@@ -7,7 +7,6 @@ import {
   useAppErrorsContext,
   useAppInputs,
   useAppShell,
-  useChiefOfStaffContext,
   useSessionLaunchContext,
 } from './AppContexts';
 import './EmptyDesktopLauncher.css';
@@ -40,7 +39,6 @@ export function EmptyDesktopLauncher({
   const { showError } = useAppErrorsContext();
   const { settings } = useAppInputs();
   const experimental = settings.new_session_launcher_enabled === 'true';
-  const { hasChiefOfStaff } = useChiefOfStaffContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const [launching, setLaunching] = useState<string | null>(null);
   // The dialog unmounts after a pick; the inline picker starts over instead.
@@ -65,15 +63,9 @@ export function EmptyDesktopLauncher({
   }, [active, focusLauncher, launching]);
 
   const handleSelect = useCallback(
-    (
-      path: string,
-      agent: SessionAgent,
-      yoloMode?: boolean,
-      chiefOfStaff?: boolean,
-      autoMode?: boolean,
-    ) => {
+    (path: string, agent: SessionAgent, yoloMode?: boolean, autoMode?: boolean) => {
       setLaunching(path.split('/').pop() || path);
-      void launchLocation(path, agent, yoloMode, chiefOfStaff, autoMode, desktopId).finally(() =>
+      void launchLocation(path, agent, yoloMode, autoMode, desktopId).finally(() =>
         setLaunching(null),
       );
     },
@@ -81,17 +73,8 @@ export function EmptyDesktopLauncher({
   );
   const handleCreateWorktree = useCallback(
     (...pick: Parameters<typeof handleCreateWorktreeSession>) => {
-      const [mainRepo, branch, startingFrom, agent, yoloMode, autoMode, chiefOfStaff] = pick;
-      handleCreateWorktreeSession(
-        mainRepo,
-        branch,
-        startingFrom,
-        agent,
-        yoloMode,
-        autoMode,
-        chiefOfStaff,
-        desktopId,
-      );
+      const [mainRepo, branch, startingFrom, agent, yoloMode, autoMode] = pick;
+      handleCreateWorktreeSession(mainRepo, branch, startingFrom, agent, yoloMode, autoMode, desktopId);
     },
     [desktopId, handleCreateWorktreeSession],
   );
@@ -106,11 +89,9 @@ export function EmptyDesktopLauncher({
           active={active}
           title={`New agent on ${label}`}
           onClose={() => setPickerGeneration((generation) => generation + 1)}
-          onSelect={(path, agent, yolo, chief, auto) =>
-            startLocation(path, agent, yolo, chief, auto, desktopId)
-          }
-          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, onCreated) =>
-            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, desktopId, onCreated)
+          onSelect={(path, agent, yolo, auto) => startLocation(path, agent, yolo, auto, desktopId)}
+          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, onCreated) =>
+            startWorktreeSession(repo, branch, from, agent, yolo, auto, desktopId, onCreated)
           }
           onGetRecentLocations={sendGetRecentLocations}
           onBrowseDirectory={sendBrowseDirectory}
@@ -118,7 +99,6 @@ export function EmptyDesktopLauncher({
           onGetRepoInfo={getRepoInfo}
           onDeleteWorktree={sendDeleteWorktree}
           agentAvailability={agentAvailability}
-          chiefExists={hasChiefOfStaff}
         />
       ) : launching ? (
         <div className="empty-desktop-launcher-starting" role="status">
@@ -143,7 +123,6 @@ export function EmptyDesktopLauncher({
           onError={showError}
           projectsDirectory={settings.projects_directory}
           agentAvailability={agentAvailability}
-          chiefExists={hasChiefOfStaff}
         />
       )}
     </div>

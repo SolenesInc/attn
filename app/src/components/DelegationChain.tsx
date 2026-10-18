@@ -1,4 +1,5 @@
 import { sessionDisplayName } from '../utils/sessionDisplayName';
+import { useDaemonStore } from '../store/daemonSessions';
 import { SessionPriority } from './SessionPriority';
 import {
   forwardRef, useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect,
@@ -105,7 +106,8 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
   const card = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const currentSession = sessions.find((session) => session.id === open.sessionId);
-  const tree = useMemo(() => delegationTree(open.sessionId, sessions), [open.sessionId, sessions]);
+  const crew = useDaemonStore((state) => state.crew);
+  const tree = useMemo(() => delegationTree(open.sessionId, sessions), [open.sessionId, sessions, crew]);
   const initialFocus = useCallback(() => card.current?.querySelector<HTMLElement>('[aria-current="true"]') ?? card.current!, []);
   const setCard = useCallback((element: HTMLDivElement | null) => {
     card.current = element;

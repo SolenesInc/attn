@@ -21,7 +21,7 @@ type pluginLaunchInstructions struct {
 }
 
 func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
-	launch, _, err := d.prepareLaunchContext(sessionID, isChief, selfReportPullRequests)
+	launch, _, err := d.prepareLaunchContext(sessionID, profileID, isChief, selfReportPullRequests)
 	if err != nil {
 		return nil, err
 	}
@@ -34,10 +34,10 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 	}, nil
 }
 
-func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, isChief, selfReportPullRequests bool) (hooks.Launch, []string, error) {
-	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), SelfReportPullRequests: selfReportPullRequests, QuickCapture: parseBooleanSetting(d.daemonSetting(SettingQuickCaptureEnabled))}
+func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (hooks.Launch, []string, error) {
+	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), SelfReportPullRequests: selfReportPullRequests, QuickCapture: parseBooleanSetting(d.daemonSetting(settingQuickCaptureEnabled))}
 	if isChief {
-		root, _, err := d.ensureNotebookScaffold()
+		root, _, err := d.ensureNotebookScaffold(profileID)
 		if err != nil {
 			return hooks.Launch{}, nil, fmt.Errorf("prepare chief notebook: %w", err)
 		}

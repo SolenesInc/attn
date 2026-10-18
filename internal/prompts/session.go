@@ -26,6 +26,7 @@ var (
 	agentGuidance = Use("session.agent", "content/agent.md",
 		Bind("delegation_boundary", delegationBoundary))
 	quickCaptureGuidance = When(Enabled(quickCaptureEnabled), Use("session.quick-capture-guidance", "content/session/quick-capture.md"))
+	crewCleared          = Use("crew.cleared", "content/crew/cleared.md")
 	gardenGuidance       = Use("session.garden", "content/garden.md")
 	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
 )
@@ -43,7 +44,7 @@ var session = Recipient{
 				When(Enabled(gardenAvailable), gardenGuidance),
 				When(Enabled(asksEnabled), askGuidance),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
-				When(Present(crewPriming), Compose(Input(crewPriming), Choose(Present(notebookRoot), Compose(), quickCaptureGuidance))),
+				When(Present(crewPriming), Compose(Input(crewPriming), crewCleared, Choose(Present(notebookRoot), Compose(), quickCaptureGuidance))),
 			)),
 		On("agent-guidance", "message_fragment", "Non-chief trust and delegation guidance.", agentGuidance),
 		On("garden-guidance", "message_fragment", "Garden instructions.", gardenGuidance),

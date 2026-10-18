@@ -184,7 +184,7 @@ describe('App markdown annotations', () => {
     expect(screen.getByRole('button', { name: 'Note on seed 1' })).toBeEnabled();
     daemon.on('seed_document_get', () => ({
       event: 'seed_document_get_result', success: true,
-      document: seedDocument({ ...listed, body: '# Complete body', tender_session: 'stopped-agent' }, { tender_holds: false }),
+      document: seedDocument({ ...listed, body: '# Complete body', tender: { ref: 'session:stopped-agent', name: 'stopped-agent', session_id: 'stopped-agent' }, claimed: false }),
     }));
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reload' })));
     expect(screen.queryByRole('alert')).toBeNull();

@@ -5,7 +5,7 @@ import { DaemonPR, RateLimitState } from '../hooks/useDaemonSocket';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
 import { PRActions } from './PRActions';
 import { StateIndicator } from './StateIndicator';
-import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
+import { ChiefBadge } from './ChiefBadge';
 import { useDaemonContext } from '../contexts/DaemonContext';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import { getRepoName } from '../utils/repo';
@@ -25,7 +25,7 @@ type DashboardSession = {
   label: string;
   state: UISessionState;
   cwd: string;
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   // Read, never derived from state: an agent can sit in waiting_input with its
   // turn already settled.
   priority?: boolean;
@@ -129,7 +129,6 @@ export function Dashboard({
   const now = useNow(TURN_AGE_TICK_MS);
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
 
-  const chiefSession = sessions.find((session) => session.chiefOfStaff);
 
   const queueParticipants = useMemo(() => (
     sessions.filter((session) => sessionParticipatesInQueue(session, crewQueueEnabled))
@@ -149,7 +148,7 @@ export function Dashboard({
   const turnSessions = useMemo(() => (
     queueModeEnabled
       ? awakeSessions
-        .filter((s) => sessionParticipatesInQueue(s, crewQueueEnabled) && s.turnOwed && !s.chiefOfStaff)
+        .filter((s) => sessionParticipatesInQueue(s, crewQueueEnabled) && s.turnOwed && !s.chief)
         .sort(compareTurnOrder)
       : []
   ), [queueModeEnabled, crewQueueEnabled, awakeSessions]);
@@ -158,7 +157,7 @@ export function Dashboard({
     queueModeEnabled
       ? awakeSessions.filter((s) => (
         !sessionParticipatesInQueue(s, crewQueueEnabled)
-        || !(s.turnOwed && !s.chiefOfStaff)
+        || !(s.turnOwed && !s.chief)
       ))
       : awakeSessions
   ), [queueModeEnabled, crewQueueEnabled, awakeSessions]);
@@ -218,7 +217,7 @@ export function Dashboard({
         <SessionProvenance automation={s.automation} interactive />
         {renderActivityLine(s)}
       </div>
-      {s.chiefOfStaff && <ChiefOfStaffBadge compact />}
+      {s.chief && <ChiefBadge compact />}
       {age && <span className="session-turn-age">{age}</span>}
       {wake && <span className="session-wake-at">{wake}</span>}
       {wake && onWakeTurn && (
@@ -518,33 +517,6 @@ export function Dashboard({
                   </div>
                 )}
               </>
-            )}
-          </div>
-        </div>
-
-        <div className="dashboard-card chief-dispatch-card" data-testid="chief-of-staff-card">
-          <div className="card-header">
-            <h2>Chief of Staff</h2>
-          </div>
-          <div className="card-body">
-            {!chiefSession ? (
-              <div className="card-empty">Assign a session as chief to track delegated work.</div>
-            ) : (
-              <div className="chief-session-block" data-testid="chief-session-summary">
-                <div className="chief-section-label">Chief session</div>
-                <button
-                  type="button"
-                  className="chief-session-summary"
-                  onClick={() => onSelectSession(chiefSession.id)}
-                >
-                  <StateIndicator state={chiefSession.state} size="sm" seed={chiefSession.id} />
-                  <span className="chief-session-name"><SessionPriority priority={chiefSession.priority} />{sessionDisplayName(chiefSession)}</span>
-                  <ChiefOfStaffBadge compact />
-                  <span className="chief-session-state">
-                    Session: {chiefSession.state.replace('_', ' ')}
-                  </span>
-                </button>
-              </div>
             )}
           </div>
         </div>

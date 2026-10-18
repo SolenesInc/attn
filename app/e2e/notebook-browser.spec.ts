@@ -191,7 +191,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.waitForSelector('.cm-content');
 
-    await expect(page.locator('.notebook-browser-chief-pulse')).toContainText('chief: active');
+    await expect(page.locator('.notebook-browser-chief-pulse')).toContainText('Chief: working');
     await expect(page.locator('.notebook-browser-kind-badge')).toBeVisible();
     await page.screenshot({ path: 'test-results/notebook-stage5-chrome.png' });
 

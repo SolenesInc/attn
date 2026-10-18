@@ -166,12 +166,12 @@ func TestAppQuickCaptureRequestsAreCorrelatedAndEmptyOrMalformedMailboxsRefused(
 func TestUserAndPeerMessagesShareInboxWithoutChangingAuthorship(t *testing.T) {
 	w := newWorld(t)
 	cli, app := w.Client(), w.TrustedApp()
-	registerSessions(t, w, cli, "chief", "peer")
-	setChiefOfStaff(app, "chief", true)
+	registerSessions(t, w, cli, "peer")
+	injectChiefSession(t, w, "chief", app.SelectedProfile())
 	sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "user request")
 	sendAgentMessage(t, cli, "peer", "chief", "peer suggestion")
 	batch := readInbox(t, cli, "chief", 0)
-	if len(batch.Items) != 2 || batch.Items[0].Kind != "quick_capture" || batch.Items[0].SenderSessionID != nil || batch.Items[1].Kind != "peer_message" || protocol.Deref(batch.Items[1].SenderSessionID) != "peer" {
+	if len(batch.Items) != 2 || batch.Items[0].Kind != "quick_capture" || batch.Items[0].Sender != nil || batch.Items[1].Kind != "peer_message" || batch.Items[1].Sender == nil || batch.Items[1].Sender.Ref != "session:peer" {
 		t.Fatalf("mixed authorship %+v", batch)
 	}
 }
@@ -289,15 +289,12 @@ func TestQuickCaptureWaitsForTheNextChief(t *testing.T) {
 	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt != nil {
 		t.Fatalf("absent Chief quick capture is read: %+v", r)
 	}
-	registerSessions(t, w, cli, "chief")
-	if r := setChiefOfStaff(app, "chief", true); !r.Success {
-		t.Fatal(r)
-	}
+	chiefKey := injectChiefSession(t, w, "chief", app.SelectedProfile())
 	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt != nil {
 		t.Fatal("inspection marked quick capture read")
 	}
 	items := readInbox(t, cli, "chief", 0).Items
-	if len(items) != 1 || items[0].Kind != "quick_capture" || items[0].Content != msg.Content || items[0].SenderSessionID != nil || items[0].Address != "chief:"+app.SelectedProfile() {
+	if len(items) != 1 || items[0].Kind != "quick_capture" || items[0].Content != msg.Content || items[0].Sender != nil || items[0].Address != protocol.AddressRef("member:"+chiefKey) {
 		t.Fatalf("user attribution: %+v", items)
 	}
 	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt == nil || *r.ReadAt != items[0].ReadAt {
@@ -371,12 +368,7 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 			id, profile string
 			app         *testworld.Peer
 		}{{"chief-a", profileA, a}, {"chief-b", profileB, b}} {
-			if err := w.InjectSession(chief.id, chief.id, w.Path(chief.id), protocol.SessionAgentClaude, chief.profile); err != nil {
-				t.Fatal(err)
-			}
-			if r := setChiefOfStaff(chief.app, chief.id, true); !r.Success {
-				t.Fatal(r)
-			}
+			injectChiefSession(t, w, chief.id, chief.profile)
 		}
 		quickCapture, file, draft := uuid.NewString(), uuid.NewString(), uuid.NewString()
 		bytesA, bytesB := []byte("profile A file"), []byte("profile B file")
@@ -393,7 +385,7 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		if _, err := b.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file}); err == nil {
 			t.Fatal("other profile downloaded file")
 		}
-		if _, err := cli.WithGardenProfile(profileB, "chief-b").QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file}); err == nil {
+		if _, err := cli.WithRequester(profileB, "chief-b").QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file}); err == nil {
 			t.Fatal("other-profile CLI downloaded file")
 		}
 		if _, _, err := cli.AgentInboxEntry(quickCapture, "chief-b"); err == nil {
@@ -483,4 +475,22 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 			t.Fatal("profile switch redirected queued quick capture")
 		}
 	})
+}
+
+func injectChiefSession(t *testing.T, w *world, id, profileID string) string {
+	t.Helper()
+	roster, err := w.Client().WithRequester(profileID, "").CrewList()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, member := range roster.Members {
+		if member.Chief {
+			if err := w.InjectCrewSession(id, id, w.Path(id), member.Key, profileID); err != nil {
+				t.Fatalf("inject the Chief's session %s: %v", id, err)
+			}
+			return member.Key
+		}
+	}
+	t.Fatalf("profile %s has no Chief", profileID)
+	return ""
 }

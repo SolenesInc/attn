@@ -25,6 +25,7 @@ import (
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 	"golang.org/x/sys/unix"
 )
 
@@ -135,7 +136,7 @@ func (d *Daemon) seedArtifactDir(seedID string, create bool) (string, string, er
 	if _, _, err := d.readSeed(seedID); err != nil {
 		return "", "", err
 	}
-	root, err := d.notebookRoot()
+	root, err := d.seedNotebookRoot(seedID)
 	if err != nil {
 		return "", "", err
 	}
@@ -144,6 +145,9 @@ func (d *Daemon) seedArtifactDir(seedID string, create bool) (string, string, er
 	}
 	dir := notebook.SeedArtifactsDir(root, seedID)
 	if create {
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			return "", "", fmt.Errorf("create notebook root %q: %w", root, err)
+		}
 		rootInfo, statErr := os.Lstat(root)
 		if statErr != nil || rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() {
 			if statErr == nil {
@@ -311,12 +315,13 @@ func (d *Daemon) reconcileSeedArtifactObservations() error {
 	if err != nil {
 		return err
 	}
-	root, err := d.notebookRoot()
-	if err != nil {
-		return err
-	}
 	var reconciliationErrors []error
 	for _, seed := range read.seeds {
+		root, err := d.seedNotebookRoot(seed.ID)
+		if err != nil {
+			reconciliationErrors = append(reconciliationErrors, err)
+			continue
+		}
 		dir := notebook.SeedArtifactsDir(root, seed.ID)
 		info, statErr := os.Lstat(dir)
 		if os.IsNotExist(statErr) {
@@ -433,7 +438,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 		if msg.DestinationPath != nil {
 			return nil, errors.New("move and copy choose the seed-owned destination; --to belongs to detach")
 		}
-		root, err = d.notebookRoot()
+		root, err = d.seedNotebookRoot(seedID)
 		if err != nil {
 			return nil, err
 		}
@@ -476,6 +481,10 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 		legacy = &validated
 	}
 
+	r, err := d.gardenRequester(msg.SourceSessionID, msg.ProfileID)
+	if err != nil {
+		return nil, err
+	}
 	d.seedArtifactMu.Lock()
 	defer d.seedArtifactMu.Unlock()
 	receipt, recovered, err := d.runSeedArtifactTransfer(root, seedID, operation, source, destination, filename, legacy)
@@ -483,7 +492,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 		return nil, err
 	}
 	if legacy != nil {
-		if err := d.detachLegacyArtifactReference(seedID, protocol.Deref(msg.SourceSessionID), *legacy); err != nil {
+		if err := d.detachLegacyArtifactReference(seedID, r.Actor(), *legacy); err != nil {
 			return nil, fmt.Errorf("artifact transferred but linked file is still associated: %w; run the same command again", err)
 		}
 	}
@@ -501,7 +510,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	}
 	changedEvent, err := seedEvents.Occur(
 		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
-		seedEvents.CausePayload{CausedBySessionID: protocol.Deref(msg.SourceSessionID)},
+		seedEvents.CausePayload{CausedBy: r.Actor().Ref()},
 	)
 	if err != nil {
 		return nil, err
@@ -922,11 +931,11 @@ func (d *Daemon) gitTrackedSource(source string) (bool, string, error) {
 	return tracked, display, err
 }
 
-func (d *Daemon) detachLegacyArtifactReference(seedID string, authorSession protocol.SessionID, legacy garden.ArtifactReference) error {
+func (d *Daemon) detachLegacyArtifactReference(seedID string, author who.Actor, legacy garden.ArtifactReference) error {
 	for _, current := range d.seedArtifactReferences(seedID) {
 		candidate := artifactFromProtocol(&current)
 		if candidate != nil && candidate.Identity() == legacy.Identity() {
-			_, err := d.appendSeedNote(seedID, "", authorSession, "", garden.NoteKindDetach, &legacy, false, authorSession)
+			_, err := d.appendSeedNote(seedID, "", author, garden.NoteKindDetach, &legacy, false)
 			return err
 		}
 	}

@@ -100,9 +100,7 @@ func TestAChiefIsGuidedAsTheChiefAndMarkedSoItsHooksAddNoAgentGuidance(t *testin
 		t.Run(string(h), func(t *testing.T) {
 			w := newWorld(t, h)
 			app := w.App()
-			chief := w.Launched(w.Spawn(app, h, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-				m.ChiefOfStaff = protocol.Ptr(true)
-			}))
+			chief := w.Launched(configureChiefOn(t, w, app, h, chiefModel(h)))
 			worker := w.Launched(w.Spawn(app, h, w.Path("worker")))
 			for _, tc := range []struct {
 				name     string
@@ -111,13 +109,13 @@ func TestAChiefIsGuidedAsTheChiefAndMarkedSoItsHooksAddNoAgentGuidance(t *testin
 				marker   string
 				unmarked string
 			}{
-				{"the chief", chief, "You are the chief of staff", "ATTN_CHIEF_GUIDANCE", "ATTN_AGENT_GUIDANCE"},
+				{"the chief", chief, "You are this profile's Chief", "ATTN_CHIEF_GUIDANCE", "ATTN_AGENT_GUIDANCE"},
 				{"a worker", worker, agentGuidanceLead, "ATTN_AGENT_GUIDANCE", "ATTN_CHIEF_GUIDANCE"},
 			} {
 				guidance := launchGuidance(t, tc.run)
 				other := agentGuidanceLead
 				if tc.guidance == agentGuidanceLead {
-					other = "You are the chief of staff"
+					other = "You are this profile's Chief"
 				}
 				if !strings.Contains(guidance, tc.guidance) || strings.Contains(guidance, other) {
 					t.Errorf("%s %s launched without only its own guidance:\n%s", tc.name, h, guidance)
@@ -180,14 +178,20 @@ func TestQuickCaptureGuidanceFollowsTheExperimentAtEachLaunch(t *testing.T) {
 					setSetting(t, app, "quick_capture_enabled", strconv.FormatBool(enabled))
 				}
 				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-					chief := w.Launched(w.Spawn(app, h, w.Path(string(h)+strconv.Itoa(i)), func(m *protocol.SpawnSessionMessage) {
-						m.ChiefOfStaff = protocol.Ptr(true)
-					}))
+					var id string
+					if i == 0 && h == fakeagent.Claude {
+						id = configureChiefOn(t, w, app, h, chiefModel(h))
+					} else {
+						id = string(wakeCrew(t, w.Client(), "chief", string(h)).SessionID)
+					}
+					chief := w.Launched(id)
 					if got := strings.Contains(launchGuidance(t, chief), "The user can send you messages from Quick Capture"); got != enabled {
 						t.Fatalf("%s chief Quick Capture guidance=%v, enabled=%v", h, got, enabled)
 					}
-					if result := setChiefOfStaff(app, chief.SessionID, false); !result.Success {
-						t.Fatal(result)
+					chief.Prompted()
+					chief.Reply("Ready. <!-- attn:state=idle -->")
+					if _, err := w.Client().CrewHandoff(protocol.SessionID(id), "Rest.", false, protocol.CrewDayCloseSleep); err != nil {
+						t.Fatal(err)
 					}
 				}
 				member := []string{"alder", "keel", "trellis"}[i]

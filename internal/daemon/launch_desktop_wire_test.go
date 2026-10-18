@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,7 +92,7 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 		w.Launched(string(day.SessionID))
 		assertBackgroundPlacement(t, w, profile, string(day.SessionID), slot5, current, active)
 		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(r protocol.BackgroundLaunchMessage) bool { return r.SessionID == day.SessionID })
-		if arrival.Name != member || arrival.DesktopLabel != "5 · Review" || arrival.RequestedBy == "" {
+		if arrival.Name != strings.ToUpper(member[:1])+member[1:] || arrival.DesktopLabel != "5 · Review" || arrival.RequestedBy == "" {
 			t.Fatalf("arrival: %+v", arrival)
 		}
 	}
@@ -100,7 +101,7 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 	testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
 		renamed := 0
 		for _, m := range e.Members {
-			if (m.ID == "alder" || m.ID == "trellis") && m.LaunchDesktop != nil && protocol.Deref(m.LaunchDesktop.Label) == "5 · Renamed" {
+			if (m.Key == "alder" || m.Key == "trellis") && m.LaunchDesktop != nil && protocol.Deref(m.LaunchDesktop.Label) == "5 · Renamed" {
 				renamed++
 			}
 		}
@@ -212,7 +213,7 @@ func TestTheLaunchReviewCreatesSuggestedDesktopsOnFinishAndKeepsChoicesAcrossRes
 	for _, member := range []string{"alder", "keel", "trellis"} {
 		item := readLaunchSetting(app, "crew", member)
 		desktop, exists := view.desktops[protocol.Deref(item.Setting.DesktopID)]
-		if !item.Confirmed || !exists || (member == "alder") != (desktop.ID == target.ID) || (member != "alder" && desktop.Name != member) {
+		if !item.Confirmed || !exists || (member == "alder") != (desktop.ID == target.ID) || (member != "alder" && desktop.Name != strings.ToUpper(member[:1])+member[1:]) {
 			t.Fatalf("%s after finish: %+v on %+v", member, item, desktop)
 		}
 	}

@@ -310,8 +310,8 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsANoteForTheNextTender(t *testi
 			t.Errorf("the seed's newest note reads %q, missing %q", answer.Body, want)
 		}
 	}
-	if answer.AuthorSession != "" || answer.AuthorMember != "" {
-		t.Errorf("the answer is noted by %q/%q, want the user", answer.AuthorSession, answer.AuthorMember)
+	if answer.Author.Ref != "user" {
+		t.Errorf("the answer is noted by %q, want the user", answer.Author.Ref)
 	}
 }
 

@@ -22,7 +22,7 @@ func TestConversationPinsAndDeletionActorsSurviveMigrationReplay(t *testing.T) {
 	if err := migrateDB(db, path); err != nil {
 		t.Fatal(err)
 	}
-	for id, want := range map[string]string{"live": "", "deleted": "sweep"} {
+	for id, want := range map[string]string{"live": "", "deleted": "attn"} {
 		var actor string
 		if err := db.QueryRow("SELECT deleted_by FROM kept_conversations WHERE resume_id=?", id).Scan(&actor); err != nil || actor != want {
 			t.Fatalf("upgrade actor %s=%q, %v; want %q", id, actor, err, want)

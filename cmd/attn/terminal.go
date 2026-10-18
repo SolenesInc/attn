@@ -33,7 +33,7 @@ that session shows in exactly one terminal; otherwise choose a terminal id.
 All targets belong to the caller's profile.
 Reads reach every desktop; actions on another desktop require --desktop.
 Shells accept input from any agent. Typing into agents requires self, a
-transitive delegation chain, or the profile's chief. Close agents with
+transitive delegation chain, or the profile's Chief. Close agents with
 attn agent close instead.
 
 Open preserves focus: first terminal right (or --down), later terminals below

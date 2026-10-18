@@ -23,16 +23,24 @@ const originExternal = "external"
 
 const originUI = "ui"
 
-func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
-	root, err := d.notebookRoot()
+func (d *Daemon) notebookStoreFor(profileID string) (*notebook.Store, error) {
+	root, err := d.notebookRoot(profileID)
 	if err != nil {
 		return nil, err
 	}
+	return d.notebookStoreAt(root)
+}
+
+func (d *Daemon) notebookStoreAt(root string) (*notebook.Store, error) {
 	d.notebookMu.Lock()
-	if d.notebookStore == nil || d.notebookStore.Root() != root {
-		d.notebookStore = notebook.NewStore(root)
+	if d.notebookStores == nil {
+		d.notebookStores = make(map[string]*notebook.Store)
 	}
-	store := d.notebookStore
+	store := d.notebookStores[root]
+	if store == nil {
+		store = notebook.NewStore(root)
+		d.notebookStores[root] = store
+	}
 	d.notebookMu.Unlock()
 	d.ensureNotebookWatcher(root)
 	return store, nil
@@ -42,93 +50,35 @@ func openNotebookWatch(root string, changed func([]string)) (*notebook.Watcher, 
 	return notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, changed)
 }
 
-func (d *Daemon) ensureNotebookWatcher(root string) {
-	select {
-	case <-d.life.Done():
-		return
-	default:
+func (d *Daemon) notebookRoot(profileID string) (string, error) {
+	configured := strings.TrimSpace(d.profileSetting(profileID, settingNotebookRoot))
+	if configured == "" {
+		return "", fmt.Errorf("profile %q has no notebook.root", profileID)
 	}
-	d.notebookWatcherMu.Lock()
-	defer d.notebookWatcherMu.Unlock()
-	if d.notebookWatcher != nil && d.notebookWatchedRoot == root {
-		return
-	}
-	if info, err := os.Stat(root); err != nil || !info.IsDir() {
-		return
-	}
-	if d.notebookWatcher != nil {
-		_ = d.notebookWatcher.Close()
-		d.notebookWatcher = nil
-		d.notebookWatchedRoot = ""
-	}
-	w, err := d.notebookWatch(root, func(paths []string) {
-		d.broadcastFsChanged(root, originExternal, paths...)
-		var mdPaths []string
-		artifactSeeds := map[string]struct{}{}
-		for _, p := range paths {
-			if _, err := notebook.CleanPath(p); err == nil {
-				mdPaths = append(mdPaths, p)
-			}
-			if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {
-				artifactSeeds[seedID] = struct{}{}
-			}
+	root := configured
+	if strings.HasPrefix(root, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
 		}
-		if len(mdPaths) > 0 {
-			d.broadcastNotebookChanged(originExternal, mdPaths...)
+		root = filepath.Join(home, root[2:])
+	}
+	root = filepath.Clean(root)
+	if config.HarnessNotebookRoot() != "" {
+		harness, err := config.CanonicalRuntimePath(os.Getenv("ATTN_HARNESS_DATA_DIR"))
+		if err != nil {
+			return "", err
 		}
-		if len(artifactSeeds) > 0 {
-			d.coalesceSnapshots(func() {
-				for seedID := range artifactSeeds {
-					if err := d.recordObservedSeedArtifacts(seedID); err != nil {
-						d.logf("Garden artifact observation for %s: %v", seedID, err)
-					}
-				}
-			})
+		resolved, err := config.CanonicalRuntimePath(root)
+		if err != nil {
+			return "", err
 		}
-	})
-	if err != nil {
-		d.logf("notebook watcher: failed to watch %s: %v", root, err)
-		return
-	}
-	d.notebookWatcher = w
-	d.notebookWatchedRoot = root
-}
-
-func (d *Daemon) noteNotebookSelfWrite(writes ...notebook.SelfWrite) {
-	d.notebookWatcherMu.Lock()
-	w := d.notebookWatcher
-	d.notebookWatcherMu.Unlock()
-	w.NoteSelfWrite(writes...)
-}
-
-func (d *Daemon) stopNotebookWatcher() {
-	d.notebookWatcherMu.Lock()
-	w := d.notebookWatcher
-	d.notebookWatcher = nil
-	d.notebookWatchedRoot = ""
-	d.notebookWatcherMu.Unlock()
-	_ = w.Close()
-}
-
-func (d *Daemon) notebookRoot() (string, error) {
-	if root := config.HarnessNotebookRoot(); root != "" {
-		return root, nil
-	}
-	if configured := strings.TrimSpace(d.daemonSetting(SettingNotebookRoot)); configured != "" {
-		if strings.HasPrefix(configured, "~/") {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return "", fmt.Errorf("resolve home directory: %w", err)
-			}
-			return filepath.Join(home, configured[2:]), nil
+		rel, err := filepath.Rel(harness, resolved)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("refusing Notebook root %q outside harness root %q", root, harness)
 		}
-		return filepath.Clean(configured), nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	return notebook.DefaultRoot(home, config.Instance()), nil
+	return root, nil
 }
 
 func (d *Daemon) broadcastNotebookChanged(origin string, paths ...string) {
@@ -171,8 +121,8 @@ func (d *Daemon) projectNotebookChanged(ev bus.Event) {
 	})
 }
 
-func (d *Daemon) ensureNotebookScaffold() (root string, created bool, err error) {
-	store, err := d.notebookStoreFor()
+func (d *Daemon) ensureNotebookScaffold(profileID string) (root string, created bool, err error) {
+	store, err := d.notebookStoreFor(profileID)
 	if err != nil {
 		return "", false, err
 	}
@@ -182,8 +132,9 @@ func (d *Daemon) ensureNotebookScaffold() (root string, created bool, err error)
 		for i, p := range createdPaths {
 			writes[i] = notebook.SelfWrite{Rel: p}
 		}
-		d.noteNotebookSelfWrite(writes...)
+		d.noteSelfWrite(store.Root(), writes...)
 		d.broadcastNotebookChanged(originAgent, createdPaths...)
+		d.broadcastFsChanged(store.Root(), originAgent, createdPaths...)
 		d.ensureNotebookWatcher(store.Root())
 	}
 	if scaffoldErr != nil {
@@ -193,15 +144,20 @@ func (d *Daemon) ensureNotebookScaffold() (root string, created bool, err error)
 }
 
 func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideMessage) {
-	root, err := d.notebookRoot()
+	sessionID := protocol.TrimID(protocol.Deref(msg.SessionID))
+	profile, err := d.callerProfile(sessionID)
 	if err != nil {
 		d.sendError(conn, "notebook: "+err.Error())
 		return
 	}
-	sessionID := protocol.TrimID(protocol.Deref(msg.SessionID))
-	sessionIsChief := d.isChiefOfStaffSession(sessionID)
+	root, err := d.notebookRoot(profile.ID)
+	if err != nil {
+		d.sendError(conn, "notebook: "+err.Error())
+		return
+	}
+	sessionIsChief := d.sessionIsChief(sessionID)
 	if sessionIsChief {
-		if _, _, serr := d.ensureNotebookScaffold(); serr != nil {
+		if _, _, serr := d.ensureNotebookScaffold(profile.ID); serr != nil {
 			d.logf("notebook guide: ensure scaffold failed: %v", serr)
 		}
 	}
@@ -215,9 +171,9 @@ func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideM
 	})
 }
 
-func (d *Daemon) sendNotebookListWSResult(client *wsClient, requestID, prefix string) {
+func (d *Daemon) sendNotebookListWSResult(client *wsClient, requestID, prefix string, scope notebookRequestScope) {
 	var entries []protocol.NotebookEntry
-	store, err := d.notebookStoreFor()
+	store, err := d.notebookStoreAt(string(scope.root))
 	if err == nil {
 		var list []notebook.Entry
 		if list, err = store.List(prefix); err == nil {
@@ -236,9 +192,9 @@ func (d *Daemon) sendNotebookListWSResult(client *wsClient, requestID, prefix st
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendNotebookReadWSResult(client *wsClient, requestID, path string) {
+func (d *Daemon) sendNotebookReadWSResult(client *wsClient, requestID, path string, scope notebookRequestScope) {
 	var result *protocol.NotebookReadResult
-	store, err := d.notebookStoreFor()
+	store, err := d.notebookStoreAt(string(scope.root))
 	if err == nil {
 		var content []byte
 		var hash string
@@ -258,9 +214,9 @@ func (d *Daemon) sendNotebookReadWSResult(client *wsClient, requestID, path stri
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendNotebookBacklinksWSResult(client *wsClient, requestID, path string) {
+func (d *Daemon) sendNotebookBacklinksWSResult(client *wsClient, requestID, path string, scope notebookRequestScope) {
 	var entries []protocol.NotebookEntry
-	store, err := d.notebookStoreFor()
+	store, err := d.notebookStoreAt(string(scope.root))
 	if err == nil {
 		var list []notebook.Entry
 		if list, err = store.Backlinks(path); err == nil {
@@ -279,9 +235,9 @@ func (d *Daemon) sendNotebookBacklinksWSResult(client *wsClient, requestID, path
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, content, baseHash string) {
+func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, content, baseHash string, scope notebookRequestScope) {
 	var result *protocol.NotebookWriteResult
-	store, err := d.notebookStoreFor()
+	store, err := d.notebookStoreAt(string(scope.root))
 	if err == nil {
 		changed := path
 		if rel, cerr := notebook.CleanPath(path); cerr == nil {
@@ -298,8 +254,9 @@ func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, co
 				}
 			} else {
 				result.Hash = protocol.Ptr(hash)
-				d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
+				d.noteSelfWrite(store.Root(), notebook.SelfWrite{Rel: changed, Hash: hash})
 				d.broadcastNotebookChanged(originUI, changed)
+				d.broadcastFsChanged(store.Root(), originUI, changed)
 			}
 		}
 	}
@@ -321,9 +278,9 @@ func chiefInboxNudgePrompt(root string) string {
 	return prompts.RenderText("chief", "inbox", prompts.Values{"inbox_path": filepath.Join(root, "inbox.md")})
 }
 
-func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, sourcePath, selection string) {
+func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, sourcePath, selection string, scope notebookRequestScope) {
 	var result *protocol.NotebookSendToChiefResult
-	store, err := d.notebookStoreFor()
+	store, err := d.notebookStoreAt(string(scope.root))
 	if err == nil {
 		if strings.TrimSpace(selection) == "" {
 			err = fmt.Errorf("notebook: empty selection")
@@ -334,11 +291,12 @@ func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, source
 	if err == nil {
 		var relPath, hash string
 		if relPath, hash, err = store.AppendInbox(formatChiefInboxEntry(sourcePath, selection)); err == nil {
-			d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: relPath, Hash: hash})
+			d.noteSelfWrite(store.Root(), notebook.SelfWrite{Rel: relPath, Hash: hash})
 			d.broadcastNotebookChanged(originUI, relPath)
+			d.broadcastFsChanged(store.Root(), originUI, relPath)
 			result = &protocol.NotebookSendToChiefResult{
 				Path:   relPath,
-				Nudged: d.nudgeChiefOfStaff(d.profileForClient(client), requestID, chiefInboxNudgePrompt(store.Root())),
+				Nudged: d.nudgeChief(scope.profileID, requestID, chiefInboxNudgePrompt(store.Root())),
 			}
 		}
 	}

@@ -171,7 +171,7 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 		guidance []string
 		retired  string
 	}{
-		{fakeagent.Claude, []string{"Never park a blocking Monitor on attn activity"}, ""},
+		{fakeagent.Claude, []string{"Never keep a blocking Monitor waiting on attn activity"}, ""},
 		{fakeagent.Codex, []string{"`attn seed show <seed-id>`"}, "attn ticket inbox"},
 	} {
 		t.Run(string(c.agent), func(t *testing.T) {
@@ -187,7 +187,7 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 				t.Fatalf("a worker's guide scaffolded %v", notebookEntryPaths(listed.Entries))
 			}
 
-			chief := w.Spawn(app, c.agent, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+			chief := configureChiefOn(t, w, app, c.agent, chiefModel(c.agent))
 			guide, err := cli.NotebookGuide(protocol.SessionID(chief))
 			if err != nil || !guide.SessionIsChief || guide.Root != root {
 				t.Fatalf("the chief's guide = %+v, %v; want the chief's guidance under %s", guide, err, root)
@@ -210,28 +210,31 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	root := fsNotebookRoot(t, w)
-	custom := fsDir(t, "custom")
-
-	for _, c := range []struct {
-		key, value string
-		ok         bool
-	}{
-		{"notebook.root", "relative/path", false},
-		{"notebook.root", filepath.Join(w.Dir, "notebook"), false},
-		{"notebook.root", custom, true},
-		{"notebook.root", "", true},
-		{"notebook.root.effective", "/tmp/whatever", false},
-	} {
-		if updated := notebookSetting(app, c.key, c.value); protocol.Deref(updated.Success) != c.ok {
-			t.Errorf("setting %s to %q succeeded=%v (%s), want %v", c.key, c.value, protocol.Deref(updated.Success), protocol.Deref(updated.Error), c.ok)
-		}
-		if c.ok {
-			testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return m.RequestID == nil && protocol.Deref(m.ChangedKey) == c.key && m.Settings[c.key] == c.value && m.Settings["notebook.root.effective"] == root
-			})
-		}
+	custom := filepath.Join(w.Dir, "custom")
+	if updated := notebookSetting(app, "notebook.root", "relative/path"); protocol.Deref(updated.Success) {
+		t.Fatal("relative root accepted")
 	}
+	if updated := notebookSetting(app, "notebook.root.effective", custom); protocol.Deref(updated.Success) || !strings.Contains(protocol.Deref(updated.Error), "notebook.root.effective") {
+		t.Fatalf("read-only refusal: %+v", updated)
+	}
+	if updated := notebookSetting(app, "notebook.root", custom); !protocol.Deref(updated.Success) {
+		t.Fatal(protocol.Deref(updated.Error))
+	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["notebook.root"] == custom && m.Settings["notebook.root.effective"] == custom
+	})
+	if written := notebookAskWrite(app, "note.md", notebookNote("new folder"), ""); !written.Success {
+		t.Fatal(protocol.Deref(written.Error))
+	}
+	if _, err := os.Stat(filepath.Join(custom, "note.md")); err != nil {
+		t.Fatal(err)
+	}
+	if updated := notebookSetting(app, "notebook.root", ""); !protocol.Deref(updated.Success) {
+		t.Fatal(protocol.Deref(updated.Error))
+	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["notebook.root.effective"] == filepath.Join(w.Dir, "notebook-default")
+	})
 }
 
 func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
@@ -239,8 +242,10 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "auto_approve_enabled", "false")
 	root := fsNotebookRoot(t, w)
-	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, chiefModel(fakeagent.Claude))
 	agent := w.Launched(chief)
+	agent.Prompted()
+	agent.Reply("Ready. <!-- attn:state=idle -->")
 	app.TypeLine(chief, "keep the notebook")
 	agent.Prompted()
 	working := testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
@@ -254,8 +259,8 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("the idle chief was prompted with %q, want the inbox doorbell", got)
 	}
-	if covered := notebookAskSendToChief(app, "/knowledge/index.md", "another selection before reading"); !covered.Success || covered.Result == nil || !covered.Result.Nudged {
-		t.Fatalf("send covered by the outstanding ring=%+v, want nudged", covered)
+	if covered := notebookAskSendToChief(app, "/knowledge/index.md", "another selection before reading"); !covered.Success || covered.Result == nil || covered.Result.Nudged {
+		t.Fatalf("send covered by the outstanding ring=%+v, want no second ring", covered)
 	}
 	wantPrompt := prompts.RenderText("chief", "inbox", prompts.Values{"inbox_path": filepath.Join(root, "inbox.md")})
 	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 2 || mail.Items[0].Content != wantPrompt || mail.Items[1].Content != wantPrompt {
@@ -282,6 +287,32 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 	if pending := notebookAskSendToChief(app, "/index.md", "wait for approval"); !pending.Success || pending.Result == nil || pending.Result.Nudged {
 		t.Fatalf("sending to a chief waiting on an approval = %+v (%s), want it kept without a nudge", pending.Result, protocol.Deref(pending.Error))
+	}
+}
+
+func TestANotebookSelectionWaitsBehindTheUsersTyping(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, chiefModel(fakeagent.Claude))
+	agent := w.Launched(chief)
+	agent.Prompted()
+	agent.Reply("Ready. <!-- attn:state=idle -->")
+	app.TypeLine(chief, "keep the notebook")
+	agent.Prompted()
+	working := testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("Ready. <!-- attn:state=idle -->")
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(w.Terminal(chief)), Data: "half a thought"})
+	app.AwaitScreen(chief, "half a thought")
+	sent := notebookAskSendToChief(app, "notes/today.md", "follow up on the release")
+	if !sent.Success || sent.Result == nil || sent.Result.Nudged {
+		t.Fatalf("selection beside typing: %+v (%s)", sent, protocol.Deref(sent.Error))
+	}
+	if inbox := notebookAskRead(app, "inbox.md"); !inbox.Success || inbox.Result == nil || !strings.Contains(inbox.Result.Content, "follow up on the release") {
+		t.Fatalf("selection not stored: %+v", inbox)
+	}
+	if mail, err := cli.AgentInboxBatch(protocol.SessionID(chief), 0); err != nil || len(mail.Items) != 1 {
+		t.Fatalf("selection not queued: %+v (%v)", mail, err)
 	}
 }
 
@@ -329,11 +360,10 @@ func TestSendToChiefWithoutAChiefStillLandsAndRefusesBadSelections(t *testing.T)
 	if back := notebookAskBacklinks(app, "/knowledge/areas/Q3 (draft).md"); len(back.Entries) != 0 {
 		t.Errorf("the source with special characters is linked from %v, want it shown as code only", notebookEntryPaths(back.Entries))
 	}
-	chief, _ := mailIdleAgent(w, app, "next-chief")
-	if assigned := setChiefOfStaff(app, chief, true); !assigned.Success {
-		t.Fatalf("assign Chief=%+v", assigned)
-	}
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
 	agent := w.Launched(chief)
+	agent.Prompted()
+	agent.Reply("Ready. <!-- attn:state=idle -->")
 	if prompt := agent.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
 		t.Fatalf("next Chief prompt=%q", prompt)
 	}
@@ -342,7 +372,7 @@ func TestSendToChiefWithoutAChiefStillLandsAndRefusesBadSelections(t *testing.T)
 		t.Fatalf("next Chief inbox=%+v", mail)
 	}
 	for _, item := range mail {
-		if item.Address != "chief:"+app.SelectedProfile() {
+		if item.Address != protocol.AddressRef("member:"+protocol.Deref(queriedSession(t, w.Client(), chief).CrewMember)) {
 			t.Fatalf("Chief item address=%s", item.Address)
 		}
 	}

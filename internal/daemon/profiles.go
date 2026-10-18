@@ -4,11 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"path/filepath"
+	"fmt"
 	"slices"
 	"strings"
-
-	"github.com/victorarias/attn/internal/crew"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/harness"
@@ -17,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type profileActionOutcome struct {
@@ -194,6 +193,7 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 		client.selectProfile("")
 		return nil, 0
 	}
+	event.Crew = d.crewRoster(selected)
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
 	return markdownTilesOnCurrentDesktop(profile, desktops), seq
@@ -245,6 +245,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 	}
 	if previousProfile != client.selectedProfile() {
 		d.sendProfileSnapshots(client)
+		d.handleGetSettingsWS(client)
 	}
 	d.sendToClient(client, result)
 	d.releaseArrangements(client)
@@ -348,11 +349,30 @@ func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {
 }
 
 func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCreateMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		profile, desktop, err := d.store.CreateProfile(msg.Name)
-		return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
-			d.publishFact(FactProfileCreated, profile.ID, nil)
-		}}, err
+	d.coalesceSnapshots(func() {
+		d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+			name, err := profiles.ValidateName("profile", msg.Name)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			d.notebookRootMu.Lock()
+			defer d.notebookRootMu.Unlock()
+			root, err := d.defaultNotebookRoot(name, "")
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			profile, desktop, err := d.store.CreateProfile(name, root)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			setupErr := d.ensureChief(profile.ID, nil)
+			return profileActionOutcome{profile: &profile, desktops: []profiles.Desktop{desktop}, publish: func() {
+				d.publishFact(FactProfileCreated, profile.ID, nil)
+				if setupErr != nil {
+					d.notifyChiefSetupFailure(profile, setupErr)
+				}
+			}}, nil
+		})
 	})
 }
 
@@ -367,19 +387,26 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		homes, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
+		roster, err := d.store.CrewRoster(msg.ProfileID)
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
 		members := 0
-		for _, member := range homes {
-			owner, err := d.store.CrewProfile(member.ID)
-			if err != nil {
-				return profileActionOutcome{}, err
-			}
-			if owner == msg.ProfileID {
+		for _, member := range roster {
+			if !member.Retired && !d.isChief(member.Key) {
 				members++
 			}
+		}
+		chief, err := d.chief(msg.ProfileID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		member, _, err := d.crewMember(chief)
+		if err != nil {
+			return profileActionOutcome{}, fmt.Errorf("cannot delete this profile: its Chief document or home could not be read (%w); fix the crew folder, then restart the daemon to retry Chief setup", err)
+		}
+		if d.crewBindingLive(member) {
+			return profileActionOutcome{}, fmt.Errorf("put the chief to sleep first: attn crew sleep chief")
 		}
 		d.automationMu.Lock()
 		deleted, closedAsks, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), members)
@@ -387,6 +414,14 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
+		identity, err := d.store.CrewIdentity(chief)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		if _, err := d.retireCrewMember(identity); err != nil {
+			return profileActionOutcome{}, err
+		}
+		d.pruneNotebookRoots()
 		remaining, err := d.store.MostRecentlyUsedProfile()
 		if err != nil {
 			return profileActionOutcome{}, err
@@ -397,6 +432,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				if scoped != client {
 					d.sendArrangement(scoped, "", nil)
 					d.sendProfileSnapshots(scoped)
+					d.handleGetSettingsWS(scoped)
 				}
 			}
 		})
@@ -665,7 +701,7 @@ func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
 		d.detachSession(client, tile.RuntimeID)
 		return nil
 	}
-	closing, err := d.beginSessionCloseAsUser(tile.SessionID, store.SessionClose{By: store.SessionClosedByUser}, client)
+	closing, err := d.beginSessionCloseAsUser(tile.SessionID, store.SessionClose{By: who.User()}, client)
 	if err != nil {
 		return err
 	}
@@ -713,5 +749,6 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	profileID := client.selectedProfile()
 	d.sendToClient(client, d.gardenProfileSnapshot(profileID))
+	d.sendToClient(client, d.crewProfileSnapshot(profileID))
 	d.sendToClient(client, asksSnapshot(profileID, d.openAsks()))
 }

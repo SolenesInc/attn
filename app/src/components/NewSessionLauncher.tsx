@@ -42,7 +42,6 @@ export interface NewSessionLauncherProps extends Omit<
     path: string,
     agent: SessionAgent,
     yolo?: boolean,
-    chief?: boolean,
     auto?: boolean,
   ) => Promise<unknown>;
   onCreateWorktreeSession: (
@@ -52,7 +51,6 @@ export interface NewSessionLauncherProps extends Omit<
     agent: SessionAgent,
     yolo: boolean,
     auto?: boolean,
-    chief?: boolean,
     onCreated?: (path: string) => void,
   ) => Promise<unknown>;
 }
@@ -73,7 +71,6 @@ export function NewSessionLauncher({
   onCreateWorktreeSession,
   onDeleteWorktree,
   agentAvailability,
-  chiefExists,
 }: NewSessionLauncherProps) {
   const inline = variant === 'inline';
   const { settings, setSetting } = useSettings();
@@ -81,7 +78,6 @@ export function NewSessionLauncher({
     isOpen,
     initialAgent,
     agentAvailability,
-    chiefExists,
     resetAgentOnOpen: true,
   });
   const [query, setQuery] = useState('');
@@ -294,7 +290,6 @@ export function NewSessionLauncher({
     if (busy) return;
     const agent = terminal ? 'shell' : controls.agent;
     const yolo = agent !== 'shell' && controls.yoloMode && controls.yoloSupported;
-    const chief = agent !== 'shell' && controls.chiefOfStaff && controls.chiefToggleEligible;
     const auto =
       agent !== 'shell' && controls.autoModeSupported ? controls.autoMode : undefined;
     const request = generation.current;
@@ -332,7 +327,7 @@ export function NewSessionLauncher({
         }
         const key = `${repo}:${branchName}:${startingFrom}`;
         const existing = created.current.get(key);
-        if (existing) await onSelect(existing, agent, yolo, chief, auto);
+        if (existing) await onSelect(existing, agent, yolo, auto);
         else
           await onCreateWorktreeSession(
             repo,
@@ -341,7 +336,6 @@ export function NewSessionLauncher({
             agent,
             yolo,
             auto,
-            chief,
             (path) => created.current.set(key, path),
           );
         destinationMemory = 'new_worktree';
@@ -349,7 +343,7 @@ export function NewSessionLauncher({
         const target =
           action?.kind === 'existing' ? action.path : action?.kind === 'main' ? repo : path;
         if (!target) return;
-        await onSelect(target, agent, yolo, chief, auto);
+        await onSelect(target, agent, yolo, auto);
         if (action?.kind === 'main') destinationMemory = 'main_repo';
       }
       if (

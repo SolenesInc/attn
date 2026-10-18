@@ -121,10 +121,12 @@ export function daemonSeed(id: string, overrides: Partial<DaemonSeed> = {}): Dae
     body: '',
     status: 'growing',
     step_slug: id,
-    planter_session: '',
-    planter_member: '',
-    tender_session: '',
-    tender_member: '',
+
+    planter: { ref: 'user', name: 'the user' },
+
+    tender: undefined,
+    claimed: false,
+    resume_available: false,
     edges: [],
     template: false,
     gate: false,
@@ -140,13 +142,16 @@ export function daemonSeed(id: string, overrides: Partial<DaemonSeed> = {}): Dae
 }
 
 export function seedDocument(seed: DaemonSeed, overrides: Partial<DaemonSeedDocument> = {}): DaemonSeedDocument {
-  return { seed, artifacts: [], references: [], children: [], notes: [], notes_total: 0, tender_holds: false, ...overrides };
+  return { seed, artifacts: [], references: [], children: [], notes: [], notes_total: 0,  ...overrides };
 }
 
 export function crewMember(id: string, overrides: Partial<DaemonCrewMember> = {}): DaemonCrewMember {
   return {
-    id,
+    key: id,
+    name: id[0].toUpperCase() + id.slice(1),
     revision: 1,
+    retired: false,
+    chief: false,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,
     awareness_dirs: [],

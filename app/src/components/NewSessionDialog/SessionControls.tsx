@@ -76,19 +76,16 @@ export function useSessionControls({
   isOpen,
   initialAgent,
   agentAvailability,
-  chiefExists = false,
   resetAgentOnOpen = false,
 }: {
   resetAgentOnOpen?: boolean;
   isOpen: boolean;
   initialAgent?: SessionAgent;
   agentAvailability?: AgentAvailability;
-  chiefExists?: boolean;
 }) {
   const { settings, setSetting } = useSettings();
   const [agent, setAgent] = useState<SessionAgent>('claude');
   const [yoloMode, setYoloMode] = useState(false);
-  const [chiefOfStaff, setChiefOfStaff] = useState(false);
   const [autoMode, setAutoMode] = useState(true);
   const autoModeTouchedRef = useRef(false);
   const previousInitialAgent = useRef<SessionAgent | undefined>(undefined);
@@ -143,7 +140,6 @@ export function useSessionControls({
   const yoloSupported = Boolean(agentCapabilities[agent]?.yolo);
   const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
   const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
-  const chiefToggleEligible = !chiefExists && (agent === 'claude' || agent === 'codex');
 
   useEffect(() => {
     if (!savedAgent || initialAgent) return;
@@ -171,12 +167,6 @@ export function useSessionControls({
       setYoloMode(false);
     }
   }, [yoloSupported]);
-
-  useEffect(() => {
-    if (!chiefToggleEligible) {
-      setChiefOfStaff(false);
-    }
-  }, [chiefToggleEligible]);
 
   useEffect(() => {
     if (autoModeTouchedRef.current) return;
@@ -239,11 +229,9 @@ export function useSessionControls({
   return {
     agent,
     yoloMode,
-    chiefOfStaff,
     autoMode,
     yoloSupported,
     autoModeSupported,
-    chiefToggleEligible,
     effectiveAgentAvailability,
     hasAvailableAgents,
     harnessesLoading,
@@ -254,7 +242,6 @@ export function useSessionControls({
     handleAgentChange,
     toggleYoloMode,
     toggleAutoMode,
-    setChiefOfStaff,
     handleControlKey,
   };
 }
@@ -269,11 +256,9 @@ export function SessionControls({
   const {
     agent,
     yoloMode,
-    chiefOfStaff,
     autoMode,
     yoloSupported,
     autoModeSupported,
-    chiefToggleEligible,
     effectiveAgentAvailability,
     hasAvailableAgents,
     harnessesLoading,
@@ -284,7 +269,6 @@ export function SessionControls({
     handleAgentChange,
     toggleYoloMode,
     toggleAutoMode,
-    setChiefOfStaff,
   } = controls;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
   const toggles = (
@@ -308,29 +292,6 @@ export function SessionControls({
                   {compact ? 'auto mode' : autoMode ? 'On' : 'Off'}
                 </span>
                 {compact && <kbd className="agent-shortcut">{keyCombo('alt', 'A')}</kbd>}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {chiefToggleEligible && (
-        <div className="picker-chief-bar">
-          <div className="picker-agent-label">CHIEF OF STAFF</div>
-          <div className="picker-chief-controls">
-            <div className="agent-toggle">
-              <button
-                type="button"
-                className={`agent-option ${chiefOfStaff ? 'active' : ''}`}
-                data-testid="location-picker-chief-toggle"
-                role="switch"
-                aria-checked={chiefOfStaff}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setChiefOfStaff((prev) => !prev)}
-                title="Launch this session as the chief of staff — it runs the notebook and delegates work to other sessions"
-              >
-                <span className="agent-option-name">
-                  {compact ? 'chief' : chiefOfStaff ? 'On' : 'Off'}
-                </span>
               </button>
             </div>
           </div>

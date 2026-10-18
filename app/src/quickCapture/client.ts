@@ -52,7 +52,7 @@ export interface QuickCaptureResult { id: string; value?: unknown; error?: strin
 
 export const EMPTY_HOST_STATE: QuickCaptureHostState = {
   enabled: false,
-  profileId: '', connected: false, mailboxes: [{ id: 'chief', name: 'Chief', detail: 'Chief of staff' }],
+  profileId: '', connected: false, mailboxes: [{ id: 'chief', name: 'Chief', detail: '' }],
   binding: null, activeBinding: null,
 };
 

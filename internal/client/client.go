@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -175,7 +174,7 @@ func (c *Client) connect() (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *Client) WithGardenProfile(profileID string, sessionID protocol.SessionID) *Client {
+func (c *Client) WithRequester(profileID string, sessionID protocol.SessionID) *Client {
 	scoped := *c
 	scoped.gardenProfile, scoped.gardenSession = profileID, sessionID
 	return &scoped
@@ -192,7 +191,7 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 			return nil, err
 		}
 		cmd, _ := fields["cmd"].(string)
-		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate || cmd == protocol.CmdQuickCaptureAttachmentGet {
+		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate || strings.HasPrefix(cmd, "crew_") || cmd == protocol.CmdAgentPeek || cmd == protocol.CmdQuickCaptureAttachmentGet {
 			if fields["profile_id"] == nil || fields["profile_id"] == "" {
 				fields["profile_id"] = c.gardenProfile
 			}
@@ -494,8 +493,8 @@ func (c *Client) StateExplain(targetSessionID string) (*protocol.StateExplainRes
 
 func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, error) {
 	resp, err := c.send(protocol.AgentPeekMessage{
-		Cmd:             protocol.CmdAgentPeek,
-		TargetSessionID: targetSessionID,
+		Cmd: protocol.CmdAgentPeek,
+		To:  targetSessionID,
 	})
 	if err != nil {
 		return nil, err
@@ -509,13 +508,9 @@ func (c *Client) AgentPeek(targetSessionID string) (*protocol.AgentPeekResult, e
 func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, content string) (*protocol.AgentMsgResult, error) {
 	msg := protocol.AgentMsgMessage{
 		Cmd:             protocol.CmdAgentMsg,
-		TargetSessionID: target,
+		To:              target,
 		SourceSessionID: sourceSessionID,
 		Content:         content,
-	}
-	if garden.ValidateID(target) == nil {
-		msg.TargetSessionID = ""
-		msg.TargetSeedID = protocol.Ptr(target)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
@@ -530,13 +525,9 @@ func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, con
 func (c *Client) AgentClose(target string, sourceSessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
 	msg := protocol.AgentCloseMessage{
 		Cmd:             protocol.CmdAgentClose,
-		TargetSessionID: target,
+		To:              target,
 		SourceSessionID: sourceSessionID,
 		Reason:          reason,
-	}
-	if garden.ValidateID(target) == nil {
-		msg.TargetSessionID = ""
-		msg.TargetSeedID = protocol.Ptr(target)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
@@ -690,7 +681,7 @@ func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateR
 	if request.SourceSessionID != nil {
 		sessionID = *request.SourceSessionID
 	}
-	c = c.WithGardenProfile(profileID, sessionID)
+	c = c.WithRequester(profileID, sessionID)
 	op, err := c.StartDelegation(request)
 	if err != nil {
 		return nil, err

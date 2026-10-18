@@ -53,7 +53,7 @@ and actions. If it has several tiles on one desktop, `open` also needs
   `--desktop <ref>`. A refusal prints the value to pass.
 - Any agent can type into a shell. To type into an agent, it must be you or
   below you in your delegation chain, including delegates' delegates. Your
-  profile's chief can type into any agent in the profile.
+  profile's Chief can type into any agent in the profile.
 - `close` closes shells. Use `attn agent close` to close an agent.
 
 Typing goes straight to the terminal, as keyboard input does. `send --text`

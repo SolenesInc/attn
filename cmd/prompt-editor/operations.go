@@ -80,7 +80,7 @@ func (e *editor) operation(ctx context.Context, q operationRequest) (any, error)
 	}
 	switch q.Op {
 	case "authoring":
-		return map[string]any{"guide": "docs/prompt-authoring.md", "workflow": authoringWorkflow}, nil
+		return map[string]any{"guide": "docs/internal/prompt-authoring.md", "workflow": authoringWorkflow}, nil
 	case "refresh":
 		return e.withState(func(*os.Root) (any, error) { return e.refresh(ctx) })
 	case "scenarios":

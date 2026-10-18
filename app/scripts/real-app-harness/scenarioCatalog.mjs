@@ -18,6 +18,12 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-shell-titles.mjs'],
   },
   {
+    id: 'chief-slot',
+    runnerId: 'CHIEF-SLOT',
+    label: 'Chief Notebook folder setup, charter editing, restored terminal and configured-save focus, sleep and one-click wake',
+    command: ['node', 'scripts/real-app-harness/scenario-chief-slot.mjs'],
+  },
+  {
     id: 'desktop-order',
     runnerId: 'DESKTOP-ORDER',
     label: 'Desktop Sort and Undo preserve arrangements; new numbered desktops follow the nearest lower number',
@@ -189,6 +195,12 @@ export const scenarioCatalog = [
     runnerId: 'AUTOCLOSE-ON-EXIT',
     label: 'Clean quits close; stopped terminals restore and resume on request',
     command: ['pnpm', 'run', 'real-app:scenario-autoclose-on-exit'],
+  },
+  {
+    id: 'notebook-profile-scope',
+    runnerId: 'NotebookProfileScope',
+    label: 'Settings and Notebook follow the selected profile',
+    command: ['node', 'scripts/real-app-harness/scenario-notebook-profile-scope.mjs'],
   },
   {
     id: 'garden-profile-scope',

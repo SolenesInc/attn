@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -104,13 +105,13 @@ func (d *Daemon) crewBoolSetting(name string) bool {
 	if d.store == nil {
 		return true
 	}
-	return !strings.EqualFold(strings.TrimSpace(d.store.GetSetting(name)), "false")
+	return !strings.EqualFold(strings.TrimSpace(d.daemonSetting(daemonSettingKey(name))), "false")
 }
 
 func (d *Daemon) crewSeconds(name string, fallback, min, max int) time.Duration {
 	seconds := fallback
 	if d.store != nil {
-		raw := strings.TrimSpace(d.store.GetSetting(name))
+		raw := strings.TrimSpace(d.daemonSetting(daemonSettingKey(name)))
 		if raw != "" {
 			parsed := resolveBoundedIntSetting(raw, fallback, min, max)
 			if parsed == fallback && raw != fmt.Sprint(fallback) {
@@ -132,31 +133,31 @@ func (d *Daemon) crewCacheTTL(agent string) time.Duration {
 		fallback = crewCacheTTLCodex
 	}
 	if agent != "" && d.store != nil {
-		if raw := strings.TrimSpace(d.daemonSetting(daemonSettingKey(SettingCrewCacheTTLPrefix + agent))); raw != "" {
-			return d.crewSeconds(SettingCrewCacheTTLPrefix+agent, fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
+		if raw := strings.TrimSpace(d.daemonSetting(daemonSettingKey(string(settingCrewCacheTTLPrefix) + agent))); raw != "" {
+			return d.crewSeconds(string(settingCrewCacheTTLPrefix)+agent, fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 		}
 	}
-	return d.crewSeconds(SettingCrewCacheTTLSeconds, fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
+	return d.crewSeconds(string(settingCrewCacheTTLSeconds), fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 }
 
 func (d *Daemon) crewHeartbeatLead() time.Duration {
-	return d.crewSeconds(SettingCrewHeartbeatLeadSeconds, crewHeartbeatLeadDefault, crewHeartbeatLeadMinSeconds, crewHeartbeatLeadMaxSeconds)
+	return d.crewSeconds(string(settingCrewHeartbeatLeadSeconds), crewHeartbeatLeadDefault, crewHeartbeatLeadMinSeconds, crewHeartbeatLeadMaxSeconds)
 }
 
 func (d *Daemon) crewAwayLimit() time.Duration {
-	return d.crewSeconds(SettingCrewAwaySeconds, crewAwayDefault, crewAwayMinSeconds, crewAwayMaxSeconds)
+	return d.crewSeconds(string(settingCrewAwaySeconds), crewAwayDefault, crewAwayMinSeconds, crewAwayMaxSeconds)
 }
 
 func (d *Daemon) crewWakeLedger() crew.WakeLedger {
 	limit := crewWakeLimitDefault
 	if d.store != nil {
-		if raw := strings.TrimSpace(d.daemonSetting(SettingCrewWakeLimit)); raw != "" {
+		if raw := strings.TrimSpace(d.daemonSetting(settingCrewWakeLimit)); raw != "" {
 			limit = resolveBoundedIntSetting(raw, crewWakeLimitDefault, 0, crewWakeLimitMax)
 		}
 	}
 	return crew.WakeLedger{
 		Limit:  limit,
-		Window: d.crewSeconds(SettingCrewWakeLimitWindowSeconds, crewWakeLimitWindowDefault, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs),
+		Window: d.crewSeconds(string(settingCrewWakeLimitWindowSeconds), crewWakeLimitWindowDefault, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs),
 	}
 }
 
@@ -212,9 +213,12 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 	awayFor := d.UserAwayFor(now)
 	awayLimit := d.crewAwayLimit()
 	lead := d.crewHeartbeatLead()
-	heartbeat := d.crewBoolSetting(SettingCrewHeartbeatEnabled)
-	autoSleep := d.crewBoolSetting(SettingCrewAutoSleepEnabled)
+	heartbeat := d.crewBoolSetting(string(settingCrewHeartbeatEnabled))
+	autoSleep := d.crewBoolSetting(string(settingCrewAutoSleepEnabled))
 	for _, member := range members {
+		if d.isChief(member.Key) {
+			continue
+		}
 		if !d.crewBindingLive(member) {
 			continue
 		}
@@ -257,21 +261,21 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		}
 		attempt := d.sessionInputs().try(context.Background(), delivery)
 		if attempt.stage != sessionInputPlaced {
-			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.err)
+			d.logf("crew: %s's heartbeat did not reach session %s: %v", member.Key.String(), sessionID, attempt.err)
 			return
 		}
 		d.crewMemo().recordHeartbeat(sessionID, generation, attempt.at)
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
-			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
+			d.storedMemberName(member.Key.String()), sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:
 		session := d.store.Get(sessionID)
 		if session == nil {
 			return
 		}
 		generation := protocol.Deref(session.LastModelRequestAt)
-		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: crewSleepPrompt})
+		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: who.ToSession(sessionID), Kind: inbox.Notice, Source: member.Key.String(), Key: "crew-auto-sleep", Text: crewSleepPrompt})
 		if err != nil {
-			d.logf("crew: %s's sleep request could not be recorded: %v", crew.DisplayName(member.ID), err)
+			d.logf("crew: %s's sleep request could not be recorded: %v", member.Key.String(), err)
 			return
 		}
 		if !receipt.Rang {
@@ -279,7 +283,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		}
 
 		d.logf("crew: asked %s to close its day — the user has been away and the cache is %s from lapsing",
-			crew.DisplayName(member.ID), cache.Remaining().Round(time.Second))
+			d.storedMemberName(member.Key.String()), cache.Remaining().Round(time.Second))
 	}
 }
 
@@ -288,12 +292,12 @@ func (d *Daemon) crewMemo() *crewLifecycleMemo {
 	return d.crewLifecycleState
 }
 
-func (d *Daemon) chargeAutonomousWake(memberID string, now time.Time) error {
+func (d *Daemon) chargeAutonomousWake(key who.MemberKey, now time.Time) error {
 	ledger := d.crewWakeLedger()
 	var refusal error
-	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
+	if _, err := d.updateCrewMember(key, func(member *crew.Member) (bool, error) {
 		ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
-		kept, err := ledger.Allows(member.ID, now)
+		kept, err := ledger.Allows(d.memberName(member.Key), now)
 		if err != nil {
 			refusal = err
 			return false, nil

@@ -385,7 +385,7 @@ function createReviewActions({ review, composer, fetchSeedDocument, onMoveSeed, 
     setComposer({ ...state, busy: true, error: '' });
     try {
       const document = await fetchSeedDocument(item.seed_id);
-      await onSendSeedToChief({ seedId: item.seed_id, expectedRev: document.seed.rev, expectedTenderSession: document.seed.tender_session || '', expectedTenderMember: document.seed.tender_member || '', guidance: state.text, review: reviewContext(review, item) });
+      await onSendSeedToChief({ seedId: item.seed_id, expectedRev: document.seed.rev, guidance: state.text, review: reviewContext(review, item) });
       setComposer(null);
       await refresh();
     } catch (error) {

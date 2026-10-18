@@ -15,7 +15,7 @@ APP_BINARY=$(APP_BUNDLE)/Contents/MacOS/attn
 # Which instance to build/install. Empty = the default/prod bundle. A named
 # instance (e.g. `make install INSTANCE=agent7`) builds attn-agent7.app /
 # com.attn.manager.agent7 with its own data dir + port. `make dev` ==
-# `make install INSTANCE=dev`. See docs/instances.md.
+# `make install INSTANCE=dev`. See docs/internal/instances.md.
 INSTANCE ?=
 # DEMO=1 builds a named instance for recordings: no instance chip, window titled attn.
 DEMO ?=
@@ -183,12 +183,12 @@ verify-ghostty-vt-wasm:
 	bash ./app/scripts/ensure-ghostty-vt-wasm.sh
 
 DIFF_BASE ?= origin/main
-GO_SUITE_IGNORES := ^(docs/|[^/]*\.md$$|app/src/)
+GO_SUITE_IGNORES := ^(docs/internal/|[^/]*\.md$$|app/src/)
 GO_SUITE_READS := ^app/src/(hooks/useDaemonSocket\.ts$$|ghostty/testdata/)
 test: git-hooks $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 	@changed="$$(git diff --name-only "$$(git merge-base HEAD $(DIFF_BASE))" && git ls-files --others --exclude-standard)" || changed=unknown; \
 	if [ -z "$(FORCE)" ] && ! printf '%s' "$$changed" | grep -qE '$(GO_SUITE_READS)' && ! printf '%s' "$$changed" | grep -qvE '$(GO_SUITE_IGNORES)'; then \
-		echo "make test: skipped the Go suite, only docs and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
+		echo "make test: skipped the Go suite, only docs/internal, root Markdown and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
 	else ./scripts/test-go.sh; fi
 
 test-scripts:
@@ -411,7 +411,7 @@ generate-types: ensure-go-jsonschema
 	# Go needs the named scalar roots; TypeScript resolves their references to strings.
 	# Passing those roots to quicktype also emits unused, unexported aliases.
 	@set --; for schema in internal/protocol/schema/tsp-output/json-schema/*.json; do \
-		case "$$schema" in */SessionID.json|*/TerminalID.json) ;; *) set -- "$$@" "$$schema" ;; esac; \
+		case "$$schema" in */SessionID.json|*/TerminalID.json|*/PartyRef.json|*/ActorRef.json|*/AddressRef.json) ;; *) set -- "$$@" "$$schema" ;; esac; \
 	done; npx quicktype@26.0.0 \
 		--src "$$@" \
 		--src-lang schema --lang typescript \

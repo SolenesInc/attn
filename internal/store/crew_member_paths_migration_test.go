@@ -56,7 +56,7 @@ func TestCrewPathsUpgradePreservesMembersWithoutMachinePaths(t *testing.T) {
 			if err := json.Unmarshal(doc.Body, &after); err != nil {
 				t.Fatal(err)
 			}
-			delete(before, "home_dir")
+			before["home_dir"] = "keel"
 			delete(before, "charter_path")
 			delete(before, "letter_path")
 			if letter != "" {

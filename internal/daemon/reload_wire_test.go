@@ -139,59 +139,6 @@ func TestReloadKeepsTheApprovalItStartedWith(t *testing.T) {
 	}
 }
 
-func TestChangingTheChiefRelaunchesExactlyTheAffectedAgents(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	runs := map[string]*fakeagent.Run{}
-	conversing := func(dir string) string {
-		id := w.Spawn(app, fakeagent.Claude, w.Path(dir))
-		runs[id] = w.Launched(id)
-		reloadConverse(t, app, id, runs[id])
-		return id
-	}
-	alice, bob, carol := conversing("alice"), conversing("bob"), conversing("carol")
-	shell := w.Spawn(app, shellHarness, w.Path("dora"))
-	runs[carol].Exit(143)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == carol })
-
-	relaunchedAs := func(what, session string, chief bool) {
-		t.Helper()
-		terminal := app.Terminal(session)
-		testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
-		run := w.Launched(session)
-		instructions, _ := flagValue(run.Argv, "--append-system-prompt")
-		if !run.Resumed || run.ConversationID != runs[session].ConversationID || strings.Contains(instructions, "You are the chief of staff") != chief {
-			t.Errorf("%s relaunched %s as %q, want it resuming %s with chief guidance %t", what, session, run.Argv, runs[session].ConversationID, chief)
-		}
-	}
-
-	reloadSetChief(t, app, alice, true)
-	relaunchedAs("assigning alice", alice, true)
-	reloadSetChief(t, app, bob, true)
-	relaunchedAs("transferring to bob", alice, false)
-	relaunchedAs("transferring to bob", bob, true)
-	reloadSetChief(t, app, bob, true)
-	reloadSetChief(t, app, alice, false)
-	reloadSetChief(t, app, bob, false)
-	relaunchedAs("demoting bob", bob, false)
-	reloadSetChief(t, app, carol, true)
-	reloadSetChief(t, app, shell, true)
-	reloadSetChief(t, app, shell, false)
-	reloadSetChief(t, app, alice, true)
-	relaunchedAs("assigning alice again", alice, true)
-
-	respawns := map[string]int{}
-	for _, e := range app.Received() {
-		if e.Event == protocol.EventRuntimeRespawned {
-			respawns[protocol.Deref(e.ID)]++
-		}
-	}
-	respawned := func(session string) int { return respawns[app.Terminal(session)] }
-	if respawned(alice) != 3 || respawned(bob) != 2 || respawned(carol) != 0 || respawned(shell) != 0 {
-		t.Errorf("runtime respawns alice=%d bob=%d carol=%d shell=%d, want 3, 2 and none for the exited carol or the shell", respawned(alice), respawned(bob), respawned(carol), respawned(shell))
-	}
-}
-
 func reloadConverse(t *testing.T, app *testworld.Peer, session string, run *fakeagent.Run) {
 	t.Helper()
 	app.TypeLine(session, "add a discount field to checkout")
@@ -209,11 +156,4 @@ func reloadRespawned(t *testing.T, app *testworld.Peer, session string) {
 	}
 	terminal := app.Terminal(session)
 	testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
-}
-
-func reloadSetChief(t *testing.T, app *testworld.Peer, session string, chief bool) {
-	t.Helper()
-	if result := setChiefOfStaff(app, session, chief); !result.Success {
-		t.Fatalf("set chief of staff %s=%t: %s", session, chief, protocol.Deref(result.Error))
-	}
 }

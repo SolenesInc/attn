@@ -39,7 +39,7 @@ func (d *Daemon) calloutsAllowed(session *protocol.Session) error {
 	if session == nil {
 		return fmt.Errorf("session not found")
 	}
-	if !parseBooleanSetting(d.daemonSetting(SettingCalloutsEnabled)) {
+	if !parseBooleanSetting(d.daemonSetting(settingCalloutsEnabled)) {
 		return fmt.Errorf("callouts are off: the user can turn them on in Settings > Experimental > Agent callouts")
 	}
 	return nil
@@ -65,8 +65,16 @@ func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutS
 		step := protocol.CalloutStep{Anchor: protocol.CalloutAnchor(anchor), Text: input.Text}
 		switch {
 		case strings.HasPrefix(anchor, "agent:"):
-			target, _ := d.resolveAgentPeekTarget(strings.TrimPrefix(anchor, "agent:"))
-			if target == nil || target.ProfileID != session.ProfileID {
+			b, err := d.bindings()
+			if err != nil {
+				return nil, err
+			}
+			r, err := d.requestFromSession(session.ID, b)
+			if err != nil {
+				return nil, err
+			}
+			target, err := d.resolveSession(r, b, strings.TrimPrefix(anchor, "agent:"))
+			if err != nil || target.ProfileID != session.ProfileID {
 				return nil, fmt.Errorf("%s is not an agent in your profile", anchor)
 			}
 			step.Anchor = protocol.CalloutAnchorAgent

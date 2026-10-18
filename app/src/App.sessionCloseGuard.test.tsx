@@ -1,7 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSession } from './test/appFixtures';
-import { agentPane, daemonDesktop, soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, crewMember, daemonDesktop, soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { laidOutDesktop, pane, split } from './test/desktopLayouts';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -9,7 +9,8 @@ import type { ScriptedDaemon } from './test/scriptedDaemon';
 async function renderOrchestrator(overrides: Partial<DaemonSession> = {}) {
   const rendered = await renderApp({
     initialState: {
-      sessions: [daemonSession('s1', { label: 'orchestrator', ...overrides })],
+      crew: [crewMember('coda', { name: 'Coda', agent: 'claude', binding_session: 's1', chief: overrides.chief === true })],
+      sessions: [daemonSession('s1', { label: 'orchestrator', ...overrides, ...(overrides.chief ? { crew_member: 'coda' } : {}) })],
       desktops: [soloDesktop('s1')],
     },
   });
@@ -37,34 +38,30 @@ function toast() {
 }
 
 describe('chief and crew sessions are protected from close', () => {
-  it.each([
-    ['the close action', closeFromSidebar],
-    ['⌘W', pressCmdW],
-  ])('no-ops %s on the chief session and shows the protected hint', async (_, close) => {
-    const { daemon } = await renderOrchestrator({ chief_of_staff: true });
-
-    close();
-
+  it.each([true, false])('protects a bound member from ⌘W (chief=%s)', async (chief) => {
+    const { daemon } = await renderOrchestrator({ chief, crew_member: 'coda' });
+    pressCmdW();
     expect(closeCommands(daemon)).toEqual([]);
-    expect(toast()).toHaveTextContent('Chief of staff is protected');
+    expect(toast()).toHaveTextContent('Coda is protected. Put Coda to sleep to close its session.');
   });
 
-  it.each([
-    ['the close action', closeFromSidebar],
-    ['⌘W', pressCmdW],
-  ])('no-ops %s on a crew member and points to Sleep', async (_, close) => {
-    const { daemon } = await renderOrchestrator({ crew_member: 'coda' });
-
-    close();
-
+  it.each([true, false])('offers Sleep for a bound member (chief=%s)', async (chief) => {
+    const { daemon } = await renderOrchestrator({ chief, crew_member: 'coda' });
+    daemon.on('crew_sleep', () => ({ event: 'crew_sleep_result', success: true, member: 'coda', session_id: 's1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for orchestrator' }));
+    expect(screen.queryByRole('menuitem', { name: /Close session/ })).toBeNull();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sleep Coda' }));
+    await daemon.idle();
+    expect(daemon.sentOf('crew_sleep')).toEqual([expect.objectContaining({ member: 'member:coda' })]);
+    if (chief) expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'awake');
     expect(closeCommands(daemon)).toEqual([]);
-    expect(toast()).toHaveTextContent('Coda is protected — put Coda to sleep to close the day.');
   });
 
   it('closes only the tile when another tile still shows the chief', async () => {
     const { daemon } = await renderApp({
       initialState: {
-        sessions: [daemonSession('a', { state: 'idle', chief_of_staff: true })],
+        crew: [crewMember('chief', { name: 'Chief', agent: 'claude', binding_session: 'a', chief: true })],
+        sessions: [daemonSession('a', { state: 'idle', chief: true, crew_member: 'chief' })],
         desktops: [
           laidOutDesktop(pane('a'), ['a']),
           daemonDesktop('other', { root: { type: 'pane', pane_id: 'pane-a2' }, panes: [{ ...agentPane('a', 'other', 'term-2'), pane_id: 'pane-a2' }] }, { order_key: 'b' }),
@@ -88,14 +85,15 @@ describe('chief and crew sessions are protected from close', () => {
   it('asks the daemon whether closing the chief\'s only tile ends it, and shows its refusal', async () => {
     const { daemon } = await renderApp({
       initialState: {
-        sessions: [daemonSession('a', { state: 'idle', chief_of_staff: true }), daemonSession('b', { state: 'idle' })],
+        crew: [crewMember('chief', { name: 'Chief', agent: 'claude', binding_session: 'a', chief: true })],
+        sessions: [daemonSession('a', { state: 'idle', chief: true, crew_member: 'chief' }), daemonSession('b', { state: 'idle' })],
         desktops: [laidOutDesktop(split('ab', 'vertical', [pane('a'), pane('b')]), ['a', 'b'])],
       },
       script: (d) => {
         d.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
         d.on('desktop_close_tile', (command) => ({
           event: 'profile_action_result', action: command.cmd, success: false, error_code: 'invalid',
-          error: 'chief of staff is protected from closing; unset the chief role first', request_id: command.request_id ?? '',
+          error: 'Chief is protected from closing; put Chief to sleep first', request_id: command.request_id ?? '',
         }));
       },
     });
@@ -107,7 +105,7 @@ describe('chief and crew sessions are protected from close', () => {
     expect(daemon.sentOf('desktop_close_tile')).toEqual([
       { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-a' },
     ]);
-    expect(toast()).toHaveTextContent('chief of staff is protected from closing');
+    expect(toast()).toHaveTextContent('Chief is protected from closing');
   });
 
   it('closes an ordinary session normally and shows no hint', async () => {

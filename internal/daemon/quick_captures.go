@@ -8,38 +8,42 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.QuickCaptureMailbox) (inbox.Address, error) {
+func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.QuickCaptureMailbox) (who.Address, error) {
 	switch mailbox.Kind {
 	case protocol.QuickCaptureMailboxKindChief:
 		if mailbox.MemberID != nil {
-			return inbox.Address{}, fmt.Errorf("chief mailbox cannot include member_id")
+			return who.Address{}, fmt.Errorf("chief mailbox cannot include member_id")
 		}
-	case protocol.QuickCaptureMailboxKindCrewMember:
-		if strings.TrimSpace(protocol.Deref(mailbox.MemberID)) == "" {
-			return inbox.Address{}, fmt.Errorf("crew mailbox requires member_id")
-		}
-		member, _, err := d.crewMember(*mailbox.MemberID)
+		chief, err := d.chiefParty(profileID)
 		if err != nil {
-			return inbox.Address{}, err
+			return who.Address{}, err
 		}
-		if d.crewProfileID(member.ID) != profileID {
-			return inbox.Address{}, fmt.Errorf("crew member %q not found in this profile", *mailbox.MemberID)
+		return chief.Address(), nil
+	case protocol.QuickCaptureMailboxKindCrewMember:
+		raw := strings.TrimSpace(protocol.Deref(mailbox.MemberID))
+		if raw == "" {
+			return who.Address{}, fmt.Errorf("crew mailbox requires member_id")
 		}
-		if member.ID != *mailbox.MemberID {
-			return inbox.Address{}, fmt.Errorf("member_id must be the stable roster identity %q", member.ID)
+		key, err := who.ParseMemberKey(raw)
+		if err != nil {
+			return who.Address{}, fmt.Errorf("member_id must be the stable roster identity: %w", err)
 		}
-	default:
-		return inbox.Address{}, fmt.Errorf("unknown quick capture mailbox kind %q", mailbox.Kind)
+		identity, err := d.store.CrewIdentity(key)
+		if err != nil || identity.ProfileID != profileID {
+			return who.Address{}, fmt.Errorf("crew member %q not found in this profile", raw)
+		}
+		to := who.Member(key).Address()
+		if err := d.mailRefusal(to); err != nil {
+			return who.Address{}, err
+		}
+		return to, nil
 	}
-	if mailbox.Kind == protocol.QuickCaptureMailboxKindChief {
-		return inbox.ToChief(profileID), nil
-	}
-	return inbox.ToMember(*mailbox.MemberID), nil
+	return who.Address{}, fmt.Errorf("unknown quick capture mailbox kind %q", mailbox.Kind)
 }
 
 type quickCaptureScope struct {

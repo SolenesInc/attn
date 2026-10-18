@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/victorarias/attn/internal/client"
@@ -55,7 +56,7 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 		if seedID := protocol.Deref(session.SeedID); seedID != "" {
 			slugs := slugsByProfile[session.ProfileID]
 			if slugs == nil {
-				seeds, err := cli.WithGardenProfile(session.ProfileID, "").SeedList("", false, 0)
+				seeds, err := cli.WithRequester(session.ProfileID, "").SeedList("", false, 0)
 				if err != nil {
 					return fmt.Errorf("read seeds in profile %s: %w", session.ProfileID, err)
 				}
@@ -67,7 +68,7 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 			}
 			slug, known := slugs[seedID]
 			if !known {
-				shown, err := cli.WithGardenProfile(session.ProfileID, "").SeedShow("", seedID)
+				shown, err := cli.WithRequester(session.ProfileID, "").SeedShow("", seedID)
 				if err != nil {
 					return fmt.Errorf("read seed %s in profile %s: %w", seedID, session.ProfileID, err)
 				}
@@ -126,10 +127,10 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 func fprintSessionTreeNode(w io.Writer, node *sessionTreeNode, prefix, branch string) {
 	session := node.session
 	label := session.Label
-	if branch == "" && (protocol.Deref(session.SeedID) != "" || protocol.Deref(session.DispatcherSessionID) != "" || protocol.Deref(session.DispatcherMember) != "") {
+	if branch == "" && (protocol.Deref(session.SeedID) != "" || protocol.Deref(session.DispatcherSessionID) != "" || session.Dispatcher != nil) {
 		dispatcher := "dispatcher"
-		if member := protocol.Deref(session.DispatcherMember); member != "" {
-			dispatcher += " " + member
+		if actor := session.Dispatcher; actor != nil && strings.HasPrefix(string(actor.Ref), "member:") {
+			dispatcher += " " + actor.Name
 		}
 		label += " (" + dispatcher + " closed or absent)"
 	}

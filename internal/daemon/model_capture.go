@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -28,7 +29,7 @@ func (d *Daemon) modelCaptureDir() string {
 }
 
 func (d *Daemon) modelCaptureEnabled() bool {
-	return d.store != nil && parseBooleanSetting(d.daemonSetting(SettingModelCaptureEnabled))
+	return d.store != nil && parseBooleanSetting(d.daemonSetting(settingModelCaptureEnabled))
 }
 
 func (d *Daemon) modelCaptureInterval() time.Duration {
@@ -36,7 +37,7 @@ func (d *Daemon) modelCaptureInterval() time.Duration {
 		return defaultModelCaptureIntervalSeconds * time.Second
 	}
 	seconds := resolveBoundedIntSetting(
-		d.daemonSetting(SettingModelCaptureIntervalSeconds),
+		d.daemonSetting(settingModelCaptureIntervalSeconds),
 		defaultModelCaptureIntervalSeconds,
 		modelCaptureIntervalMinSeconds,
 		modelCaptureIntervalMaxSeconds,
@@ -49,7 +50,7 @@ func (d *Daemon) modelCaptureMaxBytes() int64 {
 		return int64(defaultModelCaptureMaxGB) << 30
 	}
 	gb := resolveBoundedIntSetting(
-		d.daemonSetting(SettingModelCaptureMaxGB),
+		d.daemonSetting(settingModelCaptureMaxGB),
 		defaultModelCaptureMaxGB,
 		modelCaptureMaxMinGB,
 		modelCaptureMaxMaxGB,
@@ -157,6 +158,17 @@ func validateModelCaptureMaxGB(value string) error {
 		modelCaptureMaxMinGB,
 		modelCaptureMaxMaxGB,
 	)
+}
+
+func validateBoundedIntSetting(label, value string, min, max int) error {
+	n, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return fmt.Errorf("%s must be a whole number", label)
+	}
+	if n < min || n > max {
+		return fmt.Errorf("%s must be between %d and %d", label, min, max)
+	}
+	return nil
 }
 
 func resolveBoundedIntSetting(value string, fallback, min, max int) int {

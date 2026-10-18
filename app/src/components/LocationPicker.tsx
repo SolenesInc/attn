@@ -59,7 +59,6 @@ export interface LocationPickerProps {
     path: string,
     agent: SessionAgent,
     yoloMode?: boolean,
-    chiefOfStaff?: boolean,
     autoMode?: boolean,
   ) => void;
   onGetRecentLocations?: () => Promise<{ locations: RecentLocation[]; home_path?: string }>;
@@ -67,12 +66,11 @@ export interface LocationPickerProps {
   onInspectPath?: (path: string) => Promise<InspectPathResult>;
   onGetRepoInfo?: (mainRepo: string) => Promise<{ success: boolean; info?: BackendRepoInfo; error?: string }>;
   onCreateWorktree?: (mainRepo: string, branch: string, path?: string, startingFrom?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean, chiefOfStaff?: boolean) => void;
+  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean) => void;
   onDeleteWorktree?: (path: string, options?: { force?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onError?: (message: string) => void;
   projectsDirectory?: string;
   agentAvailability?: AgentAvailability;
-  chiefExists?: boolean;
 }
 
 const MAX_RECENT_LOCATIONS = 10;
@@ -113,12 +111,11 @@ export function LocationPicker({
   onError,
   projectsDirectory,
   agentAvailability,
-  chiefExists = false,
 }: LocationPickerProps) {
   const { settings, setSetting } = useSettings();
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
-  const controls = useSessionControls({ isOpen, initialAgent, agentAvailability, chiefExists });
-  const { agent, yoloMode, chiefOfStaff, autoMode, yoloSupported, autoModeSupported, chiefToggleEligible, effectiveAgentAvailability, hasAvailableAgents, agentShortcutByName, handleAgentChange, toggleYoloMode } = controls;
+  const controls = useSessionControls({ isOpen, initialAgent, agentAvailability });
+  const { agent, yoloMode, autoMode, yoloSupported, autoModeSupported, effectiveAgentAvailability, hasAvailableAgents, agentShortcutByName, handleAgentChange, toggleYoloMode } = controls;
   const inline = variant === 'inline';
 
   const [mode, setMode] = useState<Mode>('path-input');
@@ -294,7 +291,6 @@ export function LocationPicker({
       path,
       selectedAgent,
       yoloMode && yoloSupported,
-      chiefOfStaff && chiefToggleEligible,
       autoModeSupported ? autoMode : undefined,
     );
     onClose();
@@ -302,8 +298,6 @@ export function LocationPicker({
     agent,
     autoMode,
     autoModeSupported,
-    chiefOfStaff,
-    chiefToggleEligible,
     effectiveAgentAvailability,
     onClose,
     onSelect,
@@ -484,7 +478,6 @@ export function LocationPicker({
         selectedAgent,
         yoloMode && yoloSupported,
         autoModeSupported ? autoMode : undefined,
-        chiefOfStaff && chiefToggleEligible,
       );
       onClose();
       return;
@@ -523,8 +516,6 @@ export function LocationPicker({
     agent,
     autoMode,
     autoModeSupported,
-    chiefOfStaff,
-    chiefToggleEligible,
     effectiveAgentAvailability,
     setSelectedPathFromPhysical,
     yoloMode,

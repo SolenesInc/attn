@@ -14,7 +14,7 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 	for _, state := range []string{garden.StatusPlanted, garden.StatusGrowing, garden.StatusDormant, garden.StatusHarvested, garden.StatusWithered} {
 		t.Run(state, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "attn.db")
-			s, err := newSeededStore(path)
+			s, err := newStoreAtVersion(path, 1792359946019014-1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -22,15 +22,12 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			profile, err := s.GetProfile(view.Manifest.ProfileID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.RenameProfile(profile.ID, "Renamed", profile.Revision); err != nil {
+			profile := migrationFixtureProfile(t, s, view.Manifest.ProfileID)
+			if _, err := s.db.Exec("UPDATE profiles SET name='Renamed',revision=revision+1 WHERE id=?", profile.ID); err != nil {
 				t.Fatal(err)
 			}
 			oldRequest := `{"cmd":"delegate","request_id":"old-request","cwd":"/fixture","assignment":{"kind":"new","brief":"Original assignment"}}`
-			if _, _, err := s.ClaimDelegationOperation("old-request", "op-original", "original-session", "", "", oldRequest, time.Now()); err != nil {
+			if _, err := s.db.Exec(`INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,created_at,updated_at) VALUES(?,?,?,'accepted','',?,'now','now')`, "old-request", "op-original", oldRequest, "original-session"); err != nil {
 				t.Fatal(err)
 			}
 			schema := garden.SeedsSchema()
@@ -70,12 +67,12 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 			if err != nil || seed.ProfileID != profile.ID || seed.Status != state || seed.Body != "keep this" {
 				t.Fatalf("migration changed work: %+v %v", seed, err)
 			}
-			operation, err := migrated.GetDelegationOperation("old-request")
-			if err != nil {
+			var requestJSON, state string
+			if err := migrated.db.QueryRow(`SELECT request_json,state FROM delegation_operations WHERE request_id='old-request'`).Scan(&requestJSON, &state); err != nil {
 				t.Fatal(err)
 			}
 			var request protocol.DelegateMessage
-			if err := json.Unmarshal([]byte(operation.RequestJSON), &request); err != nil || protocol.Deref(request.ProfileID) != profile.ID || protocol.Deref(request.Assignment.Brief) != "Original assignment" || operation.Operation.State != protocol.DelegationOperationStateAccepted {
+			if err := json.Unmarshal([]byte(requestJSON), &request); err != nil || protocol.Deref(request.ProfileID) != profile.ID || protocol.Deref(request.Assignment.Brief) != "Original assignment" || state != "accepted" {
 				t.Fatalf("migration changed the pending assignment: %+v %v", request, err)
 			}
 		})

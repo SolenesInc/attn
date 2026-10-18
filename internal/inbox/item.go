@@ -1,6 +1,9 @@
 package inbox
 
-import "github.com/victorarias/attn/internal/protocol"
+import (
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
+)
 
 type Kind string
 
@@ -18,7 +21,7 @@ const (
 
 type Item struct {
 	ID     string
-	To     Address
+	To     who.Address
 	Kind   Kind
 	Text   string
 	Hint   string
@@ -27,10 +30,10 @@ type Item struct {
 }
 
 type Message struct {
-	ID              string
-	SenderSessionID protocol.SessionID
-	Body            string
-	CreatedAt       string
+	ID        string
+	Sender    who.Party
+	Body      string
+	CreatedAt string
 }
 
 type State string
@@ -42,7 +45,7 @@ const (
 )
 
 type PeerRecord struct {
-	To         Address
+	To         who.Address
 	Message    Message
 	ReadBy     protocol.SessionID
 	NotifiedAt string

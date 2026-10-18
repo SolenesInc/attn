@@ -24,7 +24,6 @@ const (
 	FactSessionPTYResized             = "session.pty.resized"
 	FactSessionTerminated             = "session.terminated"
 	FactSessionBranchChanged          = "session.branch.changed"
-	FactSessionChiefRoleChanged       = "session.chief_role.changed"
 	FactSessionReconciled             = "session.reconciled"
 	FactSessionPTYExited              = "session.pty.exited"
 	FactSessionCapChanged             = "session.cap.changed"
@@ -144,6 +143,7 @@ func buildWireProjections() []projection {
 				}
 			})
 		}},
+		{filter: bus.Filter{FactCrewBound, FactCrewReleased, FactCrewUpdated, FactSessionRenamed, FactSessionClosed, FactSessionReregistered}, apply: func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() }},
 		{
 			filter: bus.Filter{FactSessionStateChanged, FactSessionTitleChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
@@ -226,7 +226,6 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{
 				FactSessionTerminated,
 				FactSessionBranchChanged,
-				FactSessionChiefRoleChanged,
 				FactSessionReconciled,
 				FactWorktreeSessionsRemoved,
 			},

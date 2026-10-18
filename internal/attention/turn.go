@@ -31,9 +31,9 @@ func BreaksSnooze(state protocol.SessionState, reason string) bool {
 type Input struct {
 	IsShell bool
 
-	ChiefOfStaff bool
+	Chief bool
 }
 
 func Excluded(in Input) bool {
-	return in.IsShell || in.ChiefOfStaff
+	return in.IsShell || in.Chief
 }

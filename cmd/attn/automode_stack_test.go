@@ -74,6 +74,9 @@ func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T
 	}
 
 	s.Start()
+	if err := s.InjectSession("proposer", "Proposer", s.Path("proposer"), protocol.SessionAgent("pi")); err != nil {
+		t.Fatal(err)
+	}
 	requireStdout(t, s.Attn("automode", "denials"), "no denials recorded\n")
 
 	for _, tc := range []struct {
@@ -86,12 +89,12 @@ func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T
 		{args: []string{"--json", "--sandbox=inherit", "cargo", "test"}, want: "allow, inherit sandbox: cargo test"},
 	} {
 		var proposed autoModeProposed
-		s.Attn(append([]string{"automode", "rule", "add"}, tc.args...)...).JSON(t, &proposed)
+		s.Run(testworld.Invocation{Session: "proposer", Args: append([]string{"automode", "rule", "add"}, tc.args...)}).JSON(t, &proposed)
 		if proposed.Proposal.Kind != "rule" || proposed.Proposal.Summary != tc.want {
 			t.Errorf("attn automode rule add %s proposed %+v, want a rule %q", strings.Join(tc.args, " "), proposed.Proposal, tc.want)
 		}
 	}
-	recorded := s.Attn("automode", "rule", "add", "--sandbox", "inherit", "go", "vet")
+	recorded := s.Run(testworld.Invocation{Session: "proposer", Args: []string{"automode", "rule", "add", "--sandbox", "inherit", "go", "vet"}})
 	requireStdout(t, recorded, "recorded proposal ", ": rule allow, inherit sandbox: go vet\n",
 		"This changed nothing yet. Promote it in the attn app to put it in force.\n")
 	shown := s.Run(testworld.Invocation{Args: []string{"automode", "show"}, Dir: s.Dir})

@@ -195,14 +195,14 @@ try {
     }
     assert.equal(fs.existsSync(home), false, 'Each run owns a fresh crew fixture home');
     runner.registerCleanup('crew-fixture', async () => {
-      const member = JSON.parse(runAttn(['crew', 'list', '--json'])).find(member => member.id === mailbox);
+      const member = JSON.parse(runAttn(['crew', 'list', '--json'])).find(member => member.key === mailbox);
       if (member?.binding_session) {
         runAttn(['handoff', '--session', member.binding_session, '--sleep', '-m', 'Synthetic capture scenario complete']);
         await observer.waitFor(() => !observer.getSession(member.binding_session), 'synthetic crew session closed');
       }
+      runAttn(['crew', 'retire', `member:${mailbox}`]);
       fs.rmSync(home, { recursive: true, force: true });
-      runAttn(['doc', 'delete', 'core/crew', 'members', mailbox]);
-      assert.equal(JSON.parse(runAttn(['crew', 'list', '--json'])).some(member => member.id === mailbox), false);
+      assert.equal(JSON.parse(runAttn(['crew', 'list', '--json'])).some(member => member.key === mailbox), false);
     });
     fs.mkdirSync(home, { recursive: true });
     fs.writeFileSync(path.join(home, 'CHARTER.md'), '# Capture Fixture Builder\n\nInspect synthetic messages and their copied attachments.\n');

@@ -17,18 +17,19 @@ export interface CrewNavigationState {
   navigate: (intent: CrewNavigation) => void;
 }
 
-export function useCrewNavigation({ members, initialMember, rosterRef, charter, onClose, onOpenSeed }: {
+export function useCrewNavigation({ members, initialMember, initialTab, rosterRef, charter, onClose, onOpenSeed }: {
   members: CrewMember[];
   initialMember?: string;
+  initialTab?: CrewTab;
   rosterRef: RefObject<HTMLDivElement | null>;
   charter: CrewCharterAutosave;
   onClose: () => void;
   onOpenSeed: (seedId: string, placementSessionId?: string) => void;
 }): CrewNavigationState {
   const [selectedId, setSelectedId] = useState(() => (
-    initialMember && members.some((candidate) => candidate.id === initialMember) ? initialMember : members[0]?.id || ''
+    initialMember && members.some((candidate) => candidate.key === initialMember) ? initialMember : members[0]?.key || ''
   ));
-  const [tab, setTab] = useState<CrewTab>('launch');
+  const [tab, setTab] = useState<CrewTab>(initialTab || 'launch');
   const [pending, setPending] = useState(false);
   const sequence = useRef(0);
   const handlers = useRef({ onClose, onOpenSeed });
@@ -36,8 +37,8 @@ export function useCrewNavigation({ members, initialMember, rosterRef, charter, 
     handlers.current = { onClose, onOpenSeed };
   }, [onClose, onOpenSeed]);
 
-  const selectedMember = members.find((member) => member.id === selectedId) ?? members[0];
-  const selectedMemberId = selectedMember?.id;
+  const selectedMember = members.find((member) => member.key === selectedId) ?? members[0];
+  const selectedMemberId = selectedMember?.key;
   const bindingSession = selectedMember?.binding_session;
   const charterEdit = selectedMemberId ? charter.read(selectedMemberId) : undefined;
   const charterUnsettled = tab === 'charter' && Boolean(charterEdit?.acknowledged)

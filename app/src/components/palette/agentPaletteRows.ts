@@ -1,8 +1,9 @@
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
+import type { CrewMemberView } from '../QueueRows';
 import type { TileLeaf } from '../../types/desktop';
 import type { UISessionState } from '../../types/sessionState';
 import { headOfQueue, type QueueBandSession, type QueueBands } from '../../utils/queueBands';
-import { crewDisplayName } from '../../utils/crewName';
+import { memberName } from '../../store/daemonSessions';
 import { isSnoozed } from '../../utils/snoozeDurations';
 import type { DesktopWithSessions } from '../../utils/desktopViewModels';
 import { tileKindLabel } from '../../utils/tilePresentation';
@@ -14,13 +15,13 @@ export interface PaletteSession extends QueueBandSession {
 
 export type AgentPaletteRow<S extends PaletteSession> =
   | { kind: 'agent'; key: string; session: S; anchored: boolean; queueHead: boolean }
-  | { kind: 'member'; key: string; member: string }
+  | { kind: 'member'; key: string; member: string; name?: string; chief?: boolean; unconfigured?: boolean }
   | { kind: 'tile'; key: string; desktopId: string; tile: TileLeaf; title: string }
   | { kind: 'divider'; key: string };
 
 export interface AgentPaletteInput<S extends PaletteSession> {
   bands: QueueBands<S>;
-  crewRoster: readonly string[];
+  crew: readonly CrewMemberView[];
   desktops: readonly DesktopWithSessions<S>[];
   tileTitle: (desktopId: string, tile: TileLeaf) => string;
   now: number;
@@ -29,7 +30,7 @@ export interface AgentPaletteInput<S extends PaletteSession> {
 export type AgentStatus = 'chief' | 'snoozed' | 'approval' | 'waiting' | 'working' | 'idle';
 
 export function agentStatus(session: PaletteSession, now: number): AgentStatus {
-  if (session.chiefOfStaff) return 'chief';
+  if (session.chief) return 'chief';
   if (isSnoozed(session.turnSnoozedUntil, now)) return 'snoozed';
   if (session.turnOwed) return session.state === 'pending_approval' ? 'approval' : 'waiting';
   if (session.state === 'working' || session.state === 'launching') return 'working';
@@ -55,7 +56,7 @@ function matches(terms: readonly string[], ...texts: (string | undefined)[]): bo
 }
 
 export function agentPaletteRows<S extends PaletteSession>(
-  { bands, crewRoster, desktops, tileTitle }: AgentPaletteInput<S>,
+  { bands, crew, desktops, tileTitle }: AgentPaletteInput<S>,
   query: string,
 ): AgentPaletteRow<S>[] {
   const terms = queryTerms(query);
@@ -70,18 +71,26 @@ export function agentPaletteRows<S extends PaletteSession>(
   const bandRow = (session: S, anchored: boolean) =>
     agentRow(session, anchored, matches(terms, sessionDisplayName(session), session.crewMember, session.automation?.definition_name));
 
-  const anchored: AgentPaletteRow<S>[] = bands.chief ? bandRow(bands.chief.session, true) : [];
+  const chief = crew.find(member => member.chief);
+  const anchored: AgentPaletteRow<S>[] = [];
+  if (bands.chief) {
+    const session = chief ? { ...bands.chief.session, label: chief.name } : bands.chief.session;
+    anchored.push(...bandRow(session, true));
+  } else if (chief && matches(terms, chief.name, 'chief')) {
+    anchored.push({ kind: 'member', key: `member:${chief.key}`, member: chief.key, name: chief.name, chief: true, unconfigured: !chief.agent });
+  }
   const awakeByMember = new Map<string, typeof bands.crew>();
   for (const row of bands.crew) {
     const member = row.session.crewMember ?? '';
     awakeByMember.set(member, [...(awakeByMember.get(member) ?? []), row]);
   }
-  const members = [...new Set([...crewRoster, ...awakeByMember.keys()])].sort();
+  const members = [...new Set([...crew.filter(member => !member.chief).map(member => member.key), ...awakeByMember.keys()])].sort();
   for (const member of members) {
+    if (member === chief?.key) continue;
     const awake = awakeByMember.get(member);
     if (awake) {
       for (const row of awake) anchored.push(...bandRow(row.session, true));
-    } else if (matches(terms, member, crewDisplayName(member))) {
+    } else if (matches(terms, member, memberName(member))) {
       anchored.push({ kind: 'member', key: `member:${member}`, member });
     }
   }

@@ -33,7 +33,7 @@ var assetMimeTypes = map[string]string{
 
 func (d *Daemon) resolveFsRoot(client *wsClient, raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
-		return d.notebookRoot()
+		return d.notebookRoot(client.selectedProfile())
 	}
 	if !client.isTrustedAppClient() {
 		return "", fmt.Errorf("fs root requires the authenticated attn app client")
@@ -45,11 +45,8 @@ func (d *Daemon) resolveFsRoot(client *wsClient, raw string) (string, error) {
 	return resolved, nil
 }
 
-func (d *Daemon) fsStoreFor(client *wsClient, rawRoot string) (*fsdoc.Store, string, error) {
-	root, err := d.resolveFsRoot(client, rawRoot)
-	if err != nil {
-		return nil, "", err
-	}
+func (d *Daemon) fsStoreFor(resolvedRoot resolvedFsRoot) (*fsdoc.Store, string, error) {
+	root := string(resolvedRoot)
 	d.fsMu.Lock()
 	if d.fsStores == nil {
 		d.fsStores = make(map[string]*fsdoc.Store)
@@ -60,7 +57,7 @@ func (d *Daemon) fsStoreFor(client *wsClient, rawRoot string) (*fsdoc.Store, str
 		d.fsStores[root] = store
 	}
 	d.fsMu.Unlock()
-	if notebookRoot, nerr := d.notebookRoot(); nerr == nil && root == notebookRoot {
+	if d.isNotebookRoot(root) {
 		d.ensureNotebookWatcher(root)
 	}
 	return store, root, nil
@@ -73,16 +70,12 @@ func (d *Daemon) broadcastFsChanged(root, origin string, paths ...string) {
 		Origin: origin,
 		Root:   root,
 	}
-	if d.isNotebookRoot(root) {
-		d.broadcastMessage(msg)
-		return
-	}
 	d.sendFsChangedToWatchers(root, msg)
 }
 
-func (d *Daemon) sendFsListWSResult(client *wsClient, requestID, path, rawRoot string) {
+func (d *Daemon) sendFsListWSResult(client *wsClient, requestID, path string, rawRoot resolvedFsRoot) {
 	var entries []protocol.FsEntry
-	store, _, err := d.fsStoreFor(client, rawRoot)
+	store, _, err := d.fsStoreFor(rawRoot)
 	if err == nil {
 		var list []fsdoc.Entry
 		if list, err = store.List(path); err == nil {
@@ -101,9 +94,9 @@ func (d *Daemon) sendFsListWSResult(client *wsClient, requestID, path, rawRoot s
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendFsReadWSResult(client *wsClient, requestID, path, rawRoot string) {
+func (d *Daemon) sendFsReadWSResult(client *wsClient, requestID, path string, rawRoot resolvedFsRoot) {
 	var result *protocol.FsReadResult
-	store, _, err := d.fsStoreFor(client, rawRoot)
+	store, _, err := d.fsStoreFor(rawRoot)
 	if err == nil {
 		var content []byte
 		var hash string
@@ -123,12 +116,12 @@ func (d *Daemon) sendFsReadWSResult(client *wsClient, requestID, path, rawRoot s
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendFsReadAssetWSResult(client *wsClient, requestID, path, rawRoot string) {
+func (d *Daemon) sendFsReadAssetWSResult(client *wsClient, requestID, path string, rawRoot resolvedFsRoot) {
 	var result *protocol.FsReadAssetResult
 	mimeType, err := assetMimeTypeFor(path)
 	if err == nil {
 		var store *fsdoc.Store
-		if store, _, err = d.fsStoreFor(client, rawRoot); err == nil {
+		if store, _, err = d.fsStoreFor(rawRoot); err == nil {
 			var content []byte
 			if content, _, err = store.ReadWithLimit(path, maxAssetBytes); err == nil {
 				if len(content) > maxAssetBytes {
@@ -182,9 +175,9 @@ func assetMessageFits(requestID, path, mimeType string, rawLen int) (bool, error
 	return len(envelope)+base64.StdEncoding.EncodedLen(rawLen) <= maxAssetMessageBytes, nil
 }
 
-func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content, baseHash, rawRoot string) {
+func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content, baseHash string, rawRoot resolvedFsRoot) {
 	var result *protocol.FsWriteResult
-	store, root, err := d.fsStoreFor(client, rawRoot)
+	store, root, err := d.fsStoreFor(rawRoot)
 	if err == nil {
 		changed := path
 		if rel, cerr := fsdoc.CleanPath(path); cerr == nil {
@@ -201,11 +194,7 @@ func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content,
 				}
 			} else {
 				result.Hash = protocol.Ptr(hash)
-				if d.isNotebookRoot(root) {
-					d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
-				} else if w := d.fsWatcherFor(root); w != nil {
-					w.NoteSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
-				}
+				d.noteSelfWrite(root, notebook.SelfWrite{Rel: changed, Hash: hash})
 				d.broadcastFsChanged(root, originUI, changed)
 			}
 		}
@@ -222,12 +211,12 @@ func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content,
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newPath, rawRoot string) {
+func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newPath string, rawRoot resolvedFsRoot) {
 	oldRel, oldErr := fsdoc.CleanPath(oldPath)
 	newRel, newErr := fsdoc.CleanPath(newPath)
 	err := errors.Join(oldErr, newErr)
 	var result *protocol.FsRenameResult
-	store, root, storeErr := d.fsStoreFor(client, rawRoot)
+	store, root, storeErr := d.fsStoreFor(rawRoot)
 	if err == nil {
 		err = storeErr
 	}
@@ -237,17 +226,7 @@ func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newP
 			err = readErr
 		} else {
 			inNotebook := d.isNotebookRoot(root)
-			if inNotebook {
-				d.noteNotebookSelfWrite(
-					notebook.SelfWrite{Rel: oldRel},
-					notebook.SelfWrite{Rel: newRel, Hash: hash},
-				)
-			} else if w := d.fsWatcherFor(root); w != nil {
-				w.NoteSelfWrite(
-					notebook.SelfWrite{Rel: oldRel},
-					notebook.SelfWrite{Rel: newRel, Hash: hash},
-				)
-			}
+			d.noteSelfWrite(root, notebook.SelfWrite{Rel: oldRel}, notebook.SelfWrite{Rel: newRel, Hash: hash})
 			err = store.Rename(oldRel, newRel)
 			if err == nil {
 				result = &protocol.FsRenameResult{Path: oldRel, NewPath: newRel}
@@ -265,20 +244,16 @@ func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newP
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path, rawRoot string) {
+func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path string, rawRoot resolvedFsRoot) {
 	rel, err := fsdoc.CleanPath(path)
 	var result *protocol.FsDeleteResult
-	store, root, storeErr := d.fsStoreFor(client, rawRoot)
+	store, root, storeErr := d.fsStoreFor(rawRoot)
 	if err == nil {
 		err = storeErr
 	}
 	if err == nil {
 		inNotebook := d.isNotebookRoot(root)
-		if inNotebook {
-			d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: rel})
-		} else if w := d.fsWatcherFor(root); w != nil {
-			w.NoteSelfWrite(notebook.SelfWrite{Rel: rel})
-		}
+		d.noteSelfWrite(root, notebook.SelfWrite{Rel: rel})
 		err = store.Delete(rel)
 		if err == nil {
 			result = &protocol.FsDeleteResult{Path: rel}
@@ -295,9 +270,9 @@ func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path, rawRoot
 	d.sendToClient(client, msg)
 }
 
-func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path, rawRoot string) {
+func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path string, rawRoot resolvedFsRoot) {
 	var result *protocol.FsExistsResult
-	store, _, err := d.fsStoreFor(client, rawRoot)
+	store, _, err := d.fsStoreFor(rawRoot)
 	if err == nil {
 		var exists bool
 		if exists, err = store.Exists(path); err == nil {
@@ -317,8 +292,17 @@ func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path, rawRoot
 }
 
 func (d *Daemon) isNotebookRoot(root string) bool {
-	notebookRoot, err := d.notebookRoot()
-	return err == nil && root == notebookRoot
+	live, err := d.store.ListProfiles(false)
+	if err != nil {
+		return false
+	}
+	for _, p := range live {
+		candidate, err := d.notebookRoot(p.ID)
+		if err == nil && root == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func fsEntriesToProtocol(entries []fsdoc.Entry) []protocol.FsEntry {

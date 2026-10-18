@@ -55,7 +55,7 @@ function disableDefinition(binary, id, env) {
 
 function seedForSession(binary, sessionID, env) {
   const listed = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
-  return (listed.seeds || []).find((seed) => seed.tender_session === sessionID) || null;
+  return (listed.seeds || []).find((seed) => seed.tender?.session_id === sessionID) || null;
 }
 
 function recordedSessionIDs(binary, definitionIDs, env) {
@@ -69,7 +69,7 @@ function recordedSessionIDs(binary, definitionIDs, env) {
 
 function boundSeedsForSessions(binary, sessionIDs, env) {
   const listed = runJSON(binary, ['seed', 'ls', '--json'], env) || {};
-  return (listed.seeds || []).filter((seed) => sessionIDs.has(seed.tender_session));
+  return (listed.seeds || []).filter((seed) => sessionIDs.has(seed.tender?.session_id));
 }
 
 async function poll(fn, description, timeoutMs = 30_000) {
@@ -362,7 +362,7 @@ async function main() {
 
       const reported = await poll(() => {
         const listed = runJSON(binary, ['seed', 'ls', '--json'], daemonEnv) || {};
-        const seed = (listed.seeds || []).find((row) => row.tender_session === cleanupSessionID);
+        const seed = (listed.seeds || []).find((row) => row.tender?.session_id === cleanupSessionID);
         if (!seed) return null;
         const shown = runJSON(binary, ['seed', 'show', seed.id, '--json'], daemonEnv) || {};
         const notes = (shown.notes || []).map((note) => note.body);

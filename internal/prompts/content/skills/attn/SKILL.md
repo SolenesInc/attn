@@ -28,10 +28,19 @@ If a command reports an unknown subcommand or version, check `attn --version`
 and `which -a attn`; recover with `"$ATTN_WRAPPER_PATH"` when it is set.
 `attn skill` prints the bundled copy of this skill and its references.
 
-Read and change daemon settings with `attn settings list`, `get` and `set`.
-`list` describes each key and its accepted values; `--all` includes computed
-read-only values. Settings apply across all profiles. Use `attn settings --help`
-for syntax.
+Read and change settings with `attn settings list`, `get` and `set`. `list`
+describes each key, whether it applies to this profile or all profiles, and its
+accepted values; `--all` includes computed read-only values. Use
+`attn settings --help` for syntax.
+
+## Chief
+
+Every profile has one Chief, a crew member. `attn agent msg chief "…"` reaches
+that member, even after a rename, and wakes them after a manual sleep. Until
+a harness is chosen, their mail waits. Configure them with
+`attn crew set chief --agent <harness> --model <model>`; this wakes them at once.
+Change their charter or launch settings through `attn crew`. The Chief cannot
+be retired; use `attn crew sleep chief` to ask them to sleep.
 
 ## Delegation and reporting
 
@@ -45,6 +54,8 @@ For delegation mechanics and configured role selection, read [references/delegat
 
 - **Open shell splits, read terminals, type into them, wait, or close them:** read
   [references/terminal.md](references/terminal.md).
+- **Create, rename, move or configure a crew member:** read
+  [references/crew.md](references/crew.md).
 
 - **Create an authorized Attn delegation:** read [references/delegation.md](references/delegation.md).
 - **Change the user's delegation roles, their models, alternatives or the
@@ -59,7 +70,7 @@ For delegation mechanics and configured role selection, read [references/delegat
 - **Plant, tend, or report on work in the garden — seeds and plots, what makes
   a good seed body, artifacts:** read [references/garden.md](references/garden.md).
 - **Read or maintain the durable Notebook (journal + knowledge base), esp. as
-  chief of staff:** read [references/notebook.md](references/notebook.md).
+  Chief:** read [references/notebook.md](references/notebook.md).
 - **Show the user a markdown document:** read
   [references/markdown.md](references/markdown.md).
 - **Operate attn's persistent browser tile:** read

@@ -24,12 +24,21 @@ func quickCaptureCall(t *testing.T, cli *testworld.Peer, msg any) *protocol.Quic
 	}
 	return r
 }
-func quickCaptureSetChief(t *testing.T, app *testworld.Peer, id protocol.SessionID) {
+func registerChief(t *testing.T, s *testworld.Stack, id string) {
 	t.Helper()
-	r := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: id, ChiefOfStaff: true}, protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return r.SessionID == id })
-	if !r.Success {
-		t.Fatal(r)
+	roster, err := s.Client().CrewList()
+	if err != nil {
+		t.Fatal(err)
 	}
+	for _, member := range roster.Members {
+		if member.Chief {
+			if err := s.InjectCrewSession(id, id, s.Path(id), member.Key); err != nil {
+				t.Fatalf("register %s as the Chief's session: %v", id, err)
+			}
+			return
+		}
+	}
+	t.Fatal("the profile has no Chief")
 }
 func uploadQuickCaptureChunks(t *testing.T, cli *testworld.Peer, quickCapture, id string, data []byte) {
 	t.Helper()
@@ -53,9 +62,8 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	s := testworld.NewStack(t)
 	s.Start()
 	app := s.TrustedApp()
-	register(t, s, "first", "first")
+	registerChief(t, s, "first")
 	register(t, s, "second", "second")
-	quickCaptureSetChief(t, s.TrustedApp(), "first")
 	data, err := os.ReadFile("../../docs/banner.png")
 	if err != nil {
 		t.Fatal(err)
@@ -75,13 +83,12 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	s.Stop()
 	s.Start()
 	app = s.TrustedApp()
+	registerChief(t, s, "second")
 	register(t, s, "first", "first")
-	register(t, s, "second", "second")
 	replay := quickCaptureCall(t, app, msg)
 	if replay.Record.ID != quickCapture || len(replay.Record.Attachments) != 1 || replay.Record.Attachments[0].Bytes != len(data) {
 		t.Fatalf("restart/lost ack %+v", replay)
 	}
-	quickCaptureSetChief(t, s.TrustedApp(), "second")
 	old := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json"}, Session: "first"})
 	var empty protocol.AgentInboxBatchResult
 	old.JSON(t, &empty)
@@ -116,8 +123,7 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	}
 	s.Stop()
 	s.Start()
-	register(t, s, "first", "first")
-	quickCaptureSetChief(t, s.TrustedApp(), "first")
+	registerChief(t, s, "first")
 	final := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json"}, Session: "first"})
 	final.JSON(t, &empty)
 	if len(empty.Items) != 0 {
@@ -154,8 +160,7 @@ func TestQuickCapturePDFAttachmentRoundTripsThroughCLI(t *testing.T) {
 	s := testworld.NewStack(t)
 	s.Start()
 	app := s.TrustedApp()
-	register(t, s, "chief", "chief")
-	quickCaptureSetChief(t, app, "chief")
+	registerChief(t, s, "chief")
 	data := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n")
 	quickCapture, id := uuid.NewString(), uuid.NewString()
 	quickCaptureCall(t, app, protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true})

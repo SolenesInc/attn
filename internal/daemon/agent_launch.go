@@ -13,18 +13,18 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harness.TerminalID, isChief bool, opts *ptybackend.SpawnOptions, initialPrompt string) error {
+func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, profileID string, terminal harness.TerminalID, isChief bool, opts *ptybackend.SpawnOptions, initialPrompt string) error {
 	driver := agentdriver.Get(opts.Agent)
 	if driver == nil {
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
-	if !parseBooleanSetting(d.daemonSetting(SettingDirectAgentLaunchEnabled)) {
+	if !parseBooleanSetting(d.daemonSetting(settingDirectAgentLaunchEnabled)) {
 		prepareLauncherLaunch(driver, opts, initialPrompt)
-		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", parseBooleanSetting(d.daemonSetting(SettingQuickCaptureEnabled))))
+		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", parseBooleanSetting(d.daemonSetting(settingQuickCaptureEnabled))))
 		return nil
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
-	launch, awareness, err := d.prepareLaunchContext(sessionID, isChief && caps.HasLaunchInstructions, !caps.HasHooks)
+	launch, awareness, err := d.prepareLaunchContext(sessionID, profileID, isChief && caps.HasLaunchInstructions, !caps.HasHooks)
 	if err != nil {
 		return err
 	}

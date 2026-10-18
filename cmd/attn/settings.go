@@ -12,9 +12,11 @@ import (
 )
 
 func writeSettingsHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn settings <command>
+	fmt.Fprint(w, `usage: attn settings <command> [--profile <name|id>]
 
-Read and change daemon settings. Changes apply across all profiles.
+Read and change settings. list shows which apply to one profile or all profiles.
+Inside attn, use the session's profile. Outside attn, list and profile settings
+need --profile when several profiles exist. Daemon settings need no profile.
 
 commands:
   list [--all] [--json]  show keys, scopes, values and descriptions;
@@ -34,6 +36,7 @@ func runSettings() {
 	verb := args[0]
 	fs := flag.NewFlagSet("settings "+verb, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	profile := fs.String("profile", "", "profile name or id outside an attn session")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	all := fs.Bool("all", false, "include read-only values")
 	var positionals []string
@@ -70,10 +73,11 @@ func runSettings() {
 	default:
 		usage(fmt.Sprintf("unknown command %q", verb))
 	}
+	session := currentSessionOrExit()
 	c := client.New("")
 	refusal := func(err error) { fmt.Fprintln(os.Stderr, "settings: "+err.Error()); os.Exit(1) }
 	if verb == "set" {
-		entry, err := c.SetSetting(positionals[0], positionals[1])
+		entry, err := c.SetSetting(session, *profile, positionals[0], positionals[1])
 		if err != nil {
 			refusal(err)
 		}
@@ -88,7 +92,7 @@ func runSettings() {
 	if verb == "get" {
 		key = positionals[0]
 	}
-	result, err := c.Settings(key, *all)
+	result, err := c.Settings(session, *profile, key, *all)
 	if err != nil {
 		refusal(err)
 	}
@@ -105,9 +109,15 @@ func runSettings() {
 		printJSON(result)
 		return
 	}
+	if result.ProfileID != "" {
+		fmt.Printf("profile %s (%s)\n", result.ProfileName, result.ProfileID)
+	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, entry := range result.Entries {
 		scope := "all profiles"
+		if entry.Scope == protocol.SettingScopeProfile {
+			scope = "this profile"
+		}
 		value := protocol.Deref(entry.Value)
 		if value == "" {
 			value = "-"

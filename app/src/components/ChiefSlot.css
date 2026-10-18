@@ -1,0 +1,25 @@
+.chief-pending-row .session-trailing { color: var(--color-text-dimmed); font-size: 11px; }
+.chief-setup { margin: 2px 4px 10px; padding: 10px; border: 1px solid var(--color-border-subtle); border-radius: 6px; background: var(--color-bg-panel); font-size: 12px; }
+.chief-setup-heading, .chief-chosen-harness, .chief-install-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.chief-setup-heading h3 { margin: 0; font-size: 12px; font-weight: 600; }
+.chief-setup button { color: inherit; font: inherit; cursor: pointer; }
+.chief-setup-heading button, .chief-chosen-harness button { border: 0; background: transparent; color: var(--color-text-dimmed); }
+.chief-chosen-harness { margin: 10px 0 6px; }
+.chief-setup small { display: block; color: var(--color-text-dimmed); font-size: 10px; }
+.chief-setup [role="radiogroup"] > button { display: flex; width: 100%; align-items: center; gap: 8px; text-align: left; padding: 8px 5px; border: 0; border-radius: 4px; background: transparent; }
+.chief-setup [role="radio"][aria-checked="true"] { background: var(--color-bg-elevated); }
+.chief-radio-mark { color: var(--accent); }
+.chief-setup kbd { margin-left: auto; color: var(--color-text-dimmed); font-size: 10px; }
+.chief-setup .chief-effort { display: flex; gap: 2px; margin-top: 10px; }
+.chief-setup .chief-effort > button { justify-content: center; padding: 5px 2px; font-size: 11px; }
+.chief-setup-primary { display: flex; justify-content: center; align-items: center; gap: 6px; width: 100%; border: 1px solid var(--color-border-subtle); border-radius: 4px; padding: 7px; background: var(--color-bg-elevated); }
+.chief-setup button:disabled { opacity: .5; cursor: default; }
+.chief-setup-buttons { display: flex; gap: 6px; }
+.chief-setup-buttons.is-stacked { flex-direction: column; }
+.chief-setup-buttons > button { border: 1px solid var(--color-border-subtle); border-radius: 4px; background: var(--color-bg-elevated); padding: 6px; }
+.chief-setup-error { color: var(--color-error); }
+.chief-install-row { margin-top: 8px; }
+.chief-install-row > span { font-size: 10px; color: var(--color-text-dimmed); }
+
+.chief-notebook-folder { display: block; margin: 10px 0; }
+.chief-notebook-folder input { box-sizing: border-box; width: 100%; margin: 5px 0; padding: 6px; border: 1px solid var(--color-border-subtle); border-radius: 4px; background: var(--color-bg-elevated); color: inherit; font: inherit; }

@@ -74,7 +74,7 @@ func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
 			}
 			seed := shown.Seed
 			if seed.Body != "Migrate the store to the new schema" || seed.Title != "Store migration" || seed.Status != "growing" ||
-				seed.PlanterSession != source || seed.TenderSession != result.SessionID {
+				seed.Planter.Ref != protocol.ActorRef("session:"+source) || protocol.Deref(protocol.Deref(seed.Tender).SessionID) != result.SessionID {
 				t.Errorf("the delegation planted %+v; want the brief, growing, planted by %s and tended by %s", seed, source, result.SessionID)
 			}
 
@@ -179,16 +179,13 @@ func sessionOfDelegate(t *testing.T, w *world, sessionID string) protocol.Sessio
 func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "chief")
+	chief := configureChiefOn(t, w, app, fakeagent.Codex, "gpt-6.1-sol")
 	cwd := w.Path("chief")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if result := setChiefOfStaff(app, "chief", true); !result.Success {
-		t.Fatalf("making chief the chief: %s", protocol.Deref(result.Error))
-	}
 
-	request := delegateFrom("chief", cwd, "Audit the backlog", fakeagent.Codex)
+	request := delegateFrom(chief, cwd, "Audit the backlog", fakeagent.Codex)
 	request.Label = protocol.Ptr("Backlog audit")
 	result, err := cli.Delegate(request)
 	if err != nil {
@@ -197,17 +194,17 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	if prompt := w.Launched(string(result.SessionID)).Prompted(); !strings.Contains(prompt, "attn seed show "+result.SeedID) {
 		t.Errorf("the chief's delegate was prompted %q; want a pointer to seed %s", prompt, result.SeedID)
 	}
-	if shown, err := cli.SeedShow("", result.SeedID); err != nil || shown.Seed.TenderSession != result.SessionID || shown.Seed.Body != "Audit the backlog" {
+	if shown, err := cli.SeedShow("", result.SeedID); err != nil || protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID) != result.SessionID || shown.Seed.Body != "Audit the backlog" {
 		t.Errorf("the chief's delegation planted %+v, %v; want the brief tended by %s", shown, err, result.SessionID)
 	}
 	delegate := testworld.AwaitSession(app, string(result.SessionID), func(s protocol.Session) bool { return protocol.Deref(s.DelegatedFromChief) })
-	if protocol.Deref(delegate.ChiefOfStaff) {
+	if protocol.Deref(delegate.Chief) {
 		t.Errorf("the chief's delegate reads as the chief itself: %+v", delegate)
 	}
-	if chief := sessionOfDelegate(t, w, "chief"); !protocol.Deref(chief.ChiefOfStaff) || protocol.Deref(chief.DelegatedFromChief) {
+	if chief := sessionOfDelegate(t, w, chief); !protocol.Deref(chief.Chief) || protocol.Deref(chief.DelegatedFromChief) {
 		t.Errorf("the chief reads as %+v; want chief_of_staff and not delegated_from_chief", chief)
 	}
-	chiefDesktop, _ := placedPane(t, w, "chief")
+	chiefDesktop, _ := placedPane(t, w, chief)
 	if protocol.Deref(result.DesktopID) != chiefDesktop.ID {
 		t.Errorf("the chief's delegate landed on desktop %q; want the chief's own %s", protocol.Deref(result.DesktopID), chiefDesktop.ID)
 	}

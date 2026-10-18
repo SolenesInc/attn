@@ -85,7 +85,7 @@ function NotesIcon() {
 function SeedAnnotationDestination({ annotations, path }: Pick<Props, 'annotations' | 'path'>) {
   const {
     destinationGroupRef,
-    seedTenderSessionId,
+    seedSessionId,
     sendStatus,
     sendHasProblem,
     sendDisabled,
@@ -112,7 +112,7 @@ function SeedAnnotationDestination({ annotations, path }: Pick<Props, 'annotatio
         type="button"
         className={[
           'desktop-dock-tile-send-button',
-          seedTenderSessionId ? 'desktop-dock-tile-send-button--split-primary' : '',
+          seedSessionId ? 'desktop-dock-tile-send-button--split-primary' : '',
           sendStatus.kind === 'sent' ? 'desktop-dock-tile-send-button--ok' : '',
           sendHasProblem ? `desktop-dock-tile-send-button--${sendStatus.kind}` : '',
         ]
@@ -129,7 +129,7 @@ function SeedAnnotationDestination({ annotations, path }: Pick<Props, 'annotatio
           </span>
         ) : null}
       </button>
-      {seedTenderSessionId ? (
+      {seedSessionId ? (
         <>
           <button
             ref={destinationCaretRef}

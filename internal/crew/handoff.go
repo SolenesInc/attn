@@ -15,23 +15,23 @@ const MaxHandoffBytes = 64000
 
 const MaxHandoffFileBytes = MaxHandoffBytes + 1
 
-func FileHandoff(homeDir, member, note string, at time.Time) (string, error) {
+func FileHandoff(homeDir, member, name, note string, at time.Time) (string, error) {
 	if err := ValidateHandoffNote(note); err != nil {
 		return "", err
 	}
 	dir := filepath.Join(homeDir, HandoffsDirName)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("making %s's handoffs directory at %s: %w", DisplayName(member), dir, err)
+		return "", fmt.Errorf("making %s's handoffs directory at %s: %w", name, dir, err)
 	}
 	pattern := at.UTC().Format(HandoffStampLayout) + "-" + member + "_" + at.UTC().Format("05.000000000") + "-*.md"
 	file, err := os.CreateTemp(dir, pattern)
 	if err != nil {
-		return "", fmt.Errorf("filing %s's letter in %s: %w", DisplayName(member), dir, err)
+		return "", fmt.Errorf("filing %s's letter in %s: %w", name, dir, err)
 	}
 	defer file.Close()
 	path := file.Name()
 	if _, err := file.WriteString(ensureTrailingNewline(note)); err != nil {
-		return "", fmt.Errorf("writing %s's letter at %s: %w", DisplayName(member), path, err)
+		return "", fmt.Errorf("writing %s's letter at %s: %w", name, path, err)
 	}
 	return path, nil
 }

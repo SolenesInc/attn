@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func runDB() {
@@ -182,7 +183,7 @@ func pinRestoredConversationArchives(dbPath string) (err error) {
 			continue
 		}
 		copy := previous
-		copy.DeletedAt, copy.ReleasedAt, copy.DeletedBy = time.Time{}, time.Time{}, ""
+		copy.DeletedAt, copy.ReleasedAt, copy.DeletedBy = time.Time{}, time.Time{}, who.Actor{}
 		if err := s.PutKeptConversation(copy); err != nil {
 			return err
 		}

@@ -184,7 +184,7 @@ describe('App callouts', () => {
   it.each([
     [false, false, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button']],
     [false, true, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button']],
-    [true, false, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'queue', 'settings-button']],
+    [true, false, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'queue', 'crew', 'settings-button']],
     [true, true, ['sidebar', 'desktops', 'queue', 'settings-button']],
   ])('lists anchors for queue=%s collapsed=%s', async (queue, collapsed, anchors) => {
     const { daemon } = await launch(queue);

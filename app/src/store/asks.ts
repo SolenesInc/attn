@@ -45,14 +45,15 @@ export function useAsksAvailable(settings: Record<string, string>): boolean {
 export function useAskList<S extends AskHolderSession & { label: string }>(sessions: readonly S[]): AskListItem<S>[] {
   const asks = useAsksStore((state) => state.asks);
   const seeds = useDaemonStore((state) => state.seeds);
-  return useMemo(() => askList(asks, sessions, seeds), [asks, sessions, seeds]);
+  const crew = useDaemonStore((state) => state.crew);
+  return useMemo(() => askList(asks, sessions, seeds, crew), [asks, sessions, seeds, crew]);
 }
 
-export function useAsksOf({ id, crewMember, chiefOfStaff, seedId }: AskHolderSession): Ask[] {
+export function useAsksOf({ id, crewMember, seedId }: AskHolderSession): Ask[] {
   const asks = useAsksStore((state) => state.asks);
   const seeds = useDaemonStore((state) => state.seeds);
   return useMemo(
-    () => asks.filter((ask) => askBelongsTo(ask, { id, crewMember, chiefOfStaff, seedId }, seeds)),
-    [asks, seeds, id, crewMember, chiefOfStaff, seedId],
+    () => asks.filter((ask) => askBelongsTo(ask, { id, crewMember, seedId }, seeds)),
+    [asks, seeds, id, crewMember, seedId],
   );
 }

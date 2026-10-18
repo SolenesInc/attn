@@ -5,7 +5,6 @@ import type { DaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import { useDaemonStore } from '../store/daemonSessions';
 import { quickCaptureDaemonClient } from '../quickCapture/daemonClient';
-import { crewDisplayName } from '../utils/crewName';
 import { isMacLikePlatform } from '../shortcuts/platform';
 import {
   QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST, QUICK_CAPTURE_RESULT, QUICK_CAPTURE_STATE, QUICK_CAPTURE_SHORTCUT_SETTING, QUICK_CAPTURE_ENABLED_SETTING, QUICK_CAPTURE_FONT,
@@ -20,6 +19,8 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   const delivery = useMemo(() => quickCaptureDaemonClient(daemon, profileId), [daemon.sendQuickCaptureRequest, profileId]);
   const supported = isMacLikePlatform() && isTauri();
   const crew = useDaemonStore(store => store.crew);
+  const members = crew.filter(member => member.profile_id === profileId);
+  const chief = members.find(member => member.chief);
   const [native, setNative] = useState<NativeStatus>({ binding: null, active: null });
   const [nativeReady, setNativeReady] = useState(false);
   const queue = useRef(Promise.resolve());
@@ -28,9 +29,12 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   const state: QuickCaptureHostState = {
     enabled: settings[QUICK_CAPTURE_ENABLED_SETTING] === 'true',
     profileId, connected: !!profileId && daemon.isReady,
-    mailboxes: [EMPTY_HOST_STATE.mailboxes[0], ...crew.filter(member => member.profile_id === profileId).map(member => ({
-      id: member.id, name: crewDisplayName(member.id), detail: member.binding_session ? 'Awake' : 'Asleep',
-    }))],
+    mailboxes: [
+      chief ? { id: 'chief', name: chief.name, detail: chief.binding_session ? 'Awake' : 'Asleep' } : EMPTY_HOST_STATE.mailboxes[0],
+      ...members.filter(member => !member.chief).map(member => ({
+        id: member.key, name: member.name, detail: member.binding_session ? 'Awake' : 'Asleep',
+      })),
+    ],
     connectionError: daemon.connectionError ?? undefined,
     binding: native.binding, activeBinding: native.active, shortcutError: native.error,
     fontScale: Number(settings.uiScale) || 1, keybindings: settings.keybindings_config,

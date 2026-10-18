@@ -11,7 +11,7 @@ set -euo pipefail
 # Runs in CI (.github/workflows/ci.yml, job "Changelog") and locally:
 #   ./scripts/changelog-gate.sh main
 #
-# See docs/making-a-release.md.
+# See docs/internal/making-a-release.md.
 
 BASE_REF="${1:?usage: changelog-gate.sh <base-ref> [head-branch]}"
 HEAD_BRANCH="${2:-$(git branch --show-current)}"
@@ -56,7 +56,7 @@ CHANGELOG.md.
 
 Add one YAML fragment under changelog.d/ describing what changed (use
 kind: internal for changes with no user-visible behavior). Format and
-examples: docs/making-a-release.md
+examples: docs/internal/making-a-release.md
 EOF
   exit 1
 fi

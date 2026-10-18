@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -132,6 +133,51 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 }
 
 const notificationKindTaskFailed = "task_failed"
+
+func (d *Daemon) notifyChiefSetupFailure(profile profiles.Profile, cause error) {
+	d.logf("furnish Chief for profile %s: %v", profile.ID, cause)
+	impact := "The profile was created, but its Chief could not be set up."
+	record, err := d.store.AddNotification(store.NotificationRecord{
+		Kind:       "chief_setup_failed",
+		Severity:   store.NotificationWarning,
+		Title:      "Could not set up Chief for " + profile.Name,
+		Body:       impact + " Fix the filesystem problem, then restart the daemon to retry.",
+		Detail:     cause.Error(),
+		Trigger:    "The profile was created.",
+		Impact:     impact,
+		Cause:      cause.Error(),
+		SourceKind: "profile",
+		SourceID:   profile.ID,
+	}, time.Now())
+	if err != nil {
+		d.logf("notifications: add Chief setup failure for %s: %v", profile.ID, err)
+		return
+	}
+	d.publishFact(FactNotificationCreated, record.ID, nil)
+}
+
+func (d *Daemon) notifySessionCloseFailure(sessionID protocol.SessionID, cause error) {
+	d.logf("closing normally exited session %s: %v", sessionID, cause)
+	impact := "The agent exited, but attn could not close its session automatically."
+	record, err := d.store.AddNotification(store.NotificationRecord{
+		Kind:       "session_close_failed",
+		Severity:   store.NotificationWarning,
+		Title:      "Could not close " + d.sessionPartyName(sessionID),
+		Body:       impact,
+		Detail:     cause.Error(),
+		Trigger:    "The agent exited normally.",
+		Impact:     impact,
+		Cause:      cause.Error(),
+		SourceKind: "session",
+		SourceID:   string(sessionID),
+		Actions:    []store.NotificationAction{openSessionAction(sessionID)},
+	}, time.Now())
+	if err != nil {
+		d.logf("notifications: add session-close failure for %s: %v", sessionID, err)
+		return
+	}
+	d.publishFact(FactNotificationCreated, record.ID, nil)
+}
 
 const (
 	notificationActionRetryTask   = "retry_task"

@@ -80,11 +80,19 @@ func (d *Daemon) terminalTarget(caller *protocol.Session, ref string) (*selected
 		}
 	}
 	if match == nil {
-		member, found, err := d.resolveCrewMember(ref)
+		b, err := d.bindings()
 		if err != nil {
 			return nil, err
 		}
-		if found && d.crewProfileID(member.ID) == caller.ProfileID {
+		r, err := d.requestFromSession(caller.ID, b)
+		if err != nil {
+			return nil, err
+		}
+		if identity, err := d.resolveMember(r, ref); err == nil {
+			member, _, err := d.crewMember(identity.Key)
+			if err != nil {
+				return nil, err
+			}
 			if session := d.store.Get(member.BindingSession); session != nil && session.ProfileID == caller.ProfileID {
 				match = session
 			}
@@ -479,7 +487,17 @@ func (d *Daemon) handleTerminalClose(conn net.Conn, msg *protocol.TerminalCloseM
 		d.sendError(conn, err.Error())
 		return
 	}
-	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: string(caller.ID), Reason: "shell closed by attn terminal close"}, nil)
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	r, err := d.requestFromSession(caller.ID, b)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: r.Actor(), Reason: "shell closed by attn terminal close"}, nil)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return

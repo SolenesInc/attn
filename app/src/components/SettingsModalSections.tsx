@@ -1,8 +1,8 @@
+import { useProfilesStore } from '../store/profiles';
 import { useHarnesses } from '../hooks/useHarnesses';
 import { HarnessRouteChip } from './HarnessRouteChip';
 import { HarnessRouteBadge } from './HarnessRouteBadge';
 import { routeFromStored } from '../hooks/useHarnessRoute';
-import { ModelTier } from '../types/generated';
 import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
 import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
 import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
@@ -247,6 +247,8 @@ export function DesktopSettings({
   worktreeSweepEnabled,
   notebookRootDraft,
   effectiveNotebookRoot,
+  defaultNotebookRoot,
+  notebookSettingsLoaded,
   handleBrowseNotebookRoot,
   handleToggleOpenSentFiles,
   openSentFilesEnabled,
@@ -260,10 +262,13 @@ export function DesktopSettings({
   | 'worktreeSweepEnabled'
   | 'notebookRootDraft'
   | 'effectiveNotebookRoot'
+  | 'defaultNotebookRoot'
+  | 'notebookSettingsLoaded'
   | 'handleBrowseNotebookRoot'
   | 'handleToggleOpenSentFiles'
   | 'openSentFilesEnabled'
 >) {
+  const profileName = useProfilesStore((state) => state.profiles.find((profile) => profile.id === state.selectedProfileId)?.name ?? 'this profile');
   return (
     <>
       <section className="settings-block">
@@ -362,10 +367,9 @@ export function DesktopSettings({
         <div className="settings-block-intro">
           <h3>Notebook Folder</h3>
           <p className="settings-description">
-            Where attn keeps your durable Notebook — dated journals and the knowledge base — as plain markdown you own.
-            Leave blank to use the default (<code>~/attn-notebook</code>, separate per instance). Changing this points
-            attn at the new folder; your existing notes are not moved, so move or sync the folder yourself if you want
-            the current contents to come along.
+            Journals and knowledge for <strong>{profileName}</strong>, saved as plain markdown you own.
+            Leave blank for a folder named after this profile. Changing the folder doesn't move existing notes;
+            move or sync them yourself.
           </p>
         </div>
         <div className="settings-block-body">
@@ -373,18 +377,19 @@ export function DesktopSettings({
             <input
               data-testid="settings-notebook-root-input"
               type="text"
+              disabled={!notebookSettingsLoaded}
               value={notebookRootDraft.value}
               onChange={notebookRootDraft.onChange}
               onBlur={notebookRootDraft.commit}
               onKeyDown={notebookRootDraft.onKeyDown}
-              placeholder={effectiveNotebookRoot || '~/attn-notebook'}
+              placeholder={defaultNotebookRoot || undefined}
               className="settings-input"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
             />
             <SavedMark shown={savedFlash.saved('notebook.root')} testID="settings-notebook-root-saved" />
-            <button className="settings-action" onClick={handleBrowseNotebookRoot}>
+            <button className="settings-action" disabled={!notebookSettingsLoaded} onClick={handleBrowseNotebookRoot}>
               Browse
             </button>
           </div>
@@ -822,11 +827,7 @@ export function BackgroundAgentSettings({
   activityAgents,
   onSetSetting,
   gardenAdvisorAgents,
-  chiefOverrideAgentList,
-  chiefModelDrafts,
-  chiefEffortDrafts,
   savedFlash,
-  chiefContextCapDraft,
   headlessContextCapDraft,
 }: Pick<
   SettingsModalState,
@@ -834,75 +835,22 @@ export function BackgroundAgentSettings({
   | 'activityAgents'
   | 'onSetSetting'
   | 'gardenAdvisorAgents'
-  | 'chiefOverrideAgentList'
-  | 'chiefModelDrafts'
-  | 'chiefEffortDrafts'
   | 'savedFlash'
-  | 'chiefContextCapDraft'
   | 'headlessContextCapDraft'
 >) {
-  const { harnesses } = useHarnesses();
   return (
     <>
       <SessionActivitySettings settings={settings} agents={activityAgents} onSetSetting={onSetSetting} />
       <GardenAdvisorSettings settings={settings} agents={gardenAdvisorAgents} onSetSetting={onSetSetting} />
       <section className="settings-block">
         <div className="settings-block-intro">
-          <h3>Chief of staff</h3>
-          <p className="settings-description">
-            Harness, model and effort for Chief launches. Unset models use the deep default at low effort.
-          </p>
-        </div>
-        <div className="settings-block-body">
-          {chiefOverrideAgentList.length === 0 ? (
-            <div className="settings-warning">No installed agent supports a model or effort override.</div>
-          ) : (
-            <div className="settings-field-grid two-column">
-              {chiefOverrideAgentList.map((agent) => {
-                return <div className="settings-field" key={agent}>
-                  <HarnessRouteChip variant="field" aria-label={`${agentLabel(agent)} Chief model`} data-testid={`settings-chief-route-${agent}`} value={{ harness: agent, provider: '', model: chiefModelDrafts.value(agent), effort: chiefEffortDrafts.value(agent) }} rules={{ harnesses: harnesses.filter(harness => harness.id === agent), fixedHarness: true, tier: ModelTier.Deep, defaultEffort: 'low' }} onChange={route => {
-                    if (route.model !== chiefModelDrafts.value(agent)) void chiefModelDrafts.apply(agent, route.model);
-                    if (route.effort !== chiefEffortDrafts.value(agent)) void chiefEffortDrafts.apply(agent, route.effort);
-                  }} />
-                  <SavedMark shown={savedFlash.saved(`chief_model_${agent}`)} testID={`settings-chief-model-saved-${agent}`} />
-                </div>;
-              })}
-            </div>
-          )}
-        </div>
-      </section>
-      <section className="settings-block">
-        <div className="settings-block-intro">
           <h3>Compaction</h3>
           <p className="settings-description">
-            Token thresholds for the Chief and background runs. Empty values use the default of{' '}
+            Token thresholds for background runs. Empty values use the default of{' '}
             {DEFAULT_CONTEXT_WINDOW_CAP.toLocaleString()} tokens.
           </p>
         </div>
         <div className="settings-block-body settings-field-grid">
-          <div className="settings-field">
-            <label className="settings-label" htmlFor="settings-chief-context-cap">
-              Chief of staff
-            </label>
-            <input
-              id="settings-chief-context-cap"
-              data-testid="settings-chief-context-cap"
-              type="number"
-              min={10000}
-              max={2000000}
-              step={1000}
-              value={chiefContextCapDraft.value}
-              onChange={chiefContextCapDraft.onChange}
-              onBlur={chiefContextCapDraft.commit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  chiefContextCapDraft.commit();
-                }
-              }}
-              className="settings-input"
-            />
-            <SavedMark shown={savedFlash.saved('chief_context_window_cap')} testID="settings-chief-context-cap-saved" />
-          </div>
           <div className="settings-field">
             <label className="settings-label" htmlFor="settings-headless-context-cap">
               Headless runs

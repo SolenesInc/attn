@@ -17,7 +17,6 @@ export function DesktopAgentSignals({ agentPane, paneSession }: DesktopAgentProp
     gardenSeeds,
     agentPane.sessionId,
     paneSession?.seedId,
-    paneSession?.crewMember,
   );
   const autoSettleFiresAt = paneSession?.autoSettleFiresAt;
   const autoSettleHeld = paneSession?.autoSettleHeld;
@@ -51,7 +50,6 @@ export function DesktopAgentSignals({ agentPane, paneSession }: DesktopAgentProp
           session={{
             id: agentPane.sessionId,
             crewMember: paneSession?.crewMember,
-            chiefOfStaff: paneSession?.chiefOfStaff,
             seedId: paneSession?.seedId,
           }}
           onOpenAsk={onOpenAsk}

@@ -73,9 +73,7 @@ export interface GardenFrameProps {
   onResumeSeed?: (seedId: string, review?: SeedReviewActionContext) => Promise<unknown>;
   onHandoverSeed?: (options: Omit<SeedHandoverOptions, 'sourceSessionId'>) => Promise<unknown>;
   onSendSeedToChief?: (options: Omit<SeedSendToChiefOptions, 'sourceSessionId'>) => Promise<unknown>;
-  chiefAvailable?: boolean;
   liveSessions?: Set<string>;
-  tenderSessionLabels?: ReadonlyMap<string, string>;
   loaded?: boolean;
   moveSeed?: (
     seedId: string,
@@ -109,9 +107,6 @@ export function GardenFrame({
   onResumeSeed,
   onHandoverSeed,
   onSendSeedToChief,
-  chiefAvailable = false,
-  liveSessions,
-  tenderSessionLabels,
   loaded = true,
   moveSeed,
   noteSeed,
@@ -257,7 +252,7 @@ export function GardenFrame({
                 onResumeSeed={(seedId, review) => onResumeSeed(seedId, review)}
                 onKeepSeed={keepReviewItem}
                 onHandoverSeed={onHandoverSeed}
-                onSendSeedToChief={chiefAvailable ? onSendSeedToChief : undefined}
+                onSendSeedToChief={onSendSeedToChief}
                 onRetry={retryReviewItem}
                 onDraft={draftReviewHandover}
                 onRefresh={showReview}
@@ -266,7 +261,6 @@ export function GardenFrame({
               <GardenBoard
                 seeds={seeds}
                 seedsTotal={seedsTotal}
-                liveSessions={liveSessions ?? new Set()}
                 loaded={loaded}
                 onTransition={(seedId, verb, reason, force, comment) => (
                   moveSeed!(seedId, verb, reason, force, comment)
@@ -288,7 +282,6 @@ export function GardenFrame({
                 onResumeSeed={onResumeSeed}
                 onHandoverSeed={onHandoverSeed}
                 onSendSeedToChief={onSendSeedToChief}
-                chiefAvailable={chiefAvailable}
                 onClose={onClose}
                 viewToggle={viewToggle}
                 frame={mode === 'full' ? 'full' : 'dock'}
@@ -299,7 +292,6 @@ export function GardenFrame({
                 reviewOpening={reviewOpening}
                 reviewError={reviewError}
                 onOpenReview={() => void openReview()}
-                tenderSessionLabels={tenderSessionLabels}
               />
             )}
           </div>

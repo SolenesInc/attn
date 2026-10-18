@@ -30,7 +30,7 @@ import { useAsksAvailable } from '../store/asks';
 import type { SidebarSurface } from '../components/sidebarTypes';
 import { useAppSessions } from './useAppSessions';
 import { useAttentionQueue } from './useAttentionQueue';
-import { useChiefOfStaff } from './useChiefOfStaff';
+import { useChief } from './useChief';
 import { usePRLauncher } from './usePRLauncher';
 import { useSessionLaunch } from './useSessionLaunch';
 import { useSessionLifecycle } from './useSessionLifecycle';
@@ -199,10 +199,8 @@ export function useAppController({
   const appAppearance = useAppAppearance({ settings });
   const { increaseScale, decreaseScale, resetScale } = appAppearance;
 
-  const agentSurfaceCount =
-    sessions.length +
-    desktopViews.filter((group) => group.hasUnresolvedAgentPanes).length;
-  const appPanels = useAppPanels({ agentSurfaceCount });
+  const chief = useChief({ liveSessionIds: appSessions.liveGardenSessions, selectSession: handleSelectSession, showError });
+  const appPanels = useAppPanels();
   const crewPanelState = useCrewPanel();
   const { crewPanel, closeCrewPanel } = crewPanelState;
   const {
@@ -288,8 +286,6 @@ export function useAppController({
   });
   const { diagnosticCapture, setDiagnosticCapture, paletteOriginRef } = appDiagnostics;
 
-  const chiefOfStaff = useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showError });
-  const { chiefTransferTarget, setChiefTransferTarget } = chiefOfStaff;
 
   const [contextCapPromptSession, setContextCapPromptSession] = useState<{
     id: string;
@@ -317,7 +313,6 @@ export function useAppController({
     closeLocationPicker();
     setSnoozeMenu(null);
     delegationChainRef.current?.dismiss();
-    setChiefTransferTarget(null);
     setContextCapPromptSession(null);
     setSessionCreationJob(null);
     setOpenPRLauncherJob(null);
@@ -327,7 +322,7 @@ export function useAppController({
     setProfileSwitcherOpen(false);
   }), [closeCrewPanel, setNotebookOpen, setSessionsOpen, setPalette, closeGarden, gardenHoldsWindow,
     settingsOpen, settingsModalRef, setShortcutsOpen, setShortcutEditorOpen, whatsNewOpen, dismissWhatsNew,
-    closeLocationPicker, setSnoozeMenu, delegationChainRef, setChiefTransferTarget, setSessionCreationJob,
+    closeLocationPicker, setSnoozeMenu, delegationChainRef, setSessionCreationJob,
     setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen]);
 
   const calloutOpen = useCalloutStore((state) => state.callout !== null);
@@ -346,7 +341,6 @@ export function useAppController({
     notebookOpen,
     crewPanelOpen: crewPanel.open,
     gardenHoldsWindow,
-    chiefTransferOpen: Boolean(chiefTransferTarget),
     desktopCloseOpen: sessionLifecycle.desktopClosePrompt !== null,
     contextCapOpen: Boolean(contextCapPromptSession),
     sessionCreationOpen: Boolean(sessionCreationJob),
@@ -381,7 +375,7 @@ export function useAppController({
 
   const seedForSession = useCallback(
     (sessionId: string) => {
-      const seed = seeds.find((candidate) => candidate.tender_session === sessionId);
+      const seed = seeds.find((candidate) => candidate.claimed && candidate.tender?.session_id === sessionId);
       return seed ? { id: seed.id, title: seed.title } : null;
     },
     [seeds],
@@ -698,7 +692,7 @@ export function useAppController({
       sessionLaunch,
       prLauncher,
       sessionLifecycle,
-      chiefOfStaff,
+      chief,
     },
     attention: {
       attentionQueue,

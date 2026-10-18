@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type GardenSeedWatch struct {
@@ -14,32 +15,41 @@ type GardenSeedWatch struct {
 	SeedID           string
 }
 
-func (w GardenSeedWatch) subscribe(now time.Time) func(*sql.Tx) (bool, error) {
+type GardenPartyWatch struct {
+	Watcher who.Party
+	SeedID  string
+}
+
+func subscribeParties(watches []GardenPartyWatch, now time.Time) func(*sql.Tx) (bool, error) {
 	return func(tx *sql.Tx) (bool, error) {
-		if w.WatcherSessionID == "" || w.SeedID == "" {
-			return false, nil
+		wrote := false
+		for _, watch := range watches {
+			if watch.Watcher.IsZero() || watch.SeedID == "" {
+				continue
+			}
+			if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher, seed_id, created_at) VALUES (?, ?, ?)`, watch.Watcher, watch.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
+				return false, fmt.Errorf("subscribe delegation party %s to %s: %w", watch.Watcher, watch.SeedID, err)
+			}
+			wrote = true
 		}
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at) VALUES (?, ?, ?)`, w.WatcherSessionID, w.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
-			return false, fmt.Errorf("subscribe delegation dispatcher: %w", err)
-		}
-		return true, nil
+		return wrote, nil
 	}
 }
 
 type GardenSeedMailboxItem struct {
-	To       inbox.Address
+	To       who.Address
 	SeedID   string
 	BellName string
 }
 
 type GardenSeedBellDelivery struct {
-	To     inbox.Address
+	To     who.Address
 	ItemID string
 }
 
 const gardenSeedUnblockedHint = "unblocked"
 
-func (s *Store) SetGardenSeedWatch(watcherSessionID protocol.SessionID, seedID string, watching bool, now time.Time) (bool, error) {
+func (s *Store) SetGardenSeedWatch(watcher who.Party, seedID string, watching bool, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -49,12 +59,12 @@ func (s *Store) SetGardenSeedWatch(watcherSessionID protocol.SessionID, seedID s
 	)
 	if watching {
 		res, err = s.db.Exec(`
-			INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at)
+			INSERT OR IGNORE INTO garden_seed_watches(watcher, seed_id, created_at)
 			VALUES (?, ?, ?)
-		`, watcherSessionID, seedID, now.UTC().Format(sortableTimeFormat))
+		`, watcher, seedID, now.UTC().Format(sortableTimeFormat))
 	} else {
-		res, err = s.db.Exec(`DELETE FROM garden_seed_watches WHERE watcher_session_id = ? AND seed_id = ?`,
-			watcherSessionID, seedID)
+		res, err = s.db.Exec(`DELETE FROM garden_seed_watches WHERE watcher = ? AND seed_id = ?`,
+			watcher, seedID)
 	}
 	if err != nil {
 		return false, fmt.Errorf("set garden seed watch: %w", err)
@@ -63,32 +73,19 @@ func (s *Store) SetGardenSeedWatch(watcherSessionID protocol.SessionID, seedID s
 	return n > 0, err
 }
 
-func (s *Store) GardenSeedWatching(watcherSessionID, seedID string) (bool, error) {
+func (s *Store) GardenSeedWatches() ([]GardenPartyWatch, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var watching bool
-	if err := s.db.QueryRow(`
-		SELECT EXISTS(SELECT 1 FROM garden_seed_watches WHERE watcher_session_id = ? AND seed_id = ?)
-	`, watcherSessionID, seedID).Scan(&watching); err != nil {
-		return false, fmt.Errorf("read garden seed watch: %w", err)
-	}
-	return watching, nil
-}
-
-func (s *Store) GardenSeedWatches() ([]GardenSeedWatch, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	rows, err := s.db.Query(`SELECT watcher_session_id, seed_id FROM garden_seed_watches`)
+	rows, err := s.db.Query(`SELECT watcher, seed_id FROM garden_seed_watches`)
 	if err != nil {
 		return nil, fmt.Errorf("list garden seed watches: %w", err)
 	}
 	defer rows.Close()
-	var watches []GardenSeedWatch
+	var watches []GardenPartyWatch
 	for rows.Next() {
-		var watch GardenSeedWatch
-		if err := rows.Scan(&watch.WatcherSessionID, &watch.SeedID); err != nil {
+		var watch GardenPartyWatch
+		if err := rows.Scan(&watch.Watcher, &watch.SeedID); err != nil {
 			return nil, fmt.Errorf("scan garden seed watch: %w", err)
 		}
 		watches = append(watches, watch)
@@ -117,7 +114,7 @@ func (s *Store) HandleGardenSeedEvent(
 		return nil, false, fmt.Errorf("handle Garden seed event %d: quiet event has %d deliveries", eventSeq, len(deliveries))
 	}
 	for _, delivery := range deliveries {
-		if delivery.To == (inbox.Address{}) || delivery.ItemID == "" {
+		if delivery.To == (who.Address{}) || delivery.ItemID == "" {
 			return nil, false, fmt.Errorf("handle Garden seed event %d: delivery recipient and item id are required", eventSeq)
 		}
 	}
@@ -184,7 +181,7 @@ func (s *Store) HandleGardenSeedEvent(
 	return created, true, nil
 }
 
-func (s *Store) UnreadGardenSeedMailboxItems(to inbox.Address) ([]GardenSeedMailboxItem, error) {
+func (s *Store) UnreadGardenSeedMailboxItems(to who.Address) ([]GardenSeedMailboxItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rows, err := s.db.Query(`SELECT source_id, bell_name FROM inbox_items
@@ -221,7 +218,7 @@ func (s *Store) PendingGardenSeedMailboxItems() ([]GardenSeedMailboxItem, error)
 		if err := rows.Scan(&address, &item.SeedID, &item.BellName); err != nil {
 			return nil, err
 		}
-		item.To, err = inbox.ParseAddress(address)
+		item.To, err = who.ParseAddress(address)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +248,7 @@ func (s *Store) PendingGardenSeedBellNames() ([]string, error) {
 }
 
 func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID protocol.SessionID) ([]string, error) {
-	items, err := s.UnreadGardenSeedMailboxItems(inbox.ToSession(sessionID))
+	items, err := s.UnreadGardenSeedMailboxItems(who.ToSession(sessionID))
 	if err != nil {
 		return nil, err
 	}

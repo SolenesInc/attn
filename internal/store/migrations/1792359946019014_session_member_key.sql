@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN member_key TEXT NOT NULL DEFAULT '';

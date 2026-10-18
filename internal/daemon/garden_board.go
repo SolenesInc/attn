@@ -3,6 +3,7 @@ package daemon
 import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTransitionMessage) {
@@ -19,7 +20,11 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		fail(err)
 		return
 	}
-	ask, sessionID := d.seedTransitionAsk(msg)
+	msg.SourceSessionID = nil
+	msg.ProfileID = protocol.Ptr(client.selectedProfile())
+	r := who.RequestFromApp(client.selectedProfile())
+	ask := garden.Ask{By: r.Actor(), Reason: protocol.Deref(msg.Reason), Force: protocol.Deref(msg.Force)}
+	sessionID, _ := r.AskingSession()
 	if harvestWhenRequested(msg) {
 		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, protocol.SessionID(sessionID))
 		if err != nil {
@@ -41,8 +46,8 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		}
 		expectedRev = item.SeedRev
 	}
-	seed, doc, _, err := d.applySeedTransitionDetailedAtRevision(
-		msg.SeedID, verb, ask, protocol.Deref(msg.Comment), expectedRev)
+	seed, doc, _, err := d.applySeedMove(
+		msg.SeedID, verb, d.seedMoveRequest(msg, verb), protocol.Deref(msg.Comment), expectedRev)
 	if err != nil {
 		fail(err)
 		return
@@ -66,15 +71,14 @@ func (d *Daemon) handleSeedNoteWS(client *wsClient, msg *protocol.SeedNoteMessag
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
 	}
-	authorSession := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
+	r := who.RequestFromApp(client.selectedProfile())
 	note, err := d.appendSeedNote(
 		msg.SeedID,
 		msg.Body,
-		authorSession,
-		protocol.Deref(msg.Member),
+		r.Actor(),
 		protocol.Deref(msg.Kind),
 		artifactFromProtocol(msg.Artifact),
-		protocol.Deref(msg.Ring), authorSession,
+		protocol.Deref(msg.Ring),
 	)
 	if err != nil {
 		fail(err)

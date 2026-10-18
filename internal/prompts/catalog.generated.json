@@ -172,6 +172,11 @@
                         }
                       },
                       {
+                        "kind": "text",
+                        "id": "crew.cleared",
+                        "source": "content/crew/cleared.md"
+                      },
+                      {
                         "kind": "choose",
                         "condition": {
                           "field": {
@@ -791,13 +796,13 @@
                 }
               },
               {
-                "name": "sender_id",
+                "name": "reply_to",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "sender_id",
+                    "name": "reply_to",
                     "kind": "text",
-                    "description": "Reply target."
+                    "description": "Reply target: member name or full session reference."
                   }
                 }
               }
@@ -975,9 +980,9 @@
                 "kind": "choose",
                 "condition": {
                   "field": {
-                    "name": "held_seeds",
+                    "name": "claimed_seeds",
                     "kind": "text",
-                    "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                    "description": "Claimed seeds with their freshest handoff notes, one entry per blank-line-separated block."
                   },
                   "test": "present"
                 },
@@ -991,13 +996,13 @@
                         "source": "content/crew/garden.md",
                         "bindings": [
                           {
-                            "name": "held_seeds",
+                            "name": "claimed_seeds",
                             "node": {
                               "kind": "input",
                               "field": {
-                                "name": "held_seeds",
+                                "name": "claimed_seeds",
                                 "kind": "text",
-                                "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                                "description": "Claimed seeds with their freshest handoff notes, one entry per blank-line-separated block."
                               }
                             }
                           }
@@ -1007,9 +1012,9 @@
                         "kind": "when",
                         "condition": {
                           "field": {
-                            "name": "held_total",
+                            "name": "claimed_total",
                             "kind": "text",
-                            "description": "How many seeds the member holds; blank unless the list was cut."
+                            "description": "How many seeds the member claims; blank unless the list was cut."
                           },
                           "test": "present"
                         },
@@ -1020,24 +1025,24 @@
                             "source": "content/crew/garden-more.md",
                             "bindings": [
                               {
-                                "name": "held_total",
+                                "name": "claimed_total",
                                 "node": {
                                   "kind": "input",
                                   "field": {
-                                    "name": "held_total",
+                                    "name": "claimed_total",
                                     "kind": "text",
-                                    "description": "How many seeds the member holds; blank unless the list was cut."
+                                    "description": "How many seeds the member claims; blank unless the list was cut."
                                   }
                                 }
                               },
                               {
-                                "name": "held_limit",
+                                "name": "claimed_limit",
                                 "node": {
                                   "kind": "input",
                                   "field": {
-                                    "name": "held_limit",
+                                    "name": "claimed_limit",
                                     "kind": "text",
-                                    "description": "How many held seeds this block lists."
+                                    "description": "How many claimed seeds this block lists."
                                   }
                                 }
                               }
@@ -1462,6 +1467,116 @@
       "id": "chief",
       "description": "Chief",
       "events": [
+        {
+          "id": "charter",
+          "delivery": "document",
+          "description": "Built-in charter written to a new chief's home.",
+          "body": {
+            "kind": "text",
+            "id": "chief.charter",
+            "source": "content/chief/charter.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "handover",
+          "delivery": "user_message",
+          "description": "Upgrade notice queued in the new chief's inbox.",
+          "body": {
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "has_previous_member",
+                "kind": "flag",
+                "description": "The previous chief session belongs to a crew member."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "chief.member-handover",
+                "source": "content/chief/member-handover.md",
+                "bindings": [
+                  {
+                    "name": "previous_session",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "previous_session",
+                        "kind": "text",
+                        "description": "Previous chief session"
+                      }
+                    }
+                  },
+                  {
+                    "name": "previous_member",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "previous_member",
+                        "kind": "text",
+                        "description": "Previous chief member key"
+                      }
+                    }
+                  },
+                  {
+                    "name": "previous_member_name",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "previous_member_name",
+                        "kind": "text",
+                        "description": "Previous chief member name"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "chief.handover",
+                "source": "content/chief/handover.md",
+                "bindings": [
+                  {
+                    "name": "previous_session",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "previous_session",
+                        "kind": "text",
+                        "description": "Previous chief session"
+                      }
+                    }
+                  },
+                  {
+                    "name": "tended",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "tended",
+                        "kind": "text",
+                        "description": "Seeds claimed by the previous chief"
+                      }
+                    }
+                  },
+                  {
+                    "name": "watched",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "watched",
+                        "kind": "text",
+                        "description": "Seeds watched by the previous chief"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
         {
           "id": "seed-assignment",
           "delivery": "user_message",
@@ -3097,6 +3212,18 @@
             "kind": "text",
             "id": "attn-skill.converse-and-observe",
             "source": "content/skills/attn/references/converse-and-observe.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "crew",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.crew",
+            "source": "content/skills/attn/references/crew.md",
             "verbatim": true,
             "keep_final_newline": true
           }
@@ -5102,5 +5229,5 @@
       ]
     }
   ],
-  "definitions_hash": "7cab1066cacdb08810c09126517822c9f551b87ad68f2d42b88de179862cbe02"
+  "definitions_hash": "399e34b73c81041076a3a7deb1dd1482df0c8bbc78131e697b5a606761f659c8"
 }

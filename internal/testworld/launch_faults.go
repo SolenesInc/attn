@@ -8,3 +8,5 @@ func (w *World) RefusePiLaunches(reason string) (allow func()) {
 	w.T.Helper()
 	return w.kit.RefusePiLaunches(reason)
 }
+
+func (w *World) ScreenAtNextBoot(screen string) { w.kit.ScreenAtNextBoot(screen) }

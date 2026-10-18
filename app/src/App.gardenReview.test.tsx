@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { daemonSeed, daemonSession, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
+import { daemonSeed, daemonSession, crewMember, type DaemonSeed, type DaemonSeedDocument } from './test/daemonFixtures';
 import { renderGarden } from './test/garden';
 import { gesture, pressShortcut } from './test/renderApp';
 import type { CommandMessage, EventMessage } from './test/protocol';
@@ -25,7 +25,9 @@ const savedContext: Continuation = {
 const reviewedSeed = daemonSeed('s-review1', {
   title: 'Review this seed',
   body: 'The implementation is complete. Verify the packaged app.',
-  tender_session: 'sess-old',
+  tender: { ref: 'session:sess-old', name: 'sess-old', session_id: 'sess-old' },
+  claimed: true,
+  resume_available: false,
   rev: 4,
 });
 
@@ -70,11 +72,12 @@ interface GardenScript {
   documents?: Record<string, Partial<DaemonSeedDocument>>;
   candidates?: number;
   chief?: boolean;
+  chiefState?: 'awake' | 'asleep' | 'unconfigured';
 }
 
-async function openGarden(shown: Review | undefined, { seeds = [reviewedSeed], documents = {}, candidates, chief = true }: GardenScript = {}) {
-  const sessions = [daemonSession('s1'), ...(chief ? [daemonSession('chief', { chief_of_staff: true })] : [])];
-  const garden = await renderGarden(seeds, { sessions });
+async function openGarden(shown: Review | undefined, { seeds = [reviewedSeed], documents = {}, candidates, chief = true, chiefState = 'awake' }: GardenScript = {}) {
+  const sessions = [daemonSession('s1'), ...(chief && chiefState === 'awake' ? [daemonSession('chief', { chief: true })] : [])];
+  const garden = await renderGarden(seeds, { sessions, initial: { crew: chief ? [crewMember('chief-key', { name: 'Chief', chief: true, binding_session: chiefState === 'awake' ? 'chief' : undefined, agent: chiefState === 'unconfigured' ? undefined : 'claude', resolved_agent: chiefState === 'unconfigured' ? undefined : 'claude' })] : [] } });
   garden.documents = documents;
   const { daemon } = garden;
   daemon.on('seed_review_show', () => ({
@@ -307,8 +310,8 @@ describe('App garden review', () => {
             seed_id: 's-review1',
             kind: 'note',
             body: 'Reviewed the **live instance**.',
-            author_session: '',
-            author_member: 'alder',
+
+            author: { ref: "member:alder", name: "Alder" },
             created_at: '2026-08-30T09:01:00Z',
           }],
           notes_total: 1,
@@ -425,11 +428,16 @@ describe('App garden review', () => {
     })]);
   });
 
-  it('offers Send to Chief only while the selected profile has a chief', async () => {
+  it('offers Send to Chief without depending on a session', async () => {
     await openReview({}, { chief: false });
 
     expect(screen.getByRole('button', { name: 'Park' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Send to Chief' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Send to Chief' })).toBeInTheDocument();
+  });
+
+  it.each(['asleep', 'unconfigured'] as const)('offers Send to Chief while its permanent member is %s', async (chiefState) => {
+    await openReview({}, { chiefState });
+    expect(screen.getByRole('button', { name: 'Send to Chief' })).toBeEnabled();
   });
 
   it('sends a guarded seed to Chief from the active session with optional guidance', async () => {
@@ -437,7 +445,7 @@ describe('App garden review', () => {
     daemon.on('seed_send_to_chief', () => ({
       event: 'seed_send_to_chief_result',
       success: true,
-      result: { seed: reviewedSeed, chief_session_id: 'chief', delivery_status: 'queued', detail: 'queued for Chief' },
+      result: { seed: reviewedSeed, chief: {ref:'session:' + ('chief'),name:'Chief',session_id:'chief'}, delivery_status: 'queued', detail: 'queued for Chief' },
     }));
 
     await click(daemon, 'Send to Chief');
@@ -452,8 +460,8 @@ describe('App garden review', () => {
       source_session_id: 's1',
       seed_id: 's-review1',
       expected_rev: 4,
-      expected_tender_session: 'sess-old',
-      expected_tender_member: '',
+
+
       guidance: 'Use branch feature/special under /tmp/special.',
       review: receipt,
     })]);

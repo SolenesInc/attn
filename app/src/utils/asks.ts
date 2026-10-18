@@ -1,6 +1,5 @@
-import type { Ask, AskAnswer, AskQuestion, Seed } from '../types/generated';
+import type { Ask, AskAnswer, AskQuestion, CrewMember, Seed } from '../types/generated';
 import type { AskDraft } from '../store/asks';
-import { crewDisplayName } from './crewName';
 
 export const ASKS_SETTING = 'asks_enabled';
 
@@ -11,7 +10,6 @@ export function isAsksEnabled(settings: Record<string, string>): boolean {
 export interface AskHolderSession {
   id: string;
   crewMember?: string;
-  chiefOfStaff?: boolean;
   seedId?: string;
   turnOwed?: boolean;
   turnOpenedAt?: string;
@@ -20,20 +18,26 @@ export interface AskHolderSession {
 function tendsSeed(session: AskHolderSession, seedId: string, seeds: readonly Seed[]): boolean {
   const seed = seeds.find((candidate) => candidate.id === seedId);
   if (!seed) return session.seedId === seedId;
-  if (seed.tender_member) return session.crewMember === seed.tender_member;
-  return seed.tender_session !== '' && session.id === seed.tender_session;
+  const tender = seed.tender?.ref ?? '';
+  if (tender.startsWith('member:')) return session.crewMember === tender.slice('member:'.length);
+  return tender !== '' && tender === `session:${session.id}`;
 }
 
 export function askBelongsTo(ask: Ask, session: AskHolderSession, seeds: readonly Seed[]): boolean {
   if (ask.seed_id) return tendsSeed(session, ask.seed_id, seeds);
   if (ask.crew_member) return session.crewMember === ask.crew_member;
-  if (ask.chief) return Boolean(session.chiefOfStaff);
   return ask.session_id === session.id;
 }
 
-export function askFrom(ask: Ask, holder: (AskHolderSession & { label: string }) | undefined): string {
-  if (holder?.chiefOfStaff || ask.chief) return 'Chief';
-  if (ask.crew_member) return holder ? crewDisplayName(ask.crew_member) : `${crewDisplayName(ask.crew_member)} (asleep)`;
+export function askFrom(
+  ask: Ask,
+  holder: (AskHolderSession & { label: string }) | undefined,
+  crew: readonly Pick<CrewMember, 'key' | 'name'>[],
+): string {
+  if (ask.crew_member) {
+    const name = crew.find((member) => member.key === ask.crew_member)?.name ?? ask.crew_member;
+    return holder ? name : `${name} (asleep)`;
+  }
   if (!holder && ask.seed_id) return `waiting for the next tender of ${ask.seed_title || ask.seed_id}`;
   return holder?.label ?? 'Closed agent';
 }
@@ -67,10 +71,15 @@ export interface AskListItem<S extends AskHolderSession> {
   questionCount: number;
 }
 
-export function askList<S extends AskHolderSession & { label: string }>(asks: readonly Ask[], sessions: readonly S[], seeds: readonly Seed[]): AskListItem<S>[] {
+export function askList<S extends AskHolderSession & { label: string }>(
+  asks: readonly Ask[],
+  sessions: readonly S[],
+  seeds: readonly Seed[],
+  crew: readonly Pick<CrewMember, 'key' | 'name'>[],
+): AskListItem<S>[] {
   return orderAsks(asks, sessions, seeds).map((ask) => {
     const holder = askHolder(ask, sessions, seeds);
-    return { ask, holder, from: askFrom(ask, holder), questionCount: askQuestions(ask).length };
+    return { ask, holder, from: askFrom(ask, holder, crew), questionCount: askQuestions(ask).length };
   });
 }
 

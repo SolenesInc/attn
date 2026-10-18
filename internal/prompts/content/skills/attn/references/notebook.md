@@ -1,15 +1,18 @@
 # Notebook
 
-Load this reference when you read or maintain the attn Notebook — the durable,
-instance-wide markdown store — especially when your session is the chief of staff.
-The Notebook outlives any single agent or profile.
+Read this reference when you work on your profile's Notebook, especially as chief
+of staff. Its markdown files outlive agent sessions.
 
 The Notebook is plain markdown on disk, and you maintain it by **editing the files
 directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
 There is no `attn notebook` CLI. The notebook root is given to you in your
-operating guidance (the chief-of-staff launch injection); it is
-`~/attn-notebook` by default (per-instance variants append the instance name). Paths
-below are written relative to that `<root>`.
+operating guidance. `attn settings get notebook.root` shows the saved folder.
+Use `attn settings set notebook.root ~/notes/work` to change it for your profile;
+existing notes and crew homes stay in place. New profiles get `~/attn-notebook-<profile name>`.
+Named instances add the instance name; taken folders get a numeric suffix.
+Existing profiles keep their folders. Paths below are relative to `<root>`.
+
+The `crew/` folder belongs to attn; leave member folders in place when tidying.
 
 ## Orient First
 
@@ -87,12 +90,12 @@ filesystem watcher notices your change and refreshes any open in-app browser.
 - **Be concise.** Notes are read by future agents under a token budget; prefer a
   tight summary plus a `sources:` pointer over a transcript.
 
-## As Chief Of Staff
+## As Chief
 
-The Notebook is your home. When you are promoted to the role mid-session, attn
-points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/index.md`,
+The Notebook holds your profile's journal and knowledge. At wake, read
+`<root>/index.md` and `<root>/knowledge/index.md` to orient,
 record durable decisions in the knowledge base as you make them, and keep the
 day's journal current with your view of your profile. Write at a chief-of-staff
 altitude — what moved across your profile's agents, what you delegated and
-decided — not a per-agent play-by-play. Each profile has its own chief; the
-Notebook is the one store you all share.
+decided — not a per-agent play-by-play. Each profile has its own chief and Notebook;
+agents in that profile share it.

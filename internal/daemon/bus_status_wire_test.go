@@ -11,10 +11,11 @@ func TestBusStatusReportsProducersAndRefusesToSwitchAnUnknownConsumer(t *testing
 	w := newWorld(t)
 	cli, app := w.Client(), w.App()
 	defineRequests(t, cli, gateNS)
+	baseline := producedBy(busStatus(t, app), "document.changed")
 	put(t, cli, gateNS, "a", `{}`)
 
 	status := busStatus(t, app)
-	if produced := producedBy(status, "document.changed"); produced != 1 || status.Rows < produced {
+	if produced := producedBy(status, "document.changed") - baseline; produced != 1 || status.Rows < produced {
 		t.Errorf("bus status counts %d document.changed facts in %d rows, want the one write", produced, status.Rows)
 	}
 	if status.RecentWindowSeconds <= 0 || status.BaselineWindowSeconds <= 0 || status.SurgeRatePerHour <= 0 {

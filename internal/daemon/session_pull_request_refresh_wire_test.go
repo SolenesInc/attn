@@ -610,50 +610,6 @@ func TestAMemberCanForgetItsWatchFromTheNextDay(t *testing.T) {
 	})
 }
 
-func TestAPullRequestWatchCreatedBeforeTheChiefRoleStaysVisibleAndStoppable(t *testing.T) {
-	gh := serveRefreshedPullRequest(t)
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "watcher")
-		watchPullRequestOn(t, cli, "watcher", protocol.PullRequestWatchModeGreen)
-		w.advance(time.Second)
-		readInbox(t, cli, "watcher", 0)
-		if result := setChiefOfStaff(app, "watcher", true); !result.Success {
-			t.Fatalf("Chief=%+v", result)
-		}
-		synctest.Wait()
-		session := queriedSession(t, cli, "watcher")
-		if len(session.PullRequests) != 1 || !protocol.Deref(session.PullRequests[0].Watching) {
-			t.Fatalf("hidden watch=%+v", session.PullRequests)
-		}
-		watchPullRequestOn(t, cli, "watcher", protocol.PullRequestWatchModeGreen)
-		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
-		w.advance(protocol.HeatHotInterval)
-		items := readInbox(t, cli, "watcher", 0).Items
-		if len(items) != 1 || items[0].Address != "session:watcher" {
-			t.Fatalf("rewatch duplicated or rewrote the watch: %+v", items)
-		}
-		if err := cli.UnwatchSessionPullRequest("watcher", shopPull(71)); err != nil {
-			t.Fatal(err)
-		}
-		session = queriedSession(t, cli, "watcher")
-		if len(session.PullRequests) != 1 || protocol.Deref(session.PullRequests[0].Watching) {
-			t.Fatalf("watch after unwatch=%+v", session.PullRequests)
-		}
-		w.advance(protocol.HeatHotInterval)
-		if items := readInbox(t, cli, "watcher", 0).Items; len(items) != 0 {
-			t.Fatalf("mail after unwatch=%+v", items)
-		}
-		watchPullRequestOn(t, cli, "watcher", protocol.PullRequestWatchModeGreen)
-		if err := cli.ForgetSessionPullRequest("watcher", shopPull(71)); err != nil {
-			t.Fatal(err)
-		}
-		if session := queriedSession(t, cli, "watcher"); len(session.PullRequests) != 0 {
-			t.Fatalf("forgotten watch=%+v", session.PullRequests)
-		}
-	})
-}
-
 func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gate := make(chan struct{})
@@ -681,6 +637,43 @@ func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
 		pr := onlyPullRequest(t, cli, next.id)
 		if protocol.Deref(pr.WatchMode) != protocol.PullRequestWatchModeCodex || pr.ReadinessState != nil || pr.WatchHealth != nil {
 			t.Fatalf("mode change retained old readiness: %+v", pr)
+		}
+	})
+}
+
+func TestSessionPullRequestRefreshKeepsWatchingRecoverableSessions(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		agent := w.bubbleClaude(t, app, "watcher")
+		recordPullRequest(t, cli, agent.id, shopPull(71))
+		if err := cli.WatchSessionPullRequest(protocol.SessionID(agent.id), shopPull(71), protocol.PullRequestWatchModeGreen, ""); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool {
+			return len(s.PullRequests) == 1 && protocol.Deref(s.PullRequests[0].Watching)
+		})
+		term := w.terminal(agent.id)
+		w.stop()
+		term.Exit(1)
+		w.start()
+		app = w.App()
+		cli = w.Client()
+		recovered := false
+		for _, s := range app.Initial.Sessions {
+			if s.ID == protocol.SessionID(agent.id) && s.State == protocol.SessionStateRecoverable {
+				recovered = true
+			}
+		}
+		if !recovered {
+			testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateRecoverable })
+		}
+
+		gh.set(func(gh *refreshedPullRequest) { gh.title = "Still watched after recovery" })
+		w.advance(protocol.HeatHotInterval)
+		pr := onlyPullRequest(t, cli, agent.id)
+		if !protocol.Deref(pr.Watching) || protocol.Deref(pr.Title) != "Still watched after recovery" {
+			t.Fatalf("recoverable watch: %+v", pr)
 		}
 	})
 }

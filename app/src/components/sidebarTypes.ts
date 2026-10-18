@@ -1,3 +1,5 @@
+import type { ChiefView, ChiefActions } from '../application/useChief';
+import type { ActorView } from '../types/generated';
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react';
 import type { CriticalNotificationState } from '../hooks/useDaemonSocket';
 import type {
@@ -21,7 +23,7 @@ export interface LocalSession {
   branch?: string;
   isWorktree?: boolean;
   cwd?: string;
-  chiefOfStaff?: boolean;
+  chief?: boolean;
   delegatedFromChief?: boolean;
   autoSettleFiresAt?: string;
   autoSettleHeld?: boolean;
@@ -32,7 +34,7 @@ export interface LocalSession {
   turnSnoozedUntil?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
-  dispatcher_member?: string;
+  dispatcher?: ActorView;
   delegation_role?: SessionDelegationRole;
   automation?: AutomationProvenanceValue;
   pullRequests?: SessionPullRequest[];
@@ -48,6 +50,11 @@ export interface SelectedTile {
 export type SidebarSurface = 'queue-open' | 'queue-collapsed' | 'tree-open' | 'tree-collapsed' | 'hidden';
 
 export interface SidebarProps {
+  chief?: ChiefView | null;
+  chiefActions?: ChiefActions;
+  chiefSetupOpen?: boolean;
+  chiefSetupOpenedByUser?: boolean;
+  onChiefSettings?: () => void;
   desktops: SidebarDesktop[];
   visualIndexByDesktopId: Map<string, number>;
   selectedId: string | null;
@@ -69,7 +76,7 @@ export interface SidebarProps {
   onWakeCrewMember?: (member: string) => void;
   onSleepCrewMember?: (member: string) => void;
   onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement) => void;
+  onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement, tab?: import('../hooks/useCrewNavigation').CrewTab) => void;
   onSettleTurn?: (id: string) => void;
   onWalkRuns?: () => void;
   onJumpToWaiting?: () => void;
@@ -93,7 +100,6 @@ export interface SidebarProps {
   onCloseDesktop?: (desktopId: string) => void;
   onRenameDesktop?: (desktopId: string, title: string) => Promise<void>;
   onTogglePriority?: (session: LocalSession) => void;
-  onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;
   crewQueueEnabled?: boolean;
   harnessLogosEnabled?: boolean;
   leafDrag?: { sourceDesktopId: string } | null;

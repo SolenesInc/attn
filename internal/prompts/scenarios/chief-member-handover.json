@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "chief-member-handover",
+  "description": "A new Chief coordinates with the crew member whose session held the old role.",
+  "recipient": "chief",
+  "event": "handover",
+  "values": {
+    "has_previous_member": "true",
+    "previous_session": "previous-chief-session",
+    "previous_member": "m-keel",
+    "previous_member_name": "Keel"
+  }
+}

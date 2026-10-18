@@ -53,7 +53,7 @@ func TestACommandCarryingItsTerminalsIDSpeaksAsTheSessionTheTerminalShows(t *tes
 	fromTheAgent("agent", "msg", desk, "the build is green", "--json").JSON(t, &sent)
 	var batch protocol.AgentInboxBatchResult
 	s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json"}, Session: desk}).JSON(t, &batch)
-	if len(batch.Items) != 1 || string(protocol.Deref(batch.Items[0].SenderSessionID)) != session {
+	if len(batch.Items) != 1 || string(protocol.Deref(batch.Items[0].Sender).Ref) != "session:"+session {
 		t.Fatalf("desk's inbox holds %+v, want the message sent by session %s", batch.Items, session)
 	}
 

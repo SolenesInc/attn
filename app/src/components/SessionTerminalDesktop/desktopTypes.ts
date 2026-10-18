@@ -69,7 +69,6 @@ export interface SessionTerminalDesktopProps {
     isActive?: boolean;
     seedId?: string;
     crewMember?: string;
-    chiefOfStaff?: boolean;
     automation?: AutomationProvenanceValue;
     pullRequests?: SessionPullRequest[];
   }>;

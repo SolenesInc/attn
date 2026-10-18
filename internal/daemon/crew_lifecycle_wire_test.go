@@ -211,10 +211,10 @@ func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 		setSetting(t, app, "crew.wake_limit_window_seconds", "3600")
 		registerSessions(t, w, cli, "sender")
 		first := sendAgentMessage(t, cli, "sender", "trellis", "the build broke")
-		if first.TargetSessionID == "" || !strings.Contains(first.Detail, "woke Trellis") {
+		if protocol.Deref(first.TargetSessionID) == "" || !strings.Contains(first.Detail, "woke Trellis") {
 			t.Fatalf("first wake=%+v", first)
 		}
-		w.terminal(string(first.TargetSessionID)).Exit(0)
+		w.terminal(string(protocol.Deref(first.TargetSessionID))).Exit(0)
 		w.advance(30 * time.Minute)
 		inside := sendAgentMessage(t, cli, "sender", "trellis", "the build broke again")
 		if inside.Status != protocol.AgentMsgStatusQueued || !strings.Contains(inside.Detail, "crew.wake_limit=1") {
@@ -225,7 +225,7 @@ func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 		}
 		w.advance(31 * time.Minute)
 		fresh := sendAgentMessage(t, cli, "sender", "trellis", "the build broke a third time")
-		if fresh.TargetSessionID == "" || !strings.Contains(fresh.Detail, "woke Trellis") {
+		if protocol.Deref(fresh.TargetSessionID) == "" || !strings.Contains(fresh.Detail, "woke Trellis") {
 			t.Fatalf("after limit window=%+v", fresh)
 		}
 	})

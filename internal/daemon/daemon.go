@@ -30,12 +30,10 @@ import (
 	"github.com/victorarias/attn/internal/diag"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fsdoc"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/logging"
@@ -46,6 +44,7 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type workerReconcileReport struct {
@@ -188,9 +187,11 @@ type Daemon struct {
 	codexSharedState      *codexShared
 	quickCaptureAssetMu   sync.Mutex
 	inboxMu               sync.Mutex
-	inboxStates           map[inbox.Address]*inboxDeliveryState
+	inboxStates           map[who.Address]*inboxDeliveryState
 	inboxUnsubscribe      func()
 	crewWakeMu            sync.Mutex
+	crewDocumentErrorsMu  sync.Mutex
+	crewDocumentErrors    map[string]int64
 	crewExitedMu          sync.Mutex
 	crewExitedSessions    map[string]string
 	supportInputTraceOnce sync.Once
@@ -203,16 +204,14 @@ type Daemon struct {
 	recoveryMu          sync.RWMutex
 	recovering          bool
 	recoverySettled     chan struct{}
+	notebookRootMu      sync.Mutex
 	notebookMu          sync.Mutex
-	notebookStore       *notebook.Store
-	notebookWatcherMu   sync.Mutex
+	notebookStores      map[string]*notebook.Store
 	notebookWatch       func(string, func([]string)) (*notebook.Watcher, error)
-	notebookWatcher     *notebook.Watcher
-	notebookWatchedRoot string
 	fsMu                sync.Mutex
 	fsStores            map[string]*fsdoc.Store
-	fsWatchMu           sync.Mutex
-	fsWatchers          map[string]*fsRootWatch
+	rootWatchMu         sync.Mutex
+	rootWatches         map[string]*rootWatch
 	pendingInitialWS    map[*wsClient]struct{}
 	startedOnce         sync.Once
 	startedCh           chan struct{}
@@ -264,8 +263,9 @@ type Daemon struct {
 	gardenReviewMu             sync.Mutex
 	dispatchSeedsMu            sync.Mutex
 	dispatchSeeds              map[protocol.SessionID]string
-	dispatchersBySession       map[protocol.SessionID]garden.Tender
+	dispatchersBySession       map[protocol.SessionID]who.Actor
 	dispatchFromChief          map[protocol.SessionID]bool
+	chiefsAwaitingUser         map[who.MemberKey]struct{}
 	dispatchProjectionRevs     map[protocol.SessionID]int64
 	dispatchSeedsLoaded        bool
 
@@ -412,11 +412,7 @@ func (d *Daemon) warmLoginShellEnvCache() {
 	if shell == "" {
 		return
 	}
-	env, err := pty.ReadLoginShellEnv(shell)
-	if err != nil {
-		d.logf("login shell env pre-warm failed for %s: %v", shell, err)
-		return
-	}
+	env := pty.LoginShellEnvironment(shell, nil, d.logf)
 	d.loginShellEnvMu.Lock()
 	d.loginShellEnv = env
 	d.loginShellEnvMu.Unlock()
@@ -635,6 +631,9 @@ func (d *Daemon) Start() error {
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	if err := d.ensureChiefs(); err != nil {
+		return fmt.Errorf("ensure chiefs: %w", err)
+	}
 	d.removeEmptyDesktops()
 	d.refreshCurrentAgent()
 	selectedBackend := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_PTY_BACKEND")))
@@ -708,7 +707,7 @@ func (d *Daemon) Start() error {
 			break
 		}
 
-		sharedEnabled := parseBooleanSetting(d.daemonSetting(SettingSharedPTYHostEnabled))
+		sharedEnabled := parseBooleanSetting(d.daemonSetting(settingSharedPTYHostEnabled))
 		useSharedForNew := sharedEnabled && sharedBackend.SharedArtifactReady()
 		if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
 			useSharedForNew = true
@@ -748,6 +747,13 @@ func (d *Daemon) Start() error {
 	}()
 
 	previousRunSessions := d.storedSessionIDs()
+	previousMemberSessions, err := d.store.MemberLatestSessions()
+	if err != nil {
+		return fmt.Errorf("read crew sessions before recovery: %w", err)
+	}
+	for _, id := range previousMemberSessions {
+		previousRunSessions[id] = struct{}{}
+	}
 	if d.listener == nil {
 		unixListener, err := listenUnixAtomically(d.socketPath)
 		if err != nil {
@@ -905,6 +911,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 			continue
 		}
 		if _, ok := liveIDs[session.ID]; ok || d.hidden(session.ID) {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if sessionUpdatedAfter(session, recoveryStartedAt) {
@@ -912,9 +919,11 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 		}
 		d.releaseExitedCrewBinding(session.ID)
 		if d.store.GetSessionExit(session.ID) != nil {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if d.canReviveSession(session) {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			if session.State == protocol.SessionStateRecoverable {
 				continue
 			}
@@ -1265,6 +1274,9 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		}
 
 		d.startSessionMonitor(sessionID)
+		if _, previous := previousRunSessions[sessionID]; previous {
+			d.promoteRetainedMemberLaunch(existing, previousRunSessions)
+		}
 		d.store.Touch(sessionID)
 		d.store.ClearSessionIntentionalClose(sessionID)
 
@@ -1337,6 +1349,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				continue
 			}
 			if likelyAlive {
+				d.promoteRetainedMemberLaunch(session, previousRunSessions)
 				report.LikelyAlive++
 				continue
 			}
@@ -1347,9 +1360,11 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		}
 		d.releaseExitedCrewBinding(session.ID)
 		if d.store.GetSessionExit(session.ID) != nil {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			continue
 		}
 		if d.canReviveSession(session) {
+			d.promoteRetainedMemberLaunch(session, previousRunSessions)
 			if session.State == protocol.SessionStateRecoverable {
 				continue
 			}
@@ -1652,6 +1667,23 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 		}
 	}
+	cleanExit := info.ExitCode == 0 && info.Signal == "" && !stopped
+	var by who.Actor
+	var actorErr error
+	if cleanExit {
+		var b who.Bindings
+		b, actorErr = d.bindings()
+		if actorErr == nil {
+			if party, found := b.PartyOf(sessionID); found {
+				actorErr = b.Check(party)
+				if actorErr == nil {
+					by = party.Actor()
+				}
+			} else {
+				actorErr = fmt.Errorf("session %s has no closing actor", sessionID)
+			}
+		}
+	}
 	unlockEnds()
 	d.releaseExitedCrewBinding(sessionID)
 
@@ -1662,10 +1694,21 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	})
 	d.recordProcessEvidence(sessionID, true)
 	d.broadcastSessionStateChanged(sessionID)
-	if info.ExitCode == 0 && info.Signal == "" && !stopped && d.sessionCloseError(sessionID) == nil {
-		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
+	if cleanExit {
+		if actorErr != nil {
+			d.notifySessionCloseFailure(sessionID, actorErr)
+			return true
+		}
+		if closeErr := d.sessionCloseError(sessionID); closeErr != nil {
+			var unreadable *who.UnreadableMemberError
+			if errors.Is(closeErr, errCrewRosterUnavailable) || errors.As(closeErr, &unreadable) {
+				d.notifySessionCloseFailure(sessionID, closeErr)
+			}
+			return true
+		}
+		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: by, Reason: "Agent exited normally"}, nil)
 		if err != nil {
-			d.logf("closing normally exited session %s: %v", sessionID, err)
+			d.notifySessionCloseFailure(sessionID, err)
 		} else {
 			d.finishSessionClose(sessionID, closing)
 		}
@@ -1858,7 +1901,7 @@ func (d *Daemon) resumeSessionTeardown(sessionID protocol.SessionID) *sessionTea
 	}
 	session := d.store.Get(sessionID)
 	terminals := d.terminalsOf(sessionID)
-	d.closeSession(sessionID, store.SessionClose{By: store.SessionClosedByUser})
+	d.closeSession(sessionID, store.SessionClose{By: who.User()})
 	return &sessionTeardown{session: session, terminals: terminals, driverRun: driverRun}
 }
 
@@ -1974,7 +2017,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		}
 	}
 	defer d.finishMonitorUsage(sessionID)()
-	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.kickInboxAfterCommit(who.ToSession(sessionID))
 	d.clearSnoozeState(sessionID)
 	d.sessionInputs().fenceSession(sessionID)
 	closure, err := commit()
@@ -1993,7 +2036,6 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.decorateLedgerEntryWithUsage(entry)
 		d.publishFact(FactSessionClosed, string(sessionID), entry)
 	}
-	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
 }
@@ -2006,7 +2048,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 			d.logf("garden: preserving execution %s before reaping: %v", sessionID, err)
 		}
 	}
-	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.kickInboxAfterCommit(who.ToSession(sessionID))
 	d.clearSnoozeState(sessionID)
 	d.sessionInputs().fenceSession(sessionID)
 	closedAsks := d.store.Remove(sessionID)
@@ -2015,7 +2057,6 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	}
 	d.forgetMonitor(sessionID)
 	d.announceClosedAsks(closedAsks)
-	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 }
 
@@ -2484,10 +2525,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 
 	switch cmd {
-	case protocol.CmdGetSettings:
-		d.handleGetSettings(conn, msg.(*protocol.GetSettingsMessage))
-	case protocol.CmdSetSetting:
-		d.handleSetSetting(conn, msg.(*protocol.SetSettingMessage))
 	case protocol.CmdLaunchDesktopGet, protocol.CmdLaunchDesktopSet:
 		d.handleLaunchDesktopCommand(conn, cmd, msg)
 	case protocol.CmdDelegate:
@@ -2548,6 +2585,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	case protocol.CmdAskClose:
 		d.handleAskClose(conn, msg.(*protocol.AskCloseMessage))
 
+	case protocol.CmdGetSettings:
+		d.handleGetSettings(conn, msg.(*protocol.GetSettingsMessage))
+	case protocol.CmdSetSetting:
+		d.handleSetSetting(conn, msg.(*protocol.SetSettingMessage))
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))
 	case protocol.CmdJournalAppend:
@@ -2672,6 +2713,16 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewCreate:
+		d.handleCrewCreate(conn, msg.(*protocol.CrewCreateMessage))
+	case protocol.CmdCrewRetire:
+		d.handleCrewRetire(conn, msg.(*protocol.CrewRetireMessage))
+	case protocol.CmdCrewRestore:
+		d.handleCrewRestore(conn, msg.(*protocol.CrewRestoreMessage))
+	case protocol.CmdCrewMoveHome:
+		d.handleCrewMoveHome(conn, msg.(*protocol.CrewMoveHomeMessage))
+	case protocol.CmdCrewRename:
+		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
 	case protocol.CmdCrewPrime:
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
 	case protocol.CmdCrewHandoff:
@@ -2790,7 +2841,7 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
 		return
 	}
-	d.commitSessionUnregister(msg.ID, store.SessionClose{By: store.SessionClosedByUser})
+	d.commitSessionUnregister(msg.ID, store.SessionClose{By: who.User()})
 	d.sendOK(conn)
 
 	if teardown != nil && teardown.session != nil {
@@ -2836,7 +2887,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	}
 	d.logf("handleStop: session=%s, transcript_path=%s", sessionID, msg.TranscriptPath)
 
-	relaxBackgroundWork := d.isChiefOfStaffSession(sessionID)
+	relaxBackgroundWork := d.sessionIsChief(sessionID)
 	classifies := !d.consumeForcedStopClassification(sessionID)
 	if classifies {
 		d.cancelAutoSettle(sessionID, "stop judged")
@@ -2947,29 +2998,32 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 }
 
 func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Session {
-	decorated := d.sessionForBroadcastWithChiefOfStaff(
+	b := d.broadcastBindings()
+	decorated := d.sessionForBroadcastWithChief(
 		session,
-		d.profileChiefs(),
+		d.chiefSessions(),
 		d.delegatedFromChiefSessionIDs(),
-		d.crewMembersBySession(),
+		b,
 		d.gardenDispatchSeedsBySession(),
 		d.gardenDispatchersBySession(),
+		d.crewNames(),
 	)
 	if decorated != nil {
 		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
-		decorated.PullRequests = d.sessionPullRequestsForSession(decorated)
+		decorated.PullRequests = d.sessionPullRequestsForSession(decorated, b)
 	}
 	return decorated
 }
 
-func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
+func (d *Daemon) sessionForBroadcastWithChief(
 	session *protocol.Session,
 	chiefs map[string]protocol.SessionID,
 	delegatedFromChief map[protocol.SessionID]bool,
-	crewBySession map[protocol.SessionID]string,
+	bindings who.Bindings,
 	seedBySession map[protocol.SessionID]string,
-	dispatcherBySession map[protocol.SessionID]garden.Tender,
+	dispatcherBySession map[protocol.SessionID]who.Actor,
+	crewNames map[who.MemberKey]string,
 ) *protocol.Session {
 	clone := cloneSession(session)
 	if clone == nil {
@@ -2982,13 +3036,13 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 
 	d.decorateSessionWithAutoSettle(clone)
 	d.decorateSessionWithSnooze(clone)
-	d.decorateChiefOfStaff(clone, chiefs)
+	d.decorateChief(clone, chiefs)
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
-	d.decorateCrewMember(clone, crewBySession)
+	d.decorateCrewMember(clone, bindings, crewNames)
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession)
 	if seedBySession[clone.ID] != "" && clone.SeedID == nil {
-		clone.DispatcherMember, clone.DispatcherSessionID = nil, nil
+		clone.Dispatcher, clone.DispatcherSessionID = nil, nil
 		clone.DelegatedFromChief = nil
 	}
 	d.decorateSessionWithCost(clone)
@@ -3003,27 +3057,22 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	if len(sessions) == 0 {
 		return nil
 	}
-	chiefs := d.profileChiefs()
+	chiefs := d.chiefSessions()
 	delegatedFromChief := d.delegatedFromChiefSessionIDs()
-	crewBySession := d.crewMembersBySession()
+	bindings := d.broadcastBindings()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	dispatcherBySession := d.gardenDispatchersBySession()
+	crewNames := d.crewNames()
 	rolesBySession := d.sessionDelegationRoles()
 	bySession := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChief(session, chiefs, delegatedFromChief, bindings, seedBySession, dispatcherBySession, crewNames); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
-			addresses := []inbox.Address{inbox.ToSession(decorated.ID)}
-			if member := crewBySession[decorated.ID]; member != "" {
-				addresses = append(addresses, inbox.ToMember(member))
-			}
-			if chiefs[decorated.ProfileID] == decorated.ID {
-				addresses = append(addresses, inbox.ToChief(decorated.ProfileID))
-			}
+			addresses := bindings.AddressesOf(decorated.ID)
 			decorated.PullRequests = d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(decorated.ID, addresses, pullRequestsBySession, pullRequestWatchesByPR), addresses, pullRequestWatchesByPR)
 			out = append(out, *decorated)
 		}
@@ -3566,6 +3615,10 @@ func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMes
 }
 
 func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTestSessionMessage) {
+	if strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)) != "" {
+		d.crewWakeMu.Lock()
+		defer d.crewWakeMu.Unlock()
+	}
 	if msg.Session.ID == "" {
 		d.sendError(conn, "Session ID cannot be empty")
 		return
@@ -3580,7 +3633,12 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 	}
 	msg.Session.ProfileID = profile.ID
 	if member := strings.TrimSpace(protocol.Deref(msg.Session.CrewMember)); member != "" {
-		if _, err := d.claimCrewBinding(member, msg.Session.ID); err != nil {
+		key, err := who.ParseMemberKey(member)
+		if err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+		if _, err := d.claimCrewBinding(key, msg.Session.ID); err != nil {
 			d.sendError(conn, fmt.Sprintf("crew bind %q: %v", member, err))
 			return
 		}
@@ -3589,6 +3647,14 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		d.releaseCrewBindingIfSession(msg.Session.ID)
 		d.sendError(conn, err.Error())
 		return
+	}
+	if stored := protocol.Deref(msg.Session.CrewMember); stored != "" {
+		member, _, err := d.resolveCrewMember(stored)
+		if err == nil {
+			if err := d.store.RecordMemberSession(member.Key, msg.Session.ID); err != nil {
+				d.logf("crew: record injected member session: %v", err)
+			}
+		}
 	}
 	d.publishFact(FactSessionRegistered, string(msg.Session.ID), nil)
 	if !protocol.Deref(msg.Unplaced) {

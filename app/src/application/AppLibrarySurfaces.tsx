@@ -13,7 +13,7 @@ import {
   useAppPanelsContext,
   useAppSessionsContext,
   useAppShell,
-  useChiefOfStaffContext,
+  useChiefContext,
   useNavigationContext,
   useSessionLifecycleContext,
 } from './AppContexts';
@@ -62,13 +62,6 @@ export function AppLibrarySurfaces() {
     subscribeSessionLedger,
     getWorktreeSweepLog,
     setWorktreeKeep,
-    sendFsList,
-    sendFsRead,
-    sendFsWrite,
-    sendFsExists,
-    sendFsReadAsset,
-    sendNotebookBacklinks,
-    sendNotebookToChief,
     hasReceivedInitialState,
     sendSeedTransition,
     sendSeedNote,
@@ -94,11 +87,13 @@ export function AppLibrarySurfaces() {
   } = useAppGardenActionsContext();
   const { handleReopenSession } = useSessionLifecycleContext();
   const { notificationsChangeSignal } = useAppInputs();
-  const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
-  const { notebookChiefActive } = useAppSessionsContext();
+  const { notebookSurfaceContextValue, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
+  const { effectiveNotebookRoot, makeDaemon } = notebookSurfaceContextValue;
+  const browserDaemon = useMemo(() => makeDaemon(effectiveNotebookRoot), [makeDaemon, effectiveNotebookRoot]);
   const seeds = useDaemonStore((state) => state.seeds);
   const seedsTotal = useDaemonStore((state) => state.seedsTotal);
-  const { hasChiefOfStaff } = useChiefOfStaffContext();
+  const { view: chief } = useChiefContext();
+  const notebookChief = chief ? { name: chief.name, presence: chief.phase === 'unconfigured' ? 'unconfigured' as const : chief.phase === 'asleep' ? 'asleep' as const : daemonSessions.find(session => session.id === chief.sessionId)?.state === 'working' ? 'working' as const : 'idle' as const } : undefined;
   return (
     <>
       <LedgerSurface
@@ -143,18 +138,12 @@ export function AppLibrarySurfaces() {
         }}
       />
       <NotebookBrowser
-        isOpen={notebookOpen}
+        key={`${selectedProfileId}:${effectiveNotebookRoot}`}
+        isOpen={notebookOpen && !!effectiveNotebookRoot}
         onClose={() => setNotebookOpen(false)}
-        listDir={sendFsList}
-        readFile={sendFsRead}
-        writeFile={sendFsWrite}
-        existsFile={sendFsExists}
-        readAsset={sendFsReadAsset}
-        backlinksNotebook={sendNotebookBacklinks}
-        sendToChief={sendNotebookToChief}
-        listFiles={notebookBrowserListFiles}
+        {...browserDaemon}
         changeSignal={notebookRootChangeSignal}
-        chiefActive={notebookChiefActive}
+        chief={notebookChief}
       />
       <GardenFrame
         key={selectedProfileId}
@@ -165,7 +154,6 @@ export function AppLibrarySurfaces() {
         seeds={seeds}
         seedsTotal={seedsTotal}
         liveSessions={liveGardenSessions}
-        tenderSessionLabels={gardenSessionLabels}
         loaded={hasReceivedInitialState}
         moveSeed={sendSeedTransition}
         noteSeed={sendSeedNote}
@@ -179,7 +167,6 @@ export function AppLibrarySurfaces() {
         onResumeSeed={handleResumeSeed}
         onHandoverSeed={handleHandoverSeed}
         onSendSeedToChief={handleSendSeedToChief}
-        chiefAvailable={hasChiefOfStaff}
         reviewOverview={seedReviewOverview}
         showReview={sendSeedReviewShow}
         startReview={sendSeedReviewStart}

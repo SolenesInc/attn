@@ -164,7 +164,7 @@ func (s *Store) PutDocument(schema docstore.CollectionSchema, id string, body []
 }
 
 func putDocumentWith(q rowQuerier, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
-	if err := checkSeedProfileWrite(q, schema, table, id, body); err != nil {
+	if err := checkSeedProfileWrite(q, schema, id, body); err != nil {
 		return 0, err
 	}
 	ts := now.UTC().Format(docstore.TimeFormat)
@@ -327,15 +327,15 @@ func (s *Store) CommitDocumentWritesWithEvents(
 	return s.commitDocumentWrites(commits, events, now, false, nil)
 }
 
-func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch GardenSeedWatch, now time.Time) ([]DocumentWriteResult, error) {
-	results, _, err := s.commitDocumentWrites(commits, nil, now, false, watch.subscribe(now))
+func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch GardenPartyWatch, now time.Time) ([]DocumentWriteResult, error) {
+	results, _, err := s.commitDocumentWrites(commits, nil, now, false, subscribeParties([]GardenPartyWatch{watch}, now))
 	return results, err
 }
 
 func (s *Store) CommitGardenDispatchWritesWithEvents(
-	commits []DocumentCommit, watch GardenSeedWatch, events []BusEvent, now time.Time,
+	commits []DocumentCommit, watches []GardenPartyWatch, events []BusEvent, now time.Time,
 ) ([]DocumentWriteResult, []int64, error) {
-	return s.commitDocumentWrites(commits, events, now, false, watch.subscribe(now))
+	return s.commitDocumentWrites(commits, events, now, false, subscribeParties(watches, now))
 }
 
 func (s *Store) commitDocumentWrites(

@@ -116,7 +116,6 @@ export function AppDesktops() {
             isActive: isCurrent && entry.id === shownSessionId,
             seedId: entry.seedId,
             crewMember: entry.crewMember,
-            chiefOfStaff: entry.chiefOfStaff,
             automation: entry.automation,
             pullRequests: entry.pullRequests,
           }))}

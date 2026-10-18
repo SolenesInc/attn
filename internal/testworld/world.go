@@ -291,8 +291,12 @@ func (w *World) InjectSession(id, label, dir string, agent protocol.SessionAgent
 	return w.inject(session)
 }
 
-func (w *World) InjectCrewSession(id, label, dir, member string) error {
-	return w.inject(protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: protocol.SessionAgentClaude, State: protocol.SessionStateLaunching, CrewMember: protocol.Ptr(member)})
+func (w *World) InjectCrewSession(id, label, dir, member string, profileID ...string) error {
+	session := protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: protocol.SessionAgentClaude, State: protocol.SessionStateLaunching, CrewMember: protocol.Ptr(member)}
+	if len(profileID) != 0 {
+		session.ProfileID = profileID[0]
+	}
+	return w.inject(session)
 }
 
 // InjectUnplacedSession registers a session no pane places, so reports under its id route as an unplaced terminal's.

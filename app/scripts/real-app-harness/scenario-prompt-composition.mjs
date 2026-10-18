@@ -43,7 +43,7 @@ async function main() {
   const instance = currentHarnessInstance();
   if (!instance) throw new Error('Prompt verification requires a named instance');
   const resources = resolveHarnessResources(instance);
-  const env = instanceCliEnv(instance);
+  const env = { ...instanceCliEnv(instance), ATTN_WRAPPER_PATH: resources.appDaemon };
   const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ ...options, trustedApp: true });
@@ -53,6 +53,7 @@ async function main() {
   const pdfId = randomUUID();
   const imageOut = path.join(runner.sessionDir, 'agent-quick-capture.png');
   const pdfOut = path.join(runner.sessionDir, 'agent-quick-capture.pdf');
+  const chiefs = [];
   const crewName = `promptprobe-${randomUUID().slice(0, 8)}`;
   const crewLabel = `Promptprobe${crewName.slice('promptprobe'.length)}`;
   const crewHome = path.join(resources.dataDir, 'crew', crewName);
@@ -85,15 +86,23 @@ async function main() {
             { type: 'reply', text: chief ? 'QUICK_CAPTURE_READ' : 'PEER_READ', state: 'idle' },
           ],
         }] });
-        const result = await client.request('create_session', { cwd, label: name, agent, chief_of_staff: chief });
+        if (chief) {
+          const prior = JSON.parse(cli(['crew', 'list', '--json'])).find(member => member.chief);
+          if (prior?.binding_session) cli(['handoff', '--session', prior.binding_session, '--sleep', '-m', 'Start the prompt scenario in its fixture folder.']);
+          cli(['settings', 'set', 'notebook.root', cwd]);
+        }
+        const result = chief
+          ? { sessionId: (JSON.parse(cli(['crew', 'set', 'chief', '--agent', agent, '--model', 'gpt-6.1-sol', '--json'])).binding_session || JSON.parse(cli(['crew', 'wake', 'chief', '--json'])).session_id) }
+          : await client.request('create_session', { cwd, label: name, agent });
         sessions.push(result.sessionId);
+        if (chief) chiefs.push(result.sessionId);
         await observer.waitForSession({ id: result.sessionId });
         await waitForFirstDesktopPane(client, result.sessionId, name, 20_000);
         const captured = await waitFor(() => transcripts(cwd)[0], `${name} launch receipt`);
         const text = instructions(captured.text, agent);
         runner.writeText(`${name}-launch.jsonl`, captured.text);
         runner.assert(text.includes('Track work that outlives this turn in seeds'), 'launch carries Garden instructions', { name });
-        runner.assert(text.includes('You are the chief of staff of your profile.') === chief, 'chief branch matches session role', { name });
+        runner.assert(text.includes("You are this profile's Chief") === chief, 'chief branch matches session role', { name });
         launches.push({ id: result.sessionId, cwd });
       });
     }
@@ -163,6 +172,7 @@ async function main() {
       await waitForFirstDesktopPane(client, first.session_id, 'crew member', 20_000);
       const captured = await waitFor(() => transcripts(crewHome).find(file => file.text.includes('CREW_READY')), 'crew wake prompt');
       runner.assert(instructions(captured.text, 'codex').includes(`You are **${crewLabel}**`), 'crew identity reaches developer instructions');
+      runner.assert(instructions(captured.text, 'codex').includes('`attn crew prime` before anything else'), 'crew clear reorientation reaches developer instructions');
       const duplicate = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       runner.assert(duplicate.already_awake === true && duplicate.session_id === first.session_id, 'wake does not create a second day');
       cli(['crew', 'sleep', crewName, '--json']);
@@ -192,6 +202,9 @@ async function main() {
     await runner.finishFailure(error, { sessions });
     process.exitCode = 1;
   } finally {
+    for (const sessionId of chiefs) {
+      try { cli(['handoff', '--session', sessionId, '--sleep', '-m', 'The prompt scenario is over.']); } catch {}
+    }
     for (const sessionId of sessions) if (sessionId) await client.request('close_session', { sessionId }).catch(() => {});
     await client.quitApp().catch(() => {});
     await observer.close();

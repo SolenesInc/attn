@@ -197,3 +197,34 @@ func TestASessionMoveCreatesTheMissingNumberedDesktop(t *testing.T) {
 		})
 	}
 }
+
+func TestChiefMovesOtherAgentsOnlyWithinItsProfile(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+	worker := w.Spawn(app, fakeagent.Claude, w.Path("worker"))
+	target := createDesktop(app, app.SelectedProfile())
+	moved, err := cli.MoveSessionToDesktop(protocol.SessionID(chief), protocol.SessionID(worker), target.ID)
+	if err != nil || moved.DesktopID != target.ID {
+		t.Fatalf("Chief moving a nondelegate: %+v %v", moved, err)
+	}
+	view := viewProfile(t, w, app.SelectedProfile())
+	var placed bool
+	for _, pane := range view.desktops[target.ID].Panes {
+		placed = placed || pane.SessionID == protocol.SessionID(worker)
+	}
+	if !placed {
+		t.Fatal("Chief's move did not place the worker on the target desktop")
+	}
+	if _, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel", Agent: protocol.Ptr("claude")}); err != nil {
+		t.Fatal(err)
+	}
+	member := wakeCrew(t, cli, "Keel", "")
+	_, err = cli.MoveSessionToDesktop(member.SessionID, protocol.SessionID(worker), app.Initial.Desktops[0].ID)
+	crewErrorContains(t, err, "may move itself or an agent in its delegation chain")
+	other := createProfile(app, "Other")
+	otherApp := w.AppOn(other.ID)
+	outsider := w.Spawn(otherApp, fakeagent.Claude, w.Path("outsider"))
+	_, err = cli.MoveSessionToDesktop(protocol.SessionID(chief), protocol.SessionID(outsider), target.ID)
+	crewErrorContains(t, err, "unknown live session")
+}

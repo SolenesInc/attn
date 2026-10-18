@@ -160,7 +160,7 @@ func (r *codexShared) canRun(req *spawnRequest) bool {
 }
 
 func (r *codexShared) enabledForNewLaunches() bool {
-	return parseBooleanSetting(r.d.daemonSetting(SettingCodexSharedEnabled))
+	return parseBooleanSetting(r.d.daemonSetting(settingCodexSharedEnabled))
 }
 
 func (r *codexShared) admit(profile, conversation string) error {
@@ -178,7 +178,7 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if _, err := r.ensureServer(r.d.life.Context(), profile, configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts)); err != nil {
 		return err
 	}
-	if !opts.UnattendedLaunch.IsZero() {
+	if opts.TrustWorkingDirectory || !opts.UnattendedLaunch.IsZero() {
 		r.trustIn(opts.ID, opts.CWD)
 	}
 	opts.CodexRemote = remote
@@ -200,7 +200,7 @@ func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {
 
 func (r *codexShared) codexExecutable(configured string) string {
 	if strings.TrimSpace(configured) == "" {
-		configured = r.d.daemonSetting(SettingCodexExecutable)
+		configured = r.d.daemonSetting(settingCodexExecutable)
 	}
 	return agentdriver.MustGet(string(protocol.SessionAgentCodex)).ResolveExecutable(configured)
 }
@@ -588,7 +588,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 	if config == nil {
 		config = make(map[string]any)
 	}
-	r.capContext(config, sessionID, chief)
+	r.capContext(config, sessionID)
 	r.grantApprovals(params, sessionID)
 	if method != "thread/resume" {
 		if instructions := r.instructions(launchAs, v.profile, chief); instructions != "" {
@@ -675,11 +675,11 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 	if method != "thread/resume" && r.conversation(session) != "" {
 		return session, "", false
 	}
-	return session, session, r.d.isChiefOfStaffSession(session)
+	return session, session, r.d.sessionIsChief(session)
 }
 
-func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID, chief bool) {
-	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex), chief); limit > 0 {
+func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID) {
+	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex)); limit > 0 {
 		config["model_auto_compact_token_limit"] = limit
 	}
 }

@@ -1,0 +1,3 @@
+kind: changed
+area: inbox
+change: Crew messages, replies, PR watches and auto-mode proposals follow the member across sessions. Agent targets resolve inside the caller's profile, and queued mail states why it waits.

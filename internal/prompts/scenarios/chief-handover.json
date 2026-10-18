@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "chief-handover",
+  "description": "New chief takes over from the previous chief session after upgrade.",
+  "recipient": "chief",
+  "event": "handover",
+  "values": {
+    "previous_session": "previous-chief-session",
+    "tended": "s-build (build-release), s-docs (update-guide)",
+    "watched": "s-build (build-release), s-review (release-review)"
+  }
+}

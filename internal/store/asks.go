@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var (
@@ -20,7 +21,7 @@ var (
 type Ask struct {
 	ID        string
 	SessionID protocol.SessionID
-	To        inbox.Address
+	To        who.Address
 	Subject   string
 	Markdown  string
 	BaseDir   string
@@ -37,7 +38,7 @@ func (s *Store) AddAsk(a Ask) error {
 	}
 	query := "INSERT INTO asks (" + askColumns + ") SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
 	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, a.SessionID}
-	if seedID := a.To.SeedID(); seedID != "" {
+	if seedID := askSeedID(a.To); seedID != "" {
 		_, seeds, found, err := readCollection(s.db, garden.Namespace, garden.CollectionSeeds)
 		if err != nil {
 			return err
@@ -154,7 +155,7 @@ func closeAsk(db execer, id string) error {
 	return nil
 }
 
-func (s *Store) CloseAsksTo(to inbox.Address) ([]string, error) {
+func (s *Store) CloseAsksTo(to who.Address) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -163,13 +164,13 @@ func (s *Store) CloseAsksTo(to inbox.Address) ([]string, error) {
 	return closeAsksTo(s.db, to)
 }
 
-func closeAsksTo(db rowsQuerier, to inbox.Address) ([]string, error) {
+func closeAsksTo(db rowsQuerier, to who.Address) ([]string, error) {
 	return deleteAsks(db, "DELETE FROM asks WHERE address = ? RETURNING id", to.String())
 }
 
 func closeProfileMailboxAsks(db rowsQuerier, profileID string) ([]string, error) {
-	return deleteAsks(db, "DELETE FROM asks WHERE address = ? OR address IN (SELECT ? || member_id FROM crew_profiles WHERE profile_id = ?) RETURNING id",
-		inbox.ToChief(profileID).String(), inbox.ToMember("").String(), profileID)
+	return deleteAsks(db, "DELETE FROM asks WHERE address IN (SELECT ? || member_key FROM crew_members WHERE profile_id = ?) RETURNING id",
+		who.Member(who.MemberKey{}).Address().String(), profileID)
 }
 
 func deleteAsks(db rowsQuerier, query string, args ...any) ([]string, error) {
@@ -195,10 +196,15 @@ func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.CreatedAt); err != nil {
 		return Ask{}, err
 	}
-	to, err := inbox.ParseAddress(address)
+	to, err := who.ParseAddress(address)
 	if err != nil {
 		return Ask{}, err
 	}
 	a.To = to
 	return a, nil
+}
+
+func askSeedID(a who.Address) string {
+	id, _ := who.SwitchAddress(a, func(protocol.SessionID) (string, error) { return "", nil }, func(who.MemberKey) (string, error) { return "", nil }, func(id string) (string, error) { return id, nil })
+	return id
 }

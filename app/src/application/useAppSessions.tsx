@@ -32,7 +32,7 @@ export function useAppSessions({
       isWorktree: daemonSession?.is_worktree ?? s.isWorktree,
       delegatedFromChief: daemonSession?.delegated_from_chief ?? false,
       dispatcher_session_id: daemonSession?.dispatcher_session_id,
-      dispatcher_member: daemonSession?.dispatcher_member,
+      dispatcher:daemonSession?.dispatcher,
       delegation_role: daemonSession?.delegation_role,
       seedId: daemonSession?.seed_id,
       activity: daemonSession?.activity,
@@ -59,7 +59,7 @@ export function useAppSessions({
         agent: normalizeSessionAgent(session.agent),
         state: normalizeSessionState(session.state),
         dispatcher_session_id: session.dispatcher_session_id,
-        dispatcher_member: session.dispatcher_member,
+        dispatcher:session.dispatcher,
         delegation_role: session.delegation_role,
       })),
     [daemonSessions],
@@ -70,14 +70,6 @@ export function useAppSessions({
   const visibleEnrichedSessions = enrichedLocalSessions.filter(
     (session) => session.profileId === selectedProfileId,
   );
-
-  const selectedProfileChiefId = daemonSessions.find(
-    (session) => session.chief_of_staff === true && session.profile_id === selectedProfileId,
-  )?.id;
-  const notebookChiefSession = enrichedLocalSessions.find((session) => session.id === selectedProfileChiefId);
-  const notebookChiefActive = notebookChiefSession
-    ? notebookChiefSession.state === 'working'
-    : undefined;
 
   useEffect(() => {
     void connect();
@@ -127,6 +119,5 @@ export function useAppSessions({
     enrichedLocalSessions,
     visibleEnrichedSessions,
     delegationSessions,
-    notebookChiefActive,
   };
 }

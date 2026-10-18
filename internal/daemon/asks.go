@@ -15,10 +15,11 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) asksSettingOn() bool {
-	return parseBooleanSetting(d.daemonSetting(SettingAsksEnabled))
+	return parseBooleanSetting(d.daemonSetting(settingAsksEnabled))
 }
 
 func (d *Daemon) launchedWithAsks(sessionID protocol.SessionID) bool {
@@ -68,7 +69,7 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, errSessionNotLive(session.ID).Error())
 		return
 	case errors.Is(err, store.ErrAskSeedClosed):
-		d.sendError(conn, fmt.Sprintf("%s closed before the ask was saved; ask again", to.SeedID()))
+		d.sendError(conn, fmt.Sprintf("%s closed before the ask was saved; ask again", seedAddressID(to)))
 		return
 	case err != nil:
 		d.sendError(conn, err.Error())
@@ -78,29 +79,37 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	d.publishFact(FactAskOpened, id, nil)
 }
 
-func (d *Daemon) askAddressOf(session *protocol.Session, seedID string) (inbox.Address, error) {
+func (d *Daemon) askAddressOf(session *protocol.Session, seedID string) (who.Address, error) {
+	b, err := d.bindings()
+	if err != nil {
+		return who.Address{}, err
+	}
 	stake := d.openStake(session.ID)
 	if seedID == "" || seedID == stake {
 		if stake == "" {
-			return d.inboxAddressOf(session.ID), nil
+			party, ok := b.PartyOf(session.ID)
+			if !ok {
+				return who.Address{}, errSessionNotLive(session.ID)
+			}
+			return party.Address(), nil
 		}
-		return inbox.ToSeed(stake), nil
+		return who.ToTenderOf(stake), nil
 	}
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
-		return inbox.Address{}, err
+		return who.Address{}, err
 	}
 	if seed.ProfileID != session.ProfileID {
-		return inbox.Address{}, d.requireSeedInProfile(seed.ID, session.ProfileID, false)
+		return who.Address{}, d.requireSeedInProfile(seed.ID, session.ProfileID, false)
 	}
-	to := inbox.ToSeed(seed.ID)
+	to := who.ToTenderOf(seed.ID)
 	if holder := d.inboxHolder(to); holder != nil && holder.ID == session.ID {
 		return to, nil
 	}
-	if tender := seed.Tender(); tender.Named() {
-		return inbox.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, tender.DisplayName())
+	if tender, ok := seed.Claim.Tender(); ok {
+		return who.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, d.partyView(tender, b).Name)
 	}
-	return inbox.Address{}, fmt.Errorf("nobody is tending %s, and an ask is about a seed you tend; tend it first (attn seed tend %s), or ask without --seed", seed.ID, seed.ID)
+	return who.Address{}, fmt.Errorf("nobody is tending %s, and an ask is about a seed you tend; tend it first (attn seed tend %s), or ask without --seed", seed.ID, seed.ID)
 }
 
 func (d *Daemon) openStake(sessionID protocol.SessionID) string {
@@ -114,11 +123,16 @@ func (d *Daemon) openStake(sessionID protocol.SessionID) string {
 	return stake
 }
 
-func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(inbox.Address) bool {
-	roles := d.inboxRoleAddresses(sessionID)
+func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(who.Address) bool {
+	var roles []who.Address
+	if b, err := d.bindings(); err != nil {
+		d.logf("asks: reading bindings for %s: %v", sessionID, err)
+	} else {
+		roles = b.AddressesOf(sessionID)
+	}
 	stake, _ := d.gardenDispatchCrown(sessionID)
-	return func(to inbox.Address) bool {
-		switch seedID := to.SeedID(); seedID {
+	return func(to who.Address) bool {
+		switch seedID := seedAddressID(to); seedID {
 		case "":
 			return slices.Contains(roles, to)
 		case stake:
@@ -207,7 +221,7 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if err != nil {
 		return err
 	}
-	if seedID := stored.To.SeedID(); seedID != "" {
+	if seedID := seedAddressID(stored.To); seedID != "" {
 		err = d.noteAnswer(stored.ID, seedID, text)
 	} else {
 		err = d.inboxAnswer(stored, text)
@@ -230,8 +244,8 @@ func (d *Daemon) noteAnswer(askID, seedID, text string) error {
 	if err != nil {
 		return err
 	}
-	note := garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: text}
-	_, _, err = d.mintAndWriteNote(*schema, note, true, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
+	note := garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: text, Author: who.User()}
+	_, _, err = d.mintAndWriteNote(*schema, note, true, func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
 		return d.store.AnswerAskWithNote(askID, write, fact, events, now)
 	})
 	return err
@@ -246,7 +260,7 @@ func (d *Daemon) inboxAnswer(stored store.Ask, text string) error {
 	return nil
 }
 
-func (d *Daemon) closeAsksTo(to inbox.Address) {
+func (d *Daemon) closeAsksTo(to who.Address) {
 	ids, err := d.store.CloseAsksTo(to)
 	if err != nil {
 		d.logf("asks: closing the asks to %s: %v", to, err)
@@ -306,27 +320,29 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (openAsk, er
 		BaseDir:   a.BaseDir,
 		CreatedAt: a.CreatedAt,
 	}}
-	switch {
-	case a.To.SeedID() != "":
-		seed, _, err := d.readSeed(a.To.SeedID())
+	_, err := who.SwitchAddress(a.To, func(protocol.SessionID) (struct{}, error) {
+		if session := d.store.Get(a.SessionID); session != nil {
+			open.profileID = session.ProfileID
+		}
+		return struct{}{}, nil
+	}, func(key who.MemberKey) (struct{}, error) {
+		open.wire.CrewMember = protocol.Ptr(key.String())
+		open.profileID = d.crewProfileID(key.String())
+		return struct{}{}, nil
+	}, func(seedID string) (struct{}, error) {
+		seed, _, err := d.readSeed(seedID)
 		if err != nil {
-			return openAsk{}, err
+			return struct{}{}, err
 		}
 		open.wire.SeedID, open.wire.SeedTitle = protocol.Ptr(seed.ID), protocol.Ptr(seed.Title)
 		if seed.StepSlug != "" {
 			open.wire.SeedSlug = protocol.Ptr(seed.StepSlug)
 		}
 		open.profileID = seed.ProfileID
-	case a.To.MemberID() != "":
-		open.wire.CrewMember = protocol.Ptr(a.To.MemberID())
-		open.profileID = d.crewProfileID(a.To.MemberID())
-	case a.To.ChiefProfileID() != "":
-		open.wire.Chief = protocol.Ptr(true)
-		open.profileID = a.To.ChiefProfileID()
-	default:
-		if session := d.store.Get(a.SessionID); session != nil {
-			open.profileID = session.ProfileID
-		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return openAsk{}, err
 	}
 	return open, nil
 }

@@ -6,16 +6,13 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Client) SeedPlant(sessionID protocol.SessionID, title string, body string, partOf string, discoveredFrom string, member string) (*protocol.SeedPlantResult, error) {
+func (c *Client) SeedPlant(sessionID protocol.SessionID, title string, body string, partOf string, discoveredFrom string) (*protocol.SeedPlantResult, error) {
 	msg := protocol.SeedPlantMessage{Cmd: protocol.CmdSeedPlant, Title: title}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
 	}
 	if body != "" {
 		msg.Body = protocol.Ptr(body)
-	}
-	if member != "" {
-		msg.Member = protocol.Ptr(member)
 	}
 	if partOf != "" {
 		msg.PartOf = protocol.Ptr(partOf)
@@ -159,8 +156,7 @@ func (c *Client) SeedSendToChief(
 ) (*protocol.SeedSendToChiefResult, error) {
 	msg := protocol.SeedSendToChiefMessage{
 		Cmd: protocol.CmdSeedSendToChief, SeedID: document.ID,
-		ExpectedRev: document.Rev, ExpectedTenderSession: document.TenderSession,
-		ExpectedTenderMember: document.TenderMember,
+		ExpectedRev: document.Rev,
 	}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -217,13 +213,17 @@ func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error)
 }
 
 type SeedTransitionOptions struct {
+	Assignee         string
 	WhenMerged       bool
 	PullRequestURL   string
 	ClearHarvestWhen bool
 }
 
-func (c *Client) SeedTransition(sessionID protocol.SessionID, seedID string, verb string, reason string, member string, force bool, opts SeedTransitionOptions) (*protocol.SeedTransitionResult, error) {
+func (c *Client) SeedTransition(sessionID protocol.SessionID, seedID string, verb string, reason string, force bool, opts SeedTransitionOptions) (*protocol.SeedTransitionResult, error) {
 	msg := protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, SeedID: seedID, Verb: verb}
+	if opts.Assignee != "" {
+		msg.Assignee = protocol.Ptr(opts.Assignee)
+	}
 	if opts.WhenMerged {
 		merged := protocol.SeedHarvestWhenMerged{}
 		if opts.PullRequestURL != "" {
@@ -244,9 +244,6 @@ func (c *Client) SeedTransition(sessionID protocol.SessionID, seedID string, ver
 			msg.Reason = protocol.Ptr(reason)
 		}
 	}
-	if member != "" {
-		msg.Member = protocol.Ptr(member)
-	}
 	if force {
 		msg.Force = protocol.Ptr(true)
 	}
@@ -260,13 +257,10 @@ func (c *Client) SeedTransition(sessionID protocol.SessionID, seedID string, ver
 	return resp.SeedTransitionResult, nil
 }
 
-func (c *Client) SeedNote(sessionID protocol.SessionID, seedID string, body string, member string, kind string, ring bool, artifact *protocol.SeedArtifactReference) (*protocol.SeedNoteResult, error) {
+func (c *Client) SeedNote(sessionID protocol.SessionID, seedID string, body string, kind string, ring bool, artifact *protocol.SeedArtifactReference) (*protocol.SeedNoteResult, error) {
 	msg := protocol.SeedNoteMessage{Cmd: protocol.CmdSeedNote, SeedID: seedID, Body: body, Artifact: artifact}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
-	}
-	if member != "" {
-		msg.Member = protocol.Ptr(member)
 	}
 	if kind != "" {
 		msg.Kind = protocol.Ptr(kind)
@@ -357,13 +351,10 @@ func (c *Client) SeedWatch(sessionID protocol.SessionID, seedID string, unwatch 
 	return resp.SeedWatchResult, nil
 }
 
-func (c *Client) SeedPlot(sessionID protocol.SessionID, member string, spec protocol.SeedPlotMessage) (*protocol.SeedPlotResult, error) {
+func (c *Client) SeedPlot(sessionID protocol.SessionID, spec protocol.SeedPlotMessage) (*protocol.SeedPlotResult, error) {
 	spec.Cmd = protocol.CmdSeedPlot
 	if sessionID != "" {
 		spec.SourceSessionID = protocol.Ptr(sessionID)
-	}
-	if member != "" {
-		spec.Member = protocol.Ptr(member)
 	}
 	resp, err := c.send(spec)
 	if err != nil {

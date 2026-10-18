@@ -247,9 +247,21 @@ func TestTerminalCLIUsesTransitiveAuthority(t *testing.T) {
 	if moved.Code != 0 {
 		t.Fatalf("transitive move: %+v", moved)
 	}
-	chief := s.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	chiefSet, err := s.Client().CrewSet("chief", nil, protocol.Ptr("claude"), protocol.Ptr("sonnet"), nil, nil)
+	if err != nil || chiefSet.WokeSessionID == nil {
+		t.Fatalf("configure Chief=%+v %v", chiefSet, err)
+	}
+	chief := string(*chiefSet.WokeSessionID)
 	s.Launched(chief)
-	if got := s.Run(testworld.Invocation{Session: chief, Args: []string{"terminal", "send", root, "--text", "from-chief\r"}}); got.Code != 0 {
+	var rootDesktop string
+	for _, desktop := range s.App().Initial.Desktops {
+		for _, pane := range desktop.Panes {
+			if string(pane.SessionID) == root {
+				rootDesktop = desktop.ID
+			}
+		}
+	}
+	if got := s.Run(testworld.Invocation{Session: chief, Args: []string{"terminal", "send", root, "--desktop", rootDesktop, "--text", "from-chief\r"}}); got.Code != 0 {
 		t.Fatalf("chief typing: %+v", got)
 	}
 	if got := s.Run(testworld.Invocation{Session: root, Args: []string{"agent", "close", grandchild, "-m", "Review complete"}}); got.Code != 0 {

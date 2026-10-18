@@ -12,13 +12,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const crewWakeAgent = crew.DefaultAgent
@@ -26,6 +29,12 @@ const crewWakeAgent = crew.DefaultAgent
 const crewWakeFallbackModel = "fable"
 
 func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
+	if d.isChief(member.Key) && strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
+		if member.Model == "" {
+			return nil
+		}
+		return protocol.Ptr(member.Model)
+	}
 	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
 		if model := strings.TrimSpace(member.Model); model != "" {
 			return protocol.Ptr(model)
@@ -41,6 +50,12 @@ func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
 }
 
 func (d *Daemon) crewWakeEffort(member crew.Member, agent string) *string {
+	if d.isChief(member.Key) && strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
+		if member.Effort == "" {
+			return nil
+		}
+		return protocol.Ptr(member.Effort)
+	}
 	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
 		if effort := strings.TrimSpace(member.Effort); effort != "" {
 			return protocol.Ptr(effort)
@@ -70,16 +85,35 @@ type crewWakeRequest struct {
 	UserStarted bool
 }
 
-func (d *Daemon) crewMember(name string) (crew.Member, docstore.Document, error) {
-	members, docs, err := d.readCrewMembers()
+func (d *Daemon) crewMember(key who.MemberKey) (crew.Member, docstore.Document, error) {
+	schema, err := d.crewCollection()
 	if err != nil {
 		return crew.Member{}, docstore.Document{}, err
 	}
-	member, ok := crew.Resolve(name, members)
-	if !ok {
-		return crew.Member{}, docstore.Document{}, fmt.Errorf("no crew member %q is registered; `attn crew list` names the roster", name)
+	doc, found, err := d.store.GetDocument(*schema, key.String())
+	if err != nil {
+		return crew.Member{}, docstore.Document{}, err
 	}
-	return member, docs[member.ID], nil
+	if !found {
+		return crew.Member{}, docstore.Document{}, fmt.Errorf("crew member %s not found", key)
+	}
+	member, err := crew.Decode(doc.ID, doc.Body)
+	if err == nil {
+		err = d.validateCrewMemberPaths(member)
+	}
+	return member, *doc, err
+}
+
+func (d *Daemon) trustClaudeCrewHome(home string, loginEnv []string) error {
+	env := pty.MergeEnvironment(os.Environ(), pty.LoginShellEnvironment(pty.GetUserLoginShell(), loginEnv, d.logf))
+	configDir := ""
+	for _, entry := range env {
+		if value, found := strings.CutPrefix(entry, "CLAUDE_CONFIG_DIR="); found {
+			configDir = value
+			break
+		}
+	}
+	return agentdriver.TrustClaudeWorkingDirectory(home, configDir)
 }
 
 func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
@@ -89,20 +123,30 @@ func (d *Daemon) crewLaunchDir(member crew.Member) (string, error) {
 	if err := d.validateCrewAwarenessDirs(member); err != nil {
 		return "", err
 	}
+	if d.isChief(member.Key) {
+		root, err := d.notebookRoot(d.crewProfileID(member.Key.String()))
+		if err != nil {
+			return "", err
+		}
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			return "", err
+		}
+		return root, nil
+	}
 	dir := strings.TrimSpace(member.CWD)
 	if dir == "" {
 		return member.HomeDir(d.dataRoot), nil
 	}
 	info, err := os.Stat(dir)
 	if err != nil {
-		return "", fmt.Errorf("%s launches in %s, which is not there (%v); `attn crew set %s --cwd <dir>` moves it", crew.DisplayName(member.ID), dir, err, member.ID)
+		return "", fmt.Errorf("%s launches in %s, which is not there (%v); `attn crew set %s --cwd <dir>` moves it", d.storedMemberName(member.Key.String()), dir, err, member.Key.String())
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("%s launches in %s, which is not a directory; `attn crew set %s --cwd <dir>` moves it", crew.DisplayName(member.ID), dir, member.ID)
+		return "", fmt.Errorf("%s launches in %s, which is not a directory; `attn crew set %s --cwd <dir>` moves it", d.storedMemberName(member.Key.String()), dir, member.Key.String())
 	}
 	resolved, err := d.resolveCrewWorkDir(dir)
 	if err != nil {
-		return "", fmt.Errorf("%s launches in %s: %w", crew.DisplayName(member.ID), dir, err)
+		return "", fmt.Errorf("%s launches in %s: %w", d.storedMemberName(member.Key.String()), dir, err)
 	}
 	return resolved, nil
 }
@@ -115,17 +159,17 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		return crew.Priming{}, err
 	}
 	priming := crew.Priming{
-		Member:        member.ID,
+		Name:          d.memberName(member.Key),
 		HomeDir:       member.HomeDir(d.dataRoot),
 		CharterPath:   member.CharterPath(d.dataRoot),
 		CWD:           member.CWD,
 		AwarenessDirs: member.AwarenessDirs,
 	}
-	d.primeCrewGarden(&priming, member.ID)
+	d.primeCrewGarden(&priming, member.Key)
 	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {
 		priming.Charter = string(charter)
 	} else if !os.IsNotExist(err) {
-		d.logf("crew: reading %s's charter at %s: %v", crew.DisplayName(member.ID), member.CharterPath(d.dataRoot), err)
+		d.logf("crew: reading %s's charter at %s: %v", member.Key.String(), member.CharterPath(d.dataRoot), err)
 	}
 
 	handoffsDir, err := d.validateCrewHandoffsDir(member)
@@ -135,7 +179,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 	entries, err := os.ReadDir(handoffsDir)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			d.logf("crew: reading %s's handoffs at %s: %v", crew.DisplayName(member.ID), handoffsDir, err)
+			d.logf("crew: reading %s's handoffs at %s: %v", member.Key.String(), handoffsDir, err)
 		}
 		return priming, nil
 	}
@@ -161,29 +205,29 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 	if letter, err := os.ReadFile(letterPath); err == nil {
 		priming.Handoff = string(letter)
 	} else {
-		d.logf("crew: reading %s's freshest handoff %s: %v", crew.DisplayName(member.ID), names[0], err)
+		d.logf("crew: reading %s's freshest handoff %s: %v", member.Key.String(), names[0], err)
 	}
 	return priming, nil
 }
 
-func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
-	read, err := d.readGardenTo(0, d.crewProfileID(memberID))
+func (d *Daemon) primeCrewGarden(priming *crew.Priming, key who.MemberKey) {
+	read, err := d.readGardenTo(0, d.crewProfileID(key.String()))
 	if err != nil {
-		d.logf("crew: reading the garden to prime %s: %v", crew.DisplayName(memberID), err)
+		d.logf("crew: reading the garden to prime %s: %v", key, err)
 		return
 	}
 	priming.GardenRead = true
-	held := garden.Held(read.seeds, memberID)
-	priming.HeldTotal = len(held)
-	if len(held) > crew.MaxHeldSeeds {
-		held = held[:crew.MaxHeldSeeds]
+	held := garden.TendedBy(read.seeds, who.Member(key))
+	priming.ClaimedTotal = len(held)
+	if len(held) > crew.MaxClaimedSeeds {
+		held = held[:crew.MaxClaimedSeeds]
 	}
 	for _, seed := range held {
-		entry := crew.HeldSeed{ID: seed.ID, Slug: seed.StepSlug, Title: seed.Title}
+		entry := crew.ClaimedSeed{ID: seed.ID, Slug: seed.StepSlug, Title: seed.Title}
 		if handoff := d.gardenHandoff(seed.ID); handoff != nil {
 			entry.Handoff = handoff.Body
 		}
-		priming.Held = append(priming.Held, entry)
+		priming.Claims = append(priming.Claims, entry)
 	}
 	for _, plot := range garden.PlotsOf(read.seeds, held) {
 		priming.Plots = append(priming.Plots, crew.PlotReady{
@@ -200,42 +244,27 @@ func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWak
 }
 
 func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted bool) (*protocol.CrewWakeResult, error) {
-	name := strings.TrimSpace(msg.Member)
-	if err := d.refuseCrossProfileWake(name, protocol.Deref(msg.ProfileID), protocol.Deref(msg.SourceSessionID)); err != nil {
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		return nil, bindingsErr
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
+	if err != nil {
 		return nil, err
 	}
+	identity, err := d.resolveMember(r, msg.Member)
+	if err != nil {
+		return nil, err
+	}
+	key := identity.Key
 	request := crewWakeRequest{UserStarted: userStarted, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew wake")}
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
-	return d.crewWakeDayWithChargeLocked(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
-}
-
-func (d *Daemon) refuseCrossProfileWake(name string, askedProfileID string, sourceSessionID protocol.SessionID) error {
-	askedProfileID = strings.TrimSpace(askedProfileID)
-	if sourceSessionID = protocol.TrimID(sourceSessionID); sourceSessionID != "" {
-		profile, err := d.callerProfile(sourceSessionID)
-		if err != nil {
-			return err
-		}
-		if askedProfileID != "" && askedProfileID != profile.ID {
-			return fmt.Errorf("wake %s: session %s belongs to profile %s, not the profile_id %s it sent", name, sourceSessionID, profile.ID, askedProfileID)
-		}
-		askedProfileID = profile.ID
-	}
-	if askedProfileID == "" {
-		return nil
-	}
-	member, _, err := d.crewMember(name)
-	if err != nil {
-		return err
-	}
-	if memberProfileID := d.crewProfileID(member.ID); memberProfileID != askedProfileID {
-		return fmt.Errorf("%s belongs to profile %s, not %s; a member wakes only in its own profile", crew.DisplayName(member.ID), memberProfileID, askedProfileID)
-	}
-	return nil
+	return d.crewWakeDayWithChargeLocked(key, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
 }
 
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
+	pausepoint.At(pausepoint.MemberWakeRequested)
 	result, err := d.crewWakeAsked(msg)
 	if err != nil {
 		d.sendCrewError(conn, "wake", err)
@@ -245,7 +274,10 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 }
 
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWakeAskedFor(msg, true)
+	scoped := *msg
+	scoped.SourceSessionID = nil
+	scoped.ProfileID = protocol.Ptr(client.selectedProfile())
+	result, err := d.crewWakeAskedFor(&scoped, true)
 	var showErr error
 	if err == nil {
 		showErr = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))
@@ -272,38 +304,35 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 	d.sendToClient(client, response)
 }
 
-func (d *Daemon) crewWake(name, agent string) (*protocol.CrewWakeResult, error) {
-	return d.crewWakeWithCharge(name, agent, false)
-}
-
-func (d *Daemon) crewWakeWithCharge(name, agent string, autonomous bool) (*protocol.CrewWakeResult, error) {
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
-	return d.crewWakeWithChargeLocked(name, agent, autonomous)
-}
-
-func (d *Daemon) crewWakeWithChargeLocked(name, agent string, autonomous bool) (*protocol.CrewWakeResult, error) {
-	return d.crewWakeDayWithChargeLocked(name, agent, autonomous, nil, crewWakeRequest{})
-}
-func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
-	member, _, err := d.crewMember(name)
+func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
+	if err := d.mailRefusal(who.Member(key).Address()); err != nil {
+		return nil, fmt.Errorf("%w; `attn crew restore %s` brings it back", err, d.memberName(key))
+	}
+	member, _, err := d.crewMember(key)
 	if err != nil {
 		return nil, err
 	}
-	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.ID))
+	if d.isChief(key) && member.Agent == "" {
+		return nil, fmt.Errorf("the Chief has no harness yet; pick one: attn crew set chief --agent <harness> --model <model>")
+	}
+	if err := d.requireCrewFiles(member); err != nil {
+		return nil, err
+	}
+	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.Key.String()))
 	if boundSessionID := protocol.TrimID(member.BindingSession); boundSessionID != "" {
 		live, err := d.crewSessionActuallyLive(boundSessionID)
 		if err != nil {
-			return nil, fmt.Errorf("check %s's bound session %s: %w", crew.DisplayName(member.ID), shortSessionID(boundSessionID), err)
+			return nil, fmt.Errorf("check %s's bound session %s: %w", d.storedMemberName(member.Key.String()), shortSessionID(boundSessionID), err)
 		}
 		if !live {
-			if _, err := d.releaseCrewBinding(member.ID, boundSessionID); err != nil {
-				return nil, fmt.Errorf("release %s's exited session %s: %w", crew.DisplayName(member.ID), shortSessionID(boundSessionID), err)
+			if _, err := d.releaseCrewBinding(member.Key, boundSessionID); err != nil {
+				return nil, fmt.Errorf("release %s's exited session %s: %w", d.storedMemberName(member.Key.String()), shortSessionID(boundSessionID), err)
 			}
 			releasedSessionID = boundSessionID
 		} else {
 			awake := &protocol.CrewWakeResult{
-				Member:       member.ID,
+				Member:       member.Key.String(),
+				Name:         d.memberName(member.Key),
 				SessionID:    boundSessionID,
 				AlreadyAwake: true,
 			}
@@ -318,12 +347,15 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 			return nil, err
 		}
 	}
-	profile, err := d.liveLaunchProfile(d.crewProfileID(member.ID))
+	profile, err := d.liveLaunchProfile(d.crewProfileID(member.Key.String()))
 	if err != nil {
-		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
+		return nil, fmt.Errorf("wake %s: %w", d.storedMemberName(member.Key.String()), err)
 	}
 	if agent == "" {
 		agent = member.LaunchAgent()
+	}
+	if d.isChief(key) && !d.agentSupportsChiefGuidance(agent) {
+		return nil, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not. Pick one: attn crew set chief --agent <harness> --model <model>", agent)
 	}
 	if !d.crewAgentAvailable(agent) {
 		return nil, fmt.Errorf("agent %q is not available", agent)
@@ -333,13 +365,13 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		return nil, err
 	}
 	if autonomous {
-		if err := d.chargeAutonomousWake(member.ID, time.Now()); err != nil {
+		if err := d.chargeAutonomousWake(member.Key, time.Now()); err != nil {
 			return nil, fmt.Errorf("%w; nothing was delivered", err)
 		}
 	}
 
 	sessionID := protocol.SessionID(uuid.NewString())
-	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {
+	if _, err := d.claimCrewBinding(member.Key, sessionID); err != nil {
 		return nil, err
 	}
 
@@ -354,23 +386,24 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		Effort:        d.crewWakeEffort(member, agent),
 		Cols:          80,
 		Rows:          24,
-		Label:         protocol.Ptr(crew.DisplayName(member.ID)),
+		Label:         protocol.Ptr(d.storedMemberName(member.Key.String())),
 		InitialPrompt: protocol.Ptr(initialPrompt),
-	}, internalSpawnPolicy{launchPlacement: &launchPlacement{kind: "crew", itemID: member.ID}})
+	}, internalSpawnPolicy{member: member.Key, launchPlacement: &launchPlacement{kind: "crew", itemID: member.Key.String()}})
 	if rejection != nil {
 		d.releaseCrewBindingIfSession(sessionID)
-		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), rejection.reason())
+		return nil, fmt.Errorf("wake %s: %w", d.storedMemberName(member.Key.String()), rejection.reason())
 	}
 	if !request.UserStarted {
 		requester := request.RequestedBy
 		if requester == "" {
 			requester = "a garden notification"
 		}
-		d.announceBackgroundLaunch("crew", member.ID, sessionID, requester)
+		d.announceBackgroundLaunch("crew", member.Key.String(), sessionID, requester)
 	}
-	d.logf("crew: woke %s in session %s at %s", crew.DisplayName(member.ID), sessionID, directory)
+	d.logf("crew: woke %s in session %s at %s", member.Key.String(), sessionID, directory)
 	result := &protocol.CrewWakeResult{
-		Member:    member.ID,
+		Member:    member.Key.String(),
+		Name:      d.memberName(member.Key),
 		SessionID: sessionID,
 		ProfileID: profile.ID,
 	}
@@ -407,7 +440,7 @@ func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) 
 		return
 	}
 	if bound {
-		result.Member = protocol.Ptr(member.ID)
+		result.Member = protocol.Ptr(member.Key.String())
 		result.Guidance = protocol.Ptr(block)
 		result.AwarenessDirs = append(result.AwarenessDirs, member.AwarenessDirs...)
 		result.PrimingBytes = len(block)
@@ -440,16 +473,32 @@ func (d *Daemon) crewPrimeForSession(sessionID protocol.SessionID) (crew.Member,
 			handoff = "(none)"
 		}
 		d.logf("crew: priming %s for session %s: %d bytes (charter %d, handoff %s %d, older %d, garden %d for %d of %d held and %d plots)",
-			crew.DisplayName(member.ID), sessionID, len(block), len(priming.Charter),
+			d.storedMemberName(member.Key.String()), sessionID, len(block), len(priming.Charter),
 			handoff, len(priming.Handoff), len(priming.OlderHandoffs),
-			len(priming.GardenSection()), len(priming.Held), priming.HeldTotal, len(priming.Plots))
+			len(priming.GardenSection()), len(priming.Claims), priming.ClaimedTotal, len(priming.Plots))
 		return member, block, true, nil
 	}
 	return crew.Member{}, "", false, nil
 }
 
 func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
-	member, conflict, err := d.crewSet(msg)
+	b, bindingsErr := d.bindings()
+	if bindingsErr != nil {
+		d.sendError(conn, bindingsErr.Error())
+		return
+	}
+	r, err := d.requestFromMessage(msg.SourceSessionID, msg.ProfileID, b)
+	if err != nil {
+		d.sendCrewError(conn, "set", err)
+		return
+	}
+	identity, scopeErr := d.resolveMember(r, msg.Member)
+	if scopeErr != nil {
+		d.sendCrewError(conn, "set", scopeErr)
+		return
+	}
+
+	member, conflict, err := d.crewSet(identity.Key, msg)
 	if err != nil {
 		d.sendCrewError(conn, "set", err)
 		return
@@ -458,10 +507,17 @@ func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
 		d.sendCrewError(conn, "set", errors.New("the member changed after it was read; reconcile the returned revision and retry"))
 		return
 	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewSetResult: &protocol.CrewSetResult{Member: *member}})
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewSetResult: member})
 }
 
 func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage) {
+	r := who.RequestFromApp(client.selectedProfile())
+	identity, scopeErr := d.resolveMember(r, msg.Member)
+	if scopeErr != nil {
+		d.sendToClient(client, protocol.CrewSetResultMessage{Event: protocol.EventCrewSetResult, RequestID: protocol.Deref(msg.RequestID), Error: protocol.Ptr(scopeErr.Error())})
+		return
+	}
+
 	if strings.TrimSpace(protocol.Deref(msg.RequestID)) == "" {
 		d.sendToClient(client, protocol.CrewSetResultMessage{
 			Event: protocol.EventCrewSetResult, Success: false, Conflict: false,
@@ -469,10 +525,15 @@ func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage)
 		})
 		return
 	}
-	member, conflict, err := d.crewSet(msg)
+	member, conflict, err := d.crewSet(identity.Key, msg)
 	result := protocol.CrewSetResultMessage{
 		Event: protocol.EventCrewSetResult, RequestID: protocol.Deref(msg.RequestID),
-		Success: err == nil && !conflict, Conflict: conflict, Member: member,
+		Success: err == nil && !conflict, Conflict: conflict,
+	}
+	if member != nil {
+		result.Member = &member.Member
+		result.WokeSessionID = member.WokeSessionID
+		result.WakeError = member.WakeError
 	}
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
@@ -482,50 +543,121 @@ func (d *Daemon) handleCrewSetWS(client *wsClient, msg *protocol.CrewSetMessage)
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bool, error) {
+func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (result *protocol.CrewSetResult, conflict bool, resultErr error) {
+	d.crewWakeMu.Lock()
+	defer d.crewWakeMu.Unlock()
+	profile := d.crewProfileID(key.String())
+	var previousRoot *string
+	defer func() {
+		if previousRoot != nil {
+			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(settingNotebookRoot), Value: *previousRoot, ProfileID: &profile}); err != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("restore Notebook folder %q after failed Chief setup: %w", *previousRoot, err))
+			}
+		}
+	}()
 	schema, err := d.crewCollection()
 	if err != nil {
 		return nil, false, err
 	}
+	chief := d.isChief(key)
 	for {
-		member, doc, err := d.crewMember(strings.TrimSpace(msg.Member))
+		member, doc, err := d.crewMember(key)
 		if err != nil {
 			return nil, false, err
 		}
 		if msg.ExpectedRevision != nil && int64(*msg.ExpectedRevision) != doc.Rev {
 			wire := d.crewMemberWire(member, doc.Rev)
-			return &wire, true, nil
+			return &protocol.CrewSetResult{Member: wire}, true, nil
 		}
 		setting := storeLaunchSetting(msg.LaunchDesktopSetting)
 		if msg.LaunchDesktop != nil {
-			chosen, err := d.launchDesktopFromRef(d.crewProfileID(member.ID), member.ID, *msg.LaunchDesktop, msg.LaunchDesktopName)
+			chosen, err := d.launchDesktopFromRef(d.crewProfileID(member.Key.String()), member.Key.String(), *msg.LaunchDesktop, msg.LaunchDesktopName)
 			if err != nil {
 				return nil, false, err
 			}
 			setting = &chosen
 		}
+		before := member
+		if chief && msg.Cwd != nil {
+			return nil, false, fmt.Errorf("the Chief works from the Notebook root; change it with attn settings set notebook.root <folder>")
+		}
+		if chief && msg.Agent != nil && strings.TrimSpace(*msg.Agent) == "" {
+			return nil, false, fmt.Errorf("the Chief needs a harness; pick one: attn crew set chief --agent <harness> --model <model>")
+		}
+		if chief {
+			agent := member.Agent
+			if msg.Agent != nil {
+				agent = strings.TrimSpace(strings.ToLower(*msg.Agent))
+			}
+			if agent != "" && !d.agentSupportsChiefGuidance(agent) {
+				return nil, false, fmt.Errorf("the Chief needs a harness that takes launch instructions; %s does not. Pick one: attn crew set chief --agent <harness> --model <model>", agent)
+			}
+		}
 		if err := d.applyCrewSettings(&member, msg); err != nil {
 			return nil, false, err
 		}
+		if chief && member.Agent != "" {
+			if before.Agent == "" && member.Model == "" {
+				return nil, false, fmt.Errorf("the Chief needs a model too: attn crew set chief --agent <harness> --model <model>")
+			}
+		}
+		if msg.NotebookRoot != nil {
+			if !chief || before.Home != "" {
+				return nil, false, fmt.Errorf("the Notebook folder can only be picked before the Chief is configured; use attn settings set notebook.root <folder> to change it later")
+			}
+			oldRoot := d.profileSetting(profile, settingNotebookRoot)
+			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(settingNotebookRoot), Value: *msg.NotebookRoot, ProfileID: &profile}); err != nil {
+				return nil, false, err
+			}
+			if previousRoot == nil {
+				previousRoot = &oldRoot
+			}
+		}
+		if chief && member.Home == "" && member.Agent != "" {
+			id, err := d.store.CrewIdentity(key)
+			if err != nil {
+				return nil, false, err
+			}
+			if err := d.furnishCrewHome(id, &member, prompts.RenderText("chief", "charter", nil)); err != nil {
+				return nil, false, err
+			}
+		}
 		revision, err := d.writeCrewMemberWithLaunch(*schema, member, doc.Rev, setting)
+		if err != nil && before.Home == "" && member.Home != "" {
+			_ = os.RemoveAll(member.HomeDir(d.dataRoot))
+		}
 		if err == nil {
+			previousRoot = nil
 			if setting != nil {
-				d.publishArrangementChanged(d.crewProfileID(member.ID))
-				d.publishMigrationChanged(d.crewProfileID(member.ID))
+				d.publishArrangementChanged(d.crewProfileID(member.Key.String()))
+				d.publishMigrationChanged(d.crewProfileID(member.Key.String()))
 			}
 			wire := d.crewMemberWire(member, revision)
-			return &wire, false, nil
+			result := &protocol.CrewSetResult{Member: wire}
+			if chief && before.Agent == "" && member.Agent != "" {
+				woke, err := d.crewWakeDayWithChargeLocked(key, "", false, nil, crewWakeRequest{UserStarted: msg.SourceSessionID == nil, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew set")})
+				if err != nil {
+					result.WakeError = protocol.Ptr(err.Error())
+				} else {
+					result.WokeSessionID = protocol.Ptr(woke.SessionID)
+				}
+				current, doc, err := d.crewMember(key)
+				if err == nil {
+					result.Member = d.crewMemberWire(current, doc.Rev)
+				}
+			}
+			return result, false, nil
 		}
 		if !docstore.IsConflict(err) {
 			return nil, false, err
 		}
 		if msg.ExpectedRevision != nil {
-			current, currentDoc, readErr := d.crewMember(strings.TrimSpace(msg.Member))
+			current, currentDoc, readErr := d.crewMember(key)
 			if readErr != nil {
 				return nil, false, readErr
 			}
 			wire := d.crewMemberWire(current, currentDoc.Rev)
-			return &wire, true, nil
+			return &protocol.CrewSetResult{Member: wire}, true, nil
 		}
 	}
 }

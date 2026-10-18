@@ -1,5 +1,4 @@
 import { DesktopClosePrompt } from '../components/DesktopClosePrompt';
-import { ChiefOfStaffTransferPrompt } from '../components/ChiefOfStaffTransferPrompt';
 import { NewSessionLauncher } from '../components/NewSessionLauncher';
 import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
@@ -9,7 +8,6 @@ import {
   useAppErrorsContext,
   useAppInputs,
   useAppShell,
-  useChiefOfStaffContext,
   useSessionLaunchContext,
   useSessionLifecycleContext,
 } from './AppContexts';
@@ -40,13 +38,6 @@ export function AppSessionPrompts() {
   const { agentAvailability, contextCapPromptSession, setContextCapPromptSession } = useAppShell();
   const { showError } = useAppErrorsContext();
   const { settings } = useAppInputs();
-  const {
-    hasChiefOfStaff,
-    chiefTransferTarget,
-    chiefTransferSaving,
-    handleConfirmChiefTransfer,
-    setChiefTransferTarget,
-  } = useChiefOfStaffContext();
   const experimental = settings.new_session_launcher_enabled === 'true';
   const pickerProps = {
     initialAgent: locationPickerInitialAgent,
@@ -61,7 +52,6 @@ export function AppSessionPrompts() {
     onError: showError,
     projectsDirectory: settings.projects_directory,
     agentAvailability,
-    chiefExists: hasChiefOfStaff,
   };
   return (
     <>
@@ -76,8 +66,8 @@ export function AppSessionPrompts() {
         <NewSessionLauncher
           {...pickerProps}
           onSelect={startLocation}
-          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, chief, onCreated) =>
-            startWorktreeSession(repo, branch, from, agent, yolo, auto, chief, undefined, onCreated)
+          onCreateWorktreeSession={(repo, branch, from, agent, yolo, auto, onCreated) =>
+            startWorktreeSession(repo, branch, from, agent, yolo, auto, undefined, onCreated)
           }
         />
       ) : (
@@ -94,18 +84,6 @@ export function AppSessionPrompts() {
         phase={sessionCreationJob?.phase || 'starting_session'}
         error={sessionCreationJob?.error}
         onDismiss={() => setSessionCreationJob(null)}
-      />
-      <ChiefOfStaffTransferPrompt
-        isVisible={chiefTransferTarget !== null}
-        currentLabel={chiefTransferTarget?.currentLabel ?? ''}
-        targetLabel={chiefTransferTarget?.targetLabel ?? ''}
-        isSaving={chiefTransferSaving}
-        onConfirm={() => void handleConfirmChiefTransfer()}
-        onCancel={() => {
-          if (!chiefTransferSaving) {
-            setChiefTransferTarget(null);
-          }
-        }}
       />
       {contextCapPromptSession && (
         <SessionContextCapPrompt

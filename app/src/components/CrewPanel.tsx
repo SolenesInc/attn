@@ -9,7 +9,6 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { DaemonSession, Seed } from '../hooks/useDaemonSocket';
 import { useHarnesses } from '../hooks/useHarnesses';
 import type { CrewMember } from '../types/generated';
-import { crewDisplayName } from '../utils/crewName';
 import { CrewCharterTab } from './CrewCharterTab';
 import { CrewHandoffsTab } from './CrewHandoffsTab';
 import { CrewLaunchTab, type CrewLaunchTabProps } from './CrewLaunchTab';
@@ -25,6 +24,7 @@ interface CrewPanelProps {
   isOpen: boolean;
   visit: number;
   initialMember?: string;
+  initialTab?: CrewTab;
   members: CrewMember[];
   sessions: DaemonSession[];
   seeds: Seed[];
@@ -44,13 +44,13 @@ const tabs: { id: CrewTab; label: string }[] = [
 
 
 function MemberHeading({ member }: { member: CrewMember }) {
-  const name = crewDisplayName(member.id);
+  const name = member.name;
   const awake = Boolean(member.binding_session);
   return (
     <div className="crew-member-heading">
       <div className="crew-member-identity">
         <span className="crew-avatar is-large" aria-hidden="true">{name.slice(0, 1)}</span>
-        <div><h2>{name}</h2><span>{awake ? 'Awake' : 'Asleep'}</span></div>
+        <div><h2>{name}</h2><span>{member.chief && !member.agent ? 'Not set up' : awake ? 'Awake' : 'Asleep'}</span></div>
       </div>
       <span className={`crew-presence ${awake ? 'is-awake' : ''}`}>{awake ? 'Current day active' : 'Between days'}</span>
     </div>
@@ -88,7 +88,7 @@ function MemberTabPanel({ tab, launch, charterEdit, charterAutosave, handoffs, s
   const member = launch.member;
   switch (tab) {
     case 'launch':
-      return <CrewLaunchTab key={member.id} {...launch} />;
+      return <CrewLaunchTab key={member.key} {...launch} />;
     case 'charter':
       return <CrewCharterTab member={member} edit={charterEdit} autosave={charterAutosave} />;
     case 'handoffs':
@@ -134,6 +134,7 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
 function CrewPanelSurface({
   isOpen,
   initialMember,
+  initialTab,
   members,
   sessions,
   seeds,
@@ -151,9 +152,9 @@ function CrewPanelSurface({
   const closeRef = useRef<HTMLButtonElement>(null);
   const rosterRef = useRef<HTMLDivElement>(null);
   const { selectedMember, tab, pending: navigationPending, navigate } = useCrewNavigation({
-    members, initialMember, rosterRef, charter: charterAutosave, onClose, onOpenSeed,
+    members, initialMember, initialTab, rosterRef, charter: charterAutosave, onClose, onOpenSeed,
   });
-  const selectedMemberId = selectedMember?.id;
+  const selectedMemberId = selectedMember?.key;
   const charterEdit = selectedMemberId ? charterAutosave.read(selectedMemberId) : undefined;
 
   const requestClose = useCallback(() => navigate({ kind: 'close' }), [navigate]);
@@ -173,7 +174,7 @@ function CrewPanelSurface({
   const visibleMembers = useMemo(() => {
     const query = filter.trim().toLowerCase();
     if (!query) return members;
-    return members.filter((member) => crewDisplayName(member.id).toLowerCase().includes(query));
+    return members.filter((member) => member.name.toLowerCase().includes(query));
   }, [filter, members]);
 
   const edit = selectedMemberId ? autosave.read(selectedMemberId) : undefined;
@@ -201,7 +202,7 @@ function CrewPanelSurface({
             <CrewRoster
               members={members}
               visibleMembers={visibleMembers}
-              selectedId={member?.id}
+              selectedId={member?.key}
               filter={filter}
               listRef={rosterRef}
               saveState={(memberId) => autosave.read(memberId)?.state}
@@ -229,8 +230,8 @@ function CrewPanelSurface({
                       autosave,
                       loadModels,
                       isConnected,
-                      onSleep: () => onSleepMember(member.id),
-                      onWake: () => onWakeMember(member.id),
+                      onSleep: () => onSleepMember(member.key),
+                      onWake: () => onWakeMember(member.key),
                     }}
                     charterEdit={charterEdit}
                     charterAutosave={charterAutosave}

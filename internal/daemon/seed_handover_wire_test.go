@@ -32,10 +32,11 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	unfinished := seedArtifactsWrite(t, predecessor.Directory, "unfinished.txt", []byte("still here"))
 	body := lifeShow(t, cli, seed).Seed.Body
 	observer := w.Spawn(app, fakeagent.Codex, w.Path("observer"))
-	for _, watcher := range []string{source, observer} {
-		if _, err := cli.SeedWatch(protocol.SessionID(watcher), seed, false); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := cli.SeedWatch(protocol.SessionID(observer), seed, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.SeedWatch(protocol.SessionID(source), seed, true); err != nil {
+		t.Fatal(err)
 	}
 
 	request := seedHandoverRequest(source, predecessor.Directory, seed, "Continue from the failing test.")
@@ -58,7 +59,7 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if notes := lifeShow(t, cli, seed).Notes; notes[0].Kind != "handoff" || notes[0].Body != "Continue from the failing test." {
 		t.Errorf("the seed's log leads with %+v, want the handoff", notes[0])
 	}
-	if held := lifeShow(t, cli, sibling).Seed.TenderSession; held != predecessor.SessionID {
+	if held := protocol.Deref(protocol.Deref(lifeShow(t, cli, sibling).Seed.Tender).SessionID); held != predecessor.SessionID {
 		t.Errorf("the handover moved %s, which %s also tended, to %q", sibling, predecessor.SessionID, held)
 	}
 	if kept := sessionOfDelegate(t, w, string(predecessor.SessionID)); kept.ID != predecessor.SessionID || protocol.Deref(kept.SeedID) == seed {
@@ -81,11 +82,13 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 		t.Errorf("the successor, prompted directly, also received %q", inboxContents(items))
 	}
 
-	if shown, err := cli.SeedShow(successor.SessionID, seed); err != nil || !shown.Watching {
-		t.Errorf("the successor does not watch the seed it was handed (%v)", err)
-	}
-	if _, err := cli.SeedWatch(successor.SessionID, seed, true); err != nil {
-		t.Fatal(err)
+	for _, watcher := range []protocol.SessionID{successor.SessionID, protocol.SessionID(source)} {
+		if shown, err := cli.SeedShow(watcher, seed); err != nil || !shown.Watching {
+			t.Errorf("handover did not start a watch for %s (%v)", watcher, err)
+		}
+		if _, err := cli.SeedWatch(watcher, seed, true); err != nil {
+			t.Fatal(err)
+		}
 	}
 	accepted, err := cli.DelegationStatus(request.RequestID)
 	if err != nil {
@@ -94,8 +97,10 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if retried, err := cli.StartDelegation(request); err != nil || retried.OperationID != accepted.OperationID || retried.SessionID != successor.SessionID {
 		t.Errorf("retrying the handover = %+v, %v; want operation %s for %s", retried, err, accepted.OperationID, successor.SessionID)
 	}
-	if shown, err := cli.SeedShow(successor.SessionID, seed); err != nil || shown.Watching {
-		t.Errorf("after the retry the successor watches %s again (%v)", seed, err)
+	for _, watcher := range []protocol.SessionID{successor.SessionID, protocol.SessionID(source)} {
+		if shown, err := cli.SeedShow(watcher, seed); err != nil || shown.Watching {
+			t.Errorf("after the retry %s watches %s again (%v)", watcher, seed, err)
+		}
 	}
 	seedHandoverHeldBy(t, cli, seed, string(successor.SessionID), 1)
 }
@@ -202,8 +207,8 @@ func seedHandoverHeldBy(t *testing.T, cli *client.Client, seedID, sessionID stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(shown.Seed.TenderSession) != sessionID || string(protocol.Deref(shown.Seed.LastExecutionID)) != sessionID {
-		t.Errorf("%s is tended by %q in execution %q, want %s", seedID, shown.Seed.TenderSession, protocol.Deref(shown.Seed.LastExecutionID), sessionID)
+	if protocol.Deref(shown.Seed.Tender).Ref != protocol.PartyRef("session:"+sessionID) || string(protocol.Deref(shown.Seed.LastExecutionID)) != sessionID {
+		t.Errorf("%s is tended by %q in execution %q, want %s", seedID, protocol.Deref(protocol.Deref(shown.Seed.Tender).SessionID), protocol.Deref(shown.Seed.LastExecutionID), sessionID)
 	}
 	found := 0
 	for _, note := range shown.Notes {

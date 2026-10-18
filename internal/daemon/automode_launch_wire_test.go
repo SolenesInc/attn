@@ -20,7 +20,7 @@ func TestPiReceivesTheEffectiveAutoModeConfigAtSpawn(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	awaitAgentAvailable(app, string(fakeagent.Pi))
 
-	if !promoteProposal(app, proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "git", "push"), "").ID).Success {
+	if !promoteProposal(app, proposeAmendment(t, w, cli, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "git", "push"), "").ID).Success {
 		t.Fatal("promoting the rule failed")
 	}
 	if _, err := cli.AutoModeEnvSlot("remote_targets", []string{"payments-prod"}); err != nil {

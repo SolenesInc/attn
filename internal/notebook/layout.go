@@ -29,6 +29,33 @@ func DefaultRoot(home, instance string) string {
 	return base + "-" + p
 }
 
+func ProfileDefaultRoot(base, profileName string, taken func(string) (bool, error)) (string, error) {
+	var slug strings.Builder
+	for _, r := range strings.ToLower(profileName) {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			slug.WriteRune(r)
+		} else if slug.Len() > 0 && !strings.HasSuffix(slug.String(), "-") {
+			slug.WriteByte('-')
+		}
+	}
+	name := strings.Trim(slug.String(), "-")
+	if name == "" {
+		name = "profile"
+	}
+	root := base + "-" + name
+	candidate := root
+	for n := 2; ; n++ {
+		exists, err := taken(candidate)
+		if err != nil {
+			return "", err
+		}
+		if !exists {
+			return candidate, nil
+		}
+		candidate = fmt.Sprintf("%s-%d", root, n)
+	}
+}
+
 func TicketsDir(root string) string {
 	return filepath.Join(root, machineDir, "tickets")
 }
@@ -111,13 +138,14 @@ func ScaffoldPaths() []string {
 
 const indexTemplate = `# Notebook
 
-A durable, instance-wide markdown bundle — the journal attn writes on your behalf
+A durable markdown bundle for this profile — the journal attn writes on your behalf
 and the knowledge base the chief of staff maintains. It outlives any single
 agent and is yours to read, edit, and sync.
 
 - ` + "`journal/`" + ` — dated narrative of what was done, newest entries appended per day.
 - ` + "`knowledge/`" + ` — the PARA-organized knowledge base (projects, areas, resources, archive).
 - ` + "`log.md`" + ` — global change history, newest first.
+- ` + "`crew/`" + ` — crew homes with charters and letters, managed by attn.
 
 This is one OKF bundle (Open Knowledge Format): every note carries a ` + "`type`" + `
 frontmatter field, and links are root-absolute markdown, e.g.

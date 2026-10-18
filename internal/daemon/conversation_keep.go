@@ -22,6 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/toolhome"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const conversationKeepKind = "conversation_keep"
@@ -321,7 +322,7 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, changed map[c
 				d.logf("conversation keep: delete %s/%s: %v", key.agent, key.resumeID, err)
 				continue
 			}
-			if err := d.store.TombstoneKeptConversation(key.agent, key.resumeID, now, "sweep"); err == nil {
+			if err := d.store.TombstoneKeptConversation(key.agent, key.resumeID, now, who.Attn()); err == nil {
 				changed[key] = true
 			} else {
 				d.logf("conversation keep: tombstone %s/%s: %v", key.agent, key.resumeID, err)
@@ -586,15 +587,15 @@ func (d *Daemon) keptConversationForSession(id protocol.SessionID) *protocol.Kep
 	if err != nil {
 		d.logf("conversation keep: read pins: %v", err)
 	}
-	return protocolKeptConversation(kept, pins)
+	return d.protocolKeptConversation(kept, pins)
 }
 
-func protocolKeptConversation(kept store.KeptConversation, pins []store.ConversationPin) *protocol.KeptConversation {
+func (d *Daemon) protocolKeptConversation(kept store.KeptConversation, pins []store.ConversationPin) *protocol.KeptConversation {
 	out := &protocol.KeptConversation{Bytes: int(kept.StoredBytes), CopiedAt: kept.CopiedAt.UTC().Format(time.RFC3339Nano)}
 	if !kept.DeletedAt.IsZero() {
 		out.DeletedAt = protocol.Ptr(kept.DeletedAt.UTC().Format(time.RFC3339Nano))
-		if kept.DeletedBy != "" {
-			out.DeletedBy = protocol.Ptr(protocol.KeptConversationDeletedBy(kept.DeletedBy))
+		if !kept.DeletedBy.IsZero() {
+			out.DeletedBy = protocol.Ptr(d.actorView(kept.DeletedBy))
 		}
 	} else {
 		for _, pin := range pins {

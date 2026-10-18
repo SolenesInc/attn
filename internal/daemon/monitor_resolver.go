@@ -69,7 +69,7 @@ func (d *Daemon) resolveDue(now time.Time) {
 		if !due {
 			continue
 		}
-		at := d.resolveSession(sessionID, now)
+		at := d.resolveSessionState(sessionID, now)
 		e.mu.Lock()
 		if !e.resolvePending && !at.IsZero() {
 			e.resolveAt, e.resolvePending = at, true
@@ -78,7 +78,7 @@ func (d *Daemon) resolveDue(now time.Time) {
 	}
 }
 
-func (d *Daemon) resolveSession(sessionID protocol.SessionID, now time.Time) time.Time {
+func (d *Daemon) resolveSessionState(sessionID protocol.SessionID, now time.Time) time.Time {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		d.forgetMonitor(sessionID)

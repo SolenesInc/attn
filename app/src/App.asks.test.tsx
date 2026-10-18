@@ -40,7 +40,7 @@ const releaseDay: Ask = {
   parts: [{ question: { key: 'q1', kind: 'any', prompt: 'Which platforms?', choices: [{ label: 'macOS' }, { label: 'Linux' }] } }],
 };
 
-const migration = daemonSeed('s-cache1', { title: 'Cache store migration', tender_session: 'successor' });
+const migration = daemonSeed('s-cache1', { title: 'Cache store migration', claimed: true, tender: { ref: 'session:successor', name: 'successor', session_id: 'successor' } });
 
 const landingWeek: Ask = {
   id: 'a-landing',
@@ -226,7 +226,7 @@ describe('App asks', () => {
   });
 
   it('waits for the next tender when no live agent tends the seed', async () => {
-    const daemon = await renderAsks([landingWeek], [apiWorking], [{ ...migration, tender_session: 'delegate' }]);
+    const daemon = await renderAsks([landingWeek], [apiWorking], [{ ...migration, tender: { ref: 'session:delegate', name: 'delegate', session_id: 'delegate' } }]);
 
     expect(screen.queryByTestId('ask-marker-api')).toBeNull();
     await openDrawer(daemon);

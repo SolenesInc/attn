@@ -201,14 +201,12 @@ func TestClosingADesktopRefusesToEndTheChiefOnlyWhereItHoldsTheChiefsLastTile(t 
 	app := w.App()
 	profile := app.SelectedProfile()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	spawned, home, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-		m.ChiefOfStaff = protocol.Ptr(true)
-	})
-	if !spawned.Success {
-		t.Fatalf("spawn the chief: %s", protocol.Deref(spawned.Error))
-	}
-	chief := string(spawned.ID)
+	chief := configureChief(t, w, fakeagent.Codex, chiefModel(fakeagent.Codex))
+	homeDesktop, _ := viewProfile(t, w, profile).paneOf(t, chief)
+	home := homeDesktop.ID
 	codex := w.Launched(chief)
+	codex.Prompted()
+	codex.Reply("Ready. <!-- attn:state=idle -->")
 	app.TypeLine(chief, "plan the week")
 	codex.Prompted()
 	codex.Reply("Planned. <!-- attn:state=idle -->")
@@ -612,21 +610,21 @@ func TestNewInASharedCodexChiefTerminalStartsAPlainConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	chief := w.Spawn(app, fakeagent.Codex, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-		m.ChiefOfStaff = protocol.Ptr(true)
-	})
+	chief := configureChief(t, w, fakeagent.Codex, chiefModel(fakeagent.Codex))
 	codex := w.Launched(chief)
+	codex.Prompted()
+	codex.Reply("Ready. <!-- attn:state=idle -->")
 	terminal := app.Terminal(chief)
 	app.TypeLine(chief, "plan the week")
 	codex.Prompted()
 	codex.Reply("Planned. <!-- attn:state=idle -->")
 	server := w.CodexServer()
-	if got := server.Instructions(codex.ConversationID); !strings.Contains(got, "You are the chief of staff") {
+	if got := server.Instructions(codex.ConversationID); !strings.Contains(got, "You are this profile's Chief") {
 		t.Fatalf("the chief's conversation started with:\n%s\nwant the chief guidance", got)
 	}
 
 	moveOn(t, app, codex, terminal, "/new", "fix the build")
-	if got := server.Instructions(codex.ConversationID); strings.Contains(got, "You are the chief of staff") || !strings.Contains(got, agentGuidanceLead) {
+	if got := server.Instructions(codex.ConversationID); strings.Contains(got, "You are this profile's Chief") || !strings.Contains(got, agentGuidanceLead) {
 		t.Errorf("the conversation /new started in the chief's terminal began with:\n%s\nwant only the agent guidance", got)
 	}
 }

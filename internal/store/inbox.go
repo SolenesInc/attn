@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 
 	"github.com/victorarias/attn/internal/inbox"
 )
@@ -53,7 +54,7 @@ func scanInboxItem(row *sql.Row) (InboxItem, bool, error) {
 		return InboxItem{}, false, err
 	}
 	item.Kind = inbox.Kind(kind)
-	item.To, err = inbox.ParseAddress(address)
+	item.To, err = who.ParseAddress(address)
 	if err != nil {
 		return InboxItem{}, false, err
 	}
@@ -89,7 +90,7 @@ func scanInboxDelivery(row inboxDeliveryScanner) (InboxDelivery, error) {
 	}
 	delivery.Item.Kind = inbox.Kind(kind)
 	var err error
-	delivery.Item.To, err = inbox.ParseAddress(address)
+	delivery.Item.To, err = who.ParseAddress(address)
 	if err != nil {
 		return InboxDelivery{}, err
 	}
@@ -97,8 +98,12 @@ func scanInboxDelivery(row inboxDeliveryScanner) (InboxDelivery, error) {
 		if peerID == "" {
 			return InboxDelivery{}, fmt.Errorf("peer mailbox item %s has no peer message", delivery.Item.ID)
 		}
+		sender, err := who.ParseParty(peerSender)
+		if err != nil {
+			return InboxDelivery{}, err
+		}
 		delivery.Peer = &inbox.Message{
-			ID: peerID, SenderSessionID: protocol.SessionID(peerSender), Body: body, CreatedAt: at,
+			ID: peerID, Sender: sender, Body: body, CreatedAt: at,
 		}
 	}
 	return delivery, nil
@@ -114,7 +119,7 @@ func normalizeAgentInboxLimit(limit int) int {
 	return limit
 }
 
-func (s *Store) UnreadInboxDeliveries(to inbox.Address) ([]InboxDelivery, error) {
+func (s *Store) UnreadInboxDeliveries(to who.Address) ([]InboxDelivery, error) {
 	recipientSessionID := to.String()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -122,7 +127,7 @@ func (s *Store) UnreadInboxDeliveries(to inbox.Address) ([]InboxDelivery, error)
 	rows, err := s.db.Query(`
 		SELECT i.id, i.address, i.kind, i.source_id, i.coalesce_key,
 		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name,
-		       COALESCE(p.id, ''), COALESCE(p.sender_session_id, ''),
+		       COALESCE(p.id, ''), COALESCE(p.sender, ''),
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
@@ -145,7 +150,7 @@ func (s *Store) UnreadInboxDeliveries(to inbox.Address) ([]InboxDelivery, error)
 	return deliveries, rows.Err()
 }
 
-func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, limit int, at time.Time) ([]InboxDelivery, int, error) {
+func (s *Store) ReadInbox(addresses []who.Address, readBy protocol.SessionID, limit int, at time.Time) ([]InboxDelivery, int, error) {
 	addressJSON := inboxAddressJSON(addresses)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,7 +163,7 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, 
 	rows, err := tx.Query(`
 		SELECT i.id, i.address, i.kind, i.source_id, i.coalesce_key,
 		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name,
-		       COALESCE(p.id, ''), COALESCE(p.sender_session_id, ''),
+		       COALESCE(p.id, ''), COALESCE(p.sender, ''),
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
@@ -229,7 +234,7 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, 
 	return deliveries, remaining, nil
 }
 
-func (s *Store) ReadGardenSeedInboxItems(to inbox.Address, readBy protocol.SessionID, seedID string, at time.Time) (bool, error) {
+func (s *Store) ReadGardenSeedInboxItems(to who.Address, readBy protocol.SessionID, seedID string, at time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -254,7 +259,7 @@ func (s *Store) ReadGardenSeedInboxItems(to inbox.Address, readBy protocol.Sessi
 	return changed > 0, tx.Commit()
 }
 
-func inboxAddressJSON(addresses []inbox.Address) string {
+func inboxAddressJSON(addresses []who.Address) string {
 	values := make([]string, len(addresses))
 	for i, a := range addresses {
 		values[i] = a.String()
@@ -277,7 +282,7 @@ func (s *Store) PutInbox(item inbox.Item, at time.Time) (string, error) {
 	return item.ID, tx.Commit()
 }
 func putInbox(tx *sql.Tx, item inbox.Item, at time.Time) error {
-	if _, err := inbox.ParseAddress(item.To.String()); err != nil {
+	if _, err := who.ParseAddress(item.To.String()); err != nil {
 		return err
 	}
 	var exists bool
@@ -295,7 +300,7 @@ func putInbox(tx *sql.Tx, item inbox.Item, at time.Time) error {
 	_, err := tx.Exec(`INSERT INTO inbox_items(id,address,kind,source_id,coalesce_key,hint,text,created_at) VALUES(?,?,?,?,?,?,?,?)`, item.ID, item.To.String(), item.Kind, item.Source, item.Key, item.Hint, item.Text, at.UTC().Format(sortableTimeFormat))
 	return err
 }
-func (s *Store) WithdrawInbox(to inbox.Address, kind inbox.Kind, key string) error {
+func (s *Store) WithdrawInbox(to who.Address, kind inbox.Kind, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.Exec("DELETE FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''", to.String(), kind, key)
@@ -308,7 +313,7 @@ type InboxAttempt struct {
 	Last   time.Time
 }
 
-func (s *Store) InboxAttempt(to inbox.Address) (InboxAttempt, error) {
+func (s *Store) InboxAttempt(to who.Address) (InboxAttempt, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	result := InboxAttempt{}
@@ -321,7 +326,7 @@ func (s *Store) InboxAttempt(to inbox.Address) (InboxAttempt, error) {
 	return result, err
 }
 
-func (s *Store) StampInboxAttempt(to inbox.Address, at time.Time) (bool, error) {
+func (s *Store) StampInboxAttempt(to who.Address, at time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -342,7 +347,7 @@ func (s *Store) StampInboxAttempt(to inbox.Address, at time.Time) (bool, error) 
 	}
 	return true, tx.Commit()
 }
-func (s *Store) RingInbox(to inbox.Address, finishingWake bool, at time.Time) error {
+func (s *Store) RingInbox(to who.Address, finishingWake bool, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -368,15 +373,15 @@ func (s *Store) RingInbox(to inbox.Address, finishingWake bool, at time.Time) er
 	}
 	return tx.Commit()
 }
-func setInboxOutstanding(tx *sql.Tx, to inbox.Address, at time.Time) error {
+func setInboxOutstanding(tx *sql.Tx, to who.Address, at time.Time) error {
 	_, err := tx.Exec(`INSERT INTO inbox_delivery(address,outstanding_at) VALUES(?,?) ON CONFLICT(address) DO UPDATE SET outstanding_at=excluded.outstanding_at`, to.String(), at.UTC().Format(sortableTimeFormat))
 	return err
 }
-func acknowledgeInbox(tx *sql.Tx, to inbox.Address) error {
+func acknowledgeInbox(tx *sql.Tx, to who.Address) error {
 	_, err := tx.Exec(`DELETE FROM inbox_delivery WHERE address=?`, to.String())
 	return err
 }
-func (s *Store) UnreadInboxAddresses() ([]inbox.Address, error) {
+func (s *Store) UnreadInboxAddresses() ([]who.Address, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rows, err := s.db.Query("SELECT DISTINCT address FROM inbox_items WHERE read_at='' ORDER BY address")
@@ -384,13 +389,13 @@ func (s *Store) UnreadInboxAddresses() ([]inbox.Address, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var result []inbox.Address
+	var result []who.Address
 	for rows.Next() {
 		var value string
 		if err := rows.Scan(&value); err != nil {
 			return nil, err
 		}
-		a, err := inbox.ParseAddress(value)
+		a, err := who.ParseAddress(value)
 		if err != nil {
 			return nil, err
 		}
@@ -399,7 +404,7 @@ func (s *Store) UnreadInboxAddresses() ([]inbox.Address, error) {
 	return result, rows.Err()
 }
 
-func (s *Store) PendingSeedInboxAddresses() ([]inbox.Address, error) {
+func (s *Store) PendingSeedInboxAddresses() ([]who.Address, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rows, err := s.db.Query(`SELECT address FROM inbox_items WHERE address >= 'seed:' AND address < 'seed;' AND read_at=''
@@ -408,13 +413,13 @@ func (s *Store) PendingSeedInboxAddresses() ([]inbox.Address, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var addresses []inbox.Address
+	var addresses []who.Address
 	for rows.Next() {
 		var value string
 		if err := rows.Scan(&value); err != nil {
 			return nil, err
 		}
-		address, err := inbox.ParseAddress(value)
+		address, err := who.ParseAddress(value)
 		if err != nil {
 			return nil, err
 		}
@@ -423,7 +428,7 @@ func (s *Store) PendingSeedInboxAddresses() ([]inbox.Address, error) {
 	return addresses, rows.Err()
 }
 
-func (s *Store) ReadInboxItem(id, readBy string, addresses []inbox.Address, at time.Time) (InboxItem, bool, error) {
+func (s *Store) ReadInboxItem(id, readBy string, addresses []who.Address, at time.Time) (InboxItem, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()

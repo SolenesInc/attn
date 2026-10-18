@@ -1,3 +1,4 @@
+import { useDaemonStore } from '../../store/daemonSessions';
 import { SessionPriority } from '../SessionPriority';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
@@ -96,10 +97,13 @@ export function SessionsTab({
     onFiltersChange: rememberFilters,
   });
   const { filters, setFilters, entries: storedEntries, reload } = ledger;
+  const crew = useDaemonStore((state) => state.crew);
   const entries = useMemo(() => storedEntries.map((entry) => {
     const name = entry.agent === 'shell' && !isClosed(entry) ? liveSessionNames?.get(entry.id) : undefined;
-    return name !== undefined && name !== entry.label ? { ...entry, label: name } : entry;
-  }), [storedEntries, liveSessionNames]);
+    const named = name !== undefined && name !== entry.label ? { ...entry, label: name } : entry;
+    const member = crew.find((candidate) => candidate.key === entry.member_key);
+    return member ? { ...named, member_name: member.name } : named;
+  }), [storedEntries, liveSessionNames, crew]);
   const { keepNotices, runKeepVerb, clearKeepNotice } = useConversationPins(setConversationKeep, conversationChangeSignal, reload);
 
   const { text, setText, parsed } = useLedgerQueryText({
@@ -112,7 +116,7 @@ export function SessionsTab({
   const visible = useMemo(() => entries.filter((entry) => {
     if (!matchesDir(entry.directory, parsed.dir)) return false;
     return matchesWords(
-      [entry.label, entry.id, entry.agent, entry.branch ?? '', entry.directory, entry.profile_name],
+      [entry.member_name ?? entry.label, entry.id, entry.agent, entry.branch ?? '', entry.directory, entry.profile_name],
       parsed.words,
     );
   }), [entries, parsed.dir, parsed.words]);
@@ -162,7 +166,7 @@ export function SessionsTab({
     [liveSessionIds],
   );
 
-  const labelsBySession = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.label])), [entries]);
+  const labelsBySession = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.member_name ?? entry.label])), [entries]);
   const sessionLabel = useCallback((id: string) => labelsBySession.get(id) || id, [labelsBySession]);
   const nameText = useCallback((text: string) => nameIds(text, (id) => labelsBySession.get(id) || undefined), [labelsBySession]);
   const runVerb = useCallback((key: string, verbId: string) => {
@@ -270,7 +274,6 @@ export function SessionsTab({
               live={isLive(selected)}
               usage={(!isClosed(selected) && liveSessionUsage?.get(selected.id)) || selected.usage}
               seed={seedForSession?.(selected.id) ?? null}
-              sessionLabel={sessionLabel}
               nameText={nameText}
               now={now()}
               copied={copied}
@@ -432,7 +435,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     context.live && entry.hidden ? <span key="hidden" title={HIDDEN_HINT}>hidden</span> : null,
   ];
   if (closed) {
-    meta.push(`closed by ${closedBySomeone(entry, context.sessionLabel)}${entry.close_reason ? `: ${context.nameText(entry.close_reason)}` : ''}`);
+    meta.push(`closed by ${closedBySomeone(entry)}${entry.close_reason ? `: ${context.nameText(entry.close_reason)}` : ''}`);
   }
   // A verdict with actions speaks through its verb; only a dead end needs words on the row.
   if (closed && verdict && verdict.actions.length === 0) {
@@ -443,7 +446,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   return {
     key: entry.id,
     glyph: sessionGlyph(entry, context.live),
-    title: entry.label || 'untitled session',
+    title: entry.member_name ?? (entry.label || 'untitled session'),
     meta,
     stamp: { text: relativeStamp(stampAt, context.now), hint: fullStamp(stampAt) },
     note: context.note,
@@ -527,7 +530,6 @@ interface SessionInspectorProps {
   live: boolean;
   usage: SessionUsage | undefined;
   seed: SessionSeedLink | null;
-  sessionLabel: (id: string) => string;
   nameText: (text: string) => string;
   now: Date;
   copied: string | null;
@@ -573,8 +575,8 @@ function BranchField({ entry, verdict }: { entry: SessionLedgerEntry; verdict: R
   );
 }
 
-function InstantField({ entry, now, sessionLabel, nameText }: {
-  entry: SessionLedgerEntry; now: Date; sessionLabel: (id: string) => string; nameText: (text: string) => string;
+function InstantField({ entry, now, nameText }: {
+  entry: SessionLedgerEntry; now: Date; nameText: (text: string) => string;
 }) {
   const closed = isClosed(entry);
   return (
@@ -582,7 +584,7 @@ function InstantField({ entry, now, sessionLabel, nameText }: {
       {fullStamp(ledgerInstant(entry))} <span className="ledger-muted">({relativeStamp(ledgerInstant(entry), now)})</span>
       {closed && (
         <div className="ledger-muted">
-          by {closedBySomeone(entry, sessionLabel)}{entry.close_reason ? `: ${nameText(entry.close_reason)}` : ''}
+          by {closedBySomeone(entry)}{entry.close_reason ? `: ${nameText(entry.close_reason)}` : ''}
         </div>
       )}
     </Field>
@@ -590,14 +592,14 @@ function InstantField({ entry, now, sessionLabel, nameText }: {
 }
 
 function SessionInspector({
-  entry, verdict, note, live, usage, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
+  entry, verdict, note, live, usage, seed, nameText, now, copied, onCopy, onVerb, actionsAvailable, canKeepConversation,
 }: SessionInspectorProps) {
   return (
-    <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} />}>
+    <Inspector title={entry.member_name ?? (entry.label || 'untitled session')} kicker={<SessionKicker entry={entry} live={live} />}>
       <Field label="Profile">{profileText(entry) || '—'}</Field>
       <DirectoryField entry={entry} verdict={verdict} copied={copied} onCopy={onCopy} />
       <BranchField entry={entry} verdict={verdict} />
-      <InstantField entry={entry} now={now} sessionLabel={sessionLabel} nameText={nameText} />
+      <InstantField entry={entry} now={now} nameText={nameText} />
       <UsageField usage={usage} sessionId={entry.id} />
       {seed && (
         <Field label="Seed">

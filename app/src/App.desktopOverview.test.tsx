@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { emptyDesktop, defaultProfile } from './test/daemonFixtures';
-import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import { gesture, renderApp } from './test/renderApp';
 import { formatShortcut } from './shortcuts/formatShortcut';
 
 describe('App sidebar desktop overview', () => {
@@ -14,7 +14,6 @@ describe('App sidebar desktop overview', () => {
       },
     });
 
-    await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
     const button = screen.getByRole('button', { name: 'Desktop overview' });
     expect(button).toHaveAttribute('title', `Desktop overview (${formatShortcut('desktop.overview')})`);
     await gesture(daemon, () => fireEvent.click(button));

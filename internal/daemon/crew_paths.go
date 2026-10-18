@@ -25,22 +25,76 @@ func (d *Daemon) resolvedCrewRoot() (string, error) {
 	return root, nil
 }
 
-func (d *Daemon) requireCrewFiles(member crew.Member) error {
+func (d *Daemon) legacyCrewHome(home string) (bool, error) {
 	root, err := d.resolvedCrewRoot()
+	if err != nil {
+		return false, err
+	}
+	resolved, err := config.CanonicalRuntimePath(home)
+	if err != nil {
+		return false, err
+	}
+	return pathWithin(root, resolved), nil
+}
+
+func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
+	homeDir := member.HomeDir(d.dataRoot)
+	if homeDir == "" {
+		if member.Agent == "" {
+			return nil
+		}
+		return fmt.Errorf("crew member %s has no home", d.memberName(member.Key))
+	}
+	home, err := config.CanonicalRuntimePath(homeDir)
 	if err != nil {
 		return err
 	}
-	for _, stored := range []string{member.HomeDir(d.dataRoot), member.CharterPath(d.dataRoot)} {
-		resolved, err := config.CanonicalRuntimePath(stored)
+	if !filepath.IsAbs(member.Home) {
+		root, err := d.resolvedCrewRoot()
 		if err != nil {
-			return fmt.Errorf("resolve %s's crew file %q: %w", crew.DisplayName(member.ID), stored, err)
+			return err
 		}
-		if !pathWithin(root, resolved) {
-			return fmt.Errorf("refusing crew member %s: %q resolves outside this daemon's crew root %q through a symlink", crew.DisplayName(member.ID), stored, root)
+		if !pathWithin(root, home) {
+			return fmt.Errorf("refusing crew member %s: home %q resolves outside this daemon's crew root %q through a symlink", d.memberName(member.Key), homeDir, root)
 		}
-		if _, err := os.Stat(stored); err != nil {
-			return fmt.Errorf("%s's crew file %s is unavailable: %w", crew.DisplayName(member.ID), stored, err)
+	}
+	if _, err := d.resolveCrewWorkDir(homeDir); err != nil {
+		return err
+	}
+	if config.HarnessNotebookRoot() != "" {
+		root, err := config.CanonicalRuntimePath(os.Getenv("ATTN_HARNESS_DATA_DIR"))
+		if err != nil {
+			return err
 		}
+		if !pathWithin(root, home) {
+			return fmt.Errorf("crew member %s: refusing stored home path %q outside harness root %q. Check for an attn.db copied from another instance", d.memberName(member.Key), homeDir, root)
+		}
+	}
+	charterPath := member.CharterPath(d.dataRoot)
+	charter, err := config.CanonicalRuntimePath(charterPath)
+	if err != nil {
+		return err
+	}
+	if !pathWithin(home, charter) {
+		return fmt.Errorf("refusing crew member %s: charter %q resolves outside their home %q through a symlink", d.memberName(member.Key), charterPath, homeDir)
+	}
+	return nil
+}
+
+func (d *Daemon) requireCrewFiles(member crew.Member) error {
+	if err := d.validateCrewMemberPaths(member); err != nil {
+		return err
+	}
+	home := member.HomeDir(d.dataRoot)
+	info, err := os.Stat(home)
+	if err != nil {
+		return fmt.Errorf("crew member %s: recorded home %q is unavailable; restore the home at this path before waking or editing the member: %w", d.memberName(member.Key), home, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("crew member %s: recorded home %q is not a directory; restore the home at this path before waking or editing the member", d.memberName(member.Key), home)
+	}
+	if _, err := os.Stat(member.CharterPath(d.dataRoot)); err != nil {
+		return fmt.Errorf("crew member %s: charter %q is unavailable; restore it before waking or editing the member: %w", d.memberName(member.Key), member.CharterPath(d.dataRoot), err)
 	}
 	return nil
 }
@@ -52,14 +106,14 @@ func (d *Daemon) validateCrewLetterPath(member crew.Member, letterPath string) e
 	}
 	expectedRoot, err := config.CanonicalRuntimePath(handoffsDir)
 	if err != nil {
-		return fmt.Errorf("resolve %s's handoffs root %q: %w", crew.DisplayName(member.ID), handoffsDir, err)
+		return fmt.Errorf("resolve %s's handoffs root %q: %w", d.storedMemberName(member.Key.String()), handoffsDir, err)
 	}
 	letter, err := config.CanonicalRuntimePath(letterPath)
 	if err != nil {
-		return fmt.Errorf("resolve %s's letter path %q: %w", crew.DisplayName(member.ID), letterPath, err)
+		return fmt.Errorf("resolve %s's letter path %q: %w", d.storedMemberName(member.Key.String()), letterPath, err)
 	}
 	if letterPath == "" || !filepath.IsAbs(letterPath) || !pathWithin(expectedRoot, letter) {
-		return fmt.Errorf("refusing crew member %s: letter path %q is outside this member's handoffs root %q; a symlink leaves the member home", crew.DisplayName(member.ID), letterPath, expectedRoot)
+		return fmt.Errorf("refusing crew member %s: letter path %q is outside their handoffs root %q; a symlink leaves the member home", d.storedMemberName(member.Key.String()), letterPath, expectedRoot)
 	}
 	return nil
 }
@@ -70,15 +124,15 @@ func (d *Daemon) validateCrewHandoffsDir(member crew.Member) (string, error) {
 	}
 	home, err := config.CanonicalRuntimePath(member.HomeDir(d.dataRoot))
 	if err != nil {
-		return "", fmt.Errorf("resolve %s's home %q: %w", crew.DisplayName(member.ID), member.HomeDir(d.dataRoot), err)
+		return "", fmt.Errorf("resolve %s's home %q: %w", d.storedMemberName(member.Key.String()), member.HomeDir(d.dataRoot), err)
 	}
 	stored := filepath.Join(member.HomeDir(d.dataRoot), crew.HandoffsDirName)
 	resolved, err := config.CanonicalRuntimePath(stored)
 	if err != nil {
-		return "", fmt.Errorf("resolve %s's handoffs directory %q: %w", crew.DisplayName(member.ID), stored, err)
+		return "", fmt.Errorf("resolve %s's handoffs directory %q: %w", d.storedMemberName(member.Key.String()), stored, err)
 	}
 	if !pathWithin(home, resolved) {
-		return "", fmt.Errorf("refusing crew member %s: handoffs directory %q resolves outside this member's home %q; a symlink leaves the member home", crew.DisplayName(member.ID), stored, home)
+		return "", fmt.Errorf("refusing crew member %s: handoffs directory %q resolves outside their home %q; a symlink leaves the member home", d.storedMemberName(member.Key.String()), stored, home)
 	}
 	return stored, nil
 }
@@ -197,7 +251,7 @@ func (d *Daemon) resolveCrewRecordedDir(dir string) (string, error) {
 
 func (d *Daemon) validateCrewWorkDirs(member crew.Member) error {
 	if _, err := d.resolveCrewWorkDir(member.CWD); err != nil {
-		return fmt.Errorf("%s's cwd: %w", crew.DisplayName(member.ID), err)
+		return fmt.Errorf("%s's cwd: %w", d.storedMemberName(member.Key.String()), err)
 	}
 	return d.validateCrewAwarenessDirs(member)
 }
@@ -205,7 +259,7 @@ func (d *Daemon) validateCrewWorkDirs(member crew.Member) error {
 func (d *Daemon) validateCrewAwarenessDirs(member crew.Member) error {
 	for _, dir := range member.AwarenessDirs {
 		if _, err := d.resolveCrewWorkDir(dir); err != nil {
-			return fmt.Errorf("%s's awareness directory: %w", crew.DisplayName(member.ID), err)
+			return fmt.Errorf("%s's awareness directory: %w", d.storedMemberName(member.Key.String()), err)
 		}
 	}
 	return nil
@@ -225,7 +279,7 @@ func (d *Daemon) validateCrewBoundLaunchDir(sessionID protocol.SessionID, dir st
 		}
 		resolved, err := d.resolveCrewWorkDir(dir)
 		if err != nil {
-			return "", fmt.Errorf("%s's plugin launch directory: %w", crew.DisplayName(member.ID), err)
+			return "", fmt.Errorf("%s's plugin launch directory: %w", d.storedMemberName(member.Key.String()), err)
 		}
 		return resolved, nil
 	}

@@ -106,9 +106,6 @@
   gap: 12px;
 }
 
-/* Chief pulse: a live two-state indicator — a pulsing green dot + "chief: active"
-   while a chief-of-staff session is working, a dim dot + "chief: idle" otherwise.
-   Rendered only when a chief session exists at all. */
 .notebook-browser-chief-pulse {
   display: flex;
   align-items: center;
@@ -131,12 +128,6 @@
 
 .notebook-browser-chief-pulse.is-active .notebook-browser-chief-dot {
   background: #3fb950;
-  box-shadow: 0 0 0 0 color-mix(in srgb, #3fb950 70%, transparent);
-  animation: notebook-browser-chief-pulse 1.8s ease-out infinite;
-}
-
-@keyframes notebook-browser-chief-pulse {
-  to { box-shadow: 0 0 0 7px transparent; }
 }
 
 /* Registered length custom properties so a fold can ANIMATE the column width to 0

@@ -61,9 +61,9 @@ func (d *Daemon) autoSettleConfig() autoSettleConfig {
 		return autoSettleConfig{}
 	}
 	return autoSettleConfig{
-		enabled:   parseBooleanSetting(d.daemonSetting(SettingAutoSettleEnabled)),
-		arm:       resolveAutoSettleSeconds(d.daemonSetting(SettingAutoSettleArmSeconds), defaultAutoSettleArmSeconds),
-		countdown: resolveAutoSettleSeconds(d.daemonSetting(SettingAutoSettleCountdownSeconds), defaultAutoSettleCountdownSeconds),
+		enabled:   parseBooleanSetting(d.daemonSetting(settingAutoSettleEnabled)),
+		arm:       resolveAutoSettleSeconds(d.daemonSetting(settingAutoSettleArmSeconds), defaultAutoSettleArmSeconds),
+		countdown: resolveAutoSettleSeconds(d.daemonSetting(settingAutoSettleCountdownSeconds), defaultAutoSettleCountdownSeconds),
 	}
 }
 
@@ -387,7 +387,7 @@ func (d *Daemon) turnOwed(sessionID protocol.SessionID) bool {
 	if session == nil {
 		return false
 	}
-	d.decorateChiefOfStaff(session, d.profileChiefs())
+	d.decorateChief(session, d.chiefSessions())
 	d.decorateSessionWithTurn(session)
 	return protocol.Deref(session.TurnOwed)
 }

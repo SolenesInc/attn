@@ -117,6 +117,7 @@ function applyClose(
   filters: SessionLedgerFilters,
   at: Date,
 ): SessionLedgerEntry[] {
+  if (entry.member_key) entries = entries.filter((row) => row.id === entry.id || row.member_key !== entry.member_key);
   if (!entries.some((row) => row.id === entry.id)) {
     return closeBelongsInView(entry, filters, at) ? [entry, ...entries] : entries;
   }
@@ -177,7 +178,9 @@ export function useSessionLedger({
       }
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
+      if (event.type === 'crew') { setReloadNonce((n) => n + 1); return; }
       const entry = event.entry;
+      if (entry.member_key) { setReloadNonce((n) => n + 1); return; }
       const at = now();
       setRead((current) => ({ ...current, entries: applyClose(current.entries, entry, filtersRef.current, at) }));
     });

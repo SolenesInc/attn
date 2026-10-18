@@ -296,7 +296,7 @@ state or grants merge authority.
 Inspect with `attn pr status`; stop with `attn pr unwatch <url>`. Stopping clears
 that session's unread watch notifications. Closing or merging the PR ends the watch.
 For development instances, enable
-[GitHub polling](docs/instances.md#github-polling).
+[GitHub polling](docs/internal/instances.md#github-polling).
 
 Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>
 --mode <green|codex|formal-review>`. Its `--help` explains reviewers, baselining,
@@ -357,11 +357,14 @@ chief-of-staff/
 ├── .gitignore            # ignore attn's machine state if this is a private repo
 ├── AGENTS.md             # the chief's constitution
 ├── CLAUDE.md             # -> AGENTS.md (symlink, or a file containing `@AGENTS.md`)
-├── projects/index.md     # active initiatives, outcomes, and why they matter
-├── areas/index.md        # ongoing responsibilities and standards to maintain
-├── resources/index.md    # durable reference material
-├── archive/index.md      # finished or inactive material
-└── notebook/             # optional: keep attn's Notebook in the same home
+├── crew/chief/CHARTER.md  # the chief's persistent role and working relationship
+├── journal/              # dated notes
+└── knowledge/
+    ├── index.md          # knowledge navigation
+    ├── projects/index.md # active initiatives, outcomes, and why they matter
+    ├── areas/index.md    # ongoing responsibilities and standards to maintain
+    ├── resources/index.md # durable reference material
+    └── archive/index.md  # finished or inactive material
 ```
 
 `AGENTS.md` is the Chief's constitution: what good support looks like, how you
@@ -392,11 +395,11 @@ act as my thinking partner.
 
 ## Organization
 
-- Read projects/index.md before discussing priorities or incoming work.
-- projects/ holds time-bound efforts with a clear outcome.
-- areas/ holds ongoing responsibilities and standards.
-- resources/ holds reference material useful across projects.
-- archive/ holds inactive material. Move completed projects here.
+- Read knowledge/index.md before discussing priorities or incoming work.
+- knowledge/projects/ holds time-bound efforts with a clear outcome.
+- knowledge/areas/ holds ongoing responsibilities and standards.
+- knowledge/resources/ holds reference material useful across projects.
+- knowledge/archive/ holds inactive material. Move completed projects here.
 
 ## Boundaries
 
@@ -404,14 +407,26 @@ act as my thinking partner.
 - Implementation, tests, commits, and pull requests live in the owning repo.
 ```
 
-To keep everything in one syncable folder, open **Settings → Notebook Folder**
-and point it at `chief-of-staff/notebook`. Add `notebook/.attn/` to
-`.gitignore`; it is machine state. Changing the Notebook Folder does not move
-existing notes.
+Choose this folder as the Notebook when you first set up the chief. Its charter
+and letters live under `crew/chief/`, alongside the Notebook's notes.
+Each profile has its own Notebook folder.
+Upgrading keeps existing profiles' folders; new profiles get folders named after
+them. Choose the same path to share a Notebook across profiles. Leave the setting
+blank to use the profile's default folder. Changing it doesn't move existing
+notes or crew homes; move or sync them yourself. Add `.attn/` to `.gitignore`; it holds
+machine state.
 
-Then: **Cmd+T**, pick a harness, select the `chief-of-staff` folder, turn
-**Chief of Staff** on (or pick **Make chief of staff** from an existing
-session's menu), and give it a mission:
+Use `attn settings list|get|set` to read and change settings. The list shows
+whether each setting applies to one profile or all profiles. Inside attn,
+`attn settings set notebook.root ~/notes/work` changes the session's profile.
+Outside attn, use `--profile <name|id>` when several profiles exist.
+
+Set up your chief in the sidebar. Choose Claude Code or Codex, then a model
+and effort, check the prefilled Notebook folder, and press **Wake Chief**. The
+deepest model at low effort is preselected. The chief works from the current
+Notebook root; `attn settings set notebook.root ~/chief-of-staff` changes its
+next wake or handoff folder. Later, use the chief's **••• →
+Harness and model…** menu or **Manage crew → Launch settings**. Give it a mission:
 
 > We need to ship the new import flow this week. Help me understand what's
   already in flight, suggest how to break it down, and prepare delegation
@@ -441,15 +456,15 @@ git clone https://github.com/victorarias/attn.git && cd attn
 Developing attn while running attn? `make dev` gives you a fully isolated dev
 sibling (own bundle, data dir, and port) so rebuilds never touch your live copy.
 The full dev-loop, instance, and harness targets live in
-**[docs/instances.md](docs/instances.md)** and [AGENTS.md](AGENTS.md).
+**[docs/internal/instances.md](docs/internal/instances.md)** and [AGENTS.md](AGENTS.md).
 
 ## Docs
 
 | | |
 |---|---|
-| [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
+| [Instances](docs/internal/instances.md) | Run multiple isolated attn worlds side by side |
 | [Shared Codex](docs/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server, with hidden sessions |
-| [Release](docs/making-a-release.md) | Maintainer runbook |
+| [Release](docs/internal/making-a-release.md) | Maintainer runbook |
 
 ## Status
 

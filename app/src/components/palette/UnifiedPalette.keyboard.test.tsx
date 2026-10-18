@@ -29,7 +29,7 @@ function desktops(sessions: PaletteSession[]): DesktopWithSessions<PaletteSessio
 }
 
 const FIXTURE = [
-  session('chief', { chiefOfStaff: true }),
+  session('chief', { chief: true }),
   session('owed', { turnOwed: true, turnOpenedAt: new Date(NOW - 120_000).toISOString() }),
   session('quiet'),
   session('nightly-run', { automation: { definition_id: 1, definition_name: 'Nightly' }, turnOwed: true }),
@@ -63,7 +63,7 @@ function renderPalette({
         onStateChange={setState}
         agents={{
           bands: buildQueueBands(views, { now: NOW }),
-          crewRoster: [],
+          crew: [],
           desktops: views,
           tileTitle: () => '',
           now: NOW,
@@ -175,7 +175,7 @@ describe('UnifiedPalette keyboard flow', () => {
     fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
     expect(palette.highlighted()).toContain('quiet');
     palette.rerender([
-      session('chief', { chiefOfStaff: true }),
+      session('chief', { chief: true }),
       session('new-turn', { turnOwed: true, turnOpenedAt: new Date(NOW - 600_000).toISOString() }),
       ...FIXTURE.slice(1),
     ]);
@@ -221,7 +221,7 @@ describe('UnifiedPalette keyboard flow', () => {
             <UnifiedPalette
               state={state}
               onStateChange={setState}
-              agents={{ bands: buildQueueBands(views, { now: NOW }), crewRoster: [], desktops: views, tileTitle: () => '', now: NOW }}
+              agents={{ bands: buildQueueBands(views, { now: NOW }), crew: [], desktops: views, tileTitle: () => '', now: NOW }}
               desktops={[]}
               commands={[{ id: 'crew', title: 'Manage crew', run }]}
               onClose={() => setOpen(false)}
