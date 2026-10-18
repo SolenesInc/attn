@@ -1,12 +1,14 @@
 import { flushSync } from 'react-dom';
 import { isFixedAnchor, onScreenCalloutAnchors } from '../callouts/calloutAnchors';
 import { useCalloutStore } from '../callouts/useCalloutStore';
+import { useProfilesStore } from '../store/profiles';
 import { CalloutResultMessageCmd, type CalloutAnchorsRequestMessage, type CalloutResultMessage, type CalloutShowRequestMessage } from '../types/generated';
 
 export function handleCalloutDaemonEvent(event: { event?: string }, send: (result: CalloutResultMessage) => void): boolean {
   if (event.event !== 'callout_show_request' && event.event !== 'callout_anchors_request') return false;
   const request = event as CalloutShowRequestMessage | CalloutAnchorsRequestMessage;
-  const onScreen = onScreenCalloutAnchors();
+  const showingProfile = request.profile_id === useProfilesStore.getState().selectedProfileId;
+  const onScreen = showingProfile ? onScreenCalloutAnchors() : [];
   const result: CalloutResultMessage = {
     cmd: CalloutResultMessageCmd.CalloutResult,
     request_id: request.request_id,
@@ -14,7 +16,7 @@ export function handleCalloutDaemonEvent(event: { event?: string }, send: (resul
   };
   if (event.event === 'callout_show_request') {
     const show = request as CalloutShowRequestMessage;
-    if (useCalloutStore.getState().overlayOpen) {
+    if (!showingProfile || useCalloutStore.getState().overlayOpen) {
       send({ ...result, on_screen: [], missing: [...new Set(show.steps.map((step) => step.anchor))] });
       return true;
     }

@@ -2444,8 +2444,8 @@ model CalloutStep {
   desktop_id?: string;
   label?: string;
 }
-model CalloutShowRequestMessage { event: "callout_show_request"; request_id: string; from: string; steps: CalloutStep[]; }
-model CalloutAnchorsRequestMessage { event: "callout_anchors_request"; request_id: string; }
+model CalloutShowRequestMessage { event: "callout_show_request"; request_id: string; profile_id: string; from: string; steps: CalloutStep[]; }
+model CalloutAnchorsRequestMessage { event: "callout_anchors_request"; request_id: string; profile_id: string; }
 
 model CalloutResultMessage {
   cmd: "callout_result";

@@ -2318,6 +2318,7 @@ export enum CalloutAnchorsMessageCmd {
 
 export interface CalloutAnchorsRequestMessage {
     event:      CalloutAnchorsRequestMessageEvent;
+    profile_id: string;
     request_id: string;
     [property: string]: any;
 }
@@ -2384,6 +2385,7 @@ export interface StepElement {
 export interface CalloutShowRequestMessage {
     event:      CalloutShowRequestMessageEvent;
     from:       string;
+    profile_id: string;
     request_id: string;
     steps:      StepObject[];
     [property: string]: any;
@@ -16949,6 +16951,7 @@ const typeMap: any = {
     ], "any"),
     "CalloutAnchorsRequestMessage": o([
         { json: "event", js: "event", typ: r("CalloutAnchorsRequestMessageEvent") },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
     "CalloutAnchorsResult": o([
@@ -16978,6 +16981,7 @@ const typeMap: any = {
     "CalloutShowRequestMessage": o([
         { json: "event", js: "event", typ: r("CalloutShowRequestMessageEvent") },
         { json: "from", js: "from", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "steps", js: "steps", typ: a(r("StepObject")) },
     ], "any"),

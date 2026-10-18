@@ -79,7 +79,7 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 		answered <- browserControlAnswer{data, err}
 	}()
 	request := testworld.Await[protocol.CalloutShowRequestMessage](target, protocol.EventCalloutShowRequest, nil)
-	if len(request.Steps) != 3 || request.From == "" || request.Steps[1].Anchor != protocol.CalloutAnchorAgent || protocol.Deref(request.Steps[1].SessionID) != session.ID || protocol.Deref(request.Steps[1].Label) == "" || protocol.Deref(request.Steps[2].DesktopID) != desktopID {
+	if request.ProfileID != profileID || len(request.Steps) != 3 || request.From == "" || request.Steps[1].Anchor != protocol.CalloutAnchorAgent || protocol.Deref(request.Steps[1].SessionID) != session.ID || protocol.Deref(request.Steps[1].Label) == "" || protocol.Deref(request.Steps[2].DesktopID) != desktopID {
 		t.Fatalf("app request = %+v, want resolved agent and desktop steps with labels", request)
 	}
 	if label := protocol.Deref(request.Steps[2].Label); label != "Shop" {
@@ -101,6 +101,9 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 		listed <- result
 	}()
 	anchors := testworld.Await[protocol.CalloutAnchorsRequestMessage](target, protocol.EventCalloutAnchorsRequest, nil)
+	if anchors.ProfileID != profileID {
+		t.Fatalf("anchor request profile = %q, want %q", anchors.ProfileID, profileID)
+	}
 	target.Send(protocol.CalloutResultMessage{Cmd: protocol.CmdCalloutResult, RequestID: anchors.RequestID, OnScreen: []protocol.CalloutAnchor{protocol.CalloutAnchorHome}})
 	result := <-listed
 	if result == nil || !result.AppShowingProfile || protocol.Deref(result.Anchors[0].OnScreen) || !protocol.Deref(result.Anchors[1].OnScreen) || result.Anchors[8].OnScreen != nil {
@@ -109,6 +112,40 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	target.Close()
 	_, err := cli.CalloutShow(session.ID, []protocol.CalloutShowStep{{Anchor: "home", Text: "Home"}})
 	calloutRefused(t, err, "the attn app is not showing your profile")
+}
+
+func TestCalloutsRefuseRepliesAfterTheAppSwitchesProfiles(t *testing.T) {
+	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "callouts_enabled", "true")
+	session, _, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
+	defer exitShells(app, string(session.ID))
+	profileID := app.SelectedProfile()
+	other := createProfile(app, "Other world")
+	target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+	for _, anchors := range []bool{false, true} {
+		selectProfile(target, profileID)
+		answered := make(chan error, 1)
+		go func() {
+			if anchors {
+				_, err := cli.CalloutAnchors(session.ID)
+				answered <- err
+			} else {
+				_, err := cli.CalloutShow(session.ID, []protocol.CalloutShowStep{{Anchor: "garden", Text: "Work"}})
+				answered <- err
+			}
+		}()
+		var requestID string
+		if anchors {
+			requestID = testworld.Await[protocol.CalloutAnchorsRequestMessage](target, protocol.EventCalloutAnchorsRequest, nil).RequestID
+		} else {
+			requestID = testworld.Await[protocol.CalloutShowRequestMessage](target, protocol.EventCalloutShowRequest, nil).RequestID
+		}
+		selectProfile(target, other.ID)
+		target.Send(protocol.CalloutResultMessage{Cmd: protocol.CmdCalloutResult, RequestID: requestID, OnScreen: []protocol.CalloutAnchor{protocol.CalloutAnchorGarden}})
+		calloutRefused(t, <-answered, "the attn app switched away from your profile")
+	}
 }
 
 func TestCalloutsReportMissingAnchorsAndDisconnects(t *testing.T) {

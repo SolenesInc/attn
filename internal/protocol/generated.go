@@ -1962,6 +1962,9 @@ type CalloutAnchorsRequestMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 }
@@ -2005,6 +2008,9 @@ type CalloutShowRequestMessage struct {
 
 	// From corresponds to the JSON schema field "from".
 	From string `json:"from"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`

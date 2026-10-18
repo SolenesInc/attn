@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { agentPane, daemonDesktop, daemonSession, soloDesktop } from './test/daemonFixtures';
+import { agentPane, daemonDesktop, daemonSession, DEFAULT_PROFILE_ID, soloDesktop } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import type { EventMessage } from './test/protocol';
@@ -27,7 +27,7 @@ async function launch(queue = false) {
 }
 
 async function show(daemon: ScriptedDaemon, steps: EventMessage<'callout_show_request'>['steps'], requestId = 'callout-1') {
-  daemon.emit({ event: 'callout_show_request', request_id: requestId, from: 'Fern', steps });
+  daemon.emit({ event: 'callout_show_request', request_id: requestId, profile_id: DEFAULT_PROFILE_ID, from: 'Fern', steps });
   await daemon.idle();
   return daemon.sentOf('callout_result').slice(-1)[0];
 }
@@ -37,7 +37,7 @@ const card = () => screen.getByRole('dialog', { name: 'Callout from Fern' });
 describe('App callouts', () => {
   it('answers with visible anchors and renders the Card beside its target', async () => {
     const { daemon } = await launch();
-    daemon.emit({ event: 'callout_anchors_request', request_id: 'list' });
+    daemon.emit({ event: 'callout_anchors_request', request_id: 'list', profile_id: DEFAULT_PROFILE_ID });
     await daemon.idle();
     expect(daemon.sentOf('callout_result')).toEqual([{
       cmd: 'callout_result', request_id: 'list', on_screen: ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button'],
@@ -68,6 +68,30 @@ describe('App callouts', () => {
     await show(daemon, [{ anchor: 'sidebar', text: 'Finish' }]);
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'ArrowRight' }));
     expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
+  });
+
+  it('refuses requests from other profiles without revealing anchors or replacing the current callout', async () => {
+    const { daemon } = await launch();
+    const stale = {
+      event: 'callout_show_request' as const, request_id: 'stale', profile_id: 'other-profile', from: 'Private agent',
+      steps: [{ anchor: 'garden' as const, text: 'Private text' }, { anchor: 'agent' as const, session_id: 'stranger', text: 'Private agent text' }],
+    };
+    daemon.emit(stale);
+    await daemon.idle();
+    expect(screen.queryByTestId('callout-overlay')).not.toBeInTheDocument();
+    expect(daemon.sentOf('callout_result').slice(-1)[0]).toEqual({
+      cmd: 'callout_result', request_id: 'stale', on_screen: [], missing: ['garden', 'agent'],
+    });
+    await show(daemon, [{ anchor: 'home', text: 'Keep me' }]);
+    daemon.emit({ ...stale, request_id: 'stale-replacement' });
+    daemon.emit({ event: 'callout_anchors_request', request_id: 'stale-anchors', profile_id: 'other-profile' });
+    await daemon.idle();
+    expect(card()).toHaveTextContent('Keep me');
+    expect(screen.queryByText('Private text')).not.toBeInTheDocument();
+    expect(daemon.sentOf('callout_result').slice(-2)).toEqual([
+      { cmd: 'callout_result', request_id: 'stale-replacement', on_screen: [], missing: ['garden', 'agent'] },
+      { cmd: 'callout_result', request_id: 'stale-anchors', on_screen: [] },
+    ]);
   });
 
   it('refuses the whole callout for a missing fixed anchor and keeps the previous one', async () => {
@@ -165,7 +189,7 @@ describe('App callouts', () => {
   ])('lists anchors for queue=%s collapsed=%s', async (queue, collapsed, anchors) => {
     const { daemon } = await launch(queue);
     if (collapsed) await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
-    daemon.emit({ event: 'callout_anchors_request', request_id: 'shape' });
+    daemon.emit({ event: 'callout_anchors_request', request_id: 'shape', profile_id: DEFAULT_PROFILE_ID });
     await daemon.idle();
     expect(daemon.sentOf('callout_result')).toEqual([{ cmd: 'callout_result', request_id: 'shape', on_screen: anchors }]);
     await show(daemon, [{ anchor: 'sidebar', text: 'This shape' }]);

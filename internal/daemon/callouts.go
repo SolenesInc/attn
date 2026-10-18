@@ -115,7 +115,7 @@ func (d *Daemon) calloutApp(profileID string) (*wsClient, error) {
 	return nil, fmt.Errorf("the attn app is not showing your profile")
 }
 
-func (d *Daemon) requestCallout(app *wsClient, message func(string) any) (protocol.CalloutResultMessage, error) {
+func (d *Daemon) requestCallout(app *wsClient, profileID string, message func(string) any) (protocol.CalloutResultMessage, error) {
 	reply, err := d.calloutRequests.ask(app, calloutReplyTimeout, func(requestID string) bool {
 		payload, err := json.Marshal(message(requestID))
 		if err != nil {
@@ -125,6 +125,9 @@ func (d *Daemon) requestCallout(app *wsClient, message func(string) any) (protoc
 	}, calloutReply{err: fmt.Errorf("the attn app is unavailable")}, calloutReply{err: fmt.Errorf("the attn app did not answer within %s", calloutReplyTimeout)})
 	if err != nil {
 		return protocol.CalloutResultMessage{}, err
+	}
+	if app.selectedProfile() != profileID {
+		return protocol.CalloutResultMessage{}, fmt.Errorf("the attn app switched away from your profile")
 	}
 	return reply.result, reply.err
 }
@@ -145,8 +148,8 @@ func (d *Daemon) handleCalloutShow(conn net.Conn, msg *protocol.CalloutShowMessa
 		d.sendError(conn, err.Error())
 		return
 	}
-	result, err := d.requestCallout(app, func(id string) any {
-		return protocol.CalloutShowRequestMessage{Event: protocol.EventCalloutShowRequest, RequestID: id, From: sessionDisplayName(session), Steps: steps}
+	result, err := d.requestCallout(app, session.ProfileID, func(id string) any {
+		return protocol.CalloutShowRequestMessage{Event: protocol.EventCalloutShowRequest, RequestID: id, ProfileID: session.ProfileID, From: sessionDisplayName(session), Steps: steps}
 	})
 	if err == nil && len(result.Missing) > 0 {
 		err = fmt.Errorf("not on screen: %s; on screen now: %s", calloutAnchorNames(result.Missing), calloutAnchorNames(result.OnScreen))
@@ -167,8 +170,8 @@ func (d *Daemon) handleCalloutAnchors(conn net.Conn, msg *protocol.CalloutAnchor
 	app, err := d.calloutApp(session.ProfileID)
 	result := protocol.CalloutAnchorsResult{Anchors: slices.Clone(calloutAnchorDirectory), AppShowingProfile: app != nil}
 	if err == nil {
-		reply, err := d.requestCallout(app, func(id string) any {
-			return protocol.CalloutAnchorsRequestMessage{Event: protocol.EventCalloutAnchorsRequest, RequestID: id}
+		reply, err := d.requestCallout(app, session.ProfileID, func(id string) any {
+			return protocol.CalloutAnchorsRequestMessage{Event: protocol.EventCalloutAnchorsRequest, RequestID: id, ProfileID: session.ProfileID}
 		})
 		if err != nil {
 			d.sendError(conn, err.Error())
