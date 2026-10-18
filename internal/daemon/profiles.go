@@ -15,7 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -470,7 +469,7 @@ func (d *Daemon) sessionsEndedWith(desktop profiles.Desktop) []protocol.SessionI
 	closing := map[protocol.SessionID][]harness.TerminalID{}
 	for _, pane := range desktop.Panes {
 		t := harness.TerminalID(pane.RuntimeID)
-		if pane.SessionID == "" || d.movedOn(pane.SessionID, t) {
+		if pane.SessionID == "" {
 			continue
 		}
 		if _, seen := closing[pane.SessionID]; !seen {
@@ -654,13 +653,6 @@ func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopC
 
 func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
 	t := harness.TerminalID(tile.RuntimeID)
-	if d.movedOn(tile.SessionID, t) {
-		d.detachSession(client, tile.RuntimeID)
-		if err := d.killSessionRuntime(t); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-			return err
-		}
-		return nil
-	}
 	if !d.closeTerminal(tile.SessionID, t) {
 		d.detachSession(client, tile.RuntimeID)
 		return nil

@@ -22,7 +22,6 @@ type linkRuntime interface {
 	relaunch(opts *ptybackend.SpawnOptions)
 
 	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
-	shownConversation(t harness.TerminalID) string
 	runsLink(t harness.TerminalID) bool
 
 	renamed(sessionID protocol.SessionID, label string)
@@ -109,16 +108,6 @@ func (d *Daemon) hidden(sessionID protocol.SessionID) bool {
 
 func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
 	return d.linkConversation(sessionID) != ""
-}
-
-func (d *Daemon) movedOn(sessionID protocol.SessionID, t harness.TerminalID) bool {
-	l := d.linkOf(sessionID)
-	if l == nil {
-		return false
-	}
-	shown := l.shownConversation(t)
-	conversation := d.store.GetSessionConversation(sessionID).NativeID
-	return shown != "" && conversation != "" && conversation != shown
 }
 
 func (d *Daemon) linkCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool) {
