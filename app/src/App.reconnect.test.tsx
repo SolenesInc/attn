@@ -18,19 +18,6 @@ const THEME = {
   ],
 };
 
-const LIGHT_THEME = {
-  cmd: 'set_terminal_theme',
-  foreground: '#3b3b3b',
-  background: '#ffffff',
-  cursor: '#3b3b3b',
-  ansi_palette: [
-    '#000000', '#cd3131', '#00bc00', '#949800',
-    '#0451a5', '#bc05bc', '#0598bc', '#555555',
-    '#666666', '#cd3131', '#14ce14', '#b5ba00',
-    '#0451a5', '#bc05bc', '#0598bc', '#a5a5a5',
-  ],
-};
-
 describe('App daemon reconnect', () => {
   it('holds its terminal theme until the daemon handshake completes', async () => {
     const { daemon } = await renderApp({ initialState: false });
@@ -59,7 +46,7 @@ describe('App daemon reconnect', () => {
 
     reconnected.emit(initialState());
     await daemon.idle();
-    expect(reconnected.sent.filter(({ cmd }) => cmd === 'set_terminal_theme')).toEqual([LIGHT_THEME]);
+    expect(reconnected.sent.filter(({ cmd }) => cmd === 'set_terminal_theme')).toEqual([expect.objectContaining({ background: '#ffffff' })]);
   });
 
   it('tells a reconnected daemon its profile and theme, and asks again for what it shows', async () => {

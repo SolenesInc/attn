@@ -884,14 +884,10 @@ export function useDaemonSocket({
     return `${prefix}:${Date.now()}:${requestSequenceRef.current}`;
   }, []);
 
-  const sendOrQueueCommand = useCallback((payload: Record<string, unknown>, options?: { waitForInitialState?: boolean }) => {
+  const sendOrQueueCommand = useCallback((payload: Record<string, unknown>) => {
     const serialized = JSON.stringify(payload);
-    if (options?.waitForInitialState && !hasReceivedInitialStateRef.current) {
-      pendingOutboundCommandsRef.current.push(serialized);
-      return;
-    }
     const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
+    if (hasReceivedInitialStateRef.current && ws?.readyState === WebSocket.OPEN) {
       ws.send(serialized);
       return;
     }
@@ -2502,17 +2498,14 @@ export function useDaemonSocket({
       });
     }
     recordPtyCommand('pty_input', id, data.length, source);
-    sendOrQueueCommand(
-      {
-        cmd: 'pty_input',
-        id,
-        data,
-        ...(source ? { source } : {}),
-        ...(probeId ? { probe_id: probeId } : {}),
-        ...(traceId ? { trace_id: traceId } : {}),
-      },
-      { waitForInitialState: true },
-    );
+    sendOrQueueCommand({
+      cmd: 'pty_input',
+      id,
+      data,
+      ...(source ? { source } : {}),
+      ...(probeId ? { probe_id: probeId } : {}),
+      ...(traceId ? { trace_id: traceId } : {}),
+    });
   }, [sendOrQueueCommand]);
 
   const sendTerminalPointerActivity = useCallback((id: string) => {
@@ -2765,10 +2758,7 @@ export function useDaemonSocket({
     const geometry = pixels && pixels.xpixel && pixels.ypixel
       ? { xpixel: Math.round(pixels.xpixel), ypixel: Math.round(pixels.ypixel) }
       : {};
-    sendOrQueueCommand(
-      { cmd: 'pty_resize', id, cols, rows, ...geometry },
-      { waitForInitialState: true },
-    );
+    sendOrQueueCommand({ cmd: 'pty_resize', id, cols, rows, ...geometry });
   }, [sendOrQueueCommand]);
 
   const reconcileAttachedRuntimeGeometry = useCallback((
