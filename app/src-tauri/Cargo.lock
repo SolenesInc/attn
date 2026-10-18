@@ -67,7 +67,6 @@ dependencies = [
 name = "app-core"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "base64 0.22.1",
  "block2",
  "dirs 5.0.1",
@@ -79,7 +78,6 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "objc2-web-kit",
- "regex",
  "serde",
  "serde_json",
  "tauri",
