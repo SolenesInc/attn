@@ -74,16 +74,6 @@ export function BackgroundTasksSettings({
 
   return (
     <section className="settings-block">
-      <div className="settings-block-intro">
-        <span className="settings-kicker">Background Tasks</span>
-        <h3>Durable task runner</h3>
-        <p className="settings-description">
-          Background work attn runs for you — context compaction, session summaries and desktop
-          narration. A task that exhausts its retries becomes a
-          notification you can retry from here.
-        </p>
-      </div>
-
       <div className="settings-block-body">
         {error && (
           <div className="background-tasks-state">

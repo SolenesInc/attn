@@ -46,7 +46,7 @@ describe('Experimental settings for direct agent launches', () => {
 describe('Experimental settings for the one-screen launcher', () => {
   it('saves the launcher opt-in in both directions', async () => {
     const daemon = await openSection('experimental');
-    const launcher = () => screen.getByRole('switch', { name: 'One-screen new-session launcher (experimental)' });
+    const launcher = () => screen.getByRole('switch', { name: 'Launcher 2.0' });
     expect(launcher()).toHaveAttribute('aria-checked', 'false');
     await gesture(daemon, () => fireEvent.click(launcher()));
     expect(launcher()).toHaveAttribute('aria-checked', 'true');

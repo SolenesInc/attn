@@ -15,7 +15,6 @@ import {
   HygieneSettings,
   PluginSettings,
   SectionStatusPills,
-  TerminalSettings,
   ExperimentalSettings,
   DesktopSettings,
 } from './SettingsModalSections';
@@ -94,13 +93,6 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                       onClick={() => void selectSection(item.id)}
                     >
                       <span>{item.label}</span>
-                      {!['agents', 'models', 'backgroundAgents', 'terminal', 'experimental'].includes(item.id) && (
-                        <span
-                          className={`settings-nav-count${item.id === 'autoMode' && item.count > 0 ? ' waiting' : ''}`}
-                        >
-                          {item.count}
-                        </span>
-                      )}
                     </button>
                   ))}
                 </div>
@@ -111,10 +103,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
           <main className="settings-body" data-testid="settings-body">
             <div className="settings-content-head">
               <div>
-                {selectedNavItem?.label !== selectedNavItem?.title && (
-                  <div className="settings-kicker">{selectedNavItem?.label}</div>
-                )}
-                <h1>{selectedNavItem?.title}</h1>
+                <h1>{selectedNavItem?.label}</h1>
                 {selectedNavItem?.description && <p className="settings-lead">{selectedNavItem.description}</p>}
               </div>
               <div className="settings-status-pair">
@@ -250,16 +239,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           queueShowHiddenSessions={state.queueShowHiddenSessions}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
           asksEnabled={state.asksEnabled}
-          onSetSetting={state.onSetSetting}
-        />
-      );
-    case 'terminal':
-      return (
-        <TerminalSettings
-          ptyBackendHint={state.ptyBackendHint}
           ptyBackendMode={state.ptyBackendMode}
-          ptyBackendLabel={state.ptyBackendLabel}
-          sharedPtyHostActive={state.sharedPtyHostActive}
           sharedPtyHostEnabled={state.sharedPtyHostEnabled}
           onSetSetting={state.onSetSetting}
         />

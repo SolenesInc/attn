@@ -63,7 +63,6 @@ export function ModelTierSettings() {
   };
   const missingHarnesses = entries.filter(entry => !harnesses.some(harness => harness.id === entry.harness));
   return <>
-    <div className="settings-block-intro"><h3>Models</h3><p className="settings-description">Tiers describe how much intelligence a task needs. attn ships the mapping; your changes apply across profiles on this daemon. Reset returns a model to attn’s tier.</p></div>
     {error && <div className="settings-warning" role="alert">{error}<button type="button" className="settings-action" onClick={retry}>Retry</button></div>}
     {loading && !harnesses.length && <p role="status">Loading harnesses…</p>}
     {harnesses.map(harness => <HarnessTiers key={harness.id} harness={harness} entries={entries} setTier={setTier} remove={remove} />)}

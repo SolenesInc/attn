@@ -17,7 +17,6 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const KEY = 'pty_shared_host_enabled';
 const TOGGLE = '[data-testid="settings-shared-pty-host-toggle"]';
-const STATUS = '[data-testid="settings-shared-pty-host-status"]';
 
 async function main() {
   const options = parseCommonArgs(process.argv.slice(2).filter((arg) => arg !== '--'));
@@ -74,22 +73,17 @@ async function main() {
 
   async function openSettings() {
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
-    await client.request('settings_select_section', { sectionId: 'terminal' });
+    await client.request('settings_select_section', { sectionId: 'experimental' });
     await client.request('dom_scroll_into_view', { selector: TOGGLE });
   }
 
   async function checkSetting(enabled, label) {
     await observer.waitFor(() => observer.getSetting(KEY) === String(enabled)
       && observer.getSetting('pty_shared_host_active') === String(enabled), label);
-    const expected = enabled ? 'New sessions use the shared Rust host.' : 'New sessions use dedicated Go workers.';
-    const deadline = Date.now() + 10_000;
-    let text = '';
-    while (Date.now() < deadline) {
-      text = (await client.request('dom_text', { selector: STATUS })).text;
-      if (text === expected) break;
-      await delay(100);
-    }
-    runner.assert(text === expected, `${label}: Settings shows the effective backend`, { text });
+    await client.request('dom_wait', {
+      selector: `${TOGGLE}[aria-checked="${enabled}"]`,
+      timeoutMs: observer.connectTimeoutMs,
+    });
     const shot = await client.request('capture_screenshot_data', {
       selector: `.settings-block:has(${TOGGLE})`,
     });

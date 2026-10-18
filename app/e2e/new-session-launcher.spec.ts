@@ -31,7 +31,7 @@ for (const terminal of [false, true]) {
         .click();
       await page
         .getByRole('switch', {
-          name: 'One-screen new-session launcher (experimental)',
+          name: 'Launcher 2.0',
         })
         .click();
       await page.keyboard.press('Escape');

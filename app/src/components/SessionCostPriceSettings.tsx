@@ -259,8 +259,6 @@ export function SessionCostPriceSettings({ settings, onSetSetting }: SessionCost
   return (
     <section className="settings-block" data-testid="settings-session-cost-prices">
       <div className="settings-block-intro">
-        <div className="settings-kicker">Agents</div>
-        <h3>Model pricing</h3>
         <p className="settings-description">
           Add exact model IDs that are missing from the built-in price table, or correct stale
           rates. Every field is USD per million tokens; cache reads and writes keep their own rates.

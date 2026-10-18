@@ -121,7 +121,6 @@ export function AppearanceSettings({
     <>
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Appearance</div>
           <h3>Theme</h3>
           <p className="settings-description">Choose how attn renders the application chrome.</p>
         </div>
@@ -157,7 +156,6 @@ export function AppearanceSettings({
 
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Appearance</div>
           <h3>Font Size</h3>
           <p className="settings-description">
             Scale text across attn. The garden can use its own size, independent of the rest of the app.
@@ -297,7 +295,6 @@ export function DesktopSettings({
       </section>
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Projects</div>
           <h3>Projects Directory</h3>
           <p className="settings-description">Directory where Git repositories are cloned and opened in worktrees.</p>
         </div>
@@ -330,7 +327,6 @@ export function DesktopSettings({
 
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Worktrees</div>
           <h3>Worktree sweep</h3>
           <p className="settings-description">
             Reclaims worktrees whose work has landed. A worktree is only removed when it has been idle for 14 days, has
@@ -363,7 +359,6 @@ export function DesktopSettings({
 
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Notebook</div>
           <h3>Notebook Folder</h3>
           <p className="settings-description">
             Where attn keeps your durable Notebook — dated journals and the knowledge base — as plain markdown you own.
@@ -402,7 +397,6 @@ export function DesktopSettings({
 
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Desktop</div>
           <h3>Sent files</h3>
           <p className="settings-description">
             When an agent hands you a file with its send-file tool, attn opens the ones it can show as desktop tiles.
@@ -500,13 +494,6 @@ export function PluginSettings({
 >) {
   return (
     <section className="settings-block">
-      <div className="settings-block-intro">
-        <div className="settings-kicker">Extensions</div>
-        <h3>Plugins</h3>
-        <p className="settings-description">
-          Install first-party bundled plugins or add user-owned plugins from a local directory or Git repository.
-        </p>
-      </div>
       <div className="settings-block-body">
         <div className="settings-inline-form plugin-form">
           <input
@@ -654,97 +641,35 @@ export function PluginSettings({
   );
 }
 
-export function TerminalSettings({
-  ptyBackendHint,
-  ptyBackendMode,
-  ptyBackendLabel,
-  sharedPtyHostActive,
-  sharedPtyHostEnabled,
-  onSetSetting,
-}: Pick<
-  SettingsModalState,
-  | 'ptyBackendHint'
-  | 'ptyBackendMode'
-  | 'ptyBackendLabel'
-  | 'sharedPtyHostActive'
-  | 'sharedPtyHostEnabled'
-  | 'onSetSetting'
->) {
-  return (
-    <section className="settings-block">
-      <div className="settings-block-intro">
-        <div className="settings-kicker">Terminal</div>
-        <h3>PTY Backend</h3>
-        <p className="settings-description">
-          Shows whether terminal sessions run in external worker processes or directly in the daemon.
-        </p>
-      </div>
-      <div className="settings-block-body">
-        <div className="settings-row-card compact">
-          <div>
-            <p className="settings-row-title">Runtime mode</p>
-            <p className="settings-row-copy">{ptyBackendHint}</p>
-          </div>
-          <span className={`settings-status mode-${ptyBackendMode}`}>{ptyBackendLabel}</span>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Shared PTY host (experimental)</p>
-            <p className="settings-row-copy" id="shared-pty-host-description">
-              Off by default. Use a shared Rust process for new terminals and agents to reduce memory use. Changes apply
-              to new or explicitly reloaded sessions. Running sessions stay untouched.
-            </p>
-            <p className="settings-row-copy" data-testid="settings-shared-pty-host-status">
-              {ptyBackendMode !== 'migrating'
-                ? 'This setting requires the default daemon backend.'
-                : sharedPtyHostActive
-                  ? 'New sessions use the shared Rust host.'
-                  : sharedPtyHostEnabled
-                    ? 'Shared host unavailable. New sessions use dedicated Go workers; disable and re-enable to retry.'
-                    : 'New sessions use dedicated Go workers.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Shared PTY host (experimental)"
-            aria-checked={sharedPtyHostEnabled}
-            aria-describedby="shared-pty-host-description"
-            className="settings-action"
-            data-testid="settings-shared-pty-host-toggle"
-            disabled={ptyBackendMode !== 'migrating'}
-            onClick={() => onSetSetting('pty_shared_host_enabled', sharedPtyHostEnabled ? 'false' : 'true')}
-          >
-            {sharedPtyHostEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function ExperimentalSettings({
   newSessionLauncherEnabled,
   codexSharedEnabled,
   queueShowHiddenSessions,
   directAgentLaunchEnabled,
   asksEnabled,
+  ptyBackendMode,
+  sharedPtyHostEnabled,
   onSetSetting,
-}: Pick<SettingsModalState, 'newSessionLauncherEnabled' | 'codexSharedEnabled' | 'queueShowHiddenSessions' | 'directAgentLaunchEnabled' | 'asksEnabled' | 'onSetSetting'>) {
+}: Pick<
+  SettingsModalState,
+  | 'newSessionLauncherEnabled'
+  | 'codexSharedEnabled'
+  | 'queueShowHiddenSessions'
+  | 'directAgentLaunchEnabled'
+  | 'asksEnabled'
+  | 'ptyBackendMode'
+  | 'sharedPtyHostEnabled'
+  | 'onSetSetting'
+>) {
   return (
     <section className="settings-block">
-      <div className="settings-block-intro">
-        <div className="settings-kicker">Experimental</div>
-        <h3>Experimental features</h3>
-        <p className="settings-description">Try features that are still being developed.</p>
-      </div>
       <div className="settings-block-body">
         <div className="settings-row-card">
           <div>
-            <p className="settings-row-title">One-screen new-session launcher (experimental)</p>
-            <p className="settings-row-copy" id="new-session-launcher-description">Search a project or path, then use Tab to choose where to start.</p>
+            <p className="settings-row-title">Launcher 2.0</p>
+            <p className="settings-row-copy" id="new-session-launcher-description">New dialog for launching agents and terminals. Allows you to select a path, then repository, and worktree, in a single dialog.</p>
           </div>
-          <button type="button" role="switch" aria-label="One-screen new-session launcher (experimental)"
+          <button type="button" role="switch" aria-label="Launcher 2.0"
             aria-checked={newSessionLauncherEnabled} aria-describedby="new-session-launcher-description"
             className="settings-action" onClick={() => onSetSetting('new_session_launcher_enabled', newSessionLauncherEnabled ? 'false' : 'true')}>
             {newSessionLauncherEnabled ? 'Disable' : 'Enable'}
@@ -754,8 +679,7 @@ export function ExperimentalSettings({
           <div>
             <p className="settings-row-title">Direct agent launches</p>
             <p className="settings-row-copy" id="direct-agent-launch-description">
-              Off by default. Launch Claude, Codex and Copilot without a separate attn launcher process to reduce memory use.
-              Changes apply to new or explicitly reloaded agents. Running agents stay untouched.
+              Launch agents using less memory.
             </p>
           </div>
           <button
@@ -773,11 +697,30 @@ export function ExperimentalSettings({
         </div>
         <div className="settings-row-card">
           <div>
+            <p className="settings-row-title">Shared terminal host</p>
+            <p className="settings-row-copy" id="shared-pty-host-description">
+              Reduce memory use by sharing a host process across terminals.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Shared terminal host"
+            aria-checked={sharedPtyHostEnabled}
+            aria-describedby="shared-pty-host-description"
+            className="settings-action"
+            data-testid="settings-shared-pty-host-toggle"
+            disabled={ptyBackendMode !== 'migrating'}
+            onClick={() => onSetSetting('pty_shared_host_enabled', sharedPtyHostEnabled ? 'false' : 'true')}
+          >
+            {sharedPtyHostEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
             <p className="settings-row-title">Shared Codex</p>
             <p className="settings-row-copy" id="shared-codex-description">
-              Off by default. New Codex terminals share one app-server per profile. Switching conversations keeps the
-              old one live as a hidden session. Applies to new Codex terminals and to sessions you resume from the
-              ledger.
+              Use a shared Codex server for cross-session interaction, tighter integration with attn, and lower memory use.
             </p>
           </div>
           <button
@@ -797,7 +740,8 @@ export function ExperimentalSettings({
           <div>
             <p className="settings-row-title">Show hidden sessions in the queue</p>
             <p className="settings-row-copy" id="queue-hidden-sessions-description">
-              On by default. Hidden sessions queue like any other; choosing one opens it in a terminal.
+              For shared Codex sessions. Switching sessions inside Codex can leave the previous session running without
+              an attn tile. Include these hidden sessions in the queue; selecting one opens it in a terminal.
             </p>
           </div>
           <button
@@ -815,19 +759,16 @@ export function ExperimentalSettings({
         </div>
         <div className="settings-row-card">
           <div>
-            <p className="settings-row-title">Asks (experimental)</p>
+            <p className="settings-row-title">Asks</p>
             <p className="settings-row-copy" id="settings-asks-description">
-              Off by default. Agents ask you what they cannot settle alone, and you answer them all from one drawer
-              without opening their terminals. Applies to agents launched from now on; each agent keeps the setting it
-              launched with, reloads included. Your answer becomes a note on the seed the ask is about, or lands in the
-              agent's inbox when there is no seed, and settles its turn. Open the drawer with{' '}
-              {formatShortcut('dock.asks')}.
+              Answer agents' questions from one drawer without opening their terminals. Open it with{' '}
+              {formatShortcut('dock.asks')}. Applies to newly launched agents.
             </p>
           </div>
           <button
             type="button"
             role="switch"
-            aria-label="Asks (experimental)"
+            aria-label="Asks"
             aria-checked={asksEnabled}
             aria-describedby="settings-asks-description"
             className="settings-action"
@@ -873,7 +814,6 @@ export function BackgroundAgentSettings({
       <GardenAdvisorSettings settings={settings} agents={gardenAdvisorAgents} onSetSetting={onSetSetting} />
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Agents</div>
           <h3>Chief of staff</h3>
           <p className="settings-description">
             Harness, model and effort for Chief launches. Unset models use the deep default at low effort.
@@ -1177,14 +1117,6 @@ export function DataSettings({
   return (
     <>
       <section className="settings-block">
-        <div className="settings-block-intro">
-          <div className="settings-kicker">Local models</div>
-          <h3>Terminal viewport capture</h3>
-          <p className="settings-description">
-            Builds a local corpus for evaluating and training models that understand Codex and Claude terminal screens.
-            Collection is off by default.
-          </p>
-        </div>
         <div className="settings-block-body">
           <div className="settings-warning">
             Captures exact visible terminal text. Records may contain source code, conversations, command output, and
@@ -1295,7 +1227,6 @@ export function HygieneSettings({
     <>
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Sidebar</div>
           <h3>Auto-settle</h3>
           <p className="settings-description">
             Closes a turn for you once you have steered the agent and walked away, so the queue does not fill up with
@@ -1387,7 +1318,6 @@ export function HygieneSettings({
 
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Repositories</div>
           <h3>Muted Repositories</h3>
           <p className="settings-description">Repositories hidden from the attention queue.</p>
         </div>
@@ -1415,7 +1345,6 @@ export function HygieneSettings({
 
       <section className="settings-block">
         <div className="settings-block-intro">
-          <div className="settings-kicker">Authors</div>
           <h3>Muted Authors</h3>
           <p className="settings-description">Authors hidden from the attention queue.</p>
         </div>
@@ -1455,11 +1384,7 @@ export function BackgroundTasksSection({
         <BackgroundTasksSettings listTasks={listTasks} retryTask={retryTask} taskChangeSignal={taskChangeSignal ?? 0} />
       ) : (
         <section className="settings-block">
-          <div className="settings-block-intro">
-            <div className="settings-kicker">Background Tasks</div>
-            <h3>Durable task runner</h3>
-            <p className="settings-description">Task runner is unavailable.</p>
-          </div>
+          <p className="settings-description">Task runner is unavailable.</p>
         </section>
       )}
     </>
@@ -1494,7 +1419,6 @@ export function MobileWebSettings({
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
-        <div className="settings-kicker">Mobile</div>
         <h3>Mobile Web Client</h3>
         <p className="settings-description">
           Expose this daemon through the existing Tailscale device identity for mobile browser access.
@@ -1561,7 +1485,6 @@ export function GitHubHostsSettings({
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
-        <div className="settings-kicker">GitHub</div>
         <h3>GitHub Hosts</h3>
         <p className="settings-description">
           Authenticated hosts used by PR actions, review lookup, and repository metadata.

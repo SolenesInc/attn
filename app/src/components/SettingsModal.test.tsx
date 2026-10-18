@@ -582,31 +582,10 @@ describe('SettingsModal asks', () => {
     const { daemon } = await renderSettings();
     fireEvent.change(screen.getByLabelText('Search settings'), { target: { value: 'asks' } });
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
-    const toggle = screen.getByRole('switch', { name: 'Asks (experimental)' });
+    const toggle = screen.getByRole('switch', { name: 'Asks' });
 
     expect(toggle).toHaveAttribute('aria-checked', 'false');
     await gesture(daemon, () => fireEvent.click(toggle));
     expect(savedSettings(daemon)).toEqual([['asks_enabled', 'true']]);
-  });
-});
-
-describe('SettingsModal delegation badge', () => {
-  it('counts live roles as soon as Settings opens, before the section is visited', async () => {
-    const selection = { harness: 'codex', provider: '', model: '', effort: '' };
-    const role = (id: string) => ({ id, name: id, icon: 'code', enabled: true, description: '', instructions: '', stopping_point: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection }] });
-    const { daemon } = await renderSettings({}, (scripted) => {
-      scripted.on('delegation_preferences_get', () => ({
-        event: 'delegation_preferences_result',
-        success: true,
-        preferences: { enabled: true, revision: 3, workflow_skill_enabled: false, roles: [role('build'), role('review')], fallback: { selection: { ...selection, harness: '' }, instructions: '' } },
-        templates: [],
-        expanded_roles: [],
-        harnesses: [],
-        workflow_skill_paths: [],
-      }));
-    });
-
-    expect(screen.getByTestId('settings-nav-delegation')).toHaveTextContent('2');
-    expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 });
