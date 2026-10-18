@@ -72,7 +72,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     openDock: openGardenDock,
     closeDock: closeGardenDock,
   });
-  const [gardenSlotRef, gardenDockRect] = useDockSlotRect();
+  const [gardenSlotRef, gardenDockRect] = useDockSlotRect(dockState);
   const openNotebookBrowser = useCallback(() => {
     setNotebookOpen(true);
   }, []);
