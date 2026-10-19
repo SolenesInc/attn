@@ -388,14 +388,14 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	_, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
+	side, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
 	conversation := sideCodex.ConversationID
 	renamed := testworld.Request(sideApp, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(elsewhere), Label: "Release plan"},
 		protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return string(r.ID) == elsewhere })
 	if !renamed.Success {
 		t.Fatalf("rename %s: %s", elsewhere, protocol.Deref(renamed.Error))
 	}
-	w.CodexServer().AwaitName(conversation, "Release plan")
+	w.CodexServerOf(side.ID).AwaitName(conversation, "Release plan")
 
 	here := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(here)
@@ -405,7 +405,7 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 	typeInto(app, terminal, "/rename Release train\r")
 	codex.Prompted()
 	testworld.AwaitSession(app, resumed, func(s protocol.Session) bool { return s.Label == "Release train" })
-	w.CodexServer().AwaitName(conversation, "Release train")
+	w.CodexServerOf(app.SelectedProfile()).AwaitName(conversation, "Release train")
 
 	if way == "ledger" {
 		for _, c := range []struct {
@@ -431,7 +431,7 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 			t.Fatalf("/resume %s showed %s, want %s back", conversation, shown, elsewhere)
 		}
 	}
-	w.CodexServer().AwaitName(conversation, "Release plan")
+	w.CodexServerOf(side.ID).AwaitName(conversation, "Release plan")
 }
 
 func TestAConversationAnotherProfileResumesCountsItsTurnsOnlyThere(t *testing.T) {

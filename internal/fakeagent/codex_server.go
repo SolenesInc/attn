@@ -101,6 +101,19 @@ func codexListenPath(argv []string) string {
 	return strings.TrimPrefix(codexServerFlags.parse(argv[2:]).value("--listen"), "unix://")
 }
 
+func codexServerProfile(argv []string) string {
+	configured, err := codexHooks(codexServerFlags.parse(argv[2:]).values["-c"], "")
+	if err != nil {
+		return ""
+	}
+	for _, env := range configured.env {
+		if profile, ok := strings.CutPrefix(env, harness.CodexSharedProfileEnv+"="); ok {
+			return profile
+		}
+	}
+	return ""
+}
+
 func runCodexAppServer(cfg config) int {
 	args := codexServerFlags.parse(os.Args[2:])
 	path := codexListenPath(os.Args)
