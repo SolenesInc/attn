@@ -309,9 +309,10 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
   old, so that run still shows the old value. The source follows the install
   method: the cask API for brew, GitHub releases checked against the npm
   `latest` tag for npm, GitHub releases otherwise.
-- `codex doctor --json` prints one JSON object and exits 0 after 10–14 s, of
-  which 2–3.5 s is CPU, probed on 0.162.1. `codexVersion` is the binary's own
-  version. `checks` is keyed by check id, and
+- `codex doctor --json` prints one JSON object after 10–14 s, of which
+  2–3.5 s is CPU, probed on 0.162.1. When any check fails it still prints the
+  whole report, then exits 1, so read stdout whatever the exit status.
+  `codexVersion` is the binary's own version. `checks` is keyed by check id, and
   `checks["updates.status"].details["latest version"]` holds the newest
   release, checked live against the same source as a TUI's refresh, except
   that for npm installs it skips the check against the npm `latest` tag.
