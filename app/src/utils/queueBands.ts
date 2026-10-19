@@ -51,6 +51,9 @@ export interface QueueBandSession extends DesktopViewSession {
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
+  /** The agent made the latest change to its turn: opened or settled it itself,
+   * or went back to work on a notification. Its turn closing never moves the user. */
+  turnByAgent?: boolean;
   hidden?: boolean;
   /** Set on a shell: the agent session it was split from. */
   parentSessionId?: string;
@@ -313,10 +316,8 @@ export function advanceAfterTurnClosed<TSession extends QueueBandSession>(
 ): QueueAdvance<TSession> | null {
   if (!sessionId || !bands) return null;
   const owedBefore = previousTurns.some((row) => row.session.id === sessionId);
-  const closedNow =
-    bands.settled.some((row) => row.session.id === sessionId) ||
-    bands.snoozed.some((row) => row.session.id === sessionId);
-  if (!owedBefore || !closedNow) return null;
+  const closed = [...bands.settled, ...bands.snoozed].find((row) => row.session.id === sessionId);
+  if (!owedBefore || !closed || closed.session.turnByAgent) return null;
   const head = headOfQueue(bands);
   if (head?.session.priority) return { to: 'session', row: head };
   const stillOwed = new Set(bands.turns.map((row) => row.session.id));

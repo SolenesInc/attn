@@ -1,13 +1,20 @@
 package daemon
 
 import (
+	"errors"
 	"time"
 
 	"github.com/victorarias/attn/internal/attention"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (e *monitorEntry) openTurnLocked(now time.Time) bool {
+func (e *monitorEntry) openTurnLocked(now time.Time, afterNotification bool) bool {
 	if !attention.OpensTurn(e.state.State) {
+		return false
+	}
+	byAgent := e.turnAtStop
+	e.turnAtStop = false
+	if afterNotification && !byAgent && !attention.OpensTurnAfterNotification(e.state.State) {
 		return false
 	}
 	if deadline := e.turn.SnoozedUntil; !deadline.IsZero() {
@@ -17,11 +24,60 @@ func (e *monitorEntry) openTurnLocked(now time.Time) bool {
 		e.turn.SnoozedUntil = time.Time{}
 		e.stopWakeLocked()
 	}
-	if e.turn.OpenedAt.After(e.turn.SettledAt) {
+	if e.turnOwedLocked() {
+		if byAgent {
+			e.turn.AgentAt = e.turn.OpenedAt
+		}
 		return false
 	}
 	e.turn.OpenedAt = now.UTC()
+	if byAgent {
+		e.turn.AgentAt = e.turn.OpenedAt
+	}
 	return true
+}
+
+func (e *monitorEntry) turnOwedLocked() bool {
+	return e.turn.OpenedAt.After(e.turn.SettledAt)
+}
+
+func (e *monitorEntry) turnByAgentLocked() bool {
+	return attention.TurnByAgent(e.turn.OpenedAt, e.turn.SettledAt, e.turn.AgentAt)
+}
+
+func (e *monitorEntry) settleForAgentLocked(now time.Time) {
+	e.turn.SettledAt = now.UTC()
+	e.turn.AgentAt = e.turn.SettledAt
+	e.stopAutoSettleLocked()
+}
+
+func (e *monitorEntry) agentTurnLocked(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
+	if action == protocol.AgentTurnActionSettle {
+		withdrawn := e.turnAtStop
+		e.turnAtStop = false
+		switch {
+		case e.turnOwedLocked() && !e.turnByAgentLocked():
+			return "", errors.New("this turn opened when you stopped, not with attn turn open; only the user settles it")
+		case e.turnOwedLocked():
+			e.settleForAgentLocked(now)
+			return protocol.AgentTurnOutcomeSettled, nil
+		case withdrawn:
+			return protocol.AgentTurnOutcomeWithdrawn, nil
+		}
+		return protocol.AgentTurnOutcomeNotOpen, nil
+	}
+	if e.turn.SnoozedUntil.After(now) {
+		return protocol.AgentTurnOutcomeSnoozed, nil
+	}
+	if e.state.State == protocol.SessionStateWorking {
+		e.turnAtStop = true
+		return protocol.AgentTurnOutcomeOpensAtStop, nil
+	}
+	if !e.turnOwedLocked() {
+		e.turn.OpenedAt = now.UTC()
+	}
+	e.turn.AgentAt = e.turn.OpenedAt
+	return protocol.AgentTurnOutcomeOpened, nil
 }
 
 func (e *monitorEntry) settleLocked(turn, now time.Time) bool {

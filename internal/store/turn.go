@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -12,6 +13,7 @@ type TurnStamps struct {
 	OpenedAt     time.Time
 	SettledAt    time.Time
 	SnoozedUntil time.Time
+	AgentAt      time.Time
 }
 
 type TurnOpening struct {
@@ -263,10 +265,11 @@ func (s *Store) turnStampsLocked(id protocol.SessionID) TurnStamps {
 		opened  string
 		settled string
 		snoozed string
+		agent   string
 	)
 	err := s.db.QueryRow(
-		`SELECT turn_opened_at, turn_settled_at, turn_snoozed_until FROM sessions WHERE id = ?`, id).
-		Scan(&opened, &settled, &snoozed)
+		`SELECT turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at FROM sessions WHERE id = ?`, id).
+		Scan(&opened, &settled, &snoozed, &agent)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Printf("[store] TurnStamps: failed for session %s: %v", id, err)
@@ -277,6 +280,7 @@ func (s *Store) turnStampsLocked(id protocol.SessionID) TurnStamps {
 		OpenedAt:     parseTurnStamp(opened),
 		SettledAt:    parseTurnStamp(settled),
 		SnoozedUntil: parseTurnStamp(snoozed),
+		AgentAt:      parseTurnStamp(agent),
 	}
 }
 
@@ -297,6 +301,10 @@ func applyTurnStamps(session *protocol.Session, stamps TurnStamps) {
 	session.TurnSnoozedUntil = nil
 	if !stamps.SnoozedUntil.IsZero() {
 		session.TurnSnoozedUntil = protocol.Ptr(stamps.SnoozedUntil.UTC().Format(time.RFC3339Nano))
+	}
+	session.TurnByAgent = nil
+	if attention.TurnByAgent(stamps.OpenedAt, stamps.SettledAt, stamps.AgentAt) {
+		session.TurnByAgent = protocol.Ptr(true)
 	}
 }
 

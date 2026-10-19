@@ -124,8 +124,13 @@ type sessionInputAttempt struct {
 }
 
 type sessionInputRunState struct {
-	ref      sessionInputRunRef
-	credited bool
+	ref          sessionInputRunRef
+	credited     bool
+	notification bool
+}
+
+func (r *sessionInputRunState) startedByNotification() bool {
+	return r.notification && !r.credited
 }
 
 type sessionInputLane struct {
@@ -137,15 +142,17 @@ type sessionInputLane struct {
 	placing bool
 	// attn's paste may still sit in the composer. Only a turn start or the
 	// user's own typing clears it: nothing confirms the harness took the paste.
-	occupied      bool
-	creditNextRun bool
-	titleNext     *sessionInputDelivery
-	epoch         uint64
-	userSubmit    bool
-	heldEnter     bool
-	phase         protocol.SessionState
-	stopped       bool
-	running       sync.WaitGroup
+	occupied                 bool
+	creditNextRun            bool
+	notifyNextRun            bool
+	stoppedAfterNotification bool
+	titleNext                *sessionInputDelivery
+	epoch                    uint64
+	userSubmit               bool
+	heldEnter                bool
+	phase                    protocol.SessionState
+	stopped                  bool
+	running                  sync.WaitGroup
 }
 
 type sessionInputModule struct{ daemon *Daemon }
@@ -390,6 +397,9 @@ func (m sessionInputModule) placeOverLinkLocked(ctx context.Context, lane *sessi
 // tookLocked credits the user's words to the run going, or, while the paste waits in the
 // composer, to the next turn start. The user typing over the paste forfeits that credit.
 func (m sessionInputModule) tookLocked(lane *sessionInputLane, delivery sessionInputDelivery) sessionInputRunRef {
+	if delivery.origin.kind == sessionInputOriginMaintenance && lane.run == nil {
+		lane.notifyNextRun = true
+	}
 	if delivery.origin.kind != sessionInputOriginUserConversation {
 		return sessionInputRunRef{}
 	}
@@ -425,6 +435,7 @@ func (m sessionInputModule) claimNextLocked(lane *sessionInputLane) bool {
 
 func (lane *sessionInputLane) forfeitNextLocked() {
 	lane.creditNextRun = false
+	lane.notifyNextRun = false
 	lane.titleNext = nil
 }
 
@@ -483,7 +494,9 @@ func (m sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID pr
 		return lane.run
 	}
 	lane.epoch++
-	lane.run = &sessionInputRunState{ref: sessionInputRunRef{sessionID: sessionID, epoch: lane.epoch}, credited: m.claimNextLocked(lane)}
+	lane.run = &sessionInputRunState{ref: sessionInputRunRef{sessionID: sessionID, epoch: lane.epoch}, credited: m.claimNextLocked(lane), notification: lane.notifyNextRun}
+	lane.notifyNextRun = false
+	lane.stoppedAfterNotification = false
 	return lane.run
 }
 
@@ -507,7 +520,21 @@ func (m sessionInputModule) observePhaseLocked(lane *sessionInputLane, sessionID
 		lane.userSubmit = false
 		m.daemon.forgetUserInput(sessionID)
 	}
+	if lane.run != nil {
+		lane.stoppedAfterNotification = lane.run.startedByNotification()
+	}
 	lane.run = nil
+}
+
+func (lane *sessionInputLane) inNotificationRunLocked() bool {
+	return lane.run != nil && lane.run.startedByNotification()
+}
+
+func (lane *sessionInputLane) stopFollowsNotificationLocked() bool {
+	if lane.run != nil {
+		return lane.run.startedByNotification()
+	}
+	return lane.stoppedAfterNotification
 }
 
 func (lane *sessionInputLane) currentUserRunLocked() (sessionInputRunRef, bool) {

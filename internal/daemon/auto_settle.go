@@ -104,10 +104,22 @@ func (d *Daemon) syncAutoSettleLocked(sessionID protocol.SessionID, e *monitorEn
 		e.stopAutoSettleLocked()
 		return
 	}
+	if e.input.inNotificationRunLocked() && e.turnOwedLocked() && !e.turnByAgentLocked() && d.quietNotifications() {
+		e.settleForAgentLocked(time.Now())
+		d.logf("turn settled by a notification run: session=%s", sessionID)
+	}
 	if e.dismissal != autoSettleDismissalOff {
 		e.dismissal = autoSettleDismissalCovered
 	}
 	d.armAutoSettleLocked(sessionID, e)
+}
+
+func (d *Daemon) quietNotifications() bool {
+	return parseBooleanSetting(d.daemonSetting(SettingQueueQuietNotifications)) && d.queueFlowOn()
+}
+
+func (d *Daemon) queueFlowOn() bool {
+	return parseBooleanSetting(d.daemonSetting(SettingQueueModeEnabled))
 }
 
 func (d *Daemon) armAutoSettleForUserInput(run sessionInputRunRef) {

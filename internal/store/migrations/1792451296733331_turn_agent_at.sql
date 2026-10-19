@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN turn_agent_at TEXT NOT NULL DEFAULT '';

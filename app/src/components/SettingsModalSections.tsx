@@ -640,6 +640,7 @@ export function ExperimentalSettings({
   newSessionLauncherEnabled,
   codexSharedEnabled,
   queueShowHiddenSessions,
+  queueQuietNotifications,
   directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
@@ -653,6 +654,7 @@ export function ExperimentalSettings({
   | 'newSessionLauncherEnabled'
   | 'codexSharedEnabled'
   | 'queueShowHiddenSessions'
+  | 'queueQuietNotifications'
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
@@ -780,6 +782,28 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
           >
             {queueShowHiddenSessions ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Quiet notifications in the queue</p>
+            <p className="settings-row-copy" id="queue-quiet-notifications-description">
+              When attn wakes an agent with a notification (a message, a seed update, a pull request update), the agent
+              stays out of your queue when it stops, unless it needs an approval or opens its turn to ask for you. An
+              agent that was waiting for you leaves the queue when a notification sets it working, without moving you.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Quiet notifications in the queue"
+            aria-checked={queueQuietNotifications}
+            aria-describedby="queue-quiet-notifications-description"
+            className="settings-action"
+            data-testid="settings-queue-quiet-notifications-toggle"
+            onClick={() => onSetSetting('queue_quiet_notifications', queueQuietNotifications ? 'false' : 'true')}
+          >
+            {queueQuietNotifications ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">

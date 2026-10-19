@@ -194,6 +194,9 @@ func main() {
 	case "ask":
 		maybePrintInstanceBanner()
 		runAsk()
+	case "turn":
+		maybePrintInstanceBanner()
+		runTurn()
 	case "conversation":
 		maybePrintInstanceBanner()
 		runConversation()
@@ -581,6 +584,7 @@ commands:
   conversation <command>            list, keep forever or forget attn's conversation copies
   worktree <command>                every tracked worktree, the sweep and the keep pin
   ask [list|close]                  ask the user something they answer from attn
+  turn open|settle                  put yourself in the user's queue, or take yourself out
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
   bus <command>                     event bus: consumer cursors, lag, kill switch

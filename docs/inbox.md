@@ -154,6 +154,28 @@ unread items gets one ring for each.
   the daemon log records the stop.
 - A new item has 3 fresh attempts. Its ring also covers the older items.
 
+## Notification runs
+
+A notification run is a run that attn's own input started: a ring, or a crew
+member's heartbeat. If the user types into the agent during the run, the run
+becomes the user's.
+
+With quiet notifications on (`queue_quiet_notifications`) and the queue flow
+on, a notification run does not bring the agent to the user:
+
+- When it stops, it opens no turn, unless the agent needs approval or attn
+  cannot tell its state.
+- When it starts, it settles a turn that opened on its own. The agent made
+  that change, so the app leaves the user where they are.
+- During it, `attn agent inbox` ends with a note that says so and points to
+  `attn turn open`.
+
+An agent that needs the user opens its own turn with `attn turn open`. Called
+while the agent works, it opens the turn when the agent stops. Notification
+runs do not settle that turn: the user does, or the agent with
+`attn turn settle`, which refuses a turn that opened on its own. With the queue
+flow off, both commands change nothing.
+
 ## Wakes
 
 When a crew member's address has unread items and the member is asleep, attn

@@ -61,7 +61,7 @@ func (h monitorHome) saveView(session protocol.SessionID, previous, view monitor
 	state, turn, driver := view.State.V, view.Turn.V, view.Driver.V
 	if !d.store.ApplySessionRuntimeState(session, store.SessionRuntimeState{
 		State: state.State, Since: state.Since, Updated: state.Updated,
-		Turn:               store.TurnStamps{OpenedAt: turn.OpenedAt, SettledAt: turn.SettledAt, SnoozedUntil: turn.SnoozedUntil},
+		Turn:               store.TurnStamps{OpenedAt: turn.OpenedAt, SettledAt: turn.SettledAt, SnoozedUntil: turn.SnoozedUntil, AgentAt: turn.AgentAt},
 		LastModelRequestAt: view.LastModelRequestAt.V,
 		Driver:             store.AgentDriverReportCursor{PluginName: driver.Plugin, RunID: driver.Run, Seq: driver.Sequence},
 		DriverMetadata:     driver.Metadata,

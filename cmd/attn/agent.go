@@ -694,6 +694,9 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 	if result.Remaining > 0 {
 		fmt.Fprintln(w, prompts.RenderText("session", "inbox-more", prompts.Values{"remaining": fmt.Sprint(result.Remaining)}))
 	}
+	if protocol.Deref(result.QuietNotifications) {
+		fmt.Fprintln(w, prompts.RenderText("session", "inbox-quiet", nil))
+	}
 }
 
 func printAgentMsgStatus(w io.Writer, message *protocol.AgentPeerMessage) {

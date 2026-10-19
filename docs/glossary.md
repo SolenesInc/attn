@@ -95,7 +95,10 @@ flow (1 per profile)      how the user works with attn and their agents:
 └─ desktop flow           the user goes to their agents on their desktops;
                           like spatial work across macOS Spaces
 queue                     agents in order of the attention they are owed
-└─ turn (at most 1 per agent)  attention that an agent is owed
+└─ turn (at most 1 per agent)  attention that an agent is owed; opens when the
+                               agent stops, or when it asks (attn turn open)
+notification run          a run that attn's own input started, such as a ring;
+                          with quiet notifications its stop opens no turn
 snooze                    puts off a turn until a set time
 unsnooze                  ends a snooze early
 ```
