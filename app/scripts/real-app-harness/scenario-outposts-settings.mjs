@@ -104,7 +104,7 @@ try {
   await runner.step('keyboard_opt_in_and_add', async () => {
     await wait('[data-testid="settings-nav-outposts"]', { absent: true });
     await press('[data-testid="settings-nav-experimental"]');
-    await press(toggle, 'Space');
+    await press(toggle, 'space');
     await wait('[data-testid="settings-nav-outposts"]');
     await shot('00-experimental');
     await press('[data-testid="settings-nav-outposts"]');
@@ -156,7 +156,7 @@ try {
     await empty;
     await wait(studio, { absent: true });
     await press('[data-testid="settings-nav-experimental"]');
-    await press(toggle, 'Space');
+    await press(toggle, 'space');
     await wait('[data-testid="settings-nav-outposts"]', { absent: true });
   });
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
