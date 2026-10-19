@@ -152,8 +152,6 @@ type Daemon struct {
 	warnings                   []protocol.DaemonWarning
 	warningsMu                 sync.RWMutex
 	ptyBackend                 ptybackend.Backend
-	terminalTitlesMu           sync.RWMutex
-	terminalTitles             map[harness.TerminalID]string
 	ptySettingsMu              sync.Mutex
 	ptySettingsChangeMu        sync.Mutex
 	sharedPTYHost              *ptybackend.WorkerBackend
@@ -199,8 +197,6 @@ type Daemon struct {
 	supportInputTrace     *supportInputTraceRing
 
 	emptyDesktops emptyDesktopRemoval
-
-	snoozeMu sync.Mutex
 
 	recoveryMu          sync.RWMutex
 	recovering          bool
@@ -621,9 +617,6 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("start event bus: %w", err)
 	}
 	d.loadTerminals()
-	for _, session := range d.store.List("") {
-		d.startSessionMonitor(session.ID)
-	}
 	if d.clientToken == "" {
 		token, err := config.EnsureClientToken(d.dataRoot)
 		if err != nil {
@@ -768,9 +761,11 @@ func (d *Daemon) Start() error {
 	}
 	listener := d.listener
 	d.log("daemon started")
-	d.startInstalledPlugins()
-
 	d.wsHub.logf = d.logf
+	for _, session := range d.store.List("") {
+		d.startSessionMonitor(session.ID)
+	}
+	d.startInstalledPlugins()
 
 	d.life.Go("runMarkdownContentWatcher", func() { d.runMarkdownContentWatcher(d.life.Done()) })
 
@@ -1545,6 +1540,7 @@ func (d *Daemon) stop() {
 	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
 	// PTYs shut next so no real exit lands between the drain and the shutdown.
 	d.life.wait(d.logf)
+	d.stopMonitorCatchUps()
 	d.closeGitExecution(ErrGitExecutorClosed)
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())

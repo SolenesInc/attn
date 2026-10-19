@@ -7,27 +7,23 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestTheTaskListShowsTheNewestUpdatedTaskFirstWithinASecond(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		sessions := []string{"s0", "s1234", "s12345", "s5"}
-		registerSessions(t, w, cli, sessions...)
-		for _, id := range sessions {
-			if err := cli.UpdateState(protocol.TerminalID(w.Terminal(id)), protocol.StateWaitingInput); err != nil {
-				t.Fatalf("report %s waiting: %v", id, err)
-			}
-			testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+	inBubbleAnsweringHeadlessTasks(t, []fakeagent.Harness{fakeagent.Claude}, func(t *testing.T, w *world) {
+		w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) { task.Answer("Name the checkout work") })
+		app := w.App()
+		var agents []*bubbleClaude
+		for _, directory := range []string{"first", "second", "third", "fourth"} {
+			agents = append(agents, w.bubbleClaude(t, app, directory))
 		}
-
-		until := time.Now().Add(time.Hour).Format(time.RFC3339Nano)
 		for i, step := range []time.Duration{0, 123400 * time.Microsecond, 50 * time.Microsecond, 376550 * time.Microsecond} {
 			w.advance(step)
-			app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: protocol.SessionID(sessions[i]), Until: until})
-			testworld.AwaitSession(app, sessions[i], func(s protocol.Session) bool { return protocol.Deref(s.TurnSnoozedUntil) != "" })
+			app.TypeLine(agents[i].id, "add a discount field")
+			awaitTitleTask(app, agents[i].id, func(task protocol.Task) bool { return task.State == "done" })
 		}
 
 		requestID := uuid.NewString()
@@ -35,12 +31,13 @@ func TestTheTaskListShowsTheNewestUpdatedTaskFirstWithinASecond(t *testing.T) {
 			protocol.EventTaskListResult, func(r protocol.TaskListResultMessage) bool { return r.RequestID == requestID })
 		var subjects []string
 		for _, task := range listed.Tasks {
-			if task.Kind == "session_snooze_wake" {
+			if task.Kind == "session_title" {
 				subjects = append(subjects, task.Subject)
 			}
 		}
-		if want := []string{"s5", "s12345", "s1234", "s0"}; !slices.Equal(subjects, want) {
-			t.Errorf("snooze wake tasks = %v, want the newest-updated first", subjects)
+		want := []string{agents[3].id, agents[2].id, agents[1].id, agents[0].id}
+		if !slices.Equal(subjects, want) {
+			t.Errorf("title tasks = %v, want newest-updated first %v", subjects, want)
 		}
 	})
 }

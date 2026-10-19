@@ -38,16 +38,24 @@ func (d *Daemon) recordMonitorObservation(e *monitorEntry, sessionID protocol.Se
 	if obs.ObservedAt.IsZero() {
 		obs.ObservedAt = obs.RecordedAt
 	}
+	var report *monitorView
 	if e != nil {
 		e.mu.Lock()
 		if e.trace == nil {
 			e.trace = statetrace.NewRing(statetrace.DefaultCapacity)
 		}
 		e.trace.Record(obs)
+		if e.firstReportAt.IsZero() && harnessReportedState(obs.Source) {
+			e.firstReportAt = obs.RecordedAt
+			view := e.viewLocked()
+			report = &view
+		}
 		e.mu.Unlock()
 	}
 	d.logf("%s", obs.LogLine(sessionID))
-	if harnessReportedState(obs.Source) {
+	if report != nil {
+		e.sink.Applied(*report)
+	} else if e == nil && harnessReportedState(obs.Source) {
 		d.noteLaunchStarted(sessionID)
 	}
 }

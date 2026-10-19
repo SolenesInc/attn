@@ -307,6 +307,26 @@ func TestFilesAnAgentSendsOpenAsMarkdownTilesUnlessTurnedOff(t *testing.T) {
 	}
 }
 
+func TestFilesSentByTerminalOpenBesideTheSessionItShows(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "sender")
+	path := markdownFile(t, w, "sent.md")
+	if err := cli.OpenSentFilesFromTerminal(protocol.TerminalID(w.Terminal("sender")), []string{path}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tile := range desktopTree(t, currentDesktop(t, w)).tiles() {
+		if tile.TileParams == path && tile.TileKind == "markdown" && tile.TileSessionID == "sender" {
+			files := recentFiles(app, 0, "")
+			if len(files) != 1 || files[0].Path != path || protocol.Deref(files[0].SessionID) != "sender" {
+				t.Fatalf("sent file activity = %+v", files)
+			}
+			return
+		}
+	}
+	t.Fatalf("sent file %s has no markdown tile bound to sender", path)
+}
+
 func currentDesktop(t *testing.T, w *world) protocol.Desktop {
 	t.Helper()
 	view := w.App().Initial

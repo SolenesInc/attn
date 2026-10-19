@@ -45,9 +45,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 	opts := jobs.Options{Log: d.logf, Store: queueStore}
 	runner := jobs.New(opts)
 	if !runner.Disabled() {
-		if err := d.registerTaskWithFailureRenderer(runner, snoozeWakeKind, d.snoozeWakeHandler, jobs.HandlerConfig{}, d.renderSnoozeWakeFailure); err != nil {
-			d.logf("snooze wake: register session_snooze_wake: %v", err)
-		}
+
 		if err := d.registerTaskWithFailureRenderer(
 			runner,
 			sessionActivityKind,
@@ -126,7 +124,6 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		d.logf("conversation keep: enqueue startup: %v", err)
 	}
 	d.queueCodexUpdateCheck()
-	d.reconcileSnoozeWakeJobs()
 	d.resumeGardenReviews()
 	d.settleHarvestConditions()
 	return nil

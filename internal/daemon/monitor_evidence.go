@@ -200,7 +200,19 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*monitorEvidence
 }
 
 func (d *Daemon) startEvidence(sessionID protocol.SessionID, fresh monitorEvidence) {
-	d.startSessionMonitor(sessionID)
+	entry := d.startSessionMonitor(sessionID)
+	if entry != nil {
+		if session := d.store.Get(sessionID); session != nil {
+			entry.mu.Lock()
+			entry.state = monitorStateView{Quiet: true, Sequence: entry.state.Sequence + 1, State: session.State,
+				Since: protocol.Timestamp(session.StateSince).Time(), Updated: protocol.Timestamp(session.StateUpdatedAt).Time()}
+			entry.firstReportAt = time.Time{}
+			entry.reason = ""
+			view := entry.viewLocked()
+			entry.mu.Unlock()
+			entry.sink.Applied(view)
+		}
+	}
 	d.clearStateReason(sessionID)
 	d.clearDwell(sessionID)
 	d.updateEvidence(sessionID, nil, func(e *monitorEvidence) { *e = fresh })
@@ -464,7 +476,12 @@ func (d *Daemon) publishResolution(sessionID protocol.SessionID, current protoco
 	if !resolverOwnedStates[current] || resolution.State == current {
 		d.clearDwell(sessionID)
 		if d.recordStateReason(sessionID, resolution) && resolverOwnedStates[current] {
-			d.broadcastSessionStateChanged(sessionID)
+			if entry := d.monitorEntry(sessionID); entry != nil {
+				entry.mu.Lock()
+				view := entry.viewLocked()
+				entry.mu.Unlock()
+				entry.sink.Applied(view)
+			}
 		}
 		return resolverOwnsState
 	}

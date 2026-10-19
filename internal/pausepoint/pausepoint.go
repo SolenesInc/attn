@@ -27,6 +27,7 @@ const (
 	DaemonStartupRecovery     = "daemon-startup-recovery"
 	SessionInputPasteGap      = "session-input-paste-gap"
 	SessionInputLaneContended = "session-input-lane-contended"
+	SessionSnoozeCommitted    = "session-snooze-committed"
 )
 
 type armed struct {

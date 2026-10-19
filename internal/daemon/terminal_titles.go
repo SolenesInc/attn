@@ -6,22 +6,24 @@ import (
 )
 
 func (d *Daemon) handlePTYTitle(terminal harness.TerminalID, title string) {
-	d.terminalTitlesMu.Lock()
-	if d.terminalTitles == nil {
-		d.terminalTitles = make(map[harness.TerminalID]string)
+	r := d.terminals()
+	r.mu.Lock()
+	if r.titles == nil {
+		r.titles = make(map[harness.TerminalID]string)
 	}
-	changed := d.terminalTitles[terminal] != title
-	d.terminalTitles[terminal] = title
-	d.terminalTitlesMu.Unlock()
+	changed := r.titles[terminal] != title
+	r.titles[terminal] = title
+	r.mu.Unlock()
 	if session, shown := d.shownIn(terminal); changed && shown {
 		d.publishFact(FactSessionTitleChanged, string(session), nil)
 	}
 }
 
 func (d *Daemon) forgetTerminalTitle(terminal harness.TerminalID) {
-	d.terminalTitlesMu.Lock()
-	delete(d.terminalTitles, terminal)
-	d.terminalTitlesMu.Unlock()
+	r := d.terminals()
+	r.mu.Lock()
+	delete(r.titles, terminal)
+	r.mu.Unlock()
 }
 
 func (d *Daemon) decorateSessionWithTitle(session *protocol.Session) {
@@ -35,9 +37,10 @@ func (d *Daemon) decorateSessionWithTitle(session *protocol.Session) {
 
 func (d *Daemon) sessionTerminalTitle(sessionID protocol.SessionID) string {
 	terminal := d.primaryTerminal(sessionID)
-	d.terminalTitlesMu.RLock()
-	defer d.terminalTitlesMu.RUnlock()
-	return d.terminalTitles[terminal]
+	r := d.terminals()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.titles[terminal]
 }
 
 func (d *Daemon) decorateLedgerEntryWithTitle(entry *protocol.SessionLedgerEntry) {

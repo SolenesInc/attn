@@ -1,6 +1,8 @@
 package daemon_test
 
 import (
+	"fmt"
+	"os"
 	"slices"
 	"testing"
 	"time"
@@ -9,6 +11,34 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestASnoozeBeforeTheFirstConversationReportStillWakes(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		cwd := w.Path("shop")
+		id := w.Spawn(app, fakeagent.Codex, cwd)
+		terminal := protocol.TerminalID(w.Terminal(id))
+		if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+		deadline := time.Now().Add(time.Minute)
+		snoozeUntil(app, id, deadline)
+		testworld.AwaitSession(app, id, func(s protocol.Session) bool { return snoozedUntil(s).Equal(deadline) })
+		path := w.Path("first-conversation.jsonl")
+		if err := os.WriteFile(path, []byte(fmt.Sprintf(`{"type":"session_meta","payload":{"id":"first-conversation","cwd":%q,"source":"cli"}}
+`, cwd)), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := cli.ObserveAgentConversation(terminal, "first-conversation", path); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(time.Until(deadline))
+		testworld.AwaitSession(app, id, func(s protocol.Session) bool {
+			return openedAt(s).Equal(deadline) && protocol.Deref(s.TurnOwed) && snoozedUntil(s).IsZero()
+		})
+	})
+}
 
 func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {

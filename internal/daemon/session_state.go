@@ -3,6 +3,8 @@ package daemon
 import (
 	"time"
 
+	"github.com/victorarias/attn/internal/attention"
+
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statetrace"
 	"github.com/victorarias/attn/internal/store"
@@ -102,14 +104,40 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		return false
 	}
 
-	opening := d.turnOpeningFor(change.sessionID, protocol.SessionState(change.state))
 	entry := d.monitorEntry(change.sessionID)
-	if entry != nil {
+	var applied, opens, held bool
+	var endedSnooze time.Time
+	if entry == nil {
+		opening := d.turnOpeningFor(change.sessionID, protocol.SessionState(change.state))
+		var outcome store.TurnOpeningOutcome
+		applied, outcome = d.commitSessionState(change, opening)
+		opens, held, endedSnooze = opening.Opens, outcome.HeldBySnooze, outcome.EndedSnooze
+	} else {
+		cursor := d.store.GetAgentDriverRun(change.sessionID)
 		entry.mu.Lock()
-	}
-	applied, turn := d.commitSessionState(change, opening)
-	if entry != nil {
+		if entry.driver.Run != cursor.RunID || cursor.Seq > entry.driver.Sequence {
+			entry.driver = monitorDriverCursor{Plugin: cursor.PluginName, Run: cursor.RunID, Sequence: cursor.Seq}
+		}
+		accepted := entry.changeStateLocked(change.state, change.cause, change.requestStartedAt, time.Now())
+		var view monitorView
+		if accepted {
+			entry.state.Origin = change.origin
+			entry.state.Cause = sessionStateCauseName(change.cause)
+			if entry.firstReportAt.IsZero() && harnessReportedState(change.origin.source) {
+				entry.firstReportAt = time.Now()
+			}
+			deadline := entry.turn.SnoozedUntil
+			opens = attention.OpensTurn(entry.state.State)
+			entry.openTurnLocked(time.Now())
+			held = opens && !entry.turn.SnoozedUntil.IsZero()
+			if !deadline.IsZero() && entry.turn.SnoozedUntil.IsZero() {
+				endedSnooze = deadline
+			}
+			d.syncAutoSettleLocked(change.sessionID, entry)
+			view = entry.viewLocked()
+		}
 		entry.mu.Unlock()
+		applied = accepted && entry.sink.Applied(view)
 	}
 
 	if !applied {
@@ -122,11 +150,17 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		d.traceStateChange(change, statetrace.OutcomeDiscarded, "store_rejected")
 		return false
 	}
+	if entry != nil {
+		if !endedSnooze.IsZero() {
+			d.dropEndedSnoozeWake(change.sessionID, change.state, endedSnooze)
+		}
+		return true
+	}
 	d.updateTranscriptWatcherState(change.sessionID, protocol.SessionState(change.state))
 	d.traceStateChange(change, statetrace.OutcomeApplied, "")
 
-	if opening.Opens && !turn.HeldBySnooze {
-		d.dropEndedSnoozeWake(change.sessionID, change.state, turn.EndedSnooze)
+	if opens && !held {
+		d.dropEndedSnoozeWake(change.sessionID, change.state, endedSnooze)
 		d.enqueueSessionActivity(change.sessionID)
 	}
 

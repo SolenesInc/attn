@@ -82,50 +82,63 @@ const (
 	autoSettleDismissalCovered
 )
 
-func (d *Daemon) syncAutoSettle(sessionID protocol.SessionID, state string) {
-	if state != protocol.StateWorking {
-		d.sessionInputs().observePhase(sessionID, protocol.SessionState(state))
-		d.retireAutoSettleDismissal(sessionID)
-		d.cancelAutoSettle(sessionID, "left working")
+func (d *Daemon) syncAutoSettle(sessionID protocol.SessionID, _ string) {
+	e := d.monitorEntry(sessionID)
+	if e == nil {
 		return
 	}
-	d.sessionInputs().observePhase(sessionID, protocol.SessionStateWorking)
-	d.coverAutoSettleDismissal(sessionID)
-	if run, ok := d.sessionInputs().currentUserRun(sessionID); ok {
-		d.armAutoSettleForUserInput(run)
+	e.mu.Lock()
+	d.syncAutoSettleLocked(sessionID, e)
+	view := e.viewLocked()
+	e.mu.Unlock()
+	e.sink.Applied(view)
+}
+
+func (d *Daemon) syncAutoSettleLocked(sessionID protocol.SessionID, e *monitorEntry) {
+	state := e.state.State
+	d.sessionInputs().observePhaseLocked(e.input, sessionID, state)
+	if state != protocol.SessionStateWorking {
+		if e.dismissal == autoSettleDismissalCovered {
+			e.dismissal = autoSettleDismissalOff
+		}
+		e.stopAutoSettleLocked()
+		return
 	}
+	if e.dismissal != autoSettleDismissalOff {
+		e.dismissal = autoSettleDismissalCovered
+	}
+	d.armAutoSettleLocked(sessionID, e)
 }
 
 func (d *Daemon) armAutoSettleForUserInput(run sessionInputRunRef) {
-	if !run.valid() || d.store == nil {
+	if !run.valid() {
 		return
 	}
-	current, credited := d.sessionInputs().currentUserRun(run.sessionID)
-	if !credited || current != run {
+	e := d.monitorEntry(run.sessionID)
+	if e == nil {
 		return
 	}
-	session := d.store.Get(run.sessionID)
-	if session == nil || session.State != protocol.SessionStateWorking {
-		return
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	current, credited := e.input.currentUserRunLocked()
+	if credited && current == run {
+		d.armAutoSettleLocked(run.sessionID, e)
 	}
-	d.armAutoSettle(run.sessionID)
 }
 
 func (d *Daemon) armAutoSettle(sessionID protocol.SessionID) {
-	if sessionID == "" || d.store == nil {
-		return
-	}
-	cfg := d.autoSettleConfig()
-	if !cfg.enabled {
-		return
-	}
 	e := d.monitorEntry(sessionID)
 	if e == nil {
 		return
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.dismissal != autoSettleDismissalOff || !d.turnOwed(sessionID) {
+	d.armAutoSettleLocked(sessionID, e)
+}
+
+func (d *Daemon) armAutoSettleLocked(sessionID protocol.SessionID, e *monitorEntry) {
+	cfg := d.autoSettleConfig()
+	if !cfg.enabled || e.state.State != protocol.SessionStateWorking || e.dismissal != autoSettleDismissalOff || !d.monitorTurnOwed(sessionID, e) {
 		return
 	}
 	if _, credited := e.input.currentUserRunLocked(); !credited {
@@ -134,6 +147,18 @@ func (d *Daemon) armAutoSettle(sessionID protocol.SessionID) {
 	if e.autoSettle == nil {
 		d.startAutoSettleLocked(sessionID, e, autoSettleArming, cfg.arm)
 	}
+}
+
+func (d *Daemon) monitorTurnOwed(sessionID protocol.SessionID, e *monitorEntry) bool {
+	if !e.turn.OpenedAt.After(e.turn.SettledAt) {
+		return false
+	}
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return false
+	}
+	d.decorateChiefOfStaff(session, d.profileChiefs())
+	return !attention.Excluded(d.attentionInputFor(session))
 }
 
 func (d *Daemon) holdAutoSettle(sessionID protocol.SessionID) {
@@ -151,12 +176,11 @@ func (d *Daemon) holdAutoSettle(sessionID protocol.SessionID) {
 	}
 	resume := e.autoSettle.phase
 	d.startAutoSettleHeldLocked(sessionID, e, resume, autoSettleHoldQuietWindow)
+	view := e.viewLocked()
 	e.mu.Unlock()
+	e.sink.Applied(view)
 	if d.debugLogging {
 		d.logf("auto-settle held: session=%s resume_phase=%d", sessionID, resume)
-	}
-	if resume == autoSettleCounting {
-		d.broadcastSessionStateChanged(sessionID)
 	}
 }
 
@@ -172,7 +196,7 @@ func (d *Daemon) startAutoSettleLocked(sessionID protocol.SessionID, e *monitorE
 	}
 	firesAt := time.Now().Add(window)
 	run, _ := e.input.currentUserRunLocked()
-	opened := d.store.TurnStamps(sessionID).OpenedAt
+	opened := e.turn.OpenedAt
 	timer := &autoSettleTimer{phase: phase, firesAt: firesAt, run: run, opened: opened}
 	timer.timer = d.life.AfterFunc("autoSettle", window, func() { d.autoSettleFire(sessionID, e, timer) })
 	e.autoSettle = timer
@@ -194,13 +218,17 @@ func (d *Daemon) cancelAutoSettle(sessionID protocol.SessionID, reason string) {
 		return
 	}
 	e.mu.Lock()
-	removed, visible := e.stopAutoSettleLocked()
+	removed, _ := e.stopAutoSettleLocked()
+	var view monitorView
+	if removed {
+		view = e.viewLocked()
+	}
 	e.mu.Unlock()
+	if removed {
+		e.sink.Applied(view)
+	}
 	if removed && d.debugLogging {
 		d.logf("auto-settle canceled: session=%s reason=%s", sessionID, reason)
-	}
-	if visible {
-		d.broadcastSessionStateChanged(sessionID)
 	}
 }
 
@@ -221,17 +249,15 @@ func (d *Daemon) autoSettleFire(sessionID protocol.SessionID, e *monitorEntry, s
 	}
 	e.autoSettle = nil
 	action := d.runAutoSettleForLocked(sessionID, e, timer.phase, timer.resume, timer.run, timer.opened)
+	view := e.viewLocked()
 	e.mu.Unlock()
+	e.sink.Applied(view)
 	if action == "settled" {
 		d.traceSettle(sessionID)
 	}
 	if d.debugLogging {
 		d.logf("auto-settle fire: session=%s phase=%d outcome=%s", sessionID, timer.phase, action)
 	}
-	if action == "held" && timer.phase != autoSettleCounting {
-		return
-	}
-	d.broadcastSessionStateChanged(sessionID)
 }
 
 func (d *Daemon) runAutoSettleForLocked(sessionID protocol.SessionID, e *monitorEntry, phase, resume autoSettlePhase, armedRun sessionInputRunRef, armedTurn time.Time) string {
@@ -249,17 +275,17 @@ func (d *Daemon) runAutoSettleForLocked(sessionID protocol.SessionID, e *monitor
 	if sessionstate.ClassifierVerdictPending(e.evidence, sessionstate.PolicyFor(session.Agent), time.Now()) {
 		return "classifying"
 	}
-	if string(session.State) != protocol.StateWorking {
+	if e.state.State != protocol.SessionStateWorking {
 		return "not-working"
 	}
 	current, credited := e.input.currentUserRunLocked()
 	if !credited || current != armedRun {
 		return "wrong-run"
 	}
-	if opened := d.store.TurnStamps(sessionID).OpenedAt; opened.IsZero() || !opened.Equal(armedTurn) {
+	if opened := e.turn.OpenedAt; opened.IsZero() || !opened.Equal(armedTurn) {
 		return "wrong-turn"
 	}
-	if !d.turnOwed(sessionID) {
+	if !d.monitorTurnOwed(sessionID, e) {
 		return "not-owed"
 	}
 	if phase == autoSettleHeld || phase == autoSettleArming {
@@ -286,7 +312,7 @@ func (d *Daemon) runAutoSettleForLocked(sessionID protocol.SessionID, e *monitor
 		d.startAutoSettleHeldLocked(sessionID, e, autoSettleCounting, quiet)
 		return "held"
 	}
-	if !d.store.SettleTurn(sessionID, time.Now()) {
+	if !e.settleLocked(armedTurn, time.Now()) {
 		return "settle-failed"
 	}
 	return "settled"
@@ -303,17 +329,13 @@ func (d *Daemon) answerAutoSettleByUser(sessionID protocol.SessionID) bool {
 	}
 	working := string(session.State) == protocol.StateWorking
 	e.mu.Lock()
-	removed, _ := e.stopAutoSettleLocked()
-	armed := e.dismissal != autoSettleDismissalOff
-	disarm := armed && !removed
-	if disarm {
-		e.dismissal = autoSettleDismissalOff
-	} else if working {
-		e.dismissal = autoSettleDismissalCovered
-	} else {
-		e.dismissal = autoSettleDismissalArmed
-	}
+	removed := e.autoSettle != nil
+	disarm := e.dismissal != autoSettleDismissalOff && !removed
 	e.mu.Unlock()
+	view, applied := e.command(monitorCommand{Key: e.key(), Kind: monitorCancelCountdown}, time.Now())
+	if !applied || !e.sink.Applied(view) {
+		return false
+	}
 	if disarm && working {
 		d.armAutoSettle(sessionID)
 	}
@@ -323,50 +345,18 @@ func (d *Daemon) answerAutoSettleByUser(sessionID protocol.SessionID) bool {
 	return true
 }
 
-func (d *Daemon) coverAutoSettleDismissal(sessionID protocol.SessionID) {
-	if e := d.monitorEntry(sessionID); e != nil {
-		e.mu.Lock()
-		if e.dismissal != autoSettleDismissalOff {
-			e.dismissal = autoSettleDismissalCovered
-		}
-		e.mu.Unlock()
-	}
-}
-
-func (d *Daemon) retireAutoSettleDismissal(sessionID protocol.SessionID) {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	retire := e.dismissal == autoSettleDismissalCovered
-	if retire {
-		e.dismissal = autoSettleDismissalOff
-	}
-	e.mu.Unlock()
-	if retire {
-		d.broadcastSessionStateChanged(sessionID)
-	}
-}
-
 func (d *Daemon) decorateSessionWithAutoSettle(clone *protocol.Session) {
 	if clone == nil {
 		return
 	}
 	firesAt := ""
 	held, armed := false, false
-	if e := d.monitorEntry(clone.ID); e != nil {
-		e.mu.Lock()
-		if timer := e.autoSettle; timer != nil {
-			switch {
-			case timer.phase == autoSettleCounting:
-				firesAt = timer.firesAt.UTC().Format(time.RFC3339Nano)
-			case timer.visible():
-				held = true
-			}
+	if view, ok := d.monitorViewFor(clone.ID); ok {
+		auto := view.AutoSettle.V
+		if !auto.FiresAt.IsZero() {
+			firesAt = auto.FiresAt.UTC().Format(time.RFC3339Nano)
 		}
-		armed = e.dismissal != autoSettleDismissalOff
-		e.mu.Unlock()
+		held, armed = auto.Held, auto.DismissArmed
 	}
 	clone.AutoSettleDismissArmed = nil
 	if armed {
@@ -380,16 +370,6 @@ func (d *Daemon) decorateSessionWithAutoSettle(clone *protocol.Session) {
 	if held {
 		clone.AutoSettleHeld = protocol.Ptr(true)
 	}
-}
-
-func (d *Daemon) turnOwed(sessionID protocol.SessionID) bool {
-	session := cloneSession(d.store.Get(sessionID))
-	if session == nil {
-		return false
-	}
-	d.decorateChiefOfStaff(session, d.profileChiefs())
-	d.decorateSessionWithTurn(session)
-	return protocol.Deref(session.TurnOwed)
 }
 
 func (d *Daemon) autoSettleAppliesTo(session *protocol.Session) bool {
@@ -408,18 +388,19 @@ func (d *Daemon) decoratedSession(sessionID protocol.SessionID) *protocol.Sessio
 }
 
 func (d *Daemon) cancelAllAutoSettle() {
-	var visible []protocol.SessionID
-	for id, e := range d.monitors().each() {
+	for _, e := range d.monitors().each() {
 		e.mu.Lock()
 		_, wasVisible := e.stopAutoSettleLocked()
-		if wasVisible || e.dismissal != autoSettleDismissalOff {
-			visible = append(visible, id)
-		}
+		changed := wasVisible || e.dismissal != autoSettleDismissalOff
 		e.dismissal = autoSettleDismissalOff
+		var view monitorView
+		if changed {
+			view = e.viewLocked()
+		}
 		e.mu.Unlock()
-	}
-	for _, id := range visible {
-		d.broadcastSessionStateChanged(id)
+		if changed {
+			e.sink.Applied(view)
+		}
 	}
 }
 
