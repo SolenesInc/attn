@@ -3,11 +3,12 @@ package daemon
 import (
 	"time"
 
+	"github.com/victorarias/attn/internal/sessioncost"
+
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionstate"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type monitorRuntimeID string
@@ -80,24 +81,24 @@ type monitorExit struct {
 }
 
 type monitorView struct {
-	Conversation       monitorValue[monitorConversation]                 `fact:"session.conversation.changed"`
-	CostInitialized    monitorValue[bool]                                `fact:"session.cost.changed"`
-	Cost               monitorKeyedSet[string, *store.SessionCostSource] `fact:"session.cost.changed"`
-	FirstReportAt      monitorValue[time.Time]                           `fact:"-"`
-	Key                monitorValue[monitorKey]                          `fact:"-"`
-	Revision           monitorValue[uint64]                              `fact:"-"`
-	Succeeds           monitorValue[monitorKey]                          `fact:"-"`
-	State              monitorValue[monitorStateView]                    `fact:"session.state.changed"`
-	Turn               monitorValue[monitorTurnStamps]                   `fact:"session.state.changed"`
-	AutoSettle         monitorValue[monitorAutoSettleView]               `fact:"session.state.changed"`
-	LastModelRequestAt monitorValue[time.Time]                           `fact:"session.model_request.started"`
-	Driver             monitorValue[monitorDriverMetadata]               `fact:"session.state.changed"`
-	Branch             monitorValue[attngit.BranchInfo]                  `fact:"session.branch.changed"`
-	PullRequests       monitorKeyedSet[string, monitorPullRequest]       `fact:"session.pull_request.changed"`
-	SentFiles          monitorKeyedSet[string, uint64]                   `fact:"-"`
-	HarnessTitle       monitorValue[string]                              `fact:"session.renamed"`
-	Exit               monitorValue[*monitorExit]                        `fact:"session.pty.exited"`
-	Live               monitorValue[bool]                                `fact:"-"`
+	Conversation       monitorValue[monitorConversation]            `fact:"session.conversation.changed"`
+	CostInitialized    monitorValue[bool]                           `fact:"session.cost.changed"`
+	Cost               monitorKeyedSet[string, *sessioncost.Source] `fact:"session.cost.changed"`
+	FirstReportAt      monitorValue[time.Time]                      `fact:"-"`
+	Key                monitorValue[monitorKey]                     `fact:"-"`
+	Revision           monitorValue[uint64]                         `fact:"-"`
+	Succeeds           monitorValue[monitorKey]                     `fact:"-"`
+	State              monitorValue[monitorStateView]               `fact:"session.state.changed"`
+	Turn               monitorValue[monitorTurnStamps]              `fact:"session.state.changed"`
+	AutoSettle         monitorValue[monitorAutoSettleView]          `fact:"session.state.changed"`
+	LastModelRequestAt monitorValue[time.Time]                      `fact:"session.model_request.started"`
+	Driver             monitorValue[monitorDriverMetadata]          `fact:"session.state.changed"`
+	Branch             monitorValue[attngit.BranchInfo]             `fact:"session.branch.changed"`
+	PullRequests       monitorKeyedSet[string, monitorPullRequest]  `fact:"session.pull_request.changed"`
+	SentFiles          monitorKeyedSet[string, uint64]              `fact:"-"`
+	HarnessTitle       monitorValue[string]                         `fact:"session.renamed"`
+	Exit               monitorValue[*monitorExit]                   `fact:"session.pty.exited"`
+	Live               monitorValue[bool]                           `fact:"-"`
 }
 
 type monitorSink interface{ Applied(monitorView) bool }
@@ -126,7 +127,7 @@ func (e *monitorEntry) snapshotLocked() monitorView {
 		Conversation:       monitorValue[monitorConversation]{e.conversationInput},
 		Succeeds:           monitorValue[monitorKey]{e.succeeds},
 		CostInitialized:    monitorValue[bool]{e.costInitialized},
-		Cost:               monitorKeyedSet[string, *store.SessionCostSource]{Entries: e.cost},
+		Cost:               monitorKeyedSet[string, *sessioncost.Source]{Entries: e.cost},
 		Key:                monitorValue[monitorKey]{e.keyLocked()},
 		Revision:           monitorValue[uint64]{e.revision},
 		State:              monitorValue[monitorStateView]{state},

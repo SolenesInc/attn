@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/sessioncost"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type monitorCostOwner struct {
@@ -14,7 +13,7 @@ type monitorCostOwner struct {
 	Finalized bool
 }
 
-func (e *monitorEntry) loadCostLocked(state store.SessionMonitorCost) {
+func (e *monitorEntry) loadCostLocked(state sessioncost.Checkpoint) {
 	e.costInitialized, e.cost = state.Initialized, state.Sources
 	e.costOwners = make(map[string]monitorCostOwner)
 	for source, state := range e.cost {
@@ -27,10 +26,10 @@ func (e *monitorEntry) loadCostLocked(state store.SessionMonitorCost) {
 	}
 }
 
-func (e *monitorEntry) costCheckpoint() store.SessionMonitorCost {
+func (e *monitorEntry) costCheckpoint() sessioncost.Checkpoint {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return store.SessionMonitorCost{Initialized: e.costInitialized, Sources: e.cost}
+	return sessioncost.Checkpoint{Initialized: e.costInitialized, Sources: e.cost}
 }
 
 func (e *monitorEntry) initializeCostSources(cursors map[string]string, consumeLegacy bool) bool {
@@ -38,7 +37,7 @@ func (e *monitorEntry) initializeCostSources(cursors map[string]string, consumeL
 	changed := !e.costInitialized
 	sources := maps.Clone(e.cost)
 	if sources == nil {
-		sources = make(map[string]*store.SessionCostSource)
+		sources = make(map[string]*sessioncost.Source)
 	}
 	for id, cursor := range cursors {
 		if sources[id] != nil && sources[id].Initialized {
@@ -49,10 +48,10 @@ func (e *monitorEntry) initializeCostSources(cursors map[string]string, consumeL
 		sources[id] = source
 		changed = true
 	}
-	if consumeLegacy && sources[store.LegacySessionCostSource] != nil && sources[store.LegacySessionCostSource].Cursor != "" {
-		source := sources[store.LegacySessionCostSource].Clone()
+	if consumeLegacy && sources[sessioncost.LegacySource] != nil && sources[sessioncost.LegacySource].Cursor != "" {
+		source := sources[sessioncost.LegacySource].Clone()
 		source.Cursor = ""
-		sources[store.LegacySessionCostSource] = source
+		sources[sessioncost.LegacySource] = source
 		changed = true
 	}
 	if !changed {
@@ -65,14 +64,14 @@ func (e *monitorEntry) initializeCostSources(cursors map[string]string, consumeL
 	return e.sink.Applied(view)
 }
 
-func (e *monitorEntry) applyCostObservations(sourceID, cursor string, observations []store.SessionCostObservation) bool {
+func (e *monitorEntry) applyCostObservations(sourceID, cursor string, observations []sessioncost.Observation) bool {
 	e.mu.Lock()
 	sources := maps.Clone(e.cost)
 	if sources == nil {
-		sources = make(map[string]*store.SessionCostSource)
+		sources = make(map[string]*sessioncost.Source)
 	}
-	edited := make(map[string]*store.SessionCostSource)
-	edit := func(id string) *store.SessionCostSource {
+	edited := make(map[string]*sessioncost.Source)
+	edit := func(id string) *sessioncost.Source {
 		if source := edited[id]; source != nil {
 			return source
 		}
@@ -110,7 +109,7 @@ func (e *monitorEntry) applyCostObservations(sourceID, cursor string, observatio
 			source.Ledger = make(sessioncost.Ledger)
 		}
 		if source.Observations == nil {
-			source.Observations = make(map[string]store.SessionCostObservation)
+			source.Observations = make(map[string]sessioncost.Observation)
 		}
 		if seen {
 			key := sessioncost.RequestLedgerKey(prior.Model, prior.Purpose, prior.Usage)
@@ -145,7 +144,7 @@ func (e *monitorEntry) markCostSource(sourceID string, incomplete, unavailable b
 	}
 	sources := maps.Clone(e.cost)
 	if sources == nil {
-		sources = make(map[string]*store.SessionCostSource)
+		sources = make(map[string]*sessioncost.Source)
 	}
 	sources[sourceID] = source
 	e.costInitialized = e.costInitialized || unavailable || cursor != nil

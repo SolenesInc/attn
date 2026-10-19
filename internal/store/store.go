@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/sessioncost"
 	"log"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ type Store struct {
 	sessions               map[protocol.SessionID]*protocol.Session
 	turnStamps             map[protocol.SessionID]TurnStamps
 	activityCursors        map[protocol.SessionID]string
-	sessionCosts           map[protocol.SessionID]SessionMonitorCost
+	sessionCosts           map[protocol.SessionID]sessioncost.Checkpoint
 	sessionLabels          map[protocol.SessionID]SessionLabels
 	agentDriverRuns        map[protocol.SessionID]AgentDriverReportCursor
 	agentDriverTranscripts map[protocol.SessionID]string
@@ -114,7 +115,7 @@ func newMapBackedStore() *Store {
 		agentDriverRuns: make(map[protocol.SessionID]AgentDriverReportCursor),
 		teardownIntents: make(map[protocol.SessionID]SessionTeardownIntent),
 		sessionCloses:   make(map[protocol.SessionID]sessionCloseMark),
-		sessionCosts:    make(map[protocol.SessionID]SessionMonitorCost),
+		sessionCosts:    make(map[protocol.SessionID]sessioncost.Checkpoint),
 		sessionLabels:   make(map[protocol.SessionID]SessionLabels),
 		agentMetadata:   make(map[protocol.SessionID]string),
 		recentLocations: make(map[string]*protocol.RecentLocation),

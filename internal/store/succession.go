@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/sessioncost"
 	"strings"
 	"time"
 
@@ -129,7 +130,7 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 	if err != nil {
 		return err
 	}
-	cost, err := json.Marshal(SessionMonitorCost{Initialized: true})
+	cost, err := json.Marshal(sessioncost.Checkpoint{Initialized: true})
 	if err != nil {
 		return err
 	}

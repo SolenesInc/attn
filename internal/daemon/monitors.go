@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/victorarias/attn/internal/sessioncost"
+
 	"github.com/google/uuid"
 
 	attngit "github.com/victorarias/attn/internal/git"
@@ -15,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/statetrace"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type sessionMonitor struct {
@@ -52,7 +53,7 @@ type monitorEntry struct {
 	harnessTitle        string
 	exit                *monitorExit
 	costInitialized     bool
-	cost                map[string]*store.SessionCostSource
+	cost                map[string]*sessioncost.Source
 	costOwners          map[string]monitorCostOwner
 	evidence            sessionstate.ConversationEvidence
 	resolveAt           time.Time

@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"github.com/victorarias/attn/internal/sessioncost"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -55,7 +56,7 @@ func TestPerSourceCostsPreserveAccountingAndCursorsAcrossUpgradeAndRestart(t *te
 				if err != nil {
 					t.Fatal(err)
 				}
-				var want SessionMonitorCost
+				var want sessioncost.Checkpoint
 				if err := json.Unmarshal([]byte(c.want), &want); err != nil {
 					t.Fatal(err)
 				}

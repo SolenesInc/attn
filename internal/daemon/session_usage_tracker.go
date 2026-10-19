@@ -9,7 +9,6 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/sessioncost"
-	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -66,7 +65,7 @@ func (t *sessionUsageTracker) Reconcile() {
 		return
 	}
 	state := t.entry.costCheckpoint()
-	legacy := state.Sources[store.LegacySessionCostSource]
+	legacy := state.Sources[sessioncost.LegacySource]
 	legacyBaseline := legacy != nil && strings.TrimSpace(legacy.Cursor) != ""
 	if !state.Initialized || legacyBaseline {
 		cursors := make(map[string]string, len(sources))
@@ -171,8 +170,8 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 
 }
 
-func usageObservations(source transcript.UsageSource, usages []transcript.TokenUsage) []store.SessionCostObservation {
-	observations := make([]store.SessionCostObservation, 0, len(usages))
+func usageObservations(source transcript.UsageSource, usages []transcript.TokenUsage) []sessioncost.Observation {
+	observations := make([]sessioncost.Observation, 0, len(usages))
 	for _, usage := range usages {
 		model := strings.TrimSpace(usage.Model)
 		if model == "" {
@@ -186,7 +185,7 @@ func usageObservations(source transcript.UsageSource, usages []transcript.TokenU
 		if !source.Root {
 			observationID = "native:" + source.ID + ":" + usage.Key
 		}
-		observations = append(observations, store.SessionCostObservation{
+		observations = append(observations, sessioncost.Observation{
 			ObservationID: observationID,
 			Model:         model,
 			Purpose:       purpose,

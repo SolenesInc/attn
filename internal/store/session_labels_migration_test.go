@@ -1,6 +1,7 @@
 package store
 
 import (
+	"github.com/victorarias/attn/internal/sessioncost"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -69,7 +70,7 @@ func TestSplittingLabelsPreservesNamesAndTheirOwnersAcrossUpgradeAndRestart(t *t
 				t.Errorf("restart%d %s label=%q, want preserved %q", restart, id, label, c.label)
 			}
 			checkpoint, err := s.SessionCostCheckpoint(id)
-			if err != nil || !checkpoint.Initialized || checkpoint.Sources[LegacySessionCostSource] == nil || checkpoint.Sources[LegacySessionCostSource].Cursor != "saved-cost-cursor" || !checkpoint.Usage().UsageUnavailable {
+			if err != nil || !checkpoint.Initialized || checkpoint.Sources[sessioncost.LegacySource] == nil || checkpoint.Sources[sessioncost.LegacySource].Cursor != "saved-cost-cursor" || !checkpoint.Usage().UsageUnavailable {
 				t.Errorf("restart%d %s cost checkpoint=%+v (%v), want preserved cursor and unavailable flag", restart, id, checkpoint, err)
 			}
 		}

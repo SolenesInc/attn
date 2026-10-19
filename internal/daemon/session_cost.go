@@ -5,7 +5,6 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
@@ -16,7 +15,7 @@ func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
 	if err != nil {
 		return
 	}
-	cost := store.SessionCostUsage{UsageUnavailable: state.UsageUnavailable, MeasurementIncomplete: state.MeasurementIncomplete, Ledger: state.Ledger}
+	cost := sessioncost.Totals{UsageUnavailable: state.UsageUnavailable, MeasurementIncomplete: state.MeasurementIncomplete, Ledger: state.Ledger}
 	if usage := sessionUsage(cost, d.store.GetAllSettings()); usage != nil {
 		session.Usage = usage
 	}
@@ -50,7 +49,7 @@ func (d *Daemon) decorateLedgerEntryWithUsage(entry *protocol.SessionLedgerEntry
 	entry.Usage = sessionUsage(costs[entry.ID], d.store.GetAllSettings())
 }
 
-func sessionUsage(state store.SessionCostUsage, settings map[string]string) *protocol.SessionUsage {
+func sessionUsage(state sessioncost.Totals, settings map[string]string) *protocol.SessionUsage {
 	if state.UsageUnavailable {
 		return nil
 	}

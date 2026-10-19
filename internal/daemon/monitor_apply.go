@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/store"
 	"time"
 )
@@ -73,7 +74,7 @@ func (h monitorHome) saveView(session protocol.SessionID, previous, view monitor
 	}
 	costChanged, costDurable, usageChanged := monitorCostChange(previous, view)
 	if costChanged {
-		if err := d.store.ApplySessionCostSnapshot(session, store.SessionMonitorCost{Initialized: view.CostInitialized.V, Sources: view.Cost.Entries}, costDurable); err != nil {
+		if err := d.store.ApplySessionCostSnapshot(session, sessioncost.Checkpoint{Initialized: view.CostInitialized.V, Sources: view.Cost.Entries}, costDurable); err != nil {
 			return nil, false, fmt.Errorf("cost: %w", err)
 		}
 	}
