@@ -228,10 +228,10 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
   return release;
 }
 
-const FAILURE_EVIDENCE_REQUEST_TIMEOUT_MS = 5_000;
+const FAILURE_EVIDENCE_DEADLINE_MS = 15_000;
 
 export function registerNativeFailureEvidence(runner, { client, driver, selectors = () => ({}) }) {
-  const request = (action, payload) => client.request(action, payload, { timeoutMs: FAILURE_EVIDENCE_REQUEST_TIMEOUT_MS });
+  const request = (action, payload) => client.request(action, payload);
   runner.registerFailureEvidence('screenshot', async () => {
     const windowId = await driver.mainWindowId();
     if (!windowId) throw new Error('The app has no capturable window');
@@ -406,7 +406,12 @@ export function createScenarioRunner(options, {
   const captureFailureEvidence = async () => {
     if (cleanupPromise || failureEvidence.length === 0) return;
     appendTrace('failure_evidence:start', { count: failureEvidence.length });
-    const results = await Promise.allSettled(failureEvidence.map(({ fn }) => fn()));
+    let deadline;
+    const expired = new Promise((_, reject) => {
+      deadline = setTimeout(() => reject(new Error(`Failure evidence did not finish within ${FAILURE_EVIDENCE_DEADLINE_MS}ms`)), FAILURE_EVIDENCE_DEADLINE_MS);
+    });
+    const results = await Promise.allSettled(failureEvidence.map(({ fn }) => Promise.race([fn(), expired])));
+    clearTimeout(deadline);
     const evidence = Object.fromEntries(failureEvidence.map(({ name }, index) => [name,
       results[index].status === 'fulfilled' ? results[index].value : { error: normalizeError(results[index].reason) },
     ]));
