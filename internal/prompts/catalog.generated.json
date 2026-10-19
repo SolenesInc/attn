@@ -3865,6 +3865,18 @@
             "verbatim": true,
             "keep_final_newline": true
           }
+        },
+        {
+          "id": "technical-writing",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.technical-writing",
+            "source": "content/skills/attn-workflow/references/technical-writing.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
         }
       ]
     },

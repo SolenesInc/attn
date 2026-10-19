@@ -45,4 +45,8 @@ Build the lever: for work that is not trivial, write the tool that does it, a sc
 
 Sequence verifiable units: order multi-step work as small units that each end in a check, and verify each before starting the next, so a break is caught at the unit that caused it. Order the change's commits so a reviewer replays the proof: the failing test before the fix, the subtraction before the reshape, the baseline before the treatment.
 
-Attack the premise: when two fixes that share one assumption have failed the same check, write the assumption down and test it directly before writing a third. Each failed fix is evidence against the belief it rested on.
+Attack the premise: when two fixes that share one assumption have failed the same check, write the assumption down and test it directly before writing a third. Each failed fix is evidence against the belief it rested on. The design is the assumption when fixes pass but keep arriving in the same shape: special cases for unrelated edge cases, casts or optional fields that are always set, a lock where the design said nothing was shared, callers that must know the callee's internal rules. Stop patching. Redesign as if the new constraint had been known from the start, aiming smaller than the patched design, and bring the redesign to the coordinating agent named in the brief, or to the user when none is named, before more patches land.
+
+## Writing
+
+Text another reader acts on, such as a plan, a brief, a question for the user, a review, or a report, follows [Technical writing](references/technical-writing.md). Read it before writing one.
