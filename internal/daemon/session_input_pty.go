@@ -21,12 +21,12 @@ var sessionInputSubmitDelay = 150 * time.Millisecond
 
 const sessionInputHeldEnterKey = "\x00held-enter"
 
-func (m *sessionInputModule) holdEnterLocked(lane *sessionInputLane, sessionID protocol.SessionID, after time.Duration) {
+func (m sessionInputModule) holdEnterLocked(lane *sessionInputLane, sessionID protocol.SessionID, after time.Duration) {
 	lane.heldEnter = true
 	m.scheduleLocked(lane, sessionID, sessionInputHeldEnterKey, after, func() { m.pressHeldEnter(sessionID) })
 }
 
-func (m *sessionInputModule) dropHeldEnterLocked(lane *sessionInputLane) {
+func (m sessionInputModule) dropHeldEnterLocked(lane *sessionInputLane) {
 	lane.heldEnter = false
 	if entry := lane.retries[sessionInputHeldEnterKey]; entry != nil {
 		entry.timer.Stop()
@@ -34,7 +34,7 @@ func (m *sessionInputModule) dropHeldEnterLocked(lane *sessionInputLane) {
 	}
 }
 
-func (m *sessionInputModule) pressHeldEnter(sessionID protocol.SessionID) {
+func (m sessionInputModule) pressHeldEnter(sessionID protocol.SessionID) {
 	lane := m.lane(sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
@@ -54,19 +54,19 @@ func (m *sessionInputModule) pressHeldEnter(sessionID protocol.SessionID) {
 	m.dropHeldEnterLocked(lane)
 }
 
-func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID protocol.SessionID) bool {
+func (m sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID protocol.SessionID) bool {
 	if state := m.daemon.store.Get(sessionID); state != nil && state.State == protocol.SessionStatePendingApproval {
 		return true
 	}
 	return m.promptShowingLocked(ctx, sessionID)
 }
 
-func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID protocol.SessionID) bool {
+func (m sessionInputModule) promptShowingLocked(ctx context.Context, sessionID protocol.SessionID) bool {
 	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
 	return !known || selector
 }
 
-func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID protocol.SessionID, lane *sessionInputLane, allowUserComposer bool) error {
+func (m sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID protocol.SessionID, lane *sessionInputLane, allowUserComposer bool) error {
 	if !allowUserComposer {
 		if remaining := m.daemon.userInputQuietRemaining(sessionID, sessionInputQuietWindow); remaining > 0 {
 			return &sessionInputQuietError{retryAfter: remaining}
@@ -83,13 +83,17 @@ func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID prot
 	return nil
 }
 
-func (m *sessionInputModule) writePTY(ctx context.Context, terminal harness.TerminalID, sessionID protocol.SessionID, data []byte, source string) error {
-	lane := m.lane(sessionID)
-	if !lane.mu.TryLock() {
-		pausepoint.At(pausepoint.SessionInputLaneContended)
-		lane.mu.Lock()
+func (m sessionInputModule) writePTY(ctx context.Context, terminal harness.TerminalID, sessionID protocol.SessionID, data []byte, source string) error {
+	entry := m.daemon.monitorEntry(sessionID)
+	if entry == nil {
+		return errSessionInputLaneClosed
 	}
-	defer lane.mu.Unlock()
+	if !entry.mu.TryLock() {
+		pausepoint.At(pausepoint.SessionInputLaneContended)
+		entry.mu.Lock()
+	}
+	defer entry.mu.Unlock()
+	lane := entry.input
 	if m.daemon.ptyBackend == nil {
 		return errors.New("session has no PTY backend")
 	}
@@ -98,7 +102,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, terminal harness.Term
 			lane.phase = session.State
 		}
 	}
-	if m.daemon.noteUserInput(terminal, sessionID, source, data) {
+	if m.daemon.noteUserInput(lane, terminal, sessionID, source, data) {
 		if lane.heldEnter && m.promptShowingLocked(ctx, sessionID) {
 			return m.daemon.ptyBackend.Input(ctx, terminal, data)
 		}
@@ -112,7 +116,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, terminal harness.Term
 	return m.daemon.ptyBackend.Input(ctx, terminal, data)
 }
 
-func (m *sessionInputModule) clearUnstartedUserSubmitLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
+func (m sessionInputModule) clearUnstartedUserSubmitLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
 	if lane.run != nil || !lane.userSubmit {
 		return
 	}
@@ -136,7 +140,7 @@ func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.Terminal
 }
 
 // A held Enter still counts as custody: the paste already sits in the harness's composer.
-func (m *sessionInputModule) placePTYLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery) sessionInputAttempt {
+func (m sessionInputModule) placePTYLocked(ctx context.Context, lane *sessionInputLane, delivery sessionInputDelivery) sessionInputAttempt {
 	if m.daemon.ptyBackend == nil {
 		return sessionInputAttempt{stage: sessionInputDeferred, err: errors.New("session has no input route")}
 	}

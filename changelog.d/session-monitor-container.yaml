@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: Group live session monitoring by terminal and conversation, with one entry lock for state, input and auto-settle.

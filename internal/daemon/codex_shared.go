@@ -461,7 +461,7 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	if again || r.d.store.Get(sessionID) == nil {
 		return
 	}
-	r.d.drainTranscriptWatcher(sessionID)()
+	r.d.finishMonitorUsage(sessionID)()
 	r.observe(sessionID, pty.ProgramIdle)
 }
 

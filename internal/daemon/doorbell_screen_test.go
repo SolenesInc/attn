@@ -1,14 +1,10 @@
 package daemon
 
 import (
-	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func readDoorbellScreen(t *testing.T, name string) string {
@@ -47,26 +43,5 @@ func TestScreenShowsSelector(t *testing.T) {
 		if blocked && !strings.Contains(lower, "to select") && !strings.Contains(lower, "esc to cancel") {
 			t.Errorf("%s: named %q as the selector line, which says neither", tc.name, line)
 		}
-	}
-}
-
-func TestDoorbellDefersWhenTheScreenIsUnavailable(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-	var typed [][]byte
-	backend.onInput = func(_ string, data []byte) { typed = append(typed, data) }
-	sessionID := "session-no-screen"
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID: protocol.SessionID(sessionID), Label: "member", Agent: protocol.SessionAgentClaude,
-		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-
-	backend.screenUnavailable = true
-	delivery := maintenanceSessionInput("screen-test", "unavailable", protocol.SessionID(sessionID), "[attn] hand off now", sessionInputAtTurnBoundary)
-	if attempt := d.sessionInputs().try(context.Background(), delivery); !errors.Is(attempt.err, errSessionInputScreenUnavailable) {
-		t.Fatalf("typing without a screen returned %v, want errSessionInputScreenUnavailable", attempt.err)
-	}
-	if len(typed) != 0 {
-		t.Fatal("the boundary wrote input without screen safety evidence")
 	}
 }

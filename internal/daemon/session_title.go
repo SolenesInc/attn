@@ -71,30 +71,36 @@ func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID protocol.SessionI
 }
 
 func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID protocol.SessionID, prompt string) {
-	d.sessionTitleMu.Lock()
-	defer d.sessionTitleMu.Unlock()
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" {
-		delete(d.sessionTitleInitialPrompt, sessionID)
+	e := d.monitorEntry(sessionID)
+	if e == nil {
 		return
 	}
-	if d.sessionTitleInitialPrompt == nil {
-		d.sessionTitleInitialPrompt = make(map[protocol.SessionID][sha256.Size]byte)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	prompt = strings.TrimSpace(prompt)
+	e.titleInitialPrompt = nil
+	if prompt != "" {
+		fingerprint := sha256.Sum256([]byte(prompt))
+		e.titleInitialPrompt = &fingerprint
 	}
-	d.sessionTitleInitialPrompt[sessionID] = sha256.Sum256([]byte(prompt))
 }
 
 func (d *Daemon) forgetSessionTitleInitialPrompt(sessionID protocol.SessionID) {
-	d.sessionTitleMu.Lock()
-	defer d.sessionTitleMu.Unlock()
-	delete(d.sessionTitleInitialPrompt, sessionID)
+	if e := d.monitorEntry(sessionID); e != nil {
+		e.mu.Lock()
+		e.titleInitialPrompt = nil
+		e.mu.Unlock()
+	}
 }
 
 func (d *Daemon) matchSessionTitleInitialPrompt(sessionID protocol.SessionID, prompt string) bool {
-	d.sessionTitleMu.Lock()
-	defer d.sessionTitleMu.Unlock()
-	remembered, ok := d.sessionTitleInitialPrompt[sessionID]
-	return ok && remembered == sha256.Sum256([]byte(prompt))
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.titleInitialPrompt != nil && *e.titleInitialPrompt == sha256.Sum256([]byte(prompt))
 }
 
 func (d *Daemon) sessionWantsAutoTitle(sessionID protocol.SessionID) bool {
@@ -105,10 +111,13 @@ func (d *Daemon) sessionWantsAutoTitle(sessionID protocol.SessionID) bool {
 	if session == nil || !d.sessionMayBeAutoTitled(session) {
 		return false
 	}
-	d.sessionTitleMu.Lock()
-	defer d.sessionTitleMu.Unlock()
-	_, attempted := d.sessionTitleAttempted[sessionID]
-	return !attempted
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return !e.titleAttempted
 }
 
 func (d *Daemon) enqueueSessionTitle(sessionID protocol.SessionID, conversation string, source string) {
@@ -117,18 +126,19 @@ func (d *Daemon) enqueueSessionTitle(sessionID protocol.SessionID, conversation 
 		return
 	}
 
-	d.sessionTitleMu.Lock()
-	if _, attempted := d.sessionTitleAttempted[sessionID]; attempted {
-		d.sessionTitleMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
 		return
 	}
-	if d.sessionTitleAttempted == nil {
-		d.sessionTitleAttempted = make(map[protocol.SessionID]struct{})
+	e.mu.Lock()
+	if e.titleAttempted {
+		e.mu.Unlock()
+		return
 	}
-	d.sessionTitleAttempted[sessionID] = struct{}{}
-	fingerprint, hadFingerprint := d.sessionTitleInitialPrompt[sessionID]
-	delete(d.sessionTitleInitialPrompt, sessionID)
-	d.sessionTitleMu.Unlock()
+	e.titleAttempted = true
+	fingerprint := e.titleInitialPrompt
+	e.titleInitialPrompt = nil
+	e.mu.Unlock()
 
 	_, err := runner.Enqueue(sessionTitleKind, jobs.EnqueueOptions{
 		UniqueKey:   string(sessionID),
@@ -139,12 +149,12 @@ func (d *Daemon) enqueueSessionTitle(sessionID protocol.SessionID, conversation 
 		return
 	}
 	d.logf("session title %s: enqueue: %v", sessionID, err)
-	d.sessionTitleMu.Lock()
-	delete(d.sessionTitleAttempted, sessionID)
-	if _, newer := d.sessionTitleInitialPrompt[sessionID]; hadFingerprint && !newer {
-		d.sessionTitleInitialPrompt[sessionID] = fingerprint
+	e.mu.Lock()
+	e.titleAttempted = false
+	if fingerprint != nil && e.titleInitialPrompt == nil {
+		e.titleInitialPrompt = fingerprint
 	}
-	d.sessionTitleMu.Unlock()
+	e.mu.Unlock()
 }
 
 func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, error) {

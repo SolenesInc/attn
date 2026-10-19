@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -9,56 +8,12 @@ import (
 
 const pluginDriverSilenceGrace = 2 * time.Minute
 
-type pluginDriverSilenceWatch struct {
-	mu     sync.Mutex
-	life   *lifetime
-	armed  map[protocol.SessionID]*time.Timer
-	closed bool
-}
-
-func newPluginDriverSilenceWatch(life *lifetime) *pluginDriverSilenceWatch {
-	return &pluginDriverSilenceWatch{life: life, armed: map[protocol.SessionID]*time.Timer{}}
-}
-
-func (w *pluginDriverSilenceWatch) arm(sessionID protocol.SessionID, grace time.Duration, fire func()) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.closed {
-		return
+func (d *Daemon) stopPluginDriverSilence() {
+	r := d.monitors()
+	r.closed.Store(true)
+	for id := range r.each() {
+		d.forgetPluginDriverSilenceWatch(id)
 	}
-	if timer, ok := w.armed[sessionID]; ok {
-		timer.Stop()
-	}
-	w.armed[sessionID] = w.life.AfterFunc("pluginDriverSilence", grace, fire)
-}
-
-func (w *pluginDriverSilenceWatch) disarm(sessionID protocol.SessionID) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	timer, ok := w.armed[sessionID]
-	if !ok {
-		return false
-	}
-	timer.Stop()
-	delete(w.armed, sessionID)
-	return true
-}
-
-func (w *pluginDriverSilenceWatch) stop() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.closed = true
-	for id, timer := range w.armed {
-		timer.Stop()
-		delete(w.armed, id)
-	}
-}
-
-func (d *Daemon) pluginDriverSilence() *pluginDriverSilenceWatch {
-	d.pluginDriverSilenceOnce.Do(func() {
-		d.pluginDriverSilenceWatch = newPluginDriverSilenceWatch(&d.life)
-	})
-	return d.pluginDriverSilenceWatch
 }
 
 func (d *Daemon) armPluginDriverSilenceWatch(pluginName string) {
@@ -80,30 +35,32 @@ func (d *Daemon) armPluginDriverSilenceWatchForEveryRun() {
 }
 
 func (d *Daemon) armPluginDriverSilenceWatchForRun(sessionID protocol.SessionID, runID string, pluginName string) {
-	grace := d.pluginDriverSilenceGrace()
-	if grace <= 0 {
+	grace := pluginDriverSilenceGrace
+	r := d.monitors()
+	e := r.entry(sessionID)
+	if e == nil {
 		return
 	}
-	d.pluginDriverSilence().arm(sessionID, grace, func() {
-		d.declarePluginDriverSilent(sessionID, runID, pluginName, grace)
-	})
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if r.closed.Load() {
+		return
+	}
+
+	if e.silence != nil {
+		e.silence.Stop()
+	}
+	e.silence = d.life.AfterFunc("pluginDriverSilence", grace, func() { d.declarePluginDriverSilent(sessionID, runID, pluginName, grace) })
 }
 
 func (d *Daemon) notePluginDriverReport(sessionID protocol.SessionID) {
-	if d.pluginDriverSilence().disarm(sessionID) {
+	if d.disarmPluginDriverSilence(sessionID) {
 		d.logf("plugin driver silence cleared: session=%s", sessionID)
 	}
 }
 
 func (d *Daemon) forgetPluginDriverSilenceWatch(sessionID protocol.SessionID) {
-	d.pluginDriverSilence().disarm(sessionID)
-}
-
-func (d *Daemon) pluginDriverSilenceGrace() time.Duration {
-	if d.pluginDriverSilenceGraceOverride > 0 {
-		return d.pluginDriverSilenceGraceOverride
-	}
-	return pluginDriverSilenceGrace
+	d.disarmPluginDriverSilence(sessionID)
 }
 
 func (d *Daemon) declarePluginDriverSilent(sessionID protocol.SessionID, runID string, pluginName string, grace time.Duration) {
@@ -137,4 +94,19 @@ var pluginDriverDeclaredStates = map[protocol.SessionState]bool{
 	protocol.SessionStateIdle:            true,
 	protocol.SessionStateWaitingInput:    true,
 	protocol.SessionStatePendingApproval: true,
+}
+
+func (d *Daemon) disarmPluginDriverSilence(sessionID protocol.SessionID) bool {
+	e := d.monitorEntry(sessionID)
+	if e == nil {
+		return false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.silence == nil {
+		return false
+	}
+	e.silence.Stop()
+	e.silence = nil
+	return true
 }

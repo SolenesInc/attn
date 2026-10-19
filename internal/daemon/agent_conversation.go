@@ -108,29 +108,33 @@ func conversationDecidesIdentity(driver agentdriver.Driver) bool {
 }
 
 func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation) {
-	d.pendingConversationMu.Lock()
-	if d.store.Get(observation.SessionID) == nil {
-		if d.pendingConversation == nil {
-			d.pendingConversation = make(map[protocol.SessionID]agentConversationObservation)
-		}
-		d.pendingConversation[observation.SessionID] = observation
-		d.pendingConversationMu.Unlock()
+	e := d.monitorEntry(observation.SessionID)
+	if e == nil {
 		return
 	}
-	d.pendingConversationMu.Unlock()
+	e.mu.Lock()
+	if d.store.Get(observation.SessionID) == nil {
+		e.pendingConversation = &observation
+		e.mu.Unlock()
+		return
+	}
+	e.mu.Unlock()
 	d.observeAgentConversation(observation)
 }
 
 func (d *Daemon) consumePendingAgentConversation(sessionID protocol.SessionID) (agentConversationObservation, bool) {
-	sessionID = protocol.TrimID(sessionID)
-	if sessionID == "" {
+	e := d.monitorEntry(protocol.TrimID(sessionID))
+	if e == nil {
 		return agentConversationObservation{}, false
 	}
-	d.pendingConversationMu.Lock()
-	defer d.pendingConversationMu.Unlock()
-	observation, ok := d.pendingConversation[sessionID]
-	delete(d.pendingConversation, sessionID)
-	return observation, ok
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	observation := e.pendingConversation
+	e.pendingConversation = nil
+	if observation == nil {
+		return agentConversationObservation{}, false
+	}
+	return *observation, true
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
@@ -156,6 +160,7 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 		return true
 	}
 
+	d.startSessionMonitor(observation.SessionID)
 	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, string(observation.SessionID), observation)

@@ -1,14 +1,8 @@
 package daemon
 
 import (
-	"path/filepath"
 	"testing"
 )
-
-func newBubbleDaemon(t *testing.T) *Daemon {
-	t.Helper()
-	return NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-}
 
 func stopDaemonBackground(t *testing.T, d *Daemon) {
 	t.Helper()
@@ -19,6 +13,6 @@ func stopDaemonBackground(t *testing.T, d *Daemon) {
 		d.stopAutoSettleTimers()
 		d.stopNotebookWatcher()
 		d.stopFsWatchers()
-		d.pluginDriverSilence().stop()
+		d.stopPluginDriverSilence()
 	})
 }

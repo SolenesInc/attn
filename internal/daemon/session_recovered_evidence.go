@@ -13,11 +13,11 @@ func (d *Daemon) seedRecoveredEvidence(sessionID protocol.SessionID, existing *p
 	if d == nil || existing == nil {
 		return
 	}
-	var seeds []func(*sessionstate.Evidence)
+	var seeds []func(*monitorEvidence)
 	var at time.Time
 	if route, ok := d.recoveredApprovalRoute(sessionID); ok {
 		inLoop := route.ReviewerInLoop()
-		seeds = append(seeds, func(e *sessionstate.Evidence) { e.ReviewerInLoop = inLoop })
+		seeds = append(seeds, func(e *monitorEvidence) { e.ReviewerInLoop = inLoop })
 		at = time.Now()
 	}
 	if info.HasLastSignal {
@@ -37,14 +37,14 @@ func (d *Daemon) seedRecoveredEvidence(sessionID protocol.SessionID, existing *p
 	if len(seeds) == 0 {
 		return
 	}
-	d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
+	d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
 		for _, seed := range seeds {
 			seed(e)
 		}
 	})
 }
 
-func recoveredHarnessEdge(existing *protocol.Session, info ptybackend.SessionInfo) (func(*sessionstate.Evidence), time.Time, bool) {
+func recoveredHarnessEdge(existing *protocol.Session, info ptybackend.SessionInfo) (func(*monitorEvidence), time.Time, bool) {
 	claim, ok := recoveredHarnessClaim(existing.State)
 	if !ok {
 		return nil, time.Time{}, false
@@ -56,7 +56,7 @@ func recoveredHarnessEdge(existing *protocol.Session, info ptybackend.SessionInf
 	if info.HasLastSignal && (recordClaims(info.LastSignal, claim) || info.LastSignal.At.After(concludedAt)) {
 		return nil, time.Time{}, false
 	}
-	return func(e *sessionstate.Evidence) {
+	return func(e *monitorEvidence) {
 		e.LastHarnessEvent = &sessionstate.Observation{
 			Source:     sessionstate.SourceHarnessEvent,
 			Claim:      claim,

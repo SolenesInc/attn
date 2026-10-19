@@ -69,7 +69,15 @@ func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {
 	if !until.After(now) {
 		return fmt.Errorf("session %s: until %s is in the past; choose a future instant", sessionID, msg.Until)
 	}
-	if !d.store.SnoozeTurn(sessionID, until, now) {
+	entry := d.monitorEntry(sessionID)
+	if entry != nil {
+		entry.mu.Lock()
+	}
+	snoozed := d.store.SnoozeTurn(sessionID, until, now)
+	if entry != nil {
+		entry.mu.Unlock()
+	}
+	if !snoozed {
 		return fmt.Errorf("session %s: could not save snooze", sessionID)
 	}
 	d.cancelAutoSettle(sessionID, "snoozed")
@@ -108,6 +116,10 @@ func (d *Daemon) wakeSnooze(sessionID protocol.SessionID, at time.Time, cause st
 }
 
 func (d *Daemon) applySnoozeWakeAt(sessionID protocol.SessionID, deadline, at time.Time) bool {
+	if e := d.monitorEntry(sessionID); e != nil {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+	}
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return false
@@ -151,7 +163,7 @@ func (d *Daemon) turnOpeningFor(sessionID protocol.SessionID, state protocol.Ses
 	if !attention.OpensTurn(state) {
 		return store.TurnOpening{}
 	}
-	return store.TurnOpening{Opens: true, BreaksSnooze: attention.BreaksSnooze(state, d.stateReasons().get(sessionID))}
+	return store.TurnOpening{Opens: true, BreaksSnooze: attention.BreaksSnooze(state, d.stateReason(sessionID))}
 }
 
 func (d *Daemon) dropEndedSnoozeWake(sessionID protocol.SessionID, state string, ended time.Time) {
@@ -166,7 +178,7 @@ func (d *Daemon) dropEndedSnoozeWake(sessionID protocol.SessionID, state string,
 		if !ended.After(time.Now()) {
 			cause = "expired"
 		}
-		d.logf("snooze %s: session=%s state=%s reason=%s", cause, sessionID, state, d.stateReasons().get(sessionID))
+		d.logf("snooze %s: session=%s state=%s reason=%s", cause, sessionID, state, d.stateReason(sessionID))
 	}
 }
 

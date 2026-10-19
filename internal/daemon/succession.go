@@ -7,7 +7,6 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -45,7 +44,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	release := func() {}
 	if !sc.KeepFrom {
-		release = d.drainTranscriptWatcher(from.ID)
+		release = d.finishMonitorUsage(from.ID)
 		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
 			d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
 		}
@@ -63,23 +62,12 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		return err
 	}
 
-	d.sessionInputs().handOverSubmit(from.ID, sc.To)
-	terminal, _ := d.evidenceTable().snapshot(from.ID)
-	if sc.KeepTo {
-		d.updateEvidence(sc.To, nil, func(e *sessionstate.Evidence) {
-			e.Heartbeat, e.ProgramStatus = terminal.Heartbeat, terminal.ProgramStatus
-		})
-		d.ensureTranscriptWatcherAtPath(sc.To, observation.TranscriptPath)
-	} else {
-		d.startEvidence(sc.To, sessionstate.Evidence{
-			Heartbeat:      terminal.Heartbeat,
-			ProgramStatus:  terminal.ProgramStatus,
-			Process:        terminal.Process,
-			ReviewerInLoop: terminal.ReviewerInLoop,
-			LastBusyAt:     terminal.LastBusyAt,
-			LastMovement:   terminal.LastMovement,
-		})
+	d.startSessionMonitorFrom(sc.To, from.ID)
+	if !sc.KeepTo {
+		d.resolveSoon(sc.To)
 		d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
+	} else {
+		d.ensureTranscriptWatcherAtPath(sc.To, observation.TranscriptPath)
 	}
 	d.publishFact(FactSessionRegistered, string(sc.To), nil)
 	d.publishArrangementChanged(from.ProfileID)
@@ -92,7 +80,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		d.publishSessionUnregistered(from)
 	} else {
 		if d.hidden(from.ID) {
-			d.updateEvidence(from.ID, nil, func(e *sessionstate.Evidence) {
+			d.updateEvidence(from.ID, nil, func(e *monitorEvidence) {
 				e.Heartbeat = nil
 				e.ClearProgramStatus()
 			})
@@ -101,35 +89,4 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, sc.To, observation.NativeID)
 	return nil
-}
-
-// drainTranscriptWatcher stops a session's usage watchers, waits for their last reconcile, and refuses
-// new ones until release.
-func (d *Daemon) drainTranscriptWatcher(sessionID protocol.SessionID) (release func()) {
-	d.watchersMu.Lock()
-	if d.usageDraining == nil {
-		d.usageDraining = make(map[protocol.SessionID]bool)
-	}
-	d.usageDraining[sessionID] = true
-	watcher := d.transcriptWatch[sessionID]
-	pluginWatcher := d.pluginUsageWatch[sessionID]
-	delete(d.transcriptWatch, sessionID)
-	delete(d.pluginUsageWatch, sessionID)
-	idle := d.usageIdle[sessionID]
-	d.watchersMu.Unlock()
-	if pluginWatcher != nil {
-		close(pluginWatcher.stopCh)
-	}
-	if watcher != nil {
-		close(watcher.stopCh)
-	}
-	if idle != nil {
-		<-idle
-	}
-	d.reconcileDeferredUsage(sessionID)
-	return func() {
-		d.watchersMu.Lock()
-		delete(d.usageDraining, sessionID)
-		d.watchersMu.Unlock()
-	}
 }

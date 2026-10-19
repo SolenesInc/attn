@@ -110,6 +110,11 @@ func (r *Run) StopReadingTerminal() {
 	r.call(methodStopRead, struct{}{}, nil)
 }
 
+func (r *Run) ProgramStatus(fields string) {
+	r.t.Helper()
+	r.call(methodStatus, textParams{Text: fields}, nil)
+}
+
 func (r *Run) call(method string, params, result any) {
 	r.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
