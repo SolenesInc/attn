@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -120,7 +121,7 @@ func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time
 	if since.IsZero() {
 		return true
 	}
-	path := d.monitorEntry(session.ID).activityTranscript()
+	path := d.monitorEntry(session.ID).ActivityTranscript()
 	if path == "" {
 		return false
 	}
@@ -151,7 +152,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 		return
 	}
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(sessionID))
-	if d.monitorEntry(sessionID).activityTranscript() == "" {
+	if d.monitorEntry(sessionID).ActivityTranscript() == "" {
 		return
 	}
 	runner := d.jobQueueRef()
@@ -200,7 +201,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	}
 	resumeID := strings.TrimSpace(carried.ResumeID)
 	monitor := d.monitorEntry(sessionID)
-	transcriptPath := monitor.activityTranscript()
+	transcriptPath := monitor.ActivityTranscript()
 	if transcriptPath == "" {
 		return nil, nil
 	}
@@ -212,7 +213,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if stored.Cursor == "" {
 		return nil, d.reseedSessionActivity(monitor, sessionID, resumeID)
 	}
-	window, err := monitor.transcriptEvents(stored.Cursor)
+	window, err := monitor.TranscriptEvents(stored.Cursor)
 	switch {
 	case err == nil:
 	case errors.Is(err, transcript.ErrCursorMismatch) ||
@@ -302,8 +303,8 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	return nil, nil
 }
 
-func (d *Daemon) reseedSessionActivity(monitor *monitorEntry, sessionID protocol.SessionID, resumeID string) error {
-	head, err := monitor.transcriptHead()
+func (d *Daemon) reseedSessionActivity(monitor *sessionmonitor.Entry, sessionID protocol.SessionID, resumeID string) error {
+	head, err := monitor.TranscriptHead()
 	if err != nil {
 		return fmt.Errorf("session_activity: seed cursor for %s: %w", sessionID, err)
 	}

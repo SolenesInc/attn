@@ -1,0 +1,76 @@
+package sessionmonitor
+
+import (
+	"bytes"
+	"context"
+	"time"
+
+	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
+)
+
+const (
+	pasteStart = "\x1b[200~"
+	pasteEnd   = "\x1b[201~"
+)
+
+var SubmitDelay = 150 * time.Millisecond
+
+func (l *lane) ptySafetyLocked(allowUserComposer bool) error {
+	if allowUserComposer {
+		return nil
+	}
+	if remaining := quietRemaining(l.entry.home.LastKey(), QuietWindow); remaining > 0 {
+		return &quietError{retryAfter: remaining}
+	}
+	return nil
+}
+
+func (e *Entry) WriteInput(ctx context.Context, terminal harness.TerminalID, data []byte, source string) error {
+	if e == nil {
+		return ErrLaneClosed
+	}
+	if !e.mu.TryLock() {
+		pausepoint.At(pausepoint.SessionInputLaneContended)
+		e.mu.Lock()
+	}
+	defer e.mu.Unlock()
+	l := e.input
+	if l.phase == "" {
+		l.phase = e.state.State
+	}
+	if e.noteUserInputLocked(terminal, source, data) && bytes.ContainsAny(data, "\r\n") {
+		l.userSubmit = true
+	}
+	return e.home.Input(ctx, terminal, data)
+}
+
+func (l *lane) clearUnstartedUserSubmitLocked() {
+	if l.run == nil {
+		l.userSubmit = false
+	}
+}
+
+func (l *lane) placePTYLocked(ctx context.Context, delivery Delivery) Attempt {
+	e := l.entry
+	if err := l.ptySafetyLocked(delivery.AllowUserComposer); err != nil {
+		l.armRetryLocked(delivery, err)
+		return Attempt{Stage: Deferred, Err: err}
+	}
+	l.clearUnstartedUserSubmitLocked()
+
+	input := make([]byte, 0, len(pasteStart)+len(delivery.Text)+len(pasteEnd))
+	input = append(input, pasteStart...)
+	input = append(input, delivery.Text...)
+	input = append(input, pasteEnd...)
+	terminal := e.home.PrimaryTerminal()
+	if err := e.home.Input(ctx, terminal, input); err != nil {
+		return Attempt{Stage: Failed, Err: err}
+	}
+	pausepoint.At(pausepoint.SessionInputPasteGap)
+	time.Sleep(SubmitDelay)
+	if err := e.home.Input(ctx, terminal, []byte("\r")); err != nil {
+		return Attempt{Stage: Failed, Err: err}
+	}
+	return Attempt{Stage: Placed, At: time.Now()}
+}

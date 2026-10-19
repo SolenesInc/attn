@@ -1,4 +1,4 @@
-package daemon
+package sessionmonitor
 
 import (
 	"maps"
@@ -8,31 +8,31 @@ import (
 	"github.com/victorarias/attn/internal/sessioncost"
 )
 
-type monitorCostOwner struct {
+type costOwner struct {
 	Source    string
 	Finalized bool
 }
 
-func (e *monitorEntry) loadCostLocked(state sessioncost.Checkpoint) {
+func (e *Entry) loadCostLocked(state sessioncost.Checkpoint) {
 	e.costInitialized, e.cost = state.Initialized, state.Sources
-	e.costOwners = make(map[string]monitorCostOwner)
+	e.costOwners = make(map[string]costOwner)
 	for source, state := range e.cost {
 		for id := range state.Observations {
-			e.costOwners[id] = monitorCostOwner{Source: source}
+			e.costOwners[id] = costOwner{Source: source}
 		}
 		for _, id := range state.Finalized {
-			e.costOwners[id] = monitorCostOwner{Source: source, Finalized: true}
+			e.costOwners[id] = costOwner{Source: source, Finalized: true}
 		}
 	}
 }
 
-func (e *monitorEntry) costCheckpoint() sessioncost.Checkpoint {
+func (e *Entry) costCheckpoint() sessioncost.Checkpoint {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return sessioncost.Checkpoint{Initialized: e.costInitialized, Sources: e.cost}
 }
 
-func (e *monitorEntry) initializeCostSources(cursors map[string]string, consumeLegacy bool) bool {
+func (e *Entry) initializeCostSources(cursors map[string]string, consumeLegacy bool) bool {
 	e.mu.Lock()
 	changed := !e.costInitialized
 	sources := maps.Clone(e.cost)
@@ -61,10 +61,10 @@ func (e *monitorEntry) initializeCostSources(cursors map[string]string, consumeL
 	e.costInitialized, e.cost = true, sources
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.sink.Applied(view)
+	return e.home.Applied(view)
 }
 
-func (e *monitorEntry) applyCostObservations(sourceID, cursor string, observations []sessioncost.Observation) bool {
+func (e *Entry) applyCostObservations(sourceID, cursor string, observations []sessioncost.Observation) bool {
 	e.mu.Lock()
 	sources := maps.Clone(e.cost)
 	if sources == nil {
@@ -82,7 +82,7 @@ func (e *monitorEntry) applyCostObservations(sourceID, cursor string, observatio
 	observed := edit(sourceID)
 	observed.Cursor, observed.Initialized = cursor, true
 	if e.costOwners == nil {
-		e.costOwners = make(map[string]monitorCostOwner)
+		e.costOwners = make(map[string]costOwner)
 	}
 	for _, observation := range observations {
 		observation.ObservationID = strings.TrimSpace(observation.ObservationID)
@@ -96,7 +96,7 @@ func (e *monitorEntry) applyCostObservations(sourceID, cursor string, observatio
 			continue
 		}
 		if !exists {
-			owner = monitorCostOwner{Source: sourceID}
+			owner = costOwner{Source: sourceID}
 			e.costOwners[observation.ObservationID] = owner
 		}
 		source := sources[owner.Source]
@@ -124,10 +124,10 @@ func (e *monitorEntry) applyCostObservations(sourceID, cursor string, observatio
 	e.costInitialized, e.cost = true, sources
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.sink.Applied(view)
+	return e.home.Applied(view)
 }
 
-func (e *monitorEntry) markCostSource(sourceID string, incomplete, unavailable bool, cursor *string) bool {
+func (e *Entry) markCostSource(sourceID string, incomplete, unavailable bool, cursor *string) bool {
 	e.mu.Lock()
 	source := e.cost[sourceID].Clone()
 	source.MeasurementIncomplete = source.MeasurementIncomplete || incomplete
@@ -151,10 +151,10 @@ func (e *monitorEntry) markCostSource(sourceID string, incomplete, unavailable b
 	e.cost = sources
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.sink.Applied(view)
+	return e.home.Applied(view)
 }
 
-func monitorCostChange(previous, view monitorView) (changed, durable, usageChanged bool) {
+func CostChange(previous, view View) (changed, durable, usageChanged bool) {
 	if previous.CostInitialized.V != view.CostInitialized.V {
 		changed, durable = true, true
 	}
@@ -174,4 +174,13 @@ func monitorCostChange(previous, view monitorView) (changed, durable, usageChang
 		}
 	}
 	return
+}
+
+func (e *Entry) StartCost() {
+	if e == nil {
+		return
+	}
+	if e != nil {
+		e.initializeCostSources(nil, false)
+	}
 }

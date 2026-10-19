@@ -22,6 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -690,7 +691,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 	if probeID != "" {
 		probeStartedAt = time.Now()
 	}
-	userTyped := isComposerKeystroke(source, []byte(msg.Data))
+	userTyped := sessionmonitor.IsComposerKeystroke(source, []byte(msg.Data))
 	if d.debugLogging {
 		d.logf(
 			"pty_input: id=%s bytes=%d preview=%q source=%s",
@@ -704,7 +705,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 	if userTyped {
 		// Hold the existing timer before the agent can take this input and arm a new one.
 		if sessionID, shown := d.shownIn(terminal); shown {
-			d.holdAutoSettle(sessionID)
+			d.monitorEntry(sessionID).HoldAutoSettle()
 		}
 	}
 	writeErr := d.writeTerminalPTY(context.Background(), terminal, []byte(msg.Data), source)
@@ -733,8 +734,8 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 
 func (d *Daemon) handleTerminalPointerActivity(msg *protocol.TerminalPointerActivityMessage) {
 	sessionID, shown := d.shownIn(msg.ID)
-	if shown && d.noteAutoSettleActivity(sessionID) {
-		d.holdAutoSettle(sessionID)
+	if shown && d.monitorEntry(sessionID).NoteActivity() {
+		d.monitorEntry(sessionID).HoldAutoSettle()
 	}
 }
 

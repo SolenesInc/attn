@@ -1,14 +1,15 @@
-package daemon
+package sessionmonitor
 
 import (
 	"errors"
 	"time"
 
 	"github.com/victorarias/attn/internal/attention"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (e *monitorEntry) openTurnLocked(now time.Time, afterNotification bool) bool {
+func (e *Entry) openTurnLocked(now time.Time, afterNotification bool) bool {
 	if !attention.OpensTurn(e.state.State) {
 		return false
 	}
@@ -31,7 +32,7 @@ func (e *monitorEntry) openTurnLocked(now time.Time, afterNotification bool) boo
 	return opened
 }
 
-func (e *monitorEntry) grantTurnRequestLocked() {
+func (e *Entry) grantTurnRequestLocked() {
 	if e.turn.RequestedAt.IsZero() || !e.turnOwedLocked() {
 		return
 	}
@@ -39,21 +40,21 @@ func (e *monitorEntry) grantTurnRequestLocked() {
 	e.turn.RequestedAt = time.Time{}
 }
 
-func (e *monitorEntry) turnOwedLocked() bool {
+func (e *Entry) turnOwedLocked() bool {
 	return e.turn.OpenedAt.After(e.turn.SettledAt)
 }
 
-func (e *monitorEntry) turnByAgentLocked() bool {
+func (e *Entry) turnByAgentLocked() bool {
 	return attention.TurnByAgent(e.turn.OpenedAt, e.turn.SettledAt, e.turn.AgentAt)
 }
 
-func (e *monitorEntry) settleForAgentLocked(now time.Time) {
+func (e *Entry) settleForAgentLocked(now time.Time) {
 	e.turn.SettledAt = now.UTC()
 	e.turn.AgentAt = e.turn.SettledAt
 	e.stopAutoSettleLocked()
 }
 
-func (e *monitorEntry) agentTurnLocked(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
+func (e *Entry) agentTurnLocked(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
 	if action == protocol.AgentTurnActionSettle {
 		withdrawn := !e.turn.RequestedAt.IsZero()
 		e.turn.RequestedAt = time.Time{}
@@ -81,7 +82,7 @@ func (e *monitorEntry) agentTurnLocked(action protocol.AgentTurnAction, now time
 	return protocol.AgentTurnOutcomeOpened, nil
 }
 
-func (e *monitorEntry) settleLocked(turn, now time.Time) bool {
+func (e *Entry) settleLocked(turn, now time.Time) bool {
 	if !e.turn.OpenedAt.Equal(turn) {
 		return false
 	}
@@ -90,7 +91,7 @@ func (e *monitorEntry) settleLocked(turn, now time.Time) bool {
 	return true
 }
 
-func (e *monitorEntry) snoozeLocked(turn, until, now time.Time) bool {
+func (e *Entry) snoozeLocked(turn, until, now time.Time) bool {
 	if !e.settleLocked(turn, now) {
 		return false
 	}
@@ -99,14 +100,23 @@ func (e *monitorEntry) snoozeLocked(turn, until, now time.Time) bool {
 	return true
 }
 
-func (e *monitorEntry) armWakeLocked() {
+func (e *Entry) armWakeLocked() {
 	e.stopWakeLocked()
-	if !e.turn.SnoozedUntil.IsZero() {
-		e.wakeTimer = e.wake(e.turn.SnoozedUntil)
+	deadline := e.turn.SnoozedUntil
+	if deadline.IsZero() {
+		return
 	}
+	key := e.keyLocked()
+	e.wakeTimer = e.registry.host.AfterFunc("monitorSnoozeWake", max(0, time.Until(deadline)), func() {
+		crashpoint.At("snooze-wake-running")
+		view, woken := e.Do(Command{Key: key, Kind: Wake, Until: deadline}, deadline)
+		if woken && e.home.Applied(view) {
+			e.home.SnoozeWoke(deadline, "deadline")
+		}
+	})
 }
 
-func (e *monitorEntry) wakeLocked(deadline, at time.Time) bool {
+func (e *Entry) wakeLocked(deadline, at time.Time) bool {
 	if deadline.IsZero() || !e.turn.SnoozedUntil.Equal(deadline) {
 		return false
 	}
@@ -122,9 +132,36 @@ func (e *monitorEntry) wakeLocked(deadline, at time.Time) bool {
 	return true
 }
 
-func (e *monitorEntry) stopWakeLocked() {
+func (e *Entry) stopWakeLocked() {
 	if e.wakeTimer != nil {
 		e.wakeTimer.Stop()
 		e.wakeTimer = nil
 	}
+}
+
+func (e *Entry) StopWake() {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	e.stopWakeLocked()
+	e.mu.Unlock()
+}
+
+func (e *Entry) AgentTurn(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
+	e.mu.Lock()
+	outcome, err := e.agentTurnLocked(action, now)
+	view := e.viewLocked()
+	e.mu.Unlock()
+	e.home.Applied(view)
+	return outcome, err
+}
+
+func (e *Entry) InNotificationRun() bool {
+	if e == nil {
+		return false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.input.inNotificationRunLocked()
 }

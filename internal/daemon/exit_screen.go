@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -34,16 +35,12 @@ func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend
 		return
 	}
 	if entry := d.monitorEntry(sessionID); entry != nil {
-		entry.mu.Lock()
-		if entry.exit != nil && info.LifecycleID != "" && entry.exit.LifecycleID == info.LifecycleID {
-			view := entry.viewLocked()
-			entry.mu.Unlock()
-			if !entry.sink.Applied(view) {
+		if offered, applied := entry.ReofferExit(info.LifecycleID); offered {
+			if !applied {
 				d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
 			}
 			return
 		}
-		entry.mu.Unlock()
 	}
 	rec := store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
 	if provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider); ok {
@@ -60,11 +57,7 @@ func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend
 		}
 	}
 	if entry := d.monitorEntry(sessionID); entry != nil {
-		entry.mu.Lock()
-		entry.exit = &monitorExit{LifecycleID: info.LifecycleID, Text: rec.Text, Cols: rec.Cols, Rows: rec.Rows, Code: rec.ExitCode, Signal: rec.ExitSignal, At: time.Now()}
-		view := entry.viewLocked()
-		entry.mu.Unlock()
-		if !entry.sink.Applied(view) {
+		if !entry.ReportExit(sessionmonitor.Exit{LifecycleID: info.LifecycleID, Text: rec.Text, Cols: rec.Cols, Rows: rec.Rows, Code: rec.ExitCode, Signal: rec.ExitSignal, At: time.Now()}) {
 			d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
 		}
 		return
@@ -83,15 +76,8 @@ func (d *Daemon) saveExitScreen(rec store.SessionExitScreen, at time.Time) bool 
 
 func (d *Daemon) clearExitScreenBefore(session protocol.SessionID, before time.Time) {
 	if entry := d.monitorEntry(session); entry != nil {
-		entry.mu.Lock()
-		if entry.exit == nil || !entry.exit.At.Before(before) {
-			entry.mu.Unlock()
-			return
-		}
-		entry.exit = nil
-		view := entry.viewLocked()
-		entry.mu.Unlock()
-		if !entry.sink.Applied(view) {
+		cleared, applied := entry.ClearExitBefore(before)
+		if !cleared || !applied {
 			return
 		}
 	}

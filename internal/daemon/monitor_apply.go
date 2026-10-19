@@ -2,33 +2,29 @@ package daemon
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
-	"time"
 )
 
-func (r *monitorRegistry) sessionFor(entry *monitorEntry) (protocol.SessionID, *monitorBinding) {
+func (r *monitorIndex) bindingOf(h *monitorHome) (protocol.SessionID, *monitorBinding) {
+	session := h.sessionID()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for session, binding := range r.sessions {
-		if binding.entry == entry {
-			return session, binding
-		}
+	if binding := r.sessions[session]; binding != nil && binding.entry == h.entry {
+		return session, binding
 	}
 	return "", nil
 }
 
-type monitorHome struct {
-	daemon *Daemon
-	entry  *monitorEntry
-}
-
-func (h monitorHome) Applied(view monitorView) bool {
+func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	d := h.daemon
 	r := d.monitors()
 	r.applyMu.Lock()
-	session, binding := r.sessionFor(h.entry)
+	session, binding := r.bindingOf(h)
 	if session == "" {
 		r.applyMu.Unlock()
 		return d.admitMonitorConversation(h.entry, view)
@@ -39,6 +35,11 @@ func (h monitorHome) Applied(view monitorView) bool {
 		return true
 	}
 	recordedPullRequests, usageChanged, err := h.saveView(session, previous, view)
+	if err != nil && d.store.Get(session) == nil {
+		r.applyMu.Unlock()
+		d.life.Go("forgetClosedMonitor", func() { d.forgetMonitor(session) })
+		return false
+	}
 	if err != nil {
 		h.catchUp(session, binding, err)
 		r.applyMu.Unlock()
@@ -57,7 +58,7 @@ func (h monitorHome) Applied(view monitorView) bool {
 	return true
 }
 
-func (h monitorHome) saveView(session protocol.SessionID, previous, view monitorView) ([]string, bool, error) {
+func (h *monitorHome) saveView(session protocol.SessionID, previous, view sessionmonitor.View) ([]string, bool, error) {
 	d := h.daemon
 	state, turn, driver := view.State.V, view.Turn.V, view.Driver.V
 	if !d.store.ApplySessionRuntimeState(session, store.SessionRuntimeState{
@@ -72,7 +73,7 @@ func (h monitorHome) saveView(session protocol.SessionID, previous, view monitor
 	}) {
 		return nil, false, fmt.Errorf("runtime state was not saved")
 	}
-	costChanged, costDurable, usageChanged := monitorCostChange(previous, view)
+	costChanged, costDurable, usageChanged := sessionmonitor.CostChange(previous, view)
 	if costChanged {
 		if err := d.store.ApplySessionCostSnapshot(session, sessioncost.Checkpoint{Initialized: view.CostInitialized.V, Sources: view.Cost.Entries}, costDurable); err != nil {
 			return nil, false, fmt.Errorf("cost: %w", err)

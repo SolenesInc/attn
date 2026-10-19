@@ -68,15 +68,6 @@ func (w *launchWatch) settle(outcome launchOutcome) {
 	}
 }
 
-func harnessReportedState(source string) bool {
-	switch source {
-	case stateSourceHook, stateSourceStopHook, stateSourceHookNotify, stateSourceHookStopFailure,
-		stateSourceHookCompaction, stateSourceTranscript, stateSourcePluginDriver, stateSourceLink:
-		return true
-	}
-	return false
-}
-
 func (d *Daemon) noteLaunchStarted(sessionID protocol.SessionID) {
 	d.resolveLaunchWatch(sessionID, launchOutcome{startedAt: time.Now()})
 }

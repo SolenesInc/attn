@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/statetrace"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -63,10 +64,10 @@ func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {
 	snoozed := false
 	if entry != nil {
 		turn := d.store.TurnStamps(sessionID).OpenedAt
-		view, applied := entry.command(monitorCommand{Key: entry.key(), Kind: monitorSnooze, Turn: turn, Until: until}, now)
+		view, applied := entry.Do(sessionmonitor.Command{Key: entry.Key(), Kind: sessionmonitor.Snooze, Turn: turn, Until: until}, now)
 		snoozed = applied
 		pausepoint.At(pausepoint.SessionSnoozeCommitted)
-		if applied && !entry.sink.Applied(view) {
+		if applied && !entry.Publish(view) {
 			return fmt.Errorf("session %s: snooze is pending; attn will keep retrying until it is saved", sessionID)
 		}
 	} else {
@@ -75,7 +76,7 @@ func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {
 	if !snoozed {
 		return fmt.Errorf("session %s: could not save snooze", sessionID)
 	}
-	d.cancelAutoSettle(sessionID, "snoozed")
+	d.monitorEntry(sessionID).CancelAutoSettle("snoozed")
 	d.traceSettle(sessionID)
 	if entry == nil {
 		d.broadcastSessionStateChanged(sessionID)
@@ -93,11 +94,11 @@ func (d *Daemon) handleWakeTurn(msg *protocol.WakeTurnMessage) error {
 
 func (d *Daemon) wakeSnooze(sessionID protocol.SessionID, at time.Time, cause string) error {
 	if entry := d.monitorEntry(sessionID); entry != nil {
-		view, accepted := entry.command(monitorCommand{Key: entry.key(), Kind: monitorWake}, at)
+		view, accepted := entry.Do(sessionmonitor.Command{Key: entry.Key(), Kind: sessionmonitor.Wake}, at)
 		if !accepted {
 			return fmt.Errorf("session %s: could not save unsnooze", sessionID)
 		}
-		if !entry.sink.Applied(view) {
+		if !entry.Publish(view) {
 			return fmt.Errorf("session %s: unsnooze is pending; attn will keep retrying until it is saved", sessionID)
 		}
 		d.finishSnoozeWake(sessionID, at, cause)
@@ -181,9 +182,7 @@ func (d *Daemon) dropEndedSnoozeWake(sessionID protocol.SessionID, state string,
 
 func (d *Daemon) clearSnoozeState(sessionID protocol.SessionID) {
 	if entry := d.monitorEntry(sessionID); entry != nil {
-		entry.mu.Lock()
-		entry.stopWakeLocked()
-		entry.mu.Unlock()
+		entry.StopWake()
 	}
 }
 

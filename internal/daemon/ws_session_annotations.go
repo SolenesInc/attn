@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 func (d *Daemon) handleSessionAnnotationsGet(client *wsClient, msg *protocol.SessionAnnotationsGetMessage) {
@@ -84,16 +85,16 @@ func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.
 		fail(string("session_annotations_submit: unknown session " + sessionID))
 		return
 	}
-	delivery := annotationSessionInput(msg.RequestID, sessionID, msg.Text)
-	attempt := d.sessionInputs().try(context.Background(), delivery)
-	if attempt.stage != sessionInputPlaced {
-		if sessionInputDeferredError(attempt.err) {
+	delivery := sessionmonitor.AnnotationInput(msg.RequestID, msg.Text)
+	attempt := d.monitorEntry(sessionID).Place(context.Background(), delivery)
+	if attempt.Stage != sessionmonitor.Placed {
+		if sessionmonitor.DeferredError(attempt.Err) {
 			result.Status = annotationSubmitStatusSkipped
 			d.sendToClient(client, result)
 			return
 		}
-		d.logf("session_annotations_submit: %s: delivery failed: %v", sessionID, attempt.err)
-		fail(attempt.err.Error())
+		d.logf("session_annotations_submit: %s: delivery failed: %v", sessionID, attempt.Err)
+		fail(attempt.Err.Error())
 		return
 	}
 	result.Success = true

@@ -1,36 +1,39 @@
-package daemon
+package sessionmonitor
 
 import "time"
 
-type monitorCommandKind uint8
+type CommandKind uint8
 
 const (
-	monitorSettle monitorCommandKind = iota
-	monitorSnooze
-	monitorWake
-	monitorCancelCountdown
+	Settle CommandKind = iota
+	Snooze
+	Wake
+	CancelCountdown
 )
 
-type monitorCommand struct {
-	Key   monitorKey
-	Kind  monitorCommandKind
+type Command struct {
+	Key   Key
+	Kind  CommandKind
 	Turn  time.Time
 	Until time.Time
 }
 
-func (e *monitorEntry) command(command monitorCommand, now time.Time) (monitorView, bool) {
+func (e *Entry) Do(command Command, now time.Time) (View, bool) {
+	if e == nil {
+		return View{}, false
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.keyLocked() != command.Key {
-		return monitorView{}, false
+		return View{}, false
 	}
 	var applied bool
 	switch command.Kind {
-	case monitorSettle:
+	case Settle:
 		applied = e.settleLocked(command.Turn, now)
-	case monitorSnooze:
+	case Snooze:
 		applied = e.snoozeLocked(command.Turn, command.Until, now)
-	case monitorWake:
+	case Wake:
 		if command.Until.IsZero() {
 			command.Until = e.turn.SnoozedUntil
 			if command.Until.IsZero() {
@@ -38,17 +41,17 @@ func (e *monitorEntry) command(command monitorCommand, now time.Time) (monitorVi
 			}
 		}
 		applied = e.wakeLocked(command.Until, now)
-	case monitorCancelCountdown:
+	case CancelCountdown:
 		e.cancelCountdownLocked()
 		applied = true
 	}
 	if !applied {
-		return monitorView{}, false
+		return View{}, false
 	}
 	return e.viewLocked(), true
 }
 
-func (e *monitorEntry) cancelCountdownLocked() {
+func (e *Entry) cancelCountdownLocked() {
 	removed, _ := e.stopAutoSettleLocked()
 	if e.dismissal != autoSettleDismissalOff && !removed {
 		e.dismissal = autoSettleDismissalOff
@@ -59,8 +62,22 @@ func (e *monitorEntry) cancelCountdownLocked() {
 	}
 }
 
-func (e *monitorEntry) key() monitorKey {
+func (e *Entry) Key() Key {
+	if e == nil {
+		return Key{}
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.keyLocked()
+}
+
+func (e *Entry) Publish(view View) bool { return e.home.Applied(view) }
+
+func (e *Entry) Revision() uint64 {
+	if e == nil {
+		return 0
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.revision
 }

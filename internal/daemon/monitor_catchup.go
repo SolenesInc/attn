@@ -7,7 +7,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (h monitorHome) catchUp(session protocol.SessionID, binding *monitorBinding, failure error) {
+func (h *monitorHome) catchUp(session protocol.SessionID, binding *monitorBinding, failure error) {
 	d := h.daemon
 	r := d.monitors()
 	r.mu.Lock()
@@ -18,9 +18,7 @@ func (h monitorHome) catchUp(session protocol.SessionID, binding *monitorBinding
 	if r.sessions[session] != binding {
 		return
 	}
-	h.entry.mu.Lock()
-	caughtUp := binding.applied.Revision.V >= h.entry.revision
-	h.entry.mu.Unlock()
+	caughtUp := binding.applied.Revision.V >= h.entry.Revision()
 	if caughtUp || d.life.Ended() {
 		binding.stopCatchUp()
 		return
@@ -41,9 +39,7 @@ func (h monitorHome) catchUp(session protocol.SessionID, binding *monitorBinding
 			return
 		}
 		binding.catchUp = nil
-		h.entry.mu.Lock()
-		view := h.entry.snapshotLocked()
-		h.entry.mu.Unlock()
+		view := h.entry.Snapshot()
 		r.mu.Unlock()
 		h.Applied(view)
 	})

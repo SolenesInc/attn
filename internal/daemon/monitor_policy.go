@@ -4,21 +4,14 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
-
-type monitorPolicy struct {
-	ChiefOfStaff       bool
-	AutoSettle         autoSettleConfig
-	Headless           bool
-	TitlesAllowed      bool
-	QuietNotifications bool
-}
 
 type monitorPolicySources struct {
 	chiefs     map[string]protocol.SessionID
 	crewBound  map[protocol.SessionID]bool
-	autoSettle autoSettleConfig
+	autoSettle sessionmonitor.AutoSettleSettings
 	headless   bool
 	titles     bool
 	quiet      bool
@@ -28,7 +21,7 @@ func (d *Daemon) monitorPolicySources() monitorPolicySources {
 	sources := monitorPolicySources{
 		chiefs:     d.profileChiefs(),
 		crewBound:  map[protocol.SessionID]bool{},
-		autoSettle: d.autoSettleConfig(),
+		autoSettle: d.autoSettleSettings(),
 		headless:   headless.Enabled(),
 		titles:     sessionAutoTitleEnabled() && d.sessionTitleExec != nil,
 		quiet:      d.quietNotifications(),
@@ -43,12 +36,13 @@ func (d *Daemon) monitorPolicySources() monitorPolicySources {
 	return sources
 }
 
-func (d *Daemon) monitorPolicyFrom(sources monitorPolicySources, sessionID protocol.SessionID) monitorPolicy {
-	policy := monitorPolicy{AutoSettle: sources.autoSettle, Headless: sources.headless, QuietNotifications: sources.quiet}
+func (d *Daemon) monitorPolicyFrom(sources monitorPolicySources, sessionID protocol.SessionID) sessionmonitor.Policy {
+	policy := sessionmonitor.Policy{AutoSettle: sources.autoSettle, Headless: sources.headless, QuietNotifications: sources.quiet}
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return policy
 	}
+	policy.DriverReportsState = d.pluginDriverReportsState(session.Agent)
 	policy.ChiefOfStaff = session.ProfileID != "" && sources.chiefs[session.ProfileID] == sessionID
 	policy.TitlesAllowed = sources.titles && !sources.crewBound[sessionID] &&
 		d.store.SessionLabels(sessionID).UserLabel == "" &&
@@ -65,15 +59,6 @@ func monitorPolicySetting(key string) bool {
 	return false
 }
 
-func (d *Daemon) pushMonitorPolicy(sessionID protocol.SessionID) {
-	r := d.monitors()
-	r.policyMu.Lock()
-	defer r.policyMu.Unlock()
-	if entry := r.entry(sessionID); entry != nil {
-		entry.setPolicy(d.monitorPolicyFrom(d.monitorPolicySources(), sessionID))
-	}
-}
-
 func (d *Daemon) pushMonitorPolicies() {
 	r := d.monitors()
 	r.policyMu.Lock()
@@ -84,23 +69,8 @@ func (d *Daemon) pushMonitorPolicies() {
 	}
 	sources := d.monitorPolicySources()
 	for sessionID, entry := range entries {
-		entry.setPolicy(d.monitorPolicyFrom(sources, sessionID))
+		entry.SetPolicy(d.monitorPolicyFrom(sources, sessionID))
 	}
-}
-
-func (e *monitorEntry) policyOf() monitorPolicy {
-	if e == nil {
-		return monitorPolicy{}
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.policy
-}
-
-func (e *monitorEntry) setPolicy(policy monitorPolicy) {
-	e.mu.Lock()
-	e.policy = policy
-	e.mu.Unlock()
 }
 
 func (d *Daemon) subscribeMonitorPolicyFacts() {

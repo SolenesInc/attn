@@ -1,27 +1,23 @@
-package daemon
+package sessionmonitor
 
 import (
 	"bytes"
 	"time"
 
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) noteUserInput(lane *sessionInputLane, terminal harness.TerminalID, sessionID protocol.SessionID, source string, data []byte) bool {
-	if sessionID == "" || !isComposerKeystroke(source, data) {
+func (e *Entry) noteUserInputLocked(terminal harness.TerminalID, source string, data []byte) bool {
+	if !IsComposerKeystroke(source, data) {
 		return false
 	}
 	now := time.Now()
-	d.terminals().noteKey(terminal, now)
-	if lane.entry != nil {
-		lane.entry.activityAt = now
-	}
+	e.home.NoteKey(terminal, now)
+	e.activityAt = now
 	return true
 }
 
-func (d *Daemon) noteAutoSettleActivity(sessionID protocol.SessionID) bool {
-	e := d.monitorEntry(sessionID)
+func (e *Entry) NoteActivity() bool {
 	if e == nil {
 		return false
 	}
@@ -29,10 +25,6 @@ func (d *Daemon) noteAutoSettleActivity(sessionID protocol.SessionID) bool {
 	e.activityAt = time.Now()
 	e.mu.Unlock()
 	return true
-}
-
-func (d *Daemon) userInputQuietRemaining(sessionID protocol.SessionID, within time.Duration) time.Duration {
-	return quietRemaining(d.terminals().lastKeyOf(d.primaryTerminal(sessionID)), within)
 }
 
 func quietRemaining(last time.Time, within time.Duration) time.Duration {
@@ -55,7 +47,7 @@ func isUserKeystrokeSource(source string) bool {
 	}
 }
 
-func isComposerKeystroke(source string, data []byte) bool {
+func IsComposerKeystroke(source string, data []byte) bool {
 	return isUserKeystrokeSource(source) && userInputEditsComposer(data)
 }
 

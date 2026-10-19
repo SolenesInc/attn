@@ -1,4 +1,4 @@
-package daemon
+package sessionmonitor
 
 import (
 	"time"
@@ -11,11 +11,7 @@ type dwellPending struct {
 	until time.Time
 }
 
-func (d *Daemon) dwellReady(sessionID protocol.SessionID, state protocol.SessionState, dwell time.Duration, now time.Time) bool {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return true
-	}
+func (e *Entry) dwellReady(state protocol.SessionState, dwell time.Duration, now time.Time) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if dwell <= 0 {
@@ -33,20 +29,14 @@ func (d *Daemon) dwellReady(sessionID protocol.SessionID, state protocol.Session
 	return true
 }
 
-func (d *Daemon) dwellDeadline(sessionID protocol.SessionID) time.Time {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return time.Time{}
-	}
+func (e *Entry) dwellDeadline() time.Time {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.dwell.until
 }
 
-func (d *Daemon) clearDwell(sessionID protocol.SessionID) {
-	if e := d.monitorEntry(sessionID); e != nil {
-		e.mu.Lock()
-		e.dwell = dwellPending{}
-		e.mu.Unlock()
-	}
+func (e *Entry) clearDwell() {
+	e.mu.Lock()
+	e.dwell = dwellPending{}
+	e.mu.Unlock()
 }

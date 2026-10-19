@@ -32,7 +32,7 @@ func (d *Daemon) handleSessionMessagesGet(client *wsClient, msg *protocol.Sessio
 		return
 	}
 
-	snapshot, ok := d.assistantWindow(sessionID, session.Agent)
+	snapshot, ok := d.monitorEntry(sessionID).AssistantWindow(session.Agent)
 	if !ok {
 		detail := "live transcript watching is unavailable for this session"
 		result.Success = true

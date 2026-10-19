@@ -1,4 +1,4 @@
-package daemon
+package sessionmonitor
 
 import (
 	"strings"
@@ -12,46 +12,32 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-func (d *Daemon) evidenceSnapshot(sessionID protocol.SessionID) (monitorEvidence, bool) {
-	e := d.monitorEntry(sessionID)
+func (e *Entry) Evidence() (Evidence, bool) {
 	if e == nil {
-		return monitorEvidence{}, false
+		return Evidence{}, false
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.monitor.mu.Lock()
 	defer e.monitor.mu.Unlock()
-	return monitorEvidence{e.monitor.terminal, e.evidence}, true
+	return Evidence{e.monitor.terminal, e.evidence}, true
 }
 
-func (d *Daemon) recordEvidence(sessionID protocol.SessionID, at time.Time, mutate func(*monitorEvidence)) bool {
-	return d.updateEvidence(sessionID, nil, movedAt(at, mutate))
-}
-
-func movedAt(at time.Time, mutate func(*monitorEvidence)) func(*monitorEvidence) {
-	return func(e *monitorEvidence) {
+func movedAt(at time.Time, mutate func(*Evidence)) func(*Evidence) {
+	return func(e *Evidence) {
 		mutate(e)
 		e.LastMovement = at
 	}
 }
 
-func (d *Daemon) updateEvidence(
-	sessionID protocol.SessionID,
-	unchanged func(*monitorEvidence) bool,
-	mutate func(*monitorEvidence),
-) bool {
-	e := d.monitorEntry(sessionID)
-	if e == nil || d.store == nil || d.store.Get(sessionID) == nil {
+func (e *Entry) RecordEvidence(at time.Time, mutate func(*Evidence)) bool {
+	if e == nil {
 		return false
 	}
-	return e.updateEvidence(d.monitors(), unchanged, mutate)
+	return e.UpdateEvidence(nil, movedAt(at, mutate))
 }
 
-func (e *monitorEntry) recordEvidence(r *monitorRegistry, at time.Time, mutate func(*monitorEvidence)) bool {
-	return e.updateEvidence(r, nil, movedAt(at, mutate))
-}
-
-func (e *monitorEntry) updateEvidence(r *monitorRegistry, unchanged func(*monitorEvidence) bool, mutate func(*monitorEvidence)) bool {
+func (e *Entry) UpdateEvidence(unchanged func(*Evidence) bool, mutate func(*Evidence)) bool {
 	if e == nil {
 		return false
 	}
@@ -59,45 +45,48 @@ func (e *monitorEntry) updateEvidence(r *monitorRegistry, unchanged func(*monito
 	defer e.mu.Unlock()
 	e.monitor.mu.Lock()
 	defer e.monitor.mu.Unlock()
-	evidence := monitorEvidence{e.monitor.terminal, e.evidence}
+	evidence := Evidence{e.monitor.terminal, e.evidence}
 	if unchanged != nil && unchanged(&evidence) {
 		return false
 	}
 	mutate(&evidence)
 	e.monitor.terminal, e.evidence = evidence.TerminalEvidence, evidence.ConversationEvidence
-	e.resolveSoonLocked(r)
+	e.resolveSoonLocked()
 	return true
 }
 
-func (d *Daemon) recordPTYEvidence(sessionID protocol.SessionID, obs pty.Observation) bool {
+func (e *Entry) RecordPTY(obs pty.Observation) bool {
+	if e == nil {
+		return false
+	}
 	at := obs.At
 	if at.IsZero() {
 		at = time.Now()
 	}
-	mutate, ok := ptyEvidence(obs, at)
+	mutate, ok := PTYEvidence(obs, at)
 	if !ok {
 		return false
 	}
-	return d.updateEvidence(sessionID, func(e *monitorEvidence) bool {
+	return e.UpdateEvidence(func(e *Evidence) bool {
 		return holdsPTYEvidence(e, obs)
 	}, movedAt(at, mutate))
 }
 
-func ptyEvidence(obs pty.Observation, at time.Time) (func(*monitorEvidence), bool) {
+func PTYEvidence(obs pty.Observation, at time.Time) (func(*Evidence), bool) {
 	if obs.Source == pty.SourceProgramStatus {
 		return programStatusEvidence(obs, at), true
 	}
 	return heartbeatEvidence(obs, at)
 }
 
-func holdsPTYEvidence(e *monitorEvidence, obs pty.Observation) bool {
+func holdsPTYEvidence(e *Evidence, obs pty.Observation) bool {
 	if obs.Source == pty.SourceProgramStatus {
 		return holdsProgramStatus(e, obs)
 	}
 	return e.ProgramStatus != nil || holdsSettledHeartbeat(e, obs)
 }
 
-func programStatusClaim(claim string) (sessionstate.Claim, bool) {
+func ProgramStatusClaim(claim string) (sessionstate.Claim, bool) {
 	switch claim {
 	case pty.ProgramWorking:
 		return sessionstate.ClaimBusy, true
@@ -114,8 +103,8 @@ func programStatusClaim(claim string) (sessionstate.Claim, bool) {
 	}
 }
 
-func holdsProgramStatus(e *monitorEvidence, obs pty.Observation) bool {
-	claim, reported := programStatusClaim(obs.Claim)
+func holdsProgramStatus(e *Evidence, obs pty.Observation) bool {
+	claim, reported := ProgramStatusClaim(obs.Claim)
 	if !reported {
 		return e.ProgramStatus == nil
 	}
@@ -124,9 +113,9 @@ func holdsProgramStatus(e *monitorEvidence, obs pty.Observation) bool {
 		e.ProgramStatus.Detail == obs.Detail
 }
 
-func programStatusEvidence(obs pty.Observation, at time.Time) func(*monitorEvidence) {
-	claim, reported := programStatusClaim(obs.Claim)
-	return func(e *monitorEvidence) {
+func programStatusEvidence(obs pty.Observation, at time.Time) func(*Evidence) {
+	claim, reported := ProgramStatusClaim(obs.Claim)
+	return func(e *Evidence) {
 		if claim == sessionstate.ClaimBusy {
 			e.LastBusyAt = at
 		}
@@ -144,7 +133,7 @@ func programStatusEvidence(obs pty.Observation, at time.Time) func(*monitorEvide
 	}
 }
 
-func holdsSettledHeartbeat(e *monitorEvidence, obs pty.Observation) bool {
+func holdsSettledHeartbeat(e *Evidence, obs pty.Observation) bool {
 	switch obs.Claim {
 	case "approval", "unclassified", "busy":
 		return false
@@ -154,18 +143,21 @@ func holdsSettledHeartbeat(e *monitorEvidence, obs pty.Observation) bool {
 		e.Heartbeat.Detail == obs.Detail
 }
 
-func (d *Daemon) evidenceHoldsPTYEvidence(sessionID protocol.SessionID, obs pty.Observation) bool {
-	evidence, ok := d.evidenceSnapshot(sessionID)
+func (e *Entry) HoldsPTY(obs pty.Observation) bool {
+	if e == nil {
+		return false
+	}
+	evidence, ok := e.Evidence()
 	return ok && holdsPTYEvidence(&evidence, obs)
 }
 
-func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*monitorEvidence), bool) {
+func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*Evidence), bool) {
 	if obs.Source != pty.SourceHeartbeat {
 		return nil, false
 	}
 	switch obs.Claim {
 	case "approval":
-		return func(e *monitorEvidence) {
+		return func(e *Evidence) {
 			e.LastHarnessEvent = &sessionstate.Observation{
 				Source:     sessionstate.SourceHarnessEvent,
 				Claim:      sessionstate.ClaimApprovalPending,
@@ -180,13 +172,13 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*monitorEvidence
 			}
 		}, true
 	case "unclassified":
-		return func(*monitorEvidence) {}, true
+		return func(*Evidence) {}, true
 	}
 	claim := sessionstate.ClaimSettled
 	if obs.Claim == "busy" {
 		claim = sessionstate.ClaimBusy
 	}
-	return func(e *monitorEvidence) {
+	return func(e *Evidence) {
 		e.Heartbeat = &sessionstate.Observation{
 			Source:     sessionstate.SourceHeartbeat,
 			Claim:      claim,
@@ -199,38 +191,32 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*monitorEvidence
 	}, true
 }
 
-func (d *Daemon) startEvidence(sessionID protocol.SessionID, fresh monitorEvidence) {
-	entry := d.startSessionMonitor(sessionID)
-	if entry != nil {
-		if session := d.store.Get(sessionID); session != nil {
-			entry.mu.Lock()
-			entry.directory = session.Directory
-			entry.branch = branchFromSession(session)
-			entry.state = monitorStateView{Quiet: true, Sequence: entry.state.Sequence + 1, State: session.State,
-				Since: protocol.Timestamp(session.StateSince).Time(), Updated: protocol.Timestamp(session.StateUpdatedAt).Time()}
-			entry.firstReportAt = time.Time{}
-			entry.reason = ""
-			view := entry.viewLocked()
-			entry.mu.Unlock()
-			entry.sink.Applied(view)
-		}
+func (e *Entry) Restart(launch Launch, fresh Evidence) {
+	if e == nil {
+		return
 	}
-	d.clearStateReason(sessionID)
-	d.clearDwell(sessionID)
-	d.updateEvidence(sessionID, nil, func(e *monitorEvidence) { *e = fresh })
+	e.mu.Lock()
+	e.directory, e.branch, e.startedAt = launch.Directory, launch.Branch, launch.StartedAt
+	e.state = StateView{Quiet: true, Sequence: e.state.Sequence + 1, State: launch.State, Since: launch.StateSince, Updated: launch.StateUpdated}
+	e.firstReportAt = time.Time{}
+	e.reason = ""
+	e.dwell = dwellPending{}
+	view := e.viewLocked()
+	e.mu.Unlock()
+	e.home.Applied(view)
+	e.UpdateEvidence(nil, func(e *Evidence) { *e = fresh })
 }
 
-func reportsTurnStarts(agent string) bool {
+func ReportsTurnStarts(agent string) bool {
 	return agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasHooks
 }
 
-func (d *Daemon) recordBracketEvidence(sessionID protocol.SessionID, state string) {
-	d.monitorEntry(sessionID).recordBracketEvidence(d.monitors(), state)
-}
-
-func (e *monitorEntry) recordBracketEvidence(r *monitorRegistry, state string) {
+func (e *Entry) RecordBracket(state string) {
+	if e == nil {
+		return
+	}
 	at := time.Now()
-	e.recordEvidence(r, at, func(e *monitorEvidence) {
+	e.RecordEvidence(at, func(e *Evidence) {
 		switch state {
 		case protocol.StateWorking:
 			e.TurnOpen = true
@@ -270,12 +256,15 @@ func (e *monitorEntry) recordBracketEvidence(r *monitorRegistry, state string) {
 	})
 }
 
-func (e *monitorEntry) recordTranscriptEvidence(d *Daemon, sessionID protocol.SessionID, state, detail string, at time.Time) {
-	d.recordMonitorObservation(e, sessionID, statetrace.Observation{Source: stateSourceTranscript, Detail: detail, Claim: state, ObservedAt: at, Outcome: statetrace.OutcomeObserved})
-	e.recordBracketEvidence(d.monitors(), state)
+func (e *Entry) recordTranscriptEvidence(state, detail string, at time.Time) {
+	e.Trace(statetrace.Observation{Source: StateSourceTranscript, Detail: detail, Claim: state, ObservedAt: at, Outcome: statetrace.OutcomeObserved})
+	e.RecordBracket(state)
 }
 
-func (e *monitorEntry) recordTurnAbortedEvidence(r *monitorRegistry, detail string, abortedAt, observedAt time.Time) {
+func (e *Entry) RecordTurnAborted(detail string, abortedAt, observedAt time.Time) {
+	if e == nil {
+		return
+	}
 	if observedAt.IsZero() {
 		observedAt = time.Now()
 	}
@@ -283,7 +272,7 @@ func (e *monitorEntry) recordTurnAbortedEvidence(r *monitorRegistry, detail stri
 	if at.IsZero() {
 		at = observedAt
 	}
-	e.recordEvidence(r, observedAt, func(e *monitorEvidence) {
+	e.RecordEvidence(observedAt, func(e *Evidence) {
 		e.TurnOpen = false
 		e.ToolOpen = false
 		e.LastHarnessEvent = &sessionstate.Observation{
@@ -295,19 +284,22 @@ func (e *monitorEntry) recordTurnAbortedEvidence(r *monitorRegistry, detail stri
 	})
 }
 
-func (e *monitorEntry) recordTurnBracketClosedEvidence(r *monitorRegistry, at time.Time) {
+func (e *Entry) recordTurnBracketClosedEvidence(at time.Time) {
 	if at.IsZero() {
 		at = time.Now()
 	}
-	e.recordEvidence(r, at, func(e *monitorEvidence) {
+	e.RecordEvidence(at, func(e *Evidence) {
 		e.TurnOpen = false
 		e.ToolOpen = false
 	})
 }
 
-func (d *Daemon) recordTurnEndedEvidence(sessionID protocol.SessionID, classifies bool) {
+func (e *Entry) RecordTurnEnded(classifies bool) {
+	if e == nil {
+		return
+	}
 	at := time.Now()
-	d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
+	e.RecordEvidence(at, func(e *Evidence) {
 		e.TurnOpen = false
 		e.ToolOpen = false
 		if classifies {
@@ -316,12 +308,12 @@ func (d *Daemon) recordTurnEndedEvidence(sessionID protocol.SessionID, classifie
 	})
 }
 
-func classifierVerdictMutation(state string, observedAt time.Time) func(*monitorEvidence) {
+func classifierVerdictMutation(state string, observedAt time.Time) func(*Evidence) {
 	claim := classifierClaim(state)
 	if claim == "" {
 		return nil
 	}
-	return func(e *monitorEvidence) {
+	return func(e *Evidence) {
 		e.LastClassifier = &sessionstate.Observation{
 			Source:     sessionstate.SourceClassifier,
 			Claim:      claim,
@@ -330,15 +322,21 @@ func classifierVerdictMutation(state string, observedAt time.Time) func(*monitor
 	}
 }
 
-func (d *Daemon) recordStopFacts(sessionID protocol.SessionID, backgroundWork, pendingCron bool) {
-	d.recordEvidence(sessionID, time.Now(), func(e *monitorEvidence) {
+func (e *Entry) RecordStopFacts(backgroundWork, pendingCron bool) {
+	if e == nil {
+		return
+	}
+	e.RecordEvidence(time.Now(), func(e *Evidence) {
 		e.BackgroundWork = backgroundWork
 		e.PendingCron = pendingCron
 	})
 }
 
-func (d *Daemon) recordReviewerEvidence(sessionID protocol.SessionID, inLoop bool) {
-	d.recordEvidence(sessionID, time.Now(), func(e *monitorEvidence) {
+func (e *Entry) RecordReviewer(inLoop bool) {
+	if e == nil {
+		return
+	}
+	e.RecordEvidence(time.Now(), func(e *Evidence) {
 		e.ReviewerInLoop = inLoop
 	})
 }
@@ -348,11 +346,14 @@ const (
 	notifyIdlePrompt       = "idle_prompt"
 )
 
-func (d *Daemon) recordNotificationEvidence(sessionID protocol.SessionID, notificationType string, message string) {
+func (e *Entry) RecordNotification(notificationType string, message string) {
+	if e == nil {
+		return
+	}
 	at := time.Now()
 	switch strings.TrimSpace(notificationType) {
 	case notifyPermissionPrompt:
-		d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
+		e.RecordEvidence(at, func(e *Evidence) {
 			e.LastHarnessEvent = &sessionstate.Observation{
 				Source:     sessionstate.SourceHarnessEvent,
 				Claim:      sessionstate.ClaimApprovalPending,
@@ -361,19 +362,22 @@ func (d *Daemon) recordNotificationEvidence(sessionID protocol.SessionID, notifi
 			}
 		})
 	case notifyIdlePrompt:
-		d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
+		e.RecordEvidence(at, func(e *Evidence) {
 			e.PromptIdleAt = at
 		})
 	}
 }
 
-func (d *Daemon) recordStopFailureEvidence(sessionID protocol.SessionID, errorType string, message string) {
+func (e *Entry) RecordStopFailure(errorType string, message string) {
+	if e == nil {
+		return
+	}
 	at := time.Now()
 	detail := strings.TrimSpace(errorType)
 	if message = strings.TrimSpace(message); message != "" {
 		detail = detail + ": " + message
 	}
-	d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
+	e.RecordEvidence(at, func(e *Evidence) {
 		e.LastHarnessEvent = &sessionstate.Observation{
 			Source:     sessionstate.SourceHarnessEvent,
 			Claim:      sessionstate.ClaimStopFailed,
@@ -383,18 +387,21 @@ func (d *Daemon) recordStopFailureEvidence(sessionID protocol.SessionID, errorTy
 	})
 }
 
-func (d *Daemon) recordCompactionEvidence(sessionID protocol.SessionID, active bool) {
-	d.recordEvidence(sessionID, time.Now(), func(e *monitorEvidence) {
+func (e *Entry) RecordCompaction(active bool) {
+	if e == nil {
+		return
+	}
+	e.RecordEvidence(time.Now(), func(e *Evidence) {
 		e.Compacting = active
 	})
 }
 
-func (d *Daemon) recordProcessEvidence(sessionID protocol.SessionID, exited bool) {
-	if !exited {
+func (e *Entry) RecordProcessExit() {
+	if e == nil {
 		return
 	}
 	at := time.Now()
-	d.recordEvidence(sessionID, at, func(e *monitorEvidence) {
+	e.RecordEvidence(at, func(e *Evidence) {
 		e.Process = &sessionstate.Observation{
 			Source:     sessionstate.SourceProcess,
 			Claim:      sessionstate.ClaimExited,
@@ -403,20 +410,18 @@ func (d *Daemon) recordProcessEvidence(sessionID protocol.SessionID, exited bool
 	})
 }
 
-func (e *monitorEntry) recordClassifierStarted(d *Daemon, sessionID protocol.SessionID, at time.Time) {
-	e.recordEvidence(d.monitors(), at, func(e *monitorEvidence) { e.ClassifyingSince = at })
-	if d.monitorEntry(sessionID) == e {
-		d.cancelAutoSettle(sessionID, "classification started")
+func (e *Entry) recordClassifierStarted(at time.Time) {
+	e.RecordEvidence(at, func(e *Evidence) { e.ClassifyingSince = at })
+	if e.current() {
+		e.CancelAutoSettle("classification started")
 	}
 }
 
-func (e *monitorEntry) concludeClassification(d *Daemon, sessionID protocol.SessionID, verdict func(*monitorEvidence)) {
-	if d.monitorEntry(sessionID) == e {
-		if session := d.store.Get(sessionID); session != nil {
-			d.syncAutoSettle(sessionID, string(session.State))
-		}
+func (e *Entry) concludeClassification(verdict func(*Evidence)) {
+	if e.current() {
+		e.SyncAutoSettle()
 	}
-	e.recordEvidence(d.monitors(), time.Now(), func(e *monitorEvidence) {
+	e.RecordEvidence(time.Now(), func(e *Evidence) {
 		if verdict != nil {
 			verdict(e)
 		}
@@ -424,7 +429,7 @@ func (e *monitorEntry) concludeClassification(d *Daemon, sessionID protocol.Sess
 	})
 }
 
-var resolverOwnedStates = map[protocol.SessionState]bool{
+var ResolverOwnedStates = map[protocol.SessionState]bool{
 	protocol.SessionStateLaunching:       true,
 	protocol.SessionStateWorking:         true,
 	protocol.SessionStatePendingApproval: true,
@@ -434,47 +439,47 @@ var resolverOwnedStates = map[protocol.SessionState]bool{
 	protocol.SessionStateUnknown:         true,
 }
 
-func (d *Daemon) publishResolution(sessionID protocol.SessionID, current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
-	linkOwns := d.linkOwnsState(sessionID)
-	resolverOwnsState = resolverOwnedStates[current] && !linkOwns
+func (e *Entry) publishResolution(current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
+	linkOwns := e.linkOwnsState()
+	resolverOwnsState = ResolverOwnedStates[current] && !linkOwns
 	if resolution.Hold {
-		d.traceResolutionSkip(sessionID, resolution, string(resolution.Reason))
+		e.traceResolutionSkip(resolution, string(resolution.Reason))
 		return resolverOwnsState
 	}
 	if resolution.Reason == sessionstate.ReasonNoEvidence {
 		return resolverOwnsState
 	}
 	if linkOwns {
-		d.traceResolutionSkip(sessionID, resolution, "link_owns_state")
+		e.traceResolutionSkip(resolution, "link_owns_state")
 		return false
 	}
-	if !resolverOwnedStates[current] || resolution.State == current {
-		d.clearDwell(sessionID)
-		if d.recordStateReason(sessionID, resolution) && resolverOwnedStates[current] {
-			if entry := d.monitorEntry(sessionID); entry != nil {
-				entry.mu.Lock()
-				view := entry.viewLocked()
-				entry.mu.Unlock()
-				entry.sink.Applied(view)
-			}
+	if !ResolverOwnedStates[current] || resolution.State == current {
+		e.clearDwell()
+		if e.recordStateReason(resolution) && ResolverOwnedStates[current] {
+			e.mu.Lock()
+			view := e.viewLocked()
+			e.mu.Unlock()
+			e.home.Applied(view)
 		}
 		return resolverOwnsState
 	}
-	if !d.dwellReady(sessionID, resolution.State, dwell, now) {
-		d.traceResolutionSkip(sessionID, resolution, "dwell")
+	if !e.dwellReady(resolution.State, dwell, now) {
+		e.traceResolutionSkip(resolution, "dwell")
 		return true
 	}
-	d.recordStateReason(sessionID, resolution)
-	d.applyState(sessionStateChange{
-		sessionID: sessionID,
-		state:     string(resolution.State),
-		cause:     resolverObservation{},
-		origin: stateOrigin{
-			source: stateSourceResolver,
-			detail: resolutionDetail(resolution),
-		},
+	e.recordStateReason(resolution)
+	e.ApplyState(Change{
+		State:  string(resolution.State),
+		Cause:  resolverObservation{},
+		Origin: Origin{Source: StateSourceResolver, Detail: resolutionDetail(resolution)},
 	})
 	return true
+}
+
+func (e *Entry) linkOwnsState() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.driver.Run != "" && e.policy.DriverReportsState
 }
 
 func resolutionDetail(resolution sessionstate.Resolution) string {
@@ -484,9 +489,9 @@ func resolutionDetail(resolution sessionstate.Resolution) string {
 	return string(resolution.Reason) + ": " + resolution.Detail
 }
 
-func (d *Daemon) traceResolutionSkip(sessionID protocol.SessionID, resolution sessionstate.Resolution, reason string) {
-	d.recordStateObservation(sessionID, statetrace.Observation{
-		Source:  stateSourceResolver,
+func (e *Entry) traceResolutionSkip(resolution sessionstate.Resolution, reason string) {
+	e.Trace(statetrace.Observation{
+		Source:  StateSourceResolver,
 		Claim:   string(resolution.State),
 		Detail:  resolution.Detail,
 		Outcome: statetrace.OutcomeSkipped,

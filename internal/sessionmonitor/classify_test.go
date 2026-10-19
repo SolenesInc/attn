@@ -1,4 +1,4 @@
-package daemon
+package sessionmonitor
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ func TestClassifyPreTranscript(t *testing.T) {
 		name              string
 		transcriptEnabled bool
 		classifierEnabled bool
-		stop              stopClassification
+		stop              StopClassification
 		wantAction        classifyAction
 		wantState         string
 	}{
@@ -23,14 +23,14 @@ func TestClassifyPreTranscript(t *testing.T) {
 			name:              "a yield with a classifier reads the transcript",
 			transcriptEnabled: true,
 			classifierEnabled: true,
-			stop:              stopClassification{yielded: true},
+			stop:              StopClassification{Yielded: true},
 			wantAction:        classifyReadTranscript,
 		},
 		{
 			name:              "a yield with no classifier files nothing",
 			transcriptEnabled: true,
 			classifierEnabled: false,
-			stop:              stopClassification{yielded: true},
+			stop:              StopClassification{Yielded: true},
 			wantAction:        classifySkip,
 		},
 		{
@@ -72,7 +72,7 @@ func TestClassifyPostTranscript(t *testing.T) {
 		name        string
 		lastMessage string
 		err         error
-		stop        stopClassification
+		stop        StopClassification
 		wantAction  classifyAction
 		wantState   string
 		wantReason  string
@@ -86,13 +86,13 @@ func TestClassifyPostTranscript(t *testing.T) {
 		{
 			name:       "a yield's read error files nothing",
 			err:        errors.New("permission denied"),
-			stop:       stopClassification{yielded: true},
+			stop:       StopClassification{Yielded: true},
 			wantAction: classifySkip,
 			wantReason: "yield_transcript_parse_error",
 		},
 		{
 			name:       "a yield's empty message files nothing",
-			stop:       stopClassification{yielded: true},
+			stop:       StopClassification{Yielded: true},
 			wantAction: classifySkip,
 			wantReason: "yield_empty_message",
 		},
@@ -138,14 +138,14 @@ func TestClassifyVerdict(t *testing.T) {
 		name       string
 		state      string
 		err        error
-		stop       stopClassification
+		stop       StopClassification
 		wantState  string
 		wantReason string
 	}{
 		{
 			name:       "a parked verdict on a yield passes through",
 			state:      classifier.VerdictParked,
-			stop:       stopClassification{yielded: true},
+			stop:       StopClassification{Yielded: true},
 			wantState:  classifier.VerdictParked,
 			wantReason: "classifier",
 		},

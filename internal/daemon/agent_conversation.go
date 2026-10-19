@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -57,7 +58,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	d.proposeMonitorConversation(observation, false, t)
 }
 
-func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation agentConversationObservation, candidate *monitorEntry) bool {
+func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation agentConversationObservation, candidate *sessionmonitor.Entry) bool {
 	cur, placed := d.terminals().Showing(t)
 	if current := d.store.Get(cur); !placed || (current != nil && !conversationIsSession(current.Agent)) {
 		observation.SessionID = d.sessionInTerminal(t)
@@ -113,34 +114,60 @@ func conversationDecidesIdentity(driver agentdriver.Driver) bool {
 	return agentdriver.EffectiveCapabilities(driver).ConversationIsSession
 }
 
-func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation, candidate *monitorEntry) bool {
+func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation, candidate *sessionmonitor.Entry) bool {
 	e := d.monitorEntry(observation.SessionID)
 	if e == nil {
 		return false
 	}
-	e.mu.Lock()
-	if d.store.Get(observation.SessionID) == nil {
-		e.pendingConversation = &observation
-		e.mu.Unlock()
+	if e.QueueConversationWhile(func() bool { return d.store.Get(observation.SessionID) == nil }, observation.monitored()) {
 		return true
 	}
-	e.mu.Unlock()
 	return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 }
 
 func (d *Daemon) consumePendingAgentConversation(sessionID protocol.SessionID) (agentConversationObservation, bool) {
-	e := d.monitorEntry(protocol.TrimID(sessionID))
-	if e == nil {
+	sessionID = protocol.TrimID(sessionID)
+	observation, ok := d.monitorEntry(sessionID).TakePendingConversation()
+	if !ok {
 		return agentConversationObservation{}, false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	observation := e.pendingConversation
-	e.pendingConversation = nil
-	if observation == nil {
-		return agentConversationObservation{}, false
+	return agentConversationObservation{SessionID: sessionID, NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}, true
+}
+
+func (o agentConversationObservation) monitored() sessionmonitor.ConversationObservation {
+	return sessionmonitor.ConversationObservation{NativeID: o.NativeID, TranscriptPath: o.TranscriptPath}
+}
+
+func (d *Daemon) proposeMonitorConversation(observation agentConversationObservation, claim bool, terminal harness.TerminalID) bool {
+	return d.monitorEntry(observation.SessionID).ProposeConversation(observation.monitored(), claim, terminal)
+}
+
+func (d *Daemon) admitMonitorConversation(entry *sessionmonitor.Entry, view sessionmonitor.View) bool {
+	if view.Succeeds.V == (sessionmonitor.Key{}) {
+		d.logf("monitor apply: unknown entry %+v without predecessor", view.Key.V)
+		return false
 	}
-	return *observation, true
+	var session protocol.SessionID
+	for id, candidate := range d.monitors().each() {
+		if candidate.Key() == view.Succeeds.V {
+			session = id
+			break
+		}
+	}
+	if session == "" || view.Conversation.V.NativeID == "" {
+		d.logf("monitor apply: unknown entry %+v with predecessor %+v", view.Key.V, view.Succeeds.V)
+		return false
+	}
+	conversation := view.Conversation.V
+	observation := agentConversationObservation{SessionID: session, NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath}
+	if conversation.Terminal != "" {
+		return d.acceptMonitorConversation(conversation.Terminal, observation, entry)
+	}
+	transition := d.store.TransitionSessionConversation
+	if conversation.Claim {
+		transition = d.store.ClaimSessionConversation
+	}
+	return d.applyAgentConversation(observation, transition, entry)
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
@@ -151,7 +178,7 @@ func (d *Daemon) claimAgentConversation(observation agentConversationObservation
 	return d.proposeMonitorConversation(observation, true, "")
 }
 
-func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error), candidate *monitorEntry) bool {
+func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error), candidate *sessionmonitor.Entry) bool {
 	changed, err := transition(observation.SessionID, observation.NativeID, observation.TranscriptPath)
 	if errors.Is(err, store.ErrConversationClaimed) {
 		d.logf("agent conversation: %s is bound to another session, session=%s", observation.NativeID, observation.SessionID)
@@ -162,16 +189,12 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 		return false
 	}
 	if !changed {
-		d.ensureTranscriptWatcherAtPath(observation.SessionID, observation.TranscriptPath)
+		d.monitorEntry(observation.SessionID).EnsureTranscriptWatcher(observation.TranscriptPath)
 		return true
 	}
 
 	entry := d.startSessionMonitorFrom(observation.SessionID, "", candidate)
-	if entry != nil {
-		entry.mu.Lock()
-		entry.conversationInput = monitorConversation{agentConversationObservation: observation}
-		entry.mu.Unlock()
-	}
+	entry.SetConversation(observation.monitored())
 	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, string(observation.SessionID), observation)
@@ -204,18 +227,12 @@ func (d *Daemon) unsubscribeAgentConversationFacts() {
 
 func (d *Daemon) rebindTranscriptWatcherForConversation(event bus.Event) {
 	session := d.store.Get(protocol.SessionID(event.Subject))
-	if session == nil || !isTranscriptWatchedAgent(session.Agent) {
+	if session == nil || !sessionmonitor.IsTranscriptWatchedAgent(session.Agent) {
 		return
 	}
 	var observation agentConversationObservation
 	if err := event.Decode(&observation); err != nil {
 		d.logf("agent conversation: decode fact for session %s: %v", event.Subject, err)
 	}
-	d.startTranscriptWatcherAtPath(
-		session.ID,
-		session.Agent,
-		session.Directory,
-		d.sessionStartedAt(session.ID),
-		observation.TranscriptPath,
-	)
+	d.monitorEntry(session.ID).StartTranscriptWatcher(observation.TranscriptPath)
 }

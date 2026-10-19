@@ -5,6 +5,7 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 // linkEventSink applies what links report. Turn events set state outright, not through
@@ -35,12 +36,11 @@ func (e linkEventSink) Turn(s harness.SessionID, at time.Time, event harness.Tur
 	if event.Turn == harness.TurnRunning {
 		requestStartedAt = at
 	}
-	if !d.applyState(sessionStateChange{
-		sessionID:        sessionID,
-		state:            state,
-		requestStartedAt: requestStartedAt,
-		cause:            linkTurn{run: event.Epoch, seq: event.Seq},
-		origin:           stateOrigin{source: stateSourceLink, detail: event.Epoch},
+	if !d.applyState(sessionID, sessionmonitor.Change{
+		State:            state,
+		RequestStartedAt: requestStartedAt,
+		Cause:            sessionmonitor.LinkTurn{Run: event.Epoch, Seq: event.Seq},
+		Origin:           sessionmonitor.Origin{Source: sessionmonitor.StateSourceLink, Detail: event.Epoch},
 	}) {
 		d.logf("link turn discarded: session=%s run=%s seq=%d state=%s", sessionID, event.Epoch, event.Seq, state)
 	}

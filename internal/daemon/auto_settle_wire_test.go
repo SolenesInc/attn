@@ -290,6 +290,22 @@ func TestACancelOnAShellArmsNoDismissal(t *testing.T) {
 	}
 }
 
+func TestACancelForASessionNoTerminalRunsLeavesTheDaemonAnswering(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "auto_settle_enabled", "true")
+	if err := w.InjectUnplacedSession("u1", "unplaced", w.Path("u1"), protocol.SessionAgentClaude); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	app.Send(protocol.CancelCountdownMessage{Cmd: protocol.CmdCancelCountdown, SessionID: "u1"})
+	autoSettleAfterAppCommandsLand(app)
+
+	if armed := queriedSession(t, cli, "u1").AutoSettleDismissArmed; armed != nil {
+		t.Fatal("a cancel armed a dismissal on a session no terminal runs")
+	}
+}
+
 func autoSettleAfterAppCommandsLand(app *testworld.Peer) {
 	app.T.Helper()
 	testworld.Request(app, protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings}, protocol.EventSettingsUpdated,

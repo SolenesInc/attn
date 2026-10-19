@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -197,7 +198,7 @@ func (d *Daemon) quickCapturePut(profileID string, msg *protocol.QuickCaptureAtt
 	if err := syncQuickCaptureDir(filepath.Dir(filepath.Dir(final))); err != nil {
 		return nil, err
 	}
-	crashAt("quick-capture-attachment-installed")
+	crashpoint.At("quick-capture-attachment-installed")
 	a.Attachment.MediaType = media
 	a.Attachment.Bytes = size
 	a.State = store.QuickCaptureAssetReady

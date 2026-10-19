@@ -7,12 +7,11 @@ import (
 func stopDaemonBackground(t *testing.T, d *Daemon) {
 	t.Helper()
 	t.Cleanup(func() {
-		d.sessionInputs().stopRetries()
-		d.stopAllTranscriptWatchers()
+		d.monitors().registry.Close()
+		d.monitors().registry.StopTranscriptWatchers()
 		d.stopInbox()
 		d.stopAutoSettleTimers()
 		d.stopNotebookWatcher()
 		d.stopFsWatchers()
-		d.stopPluginDriverSilence()
 	})
 }

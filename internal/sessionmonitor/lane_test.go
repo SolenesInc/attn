@@ -1,4 +1,4 @@
-package daemon
+package sessionmonitor
 
 import (
 	"testing"
@@ -19,12 +19,12 @@ func TestSessionInput_PlacementPhaseContracts(t *testing.T) {
 	}
 	for _, state := range states {
 		t.Run(string(state), func(t *testing.T) {
-			promptReady := sessionInputPhaseAllows(sessionInputWhenPromptReady, state)
+			promptReady := PhaseAllows(WhenPromptReady, state)
 			wantPromptReady := state == protocol.SessionStateIdle || state == protocol.SessionStateWaitingInput
 			if promptReady != wantPromptReady {
 				t.Fatalf("WhenPromptReady(%s)=%v, want %v", state, promptReady, wantPromptReady)
 			}
-			turnBoundary := sessionInputPhaseAllows(sessionInputAtTurnBoundary, state)
+			turnBoundary := PhaseAllows(AtTurnBoundary, state)
 			wantTurnBoundary := state != protocol.SessionStatePendingApproval
 			if turnBoundary != wantTurnBoundary {
 				t.Fatalf("AtTurnBoundary(%s)=%v, want %v", state, turnBoundary, wantTurnBoundary)
@@ -52,7 +52,7 @@ func TestSessionInput_OnlyWhatTheUserTypesGuardsTheComposer(t *testing.T) {
 		{"input attn typed", "automation", "a delegate reported", false},
 		{"an attach replay", "attach_replay", "half written", false},
 	} {
-		if got := isComposerKeystroke(tc.source, []byte(tc.data)); got != tc.guards {
+		if got := IsComposerKeystroke(tc.source, []byte(tc.data)); got != tc.guards {
 			t.Errorf("%s (%s %q) guards the composer = %v, want %v", tc.name, tc.source, tc.data, got, tc.guards)
 		}
 	}

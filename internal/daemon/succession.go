@@ -7,12 +7,13 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
 // opened opens a session in terminal t for a conversation no session holds; it takes only the terminal,
 // and from closes into the ledger whole. The caller holds from's lifecycle lock.
-func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation, candidate *monitorEntry) error {
+func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation, candidate *sessionmonitor.Entry) error {
 	launch, _ := d.store.LaunchIntent(from.ID)
 	launch.ChiefOfStaff = false
 	to := protocol.SessionID(uuid.NewString())
@@ -25,7 +26,7 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 
 // shows puts owner, which holds the conversation t reports and runs in no live terminal, in t: a closed
 // owner reopens in place, an open one leaves its dead panes. The caller holds both lifecycle locks.
-func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner protocol.SessionID, observation agentConversationObservation, candidate *monitorEntry) error {
+func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner protocol.SessionID, observation agentConversationObservation, candidate *sessionmonitor.Entry) error {
 	return d.succeed(t, from, store.Succession{
 		To:     owner,
 		Close:  store.SessionClose{Reason: string("resumed; its terminal moved on to " + owner)},
@@ -33,7 +34,7 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner proto
 	}, observation, candidate)
 }
 
-func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation, candidate *monitorEntry) error {
+func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation, candidate *sessionmonitor.Entry) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
 	live := d.liveTerminals(context.Background())
 	sc.KeepFrom = d.othersRun(from.ID, t) || d.keepsWhenLeft(from.ID)
@@ -43,7 +44,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	release := func() {}
 	if !sc.KeepFrom {
-		release = d.finishMonitorUsage(from.ID)
+		release = d.monitorEntry(from.ID).FinishUsage()
 		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
 			d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
 		}
@@ -56,17 +57,17 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	if err != nil {
 		release()
 		if !sc.KeepFrom {
-			d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
+			d.monitorEntry(from.ID).EnsureTranscriptWatcher(d.store.GetSessionConversation(from.ID).TranscriptPath)
 		}
 		return err
 	}
 
 	d.startSessionMonitorFrom(sc.To, from.ID, candidate)
 	if !sc.KeepTo {
-		d.resolveSoon(sc.To)
-		d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
+		d.monitorEntry(sc.To).ResolveSoon()
+		d.monitorEntry(sc.To).StartTranscriptWatcher(observation.TranscriptPath)
 	} else {
-		d.ensureTranscriptWatcherAtPath(sc.To, observation.TranscriptPath)
+		d.monitorEntry(sc.To).EnsureTranscriptWatcher(observation.TranscriptPath)
 	}
 	d.publishFact(FactSessionRegistered, string(sc.To), nil)
 	d.publishArrangementChanged(from.ProfileID)
@@ -80,7 +81,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		d.publishSessionUnregistered(from)
 	} else {
 		if d.hidden(from.ID) {
-			d.updateEvidence(from.ID, nil, func(e *monitorEvidence) {
+			d.updateEvidence(from.ID, nil, func(e *sessionmonitor.Evidence) {
 				e.Heartbeat = nil
 				e.ClearProgramStatus()
 			})

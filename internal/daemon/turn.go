@@ -6,6 +6,7 @@ import (
 
 	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
@@ -21,16 +22,16 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 	settled := false
 	if entry != nil {
 		turn := d.store.TurnStamps(sessionID).OpenedAt
-		view, applied := entry.command(monitorCommand{Key: entry.key(), Kind: monitorSettle, Turn: turn}, time.Now())
+		view, applied := entry.Do(sessionmonitor.Command{Key: entry.Key(), Kind: sessionmonitor.Settle, Turn: turn}, time.Now())
 		settled = applied
-		settled = settled && entry.sink.Applied(view)
+		settled = settled && entry.Publish(view)
 	} else {
 		settled = d.store.SettleTurn(sessionID, time.Now())
 	}
 	if !settled {
 		return
 	}
-	d.cancelAutoSettle(sessionID, "settled by user")
+	d.monitorEntry(sessionID).CancelAutoSettle("settled by user")
 	d.traceSettle(sessionID)
 	if entry == nil {
 		d.broadcastSessionStateChanged(sessionID)

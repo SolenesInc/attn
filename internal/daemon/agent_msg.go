@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 const (
@@ -174,10 +175,10 @@ func agentMessageQueuedDetail(err error) string {
 	if errors.Is(err, errInboxDoorbellInFlight) {
 		return "queued (target's inbox doorbell is already being placed)"
 	}
-	if errors.Is(err, errSessionInputBlockedByApproval) {
+	if errors.Is(err, sessionmonitor.ErrBlockedByApproval) {
 		return "queued (target is waiting on an approval — lands when the approval clears)"
 	}
-	if errors.Is(err, errSessionInputComposerDirty) {
+	if errors.Is(err, sessionmonitor.ErrComposerDirty) {
 		return "queued (the user typed in the target moments ago; lands once the composer has been quiet for a while)"
 	}
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"

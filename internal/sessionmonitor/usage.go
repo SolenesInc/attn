@@ -1,25 +1,22 @@
-package daemon
+package sessionmonitor
 
 import (
 	"errors"
 	"os"
 	"strings"
 
-	"github.com/victorarias/attn/internal/protocol"
-
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-type sessionUsageTracker struct {
-	daemon    *Daemon
-	sessionID protocol.SessionID
-	entry     *monitorEntry
-	agent     string
-	resolver  transcript.UsageSourceResolver
-	rootPath  string
-	sources   map[string]*trackedUsageSource
+type usageTracker struct {
+	entry    *Entry
+	agent    string
+	resolver transcript.UsageSourceResolver
+	rootPath string
+	sources  map[string]*trackedUsageSource
 }
 
 type trackedUsageSource struct {
@@ -28,7 +25,7 @@ type trackedUsageSource struct {
 	info     os.FileInfo
 }
 
-func (d *Daemon) newSessionUsageTracker(w *transcriptWatcher, rootPath string) *sessionUsageTracker {
+func newUsageTracker(w *transcriptWatcher, rootPath string) *usageTracker {
 	driver := agentdriver.Get(string(w.agent))
 	provider, ok := agentdriver.GetTranscriptUsageSourceProvider(driver)
 	if !ok || !transcript.SupportsUsage(string(w.agent)) {
@@ -38,29 +35,17 @@ func (d *Daemon) newSessionUsageTracker(w *transcriptWatcher, rootPath string) *
 	if resolver == nil {
 		return nil
 	}
-	entry := w.entry
-	if entry == nil {
-		entry = d.monitorEntry(w.sessionID)
-	}
-	if entry == nil {
-		return nil
-	}
-	return newSessionUsageTrackerAt(d, entry, w.sessionID, string(w.agent), rootPath, resolver)
+	return newUsageTrackerAt(w.entry, string(w.agent), rootPath, resolver)
 }
 
-func newSessionUsageTrackerAt(
-	d *Daemon, entry *monitorEntry, sessionID protocol.SessionID, agent string, rootPath string, resolver transcript.UsageSourceResolver,
-) *sessionUsageTracker {
-	return &sessionUsageTracker{
-		daemon: d, entry: entry, sessionID: sessionID, agent: agent, resolver: resolver, rootPath: rootPath,
-		sources: make(map[string]*trackedUsageSource),
-	}
+func newUsageTrackerAt(entry *Entry, agent string, rootPath string, resolver transcript.UsageSourceResolver) *usageTracker {
+	return &usageTracker{entry: entry, agent: agent, resolver: resolver, rootPath: rootPath, sources: make(map[string]*trackedUsageSource)}
 }
 
-func (t *sessionUsageTracker) Reconcile() {
+func (t *usageTracker) Reconcile() {
 	sources, err := t.resolver.Discover()
 	if err != nil {
-		t.daemon.logf("transcript watcher: usage source discovery failed session=%s err=%v", t.sessionID, err)
+		t.entry.logf("transcript watcher: usage source discovery failed session=%s err=%v", t.entry.Label(), err)
 		t.markIncomplete()
 		return
 	}
@@ -77,7 +62,7 @@ func (t *sessionUsageTracker) Reconcile() {
 			}
 			cursor, cursorErr := transcript.HeadCursor(source.Path)
 			if cursorErr != nil {
-				t.daemon.logf("transcript watcher: usage baseline failed session=%s path=%s err=%v", t.sessionID, source.Path, cursorErr)
+				t.entry.logf("transcript watcher: usage baseline failed session=%s path=%s err=%v", t.entry.Label(), source.Path, cursorErr)
 				t.markIncomplete()
 				baselineFailed = true
 				continue
@@ -113,7 +98,7 @@ func (t *sessionUsageTracker) Reconcile() {
 			tracked.follower, err = usageFollowerAt(source.Path, t.agent, sourceState.Cursor)
 			if err != nil {
 				if !isUsageCursorError(err) {
-					t.daemon.logf("transcript watcher: usage follower init failed session=%s path=%s err=%v", t.sessionID, source.Path, err)
+					t.entry.logf("transcript watcher: usage follower init failed session=%s path=%s err=%v", t.entry.Label(), source.Path, err)
 					t.markIncomplete()
 					continue
 				}
@@ -141,10 +126,10 @@ func usageFollowerAt(path, agent, cursor string) (*transcript.Follower, error) {
 	return transcript.NewFollowerAfterCursor(path, agent, cursor)
 }
 
-func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
+func (t *usageTracker) readIfMoved(tracked *trackedUsageSource) {
 	info, err := os.Stat(tracked.source.Path)
 	if err != nil {
-		t.daemon.logf("transcript watcher: usage source unavailable session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
+		t.entry.logf("transcript watcher: usage source unavailable session=%s path=%s err=%v", t.entry.Label(), tracked.source.Path, err)
 		t.markIncomplete()
 		return
 	}
@@ -158,14 +143,14 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 			t.resetAtHead(tracked)
 			return
 		}
-		t.daemon.logf("transcript watcher: usage source read failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
+		t.entry.logf("transcript watcher: usage source read failed session=%s path=%s err=%v", t.entry.Label(), tracked.source.Path, err)
 		t.markIncomplete()
 		return
 	}
 	tracked.info = info
 	observations := usageObservations(tracked.source, batch.Usage)
 	if !t.entry.applyCostObservations(tracked.source.ID, tracked.follower.Cursor(), observations) {
-		t.daemon.logf("transcript watcher: usage source apply failed session=%s path=%s", t.sessionID, tracked.source.Path)
+		t.entry.logf("transcript watcher: usage source apply failed session=%s path=%s", t.entry.Label(), tracked.source.Path)
 	}
 
 }
@@ -204,7 +189,7 @@ func usageObservations(source transcript.UsageSource, usages []transcript.TokenU
 	return observations
 }
 
-func (t *sessionUsageTracker) resetAtHead(tracked *trackedUsageSource) bool {
+func (t *usageTracker) resetAtHead(tracked *trackedUsageSource) bool {
 	t.markIncomplete()
 	cursor, err := transcript.HeadCursor(tracked.source.Path)
 	if err != nil {
@@ -218,7 +203,7 @@ func (t *sessionUsageTracker) resetAtHead(tracked *trackedUsageSource) bool {
 	return err == nil
 }
 
-func (t *sessionUsageTracker) markIncomplete() {
+func (t *usageTracker) markIncomplete() {
 	t.entry.markCostSource(t.rootPath, true, false, nil)
 }
 
@@ -226,4 +211,15 @@ func isUsageCursorError(err error) bool {
 	return errors.Is(err, transcript.ErrCursorMismatch) ||
 		errors.Is(err, transcript.ErrCursorPastEnd) ||
 		errors.Is(err, transcript.ErrInvalidCursor)
+}
+
+func (e *Entry) FinishAndSettleUsage(agent protocol.SessionAgent, path string) func() {
+	release, tracker := e.finishUsage()
+	if tracker == nil && e != nil && path != "" {
+		tracker = newUsageTracker(&transcriptWatcher{entry: e, agent: agent}, path)
+	}
+	if tracker != nil {
+		tracker.Reconcile()
+	}
+	return release
 }

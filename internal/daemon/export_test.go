@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 type WireDaemon struct {
@@ -55,8 +56,8 @@ func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
 }
 
 func UseShippedPasteGap(t testing.TB) {
-	sessionInputSubmitDelay = shippedSessionInputSubmitDelay
-	t.Cleanup(func() { sessionInputSubmitDelay = 0 })
+	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay
+	t.Cleanup(func() { sessionmonitor.SubmitDelay = 0 })
 }
 
 // PauseNextHeldAction blocks the next profile action after it ran, while its client's broadcasts are held.

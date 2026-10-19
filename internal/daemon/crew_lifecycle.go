@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 const (
@@ -175,7 +176,7 @@ func (d *Daemon) crewCacheState(session *protocol.Session, now time.Time) crew.C
 }
 
 func crewSessionReachable(session *protocol.Session) bool {
-	return sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State)
+	return sessionmonitor.PhaseAllows(sessionmonitor.AtTurnBoundary, session.State)
 }
 
 func crewSessionMidTurn(session *protocol.Session) bool {
@@ -251,16 +252,16 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		if !d.crewMemo().heartbeatDue(sessionID, generation, now, d.crewHeartbeatLead()) {
 			return
 		}
-		delivery := maintenanceSessionInput("crew-heartbeat", string(sessionID)+"/"+generation, sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-		delivery.resend = func() {
+		delivery := sessionmonitor.MaintenanceInput("crew-heartbeat", string(sessionID)+"/"+generation, crewHeartbeatPrompt, sessionmonitor.WhenPromptReady)
+		delivery.Resend = func() {
 			d.actOnCrewMember(member, sessionID, action, cache, time.Now())
 		}
-		attempt := d.sessionInputs().try(context.Background(), delivery)
-		if attempt.stage != sessionInputPlaced {
-			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.err)
+		attempt := d.monitorEntry(sessionID).Place(context.Background(), delivery)
+		if attempt.Stage != sessionmonitor.Placed {
+			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.Err)
 			return
 		}
-		d.crewMemo().recordHeartbeat(sessionID, generation, attempt.at)
+		d.crewMemo().recordHeartbeat(sessionID, generation, attempt.At)
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
 			crew.DisplayName(member.ID), sessionID, cache.Age.Round(time.Second), cache.TTL)
 	case crew.ActionSleep:
