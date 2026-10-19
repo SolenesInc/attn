@@ -105,7 +105,7 @@ starts one yourself: pick a harness or a plain shell, pick a directory, go. It
 opens on the desktop you're on, beside the agent you're looking at. Cmd+Shift+N
 (Ctrl+Alt+N on Linux) opens it below instead.
 
-![Cmd+N (Ctrl+Shift+N on Linux) opens the new agent picker. Enter picks the recipes repository, the arrow keys pick its fix-unit-conversion worktree, and a new Claude Code agent opens beside the one on screen.](../images/new-agent.avif)
+![Cmd+N (Ctrl+Shift+N on Linux) opens the new agent picker. You press Enter to pick the recipes repository, then the arrow keys and Enter to pick its fix-unit-conversion worktree, and a new Claude Code agent opens beside the one you're looking at.](../images/new-agent.avif)
 
 ## Know who needs you
 

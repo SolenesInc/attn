@@ -16,8 +16,9 @@ Run a scene:
 
     node app/scripts/demo-harness/demo.mjs <scene> [--out <dir>]
 
-Without `--out`, files land in `$TMPDIR/attn-demo/<scene>`. Each run starts
-from an empty instance, creates its repos in `~/projects/attn-demo`, and
+Without `--out`, files land in `$TMPDIR/attn-demo/<scene>`. Copy the stills
+you want into this folder; clips go through the polish step below, which
+writes them here. Each run starts from an empty instance, creates its repos in `~/projects/attn-demo`, and
 removes them at the end. It refuses to start if that folder already exists.
 When you're done recording, `attn instance clean demo` removes the instance.
 
@@ -33,7 +34,8 @@ Scenes:
 
 Clips need the window recorder (`make install-window-recorder`) and screen
 recording permission for it. The demo window floats above other windows while
-a scene runs. Leave it on a Retina display. On a display with scale 1 the
+a scene runs, and each clip puts it back on the main display (the one with the
+menu bar). That display has to be a Retina one: on a display with scale 1 the
 footage would come out blurry, so a clip refuses to record there.
 
 ## Polish a clip
@@ -88,8 +90,7 @@ export default {
   Worktrees sit next to them as `<repo>--<branch>`. `recipeTurns.mjs` has the
   turns the scenes share.
 - `demo.session` opens a session and waits for the agent's prompt. The agent is
-  `claude` unless you pass `agent: 'codex'`. Shells get a plain prompt, not
-  your own shell config.
+  `claude` unless you pass `agent: 'codex'`.
 - `prompt` types like a person, and the stub plays the turn. The same turn
   works for both agents: `read`, `edit` and `run` become each agent's own
   tools. A turn ends with `ask` (the session waits for you), `done` (it goes
@@ -98,6 +99,9 @@ export default {
 - `demo.press(shortcutId)` presses a shortcut's current binding and `demo.key`
   presses one key; both show as a keycap in the polished clip. `demo.type`
   types into whatever has focus.
+- Shells a scene splits off run your login shell. fish and zsh get a plain
+  prompt with no history or suggestions; any other shell loads your own
+  config, prompt included.
 - `demo.caption(text)` sets the caption from that moment on. Backticks mark
   keys.
 - `demo.focus(selector)` zooms onto an element; `demo.focus(null)` zooms back
@@ -106,8 +110,10 @@ export default {
   another's, and the polished clip draws the pointer.
 - `demo.ui(action, payload)` calls the app's automation bridge
   (`app/src/hooks/useUiAutomationBridge.ts`).
-- `demo.still(name, { crop, highlight })` captures the window. `crop` takes a
-  selector, `highlight` draws a box around one.
+- `demo.still(name, { crop, highlight })` captures the window.
+  `crop: { selector, extendBottom }` crops to an element, with `extendBottom`
+  adding that many pixels below it. `highlight` takes a selector and draws a
+  box around it.
 - `demo.clip(name, async () => { ... })` records whatever the callback does.
 
 A prompt with no scripted turn gets a reply that says so, in the terminal
