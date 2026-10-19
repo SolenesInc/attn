@@ -14,6 +14,7 @@ gh pr create
 - Squash-merge only with green checks, approval, and a mergeable exact head,
   and only with the user's permission.
 - The slopradar comment is information for the reviewer, never a gate.
-- Watch with a [PR watch](../../README.md#watching-pull-requests) in `--mode codex`.
+- Watch with `attn pr watch <url> --mode codex`; `attn pr watch --help`
+  describes its readiness signals.
 - `next` is a read-only mirror of `main` for older checkouts. Nothing merges
   into it.
