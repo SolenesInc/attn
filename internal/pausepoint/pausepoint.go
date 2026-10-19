@@ -22,6 +22,7 @@ const (
 	PtyStreamRead      = "pty-stream-read"
 	PtySubscriberDrop  = "pty-subscriber-drop"
 	PtyWatchReplay     = "pty-watch-replay"
+	PtyWorkerUpgrade   = "pty-worker-upgrade"
 	BusAnnounce        = "bus-announce"
 
 	DaemonStartupRecovery     = "daemon-startup-recovery"
