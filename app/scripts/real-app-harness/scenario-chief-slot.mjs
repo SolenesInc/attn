@@ -8,8 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
-import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot } from './perfMeasure.mjs';
-import { createWindowDriver, delay } from './platform.mjs';
+import { createWindowDriver } from './platform.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const instance = currentHarnessInstance();
@@ -17,7 +16,7 @@ if (!instance) throw new Error('Chief slot verification requires a named instanc
 const resources = resolveHarnessResources(instance);
 const env = { ...instanceCliEnv(instance), ATTN_WRAPPER_PATH: resources.appDaemon };
 const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
-const client = new UiAutomationClient(options);
+const client = new UiAutomationClient({ ...options, launchEnv: { ATTN_WRAPPER_PATH: resources.appDaemon } });
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const runner = createScenarioRunner(options, { scenarioId: 'CHIEF-SLOT', tier: 'local', prefix: 'chief-slot' });
@@ -27,7 +26,6 @@ let chief;
 let firstDay;
 let notebookRoot;
 let liveAgent;
-let webkitBaseline;
 const state = () => client.request('chief_slot_get_state');
 const waitDom = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
 const click = async selector => {
@@ -41,7 +39,10 @@ const click = async selector => {
   runner.writeJson(`focus-${selector.replace(/[^a-zA-Z0-9]/g, '')}.json`, await client.request('dom_active_element'));
   await driver.clickWindow(x, y);
 };
-const screenshot = async name => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
+const screenshot = async name => {
+  if (name !== '02-chief-waking') await client.request('get_state');
+  return driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
+};
 const openChiefRoute = async () => {
   await driver.pressKey('Tab');
   await driver.pressKey('Tab');
@@ -49,17 +50,7 @@ const openChiefRoute = async () => {
   await waitDom('[role="menu"] button:first-of-type', { textIncludes: 'Harness and model' });
   await screenshot(`03-chief-actions-${(await state()).phase}`);
   await click('[role="menu"] button:first-of-type');
-  await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
-};
-const sampleIdle = async name => {
-  const before = await snapshot(client.readManifest().pid, readLiveDaemonPid(instance), webkitBaseline);
-  const pids = new Set(Object.values(before.byClass).flatMap(group => group.pids.map(entry => entry.pid)));
-  const samples = [];
-  for (let index = 0; index < 10; index += 1) {
-    await delay(1000);
-    samples.push((await readProcessTable()).filter(process => pids.has(process.pid)).map(({ pid, comm, cpuPct }) => ({ pid, comm, cpuPct })));
-  }
-  runner.writeJson(`idle-${name}.json`, { before, samples });
+  await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
 };
 const roster = () => JSON.parse(cli(['crew', 'list', '--profile', profile.id, '--json']));
 runner.registerCleanup('close_observer', () => observer.close());
@@ -82,11 +73,8 @@ runner.registerCleanup('restore_profile', async () => {
 
 try {
   await runner.step('fresh_profile', async () => {
-    webkitBaseline = await captureWebKitPids();
     await launchFreshAppAndConnect(client, observer);
-    const { logicalBounds } = await client.request('get_window_bounds');
-    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, x: 0, y: 0 } });
-    await driver.activateApp();
+    runner.writeJson('parked-window-first-launch.json', await client.request('get_window_bounds'));
     queueDaemonSettingRestore(observer, 'queue_mode_enabled');
     queueDaemonSettingRestore(observer, 'model_tier_overrides');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
@@ -113,13 +101,44 @@ try {
         { type: 'attn', args: ['handoff', '--sleep', '-m', 'The chief slot scenario left this letter.'] },
       ] },
     ] });
+    if (!(await state()).setupOpen) await click('[data-testid="chief-slot"] .queue-row-select');
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    const body = await client.request('dom_bounds', { selector: '.chief-pop-body' });
+    runner.writeJson('setup-body-bounds.json', body);
+    runner.assert(body.scrollWidth === body.clientWidth && body.scrollHeight === body.clientHeight, 'first-run setup fits without clipping or scrollbars', body);
     await screenshot('01-chief-setup');
-    await sampleIdle('unconfigured');
-    await pressShortcutKeys(client, driver, 'session.toggleSidebar');
-    await sampleIdle('collapsed-baseline');
-    await pressShortcutKeys(client, driver, 'session.toggleSidebar');
+    await driver.pressKey('Escape');
+    await waitDom('[data-testid="chief-slot"] .queue-row-select', { focused: true });
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
+    await click('[data-testid="chief-slot"] .queue-row-select');
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await screenshot('01-chief-setup-desktop-flow');
+    await driver.pressKey('Escape');
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
   });
-  await runner.step('restored_live_terminal_keeps_focus_with_automatic_setup', async () => {
+  await runner.step('no_harness_recheck', async () => {
+    await click('[data-testid="chief-slot"] .queue-row-select');
+    const originals = new Map(['claude', 'codex'].map(agent => [agent, observer.getSetting(`${agent}_executable`)]));
+    const missing = [];
+    for (const [agent] of originals) {
+      queueDaemonSettingRestore(observer, `${agent}_executable`);
+      const executable = path.join(runner.sessionDir, `missing-${agent}`);
+      fs.writeFileSync(executable, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+      cli(['settings', 'set', `${agent}_executable`, executable]);
+      missing.push(executable);
+    }
+    for (const executable of missing) fs.unlinkSync(executable);
+    await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+    await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the chief' });
+    runner.writeJson('no-harness-settings.json', Object.fromEntries(['claude', 'codex'].map(agent => [agent, observer.getSetting(`${agent}_available`)])));
+    await screenshot('01-chief-no-harness');
+    await click('[data-testid="chief-setup"] .chief-link');
+    await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the chief' });
+    for (const [agent, executable] of originals) cli(['settings', 'set', `${agent}_executable`, executable]);
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await driver.pressKey('Escape');
+  });
+  await runner.step('restored_live_terminal_keeps_setup_closed', async () => {
     const cwd = path.join(runner.sessionDir, 'live-agent');
     fs.mkdirSync(cwd, { recursive: true });
     writeMockAgentFixture(cwd, { version: 1, agent: 'claude', turns: [] });
@@ -127,31 +146,48 @@ try {
     await client.request('select_session', { sessionId: liveAgent });
     await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
     await relaunchAppAndConnect(client, observer);
-    const { logicalBounds } = await client.request('get_window_bounds');
-    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, x: 0, y: 0 } });
-    await driver.activateApp();
+    runner.writeJson('parked-window-restored.json', await client.request('get_window_bounds'));
     await client.request('select_session', { sessionId: liveAgent });
     runner.writeJson('restored-view.json', { app: await client.request('get_state'), focus: await client.request('dom_active_element'), chief: await state() });
     await waitDom('[data-session-visible="1"] [aria-label="Terminal input"]', { focused: true });
     await waitDom('[data-testid="chief-slot"][data-chief-phase="unconfigured"]');
+    await waitDom('[data-testid="chief-setup"]', { absent: true });
+    await screenshot('01-chief-agents-running');
     runner.writeJson('restored-terminal-focus.json', { chief: await state(), focus: await client.request('dom_active_element') });
   });
-  await runner.step('folder_enter_wakes_and_focuses', async () => {
-    await click('[data-testid="chief-setup"] [role="radiogroup"][aria-label="Chief harness"] [role="radio"]:first-child');
+  await runner.step('enter_wakes_and_focuses', async () => {
+    await click('[data-testid="chief-slot"] .queue-row-select');
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await driver.pressKey('Escape');
+    await waitDom('[data-testid="chief-slot"] .queue-row-select', { focused: true });
     await driver.pressEnter();
-    await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"] [aria-checked="true"]', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await screenshot('01-chief-setup-with-agent');
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
     const folderSelector = '[data-testid="chief-setup"] input[aria-label="Notebook folder"]';
     const { value: defaultFolder } = await client.request('dom_value', { selector: folderSelector });
     runner.assert(defaultFolder === cli(['settings', 'get', 'notebook.root', '--profile', profile.id]).trim(), 'the folder is prefilled with the profile Notebook', { defaultFolder });
+    const invalidRoot = path.join(runner.sessionDir, 'not-a-folder');
+    fs.writeFileSync(invalidRoot, 'This file reproduces a Notebook folder save failure.');
+    await click(folderSelector);
+    await driver.pressKey('a', { command: true });
+    await driver.typeText(invalidRoot);
+    await driver.pressEnter();
+    await waitDom('[data-testid="chief-setup"] [role="alert"]');
+    await screenshot('02-chief-save-error');
     await click(folderSelector);
     await driver.pressKey('a', { command: true });
     await driver.typeText(notebookRoot);
     await screenshot('02-chief-model-and-folder');
+    await driver.pressKey('Tab');
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    const waking = waitDom('[data-testid="chief-slot"][data-chief-phase="configuring"]').then(() => screenshot('02-chief-waking'));
     await driver.pressEnter();
+    await waking;
     await waitDom('[data-testid="chief-slot"][data-chief-phase="awake"]');
     const awake = await state();
     firstDay = awake.sessionId;
-    runner.assert(awake.shownAgentId === firstDay, 'Enter in the Notebook folder wakes and shows the chief', { awake });
+    runner.assert(awake.shownAgentId === firstDay, 'Enter on Wake accepts the selected route and shows the chief', { awake });
     const configured = roster().find(member => member.chief);
     runner.assert(configured?.binding_session === firstDay, 'the roster binds the chief to the shown session');
     runner.assert(configured?.home_dir === path.join(notebookRoot, 'crew', 'chief') && configured?.cwd === notebookRoot, 'the chief has its final Notebook home and working directory', { configured });
@@ -176,6 +212,21 @@ try {
     await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
     runner.writeJson('configured-save-focus.json', { state: await state(), focus: await client.request('dom_active_element') });
   });
+  await runner.step('configured_command_expands_the_sidebar_and_focuses_save', async () => {
+    await pressShortcutKeys(client, driver, 'session.toggleSidebar');
+    await waitDom('[data-testid="chief-slot"]', { absent: true });
+    await relaunchAppAndConnect(client, observer);
+    runner.writeJson('parked-window-configured.json', await client.request('get_window_bounds'));
+    await pressShortcutKeys(client, driver, 'ui.commandPalette');
+    await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
+    await driver.typeText("Change the chief's harness and model");
+    await waitDom('.unified-palette-option[aria-selected="true"]', { textIncludes: "Change the chief's harness and model" });
+    await driver.pressEnter();
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await screenshot('03-chief-route-from-collapsed-sidebar');
+    await driver.pressKey('Escape');
+    await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
+  });
   await runner.step('sleep_and_one_click_wake', async () => {
     await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
     await driver.pressKey('Tab');
@@ -184,9 +235,9 @@ try {
     runner.writeJson('sleep-after-activation.json', await state());
     await waitDom('[data-testid="chief-slot"][data-chief-phase="asleep"]');
     await screenshot('04-chief-asleep');
-    await sampleIdle('asleep');
     runner.assert(!roster().find(member => member.chief)?.binding_session, 'sleep releases the chief binding');
-    await click('[data-testid="queue-agent-filter"]');
+    await pressShortcutKeys(client, driver, 'sidebar.agentList');
+    await waitDom('[data-testid="queue-agent-filter"]', { focused: true });
     await driver.pressKey('ArrowDown');
     await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
     await openChiefRoute();
@@ -229,6 +280,7 @@ try {
   });
   console.log(JSON.stringify(await runner.finishSuccess({ profile: profile.id, chief: chief.key, firstDay }), null, 2));
 } catch (error) {
+  runner.writeJson('app-exit.json', { pid: client.launch?.pid, exitCode: client.launch?.child?.exitCode, signal: client.launch?.child?.signalCode, logPath: client.launch?.logPath });
   if (chief) {
     try {
       runner.writeJson('chief-slot-failure-state.json', {

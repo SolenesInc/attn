@@ -2020,7 +2020,7 @@ export function useUiAutomationBridge({
           phase: slot?.getAttribute('data-chief-phase') || null,
           member: slot?.getAttribute('data-chief-member') || null,
           sessionId: slot?.getAttribute('data-chief-session') || null,
-          setupOpen: Boolean(slot?.querySelector('[data-testid="chief-setup"]')),
+          setupOpen: Boolean(document.querySelector('[data-testid="chief-setup"]')),
           shownAgentId,
         };
       }

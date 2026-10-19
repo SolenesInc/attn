@@ -1,4 +1,4 @@
-import { test, expect, waitForMockPtyBanner } from './fixtures';
+import { test, expect, dismissChiefSetup, waitForMockPtyBanner } from './fixtures';
 
 const OSC = ']133;';
 const BEL = '';
@@ -19,6 +19,7 @@ async function openTerminalSession(
   await daemon.start();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
+  await dismissChiefSetup(page);
   await page.evaluate(({ id }) => {
     window.__TEST_INJECT_SESSION?.({
       id,

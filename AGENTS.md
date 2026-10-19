@@ -292,7 +292,7 @@ working on:
 - Tests, before writing, changing, or deleting them => docs/internal/testing.md
 - How a harness behaves, before relying on it => docs/internal/harnesses.md; check new
   claims in its source or with a probe and record them there
-- The inbox: addresses, rings, wakes, seed updates or notices => docs/inbox.md
+- The inbox: addresses, rings, wakes, seed updates or notices => docs/internal/inbox.md
 - User-facing behavior => the relevant page in `docs/guide/`
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/internal/prompt-authoring.md

@@ -641,4 +641,10 @@ export async function waitForMockPtyBanner(
     .toBe(true);
 }
 
+export async function dismissChiefSetup(page: import('@playwright/test').Page) {
+  const setup = page.getByRole('dialog', { name: 'Set up Chief' });
+  await setup.getByRole('button', { name: 'Close chief setup' }).click();
+  await expect(setup).toHaveCount(0);
+}
+
 export { expect };

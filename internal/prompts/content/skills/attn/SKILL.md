@@ -1,6 +1,6 @@
 ---
 name: attn
-description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, the Notebook, markdown, terminals, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
+description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, the Notebook, markdown, terminals, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's Chief. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
 ---
 
 # attn

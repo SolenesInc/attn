@@ -145,8 +145,7 @@ export async function startWorld({ repos, log }) {
     await client.waitForFrontendResponsive(30_000);
     await client.request('dismiss_whats_new');
     await client.request('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
-    await client.request('dom_wait', { selector: '.dock-collapse-btn[aria-expanded="true"]', timeoutMs: 10_000 });
-    await client.request('dom_click', { selector: '.dock-collapse-btn' });
+    await client.request('dom_click', { selector: '.dock-collapse-btn[aria-expanded="true"]' }).catch(() => {});
     await setFrontWindowBounds(WINDOW, { client });
     const daemon = new DaemonObserver();
     await daemon.connect();
