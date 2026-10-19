@@ -625,7 +625,7 @@ export function useSettingsModalState({
             id: 'outposts' as const,
             label: 'Outposts',
             title: 'Outposts',
-            description: 'Connect this home to other machines through a bridge.',
+            description: 'Connect this home to attn on other computers.',
             count: 1,
             keywords: 'outposts bridge host machine address pair re-pair remove connection build fingerprint',
           }] : []),

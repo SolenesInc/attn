@@ -36,7 +36,7 @@ export function OutpostsSettings() {
       <section className="settings-block">
         <div className="settings-block-intro">
           <h3>Add an outpost</h3>
-          <p className="settings-description">Connect to an outpost running the same attn build. Its host key is pinned on first contact.</p>
+          <p className="settings-description">Connect to attn on another computer running the same build. Its host key is pinned on first contact.</p>
         </div>
         <form className="settings-block-body" aria-label="Add an outpost" onSubmit={add}>
           <div className="settings-field">
