@@ -198,7 +198,9 @@ A block's first line is the question; the rest is context. Choices are
   ASK
 
 attn ask prints the ask's id and returns at once. Carry on with work that does
-not depend on the answer; attn tells you when it arrives.
+not depend on the answer; attn tells you when it arrives. By then the user has
+likely moved on and will not read what you write back, so if you still need
+them, ask again.
 
 commands:
   (none)                 open an ask from stdin or --file

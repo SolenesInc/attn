@@ -1,0 +1,3 @@
+kind: changed
+area: agents
+change: "Agents learn that once you answer an ask you have likely moved on, so if they still need you they ask again instead of replying in their conversation, where you would not see it."
