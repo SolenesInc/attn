@@ -1,0 +1,3 @@
+kind: internal
+area: agents
+change: Quick Capture keeps attachment bytes on disk and streams them in chunks, so large files no longer load whole into the capture window.

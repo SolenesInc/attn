@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Ref } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import type { QuickCaptureDeliveryClient, QuickCaptureItem } from '../quickCapture/client';
 
 interface Props {
@@ -116,17 +117,15 @@ function QuickCaptureHistoryImage({ client, captureId, image }: { client: QuickC
     setUrl(''); setError('');
     if (!visible) return;
     let disposed = false;
-    let owned = '';
-    const release = (value: string) => { if (value.startsWith('blob:')) URL.revokeObjectURL(value); };
     const load = (imageLoads.get(client) ?? Promise.resolve()).then(async () => {
       if (disposed) return;
       try {
-        const value = await client.file(captureId, image.id, image.mediaType);
-        if (disposed) release(value); else { owned = value; setUrl(value); }
+        const path = await client.file(captureId, image.id);
+        if (!disposed) setUrl(convertFileSrc(path));
       } catch (error) { if (!disposed) setError(String(error)); }
     });
     imageLoads.set(client, load);
-    return () => { disposed = true; release(owned); owned = ''; };
-  }, [visible, client, captureId, image.id, image.mediaType, retry]);
+    return () => { disposed = true; };
+  }, [visible, client, captureId, image.id, retry]);
   return <figure ref={figure} className="capture-history-image"><div className="capture-history-image-preview">{url && <img src={url} alt={image.name} />}</div><figcaption><span>{image.name}</span><small>{fileSize(image.bytes)}</small>{error && <><span role="alert"> {error}</span><button aria-label={`Retry ${image.name}`} onClick={() => setRetry(value => value + 1)}>Retry image</button></>}</figcaption></figure>;
 }

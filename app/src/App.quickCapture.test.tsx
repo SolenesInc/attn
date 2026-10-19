@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { readImage } from '@tauri-apps/plugin-clipboard-manager';
 import { QuickCapture } from './components/QuickCapture';
 import { QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST } from './quickCapture/client';
 import { DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop } from './test/daemonFixtures';
@@ -11,18 +10,17 @@ import { serveSettings } from './test/settings';
 import type { EventMessage } from './test/protocol';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
-const localFetch = globalThis.fetch;
-vi.mock('@tauri-apps/plugin-clipboard-manager', async importOriginal => ({
-  ...await importOriginal<typeof import('@tauri-apps/plugin-clipboard-manager')>(),
-  readImage: vi.fn(),
-}));
 const native = vi.hoisted(() => {
   (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED = true;
   return ({
   listeners: new Map<string, Set<(event: { payload: unknown }) => unknown>>(),
   draft: null as unknown,
   drafts: new Map<string, unknown>(),
-  files: new Map<string, string>(),
+  files: new Map<string, Uint8Array>(),
+  parts: new Map<string, Uint8Array>(),
+  disk: new Map<string, Uint8Array>(),
+  clipboardImage: undefined as Uint8Array | undefined,
+  emitted: [] as unknown[],
   visible: false,
   readyGate: undefined as Promise<void> | undefined,
   binding: null as string | null,
@@ -32,6 +30,7 @@ const native = vi.hoisted(() => {
 }); });
 vi.mock('@tauri-apps/api/event', () => {
   async function emitTo(_label: string, event: string, payload?: unknown) {
+    native.emitted.push(payload);
     if (event === 'capture-open') native.visible = true;
     if (event === 'capture-hidden') native.visible = false;
     for (const listener of native.listeners.get(event) ?? []) await listener({ payload });
@@ -53,11 +52,26 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
   }),
 }));
 
+const bytesOf = (binary: string) => Uint8Array.from(binary, char => char.charCodeAt(0));
+const base64Of = (bytes: Uint8Array) => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
+type SeededDraft = Omit<CachedQuickCaptureDraft, 'files'> & { files: { id: string; name: string; binary: string }[] };
+function storedDraft(draft: SeededDraft, profileId = DEFAULT_PROFILE_ID) {
+  for (const file of draft.files) native.files.set(`${profileId}:${file.id}`, bytesOf(file.binary));
+  return { ...draft, files: draft.files.map(({ id, name }) => ({ id, name })) };
+}
+function storedFile(profileId: string, id: string, name: string) {
+  const bytes = native.files.get(`${profileId}:${id}`);
+  if (!bytes) throw new Error(`${id}.file is missing`);
+  const head = String.fromCharCode(...bytes.slice(0, 4));
+  const mediaType = head === '\x89PNG' || name.endsWith('.png') ? 'image/png' : head === '%PDF' ? 'application/pdf' : 'application/octet-stream';
+  return { size: bytes.length, mediaType, path: `/quick-capture-drafts/${profileId}/${id}.file` };
+}
+
 beforeEach(() => {
-  vi.mocked(readImage).mockClear().mockRejectedValue(new Error('Clipboard has no image'));
-  native.listeners.clear(); native.readyGate = undefined; native.visible = false; native.draft = null; native.drafts.clear(); native.files.clear(); native.binding = null; native.active = null;
+  native.listeners.clear(); native.readyGate = undefined; native.visible = false; native.draft = null; native.drafts.clear(); native.binding = null; native.active = null;
+  native.files.clear(); native.parts.clear(); native.disk.clear(); native.clipboardImage = undefined; native.emitted = [];
   vi.mocked(isTauri).mockReturnValue(true);
-  vi.mocked(invoke).mockImplementation(async (command, args) => {
+  vi.mocked(invoke).mockImplementation(async (command, args, options) => {
     const values = args as Record<string, any> | undefined;
     if (command === 'get_client_token') return 'test-token';
     if (command === 'capture_hide') { native.onHide?.(); return; }
@@ -71,11 +85,42 @@ beforeEach(() => {
     if (command === 'capture_cache') { native.binding = values!.binding; return; }
     if (command === 'quick_capture_draft_read') {
       const draft = (native.drafts.get(values!.profileId) ?? (native.drafts.size === 0 ? native.draft : null)) as CachedQuickCaptureDraft | null;
-      for (const file of draft?.files ?? []) if (file.url) native.files.set(`${values!.profileId}:${file.id}`, file.url);
-      return draft && { ...draft, files: draft.files.map(file => ({ ...file, url: file.url || native.files.get(`${values!.profileId}:${file.id}`)! })) };
+      return draft && { ...draft, files: draft.files.map(({ id, name }) => ({ id, name, ...storedFile(values!.profileId, id, name) })) };
     }
-    if (command === 'quick_capture_draft_write') { native.draft = values!.draft; native.drafts.set(values!.profileId, values!.draft); return; }
-    if (command === 'quick_capture_draft_file_write') { native.files.set(`${values!.profileId}:${values!.id}`, values!.url); return; }
+    if (command === 'quick_capture_draft_write') {
+      const previous = (native.drafts.get(values!.profileId) ?? (native.drafts.size === 0 ? native.draft : null)) as CachedQuickCaptureDraft | null;
+      for (const file of previous?.files ?? []) {
+        if (!values!.draft.files.some((kept: { id: string }) => kept.id === file.id)) native.files.delete(`${values!.profileId}:${file.id}`);
+      }
+      native.draft = values!.draft; native.drafts.set(values!.profileId, values!.draft); return;
+    }
+    if (command === 'quick_capture_draft_file_copy') {
+      const bytes = native.disk.get(values!.path);
+      if (!bytes) throw new Error(`Cannot read ${values!.path}`);
+      native.files.set(`${values!.profileId}:${values!.id}`, bytes);
+      return storedFile(values!.profileId, values!.id, values!.path);
+    }
+    if (command === 'quick_capture_draft_file_append') {
+      const headers = options!.headers as Record<string, string>;
+      const key = `${headers['profile-id']}:${headers['file-id']}`;
+      const previous = Number(headers.offset) === 0 ? new Uint8Array() : native.parts.get(key)!;
+      if (previous.length !== Number(headers.offset)) throw new Error(`Part holds ${previous.length} bytes, asked to write at ${headers.offset}`);
+      native.parts.set(key, new Uint8Array([...previous, ...(args as Uint8Array)])); return;
+    }
+    if (command === 'quick_capture_draft_file_finish') {
+      const key = `${values!.profileId}:${values!.id}`;
+      native.files.set(key, native.parts.get(key)!); native.parts.delete(key);
+      return storedFile(values!.profileId, values!.id, values!.name);
+    }
+    if (command === 'quick_capture_draft_clipboard_image') {
+      if (!native.clipboardImage) throw new Error('Clipboard has no image');
+      native.files.set(`${values!.profileId}:${values!.id}`, native.clipboardImage);
+      return storedFile(values!.profileId, values!.id, 'Pasted screenshot.png');
+    }
+    if (command === 'quick_capture_draft_file_chunk') {
+      const bytes = native.files.get(`${values!.profileId}:${values!.id}`)!;
+      return base64Of(bytes.slice(values!.offset, values!.offset + values!.length));
+    }
     return undefined;
   });
 });
@@ -269,9 +314,7 @@ describe('Quick Capture app wire behavior', () => {
     const a = defaultProfile('desktop-1');
     const b = defaultProfile('desktop-work', { id: other, name: 'Work' });
     const desktops = [emptyDesktop('desktop-1'), emptyDesktop('desktop-work', { profile_id: other })];
-    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
-    const url = `data:application/pdf;base64,${btoa('A'.repeat(524288 + 1))}`;
-    vi.mocked(invoke).mockImplementation(async (command, args) => command === 'quick_capture_file_read' ? url : nativeInvoke(command, args));
+    native.disk.set('/a.pdf', bytesOf('A'.repeat(524288 + 1)));
     const { daemon } = await captureApp(daemon => {
       daemon.on('quick_capture_list', command => ({ event: 'quick_capture_result', profile_id: command.profile_id!, success: true, result: { list: { items: [], draft_assets: [] } } }));
       daemon.on('quick_capture_attachment_put', command => command.offset === 0 ? undefined : ({ event: 'quick_capture_result', profile_id: other, success: false, error: 'The selected profile changed' }));
@@ -355,7 +398,7 @@ describe('Quick Capture app wire behavior', () => {
         getData: (type: string) => type === format ? 'Pasted message' : '' } });
     });
     expect(allowed).toBe(true);
-    expect(readImage).not.toHaveBeenCalled();
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_draft_clipboard_image')).toEqual([]);
     expect(screen.queryByRole('button', { name: 'Remove Pasted screenshot' })).toBeNull();
     expect(daemon.sentOf('quick_capture_attachment_put')).toEqual([]);
   });
@@ -370,10 +413,6 @@ describe('Quick Capture app wire behavior', () => {
       const image = document.createElement('img'); readyToDecode(image); return image;
     });
     const { daemon } = await captureApp(daemon => {
-      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).startsWith('data:')) return localFetch(input, init);
-        throw new Error('app wire tests reach no network');
-      });
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID,
         success: true, result: { list: { items: [], draft_assets: [] } } }));
       daemon.on('quick_capture_attachment_put', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID,
@@ -395,7 +434,7 @@ describe('Quick Capture app wire behavior', () => {
     await daemon.idle();
     expect(atob(uploaded.data_base64)).toBe(binary);
     expect(uploaded.name).toBe('copied.png');
-    expect(readImage).not.toHaveBeenCalled();
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_draft_clipboard_image')).toEqual([]);
     expect(screen.getByRole('button', { name: 'Remove copied.png' })).toBeInTheDocument();
     expect(editor()).toHaveValue('Existing message');
   });
@@ -447,14 +486,9 @@ describe('Quick Capture app wire behavior', () => {
 
   it('uploads restored image bytes before sending and retains the image on an upload failure', async () => {
     const captureId = crypto.randomUUID(); const imageId = crypto.randomUUID();
-    const url = 'data:image/png;base64,iVBORw0KGgo=';
-    native.draft = { id: captureId, text: '', mailbox: 'chief', uncertain: false,
-      files: [{ id: imageId, name: 'screenshot.png', url }] };
+    native.draft = storedDraft({ id: captureId, text: '', mailbox: 'chief', uncertain: false,
+      files: [{ id: imageId, name: 'screenshot.png', binary: atob('iVBORw0KGgo=') }] });
     const { daemon } = await captureApp(daemon => {
-    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).startsWith('data:')) return localFetch(input, init);
-      throw new Error('app wire tests reach no network');
-    });
     daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
     daemon.on('quick_capture_attachment_put', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: false, error: 'Upload storage unavailable' }));
     daemon.on('quick_capture_get', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: false, error: 'Quick capture absent', error_code: 'quick_capture_not_found' }));
@@ -471,8 +505,8 @@ describe('Quick Capture app wire behavior', () => {
 
   it('reconciles a ready image after relaunch and sends an image-only capture without reuploading it', async () => {
     const captureId = crypto.randomUUID(); const imageId = crypto.randomUUID();
-    native.draft = { id: captureId, text: '', mailbox: 'chief', uncertain: false,
-      files: [{ id: imageId, name: 'kept.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
+    native.draft = storedDraft({ id: captureId, text: '', mailbox: 'chief', uncertain: false,
+      files: [{ id: imageId, name: 'kept.png', binary: atob('iVBORw0KGgo=') }] });
     const { daemon, hidden } = await captureApp(daemon => {
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [],
         draft_assets: [{ capture_id: captureId, attachment_id: imageId, name: 'kept.png', state: 'ready', next_offset: 8 }] } } }));
@@ -488,13 +522,9 @@ describe('Quick Capture app wire behavior', () => {
 
   it('drains an eager image upload before deleting a removed attachment', async () => {
     const captureId = crypto.randomUUID(); const imageId = crypto.randomUUID();
-    native.draft = { id: captureId, text: '', mailbox: 'chief', uncertain: false,
-      files: [{ id: imageId, name: 'remove.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
+    native.draft = storedDraft({ id: captureId, text: '', mailbox: 'chief', uncertain: false,
+      files: [{ id: imageId, name: 'remove.png', binary: atob('iVBORw0KGgo=') }] });
     const { daemon } = await captureApp(daemon => {
-      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).startsWith('data:')) return localFetch(input, init);
-        throw new Error('app wire tests reach no network');
-      });
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { list: { items: [], draft_assets: [] } } }));
       daemon.on('quick_capture_attachment_discard', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { discarded: true } }));
@@ -514,8 +544,8 @@ describe('Quick Capture app wire behavior', () => {
 
   it('blocks sending until attachment removal is saved and remote discard settles', async () => {
     const captureId = crypto.randomUUID(), fileId = crypto.randomUUID();
-    native.draft = { id: captureId, text: 'Send without this file', mailbox: 'chief', uncertain: false,
-      files: [{ id: fileId, name: 'removed.png', url: 'data:image/png;base64,aGVsbG8=' }] };
+    native.draft = storedDraft({ id: captureId, text: 'Send without this file', mailbox: 'chief', uncertain: false,
+      files: [{ id: fileId, name: 'removed.png', binary: atob('aGVsbG8=') }] });
     let saveStarted!: () => void, finishSave!: () => void;
     const started = new Promise<void>(resolve => { saveStarted = resolve; });
     const saved = new Promise<void>(resolve => { finishSave = resolve; });
@@ -548,8 +578,8 @@ describe('Quick Capture app wire behavior', () => {
 
   it('retains a sendable attachment after removal cannot be saved, editing resumes and the panel relaunches', async () => {
     const captureId = crypto.randomUUID(), fileId = crypto.randomUUID();
-    native.draft = { id: captureId, text: 'Retain this file', mailbox: 'chief', uncertain: false,
-      files: [{ id: fileId, name: 'retained.png', url: 'data:image/png;base64,aGVsbG8=' }] };
+    native.draft = storedDraft({ id: captureId, text: 'Retain this file', mailbox: 'chief', uncertain: false,
+      files: [{ id: fileId, name: 'retained.png', binary: atob('aGVsbG8=') }] });
     let discarded = false, failRemoval = false;
     const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
     vi.mocked(invoke).mockImplementation(async (command, args) => {
@@ -583,6 +613,55 @@ describe('Quick Capture app wire behavior', () => {
     expect(daemon.sentOf('quick_capture_send')).toEqual([expect.objectContaining({ capture_id: captureId, attachment_ids: [fileId] })]);
   });
 
+  it('drops a multi-megabyte file without its bytes in the draft, the window bridge or native calls', async () => {
+    const bytes = Uint8Array.from({ length: 3 * 1024 * 1024 + 7 }, (_, index) => (index * 31) % 256);
+    native.disk.set('/large.bin', bytes);
+    const { daemon } = await captureApp(daemon => {
+      daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('quick_capture_attachment_put', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
+        result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
+      daemon.on('quick_capture_send', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { record: record(command) } }));
+    });
+    await act(async () => { await native.onDrop!({ payload: { type: 'drop', paths: ['/large.bin'], position: { x: 100, y: 100 } } }); });
+    await daemon.idle();
+    await hideCapture(daemon);
+    const attachmentId = daemon.sentOf('quick_capture_attachment_put')[0].attachment_id;
+    expect(native.draft).toEqual({ id: expect.any(String), text: '', mailbox: 'chief', uncertain: false, files: [{ id: attachmentId, name: 'large.bin' }] });
+    await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
+    const uploads = daemon.sentOf('quick_capture_attachment_put');
+    expect(uploads.map(command => [command.offset, atob(command.data_base64).length, command.final])).toEqual([
+      ...Array.from({ length: 6 }, (_, index) => [index * 524288, 524288, false]), [6 * 524288, 7, true]]);
+    const received = bytesOf(uploads.map(command => atob(command.data_base64)).join(''));
+    expect(received.length === bytes.length && received.every((byte, index) => byte === bytes[index])).toBe(true);
+    expect(daemon.sentOf('quick_capture_send')).toMatchObject([{ attachment_ids: [attachmentId] }]);
+    const crossings = [...vi.mocked(invoke).mock.calls.map(([command, args]) => ({ command, args })), ...native.emitted.map(payload => ({ payload }))];
+    expect(crossings.filter(crossing => JSON.stringify(crossing).length > 4096)).toEqual([]);
+  });
+
+  it('pastes a native screenshot through the draft folder and uploads its bytes', async () => {
+    const png = bytesOf(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII='));
+    native.clipboardImage = png;
+    let readyToDecode!: (image: HTMLImageElement) => void;
+    const decoding = new Promise<HTMLImageElement>(resolve => { readyToDecode = resolve; });
+    vi.spyOn(window, 'Image').mockImplementation(function () {
+      const image = document.createElement('img'); readyToDecode(image); return image;
+    });
+    const { daemon } = await captureApp(daemon => {
+      daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
+      daemon.on('quick_capture_attachment_put', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
+        result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
+    });
+    await gesture(daemon, () => fireEvent.paste(editor(), { clipboardData: { files: [], types: [], items: [], getData: () => '' } }));
+    const image = await decoding;
+    expect(image.src).toMatch(/^asset:\/\/localhost\/\/quick-capture-drafts\//);
+    await act(async () => fireEvent.load(image));
+    const uploaded = await daemon.received('quick_capture_attachment_put');
+    await daemon.idle();
+    expect(uploaded).toMatchObject({ name: 'Pasted screenshot', final: true });
+    expect(bytesOf(atob(uploaded.data_base64))).toEqual(png);
+    expect(screen.getByRole('img', { name: 'Pasted screenshot' })).toBeInTheDocument();
+  });
+
   it('IME Enter keeps composing, while Shift+Enter does not send', async () => {
     const { daemon } = await captureApp();
     await gesture(daemon, () => {
@@ -596,14 +675,8 @@ describe('Quick Capture app wire behavior', () => {
 
   it.each(['paste', 'drop'] as const)('attaches a PDF by %s, stages its bytes and submits without image decoding', async mode => {
     const pdf = '%PDF-1.4\nQuick Capture PDF fixture\n%%EOF\n';
-    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
-    vi.mocked(invoke).mockImplementation(async (command, args) => command === 'quick_capture_file_read'
-      ? `data:application/pdf;base64,${btoa(pdf)}` : nativeInvoke(command, args));
+    native.disk.set('/fixture/notes.pdf', bytesOf(pdf));
     const { daemon } = await captureApp(daemon => {
-      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).startsWith('data:')) return localFetch(input, init);
-        throw new Error('app wire tests reach no network');
-      });
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
       daemon.on('quick_capture_attachment_put', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
@@ -624,15 +697,9 @@ describe('Quick Capture app wire behavior', () => {
   });
 
   it('retains edits and removal made while another file occupies the upload queue', async () => {
-    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
-    vi.mocked(invoke).mockImplementation(async (command, args) => command === 'quick_capture_file_read'
-      ? 'data:application/pdf;base64,JVBERi0xLjQK' : nativeInvoke(command, args));
+    for (const path of ['/first.pdf', '/second.pdf']) native.disk.set(path, bytesOf(atob('JVBERi0xLjQK')));
     let uploadsHeld = true;
     const { daemon } = await captureApp(daemon => {
-      vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).startsWith('data:')) return localFetch(input, init);
-        throw new Error('app wire tests reach no network');
-      });
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
       daemon.on('quick_capture_attachment_put', command => uploadsHeld ? undefined : ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { upload: { next_offset: command.offset + atob(command.data_base64).length } } }));
@@ -661,13 +728,7 @@ describe('Quick Capture app wire behavior', () => {
   });
 
   it('retains the draft and resumes file staging after a disconnect drains the upload queue', async () => {
-    const reads: string[] = [];
-    const url = 'data:application/pdf;base64,JVBERi0xLjQK';
-    const nativeInvoke = vi.mocked(invoke).getMockImplementation()!;
-    vi.mocked(invoke).mockImplementation(async (command, args) => {
-      if (command !== 'quick_capture_file_read') return nativeInvoke(command, args);
-      reads.push((args as { path: string }).path); return url;
-    });
+    for (const path of ['/first.pdf', '/second.pdf']) native.disk.set(path, bytesOf(atob('JVBERi0xLjQK')));
     let held = true;
     const { daemon } = await captureApp(daemon => {
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [], draft_assets: [] } } }));
@@ -685,7 +746,8 @@ describe('Quick Capture app wire behavior', () => {
     await daemon.idle();
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(editor()).toBeInTheDocument();
-    expect(reads).toEqual(['/first.pdf', '/second.pdf']);
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_draft_file_copy').map(([, args]) => (args as { path: string }).path))
+      .toEqual(['/first.pdf', '/second.pdf']);
     await hideCapture(daemon);
     expect((native.draft as CachedQuickCaptureDraft).files.map(file => file.name)).toEqual(['first.pdf', 'second.pdf']);
     held = false;
@@ -701,14 +763,13 @@ describe('Quick Capture app wire behavior', () => {
   });
 
   it.each([{ length: 0, offset: 0 }, { length: 524291, offset: 0 }, { length: 524292, offset: 1 }, { length: 524293, offset: 2 }])(
-    'uploads exact retained bytes (length=$length, resumed offset=$offset) without a whole-file URL fetch', async ({ length, offset }) => {
+    'uploads exact retained bytes (length=$length, resumed offset=$offset) chunk by chunk from the draft file', async ({ length, offset }) => {
       const captureId = crypto.randomUUID(), attachmentId = crypto.randomUUID();
       const bytes = Uint8Array.from({ length }, (_, index) => index % 256);
       const binary = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
-      native.draft = { id: captureId, text: 'Binary attachment', mailbox: 'chief', uncertain: false,
-        files: [{ id: attachmentId, name: 'retained.bin', url: `data:application/octet-stream;base64,${btoa(binary)}` }] };
+      native.draft = storedDraft({ id: captureId, text: 'Binary attachment', mailbox: 'chief', uncertain: false,
+        files: [{ id: attachmentId, name: 'retained.bin', binary }] });
       const { daemon } = await captureApp(daemon => {
-        vi.stubGlobal('fetch', () => { throw new Error('retained files upload directly from their base64 bytes'); });
         daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [],
           draft_assets: offset ? [{ capture_id: captureId, attachment_id: attachmentId, name: 'retained.bin', state: 'staged', next_offset: offset }] : [] } } }));
         daemon.on('quick_capture_attachment_put', command => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
@@ -829,8 +890,8 @@ describe('Quick Capture app wire behavior', () => {
     const b = defaultProfile('desktop-work', { id: 'profile-work', name: 'Work' });
     const desktops = [emptyDesktop('desktop-1'), emptyDesktop('desktop-work', { profile_id: b.id })];
     const captureId = crypto.randomUUID(), fileId = crypto.randomUUID();
-    native.drafts.set(a.id, { id: captureId, text: 'Discard this message', mailbox: 'chief', uncertain: false,
-      files: [{ id: fileId, name: 'discard.pdf', url: 'data:application/pdf;base64,JVBERi0=' }] });
+    native.drafts.set(a.id, storedDraft({ id: captureId, text: 'Discard this message', mailbox: 'chief', uncertain: false,
+      files: [{ id: fileId, name: 'discard.pdf', binary: atob('JVBERi0=') }] }, a.id));
     const { daemon } = await captureApp(daemon => {
       daemon.on('quick_capture_list', command => ({ event: 'quick_capture_result', profile_id: command.profile_id!, success: true,
         result: { list: { items: [], draft_assets: command.profile_id === a.id
@@ -861,8 +922,8 @@ describe('Quick Capture app wire behavior', () => {
 
   it('keeps a discarded draft cleared after remote cleanup fails and the panel relaunches', async () => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID(), secondId = crypto.randomUUID();
-    native.draft = { id: captureId, text: 'Discard this message', mailbox: 'chief', uncertain: false,
-      files: [imageId, secondId].map(id => ({ id, name: 'discard.png', url: 'data:image/png;base64,iVBORw0KGgo=' })) };
+    native.draft = storedDraft({ id: captureId, text: 'Discard this message', mailbox: 'chief', uncertain: false,
+      files: [imageId, secondId].map(id => ({ id, name: 'discard.png', binary: atob('iVBORw0KGgo=') })) });
     const { daemon, capture } = await captureApp(daemon => {
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true,
         result: { list: { items: [], draft_assets: [imageId, secondId].map(id => ({ capture_id: captureId, attachment_id: id,
@@ -896,8 +957,8 @@ describe('Quick Capture app wire behavior', () => {
 
   it('does not let queued uploads restore a draft while its local clear is pending', async () => {
     const captureId = crypto.randomUUID();
-    const files = ['first.pdf', 'second.pdf', 'third.pdf'].map(name => ({ id: crypto.randomUUID(), name, url: 'data:application/pdf;base64,JVBERi0=' }));
-    native.draft = { id: captureId, text: 'Discard queued files', mailbox: 'chief', uncertain: false, files };
+    const files = ['first.pdf', 'second.pdf', 'third.pdf'].map(name => ({ id: crypto.randomUUID(), name, binary: atob('JVBERi0=') }));
+    native.draft = storedDraft({ id: captureId, text: 'Discard queued files', mailbox: 'chief', uncertain: false, files });
     let finishSave!: () => void;
     let saveStarted!: () => void;
     const saveGate = new Promise<void>(resolve => { finishSave = resolve; });
@@ -946,8 +1007,8 @@ describe('Quick Capture app wire behavior', () => {
 
   it('reports a failed local clear without starting remote deletion', async () => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID();
-    native.draft = { id: captureId, text: 'Keep this message', mailbox: 'chief', uncertain: false,
-      files: [{ id: imageId, name: 'kept.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
+    native.draft = storedDraft({ id: captureId, text: 'Keep this message', mailbox: 'chief', uncertain: false,
+      files: [{ id: imageId, name: 'kept.png', binary: atob('iVBORw0KGgo=') }] });
     const originalInvoke = vi.mocked(invoke).getMockImplementation()!;
     vi.mocked(invoke).mockImplementation(async (command, args) => {
       if (command === 'quick_capture_draft_write' && (args as { draft: CachedQuickCaptureDraft }).draft.id !== captureId) {
@@ -972,13 +1033,13 @@ describe('Quick Capture app wire behavior', () => {
   it.each(['paste', 'drop'])('blocks %s files until the retained draft is restored', async source => {
     const captureId = crypto.randomUUID(), imageId = crypto.randomUUID();
     const stored: CachedQuickCaptureDraft = { id: captureId, text: 'Retained message', mailbox: 'chief', uncertain: false,
-      files: [{ id: imageId, name: 'saved.png', url: 'data:image/png;base64,iVBORw0KGgo=' }] };
+      files: [{ id: imageId, name: 'saved.png', size: 8, mediaType: 'image/png', path: `/quick-capture-drafts/${DEFAULT_PROFILE_ID}/${imageId}.file` }] };
     const originalInvoke = vi.mocked(invoke).getMockImplementation()!;
     let finishRead!: (draft: CachedQuickCaptureDraft) => void;
     const read = new Promise<CachedQuickCaptureDraft>(resolve => { finishRead = resolve; });
     vi.mocked(invoke).mockImplementation(async (command, args) => {
       if (command === 'quick_capture_draft_read') return read;
-      if (command === 'quick_capture_file_read') throw new Error('Synthetic drop read failure');
+      if (command === 'quick_capture_draft_file_copy') throw new Error('Synthetic drop read failure');
       return originalInvoke(command, args);
     });
     const { daemon } = await captureApp(daemon => {
@@ -992,14 +1053,14 @@ describe('Quick Capture app wire behavior', () => {
     });
     expect(screen.getByRole('alert')).toHaveTextContent('Draft is still loading');
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_file_read')).toHaveLength(0);
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_draft_file_copy')).toHaveLength(0);
     expect(daemon.sentOf('quick_capture_attachment_put')).toEqual([]);
     await act(async () => finishRead(stored)); await daemon.idle();
     expect(editor()).toHaveValue('Retained message'); expect(editor()).not.toHaveAttribute('readonly');
     expect(screen.getByRole('img', { name: 'saved.png' })).toBeInTheDocument();
     if (source === 'drop') {
       await gesture(daemon, () => native.onDrop!({ payload: { type: 'drop', paths: ['/synthetic/new.png'], position: { x: 0, y: 0 } } }));
-      expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_file_read')).toHaveLength(1);
+      expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_draft_file_copy')).toHaveLength(1);
       expect(screen.getByRole('alert')).toHaveTextContent('Synthetic drop read failure');
     }
   });

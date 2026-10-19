@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=';
 const records = Array.from({ length: 6 }, (_, index) => ({
@@ -7,8 +7,28 @@ const records = Array.from({ length: 6 }, (_, index) => ({
   attachments: [0, 1].map(file => ({ id: `image-${index}-${file}`, name: `Preview ${index}-${file}`, media_type: 'image/png', bytes: 68 })),
 }));
 
-test('Recent loads newest visible previews serially across close/reopen and releases offscreen images', async ({ page }, testInfo) => {
+async function installNativeDownloads(page: Page) {
+  await page.addInitScript(() => {
+    const partial = new Map<string, string>();
+    const complete = new Map<string, string>();
+    (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
+      convertFileSrc: (path: string) => `data:image/png;base64,${btoa(complete.get(path) ?? '')}`,
+      invoke: async (command: string, args: { captureId: string; attachmentId: string; dataBase64?: string; last?: boolean }) => {
+        const path = `/quick-capture-downloads/${args.captureId}-${args.attachmentId}`;
+        if (command === 'quick_capture_download_find') return complete.has(path) ? path : null;
+        if (command !== 'quick_capture_download_append') throw new Error(`Unexpected native command ${command}`);
+        partial.set(path, (partial.get(path) ?? '') + atob(args.dataBase64!));
+        if (!args.last) return null;
+        complete.set(path, partial.get(path)!);
+        return path;
+      },
+    };
+  });
+}
+
+test('Recent loads newest visible previews serially, reuses downloads across close/reopen and releases offscreen images', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 560, height: 300 });
+  await installNativeDownloads(page);
   const requests: string[] = [];
   let imageFailed = false;
   let releaseFirst!: () => void;
@@ -40,7 +60,7 @@ test('Recent loads newest visible previews serially across close/reopen and rele
   await expect(page.getByRole('alert')).toContainText('Image temporarily unavailable');
   await page.getByRole('button', { name: 'Retry Preview 3-1' }).click();
   await expect(page.getByRole('img', { name: 'Preview 3-1' })).toBeVisible();
-  expect(requests).toEqual(['image-3-0', 'image-3-0', 'image-3-1', 'image-3-1']);
+  expect(requests).toEqual(['image-3-0', 'image-3-1', 'image-3-1']);
   await page.screenshot({ path: testInfo.outputPath('recent-visible-previews.png') });
   await page.locator('.capture-history-image').first().scrollIntoViewIfNeeded();
   await expect(page.getByRole('img', { name: 'Preview 0-0' })).toBeVisible();
