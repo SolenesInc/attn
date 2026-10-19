@@ -65,14 +65,14 @@ export class DelegationChainController {
     window.addEventListener('pointerover', this.pointerMoved, true);
     window.addEventListener('pointerout', this.pointerMoved, true);
     document.addEventListener('pointerdown', this.outsidePointer, true);
-    window.addEventListener('scroll', this.outsideScroll, true);
+    window.addEventListener('wheel', this.outsideScroll, { capture: true, passive: true });
     return () => {
       this.cancelClose();
       window.removeEventListener('pointermove', this.pointerMoved, true);
       window.removeEventListener('pointerover', this.pointerMoved, true);
       window.removeEventListener('pointerout', this.pointerMoved, true);
       document.removeEventListener('pointerdown', this.outsidePointer, true);
-      window.removeEventListener('scroll', this.outsideScroll, true);
+      window.removeEventListener('wheel', this.outsideScroll, true);
     };
   }
 
@@ -87,7 +87,7 @@ export class DelegationChainController {
     this.dismiss('outside-pointer');
   };
 
-  private outsideScroll = (event: Event) => {
+  private outsideScroll = (event: WheelEvent) => {
     if (this.current && !this.popover?.contains(event.target as Node)) this.dismiss('outside-scroll');
   };
 
