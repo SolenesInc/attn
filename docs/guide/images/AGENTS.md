@@ -18,8 +18,9 @@ Run a scene:
 
 Without `--out`, files land in `$TMPDIR/attn-demo/<scene>`. Copy the stills
 you want into this folder; clips go through the polish step below, which
-writes them here. Each run starts from an empty instance, creates its repos in `~/projects/attn-demo`, and
-removes them at the end. It refuses to start if that folder already exists.
+writes them here. Each run starts from an empty instance, creates its repos
+and the profile's Notebook in `~/projects/attn-demo`, and removes them at the
+end. It refuses to start if that folder already exists.
 When you're done recording, `attn instance clean demo` removes the instance.
 
 Scenes:
@@ -31,6 +32,8 @@ Scenes:
 - `new-agent`, `split-terminals`, `move-tiles` and `queue-on` record the clips
   the guide shows for starting an agent, splitting a shell, moving a tile
   between desktops and turning on the queue.
+- `queue-loop` records the README's queue flow clip, and `chief-setup` the
+  Chief's first-run setup and first session in getting-started.
 
 Clips need the window recorder (`make install-window-recorder`) and screen
 recording permission for it. The demo window floats above other windows while
@@ -53,7 +56,9 @@ renders it locally with the pinned `hyperframes` CLI (telemetry off, nothing
 uploaded), and encodes a looping animated AVIF. The composition crops the
 titlebar, writes each caption in a bar under the window, shows a keycap for
 each key press, zooms onto what a scene focuses, draws a pointer for each
-drag, and crossfades back to the first frame so the loop has no jump. It needs
+drag, and crossfades back to the first frame so the loop has no jump.
+Stretches a scene marks with `demo.speed` play faster, with the rate in a
+corner. It needs
 Node 22 or newer and an `ffmpeg` built with `libsvtav1`. `--keep` leaves the
 HyperFrames project and its MP4 in place, for `npx hyperframes preview`.
 
@@ -108,9 +113,20 @@ export default {
   out.
 - `demo.drag(from, to)` drags with the mouse from one element's center to
   another's, and the polished clip draws the pointer.
+- `demo.speed(rate)` plays the clip from that moment at `rate` times speed;
+  `demo.speed(1)` goes back to real time. Use it for waits the viewer
+  doesn't need to sit through.
+- `demo.reply(prompt, turn, { cwd })` scripts the reply to a prompt that
+  attn sends on its own, like the Chief's wake prompt, and returns a promise
+  that settles when the agent sends it.
+- Every run starts with attn holding back GitHub requests for a minute (the
+  harness's own daemon connection fetches every PR again), and Home shows a
+  rate-limit banner until then. Scenes that show Home call
+  `demo.waitOutGitHubThrottle()` first.
 - `demo.ui(action, payload)` calls the app's automation bridge
   (`app/src/hooks/useUiAutomationBridge.ts`).
-- `demo.still(name, { crop, highlight })` captures the window.
+- `demo.still(name, { crop, highlight })` captures the window without its
+  titlebar.
   `crop: { selector, extendBottom }` crops to an element, with `extendBottom`
   adding that many pixels below it. `highlight` takes a selector and draws a
   box around it.

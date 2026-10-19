@@ -1,0 +1,3 @@
+kind: internal
+area: docs
+change: The README shows the queue flow loop, and the guide's getting-started page shows the Chief's first-run setup and first session.

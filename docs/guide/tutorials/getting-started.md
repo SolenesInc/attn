@@ -88,6 +88,8 @@ folder, and wake it. In its first session, the Chief helps you choose delegation
 roles, explains how your Notebook is laid out, and offers a tour of the app.
 You can skip anything, or build something together to try it out.
 
+![On your first run, the Chief's setup opens beside the sidebar. You keep Claude Code and Opus, check the Notebook folder and press Enter to wake the Chief. It opens on a desktop of its own, reads your Notebook and lists what it would like to cover, starting with your delegation roles.](../images/chief-setup.avif)
+
 Ask the Chief to walk you through Attn again anytime, or run
 `attn onboarding again`.
 After that, the Chief is your agent, and you can use it however you like. Its

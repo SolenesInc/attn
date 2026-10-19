@@ -16,6 +16,8 @@ their sessions and terminals through restarts, and shows who needs you. Use
 Claude Code, Codex, Copilot or Pi as you know them. Ask the Chief to help you
 coordinate work, or go straight to your agents.
 
+![In queue flow, Cmd+J (Ctrl+Shift+J on Linux) takes you to the agent that has waited longest. You answer it, Cmd+Shift+E (Ctrl+Alt+E on Linux) settles it, and attn brings the next agent waiting for you, then takes you Home when nobody is left.](docs/guide/images/queue-loop.avif)
+
 ## Install
 
 ### Homebrew cask (desktop app)
