@@ -60,6 +60,20 @@ export function orderAsks(asks: readonly Ask[], sessions: readonly AskHolderSess
   });
 }
 
+export interface AskListItem<S extends AskHolderSession> {
+  ask: Ask;
+  holder: S | undefined;
+  from: string;
+  questionCount: number;
+}
+
+export function askList<S extends AskHolderSession & { label: string }>(asks: readonly Ask[], sessions: readonly S[], seeds: readonly Seed[]): AskListItem<S>[] {
+  return orderAsks(asks, sessions, seeds).map((ask) => {
+    const holder = askHolder(ask, sessions, seeds);
+    return { ask, holder, from: askFrom(ask, holder), questionCount: askQuestions(ask).length };
+  });
+}
+
 export function draftAnswers(ask: Ask, draft: AskDraft): AskAnswer[] {
   return askQuestions(ask).flatMap((question) => {
     const answer = draft.answers[question.key];

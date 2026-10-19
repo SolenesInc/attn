@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -116,4 +117,32 @@ func TestAPiSessionThatEndsBeforeItsTranscriptAppearsIsNotIncomplete(t *testing.
 	if usage := awaitPricedRows(app, session, 17386); protocol.Deref(usage.MeasurementIncomplete) {
 		t.Errorf("the usage = %+v, want the run that ended before writing anything not to mark it incomplete", usage)
 	}
+}
+
+func TestAPiTranscriptReportedAfterItAlreadyExistsKeepsItsHeadBaseline(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		driver := connectDriver(t, w, "attn-pi", "pi", map[string]bool{"state_reporting": true, "resume": true})
+		session, run := spawnDriven(w, app, driver, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ResumeSessionID = protocol.Ptr("existing-conversation") })
+		path := w.Path("existing-pi-session.jsonl")
+		lines := piTranscriptLines(t)
+		appendTranscript(t, path, lines[:5])
+		if err := reportTranscript(driver, run.SessionID, run.RunID, path); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(time.Second)
+		if got := listedState(t, w, session).Usage; got != nil {
+			t.Fatalf("inherited usage was billed: %+v", got)
+		}
+		appendTranscript(t, path, lines[5:])
+		w.advance(time.Second)
+		got := listedState(t, w, session).Usage
+		if got == nil {
+			t.Fatal("new usage after the baseline was lost")
+		}
+		agent := usageRow(got, "agent")
+		if agent == nil || agent.InputTokens != 12007 || agent.OutputTokens != 1060 {
+			t.Fatalf("new usage after the baseline = %+v", agent)
+		}
+	})
 }

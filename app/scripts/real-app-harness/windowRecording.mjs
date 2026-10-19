@@ -22,6 +22,8 @@ export async function ensureWindowRecorder(options) {
 const FINALIZE_TRIPWIRE_MS = 10_000;
 
 export function startWindowRecording({ windowId, outputPath, command, fps = 15, showCursor = true, spawnFn = spawn }) {
+  const readyPath = `${outputPath}.ready`;
+  fs.rmSync(readyPath, { force: true });
   const launch = typeof command === 'string'
     ? { command, argsPrefix: [], captureLaunchedStderr: false, stopWithFile: false }
     : command;
@@ -49,6 +51,23 @@ export function startWindowRecording({ windowId, outputPath, command, fps = 15, 
   return {
     windowId,
     outputPath,
+    waitForFirstFrame() {
+      return new Promise((resolve, reject) => {
+        const check = () => {
+          if (!fs.existsSync(readyPath)) return;
+          watcher.close();
+          resolve();
+        };
+        const watcher = fs.watch(path.dirname(readyPath), (_, filename) => {
+          if (filename === path.basename(readyPath)) check();
+        });
+        void exited.then(({ code, spawnError }) => {
+          watcher.close();
+          reject(new Error(`recorder exited before its first frame: ${spawnError?.message ?? code}`));
+        });
+        check();
+      });
+    },
     async stop() {
       let forced = false;
       try {
@@ -79,6 +98,7 @@ export function startWindowRecording({ windowId, outputPath, command, fps = 15, 
           fs.rmSync(stopFilePath, { force: true });
         } catch {}
       }
+      fs.rmSync(readyPath, { force: true });
 
       let bytes = 0;
       try {

@@ -8,6 +8,7 @@ import type { LedgerTab } from '../components/ledger/LedgerSurface';
 import { useDockPanels } from '../hooks/useDockPanels';
 import { useGardenPresentation } from '../hooks/useGardenPresentation';
 import { useWhatsNew } from '../hooks/useWhatsNew';
+import { useAsksStore } from '../store/asks';
 
 interface Options {
   agentSurfaceCount: number;
@@ -59,6 +60,10 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const asksPanelOpen = openDockPanels.asks;
   const automationsPanelOpen = openDockPanels.automations;
   const gardenPanelOpen = openDockPanels.garden;
+  const openAsk = useCallback((askId?: string) => {
+    useAsksStore.getState().showAsk(askId ?? null);
+    openDockPanel('asks');
+  }, [openDockPanel]);
   const openGardenDock = useCallback(() => openDockPanel('garden'), [openDockPanel]);
   const closeGardenDock = useCallback(() => closeDockPanel('garden'), [closeDockPanel]);
   const {
@@ -117,6 +122,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     toggleDockPanel,
     openDockPanel,
     closeDockPanel,
+    openAsk,
     sidebarCollapsed,
     setSidebarCollapsed,
     toggleSidebarCollapse,

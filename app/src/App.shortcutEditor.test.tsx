@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
@@ -18,11 +18,13 @@ interface Launch {
   platform?: string;
   config?: Config;
   withSession?: boolean;
+  quickCapture?: boolean;
 }
 
-async function renderKeybindings({ platform, config, withSession = false }: Launch = {}) {
+async function renderKeybindings({ platform, config, withSession = false, quickCapture = false }: Launch = {}) {
   if (platform) onTestFinished(stubNavigatorPlatform(platform));
   const settings: Record<string, string> = config ? { [KEY]: JSON.stringify({ version: 1, overrides: {}, ...config }) } : {};
+  if (quickCapture) settings.quick_capture_enabled = 'true';
   const view = await renderApp({
     initialState: {
       settings,
@@ -217,6 +219,72 @@ describe('App shortcut editor', () => {
 
     expect(within(row('Agent palette')).getByTitle('Click to rebind')).toHaveTextContent('⌘K');
     expect(keybindingWrites(daemon)).toEqual([]);
+  });
+
+  it.each(['combo', 'chord'])('hands Quick Capture recording over to a standard %s recorder', async mode => {
+    const { daemon } = await renderEditor({ quickCapture: true });
+    const capture = within(screen.getByRole('region', { name: 'Global Quick Capture shortcut' }));
+    fireEvent.click(capture.getByRole('button', { name: 'Change' }));
+    expect(capture.getByRole('button', { name: 'Press shortcut…' })).toHaveFocus();
+
+    const standard = within(row('Agent palette'));
+    fireEvent.click(mode === 'chord' ? standard.getByLabelText('Record a chord') : standard.getByTitle('Click to rebind'));
+
+    expect(capture.queryByRole('button', { name: 'Press shortcut…' })).toBeNull();
+    expect(capture.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'k', code: 'KeyK', metaKey: true });
+    expect(screen.queryByRole('dialog', { name: 'Agents' })).toBeNull();
+    if (mode === 'chord') fireEvent.keyDown(window, { key: 'd', code: 'KeyD' });
+    await daemon.idle();
+
+    expect(saved(daemon).overrides).toEqual(mode === 'chord'
+      ? { 'ui.actionMenu': { leader: { key: 'k', meta: true }, then: { key: 'd' } } }
+      : {});
+    expect(daemon.sentOf('set_setting').filter(({ key }) => key === 'capture.shortcut')).toEqual([]);
+  });
+
+  it('hands a standard recording over to Quick Capture and cancels on Escape', async () => {
+    const { daemon } = await renderEditor({ quickCapture: true });
+    fireEvent.click(within(row('Agent palette')).getByTitle('Click to rebind'));
+    const capture = within(screen.getByRole('region', { name: 'Global Quick Capture shortcut' }));
+
+    fireEvent.click(capture.getByRole('button', { name: 'Change' }));
+
+    expect(within(row('Agent palette')).getByTitle('Click to rebind')).toBeInTheDocument();
+    fireEvent.keyDown(capture.getByRole('button', { name: 'Press shortcut…' }), { key: 'Escape', code: 'Escape' });
+    expect(capture.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Customize Shortcuts' })).toBeInTheDocument();
+    expect(keybindingWrites(daemon)).toEqual([]);
+
+    await closeEditor(daemon);
+    await gesture(daemon, () => pressShortcut('ui.actionMenu'));
+    expect(screen.getByRole('dialog', { name: 'Agents' })).toBeInTheDocument();
+  });
+
+  it('ends Quick Capture recording when focus leaves its button', async () => {
+    const { daemon } = await renderEditor({ quickCapture: true });
+    const capture = within(screen.getByRole('region', { name: 'Global Quick Capture shortcut' }));
+    fireEvent.click(capture.getByRole('button', { name: 'Change' }));
+
+    act(() => screen.getByRole('button', { name: 'Close shortcut editor' }).focus());
+
+    expect(capture.getByRole('button', { name: 'Change' })).toBeInTheDocument();
+    expect(keybindingWrites(daemon)).toEqual([]);
+  });
+
+  it('releases Quick Capture recording when the experiment is disabled', async () => {
+    const { daemon } = await renderEditor({ quickCapture: true });
+    const capture = within(screen.getByRole('region', { name: 'Global Quick Capture shortcut' }));
+    fireEvent.click(capture.getByRole('button', { name: 'Change' }));
+    expect(capture.getByRole('button', { name: 'Press shortcut…' })).toHaveFocus();
+
+    await act(async () => daemon.emit({ event: 'settings_updated', settings: { quick_capture_enabled: 'false' } }));
+
+    expect(screen.queryByRole('region', { name: 'Global Quick Capture shortcut' })).toBeNull();
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' }));
+    expect(screen.queryByRole('dialog', { name: 'Customize Shortcuts' })).toBeNull();
+    await gesture(daemon, () => pressShortcut('ui.actionMenu'));
+    expect(screen.getByRole('dialog', { name: 'Agents' })).toBeInTheDocument();
   });
 
   it('warns about a shortcut without an accelerator', async () => {

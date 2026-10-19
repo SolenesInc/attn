@@ -350,8 +350,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		}
 	}
 	unlockEnds()
-	d.sessionInputs().forgetSession(sessionID)
-	d.recordPlacedInputOwed(sessionID, false)
+	d.sessionInputs().resetSession(sessionID)
 
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	intent.Asks = d.launchedWithAsks(sessionID)

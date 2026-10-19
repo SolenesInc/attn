@@ -146,6 +146,16 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
 - `thread/archive` moves the rollout to `archived_sessions/` (flat, no dated
   directories) and refuses later resumes; `thread/unarchive` moves it back.
 
+Read in the source at openai/codex rust-v0.162.1:
+
+- In a `--remote` TUI, `/new` and `/clear` send `thread/start` before the
+  first prompt (`tui/src/app/event_dispatch.rs`,
+  `tui/src/app/session_lifecycle.rs`). SessionStart remains queued until the
+  first turn, before UserPromptSubmit (`core/src/session/session.rs`,
+  `core/src/session/turn.rs`). attn admits the successor when those hooks
+  report its conversation. That first prompt makes it working; the previous
+  conversation's program status does not carry over.
+
 Probed on 0.163.0 with a real model:
 
 - A `--remote` TUI refuses `--add-dir` and exits at once. Extra writable

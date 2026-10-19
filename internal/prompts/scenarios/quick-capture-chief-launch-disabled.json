@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "quick-capture-chief-launch-disabled",
+  "description": "Chief launch while experimental Quick Capture is off.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "/workspace/notebook",
+    "quick_capture_enabled": "false"
+  },
+  "inputs": {}
+}

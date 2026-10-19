@@ -3,7 +3,6 @@ package daemon
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,9 +45,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/statetrace"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/transcript"
 )
 
 type workerReconcileReport struct {
@@ -98,6 +95,8 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
+	monitorsOnce        sync.Once
+	monitorState        *monitorRegistry
 	outposts            outpostsRuntime
 	outpost             outpostRuntime
 	recentFileStat      func(string) (os.FileInfo, error)
@@ -112,133 +111,94 @@ type Daemon struct {
 	clientToken      string
 	store            *store.Store
 	// Serializes PR fetches with review-request edge reconciliation.
-	prRefreshMu                       sync.Mutex
-	automationMu                      sync.Mutex
-	automationLaunchFailures          sync.Map
-	automationLaunchResults           sync.Map
-	automationObservationMu           sync.Mutex
-	automationObservationLocks        map[string]*sync.Mutex
-	automationRepoMu                  sync.Mutex
-	automationRepos                   map[string]*sync.Mutex
-	automationDeliveryHook            func(*store.AutomationRun) error
-	wsWriteTimeout                    time.Duration
-	wsPingInterval                    time.Duration
-	wsPingTimeout                     time.Duration
-	listener                          net.Listener
-	httpServer                        *http.Server
-	httpListener                      net.Listener
-	httpHandler                       http.Handler
-	diagServer                        *diag.Server
-	harnessWSListenerFD               string
-	wsHub                             *wsHub
-	startedAt                         time.Time
-	lastPresentAt                     time.Time
-	presenceMu                        sync.RWMutex
-	crewLifecycleState                *crewLifecycleMemo
-	crewMemoOnce                      sync.Once
-	crewCharterMu                     sync.Mutex
-	life                              lifetime
-	stopOnce                          sync.Once
-	logger                            *logging.Logger
-	debugLogging                      bool
-	ghRegistry                        *github.ClientRegistry
-	classifier                        Classifier
-	repoVisibilityKnown               map[string]string
-	repoVisibilityPending             map[string]bool
-	repoVisibilityMu                  sync.Mutex
-	reopenGitMu                       sync.Mutex
-	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
-	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
-	gitExec                           gitExecutor
-	worktreeMaintenance               worktreeMaintenanceCoordinator
-	warnings                          []protocol.DaemonWarning
-	warningsMu                        sync.RWMutex
-	ptyBackend                        ptybackend.Backend
-	terminalTitlesMu                  sync.RWMutex
-	terminalTitles                    map[harness.TerminalID]string
-	ptySettingsMu                     sync.Mutex
-	ptySettingsChangeMu               sync.Mutex
-	sharedPTYHost                     *ptybackend.WorkerBackend
-	upgradingMu                       sync.Mutex
-	upgradingWorkers                  map[harness.TerminalID]bool
-	ptyRecovered                      atomic.Bool
-	watchersMu                        sync.Mutex
-	transcriptWatch                   map[protocol.SessionID]*transcriptWatcher
-	pluginUsageWatch                  map[protocol.SessionID]*pluginUsageWatcher
-	finalUsage                        map[protocol.SessionID][]func()
-	usageRuns                         map[protocol.SessionID]int
-	usageIdle                         map[protocol.SessionID]chan struct{}
-	usageDraining                     map[protocol.SessionID]bool
-	transcriptWatcherSessionLookup    func(string) *protocol.Session
-	transcriptResumeLookup            func(protocol.SessionAgent, string) string
-	classifiedMu                      sync.Mutex
-	classifiedTurn                    map[protocol.SessionID]string
-	classifyingTurn                   map[protocol.SessionID]string
-	classificationTranscriptExtractor func(*protocol.Session, string, int, time.Time) (string, string, error)
-	forcedStopMu                      sync.Mutex
-	forcedStop                        map[protocol.SessionID]time.Time
-	pendingConversationMu             sync.Mutex
-	pendingConversation               map[protocol.SessionID]agentConversationObservation
-	sessionTitleMu                    sync.Mutex
-	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
-	sessionTitleAttempted             map[protocol.SessionID]struct{}
-	sessionTitleInitialPrompt         map[protocol.SessionID][sha256.Size]byte
-	seedArtifactMu                    sync.Mutex
-	harnessModelQueries               singleflight.Group
-	harnessModelCatalogs              sync.Map
-	delegationMu                      sync.Mutex
-	delegationRunning                 map[string]bool
-	delegationCheckoutMu              sync.Mutex
-	delegationWaitsForFirstTurn       bool
-	launchWatchMu                     sync.Mutex
-	launchWatches                     map[protocol.SessionID]*launchWatch
-	recoveredLaunches                 map[protocol.SessionID]*launchWatch
-	terminalExitIntentMu              sync.Mutex
-	terminalExitIntents               map[harness.TerminalID]terminalExitIntent
-	replacedRuntimes                  map[harness.TerminalID][]string
-	prepareSessionTeardownHook        func(string) error
-	teardownMu                        sync.Mutex
-	tearingDown                       map[protocol.SessionID]chan struct{}
-	sessionLifecycleLocks             sessionLocks
-	terminalEndLocks                  sessionLocks
-	spawnLocksMu                      sync.Mutex
-	spawnLocks                        map[protocol.SessionID]*spawnLock
-	sessionInputOnce                  sync.Once
-	sessionInputState                 *sessionInputModule
-	terminalsOnce                     sync.Once
-	terminalState                     *terminalRegistry
-	codexSharedOnce                   sync.Once
-	codexSharedState                  *codexShared
-	inboxMu                           sync.Mutex
-	inboxStates                       map[inbox.Address]*inboxDeliveryState
-	inboxUnsubscribe                  func()
-	crewWakeMu                        sync.Mutex
-	crewExitedMu                      sync.Mutex
-	crewExitedSessions                map[string]string
-	stateTraceOnce                    sync.Once
-	stateTrace                        *statetrace.Recorder
-	sessionEvidenceOnce               sync.Once
-	sessionEvidence                   *sessionEvidenceTable
-	sessionDwellOnce                  sync.Once
-	sessionDwell                      *dwellGate
-	sessionResolverOnce               sync.Once
-	sessionResolverState              *sessionResolver
-	pluginDriverSilenceOnce           sync.Once
-	pluginDriverSilenceWatch          *pluginDriverSilenceWatch
-	pluginDriverSilenceGraceOverride  time.Duration
-	sessionStateReasonOnce            sync.Once
-	sessionStateReason                *sessionStateReasons
-	supportInputTraceOnce             sync.Once
-	supportInputTrace                 *supportInputTraceRing
-	lastInputMu                       sync.Mutex
-	lastAutoSettleActivityAt          map[protocol.SessionID]time.Time
-	autoSettleFireMu                  sync.Mutex
+	prRefreshMu                sync.Mutex
+	automationMu               sync.Mutex
+	automationLaunchFailures   sync.Map
+	automationLaunchResults    sync.Map
+	automationObservationMu    sync.Mutex
+	automationObservationLocks map[string]*sync.Mutex
+	automationRepoMu           sync.Mutex
+	automationRepos            map[string]*sync.Mutex
+	automationDeliveryHook     func(*store.AutomationRun) error
+	wsWriteTimeout             time.Duration
+	wsPingInterval             time.Duration
+	wsPingTimeout              time.Duration
+	listener                   net.Listener
+	httpServer                 *http.Server
+	httpListener               net.Listener
+	httpHandler                http.Handler
+	diagServer                 *diag.Server
+	harnessWSListenerFD        string
+	wsHub                      *wsHub
+	startedAt                  time.Time
+	lastPresentAt              time.Time
+	presenceMu                 sync.RWMutex
+	crewLifecycleState         *crewLifecycleMemo
+	crewMemoOnce               sync.Once
+	crewCharterMu              sync.Mutex
+	life                       lifetime
+	stopOnce                   sync.Once
+	logger                     *logging.Logger
+	debugLogging               bool
+	ghRegistry                 *github.ClientRegistry
+	repoVisibilityKnown        map[string]string
+	repoVisibilityPending      map[string]bool
+	repoVisibilityMu           sync.Mutex
+	reopenGitMu                sync.Mutex
+	reopenBranches             *sharedCalls[reopenBranchKey, branchInspection]
+	reopenInspect              func(context.Context, *git.Client, string, string) (branchInspection, error)
+	gitExec                    gitExecutor
+	worktreeMaintenance        worktreeMaintenanceCoordinator
+	warnings                   []protocol.DaemonWarning
+	warningsMu                 sync.RWMutex
+	ptyBackend                 ptybackend.Backend
+	terminalTitlesMu           sync.RWMutex
+	terminalTitles             map[harness.TerminalID]string
+	ptySettingsMu              sync.Mutex
+	ptySettingsChangeMu        sync.Mutex
+	sharedPTYHost              *ptybackend.WorkerBackend
+	upgradingMu                sync.Mutex
+	upgradingWorkers           map[harness.TerminalID]bool
+	ptyRecovered               atomic.Bool
+
+	sessionTitleExec func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
+
+	seedArtifactMu              sync.Mutex
+	harnessModelQueries         singleflight.Group
+	harnessModelCatalogs        sync.Map
+	delegationMu                sync.Mutex
+	delegationRunning           map[string]bool
+	delegationCheckoutMu        sync.Mutex
+	delegationWaitsForFirstTurn bool
+	launchWatchMu               sync.Mutex
+	launchWatches               map[protocol.SessionID]*launchWatch
+	recoveredLaunches           map[protocol.SessionID]*launchWatch
+	terminalExitIntentMu        sync.Mutex
+	terminalExitIntents         map[harness.TerminalID]terminalExitIntent
+	replacedRuntimes            map[harness.TerminalID][]string
+
+	teardownMu            sync.Mutex
+	tearingDown           map[protocol.SessionID]chan struct{}
+	sessionLifecycleLocks sessionLocks
+	terminalEndLocks      sessionLocks
+	spawnLocksMu          sync.Mutex
+	spawnLocks            map[protocol.SessionID]*spawnLock
+
+	terminalsOnce         sync.Once
+	terminalState         *terminalRegistry
+	codexSharedOnce       sync.Once
+	codexSharedState      *codexShared
+	quickCaptureAssetMu   sync.Mutex
+	inboxMu               sync.Mutex
+	inboxStates           map[inbox.Address]*inboxDeliveryState
+	inboxUnsubscribe      func()
+	crewWakeMu            sync.Mutex
+	crewExitedMu          sync.Mutex
+	crewExitedSessions    map[string]string
+	supportInputTraceOnce sync.Once
+	supportInputTrace     *supportInputTraceRing
 
 	emptyDesktops emptyDesktopRemoval
-
-	autoSettleMu         sync.Mutex
-	autoSettleTimers     map[protocol.SessionID]*autoSettleTimer
-	autoSettleDismissals map[protocol.SessionID]bool
 
 	snoozeMu sync.Mutex
 
@@ -263,10 +223,7 @@ type Daemon struct {
 	pluginSupervisorMu  sync.Mutex
 	pluginSupervisor    *pluginSupervisor
 	pluginHealthEnabled bool
-	pluginDriverMu      sync.Mutex
-	pluginLaunching     map[protocol.SessionID]pluginSessionLaunch
-	pluginReports       map[protocol.SessionID][]pendingPluginReport
-	pluginExits         map[protocol.SessionID]ptybackend.ExitInfo
+
 	pluginDir           string
 	bundledPluginDir    string
 	busPinMu            sync.Mutex
@@ -548,13 +505,10 @@ func New(socketPath string) *Daemon {
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
-		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
-		pendingInitialWS:    make(map[*wsClient]struct{}),
-		startedCh:           make(chan struct{}),
-		classifiedTurn:      make(map[protocol.SessionID]string),
-		classifyingTurn:     make(map[protocol.SessionID]string),
-		forcedStop:          make(map[protocol.SessionID]time.Time),
-		pendingConversation: make(map[protocol.SessionID]agentConversationObservation),
+
+		pendingInitialWS: make(map[*wsClient]struct{}),
+		startedCh:        make(chan struct{}),
+
 		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginHealthEnabled: true,
@@ -586,19 +540,16 @@ func NewForTesting(socketPath string) *Daemon {
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
-		transcriptWatch:     make(map[protocol.SessionID]*transcriptWatcher),
-		pendingInitialWS:    make(map[*wsClient]struct{}),
-		startedCh:           make(chan struct{}),
-		classifiedTurn:      make(map[protocol.SessionID]string),
-		classifyingTurn:     make(map[protocol.SessionID]string),
-		forcedStop:          make(map[protocol.SessionID]time.Time),
-		pendingConversation: make(map[protocol.SessionID]agentConversationObservation),
-		tailscale:           newTailscaleRuntime(),
-		plugins:             newPluginRegistry(),
-		pluginDir:           pluginDirForSocket(socketPath),
-		bundledPluginDir:    bundledPluginDirForExecutable(),
-		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
-		jobQueue:            jobs.New(jobs.Options{}),
+
+		pendingInitialWS: make(map[*wsClient]struct{}),
+		startedCh:        make(chan struct{}),
+
+		tailscale:        newTailscaleRuntime(),
+		plugins:          newPluginRegistry(),
+		pluginDir:        pluginDirForSocket(socketPath),
+		bundledPluginDir: bundledPluginDirForExecutable(),
+		spawnLocks:       make(map[protocol.SessionID]*spawnLock),
+		jobQueue:         jobs.New(jobs.Options{}),
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
@@ -624,18 +575,6 @@ func (d *Daemon) Start() error {
 	}
 	if d.startedCh == nil {
 		d.startedCh = make(chan struct{})
-	}
-	if d.transcriptWatch == nil {
-		d.transcriptWatch = make(map[protocol.SessionID]*transcriptWatcher)
-	}
-	if d.classifiedTurn == nil {
-		d.classifiedTurn = make(map[protocol.SessionID]string)
-	}
-	if d.classifyingTurn == nil {
-		d.classifyingTurn = make(map[protocol.SessionID]string)
-	}
-	if d.forcedStop == nil {
-		d.forcedStop = make(map[protocol.SessionID]time.Time)
 	}
 	if d.ptyBackend == nil {
 		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManager(d.logf))
@@ -676,6 +615,9 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("start event bus: %w", err)
 	}
 	d.loadTerminals()
+	for _, session := range d.store.List("") {
+		d.startSessionMonitor(session.ID)
+	}
 	if d.clientToken == "" {
 		token, err := config.EnsureClientToken(d.dataRoot)
 		if err != nil {
@@ -685,6 +627,9 @@ func (d *Daemon) Start() error {
 	}
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
+	}
+	if err := d.recoverQuickCaptureAssets(); err != nil {
+		d.logf("quick capture asset recovery incomplete: %v", err)
 	}
 	if d.daemonSetting(settingOutpostListen) != "" {
 		d.configureOutpostListener()
@@ -1318,11 +1263,13 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				report.MissingMetadata++
 				continue
 			}
+			d.startSessionMonitor(sessionID)
 			report.Created++
 			report.markChanged(sessionID)
 			continue
 		}
 
+		d.startSessionMonitor(sessionID)
 		d.store.Touch(sessionID)
 		d.store.ClearSessionIntentionalClose(sessionID)
 
@@ -1604,7 +1551,7 @@ func (d *Daemon) stop() {
 	d.stopAllTranscriptWatchers()
 
 	d.stopInbox()
-	d.pluginDriverSilence().stop()
+	d.stopPluginDriverSilence()
 	d.stopAutoSettleTimers()
 	// Store.Close drains connections and checkpoints the WAL so attn.db alone holds every commit.
 	if d.store != nil {
@@ -1699,7 +1646,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
-	d.sessionInputs().forgetSession(sessionID)
+	d.sessionInputs().fenceSession(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
 	d.captureExitScreen(sessionID, info)
@@ -1884,13 +1831,6 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 		}
 	}
 	d.markForcedStopClassification(sessionID)
-	if d.prepareSessionTeardownHook != nil {
-		if err := d.prepareSessionTeardownHook(string(sessionID)); err != nil {
-			d.clearForcedStopClassification(sessionID)
-			lifecycleLock.Unlock()
-			return nil, err
-		}
-	}
 	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), time.Now())
 	if err != nil {
 		d.clearForcedStopClassification(sessionID)
@@ -2038,13 +1978,15 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
 	}
-	defer d.drainTranscriptWatcher(sessionID)()
-	d.forgetSessionRuntime(sessionID)
+	defer d.finishMonitorUsage(sessionID)()
+	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.clearSnoozeState(sessionID)
+	d.sessionInputs().fenceSession(sessionID)
 	closure, err := commit()
 	if err != nil {
 		d.logf("close session %s: %v", sessionID, err)
 	}
-	d.forgetSessionTrace(sessionID)
+	d.forgetMonitor(sessionID)
 	d.announceClosedAsks(closure.Asks)
 	if closure.Recorded {
 		for _, terminal := range terminals {
@@ -2059,8 +2001,6 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
-	d.clearClassifiedTurn(sessionID)
-	d.clearClassifyingTurn(sessionID)
 }
 
 func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
@@ -2071,37 +2011,17 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 			d.logf("garden: preserving execution %s before reaping: %v", sessionID, err)
 		}
 	}
-	d.forgetSessionRuntime(sessionID)
+	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.clearSnoozeState(sessionID)
+	d.sessionInputs().fenceSession(sessionID)
 	closedAsks := d.store.Remove(sessionID)
 	for _, terminal := range terminals {
 		d.forgetTerminalTitle(terminal)
 	}
-	d.forgetSessionTrace(sessionID)
+	d.forgetMonitor(sessionID)
 	d.announceClosedAsks(closedAsks)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
-}
-
-func (d *Daemon) forgetSessionRuntime(sessionID protocol.SessionID) {
-	d.stopTranscriptWatcher(sessionID)
-
-	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
-	d.forgetSessionTitleInitialPrompt(sessionID)
-	d.clearAutoSettleState(sessionID)
-	d.lastInputMu.Lock()
-	delete(d.lastAutoSettleActivityAt, sessionID)
-	d.lastInputMu.Unlock()
-	d.clearSnoozeState(sessionID)
-	d.sessionInputs().forgetSession(sessionID)
-	d.forgetPluginDriverSilenceWatch(sessionID)
-}
-
-func (d *Daemon) forgetSessionTrace(sessionID protocol.SessionID) {
-	d.forgetStateTrace(sessionID)
-	d.evidenceTable().forget(sessionID)
-	d.sessionResolver().forget(sessionID)
-	d.stateReasons().forget(sessionID)
-	d.dwellGate().clear(sessionID)
 }
 
 func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation) {
@@ -2695,6 +2615,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAgentMsg(conn, msg.(*protocol.AgentMsgMessage))
 	case protocol.CmdAgentClose:
 		d.handleAgentClose(conn, msg.(*protocol.AgentCloseMessage))
+	case protocol.CmdAgentReload:
+		d.handleAgentReload(conn, msg.(*protocol.AgentReloadMessage))
+	case protocol.CmdQuickCaptureAttachmentGet:
+		d.handleQuickCapture(conn, msg)
+	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentDiscard:
+		d.sendError(conn, "quick capture authoring and history are app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:
 		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
 	case protocol.CmdAgentMsgStatus:
@@ -2947,7 +2873,8 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			yielded:                true,
 			runningBackgroundTasks: runningBackgroundTaskCount(msg),
 		}
-		d.life.Go("classifyStop", func() { d.classifyStop(sessionID, msg.TranscriptPath, classification) })
+		entry := d.monitorEntry(sessionID)
+		d.life.Go("classifyStop", func() { entry.classifyStop(d, sessionID, msg.TranscriptPath, classification) })
 		return
 	}
 
@@ -2962,7 +2889,8 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	d.life.Go("classifySessionState", func() { d.classifySessionState(sessionID, msg.TranscriptPath) })
+	entry := d.monitorEntry(sessionID)
+	d.life.Go("classifySessionState", func() { entry.classifyStop(d, sessionID, msg.TranscriptPath, stopClassification{}) })
 	d.life.Go("maybeGenerateSessionTitle", func() { d.maybeGenerateSessionTitle(sessionID, msg.TranscriptPath) })
 }
 
@@ -3015,129 +2943,6 @@ func (d *Daemon) resolveTranscriptPathForSession(session *protocol.Session, tran
 	}
 
 	return path
-}
-
-func (d *Daemon) extractLastAssistantMessage(session *protocol.Session, transcriptPath string, maxChars int, classificationStart time.Time) (string, string, error) {
-	if session == nil {
-		lastMessage, err := transcript.ExtractLastAssistantMessage(transcriptPath, maxChars)
-		return lastMessage, "", err
-	}
-
-	driver := agentdriver.Get(session.Agent)
-	lastMessage, turnID, err := agentdriver.ExtractLastAssistantForClassification(
-		driver,
-		transcriptPath,
-		maxChars,
-		classificationStart,
-		d.classifiedTurnID(session.ID),
-	)
-	if err != nil {
-		return "", "", err
-	}
-	turnID = strings.TrimSpace(turnID)
-	if turnID != "" && !d.beginClassifyingTurn(session.ID, turnID) {
-		return "", "", agentdriver.ErrNoNewAssistantTurn
-	}
-	return lastMessage, turnID, nil
-}
-
-func (d *Daemon) classifiedTurnID(sessionID protocol.SessionID) string {
-	d.classifiedMu.Lock()
-	defer d.classifiedMu.Unlock()
-	if d.classifiedTurn == nil {
-		return ""
-	}
-	return d.classifiedTurn[sessionID]
-}
-
-func (d *Daemon) setClassifiedTurnID(sessionID protocol.SessionID, turnID string) {
-	d.classifiedMu.Lock()
-	defer d.classifiedMu.Unlock()
-	if d.classifiedTurn == nil {
-		d.classifiedTurn = make(map[protocol.SessionID]string)
-	}
-	d.classifiedTurn[sessionID] = turnID
-}
-
-func (d *Daemon) clearClassifiedTurn(sessionID protocol.SessionID) {
-	d.classifiedMu.Lock()
-	defer d.classifiedMu.Unlock()
-	if d.classifiedTurn == nil {
-		return
-	}
-	delete(d.classifiedTurn, sessionID)
-}
-
-func (d *Daemon) beginClassifyingTurn(sessionID protocol.SessionID, turnID string) bool {
-	d.classifiedMu.Lock()
-	defer d.classifiedMu.Unlock()
-	if d.classifyingTurn == nil {
-		d.classifyingTurn = make(map[protocol.SessionID]string)
-	}
-	if d.classifiedTurn != nil && d.classifiedTurn[sessionID] == turnID {
-		return false
-	}
-	if d.classifyingTurn[sessionID] == turnID {
-		return false
-	}
-	d.classifyingTurn[sessionID] = turnID
-	return true
-}
-
-func (d *Daemon) clearClassifyingTurn(sessionID protocol.SessionID) {
-	d.classifiedMu.Lock()
-	defer d.classifiedMu.Unlock()
-	if d.classifyingTurn == nil {
-		return
-	}
-	delete(d.classifyingTurn, sessionID)
-}
-
-func (d *Daemon) markForcedStopClassification(sessionID protocol.SessionID) {
-	if protocol.TrimID(sessionID) == "" {
-		return
-	}
-	now := time.Now()
-	d.forcedStopMu.Lock()
-	defer d.forcedStopMu.Unlock()
-	if d.forcedStop == nil {
-		d.forcedStop = make(map[protocol.SessionID]time.Time)
-	}
-	for id, markedAt := range d.forcedStop {
-		if now.Sub(markedAt) > forcedStopSuppressTTL {
-			delete(d.forcedStop, id)
-		}
-	}
-	d.forcedStop[sessionID] = now
-}
-
-func (d *Daemon) consumeForcedStopClassification(sessionID protocol.SessionID) bool {
-	if protocol.TrimID(sessionID) == "" {
-		return false
-	}
-	now := time.Now()
-	d.forcedStopMu.Lock()
-	defer d.forcedStopMu.Unlock()
-	if len(d.forcedStop) == 0 {
-		return false
-	}
-	for id, markedAt := range d.forcedStop {
-		if now.Sub(markedAt) > forcedStopSuppressTTL {
-			delete(d.forcedStop, id)
-		}
-	}
-	markedAt, ok := d.forcedStop[sessionID]
-	if !ok {
-		return false
-	}
-	delete(d.forcedStop, sessionID)
-	return now.Sub(markedAt) <= forcedStopSuppressTTL
-}
-
-func (d *Daemon) clearForcedStopClassification(sessionID protocol.SessionID) {
-	d.forcedStopMu.Lock()
-	defer d.forcedStopMu.Unlock()
-	delete(d.forcedStop, sessionID)
 }
 
 func cloneSession(session *protocol.Session) *protocol.Session {
@@ -3796,6 +3601,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 	if !protocol.Deref(msg.Unplaced) {
 		d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical, focus: true})
 	}
+	d.startSessionMonitor(msg.Session.ID)
 	d.sendOK(conn)
 }
 

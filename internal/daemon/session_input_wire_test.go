@@ -122,3 +122,26 @@ func TestAnAnnotationLeftInTheComposerHoldsAttnsDoorbellUntilATurnTakesItOrTheUs
 		})
 	}
 }
+
+func TestTheDoorbellWaitsUntilTheTerminalsScreenIsAvailable(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		agent := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "sender")
+		restore := agent.term.ScreenUnavailable()
+		if sent := sendAgentMessage(t, cli, "sender", agent.id, "the build is green"); sent.Status != protocol.AgentMsgStatusQueued {
+			t.Fatalf("unavailable screen accepted mail: %+v", sent)
+		}
+		w.advance(30 * time.Second)
+		if got := pastedContaining(agent.term, inboxDoorbell); got != 0 {
+			t.Fatalf("doorbell pasted without a screen: %q", agent.term.Pasted())
+		}
+		restore()
+		agent.take("continue")
+		agent.reply("Done. <!-- attn:state=idle -->")
+		w.advance(0)
+		if got := pastedContaining(agent.term, inboxDoorbell); got != 1 {
+			t.Fatalf("doorbell after screen recovered: %q", agent.term.Pasted())
+		}
+	})
+}

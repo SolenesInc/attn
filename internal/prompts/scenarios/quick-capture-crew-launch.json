@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "quick-capture-crew-launch",
+  "description": "Quick Capture guidance for a crew member launch.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "quick_capture_enabled": "true"
+  },
+  "inputs": {
+    "crew_priming": "crew-with-handoff"
+  }
+}

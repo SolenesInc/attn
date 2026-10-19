@@ -69,6 +69,7 @@ export function SidebarPanelButtons({ collapsed = false }: { collapsed?: boolean
     >
       {action.icon}
       {action.unread && <span className="sidebar-notification-dot" aria-label="Unread notifications" />}
+      {Boolean(action.count) && <span className="sidebar-count-badge" aria-hidden="true">{action.count}</span>}
     </button>
   ));
 }

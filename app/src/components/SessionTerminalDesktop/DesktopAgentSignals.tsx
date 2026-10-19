@@ -1,3 +1,4 @@
+import { PaneAskChip } from '../Asks/PaneAskChip';
 import { PaneSeedChip } from '../PaneSeedChip';
 import { HeaderSettleKeptChip, HeaderSettlingIndicator } from '../SettlingIndicator';
 import { derivePaneSeedDisplay } from '../paneSeedDisplay';
@@ -7,6 +8,7 @@ export function DesktopAgentSignals({ agentPane, paneSession }: DesktopAgentProp
   const {
     gardenSeeds,
     onOpenSeed,
+    onOpenAsk,
     onCancelCountdown,
     pinnedSeedPopover,
     dismissSeedPopover,
@@ -42,6 +44,17 @@ export function DesktopAgentSignals({ agentPane, paneSession }: DesktopAgentProp
           pinned={pinnedSeedPopover === agentPane.sessionId}
           onOpenSeed={onOpenSeed}
           onPopoverClosed={dismissSeedPopover}
+        />
+      ) : null}
+      {onOpenAsk ? (
+        <PaneAskChip
+          session={{
+            id: agentPane.sessionId,
+            crewMember: paneSession?.crewMember,
+            chiefOfStaff: paneSession?.chiefOfStaff,
+            seedId: paneSession?.seedId,
+          }}
+          onOpenAsk={onOpenAsk}
         />
       ) : null}
     </>

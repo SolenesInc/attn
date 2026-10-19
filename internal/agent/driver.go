@@ -183,7 +183,8 @@ type SpawnOpts struct {
 
 	Asks bool
 
-	CrewPriming string
+	CrewPriming  string
+	QuickCapture bool
 
 	AwarenessDirs []string
 
@@ -211,6 +212,7 @@ func (o SpawnOpts) launchSpec() hooks.Launch {
 		Garden:                 o.Garden,
 		Asks:                   o.Asks,
 		Crew:                   o.CrewPriming,
+		QuickCapture:           o.QuickCapture,
 		SelfReportPullRequests: o.SelfReportPullRequests,
 	}
 }

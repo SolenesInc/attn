@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useAskList } from '../store/asks';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -11,6 +12,7 @@ import {
   useAppGardenActionsContext,
   useAppInputs,
   useAppPanelsContext,
+  useAppSessionsContext,
   useAppShell,
   useAttentionQueueContext,
   useChiefOfStaffContext,
@@ -56,8 +58,10 @@ export function AppSidebar() {
     sendSettleTurn,
     sendWakeTurn,
   } = useDaemonApi();
-  const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList } =
+  const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList, openAsk } =
     useAppPanelsContext();
+  const { profileSessions } = useAppSessionsContext();
+  const asks = useAskList(profileSessions);
   const { setProfileSwitcherOpen, setDesktopOverviewOpen } = useDesktopNavigationContext();
   const { handleOpenPalette, sidebarSurface, windowCovered, agentFocused } = useAppShell();
   const { keybindings } = useAppAppearanceContext();
@@ -145,6 +149,8 @@ export function AppSidebar() {
       onSettleTurn={sendSettleTurn}
       onWalkRuns={handleNextRun}
       onJumpToWaiting={handleJumpToWaiting}
+      asks={asks}
+      onOpenAsk={openAsk}
       profileName={profileName}
       onSwitchProfile={() => setProfileSwitcherOpen(true)}
       onOpenCommands={() => handleOpenPalette('commands')}

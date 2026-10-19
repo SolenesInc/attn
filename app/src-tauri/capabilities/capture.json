@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture",
+  "description": "Quick Capture composer",
+  "windows": [
+    "capture"
+  ],
+  "webviews": [
+    "capture"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-is-visible",
+    "clipboard-manager:allow-read-image"
+  ]
+}

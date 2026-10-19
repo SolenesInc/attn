@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,6 +51,14 @@ func runAgent() {
 			return
 		}
 		runAgentClose(os.Args[3:])
+	case "reload":
+		if hasHelpFlag(os.Args[3:]) {
+			writeAgentHelp(os.Stdout)
+			return
+		}
+		runAgentReload(os.Args[3:])
+	case "attachment":
+		runAgentAttachment(os.Args[3:])
 	case "inbox":
 		if hasHelpFlag(os.Args[3:]) {
 			writeAgentHelp(os.Stdout)
@@ -588,12 +597,20 @@ func runAgentInbox(args []string) {
 		os.Exit(2)
 	}
 	if parsed.messageID != "" {
-		result, err := client.New("").AgentInbox(parsed.messageID, parsed.sessionID)
+		result, item, err := client.New("").AgentInboxEntry(parsed.messageID, parsed.sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "agent inbox: %s\n", agentMailboxErrorMessage(agentMailboxArgs{
 				messageID: parsed.messageID, sessionID: parsed.sessionID,
 			}, err))
 			os.Exit(1)
+		}
+		if item != nil {
+			if parsed.json {
+				printJSON(item)
+			} else {
+				printAgentInboxBatch(os.Stdout, &protocol.AgentInboxBatchResult{Items: []protocol.AgentInboxItem{*item}})
+			}
+			return
 		}
 		if parsed.json {
 			printJSON(result)
@@ -652,6 +669,14 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 			if sourceID := strings.TrimSpace(protocol.Deref(item.SourceID)); sourceID != "" {
 				content += " " + sourceID
 			}
+		}
+		if item.Kind == string(inbox.QuickCapture) {
+			var files strings.Builder
+			for _, a := range item.Attachments {
+				fmt.Fprintln(&files, prompts.RenderText("session", "quick-capture-file", prompts.Values{"name": strconv.Quote(a.Name), "media_type": a.MediaType, "bytes": strconv.Itoa(a.Bytes), "capture_id": protocol.Deref(item.SourceID), "attachment_id": a.ID}))
+			}
+			fmt.Fprintln(w, prompts.RenderText("session", "quick-capture", prompts.Values{"message": item.Content, "files": files.String()}))
+			continue
 		}
 		if item.Kind != string(inbox.PeerMessage) {
 			if item.Kind == string(inbox.Notice) {
@@ -718,10 +743,26 @@ commands:
         what you have to say first. A seed id closes whoever tends it, and the
         seed keeps its tender with a note about the close.
         The caller defaults to this session (resolved from this terminal).
+  reload <session-id>... [--source-session <id>] [--json]
+  reload --all [--source-session <id>] [--json]
+        interrupt and reload agents in place, as "Reload this agent" does.
+        Running work is interrupted and non-persistent state may be lost.
+        Full ids and unique prefixes work. A session may reload itself and
+        descendants; the profile's chief may reload any agent in that profile.
+        --all is chief-only, includes the chief and crew, and excludes shells.
+        Chief and crew close protections do not prevent reload.
+        Each target reports an outcome; failures leave successful reloads in place
+        and exit nonzero. Repeated targets reload once. Exited agents use 80x24.
+        The caller defaults to this session and reloads last if selected;
+        self reload may interrupt the command before its result arrives.
   inbox [message-id] [--limit <count>] [--session <id>] [--json]
-        read up to 20 unread notifications in FIFO order, or one notified peer
+        read up to 20 unread notifications in FIFO order, or one notified user or peer
         message by id. Each returned item gets its durable read receipt. The batch
         limit can be 1 through 50. The session defaults to the current session.
+  attachment <capture-id> <attachment-id> --out <path> [--profile <name|id>]
+        Download a saved user file from this session's profile, then inspect it.
+        Outside a session, choose --profile when more than one profile exists.
+
   msg-status <message-id> [--session <id>] [--json]
         inspect your sent message as queued, notified, or read. The sender
         session defaults to the current session.

@@ -72,7 +72,9 @@ function RailDesktops() {
     sessionWantsAttention,
     visibleVisualOrder,
     visualIndexOfDesktop,
+    asks,
   } = useSidebarContext();
+  const askingIds = new Set(asks.flatMap((item) => (item.holder ? [item.holder.id] : [])));
   const desktopListRef = useRef<HTMLDivElement>(null);
   const desktopOrder = JSON.stringify(visibleVisualOrder.map((desktop) => desktop.id));
   const { onClick } = useRevealSelection(
@@ -82,7 +84,9 @@ function RailDesktops() {
     <div className="rail-desktops" ref={desktopListRef} onClick={onClick}>
       {visibleVisualOrder.map((desktopView) => {
         const shortcut = desktopShortcut(visualIndexOfDesktop(desktopView.id));
-        const label = shortcut ? `${desktopView.title} (${shortcut})` : desktopView.title;
+        const asking = desktopView.sessions.some((session) => askingIds.has(session.id));
+        const name = asking ? `${desktopView.title}, open ask` : desktopView.title;
+        const label = shortcut ? `${name} (${shortcut})` : name;
         const current = !homeActive && selectedDesktopId === desktopView.id;
         return (
           <button
@@ -106,6 +110,7 @@ function RailDesktops() {
                   className={`mini-badge ${desktopView.status === 'pending_approval' ? 'pending' : ''} ${desktopView.status === 'unknown' ? 'unknown' : ''}`}
                 />
               )}
+              {asking && <span className="mini-ask-badge" aria-hidden="true">?</span>}
             </DesktopChip>
           </button>
         );

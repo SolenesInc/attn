@@ -314,8 +314,13 @@ depend on the answer.
 Press **Cmd+Shift+R** to answer every agent from one drawer, waiting agents first.
 Pick choices, write answers, add a note and send with **Cmd+Enter**; the drawer
 brings the next ask. Your answer settles the agent's turn. **Open agent** jumps to
-its terminal, and the queue, the sidebar and the home screen mark the agents that
-asked.
+its terminal.
+
+The queue, the sidebar and the home screen mark the agents that asked, and the
+sidebar's Asks button counts open asks. With the sidebar collapsed, the queue bar
+counts open asks and lists them on hover; in desktop flow the rail keeps the count
+and marks the desktops of the agents that asked. The asking agent's tile header
+shows its ask: hover it to read the question, click it to answer.
 
 An ask is about the seed its agent works on: the one a delegation assigned them,
 or another seed they tend. The drawer names the seed, and **Open in Garden** shows

@@ -15,6 +15,12 @@ func decodeInto[T any](data []byte) (any, error) {
 }
 
 var messageDecoders = map[string]func([]byte) (any, error){
+	CmdQuickCaptureSend:              decodeInto[QuickCaptureSendMessage],
+	CmdQuickCaptureGet:               decodeInto[QuickCaptureGetMessage],
+	CmdQuickCaptureList:              decodeInto[QuickCaptureListMessage],
+	CmdQuickCaptureAttachmentPut:     decodeInto[QuickCaptureAttachmentPutMessage],
+	CmdQuickCaptureAttachmentGet:     decodeInto[QuickCaptureAttachmentGetMessage],
+	CmdQuickCaptureAttachmentDiscard: decodeInto[QuickCaptureAttachmentDiscardMessage],
 	CmdClientHello:                   decodeInto[ClientHelloMessage],
 	CmdDelegate:                      decodeInto[DelegateMessage],
 	CmdAutomationApply:               decodeInto[AutomationApplyMessage],
@@ -90,6 +96,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdAgentPeek:                     decodeInto[AgentPeekMessage],
 	CmdAgentMsg:                      decodeInto[AgentMsgMessage],
 	CmdAgentClose:                    decodeInto[AgentCloseMessage],
+	CmdAgentReload:                   decodeInto[AgentReloadMessage],
 	CmdAgentInbox:                    decodeInto[AgentInboxMessage],
 	CmdAgentMsgStatus:                decodeInto[AgentMsgStatusMessage],
 	CmdCrewList:                      decodeInto[CrewListMessage],

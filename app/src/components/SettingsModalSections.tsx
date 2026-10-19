@@ -3,7 +3,8 @@ import { HarnessRouteChip } from './HarnessRouteChip';
 import { HarnessRouteBadge } from './HarnessRouteBadge';
 import { routeFromStored } from '../hooks/useHarnessRoute';
 import { ModelTier } from '../types/generated';
-import { formatShortcut } from '../shortcuts/formatShortcut';
+import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
+import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
 import { agentCapabilityLabel, agentLabel, isAgentAvailable } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
 import { ASKS_SETTING } from '../utils/asks';
@@ -642,6 +643,7 @@ export function PluginSettings({
 }
 
 export function ExperimentalSettings({
+  quickCaptureEnabled,
   newSessionLauncherEnabled,
   codexSharedEnabled,
   queueShowHiddenSessions,
@@ -653,6 +655,7 @@ export function ExperimentalSettings({
   onSetSetting,
 }: Pick<
   SettingsModalState,
+  | 'quickCaptureEnabled'
   | 'newSessionLauncherEnabled'
   | 'codexSharedEnabled'
   | 'queueShowHiddenSessions'
@@ -663,9 +666,24 @@ export function ExperimentalSettings({
   | 'sharedPtyHostEnabled'
   | 'onSetSetting'
 >) {
+  const shortcutModifiers: Record<string, string> = { Control: 'ctrl', Alt: 'alt', Super: 'accel' };
+  const defaultShortcutLabel = keyCombo(...DEFAULT_QUICK_CAPTURE_SHORTCUT.split('+').map(part => shortcutModifiers[part] ?? part));
   return (
     <section className="settings-block">
       <div className="settings-block-body">
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Quick Capture</p>
+            <p className="settings-row-copy" id="quick-capture-description">
+              Send messages and files to Chief or a crew member from any app with a global shortcut (default to {defaultShortcutLabel}).
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Quick Capture"
+            aria-checked={quickCaptureEnabled} aria-describedby="quick-capture-description"
+            className="settings-action" onClick={() => onSetSetting('quick_capture_enabled', quickCaptureEnabled ? 'false' : 'true')}>
+            {quickCaptureEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
         <div className="settings-row-card">
           <div>
             <p className="settings-row-title">Launcher 2.0</p>

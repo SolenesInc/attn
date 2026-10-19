@@ -1,9 +1,9 @@
 # Reaching another agent
 
-You are not alone on this daemon. Other sessions are running beside you, and
-four commands reach them: `attn agent list` names them, `attn agent peek` shows
-you what one is doing, `attn agent msg` speaks to one, and `attn agent close`
-ends one. Run `attn agent --help` for the exact flags; this file is the rules.
+Other sessions are running beside you. `attn agent list` names them,
+`attn agent peek` shows what one is doing, `attn agent msg` speaks to one,
+`attn agent reload` restarts one in place, and `attn agent close` ends one.
+Run `attn agent --help` for the exact flags; this file is the rules.
 
 ## Who else is here
 
@@ -77,6 +77,29 @@ command acts as the user. CLI snooze of remote sessions is unsupported.
 Each id reports its outcome, and a batch with any failed id exits nonzero;
 successful ids keep their changes. Past deadlines and unknown sessions are
 errors. Run `attn session --help` for syntax.
+
+## Reloading agents
+
+`attn agent reload <session-id>...` does the same thing as the palette's
+"Reload this agent" action. It interrupts running agents immediately and may
+lose non-persistent state. Save anything needed before reloading. The session
+stays in place and resumes its saved conversation when one is available.
+
+Use full session ids or unique prefixes. A session may reload itself and
+agents below it in its delegation chain, including delegates of delegates.
+The profile's chief may reload any agent in that profile. Chief and crew
+sessions can be reloaded under these rules, even though they are protected
+from closing. Shells are excluded.
+
+`attn agent reload --all` is chief-only and selects every agent in the chief's
+profile, including the chief and crew sessions. Each target is authorized
+separately. A failed target does not undo successful reloads or stop the rest
+of the batch; any failure makes the command exit nonzero. Repeated targets
+reload once. Exited agents restart at 80x24.
+
+The caller defaults to the current session; outside one, pass
+`--source-session <id>`. If selected, the caller reloads last. Self reload can
+end the command before its result arrives, so write your handoff first.
 
 ## Closing a session
 

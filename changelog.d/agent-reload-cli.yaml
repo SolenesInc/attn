@@ -1,0 +1,3 @@
+kind: added
+area: cli
+change: Reload agents in place with agent reload, including batches and a profile-wide --all for the chief.

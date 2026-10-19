@@ -39,31 +39,33 @@ type Observation struct {
 	ObservedAt time.Time
 }
 
-type Evidence struct {
-	Heartbeat        *Observation
-	ProgramStatus    *Observation
-	LastHarnessEvent *Observation
-	LastClassifier   *Observation
-	Process          *Observation
-
-	TurnOpen       bool
-	TurnEverOpened bool
-	ToolOpen       bool
-	BackgroundWork bool
-	PendingCron    bool
-	Compacting     bool
+type TerminalEvidence struct {
+	Heartbeat      *Observation
+	ProgramStatus  *Observation
+	Process        *Observation
 	ReviewerInLoop bool
+	LastBusyAt     time.Time
+	LastMovement   time.Time
+}
 
+type ConversationEvidence struct {
+	LastHarnessEvent  *Observation
+	LastClassifier    *Observation
+	TurnOpen          bool
+	TurnEverOpened    bool
+	ToolOpen          bool
+	BackgroundWork    bool
+	PendingCron       bool
+	Compacting        bool
 	InitialPromptOwed bool
 	PlacedInputOwed   bool
+	PromptIdleAt      time.Time
+	ClassifyingSince  time.Time
+}
 
-	LastBusyAt time.Time
-
-	PromptIdleAt time.Time
-
-	ClassifyingSince time.Time
-
-	LastMovement time.Time
+type evidence struct {
+	TerminalEvidence
+	ConversationEvidence
 }
 
 type Policy struct {
@@ -149,7 +151,8 @@ type Resolution struct {
 	Hold   bool
 }
 
-func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
+func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, policy Policy, now time.Time) Resolution {
+	e := evidence{terminal, conversation}
 	if e.Process != nil && e.Process.Claim == ClaimExited {
 		return Resolution{State: protocol.SessionStateIdle, Reason: ReasonProcessExited, Detail: e.Process.Detail}
 	}
@@ -196,7 +199,7 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 				return settled(e, ReasonParkedExpired, policy, now)
 			}
 		}
-		if ClassifierVerdictPending(e, policy, now) {
+		if ClassifierVerdictPending(e.ConversationEvidence, policy, now) {
 			return Resolution{State: protocol.SessionStateWorking, Reason: ReasonBackgroundWork}
 		}
 		if promptIdleConfirmed(e) {
@@ -229,7 +232,7 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	}
 
 	signal := liveSignal(e)
-	if signal != nil && TookATurn(e) && !e.TurnOpen && !e.ToolOpen {
+	if signal != nil && TookATurn(e.ConversationEvidence) && !e.TurnOpen && !e.ToolOpen {
 		if signal.Claim == ClaimBusy && !heartbeatSilentFor(e, now, policy.HeartbeatSettleAfter) {
 			return running(e)
 		}
@@ -243,7 +246,7 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return settled(e, ReasonCronPending, policy, now)
 	}
 
-	if signal != nil && signal.Claim == ClaimSettled && !TookATurn(e) {
+	if signal != nil && signal.Claim == ClaimSettled && !TookATurn(e.ConversationEvidence) {
 		if e.InitialPromptOwed || e.PlacedInputOwed {
 			return Resolution{Hold: true, Reason: ReasonPromptOwed}
 		}
@@ -261,17 +264,18 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	return Resolution{State: protocol.SessionStateUnknown, Reason: ReasonNoEvidence}
 }
 
-func NextChange(e Evidence, policy Policy, now time.Time) (time.Time, bool) {
-	current := Resolve(e, policy, now)
+func NextChange(terminal TerminalEvidence, conversation ConversationEvidence, policy Policy, now time.Time) (time.Time, bool) {
+	e := evidence{terminal, conversation}
+	current := Resolve(e.TerminalEvidence, e.ConversationEvidence, policy, now)
 	for _, at := range expiryInstants(e, policy, now) {
-		if Resolve(e, policy, at) != current {
+		if Resolve(e.TerminalEvidence, e.ConversationEvidence, policy, at) != current {
 			return at, true
 		}
 	}
 	return time.Time{}, false
 }
 
-func expiryInstants(e Evidence, policy Policy, now time.Time) []time.Time {
+func expiryInstants(e evidence, policy Policy, now time.Time) []time.Time {
 	var instants []time.Time
 	expires := func(base time.Time, lifetime time.Duration) {
 		if base.IsZero() {
@@ -297,7 +301,7 @@ func expiryInstants(e Evidence, policy Policy, now time.Time) []time.Time {
 	return instants
 }
 
-func running(e Evidence) Resolution {
+func running(e evidence) Resolution {
 	if e.TurnOpen || e.ToolOpen {
 		return Resolution{State: protocol.SessionStateWorking, Reason: ReasonBracketOpen}
 	}
@@ -308,7 +312,7 @@ func running(e Evidence) Resolution {
 	return Resolution{State: protocol.SessionStateWorking, Reason: ReasonHeartbeatBusy, Detail: detail}
 }
 
-func liveSignal(e Evidence) *Observation {
+func liveSignal(e evidence) *Observation {
 	if e.ProgramStatus != nil {
 		return e.ProgramStatus
 	}
@@ -330,24 +334,24 @@ func programStatusEdge(o Observation) (Resolution, bool) {
 	}
 }
 
-func settled(e Evidence, fallback Reason, policy Policy, now time.Time) Resolution {
+func settled(e evidence, fallback Reason, policy Policy, now time.Time) Resolution {
 	if r, ok := classifierVerdict(e); ok {
 		return r
 	}
-	if ClassifierVerdictPending(e, policy, now) {
+	if ClassifierVerdictPending(e.ConversationEvidence, policy, now) {
 		return Resolution{Hold: true, Reason: ReasonAwaitingVerdict}
 	}
 	return Resolution{State: protocol.SessionStateIdle, Reason: fallback}
 }
 
-func ClassifierVerdictPending(e Evidence, policy Policy, now time.Time) bool {
+func ClassifierVerdictPending(e ConversationEvidence, policy Policy, now time.Time) bool {
 	if e.ClassifyingSince.IsZero() {
 		return false
 	}
 	return now.Sub(e.ClassifyingSince) <= policy.ClassifierTimeout
 }
 
-func harnessEdge(e Evidence) (Resolution, bool) {
+func harnessEdge(e evidence) (Resolution, bool) {
 	if e.LastHarnessEvent == nil || supersededByBusy(e.LastHarnessEvent, e) || supersededByProgramStatus(e.LastHarnessEvent, e) {
 		return Resolution{}, false
 	}
@@ -375,19 +379,19 @@ func harnessEdge(e Evidence) (Resolution, bool) {
 	}
 }
 
-func turnAborted(e Evidence) bool {
+func turnAborted(e evidence) bool {
 	return e.LastHarnessEvent != nil &&
 		e.LastHarnessEvent.Claim == ClaimTurnAborted &&
 		!supersededByBusy(e.LastHarnessEvent, e)
 }
 
-func parkedVerdict(e Evidence) bool {
+func parkedVerdict(e evidence) bool {
 	return e.LastClassifier != nil &&
 		e.LastClassifier.Claim == ClaimParked &&
 		!supersededByBusy(e.LastClassifier, e)
 }
 
-func classifierVerdict(e Evidence) (Resolution, bool) {
+func classifierVerdict(e evidence) (Resolution, bool) {
 	if e.LastClassifier == nil {
 		return Resolution{}, false
 	}
@@ -412,28 +416,29 @@ func classifierVerdict(e Evidence) (Resolution, bool) {
 	}
 }
 
-func DwellFor(state protocol.SessionState, e Evidence, policy Policy) time.Duration {
+func DwellFor(state protocol.SessionState, terminal TerminalEvidence, conversation ConversationEvidence, policy Policy) time.Duration {
+	e := evidence{terminal, conversation}
 	if state == protocol.SessionStatePendingApproval && e.ReviewerInLoop {
 		return policy.GuardianDwell
 	}
 	return 0
 }
 
-func supersededByBusy(o *Observation, e Evidence) bool {
+func supersededByBusy(o *Observation, e evidence) bool {
 	if o == nil || e.LastBusyAt.IsZero() {
 		return false
 	}
 	return e.LastBusyAt.After(o.ObservedAt)
 }
 
-func (e *Evidence) ClearProgramStatus() {
-	if e.LastHarnessEvent != nil && supersededByProgramStatus(e.LastHarnessEvent, *e) {
-		e.LastHarnessEvent = nil
+func ClearProgramStatus(terminal *TerminalEvidence, conversation *ConversationEvidence) {
+	if conversation.LastHarnessEvent != nil && supersededByProgramStatus(conversation.LastHarnessEvent, evidence{*terminal, *conversation}) {
+		conversation.LastHarnessEvent = nil
 	}
-	e.ProgramStatus = nil
+	terminal.ProgramStatus = nil
 }
 
-func supersededByProgramStatus(o *Observation, e Evidence) bool {
+func supersededByProgramStatus(o *Observation, e evidence) bool {
 	return e.ProgramStatus != nil && !o.ObservedAt.After(e.ProgramStatus.ObservedAt)
 }
 
@@ -441,25 +446,25 @@ func fresh(o *Observation, claim Claim, now time.Time, ttl time.Duration) bool {
 	return o != nil && o.Claim == claim && now.Sub(o.ObservedAt) <= ttl
 }
 
-func TookATurn(e Evidence) bool {
+func TookATurn(e ConversationEvidence) bool {
 	if e.TurnOpen || e.ToolOpen || e.TurnEverOpened {
 		return true
 	}
 	return e.LastClassifier != nil || !e.ClassifyingSince.IsZero()
 }
 
-func evidenceStoppedMoving(e Evidence, now time.Time, d time.Duration) bool {
+func evidenceStoppedMoving(e evidence, now time.Time, d time.Duration) bool {
 	if e.LastMovement.IsZero() {
 		return false
 	}
 	return now.Sub(e.LastMovement) > d
 }
 
-func promptIdleConfirmed(e Evidence) bool {
+func promptIdleConfirmed(e evidence) bool {
 	return !e.PromptIdleAt.IsZero() && e.PromptIdleAt.After(e.LastBusyAt)
 }
 
-func heartbeatSilentFor(e Evidence, now time.Time, d time.Duration) bool {
+func heartbeatSilentFor(e evidence, now time.Time, d time.Duration) bool {
 	lastActive := lastActiveAt(e)
 	if lastActive.IsZero() {
 		return false
@@ -467,7 +472,7 @@ func heartbeatSilentFor(e Evidence, now time.Time, d time.Duration) bool {
 	return now.Sub(lastActive) > d
 }
 
-func lastActiveAt(e Evidence) time.Time {
+func lastActiveAt(e evidence) time.Time {
 	if e.LastBusyAt.IsZero() || e.ProgramStatus == nil || e.ProgramStatus.ObservedAt.Before(e.LastBusyAt) {
 		return e.LastBusyAt
 	}

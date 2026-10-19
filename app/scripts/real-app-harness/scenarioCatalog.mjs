@@ -1,5 +1,11 @@
 export const scenarioCatalog = [
   {
+    id: 'agent-reload',
+    runnerId: 'AGENT-RELOAD',
+    label: 'CLI reload keeps the agent tile and native keyboard input working',
+    command: ['node', 'scripts/real-app-harness/scenario-agent-reload.mjs'],
+  },
+  {
     id: 'callouts',
     runnerId: 'CALLOUTS',
     label: 'Agent callouts across sidebar shapes, native stepping, navigation and browser tiles',
@@ -42,6 +48,14 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-launch-desktops.mjs'],
   },
   {
+    id: 'quick-capture',
+    runnerId: 'QUICK-CAPTURE',
+    label: 'Quick Capture: native shortcut, focus, file delivery and history',
+    command: ['node', 'scripts/real-app-harness/scenario-quick-capture.mjs'],
+    skipOn: { linux: 'Quick Capture uses a macOS nonactivating panel' },
+    timeoutMs: 600_000,
+  },
+  {
     id: 'snooze-keyboard',
     runnerId: 'SNOOZE-KEYBOARD',
     label: 'Snooze from the palette: agent-centered picker, native keys, focus handover and wake',
@@ -52,7 +66,7 @@ export const scenarioCatalog = [
   {
     id: 'prompt-composition',
     runnerId: 'PromptComposition',
-    label: 'Prompt delivery: ordinary/chief channels, peer attribution, crew wake/sleep and successor',
+    label: 'Prompt delivery: ordinary/chief channels, peer/user attribution, quick capture file retrieval, crew wake/sleep and successor',
     command: ['node', 'scripts/real-app-harness/scenario-prompt-composition.mjs'],
     timeoutMs: 240_000,
   },

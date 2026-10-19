@@ -168,3 +168,34 @@ func TestACodexDefaultContextWindowCapBecomesItsCompactLimit(t *testing.T) {
 		t.Errorf("a capped codex launched as %q, want its compact limit at 200000", capped.Argv)
 	}
 }
+
+func TestQuickCaptureGuidanceFollowsTheExperimentAtEachLaunch(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+			w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)
+			app := w.App()
+			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
+			for i, enabled := range []bool{false, true, false} {
+				if i > 0 {
+					setSetting(t, app, "quick_capture_enabled", strconv.FormatBool(enabled))
+				}
+				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+					chief := w.Launched(w.Spawn(app, h, w.Path(string(h)+strconv.Itoa(i)), func(m *protocol.SpawnSessionMessage) {
+						m.ChiefOfStaff = protocol.Ptr(true)
+					}))
+					if got := strings.Contains(launchGuidance(t, chief), "The user can send you messages from Quick Capture"); got != enabled {
+						t.Fatalf("%s chief Quick Capture guidance=%v, enabled=%v", h, got, enabled)
+					}
+					if result := setChiefOfStaff(app, chief.SessionID, false); !result.Success {
+						t.Fatal(result)
+					}
+				}
+				member := []string{"alder", "keel", "trellis"}[i]
+				day := w.Launched(string(wakeCrew(t, w.Client(), member, "copilot").SessionID))
+				if got := strings.Contains(launchGuidance(t, day), "The user can send you messages from Quick Capture"); got != enabled {
+					t.Fatalf("crew Quick Capture guidance=%v, enabled=%v", got, enabled)
+				}
+			}
+		})
+	}
+}

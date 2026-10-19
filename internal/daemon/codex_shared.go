@@ -106,8 +106,7 @@ func (r *codexShared) runsLink(t harness.TerminalID) bool {
 }
 
 func (r *codexShared) dir() string {
-	sum := sha256.Sum256([]byte(r.d.dataRoot))
-	return filepath.Join("/tmp", "attn-cx-"+hex.EncodeToString(sum[:8]))
+	return codexshared.SocketDir(r.d.dataRoot)
 }
 
 func (r *codexShared) ensureDir() error {
@@ -462,7 +461,7 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	if again || r.d.store.Get(sessionID) == nil {
 		return
 	}
-	r.d.drainTranscriptWatcher(sessionID)()
+	r.d.finishMonitorUsage(sessionID)()
 	r.observe(sessionID, pty.ProgramIdle)
 }
 

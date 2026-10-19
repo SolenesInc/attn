@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"syscall"
 
@@ -17,69 +16,6 @@ func spawnTestClient() *wsClient {
 		send:            make(chan outboundMessage, 8),
 		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
 	}
-}
-
-type fakeWorkerReconcileBackend struct {
-	liveIDs []string
-	info    map[string]ptybackend.SessionInfo
-	params  map[string]ptybackend.SessionLaunchParams
-}
-
-func (b *fakeWorkerReconcileBackend) Spawn(context.Context, ptybackend.SpawnOptions) error {
-	return nil
-}
-
-func (b *fakeWorkerReconcileBackend) Attach(context.Context, harness.TerminalID, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
-	return ptybackend.AttachInfo{}, nil, nil
-}
-
-func (b *fakeWorkerReconcileBackend) Input(context.Context, harness.TerminalID, []byte) error {
-	return nil
-}
-
-func (b *fakeWorkerReconcileBackend) Resize(context.Context, harness.TerminalID, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
-	return ptybackend.ResizeResult{Changed: true}, nil
-}
-
-func (b *fakeWorkerReconcileBackend) SetTheme(context.Context, harness.TerminalID, pty.TerminalTheme) error {
-	return nil
-}
-
-func (b *fakeWorkerReconcileBackend) Kill(context.Context, harness.TerminalID, syscall.Signal) error {
-	return nil
-}
-
-func (b *fakeWorkerReconcileBackend) Remove(context.Context, harness.TerminalID) error { return nil }
-
-func (b *fakeWorkerReconcileBackend) TerminalIDs(context.Context) []harness.TerminalID {
-	ids := make([]harness.TerminalID, len(b.liveIDs))
-	for i, id := range b.liveIDs {
-		ids[i] = harness.TerminalID(id)
-	}
-	return ids
-}
-
-func (b *fakeWorkerReconcileBackend) Recover(context.Context) (ptybackend.RecoveryReport, error) {
-	return ptybackend.RecoveryReport{Recovered: len(b.liveIDs)}, nil
-}
-
-func (b *fakeWorkerReconcileBackend) Shutdown(context.Context) error { return nil }
-
-func (b *fakeWorkerReconcileBackend) SessionInfo(_ context.Context, id harness.TerminalID) (ptybackend.SessionInfo, error) {
-	sessionID := string(id)
-	info, ok := b.info[sessionID]
-	if !ok {
-		return ptybackend.SessionInfo{}, fmt.Errorf("missing info for %s", sessionID)
-	}
-	return info, nil
-}
-
-func (b *fakeWorkerReconcileBackend) SessionLaunchParams(_ context.Context, id harness.TerminalID) (ptybackend.SessionLaunchParams, error) {
-	params, ok := b.params[string(id)]
-	if !ok {
-		return ptybackend.SessionLaunchParams{}, pty.ErrSessionNotFound
-	}
-	return params, nil
 }
 
 type fakeOutputStream struct {

@@ -1,5 +1,6 @@
 import { SidebarTreeHarness } from './SidebarTreeHarness';
 import type { HarnessProps } from '../types';
+import { QuickCaptureHistoryHarness } from './QuickCaptureHistoryHarness';
 import { BrokenLinksHarness } from './BrokenLinksHarness';
 import { FileTreeHarness } from './FileTreeHarness';
 import { FrontmatterCardHarness } from './FrontmatterCardHarness';
@@ -19,6 +20,7 @@ import { AgentHeaderHarness } from './AgentHeaderHarness';
 import { SidebarRailHarness } from './SidebarRailHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
+  QuickCaptureHistory: QuickCaptureHistoryHarness,
   AgentHeader: AgentHeaderHarness,
   BrokenLinks: BrokenLinksHarness,
   FileTree: FileTreeHarness,

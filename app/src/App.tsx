@@ -1,7 +1,11 @@
 import { Toast } from './components/Toast';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { emitTo } from '@tauri-apps/api/event';
+import { QUICK_CAPTURE_READ } from './quickCapture/client';
 import { useCallback, useEffect, useState } from 'react';
 import './App.css';
+import { useQuickCaptureHost } from './application/useQuickCaptureHost';
+import { QuickCaptureShortcutProvider } from './quickCapture/ShortcutContext';
 import { AppContent } from './application/AppContent';
 import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
 import { MigrationFailureScreen } from './components/MigrationFailureScreen';
@@ -90,6 +94,7 @@ function App() {
   }, []);
 
   const daemon = useDaemonSocket({
+    onQuickCaptureRead: receipt => { if (isTauri()) void emitTo('capture', QUICK_CAPTURE_READ, receipt); },
     onSessionsUpdate: (sessions) => {
       useSessionStore.getState().syncFromDaemonSessions(sessions);
       setDaemonSessions(sessions);
@@ -119,6 +124,8 @@ function App() {
     onSettingError: setSettingError,
     onWorktreesUpdate: setWorktrees,
   });
+
+  const captureHost = useQuickCaptureHost(daemon, settings);
 
   const {
     getMarkdownAnnotations,
@@ -172,6 +179,7 @@ function App() {
     <SettingsProvider settings={settings} setSetting={sendSetSetting}>
       <KeybindingsProvider>
         <DaemonApiProvider api={daemon}>
+          <QuickCaptureShortcutProvider value={captureHost}>
           <MigrationGate>
             <AppContent
               daemonSessions={daemonSessions}
@@ -194,6 +202,7 @@ function App() {
             />
           </MigrationGate>
           <Toast />
+          </QuickCaptureShortcutProvider>
         </DaemonApiProvider>
       </KeybindingsProvider>
     </SettingsProvider>

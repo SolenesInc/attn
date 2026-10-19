@@ -69,6 +69,7 @@ export interface SessionTerminalDesktopProps {
     isActive?: boolean;
     seedId?: string;
     crewMember?: string;
+    chiefOfStaff?: boolean;
     automation?: AutomationProvenanceValue;
     pullRequests?: SessionPullRequest[];
   }>;
@@ -77,6 +78,7 @@ export interface SessionTerminalDesktopProps {
   gardenSeeds?: Seed[];
   onOpenSeed?: (seedId: string) => void;
   onRevealSeedInGarden?: (seedId: string) => void;
+  onOpenAsk?: (askId: string) => void;
   backToCrewTileId?: string;
   onBackToCrew?: (returnFocus: HTMLElement) => void;
   seedPopoverRequest?: { sessionId: string; nonce: number };

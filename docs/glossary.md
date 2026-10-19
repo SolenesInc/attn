@@ -71,19 +71,20 @@ address                 who an item is for: a session or a mailbox
 ├─ mailbox              crew member, chief or seed tender; like a shared
 │                       mailbox (support@) that whoever holds the job reads
 ├─ inbox (1)
-│  └─ item (0..n)       peer message, seed update, user message,
+│  └─ item (0..n)       peer message, seed update, quick capture,
 │                       PR watch update or notice
-└─ ask* (0..n)          a question an agent sends the user, who answers in
+└─ ask (0..n)           a question an agent sends the user, who answers in
                         their own time; like a decision request
    ├─ seed (at most 1)  the work the ask is about; the ask is addressed to
    │                    the seed's tender
    ├─ question (0..n)   pick one, pick any, or write an answer
-   └─ answer (at most 1) the user's reply: a note on the seed, or a user
-                        message in the inbox when there is no seed
+   └─ answer (at most 1) the user's reply: a note on the seed, or an
+                        inbox item when there is no seed
 ring                    one prompt that tells an agent that they have unread
                         items; like a push notification
-
-* experimental
+quick capture           a quick message (with optional attachments) the user
+                        can send to chief or crew, from outside attn, using a
+                        global shortcut; like macOS Quick Note
 ```
 
 ```text
@@ -180,7 +181,7 @@ window (1..n)           one macOS app window
 │                       VS Code command palette (⌘K, ⌘P)
 ├─ dialog (0..1)        a modal window that waits for an answer: settings,
 │                       confirmations
-└─ callout* (0..1)      short text from an agent that points at part of the
+└─ callout (0..1)       short text from an agent that points at part of the
                         app window; like a guided tour
 current desktop         the desktop a profile shows; every window shares it
 active tile             the tile a desktop has selected; every window shares it

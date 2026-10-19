@@ -106,7 +106,14 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate {
             writer?.startSession(atSourceTime: pts)
             sessionStarted = true
         }
-        adaptor.append(pixelBuffer, withPresentationTime: pts)
+        guard adaptor.append(pixelBuffer, withPresentationTime: pts) else { return }
+        if lastPixelBuffer == nil {
+            do {
+                try Data("ready\n".utf8).write(to: URL(fileURLWithPath: outputURL.path + ".ready"))
+            } catch {
+                fail("cannot acknowledge first recorded frame: \(error)", code: 4)
+            }
+        }
         lastPixelBuffer = pixelBuffer
         lastPTS = pts
     }

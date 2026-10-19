@@ -46,6 +46,19 @@ describe('SettingsModal sections', () => {
     ]);
   });
 
+  it('keeps Quick Capture off until enabled in Experimental and can turn it off again', async () => {
+    const daemon = await openSection('experimental');
+    const toggle = () => screen.getByRole('switch', { name: 'Quick Capture' });
+    expect(toggle()).toHaveAccessibleDescription('Send messages and files to Chief or a crew member from any app with a global shortcut (default to ⌃⌥⌘Space).');
+    expect(toggle()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(toggle()));
+    expect(savedSettings(daemon)).toEqual([['quick_capture_enabled', 'true']]);
+    expect(toggle()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(toggle()));
+    expect(savedSettings(daemon)).toEqual([['quick_capture_enabled', 'true'], ['quick_capture_enabled', 'false']]);
+    expect(toggle()).toHaveAttribute('aria-checked', 'false');
+  });
+
   it('exposes theme selection and the projects directory through accessible controls', async () => {
     const daemon = await openSection('general', { settings: { theme: 'system' } });
     expect(screen.getByRole('button', { name: 'System', pressed: true })).toBeInTheDocument();

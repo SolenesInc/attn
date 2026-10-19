@@ -292,6 +292,30 @@
         "seconds": 39.5,
         "runnerClass": "local Linux x86_64 SSH runner",
         "note": "Green matrix PASS callouts 39.500s (ATTN_VERDICT durationMs=38935, including cleanup). Covers native Enter/ArrowRight/Escape after browser hiding, terminal CLI input after browser restore, palette Escape after native browser focus, all sidebar shapes, reveal/navigation, and desktop-scoped browser cleanup. Idle sampling awaits finite entrance animations."
+      },
+      "prompt-composition": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/37237377153",
+        "job": "App acceptance shard 3/4",
+        "recordedAt": "2026-10-04",
+        "seconds": 29.596,
+        "runnerClass": "hosted Linux",
+        "note": "Green native scenario durationMs=29596, including uploads, agent inbox delivery, byte-exact image/PDF retrieval and cleanup. Receipt: app-acceptance-evidence-1-shard-3/last-matrix.json and matrix-digest.txt."
+      },
+      "quick-capture": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/39176091798",
+        "job": "App acceptance macOS",
+        "recordedAt": "2026-10-19",
+        "seconds": 206.599,
+        "runnerClass": "hosted macOS",
+        "note": "Green quick-capture durationMs=206599 in last-matrix.json, revision221afcbcb, including the enable-first recording, native shortcut, focus, file delivery, history, disable/re-enable draft retention and cleanup. Artifact12154318251."
+      },
+      "agent-reload": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/39231395121",
+        "job": "Soak agent-reload",
+        "recordedAt": "2026-10-19",
+        "seconds": 13.867,
+        "runnerClass": "github-hosted Ubuntu24.04 amd64, 4vcpu/16GB",
+        "note": "Green isolated packaged scenario on 822ed03414a2. Iteration wall time 13867ms; ATTN_VERDICT durationMs=13277 including cleanup. Native keyboard input succeeds before and after CLI reload, with the same tile and desktop."
       }
     }
   },
@@ -322,7 +346,7 @@
     "home-dock": 15.337,
     "markdown-opener": 20.3,
     "notebook-editor-undo": 32.8,
-    "prompt-composition": 19,
+    "prompt-composition": 29.596,
     "codex-shared": 25,
     "pty-host-setting": 8.3,
     "session-close-ledger": 9.9,
@@ -355,6 +379,8 @@
     "new-session-launcher": 22.491,
     "agent-terminals": 6.524,
     "shell-titles": 14.058,
-    "callouts": 39.5
+    "callouts": 39.5,
+    "quick-capture": 206.599,
+    "agent-reload": 13.867
   }
 }

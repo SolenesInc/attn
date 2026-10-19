@@ -11,6 +11,7 @@ import (
 )
 
 type pluginUsageWatcher struct {
+	entry     *monitorEntry
 	sessionID protocol.SessionID
 	path      string
 	stopCh    chan struct{}
@@ -24,30 +25,32 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID protocol.SessionID, agent st
 		return
 	}
 
-	d.watchersMu.Lock()
-	previous := d.pluginUsageWatch[sessionID]
-	if d.usageDraining[sessionID] || previous != nil && previous.path == path {
-		d.watchersMu.Unlock()
+	e := d.monitorEntry(sessionID)
+	if e == nil {
 		return
 	}
-	watcher := &pluginUsageWatcher{sessionID: sessionID, path: path, stopCh: make(chan struct{}), doneCh: make(chan struct{})}
+	e.mu.Lock()
+	previous := e.pluginUsageWatch
+	if e.usageDraining || previous != nil && previous.path == path {
+		e.mu.Unlock()
+		return
+	}
+	watcher := &pluginUsageWatcher{entry: e, sessionID: sessionID, path: path, stopCh: make(chan struct{}), doneCh: make(chan struct{})}
 	// The baseline lands before the report is answered, so a transcript written right after it still counts.
 	if !d.life.Do("seedPluginUsageBaseline", func() { d.seedPluginUsageBaseline(sessionID, path) }) {
-		d.watchersMu.Unlock()
+		e.mu.Unlock()
 		return
 	}
 	tracker := newSessionUsageTrackerAt(d, sessionID, agent, path, transcript.NewReportedUsageSourceResolver(path))
 	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
 	if !d.life.Go("runPluginUsageWatcher", func() { d.runPluginUsageWatcher(watcher, tracker) }) {
-		d.watchersMu.Unlock()
+		e.mu.Unlock()
 		return
 	}
-	d.beginUsageRunLocked(sessionID)
-	if d.pluginUsageWatch == nil {
-		d.pluginUsageWatch = make(map[protocol.SessionID]*pluginUsageWatcher)
-	}
-	d.pluginUsageWatch[sessionID] = watcher
-	d.watchersMu.Unlock()
+	e.beginUsageRunLocked()
+	e.pluginUsageWatch = watcher
+
+	e.mu.Unlock()
 	if previous != nil {
 		close(previous.stopCh)
 	}
@@ -67,7 +70,7 @@ func (d *Daemon) seedPluginUsageBaseline(sessionID protocol.SessionID, path stri
 }
 
 func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUsageTracker) {
-	defer d.endUsageRun(w.sessionID)
+	defer w.entry.endUsageRun()
 	defer close(w.doneCh)
 	ticker := time.NewTicker(transcriptPollInterval)
 	defer ticker.Stop()
@@ -81,7 +84,7 @@ func (d *Daemon) runPluginUsageWatcher(w *pluginUsageWatcher, tracker *sessionUs
 			return
 		case <-d.life.Done():
 			seen := read != nil
-			d.deferFinalUsage(w.sessionID, func() { d.reconcilePluginUsageOnStop(w.path, seen, tracker) })
+			w.entry.deferFinalUsage(func() { d.reconcilePluginUsageOnStop(w.path, seen, tracker) })
 			return
 		case <-ticker.C:
 		}
@@ -106,32 +109,6 @@ func (d *Daemon) reconcilePluginUsageOnStop(path string, seen bool, tracker *ses
 		}
 	}
 	tracker.Reconcile()
-}
-
-func (d *Daemon) stopPluginUsageWatcher(sessionID protocol.SessionID) {
-	d.watchersMu.Lock()
-	watcher, ok := d.pluginUsageWatch[sessionID]
-	if ok {
-		delete(d.pluginUsageWatch, sessionID)
-	}
-	d.watchersMu.Unlock()
-	if ok {
-		close(watcher.stopCh)
-	}
-}
-
-func (d *Daemon) stopAllPluginUsageWatchers() {
-	d.watchersMu.Lock()
-	watchers := make([]*pluginUsageWatcher, 0, len(d.pluginUsageWatch))
-	for _, watcher := range d.pluginUsageWatch {
-		watchers = append(watchers, watcher)
-	}
-	d.pluginUsageWatch = make(map[protocol.SessionID]*pluginUsageWatcher)
-	d.watchersMu.Unlock()
-
-	for _, watcher := range watchers {
-		close(watcher.stopCh)
-	}
 }
 
 func (d *Daemon) restorePluginUsageWatchers() {

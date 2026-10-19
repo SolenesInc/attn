@@ -1,8 +1,6 @@
 import { useMemo } from 'react';
 import { Dashboard } from '../components/Dashboard';
-import { useAsksStore } from '../store/asks';
-import { useDaemonStore } from '../store/daemonSessions';
-import { askFrom, askHolder, orderAsks } from '../utils/asks';
+import { useAskList } from '../store/asks';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { activityStaleMs } from '../utils/activitySettings';
 import {
@@ -20,17 +18,12 @@ export function AppDashboard() {
   const { hasReceivedInitialState, rateLimit, sendWakeTurn } = useDaemonApi();
 
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
-  const { setSettingsOpen, whatsNew, openDockPanel } = useAppPanelsContext();
+  const { setSettingsOpen, whatsNew, openAsk } = useAppPanelsContext();
   const { queueModeEnabled, crewQueueEnabled, queueSessions } = useAttentionQueueContext();
-  const openAsks = useAsksStore((state) => state.asks);
-  const seeds = useDaemonStore((state) => state.seeds);
+  const askItems = useAskList(queueSessions);
   const asks = useMemo(
-    () => orderAsks(openAsks, queueSessions, seeds).map((ask) => ({
-      id: ask.id,
-      from: askFrom(ask, askHolder(ask, queueSessions, seeds)),
-      subject: ask.subject,
-    })),
-    [openAsks, queueSessions, seeds],
+    () => askItems.map(({ ask, from }) => ({ id: ask.id, from, subject: ask.subject })),
+    [askItems],
   );
   const { handleNewSession } = useSessionLaunchContext();
   const { handleOpenPR } = usePRLauncherContext();
@@ -56,10 +49,7 @@ export function AppDashboard() {
           onOpenPR={handleOpenPR}
           onOpenSettings={() => setSettingsOpen(true)}
           asks={asks}
-          onOpenAsk={(askId) => {
-            useAsksStore.getState().selectAsk(askId);
-            openDockPanel('asks');
-          }}
+          onOpenAsk={openAsk}
           introBanner={whatsNew.bannerVisible ? { onReplay: whatsNew.open, onDismiss: whatsNew.dismissBanner } : undefined}
         />
       </div>

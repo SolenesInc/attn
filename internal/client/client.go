@@ -192,7 +192,7 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 			return nil, err
 		}
 		cmd, _ := fields["cmd"].(string)
-		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate {
+		if strings.HasPrefix(cmd, "seed_") || cmd == protocol.CmdOpenSeed || cmd == protocol.CmdDelegateStatus || cmd == protocol.CmdDelegate || cmd == protocol.CmdQuickCaptureAttachmentGet {
 			if fields["profile_id"] == nil || fields["profile_id"] == "" {
 				fields["profile_id"] = c.gardenProfile
 			}
@@ -525,6 +525,19 @@ func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, con
 		return nil, errors.New("daemon returned no agent msg result")
 	}
 	return resp.AgentMsgResult, nil
+}
+
+func (c *Client) AgentReload(targets []string, sourceSessionID protocol.SessionID, all bool) (*protocol.AgentReloadResult, error) {
+	resp, err := c.send(protocol.AgentReloadMessage{
+		Cmd: protocol.CmdAgentReload, Targets: targets, SourceSessionID: sourceSessionID, All: all,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AgentReloadResult == nil {
+		return nil, fmt.Errorf("daemon did not return an agent reload result")
+	}
+	return resp.AgentReloadResult, nil
 }
 
 func (c *Client) AgentClose(target string, sourceSessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
