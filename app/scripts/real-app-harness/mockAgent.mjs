@@ -34,6 +34,7 @@ const MOCK_AGENT_FLAVORS = {
 export const MOCK_AGENT_AGENTS = Object.keys(MOCK_AGENT_FLAVORS);
 export const MOCK_AGENT_EXECUTABLE = executablePath;
 export const MOCK_AGENT_MODEL = 'mock-agent-1';
+export const MOCK_CODEX_VERSION = '1.0.0';
 
 export function mockAgentName(agent) {
   const name = String(agent || '').trim().toLowerCase();
@@ -676,6 +677,10 @@ export function answerStreamJsonLine(line) {
     response: { models: [{ value: MOCK_AGENT_MODEL, displayName: 'Mock agent 1', supportsEffort: true,
       supportedEffortLevels: ['low', 'medium', 'high'] }] } } };
 }
+function mockCodexDoctorReport() {
+  return { schemaVersion: 1, codexVersion: MOCK_CODEX_VERSION, overallStatus: 'ok',
+    checks: { 'updates.status': { id: 'updates.status', status: 'ok', details: { 'latest version': MOCK_CODEX_VERSION } } } };
+}
 function isStreamJsonDiscovery(args) {
   return args.includes('--print') && args.includes('--input-format') && args.includes('stream-json');
 }
@@ -701,6 +706,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === executablePath) {
   if (process.argv[2] === 'app-server' && process.argv.includes('--listen')) import('./mockCodexShared.mjs').then((module) => module.runSharedMockServer());
   else if (process.argv.includes('--remote')) import('./mockCodexShared.mjs').then((module) => module.runSharedMockView()).catch((error) => { console.error(error); process.exitCode = 1; });
   else if (process.argv[2] === 'app-server') runLineServer(answerAppServerLine);
+  else if (process.argv[2] === '--version') console.log(`codex-cli ${MOCK_CODEX_VERSION}`);
+  else if (process.argv[2] === 'doctor' && process.argv.includes('--json')) console.log(JSON.stringify(mockCodexDoctorReport()));
   else if (isStreamJsonDiscovery(process.argv.slice(2))) runLineServer(answerStreamJsonLine);
   else runMockAgent().catch((error) => {
     console.error(`mock agent failed: ${error instanceof Error ? error.message : String(error)}`);
