@@ -7241,6 +7241,7 @@ model CrewRetireResult {
   already_retired: boolean;
   released_seeds: string[];
   removed_watches: int32;
+  closed_asks: string[];
   unread: int32;
   sleep?: CrewSleepResult;
 }

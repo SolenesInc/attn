@@ -65,8 +65,9 @@ commands:
         with attn crew wake <name> to begin their first day.
 
   retire <member> [--profile <name|id>] [--json]
-        Take a member out of service, release claims and remove watches.
-        Keep their name, home and unread mail; ask an awake member to sleep.
+        Take a member out of service, release claims, remove watches and
+        close their open asks. Keep their name, home and unread mail; ask an
+        awake member to sleep. Restore doesn't reopen closed asks.
 
   restore <member> [--profile <name|id>] [--json]
         Return a retired member to service. Unread mail can wake them.
@@ -532,7 +533,7 @@ func runCrewRetirement(verb string, args []string) {
 	} else {
 		fmt.Printf("%s is retired.\n", result.Member.Name)
 	}
-	fmt.Printf("Released seeds: %s\nRemoved watches: %d\nUnread mail kept: %d\n", valueOrDash(strings.Join(result.ReleasedSeeds, ", ")), result.RemovedWatches, result.Unread)
+	fmt.Printf("Released seeds: %s\nRemoved watches: %d\nClosed asks: %s\nUnread mail kept: %d\n", valueOrDash(strings.Join(result.ReleasedSeeds, ", ")), result.RemovedWatches, valueOrDash(strings.Join(result.ClosedAsks, ", ")), result.Unread)
 	if result.Sleep != nil {
 		fmt.Println(crewSleepOutcomeLine(result.Sleep))
 	}

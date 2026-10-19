@@ -360,7 +360,7 @@ func TestCrewLifecycleCommandsAndClearPriming(t *testing.T) {
 	if protocol.Deref(roster[created.Member.Key].BindingSession) != next.ID {
 		t.Fatalf("restart binding = %+v", roster)
 	}
-	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "Released seeds: -", "Removed watches: 0", "Unread mail kept: 0")
+	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "Released seeds: -", "Removed watches: 0", "Closed asks: -", "Unread mail kept: 0")
 	requireStdout(t, s.Attn("crew", "list", "--all"), "Keel", "retired")
 	requireFailure(t, s.Attn("crew", "wake", "Keel"), "crew wake: ", "Keel is retired")
 	requireFailure(t, s.Attn("crew", "create", "Keel"), "crew create: ", "Keel is retired", "restore")

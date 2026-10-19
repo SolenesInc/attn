@@ -397,3 +397,35 @@ func TestClosingASessionClosesTheAsksAddressedToIt(t *testing.T) {
 		t.Fatal("an ask of a closed session took an answer")
 	}
 }
+
+func TestRetiringAMemberClosesItsAsksAndRestoringKeepsThemClosed(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	day := wakeCrew(t, cli, "trellis", "")
+	w.Launched(string(day.SessionID))
+	asked, err := cli.AskOpen(day.SessionID, "", cacheAsk, "", w.Path("trellis"))
+	if err != nil {
+		t.Fatalf("crew ask: %v", err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 })
+
+	retired, err := cli.CrewRetire("trellis")
+	if err != nil || len(retired.ClosedAsks) != 1 || retired.ClosedAsks[0] != asked.ID {
+		t.Fatalf("retire = %+v (%v), want it to close %s", retired, err, asked.ID)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
+	late := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: "late", AskID: asked.ID, Answers: []protocol.AskAnswer{}, Note: protocol.Ptr("too late"),
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "late" })
+	if late.Success {
+		t.Fatal("an ask of a retired member took an answer")
+	}
+
+	if _, err := cli.CrewRestore("trellis"); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if shown := w.App().Initial.Asks; len(shown) != 0 {
+		t.Fatalf("after restore the app shows %+v, want no asks", shown)
+	}
+}

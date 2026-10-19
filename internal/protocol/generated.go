@@ -2726,6 +2726,9 @@ type CrewRetireResult struct {
 	// AlreadyRetired corresponds to the JSON schema field "already_retired".
 	AlreadyRetired bool `json:"already_retired"`
 
+	// ClosedAsks corresponds to the JSON schema field "closed_asks".
+	ClosedAsks []string `json:"closed_asks"`
+
 	// Member corresponds to the JSON schema field "member".
 	Member CrewMember `json:"member"`
 
