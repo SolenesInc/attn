@@ -46,6 +46,8 @@ func delegateRoles(w io.Writer, args []string) error {
 		return nil
 	case "show":
 		return delegateRolesShow(w, rest)
+	case "install":
+		return delegateRolesInstall(w, rest)
 	case "history":
 		return delegateRolesHistory(w, rest)
 	case "rollback":
@@ -90,10 +92,14 @@ reading:
         revisions newest first, with who changed what and why.
 
 changing (each accepts -m TEXT, the reason recorded in history):
+  install
+        install Attn's maintained roles and their attn-workflow skill.
+        Keep existing roles; set models afterwards with set.
+        Named instances refuse the user-global skill install.
   add <role> --name NAME [guidance] [model]
         a custom role. Its default model comes from the model flags.
   add <role> --builtin pathfinder|builder|reviewer|orchestrator|prototyper [model]
-        one of Attn's maintained roles (needs Add Attn roles in Settings once).
+        one of Attn's maintained roles (needs attn delegate roles install once).
   add <role>/<alt> [--when TEXT] [--name NAME] [model]
         an alternative model for a role, starting from its default model.
         --when says when an agent should pick it instead of the default;
@@ -210,6 +216,48 @@ func writeDelegationRole(w io.Writer, role protocol.DelegationRole) {
 			fmt.Fprintf(w, "\nalternative %s/%s %q: %s\nwhen: %s\n", role.ID, choice.ID, choice.Name, delegationprefs.DescribeSelection(choice.Selection), strings.TrimSpace(choice.When))
 		}
 	}
+}
+
+func delegateRolesInstall(w io.Writer, args []string) error {
+	fs := flag.NewFlagSet("delegate roles install", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	message := fs.String("m", "", "reason recorded in history")
+	positionals, err := parseInterspersedFlagArgs(fs, args)
+	if err != nil || len(positionals) != 0 {
+		return usagef("usage: attn delegate roles install [-m TEXT]")
+	}
+	c := client.New("")
+	live, err := c.DelegationPreferencesShow()
+	if err != nil {
+		return err
+	}
+	next := live.Preferences
+	next.Enabled, next.WorkflowSkillEnabled = true, true
+	for _, template := range prompts.DelegationRoleTemplates() {
+		if slices.ContainsFunc(next.Roles, func(role protocol.DelegationRole) bool {
+			return protocol.Deref(role.Builtin) == protocol.Deref(template.Builtin)
+		}) {
+			continue
+		}
+		stem := template.ID
+		for suffix := 2; slices.ContainsFunc(next.Roles, func(role protocol.DelegationRole) bool { return role.ID == template.ID }); suffix++ {
+			template.ID = fmt.Sprintf("%s-%d", stem, suffix)
+		}
+		next.Roles = append(next.Roles, template)
+	}
+	saved, paths, err := c.InstallDelegationRoles(next, *message)
+	if client.ErrorCode(err) == protocol.ErrorCodeConflict {
+		return fmt.Errorf("the table changed while this command ran; run it again")
+	}
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		fmt.Fprintln(w, "installed "+path)
+	}
+	writeDelegationRevisionResult(w, saved)
+	writeDelegationTable(w, saved.Preferences)
+	return nil
 }
 
 func delegateRolesHistory(w io.Writer, args []string) error {

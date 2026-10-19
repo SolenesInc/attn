@@ -32,7 +32,7 @@ const DefaultAgent = "claude"
 const ChiefName = "Chief"
 
 type Member struct {
-	Onboarded      bool               `json:"onboarded,omitempty"`
+	FirstDay       protocol.FirstDay  `json:"first_day,omitempty"`
 	Key            who.MemberKey      `json:"-"`
 	Home           string             `json:"home_dir"`
 	CWD            string             `json:"cwd"`

@@ -9,6 +9,8 @@ import { useDockPanels } from '../hooks/useDockPanels';
 import { useGardenPresentation } from '../hooks/useGardenPresentation';
 import { useWhatsNew } from '../hooks/useWhatsNew';
 import { useAsksStore } from '../store/asks';
+import { useDaemonStore } from '../store/daemonSessions';
+import { useProfilesStore } from '../store/profiles';
 
 export function useAppPanels() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -33,7 +35,9 @@ export function useAppPanels() {
   }, []);
   const [notebookOpen, setNotebookOpen] = useState(false);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
-  const whatsNew = useWhatsNew();
+  const profileId = useProfilesStore(state => state.selectedProfileId);
+  const firstDay = useDaemonStore(state => state.crew.find(member => member.chief && member.profile_id === profileId)?.first_day);
+  const whatsNew = useWhatsNew(firstDay);
 
   const { dockState, toggleDockPanel, openDockPanel, closeDockPanel } = useDockPanels();
 

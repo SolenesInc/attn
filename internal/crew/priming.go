@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/prompts"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 const HandoffsDirName = "handoffs"
@@ -33,6 +34,7 @@ type PlotReady struct {
 }
 
 type Priming struct {
+	FirstDay      protocol.FirstDay
 	Name          string
 	HomeDir       string
 	CharterPath   string
@@ -61,6 +63,8 @@ func (p Priming) Block() string {
 	handoffsDir := filepath.Join(p.HomeDir, HandoffsDirName)
 	return prompts.RenderText("crew", "priming", prompts.Values{
 		"display_name":     p.Name,
+		"onboarding":       fmt.Sprint(p.FirstDay == protocol.FirstDayFull || p.FirstDay == protocol.FirstDayTour),
+		"established":      fmt.Sprint(p.FirstDay == protocol.FirstDayTour),
 		"home_dir":         p.HomeDir,
 		"has_charter":      fmt.Sprint(strings.TrimSpace(p.Charter) != ""),
 		"charter_file":     CharterFileName,

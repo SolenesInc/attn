@@ -160,14 +160,24 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 	if err != nil {
 		return err
 	}
-	b := crewBirth{ProfileID: profile, Name: crew.ChiefName, Charter: prompts.RenderText("chief", "charter", nil)}
+	b := crewBirth{ProfileID: profile, Name: crew.ChiefName, Charter: prompts.RenderText("chief", "charter", nil), FirstDay: protocol.FirstDayNone}
+	if u == nil {
+		ledger, err := d.store.SessionLedger(store.SessionLedgerQuery{Scope: store.SessionLedgerAll, ProfileID: profile, Limit: 1})
+		if err != nil {
+			return err
+		}
+		b.FirstDay = protocol.FirstDayFull
+		if len(ledger.Entries) > 0 {
+			b.FirstDay = protocol.FirstDayTour
+		}
+	}
+
 	if u != nil {
 		if u.Agent != string(protocol.SessionAgentCopilot) {
 			b.Agent = u.Agent
 			b.Model = u.Model
 			b.Effort = u.Effort
 		}
-		b.Onboarded = true
 	}
 	return d.furnishCrewMember(identity, b)
 }

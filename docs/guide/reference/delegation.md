@@ -48,10 +48,12 @@ frontend work, or consequential work that needs a stronger model. "Anything
 else" covers delegations no role fits.
 
 Attn comes bundled with its own delegation roles you can opt into with "Add Attn
-roles". Doing that also installs the attn-workflow skill for your harnesses. The
+roles" in Settings > Delegation, or ask an agent to run
+`attn delegate roles install`. Doing that also installs the attn-workflow skill for your harnesses. The
 skill is necessary for the bundled roles, and any agent on your computer can use
 it (although it's designed to be used inside Attn). To change how a bundled role
-works, make an editable copy of it.
+works, make an editable copy of it. Named instances refuse the user-global
+skill install; you can still add custom roles there.
 
 ### Attn's roles
 

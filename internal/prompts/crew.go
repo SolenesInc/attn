@@ -17,6 +17,13 @@ func crewRecipient() Recipient {
 	plotReady := TextField("plot_ready", "One line per plot with its ready count.")
 	gardenRead := FlagField("garden_read", "The garden was readable when the member woke.")
 
+	onboarding := FlagField("onboarding", "The profile's Chief has not finished onboarding.")
+	established := FlagField("established", "The pending first day is the short tour.")
+	chiefOnboarding := Use("chief.onboarding", "content/chief/onboarding.md",
+		Bind("first_day", Choose(Enabled(established),
+			Use("chief.onboarding-tour", "content/chief/onboarding-tour.md"),
+			Use("chief.onboarding-full", "content/chief/onboarding-full.md"))))
+
 	identity := template("crew.identity", "content/crew/identity.md", name, home)
 	existingCharter := template("crew.charter", "content/crew/charter.md", TextField("charter_file", "Charter file"))
 	firstDay := template("crew.first-day", "content/crew/first-day.md", TextField("charter_path", "Charter path"))
@@ -46,6 +53,7 @@ func crewRecipient() Recipient {
 					Choose(Enabled(charter), existingCharter, firstDay),
 					When(Present(cwd), launchDirectory),
 					When(Present(awareness), awarenessDirectories)),
+				When(Enabled(onboarding), chiefOnboarding),
 				Choose(Present(handoff),
 					Compose(Join("", letter, When(Present(older), olderLetters)), Input(handoff)),
 					noLetter),

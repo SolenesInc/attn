@@ -134,6 +134,8 @@ crew member             an agent with a permanent identity and memory
 │                       next sessions; like a shift handoff
 └─ session (at most 1)  the member's current session
 chief                   the crew member that coordinates one profile
+onboarding              the Chief's first conversation to help the user set up
+                        and learn attn
 asleep                  the member has no session, until something wakes them
 awake                   the member has a session
 retired                 the member is out of service; their identity and memory stay

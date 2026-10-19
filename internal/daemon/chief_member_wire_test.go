@@ -353,10 +353,6 @@ func TestUpgradeCreatesAnOnboardedChiefAndWaitsForTheUser(t *testing.T) {
 	if protocol.Deref(chief.Agent) != "codex" || protocol.Deref(chief.Model) != "gpt-6.1-sol" || protocol.Deref(chief.Effort) != "high" || protocol.Deref(chief.Cwd) != filepath.Join(w.Dir, "notebook") || chief.BindingSession != nil {
 		t.Fatalf("upgraded Chief before presence: %+v", chief)
 	}
-	doc, err := cli.DocGet(crew.Namespace, crew.CollectionMembers, chief.Key)
-	if err != nil || doc.Document == nil || !strings.Contains(doc.Document.Body, `"onboarded":true`) {
-		t.Fatalf("upgraded marker: %+v %v", doc, err)
-	}
 	claim, err := cli.SeedShow("previous-chief", "s-c1am01")
 	if err != nil || claim.Seed.Tender == nil || claim.Seed.Tender.Ref != "session:previous-chief" || !claim.Watching {
 		t.Fatalf("old session lost claim/watch: %+v %v", claim, err)

@@ -1,6 +1,7 @@
 // One-time "what's new" gating; bump WHATS_NEW_ID when there's a new story to tell.
 
 import { useCallback, useEffect, useState } from 'react';
+import { FirstDay } from '../types/generated';
 
 export const WHATS_NEW_ID = 'profiles-desktops-intro-2026-10';
 export const WHATS_NEW_STORAGE_KEY = 'attn.whats_new.last_seen';
@@ -34,20 +35,26 @@ export interface WhatsNewControls {
   dismissBanner: () => void;
 }
 
-export function useWhatsNew(): WhatsNewControls {
-  const [isOpen, setIsOpen] = useState(false);
+export function useWhatsNew(firstDay: FirstDay | undefined): WhatsNewControls {
+  const [opening, setOpening] = useState<'closed' | 'automatic' | 'requested'>('closed');
   const [bannerVisible, setBannerVisible] = useState(() => readId(WHATS_NEW_BANNER_STORAGE_KEY) !== WHATS_NEW_ID);
 
   useEffect(() => {
-    if (readId(WHATS_NEW_STORAGE_KEY) !== WHATS_NEW_ID) {
-      setIsOpen(true);
+    if (firstDay === undefined) return;
+    if (firstDay === FirstDay.Full) {
+      persistId(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
+      persistId(WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID);
+      setOpening(current => current === 'automatic' ? 'closed' : current);
+      setBannerVisible(false);
+    } else if (readId(WHATS_NEW_STORAGE_KEY) !== WHATS_NEW_ID) {
+      setOpening(current => current === 'closed' ? 'automatic' : current);
     }
-  }, []);
+  }, [firstDay]);
 
-  const open = useCallback(() => setIsOpen(true), []);
+  const open = useCallback(() => setOpening('requested'), []);
 
   const dismiss = useCallback(() => {
-    setIsOpen(false);
+    setOpening('closed');
     persistId(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
   }, []);
 
@@ -56,5 +63,6 @@ export function useWhatsNew(): WhatsNewControls {
     persistId(WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID);
   }, []);
 
-  return { isOpen, open, dismiss, bannerVisible, dismissBanner };
+  const showRelease = firstDay !== undefined && firstDay !== FirstDay.Full;
+  return { isOpen: opening === 'requested' || (showRelease && opening === 'automatic'), open, dismiss, bannerVisible: showRelease && bannerVisible, dismissBanner };
 }

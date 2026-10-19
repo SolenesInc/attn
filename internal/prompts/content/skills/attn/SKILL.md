@@ -52,6 +52,11 @@ For delegation mechanics and configured role selection, read [references/delegat
 
 ## Capability Index
 
+- **Onboard the user as Chief, or run onboarding again:** read
+  [references/onboarding.md](references/onboarding.md).
+- **Explain how attn works:** read `attn help` and `attn help <topic>`, then
+  present the relevant guidance to the user.
+
 - **Open shell splits, read terminals, type into them, wait, or close them:** read
   [references/terminal.md](references/terminal.md).
 - **Create, rename, move or configure a crew member:** read
