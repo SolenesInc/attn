@@ -35,14 +35,33 @@ test('queue rows share the tree geometry and reveal actions on hover', async ({ 
     .toHaveCSS('background-image', /linear-gradient/);
 });
 
-test('desktop flow crew rows line up with the session rows', async ({ page }) => {
-  await page.goto('/test-harness/?component=QueueSidebarFit&desktop');
-  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+const rowKinds = {
+  desktop: ['sidebar-home', 'chief-slot', 'queue-crew-birch', 'sidebar-desktop-overview', 'sidebar-session-owed-1'],
+  queue: ['sidebar-home', 'chief-slot', 'queue-crew-birch', 'queue-crew-alder', 'queue-turn-owed-1'],
+};
+const rowIcon = '> :not(button)';
 
-  const session = await page.getByTestId('sidebar-session-owed-1').boundingBox();
-  for (const crew of ['queue-crew-chief-member', 'queue-crew-birch']) {
-    const row = await page.getByTestId(crew).boundingBox();
-    expect(row?.x).toBe(session?.x);
-    expect(row?.width).toBe(session?.width);
+for (const flow of ['desktop', 'queue'] as const) {
+  for (const chief of ['awake', 'sleeping', 'unconfigured']) {
+    test(`${flow} flow rows share one inset and icon column with the chief ${chief}`, async ({ page }) => {
+      await page.goto(`/test-harness/?component=QueueSidebarFit&chief=${chief}${flow === 'desktop' ? '&desktop' : ''}`);
+      await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+
+      const geometry = async (testId: string) => {
+        const slot = page.getByTestId(testId);
+        const row = testId === 'chief-slot' ? slot.locator('> .session-item') : slot;
+        const box = await row.boundingBox();
+        const icon = await row.locator(rowIcon).first().boundingBox();
+        return { testId, x: box?.x, width: box?.width, iconX: icon?.x };
+      };
+      const [first, ...rest] = await Promise.all(rowKinds[flow].map(geometry));
+      for (const row of rest) {
+        expect({ ...row, testId: first.testId }).toEqual(first);
+      }
+      if (flow === 'desktop') {
+        const header = await page.locator('.desktop-rule').first().boundingBox();
+        expect({ x: header?.x, width: header?.width }).toEqual({ x: first.x, width: first.width });
+      }
+    });
   }
-});
+}
