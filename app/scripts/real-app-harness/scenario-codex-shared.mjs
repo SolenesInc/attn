@@ -124,15 +124,15 @@ try {
     await observer.waitFor(() => session(checkout)?.state === 'waiting_input', 'checkout waits on the user');
   });
 
-  await runner.step('new_leaves_the_old_session_hidden_in_the_queue_and_ledger', async () => {
+  await runner.step('new_shows_a_new_session_at_once_and_leaves_the_old_one_hidden_in_the_queue_and_ledger', async () => {
     const pane = await paneOf(checkout);
     await submit(checkout, pane.paneId, '/new');
-    await waitForPaneText(client, checkout, pane.paneId, (text) => Boolean(lastConversation(text)) && lastConversation(text) !== checkoutConversation, 'the terminal shows a new conversation');
-    await submit(checkout, pane.paneId, 'look at the tax table');
-    await observer.waitFor(() => isHidden(checkout), 'checkout is hidden once its terminal moved on');
+    await observer.waitFor(() => isHidden(checkout), 'checkout is hidden as soon as its terminal moved on, before any prompt');
     discount = observer.desktops.flatMap((desktop) => desktop.panes).find((entry) => entry.runtime_id === terminal)?.session_id;
     runner.assert(discount && discount !== checkout, 'the terminal now shows another session', { discount });
     sessions.push(discount);
+    await waitForPaneText(client, discount, pane.paneId, (text) => Boolean(lastConversation(text)) && lastConversation(text) !== checkoutConversation, 'the terminal shows a new conversation');
+    await submit(discount, pane.paneId, 'look at the tax table');
     runner.assert(session(checkout).state === 'waiting_input', 'the hidden session keeps its queue state', session(checkout));
     await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
     const row = await queueRow(checkout);
@@ -147,11 +147,11 @@ try {
     await client.request('click_pane', { sessionId: discount, paneId: pane.paneId });
     await waitForPaneInputFocus(client, discount, pane.paneId, 15_000);
     await submit(discount, pane.paneId, `/agents ${checkoutConversation}`);
-    await waitForPaneText(client, discount, pane.paneId, (text) => lastConversation(text) === checkoutConversation, 'the terminal switches back to checkout');
-    await submit(discount, pane.paneId, 'lock it');
-    await observer.waitFor(() => tileOf(checkout) && !isHidden(checkout) && isHidden(discount), 'checkout is shown again and the other session is hidden');
+    await observer.waitFor(() => tileOf(checkout) && !isHidden(checkout) && isHidden(discount), 'checkout is shown again at once and the other session is hidden');
     const back = await paneOf(checkout);
     runner.assert(back.paneId === pane.paneId, 'the switch reused the same tile', { before: pane.paneId, after: back.paneId });
+    await waitForPaneText(client, checkout, back.paneId, (text) => lastConversation(text) === checkoutConversation, 'the terminal switches back to checkout');
+    await submit(checkout, back.paneId, 'lock it');
     await waitForPaneInputFocus(client, checkout, back.paneId, 15_000, { stableMs: 500 });
     await client.request('type_pane_via_ui', { sessionId: checkout, paneId: back.paneId, text: 'still typing' });
     const typed = await waitForPaneText(client, checkout, back.paneId, (text) => text.includes('still typing'), 'a draft typed after the switch reaches the terminal');

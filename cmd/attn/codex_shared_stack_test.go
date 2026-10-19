@@ -167,8 +167,9 @@ func TestASharedCodexSessionShownInAnotherSessionsTerminalKeepsItsApprovalMode(t
 			yolo.Reply("It races the tax lookup. <!-- attn:state=idle -->")
 			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 			conversation := yolo.ConversationID
+			first := app.Terminal(unguarded)
 			for _, line := range []string{"/new", "add a discount field"} {
-				typeLineInto(app, app.Terminal(unguarded), line)
+				typeLineInto(app, first, line)
 				yolo.Prompted()
 			}
 			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })

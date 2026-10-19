@@ -1,0 +1,13 @@
+kind: fixed
+area: codex
+change: >
+  A shared Codex tile shows the session of the conversation its Codex switched
+  to as soon as /new, /resume or /agents switches it, so its name in the
+  sidebar, `attn session list` and `attn agent peek` follow at once. It used to
+  keep the old session's name until the next prompt there. A /new conversation
+  is now a session of its own right away, and stays hidden if you leave it
+  without a prompt. A new tile switched before its first prompt still leaves no
+  empty session behind.
+symptom: >
+  After a switch, the tile kept the old session's name and identity while it
+  showed another conversation.

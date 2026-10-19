@@ -1584,14 +1584,6 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
 		return false
 	}
-	if sessionID, shown := d.shownIn(info.ID); shown && d.movedOn(sessionID, info.ID) {
-		unlockEnds := d.lockTerminalEnds(sessionID)
-		d.dropTerminal(info.ID)
-		unlockEnds()
-		d.publishFact(FactSessionReregistered, string(sessionID), nil)
-		d.logf("terminal %s exited after its agent moved on from session %s, which runs on over its link", info.ID, sessionID)
-		return false
-	}
 	d.linkTerminalExited(info.ID)
 	if d.linkProcess(info.ID) {
 		d.forgetTerminalTitle(info.ID)
@@ -2032,7 +2024,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 
 func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation) {
 	sessionID, shown := d.shownIn(terminal)
-	if !shown || d.movedOn(sessionID, terminal) {
+	if !shown {
 		return
 	}
 	state := obs.Claim

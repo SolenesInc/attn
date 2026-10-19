@@ -94,8 +94,7 @@ Read in the source at openai/codex 60947e2341.
   and starts a new chat; it reports `clear`.
 - `/agents` opens the agent command center. It lists **root sessions**,
   including ones running in other terminals, and switches this terminal to the
-  one picked, resuming it first when it is not loaded
-  (`tui/src/app/agents_overview.rs`). It does not switch subagents.
+  one picked (`tui/src/app/agents_overview.rs`). It does not switch subagents.
 - `/multi-agents` switches between this session's subagents. Subagent threads
   fire no SessionStart or SessionEnd; a spawned one fires SubagentStart
   (`core/src/hook_runtime.rs`).
@@ -298,6 +297,33 @@ Read in the source at openai/codex 1ffa95e:
   app-server it keeps reporting `working`; once it resumes, it replays the
   conversation's turns, so a turn the lost server was running ends as
   interrupted (`tui/src/app/reconnect.rs`, `tui/src/chatwidget/replay.rs`).
+
+Read in the source at openai/codex rust-v0.162.1, and the switches probed on
+it with a model on a closed port. A shared Codex tile follows the conversation
+its Codex shows on these:
+
+- A `--remote` TUI starts, forks or resumes a conversation on its own
+  connection only to show it, or an `ephemeral` one for a helper such as
+  automatic titles and recaps. Its task tools that reach other conversations,
+  `create_thread`, `fork_thread` and `send_message_to_thread`, need an MCP
+  server it starts only for a local daemon or an embedded app-server, so it
+  refuses them (`tui/src/app/startup.rs`, `tui/src/app/app_server_events.rs`,
+  `tui/src/dynamic_tools.rs`, `tui/src/app/thread_title.rs`).
+- `/agents` reads the root conversation picked with `thread/read` and resumes
+  it with `thread/resume`, even one it showed before. The exception is a
+  conversation it started itself and has not prompted yet: it stays subscribed
+  to it when it leaves and goes back to it without a request, so the first
+  sign is the `turn/start` of the next prompt there
+  (`tui/src/app/agents_overview.rs`, `tui/src/app/thread_routing.rs`).
+- Picking a subagent that is not attached resumes it
+  (`tui/src/app/session_lifecycle.rs`), and on reconnect it resumes the
+  conversation it displays, a subagent's when it shows one, never one another
+  client loaded (`tui/src/app/reconnect.rs`).
+- The `thread` of a `thread/start`, `thread/fork` or `thread/resume` reply
+  carries `path` even before the conversation is on disk, and
+  `parentThreadId` only for a subagent
+  (`app-server-protocol/src/protocol/v2/thread_data.rs`,
+  `app-server/src/request_processors/thread_processor.rs`).
 
 ### Codex updates
 

@@ -337,15 +337,6 @@ func (r *codexShared) restore(profile, conversation string) error {
 	return nil
 }
 
-func (r *codexShared) shownConversation(t harness.TerminalID) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if v := r.views[t]; v != nil {
-		return v.thread
-	}
-	return ""
-}
-
 func (r *codexShared) transcriptPath(path string) string {
 	return transcript.ResolveCodexRolloutPath(path)
 }

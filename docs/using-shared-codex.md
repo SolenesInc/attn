@@ -40,9 +40,9 @@ a plain Codex, since the app-server runs one Codex for the whole profile.
 
 ## Switching conversations
 
-`/new`, `/resume` and `/agents` change the conversation a terminal shows. attn
-notices when you send the next prompt there. The terminal then shows the new
-conversation's session, and the session you left stays open and **hidden**:
+`/new`, `/resume` and `/agents` change the conversation a terminal shows, and
+its tile shows that conversation's session at once, with its name and state.
+The session you left stays open and **hidden**:
 
 - It keeps its state, so a session that was waiting for you still waits.
   From then on the app-server tells attn when its turn runs, waits on an
@@ -54,6 +54,15 @@ conversation's session, and the session you left stays open and **hidden**:
   `attn session show` say `(hidden)`.
 
 Several terminals can show the same conversation. They show one session.
+
+A conversation you start with `/new` is a session of its own right away, and
+stays open and hidden if you leave it without a prompt, like any other. A new
+tile is the exception: until its first prompt, switching it to another
+conversation leaves no empty session behind.
+
+One switch shows late. When `/agents` takes a terminal back to a conversation
+it started that you never prompted, Codex doesn't tell the app-server, so the
+tile shows that conversation's session at your first prompt there.
 
 A session keeps the approval mode it launched with, YOLO or auto-approve,
 wherever its conversation opens: in any shared terminal with `/resume` or
@@ -79,12 +88,10 @@ name wins.
 
 ## Closing and resuming
 
-Closing a tile ends only its terminal in two cases: another tile shows the same
-session, or its Codex switched to another conversation and you have not sent
-the next prompt. The session stays open, and is hidden if no tile shows it.
-Closing the last tile of a session archives its conversation in Codex, settles
-its usage and closes the session into the ledger. A hidden session closes the
-same way.
+Closing a tile ends only its terminal when another tile shows the same
+session. Closing the last tile of a session archives its conversation in Codex,
+settles its usage and closes the session into the ledger. A hidden session
+closes the same way.
 
 To pick it up again, resume the session from the Sessions ledger. attn
 unarchives the conversation and resumes it in a new tile, shared or plain as

@@ -41,6 +41,153 @@ func TestNewInASharedCodexTerminalLeavesTheSessionItLeftOpenAndHidden(t *testing
 	}
 }
 
+func TestASharedCodexTerminalShowsTheSessionOfEachConversationItSwitchesToBeforeAnyPrompt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	tax := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	taxCodex := w.Launched(tax)
+	app.TypeLine(tax, "look at the tax table")
+	taxCodex.Prompted()
+	taxCodex.Reply("Looked. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, tax, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	typeInto(app, terminal, "/resume "+taxCodex.ConversationID+"\r")
+	codex.Prompted()
+	if got := sessionShownIn(t, w, app, terminal); got != tax {
+		t.Fatalf("after /resume of the conversation of %s, terminal %s shows session %s", tax, terminal, got)
+	}
+	if left := queriedSession(t, w.Client(), checkout); !protocol.Deref(left.Hidden) || left.State != protocol.SessionStateWaitingInput {
+		t.Errorf("the session the terminal left is %s (hidden=%v), want it hidden and still waiting on the user", left.State, protocol.Deref(left.Hidden))
+	}
+
+	typeInto(app, terminal, "/new\r")
+	codex.Prompted()
+	fresh := sessionShownIn(t, w, app, terminal)
+	if fresh == checkout || fresh == tax {
+		t.Fatalf("after /new, terminal %s shows session %s, want a new one", terminal, fresh)
+	}
+	if got := sessionShownIn(t, w, app, app.Terminal(tax)); got != tax {
+		t.Errorf("the tile of %s shows session %s after the other terminal left it", tax, got)
+	}
+
+	typeInto(app, terminal, "/resume "+conversation+"\r")
+	codex.Prompted()
+	if got := sessionShownIn(t, w, app, terminal); got != checkout {
+		t.Fatalf("after /resume of the conversation of %s, terminal %s shows session %s", checkout, terminal, got)
+	}
+	if back := queriedSession(t, w.Client(), checkout); protocol.Deref(back.Hidden) || back.State != protocol.SessionStateWaitingInput {
+		t.Errorf("the session the terminal came back to is %s (hidden=%v), want it shown and still waiting on the user", back.State, protocol.Deref(back.Hidden))
+	}
+	if left := queriedSession(t, w.Client(), fresh); !protocol.Deref(left.Hidden) {
+		t.Errorf("session %s, which /new opened and the terminal left, is not hidden", fresh)
+	}
+}
+
+func TestASharedCodexTerminalThatAgentsTakesBackToAnUnpromptedNewConversationShowsItsSessionAtThePrompt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	conversation := codex.ConversationID
+	typeInto(app, terminal, "/new\r")
+	codex.Prompted()
+	discount, blank := sessionShownIn(t, w, app, terminal), codex.ConversationID
+	if discount == checkout {
+		t.Fatalf("after /new, terminal %s still shows session %s", terminal, checkout)
+	}
+	typeInto(app, terminal, "/agents "+conversation+"\r")
+	codex.Prompted()
+	if got := sessionShownIn(t, w, app, terminal); got != checkout {
+		t.Fatalf("after /agents to the conversation of %s, terminal %s shows session %s", checkout, terminal, got)
+	}
+
+	typeInto(app, terminal, "/agents "+blank+"\r")
+	codex.Prompted()
+	typeInto(app, terminal, "add a discount field\r")
+	if got := codex.Prompted(); got != "add a discount field" || codex.ConversationID != blank {
+		t.Fatalf("codex took %q in %s, want the prompt in %s", got, codex.ConversationID, blank)
+	}
+	if got := sessionShownIn(t, w, app, terminal); got != discount {
+		t.Fatalf("after a prompt in the conversation of %s, terminal %s shows session %s", discount, terminal, got)
+	}
+	if left := queriedSession(t, w.Client(), checkout); !protocol.Deref(left.Hidden) {
+		t.Errorf("session %s, which the terminal left, is not hidden", checkout)
+	}
+}
+
+func TestASharedCodexTerminalShowingASubagentKeepsTheSessionOfTheConversationThatStartedIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	subagent := w.CodexServer().SpawnSubagent(codex.ConversationID)
+
+	typeInto(app, terminal, "/multi-agents "+subagent+"\r")
+	codex.Prompted()
+	if got := sessionShownIn(t, w, app, terminal); got != checkout {
+		t.Fatalf("showing subagent %s, terminal %s shows session %s, want %s", subagent, terminal, got, checkout)
+	}
+	listed, err := w.Client().Query("")
+	if err != nil {
+		t.Fatalf("query sessions: %v", err)
+	}
+	for _, s := range listed {
+		if string(s.ID) != checkout {
+			t.Errorf("showing a subagent opened session %s", s.ID)
+		}
+	}
+	if shown := queriedSession(t, w.Client(), checkout); protocol.Deref(shown.Hidden) {
+		t.Errorf("session %s, whose subagent the terminal shows, is hidden", checkout)
+	}
+	if got := strings.TrimSpace(w.CodexServer().RunTool(subagent, `"$ATTN_WRAPPER_PATH" presence`)); got != "running inside attn (session "+checkout+")" {
+		t.Errorf("a tool of subagent %s reports %q, want session %s", subagent, got, checkout)
+	}
+
+	desktop, tile := tileOf(t, w, app, terminal)
+	if closed := closeTileFromApp(app, desktop, tile); !closed.Success {
+		t.Fatalf("close the tile: %s", protocol.Deref(closed.Error))
+	}
+	if entry := ledgerShowOverTheWebSocket(app, checkout).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		t.Errorf("closing the last tile of %s while it showed a subagent left %+v, want it closed", checkout, entry)
+	}
+}
+
+func TestANewSharedCodexTileThatResumesBeforeItsFirstPromptLeavesNoEmptySessionAndCanGoBack(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, _ := sharedCodexWaiting(t, w, app)
+	fresh := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	freshCodex := w.Launched(fresh)
+	terminal := app.Terminal(fresh)
+	blank := freshCodex.ConversationID
+
+	typeInto(app, terminal, "/resume "+codex.ConversationID+"\r")
+	freshCodex.Prompted()
+	if got := sessionShownIn(t, w, app, terminal); got != checkout {
+		t.Fatalf("after /resume of the conversation of %s, the new tile shows session %s", checkout, got)
+	}
+	if entry := ledgerShowOverTheWebSocket(app, fresh).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		t.Errorf("the ledger shows %+v, want %s, which never had a conversation of its own, closed", entry, fresh)
+	}
+
+	typeInto(app, terminal, "/agents "+blank+"\r")
+	freshCodex.Prompted()
+	typeInto(app, terminal, "sketch the coupon form\r")
+	if got := freshCodex.Prompted(); got != "sketch the coupon form" || freshCodex.ConversationID != blank {
+		t.Fatalf("codex took %q in %s, want the prompt in %s", got, freshCodex.ConversationID, blank)
+	}
+	if coupon := sessionShownIn(t, w, app, terminal); coupon == checkout || coupon == fresh {
+		t.Fatalf("after a prompt in the tile's own unprompted conversation, it shows session %s, want a new one", coupon)
+	}
+	if shown := queriedSession(t, w.Client(), checkout); protocol.Deref(shown.Hidden) {
+		t.Errorf("session %s, which its own tile still shows, is hidden", checkout)
+	}
+}
+
 func TestASharedCodexToolSpeaksAsItsConversationsSessionAfterItsTerminalMovesOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
