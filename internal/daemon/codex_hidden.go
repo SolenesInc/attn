@@ -311,7 +311,7 @@ func (r *codexShared) archiveUnheld(profile string, closed protocol.SessionID, c
 		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, closed, holder)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.d.life.Context(), codexServerStartLimit)
+	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
 	_, client, err := r.control(ctx, profile)
 	if err == nil {
