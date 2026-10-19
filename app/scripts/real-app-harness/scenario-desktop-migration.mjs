@@ -74,8 +74,6 @@ function legacyWorkspacesSql(fixtureDir) {
     'DROP TABLE addressed_pull_request_watches;',
     "ALTER TABLE prs ADD COLUMN last_updated TEXT NOT NULL DEFAULT '';",
     "ALTER TABLE prs ADD COLUMN last_polled TEXT NOT NULL DEFAULT '';",
-    'UPDATE prs SET last_updated = (SELECT last_updated FROM pr_poll_times WHERE pr_id = prs.id);',
-    'DROP TABLE pr_poll_times;',
     'DELETE FROM schema_migrations WHERE version IN (1791738052340741, 1792452850741951);',
     // It still has the Present tables, without the address column 168 adds.
     "CREATE TABLE presentations (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, ticket_id TEXT, title TEXT NOT NULL, kind TEXT NOT NULL, repo_path TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL);",

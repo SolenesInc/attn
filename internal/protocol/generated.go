@@ -6877,9 +6877,6 @@ type PR struct {
 	// "last_heat_activity_at".
 	LastHeatActivityAt *string `json:"last_heat_activity_at,omitempty,omitzero"`
 
-	// LastUpdated corresponds to the JSON schema field "last_updated".
-	LastUpdated string `json:"last_updated"`
-
 	// Mergeable corresponds to the JSON schema field "mergeable".
 	Mergeable *bool `json:"mergeable,omitempty,omitzero"`
 

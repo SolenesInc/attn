@@ -307,7 +307,6 @@ func (c *Client) SearchAuthoredPRs() ([]*protocol.PR, error) {
 			Role:         protocol.PRRoleAuthor,
 			State:        protocol.PRStateWaiting,
 			Reason:       "",
-			LastUpdated:  string(protocol.TimestampNow()),
 			CommentCount: protocol.Ptr(item.Comments),
 		})
 	}
@@ -351,7 +350,6 @@ func (c *Client) SearchReviewRequestedPRs() ([]*protocol.PR, error) {
 			Role:         protocol.PRRoleReviewer,
 			State:        protocol.PRStateWaiting,
 			Reason:       protocol.PRReasonReviewNeeded,
-			LastUpdated:  string(protocol.TimestampNow()),
 			CommentCount: protocol.Ptr(item.Comments),
 		})
 	}
@@ -395,7 +393,6 @@ func (c *Client) SearchReviewedByMePRs() ([]*protocol.PR, error) {
 			Role:         protocol.PRRoleReviewer,
 			State:        protocol.PRStateWaiting,
 			Reason:       protocol.PRReasonReviewNeeded,
-			LastUpdated:  string(protocol.TimestampNow()),
 			CommentCount: protocol.Ptr(item.Comments),
 			ApprovedByMe: true,
 		})

@@ -4,7 +4,6 @@ import (
 	"maps"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/github/mockserver"
@@ -56,13 +55,8 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 		t.Fatalf("approve: %s", protocol.Deref(approved.Error))
 	}
 
-	refreshAt := time.Now()
 	refreshPRs(t, app)
 	after := queryPRs(t, cli, "")
-	refreshedCheckout := prNumbered(t, after, 1)
-	if protocol.Timestamp(refreshedCheckout.LastUpdated).Time().Before(refreshAt) {
-		t.Errorf("refresh timestamp = %q, want it at or after %s", refreshedCheckout.LastUpdated, refreshAt)
-	}
 	if pr := prNumbered(t, after, 2); !pr.Muted {
 		t.Error("the muted pull request came back unmuted after a refresh")
 	}
@@ -128,14 +122,10 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 		return len(e.Prs) == 1 && e.Prs[0].ID == checkout.ID && e.Prs[0].Title == "Checkout is ready"
 	})
 	gh.Close()
-	beforeRestart := prNumbered(t, queryPRs(t, w.Client(), ""), 1)
 	w.restart()
 	remaining := queryPRs(t, w.Client(), "")
 	if len(remaining) != 1 || remaining[0].ID != checkout.ID || remaining[0].Title != "Checkout is ready" {
 		t.Fatalf("dashboard after removal and restart = %+v, want only the renamed checkout PR", remaining)
-	}
-	if remaining[0].LastUpdated != beforeRestart.LastUpdated {
-		t.Errorf("offline restart changed the poll timestamp: got %q, want %q", remaining[0].LastUpdated, beforeRestart.LastUpdated)
 	}
 }
 

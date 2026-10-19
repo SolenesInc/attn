@@ -513,22 +513,6 @@ const (
 	HeatColdInterval = 10 * time.Minute
 )
 
-func (pr *PR) NeedsDetailRefresh() bool {
-	if !pr.DetailsFetched {
-		return true
-	}
-	lastUpdated := Timestamp(pr.LastUpdated).Time()
-	detailsFetchedAt := Timestamp(Deref(pr.DetailsFetchedAt)).Time()
-
-	if lastUpdated.After(detailsFetchedAt) {
-		return true
-	}
-	if time.Since(detailsFetchedAt) > 5*time.Minute {
-		return true
-	}
-	return false
-}
-
 const (
 	EventDelegationPreferencesResult  = "delegation_preferences_result"
 	EventDelegationPreferencesChanged = "delegation_preferences_changed"

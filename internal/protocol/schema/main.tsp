@@ -220,7 +220,6 @@ model PR {
   role: PRRole;
   state: string;
   reason: string;               // Why it needs attention
-  last_updated: string;         // ISO timestamp
   muted: boolean;
 
   // Detailed status (fetched on-demand via gh api)

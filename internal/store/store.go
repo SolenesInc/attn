@@ -1489,10 +1489,10 @@ func (s *Store) ApplyAgentDriverMetadata(id protocol.SessionID, runID string, se
 }
 
 const selectPRs = `SELECT id, host, repo, number, title, url, author, role, state, reason,
-	last_updated, muted, details_fetched, details_fetched_at,
+	muted, details_fetched, details_fetched_at,
 	mergeable, mergeable_state, ci_status, review_status, head_sha, head_branch, comment_count,
 	approved_by_me, heat_state, last_heat_activity_at
-	FROM prs JOIN pr_poll_times ON pr_poll_times.pr_id = prs.id`
+	FROM prs`
 
 func (s *Store) SetPRs(prs []*protocol.PR) error {
 	s.mu.Lock()
@@ -1562,9 +1562,6 @@ func (s *Store) SetPRs(prs []*protocol.PR) error {
 		delete(existing, pr.ID)
 	}
 	for id := range existing {
-		if _, err := tx.Exec("DELETE FROM pr_poll_times WHERE pr_id = ?", id); err != nil {
-			return err
-		}
 		if _, err := tx.Exec("DELETE FROM prs WHERE id = ?", id); err != nil {
 			return err
 		}
@@ -1601,7 +1598,7 @@ func savePR(tx *sql.Tx, pr *protocol.PR) error {
 
 	heatState := protocol.DerefOr(pr.HeatState, protocol.HeatStateCold)
 
-	if _, err := tx.Exec(`
+	_, err := tx.Exec(`
 		INSERT INTO prs (id, host, repo, number, title, url, author, role, state, reason, muted, details_fetched, details_fetched_at, mergeable, mergeable_state, ci_status, review_status, head_sha, head_branch, comment_count, approved_by_me, heat_state, last_heat_activity_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -1654,14 +1651,7 @@ func savePR(tx *sql.Tx, pr *protocol.PR) error {
 		mergeableVal, nullPtrString(pr.MergeableState), nullPtrString(pr.CIStatus), nullPtrString(pr.ReviewStatus),
 		nullPtrString(pr.HeadSHA), nullPtrString(pr.HeadBranch), protocol.Deref(pr.CommentCount), boolToInt(pr.ApprovedByMe),
 		string(heatState), nullPtrString(pr.LastHeatActivityAt),
-	); err != nil {
-		return err
-	}
-	_, err := tx.Exec(`
-		INSERT INTO pr_poll_times(pr_id, last_updated) VALUES (?, ?)
-		ON CONFLICT(pr_id) DO UPDATE SET last_updated=excluded.last_updated
-		WHERE pr_poll_times.last_updated IS NOT excluded.last_updated
-	`, pr.ID, pr.LastUpdated)
+	)
 	return err
 }
 
@@ -2452,7 +2442,6 @@ func scanPR(row interface{ Scan(...any) error }) *protocol.PR {
 func scanPRRecord(row interface{ Scan(...any) error }) (*protocol.PR, error) {
 	var pr protocol.PR
 	var muted, detailsFetched, approvedByMe int
-	var lastUpdated string
 	var detailsFetchedAt, mergeableState, ciStatus, reviewStatus, headSHA, headBranch sql.NullString
 	var heatState, lastHeatActivityAt sql.NullString
 	var mergeable sql.NullInt64
@@ -2460,7 +2449,7 @@ func scanPRRecord(row interface{ Scan(...any) error }) (*protocol.PR, error) {
 
 	err := row.Scan(
 		&pr.ID, &pr.Host, &pr.Repo, &pr.Number, &pr.Title, &pr.URL, &pr.Author, &pr.Role, &pr.State, &pr.Reason,
-		&lastUpdated, &muted, &detailsFetched, &detailsFetchedAt,
+		&muted, &detailsFetched, &detailsFetchedAt,
 		&mergeable, &mergeableState, &ciStatus, &reviewStatus,
 		&headSHA, &headBranch, &commentCount, &approvedByMe,
 		&heatState, &lastHeatActivityAt,
@@ -2469,7 +2458,6 @@ func scanPRRecord(row interface{ Scan(...any) error }) (*protocol.PR, error) {
 		return nil, err
 	}
 
-	pr.LastUpdated = lastUpdated
 	pr.Muted = muted == 1
 	pr.DetailsFetched = detailsFetched == 1
 	if detailsFetchedAt.Valid {
