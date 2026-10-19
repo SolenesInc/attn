@@ -468,6 +468,9 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 		HomeDir:     member.HomeDir(d.dataRoot),
 		Chief:       d.isChief(member.Key),
 	}
+	if wire.Chief {
+		wire.FirstDay = protocol.Ptr(chiefFirstDay(member))
+	}
 	if !wire.Chief || member.Agent != "" {
 		wire.ResolvedAgent = protocol.Ptr(member.LaunchAgent())
 	}

@@ -13,7 +13,7 @@ func TestTheSkillCommandPrintsTheBundledSkillAndItsReferences(t *testing.T) {
 
 	requireStdout(t, s.Attn("skill"), "name: attn")
 	listed := s.Attn("skill", "--list")
-	requireStdout(t, listed, "garden\n", "delegation\n")
+	requireStdout(t, listed, "garden\n", "delegation\n", "onboarding\n")
 	if strings.Contains(listed.Stdout, "workflow\n") {
 		t.Errorf("skill still advertises the removed engine reference: %s", listed.Stdout)
 	}

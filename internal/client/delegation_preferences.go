@@ -29,6 +29,17 @@ func (c *Client) DelegationPreferencesCommit(preferences protocol.DelegationPref
 	})
 }
 
+func (c *Client) InstallDelegationRoles(preferences protocol.DelegationPreferences, message string) (*protocol.DelegationPreferencesRevision, []string, error) {
+	response, err := c.send(protocol.DelegationPreferencesCommitMessage{Cmd: protocol.CmdDelegationPreferencesCommit, Preferences: preferences, Message: nonEmpty(message), InstallWorkflowSkill: protocol.Ptr(true)})
+	if err != nil {
+		return nil, nil, err
+	}
+	if response.DelegationPreferencesRevision == nil {
+		return nil, nil, fmt.Errorf("daemon returned no delegation preferences revision")
+	}
+	return response.DelegationPreferencesRevision, response.WorkflowSkillPaths, nil
+}
+
 func (c *Client) DelegationPreferencesRollback(revision *int, message string) (*protocol.DelegationPreferencesRevision, error) {
 	return c.delegationPreferencesRevision(protocol.DelegationPreferencesRollbackMessage{
 		Cmd:      protocol.CmdDelegationPreferencesRollback,

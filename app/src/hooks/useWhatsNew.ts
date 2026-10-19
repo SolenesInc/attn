@@ -1,6 +1,7 @@
 // One-time "what's new" gating; bump WHATS_NEW_ID when there's a new story to tell.
 
 import { useCallback, useEffect, useState } from 'react';
+import { FirstDay } from '../types/generated';
 
 export const WHATS_NEW_ID = 'profiles-desktops-intro-2026-10';
 export const WHATS_NEW_STORAGE_KEY = 'attn.whats_new.last_seen';
@@ -34,20 +35,28 @@ export interface WhatsNewControls {
   dismissBanner: () => void;
 }
 
-export function useWhatsNew(): WhatsNewControls {
+export function useWhatsNew(firstDay: FirstDay | undefined): WhatsNewControls {
   const [isOpen, setIsOpen] = useState(false);
+  const [replaying, setReplaying] = useState(false);
   const [bannerVisible, setBannerVisible] = useState(() => readId(WHATS_NEW_BANNER_STORAGE_KEY) !== WHATS_NEW_ID);
 
   useEffect(() => {
-    if (readId(WHATS_NEW_STORAGE_KEY) !== WHATS_NEW_ID) {
+    if (firstDay === undefined) return;
+    if (firstDay === FirstDay.Full) {
+      persistId(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
+      persistId(WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID);
+      setIsOpen(false);
+      setBannerVisible(false);
+    } else if (readId(WHATS_NEW_STORAGE_KEY) !== WHATS_NEW_ID) {
       setIsOpen(true);
     }
-  }, []);
+  }, [firstDay]);
 
-  const open = useCallback(() => setIsOpen(true), []);
+  const open = useCallback(() => setReplaying(true), []);
 
   const dismiss = useCallback(() => {
     setIsOpen(false);
+    setReplaying(false);
     persistId(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
   }, []);
 
@@ -56,5 +65,6 @@ export function useWhatsNew(): WhatsNewControls {
     persistId(WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID);
   }, []);
 
-  return { isOpen, open, dismiss, bannerVisible, dismissBanner };
+  const showRelease = firstDay !== undefined && firstDay !== FirstDay.Full;
+  return { isOpen: replaying || (showRelease && isOpen), open, dismiss, bannerVisible: showRelease && bannerVisible, dismissBanner };
 }

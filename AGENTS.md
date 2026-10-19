@@ -293,6 +293,7 @@ working on:
 - How a harness behaves, before relying on it => docs/internal/harnesses.md; check new
   claims in its source or with a probe and record them there
 - The inbox: addresses, rings, wakes, seed updates or notices => docs/inbox.md
+- User-facing behavior => the relevant page in `docs/guide/`
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/internal/prompt-authoring.md
 - Branches, PRs, merges, or waiting on reviews => docs/internal/pull-requests.md

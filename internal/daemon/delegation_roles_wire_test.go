@@ -165,3 +165,38 @@ func TestADelegateLaunchedInARoleGetsOnlyThatRolesGuidance(t *testing.T) {
 		t.Errorf("with the roles off agents are offered %+v, %v; want nothing", offered, err)
 	}
 }
+
+func TestTheExplicitSocketInstallKeepsCustomRolesAndReportsSkillPaths(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	loaded := loadDelegationPreferences(app)
+	next := *loaded.Preferences
+	next.Enabled = true
+	next.Roles = []protocol.DelegationRole{{ID: "special", Name: "Specialist", Enabled: true, DefaultChoiceID: "default", Choices: []protocol.DelegationChoice{{ID: "default", Name: "Default", Selection: protocol.DelegationSelection{Harness: "claude"}}}}}
+	saved, err := cli.DelegationPreferencesCommit(next, "keep my specialist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	next = saved.Preferences
+	next.WorkflowSkillEnabled = true
+	next.Roles = append(next.Roles, loaded.Templates...)
+	if _, err := cli.DelegationPreferencesCommit(next, "implicit install"); err == nil || !strings.Contains(err.Error(), "attn delegate roles install") {
+		t.Fatalf("implicit install = %v; want the explicit verb", err)
+	}
+	installed, paths, err := cli.InstallDelegationRoles(next, "use Attn roles")
+	if err != nil || installed == nil || !installed.Preferences.WorkflowSkillEnabled || len(installed.Preferences.Roles) != len(loaded.Templates)+1 || installed.Preferences.Roles[0].ID != "special" {
+		t.Fatalf("socket install = %+v, %v", installed, err)
+	}
+	for _, harnessDir := range []string{".claude", ".agents"} {
+		path := delegationWorkflowSkillIn(os.Getenv("ATTN_TOOL_HOME"), harnessDir)
+		if !slices.Contains(paths, path) {
+			t.Fatalf("paths %v lack %s", paths, path)
+		}
+		if _, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if current := savedPreferences(app); current.Revision != installed.Preferences.Revision || len(current.Roles) != len(next.Roles) {
+		t.Fatalf("socket install not visible in Settings: %+v", current)
+	}
+}

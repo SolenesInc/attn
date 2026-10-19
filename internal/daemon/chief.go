@@ -161,6 +161,17 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 		return err
 	}
 	b := crewBirth{ProfileID: profile, Name: crew.ChiefName, Charter: prompts.RenderText("chief", "charter", nil)}
+	if u == nil {
+		ledger, err := d.store.SessionLedger(store.SessionLedgerQuery{Scope: store.SessionLedgerAll, ProfileID: profile, Limit: 1})
+		if err != nil {
+			return err
+		}
+		b.OnboardingPath = protocol.FirstDayFull
+		if len(ledger.Entries) > 0 {
+			b.OnboardingPath = protocol.FirstDayTour
+		}
+	}
+
 	if u != nil {
 		if u.Agent != string(protocol.SessionAgentCopilot) {
 			b.Agent = u.Agent

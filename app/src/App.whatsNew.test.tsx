@@ -2,9 +2,10 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import { openAttachedTerminals } from './test/appFixtures';
-import { daemonSession, soloDesktop } from './test/daemonFixtures';
+import { DEFAULT_PROFILE_ID, crewMember, daemonSession, soloDesktop } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp';
+import { FirstDay } from './types/generated';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const whatsNew = () => screen.queryByRole('dialog', { name: "What's new" });
@@ -15,7 +16,7 @@ const stepKeys = () =>
 
 async function launchAfterUpdate(settings: Record<string, string> = {}) {
   localStorage.setItem(WHATS_NEW_STORAGE_KEY, 'an-earlier-release');
-  return renderApp({ initialState: { settings } });
+  return renderApp({ initialState: { settings, crew: [crewMember('chief', { chief: true, first_day: FirstDay.None })] } });
 }
 
 async function press(daemon: ScriptedDaemon, key: string) {
@@ -28,6 +29,38 @@ async function walkToLastStep(daemon: ScriptedDaemon) {
 }
 
 describe('App what’s new', () => {
+  it('opens fresh profiles on Home and keeps release news seen after onboarding ends', async () => {
+    localStorage.removeItem(WHATS_NEW_STORAGE_KEY);
+    localStorage.removeItem(WHATS_NEW_BANNER_STORAGE_KEY);
+    const fresh = await renderApp({ initialState: { crew: [crewMember('chief', { chief: true, first_day: FirstDay.Full })] } });
+    expect(whatsNew()).toBeNull();
+    expect(introBanner()).toBeNull();
+    expect(localStorage.getItem(WHATS_NEW_STORAGE_KEY)).toBe(WHATS_NEW_ID);
+    expect(localStorage.getItem(WHATS_NEW_BANNER_STORAGE_KEY)).toBe(WHATS_NEW_ID);
+    await restartApp(fresh, { initialState: { crew: [crewMember('chief', { chief: true, first_day: FirstDay.None })] } });
+    expect(whatsNew()).toBeNull();
+    expect(introBanner()).toBeNull();
+  });
+
+  it('keeps release news for a profile opening with the short tour', async () => {
+    localStorage.removeItem(WHATS_NEW_STORAGE_KEY);
+    localStorage.removeItem(WHATS_NEW_BANNER_STORAGE_KEY);
+    await renderApp({ initialState: { crew: [crewMember('chief', { chief: true, first_day: FirstDay.Tour })] } });
+    expect(stepTitle()).toBe('One profile per world');
+    expect(localStorage.getItem(WHATS_NEW_BANNER_STORAGE_KEY)).toBeNull();
+  });
+
+  it('waits for the Chief before deciding whether to show release news', async () => {
+    localStorage.removeItem(WHATS_NEW_STORAGE_KEY);
+    localStorage.removeItem(WHATS_NEW_BANNER_STORAGE_KEY);
+    const { daemon } = await renderApp();
+    expect(whatsNew()).toBeNull();
+    expect(introBanner()).toBeNull();
+    await gesture(daemon, () => daemon.emit({ event: 'crew_updated', profile_id: DEFAULT_PROFILE_ID, members: [crewMember('chief', { chief: true, first_day: FirstDay.Full })] }));
+    expect(whatsNew()).toBeNull();
+    expect(introBanner()).toBeNull();
+  });
+
   it('greets the first launch after an update with the first step, and never an up-to-date launch', async () => {
     const first = await launchAfterUpdate();
     expect(stepTitle()).toBe('One profile per world');
@@ -146,6 +179,7 @@ describe('App what’s new', () => {
   it('keeps its arrow keys away from the terminal underneath', async () => {
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, 'an-earlier-release');
     const { daemon } = await openAttachedTerminals({
+      initialState: { crew: [crewMember('chief', { chief: true, first_day: FirstDay.None })] },
       sessions: [daemonSession('s1', { state: 'idle' })],
       desktops: [soloDesktop('s1', { shortcut_slot: 1 })],
     });
@@ -160,7 +194,7 @@ describe('App what’s new', () => {
 
   it('offers a replay banner on Home for a new release, which replays from the first step', async () => {
     localStorage.removeItem(WHATS_NEW_BANNER_STORAGE_KEY);
-    const { daemon } = await renderApp();
+    const { daemon } = await renderApp({ initialState: { crew: [crewMember('chief', { chief: true, first_day: FirstDay.None })] } });
     expect(whatsNew()).toBeNull();
 
     await gesture(daemon, () => fireEvent.click(within(introBanner()!).getByRole('button', { name: 'Replay the intro' })));
@@ -170,7 +204,7 @@ describe('App what’s new', () => {
 
   it('keeps a dismissed banner away across launches, leaving the command palette as the way back', async () => {
     localStorage.removeItem(WHATS_NEW_BANNER_STORAGE_KEY);
-    const first = await renderApp();
+    const first = await renderApp({ initialState: { crew: [crewMember('chief', { chief: true, first_day: FirstDay.None })] } });
 
     await gesture(first.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dismiss the intro banner' })));
     expect(introBanner()).toBeNull();

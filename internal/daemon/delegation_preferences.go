@@ -76,29 +76,8 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 	if err == nil {
 		err = delegationprefs.Validate(msg.Preferences)
 	}
-	if err == nil && msg.Preferences.WorkflowSkillEnabled && !current.WorkflowSkillEnabled && !protocol.Deref(msg.InstallWorkflowSkill) {
-		err = fmt.Errorf("enabling attn-workflow requires the explicit Add Attn roles install action")
-	}
-	if err == nil && protocol.Deref(msg.InstallWorkflowSkill) {
-		if !msg.Preferences.WorkflowSkillEnabled {
-			err = fmt.Errorf("the install action must save workflow_skill_enabled")
-		} else if msg.Preferences.Revision != current.Revision {
-			err = delegationprefs.ErrConflict
-		} else {
-			var harnesses []string
-			for _, harness := range d.delegationHarnesses() {
-				if harness.Available {
-					harnesses = append(harnesses, harness.ID)
-				}
-			}
-			var attempted bool
-			installedPaths, attempted, err = agentdriver.EnsureWorkflowSkillsInstalled(harnesses)
-			if err == nil && !attempted {
-				err = fmt.Errorf("attn-workflow installation is disabled for instance %q; saved preferences were not changed", config.InstanceLabel())
-			} else if err == nil && len(installedPaths) == 0 {
-				err = fmt.Errorf("no available harness has a supported attn-workflow skill directory")
-			}
-		}
+	if err == nil {
+		installedPaths, err = d.installAttnRoles(current, msg.Preferences, protocol.Deref(msg.InstallWorkflowSkill))
 	}
 	var cfg delegationprefs.Config
 	if err == nil {
@@ -120,6 +99,38 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 	d.sendToClient(client, result)
 }
 
+func (d *Daemon) installAttnRoles(current, next delegationprefs.Config, install bool) ([]string, error) {
+	if !install {
+		if next.WorkflowSkillEnabled && !current.WorkflowSkillEnabled {
+			return nil, fmt.Errorf("enabling attn-workflow needs the explicit install: attn delegate roles install, or Add Attn roles in Settings > Delegation")
+		}
+		return nil, nil
+	}
+	if !next.WorkflowSkillEnabled {
+		return nil, fmt.Errorf("the install action must save workflow_skill_enabled")
+	}
+	if next.Revision != current.Revision {
+		return nil, delegationprefs.ErrConflict
+	}
+	var harnesses []string
+	for _, harness := range d.delegationHarnesses() {
+		if harness.Available {
+			harnesses = append(harnesses, harness.ID)
+		}
+	}
+	paths, attempted, err := agentdriver.EnsureWorkflowSkillsInstalled(harnesses)
+	if err != nil {
+		return paths, fmt.Errorf("%w; saved preferences were not changed", err)
+	}
+	if !attempted {
+		return paths, fmt.Errorf("attn-workflow installation is disabled for instance %q; saved preferences were not changed", config.InstanceLabel())
+	}
+	if len(paths) == 0 {
+		return paths, fmt.Errorf("no available harness has a supported attn-workflow skill directory; saved preferences were not changed")
+	}
+	return paths, nil
+}
+
 func (d *Daemon) handleDelegationPreferencesShow(conn net.Conn) {
 	history, err := d.store.DelegationPreferencesHistory(1)
 	if err != nil {
@@ -135,8 +146,12 @@ func (d *Daemon) handleDelegationPreferencesShow(conn net.Conn) {
 
 func (d *Daemon) handleDelegationPreferencesCommit(conn net.Conn, msg *protocol.DelegationPreferencesCommitMessage) {
 	current, err := d.store.GetDelegationPreferences()
-	if err == nil && msg.Preferences.WorkflowSkillEnabled && !current.WorkflowSkillEnabled {
-		err = fmt.Errorf("enabling attn-workflow requires the explicit Add Attn roles install action in Settings > Delegation")
+	var installedPaths []string
+	if err == nil {
+		err = delegationprefs.Validate(msg.Preferences)
+	}
+	if err == nil {
+		installedPaths, err = d.installAttnRoles(current, msg.Preferences, protocol.Deref(msg.InstallWorkflowSkill))
 	}
 	var saved store.DelegationPreferencesRevision
 	if err == nil {
@@ -147,7 +162,8 @@ func (d *Daemon) handleDelegationPreferencesCommit(conn net.Conn, msg *protocol.
 		return
 	}
 	d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
-	d.replyDelegationPreferencesRevision(conn, saved)
+	wire := delegationPreferencesRevisionWire(saved)
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, DelegationPreferencesRevision: &wire, WorkflowSkillPaths: installedPaths})
 }
 
 func (d *Daemon) handleDelegationPreferencesHistory(conn net.Conn, msg *protocol.DelegationPreferencesHistoryMessage) {

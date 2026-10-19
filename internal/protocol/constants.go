@@ -139,6 +139,7 @@ const (
 	CmdCrewRename                    = "crew_rename"
 	CmdCrewMoveHome                  = "crew_move_home"
 	CmdCrewPrime                     = "crew_prime"
+	CmdOnboarding                    = "onboarding"
 	CmdCrewHandoff                   = "crew_handoff"
 	CmdStop                          = "stop"
 	CmdFilesEdited                   = "files_edited"

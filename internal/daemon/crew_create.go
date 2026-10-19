@@ -26,6 +26,7 @@ type crewBirth struct {
 	CWD            string
 	Desktop        *store.LaunchDesktopSetting
 	Onboarded      bool
+	OnboardingPath protocol.FirstDay
 }
 
 func (d *Daemon) createCrewMember(b crewBirth) (store.CrewIdentity, error) {
@@ -51,7 +52,7 @@ func (d *Daemon) createCrewMember(b crewBirth) (store.CrewIdentity, error) {
 }
 
 func (d *Daemon) furnishCrewMember(id store.CrewIdentity, b crewBirth) (resultErr error) {
-	member := crew.Member{Onboarded: b.Onboarded, Key: id.Key, AwarenessDirs: []string{}}
+	member := crew.Member{Onboarded: b.Onboarded, OnboardingPath: b.OnboardingPath, Key: id.Key, AwarenessDirs: []string{}}
 	if b.insertIdentity {
 		if err := d.applyCrewSettings(&member, &protocol.CrewSetMessage{Agent: protocol.Ptr(b.Agent), Model: protocol.Ptr(b.Model), Effort: protocol.Ptr(b.Effort), Cwd: protocol.Ptr(b.CWD)}); err != nil {
 			return err

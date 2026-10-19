@@ -1246,6 +1246,52 @@
                 ]
               },
               {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "onboarding",
+                    "kind": "flag",
+                    "description": "The profile's Chief has not finished onboarding."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "chief.onboarding",
+                    "source": "content/chief/onboarding.md",
+                    "bindings": [
+                      {
+                        "name": "first_day",
+                        "node": {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "established",
+                              "kind": "flag",
+                              "description": "The pending first day is the short tour."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "chief.onboarding-tour",
+                              "source": "content/chief/onboarding-tour.md"
+                            },
+                            {
+                              "kind": "text",
+                              "id": "chief.onboarding-full",
+                              "source": "content/chief/onboarding-full.md"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
                 "kind": "choose",
                 "condition": {
                   "field": {
@@ -3301,6 +3347,18 @@
           }
         },
         {
+          "id": "onboarding",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.onboarding",
+            "source": "content/skills/attn/references/onboarding.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "showing",
           "delivery": "reference",
           "description": "Loaded on demand through attn skill show or the installed skill directory.",
@@ -5229,5 +5287,5 @@
       ]
     }
   ],
-  "definitions_hash": "399e34b73c81041076a3a7deb1dd1482df0c8bbc78131e697b5a606761f659c8"
+  "definitions_hash": "f0659f2ac835ac8a5ad139a205847ae3cac83076af3b1df7f234e7a2e307d93a"
 }

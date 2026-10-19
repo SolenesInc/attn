@@ -1037,6 +1037,7 @@ model DelegationPreferencesShowMessage {
 }
 
 model DelegationPreferencesCommitMessage {
+  install_workflow_skill?: boolean;
   cmd: "delegation_preferences_commit";
   preferences: DelegationPreferences;
   message?: string;
@@ -5680,6 +5681,8 @@ model AutoModeEnvSetResultMessage {
 // ============================================================================
 
 model Response {
+  onboarding_result?: OnboardingResult;
+  workflow_skill_paths?: string[];
   settings_list?: SettingsListResult;
   setting?: SettingEntry;
   ok: boolean;
@@ -5875,6 +5878,7 @@ model CrewListMessage {
 
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
+  first_day?: FirstDay;
   chief: boolean;
   retired: boolean;
   profile_name?: string;
@@ -6159,6 +6163,23 @@ model CrewSetResultMessage {
 // What a launching session needs to be its member: the composed priming block
 // and the directories to open. Asked by the attn wrapper for every launch, so
 // the answer is empty for the sessions — most of them — that are nobody.
+enum OnboardingAction { show, done, again }
+enum FirstDay { full, tour, none }
+
+model OnboardingMessage {
+  cmd: "onboarding";
+  action: OnboardingAction;
+  source_session_id?: SessionID;
+  profile_id?: string;
+}
+
+model OnboardingResult {
+  chief: string;
+  configured: boolean;
+  onboarded: boolean;
+  first_day: FirstDay;
+}
+
 model CrewPrimeMessage {
   cmd: "crew_prime";
   session_id: SessionID;

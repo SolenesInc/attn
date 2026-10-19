@@ -2571,6 +2571,9 @@ type CrewMember struct {
 	// Effort corresponds to the JSON schema field "effort".
 	Effort *string `json:"effort,omitempty,omitzero"`
 
+	// FirstDay corresponds to the JSON schema field "first_day".
+	FirstDay *FirstDay `json:"first_day,omitempty,omitzero"`
+
 	// HomeDir corresponds to the JSON schema field "home_dir".
 	HomeDir string `json:"home_dir"`
 
@@ -3314,6 +3317,10 @@ type DelegationPreferencesChangedMessage struct {
 type DelegationPreferencesCommitMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// InstallWorkflowSkill corresponds to the JSON schema field
+	// "install_workflow_skill".
+	InstallWorkflowSkill *bool `json:"install_workflow_skill,omitempty,omitzero"`
 
 	// Message corresponds to the JSON schema field "message".
 	Message *string `json:"message,omitempty,omitzero"`
@@ -4387,6 +4394,12 @@ type FilesEditedMessage struct {
 	// Paths corresponds to the JSON schema field "paths".
 	Paths []string `json:"paths"`
 }
+
+type FirstDay string
+
+const FirstDayFull FirstDay = "full"
+const FirstDayNone FirstDay = "none"
+const FirstDayTour FirstDay = "tour"
 
 type FsChangedMessage struct {
 	// Event corresponds to the JSON schema field "event".
@@ -6948,6 +6961,40 @@ type NotificationsUpdatedMessage struct {
 	UnreadCriticalCount int `json:"unread_critical_count"`
 }
 
+type OnboardingAction string
+
+const OnboardingActionAgain OnboardingAction = "again"
+const OnboardingActionDone OnboardingAction = "done"
+const OnboardingActionShow OnboardingAction = "show"
+
+type OnboardingMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action OnboardingAction `json:"action"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type OnboardingResult struct {
+	// Chief corresponds to the JSON schema field "chief".
+	Chief string `json:"chief"`
+
+	// Configured corresponds to the JSON schema field "configured".
+	Configured bool `json:"configured"`
+
+	// FirstDay corresponds to the JSON schema field "first_day".
+	FirstDay FirstDay `json:"first_day"`
+
+	// Onboarded corresponds to the JSON schema field "onboarded".
+	Onboarded bool `json:"onboarded"`
+}
+
 type OpenBrowserMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -8361,6 +8408,9 @@ type Response struct {
 	// Ok corresponds to the JSON schema field "ok".
 	Ok bool `json:"ok"`
 
+	// OnboardingResult corresponds to the JSON schema field "onboarding_result".
+	OnboardingResult *OnboardingResult `json:"onboarding_result,omitempty,omitzero"`
+
 	// Profiles corresponds to the JSON schema field "profiles".
 	Profiles []Profile `json:"profiles,omitempty,omitzero"`
 
@@ -8466,6 +8516,9 @@ type Response struct {
 
 	// TerminalWaitResult corresponds to the JSON schema field "terminal_wait_result".
 	TerminalWaitResult *TerminalWaitResult `json:"terminal_wait_result,omitempty,omitzero"`
+
+	// WorkflowSkillPaths corresponds to the JSON schema field "workflow_skill_paths".
+	WorkflowSkillPaths []string `json:"workflow_skill_paths,omitempty,omitzero"`
 
 	// WorktreeKeepResult corresponds to the JSON schema field "worktree_keep_result".
 	WorktreeKeepResult *WorktreeKeepResult `json:"worktree_keep_result,omitempty,omitzero"`

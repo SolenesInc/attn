@@ -2723,6 +2723,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleCrewMoveHome(conn, msg.(*protocol.CrewMoveHomeMessage))
 	case protocol.CmdCrewRename:
 		d.handleCrewRename(conn, msg.(*protocol.CrewRenameMessage))
+	case protocol.CmdOnboarding:
+		d.handleOnboarding(conn, msg.(*protocol.OnboardingMessage))
 	case protocol.CmdCrewPrime:
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
 	case protocol.CmdCrewHandoff:
