@@ -1,0 +1,3 @@
+kind: fixed
+area: sidebar
+change: Crew rows in the desktop flow sidebar line up with the session rows instead of sitting inset.

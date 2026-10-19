@@ -134,4 +134,4 @@
   box-shadow: 0 0 0 2px var(--color-bg-panel);
 }
 
-.sidebar-sleeping-crew { margin: 12px 8px 0; }
+.sidebar-sleeping-crew { margin-top: 12px; }
