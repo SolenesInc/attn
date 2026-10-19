@@ -522,7 +522,7 @@ func (d *upgradeDaemon) event(name, id string) map[string]any {
 		event, _, _ := d.read(ctx)
 		if event["event"] == name && (id == "" || event["id"] == id) {
 			if success, ok := event["success"].(bool); ok && !success {
-				d.t.Fatalf("%s failed: %v", name, event)
+				d.t.Fatalf("%s failed: %v\n%s", name, event, d.logSinceStart())
 			}
 			return event
 		}
