@@ -207,10 +207,12 @@ these.
   "serverShuttingDown"`; 0.162.1 sends no data. `thread/read`, `thread/list`,
   `turn/interrupt` and approval answers still work. Nothing announces the
   drain to clients.
-- The drain ends when no turn is running, and has no timeout of its own. A turn
+- The drain ends when no turn is running and no request admitted before it is
+  still preparing or submitting work, and has no timeout of its own. A turn
   waiting on an approval or a question is still running, and so is a turn's
-  title generation. A second SIGTERM or SIGINT forces the exit. With no turn
-  running the drain ends at once.
+  title generation. A second SIGTERM or SIGINT forces the exit. With neither
+  left, the drain ends at once (`ShutdownState::update` in
+  `app-server/src/lib.rs`).
 - At the end the server stops listening, removes its socket and drops every
   connection without a WebSocket close frame, so clients see EOF before the
   process exits. It then shuts its conversations down, which can take about
