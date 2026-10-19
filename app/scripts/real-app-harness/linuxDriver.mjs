@@ -359,6 +359,27 @@ export class LinuxDriver {
     ]));
   }
 
+  async nativeFocusState() {
+    const read = (fn) => fn().catch((error) => ({ error: String(error?.message || error) }));
+    const describeWindow = async (id) => ({
+      id,
+      name: await this.runXdotoolCapture(['getwindowname', String(id)]).catch(() => null),
+      pid: await this.runXdotoolCapture(['getwindowpid', String(id)]).catch(() => null),
+      geometry: await this.windowGeometry(id).catch(() => null),
+    });
+    const [mainWindow, focusedWindow, pointer] = await Promise.all([
+      read(async () => {
+        const id = await this.mainWindowId();
+        return id ? describeWindow(id) : null;
+      }),
+      read(async () => describeWindow(Number.parseInt(await this.runXdotoolCapture(['getwindowfocus', '-f']), 10))),
+      read(async () => Object.fromEntries(
+        (await this.runXdotoolCapture(['getmouselocation', '--shell'])).split(/\r?\n/).map((line) => line.split('=', 2)),
+      )),
+    ]);
+    return { mainWindow, focusedWindow, pointer };
+  }
+
   async relativePoint(relativeX, relativeY, opts = {}) {
     const windowId = await this.requireWindow(opts);
     const bounds = await this.windowGeometry(windowId);
