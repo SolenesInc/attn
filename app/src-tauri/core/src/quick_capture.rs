@@ -267,6 +267,7 @@ mod mac {
     }
 
     pub fn install(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+        super::forget_downloads();
         let cached = super::load_preference();
         app.manage(Mutex::new(QuickCaptureState {
             manager: Some(GlobalHotKeyManager::new()?),
@@ -526,6 +527,24 @@ fn is_uuid(id: &str) -> bool {
         })
 }
 
+fn profile_dir(root: &str, profile_id: &str) -> Result<std::path::PathBuf, String> {
+    let id = profile_id
+        .strip_prefix("profile-")
+        .ok_or("Quick Capture needs a profile identity")?;
+    if !is_uuid(id) {
+        return Err("Quick Capture profile id must contain a UUID".into());
+    }
+    Ok(crate::instance::data_dir()?.join(root).join(profile_id))
+}
+
+fn draft_dir(profile_id: &str) -> Result<std::path::PathBuf, String> {
+    profile_dir("quick-capture-drafts", profile_id)
+}
+
+fn draft_files_dir(profile_id: &str) -> Result<std::path::PathBuf, String> {
+    Ok(draft_dir(profile_id)?.join("capture-draft-files"))
+}
+
 fn draft_file_name(id: &str) -> Result<String, String> {
     if !is_uuid(id) {
         return Err("Draft file id must be a UUID".into());
@@ -533,101 +552,182 @@ fn draft_file_name(id: &str) -> Result<String, String> {
     Ok(format!("{id}.file"))
 }
 
-fn write_cache(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
-    use std::io::Write;
+fn draft_file_path(profile_id: &str, id: &str) -> Result<std::path::PathBuf, String> {
+    Ok(draft_files_dir(profile_id)?.join(draft_file_name(id)?))
+}
+
+fn download_path(
+    profile_id: &str,
+    capture_id: &str,
+    attachment_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    if !is_uuid(capture_id) || !is_uuid(attachment_id) {
+        return Err("Capture and attachment ids must be UUIDs".into());
+    }
+    Ok(profile_dir("quick-capture-downloads", profile_id)?
+        .join(format!("{capture_id}-{attachment_id}")))
+}
+
+fn io_error(path: &std::path::Path) -> impl Fn(std::io::Error) -> String + '_ {
+    move |error| format!("{}: {error}", path.display())
+}
+
+fn commit(temporary: &std::path::Path, path: &std::path::Path) -> Result<(), String> {
+    std::fs::File::open(temporary)
+        .and_then(|file| file.sync_all())
+        .map_err(io_error(temporary))?;
+    std::fs::rename(temporary, path).map_err(io_error(path))?;
     let parent = path.parent().ok_or("Cache path has no parent")?;
-    std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    let temporary = path.with_extension("tmp");
-    let mut file = std::fs::File::create(&temporary).map_err(|error| error.to_string())?;
-    file.write_all(bytes).map_err(|error| error.to_string())?;
-    file.sync_all().map_err(|error| error.to_string())?;
-    std::fs::rename(temporary, path).map_err(|error| error.to_string())?;
     std::fs::File::open(parent)
         .and_then(|dir| dir.sync_all())
-        .map_err(|error| error.to_string())
+        .map_err(io_error(parent))
 }
 
-fn draft_dir(profile_id: &str) -> Result<std::path::PathBuf, String> {
-    let id = profile_id
-        .strip_prefix("profile-")
-        .ok_or("Capture draft needs a profile identity")?;
-    if !is_uuid(id) {
-        return Err("Capture draft profile id must contain a UUID".into());
+fn write_cache(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    let parent = path.parent().ok_or("Cache path has no parent")?;
+    std::fs::create_dir_all(parent).map_err(io_error(parent))?;
+    let temporary = path.with_extension("tmp");
+    std::fs::write(&temporary, bytes).map_err(io_error(&temporary))?;
+    commit(&temporary, path)
+}
+
+fn append_at(path: &std::path::Path, offset: u64, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let parent = path.parent().ok_or("Cache path has no parent")?;
+    std::fs::create_dir_all(parent).map_err(io_error(parent))?;
+    let mut file = if offset == 0 {
+        std::fs::File::create(path)
+    } else {
+        std::fs::OpenOptions::new().append(true).open(path)
     }
-    Ok(crate::instance::data_dir()?
-        .join("quick-capture-drafts")
-        .join(profile_id))
+    .map_err(io_error(path))?;
+    let length = file.metadata().map_err(io_error(path))?.len();
+    if length != offset {
+        return Err(format!(
+            "{} holds {length} bytes, asked to write at offset {offset}",
+            path.display()
+        ));
+    }
+    file.write_all(bytes).map_err(io_error(path))
 }
 
-fn read_draft(profile_id: String) -> Result<Option<serde_json::Value>, String> {
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoredFile {
+    size: u64,
+    media_type: String,
+    path: String,
+}
+
+fn stored_file(app: &AppHandle, path: &std::path::Path, name: &str) -> Result<StoredFile, String> {
+    use std::io::Read;
+    use tauri::Manager;
+    let mut head = Vec::new();
+    let file = std::fs::File::open(path).map_err(io_error(path))?;
+    let size = file.metadata().map_err(io_error(path))?.len();
+    file.take(8192)
+        .read_to_end(&mut head)
+        .map_err(io_error(path))?;
+    let directory = path.parent().ok_or("Stored file has no parent")?;
+    app.asset_protocol_scope()
+        .allow_directory(directory, false)
+        .map_err(|error| error.to_string())?;
+    Ok(StoredFile {
+        size,
+        media_type: tauri::utils::mime_type::MimeType::parse_with_fallback(
+            &head,
+            name,
+            tauri::utils::mime_type::MimeType::OctetStream,
+        ),
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
+fn draft_file_ids(draft: &serde_json::Value) -> Result<Vec<String>, String> {
+    draft["files"]
+        .as_array()
+        .ok_or("Draft files are missing")?
+        .iter()
+        .map(|file| draft_file_name(file["id"].as_str().ok_or("Draft file id is missing")?))
+        .collect()
+}
+
+fn stored_draft(dir: &std::path::Path) -> Result<Option<serde_json::Value>, String> {
+    let path = dir.join("quick-capture-draft.json");
+    match std::fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map(Some)
+            .map_err(|error| error.to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(io_error(&path)(error)),
+    }
+}
+
+fn read_draft(app: &AppHandle, profile_id: String) -> Result<Option<serde_json::Value>, String> {
     let dir = draft_dir(&profile_id)?;
-    let bytes = match std::fs::read(dir.join("quick-capture-draft.json")) {
-        Ok(bytes) => bytes,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error.to_string()),
+    let files_dir = draft_files_dir(&profile_id)?;
+    let Some(mut draft) = stored_draft(&dir)? else {
+        return Ok(None);
     };
-    let mut draft: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    let kept = draft_file_ids(&draft)?;
+    if let Ok(entries) = std::fs::read_dir(&files_dir) {
+        for entry in entries.flatten() {
+            if !kept.contains(&entry.file_name().to_string_lossy().into_owned()) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
     for file in draft["files"]
         .as_array_mut()
         .ok_or("Draft files are missing")?
     {
         let id = file["id"].as_str().ok_or("Draft file id is missing")?;
-        let path = dir.join("capture-draft-files").join(draft_file_name(id)?);
-        file["url"] = std::fs::read_to_string(path)
-            .map_err(|error| error.to_string())?
-            .into();
+        let name = file["name"].as_str().unwrap_or_default().to_owned();
+        let stored = stored_file(app, &draft_file_path(&profile_id, id)?, &name)?;
+        file["size"] = stored.size.into();
+        file["mediaType"] = stored.media_type.into();
+        file["path"] = stored.path.into();
     }
     Ok(Some(draft))
 }
 
-fn write_draft_file(profile_id: String, id: String, url: String) -> Result<(), String> {
-    let path = draft_dir(&profile_id)?
-        .join("capture-draft-files")
-        .join(draft_file_name(&id)?);
-    write_cache(&path, url.as_bytes())
-}
-
 fn write_draft(profile_id: String, draft: serde_json::Value) -> Result<(), String> {
     let dir = draft_dir(&profile_id)?;
-    let files = draft["files"].as_array().ok_or("Draft files are missing")?;
-    let names = files
-        .iter()
-        .map(|file| draft_file_name(file["id"].as_str().ok_or("Draft file id is missing")?))
-        .collect::<Result<std::collections::HashSet<_>, String>>()?;
+    let files_dir = draft_files_dir(&profile_id)?;
+    let kept = draft_file_ids(&draft)?;
+    let previous = match stored_draft(&dir) {
+        Ok(Some(previous)) => draft_file_ids(&previous)?,
+        _ => Vec::new(),
+    };
     write_cache(
         &dir.join("quick-capture-draft.json"),
         &serde_json::to_vec(&draft).map_err(|error| error.to_string())?,
     )?;
-    if let Ok(entries) = std::fs::read_dir(dir.join("capture-draft-files")) {
-        for entry in entries {
-            let entry = entry.map_err(|error| error.to_string())?;
-            if !names.contains(&entry.file_name().to_string_lossy().to_string()) {
-                std::fs::remove_file(entry.path()).map_err(|error| error.to_string())?;
+    for name in previous.iter().filter(|name| !kept.contains(name)) {
+        match std::fs::remove_file(files_dir.join(name)) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(io_error(&files_dir.join(name))(error))
             }
+            _ => {}
         }
     }
     Ok(())
 }
 
-#[tauri::command]
-pub async fn quick_capture_draft_read(
-    profile_id: String,
-) -> Result<Option<serde_json::Value>, String> {
-    tauri::async_runtime::spawn_blocking(move || read_draft(profile_id))
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
         .await
         .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-pub async fn quick_capture_draft_file_write(
+pub async fn quick_capture_draft_read(
+    app: AppHandle,
     profile_id: String,
-    id: String,
-    url: String,
-) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || write_draft_file(profile_id, id, url))
-        .await
-        .map_err(|error| error.to_string())?
+) -> Result<Option<serde_json::Value>, String> {
+    blocking(move || read_draft(&app, profile_id)).await
 }
 
 #[tauri::command]
@@ -635,27 +735,164 @@ pub async fn quick_capture_draft_write(
     profile_id: String,
     draft: serde_json::Value,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || write_draft(profile_id, draft))
-        .await
-        .map_err(|error| error.to_string())?
+    blocking(move || write_draft(profile_id, draft)).await
 }
 
 #[tauri::command]
-pub async fn quick_capture_file_read(path: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        use base64::Engine;
-        let bytes = std::fs::read(&path).map_err(|error| format!("Cannot read {path}: {error}"))?;
-        let media = tauri::utils::mime_type::MimeType::parse_with_fallback(
-            &bytes,
-            &path,
-            tauri::utils::mime_type::MimeType::OctetStream,
-        );
-        Ok(format!(
-            "data:{};base64,{}",
-            media,
-            base64::engine::general_purpose::STANDARD.encode(bytes)
-        ))
+pub async fn quick_capture_draft_file_copy(
+    app: AppHandle,
+    profile_id: String,
+    id: String,
+    path: String,
+) -> Result<StoredFile, String> {
+    blocking(move || {
+        let target = draft_file_path(&profile_id, &id)?;
+        let parent = target.parent().ok_or("Draft file has no parent")?;
+        std::fs::create_dir_all(parent).map_err(io_error(parent))?;
+        let temporary = target.with_extension("tmp");
+        std::fs::copy(&path, &temporary).map_err(|error| format!("Cannot read {path}: {error}"))?;
+        commit(&temporary, &target)?;
+        stored_file(&app, &target, &path)
     })
     .await
-    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn quick_capture_draft_file_append(
+    request: tauri::ipc::Request<'_>,
+) -> Result<(), String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Draft file chunks arrive as raw bytes".into());
+    };
+    let header = |name: &str| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned)
+            .ok_or(format!("Draft file chunk is missing the {name} header"))
+    };
+    let path = draft_file_path(&header("profile-id")?, &header("file-id")?)?.with_extension("part");
+    let offset = header("offset")?
+        .parse::<u64>()
+        .map_err(|error| format!("Draft file chunk offset: {error}"))?;
+    let bytes = bytes.clone();
+    blocking(move || append_at(&path, offset, &bytes)).await
+}
+
+#[tauri::command]
+pub async fn quick_capture_draft_file_finish(
+    app: AppHandle,
+    profile_id: String,
+    id: String,
+    name: String,
+) -> Result<StoredFile, String> {
+    blocking(move || {
+        let target = draft_file_path(&profile_id, &id)?;
+        commit(&target.with_extension("part"), &target)?;
+        stored_file(&app, &target, &name)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn quick_capture_draft_clipboard_image(
+    app: AppHandle,
+    profile_id: String,
+    id: String,
+) -> Result<StoredFile, String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    blocking(move || {
+        let image = app
+            .clipboard()
+            .read_image()
+            .map_err(|error| error.to_string())?;
+        let pixels =
+            image::RgbaImage::from_raw(image.width(), image.height(), image.rgba().to_vec())
+                .ok_or("Clipboard image size does not match its pixels")?;
+        let target = draft_file_path(&profile_id, &id)?;
+        let parent = target.parent().ok_or("Draft file has no parent")?;
+        std::fs::create_dir_all(parent).map_err(io_error(parent))?;
+        let temporary = target.with_extension("tmp");
+        pixels
+            .save_with_format(&temporary, image::ImageFormat::Png)
+            .map_err(|error| error.to_string())?;
+        commit(&temporary, &target)?;
+        stored_file(&app, &target, "Pasted screenshot.png")
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn quick_capture_draft_file_chunk(
+    profile_id: String,
+    id: String,
+    offset: u64,
+    length: u64,
+) -> Result<String, String> {
+    blocking(move || {
+        use base64::Engine;
+        use std::io::{Read, Seek};
+        let path = draft_file_path(&profile_id, &id)?;
+        let mut file = std::fs::File::open(&path).map_err(io_error(&path))?;
+        file.seek(std::io::SeekFrom::Start(offset))
+            .map_err(io_error(&path))?;
+        let mut bytes = Vec::new();
+        file.take(length)
+            .read_to_end(&mut bytes)
+            .map_err(io_error(&path))?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn quick_capture_download_find(
+    app: AppHandle,
+    profile_id: String,
+    capture_id: String,
+    attachment_id: String,
+) -> Result<Option<String>, String> {
+    blocking(move || {
+        let path = download_path(&profile_id, &capture_id, &attachment_id)?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        Ok(Some(stored_file(&app, &path, "")?.path))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn quick_capture_download_append(
+    app: AppHandle,
+    profile_id: String,
+    capture_id: String,
+    attachment_id: String,
+    offset: u64,
+    data_base64: String,
+    last: bool,
+) -> Result<Option<String>, String> {
+    blocking(move || {
+        use base64::Engine;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(data_base64)
+            .map_err(|error| error.to_string())?;
+        let path = download_path(&profile_id, &capture_id, &attachment_id)?;
+        let partial = path.with_extension("part");
+        append_at(&partial, offset, &bytes)?;
+        if !last {
+            return Ok(None);
+        }
+        commit(&partial, &path)?;
+        Ok(Some(stored_file(&app, &path, "")?.path))
+    })
+    .await
+}
+
+#[cfg(target_os = "macos")]
+fn forget_downloads() {
+    if let Ok(dir) = crate::instance::data_dir() {
+        let _ = std::fs::remove_dir_all(dir.join("quick-capture-downloads"));
+    }
 }

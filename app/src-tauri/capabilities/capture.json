@@ -10,7 +10,6 @@
   ],
   "permissions": [
     "core:default",
-    "core:window:allow-is-visible",
-    "clipboard-manager:allow-read-image"
+    "core:window:allow-is-visible"
   ]
 }

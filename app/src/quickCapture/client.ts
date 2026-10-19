@@ -10,7 +10,10 @@ export const QUICK_CAPTURE_SHORTCUT_SETTING = 'capture.shortcut';
 export const QUICK_CAPTURE_ENABLED_SETTING = 'quick_capture_enabled';
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = 'Control+Alt+Super+Space';
 
-export interface DraftAttachment { id: string; name: string; url: string }
+export const QUICK_CAPTURE_CHUNK_BYTES = 524288;
+
+export interface StoredDraftFile { size: number; mediaType: string; path: string }
+export interface DraftAttachment extends StoredDraftFile { id: string; name: string }
 export interface QuickCaptureDraft { id: string; text: string; mailbox: string; files: DraftAttachment[]; uncertain: boolean }
 export interface QuickCaptureSubmission { id: string; text: string; mailbox: string; fileIds: string[] }
 export interface QuickCaptureMailbox { id: string; name: string; detail: string }
@@ -32,7 +35,7 @@ export interface QuickCaptureDeliveryClient {
   submit(submission: QuickCaptureSubmission): Promise<QuickCaptureItem>;
   resolve(id: string): Promise<QuickCaptureItem | null>;
   recent(cursor?: string): Promise<QuickCaptureHistory>;
-  file(captureId: string, attachmentId: string, mediaType?: string): Promise<string>;
+  file(captureId: string, attachmentId: string): Promise<string>;
   discard(id: string, fileIds: string[]): Promise<void>;
 }
 export interface QuickCaptureClient extends QuickCaptureDeliveryClient {
@@ -44,7 +47,7 @@ export type QuickCaptureRequest = { profileId: string } & (
   | { id: string; action: 'stage'; draft: QuickCaptureDraft }
   | { id: string; action: 'resolve'; captureId: string }
   | { id: string; action: 'recent'; cursor?: string }
-  | { id: string; action: 'file'; captureId: string; attachmentId: string; mediaType?: string }
+  | { id: string; action: 'file'; captureId: string; attachmentId: string }
   | { id: string; action: 'discard'; captureId: string; fileIds: string[] }
   | { id: string; action: 'binding'; binding: string | null }
   | { id: string; action: 'font'; change: 'increase' | 'decrease' | 'reset' });
@@ -99,7 +102,7 @@ export function createQuickCaptureBridge(onState: (state: QuickCaptureHostState)
       submit: submission => call({ action: 'submit', submission }),
       resolve: captureId => call({ action: 'resolve', captureId }),
       recent: cursor => call({ action: 'recent', cursor }),
-      file: (captureId, attachmentId, mediaType) => call({ action: 'file', captureId, attachmentId, mediaType }),
+      file: (captureId, attachmentId) => call({ action: 'file', captureId, attachmentId }),
       discard: (captureId, fileIds) => call({ action: 'discard', captureId, fileIds }),
       setBinding: binding => call({ action: 'binding', binding }),
       resizeText: change => call({ action: 'font', change }),
