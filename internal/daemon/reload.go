@@ -509,7 +509,7 @@ func (p *preparedPluginReload) commit() error {
 		return nil
 	}
 	oldRun := p.d.store.GetAgentDriverRun(p.sessionID)
-	if !p.d.store.BeginAgentDriverRun(p.sessionID, p.pluginName, p.runID) {
+	if !p.d.beginAgentDriverRun(p.sessionID, p.pluginName, p.runID) {
 		return fmt.Errorf("initialize plugin driver run cursor")
 	}
 	p.completed = true

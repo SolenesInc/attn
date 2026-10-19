@@ -29,6 +29,9 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID protocol.SessionID, agent st
 	if e == nil {
 		return
 	}
+	if !d.life.Do("seedPluginUsageBaseline", func() { d.seedPluginUsageBaseline(sessionID, path) }) {
+		return
+	}
 	e.mu.Lock()
 	previous := e.pluginUsageWatch
 	if e.usageDraining || previous != nil && previous.path == path {
@@ -36,12 +39,7 @@ func (d *Daemon) ensurePluginUsageWatcher(sessionID protocol.SessionID, agent st
 		return
 	}
 	watcher := &pluginUsageWatcher{entry: e, sessionID: sessionID, path: path, stopCh: make(chan struct{}), doneCh: make(chan struct{})}
-	// The baseline lands before the report is answered, so a transcript written right after it still counts.
-	if !d.life.Do("seedPluginUsageBaseline", func() { d.seedPluginUsageBaseline(sessionID, path) }) {
-		e.mu.Unlock()
-		return
-	}
-	tracker := newSessionUsageTrackerAt(d, sessionID, agent, path, transcript.NewReportedUsageSourceResolver(path))
+	tracker := newSessionUsageTrackerAt(d, e, sessionID, agent, path, transcript.NewReportedUsageSourceResolver(path))
 	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
 	if !d.life.Go("runPluginUsageWatcher", func() { d.runPluginUsageWatcher(watcher, tracker) }) {
 		e.mu.Unlock()
@@ -64,8 +62,8 @@ func (d *Daemon) seedPluginUsageBaseline(sessionID protocol.SessionID, path stri
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		return
 	}
-	if err := d.store.InitializeSessionCostSources(sessionID, map[string]string{filepath.Clean(path): ""}); err != nil {
-		d.logf("plugin usage watcher: usage baseline seed failed session=%s path=%s err=%v", sessionID, path, err)
+	if entry := d.monitorEntry(sessionID); entry != nil {
+		entry.initializeCostSources(map[string]string{filepath.Clean(path): ""}, false)
 	}
 }
 

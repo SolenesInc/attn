@@ -6,13 +6,10 @@ import (
 )
 
 func (d *Daemon) stateReason(sessionID protocol.SessionID) string {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return ""
+	if view, ok := d.monitorViewFor(sessionID); ok {
+		return view.State.V.Reason
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.reason
+	return ""
 }
 
 func (d *Daemon) clearStateReason(sessionID protocol.SessionID) {

@@ -152,8 +152,6 @@ type Daemon struct {
 	warnings                   []protocol.DaemonWarning
 	warningsMu                 sync.RWMutex
 	ptyBackend                 ptybackend.Backend
-	terminalTitlesMu           sync.RWMutex
-	terminalTitles             map[harness.TerminalID]string
 	ptySettingsMu              sync.Mutex
 	ptySettingsChangeMu        sync.Mutex
 	sharedPTYHost              *ptybackend.WorkerBackend
@@ -199,8 +197,6 @@ type Daemon struct {
 	supportInputTrace     *supportInputTraceRing
 
 	emptyDesktops emptyDesktopRemoval
-
-	snoozeMu sync.Mutex
 
 	recoveryMu          sync.RWMutex
 	recovering          bool
@@ -621,9 +617,6 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("start event bus: %w", err)
 	}
 	d.loadTerminals()
-	for _, session := range d.store.List("") {
-		d.startSessionMonitor(session.ID)
-	}
 	if d.clientToken == "" {
 		token, err := config.EnsureClientToken(d.dataRoot)
 		if err != nil {
@@ -768,9 +761,11 @@ func (d *Daemon) Start() error {
 	}
 	listener := d.listener
 	d.log("daemon started")
-	d.startInstalledPlugins()
-
 	d.wsHub.logf = d.logf
+	for _, session := range d.store.List("") {
+		d.startSessionMonitor(session.ID)
+	}
+	d.startInstalledPlugins()
 
 	d.life.Go("runMarkdownContentWatcher", func() { d.runMarkdownContentWatcher(d.life.Done()) })
 
@@ -1545,6 +1540,7 @@ func (d *Daemon) stop() {
 	// Work begun before the stop finishes; later exits and failures are the teardown's, not outcomes.
 	// PTYs shut next so no real exit lands between the drain and the shutdown.
 	d.life.wait(d.logf)
+	d.stopMonitorCatchUps()
 	d.closeGitExecution(ErrGitExecutorClosed)
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
@@ -1644,10 +1640,15 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
+	d.captureExitScreen(sessionID, info)
+	d.reactSessionExit(sessionID, info, stopped, unlockEnds)
+	return true
+}
+
+func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, info ptybackend.ExitInfo, stopped bool, unlockEnds func()) {
 	d.sessionInputs().fenceSession(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
-	d.captureExitScreen(sessionID, info)
 	d.noteLaunchExited(sessionID, info)
 
 	if d.ptyBackend != nil {
@@ -1673,7 +1674,6 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			d.finishSessionClose(sessionID, closing)
 		}
 	}
-	return true
 }
 
 type ptyExit struct {
@@ -1835,6 +1835,8 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 		lifecycleLock.Unlock()
 		return nil, err
 	}
+	pausepoint.At(pausepoint.SessionTeardownPrepared)
+	d.retireMonitorDriver(sessionID, driverRun.RunID)
 	return &sessionTeardown{session: session, terminals: d.terminalsOf(sessionID), driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
@@ -1845,8 +1847,25 @@ func (d *Daemon) commitSessionUnregister(sessionID protocol.SessionID, closed st
 func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *sessionTeardown) {
 	defer teardown.releaseLifecycle()
 	d.clearForcedStopClassification(sessionID)
-	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
+	entry := d.monitorEntry(sessionID)
+	if entry != nil {
+		entry.mu.Lock()
+	}
+	err := d.store.CancelSessionTeardown(sessionID)
+	var view monitorView
+	if err == nil && entry != nil {
+		entry.driver = d.driverInputFromRecord(sessionID)
+		view = entry.viewLocked()
+	}
+	if entry != nil {
+		entry.mu.Unlock()
+	}
+	if err != nil {
 		d.logf("cancel session teardown failed for %s: %v", sessionID, err)
+		return
+	}
+	if entry != nil {
+		entry.sink.Applied(view)
 	}
 }
 
@@ -1957,7 +1976,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 		d.decorateSessionWithTitle(session)
 		closed.FallbackLabel = protocol.Deref(session.Title)
 		if closed.FallbackLabel == "" {
-			closed.FallbackLabel = defaultSessionLabel(session.Directory, sessionID)
+			closed.FallbackLabel = store.DefaultSessionLabel(session.Directory, sessionID)
 		}
 	}
 	if l := d.linkOf(sessionID); l != nil {
@@ -2981,7 +3000,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 		return nil
 	}
 	if d.store != nil {
-		clone.TerminalExit = d.store.GetSessionExit(clone.ID)
+		clone.TerminalExit = d.sessionExit(clone.ID)
 	}
 	d.decorateSessionWithStateReason(clone)
 
@@ -3770,21 +3789,9 @@ func (d *Daemon) monitorBranches() {
 }
 
 func (d *Daemon) checkAllBranches() {
-	sessions := d.store.List("")
-
 	d.coalesceSnapshots(func() {
-		for _, session := range sessions {
-			info, err := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitDeferred}, session.Directory)
-			if err != nil {
-				continue
-			}
-
-			if info.Branch != protocol.Deref(session.Branch) || info.IsWorktree != protocol.Deref(session.IsWorktree) ||
-				info.Repository != protocol.Deref(session.Repository) {
-				d.store.UpdateBranch(session.ID, info.Branch, info.IsWorktree, info.MainRepo, info.Repository)
-				d.logf("Branch changed: session=%s branch=%s isWorktree=%v", session.ID, info.Branch, info.IsWorktree)
-				d.publishFact(FactSessionBranchChanged, string(session.ID), nil)
-			}
+		for _, entry := range d.monitors().each() {
+			entry.checkBranch(d)
 		}
 	})
 }

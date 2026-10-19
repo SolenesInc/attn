@@ -15,9 +15,35 @@ const exitScreenMaxBytes = 256 * 1024
 
 const exitScreenSnapshotTimeout = modelCaptureSnapshotTimeout
 
+func (d *Daemon) sessionExit(session protocol.SessionID) *protocol.TerminalExit {
+	if view, ok := d.monitorViewFor(session); ok {
+		if exit := view.Exit.V; exit != nil {
+			result := &protocol.TerminalExit{Code: exit.Code, At: string(protocol.NewTimestamp(exit.At))}
+			if exit.Signal != "" {
+				result.Signal = protocol.Ptr(exit.Signal)
+			}
+			return result
+		}
+		return nil
+	}
+	return d.store.GetSessionExit(session)
+}
+
 func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend.ExitInfo) {
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return
+	}
+	if entry := d.monitorEntry(sessionID); entry != nil {
+		entry.mu.Lock()
+		if entry.exit != nil && info.LifecycleID != "" && entry.exit.LifecycleID == info.LifecycleID {
+			view := entry.viewLocked()
+			entry.mu.Unlock()
+			if !entry.sink.Applied(view) {
+				d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
+			}
+			return
+		}
+		entry.mu.Unlock()
 	}
 	rec := store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
 	if provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider); ok {
@@ -33,11 +59,45 @@ func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend
 			rec.Rows = int(snapshot.Screen.Rows)
 		}
 	}
-	if err := d.store.SaveSessionExitScreen(rec, time.Now()); err != nil {
-		d.logf("exit screen not kept: session=%s err=%v", sessionID, err)
+	if entry := d.monitorEntry(sessionID); entry != nil {
+		entry.mu.Lock()
+		entry.exit = &monitorExit{LifecycleID: info.LifecycleID, Text: rec.Text, Cols: rec.Cols, Rows: rec.Rows, Code: rec.ExitCode, Signal: rec.ExitSignal, At: time.Now()}
+		view := entry.viewLocked()
+		entry.mu.Unlock()
+		if !entry.sink.Applied(view) {
+			d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
+		}
 		return
 	}
-	d.logf("exit screen kept: session=%s code=%d signal=%q text_bytes=%d", sessionID, info.ExitCode, info.Signal, len(rec.Text))
+	d.saveExitScreen(rec, time.Now())
+}
+
+func (d *Daemon) saveExitScreen(rec store.SessionExitScreen, at time.Time) bool {
+	if err := d.store.SaveSessionExitScreen(rec, at); err != nil {
+		d.logf("exit screen not kept: session=%s err=%v", rec.SessionID, err)
+		return false
+	}
+	d.logf("exit screen kept: session=%s code=%d signal=%q text_bytes=%d", rec.SessionID, rec.ExitCode, rec.ExitSignal, len(rec.Text))
+	return true
+}
+
+func (d *Daemon) clearExitScreenBefore(session protocol.SessionID, before time.Time) {
+	if entry := d.monitorEntry(session); entry != nil {
+		entry.mu.Lock()
+		if entry.exit == nil || !entry.exit.At.Before(before) {
+			entry.mu.Unlock()
+			return
+		}
+		entry.exit = nil
+		view := entry.viewLocked()
+		entry.mu.Unlock()
+		if !entry.sink.Applied(view) {
+			return
+		}
+	}
+	if err := d.store.DeleteSessionExitScreenBefore(session, before); err != nil {
+		d.logf("exit screen of the previous process not cleared: session=%s err=%v", session, err)
+	}
 }
 
 func clampExitScreenText(text string) string {

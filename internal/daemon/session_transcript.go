@@ -100,11 +100,6 @@ func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
 	if _, err := os.Stat(path); err != nil {
 		return ""
 	}
-	d.observeAgentConversation(agentConversationObservation{
-		SessionID:      session.ID,
-		NativeID:       binding.NativeID,
-		TranscriptPath: path,
-	})
 	return path
 }
 

@@ -487,10 +487,7 @@ func (m sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID pr
 	return lane.run
 }
 
-func (m sessionInputModule) observePhase(sessionID protocol.SessionID, phase protocol.SessionState) {
-	lane := m.lane(sessionID)
-	lane.mu.Lock()
-	defer lane.mu.Unlock()
+func (m sessionInputModule) observePhaseLocked(lane *sessionInputLane, sessionID protocol.SessionID, phase protocol.SessionState) {
 	previous := lane.phase
 	lane.phase = phase
 	if lane.heldEnter && previous == protocol.SessionStatePendingApproval && phase != previous {
@@ -513,13 +510,6 @@ func (m sessionInputModule) observePhase(sessionID protocol.SessionID, phase pro
 	lane.run = nil
 }
 
-func (m sessionInputModule) currentUserRun(sessionID protocol.SessionID) (sessionInputRunRef, bool) {
-	lane := m.lane(sessionID)
-	lane.mu.Lock()
-	defer lane.mu.Unlock()
-	return lane.currentUserRunLocked()
-}
-
 func (lane *sessionInputLane) currentUserRunLocked() (sessionInputRunRef, bool) {
 	if lane.run == nil || !lane.run.credited {
 		return sessionInputRunRef{}, false
@@ -538,7 +528,20 @@ func (d *Daemon) observePromptSubmitted(sessionID protocol.SessionID, at time.Ti
 }
 
 func (d *Daemon) markModelRequestStarted(sessionID protocol.SessionID, at time.Time) bool {
-	if d.store == nil || !d.store.MarkModelRequestStarted(sessionID, at) {
+	if d.store == nil {
+		return false
+	}
+	if entry := d.monitorEntry(sessionID); entry != nil {
+		entry.mu.Lock()
+		if at.IsZero() || !at.After(entry.lastModelRequestAt) {
+			entry.mu.Unlock()
+			return false
+		}
+		entry.lastModelRequestAt = at
+		view := entry.viewLocked()
+		entry.mu.Unlock()
+		return entry.sink.Applied(view)
+	} else if !d.store.MarkModelRequestStarted(sessionID, at) {
 		return false
 	}
 	d.publishFact(FactSessionModelRequestStarted, string(sessionID), nil)

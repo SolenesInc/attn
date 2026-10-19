@@ -1028,8 +1028,8 @@ func (s *Store) ShowSession(sessionID protocol.SessionID) (profiles.Profile, pro
 }
 
 func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, sessionID protocol.SessionID) (profiles.Desktop, string, error) {
-	var title string
-	if err := tx.QueryRow(`SELECT label FROM sessions WHERE id = ?`, sessionID).Scan(&title); err != nil {
+	title, err := sessionLabelTx(tx, sessionID)
+	if err != nil {
 		return profiles.Desktop{}, "", err
 	}
 	current, err := loadLaunchDesktop(tx, profile, "")

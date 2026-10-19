@@ -18,5 +18,4 @@ func (d *Daemon) handleCancelCountdown(msg *protocol.CancelCountdownMessage) {
 	if !settleAnswered {
 		return
 	}
-	d.broadcastSessionStateChanged(sessionID)
 }

@@ -15,6 +15,7 @@ import (
 type terminalRegistry struct {
 	mu       sync.RWMutex
 	byID     map[harness.TerminalID]*terminal
+	titles   map[harness.TerminalID]string
 	shown    uint64
 	ending   map[harness.TerminalID]endingTerminal
 	expected map[harness.TerminalID]harness.SessionID
@@ -28,7 +29,7 @@ type terminal struct {
 
 func (d *Daemon) terminals() *terminalRegistry {
 	d.terminalsOnce.Do(func() {
-		d.terminalState = &terminalRegistry{byID: make(map[harness.TerminalID]*terminal), ending: make(map[harness.TerminalID]endingTerminal), expected: make(map[harness.TerminalID]harness.SessionID)}
+		d.terminalState = &terminalRegistry{byID: make(map[harness.TerminalID]*terminal), titles: make(map[harness.TerminalID]string), ending: make(map[harness.TerminalID]endingTerminal), expected: make(map[harness.TerminalID]harness.SessionID)}
 	})
 	return d.terminalState
 }

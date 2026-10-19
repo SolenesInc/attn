@@ -41,6 +41,59 @@ func TestASessionsPullRequestsComeBackNewestFirstAndOncePerSession(t *testing.T)
 	if got := pullNumbers(queriedSession(t, cli, s2)); !slices.Equal(got, []int{1}) {
 		t.Errorf("second session's pull requests after the first forgot #1 = %v, want its own kept", got)
 	}
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(s1)), protocol.StateWorking); err != nil {
+		t.Fatal(err)
+	}
+	if got := pullNumbers(queriedSession(t, cli, s1)); !slices.Equal(got, []int{2}) {
+		t.Fatalf("a later state report restored the forgotten pull request: %v", got)
+	}
+	recordPullRequest(t, cli, s1, shopPull(1))
+	if got := pullNumbers(queriedSession(t, cli, s1)); !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("reporting the forgotten pull request again = %v, want [1 2]", got)
+	}
+}
+
+func TestAPullRequestReportedByTerminalBelongsToTheSessionItShows(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	if err := cli.RecordPullRequestCreatedFromTerminal(protocol.TerminalID(w.Terminal(session)), shopPull(3)); err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+		return slices.Equal(pullNumbers(s), []int{3})
+	})
+	if got := pullNumbers(queriedSession(t, cli, session)); !slices.Equal(got, []int{3}) {
+		t.Fatalf("reported pull requests = %v, want [3]", got)
+	}
+}
+
+func TestADriverReportsPullRequestsOnlyForItsOwnRun(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
+		session, run := spawnDriven(w, app, driver, w.Path("shop"))
+		for _, refusal := range []struct{ session, run, url string }{
+			{run.SessionID, "another-run", shopPull(1)},
+			{"unknown-terminal", run.RunID, shopPull(1)},
+			{run.SessionID, run.RunID, "https://github.com/acme/shop"},
+		} {
+			if err := driver.report("session.report_pull_request", map[string]any{
+				"session_id": refusal.session, "run_id": refusal.run, "url": refusal.url,
+			}); err == nil {
+				t.Fatalf("accepted invalid report %+v", refusal)
+			}
+		}
+		if got := pullNumbers(queriedSession(t, cli, session)); len(got) != 0 {
+			t.Fatalf("refused reports recorded pull requests %v", got)
+		}
+		driver.mustReport("session.report_pull_request", map[string]any{
+			"session_id": run.SessionID, "run_id": run.RunID, "url": shopPull(2),
+		})
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+			return slices.Equal(pullNumbers(s), []int{2})
+		})
+	})
 }
 
 func TestAMergeHarvestsTheSeedArmedOnItEvenAfterItsSessionsClosed(t *testing.T) {

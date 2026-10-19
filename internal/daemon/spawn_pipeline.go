@@ -445,7 +445,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
 	d.startEvidence(msg.ID, monitorEvidence{TerminalEvidence: sessionstate.TerminalEvidence{ReviewerInLoop: plan.spawnOpts.ApprovalRoute.ReviewerInLoop()}, ConversationEvidence: sessionstate.ConversationEvidence{InitialPromptOwed: hasInitialPrompt && reportsTurnStarts(req.agent)}})
 	d.rememberSessionTitleInitialPrompt(msg.ID, req.initialPrompt)
-	if req.hasPluginDriver && !d.store.BeginAgentDriverRun(session.ID, req.pluginDriver.PluginName, plan.pluginRunID) {
+	if req.hasPluginDriver && !d.beginAgentDriverRun(session.ID, req.pluginDriver.PluginName, plan.pluginRunID) {
 		d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
@@ -457,7 +457,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		if req.hasPluginDriver {
-			d.store.EndAgentDriverRun(msg.ID)
+			d.endAgentDriverRun(msg.ID)
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
 		if req.existingSession == nil {
@@ -470,9 +470,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
 	}
-	if err := d.store.DeleteSessionExitScreenBefore(msg.ID, req.spawnStartedAt); err != nil {
-		d.logf("exit screen of the previous process not cleared: session=%s err=%v", msg.ID, err)
-	}
+	d.clearExitScreenBefore(msg.ID, req.spawnStartedAt)
 	if hasInitialPrompt {
 		d.maybeGenerateSessionTitleFromPrompt(msg.ID, req.initialPrompt, sessionInputOrigin{})
 	}
@@ -584,8 +582,8 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
 	if !req.isShell && req.existingSession == nil && req.resumeSessionID == "" {
-		if err := d.store.InitializeSessionCostTracking(session.ID); err != nil {
-			d.logf("initialize session cost tracking for %s: %v", session.ID, err)
+		if entry := d.monitorEntry(session.ID); entry != nil {
+			entry.initializeCostSources(nil, false)
 		}
 	}
 	if plan.launchedConversation != "" {

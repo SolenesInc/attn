@@ -29,7 +29,8 @@ type Store struct {
 	sessions               map[protocol.SessionID]*protocol.Session
 	turnStamps             map[protocol.SessionID]TurnStamps
 	activityCursors        map[protocol.SessionID]string
-	sessionCosts           map[protocol.SessionID]SessionCostState
+	sessionCosts           map[protocol.SessionID]SessionMonitorCost
+	sessionLabels          map[protocol.SessionID]SessionLabels
 	agentDriverRuns        map[protocol.SessionID]AgentDriverReportCursor
 	agentDriverTranscripts map[protocol.SessionID]string
 	teardownIntents        map[protocol.SessionID]SessionTeardownIntent
@@ -113,7 +114,8 @@ func newMapBackedStore() *Store {
 		agentDriverRuns: make(map[protocol.SessionID]AgentDriverReportCursor),
 		teardownIntents: make(map[protocol.SessionID]SessionTeardownIntent),
 		sessionCloses:   make(map[protocol.SessionID]sessionCloseMark),
-		sessionCosts:    make(map[protocol.SessionID]SessionCostState),
+		sessionCosts:    make(map[protocol.SessionID]SessionMonitorCost),
+		sessionLabels:   make(map[protocol.SessionID]SessionLabels),
 		agentMetadata:   make(map[protocol.SessionID]string),
 		recentLocations: make(map[string]*protocol.RecentLocation),
 	}
@@ -259,6 +261,12 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 				stored.ActivityAt = protocol.Ptr(protocol.Deref(existing.ActivityAt))
 			}
 		}
+		labels := initialSessionLabels(session)
+		if prior := s.sessions[session.ID]; prior != nil && prior.Label == session.Label {
+			labels = s.sessionLabels[session.ID]
+		}
+		s.sessionLabels[session.ID] = labels
+		stored.Label = labels.shown(stored.ID, stored.Directory, stored.Agent)
 		s.sessions[session.ID] = stored
 		return nil
 	}
@@ -288,12 +296,21 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	if lastModelRequestAt == "" {
 		lastModelRequestAt = session.StateUpdatedAt
 	}
-	_, err := s.db.Exec(`
+	labels := initialSessionLabels(session)
+	var prior SessionLabels
+	err := s.db.QueryRow(`SELECT user_label,harness_title FROM sessions WHERE id=?`, session.ID).Scan(&prior.UserLabel, &prior.HarnessTitle)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && prior.shown(session.ID, session.Directory, session.Agent) == session.Label {
+		labels.UserLabel = prior.UserLabel
+	}
+	_, err = s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, priority)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, priority)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			label = excluded.label,
+			user_label = excluded.user_label,
 			agent = excluded.agent,
 			directory = excluded.directory,
 			profile_id = CASE WHEN sessions.profile_id = '' THEN excluded.profile_id ELSE sessions.profile_id END,
@@ -311,7 +328,8 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 			parent_session_id = excluded.parent_session_id,
 			last_seen = excluded.last_seen`,
 		session.ID,
-		session.Label,
+		labels.UserLabel,
+		labels.HarnessTitle,
 		session.Agent,
 		session.Directory,
 		session.ProfileID,
@@ -369,6 +387,7 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	}
 
 	var session protocol.Session
+	var labels SessionLabels
 	var stateSince, stateUpdatedAt, lastSeen string
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
 	var isWorktree, priority int
@@ -376,10 +395,11 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
-		&session.Label,
+		&labels.UserLabel,
+		&labels.HarnessTitle,
 		&session.Agent,
 		&session.Directory,
 		&session.ProfileID,
@@ -405,6 +425,7 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	if err != nil {
 		return nil
 	}
+	session.Label = labels.shown(session.ID, session.Directory, session.Agent)
 	applyTurnStamps(&session, TurnStamps{
 		OpenedAt:     parseTurnStamp(turnOpenedAt),
 		SettledAt:    parseTurnStamp(turnSettledAt),
@@ -536,12 +557,12 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
-			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+			FROM sessions WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
-			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
 		return nil
@@ -551,6 +572,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	var result []*protocol.Session
 	for rows.Next() {
 		var session protocol.Session
+		var labels SessionLabels
 		var stateSince, stateUpdatedAt, lastSeen string
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
 		var isWorktree, priority int
@@ -559,7 +581,8 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 		err := rows.Scan(
 			&session.ID,
-			&session.Label,
+			&labels.UserLabel,
+			&labels.HarnessTitle,
 			&session.Agent,
 			&session.Directory,
 			&session.ProfileID,
@@ -585,6 +608,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		if err != nil {
 			continue
 		}
+		session.Label = labels.shown(session.ID, session.Directory, session.Agent)
 		applyTurnStamps(&session, TurnStamps{
 			OpenedAt:     parseTurnStamp(turnOpenedAt),
 			SettledAt:    parseTurnStamp(turnSettledAt),
@@ -627,6 +651,12 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		result = append(result, &session)
 	}
 
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Label == result[j].Label {
+			return result[i].ID < result[j].ID
+		}
+		return result[i].Label < result[j].Label
+	})
 	return result
 }
 
@@ -719,51 +749,21 @@ func (s *Store) MarkModelRequestStarted(id protocol.SessionID, at time.Time) boo
 	return updated == 1
 }
 
-func (s *Store) UpdateBranch(id protocol.SessionID, branch string, isWorktree bool, mainRepo, repository string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		if session := s.sessions[id]; session != nil {
-			if branch != "" {
-				session.Branch = protocol.Ptr(branch)
-			} else {
-				session.Branch = nil
-			}
-			session.IsWorktree = protocol.Ptr(isWorktree)
-			if mainRepo != "" {
-				session.MainRepo = protocol.Ptr(mainRepo)
-			} else {
-				session.MainRepo = nil
-			}
-			if repository != "" {
-				session.Repository = protocol.Ptr(repository)
-			} else {
-				session.Repository = nil
-			}
-		}
-		return
-	}
-
-	_, err := s.db.Exec(`UPDATE sessions SET branch = ?, is_worktree = ?, main_repo = ?, repository = ? WHERE id = ? AND closed_at = ''`,
-		branch, boolToInt(isWorktree), mainRepo, repository, id)
-	if err != nil {
-		log.Printf("[store] UpdateBranch: failed for session %s: %v", id, err)
-	}
-}
-
 func (s *Store) UpdateSessionLabel(id protocol.SessionID, label string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.db == nil {
 		if session := s.sessions[id]; session != nil {
-			session.Label = label
+			labels := s.sessionLabels[id]
+			labels.UserLabel = label
+			s.sessionLabels[id] = labels
+			session.Label = labels.shown(id, session.Directory, session.Agent)
 		}
 		return
 	}
 
-	if _, err := s.db.Exec(`UPDATE sessions SET label = ? WHERE id = ? AND closed_at = ''`, label, id); err != nil {
+	if _, err := s.db.Exec(`UPDATE sessions SET user_label = ? WHERE id = ? AND closed_at = ''`, label, id); err != nil {
 		log.Printf("[store] UpdateSessionLabel: failed for session %s: %v", id, err)
 	}
 }
