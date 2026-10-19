@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/activity"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
@@ -480,6 +481,45 @@ func (d *Daemon) assistantWindow(sessionID protocol.SessionID, agent protocol.Se
 	}
 	return watcher.snapshot(), true
 }
+
+func (e *monitorEntry) activityTranscript() string {
+	if e == nil {
+		return ""
+	}
+	e.mu.Lock()
+	watcher, bound := e.transcriptWatch, strings.TrimSpace(e.conversationInput.TranscriptPath)
+	e.mu.Unlock()
+	if watcher != nil {
+		if path := watcher.exactPath(); path != "" {
+			return path
+		}
+	}
+	if bound == "" {
+		return ""
+	}
+	if _, err := os.Stat(bound); err != nil {
+		return ""
+	}
+	return bound
+}
+
+func (e *monitorEntry) transcriptEvents(cursor string) (activity.Window, error) {
+	path := e.activityTranscript()
+	if path == "" {
+		return activity.Window{}, errNoActivityTranscript
+	}
+	return activity.Read(path, string(e.agent), cursor)
+}
+
+func (e *monitorEntry) transcriptHead() (string, error) {
+	path := e.activityTranscript()
+	if path == "" {
+		return "", errNoActivityTranscript
+	}
+	return activity.SeedCursor(path)
+}
+
+var errNoActivityTranscript = errors.New("the session has no live transcript")
 
 func (d *Daemon) liveTranscriptPath(sessionID protocol.SessionID, agent protocol.SessionAgent) string {
 	e := d.monitorEntry(sessionID)

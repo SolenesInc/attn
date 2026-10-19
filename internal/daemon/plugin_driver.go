@@ -13,6 +13,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/transcript"
@@ -530,7 +531,7 @@ func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCM
 	session := d.store.Get(params.SessionID)
 	id := msg.ID
 	d.life.Go("classifyPluginStop", func() {
-		verdict, err := d.runClassifier(session, text, 30*time.Second)
+		verdict, err := d.runClassifier(session, text, 30*time.Second, headless.Enabled())
 		if err != nil {
 			verdict = protocol.StateUnknown
 		}

@@ -104,7 +104,7 @@ func (d *Daemon) syncAutoSettleLocked(sessionID protocol.SessionID, e *monitorEn
 		e.stopAutoSettleLocked()
 		return
 	}
-	if e.input.inNotificationRunLocked() && e.turnOwedLocked() && !e.turnByAgentLocked() && d.quietNotifications() {
+	if e.input.inNotificationRunLocked() && e.turnOwedLocked() && !e.turnByAgentLocked() && e.policy.QuietNotifications {
 		e.settleForAgentLocked(time.Now())
 		d.logf("turn settled by a notification run: session=%s", sessionID)
 	}
@@ -149,8 +149,8 @@ func (d *Daemon) armAutoSettle(sessionID protocol.SessionID) {
 }
 
 func (d *Daemon) armAutoSettleLocked(sessionID protocol.SessionID, e *monitorEntry) {
-	cfg := d.autoSettleConfig()
-	if !cfg.enabled || e.state.State != protocol.SessionStateWorking || e.dismissal != autoSettleDismissalOff || !d.monitorTurnOwed(sessionID, e) {
+	cfg := e.policy.AutoSettle
+	if !cfg.enabled || e.state.State != protocol.SessionStateWorking || e.dismissal != autoSettleDismissalOff || !e.owesUserLocked() {
 		return
 	}
 	if _, credited := e.input.currentUserRunLocked(); !credited {
@@ -161,16 +161,9 @@ func (d *Daemon) armAutoSettleLocked(sessionID protocol.SessionID, e *monitorEnt
 	}
 }
 
-func (d *Daemon) monitorTurnOwed(sessionID protocol.SessionID, e *monitorEntry) bool {
-	if !e.turn.OpenedAt.After(e.turn.SettledAt) {
-		return false
-	}
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return false
-	}
-	d.decorateChiefOfStaff(session, d.profileChiefs())
-	return !attention.Excluded(d.attentionInputFor(session))
+func (e *monitorEntry) owesUserLocked() bool {
+	return e.turnOwedLocked() &&
+		!attention.Excluded(attention.Input{IsShell: e.agent == protocol.SessionAgentShell, ChiefOfStaff: e.policy.ChiefOfStaff})
 }
 
 func (d *Daemon) holdAutoSettle(sessionID protocol.SessionID) {
@@ -273,18 +266,11 @@ func (d *Daemon) autoSettleFire(sessionID protocol.SessionID, e *monitorEntry, s
 }
 
 func (d *Daemon) runAutoSettleForLocked(sessionID protocol.SessionID, e *monitorEntry, phase, resume autoSettlePhase, armedRun sessionInputRunRef, armedTurn time.Time) string {
-	cfg := d.autoSettleConfig()
+	cfg := e.policy.AutoSettle
 	if !cfg.enabled {
 		return "disabled"
 	}
-	if d.store == nil {
-		return "noop"
-	}
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return "gone"
-	}
-	if sessionstate.ClassifierVerdictPending(e.evidence, sessionstate.PolicyFor(session.Agent), time.Now()) {
+	if sessionstate.ClassifierVerdictPending(e.evidence, sessionstate.PolicyFor(e.agent), time.Now()) {
 		return "classifying"
 	}
 	if e.state.State != protocol.SessionStateWorking {
@@ -297,7 +283,7 @@ func (d *Daemon) runAutoSettleForLocked(sessionID protocol.SessionID, e *monitor
 	if opened := e.turn.OpenedAt; opened.IsZero() || !opened.Equal(armedTurn) {
 		return "wrong-turn"
 	}
-	if !d.monitorTurnOwed(sessionID, e) {
+	if !e.owesUserLocked() {
 		return "not-owed"
 	}
 	if phase == autoSettleHeld || phase == autoSettleArming {

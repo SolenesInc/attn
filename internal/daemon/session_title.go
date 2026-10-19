@@ -103,20 +103,13 @@ func (d *Daemon) matchSessionTitleInitialPrompt(sessionID protocol.SessionID, pr
 }
 
 func (d *Daemon) sessionWantsAutoTitle(sessionID protocol.SessionID) bool {
-	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
-		return false
-	}
-	session := d.store.Get(sessionID)
-	if session == nil || !d.sessionMayBeAutoTitled(session) {
-		return false
-	}
 	e := d.monitorEntry(sessionID)
 	if e == nil {
 		return false
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return !e.titleAttempted
+	return e.policy.TitlesAllowed && e.policy.Headless && !e.titleAttempted
 }
 
 func (d *Daemon) enqueueSessionTitle(sessionID protocol.SessionID, conversation string, source string) {

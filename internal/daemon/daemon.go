@@ -182,19 +182,20 @@ type Daemon struct {
 	spawnLocksMu          sync.Mutex
 	spawnLocks            map[protocol.SessionID]*spawnLock
 
-	terminalsOnce         sync.Once
-	terminalState         *terminalRegistry
-	codexSharedOnce       sync.Once
-	codexSharedState      *codexShared
-	quickCaptureAssetMu   sync.Mutex
-	inboxMu               sync.Mutex
-	inboxStates           map[inbox.Address]*inboxDeliveryState
-	inboxUnsubscribe      func()
-	crewWakeMu            sync.Mutex
-	crewExitedMu          sync.Mutex
-	crewExitedSessions    map[string]string
-	supportInputTraceOnce sync.Once
-	supportInputTrace     *supportInputTraceRing
+	terminalsOnce            sync.Once
+	terminalState            *terminalRegistry
+	codexSharedOnce          sync.Once
+	codexSharedState         *codexShared
+	quickCaptureAssetMu      sync.Mutex
+	inboxMu                  sync.Mutex
+	inboxStates              map[inbox.Address]*inboxDeliveryState
+	inboxUnsubscribe         func()
+	monitorPolicyUnsubscribe func()
+	crewWakeMu               sync.Mutex
+	crewExitedMu             sync.Mutex
+	crewExitedSessions       map[string]string
+	supportInputTraceOnce    sync.Once
+	supportInputTrace        *supportInputTraceRing
 
 	emptyDesktops emptyDesktopRemoval
 
@@ -2860,7 +2861,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	}
 	d.logf("handleStop: session=%s, transcript_path=%s", sessionID, msg.TranscriptPath)
 
-	relaxBackgroundWork := d.isChiefOfStaffSession(sessionID)
+	relaxBackgroundWork := d.monitorEntry(sessionID).policyOf().ChiefOfStaff
 	classifies := !d.consumeForcedStopClassification(sessionID)
 	if classifies {
 		d.cancelAutoSettle(sessionID, "stop judged")

@@ -29,6 +29,8 @@ type sessionMonitor struct {
 type monitorEntry struct {
 	mu                  sync.Mutex
 	initialized         bool
+	policy              monitorPolicy
+	agent               protocol.SessionAgent
 	revision            uint64
 	state               monitorStateView
 	driver              monitorDriverMetadata
@@ -97,6 +99,7 @@ type monitorBinding struct {
 }
 
 type monitorRegistry struct {
+	policyMu  sync.Mutex
 	applyMu   sync.Mutex
 	mu        sync.Mutex
 	physical  map[harness.TerminalID]*sessionMonitor
@@ -208,9 +211,14 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	if previousID != "" {
 		previous = d.monitorEntry(previousID)
 	}
-	entry := d.monitors().start(terminal, conversation, sessionID, linked, candidate, func(entry *monitorEntry) {
+	r := d.monitors()
+	r.policyMu.Lock()
+	policy := d.monitorPolicyFrom(d.monitorPolicySources(), sessionID)
+	entry := r.start(terminal, conversation, sessionID, linked, candidate, func(entry *monitorEntry) {
+		entry.policy = policy
 		d.initializeMonitor(entry, sessionID)
 	})
+	r.policyMu.Unlock()
 	if previous != nil && previous != entry {
 		previous.mu.Lock()
 		typed := previous.input.userSubmit
@@ -245,6 +253,7 @@ func (d *Daemon) initializeMonitor(entry *monitorEntry, sessionID protocol.Sessi
 		if session := d.store.Get(sessionID); session != nil {
 			conversation := d.store.GetSessionConversation(sessionID)
 			entry.conversationInput = monitorConversation{agentConversationObservation: agentConversationObservation{SessionID: sessionID, NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath}}
+			entry.agent = session.Agent
 			entry.directory = session.Directory
 			entry.branch = branchFromSession(session)
 			entry.harnessTitle = d.store.SessionLabels(sessionID).HarnessTitle

@@ -161,7 +161,7 @@ func (e *monitorEntry) classifyStop(d *Daemon, sessionID protocol.SessionID, tra
 	}
 
 	d.logf("classifySessionState: calling classifier for session %s", sessionID)
-	state, err := d.runClassifier(session, classifierInput, 30*time.Second)
+	state, err := d.runClassifier(session, classifierInput, 30*time.Second, e.policyOf().Headless)
 	if err != nil {
 		d.logf("classifySessionState: classifier error for %s: %v", sessionID, err)
 	}
@@ -172,8 +172,9 @@ func (e *monitorEntry) classifyStop(d *Daemon, sessionID protocol.SessionID, tra
 	apply(decision)
 }
 
-func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout time.Duration) (string, error) {
-	if d.headlessTaskRefused("classifier") {
+func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout time.Duration, headlessTasks bool) (string, error) {
+	if !headlessTasks {
+		d.logf("headless task refused (classifier)")
 		return d.classifyFromMarker(session, text)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)

@@ -124,7 +124,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 			}
 			deadline := entry.turn.SnoozedUntil
 			opens = attention.OpensTurn(entry.state.State)
-			entry.openTurnLocked(time.Now(), d.quietNotifications() && entry.input.stopFollowsNotificationLocked())
+			entry.openTurnLocked(time.Now(), entry.policy.QuietNotifications && entry.input.stopFollowsNotificationLocked())
 			held = opens && !entry.turn.SnoozedUntil.IsZero()
 			if !deadline.IsZero() && entry.turn.SnoozedUntil.IsZero() {
 				endedSnooze = deadline
