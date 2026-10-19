@@ -66,8 +66,9 @@ commands:
 
   retire <member> [--profile <name|id>] [--json]
         Take a member out of service, release claims, remove watches and
-        close their open asks. Keep their name, home and unread mail; ask an
-        awake member to sleep. Restore doesn't reopen closed asks.
+        close their asks that aren't about a seed; asks about a seed wait for
+        its next tender. Keep their name, home and unread mail; ask an awake
+        member to sleep. Restore doesn't reopen closed asks.
 
   restore <member> [--profile <name|id>] [--json]
         Return a retired member to service. Unread mail can wake them.

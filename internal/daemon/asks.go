@@ -71,6 +71,9 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	case errors.Is(err, store.ErrAskSeedClosed):
 		d.sendError(conn, fmt.Sprintf("%s closed before the ask was saved; ask again", seedAddressID(to)))
 		return
+	case errors.Is(err, store.ErrAskerRetired):
+		d.sendError(conn, "you are retired, so your asks are closed and new ones are refused")
+		return
 	case err != nil:
 		d.sendError(conn, err.Error())
 		return

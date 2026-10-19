@@ -16,6 +16,7 @@ var (
 	ErrAskNotOpen    = errors.New("the ask is not open")
 	ErrAskerGone     = errors.New("the asking session is not live")
 	ErrAskSeedClosed = errors.New("the seed the ask is about is no longer open")
+	ErrAskerRetired  = errors.New("the asking crew member is retired")
 )
 
 type Ask struct {
@@ -49,6 +50,10 @@ func (s *Store) AddAsk(a Ask) error {
 		query += " AND EXISTS (SELECT 1 FROM " + seeds + " WHERE id = ? AND json_extract(body, '$.status') IN (?, ?, ?))"
 		args = append(args, seedID, garden.StatusPlanted, garden.StatusGrowing, garden.StatusDormant)
 	}
+	if key, ok := askMemberKey(a.To); ok {
+		query += " AND NOT EXISTS (SELECT 1 FROM crew_members WHERE member_key = ? AND retired_at != '')"
+		args = append(args, key)
+	}
 	result, err := s.db.Exec(query, args...)
 	if err != nil {
 		return err
@@ -67,7 +72,10 @@ func (s *Store) AddAsk(a Ask) error {
 	if live == 0 {
 		return ErrAskerGone
 	}
-	return ErrAskSeedClosed
+	if askSeedID(a.To) != "" {
+		return ErrAskSeedClosed
+	}
+	return ErrAskerRetired
 }
 
 func (s *Store) OpenAsks() ([]Ask, error) {
@@ -202,6 +210,12 @@ func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 	}
 	a.To = to
 	return a, nil
+}
+
+func askMemberKey(a who.Address) (who.MemberKey, bool) {
+	var key who.MemberKey
+	member, _ := who.SwitchAddress(a, func(protocol.SessionID) (bool, error) { return false, nil }, func(k who.MemberKey) (bool, error) { key = k; return true, nil }, func(string) (bool, error) { return false, nil })
+	return key, member
 }
 
 func askSeedID(a who.Address) string {

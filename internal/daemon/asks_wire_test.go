@@ -398,7 +398,7 @@ func TestClosingASessionClosesTheAsksAddressedToIt(t *testing.T) {
 	}
 }
 
-func TestRetiringAMemberClosesItsAsksAndRestoringKeepsThemClosed(t *testing.T) {
+func TestRetiringAMemberClosesItsAsksRefusesNewOnesAndRestoringKeepsThemClosed(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
@@ -420,6 +420,9 @@ func TestRetiringAMemberClosesItsAsksAndRestoringKeepsThemClosed(t *testing.T) {
 	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "late" })
 	if late.Success {
 		t.Fatal("an ask of a retired member took an answer")
+	}
+	if _, err := cli.AskOpen(day.SessionID, "", cacheAsk, "", w.Path("trellis")); err == nil || !strings.Contains(err.Error(), "you are retired") {
+		t.Fatalf("a retired member still awake asked again: %v, want a refusal saying it is retired", err)
 	}
 
 	if _, err := cli.CrewRestore("trellis"); err != nil {
