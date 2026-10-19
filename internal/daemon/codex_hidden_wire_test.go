@@ -147,9 +147,7 @@ func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesI
 	if entry.Usage.MeasurementIncomplete != nil {
 		t.Errorf("closing and archiving %s left its usage %+v, want it complete", checkout, entry.Usage)
 	}
-	if !archivedInCodex(t, w, conversation) {
-		t.Errorf("conversation %s was not archived in Codex", conversation)
-	}
+	w.CodexServer().AwaitArchived(conversation)
 
 	reopened := reopenOverTheWebSocket(app, checkout)
 	if !reopened.Success {
@@ -266,9 +264,7 @@ func TestInputReachesAHiddenSharedCodexSessionWithoutTouchingAnotherTerminalsDra
 	if entry := ledgerShowOverTheWebSocket(app, checkout).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
 		t.Errorf("the ledger shows %+v, want %s closed", entry, checkout)
 	}
-	if !archivedInCodex(t, w, conversation) {
-		t.Errorf("closing the hidden session left conversation %s unarchived", conversation)
-	}
+	server.AwaitArchived(conversation)
 	codex.Reply("Both added. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, sessionShownIn(t, w, app, terminal), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
@@ -516,12 +512,14 @@ func TestClosingASharedCodexSessionFromTheCLIArchivesItsConversation(t *testing.
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, _ := sharedCodexWaiting(t, w, app)
+	server := w.CodexServer()
 	if err := w.Client().Unregister(protocol.SessionID(checkout)); err != nil {
 		t.Fatalf("unregister %s: %v", checkout, err)
 	}
 	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && string(e.Session.ID) == checkout
 	})
+	server.AwaitStopped()
 	if !archivedInCodex(t, w, codex.ConversationID) {
 		t.Errorf("closing %s from the CLI left conversation %s unarchived", checkout, codex.ConversationID)
 	}

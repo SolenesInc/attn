@@ -288,10 +288,25 @@ func (r *codexShared) closing(sessionID protocol.SessionID) (afterClose func()) 
 	finishUsage := r.d.finishMonitorUsage(sessionID)
 	r.settleUsage(sessionID)
 	finishUsage()
-	return func() { r.archiveUnheld(session.ProfileID, sessionID, conversation) }
+	profile := session.ProfileID
+	r.mu.Lock()
+	r.archivingAfterClose[profile]++
+	r.mu.Unlock()
+	return func() {
+		r.archiveUnheld(profile, sessionID, conversation)
+		r.mu.Lock()
+		if r.archivingAfterClose[profile]--; r.archivingAfterClose[profile] == 0 {
+			delete(r.archivingAfterClose, profile)
+		}
+		r.mu.Unlock()
+		r.profileReleased(profile)
+	}
 }
 
 func (r *codexShared) archiveUnheld(profile string, closed protocol.SessionID, conversation string) {
+	lifecycle := r.d.sessionLifecycleLockFor(closed)
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	if holder := r.d.store.OtherOpenSessionHolding(conversation, ""); holder != "" {
 		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, closed, holder)
 		return
@@ -421,6 +436,10 @@ func (r *codexShared) profileReleased(profile string) {
 
 func (r *codexShared) needed(profile string) bool {
 	r.mu.Lock()
+	if r.archivingAfterClose[profile] > 0 {
+		r.mu.Unlock()
+		return true
+	}
 	for _, v := range r.views {
 		if v.profile == profile {
 			r.mu.Unlock()

@@ -102,6 +102,37 @@ func TestClosingASessionAnswersWhileItsResumeWaitsForItsSharedCodexAppServer(t *
 	}
 }
 
+func TestReopeningASessionClosedWhileItsResumeWaitedKeepsItsConversationLive(t *testing.T) {
+	w, app, session, conversation := stoppedSharedCodexSessionWithNoAppServer(t)
+	boot := w.HoldNextBoot()
+	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
+	w.AwaitHeldBoot()
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatalf("close %s: %s", session, protocol.Deref(closed.Error))
+	}
+
+	reopen := uuid.NewString()
+	app.Send(protocol.SessionReopenMessage{Cmd: protocol.CmdSessionReopen, RequestID: protocol.Ptr(reopen), SessionID: protocol.SessionID(session)})
+	boot()
+	if reopened := testworld.Await(app, protocol.EventSessionReopenResult, func(r protocol.SessionReopenResultMessage) bool { return r.RequestID == reopen }); !reopened.Success {
+		t.Fatalf("reopen %s after its close: %s", session, protocol.Deref(reopened.Error))
+	}
+	resumed := w.Launched(session)
+	if !resumed.Resumed || resumed.ConversationID != conversation {
+		t.Fatalf("the reopen ran %q showing %s (resumed=%v), want conversation %s", resumed.Argv, resumed.ConversationID, resumed.Resumed, conversation)
+	}
+	app.TypeLine(session, "pick up where we left off")
+	if got := resumed.Prompted(); got != "pick up where we left off" {
+		t.Fatalf("the reopened Codex received %q", got)
+	}
+	if archivedInCodex(t, w, conversation) {
+		t.Errorf("conversation %s of the reopened session is archived", conversation)
+	}
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatalf("close %s: %s", session, protocol.Deref(closed.Error))
+	}
+}
+
 func stoppedSharedCodexSessionWithNoAppServer(t *testing.T) (w *world, app *testworld.Peer, session, conversation string) {
 	t.Helper()
 	w = newWorld(t, fakeagent.Codex)
