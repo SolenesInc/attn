@@ -33,6 +33,7 @@ const (
 	methodFakeCrash      = "attn-fake/crash"
 	methodFakeTerminal   = "attn-fake/terminal"
 	methodThreadName     = "thread_name"
+	methodAwaitArchived  = "await_archived"
 	methodAskQuestion    = "ask_question"
 	methodInstructions   = "instructions"
 	methodCompactLimit   = "compact_limit"
@@ -45,18 +46,19 @@ const (
 )
 
 type codexAppServer struct {
-	cfg     config
-	version string
-	hooks   hookSet
-	toolEnv []string
-	mu      sync.Mutex
-	threads map[string]*codexServerThread
-	conns   map[*codexServerConn]bool
-	nextID  int
-	prompts map[string]chan string
-	names   map[string]string
-	named   chan struct{}
-	listed  chan struct{}
+	cfg      config
+	version  string
+	hooks    hookSet
+	toolEnv  []string
+	mu       sync.Mutex
+	threads  map[string]*codexServerThread
+	conns    map[*codexServerConn]bool
+	nextID   int
+	prompts  map[string]chan string
+	names    map[string]string
+	named    chan struct{}
+	archived chan struct{}
+	listed   chan struct{}
 }
 
 type codexServerConn struct {
@@ -101,6 +103,19 @@ func codexListenPath(argv []string) string {
 	return strings.TrimPrefix(codexServerFlags.parse(argv[2:]).value("--listen"), "unix://")
 }
 
+func codexServerProfile(argv []string) string {
+	configured, err := codexHooks(codexServerFlags.parse(argv[2:]).values["-c"], "")
+	if err != nil {
+		return ""
+	}
+	for _, env := range configured.env {
+		if profile, ok := strings.CutPrefix(env, harness.CodexSharedProfileEnv+"="); ok {
+			return profile
+		}
+	}
+	return ""
+}
+
 func runCodexAppServer(cfg config) int {
 	args := codexServerFlags.parse(os.Args[2:])
 	path := codexListenPath(os.Args)
@@ -110,16 +125,17 @@ func runCodexAppServer(cfg config) int {
 		return 1
 	}
 	s := &codexAppServer{
-		cfg:     cfg,
-		version: installedCodexVersion(),
-		hooks:   hookSet{groups: configured.groups, env: os.Environ()},
-		toolEnv: configured.env,
-		threads: map[string]*codexServerThread{},
-		conns:   map[*codexServerConn]bool{},
-		prompts: map[string]chan string{},
-		names:   map[string]string{},
-		named:   make(chan struct{}),
-		listed:  make(chan struct{}),
+		cfg:      cfg,
+		version:  installedCodexVersion(),
+		hooks:    hookSet{groups: configured.groups, env: os.Environ()},
+		toolEnv:  configured.env,
+		threads:  map[string]*codexServerThread{},
+		conns:    map[*codexServerConn]bool{},
+		prompts:  map[string]chan string{},
+		names:    map[string]string{},
+		named:    make(chan struct{}),
+		archived: make(chan struct{}),
+		listed:   make(chan struct{}),
 	}
 	control, err := dialControl(cfg, s.handleKit)
 	if err != nil {
@@ -762,6 +778,8 @@ func (s *codexAppServer) archive(id string) (any, func(), error) {
 	}
 	s.mu.Lock()
 	delete(s.threads, id)
+	close(s.archived)
+	s.archived = make(chan struct{})
 	s.mu.Unlock()
 	return map[string]any{}, func() {
 		s.broadcast("thread/status/changed", map[string]any{"threadId": id, "status": map[string]any{"type": "notLoaded"}})
@@ -769,30 +787,36 @@ func (s *codexAppServer) archive(id string) (any, func(), error) {
 	}, nil
 }
 
-func (s *codexAppServer) unarchive(id string) (any, func(), error) {
-	archived := filepath.Join(s.cfg.CodexHome, "archived_sessions")
-	entries, _ := os.ReadDir(archived)
+func (s *codexAppServer) archivedRollout(id string) string {
+	entries, _ := os.ReadDir(filepath.Join(s.cfg.CodexHome, "archived_sessions"))
 	for _, entry := range entries {
-		if !strings.HasSuffix(entry.Name(), "-"+id+".jsonl") {
-			continue
+		if strings.HasSuffix(entry.Name(), "-"+id+".jsonl") {
+			return entry.Name()
 		}
-		stamp, _, _ := strings.Cut(strings.TrimPrefix(entry.Name(), "rollout-"), "T")
-		date, err := time.Parse("2006-01-02", stamp)
-		if err != nil {
-			return nil, nil, err
-		}
-		dir := filepath.Join(s.cfg.CodexHome, "sessions", date.Format("2006/01/02"))
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, nil, err
-		}
-		if err := os.Rename(filepath.Join(archived, entry.Name()), filepath.Join(dir, entry.Name())); err != nil {
-			return nil, nil, err
-		}
-		return map[string]any{"thread": map[string]any{"id": id, "status": map[string]any{"type": "notLoaded"}}}, func() {
-			s.broadcast("thread/unarchived", map[string]any{"threadId": id})
-		}, nil
 	}
-	return nil, nil, fmt.Errorf("no archived rollout found for thread id %s", id)
+	return ""
+}
+
+func (s *codexAppServer) unarchive(id string) (any, func(), error) {
+	name := s.archivedRollout(id)
+	if name == "" {
+		return nil, nil, fmt.Errorf("no archived rollout found for thread id %s", id)
+	}
+	stamp, _, _ := strings.Cut(strings.TrimPrefix(name, "rollout-"), "T")
+	date, err := time.Parse("2006-01-02", stamp)
+	if err != nil {
+		return nil, nil, err
+	}
+	dir := filepath.Join(s.cfg.CodexHome, "sessions", date.Format("2006/01/02"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, nil, err
+	}
+	if err := os.Rename(filepath.Join(s.cfg.CodexHome, "archived_sessions", name), filepath.Join(dir, name)); err != nil {
+		return nil, nil, err
+	}
+	return map[string]any{"thread": map[string]any{"id": id, "status": map[string]any{"type": "notLoaded"}}}, func() {
+		s.broadcast("thread/unarchived", map[string]any{"threadId": id})
+	}, nil
 }
 
 type serverThreadParams struct {
@@ -836,6 +860,21 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			case <-named:
 			case <-deadline:
 				return nil, fmt.Errorf("conversation %s is named %q, not %q, after %s", p.ThreadID, name, p.Text, HangGuard)
+			}
+		}
+	case methodAwaitArchived:
+		deadline := time.After(HangGuard)
+		for {
+			s.mu.Lock()
+			archived := s.archived
+			s.mu.Unlock()
+			if s.archivedRollout(p.ThreadID) != "" {
+				return struct{}{}, nil
+			}
+			select {
+			case <-archived:
+			case <-deadline:
+				return nil, fmt.Errorf("conversation %s is not archived after %s", p.ThreadID, HangGuard)
 			}
 		}
 	case methodAskApproval:

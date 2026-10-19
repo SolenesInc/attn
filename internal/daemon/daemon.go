@@ -1979,12 +1979,16 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 			closed.FallbackLabel = store.DefaultSessionLabel(session.Directory, sessionID)
 		}
 	}
+	var afterClose func()
 	if l := d.linkOf(sessionID); l != nil {
-		l.closed(sessionID)
+		afterClose = l.closing(sessionID)
 	}
 	d.recordSessionClose(sessionID, func() (store.SessionClosure, error) {
 		return d.store.CloseSession(sessionID, closed, time.Now())
 	})
+	if afterClose != nil {
+		d.life.Go("linkAfterSessionClose", afterClose)
+	}
 }
 
 func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (store.SessionClosure, error)) {

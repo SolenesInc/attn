@@ -52,6 +52,8 @@ type codexShared struct {
 	seq       uint64
 	installed string
 	latest    string
+
+	archivingAfterClose map[string]int
 }
 
 type codexServer struct {
@@ -87,7 +89,7 @@ type codexView struct {
 
 func (d *Daemon) codexShared() *codexShared {
 	d.codexSharedOnce.Do(func() {
-		r := &codexShared{d: d, servers: make(map[string]*codexServer), views: make(map[harness.TerminalID]*codexView)}
+		r := &codexShared{d: d, servers: make(map[string]*codexServer), views: make(map[harness.TerminalID]*codexView), archivingAfterClose: make(map[string]int)}
 		d.codexSharedState = r
 		d.life.Go("codexSharedStop", func() {
 			<-d.life.Done()

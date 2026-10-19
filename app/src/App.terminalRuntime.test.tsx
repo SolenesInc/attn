@@ -492,6 +492,22 @@ describe('App terminal runtime', () => {
     expect(screen.getByText('Failed to reload session: reload denied')).toBeInTheDocument();
   });
 
+  it('says nothing when a reload fails because the session closed while it waited', async () => {
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('reload_session', () => undefined);
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for s1' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Reload session/ }));
+    await daemon.idle();
+
+    daemon.emit({ event: 'session_unregistered', session: daemonSession('s1') });
+    await daemon.idle();
+    daemon.emit({ event: 'reload_session_result', id: 's1', success: false, error: 'spawned session s1 is no longer open' });
+    await daemon.idle();
+
+    expect(daemon.sentOf('reload_session')).toEqual([{ cmd: 'reload_session', id: 's1', cols: 80, rows: 24 }]);
+    expect(screen.queryByText(/Failed to reload session/)).toBeNull();
+  });
+
   it('reports pointer activity over a terminal, naming the terminal, only once the daemon handshake completes', async () => {
     const { daemon } = await renderApp({
       initialState: {

@@ -51,6 +51,11 @@ func (s *CodexServer) AwaitName(conversation, name string) {
 	s.call(methodThreadName, serverThreadParams{ThreadID: conversation, Text: name}, nil)
 }
 
+func (s *CodexServer) AwaitArchived(conversation string) {
+	s.t.Helper()
+	s.call(methodAwaitArchived, serverThreadParams{ThreadID: conversation}, nil)
+}
+
 func (s *CodexServer) AskApproval(conversation string) {
 	s.t.Helper()
 	s.call(methodAskApproval, serverThreadParams{ThreadID: conversation}, nil)

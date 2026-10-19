@@ -279,28 +279,48 @@ func (r *codexShared) serverGone(profile string) {
 	})
 }
 
-func (r *codexShared) closed(sessionID protocol.SessionID) {
+func (r *codexShared) closing(sessionID protocol.SessionID) (afterClose func()) {
 	conversation := r.conversation(sessionID)
 	session := r.d.store.Get(sessionID)
 	if conversation == "" || session == nil {
-		return
+		return nil
 	}
-	defer r.d.finishMonitorUsage(sessionID)()
-	defer r.settleUsage(sessionID)
-	if other := r.d.store.OtherOpenSessionHolding(conversation, sessionID); other != "" {
-		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, sessionID, other)
+	finishUsage := r.d.finishMonitorUsage(sessionID)
+	r.settleUsage(sessionID)
+	finishUsage()
+	profile := session.ProfileID
+	r.mu.Lock()
+	r.archivingAfterClose[profile]++
+	r.mu.Unlock()
+	return func() {
+		r.archiveUnheld(profile, sessionID, conversation)
+		r.mu.Lock()
+		if r.archivingAfterClose[profile]--; r.archivingAfterClose[profile] == 0 {
+			delete(r.archivingAfterClose, profile)
+		}
+		r.mu.Unlock()
+		r.profileReleased(profile)
+	}
+}
+
+func (r *codexShared) archiveUnheld(profile string, closed protocol.SessionID, conversation string) {
+	lifecycle := r.d.sessionLifecycleLockFor(closed)
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
+	if holder := r.d.store.OtherOpenSessionHolding(conversation, ""); holder != "" {
+		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, closed, holder)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
-	_, client, err := r.control(ctx, session.ProfileID)
+	_, client, err := r.control(ctx, profile)
 	if err == nil {
 		callCtx, cancelCall := context.WithTimeout(ctx, codexServerCallLimit)
 		_, err = client.Call(callCtx, "thread/archive", map[string]any{"threadId": conversation})
 		cancelCall()
 	}
 	if err != nil {
-		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, sessionID, err)
+		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, closed, err)
 	}
 }
 
@@ -408,6 +428,10 @@ func (r *codexShared) profileReleased(profile string) {
 
 func (r *codexShared) needed(profile string) bool {
 	r.mu.Lock()
+	if r.archivingAfterClose[profile] > 0 {
+		r.mu.Unlock()
+		return true
+	}
 	for _, v := range r.views {
 		if v.profile == profile {
 			r.mu.Unlock()

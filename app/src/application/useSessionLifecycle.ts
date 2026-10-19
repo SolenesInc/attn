@@ -121,6 +121,7 @@ export function useSessionLifecycle({
       const paneId = session?.desktop.agents.find((pane) => pane.sessionId === id)?.id;
       const size = paneId ? getPaneSize(id, paneId) || undefined : undefined;
       void reloadSession(id, size).catch((error) => {
+        if (!useSessionStore.getState().sessions.some((entry) => entry.id === id)) return;
         const message = error instanceof Error ? error.message : String(error);
         showError(`Failed to reload session: ${message}`);
       });
