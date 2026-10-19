@@ -16,6 +16,7 @@ vi.mock('@tauri-apps/api/app', () => ({
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({
+  emitTo: vi.fn().mockResolvedValue(undefined),
   emit: vi.fn(async () => {}),
   listen: vi.fn(async () => () => {}),
 }));

@@ -170,7 +170,7 @@ fn log_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
         .map(|dir| dir.join(LOG_RELATIVE_PATH))
 }
 
-fn append_log<R: Runtime>(app: &AppHandle<R>, message: &str) {
+pub(crate) fn append_log<R: Runtime>(app: &AppHandle<R>, message: &str) {
     let Some(path) = log_path(app) else {
         eprintln!("[UIAutomation] {message}");
         return;
@@ -429,7 +429,15 @@ fn handle_request<R: Runtime>(
     let (sender, receiver) = mpsc::channel();
     pending.insert(request_id.clone(), sender);
 
-    if let Err(error) = app.emit(REQUEST_EVENT, &bridge_request) {
+    let delivery = if matches!(
+        bridge_request.action.as_str(),
+        "capture_state" | "capture_binding" | "capture_dismiss"
+    ) {
+        app.emit_to("capture", "attn://capture/automation", &bridge_request)
+    } else {
+        app.emit(REQUEST_EVENT, &bridge_request)
+    };
+    if let Err(error) = delivery {
         pending.remove(&request_id);
         append_log(
             app,

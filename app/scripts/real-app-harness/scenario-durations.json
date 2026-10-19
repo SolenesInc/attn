@@ -300,6 +300,14 @@
         "seconds": 29.596,
         "runnerClass": "hosted Linux",
         "note": "Green native scenario durationMs=29596, including uploads, agent inbox delivery, byte-exact image/PDF retrieval and cleanup. Receipt: app-acceptance-evidence-1-shard-3/last-matrix.json and matrix-digest.txt."
+      },
+      "quick-capture": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/39176091798",
+        "job": "App acceptance macOS",
+        "recordedAt": "2026-10-19",
+        "seconds": 206.599,
+        "runnerClass": "hosted macOS",
+        "note": "Green quick-capture durationMs=206599 in last-matrix.json, revision221afcbcb, including the enable-first recording, native shortcut, focus, file delivery, history, disable/re-enable draft retention and cleanup. Artifact12154318251."
       }
     }
   },
@@ -363,6 +371,7 @@
     "new-session-launcher": 22.491,
     "agent-terminals": 6.524,
     "shell-titles": 14.058,
-    "callouts": 39.5
+    "callouts": 39.5,
+    "quick-capture": 206.599
   }
 }

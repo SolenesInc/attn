@@ -45,6 +45,7 @@ const (
 	SettingOpenSentFilesEnabled          = "open_sent_files_enabled"
 	SettingAutoSettleEnabled             = "auto_settle_enabled"
 	SettingAsksEnabled                   = "asks_enabled"
+	SettingCaptureShortcut               = "capture.shortcut"
 	SettingQuickCaptureEnabled           = "quick_capture_enabled"
 	SettingCalloutsEnabled               = "callouts_enabled"
 	SettingAutoSettleArmSeconds          = "auto_settle_arm_seconds"
@@ -101,6 +102,7 @@ type settingSpec struct {
 func (d *Daemon) daemonSetting(key daemonSettingKey) string { return d.store.GetSetting(string(key)) }
 
 var settingSpecs = []settingSpec{
+	{key: SettingCaptureShortcut, scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: SettingQuickCaptureEnabled, scope: daemonScope, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingNewSessionLauncherEnabled, scope: daemonScope, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingDirectAgentLaunchEnabled, scope: daemonScope, description: "Launch agents directly: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},

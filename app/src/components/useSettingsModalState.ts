@@ -282,6 +282,7 @@ export function useSettingsModalState({
   const codexSharedEnabled = settings.codex_shared_enabled === 'true';
   const queueShowHiddenSessions = settings.queue_show_hidden_sessions !== 'false';
   const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
+  const quickCaptureEnabled = settings.quick_capture_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
 
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
@@ -742,6 +743,7 @@ export function useSettingsModalState({
     codexSharedEnabled,
     queueShowHiddenSessions,
     directAgentLaunchEnabled,
+    quickCaptureEnabled,
     onSetSetting,
     settings,
     activityAgents,
