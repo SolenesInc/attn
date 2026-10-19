@@ -234,9 +234,16 @@ func delegateRolesInstall(w io.Writer, args []string) error {
 	next := live.Preferences
 	next.Enabled, next.WorkflowSkillEnabled = true, true
 	for _, template := range prompts.DelegationRoleTemplates() {
-		if !slices.ContainsFunc(next.Roles, func(role protocol.DelegationRole) bool { return role.ID == template.ID }) {
-			next.Roles = append(next.Roles, template)
+		if slices.ContainsFunc(next.Roles, func(role protocol.DelegationRole) bool {
+			return protocol.Deref(role.Builtin) == protocol.Deref(template.Builtin)
+		}) {
+			continue
 		}
+		stem := template.ID
+		for suffix := 2; slices.ContainsFunc(next.Roles, func(role protocol.DelegationRole) bool { return role.ID == template.ID }); suffix++ {
+			template.ID = fmt.Sprintf("%s-%d", stem, suffix)
+		}
+		next.Roles = append(next.Roles, template)
 	}
 	saved, paths, err := c.InstallDelegationRoles(next, *message)
 	if client.ErrorCode(err) == protocol.ErrorCodeConflict {

@@ -1,6 +1,10 @@
 package main_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -38,15 +42,38 @@ func TestTheRoleInstallCommandKeepsCustomRoles(t *testing.T) {
 	s.Start()
 	prompttest.Equal(t, "delegation-roles-help", map[string]string{"help": s.Attn("delegate", "roles", "--help").Stdout})
 	requireStdout(t, s.Attn("delegate", "roles", "add", "special", "--name", "Specialist", "--agent", "claude", "--model", "sonnet"), "revision")
+	requireStdout(t, s.Attn("delegate", "roles", "add", "builder", "--name", "My builder", "--agent", "claude", "--model", "sonnet"), "revision")
 	requireStdout(t, s.Attn("delegate", "roles", "install", "-m", "use Attn roles"), "installed", "attn-workflow", "pathfinder", "builder", "reviewer", "orchestrator", "prototyper", "special")
 	var preferences protocol.DelegationPreferences
 	s.Attn("delegate", "roles", "show", "--json").JSON(t, &preferences)
-	if !preferences.WorkflowSkillEnabled || len(preferences.Roles) != 6 || preferences.Roles[0].ID != "special" {
+	if !preferences.WorkflowSkillEnabled || len(preferences.Roles) != 7 || preferences.Roles[0].ID != "special" {
 		t.Fatalf("installed: %+v", preferences)
 	}
+	builtins := func() []protocol.DelegationRole {
+		return slices.DeleteFunc(slices.Clone(preferences.Roles), func(role protocol.DelegationRole) bool { return role.Builtin == nil })
+	}
+	if len(builtins()) != 5 || preferences.Roles[1].Builtin != nil || preferences.Roles[1].ID != "builder" {
+		t.Fatalf("install lost the custom builder or missed a maintained role: %+v", preferences.Roles)
+	}
+	requireStdout(t, s.Attn("delegate", "roles", "rm", "builder"), "revision")
+	s.Attn("delegate", "roles", "show", "--json").JSON(t, &preferences)
+	for index := range preferences.Roles {
+		if protocol.Deref(preferences.Roles[index].Builtin) == protocol.BuiltinDelegationRoleBuilder {
+			preferences.Roles[index].ID = "implementer"
+		}
+	}
+	raw, err := json.Marshal(preferences)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "adopted-roles.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	requireStdout(t, s.Attn("delegate", "roles", "apply", path), "revision")
 	requireStdout(t, s.Attn("delegate", "roles", "install"), "installed")
 	s.Attn("delegate", "roles", "show", "--json").JSON(t, &preferences)
-	if len(preferences.Roles) != 6 {
+	if len(preferences.Roles) != 6 || len(builtins()) != 5 {
 		t.Fatalf("reinstall duplicated roles: %+v", preferences.Roles)
 	}
 }
