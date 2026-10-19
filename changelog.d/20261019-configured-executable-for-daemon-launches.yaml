@@ -1,0 +1,4 @@
+kind: fixed
+area: crew
+change: Crew wakes, delegations and handoffs start the harness executable set in settings. They used to start whichever one was first on PATH.
+symptom: A crew member woke on the stock harness even though settings named a different executable.

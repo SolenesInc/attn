@@ -812,3 +812,58 @@ func TestCrewEditsFromTheAppAreRevisionChecked(t *testing.T) {
 		}
 	})
 }
+
+func TestTheConfiguredHarnessExecutableLaunchesWakesAndReloads(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run(fmt.Sprintf("direct=%t", direct), func(t *testing.T) {
+			w := newCrewWorld(t, fakeagent.Claude)
+			app, cli := w.App(), w.Client()
+			t.Setenv("ATTN_CLAUDE_EXECUTABLE", "")
+			if direct {
+				setSetting(t, app, "direct_agent_launch_enabled", "true")
+			}
+			markedClaude := func(name string) string {
+				path := w.Path("tools", name)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				script := fmt.Sprintf("#!/bin/sh\nATTN_TEST_LAUNCHED_BY=%s exec '%s' \"$@\"\n", name, filepath.Join(w.Dir, "bin", "claude"))
+				if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				return path
+			}
+			launchedBy := func(run *fakeagent.Run) string {
+				for _, pair := range run.Env {
+					if value, ok := strings.CutPrefix(pair, "ATTN_TEST_LAUNCHED_BY="); ok {
+						return value
+					}
+				}
+				return "PATH"
+			}
+			setSetting(t, app, "claude_executable", markedClaude("configured-claude"))
+
+			woken := wakeCrew(t, cli, "trellis", "claude")
+			if got := launchedBy(w.Launched(string(woken.SessionID))); got != "configured-claude" {
+				t.Errorf("a crew wake launched claude from %s, want the configured executable", got)
+			}
+
+			reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: woken.SessionID, Cols: 100, Rows: 30},
+				protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return r.ID == woken.SessionID })
+			if !reloaded.Success {
+				t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
+			}
+			if got := launchedBy(w.Launched(string(woken.SessionID))); got != "configured-claude" {
+				t.Errorf("a reloaded crew session launched claude from %s, want the configured executable", got)
+			}
+
+			chosen := markedClaude("chosen-claude")
+			session := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+				m.Executable = protocol.Ptr(chosen)
+			})
+			if got := launchedBy(w.Launched(session)); got != "chosen-claude" {
+				t.Errorf("a spawn naming its executable launched claude from %s, want the one it named", got)
+			}
+		})
+	}
+}
