@@ -75,6 +75,7 @@ CREATE TABLE launch_desktops ( kind TEXT NOT NULL CHECK(kind IN ('automation', '
 CREATE TABLE markdown_annotation_drafts ( path TEXT PRIMARY KEY, annotations_json TEXT NOT NULL, generation INTEGER NOT NULL, tombstone_generation INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL );
 CREATE TABLE monitored_worktree_repositories ( main_repo TEXT PRIMARY KEY NOT NULL );
 CREATE TABLE notifications ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', detail TEXT NOT NULL DEFAULT '', source_kind TEXT NOT NULL DEFAULT '', source_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, read_at TEXT NOT NULL DEFAULT '' , severity TEXT NOT NULL DEFAULT 'info', trigger TEXT NOT NULL DEFAULT '', impact TEXT NOT NULL DEFAULT '', cause TEXT NOT NULL DEFAULT '', diagnostic TEXT NOT NULL DEFAULT '', actions_json TEXT NOT NULL DEFAULT '');
+CREATE TABLE outposts ( id TEXT PRIMARY KEY, name TEXT NOT NULL, address TEXT NOT NULL UNIQUE, host_key TEXT, daemon_id TEXT UNIQUE, added_at TEXT NOT NULL, paired_at TEXT );
 CREATE TABLE peer_messages ( id TEXT PRIMARY KEY, sender_session_id TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL );
 CREATE TABLE pr_interactions ( pr_id TEXT PRIMARY KEY, last_visited_at TEXT, last_approved_at TEXT, last_seen_sha TEXT, last_seen_comment_count INTEGER , last_seen_ci_status TEXT);
 CREATE TABLE pr_poll_times ( pr_id TEXT PRIMARY KEY REFERENCES prs(id) ON DELETE CASCADE, last_updated TEXT NOT NULL, last_polled TEXT NOT NULL );

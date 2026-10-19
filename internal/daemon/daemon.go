@@ -97,6 +97,8 @@ var ErrAlreadyRunning = errors.New("daemon already running")
 type Daemon struct {
 	monitorsOnce        sync.Once
 	monitorState        *monitorRegistry
+	outposts            outpostsRuntime
+	outpost             outpostRuntime
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
 	// Nil in production; wire tests pause a profile action here, its broadcasts held, to land a change meanwhile.
@@ -590,9 +592,6 @@ func (d *Daemon) Start() error {
 		d.plugins = newPluginRegistry()
 	}
 	startSucceeded := false
-	if err := enrollment.RefuseOutpost(d.dataRoot); err != nil {
-		return err
-	}
 	if err := d.acquirePIDLock(); err != nil {
 		return fmt.Errorf("acquire PID lock: %w", err)
 	}
@@ -637,6 +636,12 @@ func (d *Daemon) Start() error {
 	}
 	if err := d.recoverQuickCaptureAssets(); err != nil {
 		d.logf("quick capture asset recovery incomplete: %v", err)
+	}
+	if d.daemonSetting(settingOutpostListen) != "" {
+		d.configureOutpostListener()
+	}
+	if d.outpostsEnabled() {
+		d.configureOutposts()
 	}
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()

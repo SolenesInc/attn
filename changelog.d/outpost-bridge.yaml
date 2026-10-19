@@ -1,0 +1,4 @@
+kind: added
+area: outposts
+change: Daemons can pair over an experimental SSH bridge and report connection health, with explicit opt-in on each side.
+notes: This slice carries connection health only; agents, terminals and files stay on their current machine.

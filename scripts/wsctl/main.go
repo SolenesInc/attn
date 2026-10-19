@@ -41,6 +41,8 @@ func main() {
 		err = screen(args)
 	case "input":
 		err = input(args)
+	case "outposts":
+		err = outposts(args)
 	case "list":
 		err = list(args)
 	case "refresh-prs":
@@ -72,6 +74,7 @@ Commands:
   input --id I --text T [--enter]
   list
   refresh-prs
+  outposts [--add NAME --address HOST:PORT | --remove ID | --repair ID] [--until STATE | --watch]
 `, wsURL())
 }
 

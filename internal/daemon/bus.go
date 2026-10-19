@@ -75,6 +75,7 @@ const (
 	FactPluginHealthChanged    = "plugin.health.changed"
 	FactPluginDriverRegistered = "plugin.driver.registered"
 
+	FactOutpostChanged        = "outpost.changed"
 	FactSettingChanged        = "setting.changed"
 	FactBackupWritten         = "backup.written"
 	FactTailscaleServeChanged = "tailscale.serve.changed"
@@ -130,6 +131,7 @@ func wireProjections() []projection {
 
 func buildWireProjections() []projection {
 	return []projection{
+		{filter: bus.Filter{FactOutpostChanged}, apply: func(d *Daemon, _ bus.Event) { d.projectOutpostsUpdated() }},
 		{filter: bus.Filter{FactQuickCaptureRead}, apply: func(d *Daemon, ev bus.Event) {
 			var scope struct {
 				ProfileID string `json:"profile_id"`
@@ -339,6 +341,9 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSettingChanged},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSettingsUpdated(ev.Subject)
+				if ev.Subject == string(settingOutpostsEnabled) {
+					d.projectOutpostsUpdated()
+				}
 				if settingShapesCrewLaunch(ev.Subject) {
 					d.projectCrewRoster()
 				}

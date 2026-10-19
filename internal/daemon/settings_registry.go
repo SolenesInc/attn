@@ -11,6 +11,14 @@ import (
 )
 
 const (
+	settingOutpostsEnabled  daemonSettingKey = "outposts_enabled"
+	settingOutpostListen    daemonSettingKey = "outpost_listen"
+	settingOutpostState     daemonSettingKey = "outpost_state"
+	settingOutpostHome      daemonSettingKey = "outpost_home"
+	settingOutpostLastError daemonSettingKey = "outpost_last_error"
+)
+
+const (
 	SettingProjectsDirectory             = "projects_directory"
 	SettingUIScale                       = "uiScale"
 	SettingGardenScale                   = "gardenScale"
@@ -102,6 +110,16 @@ type settingSpec struct {
 func (d *Daemon) daemonSetting(key daemonSettingKey) string { return d.store.GetSetting(string(key)) }
 
 var settingSpecs = []settingSpec{
+	{key: string(settingOutpostsEnabled), scope: daemonScope, description: "Connect to outposts from this home: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: string(settingOutpostListen), scope: daemonScope, description: "Listen for a home bridge on this address:port. Empty disables the outpost listener.", validate: func(d *Daemon, key, value string) error {
+		if value == "" {
+			return nil
+		}
+		return validateOutpostAddress(value)
+	}},
+	{key: string(settingOutpostState), scope: daemonScope, description: "Current outpost listener and bridge state.", readOnly: true},
+	{key: string(settingOutpostHome), scope: daemonScope, description: "Recorded home daemon id. Release it with attn enrollment leave.", readOnly: true},
+	{key: string(settingOutpostLastError), scope: daemonScope, description: "Last outpost bridge error, kept until the next successful connection.", readOnly: true},
 	{key: SettingCaptureShortcut, scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: SettingQuickCaptureEnabled, scope: daemonScope, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingNewSessionLauncherEnabled, scope: daemonScope, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},

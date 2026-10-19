@@ -289,6 +289,27 @@ model WorktreeSweepEntry {
   at: string;
 }
 
+enum OutpostState {
+  connecting,
+  connected,
+  stalled,
+  lost,
+  refused,
+}
+
+model OutpostInfo {
+  id: string;
+  name: string;
+  address: string;
+  state: OutpostState;
+  state_since: string;
+  daemon_id?: string;
+  host_key_fingerprint?: string;
+  build?: string;
+  last_error?: string;
+  last_error_at?: string;
+}
+
 model PluginInfo {
   name: string;
   version: string;
@@ -1550,6 +1571,10 @@ model SettingEntry {
 model SettingsListResult {
   entries: SettingEntry[];
 }
+
+model AddOutpostMessage { cmd: "add_outpost"; name: string; address: string; }
+model RemoveOutpostMessage { cmd: "remove_outpost"; id: string; }
+model RepairOutpostMessage { cmd: "repair_outpost"; id: string; }
 
 model ListPluginsMessage {
   cmd: "list_plugins";
@@ -3544,6 +3569,8 @@ model GitHubHostsUpdatedMessage {
   github_hosts: string[];
   github_polling_off_reason?: string;
 }
+
+model OutpostsUpdatedMessage { event: "outposts_updated"; outposts: OutpostInfo[]; }
 
 model PluginsUpdatedMessage {
   event: "plugins_updated";
@@ -7110,6 +7137,7 @@ alias DaemonEvent =
   | SettingsUpdatedMessage
   | GitHubHostsUpdatedMessage
   | PluginsUpdatedMessage
+  | OutpostsUpdatedMessage
   | PluginActionResultMessage
   | RecentLocationsResultMessage
   | BranchesResultMessage
