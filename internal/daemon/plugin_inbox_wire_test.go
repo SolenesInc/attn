@@ -55,8 +55,7 @@ func TestAnInboxHeldForApprovalRingsOnceTheDriverReportsIdle(t *testing.T) {
 		t.Fatal(err)
 	}
 	testworld.AwaitSession(app, asking, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
-	app.TypeLine(asking, "yes, allow it")
-	app.AwaitScreen(asking, "yes, allow it")
+	app.Watch(asking)
 	sent := sendAgentMessage(t, cli, author, asking, "take a look")
 	if sent.Status != protocol.AgentMsgStatusQueued {
 		t.Fatalf("approval send=%+v", sent)

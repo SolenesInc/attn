@@ -193,15 +193,12 @@ func (r *terminalRegistry) Primary(s harness.SessionID) (harness.TerminalID, boo
 	return primary, seq > 0
 }
 
-func (r *terminalRegistry) noteKey(t harness.TerminalID, at time.Time) (previous time.Time, placed bool) {
+func (r *terminalRegistry) noteKey(t harness.TerminalID, at time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	entry := r.byID[t]
-	if entry == nil {
-		return time.Time{}, false
+	if entry := r.byID[t]; entry != nil {
+		entry.lastKey = at
 	}
-	previous, entry.lastKey = entry.lastKey, at
-	return previous, true
 }
 
 func (r *terminalRegistry) lastKeyOf(t harness.TerminalID) time.Time {
@@ -211,14 +208,6 @@ func (r *terminalRegistry) lastKeyOf(t harness.TerminalID) time.Time {
 		return entry.lastKey
 	}
 	return time.Time{}
-}
-
-func (r *terminalRegistry) forgetKey(t harness.TerminalID) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if entry := r.byID[t]; entry != nil {
-		entry.lastKey = time.Time{}
-	}
 }
 
 const endingGrace = time.Minute

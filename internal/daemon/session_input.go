@@ -10,7 +10,6 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 type sessionInputStage uint8
@@ -137,19 +136,14 @@ type sessionInputLane struct {
 	mu    *sync.Mutex
 	entry *monitorEntry
 
-	retries map[string]*sessionInputRetry
-	run     *sessionInputRunState
-	placing bool
-	// attn's paste may still sit in the composer. Only a turn start or the
-	// user's own typing clears it: nothing confirms the harness took the paste.
-	occupied                 bool
+	retries                  map[string]*sessionInputRetry
+	run                      *sessionInputRunState
+	placing                  bool
 	creditNextRun            bool
 	notifyNextRun            bool
 	stoppedAfterNotification bool
-	titleNext                *sessionInputDelivery
 	epoch                    uint64
 	userSubmit               bool
-	heldEnter                bool
 	phase                    protocol.SessionState
 	stopped                  bool
 	running                  sync.WaitGroup
@@ -159,12 +153,9 @@ type sessionInputModule struct{ daemon *Daemon }
 
 var (
 	errSessionInputBlockedByApproval = errors.New("session input blocked by pending approval")
-	errSessionInputBlockedBySelector = errors.New("session input blocked by an on-screen selector")
 	errSessionInputComposerDirty     = errors.New("session input blocked by the user's composer")
-	errSessionInputComposerOccupied  = errors.New("session input blocked by an unresolved automated composer")
 	errSessionInputPlacingAnother    = errors.New("another session input is being placed")
 	errSessionInputLaneClosed        = errors.New("the session's input lane is closed")
-	errSessionInputScreenUnavailable = errors.New("session input blocked because the screen is unavailable")
 	errSessionInputInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
 )
 
@@ -183,25 +174,22 @@ type sessionInputRetry struct {
 	resend func()
 }
 
-var sessionInputComposerRetry = 3 * time.Second
+var sessionInputPlacingRetry = 3 * time.Second
 
 func sessionInputRetryDelay(err error) (time.Duration, bool) {
 	var quiet *sessionInputQuietError
 	if errors.As(err, &quiet) {
 		return quiet.retryAfter, true
 	}
-	if errors.Is(err, errSessionInputComposerOccupied) || errors.Is(err, errSessionInputPlacingAnother) {
-		return sessionInputComposerRetry, true
+	if errors.Is(err, errSessionInputPlacingAnother) {
+		return sessionInputPlacingRetry, true
 	}
 	return 0, false
 }
 
 func sessionInputDeferredError(err error) bool {
 	return errors.Is(err, errSessionInputBlockedByApproval) ||
-		errors.Is(err, errSessionInputBlockedBySelector) ||
 		errors.Is(err, errSessionInputComposerDirty) ||
-		errors.Is(err, errSessionInputComposerOccupied) ||
-		errors.Is(err, errSessionInputScreenUnavailable) ||
 		errors.Is(err, errSessionInputInitialPrompt)
 }
 
@@ -236,10 +224,6 @@ func (m sessionInputModule) resetSession(sessionID protocol.SessionID) {
 	lane.running.Wait()
 	e.mu.Lock()
 	e.input = &sessionInputLane{mu: &e.mu, entry: e, stopped: m.daemon.monitors().closed.Load()}
-	if e.evidence.PlacedInputOwed {
-		e.evidence.PlacedInputOwed = false
-		e.resolveSoonLocked(m.daemon.monitors())
-	}
 	e.mu.Unlock()
 }
 
@@ -343,10 +327,6 @@ func (m sessionInputModule) place(ctx context.Context, delivery sessionInputDeli
 		m.armRetryLocked(lane, delivery, errSessionInputPlacingAnother)
 		return deferred(errSessionInputPlacingAnother)
 	}
-	if lane.heldEnter || lane.occupied {
-		m.armRetryLocked(lane, delivery, errSessionInputComposerOccupied)
-		return deferred(errSessionInputComposerOccupied)
-	}
 
 	state := m.daemon.store.Get(delivery.sessionID)
 	if state == nil {
@@ -394,8 +374,7 @@ func (m sessionInputModule) placeOverLinkLocked(ctx context.Context, lane *sessi
 	return sessionInputAttempt{stage: sessionInputPlaced, at: custody.At}, true
 }
 
-// tookLocked credits the user's words to the run going, or, while the paste waits in the
-// composer, to the next turn start. The user typing over the paste forfeits that credit.
+// tookLocked credits the user's words to the run going, or to the next turn start when none runs.
 func (m sessionInputModule) tookLocked(lane *sessionInputLane, delivery sessionInputDelivery) sessionInputRunRef {
 	if delivery.origin.kind == sessionInputOriginMaintenance && lane.run == nil {
 		lane.notifyNextRun = true
@@ -403,16 +382,11 @@ func (m sessionInputModule) tookLocked(lane *sessionInputLane, delivery sessionI
 	if delivery.origin.kind != sessionInputOriginUserConversation {
 		return sessionInputRunRef{}
 	}
-	if lane.run == nil || lane.occupied {
+	m.titleLocked(delivery)
+	if lane.run == nil {
 		lane.creditNextRun = true
-		if lane.occupied || lane.heldEnter {
-			lane.titleNext = &delivery
-		} else {
-			m.titleLocked(delivery)
-		}
 		return sessionInputRunRef{}
 	}
-	m.titleLocked(delivery)
 	lane.run.credited = true
 	return lane.run.ref
 }
@@ -422,42 +396,10 @@ func (m sessionInputModule) titleLocked(delivery sessionInputDelivery) {
 	m.daemon.life.Go("maybeGenerateSessionTitleFromPrompt", func() { m.daemon.maybeGenerateSessionTitleFromPrompt(sessionID, text, origin) })
 }
 
-// claimNextLocked hands a turn start the credit and title of words still waiting in the composer.
-func (m sessionInputModule) claimNextLocked(lane *sessionInputLane) bool {
+func (lane *sessionInputLane) claimNextLocked() bool {
 	credit := lane.creditNextRun
 	lane.creditNextRun = false
-	if next := lane.titleNext; next != nil {
-		lane.titleNext = nil
-		m.titleLocked(*next)
-	}
 	return credit
-}
-
-func (lane *sessionInputLane) forfeitNextLocked() {
-	lane.creditNextRun = false
-	lane.notifyNextRun = false
-	lane.titleNext = nil
-}
-
-func (m sessionInputModule) recordOwedLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
-	if lane.entry == nil {
-		return
-	}
-	owed := lane.occupied && reportsTurnStarts(string(m.daemon.sessionAgent(sessionID)))
-	evidence := &lane.entry.evidence
-	if evidence.PlacedInputOwed == owed || (owed && sessionstate.TookATurn(*evidence)) {
-		return
-	}
-	evidence.PlacedInputOwed = owed
-	lane.entry.resolveSoonLocked(m.daemon.monitors())
-}
-
-func (m sessionInputModule) releaseComposerLocked(lane *sessionInputLane, sessionID protocol.SessionID) {
-	if !lane.occupied {
-		return
-	}
-	lane.occupied = false
-	m.recordOwedLocked(lane, sessionID)
 }
 
 func deliveryAllowedForPhase(placement sessionInputPlacement, state protocol.SessionState) error {
@@ -480,45 +422,36 @@ func (m sessionInputModule) observePromptSubmitted(sessionID protocol.SessionID)
 	defer lane.mu.Unlock()
 	typed = lane.userSubmit
 	lane.userSubmit = false
-	m.daemon.forgetUserInput(sessionID)
-	m.releaseComposerLocked(lane, sessionID)
-	current := m.ensureRunLocked(lane, sessionID)
-	if m.claimNextLocked(lane) || typed {
+	current := lane.ensureRunLocked(sessionID)
+	if lane.claimNextLocked() || typed {
 		current.credited = true
 	}
 	return current.ref, current.credited, typed
 }
 
-func (m sessionInputModule) ensureRunLocked(lane *sessionInputLane, sessionID protocol.SessionID) *sessionInputRunState {
+func (lane *sessionInputLane) ensureRunLocked(sessionID protocol.SessionID) *sessionInputRunState {
 	if lane.run != nil {
 		return lane.run
 	}
 	lane.epoch++
-	lane.run = &sessionInputRunState{ref: sessionInputRunRef{sessionID: sessionID, epoch: lane.epoch}, credited: m.claimNextLocked(lane), notification: lane.notifyNextRun}
+	lane.run = &sessionInputRunState{ref: sessionInputRunRef{sessionID: sessionID, epoch: lane.epoch}, credited: lane.claimNextLocked(), notification: lane.notifyNextRun}
 	lane.notifyNextRun = false
 	lane.stoppedAfterNotification = false
 	return lane.run
 }
 
-func (m sessionInputModule) observePhaseLocked(lane *sessionInputLane, sessionID protocol.SessionID, phase protocol.SessionState) {
+func (lane *sessionInputLane) observePhaseLocked(sessionID protocol.SessionID, phase protocol.SessionState) {
 	previous := lane.phase
 	lane.phase = phase
-	if lane.heldEnter && previous == protocol.SessionStatePendingApproval && phase != previous {
-		m.holdEnterLocked(lane, sessionID, 0)
-	}
 	if phase == protocol.SessionStateWorking {
 		if previous == protocol.SessionStatePendingApproval {
 			lane.userSubmit = false
-			m.daemon.forgetUserInput(sessionID)
-		} else if lane.run == nil {
-			m.releaseComposerLocked(lane, sessionID)
 		}
-		m.ensureRunLocked(lane, sessionID)
+		lane.ensureRunLocked(sessionID)
 		return
 	}
-	if previous == protocol.SessionStateWorking && lane.userSubmit {
+	if previous == protocol.SessionStateWorking {
 		lane.userSubmit = false
-		m.daemon.forgetUserInput(sessionID)
 	}
 	if lane.run != nil {
 		lane.stoppedAfterNotification = lane.run.startedByNotification()

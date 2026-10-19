@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -254,16 +253,21 @@ func TestInboxAttemptsSurviveRestartWithoutAFreshBudget(t *testing.T) {
 }
 
 func TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget(t *testing.T) {
-	for _, approval := range []bool{false, true} {
-		t.Run(fmt.Sprint(approval), func(t *testing.T) {
+	for _, approval := range []string{"", "permission_prompt", "permission_request"} {
+		t.Run("approval="+approval, func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
 				app, cli := w.App(), w.Client()
 				setSetting(t, app, "auto_approve_enabled", "false")
 				recipient := w.bubbleClaude(t, app, "shop")
 				registerSessions(t, w, cli, "sender")
 				app.TypeLine(recipient.id, "work without checking inbox")
-				if approval {
+				switch approval {
+				case "permission_prompt":
 					if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(recipient.id)), "permission_prompt", "Allow edit?"); err != nil {
+						t.Fatal(err)
+					}
+				case "permission_request":
+					if err := cli.UpdateState(protocol.TerminalID(w.Terminal(recipient.id)), protocol.StatePendingApproval); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -276,7 +280,7 @@ func TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget(t *testing.T) {
 				if got := recipient.promptsContaining(inboxDoorbell); got != 0 {
 					t.Fatalf("blocked rings=%d", got)
 				}
-				if approval {
+				if approval != "" {
 					if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal(recipient.id)), protocol.StateWorking, "", "", ""); err != nil {
 						t.Fatal(err)
 					}
@@ -630,42 +634,6 @@ func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 		synctest.Wait()
 		if got := day.promptsContaining(inboxDoorbell); got != 3 {
 			t.Fatalf("unread member address was not acknowledged: %d", got)
-		}
-	})
-}
-
-func TestAnInboxRingsAfterASelectorClearsWithoutAnotherTurn(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app := w.App()
-		recipient := w.bubbleClaude(t, app, "recipient")
-		cli := w.Client()
-		registerSessions(t, w, cli, "sender")
-		recipient.term.PaintScreen("Which should I keep?\n❯ 1. The old import path\nEnter to select · Esc to cancel")
-		sent := sendAgentMessage(t, cli, "sender", recipient.id, "read after dismissing")
-		if sent.Status != protocol.AgentMsgStatusQueued {
-			t.Fatalf("selector send=%+v", sent)
-		}
-		w.advance(15 * time.Minute)
-		if got := recipient.promptsContaining(inboxDoorbell); got != 0 {
-			t.Fatalf("selector rings=%d", got)
-		}
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(recipient.self), Data: "\x1b"})
-		w.advance(0)
-		recipient.term.PaintScreen("❯ ")
-		w.advance(29 * time.Second)
-		if got := recipient.promptsContaining(inboxDoorbell); got != 0 {
-			t.Fatalf("ring inside quiet window=%d", got)
-		}
-		w.advance(time.Second)
-		if got := recipient.promptsContaining(inboxDoorbell); got != 1 {
-			t.Fatalf("cleared selector rings=%d", got)
-		}
-		for want := 2; want <= 3; want++ {
-			recipient.reply("Later. <!-- attn:state=idle -->")
-			w.advance(5 * time.Minute)
-			if got := recipient.promptsContaining(inboxDoorbell); got != want {
-				t.Fatalf("ring=%d want=%d", got, want)
-			}
 		}
 	})
 }

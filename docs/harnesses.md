@@ -87,6 +87,15 @@ Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
 - Claude keeps setting its title glyphs. Once a terminal has a root record,
   attn ignores the glyphs until a `clear`.
 
+Probed on 2.1.303 under a scratch PTY with a local mock API, in auto and
+default permission mode:
+
+- AskUserQuestion fires PreToolUse, then `blocked kind=question` about 20 ms
+  later, then a PermissionRequest for `AskUserQuestion` about 40 ms after
+  PreToolUse.
+- With `/model`, `/resume`, `/config`, `/permissions` or the Esc-Esc rewind
+  menu open, Claude sends no report and fires no hook.
+
 ## Codex
 
 Read in the source at openai/codex 60947e2341.
@@ -308,6 +317,16 @@ Read in the source at openai/codex 1ffa95e:
   app-server it keeps reporting `working`; once it resumes, it replays the
   conversation's turns, so a turn the lost server was running ends as
   interrupted (`tui/src/app/reconnect.rs`, `tui/src/chatwidget/replay.rs`).
+
+Read in the source at openai/codex rust-v0.163.0 and c3bb20602d:
+
+- The TUI reports `blocked` only while a question, an approval overlay or an
+  MCP elicitation waits on the user. A guardian review shows as a footer
+  status, so the TUI reports `working` while the guardian reviews
+  (`tui/src/chatwidget/status_surfaces.rs`, `tui/src/bottom_pane/mod.rs`).
+- rust-v0.163.0 sends `blocked` without a kind. Later builds (#54114) add
+  `kind=permission` for approvals and `kind=question` for questions and
+  elicitations.
 
 Read in the source at openai/codex rust-v0.162.1, and the switches probed on
 it with a model on a closed port. A shared Codex tile follows the conversation

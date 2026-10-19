@@ -28,7 +28,7 @@ func TestBothExplicitSharedResumesFollowTheirProgramsStatus(t *testing.T) {
 		state  protocol.SessionState
 	}{
 		{"state=working", protocol.SessionStateWorking},
-		{"state=blocked:kind=question", protocol.SessionStateWaitingInput},
+		{"state=blocked:kind=question", protocol.SessionStatePendingApproval},
 		{"state=working", protocol.SessionStateWorking},
 		{"state=idle", protocol.SessionStateIdle},
 	} {
@@ -59,13 +59,13 @@ func TestStartingAnotherConversationInASharedViewKeepsItsDuplicateBlocked(t *tes
 	second.Reply("Added it. <!-- attn:state=idle -->")
 	idle := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	second.ProgramStatus("state=blocked:app=codex")
-	testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 	moveOn(t, app, first, terminal, "/new", "continue the other conversation")
 	target := sessionShownIn(t, w, app, terminal)
 	next := testworld.AwaitSession(app, target, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	first.Reply("Finished the other conversation. <!-- attn:state=idle -->")
 	testworld.AwaitStateAfter(app, next, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	if s := listedState(t, w, duplicate); s.State != protocol.SessionStateWaitingInput {
+	if s := listedState(t, w, duplicate); s.State != protocol.SessionStatePendingApproval {
 		t.Fatalf("the sibling's new conversation changed the blocked duplicate to %s", s.State)
 	}
 }

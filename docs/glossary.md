@@ -38,7 +38,7 @@ agent                   a harness that runs in a terminal; the user talks to
    ├─ launching         starting up
    ├─ working           busy
    ├─ waiting           done; waits for the user's input
-   ├─ needs approval    asks the user to allow a tool call
+   ├─ needs approval    blocked on a prompt the user must answer
    ├─ scheduled         will continue by itself at a set time
    ├─ idle              nothing to do
    ├─ recoverable       stopped; attn can bring it back

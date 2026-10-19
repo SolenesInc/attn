@@ -287,6 +287,11 @@ func (p *Peer) TypeLine(sessionID, text string) {
 	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: text + "\r"})
 }
 
+func (p *Peer) Watch(sessionID string) {
+	p.T.Helper()
+	p.attach(p.Terminal(sessionID))
+}
+
 func (p *Peer) AwaitScreen(sessionID, text string) {
 	p.T.Helper()
 	p.AwaitTerminalScreen(p.Terminal(sessionID), text)

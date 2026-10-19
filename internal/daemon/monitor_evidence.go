@@ -343,32 +343,6 @@ func (d *Daemon) recordReviewerEvidence(sessionID protocol.SessionID, inLoop boo
 	})
 }
 
-func (d *Daemon) recordReviewerEvidenceFromPermissionMode(sessionID protocol.SessionID, permissionMode string) {
-	mode := strings.TrimSpace(permissionMode)
-	if mode == "" {
-		return
-	}
-	if !permissionModeGovernsApprovals(d.sessionAgent(sessionID)) {
-		return
-	}
-	d.recordReviewerEvidence(sessionID, mode != "default")
-}
-
-func permissionModeGovernsApprovals(agent protocol.SessionAgent) bool {
-	return agent == protocol.SessionAgentClaude
-}
-
-func (d *Daemon) sessionAgent(sessionID protocol.SessionID) protocol.SessionAgent {
-	if d.store == nil {
-		return ""
-	}
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return ""
-	}
-	return session.Agent
-}
-
 const (
 	notifyPermissionPrompt = "permission_prompt"
 	notifyIdlePrompt       = "idle_prompt"
@@ -426,7 +400,6 @@ func (d *Daemon) recordProcessEvidence(sessionID protocol.SessionID, exited bool
 			Claim:      sessionstate.ClaimExited,
 			ObservedAt: at,
 		}
-		e.PlacedInputOwed = false
 	})
 }
 

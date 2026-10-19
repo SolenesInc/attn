@@ -27,15 +27,13 @@ func TestAnAnsweredAskReachesTheAgentsInboxAndSettlesItsTurn(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
-	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("pick a cache store") })
 	agent := w.Launched(asker)
 	if guidance := launchGuidance(t, agent); !strings.Contains(guidance, askGuidanceLead) {
 		t.Fatalf("an agent launched with asks on was not taught them:\n%s", guidance)
 	}
-	idle := testworld.AwaitSession(app, asker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	app.TypeLine(asker, "pick a cache store")
 	agent.Prompted()
-	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	working := testworld.AwaitSession(app, asker, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
 	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
 	if err != nil {

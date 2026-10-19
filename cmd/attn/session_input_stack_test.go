@@ -19,9 +19,12 @@ func TestWhatTheUserTypesWhileAttnRingsTheDoorbellStaysInTheirDraft(t *testing.T
 	app := s.App()
 	const reviewer = "rev-1111-2222"
 	register(t, s, reviewer, "reviewer")
-	recipient := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	recipient := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("wait for the reviewer") })
 	claude := s.Launched(recipient)
-	converse(app, claude, recipient, "wait for the reviewer", "Waiting.")
+	claude.Prompted()
+	claude.Reply("Waiting. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, recipient, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	app.Watch(recipient)
 
 	sent := s.Launch(testworld.Invocation{Args: []string{"agent", "msg", recipient, "the build is green"}, Session: reviewer})
 	gap.Await()
@@ -37,36 +40,4 @@ func TestWhatTheUserTypesWhileAttnRingsTheDoorbellStaysInTheirDraft(t *testing.T
 		t.Fatalf("attn agent msg exited %d: %s", result.Code, result.Stderr)
 	}
 	app.AwaitScreen(recipient, "half a thought")
-}
-
-func TestAnApprovalPromptThatAppearsAfterAttnPastesItsMessageIsLeftForTheUser(t *testing.T) {
-	t.Parallel()
-	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-	gap := s.PauseAt(pausepoint.SessionInputPasteGap)
-	s.Start()
-	app := s.App()
-	setSetting(t, app, "auto_approve_enabled", "true")
-	const reviewer = "rev-1111-2222"
-	register(t, s, reviewer, "reviewer")
-	recipient := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
-	codex := s.Launched(recipient)
-	converse(app, codex, recipient, "wait for the reviewer", "Waiting.")
-
-	sent := s.Launch(testworld.Invocation{Args: []string{"agent", "msg", recipient, "the build is green"}, Session: reviewer})
-	gap.Await()
-	app.AwaitScreen(recipient, "attn agent inbox")
-	codex.AskApproval()
-	app.AwaitScreen(recipient, "Yes, proceed")
-	gap.Release()
-	if result := sent.Wait(); result.Code != 0 {
-		t.Fatalf("attn agent msg exited %d: %s", result.Code, result.Stderr)
-	}
-
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(recipient)), Data: "1"})
-	if answer := codex.Answered(); answer != "1" {
-		t.Fatalf("codex's approval prompt was answered with %q, want the user's %q", answer, "1")
-	}
-	if got := codex.Prompted(); !strings.Contains(got, "attn agent inbox") {
-		t.Errorf("once the approval was answered codex was prompted with %q, want attn's doorbell", got)
-	}
 }

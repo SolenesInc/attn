@@ -177,14 +177,8 @@ func agentMessageQueuedDetail(err error) string {
 	if errors.Is(err, errSessionInputBlockedByApproval) {
 		return "queued (target is waiting on an approval — lands when the approval clears)"
 	}
-	if errors.Is(err, errSessionInputBlockedBySelector) {
-		return "queued (target's screen is waiting on a keypress, so typed words would answer it — lands once that clears)"
-	}
 	if errors.Is(err, errSessionInputComposerDirty) {
 		return "queued (the user typed in the target moments ago; lands once the composer has been quiet for a while)"
-	}
-	if errors.Is(err, errSessionInputScreenUnavailable) {
-		return "queued (attn cannot see a safe prompt on the target yet; lands on its next state change)"
 	}
 	return "queued (target is not taking input right now — lands when it is running again; don't wait for a reply)"
 }

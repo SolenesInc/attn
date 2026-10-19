@@ -7,18 +7,10 @@ import (
 )
 
 const (
-	methodShowSelector = "show_selector"
-	methodAskApproval  = "ask_approval"
-	methodDismiss      = "dismiss"
-	methodAnswered     = "answered"
+	methodAskApproval = "ask_approval"
+	methodDismiss     = "dismiss"
+	methodAnswered    = "answered"
 )
-
-var selectorLines = []string{
-	"Which should I keep?",
-	"❯ 1. The old import path",
-	"  2. The new import path",
-	"Enter to select · ↑/↓ to navigate · Esc to cancel",
-}
 
 type modal struct {
 	announce  string
@@ -39,11 +31,6 @@ type serverApprovals interface {
 
 type modalResult struct {
 	Typed string `json:"typed"`
-}
-
-func (r *Run) ShowSelector() {
-	r.t.Helper()
-	r.call(methodShowSelector, struct{}{}, nil)
 }
 
 func (r *Run) AskApproval() {
@@ -72,8 +59,6 @@ func (a *agent) handleModal(method string) (any, error) {
 	a.turn.Lock()
 	defer a.turn.Unlock()
 	switch method {
-	case methodShowSelector:
-		return struct{}{}, a.term.openModal(&modal{lines: selectorLines, resting: func() {}})
 	case methodAskApproval:
 		if remote, ok := a.conv.(serverApprovals); ok {
 			return struct{}{}, remote.askApproval()

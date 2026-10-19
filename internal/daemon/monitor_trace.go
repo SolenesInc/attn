@@ -20,7 +20,7 @@ const (
 	stateSourceHookNotify      = "hook_notify"
 	stateSourceHookStopFailure = "hook_stop_failure"
 	stateSourceHookCompaction  = "hook_compaction"
-	stateSourceReviewer        = "reviewer"
+	stateSourcePermissionMode  = "permission_mode"
 	stateSourceResolver        = "resolver"
 )
 
@@ -206,5 +206,5 @@ func (d *Daemon) tracePermissionMode(sessionID protocol.SessionID, mode string) 
 	if mode == "" {
 		return
 	}
-	d.traceStateEvidence(sessionID, stateOrigin{source: stateSourceReviewer}, mode)
+	d.traceStateEvidence(sessionID, stateOrigin{source: stateSourcePermissionMode}, mode)
 }

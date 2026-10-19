@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -82,66 +83,89 @@ func TestResendingAnAnnotationBatchNeverPressesEnterOnAnApprovalThatOpenedSince(
 	})
 }
 
-func TestAnAnnotationLeftInTheComposerHoldsAttnsDoorbellUntilATurnTakesItOrTheUserTypes(t *testing.T) {
+func TestAnAskUserQuestionHoldsAttnsRingUntilItIsAnswered(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		release func(w *world, app *testworld.Peer, agent *bubbleClaude)
+		name      string
+		answer    func(w *world, app *testworld.Peer, claude *bubbleClaude)
+		ringAfter time.Duration
 	}{
-		{"the agent takes it", func(_ *world, _ *testworld.Peer, agent *bubbleClaude) {
-			agent.take(sessionAnnotationFeedback)
-			agent.reply("Verified. <!-- attn:state=idle -->")
-		}},
-		{"the user types over it", func(w *world, app *testworld.Peer, agent *bubbleClaude) {
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "x"})
-			w.advance(30 * time.Second)
-		}},
+		{"by a keypress", func(w *world, app *testworld.Peer, claude *bubbleClaude) {
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(claude.self), Data: "1"})
+		}, 30 * time.Second},
+		{"over the hook wire", func(*world, *testworld.Peer, *bubbleClaude) {}, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
 				app, cli := w.App(), w.Client()
-				agent := w.bubbleClaude(t, app, "shop")
+				claude := w.bubbleClaude(t, app, "shop")
 				registerSessions(t, w, cli, "sender")
-				agent.term.OnSubmit(nil)
-				if got := submitSessionAnnotationFeedback(app, agent.id, sessionAnnotationFeedback); got.status != "delivered" {
-					t.Fatalf("submit = %+v, want delivered", got)
+				terminal := protocol.TerminalID(claude.self)
+				app.TypeLine(claude.id, "ask me which colour to use")
+				if err := cli.UpdateStateFromHook(terminal, protocol.StateWorking, "auto"); err != nil {
+					t.Fatal(err)
+				}
+				w.advance(time.Minute)
+
+				asked := time.Now()
+				claude.term.ProgramStatus(pty.ProgramBlockedQuestion)
+				if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
+					t.Fatal(err)
+				}
+				w.advance(0)
+				if s := queriedSession(t, cli, claude.id); s.State != protocol.SessionStatePendingApproval || !stateSince(t, s).Equal(asked) {
+					t.Fatalf("an open AskUserQuestion reads %s since %s, want pending_approval since it was asked, %s", s.State, s.StateSince, asked)
+				}
+				sent := sendAgentMessage(t, cli, "sender", claude.id, "the build is green")
+				if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "approval") {
+					t.Fatalf("mail for an agent asking the user = %+v, want it queued behind the approval", sent)
+				}
+				w.advance(10 * time.Minute)
+				if got := pastedContaining(claude.term, inboxDoorbell); got != 0 {
+					t.Fatalf("attn typed into an open AskUserQuestion: %q", claude.term.Pasted())
 				}
 
-				if sent := sendAgentMessage(t, cli, "sender", agent.id, "the build is green"); sent.Status != protocol.AgentMsgStatusQueued {
-					t.Errorf("mail while attn's annotation sits untaken = %+v, want it held", sent)
-				}
-				w.advance(10 * time.Second)
-				if got := pastedContaining(agent.term, inboxDoorbell); got != 0 {
-					t.Fatalf("attn pasted its doorbell onto the untaken annotation: %q", agent.term.Pasted())
-				}
-				tc.release(w, app, agent)
+				answered := time.Now()
+				tc.answer(w, app, claude)
+				claude.term.ProgramStatus(pty.ProgramWorking)
 				w.advance(0)
-				if got := pastedContaining(agent.term, inboxDoorbell); got != 1 {
-					t.Fatalf("once %s attn pasted %q, want the doorbell once", tc.name, agent.term.Pasted())
+				claude.reply("Blue it is. <!-- attn:state=idle -->")
+				claude.term.ProgramStatus(pty.ProgramDone)
+				w.advance(0)
+				if tc.ringAfter > 0 {
+					w.advance(time.Until(answered.Add(tc.ringAfter)) - time.Nanosecond)
+					if got := pastedContaining(claude.term, inboxDoorbell); got != 0 {
+						t.Fatalf("attn rang %s after the user answered, inside the quiet window", time.Since(answered))
+					}
+					w.advance(time.Nanosecond)
+				}
+				if got := pastedContaining(claude.term, inboxDoorbell); got != 1 {
+					t.Fatalf("%s after the answer attn pasted %q, want the doorbell once", time.Since(answered), claude.term.Pasted())
 				}
 			})
 		})
 	}
 }
 
-func TestTheDoorbellWaitsUntilTheTerminalsScreenIsAvailable(t *testing.T) {
+func TestARingWaitsOutTheQuietWindowEvenAfterTheUserSubmitsTheirPrompt(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		agent := w.bubbleClaude(t, app, "shop")
+		claude := w.bubbleClaude(t, app, "shop")
 		registerSessions(t, w, cli, "sender")
-		restore := agent.term.ScreenUnavailable()
-		if sent := sendAgentMessage(t, cli, "sender", agent.id, "the build is green"); sent.Status != protocol.AgentMsgStatusQueued {
-			t.Fatalf("unavailable screen accepted mail: %+v", sent)
-		}
-		w.advance(30 * time.Second)
-		if got := pastedContaining(agent.term, inboxDoorbell); got != 0 {
-			t.Fatalf("doorbell pasted without a screen: %q", agent.term.Pasted())
-		}
-		restore()
-		agent.take("continue")
-		agent.reply("Done. <!-- attn:state=idle -->")
+		typed := time.Now()
+		app.TypeLine(claude.id, "rename the checkout module")
 		w.advance(0)
-		if got := pastedContaining(agent.term, inboxDoorbell); got != 1 {
-			t.Fatalf("doorbell after screen recovered: %q", agent.term.Pasted())
+		claude.reply("Renamed. <!-- attn:state=idle -->")
+
+		if sent := sendAgentMessage(t, cli, "sender", claude.id, "the build is green"); sent.Status != protocol.AgentMsgStatusQueued {
+			t.Fatalf("mail moments after the user's prompt = %+v, want it queued", sent)
+		}
+		w.advance(time.Until(typed.Add(30*time.Second)) - time.Nanosecond)
+		if got := pastedContaining(claude.term, inboxDoorbell); got != 0 {
+			t.Fatalf("attn rang %s after the user's last keystroke", time.Since(typed))
+		}
+		w.advance(time.Nanosecond)
+		if got := pastedContaining(claude.term, inboxDoorbell); got != 1 {
+			t.Fatalf("30 s after the user's last keystroke attn pasted %q, want the doorbell once", claude.term.Pasted())
 		}
 	})
 }

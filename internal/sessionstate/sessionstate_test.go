@@ -979,8 +979,16 @@ func TestPolicyForUsesTheMeasuredPerAgentTTL(t *testing.T) {
 	if got := PolicyFor("copilot"); got.HeartbeatTTL > claude.HeartbeatTTL {
 		t.Fatalf("unknown agent TTL %s, want no more than claude's %s", got.HeartbeatTTL, claude.HeartbeatTTL)
 	}
+	if claude.GuardianDwell != 0 {
+		t.Fatalf("claude GuardianDwell %s, want 0: its classifier decides before it asks", claude.GuardianDwell)
+	}
+	for _, policy := range []Policy{codex, PolicyFor("copilot")} {
+		if policy.GuardianDwell <= 0 {
+			t.Fatalf("policy has no guardian dwell: %+v", policy)
+		}
+	}
 	for _, policy := range []Policy{claude, codex, PolicyFor("copilot")} {
-		if policy.StaleAfter <= 0 || policy.StuckAfter <= 0 || policy.GuardianDwell <= 0 {
+		if policy.StaleAfter <= 0 || policy.StuckAfter <= 0 {
 			t.Fatalf("policy has an unset window: %+v", policy)
 		}
 		if policy.StaleAfter <= policy.HeartbeatTTL {

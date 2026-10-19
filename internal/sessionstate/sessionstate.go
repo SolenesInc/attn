@@ -58,7 +58,6 @@ type ConversationEvidence struct {
 	PendingCron       bool
 	Compacting        bool
 	InitialPromptOwed bool
-	PlacedInputOwed   bool
 	PromptIdleAt      time.Time
 	ClassifyingSince  time.Time
 }
@@ -106,6 +105,7 @@ func PolicyFor(agent string) Policy {
 	}
 	if agent == string(protocol.SessionAgentClaude) {
 		policy.HeartbeatTTL = claudeHeartbeatTTL
+		policy.GuardianDwell = 0
 	}
 	if agent == string(protocol.SessionAgentShell) {
 		policy.HeartbeatTTL = shellHeartbeatTTL
@@ -247,7 +247,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 	}
 
 	if signal != nil && signal.Claim == ClaimSettled && !TookATurn(e.ConversationEvidence) {
-		if e.InitialPromptOwed || e.PlacedInputOwed {
+		if e.InitialPromptOwed {
 			return Resolution{Hold: true, Reason: ReasonPromptOwed}
 		}
 		return Resolution{State: protocol.SessionStateIdle, Reason: ReasonAtPrompt}
@@ -326,7 +326,7 @@ func programStatusEdge(o Observation) (Resolution, bool) {
 	case ClaimApprovalPending:
 		return Resolution{State: protocol.SessionStatePendingApproval, Reason: ReasonProgramBlocked, Detail: o.Detail}, true
 	case ClaimNeedsInput:
-		return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonProgramBlocked, Detail: o.Detail}, true
+		return Resolution{State: protocol.SessionStatePendingApproval, Reason: ReasonProgramBlocked, Detail: o.Detail}, true
 	case ClaimStopFailed:
 		return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonProgramError, Detail: o.Detail}, true
 	default:
@@ -418,10 +418,14 @@ func classifierVerdict(e evidence) (Resolution, bool) {
 
 func DwellFor(state protocol.SessionState, terminal TerminalEvidence, conversation ConversationEvidence, policy Policy) time.Duration {
 	e := evidence{terminal, conversation}
-	if state == protocol.SessionStatePendingApproval && e.ReviewerInLoop {
+	if state == protocol.SessionStatePendingApproval && e.ReviewerInLoop && !questionOpen(e) {
 		return policy.GuardianDwell
 	}
 	return 0
+}
+
+func questionOpen(e evidence) bool {
+	return e.ProgramStatus != nil && e.ProgramStatus.Claim == ClaimNeedsInput
 }
 
 func supersededByBusy(o *Observation, e evidence) bool {

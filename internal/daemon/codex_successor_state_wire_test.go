@@ -17,7 +17,7 @@ func TestASharedCodexSuccessorStartsWorkingOnItsOwnFirstPrompt(t *testing.T) {
 		}{
 			{"idle", "state=idle:app=codex", protocol.SessionStateIdle},
 			{"working", "state=working:app=codex", protocol.SessionStateWorking},
-			{"blocked", "state=blocked:app=codex", protocol.SessionStateWaitingInput},
+			{"blocked", "state=blocked:app=codex", protocol.SessionStatePendingApproval},
 		} {
 			t.Run(command+"/"+old.name, func(t *testing.T) {
 				w := newWorld(t, fakeagent.Codex)
@@ -38,7 +38,7 @@ func TestASharedCodexSuccessorStartsWorkingOnItsOwnFirstPrompt(t *testing.T) {
 				}
 				next := testworld.AwaitSession(app, successor, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 				first.ProgramStatus("state=blocked:app=codex")
-				testworld.AwaitStateAfter(app, next, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+				testworld.AwaitStateAfter(app, next, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 			})
 		}
 	}

@@ -181,8 +181,8 @@ the snooze deadline. CLI snooze currently supports local sessions.
 | Color | What it means |
 |---|---|
 | 🟢 Green | Agent is working. Leave it alone |
-| 🟡 Yellow | Agent needs you: asked a question, or finished a long run (5+ min) and is waiting for your review |
-| 🟡 Flashing | Agent wants tool approval. Go approve |
+| 🟡 Yellow | Agent needs you: ended on a question, or finished a long run (5+ min) and is waiting for your review |
+| 🟡 Flashing | Agent is blocked on a prompt: a tool approval or a question. Go answer it |
 | 🔵 Blue (slow pulse) | Parked on a `/loop` or schedule. It'll resume itself |
 | 🟣 Purple | State couldn't be read reliably. Worth a glance |
 | ⚪ Gray | Done, or a plain shell. Move on |

@@ -96,7 +96,7 @@ func (d *Daemon) syncAutoSettle(sessionID protocol.SessionID, _ string) {
 
 func (d *Daemon) syncAutoSettleLocked(sessionID protocol.SessionID, e *monitorEntry) {
 	state := e.state.State
-	d.sessionInputs().observePhaseLocked(e.input, sessionID, state)
+	e.input.observePhaseLocked(sessionID, state)
 	if state != protocol.SessionStateWorking {
 		if e.dismissal == autoSettleDismissalCovered {
 			e.dismissal = autoSettleDismissalOff

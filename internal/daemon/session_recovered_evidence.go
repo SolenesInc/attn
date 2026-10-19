@@ -72,7 +72,9 @@ func recordClaims(obs pty.Observation, wait sessionstate.Claim) bool {
 		return false
 	}
 	recorded, _ := programStatusClaim(obs.Claim)
-	return recorded == wait || (recorded == sessionstate.ClaimStopFailed && wait == sessionstate.ClaimNeedsInput)
+	return recorded == wait ||
+		(recorded == sessionstate.ClaimStopFailed && wait == sessionstate.ClaimNeedsInput) ||
+		(recorded == sessionstate.ClaimNeedsInput && wait == sessionstate.ClaimApprovalPending)
 }
 
 func recoveredHarnessClaim(state protocol.SessionState) (sessionstate.Claim, bool) {

@@ -13,13 +13,9 @@ func (d *Daemon) noteUserInput(lane *sessionInputLane, terminal harness.Terminal
 		return false
 	}
 	now := time.Now()
-	previous, placed := d.terminals().noteKey(terminal, now)
+	d.terminals().noteKey(terminal, now)
 	if lane.entry != nil {
 		lane.entry.activityAt = now
-	}
-
-	if placed && quietRemaining(previous, sessionInputQuietWindow) == 0 {
-		d.kickSessionInboxAddresses(sessionID)
 	}
 	return true
 }
@@ -33,12 +29,6 @@ func (d *Daemon) noteAutoSettleActivity(sessionID protocol.SessionID) bool {
 	e.activityAt = time.Now()
 	e.mu.Unlock()
 	return true
-}
-
-func (d *Daemon) forgetUserInput(sessionID protocol.SessionID) {
-	for _, terminal := range d.terminals().Of(sessionID) {
-		d.terminals().forgetKey(terminal)
-	}
 }
 
 func (d *Daemon) userInputQuietRemaining(sessionID protocol.SessionID, within time.Duration) time.Duration {

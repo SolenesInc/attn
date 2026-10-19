@@ -239,9 +239,11 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "auto_approve_enabled", "false")
 	root := fsNotebookRoot(t, w)
-	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
+		m.ChiefOfStaff = protocol.Ptr(true)
+		m.InitialPrompt = protocol.Ptr("keep the notebook")
+	})
 	agent := w.Launched(chief)
-	app.TypeLine(chief, "keep the notebook")
 	agent.Prompted()
 	working := testworld.AwaitSession(app, chief, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	agent.Reply("Ready. <!-- attn:state=idle -->")

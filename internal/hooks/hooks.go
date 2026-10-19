@@ -111,17 +111,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 					},
 				},
 			},
-			"PreToolUse": {
-				{
-					Matcher: "AskUserQuestion",
-					Hooks: []Hook{
-						{
-							Type:    "command",
-							Command: fmt.Sprintf(`ATTN_SOCKET_PATH=%s %s _hook-state "%s" "waiting_input"`, socketCmd, wrapperCmd, sessionID),
-						},
-					},
-				},
-			},
 			"Notification": {
 				{
 					Matcher: "*",
@@ -178,15 +167,6 @@ func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) 
 				},
 			},
 			"PostToolUse": {
-				{
-					Matcher: "AskUserQuestion",
-					Hooks: []Hook{
-						{
-							Type:    "command",
-							Command: fmt.Sprintf(`ATTN_SOCKET_PATH=%s %s _hook-state "%s" "working"`, socketCmd, wrapperCmd, sessionID),
-						},
-					},
-				},
 				{
 					Matcher: "*",
 					Hooks: []Hook{
