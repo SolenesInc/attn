@@ -445,7 +445,7 @@ describe('App sidebar', () => {
         settings: { keybindings_config: JSON.stringify({ version: 1, overrides: { 'session.goToDashboard': { key: 'y', meta: true, alt: true } } }) },
       });
 
-      expect(screen.getByTestId('sidebar-home').querySelector('.sidebar-home-shortcut')).toHaveTextContent('⌘⌥Y');
+      expect(screen.getByTestId('sidebar-home').querySelector('.sidebar-nav-shortcut')).toHaveTextContent('⌘⌥Y');
     });
 
     it('keeps a way home when the sidebar is collapsed, and a waiting desktop still shows its badge', async () => {

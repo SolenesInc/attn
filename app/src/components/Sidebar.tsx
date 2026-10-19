@@ -64,15 +64,15 @@ function SidebarExpanded() {
       {/* Home sits above everything, the chief's slot included: it is the one row that is not an agent. */}
       <button
         type="button"
-        className={`sidebar-home-row ${homeActive ? 'selected' : ''}`}
+        className={`sidebar-nav-row sidebar-home-row ${homeActive ? 'selected' : ''}`}
         data-testid="sidebar-home"
         data-callout-anchor="home"
         onClick={onGoToDashboard}
         aria-current={homeActive ? 'page' : undefined}
       >
         <HomeIcon />
-        <span className="sidebar-home-label">Home</span>
-        <span className="sidebar-home-shortcut">{formatShortcut('session.goToDashboard')}</span>
+        <span className="sidebar-nav-label">Home</span>
+        <span className="sidebar-nav-shortcut">{formatShortcut('session.goToDashboard')}</span>
       </button>
 
       <div ref={listRef} onClick={onClick} className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
