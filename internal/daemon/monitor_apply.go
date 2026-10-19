@@ -30,8 +30,7 @@ func (h monitorHome) Applied(view monitorView) bool {
 	session, binding := r.sessionFor(h.entry)
 	if session == "" {
 		r.applyMu.Unlock()
-		d.logf("monitor apply: unknown entry %+v", view.Key.V)
-		return false
+		return d.admitMonitorConversation(h.entry, view)
 	}
 	previous := binding.applied
 	if previous.Revision.V >= view.Revision.V {

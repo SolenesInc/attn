@@ -165,6 +165,44 @@ func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesI
 	}
 }
 
+func TestOneSharedTerminalsExitLeavesItsSessionUsableInTheOther(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, first, firstTerminal := sharedCodexWaiting(t, w, app)
+	other := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	second := w.Launched(other)
+	secondTerminal := app.Terminal(other)
+	moveOn(t, app, second, secondTerminal, "/resume "+first.ConversationID, "continue checkout")
+	second.Reply("Continued. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	first.Exit(1)
+	testworld.Await(app, protocol.EventTerminalBindingsUpdated, func(e protocol.TerminalBindingsUpdatedMessage) bool {
+		found := false
+		for _, binding := range e.TerminalBindings {
+			if string(binding.TerminalID) == firstTerminal {
+				return false
+			}
+			found = found || string(binding.TerminalID) == secondTerminal && string(binding.SessionID) == checkout
+		}
+		return found
+	})
+	before := listedState(t, w, checkout)
+	if before.TerminalExit != nil || protocol.Deref(before.StateReason) == "process_exited" {
+		t.Fatalf("the remaining terminal shows an exited session: %+v", before)
+	}
+	if result := submitSessionAnnotationFeedback(app, checkout, sessionAnnotationFeedback); !result.success {
+		t.Fatalf("feedback to the remaining terminal: %+v", result)
+	}
+	server := w.CodexServer()
+	if prompt := server.Prompted(first.ConversationID); prompt != sessionAnnotationFeedback {
+		t.Fatalf("the remaining conversation took %q, want feedback", prompt)
+	}
+	working := testworld.AwaitStateAfter(app, before, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	server.Reply(first.ConversationID, "Still running. <!-- attn:state=waiting_input -->")
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+}
+
 func TestClosingADesktopEndsOnlyItsTileOfASharedCodexSessionAnotherDesktopShows(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

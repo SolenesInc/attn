@@ -1648,10 +1648,15 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
+	d.captureExitScreen(sessionID, info)
+	d.reactSessionExit(sessionID, info, stopped, unlockEnds)
+	return true
+}
+
+func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, info ptybackend.ExitInfo, stopped bool, unlockEnds func()) {
 	d.sessionInputs().fenceSession(sessionID)
 	d.stopTranscriptWatcher(sessionID)
 	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
-	d.captureExitScreen(sessionID, info)
 	d.noteLaunchExited(sessionID, info)
 
 	if d.ptyBackend != nil {
@@ -1677,7 +1682,6 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			d.finishSessionClose(sessionID, closing)
 		}
 	}
-	return true
 }
 
 type ptyExit struct {

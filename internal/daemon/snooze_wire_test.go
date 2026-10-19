@@ -40,6 +40,36 @@ func TestASnoozeBeforeTheFirstConversationReportStillWakes(t *testing.T) {
 	})
 }
 
+func TestAClearedConversationsSnoozeStillWakes(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		cwd := w.Path("shop")
+		first := w.Spawn(app, fakeagent.Codex, cwd)
+		terminal := protocol.TerminalID(w.Terminal(first))
+		for _, native := range []string{"before-clear", "after-clear"} {
+			path := w.Path(native + ".jsonl")
+			if err := os.WriteFile(path, []byte(fmt.Sprintf("{\"type\":\"session_meta\",\"payload\":{\"id\":%q,\"cwd\":%q,\"source\":\"cli\"}}\n", native, cwd)), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := cli.ObserveAgentConversation(terminal, native, path); err != nil {
+				t.Fatal(err)
+			}
+		}
+		next := awaitSuccessor(app, first)
+		if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+		deadline := time.Now().Add(time.Minute)
+		snoozeUntil(app, string(next.ID), deadline)
+		testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return snoozedUntil(s).Equal(deadline) })
+		w.advance(time.Until(deadline))
+		testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool {
+			return openedAt(s).Equal(deadline) && protocol.Deref(s.TurnOwed) && snoozedUntil(s).IsZero()
+		})
+	})
+}
+
 func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()

@@ -52,11 +52,15 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 // conversationIn routes a conversation the harness in terminal t reports from SessionStart or
 // UserPromptSubmit. Those arrive in order, so only they may open or show a session.
 func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversationObservation) {
+	observation.SessionID = d.sessionInTerminal(t)
+	d.proposeMonitorConversation(observation, false, t)
+}
+
+func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation agentConversationObservation, candidate *monitorEntry) bool {
 	cur, placed := d.terminals().Showing(t)
 	if current := d.store.Get(cur); !placed || (current != nil && !conversationIsSession(current.Agent)) {
 		observation.SessionID = d.sessionInTerminal(t)
-		d.observeOrQueueAgentConversation(observation)
-		return
+		return d.observeOrQueueAgentConversation(observation, candidate)
 	}
 	held := d.store.GetSessionConversation(cur).NativeID
 	var owner protocol.SessionID
@@ -67,32 +71,33 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	session := d.store.Get(cur)
 	if shown, _ := d.terminals().Showing(t); shown != cur || session == nil || !d.terminalLive(t) {
 		d.logf("agent conversation: dropped %s from terminal %s, which no longer runs session %s", observation.NativeID, t, cur)
-		return
+		return false
 	}
 	observation.SessionID = session.ID
 	if held = d.store.GetSessionConversation(session.ID).NativeID; held == observation.NativeID {
-		d.observeAgentConversation(observation)
-		return
+		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 	}
 	if now := d.store.ConversationOwner(session.ID, observation.NativeID); now != owner {
 		d.logf("agent conversation: dropped %s from terminal %s; its owner changed from %q to %q meanwhile", observation.NativeID, t, owner, now)
-		return
+		return false
 	}
 	var err error
 	switch {
 	case owner == "" && held == "":
-		d.observeAgentConversation(observation)
+		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 	case owner == "":
-		err = d.opened(t, session, observation)
+		err = d.opened(t, session, observation, candidate)
 	case d.ownerLive(owner) && d.linkOf(session.ID) == nil:
 		// A live owner keeps its terminal, so this session takes the conversation over in place.
-		d.observeAgentConversation(observation)
+		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 	default:
-		err = d.shows(t, session, owner, observation)
+		err = d.shows(t, session, owner, observation, candidate)
 	}
 	if err != nil {
 		d.logf("agent conversation: terminal %s could not move on from session %s for %s; it keeps it: %v", t, session.ID, observation.NativeID, err)
 	}
+
+	return err == nil
 }
 
 func (d *Daemon) ownerLive(owner protocol.SessionID) bool {
@@ -107,19 +112,19 @@ func conversationDecidesIdentity(driver agentdriver.Driver) bool {
 	return agentdriver.EffectiveCapabilities(driver).ConversationIsSession
 }
 
-func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation) {
+func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation, candidate *monitorEntry) bool {
 	e := d.monitorEntry(observation.SessionID)
 	if e == nil {
-		return
+		return false
 	}
 	e.mu.Lock()
 	if d.store.Get(observation.SessionID) == nil {
 		e.pendingConversation = &observation
 		e.mu.Unlock()
-		return
+		return true
 	}
 	e.mu.Unlock()
-	d.observeAgentConversation(observation)
+	return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 }
 
 func (d *Daemon) consumePendingAgentConversation(sessionID protocol.SessionID) (agentConversationObservation, bool) {
@@ -138,14 +143,14 @@ func (d *Daemon) consumePendingAgentConversation(sessionID protocol.SessionID) (
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
-	d.applyAgentConversation(observation, d.store.TransitionSessionConversation)
+	d.proposeMonitorConversation(observation, false, "")
 }
 
 func (d *Daemon) claimAgentConversation(observation agentConversationObservation) bool {
-	return d.applyAgentConversation(observation, d.store.ClaimSessionConversation)
+	return d.proposeMonitorConversation(observation, true, "")
 }
 
-func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error)) bool {
+func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error), candidate *monitorEntry) bool {
 	changed, err := transition(observation.SessionID, observation.NativeID, observation.TranscriptPath)
 	if errors.Is(err, store.ErrConversationClaimed) {
 		d.logf("agent conversation: %s is bound to another session, session=%s", observation.NativeID, observation.SessionID)
@@ -160,7 +165,12 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 		return true
 	}
 
-	d.startSessionMonitor(observation.SessionID)
+	entry := d.startSessionMonitorFrom(observation.SessionID, "", candidate)
+	if entry != nil {
+		entry.mu.Lock()
+		entry.conversationInput = monitorConversation{agentConversationObservation: observation}
+		entry.mu.Unlock()
+	}
 	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, string(observation.SessionID), observation)

@@ -39,6 +39,8 @@ type monitorEntry struct {
 	wake                func(time.Time) *time.Timer
 	monitor             *sessionMonitor
 	sink                monitorSink
+	conversationInput   monitorConversation
+	succeeds            monitorKey
 	conversation        string
 	localConversation   string
 	directory           string
@@ -124,7 +126,7 @@ func (d *Daemon) monitorEntry(sessionID protocol.SessionID) *monitorEntry {
 	return d.monitors().entry(sessionID)
 }
 
-func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string, sessionID protocol.SessionID, linked bool, initialize func(*monitorEntry)) *monitorEntry {
+func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string, sessionID protocol.SessionID, linked bool, candidate *monitorEntry, initialize func(*monitorEntry)) *monitorEntry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var old *monitorEntry
@@ -156,6 +158,9 @@ func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string
 	if !linked {
 		m = r.physical[terminal]
 	}
+	if m == nil && candidate != nil {
+		m = candidate.monitor
+	}
 	if m == nil {
 		m = &sessionMonitor{terminalID: terminal, entries: make(map[*monitorEntry]struct{})}
 		if linked {
@@ -167,7 +172,12 @@ func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string
 		r.physical[terminal] = m
 	}
 	r.nextLocal++
-	e := &monitorEntry{monitor: m, conversation: conversation, localConversation: "local:" + strconv.FormatUint(r.nextLocal, 10)}
+	e := candidate
+	if e == nil {
+		e = &monitorEntry{}
+	}
+	e.succeeds = monitorKey{}
+	e.monitor, e.conversation, e.localConversation = m, conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
 	e.input = &sessionInputLane{mu: &e.mu, entry: e, stopped: r.closed.Load()}
 	initialize(e)
 	m.entries[e] = struct{}{}
@@ -179,10 +189,10 @@ func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string
 }
 
 func (d *Daemon) startSessionMonitor(sessionID protocol.SessionID) *monitorEntry {
-	return d.startSessionMonitorFrom(sessionID, "")
+	return d.startSessionMonitorFrom(sessionID, "", nil)
 }
 
-func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID) *monitorEntry {
+func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID, candidate *monitorEntry) *monitorEntry {
 	terminal := d.primaryTerminal(sessionID)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
 	linked := d.store.SessionLink(sessionID) == codexLinkKind
@@ -198,7 +208,7 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	if previousID != "" {
 		previous = d.monitorEntry(previousID)
 	}
-	entry := d.monitors().start(terminal, conversation, sessionID, linked, func(entry *monitorEntry) {
+	entry := d.monitors().start(terminal, conversation, sessionID, linked, candidate, func(entry *monitorEntry) {
 		d.initializeMonitor(entry, sessionID)
 	})
 	if previous != nil && previous != entry {
@@ -218,6 +228,8 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 func (d *Daemon) initializeMonitor(entry *monitorEntry, sessionID protocol.SessionID) {
 	if entry.sink == nil {
 		entry.sink = monitorHome{daemon: d, entry: entry}
+	}
+	if entry.wake == nil {
 		entry.wake = func(deadline time.Time) *time.Timer {
 			key := entry.keyLocked()
 			return d.life.AfterFunc("monitorSnoozeWake", max(0, time.Until(deadline)), func() {
@@ -231,6 +243,8 @@ func (d *Daemon) initializeMonitor(entry *monitorEntry, sessionID protocol.Sessi
 	}
 	if !entry.initialized {
 		if session := d.store.Get(sessionID); session != nil {
+			conversation := d.store.GetSessionConversation(sessionID)
+			entry.conversationInput = monitorConversation{agentConversationObservation: agentConversationObservation{SessionID: sessionID, NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath}}
 			entry.directory = session.Directory
 			entry.branch = branchFromSession(session)
 			entry.harnessTitle = d.store.SessionLabels(sessionID).HarnessTitle

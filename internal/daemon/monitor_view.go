@@ -61,16 +61,24 @@ type monitorDriverMetadata struct {
 	TranscriptPath string
 }
 
+type monitorConversation struct {
+	agentConversationObservation
+	Claim    bool
+	Terminal harness.TerminalID
+}
+
 type monitorExit struct {
-	Text   string
-	Cols   int
-	Rows   int
-	Code   int
-	Signal string
-	At     time.Time
+	LifecycleID string
+	Text        string
+	Cols        int
+	Rows        int
+	Code        int
+	Signal      string
+	At          time.Time
 }
 
 type monitorView struct {
+	Conversation       monitorValue[monitorConversation]                 `fact:"session.conversation.changed"`
 	CostInitialized    monitorValue[bool]                                `fact:"session.cost.changed"`
 	Cost               monitorKeyedSet[string, *store.SessionCostSource] `fact:"session.cost.changed"`
 	FirstReportAt      monitorValue[time.Time]                           `fact:"-"`
@@ -113,6 +121,8 @@ func (e *monitorEntry) snapshotLocked() monitorView {
 	live := e.exit == nil && (process == nil || process.Claim != sessionstate.ClaimExited)
 	e.monitor.mu.Unlock()
 	return monitorView{
+		Conversation:       monitorValue[monitorConversation]{e.conversationInput},
+		Succeeds:           monitorValue[monitorKey]{e.succeeds},
 		CostInitialized:    monitorValue[bool]{e.costInitialized},
 		Cost:               monitorKeyedSet[string, *store.SessionCostSource]{Entries: e.cost},
 		Key:                monitorValue[monitorKey]{e.keyLocked()},

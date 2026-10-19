@@ -33,6 +33,18 @@ func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return
 	}
+	if entry := d.monitorEntry(sessionID); entry != nil {
+		entry.mu.Lock()
+		if entry.exit != nil && info.LifecycleID != "" && entry.exit.LifecycleID == info.LifecycleID {
+			view := entry.viewLocked()
+			entry.mu.Unlock()
+			if !entry.sink.Applied(view) {
+				d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
+			}
+			return
+		}
+		entry.mu.Unlock()
+	}
 	rec := store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
 	if provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider); ok {
 		ctx, cancel := context.WithTimeout(context.Background(), exitScreenSnapshotTimeout)
@@ -49,10 +61,12 @@ func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend
 	}
 	if entry := d.monitorEntry(sessionID); entry != nil {
 		entry.mu.Lock()
-		entry.exit = &monitorExit{Text: rec.Text, Cols: rec.Cols, Rows: rec.Rows, Code: rec.ExitCode, Signal: rec.ExitSignal, At: time.Now()}
+		entry.exit = &monitorExit{LifecycleID: info.LifecycleID, Text: rec.Text, Cols: rec.Cols, Rows: rec.Rows, Code: rec.ExitCode, Signal: rec.ExitSignal, At: time.Now()}
 		view := entry.viewLocked()
 		entry.mu.Unlock()
-		entry.sink.Applied(view)
+		if !entry.sink.Applied(view) {
+			d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
+		}
 		return
 	}
 	d.saveExitScreen(rec, time.Now())

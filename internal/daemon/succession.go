@@ -12,7 +12,7 @@ import (
 
 // opened opens a session in terminal t for a conversation no session holds; it takes only the terminal,
 // and from closes into the ledger whole. The caller holds from's lifecycle lock.
-func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation) error {
+func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation, candidate *monitorEntry) error {
 	launch, _ := d.store.LaunchIntent(from.ID)
 	launch.ChiefOfStaff = false
 	to := protocol.SessionID(uuid.NewString())
@@ -20,20 +20,20 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 		To:     to,
 		Launch: launch,
 		Close:  store.SessionClose{Reason: string("cleared; its terminal moved on to " + to)},
-	}, observation)
+	}, observation, candidate)
 }
 
 // shows puts owner, which holds the conversation t reports and runs in no live terminal, in t: a closed
 // owner reopens in place, an open one leaves its dead panes. The caller holds both lifecycle locks.
-func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner protocol.SessionID, observation agentConversationObservation) error {
+func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner protocol.SessionID, observation agentConversationObservation, candidate *monitorEntry) error {
 	return d.succeed(t, from, store.Succession{
 		To:     owner,
 		Close:  store.SessionClose{Reason: string("resumed; its terminal moved on to " + owner)},
 		KeepTo: d.store.Get(owner) != nil && d.linkOf(owner) != nil,
-	}, observation)
+	}, observation, candidate)
 }
 
-func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
+func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation, candidate *monitorEntry) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
 	live := d.liveTerminals(context.Background())
 	sc.KeepFrom = d.othersRun(from.ID, t) || d.keepsWhenLeft(from.ID)
@@ -61,7 +61,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		return err
 	}
 
-	d.startSessionMonitorFrom(sc.To, from.ID)
+	d.startSessionMonitorFrom(sc.To, from.ID, candidate)
 	if !sc.KeepTo {
 		d.resolveSoon(sc.To)
 		d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
