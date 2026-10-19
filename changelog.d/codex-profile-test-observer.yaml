@@ -1,0 +1,3 @@
+kind: internal
+area: tests
+change: Shared Codex rename checks observe the server for the session's profile.
