@@ -79,7 +79,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"mergeable":       true,
 			"mergeable_state": "clean",
-			"head":            map[string]string{"sha": "abc123"},
+			"head":            map[string]string{"sha": "abc123", "ref": "feature"},
 		})
 		return
 	}

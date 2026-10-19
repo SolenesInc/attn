@@ -188,3 +188,28 @@ func authorMutes(authors []protocol.AuthorState) map[string]bool {
 	}
 	return muted
 }
+
+func TestAPollPublishesAPullRequestUpdateOnlyWhenGitHubReportsAChange(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	gh.AddPR(mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Add checkout", Role: "reviewer"})
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := newWorld(t)
+	app := w.App()
+	refreshPRs(t, app)
+	refreshPRs(t, app)
+	status := busStatus(t, app)
+	if appeared, updated := producedBy(status, "pr.appeared"), producedBy(status, "pr.updated"); appeared != 1 || updated != 0 {
+		t.Errorf("two polls of the same pull request published %d pr.appeared and %d pr.updated, want 1 and 0", appeared, updated)
+	}
+
+	gh.Reset()
+	gh.AddPR(mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Checkout is ready", Role: "reviewer"})
+	refreshPRs(t, app)
+	refreshPRs(t, app)
+	if updated := producedBy(busStatus(t, app), "pr.updated"); updated != 1 {
+		t.Errorf("a renamed pull request polled twice published %d pr.updated, want 1", updated)
+	}
+}
