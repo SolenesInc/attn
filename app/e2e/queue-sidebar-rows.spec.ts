@@ -34,3 +34,15 @@ test('queue rows share the tree geometry and reveal actions on hover', async ({ 
   await expect(page.getByTestId('queue-crew-birch').locator('.session-actions'))
     .toHaveCSS('background-image', /linear-gradient/);
 });
+
+test('desktop flow crew rows line up with the session rows', async ({ page }) => {
+  await page.goto('/test-harness/?component=QueueSidebarFit&desktop');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+
+  const session = await page.getByTestId('sidebar-session-owed-1').boundingBox();
+  for (const crew of ['queue-crew-chief-member', 'queue-crew-birch']) {
+    const row = await page.getByTestId(crew).boundingBox();
+    expect(row?.x).toBe(session?.x);
+    expect(row?.width).toBe(session?.width);
+  }
+});
