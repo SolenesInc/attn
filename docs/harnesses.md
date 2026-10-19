@@ -53,6 +53,12 @@ Probed on 2.1.288 with a mock API.
   macOS and Linux). SessionStart, UserPromptSubmit and Stop use the
   `--session-id` conversation id.
 
+Probed on 2.1.303 with synthetic prompts and a local mock API:
+
+- `--resume <id> --fork-session` copies the prior assistant messages into the
+  new conversation's transcript, preserving their `message.id` and usage.
+  A message id therefore identifies the same request across root transcripts.
+
 ### Program status (OSC 7501)
 
 Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
@@ -148,6 +154,11 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
 
 Read in the source at openai/codex rust-v0.162.1:
 
+- Resuming appends to the existing rollout. A fork creates a new thread id
+  and writes its own `session_meta` before inherited history
+  (`core/src/session/session.rs`, `thread-store/src/local/create_thread.rs`,
+  `rollout/src/recorder.rs`). `thread/revert` can create a new rollout file
+  while retaining the thread id (`rollout/src/recorder.rs`).
 - In a `--remote` TUI, `/new` and `/clear` send `thread/start` before the
   first prompt (`tui/src/app/event_dispatch.rs`,
   `tui/src/app/session_lifecycle.rs`). SessionStart remains queued until the
@@ -343,3 +354,13 @@ Read in the source at openai/codex rust-v0.163.0 and probed on 0.162.1 and
   - brew cask, read in its source only: `brew upgrade` renames
     `Caskroom/codex/<old>` aside before installing and deletes it once the new
     version is in.
+
+## Pi
+
+Read in the installed 0.85.1 source and probed through its session SDK with
+synthetic messages:
+
+- `SessionManager.createBranchedSession` and `forkFrom` create a new session
+  file while preserving the inherited message entries' `id` and usage
+  (`dist/core/session-manager.js`). An entry id can therefore occur in more
+  than one session file.

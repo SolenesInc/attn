@@ -3,6 +3,7 @@ package daemon
 import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) handlePTYTitle(terminal harness.TerminalID, title string) {
@@ -49,6 +50,6 @@ func (d *Daemon) decorateLedgerEntryWithTitle(entry *protocol.SessionLedgerEntry
 	}
 	entry.Label = d.sessionTerminalTitle(entry.ID)
 	if entry.Label == "" {
-		entry.Label = defaultSessionLabel(entry.Directory, entry.ID)
+		entry.Label = store.DefaultSessionLabel(entry.Directory, entry.ID)
 	}
 }

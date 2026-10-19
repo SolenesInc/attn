@@ -35,10 +35,12 @@ func TestWorkflowRetirementPreservesSharedStateAcrossUpgradeAndRestart(t *testin
 				t.Errorf("retired table %s survived restart %d", table, restart)
 			}
 		}
+		if session := upgraded.Get("preserved"); session == nil || session.Label != "Kept session" {
+			t.Errorf("restart %d: kept session = %+v, want Kept session", restart, session)
+		}
 		for query, want := range map[string]int{
 			`SELECT COUNT(*) FROM settings WHERE key='workflows_enabled'`:                     0,
 			`SELECT COUNT(*) FROM settings WHERE key='queue_mode_enabled' AND value='true'`:   1,
-			`SELECT COUNT(*) FROM sessions WHERE id='preserved' AND label='Kept session'`:     1,
 			`SELECT COUNT(*) FROM bus_consumers WHERE name='garden-seed-bells' AND cursor=11`: 1,
 		} {
 			var got int

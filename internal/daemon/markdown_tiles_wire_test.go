@@ -305,6 +305,11 @@ func TestFilesAnAgentSendsOpenAsMarkdownTilesUnlessTurnedOff(t *testing.T) {
 	if got := shown(); !slices.Equal(got, []string{later, notes, plan}) {
 		t.Errorf("with the setting off the desktop shows %v, want nothing new", got)
 	}
+	files := recentFiles(app, 0, "")
+	index := slices.Index(paths(files), off)
+	if index < 0 || files[index].Count != 1 || protocol.Deref(files[index].SessionID) != "s1" {
+		t.Fatalf("a file sent with tile opening off was not recorded once for its sender: %+v", files)
+	}
 }
 
 func TestFilesSentByTerminalOpenBesideTheSessionItShows(t *testing.T) {

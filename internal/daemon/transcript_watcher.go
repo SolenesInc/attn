@@ -182,9 +182,6 @@ func (d *Daemon) discoverTranscriptForWatcher(w *transcriptWatcher) string {
 	if _, err := os.Stat(path); err != nil {
 		return ""
 	}
-	if _, err := d.store.TransitionSessionConversation(w.sessionID, binding.NativeID, path); err != nil {
-		d.logf("transcript watcher: persist discovered path failed session=%s path=%s err=%v", w.sessionID, path, err)
-	}
 	return path
 }
 
@@ -366,20 +363,11 @@ func (d *Daemon) applySessionUsageAvailability(w *transcriptWatcher, batch trans
 	if transcript.SupportsUsage(string(w.agent)) {
 		return nil
 	}
-	changed := false
 	for _, event := range batch.Events {
-		if event.Kind != transcript.EventKindAssistant {
-			continue
+		if event.Kind == transcript.EventKindAssistant {
+			w.entry.markCostSource(w.exactPath(), false, true, nil)
+			break
 		}
-		var err error
-		changed, err = d.store.MarkSessionCostUsageUnavailable(w.sessionID, "")
-		if err != nil {
-			return err
-		}
-		break
-	}
-	if changed {
-		d.publishFact(FactSessionCostChanged, string(w.sessionID), nil)
 	}
 	return nil
 }

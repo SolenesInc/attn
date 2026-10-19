@@ -1839,6 +1839,8 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 		lifecycleLock.Unlock()
 		return nil, err
 	}
+	pausepoint.At(pausepoint.SessionTeardownPrepared)
+	d.retireMonitorDriver(sessionID, driverRun.RunID)
 	return &sessionTeardown{session: session, terminals: d.terminalsOf(sessionID), driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
@@ -1849,8 +1851,25 @@ func (d *Daemon) commitSessionUnregister(sessionID protocol.SessionID, closed st
 func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *sessionTeardown) {
 	defer teardown.releaseLifecycle()
 	d.clearForcedStopClassification(sessionID)
-	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
+	entry := d.monitorEntry(sessionID)
+	if entry != nil {
+		entry.mu.Lock()
+	}
+	err := d.store.CancelSessionTeardown(sessionID)
+	var view monitorView
+	if err == nil && entry != nil {
+		entry.driver = d.driverInputFromRecord(sessionID)
+		view = entry.viewLocked()
+	}
+	if entry != nil {
+		entry.mu.Unlock()
+	}
+	if err != nil {
 		d.logf("cancel session teardown failed for %s: %v", sessionID, err)
+		return
+	}
+	if entry != nil {
+		entry.sink.Applied(view)
 	}
 }
 
@@ -1961,7 +1980,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 		d.decorateSessionWithTitle(session)
 		closed.FallbackLabel = protocol.Deref(session.Title)
 		if closed.FallbackLabel == "" {
-			closed.FallbackLabel = defaultSessionLabel(session.Directory, sessionID)
+			closed.FallbackLabel = store.DefaultSessionLabel(session.Directory, sessionID)
 		}
 	}
 	if l := d.linkOf(sessionID); l != nil {
@@ -2985,7 +3004,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 		return nil
 	}
 	if d.store != nil {
-		clone.TerminalExit = d.store.GetSessionExit(clone.ID)
+		clone.TerminalExit = d.sessionExit(clone.ID)
 	}
 	d.decorateSessionWithStateReason(clone)
 
@@ -3774,21 +3793,9 @@ func (d *Daemon) monitorBranches() {
 }
 
 func (d *Daemon) checkAllBranches() {
-	sessions := d.store.List("")
-
 	d.coalesceSnapshots(func() {
-		for _, session := range sessions {
-			info, err := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitDeferred}, session.Directory)
-			if err != nil {
-				continue
-			}
-
-			if info.Branch != protocol.Deref(session.Branch) || info.IsWorktree != protocol.Deref(session.IsWorktree) ||
-				info.Repository != protocol.Deref(session.Repository) {
-				d.store.UpdateBranch(session.ID, info.Branch, info.IsWorktree, info.MainRepo, info.Repository)
-				d.logf("Branch changed: session=%s branch=%s isWorktree=%v", session.ID, info.Branch, info.IsWorktree)
-				d.publishFact(FactSessionBranchChanged, string(session.ID), nil)
-			}
+		for _, entry := range d.monitors().each() {
+			entry.checkBranch(d)
 		}
 	})
 }

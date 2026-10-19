@@ -113,11 +113,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		applied, outcome = d.commitSessionState(change, opening)
 		opens, held, endedSnooze = opening.Opens, outcome.HeldBySnooze, outcome.EndedSnooze
 	} else {
-		cursor := d.store.GetAgentDriverRun(change.sessionID)
 		entry.mu.Lock()
-		if entry.driver.Run != cursor.RunID || cursor.Seq > entry.driver.Sequence {
-			entry.driver = monitorDriverCursor{Plugin: cursor.PluginName, Run: cursor.RunID, Sequence: cursor.Seq}
-		}
 		accepted := entry.changeStateLocked(change.state, change.cause, change.requestStartedAt, time.Now())
 		var view monitorView
 		if accepted {

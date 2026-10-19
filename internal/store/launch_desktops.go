@@ -391,8 +391,8 @@ func (s *Store) PlaceBackgroundSession(sessionID protocol.SessionID, runtimeID p
 		if err != nil {
 			return err
 		}
-		var title string
-		if err := tx.QueryRow(`SELECT label FROM sessions WHERE id = ?`, sessionID).Scan(&title); err != nil {
+		title, err := sessionLabelTx(tx, sessionID)
+		if err != nil {
 			return err
 		}
 		desktop, err = placeSessionInTree(tx, desktop, SessionPlacementRequest{SessionID: sessionID, RuntimeID: runtimeID, Title: title, Direction: layouttree.DirectionVertical, Status: profiles.PaneStatusReady}, paneID)

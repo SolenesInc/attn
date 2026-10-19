@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type linkRuntime interface {
@@ -137,7 +138,7 @@ func (d *Daemon) linkRenamed(sessionID protocol.SessionID, label string) {
 }
 
 func (d *Daemon) mirrorLabel(sessionID protocol.SessionID) {
-	if session := d.store.Get(sessionID); session != nil && !sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
+	if session := d.store.Get(sessionID); session != nil && !store.SessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
 		d.linkRenamed(session.ID, session.Label)
 	}
 }

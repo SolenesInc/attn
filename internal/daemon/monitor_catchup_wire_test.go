@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,31 @@ func TestAnAutoSettleRetriesAfterStorageRecovers(t *testing.T) {
 		if got.State != protocol.SessionStateWorking || protocol.Deref(got.TurnOwed) || got.AutoSettleFiresAt != nil {
 			t.Fatalf("recovered auto-settle: state=%s owed=%v countdown=%v", got.State, protocol.Deref(got.TurnOwed), protocol.Deref(got.AutoSettleFiresAt))
 		}
+	})
+}
+
+func TestPullRequestReportsRetryTheirLatestViewAfterStorageRecovers(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := autoSettleOwingSession(t, w)
+		restore := w.RefuseDatabaseCommits()
+		defer restore()
+		for _, number := range []int{1, 2} {
+			if err := cli.RecordPullRequestCreated("s1", shopPull(number)); err == nil {
+				t.Fatal("unsaved report returned success")
+			}
+		}
+		restore()
+		w.advance(jobs.DefaultBackoffBase)
+		numbers := pullNumbers(queriedSession(t, cli, "s1"))
+		slices.Sort(numbers)
+		if !slices.Equal(numbers, []int{1, 2}) {
+			t.Fatalf("recovered pull requests=%v, want [1 2]", numbers)
+		}
+		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
+			numbers := pullNumbers(s)
+			slices.Sort(numbers)
+			return slices.Equal(numbers, []int{1, 2})
+		})
 	})
 }
 

@@ -53,9 +53,8 @@ func TestOutpostsRetirementKeepsSessionsAndRetiresRemoteDispatches(t *testing.T)
 	if hasTable(t, upgraded, "endpoints") {
 		t.Fatal("endpoints table survived the upgrade")
 	}
-	var label string
-	if err := upgraded.db.QueryRow(`SELECT label FROM sessions WHERE id = 'session-1'`).Scan(&label); err != nil || label != "Preserved" {
-		t.Fatalf("session after the upgrade = %q (%v), want Preserved", label, err)
+	if session := upgraded.Get("session-1"); session == nil || session.Label != "Preserved" {
+		t.Fatalf("session after the upgrade = %+v, want Preserved", session)
 	}
 	for id, want := range map[string]string{
 		"remote": `{"session_id":"remote","crown":"s-1","agent":"claude"}`,

@@ -16,6 +16,7 @@ import (
 type sessionUsageTracker struct {
 	daemon    *Daemon
 	sessionID protocol.SessionID
+	entry     *monitorEntry
 	agent     string
 	resolver  transcript.UsageSourceResolver
 	rootPath  string
@@ -38,14 +39,21 @@ func (d *Daemon) newSessionUsageTracker(w *transcriptWatcher, rootPath string) *
 	if resolver == nil {
 		return nil
 	}
-	return newSessionUsageTrackerAt(d, w.sessionID, string(w.agent), rootPath, resolver)
+	entry := w.entry
+	if entry == nil {
+		entry = d.monitorEntry(w.sessionID)
+	}
+	if entry == nil {
+		return nil
+	}
+	return newSessionUsageTrackerAt(d, entry, w.sessionID, string(w.agent), rootPath, resolver)
 }
 
 func newSessionUsageTrackerAt(
-	d *Daemon, sessionID protocol.SessionID, agent string, rootPath string, resolver transcript.UsageSourceResolver,
+	d *Daemon, entry *monitorEntry, sessionID protocol.SessionID, agent string, rootPath string, resolver transcript.UsageSourceResolver,
 ) *sessionUsageTracker {
 	return &sessionUsageTracker{
-		daemon: d, sessionID: sessionID, agent: agent, resolver: resolver, rootPath: rootPath,
+		daemon: d, entry: entry, sessionID: sessionID, agent: agent, resolver: resolver, rootPath: rootPath,
 		sources: make(map[string]*trackedUsageSource),
 	}
 }
@@ -57,19 +65,15 @@ func (t *sessionUsageTracker) Reconcile() {
 		t.markIncomplete()
 		return
 	}
-	state, err := t.daemon.store.SessionCost(t.sessionID)
-	if err != nil {
-		t.daemon.logf("transcript watcher: usage state read failed session=%s err=%v", t.sessionID, err)
-		return
-	}
-
-	legacyBaseline := state.Initialized && len(state.Sources) == 0 && strings.TrimSpace(state.Cursor) != ""
+	state := t.entry.costCheckpoint()
+	legacy := state.Sources[store.LegacySessionCostSource]
+	legacyBaseline := legacy != nil && strings.TrimSpace(legacy.Cursor) != ""
 	if !state.Initialized || legacyBaseline {
 		cursors := make(map[string]string, len(sources))
 		baselineFailed := false
 		for _, source := range sources {
 			if legacyBaseline && source.Root {
-				cursors[source.ID] = state.Cursor
+				cursors[source.ID] = legacy.Cursor
 				continue
 			}
 			cursor, cursorErr := transcript.HeadCursor(source.Path)
@@ -84,31 +88,22 @@ func (t *sessionUsageTracker) Reconcile() {
 		if baselineFailed {
 			return
 		}
-		if err := t.daemon.store.InitializeSessionCostSources(t.sessionID, cursors); err != nil {
-			t.daemon.logf("transcript watcher: usage baseline persist failed session=%s err=%v", t.sessionID, err)
+		if !t.entry.initializeCostSources(cursors, legacyBaseline) {
 			return
 		}
-		state, err = t.daemon.store.SessionCost(t.sessionID)
-		if err != nil {
-			return
-		}
+		state = t.entry.costCheckpoint()
 	}
 
 	discovered := make(map[string]struct{}, len(sources))
 	for _, source := range sources {
 		discovered[source.ID] = struct{}{}
 		sourceState, exists := state.Sources[source.ID]
-		if !exists {
+		if !exists || !sourceState.Initialized {
 			cursor := ""
-			if err := t.daemon.store.InitializeSessionCostSources(t.sessionID, map[string]string{source.ID: cursor}); err != nil {
-				t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, source.Path, err)
+			if !t.entry.initializeCostSources(map[string]string{source.ID: cursor}, false) {
 				continue
 			}
-			sourceState = store.SessionCostSourceState{Cursor: cursor}
-			if state.Sources == nil {
-				state.Sources = make(map[string]store.SessionCostSourceState)
-			}
-			state.Sources[source.ID] = sourceState
+			sourceState = t.entry.costCheckpoint().Sources[source.ID]
 		}
 		tracked := t.sources[source.ID]
 		if tracked != nil && tracked.source.Path != source.Path {
@@ -170,17 +165,10 @@ func (t *sessionUsageTracker) readIfMoved(tracked *trackedUsageSource) {
 	}
 	tracked.info = info
 	observations := usageObservations(tracked.source, batch.Usage)
-	changed, err := t.daemon.store.ApplySessionCostSourceObservations(
-		t.sessionID, tracked.source.ID, tracked.follower.Cursor(), observations,
-	)
-	if err != nil {
-		t.daemon.logf("transcript watcher: usage source persist failed session=%s path=%s err=%v", t.sessionID, tracked.source.Path, err)
-		t.markIncomplete()
-		return
+	if !t.entry.applyCostObservations(tracked.source.ID, tracked.follower.Cursor(), observations) {
+		t.daemon.logf("transcript watcher: usage source apply failed session=%s path=%s", t.sessionID, tracked.source.Path)
 	}
-	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, string(t.sessionID), nil)
-	}
+
 }
 
 func usageObservations(source transcript.UsageSource, usages []transcript.TokenUsage) []store.SessionCostObservation {
@@ -223,7 +211,7 @@ func (t *sessionUsageTracker) resetAtHead(tracked *trackedUsageSource) bool {
 	if err != nil {
 		return false
 	}
-	if err := t.daemon.store.SetSessionCostSourceCursor(t.sessionID, tracked.source.ID, cursor); err != nil {
+	if !t.entry.markCostSource(tracked.source.ID, true, false, &cursor) {
 		return false
 	}
 	tracked.follower, err = usageFollowerAt(tracked.source.Path, t.agent, cursor)
@@ -232,14 +220,7 @@ func (t *sessionUsageTracker) resetAtHead(tracked *trackedUsageSource) bool {
 }
 
 func (t *sessionUsageTracker) markIncomplete() {
-	changed, err := t.daemon.store.MarkSessionCostMeasurementIncomplete(t.sessionID)
-	if err != nil {
-		t.daemon.logf("transcript watcher: usage incomplete persist failed session=%s err=%v", t.sessionID, err)
-		return
-	}
-	if changed {
-		t.daemon.publishFact(FactSessionCostChanged, string(t.sessionID), nil)
-	}
+	t.entry.markCostSource(t.rootPath, true, false, nil)
 }
 
 func isUsageCursorError(err error) bool {

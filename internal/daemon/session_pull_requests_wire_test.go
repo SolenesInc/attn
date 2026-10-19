@@ -41,6 +41,16 @@ func TestASessionsPullRequestsComeBackNewestFirstAndOncePerSession(t *testing.T)
 	if got := pullNumbers(queriedSession(t, cli, s2)); !slices.Equal(got, []int{1}) {
 		t.Errorf("second session's pull requests after the first forgot #1 = %v, want its own kept", got)
 	}
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(s1)), protocol.StateWorking); err != nil {
+		t.Fatal(err)
+	}
+	if got := pullNumbers(queriedSession(t, cli, s1)); !slices.Equal(got, []int{2}) {
+		t.Fatalf("a later state report restored the forgotten pull request: %v", got)
+	}
+	recordPullRequest(t, cli, s1, shopPull(1))
+	if got := pullNumbers(queriedSession(t, cli, s1)); !slices.Equal(got, []int{1, 2}) {
+		t.Fatalf("reporting the forgotten pull request again = %v, want [1 2]", got)
+	}
 }
 
 func TestAPullRequestReportedByTerminalBelongsToTheSessionItShows(t *testing.T) {

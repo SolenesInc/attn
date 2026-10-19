@@ -204,6 +204,8 @@ func (d *Daemon) startEvidence(sessionID protocol.SessionID, fresh monitorEviden
 	if entry != nil {
 		if session := d.store.Get(sessionID); session != nil {
 			entry.mu.Lock()
+			entry.directory = session.Directory
+			entry.branch = branchFromSession(session)
 			entry.state = monitorStateView{Quiet: true, Sequence: entry.state.Sequence + 1, State: session.State,
 				Since: protocol.Timestamp(session.StateSince).Time(), Updated: protocol.Timestamp(session.StateUpdatedAt).Time()}
 			entry.firstReportAt = time.Time{}

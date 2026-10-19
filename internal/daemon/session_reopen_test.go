@@ -10,18 +10,17 @@ import (
 )
 
 type reopenSession struct {
-	ID         string
-	Directory  string
-	Branch     string
-	Repo       string
-	Agent      string
-	Resume     string
-	ClosedBy   string
-	Reason     string
-	CostCursor string
-	NoIntent   bool
-	Intent     *store.LaunchIntent
-	ProfileID  string
+	ID        string
+	Directory string
+	Branch    string
+	Repo      string
+	Agent     string
+	Resume    string
+	ClosedBy  string
+	Reason    string
+	NoIntent  bool
+	Intent    *store.LaunchIntent
+	ProfileID string
 }
 
 func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
@@ -55,11 +54,7 @@ func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 	if session.Resume != "" {
 		d.persistResumeSessionID(protocol.SessionID(session.ID), session.Resume)
 	}
-	if session.CostCursor != "" {
-		if err := d.store.SetSessionCostCursor(protocol.SessionID(session.ID), session.CostCursor); err != nil {
-			t.Fatalf("set the cost cursor of %s: %v", session.ID, err)
-		}
-	}
+
 	closedBy := session.ClosedBy
 	if closedBy == "" {
 		closedBy = store.SessionClosedByUser

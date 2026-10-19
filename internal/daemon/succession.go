@@ -18,7 +18,6 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 	to := protocol.SessionID(uuid.NewString())
 	return d.succeed(t, from, store.Succession{
 		To:     to,
-		Label:  defaultSessionLabel(from.Directory, to),
 		Launch: launch,
 		Close:  store.SessionClose{Reason: string("cleared; its terminal moved on to " + to)},
 	}, observation)

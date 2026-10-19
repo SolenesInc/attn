@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -17,11 +15,12 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
 const (
-	maxSessionNameRunes      = 48
+	maxSessionNameRunes      = store.SessionNameRunes
 	sessionTitleTimeout      = 90 * time.Second
 	sessionTitleBriefCharCap = 1500
 	sessionTitleKind         = "session_title"
@@ -184,33 +183,20 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 		return nil, context.Canceled
 	}
 	defer job.CommitGuard.Leave()
-	d.store.UpdateSessionLabel(sessionID, title)
-	session.Label = title
+	entry := d.monitorEntry(sessionID)
+	if entry == nil || !entry.reportHarnessTitle(title) {
+		return nil, fmt.Errorf("session %s: harness title view was not applied", sessionID)
+	}
 	d.logf("session title %s: %q from %s", sessionID, title, payload.Source)
-	d.publishFact(FactSessionRenamed, string(sessionID), nil)
-	d.linkRenamed(sessionID, title)
+	d.mirrorLabel(sessionID)
 	return title, nil
 }
 
 func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
-	if !sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
+	if d.store.SessionLabels(session.ID).UserLabel != "" || !store.SessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
 		return false
 	}
 	return d.crewMemberBoundTo(session.ID) == ""
-}
-
-var (
-	idShapedLabel = regexp.MustCompile(`^(?:s-)?[a-z0-9]{6}$|^[0-9a-f]{6,}$|^[A-Z][A-Z0-9]*-[0-9]+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f-]{4,}$`)
-	sixLetterWord = regexp.MustCompile(`^(?:s-)?[a-z]{6}$`)
-)
-
-func sessionLabelIsPlaceholder(label string, cwd string, sessionID protocol.SessionID) bool {
-	label = strings.TrimSpace(label)
-	def := defaultSessionLabel(cwd, sessionID)
-	if label == def || label == truncateDelegationName(def) {
-		return true
-	}
-	return idShapedLabel.MatchString(label) && !sixLetterWord.MatchString(label)
 }
 
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
@@ -323,14 +309,6 @@ func sanitizeSessionTitle(raw string) string {
 	}
 
 	return line
-}
-
-func defaultSessionLabel(cwd string, sessionID protocol.SessionID) string {
-	label := filepath.Base(cwd)
-	if label == "" || label == "." || label == string(filepath.Separator) {
-		return string(sessionID)
-	}
-	return label
 }
 
 func sessionAutoTitleEnabled() bool {

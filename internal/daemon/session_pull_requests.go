@@ -132,6 +132,12 @@ func (d *Daemon) publishSessionPullRequestMembershipChanged(prID string, extraSe
 }
 
 func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) error {
+	if entry := d.monitorEntry(rec.SessionID); entry != nil {
+		if !entry.reportPullRequest(rec.PRID, monitorPullRequest{Repository: rec.Repository, Number: rec.Number, URL: rec.URL}) {
+			return fmt.Errorf("record pull request %s: monitor view was not applied", rec.PRID)
+		}
+		return nil
+	}
 	recorded, err := d.store.RecordSessionPullRequest(rec, time.Now())
 	if err != nil {
 		return fmt.Errorf("record pull request %s: %w", rec.PRID, err)

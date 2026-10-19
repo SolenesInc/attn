@@ -62,12 +62,20 @@ func loadLegacySingleCursorCostFixture(t *testing.T, w *world, session, cursor s
 	if err != nil {
 		t.Fatal(err)
 	}
+	loadLegacyCostFixture(t, w, session, string(blob))
+}
+
+func loadLegacyCostFixture(t *testing.T, w *world, session, blob string) {
+	t.Helper()
 	db, err := sql.Open("sqlite3", filepath.Join(w.Dir, "attn.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", string(blob), session); err != nil {
+	if _, err := db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", blob, session); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("DELETE FROM schema_migrations WHERE version=1792435339090792"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -76,4 +84,32 @@ func appendLegacyCostUsage(t *testing.T, path, id, model string, input, output i
 	t.Helper()
 	line := fmt.Sprintf(`{"type":"assistant","message":{"id":%q,"model":%q,"usage":{"input_tokens":%d,"output_tokens":%d}}}`+"\n", id, model, input, output)
 	appendTranscript(t, path, [][]byte{[]byte(line)})
+}
+
+func TestAnUpgradedCostObservationRemainsRevisableAcrossSourceAdmissionAndRestart(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "old work")
+		agent.reply("done <!-- attn:state=idle -->")
+		cursor, err := transcript.HeadCursor(agent.transcript.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		legacy := fmt.Sprintf(`{"initialized":true,"cursor":%q,"ledger":{"agent|claude-opus-4-8":{"input_tokens":10,"output_tokens":2}},"observations":{"claude:pending":{"observation_id":"claude:pending","model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":2}}}}`, cursor)
+		w.stop()
+		loadLegacyCostFixture(t, w, agent.id, legacy)
+		appendLegacyCostUsage(t, agent.transcript.Path, "pending", "claude-opus-4-8", 20, 5)
+		w.start()
+		w.advance(time.Second)
+		if usage := queriedSession(t, w.Client(), agent.id).Usage; usage == nil || usage.TotalTokens != 25 {
+			t.Fatalf("revised migrated usage=%+v, want25 replacing the original12", usage)
+		}
+		w.restart()
+		appendLegacyCostUsage(t, agent.transcript.Path, "pending", "claude-opus-4-8", 20, 8)
+		w.advance(time.Second)
+		if usage := queriedSession(t, w.Client(), agent.id).Usage; usage == nil || usage.TotalTokens != 28 {
+			t.Fatalf("revised usage after restart=%+v, want28", usage)
+		}
+	})
 }

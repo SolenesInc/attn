@@ -131,7 +131,7 @@ func (s *Store) CloseSession(id protocol.SessionID, closed SessionClose, now tim
 // addressed to it; the caller forgets the cost and announces an emptied desktop after commit.
 func (s *Store) closeSessionTx(tx *sql.Tx, id protocol.SessionID, closed SessionClose, at string) (bool, bool, []string, error) {
 	result, err := tx.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?,
-		label = CASE WHEN agent = 'shell' AND label = '' THEN ? ELSE label END
+		user_label = CASE WHEN agent = 'shell' AND user_label = '' THEN ? ELSE user_label END
 		WHERE id = ? AND closed_at = ''`, at, closed.By, strings.TrimSpace(closed.Reason), closed.FallbackLabel, id)
 	if err != nil {
 		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)
@@ -172,14 +172,13 @@ func finalizeSessionCostTx(tx *sql.Tx, id protocol.SessionID) error {
 	if err := tx.QueryRow("SELECT session_cost_json FROM sessions WHERE id = ?", id).Scan(&raw); err != nil {
 		return err
 	}
-	state, err := decodeSessionCostState(raw)
+	state, err := decodeSessionMonitorCost(raw)
 	if err != nil {
 		return err
 	}
-	if len(state.Observations) == 0 {
+	if !finalizeSessionCost(&state) {
 		return nil
 	}
-	finalizeSessionCost(&state)
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return err
@@ -284,7 +283,7 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 	return s.sessionLedgerDB(query, limit)
 }
 
-const ledgerSelect = `SELECT id, label, agent, directory, profile_id, priority,
+const ledgerSelect = `SELECT id, user_label, harness_title, agent, directory, profile_id, priority,
 	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason, turn_snoozed_until,
@@ -633,6 +632,7 @@ type ledgerScanner interface {
 
 func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var entry protocol.SessionLedgerEntry
+	var labels SessionLabels
 	var isWorktree, priority int
 	var branch, mainRepo, repository sql.NullString
 	var (
@@ -646,7 +646,8 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 
 	err := row.Scan(
 		&entry.ID,
-		&entry.Label,
+		&labels.UserLabel,
+		&labels.HarnessTitle,
 		&entry.Agent,
 		&entry.Directory,
 		&entry.ProfileID,
@@ -668,6 +669,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
 	}
+	entry.Label = labels.shown(entry.ID, entry.Directory, entry.Agent)
 	if until, err := time.Parse(time.RFC3339Nano, snoozedUntil); err == nil && until.After(time.Now()) && closedAt == "" {
 		entry.TurnSnoozedUntil = protocol.Ptr(until.UTC().Format(time.RFC3339Nano))
 	}

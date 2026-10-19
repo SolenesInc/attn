@@ -362,11 +362,12 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 	s.events.run(r.d, func() {
 		sessionID := r.holder(s.profile, p.ThreadID)
 		session := r.d.store.Get(sessionID)
-		if session == nil || name == "" || session.Label == name {
+		if session == nil || name == "" {
 			return
 		}
-		r.d.store.UpdateSessionLabel(sessionID, name)
-		r.d.publishFact(FactSessionRenamed, string(sessionID), nil)
+		if entry := r.d.monitorEntry(sessionID); entry != nil {
+			entry.reportHarnessTitle(name)
+		}
 	})
 }
 

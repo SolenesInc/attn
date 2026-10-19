@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 const pluginDriverCallTimeout = 30 * time.Second
@@ -593,7 +594,13 @@ func (d *Daemon) applyPluginReportedStop(params pluginReportStopParams) {
 
 func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) bool {
 	d.notePluginDriverReport(params.SessionID)
-	if !d.store.ApplyAgentDriverMetadata(params.SessionID, params.RunID, params.Seq, string(params.Metadata)) {
+	var applied bool
+	if entry := d.monitorEntry(params.SessionID); entry != nil {
+		applied = entry.reportDriverMetadata(params.RunID, params.Seq, string(params.Metadata))
+	} else {
+		applied = d.store.ApplyAgentDriverMetadata(params.SessionID, params.RunID, params.Seq, string(params.Metadata))
+	}
+	if !applied {
 		d.logf("plugin metadata report discarded: session=%s run=%s seq=%d", params.SessionID, params.RunID, params.Seq)
 		return false
 	}
@@ -604,6 +611,17 @@ func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) 
 }
 
 func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams, path string) {
+	if entry := d.monitorEntry(params.SessionID); entry != nil {
+		if session := d.store.Get(params.SessionID); session != nil && transcript.SupportsUsage(session.Agent) {
+			if !d.life.Do("seedPluginUsageBaseline", func() { d.seedPluginUsageBaseline(params.SessionID, path) }) {
+				return
+			}
+		}
+		if !entry.reportDriverTranscript(params.RunID, path) {
+			d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
+		}
+		return
+	}
 	if !d.store.SetAgentDriverTranscriptPath(params.SessionID, params.RunID, path) {
 		d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
 		return
@@ -737,7 +755,7 @@ func (d *Daemon) closePluginDriverSession(sessionID protocol.SessionID, reason s
 		d.logf("plugin session close skipped: session=%s reason=%s no longer in store", sessionID, reason)
 		return
 	}
-	run := d.store.EndAgentDriverRun(sessionID)
+	run := d.endAgentDriverRun(sessionID)
 	if run.RunID == "" {
 		d.logf("plugin session close skipped: session=%s reason=%s has no active driver run", sessionID, reason)
 		return

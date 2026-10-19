@@ -57,6 +57,9 @@ function legacyWorkspacesSql(fixtureDir) {
     `INSERT OR REPLACE INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
       VALUES (1, 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
     'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
+    'ALTER TABLE sessions RENAME COLUMN user_label TO label;',
+    'ALTER TABLE sessions DROP COLUMN harness_title;',
+    'DELETE FROM schema_migrations WHERE version = 1792371295625260;',
     "CREATE TABLE workspaces (id TEXT PRIMARY KEY, title TEXT NOT NULL, directory TEXT NOT NULL, created_at TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, rank TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0);",
     'CREATE TABLE workspace_layouts (workspace_id TEXT PRIMARY KEY, active_pane_id TEXT NOT NULL, layout_json TEXT NOT NULL, updated_at TEXT NOT NULL);',
     "CREATE TABLE workspace_layout_panes (workspace_id TEXT NOT NULL, pane_id TEXT NOT NULL, runtime_id TEXT NOT NULL DEFAULT '', session_id TEXT, kind TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready', error TEXT NOT NULL DEFAULT '', PRIMARY KEY (workspace_id, pane_id));",

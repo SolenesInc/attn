@@ -2,7 +2,10 @@ package store
 
 import (
 	"path/filepath"
+	"strconv"
 	"testing"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestUnnamedShellMigrationClearsOnlyPlaceholderNames(t *testing.T) {
@@ -38,22 +41,22 @@ func TestUnnamedShellMigrationClearsOnlyPlaceholderNames(t *testing.T) {
 			if err := db.Close(); err != nil {
 				t.Fatal(err)
 			}
-			db, err = OpenDB(path)
+			upgraded, err := NewWithDB(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer db.Close()
+			defer upgraded.Close()
 			for i, c := range cases {
-				var label string
-				if err := db.QueryRow(`SELECT label FROM sessions WHERE id=?`, i).Scan(&label); err != nil {
-					t.Fatal(err)
+				entry := upgraded.SessionLedgerEntry(protocol.SessionID(strconv.Itoa(i)))
+				if entry == nil {
+					t.Fatalf("session %d disappeared", i)
 				}
 				want := c.want
 				if lifecycle.closedAt != "" {
 					want = c.label
 				}
-				if label != want {
-					t.Errorf("%s %q in %q became %q, want %q", c.agent, c.label, c.directory, label, want)
+				if entry.Label != want {
+					t.Errorf("%s %q in %q became %q, want %q", c.agent, c.label, c.directory, entry.Label, want)
 				}
 			}
 		})

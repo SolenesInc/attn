@@ -3,8 +3,11 @@ package daemon
 import (
 	"time"
 
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionstate"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type monitorRuntimeID string
@@ -16,6 +19,14 @@ type monitorKey struct {
 }
 
 type monitorValue[T any] struct{ V T }
+type monitorKeyedSet[K comparable, V any] struct{ Entries map[K]V }
+
+type monitorPullRequest struct {
+	Repository string
+	Number     int
+	URL        string
+	Sequence   uint64
+}
 type monitorStateView struct {
 	Quiet     bool
 	Origin    stateOrigin
@@ -42,22 +53,41 @@ type monitorAutoSettleView struct {
 	DismissArmed bool
 }
 
-type monitorDriverCursor struct {
-	Plugin   string
-	Run      string
-	Sequence uint64
+type monitorDriverMetadata struct {
+	Plugin         string
+	Run            string
+	Sequence       uint64
+	Metadata       string
+	TranscriptPath string
+}
+
+type monitorExit struct {
+	Text   string
+	Cols   int
+	Rows   int
+	Code   int
+	Signal string
+	At     time.Time
 }
 
 type monitorView struct {
-	FirstReportAt      monitorValue[time.Time]             `fact:"-"`
-	Key                monitorValue[monitorKey]            `fact:"-"`
-	Revision           monitorValue[uint64]                `fact:"-"`
-	Succeeds           monitorValue[monitorKey]            `fact:"-"`
-	State              monitorValue[monitorStateView]      `fact:"session.state.changed"`
-	Turn               monitorValue[monitorTurnStamps]     `fact:"session.state.changed"`
-	AutoSettle         monitorValue[monitorAutoSettleView] `fact:"session.state.changed"`
-	LastModelRequestAt monitorValue[time.Time]             `fact:"session.model_request.started"`
-	Driver             monitorValue[monitorDriverCursor]   `fact:"session.state.changed"`
+	CostInitialized    monitorValue[bool]                                `fact:"session.cost.changed"`
+	Cost               monitorKeyedSet[string, *store.SessionCostSource] `fact:"session.cost.changed"`
+	FirstReportAt      monitorValue[time.Time]                           `fact:"-"`
+	Key                monitorValue[monitorKey]                          `fact:"-"`
+	Revision           monitorValue[uint64]                              `fact:"-"`
+	Succeeds           monitorValue[monitorKey]                          `fact:"-"`
+	State              monitorValue[monitorStateView]                    `fact:"session.state.changed"`
+	Turn               monitorValue[monitorTurnStamps]                   `fact:"session.state.changed"`
+	AutoSettle         monitorValue[monitorAutoSettleView]               `fact:"session.state.changed"`
+	LastModelRequestAt monitorValue[time.Time]                           `fact:"session.model_request.started"`
+	Driver             monitorValue[monitorDriverMetadata]               `fact:"session.state.changed"`
+	Branch             monitorValue[attngit.BranchInfo]                  `fact:"session.branch.changed"`
+	PullRequests       monitorKeyedSet[string, monitorPullRequest]       `fact:"session.pull_request.changed"`
+	SentFiles          monitorKeyedSet[string, uint64]                   `fact:"-"`
+	HarnessTitle       monitorValue[string]                              `fact:"session.renamed"`
+	Exit               monitorValue[*monitorExit]                        `fact:"session.pty.exited"`
+	Live               monitorValue[bool]                                `fact:"-"`
 }
 
 type monitorSink interface{ Applied(monitorView) bool }
@@ -78,15 +108,27 @@ func (e *monitorEntry) snapshotLocked() monitorView {
 	}
 	state := e.state
 	state.Reason = e.reason
+	e.monitor.mu.Lock()
+	process := e.monitor.terminal.Process
+	live := e.exit == nil && (process == nil || process.Claim != sessionstate.ClaimExited)
+	e.monitor.mu.Unlock()
 	return monitorView{
+		CostInitialized:    monitorValue[bool]{e.costInitialized},
+		Cost:               monitorKeyedSet[string, *store.SessionCostSource]{Entries: e.cost},
 		Key:                monitorValue[monitorKey]{e.keyLocked()},
 		Revision:           monitorValue[uint64]{e.revision},
 		State:              monitorValue[monitorStateView]{state},
 		Turn:               monitorValue[monitorTurnStamps]{e.turn},
 		AutoSettle:         monitorValue[monitorAutoSettleView]{auto},
 		LastModelRequestAt: monitorValue[time.Time]{e.lastModelRequestAt},
-		Driver:             monitorValue[monitorDriverCursor]{e.driver},
+		Driver:             monitorValue[monitorDriverMetadata]{e.driver},
 		FirstReportAt:      monitorValue[time.Time]{e.firstReportAt},
+		Branch:             monitorValue[attngit.BranchInfo]{e.branch},
+		PullRequests:       monitorKeyedSet[string, monitorPullRequest]{Entries: e.pullRequests},
+		SentFiles:          monitorKeyedSet[string, uint64]{Entries: e.sentFiles},
+		HarnessTitle:       monitorValue[string]{e.harnessTitle},
+		Exit:               monitorValue[*monitorExit]{e.exit},
+		Live:               monitorValue[bool]{live},
 	}
 }
 

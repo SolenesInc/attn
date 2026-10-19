@@ -9,11 +9,13 @@ import (
 
 	"github.com/google/uuid"
 
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/statetrace"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type sessionMonitor struct {
@@ -29,7 +31,7 @@ type monitorEntry struct {
 	initialized         bool
 	revision            uint64
 	state               monitorStateView
-	driver              monitorDriverCursor
+	driver              monitorDriverMetadata
 	turn                monitorTurnStamps
 	lastModelRequestAt  time.Time
 	firstReportAt       time.Time
@@ -39,6 +41,15 @@ type monitorEntry struct {
 	sink                monitorSink
 	conversation        string
 	localConversation   string
+	directory           string
+	branch              attngit.BranchInfo
+	pullRequests        map[string]monitorPullRequest
+	sentFiles           map[string]uint64
+	harnessTitle        string
+	exit                *monitorExit
+	costInitialized     bool
+	cost                map[string]*store.SessionCostSource
+	costOwners          map[string]monitorCostOwner
 	evidence            sessionstate.ConversationEvidence
 	resolveAt           time.Time
 	resolvePending      bool
@@ -115,30 +126,31 @@ func (d *Daemon) monitorEntry(sessionID protocol.SessionID) *monitorEntry {
 
 func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string, sessionID protocol.SessionID, linked bool, initialize func(*monitorEntry)) *monitorEntry {
 	r.mu.Lock()
-	var detached *monitorEntry
-	defer func() {
-		r.mu.Unlock()
-		if detached != nil {
-			detached.stop()
-		}
-	}()
+	defer r.mu.Unlock()
 	var old *monitorEntry
 	if binding := r.sessions[sessionID]; binding != nil {
 		old = binding.entry
 	}
 	if old != nil && old.monitor.terminalID == terminal {
 		old.mu.Lock()
-		defer old.mu.Unlock()
 		if (conversation == "" && !linked) || old.conversation == conversation {
 			initialize(old)
+			old.mu.Unlock()
 			return old
 		}
 		if old.conversation == "" && conversation != "" {
 			old.conversation = conversation
 			initialize(old)
 			old.armWakeLocked()
+			old.mu.Unlock()
 			return old
 		}
+		old.mu.Unlock()
+	}
+	if old != nil {
+		r.mu.Unlock()
+		old.stop()
+		r.mu.Lock()
 	}
 	var m *sessionMonitor
 	if !linked {
@@ -150,7 +162,7 @@ func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string
 			m.runtime = monitorRuntimeID(uuid.NewString())
 		}
 	}
-	detached = r.forgetLocked(sessionID)
+	r.forgetLocked(sessionID)
 	if !linked {
 		r.physical[terminal] = m
 	}
@@ -219,12 +231,23 @@ func (d *Daemon) initializeMonitor(entry *monitorEntry, sessionID protocol.Sessi
 	}
 	if !entry.initialized {
 		if session := d.store.Get(sessionID); session != nil {
+			entry.directory = session.Directory
+			entry.branch = branchFromSession(session)
+			entry.harnessTitle = d.store.SessionLabels(sessionID).HarnessTitle
 			entry.state = monitorStateView{State: session.State, Since: protocol.Timestamp(session.StateSince).Time(), Updated: protocol.Timestamp(session.StateUpdatedAt).Time()}
 			entry.lastModelRequestAt = protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time()
 		}
 		stamps := d.store.TurnStamps(sessionID)
-		cursor := d.store.GetAgentDriverRun(sessionID)
-		entry.driver = monitorDriverCursor{Plugin: cursor.PluginName, Run: cursor.RunID, Sequence: cursor.Seq}
+		entry.driver = d.driverInputFromRecord(sessionID)
+		if cost, err := d.store.SessionCostCheckpoint(sessionID); err == nil {
+			entry.loadCostLocked(cost)
+		} else {
+			d.logf("monitor cost: session=%s load failed: %v", sessionID, err)
+		}
+		if saved := d.store.GetSessionExitScreen(sessionID); saved != nil {
+			entry.exit = &monitorExit{Text: saved.Text, Cols: saved.Cols, Rows: saved.Rows, Code: saved.ExitCode,
+				Signal: saved.ExitSignal, At: protocol.Timestamp(saved.ExitedAt).Time()}
+		}
 		entry.turn = monitorTurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil}
 		entry.initialized = d.store.Get(sessionID) != nil
 	}
@@ -242,12 +265,13 @@ func (r *monitorRegistry) each() map[protocol.SessionID]*monitorEntry {
 
 func (d *Daemon) forgetMonitor(sessionID protocol.SessionID) {
 	r := d.monitors()
-	r.mu.Lock()
-	e := r.forgetLocked(sessionID)
-	r.mu.Unlock()
-	if e != nil {
-		e.stop()
+	entry := r.entry(sessionID)
+	if entry != nil {
+		entry.stop()
 	}
+	r.mu.Lock()
+	r.forgetLocked(sessionID)
+	r.mu.Unlock()
 	r.rearm()
 }
 
@@ -268,8 +292,7 @@ func (r *monitorRegistry) forgetLocked(sessionID protocol.SessionID) *monitorEnt
 }
 
 func (e *monitorEntry) stop() {
-	release := e.finishUsage()
-	defer release()
+	e.finishUsage()
 	e.mu.Lock()
 	lane := e.input
 	lane.stopRetriesLocked()
