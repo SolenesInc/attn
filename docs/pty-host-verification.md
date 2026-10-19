@@ -27,12 +27,13 @@ launch starts a fresh host.
 ## Moving running terminals to a new build
 
 When an update changes the terminal snapshot format, a running host's
-terminals can no longer hand the app a screen it reads. After startup recovery
-the daemon moves each such host onto the newest build that passed its check.
-The host stops reading at a chunk boundary, writes each terminal's screen as
-plain VT, and re-execs itself as the new build. Its pid, sockets, PTYs, agent
+terminals can no longer hand the app a screen it reads. As part of startup
+recovery the daemon moves each such host onto the newest build that passed its
+check. The host stops reading at a chunk boundary, writes each terminal's screen
+as plain VT, and re-execs itself as the new build. Its pid, sockets, PTYs, agent
 processes, screens, scrollback and command blocks all carry over; kitty images
-do not. The app reattaches and sees the same screen.
+do not. The app gets its sessions only after every move has finished, so it
+reattaches to the new build and sees the same screen.
 
 Before it touches a live host, the daemon rehearses the move on a throwaway
 host running the same old build with a probe terminal. If the rehearsal fails,
