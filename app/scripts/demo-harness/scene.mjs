@@ -15,17 +15,12 @@ const READ_PAUSE_MS = 1200;
 const CLIP_FPS = 30;
 const SETTLE_TRIPWIRE_MS = 90_000;
 const DRAG_STEPS = 60;
-const RECORDER_STOP_LATENCY_MS = 50;
 const PROMPT_READY = { claude: ensureClaudePromptReadyViaPty, codex: ensureCodexPromptReadyViaPty };
 const KEY_GLYPHS = { arrowleft: '←', arrowright: '→', arrowup: '↑', arrowdown: '↓', enter: '⏎', return: '⏎', escape: 'Esc', tab: 'Tab', backspace: '⌫', ' ': 'Space' };
 const CLIP_SCALE = 2;
 
 function ffmpeg(...args) {
   execFileSync('ffmpeg', ['-loglevel', 'error', '-y', ...args]);
-}
-
-function mediaSeconds(file) {
-  return Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], { encoding: 'utf8' }));
 }
 
 export function createDemo({ world, outDir, log }) {
@@ -95,9 +90,9 @@ export function createDemo({ world, outDir, log }) {
       await driver.pressKey(binding.key, { command: !!binding.meta, control: !!binding.ctrl, shift: !!binding.shift, option: !!binding.alt });
     },
 
-    async key(key, modifiers = {}) {
-      note('press', { keys: keyGlyphs({ key, meta: modifiers.command, ctrl: modifiers.control, alt: modifiers.option, shift: modifiers.shift }) });
-      await driver.pressKey(key, modifiers);
+    async key(key) {
+      note('press', { keys: keyGlyphs({ key }) });
+      await driver.pressKey(key);
     },
 
     async type(text) {
@@ -120,12 +115,12 @@ export function createDemo({ world, outDir, log }) {
       note('focus', { selector }, await windowRect(selector));
     },
 
-    async drag(fromSelector, toSelector, { steps = DRAG_STEPS } = {}) {
+    async drag(fromSelector, toSelector) {
       const { width, height } = await windowGeometry();
       const from = center(await windowRect(fromSelector));
       const to = center(await windowRect(toSelector));
       note('drag', { from, to });
-      await client.request('native_mouse', { action: 'drag', x: from.x / width, y: from.y / height, toX: to.x / width, toY: to.y / height, steps });
+      await client.request('native_mouse', { action: 'drag', x: from.x / width, y: from.y / height, toX: to.x / width, toY: to.y / height, steps: DRAG_STEPS });
       note('drop', { at: to });
     },
 
@@ -206,25 +201,22 @@ export function createDemo({ world, outDir, log }) {
       await world.placeWindow();
       const { scaleFactor, width, height, titlebar } = await windowGeometry();
       if (scaleFactor < CLIP_SCALE) {
-        throw new Error(`clip ${name} needs the window on a display with scale ${CLIP_SCALE} or more, but it is on one with scale ${scaleFactor}, which records blurry footage; move the window to a Retina display and run the scene again`);
+        throw new Error(`clip ${name} needs a display with scale ${CLIP_SCALE} or more, but the harness puts the window on the main display, which has scale ${scaleFactor} and records blurry footage; make a Retina display the main display and run the scene again`);
       }
       const windowId = await driver.mainWindowId();
       const recording = startWindowRecording({ windowId, outputPath: raw, command: await ensureWindowRecorder(), fps: CLIP_FPS, showCursor: false });
+      await recording.waitForFirstFrame();
       clipLog = Object.assign([], { startedAt: Date.now() });
       note('window', { width, height, titlebar });
       const outcome = await run().then(() => null, (error) => error);
       const events = clipLog;
       clipLog = null;
-      const stopRequestedAt = Date.now();
       const result = await recording.stop();
       if (outcome) throw outcome;
       if (result.failure) throw new Error(`recording ${raw} failed: ${result.failure}`);
-      const firstFrameAt = stopRequestedAt + RECORDER_STOP_LATENCY_MS - mediaSeconds(raw) * 1000;
-      const shift = (events.startedAt - firstFrameAt) / 1000;
       ffmpeg('-i', raw, '-vf', `fps=${CLIP_FPS}`, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '16', file);
       fs.rmSync(raw);
-      const lines = events.map((event) => JSON.stringify({ ...event, t: Number((event.t + shift).toFixed(3)) }));
-      fs.writeFileSync(path.join(outDir, `${name}.events.jsonl`), lines.join('\n') + '\n');
+      fs.writeFileSync(path.join(outDir, `${name}.events.jsonl`), events.map((event) => JSON.stringify(event)).join('\n') + '\n');
       return file;
     },
   };

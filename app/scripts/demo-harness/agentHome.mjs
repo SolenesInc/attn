@@ -69,6 +69,8 @@ function writeShellHome(toolHome) {
   fs.mkdirSync(path.join(configDir, 'fish'), { recursive: true });
   fs.mkdirSync(zshDir, { recursive: true });
   fs.writeFileSync(path.join(configDir, 'fish', 'config.fish'), `set -g fish_greeting
+set -g fish_history ''
+set -g fish_autosuggestion_enabled 0
 fish_add_path --global ${nodeBin}
 function fish_prompt
     set_color brblue; echo -n (string replace -r "^$HOME" "~" $PWD); set_color normal; echo -n ' $ '
