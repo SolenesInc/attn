@@ -54,8 +54,8 @@ export function OutpostsSettings() {
       {!isConnected && <p className="settings-warning" role="status">Connect to the home daemon to change outposts.</p>}
       <section className="settings-block">
         <div className="settings-block-intro">
-          <h3>Bridges</h3>
-          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove disconnects the bridge and forgets this outpost.</p>
+          <h3>Outposts</h3>
+          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove disconnects and forgets this outpost.</p>
         </div>
         <div className="settings-block-body">
           {outposts.length === 0 ? <p className="settings-empty">No outposts added.</p> : (
