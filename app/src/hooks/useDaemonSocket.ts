@@ -6,6 +6,7 @@ export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
+import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
 import { handleQuickCaptureDaemonEvent } from './daemonQuickCaptureEvents';
@@ -19,7 +20,7 @@ import {
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
-import type { DelegationPreferences } from '../types/generated';
+import type { DelegationPreferences, OutpostInfo } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
@@ -718,6 +719,7 @@ export function useDaemonSocket({
   const instanceMismatchRef = useRef<boolean>(false);
   const instanceCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const [migrationFailure, setMigrationFailure] = useState<MigrationFailure | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
   const connectionGenerationRef = useRef(0);
@@ -729,6 +731,8 @@ export function useDaemonSocket({
   const [isReady, setIsReady] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
+  const [outposts, setOutposts] = useState<OutpostInfo[]>([]);
+  const [outpostCommandError, setOutpostCommandError] = useState('');
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
   const [keptConversationsChangeSignal, setKeptConversationsChangeSignal] = useState(0);
@@ -1019,6 +1023,7 @@ export function useDaemonSocket({
     };
 
     ws.onopen = () => {
+      setIsConnected(true);
       console.log('[Daemon] WebSocket connected');
       setConnectionError(null);
       useProfilesStore.getState().connectionOpened();
@@ -1153,6 +1158,7 @@ export function useDaemonSocket({
             callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);
 
             const nextSettings = data.settings || {};
+            if (nextSettings.outposts_enabled !== 'true') setOutposts([]);
             settingsRef.current = nextSettings;
             callbacksRef.current.onSettingsUpdate?.(nextSettings);
             const nextWarnings = data.warnings || [];
@@ -2251,6 +2257,7 @@ export function useDaemonSocket({
           }
 
           case 'command_error':
+            if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
             if (data.error_code === 'unauthorized_client') {
               console.error('[Daemon] Client token refused:', data.error);
               setConnectionError(data.error || 'The daemon refused this client.');
@@ -2271,6 +2278,7 @@ export function useDaemonSocket({
             const pending = pendingActionsRef.current;
             if (handleCalloutDaemonEvent(data, (result) => ws.send(JSON.stringify(result)))) break;
             if (handleQuickCaptureDaemonEvent(data, pending, receipt => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onQuickCaptureRead?.(receipt); })) break;
+            if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
@@ -2305,6 +2313,7 @@ export function useDaemonSocket({
 
     ws.onclose = (event) => {
       wsRef.current = null;
+      setIsConnected(false);
       rejectPendingByPredicate((key) => SELECTION_COMMANDS.some((command) => key.startsWith(`${command}:`)), new Error('The daemon disconnected before confirming the selection'));
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
@@ -3206,6 +3215,20 @@ export function useDaemonSocket({
     const key = 'list_plugins';
     return sendKeyedRequest<PluginListResult>(key, { cmd: 'list_plugins' }, 'List plugins timed out');
   }, [sendKeyedRequest]);
+
+  const sendOutpostCommand = useCallback((message: OutpostCommandMessage): boolean => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setOutpostCommandError('Connect to the home daemon to change outposts.');
+      return false;
+    }
+    setOutpostCommandError('');
+    ws.send(JSON.stringify(message));
+    return true;
+  }, []);
+  const sendAddOutpost = useCallback((name: string, address: string) => sendOutpostCommand({ cmd: 'add_outpost', name, address }), [sendOutpostCommand]);
+  const sendRepairOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'repair_outpost', id }), [sendOutpostCommand]);
+  const sendRemoveOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'remove_outpost', id }), [sendOutpostCommand]);
 
   const sendInstallPlugin = useCallback((source: string): Promise<PluginActionResult> => {
     const key = 'plugin_action:install:pending';
@@ -4141,7 +4164,7 @@ export function useDaemonSocket({
 
 
   return {
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    isConnected,
     isReady,
     connectionError,
     migrationFailure,
@@ -4203,6 +4226,11 @@ export function useDaemonSocket({
     sendQuickCaptureRequest,
     sendSaveSetting,
     sendGetSettings,
+    outposts,
+    outpostCommandError,
+    sendAddOutpost,
+    sendRepairOutpost,
+    sendRemoveOutpost,
     sendListPlugins,
     sendInstallPlugin,
     sendInstallBundledPlugin,

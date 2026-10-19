@@ -244,6 +244,12 @@ export const scenarioCatalog = [
     timeoutMs: 180_000,
   },
   {
+    id: 'outposts-settings',
+    runnerId: 'OutpostsSettings',
+    label: 'Outposts settings: keyboard opt-in, pairing, stalled/lost recovery, full refusal, re-pair and remove',
+    command: ['node', 'scripts/real-app-harness/scenario-outposts-settings.mjs'],
+  },
+  {
     id: 'agent-settings',
     runnerId: 'AgentSettings',
     label: 'Agent settings: grouped defaults, background agents, autosave acknowledgements and close recovery',

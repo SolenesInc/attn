@@ -55,6 +55,7 @@ export type SettingsSectionID =
   | 'autoMode'
   | 'delegation'
   | 'connectivity'
+  | 'outposts'
   | 'plugins'
   | 'backgroundTasks'
   | 'eventBus';

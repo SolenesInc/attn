@@ -636,6 +636,7 @@ export function PluginSettings({
 
 export function ExperimentalSettings({
   quickCaptureEnabled,
+  outpostsEnabled,
   newSessionLauncherEnabled,
   codexSharedEnabled,
   queueShowHiddenSessions,
@@ -648,6 +649,7 @@ export function ExperimentalSettings({
 }: Pick<
   SettingsModalState,
   | 'quickCaptureEnabled'
+  | 'outpostsEnabled'
   | 'newSessionLauncherEnabled'
   | 'codexSharedEnabled'
   | 'queueShowHiddenSessions'
@@ -705,6 +707,17 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
           >
             {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Outposts</p>
+            <p className="settings-row-copy" id="settings-outposts-description">Connect this home to attn on other computers. Add them in Settings → Outposts.</p>
+          </div>
+          <button type="button" role="switch" aria-label="Outposts" aria-checked={outpostsEnabled}
+            aria-describedby="settings-outposts-description" className="settings-action"
+            onClick={() => onSetSetting('outposts_enabled', outpostsEnabled ? 'false' : 'true')}>
+            {outpostsEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">

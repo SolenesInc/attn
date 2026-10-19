@@ -136,6 +136,10 @@ export function useSettingsModalState({
     [autosave],
   );
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
+  const outpostsEnabled = settings.outposts_enabled === 'true';
+  useEffect(() => {
+    if (selectedSection === 'outposts' && !outpostsEnabled) setSelectedSection('connectivity');
+  }, [selectedSection, outpostsEnabled]);
   const delegationPolicy = useDelegationPreferences(
     isOpen,
     sendDelegationPreferencesGet,
@@ -593,6 +597,14 @@ export function useSettingsModalState({
             description: 'Controls for mobile browser access and GitHub host detection.',
             keywords: 'tailscale mobile web github hosts',
           },
+          ...(outpostsEnabled ? [{
+            id: 'outposts' as const,
+            label: 'Outposts',
+            title: 'Outposts',
+            description: 'Connect this home to attn on other computers.',
+            count: 1,
+            keywords: 'outposts bridge host machine address pair re-pair remove connection build fingerprint',
+          }] : []),
         ],
       },
       {
@@ -632,7 +644,7 @@ export function useSettingsModalState({
         ],
       },
     ],
-    [],
+    [outpostsEnabled],
   );
 
   const filteredNavGroups = useMemo(() => {
@@ -653,6 +665,7 @@ export function useSettingsModalState({
   const selectedNavItem = flatNavItems.find((item) => item.id === selectedSection) || flatNavItems[0];
   return {
     selectedSection,
+    outpostsEnabled,
     delegationPolicy,
     tailscaleEnabled,
     tailscaleStatus,
