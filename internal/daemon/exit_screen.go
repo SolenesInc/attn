@@ -13,7 +13,7 @@ import (
 
 const exitScreenMaxBytes = 256 * 1024
 
-const exitScreenSnapshotTimeout = modelCaptureSnapshotTimeout
+const exitScreenSnapshotTimeout = 3 * time.Second
 
 func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend.ExitInfo) {
 	if d.store == nil || d.store.Get(sessionID) == nil {

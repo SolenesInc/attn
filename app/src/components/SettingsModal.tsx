@@ -10,7 +10,6 @@ import {
   BackgroundAgentSettings,
   BackgroundTasksSection,
   ConnectivitySettings,
-  DataSettings,
   EventBusSection,
   HygieneSettings,
   PluginSettings,
@@ -116,8 +115,6 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                     pluginProblemCount={state.pluginProblemCount}
                     activePluginCount={state.activePluginCount}
                     plugins={state.plugins}
-                    modelCaptureEnabled={state.modelCaptureEnabled}
-                    modelCaptureBytes={state.modelCaptureBytes}
                     autoModePolicy={state.autoModePolicy}
                     autoSettleEnabled={state.autoSettleEnabled}
                     mutedRepos={state.mutedRepos}
@@ -244,18 +241,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           ptyBackendMode={state.ptyBackendMode}
           sharedPtyHostEnabled={state.sharedPtyHostEnabled}
           onSetSetting={state.onSetSetting}
-        />
-      );
-    case 'data':
-      return (
-        <DataSettings
-          handleToggleModelCapture={state.handleToggleModelCapture}
-          modelCaptureEnabled={state.modelCaptureEnabled}
-          modelCaptureInterval={state.modelCaptureInterval}
-          onSetSetting={state.onSetSetting}
-          modelCaptureMaxGB={state.modelCaptureMaxGB}
-          modelCaptureBytes={state.modelCaptureBytes}
-          modelCapturePath={state.modelCapturePath}
         />
       );
     case 'hygiene':

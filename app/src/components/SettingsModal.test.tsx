@@ -1,6 +1,6 @@
 import { openRoute, pickModel, pickEffort, enterModel, routeDialog } from '../test/harnessRoute';
 import { act, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { gesture, renderApp } from '../test/renderApp';
 import type { EventMessage } from '../test/protocol';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
@@ -214,57 +214,6 @@ describe('SettingsModal', () => {
     expect(screen.getByRole('button', { name: 'Snipe' })).toBeInTheDocument();
     expect(screen.getByText('Resume')).toBeInTheDocument();
     expect(document.getElementById('settings-snipe-exec')).toBeNull();
-  });
-});
-
-describe('SettingsModal model data capture', () => {
-  const capture = (enabled: string, bytes: string) => ({
-    'model_capture.enabled': enabled,
-    'model_capture.interval_seconds': '10',
-    'model_capture.max_gb': '5',
-    'model_capture.path': '/Users/me/.attn/model-captures',
-    'model_capture.bytes': bytes,
-  });
-
-  it('shows the privacy boundary and persists capture controls', async () => {
-    const daemon = await openSection('data', { settings: capture('false', String(1536 * 1024)) });
-
-    expect(screen.getByText(/Captures exact visible terminal text/)).toBeInTheDocument();
-    expect(screen.getByTestId('settings-model-capture-path')).toHaveTextContent('/Users/me/.attn/model-captures');
-    expect(screen.getByTestId('settings-model-capture-size')).toHaveTextContent('1.5 MB');
-
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-model-capture-toggle')));
-    await gesture(daemon, () => fireEvent.change(screen.getByTestId('settings-model-capture-interval'), { target: { value: '30' } }));
-    await gesture(daemon, () => fireEvent.change(screen.getByTestId('settings-model-capture-max-gb'), { target: { value: '10' } }));
-
-    expect(savedSettings(daemon)).toEqual([
-      ['model_capture.enabled', 'true'],
-      ['model_capture.interval_seconds', '30'],
-      ['model_capture.max_gb', '10'],
-    ]);
-  });
-
-  it('refreshes captured bytes at the configured cadence only while Data is visible', async () => {
-    let bytes = 0;
-    const daemon = await openSection('data', { settings: capture('true', '0') }, (scripted) => {
-      scripted.on('get_settings', () => {
-        bytes += 1024 * 1024;
-        return { event: 'settings_updated', settings: capture('true', String(bytes)) };
-      });
-    });
-    expect(daemon.sentOf('get_settings')).toHaveLength(1);
-    expect(screen.getByTestId('settings-model-capture-size')).toHaveTextContent('1.0 MB');
-
-    await act(() => vi.advanceTimersByTimeAsync(9_999));
-    expect(daemon.sentOf('get_settings')).toHaveLength(1);
-    await act(() => vi.advanceTimersByTimeAsync(1));
-    await daemon.idle();
-    expect(daemon.sentOf('get_settings')).toHaveLength(2);
-    expect(screen.getByTestId('settings-model-capture-size')).toHaveTextContent('2.0 MB');
-
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-general')));
-    await act(() => vi.advanceTimersByTimeAsync(10_000));
-    expect(daemon.sentOf('get_settings')).toHaveLength(2);
   });
 });
 

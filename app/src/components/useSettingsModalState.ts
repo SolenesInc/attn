@@ -37,7 +37,6 @@ import {
   SettingsModalProps,
   SettingsNavGroup,
   SettingsSectionID,
-  formatByteCount,
 } from './settingsModalShared';
 import { usePluginPanel } from './usePluginPanel';
 import { useSavedFlash } from './useSavedFlash';
@@ -79,7 +78,6 @@ export function useSettingsModalState({
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
     sendHarnessModels,
-    sendGetSettings,
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
     sendAutoModeGet,
@@ -153,17 +151,12 @@ export function useSettingsModalState({
   const effectiveNotebookRoot = settings['notebook.root.effective'] || '';
   const {
     tailscaleEnabled,
-    modelCaptureEnabled,
-    modelCaptureInterval,
-    modelCaptureMaxGB,
-    modelCapturePath,
-    modelCaptureBytes,
     tailscaleStatus,
     tailscaleURL,
     tailscaleDomain,
     tailscaleAuthURL,
     tailscaleError,
-  } = settingsConnectionAndCapture(settings);
+  } = settingsConnection(settings);
   const autoApproveEnabled = (settings.auto_approve_enabled || 'true') === 'true';
 
   const actualAgentExecutables = useMemo(() => getAgentExecutableSettings(settings), [settings]);
@@ -373,19 +366,6 @@ export function useSettingsModalState({
 
   useEscapeStack(closeSettings, isOpen);
 
-  useEffect(() => {
-    if (!isOpen || selectedSection !== 'data') return;
-
-    sendGetSettings();
-    if (!modelCaptureEnabled) return;
-
-    const intervalSeconds = Number(modelCaptureInterval);
-    if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) return;
-
-    const intervalID = window.setInterval(sendGetSettings, intervalSeconds * 1000);
-    return () => window.clearInterval(intervalID);
-  }, [isOpen, selectedSection, modelCaptureEnabled, modelCaptureInterval, sendGetSettings]);
-
   // UI automation bridge handle (testing only). Registered for the whole
   // lifetime so the bridge can read `open: false` through it.
   useEffect(() => {
@@ -428,10 +408,6 @@ export function useSettingsModalState({
   const handleToggleOpenSentFiles = useCallback(() => {
     onSetSetting(OPEN_SENT_FILES_ENABLED_SETTING, openSentFilesEnabled ? 'false' : 'true');
   }, [onSetSetting, openSentFilesEnabled]);
-
-  const handleToggleModelCapture = useCallback(() => {
-    onSetSetting('model_capture.enabled', modelCaptureEnabled ? 'false' : 'true');
-  }, [modelCaptureEnabled, onSetSetting]);
 
   const { set: setNotebookRoot } = notebookRootDraft;
   const handleBrowseNotebookRoot = useCallback(async () => {
@@ -653,13 +629,6 @@ export function useSettingsModalState({
             keywords:
               'event bus log durable facts producers consumers cursor lag retention compaction trim stalled disabled kill switch seq',
           },
-          {
-            id: 'data',
-            label: 'Model data capture',
-            description:
-              'Collect visible Codex and Claude terminal screens for local model evaluation and training. Off by default.',
-            keywords: 'local model training dataset capture privacy terminal viewport local retention sampling',
-          },
         ],
       },
     ],
@@ -690,8 +659,6 @@ export function useSettingsModalState({
     pluginProblemCount,
     activePluginCount,
     plugins,
-    modelCaptureEnabled,
-    modelCaptureBytes,
     autoModePolicy,
     autoSettleEnabled,
     asksEnabled,
@@ -769,10 +736,6 @@ export function useSettingsModalState({
     executableAgentList,
     executableDrafts,
     defaultContextCapDrafts,
-    handleToggleModelCapture,
-    modelCaptureInterval,
-    modelCaptureMaxGB,
-    modelCapturePath,
     handleToggleAutoSettle,
     autoSettleArmDraft,
     autoSettleCountdownDraft,
@@ -796,13 +759,8 @@ export function useSettingsModalState({
 
 export type SettingsModalState = ReturnType<typeof useSettingsModalState>;
 
-export function settingsConnectionAndCapture(settings: DaemonSettings) {
+export function settingsConnection(settings: DaemonSettings) {
   const tailscaleEnabled = (settings.tailscale_enabled || 'false') === 'true';
-  const modelCaptureEnabled = (settings['model_capture.enabled'] || 'false') === 'true';
-  const modelCaptureInterval = settings['model_capture.interval_seconds'] || '10';
-  const modelCaptureMaxGB = settings['model_capture.max_gb'] || '5';
-  const modelCapturePath = settings['model_capture.path'] || '';
-  const modelCaptureBytes = formatByteCount(settings['model_capture.bytes']);
   const tailscaleStatus = settings.tailscale_status || 'disabled';
   const tailscaleURL = settings.tailscale_url || '';
   const tailscaleDomain = settings.tailscale_domain || '';
@@ -810,11 +768,6 @@ export function settingsConnectionAndCapture(settings: DaemonSettings) {
   const tailscaleError = settings.tailscale_error || '';
   return {
     tailscaleEnabled,
-    modelCaptureEnabled,
-    modelCaptureInterval,
-    modelCaptureMaxGB,
-    modelCapturePath,
-    modelCaptureBytes,
     tailscaleStatus,
     tailscaleURL,
     tailscaleDomain,
