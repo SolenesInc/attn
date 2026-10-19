@@ -53,7 +53,7 @@ export function AppDesktops() {
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
-  const { seedPopoverRequest, usagePopoverRequest } = useAppPanelsContext();
+  const { seedPopoverRequest, usagePopoverRequest, openAsk } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
   const { delegationSessions } = useAppSessionsContext();
   const { daemonSessions } = useAppInputs();
@@ -116,6 +116,7 @@ export function AppDesktops() {
             isActive: isCurrent && entry.id === shownSessionId,
             seedId: entry.seedId,
             crewMember: entry.crewMember,
+            chiefOfStaff: entry.chiefOfStaff,
             automation: entry.automation,
             pullRequests: entry.pullRequests,
           }))}
@@ -130,6 +131,7 @@ export function AppDesktops() {
           gardenSeeds={seeds}
           onOpenSeed={handleOpenSeedTile}
           onRevealSeedInGarden={handleRevealSeedInGarden}
+          onOpenAsk={openAsk}
           backToCrewTileId={crewSeedTile?.desktopId === desktop.id ? crewSeedTile.tileId : undefined}
           onBackToCrew={handleBackToCrew}
           seedPopoverRequest={seedPopoverRequest}

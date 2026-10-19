@@ -6,11 +6,13 @@ import { type TileContentState } from '../types/desktop';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
 import { sessionParticipatesInQueue } from '../utils/queueBands';
 import { automationRunGroups } from '../utils/automationRuns';
+import type { AskHolderSession, AskListItem } from '../utils/asks';
 import type { DockItem, LocalSession, SidebarProps, SidebarDesktop } from './sidebarTypes';
 import { useSidebarDrag } from './useSidebarDrag';
 
 const EMPTY_DOCK_ITEMS: DockItem[] = [];
 const EMPTY_TILE_CONTENTS: Record<string, TileContentState> = {};
+const NO_ASKS: readonly AskListItem<AskHolderSession>[] = [];
 
 export function useSidebarState({
   desktops,
@@ -38,6 +40,8 @@ export function useSidebarState({
   onSettleTurn,
   onWalkRuns,
   onJumpToWaiting,
+  asks = NO_ASKS,
+  onOpenAsk,
   profileName,
   onSwitchProfile,
   onOpenCommands,
@@ -269,6 +273,8 @@ export function useSidebarState({
     onSettleTurn,
     onWalkRuns,
     onJumpToWaiting,
+    asks,
+    onOpenAsk,
     profileName,
     onSwitchProfile,
     onOpenCommands,

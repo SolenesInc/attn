@@ -3,15 +3,14 @@ import type { Ask, AskAnswer } from '../../types/generated';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
-import { EMPTY_ASK_DRAFT, useAsksStore } from '../../store/asks';
-import { useDaemonStore } from '../../store/daemonSessions';
+import { EMPTY_ASK_DRAFT, useAskList, useAsksStore } from '../../store/asks';
 import type { UISessionState } from '../../types/sessionState';
-import { askFrom, askHolder, askQuestions, draftAnswers, draftSendable, orderAsks, type AskHolderSession } from '../../utils/asks';
-import { formatTurnAge } from '../../utils/queueBands';
+import { askQuestions, draftAnswers, draftSendable, type AskHolderSession, type AskListItem } from '../../utils/asks';
 import { fileMarkdownSource } from '../MarkdownReader/documentSource';
 import { MarkdownReader } from '../MarkdownReader';
 import { SessionLead } from '../SessionLead';
 import { AskQuestionCard } from './AskQuestionCard';
+import { AskRowSummary } from './AskRowSummary';
 import './Asks.css';
 
 export interface AskDrawerSession extends AskHolderSession {
@@ -31,23 +30,27 @@ interface AsksDrawerProps {
 
 const SEND_SHORTCUT = { key: 'Enter', meta: true };
 
+function takeKeyboardFromTerminal(input: HTMLElement) {
+  document.getSelection()?.removeAllRanges();
+  input.focus({ preventScroll: true });
+}
+
 function isTyping(target: EventTarget): boolean {
   if (target instanceof HTMLInputElement) return !['radio', 'checkbox', 'button'].includes(target.type);
   return target instanceof HTMLElement && (target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
 export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }: AsksDrawerProps) {
-  const asks = useAsksStore((state) => state.asks);
-  const seeds = useDaemonStore((state) => state.seeds);
+  const items = useAskList(sessions);
   const drafts = useAsksStore((state) => state.drafts);
   const selectedAskId = useAsksStore((state) => state.selectedAskId);
+  const focusRequest = useAsksStore((state) => state.focusRequest);
   const { selectAsk, setDraft } = useAsksStore.getState();
   const { sendAskAnswer } = useDaemonApi();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ordered = useMemo(() => orderAsks(asks, sessions, seeds), [asks, sessions, seeds]);
-  const index = Math.max(0, ordered.findIndex((ask) => ask.id === selectedAskId));
-  const ask = ordered[index];
+  const index = Math.max(0, items.findIndex((item) => item.ask.id === selectedAskId));
+  const ask = items[index]?.ask;
   const askId = ask?.id;
   const drawerRef = useRef<HTMLDivElement>(null);
   const askRef = useRef<HTMLElement>(null);
@@ -71,16 +74,17 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     const article = askRef.current;
     if (!article) return;
     article.scrollTop = 0;
-    article.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)')?.focus({ preventScroll: true });
-  }, [askId, selectAsk]);
+    const input = article.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)');
+    if (input) takeKeyboardFromTerminal(input);
+  }, [askId, focusRequest, selectAsk]);
 
   const show = (id: string) => {
     selectAsk(id);
     setError(null);
   };
   const step = (delta: number) => {
-    const next = ordered[index + delta];
-    if (next) show(next.id);
+    const next = items[index + delta];
+    if (next) show(next.ask.id);
   };
 
   if (!ask) {
@@ -95,8 +99,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     );
   }
 
-  const holder = askHolder(ask, sessions, seeds);
-  const from = askFrom(ask, holder);
+  const { holder, from } = items[index];
   const seedId = ask.seed_id;
   const questions = askQuestions(ask);
   const draft = drafts[ask.id] ?? EMPTY_ASK_DRAFT;
@@ -104,12 +107,12 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const changeAnswer = (answer: AskAnswer) => setDraft(ask.id, { ...draft, answers: { ...draft.answers, [answer.key]: answer } });
   const send = async () => {
     if (!sendable) return;
-    const after = ordered[index + 1] ?? ordered[index - 1];
+    const after = items[index + 1] ?? items[index - 1];
     setSending(true);
     setError(null);
     try {
       await sendAskAnswer(ask.id, draftAnswers(ask, draft), draft.note);
-      selectAsk(after?.id ?? null);
+      selectAsk(after?.ask.id ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -133,8 +136,8 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
 
   return (
     <div ref={drawerRef} className="asks-drawer" role="region" aria-label="Asks" tabIndex={-1} onKeyDown={onKeyDown}>
-      <AsksHeader count={ordered.length} onClose={onClose} />
-      <AsksList asks={ordered} selectedId={ask.id} sessions={sessions} listRef={listRef} onShow={show} />
+      <AsksHeader count={items.length} onClose={onClose} />
+      <AsksList items={items} selectedId={ask.id} listRef={listRef} onShow={show} />
       <article ref={askRef} className="asks-ask" aria-label={ask.subject} data-testid={`ask-${ask.id}`}>
         <div className="asks-ask-from">
           {holder && <SessionLead agent={holder.agent} state={holder.state} reason={holder.state_reason} seed={holder.id} />}
@@ -175,7 +178,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
         {error && <div className="asks-error" role="alert">{error}</div>}
       </article>
       <div className="asks-footer">
-        <AsksHints several={ordered.length > 1} hasHolder={Boolean(holder)} hasSeed={Boolean(seedId)} />
+        <AsksHints several={items.length > 1} hasHolder={Boolean(holder)} hasSeed={Boolean(seedId)} />
         <button type="button" className="asks-send" disabled={!sendable} aria-busy={sending || undefined} onClick={() => void send()}>
           {sending ? 'Sending…' : 'Send'} <kbd>{formatShortcut(SEND_SHORTCUT)}</kbd>
         </button>
@@ -185,36 +188,28 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
 }
 
 interface AsksListProps {
-  asks: readonly Ask[];
+  items: readonly AskListItem<AskDrawerSession>[];
   selectedId: string;
-  sessions: readonly AskDrawerSession[];
   listRef: RefObject<HTMLOListElement | null>;
   onShow: (askId: string) => void;
 }
 
-function AsksList({ asks, selectedId, sessions, listRef, onShow }: AsksListProps) {
-  const seeds = useDaemonStore((state) => state.seeds);
+function AsksList({ items, selectedId, listRef, onShow }: AsksListProps) {
   const now = useNow(TURN_AGE_TICK_MS);
   return (
     <ol ref={listRef} className="asks-list" aria-label="Open asks">
-      {asks.map((item) => {
-        const itemHolder = askHolder(item, sessions, seeds);
-        const questionCount = askQuestions(item).length;
-        const selected = item.id === selectedId;
+      {items.map((item) => {
+        const selected = item.ask.id === selectedId;
         return (
-          <li key={item.id}>
+          <li key={item.ask.id}>
             <button
               type="button"
               className={`asks-row ${selected ? 'asks-row--selected' : ''}`.trim()}
-              data-testid={`asks-row-${item.id}`}
+              data-testid={`asks-row-${item.ask.id}`}
               aria-current={selected ? 'true' : undefined}
-              onClick={() => onShow(item.id)}
+              onClick={() => onShow(item.ask.id)}
             >
-              <span className="asks-row-from">{askFrom(item, itemHolder)}</span>
-              <span className="asks-row-subject">{item.subject}</span>
-              {questionCount > 1 && <span className="asks-row-count">{questionCount} questions</span>}
-              {itemHolder?.turnOwed && <span className="asks-row-waiting" role="img" aria-label="Waiting on you" title="Waiting on you" />}
-              <span className="asks-row-age">{formatTurnAge(item.created_at, now)}</span>
+              <AskRowSummary item={item} now={now} />
             </button>
           </li>
         );

@@ -14,7 +14,9 @@ import {
   useAppShell,
   useNavigationContext,
 } from './AppContexts';
+import { useAsksAvailable, useAsksStore } from '../store/asks';
 import {
+  AsksIcon,
   AutomationsIcon,
   GardenIcon,
   NotificationsBellIcon,
@@ -22,7 +24,9 @@ import {
 } from './AppIcons';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 export function useAppSidebarActions() {
-  const { notificationsUnread } = useAppInputs();
+  const { notificationsUnread, settings } = useAppInputs();
+  const asksAvailable = useAsksAvailable(settings);
+  const openAskCount = useAsksStore((state) => state.asks.length);
   const { hasCriticalNotification, zoomModeBySessionId } = useAppShell();
   const {
     toggleDockPanel,
@@ -32,6 +36,7 @@ export function useAppSidebarActions() {
     notificationsPanelOpen,
     toggleNotificationsPanel,
     automationsPanelOpen,
+    asksPanelOpen,
     sessionsOpen,
     ledgerTab,
     openLedger,
@@ -81,6 +86,18 @@ export function useAppSidebarActions() {
         toneClassName: hasCriticalNotification ? 'has-critical' : undefined,
         onClick: toggleNotificationsPanel,
       },
+      ...(asksAvailable
+        ? [{
+            id: 'asks',
+            title: openAskCount
+              ? `${openAskCount} open ${openAskCount === 1 ? 'ask' : 'asks'} (${formatShortcut('dock.asks')})`
+              : `Asks (${formatShortcut('dock.asks')})`,
+            icon: <AsksIcon />,
+            active: asksPanelOpen,
+            count: openAskCount,
+            onClick: () => toggleDockPanel('asks'),
+          }]
+        : []),
     ],
     [
       toggleDockPanel,
@@ -96,6 +113,9 @@ export function useAppSidebarActions() {
       ledgerTab,
       openLedger,
       toggleNotificationsPanel,
+      asksAvailable,
+      openAskCount,
+      asksPanelOpen,
     ],
   );
 

@@ -485,7 +485,7 @@
    which leaf is unfocused. */
 .desktop-pane-identity {
   flex: 1;
-  min-width: 0;
+  min-width: 40%;
   display: flex;
   flex-direction: column;
   align-items: stretch;
