@@ -3219,6 +3219,9 @@ model InitialStateMessage {
   crew?: CrewMember[];
   // The selected profile's open asks.
   asks?: Ask[];
+  // The selected profile's shared Codex versions, absent while Shared Codex is
+  // off.
+  shared_codex?: SharedCodexState;
 }
 
 model SessionRegisteredMessage {
@@ -3399,6 +3402,34 @@ model AsksUpdatedMessage {
   event: "asks_updated";
   profile_id: string;
   asks: Ask[];
+}
+
+// pending: the installed Codex differs from the one the profile's app-server
+// runs.
+enum SharedCodexRestart {
+  none,
+  pending,
+}
+
+// Versions are Codex release numbers, as `codex --version` prints them.
+model SharedCodexState {
+  // The profile's app-server; absent while none runs.
+  running_version?: string;
+  // What a new Codex terminal launches.
+  installed_version?: string;
+  // The newest release, checked once a day.
+  latest_version?: string;
+  restart: SharedCodexRestart;
+  // Sessions shown in terminals whose Codex is older than the app-server.
+  stale_sessions?: SessionID[];
+}
+
+// The profile's shared Codex versions. shared_codex is absent while Shared
+// Codex is off.
+model SharedCodexChangedMessage {
+  event: "shared_codex_changed";
+  profile_id: string;
+  shared_codex?: SharedCodexState;
 }
 
 model PRsUpdatedMessage {
@@ -7174,6 +7205,7 @@ alias DaemonEvent =
   | ClientEvictionNoticeMessage
   | AskAnswerResultMessage
   | AsksUpdatedMessage
+  | SharedCodexChangedMessage
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage
   | MarkdownAnnotationsSaveResultMessage

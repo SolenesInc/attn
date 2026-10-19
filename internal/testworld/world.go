@@ -262,6 +262,21 @@ func (w *World) CodexFolderTrust(dir string) string {
 	return w.kit.CodexFolderTrust(dir)
 }
 
+func (w *World) SetCodexVersion(version string) {
+	w.T.Helper()
+	w.kit.SetCodexVersion(version)
+}
+
+func (w *World) SetCodexLatest(version string) {
+	w.T.Helper()
+	w.kit.SetCodexLatest(version)
+}
+
+func (w *World) InstallCodexAt(name, version string) string {
+	w.T.Helper()
+	return w.kit.InstallCodexAt(w.Path(name), version)
+}
+
 func (w *World) CodexServers() []int {
 	return w.kit.CodexServers()
 }

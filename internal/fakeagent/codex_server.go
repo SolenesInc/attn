@@ -45,6 +45,7 @@ const (
 
 type codexAppServer struct {
 	cfg     config
+	version string
 	hooks   hookSet
 	toolEnv []string
 	mu      sync.Mutex
@@ -108,6 +109,7 @@ func runCodexAppServer(cfg config) int {
 	}
 	s := &codexAppServer{
 		cfg:     cfg,
+		version: installedCodexVersion(),
 		hooks:   hookSet{groups: configured.groups, env: os.Environ()},
 		toolEnv: configured.env,
 		threads: map[string]*codexServerThread{},
@@ -285,7 +287,7 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 	}
 	switch m.Method {
 	case "initialize":
-		return map[string]any{"userAgent": "codex-fake", "codexHome": s.cfg.CodexHome, "platformFamily": "unix", "platformOs": "linux"}, nil, nil
+		return map[string]any{"userAgent": "codex-tui/" + s.version + " (fake; fake) fakeagent", "codexHome": s.cfg.CodexHome, "platformFamily": "unix", "platformOs": "linux"}, nil, nil
 	case "config/read":
 		config, err := readCodexConfig(s.cfg.CodexHome)
 		return map[string]any{"config": config}, nil, err

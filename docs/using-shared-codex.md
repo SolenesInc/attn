@@ -7,7 +7,9 @@ switch a terminal to another conversation, the one you left keeps running as a
 hidden session instead of closing.
 
 It runs the stock `codex` you already use, with your Codex account, model,
-settings and conversations. attn was checked against Codex 0.160.0.
+settings and conversations. Shared terminals run the Codex executable set in
+Settings, and so does the app-server when it starts; one already running keeps
+its Codex until it stops. attn was checked against Codex 0.160.0.
 
 ## Turn it on or off
 

@@ -580,6 +580,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
 		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
+		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)
@@ -1148,7 +1149,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSpawnSession:
 		spawn := msg.(*protocol.SpawnSessionMessage)
 		spawn.ProfileID = protocol.Deref(client.profileOr(protocol.Ptr(spawn.ProfileID)))
-		d.handleSpawnSession(client, spawn)
+		d.life.Go("handleSpawnSession", func() { d.handleSpawnSession(client, spawn) })
 	case protocol.CmdAttachSession:
 		d.handleAttachSession(client, msg.(*protocol.AttachSessionMessage))
 	case protocol.CmdDetachSession:
@@ -1194,7 +1195,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdKillSession:
 		d.handleKillSession(client, msg.(*protocol.KillSessionMessage))
 	case protocol.CmdReloadSession:
-		d.handleReloadSession(client, msg.(*protocol.ReloadSessionMessage))
+		d.life.Go("handleReloadSession", func() { d.handleReloadSession(client, msg.(*protocol.ReloadSessionMessage)) })
 	case protocol.CmdSetTerminalTheme:
 		d.handleSetTerminalTheme(client, msg.(*protocol.SetTerminalThemeMessage))
 	case protocol.CmdSetClientPresence:

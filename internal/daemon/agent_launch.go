@@ -107,6 +107,9 @@ func (d *Daemon) removeAgentLaunchDir(terminal harness.TerminalID) {
 }
 
 func configuredLaunchExecutable(driver agentdriver.Driver, opts *ptybackend.SpawnOptions) string {
+	if opts.LaunchExecutable != "" {
+		return opts.LaunchExecutable
+	}
 	if !opts.UnattendedLaunch.IsZero() {
 		return opts.UnattendedLaunch.Executable
 	}

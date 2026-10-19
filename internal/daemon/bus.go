@@ -96,6 +96,8 @@ const (
 	FactAskOpened = "ask.opened"
 	FactAskClosed = "ask.closed"
 
+	FactSharedCodexChanged = "shared_codex.changed"
+
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
@@ -387,6 +389,10 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactAskOpened, FactAskClosed},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
 		},
+		{
+			filter: bus.Filter{FactSharedCodexChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectSharedCodex() },
+		},
 	}
 }
 
@@ -532,6 +538,7 @@ const (
 	snapshotSessions    = "sessions_updated"
 	snapshotGarden      = "garden_seeds_updated"
 	snapshotAsks        = "asks_updated"
+	snapshotSharedCodex = "shared_codex_changed"
 	snapshotCrew        = "crew_updated"
 	snapshotPRs         = "prs_updated"
 	snapshotRepos       = "repos_updated"
