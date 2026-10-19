@@ -927,9 +927,7 @@ function seedFixture(overrides: Partial<Seed> = {}): Seed {
     state_changed_at_exact: true,
     step_slug: 'seed-reader-plan',
     profile_id: 'profile-default',
-
     planter: { ref: 'user', name: 'the user' },
-
     tender: { ref: 'member:trellis', name: "Trellis", session_id: 'sess-a' },
     claimed: true,
     resume_available: false,
@@ -951,14 +949,12 @@ function seedDocumentFixture(body = '# Seed body\n\nAnnotate this plan.'): SeedD
       body,
       plot_progress: { total: 1, done: 1, withered: 0, growing: 0, dormant: 0, ready: 0, blocked: 0 },
     }),
-
     children: [seedFixture({ id: 's-child1', title: 'Reader child', body: '', status: 'harvested' })],
     notes: [{
       id: 'n-live11',
       seed_id: 's-plan11',
       kind: 'note',
       body: 'Live ledger note',
-
       author: { ref: "member:trellis", name: "Trellis" },
       created_at: '2026-08-15T09:00:00Z',
     }],
@@ -1247,8 +1243,7 @@ describe('DesktopDockTile seed reader', () => {
   it('makes Note on seed the unsplit primary when nobody tends the seed', async () => {
     const detail = {
       ...seedDocumentFixture(),
-      seed: seedFixture({  tender: undefined, claimed: false }),
-
+      seed: seedFixture({ tender: undefined, claimed: false }),
     };
     const daemonApi = createMockDaemonApi({
       sendSeedDocumentGet: vi.fn().mockResolvedValue(detail),
