@@ -565,7 +565,7 @@ func buildSpawnCommand(opts SpawnOptions, agent, shellPath string, env []string)
 		return loginShellCommand(shellPath, opts.AgentArgv, overlay)
 	}
 	command := opts.AgentArgv[0]
-	if resolved, ok := resolveAgentArgvPath(command, env); ok {
+	if resolved, ok := ResolveCommandPath(command, env); ok {
 		command = resolved
 	}
 	return exec.Command(command, opts.AgentArgv[1:]...)
@@ -594,7 +594,7 @@ func loginShellCommand(shellPath string, argv, overlay []string) *exec.Cmd {
 	return exec.Command(shellPath, args...)
 }
 
-func resolveAgentArgvPath(command string, env []string) (string, bool) {
+func ResolveCommandPath(command string, env []string) (string, bool) {
 	command = strings.TrimSpace(command)
 	if command == "" || strings.ContainsRune(command, filepath.Separator) {
 		return "", false

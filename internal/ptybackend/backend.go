@@ -36,7 +36,8 @@ type SpawnOptions struct {
 
 	Theme pty.TerminalTheme
 
-	Executable string
+	Executable       string
+	LaunchExecutable string
 
 	ClaudeExecutable  string
 	CodexExecutable   string

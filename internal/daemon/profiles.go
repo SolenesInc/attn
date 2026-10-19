@@ -714,4 +714,7 @@ func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	profileID := client.selectedProfile()
 	d.sendToClient(client, d.gardenProfileSnapshot(profileID))
 	d.sendToClient(client, asksSnapshot(profileID, d.openAsks()))
+	if profileID != "" {
+		d.sendToClient(client, d.codexShared().changedMessage(profileID))
+	}
 }

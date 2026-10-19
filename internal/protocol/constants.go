@@ -358,6 +358,7 @@ const (
 	EventCrewSetResult                   = "crew_set_result"
 	EventAskAnswerResult                 = "ask_answer_result"
 	EventAsksUpdated                     = "asks_updated"
+	EventSharedCodexChanged              = "shared_codex_changed"
 	EventDelegateResult                  = "delegate_result"
 	EventDelegationOperation             = "delegation_operation"
 	EventNotebookListResult              = "notebook_list_result"

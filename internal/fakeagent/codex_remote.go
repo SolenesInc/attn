@@ -15,6 +15,7 @@ import (
 
 type codexRemote struct {
 	cfg          config
+	version      string
 	term         *terminal
 	path         string
 	cwd          string
@@ -112,7 +113,7 @@ func (c *codexRemote) showPending() {
 }
 
 func (c *codexRemote) connect() (*codexshared.Client, error) {
-	client, err := codexshared.Connect(context.Background(), c.path, "codex-tui", c.observe)
+	client, err := codexshared.Connect(context.Background(), c.path, codexshared.ClientInfo{Name: "codex-tui", Version: c.version}, c.observe)
 	if err != nil {
 		return nil, err
 	}

@@ -236,8 +236,9 @@ type Daemon struct {
 	worktreePluginCallTimeout         time.Duration
 	worktreeCreateProviderCallTimeout time.Duration
 
-	loginShellEnvMu sync.RWMutex
-	loginShellEnv   []string
+	loginShellEnvMu   sync.RWMutex
+	loginShellEnv     []string
+	loginShellEnvOnce sync.Once
 
 	terminalThemeMu sync.Mutex
 	terminalTheme   pty.TerminalTheme
@@ -421,6 +422,11 @@ func (d *Daemon) warmLoginShellEnvCache() {
 	d.loginShellEnv = env
 	d.loginShellEnvMu.Unlock()
 	d.logf("login shell env pre-warmed: shell=%s vars=%d", shell, len(env))
+}
+
+func (d *Daemon) loginShellEnvironment() []string {
+	d.loginShellEnvOnce.Do(d.warmLoginShellEnvCache)
+	return d.cachedLoginShellEnv()
 }
 
 func (d *Daemon) cachedLoginShellEnv() []string {
@@ -738,7 +744,7 @@ func (d *Daemon) Start() error {
 		)
 	}
 
-	d.life.Go("warmLoginShellEnvCache", d.warmLoginShellEnvCache)
+	d.life.Go("warmLoginShellEnvCache", func() { d.loginShellEnvironment() })
 
 	d.setRecovering(true)
 	defer func() {

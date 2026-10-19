@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -47,26 +48,37 @@ func Dial(ctx context.Context, path string) (*websocket.Conn, error) {
 }
 
 type Client struct {
-	conn    *websocket.Conn
-	mu      sync.Mutex
-	pending map[string]chan Message
-	next    atomic.Uint64
-	done    chan struct{}
-	err     error
+	conn          *websocket.Conn
+	mu            sync.Mutex
+	pending       map[string]chan Message
+	next          atomic.Uint64
+	done          chan struct{}
+	err           error
+	serverVersion string
 }
 
-func Connect(ctx context.Context, path, name string, observe func(Message)) (*Client, error) {
+type ClientInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+func Connect(ctx context.Context, path string, info ClientInfo, observe func(Message)) (*Client, error) {
 	conn, err := Dial(ctx, path)
 	if err != nil {
 		return nil, err
 	}
 	c := &Client{conn: conn, pending: make(map[string]chan Message), done: make(chan struct{})}
 	go c.read(observe)
-	_, err = c.Call(ctx, "initialize", map[string]any{
-		"clientInfo":   map[string]any{"name": name, "version": "1"},
+	raw, err := c.Call(ctx, "initialize", map[string]any{
+		"clientInfo":   info,
 		"capabilities": map[string]any{"experimentalApi": true},
 	})
 	if err == nil {
+		var reply struct {
+			UserAgent string `json:"userAgent"`
+		}
+		_ = json.Unmarshal(raw, &reply)
+		c.serverVersion = UserAgentVersion(reply.UserAgent)
 		err = c.write(ctx, Message{Method: "initialized"})
 	}
 	if err != nil {
@@ -75,6 +87,17 @@ func Connect(ctx context.Context, path, name string, observe func(Message)) (*Cl
 	}
 	return c, nil
 }
+
+func UserAgentVersion(userAgent string) string {
+	_, rest, ok := strings.Cut(userAgent, "/")
+	if !ok {
+		return ""
+	}
+	version, _, _ := strings.Cut(rest, " ")
+	return version
+}
+
+func (c *Client) ServerVersion() string { return c.serverVersion }
 
 func (c *Client) read(observe func(Message)) {
 	defer close(c.done)

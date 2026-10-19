@@ -5180,6 +5180,9 @@ type InitialStateMessage struct {
 	// Settings corresponds to the JSON schema field "settings".
 	Settings RecordString `json:"settings,omitempty,omitzero"`
 
+	// SharedCodex corresponds to the JSON schema field "shared_codex".
+	SharedCodex *SharedCodexState `json:"shared_codex,omitempty,omitzero"`
+
 	// SourceFingerprint corresponds to the JSON schema field "source_fingerprint".
 	SourceFingerprint *string `json:"source_fingerprint,omitempty,omitzero"`
 
@@ -10507,6 +10510,39 @@ type SettleTurnMessage struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
+}
+
+type SharedCodexChangedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// SharedCodex corresponds to the JSON schema field "shared_codex".
+	SharedCodex *SharedCodexState `json:"shared_codex,omitempty,omitzero"`
+}
+
+type SharedCodexRestart string
+
+const SharedCodexRestartNone SharedCodexRestart = "none"
+const SharedCodexRestartPending SharedCodexRestart = "pending"
+
+type SharedCodexState struct {
+	// InstalledVersion corresponds to the JSON schema field "installed_version".
+	InstalledVersion *string `json:"installed_version,omitempty,omitzero"`
+
+	// LatestVersion corresponds to the JSON schema field "latest_version".
+	LatestVersion *string `json:"latest_version,omitempty,omitzero"`
+
+	// Restart corresponds to the JSON schema field "restart".
+	Restart SharedCodexRestart `json:"restart"`
+
+	// RunningVersion corresponds to the JSON schema field "running_version".
+	RunningVersion *string `json:"running_version,omitempty,omitzero"`
+
+	// StaleSessions corresponds to the JSON schema field "stale_sessions".
+	StaleSessions []SessionID `json:"stale_sessions,omitempty,omitzero"`
 }
 
 type SnoozeTurnMessage struct {
