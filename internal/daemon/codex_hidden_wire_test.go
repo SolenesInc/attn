@@ -392,14 +392,14 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	_, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
+	side, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
 	conversation := sideCodex.ConversationID
 	renamed := testworld.Request(sideApp, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(elsewhere), Label: "Release plan"},
 		protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return string(r.ID) == elsewhere })
 	if !renamed.Success {
 		t.Fatalf("rename %s: %s", elsewhere, protocol.Deref(renamed.Error))
 	}
-	w.CodexServer().AwaitName(conversation, "Release plan")
+	w.CodexServerForProfile(side.ID).AwaitName(conversation, "Release plan")
 
 	here := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(here)
@@ -435,7 +435,7 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 			t.Fatalf("/resume %s showed %s, want %s back", conversation, shown, elsewhere)
 		}
 	}
-	w.CodexServer().AwaitName(conversation, "Release plan")
+	w.CodexServerForProfile(side.ID).AwaitName(conversation, "Release plan")
 }
 
 func TestAConversationAnotherProfileResumesCountsItsTurnsOnlyThere(t *testing.T) {

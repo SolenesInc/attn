@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/harness"
 )
 
 const (
@@ -174,6 +176,25 @@ func (k *Kit) CodexServer() *CodexServer {
 		k.t.Fatal("no Codex app-server was launched")
 	}
 	return &CodexServer{t: k.t, fake: k.servers[len(k.servers)-1]}
+}
+
+func (k *Kit) CodexServerForProfile(profile string) *CodexServer {
+	k.t.Helper()
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for i := len(k.servers) - 1; i >= 0; i-- {
+		server := k.servers[i]
+		args := codexServerFlags.parse(server.Argv[2:])
+		configured, err := codexHooks(args.values["-c"], "")
+		if err != nil {
+			k.t.Fatal(err)
+		}
+		if slices.Contains(configured.env, harness.CodexSharedProfileEnv+"="+profile) {
+			return &CodexServer{t: k.t, fake: server}
+		}
+	}
+	k.t.Fatalf("no Codex app-server was launched for profile %s", profile)
+	return nil
 }
 
 func (k *Kit) HoldNextBoot() (boot func()) {

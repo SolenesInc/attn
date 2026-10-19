@@ -269,6 +269,11 @@ func (w *World) CodexServer() *fakeagent.CodexServer {
 	return w.kit.CodexServer()
 }
 
+func (w *World) CodexServerForProfile(profile string) *fakeagent.CodexServer {
+	w.T.Helper()
+	return w.kit.CodexServerForProfile(profile)
+}
+
 func (w *World) HoldNextBoot() (boot func()) {
 	return w.kit.HoldNextBoot()
 }
