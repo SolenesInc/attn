@@ -14,7 +14,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/headless"
-	"github.com/victorarias/attn/internal/modelcapture"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -229,16 +228,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		settings[SettingDBLastBackupAt] = lastBackupAt.Format(time.RFC3339)
 	}
 	settings[SettingTailscaleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingTailscaleEnabled]))
-	settings[SettingModelCaptureEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingModelCaptureEnabled]))
-	settings[SettingModelCaptureIntervalSeconds] = strconv.Itoa(int(d.modelCaptureInterval() / time.Second))
-	settings[SettingModelCaptureMaxGB] = strconv.FormatInt(d.modelCaptureMaxBytes()>>30, 10)
-	settings[SettingModelCapturePath] = d.modelCaptureDir()
-	if bytes, err := modelcapture.SizeBytes(d.modelCaptureDir()); err == nil {
-		settings[SettingModelCaptureBytes] = strconv.FormatInt(bytes, 10)
-	} else {
-		d.logf("model capture size failed: %v", err)
-		settings[SettingModelCaptureBytes] = "0"
-	}
 	settings[SettingQueueModeEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueModeEnabled]))
 	settings[SettingDirectAgentLaunchEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingDirectAgentLaunchEnabled]))
 	settings[SettingQueueCrewEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueCrewEnabled]))

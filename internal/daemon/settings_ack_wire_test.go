@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -10,12 +9,9 @@ import (
 func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	capturePath := filepath.Join(w.Dir, "model-captures")
 	for key, want := range map[string]string{
-		"model_capture.enabled":          "false",
-		"model_capture.interval_seconds": "10",
-		"model_capture.max_gb":           "5",
-		"model_capture.path":             capturePath,
+		"queue_mode_enabled": "false",
+		"crew.away_seconds":  "9000",
 	} {
 		if got := app.Initial.Settings[key]; got != want {
 			t.Errorf("the app first sees %s = %q, want %q", key, got, want)
@@ -23,9 +19,9 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 	}
 
 	for _, refused := range []struct{ key, value string }{
-		{"model_capture.interval_seconds", "4"},
-		{"model_capture.max_gb", "101"},
-		{"model_capture.path", "/tmp/elsewhere"},
+		{"crew.away_seconds", "59"},
+		{"crew.away_seconds", "86401"},
+		{"pty_backend_mode", "elsewhere"},
 		{"default_context_window_cap_codex", "1"},
 	} {
 		ack := gardenAdvisorSetSetting(app, refused.key, refused.value)
@@ -38,7 +34,7 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 	}
 
 	for key, value := range map[string]string{
-		"model_capture.enabled":            "true",
+		"queue_mode_enabled":               "true",
 		"default_context_window_cap_codex": "128000",
 	} {
 		if ack := gardenAdvisorSetSetting(app, key, value); !protocol.Deref(ack.Success) || protocol.Deref(ack.ChangedKey) != key {
@@ -51,10 +47,8 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 
 	w.restart()
 	for key, want := range map[string]string{
-		"model_capture.enabled":            "true",
-		"model_capture.interval_seconds":   "10",
-		"model_capture.max_gb":             "5",
-		"model_capture.path":               capturePath,
+		"queue_mode_enabled":               "true",
+		"crew.away_seconds":                "9000",
 		"default_context_window_cap_codex": "128000",
 	} {
 		if got := w.App().Initial.Settings[key]; got != want {

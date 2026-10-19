@@ -174,7 +174,6 @@ function selectedSettings(settings: DaemonSettings): Record<string, string> {
     'pty_shared_host_enabled',
     'pty_shared_host_active',
     'theme',
-    'model_capture.enabled',
   ];
   return Object.fromEntries(keys.flatMap((key) => settings[key] === undefined ? [] : [[key, settings[key]]]));
 }

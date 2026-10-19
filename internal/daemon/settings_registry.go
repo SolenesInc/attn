@@ -39,11 +39,6 @@ const (
 	SettingTheme                         = "theme"
 	SettingReviewerModel                 = "reviewer_model"
 	SettingTailscaleEnabled              = "tailscale_enabled"
-	SettingModelCaptureEnabled           = "model_capture.enabled"
-	SettingModelCaptureIntervalSeconds   = "model_capture.interval_seconds"
-	SettingModelCaptureMaxGB             = "model_capture.max_gb"
-	SettingModelCapturePath              = "model_capture.path"
-	SettingModelCaptureBytes             = "model_capture.bytes"
 	SettingQueueModeEnabled              = "queue_mode_enabled"
 	SettingQueueCrewEnabled              = "queue_crew_enabled"
 	SettingQueueShowHiddenSessions       = "queue_show_hidden_sessions"
@@ -180,9 +175,6 @@ var settingSpecs = []settingSpec{
 	{key: SettingAutoSettleEnabled, scope: daemonScope, description: "Settle completed turns automatically: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
-	{key: SettingModelCaptureEnabled, scope: daemonScope, description: "Capture model traffic locally: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
 	{key: SettingActivityEnabled, scope: daemonScope, description: "Track session activity: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
@@ -194,12 +186,6 @@ var settingSpecs = []settingSpec{
 	}},
 	{key: string(settingWorktreeSweepEnabled), scope: daemonScope, description: "Remove unused worktrees automatically: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
-	}},
-	{key: SettingModelCaptureIntervalSeconds, scope: daemonScope, description: "Model capture interval in seconds.", validate: func(d *Daemon, key, value string) error {
-		return validateModelCaptureInterval(value)
-	}},
-	{key: SettingModelCaptureMaxGB, scope: daemonScope, description: "Maximum model capture storage in GB.", validate: func(d *Daemon, key, value string) error {
-		return validateModelCaptureMaxGB(value)
 	}},
 	{key: SettingAutoSettleArmSeconds, scope: daemonScope, description: "Delay before arming automatic settlement, in seconds. Empty uses the default delay.", validate: func(d *Daemon, key, value string) error {
 		return validateAutoSettleSeconds("auto-settle delay", value, autoSettleArmMinSeconds, autoSettleArmMaxSeconds)
@@ -281,8 +267,6 @@ var settingSpecs = []settingSpec{
 	{key: "pty_backend_mode", scope: daemonScope, description: "Active terminal backend.", readOnly: true},
 	{key: "pty_shared_host_active", scope: daemonScope, description: "Whether the shared terminal host is active.", readOnly: true},
 	{key: "automode_enabled_default", scope: daemonScope, description: "Default auto-mode state from the auto-mode configuration.", readOnly: true},
-	{key: "model_capture.path", scope: daemonScope, description: "Folder containing captured model traffic.", readOnly: true},
-	{key: "model_capture.bytes", scope: daemonScope, description: "Current model capture storage in bytes.", readOnly: true},
 	{key: "db.last_backup_at", scope: daemonScope, description: "Time of the last database backup.", readOnly: true},
 	{key: "headless_tasks.enabled.stored", scope: daemonScope, description: "Stored background model task switch.", readOnly: true},
 	{key: "headless_tasks.enabled.override", scope: daemonScope, description: "Environment override for background model tasks.", readOnly: true},
@@ -363,6 +347,14 @@ func validateBooleanSetting(value string) error {
 	default:
 		return fmt.Errorf("invalid boolean value: %s", value)
 	}
+}
+
+func resolveBoundedIntSetting(value string, fallback, min, max int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || n < min || n > max {
+		return fallback
+	}
+	return n
 }
 
 func validateBoundedIntSetting(label, value string, min, max int) error {

@@ -801,8 +801,6 @@ func (d *Daemon) Start() error {
 
 	d.life.Go("monitorBranches", d.monitorBranches)
 
-	d.life.Go("runModelCaptureLoop", d.runModelCaptureLoop)
-
 	queueStarted := make(chan error, 1)
 	if !d.life.Go("jobQueue", func() {
 		err := d.startJobQueue()

@@ -13,7 +13,7 @@ import (
 
 const exitScreenMaxBytes = 256 * 1024
 
-const exitScreenSnapshotTimeout = modelCaptureSnapshotTimeout
+const exitScreenSnapshotTimeout = 3 * time.Second
 
 func (d *Daemon) sessionExit(session protocol.SessionID) *protocol.TerminalExit {
 	if view, ok := d.monitorViewFor(session); ok {

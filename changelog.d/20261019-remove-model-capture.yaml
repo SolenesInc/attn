@@ -1,0 +1,4 @@
+kind: removed
+area: settings
+change: Removed model data capture and its Settings section. attn no longer records Claude and Codex terminal screens.
+notes: Files captured earlier stay in the model-captures folder inside attn's data folder (~/.attn/model-captures by default). attn no longer reads or writes them, so you can delete that folder by hand.

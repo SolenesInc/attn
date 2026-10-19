@@ -18,7 +18,6 @@ const SECTION_IDS = [
   'plugins',
   'backgroundTasks',
   'eventBus',
-  'data',
 ] as const;
 
 const sharedHostSwitch = () => screen.getByRole('switch', { name: 'Shared terminal host' });
@@ -42,7 +41,6 @@ describe('SettingsModal sections', () => {
       'Experimental',
       'Task runner',
       'Event bus',
-      'Model data capture',
     ]);
   });
 

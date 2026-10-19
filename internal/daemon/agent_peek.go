@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -15,7 +16,7 @@ const agentPeekMessageMaxChars = annotatableMessageMaxChars
 
 const agentShortIDLength = 8
 
-const agentPeekSnapshotTimeout = modelCaptureSnapshotTimeout
+const agentPeekSnapshotTimeout = 3 * time.Second
 
 func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) {
 	session, errCode := d.resolveAgentPeekTarget(msg.TargetSessionID)
