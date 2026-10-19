@@ -9,6 +9,7 @@ import {
   waitForNativePointerWitness,
 } from './nativePointerWitness';
 import { settleBeforeBridgeRequest, settleUi } from './uiAutomationSettle';
+import { supportUiDiagnosticsSnapshot } from '../utils/uiDiagnosticsLog';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -316,6 +317,8 @@ export async function runDomAutomationAction(
         })),
       };
     }
+    case 'ui_diagnostics':
+      return supportUiDiagnosticsSnapshot();
     case 'dom_wait':
       return waitForAutomationDom({
         selector: typeof payload.selector === 'string' ? payload.selector : '',

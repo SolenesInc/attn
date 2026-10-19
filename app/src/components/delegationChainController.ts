@@ -1,3 +1,5 @@
+import { recordUiDiag } from '../utils/uiDiagnosticsLog';
+
 type ChainDismissal = 'dismiss' | 'hover-leave' | 'outside-scroll' | 'outside-pointer' | 'handoff' | 'selection' | 'context' | 'anchor-removed' | 'sidebar-collapse';
 
 interface FocusReturn {
@@ -111,6 +113,7 @@ export class DelegationChainController {
     const focus = samePopup ? previous.focus : { target, navigationKey, restore: true };
     if (previous && !samePopup) previous.focus.restore = false;
     focus.target = target;
+    recordUiDiag({ kind: 'delegation_chain_opened', sessionId, mode });
     this.publish({ sessionId, navigationKey, anchor, mode, focus });
   }
 
@@ -149,6 +152,7 @@ export class DelegationChainController {
     this.hoverSuppressed = reason !== 'hover-leave';
     this.current.focus.restore = !['outside-pointer', 'handoff', 'selection', 'context'].includes(reason);
     if (reason === 'sidebar-collapse') this.current.focus.target = null;
+    recordUiDiag({ kind: 'delegation_chain_dismissed', sessionId: this.current.sessionId, mode: this.current.mode, reason });
     this.publish(null);
   };
 
