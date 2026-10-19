@@ -45,6 +45,7 @@ const desktops = buildDesktopViewModels([desktop], sessions);
 export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const params = new URLSearchParams(window.location.search);
   const desktopFlow = params.has('desktop');
+  const chiefPhase = params.get('chief') ?? 'awake';
   const crew = [{ key: 'chief-member', name: 'Chief', chief: true, agent: 'claude', binding_session: 'chief' },{ key: 'alder', name: 'Alder', binding_session: 'crew-awake' }, { key: 'birch', name: 'Birch' }, { key: 'cedar', name: 'Cedar' }];
   if (params.has('largeCrew')) {
     crew.push(...sessions.map((session) => ({ key: `sleeping-${session.id}`, name: `Sleeping ${session.label}` })));
@@ -65,7 +66,7 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
           desktops={desktops}
           visualIndexByDesktopId={new Map([['desk-1', 0]])}
           queue={desktopFlow ? null : buildQueueBands(desktops)}
-          chief={{ ref: 'member:chief-member', key: 'chief-member', name: 'Chief', agent: 'claude', revision: 1, phase: 'awake', requestPending: false, sessionId: 'chief' }}
+          chief={{ ref: 'member:chief-member', key: 'chief-member', name: 'Chief', agent: 'claude', revision: 1, phase: chiefPhase, requestPending: false, sessionId: chiefPhase === 'awake' ? 'chief' : undefined }}
           chiefActions={{ setUp: async () => true, wake: noop, sleep: noop, edit: noop, dismiss: noop }}
           crew={crew}
           profileName="Harness"

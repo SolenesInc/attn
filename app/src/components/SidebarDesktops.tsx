@@ -30,17 +30,17 @@ export function SidebarDesktopOverview({ compact = false }: { compact?: boolean 
   return (
     <button
       type="button"
-      className={compact ? 'queue-desktop-chip is-extra' : 'sidebar-home-row'}
+      className={compact ? 'queue-desktop-chip is-extra' : 'sidebar-nav-row'}
       data-testid={compact ? 'queue-desktop-overview' : 'sidebar-desktop-overview'}
       title={`Desktop overview (${formatShortcut('desktop.overview')})`}
       aria-label="Desktop overview"
       onClick={onOpenOverview}
     >
-      <span aria-hidden="true">⊞</span>
+      <span className={compact ? undefined : 'sidebar-nav-icon'} aria-hidden="true">⊞</span>
       {!compact && (
         <>
-          <span className="sidebar-home-label">Desktop overview</span>
-          <span className="sidebar-home-shortcut">{formatShortcut('desktop.overview')}</span>
+          <span className="sidebar-nav-label">Desktop overview</span>
+          <span className="sidebar-nav-shortcut">{formatShortcut('desktop.overview')}</span>
         </>
       )}
     </button>

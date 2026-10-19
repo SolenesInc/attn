@@ -55,7 +55,7 @@
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 8px 6px;
 }
 
 .session-group {
@@ -920,17 +920,17 @@
   padding: 0;
 }
 
-/* The home row. Above the queue bands and the tree, so it reads as the fixed
-   place you return to rather than a member of either list. */
-.sidebar-home-row {
-  display: flex;
+.sidebar-nav-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  width: calc(100% - 12px);
-  margin: 4px 6px 0;
-  padding: 8px 10px;
+  gap: 7px;
+  width: 100%;
+  height: 32px;
+  margin: 4px 0 0;
+  padding: 0 8px 0 6px;
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   background: none;
   color: var(--color-text-secondary);
   font-family: inherit;
@@ -938,27 +938,38 @@
   text-align: left;
   cursor: pointer;
 }
-.sidebar-home-row:hover {
+/* The home row. Above the queue bands and the tree, so it reads as the fixed
+   place you return to rather than a member of either list. */
+.sidebar-home-row {
+  width: calc(100% - 12px);
+  margin: 4px 6px 0;
+}
+.sidebar-nav-row:hover {
   background: rgba(255, 255, 255, 0.04);
   color: var(--color-text-primary);
 }
-.sidebar-home-row.selected {
+.sidebar-nav-row.selected {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
 }
-.sidebar-home-row:focus-visible {
+.sidebar-nav-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.sidebar-home-row svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
+.sidebar-nav-row svg,
+.sidebar-nav-icon {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
 }
-.sidebar-home-label {
-  flex: 1;
+.sidebar-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.sidebar-home-shortcut {
+.sidebar-nav-shortcut {
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
   font-size: var(--font-size-xs);
   color: var(--color-text-dimmed);
