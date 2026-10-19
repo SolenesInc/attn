@@ -41,6 +41,7 @@ type wsClient struct {
 
 	attachedStreams map[protocol.TerminalID]ptybackend.Stream
 	attachMu        sync.Mutex
+	terminalOrder   terminalOrder
 
 	docSubscriptions clientDocSubscriptions
 
@@ -1151,15 +1152,24 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		spawn.ProfileID = protocol.Deref(client.profileOr(protocol.Ptr(spawn.ProfileID)))
 		d.life.Go("handleSpawnSession", func() { d.handleSpawnSession(client, spawn) })
 	case protocol.CmdAttachSession:
-		d.handleAttachSession(client, msg.(*protocol.AttachSessionMessage))
+		attach := msg.(*protocol.AttachSessionMessage)
+		attachNow := func() { d.handleAttachSession(client, attach) }
+		if protocol.Deref(attach.AttachPolicy) == protocol.AttachPolicyRevive {
+			d.offPumpInTerminalOrder(client, attach.ID, attachNow)
+		} else {
+			d.inTerminalOrder(client, attach.ID, attachNow)
+		}
 	case protocol.CmdDetachSession:
-		d.handleDetachSessionWS(client, msg.(*protocol.DetachSessionMessage))
+		detach := msg.(*protocol.DetachSessionMessage)
+		d.inTerminalOrder(client, detach.ID, func() { d.handleDetachSessionWS(client, detach) })
 	case protocol.CmdGetScreenSnapshot:
-		d.handleGetScreenSnapshot(client, msg.(*protocol.GetScreenSnapshotMessage))
+		snapshot := msg.(*protocol.GetScreenSnapshotMessage)
+		d.inTerminalOrder(client, snapshot.ID, func() { d.handleGetScreenSnapshot(client, snapshot) })
 	case protocol.CmdGetKittyImage:
 		d.handleGetKittyImage(client, msg.(*protocol.GetKittyImageMessage))
 	case protocol.CmdPtyInput:
-		d.handlePtyInput(client, msg.(*protocol.PtyInputMessage))
+		input := msg.(*protocol.PtyInputMessage)
+		d.inTerminalOrder(client, input.ID, func() { d.handlePtyInput(client, input) })
 	case protocol.CmdSupportSnapshot:
 		d.handleSupportSnapshot(client, msg.(*protocol.SupportSnapshotMessage))
 	case protocol.CmdTerminalPointerActivity:
@@ -1191,7 +1201,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdAutoModeLegacyDismiss:
 		d.handleAutoModeLegacyDismissWS(client, msg.(*protocol.AutoModeLegacyDismissMessage))
 	case protocol.CmdPtyResize:
-		d.handlePtyResize(client, msg.(*protocol.PtyResizeMessage))
+		resize := msg.(*protocol.PtyResizeMessage)
+		d.inTerminalOrder(client, resize.ID, func() { d.handlePtyResize(client, resize) })
 	case protocol.CmdKillSession:
 		d.handleKillSession(client, msg.(*protocol.KillSessionMessage))
 	case protocol.CmdReloadSession:

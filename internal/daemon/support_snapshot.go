@@ -151,8 +151,7 @@ func (d *Daemon) handleSupportSnapshot(client *wsClient, msg *protocol.SupportSn
 	sort.Strings(ids)
 	runtimes := make([]protocol.SupportRuntimeEvidence, 0, len(ids))
 	for _, runtimeID := range ids {
-		_, attached := client.attachedStreams[protocol.TerminalID(runtimeID)]
-		runtimes = append(runtimes, d.supportRuntimeEvidence(ctx, protocol.TerminalID(runtimeID), attached))
+		runtimes = append(runtimes, d.supportRuntimeEvidence(ctx, protocol.TerminalID(runtimeID), client.streamsTo(protocol.TerminalID(runtimeID))))
 	}
 	warnings := d.getWarnings()
 	warningCodes := make([]string, 0, len(warnings))
