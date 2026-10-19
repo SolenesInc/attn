@@ -18,15 +18,16 @@ type crewRetirement struct {
 	AlreadyRetired bool
 	ReleasedSeeds  []string
 	RemovedWatches int
+	ClosedAsks     []string
 	Unread         int
 	Sleep          *protocol.CrewSleepResult
 }
 
 func (d *Daemon) retireCrewMember(m store.CrewIdentity) (crewRetirement, error) {
-	result := crewRetirement{Member: m, AlreadyRetired: m.Retired, ReleasedSeeds: []string{}}
+	result := crewRetirement{Member: m, AlreadyRetired: m.Retired, ReleasedSeeds: []string{}, ClosedAsks: []string{}}
 	d.crewWakeMu.Lock()
 	d.lockGardenRoles()
-	removed, err := d.store.RetireCrewMember(m.Key, time.Now())
+	removed, closedAsks, err := d.store.RetireCrewMember(m.Key, time.Now())
 	d.unlockGardenRoles()
 	d.crewWakeMu.Unlock()
 	if err != nil {
@@ -34,7 +35,9 @@ func (d *Daemon) retireCrewMember(m store.CrewIdentity) (crewRetirement, error) 
 	}
 	result.Member.Retired = true
 	result.RemovedWatches = removed
+	result.ClosedAsks = append(result.ClosedAsks, closedAsks...)
 	d.publishFact(FactCrewUpdated, m.Key.String(), nil)
+	d.announceClosedAsks(closedAsks)
 	result.ReleasedSeeds, err = d.releaseRetiredClaims(m)
 	if err != nil {
 		return result, err
@@ -141,7 +144,7 @@ func (d *Daemon) handleCrewRetire(conn net.Conn, msg *protocol.CrewRetireMessage
 		d.sendCrewError(conn, "retire", err)
 		return
 	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewRetireResult: &protocol.CrewRetireResult{Member: d.crewMemberWire(member, doc.Rev), AlreadyRetired: retired.AlreadyRetired, ReleasedSeeds: retired.ReleasedSeeds, RemovedWatches: retired.RemovedWatches, Unread: retired.Unread, Sleep: retired.Sleep}})
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewRetireResult: &protocol.CrewRetireResult{Member: d.crewMemberWire(member, doc.Rev), AlreadyRetired: retired.AlreadyRetired, ReleasedSeeds: retired.ReleasedSeeds, RemovedWatches: retired.RemovedWatches, ClosedAsks: retired.ClosedAsks, Unread: retired.Unread, Sleep: retired.Sleep}})
 }
 
 func (d *Daemon) handleCrewRestore(conn net.Conn, msg *protocol.CrewRestoreMessage) {

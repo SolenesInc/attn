@@ -382,9 +382,8 @@ func (s *Store) commitCrewBirth(m NewCrewMember, now time.Time, insert bool) (Do
 	return result, err
 }
 
-func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (int, error) {
-	removed := 0
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (removed int, closedAsks []string, err error) {
+	err = s.profilesTx(func(tx *sql.Tx, _ string) error {
 		if _, err := tx.Exec("UPDATE crew_members SET retired_at = ? WHERE member_key = ? AND retired_at = ''", at.UTC().Format(time.RFC3339Nano), key); err != nil {
 			return err
 		}
@@ -402,10 +401,14 @@ func (s *Store) RetireCrewMember(key who.MemberKey, at time.Time) (int, error) {
 			return err
 		}
 		count, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
 		removed += int(count)
+		closedAsks, err = closeAsksTo(tx, who.Member(key).Address())
 		return err
 	})
-	return removed, err
+	return removed, closedAsks, err
 }
 
 func (s *Store) RestoreCrewMember(key who.MemberKey) (bool, error) {

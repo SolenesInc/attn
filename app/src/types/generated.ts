@@ -3002,6 +3002,7 @@ export enum CrewRetireMessageCmd {
 
 export interface CrewRetireResult {
     already_retired: boolean;
+    closed_asks:     string[];
     member:          Member;
     released_seeds:  string[];
     removed_watches: number;
@@ -8094,6 +8095,7 @@ export interface CrewRestoreResultObject {
 
 export interface CrewRetireResultObject {
     already_retired: boolean;
+    closed_asks:     string[];
     member:          Member;
     released_seeds:  string[];
     removed_watches: number;
@@ -18201,6 +18203,7 @@ const typeMap: any = {
     ], "any"),
     "CrewRetireResult": o([
         { json: "already_retired", js: "already_retired", typ: true },
+        { json: "closed_asks", js: "closed_asks", typ: a("") },
         { json: "member", js: "member", typ: r("Member") },
         { json: "released_seeds", js: "released_seeds", typ: a("") },
         { json: "removed_watches", js: "removed_watches", typ: 0 },
@@ -21387,6 +21390,7 @@ const typeMap: any = {
     ], "any"),
     "CrewRetireResultObject": o([
         { json: "already_retired", js: "already_retired", typ: true },
+        { json: "closed_asks", js: "closed_asks", typ: a("") },
         { json: "member", js: "member", typ: r("Member") },
         { json: "released_seeds", js: "released_seeds", typ: a("") },
         { json: "removed_watches", js: "removed_watches", typ: 0 },
