@@ -100,6 +100,7 @@ const (
 	CmdAgentPeek                     = "agent_peek"
 	CmdAgentMsg                      = "agent_msg"
 	CmdAgentClose                    = "agent_close"
+	CmdAgentReload                   = "agent_reload"
 	CmdAgentInbox                    = "agent_inbox"
 	CmdAgentMsgStatus                = "agent_msg_status"
 	CmdSeedPlant                     = "seed_plant"

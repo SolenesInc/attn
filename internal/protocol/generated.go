@@ -295,6 +295,39 @@ type AgentPeerMessage struct {
 	TargetSessionID string `json:"target_session_id"`
 }
 
+type AgentReloadMessage struct {
+	// All corresponds to the JSON schema field "all".
+	All bool `json:"all"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID SessionID `json:"source_session_id"`
+
+	// Targets corresponds to the JSON schema field "targets".
+	Targets []string `json:"targets"`
+}
+
+type AgentReloadOutcome struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+}
+
+type AgentReloadResult struct {
+	// Outcomes corresponds to the JSON schema field "outcomes".
+	Outcomes []AgentReloadOutcome `json:"outcomes"`
+}
+
 type ApprovePRMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7832,6 +7865,9 @@ type Response struct {
 
 	// AgentPeekResult corresponds to the JSON schema field "agent_peek_result".
 	AgentPeekResult *AgentPeekResult `json:"agent_peek_result,omitempty,omitzero"`
+
+	// AgentReloadResult corresponds to the JSON schema field "agent_reload_result".
+	AgentReloadResult *AgentReloadResult `json:"agent_reload_result,omitempty,omitzero"`
 
 	// AskListResult corresponds to the JSON schema field "ask_list_result".
 	AskListResult *AskListResult `json:"ask_list_result,omitempty,omitzero"`

@@ -1,5 +1,11 @@
 export const scenarioCatalog = [
   {
+    id: 'agent-reload',
+    runnerId: 'AGENT-RELOAD',
+    label: 'CLI reload keeps the agent tile and native keyboard input working',
+    command: ['node', 'scripts/real-app-harness/scenario-agent-reload.mjs'],
+  },
+  {
     id: 'callouts',
     runnerId: 'CALLOUTS',
     label: 'Agent callouts across sidebar shapes, native stepping, navigation and browser tiles',
