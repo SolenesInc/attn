@@ -166,7 +166,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		AwarenessDirs: member.AwarenessDirs,
 	}
 	if d.isChief(member.Key) {
-		priming.FirstDay = chiefFirstDay(member)
+		priming.FirstDay = member.FirstDay
 	}
 	d.primeCrewGarden(&priming, member.Key)
 	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {

@@ -220,5 +220,5 @@ func (d *Daemon) chiefOnboardingPending(session *protocol.Session) bool {
 		return false
 	}
 	member, _, err := d.crewMember(key)
-	return err == nil && member.BindingSession == session.ID && !member.Onboarded
+	return err == nil && member.BindingSession == session.ID && member.FirstDay != protocol.FirstDayNone
 }

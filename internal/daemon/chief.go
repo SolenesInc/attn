@@ -160,15 +160,15 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 	if err != nil {
 		return err
 	}
-	b := crewBirth{ProfileID: profile, Name: crew.ChiefName, Charter: prompts.RenderText("chief", "charter", nil)}
+	b := crewBirth{ProfileID: profile, Name: crew.ChiefName, Charter: prompts.RenderText("chief", "charter", nil), FirstDay: protocol.FirstDayNone}
 	if u == nil {
 		ledger, err := d.store.SessionLedger(store.SessionLedgerQuery{Scope: store.SessionLedgerAll, ProfileID: profile, Limit: 1})
 		if err != nil {
 			return err
 		}
-		b.OnboardingPath = protocol.FirstDayFull
+		b.FirstDay = protocol.FirstDayFull
 		if len(ledger.Entries) > 0 {
-			b.OnboardingPath = protocol.FirstDayTour
+			b.FirstDay = protocol.FirstDayTour
 		}
 	}
 
@@ -178,7 +178,6 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 			b.Model = u.Model
 			b.Effort = u.Effort
 		}
-		b.Onboarded = true
 	}
 	return d.furnishCrewMember(identity, b)
 }

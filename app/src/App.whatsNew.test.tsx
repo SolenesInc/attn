@@ -61,6 +61,23 @@ describe('App what’s new', () => {
     expect(introBanner()).toBeNull();
   });
 
+  it('keeps an explicitly requested replay open when a pending Chief roster arrives', async () => {
+    localStorage.removeItem(WHATS_NEW_STORAGE_KEY);
+    localStorage.removeItem(WHATS_NEW_BANNER_STORAGE_KEY);
+    const { daemon } = await renderApp();
+    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
+    const search = within(screen.getByRole('dialog')).getByRole('combobox');
+    fireEvent.change(search, { target: { value: ">What's new" } });
+    await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+    expect(stepTitle()).toBe('One profile per world');
+
+    await gesture(daemon, () => daemon.emit({ event: 'crew_updated', profile_id: DEFAULT_PROFILE_ID, members: [crewMember('chief', { chief: true, first_day: FirstDay.Full })] }));
+    expect(stepTitle()).toBe('One profile per world');
+    expect(introBanner()).toBeNull();
+    expect(localStorage.getItem(WHATS_NEW_STORAGE_KEY)).toBe(WHATS_NEW_ID);
+    expect(localStorage.getItem(WHATS_NEW_BANNER_STORAGE_KEY)).toBe(WHATS_NEW_ID);
+  });
+
   it('greets the first launch after an update with the first step, and never an up-to-date launch', async () => {
     const first = await launchAfterUpdate();
     expect(stepTitle()).toBe('One profile per world');

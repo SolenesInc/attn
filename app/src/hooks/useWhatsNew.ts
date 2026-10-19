@@ -36,8 +36,7 @@ export interface WhatsNewControls {
 }
 
 export function useWhatsNew(firstDay: FirstDay | undefined): WhatsNewControls {
-  const [isOpen, setIsOpen] = useState(false);
-  const [replaying, setReplaying] = useState(false);
+  const [opening, setOpening] = useState<'closed' | 'automatic' | 'requested'>('closed');
   const [bannerVisible, setBannerVisible] = useState(() => readId(WHATS_NEW_BANNER_STORAGE_KEY) !== WHATS_NEW_ID);
 
   useEffect(() => {
@@ -45,18 +44,17 @@ export function useWhatsNew(firstDay: FirstDay | undefined): WhatsNewControls {
     if (firstDay === FirstDay.Full) {
       persistId(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
       persistId(WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID);
-      setIsOpen(false);
+      setOpening(current => current === 'automatic' ? 'closed' : current);
       setBannerVisible(false);
     } else if (readId(WHATS_NEW_STORAGE_KEY) !== WHATS_NEW_ID) {
-      setIsOpen(true);
+      setOpening(current => current === 'closed' ? 'automatic' : current);
     }
   }, [firstDay]);
 
-  const open = useCallback(() => setReplaying(true), []);
+  const open = useCallback(() => setOpening('requested'), []);
 
   const dismiss = useCallback(() => {
-    setIsOpen(false);
-    setReplaying(false);
+    setOpening('closed');
     persistId(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
   }, []);
 
@@ -66,5 +64,5 @@ export function useWhatsNew(firstDay: FirstDay | undefined): WhatsNewControls {
   }, []);
 
   const showRelease = firstDay !== undefined && firstDay !== FirstDay.Full;
-  return { isOpen: replaying || (showRelease && isOpen), open, dismiss, bannerVisible: showRelease && bannerVisible, dismissBanner };
+  return { isOpen: opening === 'requested' || (showRelease && opening === 'automatic'), open, dismiss, bannerVisible: showRelease && bannerVisible, dismissBanner };
 }

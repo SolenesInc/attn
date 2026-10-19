@@ -469,7 +469,7 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 		Chief:       d.isChief(member.Key),
 	}
 	if wire.Chief {
-		wire.FirstDay = protocol.Ptr(chiefFirstDay(member))
+		wire.FirstDay = protocol.Ptr(member.FirstDay)
 	}
 	if !wire.Chief || member.Agent != "" {
 		wire.ResolvedAgent = protocol.Ptr(member.LaunchAgent())

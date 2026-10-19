@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")/.."
-unset ATTN_CODEX_SHARED_PROFILE CODEX_THREAD_ID CODEX_SESSION_ID
-
-go test ./cmd/attn -run 'TestTheHelpCommandReadsTheEmbeddedGuide|TestOnboardingCommandsReportAndPersistTheNextFirstDay|TestTheRoleInstallCommandKeepsCustomRoles|TestTheSkillCommandPrintsTheBundledSkillAndItsReferences' -count=1
-go test ./internal/daemon -run 'TestChiefOnboardingFullDoneAndAgainReachBothHarnesses|TestAnEstablishedProfileKeepsItsTourAsOldSessionsChange|TestUpgradedChiefSkipsOnboarding|TestOnlyThePendingChiefCanShowCalloutsWithTheToggleOff|TestOnboardingIsScopedToTheRequestingProfile|TestTheExplicitSocketInstallKeepsCustomRolesAndReportsSkillPaths|TestAddingAttnRolesInstallsTheWorkflowSkillBeforeSavingThem' -count=1
-pnpm --dir app exec vitest run src/App.whatsNew.test.tsx

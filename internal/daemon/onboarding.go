@@ -5,17 +5,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func chiefFirstDay(member crew.Member) protocol.FirstDay {
-	if member.Onboarded {
-		return protocol.FirstDayNone
-	}
-	return member.OnboardingPath
-}
 
 func (d *Daemon) handleOnboarding(conn net.Conn, msg *protocol.OnboardingMessage) {
 	switch msg.Action {
@@ -51,10 +43,9 @@ func (d *Daemon) handleOnboarding(conn net.Conn, msg *protocol.OnboardingMessage
 			return
 		}
 		if msg.Action != protocol.OnboardingActionShow {
-			member.Onboarded = msg.Action == protocol.OnboardingActionDone
-			member.OnboardingPath = ""
-			if !member.Onboarded {
-				member.OnboardingPath = protocol.FirstDayFull
+			member.FirstDay = protocol.FirstDayNone
+			if msg.Action == protocol.OnboardingActionAgain {
+				member.FirstDay = protocol.FirstDayFull
 			}
 			if _, err := d.writeCrewMember(*schema, member, doc.Rev); err != nil {
 				if docstore.IsConflict(err) {
@@ -64,7 +55,7 @@ func (d *Daemon) handleOnboarding(conn net.Conn, msg *protocol.OnboardingMessage
 				return
 			}
 		}
-		result := protocol.OnboardingResult{Chief: d.memberName(key), Configured: member.Agent != "", Onboarded: member.Onboarded, FirstDay: chiefFirstDay(member)}
+		result := protocol.OnboardingResult{Chief: d.memberName(key), Configured: member.Agent != "", Onboarded: member.FirstDay == protocol.FirstDayNone, FirstDay: member.FirstDay}
 		_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, OnboardingResult: &result})
 		return
 	}
