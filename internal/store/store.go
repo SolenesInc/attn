@@ -1489,7 +1489,7 @@ func (s *Store) ApplyAgentDriverMetadata(id protocol.SessionID, runID string, se
 }
 
 const selectPRs = `SELECT id, host, repo, number, title, url, author, role, state, reason,
-	last_updated, last_polled, muted, details_fetched, details_fetched_at,
+	last_updated, muted, details_fetched, details_fetched_at,
 	mergeable, mergeable_state, ci_status, review_status, head_sha, head_branch, comment_count,
 	approved_by_me, heat_state, last_heat_activity_at
 	FROM prs JOIN pr_poll_times ON pr_poll_times.pr_id = prs.id`
@@ -1658,10 +1658,10 @@ func savePR(tx *sql.Tx, pr *protocol.PR) error {
 		return err
 	}
 	_, err := tx.Exec(`
-		INSERT INTO pr_poll_times(pr_id, last_updated, last_polled) VALUES (?, ?, ?)
-		ON CONFLICT(pr_id) DO UPDATE SET last_updated=excluded.last_updated, last_polled=excluded.last_polled
-		WHERE pr_poll_times.last_updated IS NOT excluded.last_updated OR pr_poll_times.last_polled IS NOT excluded.last_polled
-	`, pr.ID, pr.LastUpdated, pr.LastPolled)
+		INSERT INTO pr_poll_times(pr_id, last_updated) VALUES (?, ?)
+		ON CONFLICT(pr_id) DO UPDATE SET last_updated=excluded.last_updated
+		WHERE pr_poll_times.last_updated IS NOT excluded.last_updated
+	`, pr.ID, pr.LastUpdated)
 	return err
 }
 
@@ -2452,7 +2452,7 @@ func scanPR(row interface{ Scan(...any) error }) *protocol.PR {
 func scanPRRecord(row interface{ Scan(...any) error }) (*protocol.PR, error) {
 	var pr protocol.PR
 	var muted, detailsFetched, approvedByMe int
-	var lastUpdated, lastPolled string
+	var lastUpdated string
 	var detailsFetchedAt, mergeableState, ciStatus, reviewStatus, headSHA, headBranch sql.NullString
 	var heatState, lastHeatActivityAt sql.NullString
 	var mergeable sql.NullInt64
@@ -2460,7 +2460,7 @@ func scanPRRecord(row interface{ Scan(...any) error }) (*protocol.PR, error) {
 
 	err := row.Scan(
 		&pr.ID, &pr.Host, &pr.Repo, &pr.Number, &pr.Title, &pr.URL, &pr.Author, &pr.Role, &pr.State, &pr.Reason,
-		&lastUpdated, &lastPolled, &muted, &detailsFetched, &detailsFetchedAt,
+		&lastUpdated, &muted, &detailsFetched, &detailsFetchedAt,
 		&mergeable, &mergeableState, &ciStatus, &reviewStatus,
 		&headSHA, &headBranch, &commentCount, &approvedByMe,
 		&heatState, &lastHeatActivityAt,
@@ -2470,7 +2470,6 @@ func scanPRRecord(row interface{ Scan(...any) error }) (*protocol.PR, error) {
 	}
 
 	pr.LastUpdated = lastUpdated
-	pr.LastPolled = lastPolled
 	pr.Muted = muted == 1
 	pr.DetailsFetched = detailsFetched == 1
 	if detailsFetchedAt.Valid {

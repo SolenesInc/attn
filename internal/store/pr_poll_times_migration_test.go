@@ -29,7 +29,7 @@ func TestExistingDashboardPRsKeepTheirPollTimesAfterUpgrade(t *testing.T) {
 					t.Fatal(err)
 				}
 				pr := s.GetPR("github.com:acme/shop#1")
-				if pr == nil || pr.LastUpdated != stamp || pr.LastPolled != stamp || !pr.Muted || protocol.Deref(pr.HeadSHA) != "head-a" {
+				if pr == nil || pr.LastUpdated != stamp || !pr.Muted || protocol.Deref(pr.HeadSHA) != "head-a" {
 					t.Fatalf("upgraded PR=%+v, want preserved timestamps, mute and head", pr)
 				}
 				if err := s.Close(); err != nil {

@@ -171,7 +171,6 @@ export function daemonPR(id: string, overrides: Partial<DaemonPR> = {}): DaemonP
     state: 'waiting',
     reason: 'review_needed',
     last_updated: '2026-08-05T10:00:00Z',
-    last_polled: '2026-08-05T10:00:00Z',
     muted: false,
     details_fetched: true,
     approved_by_me: false,

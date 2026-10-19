@@ -60,10 +60,8 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 	refreshPRs(t, app)
 	after := queryPRs(t, cli, "")
 	refreshedCheckout := prNumbered(t, after, 1)
-	for _, stamp := range []string{refreshedCheckout.LastUpdated, refreshedCheckout.LastPolled} {
-		if protocol.Timestamp(stamp).Time().Before(refreshAt) {
-			t.Errorf("refresh timestamp = %q, want it at or after %s", stamp, refreshAt)
-		}
+	if protocol.Timestamp(refreshedCheckout.LastUpdated).Time().Before(refreshAt) {
+		t.Errorf("refresh timestamp = %q, want it at or after %s", refreshedCheckout.LastUpdated, refreshAt)
 	}
 	if pr := prNumbered(t, after, 2); !pr.Muted {
 		t.Error("the muted pull request came back unmuted after a refresh")
@@ -136,9 +134,8 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 	if len(remaining) != 1 || remaining[0].ID != checkout.ID || remaining[0].Title != "Checkout is ready" {
 		t.Fatalf("dashboard after removal and restart = %+v, want only the renamed checkout PR", remaining)
 	}
-	if remaining[0].LastUpdated != beforeRestart.LastUpdated || remaining[0].LastPolled != beforeRestart.LastPolled {
-		t.Errorf("offline restart changed poll timestamps: got %q/%q, want %q/%q", remaining[0].LastUpdated, remaining[0].LastPolled,
-			beforeRestart.LastUpdated, beforeRestart.LastPolled)
+	if remaining[0].LastUpdated != beforeRestart.LastUpdated {
+		t.Errorf("offline restart changed the poll timestamp: got %q, want %q", remaining[0].LastUpdated, beforeRestart.LastUpdated)
 	}
 }
 
