@@ -15,15 +15,19 @@ an item.
 
 ## Who an item is for
 
-An address names who an item is for: a session, or a mailbox that whichever
-session holds it reads.
+A party is a session or crew member. An actor is a party, the user or attn.
+An address names who an item is for: a session, or a mailbox for a crew member
+or seed tender. The tender is the party that claims the seed.
 
 | Address | Who reads it | When nobody holds it |
 |---|---|---|
-| session | that session | The item waits. attn never resumes a closed session to deliver it. Seed updates are the exception (see [Seed updates](#seed-updates)). |
+| session | that session | The item waits. attn never resumes a closed session to deliver it. Session-addressed seed updates are withdrawn on close (see [Seed updates](#seed-updates)). |
 | crew member | the member's current session | attn wakes the member (see [Wakes](#wakes)). |
-| chief | the profile's current chief session | The item waits for the next chief. attn never wakes a chief. |
-| seed | the seed's current tender: a session, or a crew member | The item waits for the next tender. A member tender is woken like a member address. |
+| seed | the seed's current tender | The item waits for the next tender. A member tender is woken like a member address. |
+
+The Chief has a crew member mailbox. Mail wakes them after a manual sleep.
+They never auto-sleep. Until their harness is configured, mail waits; their
+first wake also waits while the user is away.
 
 An item follows its mailbox. When a member's session ends, their next session
 gets the unread items. When a seed gets a new tender, the new tender gets the
@@ -33,22 +37,24 @@ and the watchers themselves, so they do not move to a new tender.
 The sender picks the address:
 
 - `attn agent msg <member>` addresses the member.
-- `attn agent msg <session>` addresses the member or the chief when that
-  session holds one of those mailboxes. So the message follows the role into
-  the next session. Otherwise it addresses the session.
+- `attn agent msg <session>` addresses the member when that session is bound
+  to one, so the message follows the member into the next session. Otherwise
+  it addresses the session. An explicit `session:<id>` addresses that session.
+- `attn agent msg chief` addresses the profile's Chief member, even after a
+  rename.
 - `attn agent msg <seed-id>` addresses the seed.
-- A seed update addresses a crew member tender as the member. It addresses a
-  session tender and every watcher as their session.
+- A seed update addresses the tender and every watcher as their party. A
+  member's claim and watches survive naps, `/clear` and sleep.
 - Crew sleep and auto-sleep requests address the session. They are about that
   one session, and a wake to deliver them makes no sense.
 
-A session reads all its addresses together: its own, its member's, the chief's
-when it is the chief, and those of the seeds it tends.
+A session reads all its addresses together: its own, its member's when bound
+to one, and those of the seeds its party tends.
 
 ## What puts items in
 
-There are five kinds of item: peer messages, seed updates, user messages, PR
-watch updates and notices.
+The inbox carries peer messages, seed updates, quick captures, answers to
+asks, PR watch updates and notices.
 
 ### Peer messages
 
@@ -59,16 +65,16 @@ with the reason, when:
 - the sender sent the same text to the same address in the last 10 seconds;
 - the sender sent 8 messages to the same address in the last 30 seconds;
 - the address has 50 unread peer messages;
-- the message would reach the sender: their own session, their member, the
-  chief when they are the chief, or a seed they tend.
+- the recipient member is retired;
+- the message would reach the sender's current session, through any address.
 
 ### Seed updates
 
 Some Garden events put a seed update in the inbox of the seed's tender and of
-every session that watches the seed or a seed it is part of. Two sessions get
-no update, at any of their addresses: the session that caused the event, and
-the session that attn told about it directly, such as the new tender of a
-delegation, a handover or a seed sent to the chief.
+every party that watches the seed or a seed it is part of. attn excludes the
+party that caused the event, and any party told about it directly, such
+as the new tender of a delegation or handover. An event caused by the user or
+attn excludes no party as its author.
 
 | Event | Seed update |
 |---|---|
@@ -84,13 +90,22 @@ for the details.
 
 `attn seed show` and `attn seed notes` mark the reader's unread update for that
 seed as read. attn withdraws a recipient's unread update for a seed when they
-stop being its tender or a watcher, or when the session it is addressed to
-closes. A new tender does not get updates from before they tended the seed.
+no longer have a claim or watch covering it. A session-addressed update is
+also withdrawn when that session closes. A member-addressed update stays
+through naps, `/clear` and sleep while the member still has that claim or
+watch. A new tender does not get updates from before they tended the seed.
 
-### User messages
+### Quick captures
 
-A user message is the user's answer to an ask that is not about a seed: the ask
-names no seed, and the asking session has no stake. It goes to the address the
+A quick capture is a message from the user, with optional attachments, sent
+to a crew member through the global shortcut. It stays in that member's
+mailbox across sessions and uses the same rings and inbox wakes as other
+items. `attn agent inbox` returns its text and attachments.
+
+### Answers to asks
+
+An answer item carries the user's answer to an ask that is not about a seed.
+The ask names no seed, and the asking session has no stake. It goes to the address the
 ask came from. The answer to an ask about a seed is a note on that seed, and
 that note rings (see [Seed updates](#seed-updates)).
 
@@ -107,8 +122,8 @@ when monitoring recovers.
 
 Notices are attn's own messages to an agent:
 
-- a new selection in the chief's Notebook inbox;
-- a seed sent to the chief;
+- a new selection in the Chief's Notebook inbox;
+- a seed sent to the Chief;
 - crew sleep and auto-sleep requests.
 
 ## Coalescing
@@ -164,15 +179,16 @@ wakes the member before it rings.
   Items that arrive during the wake share it.
 - A member has at most one inbox wake at a time.
 - Every inbox wake counts against the member's wake limit, items from the user
-  included. The limit is 8 wakes per 12 hours, set by `crew.wake_limit` and
+  included. The default limit is 8 wakes per 12 hours, set by `crew.wake_limit` and
   `crew.wake_limit_window_seconds`. A wake from the sidebar or `attn crew wake`
   does not count.
-- A wake that fails still uses an attempt, including one the wake limit
-  refuses. attn tries again after 5 minutes. After 3 attempts the items wait
-  for a read or a new item.
+- A wake refused by the wake limit, or one whose agent fails to launch, still
+  uses an attempt. attn tries again after 5 minutes. After 3 attempts the
+  items wait for a read or a new item.
+- A missing member home or charter prevents the wake without spending an
+  attempt. attn retries while the items wait for those files to be restored.
 - A member that goes back to sleep with unread items that have attempts left
   is woken again, 5 minutes after the last attempt.
-- attn never wakes the chief.
 - A manual wake does not ring for items that have no attempts left. The agent
   still finds them with `attn agent inbox`.
 
@@ -181,16 +197,16 @@ wakes the member before it rings.
 `attn agent inbox` returns the unread items of every address the session holds,
 oldest first. It returns 20 items by default; `--limit` allows up to 50. It
 marks them read, records which session read them, and says how many unread
-items remain. It ends the outstanding ring of every address it read, even when
-`--limit` left items unread. Those items ring again at the next safe prompt.
+items remain. It ends the outstanding ring of every address the session holds,
+even when `--limit` left items unread. Those items ring again at the next safe prompt.
 
 `attn agent inbox <message-id>` reads one peer message once it has been rung,
 whether or not it was read before.
 
 `attn agent msg` replies at once with what happens next: the agent was rung,
 the message waits for a safe prompt or for an outstanding ring to be read, a
-member is being woken, the message waits for a tender or a chief, or the wake
-limit is used up (with the setting to change). `attn agent msg-status <id>`
+member is being woken, the message waits for a tender or Chief configuration,
+or the wake limit is used up (with the setting to change). `attn agent msg-status <id>`
 shows the sender whether their message is queued, notified or read.
 
 ## Limits
@@ -199,7 +215,7 @@ shows the sender whether their message is queued, notified or read.
 |---|---|---|---|
 | Time between attempts | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
 | Attempts per item | 3 | `inbox.MaxAttempts` | One ring was enough for over 99% of items; the repeats were harness outages. |
-| Inbox wakes per member | 8 per 12 hours | `crew.wake_limit`, `crew.wake_limit_window_seconds` | |
+| Inbox wakes per member | 8 per 12 hours by default | `crew.wake_limit`, `crew.wake_limit_window_seconds` | |
 | Peer message size | 32 KiB | `protocol.AgentMessageMaxChars` | |
 | Same text to one address | once per 10 s | `agentMessageDedupeWindow` | |
 | Peer messages from one sender to one address | 8 per 30 s | `agentMessageRateLimit` | |
@@ -233,9 +249,10 @@ all 30, and `attn agent inbox` returns the oldest 20. The other 10 ring again
 at the next safe prompt.
 
 **The tender changes.** A seed has an unread update for its tender, and then
-another session tends it. attn withdraws the old tender's update, unless the
-old tender also watches the seed. The new tender gets no update for the earlier
-event. A message sent to the seed's id goes to the new tender.
+another party claims it. attn withdraws the old tender's update, unless the
+old tender also watches the seed. A member's watch keeps that update through
+naps, `/clear` and sleep. The new tender gets no update for the earlier event.
+Unread messages addressed to the seed go to the new tender.
 
 **The wake limit is used up.** A message for an asleep member arrives after the
 member's 8th wake in 12 hours. The sender's receipt names `crew.wake_limit`.

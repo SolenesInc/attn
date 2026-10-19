@@ -113,7 +113,7 @@ garden                  a profile's issue tracker
    ├─ state (1)         planted, growing, parked, harvested or withered
    ├─ seed (0..n)       a subtask
    ├─ claim (at most 1)   the assignment; its tender is a session or crew member
-   ├─ watcher (0..n)    a session or crew member that follows the seed and
+   ├─ watcher (0..n)    a party that follows the seed and
    │                    its subtasks; like a watcher on a ticket
    ├─ note (0..n)       a comment in the ticket's log
    └─ edge (0..n)       blocks or discovered-from
