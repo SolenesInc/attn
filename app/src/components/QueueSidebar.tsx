@@ -16,7 +16,7 @@ import { HomeIcon } from './SidebarIcons';
 import { SidebarAutomationGroups, SidebarDesktopOverview } from './SidebarDesktops';
 import { useWaitingFit } from './useWaitingFit';
 
-const WALK_ROW_SELECTOR = '.queue-row-select:not(:disabled), .sidebar-row-select, .chief-setup button:not(:disabled)';
+const WALK_ROW_SELECTOR = '.queue-row-select:not(:disabled), .sidebar-row-select';
 
 export function QueueSidebar() {
   const {

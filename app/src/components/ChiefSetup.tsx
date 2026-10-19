@@ -1,57 +1,87 @@
-import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useHarnesses } from '../hooks/useHarnesses';
 import { routeFromStored, useHarnessRoute, type HarnessRoute } from '../hooks/useHarnessRoute';
 import type { ChiefView } from '../application/useChief';
 import { chiefHarnesses, chiefRouteRules } from './chiefRoute';
 
-export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, onOpenSettings }: {
+export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOpenSettings }: {
   chief: ChiefView;
-  autoFocus: boolean;
+  anchor: HTMLElement;
   onSave: (route: HarnessRoute, notebookRoot?: string) => Promise<boolean>;
-  onClose: () => void;
+  onClose: (returnFocus?: boolean) => void;
   onReturnFocus: () => void;
   onOpenSettings?: () => void;
 }) {
   const { settings, sendGetSettings } = useDaemonApi();
+  const [firstRun] = useState(!chief.agent);
   const [notebookRoot, setNotebookRoot] = useState<string | null>(null);
   const folder = notebookRoot ?? String(settings['notebook.root'] || '');
   const catalog = useHarnesses();
   const harnesses = chiefHarnesses(catalog.harnesses, settings);
   const defaultHarness = harnesses.find(harness => harness.id === settings.new_session_agent) || harnesses[0];
   const [draft, setDraft] = useState<HarnessRoute>(() => routeFromStored(chief.agent || '', chief.model || '', chief.effort || 'low'));
-  const [step, setStep] = useState<'harness' | 'model'>(chief.agent ? 'model' : 'harness');
   const harness = harnesses.find(candidate => candidate.id === draft.harness) || defaultHarness;
   const route = draft.harness === harness?.id ? draft : { harness: harness?.id || '', model: '', provider: '', effort: 'low' };
+  if (!draft.harness && harness) setDraft(route);
   const view = useHarnessRoute(route, chiefRouteRules(harnesses), 'on-mount');
   const recommended = view.catalog?.models.find(model => model.id === view.catalog?.tier_defaults.deep && model.tier === 'deep' && model.access !== 'unsupported');
   const selected = route.model ? view.selected : recommended;
   const value: HarnessRoute = { ...route, model: selected?.id || route.model, provider: selected?.provider || route.provider, effort: view.effortMode === 'unsupported' ? '' : route.effort };
-  const models = view.options().filter(option => option.stored || (option.model && option.model.access !== 'unsupported'));
-  const showHarness = step === 'harness' && harnesses.length > 1;
+  const models = view.options().filter(option => option.stored || (option.model && option.model.access !== 'unsupported' && option.model.tier_source !== 'alias'));
   const root = useRef<HTMLDivElement>(null);
-  const focusRequested = useRef<'automatic' | 'explicit' | null>(autoFocus ? 'automatic' : null);
+  const [position, setPosition] = useState<{ top: number; left: number; notch: number } | null>(null);
+  const place = useEffectEvent(() => {
+    const at = anchor?.getBoundingClientRect();
+    const bounds = root.current?.getBoundingClientRect();
+    if (!at || !bounds) return;
+    const sidebar = anchor?.closest('.sidebar, .queue-sidebar');
+    const left = Math.max(0, Math.min((sidebar?.getBoundingClientRect().right ?? at.right) + 10, window.innerWidth - bounds.width));
+    const top = Math.max(0, Math.min(at.top - 10, window.innerHeight - bounds.height));
+    const notch = Math.max(10, Math.min(at.top + at.height / 2 - top - 5, bounds.height - 20));
+    setPosition(previous => previous?.top === top && previous.left === left && previous.notch === notch ? previous : { top, left, notch });
+  });
+  useLayoutEffect(() => { place(); });
+  const outside = useEffectEvent((event: MouseEvent) => {
+    if (root.current?.contains(event.target as Node) || anchor?.contains(event.target as Node)) return;
+    event.preventDefault();
+    onClose();
+  });
+  useEffect(() => {
+    document.addEventListener('mousedown', outside);
+    window.addEventListener('resize', place);
+    document.addEventListener('scroll', place, true);
+    const observer = new ResizeObserver(place);
+    if (root.current) observer.observe(root.current);
+    if (anchor) observer.observe(anchor);
+    return () => {
+      document.removeEventListener('mousedown', outside);
+      window.removeEventListener('resize', place);
+      document.removeEventListener('scroll', place, true);
+      observer.disconnect();
+    };
+  }, [anchor]);
+  useEscapeStack(onClose, true);
+  const focusRequested = useRef<string | null>('primary');
   const retainFocus = useCallback((element: HTMLButtonElement | null) => {
     if (!element) return;
-    return () => { if (document.activeElement === element) focusRequested.current = 'explicit'; };
+    return () => { if (document.activeElement === element) focusRequested.current = element.closest('[role="radiogroup"]')?.getAttribute('aria-label') || 'primary'; };
   }, []);
   useLayoutEffect(() => {
-    if (focusRequested.current !== 'explicit') focusRequested.current = autoFocus ? 'automatic' : null;
-  }, [autoFocus]);
-  const changeStep = (next: 'harness' | 'model') => { focusRequested.current = 'explicit'; setStep(next); };
-  useLayoutEffect(() => {
     if (!focusRequested.current) return;
-    const selected = root.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]:not(:disabled)');
-    const first = root.current?.querySelector<HTMLElement>('[role="radio"]:not(:disabled), .chief-setup-primary:not(:disabled), .chief-setup-buttons button:not(:disabled)');
-    const target = selected || first;
-    if (target) { target.focus(); focusRequested.current = null; }
+    const radio = focusRequested.current !== 'primary' && root.current?.querySelector<HTMLElement>(`[aria-label="${focusRequested.current}"] [aria-checked="true"]:not(:disabled)`);
+    const primary = root.current?.querySelector<HTMLElement>('.chief-pop-primary:not(:disabled), .chief-link:not(:disabled)');
+    const target = radio || primary;
+    if (target) { target.focus({ preventScroll: true }); focusRequested.current = null; }
+    else root.current?.focus({ preventScroll: true });
   });
   useLayoutEffect(() => {
     if (!focusRequested.current) return;
     const cancel = () => { focusRequested.current = null; };
     const focusMoved = (event: FocusEvent) => {
-      const automaticShellFocus = focusRequested.current === 'automatic' && event.target === root.current?.closest('.app');
-      if (!automaticShellFocus) cancel();
+      if (event.target !== root.current && event.target !== anchor.closest('.app')) cancel();
     };
     document.addEventListener('focusin', focusMoved, true);
     document.addEventListener('pointerdown', cancel, true);
@@ -61,70 +91,86 @@ export function ChiefSetup({ chief, autoFocus, onSave, onClose, onReturnFocus, o
     };
   });
   const busy = chief.requestPending;
-  const canSave = !busy && Boolean(harness && value.model && !catalog.loading && !catalog.error && !view.loading && !view.error && (chief.agent || folder.trim()));
+  const checking = catalog.loading && !catalog.hasCatalog;
+  const canSave = !busy && Boolean(harness && value.model && !catalog.loading && !catalog.error && !view.loading && !view.error && (!firstRun || folder.trim()));
   const submit = () => {
     if (!canSave) return;
-    const returnFocus = Boolean(chief.agent && root.current?.contains(document.activeElement));
-    void onSave(value, chief.agent ? undefined : folder.trim()).then(saved => { if (saved && returnFocus) onReturnFocus(); });
+    const returnFocus = Boolean(!firstRun && root.current?.contains(document.activeElement));
+    void onSave(value, firstRun ? folder.trim() : undefined).then(saved => { if (saved && returnFocus) onReturnFocus(); });
   };
-  const moveRadio = (event: KeyboardEvent, kind: 'harness' | 'model' | 'effort') => {
-    const group = event.currentTarget;
-    const buttons = Array.from(group.querySelectorAll<HTMLButtonElement>('button[role="radio"]:not(:disabled)'));
-    const current = buttons.findIndex(button => button.getAttribute('aria-checked') === 'true');
-    const forward = kind === 'effort' ? 'ArrowRight' : 'ArrowDown';
-    const backward = kind === 'effort' ? 'ArrowLeft' : 'ArrowUp';
-    let next = event.key === forward ? (current + 1) % buttons.length : event.key === backward ? (current - 1 + buttons.length) % buttons.length : -1;
-    if (kind !== 'effort' && /^[1-9]$/.test(event.key)) next = Number(event.key) - 1;
-    if (next >= 0 && buttons[next]) { event.preventDefault(); buttons[next].click(); buttons[next].focus(); }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      if (kind === 'harness') changeStep('model');
-      else if (kind === 'model') submit();
+  const recheck = () => {
+    focusRequested.current = 'primary';
+    sendGetSettings();
+    catalog.retry();
+    view.discover(true);
+  };
+  const moveRadio = (event: KeyboardEvent) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const radio = (event.target as HTMLElement).closest('button[role="radio"]');
+    const group = radio?.closest('[role="radiogroup"]');
+    if (!group) return;
+    if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      const buttons = Array.from(group.querySelectorAll<HTMLButtonElement>('button[role="radio"]:not(:disabled)'));
+      const current = buttons.indexOf(event.target as HTMLButtonElement);
+      const step = event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1;
+      const next = buttons[(current + step + buttons.length) % buttons.length];
+      if (next) { event.preventDefault(); event.stopPropagation(); next.click(); next.focus(); }
     }
+    if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); submit(); }
   };
-  return <div ref={root} className="chief-setup" data-testid="chief-setup" onKeyDown={event => {
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose(); }
+  const primaryLabel = chief.phase === 'configuring' ? firstRun ? 'Waking…' : 'Saving…' : firstRun ? `Wake ${chief.name}` : chief.sessionId ? 'Save for next wake' : 'Save';
+  return createPortal(<div ref={root} tabIndex={-1} className="chief-pop" data-testid="chief-setup" role="dialog" aria-label={firstRun ? `Set up ${chief.name}` : `${chief.name}'s harness`} style={position ? { top: position.top, left: position.left } : { top: 0, left: 0 }} onKeyDown={moveRadio} onBlur={event => {
+    if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget) && !anchor?.contains(event.relatedTarget)) onClose(false);
   }}>
-    <div className="chief-setup-heading"><h3>{chief.agent ? 'Harness and model' : 'Set up your chief'}</h3><button type="button" aria-label="Close chief setup" onClick={onClose}>×</button></div>
-    {catalog.loading && !catalog.hasCatalog ? <p role="status">Checking harnesses…</p> : catalog.error && !harnesses.length ? null : !harnesses.length ? <>
-      <p>No harness here can run the chief</p>
-      <div className="chief-install-row">Claude Code <span>Not installed</span></div>
-      <div className="chief-install-row">Codex <span>Not installed</span></div>
-      <div className="chief-setup-buttons">
-        {onOpenSettings && <button ref={retainFocus} type="button" onClick={onOpenSettings}>Settings › Agents</button>}
-        <button ref={retainFocus} type="button" onClick={() => { sendGetSettings(); catalog.retry(); }}>Check again</button>
+    <span className="chief-pop-notch" aria-hidden="true" style={{ top: position?.notch }} />
+    <header className="chief-pop-head">
+      <h3>{firstRun ? `Wake your ${chief.name.toLowerCase()}` : `${chief.name}'s harness`}</h3>
+      <button type="button" className="chief-pop-close" aria-label="Close chief setup" onClick={() => onClose()}><kbd>esc</kbd></button>
+    </header>
+    <div className="chief-pop-body">
+    {checking ? <p className="chief-quiet" role="status">Checking harnesses…</p> : !harnesses.length || catalog.error ? <>
+      {catalog.error ? <p className="chief-setup-error" role="alert">{catalog.error}</p> : <p className="chief-quiet">No harness here can run the chief. Install Claude Code or Codex to wake it.</p>}
+      <div className="chief-link-row">
+        <button ref={retainFocus} type="button" className="chief-link" onClick={recheck}>Check again</button>
+        {onOpenSettings && <button type="button" className="chief-link" onClick={onOpenSettings}>Settings › Agents</button>}
       </div>
-    </> : showHarness ? <>
-      <div role="radiogroup" aria-label="Chief harness" onKeyDown={event => moveRadio(event, 'harness')}>
-        {harnesses.map((candidate, index) => <button ref={retainFocus} type="button" role="radio" aria-checked={harness?.id === candidate.id} tabIndex={harness?.id === candidate.id ? 0 : -1} key={candidate.id} onClick={() => setDraft({ harness: candidate.id, model: '', provider: '', effort: 'low' })}>
-          <span className="chief-radio-mark">{harness?.id === candidate.id ? '●' : '○'}</span><span>{candidate.name}</span><kbd>{index + 1}</kbd>
-        </button>)}
-      </div>
-      <button type="button" className="chief-setup-primary" onClick={() => changeStep('model')}>Continue <kbd>⏎</kbd></button>
     </> : <>
-      <div className="chief-chosen-harness"><span>{harness.name}</span>{harnesses.length > 1 ? <button type="button" onClick={() => changeStep('harness')}>change</button> : <small>the only one installed</small>}</div>
-      <div role="radiogroup" aria-label="Chief model" onKeyDown={event => moveRadio(event, 'model')}>
-        {models.map(({ model, stored, label }, index) => {
-          const checked = stored || (value.model === model?.id && value.provider === model?.provider);
-          return <button ref={retainFocus} type="button" role="radio" key={`${model?.provider ?? value.provider}/${model?.id ?? value.model}`} aria-checked={checked} tabIndex={checked ? 0 : -1} disabled={busy} onClick={() => { if (model) setDraft(view.withModel(model)); }}>
-            <span className="chief-radio-mark">{checked ? '●' : '○'}</span>
-            <span>{label}{model === recommended && <small>recommended</small>}</span>
-            <kbd>{index + 1}</kbd>
-          </button>;
-        })}
-      </div>
-      {view.loading && <p role="status">Checking models…</p>}
-      {view.error && <div role="alert">{view.error}<button type="button" onClick={() => view.discover(true)}>Check again</button></div>}
-      {view.effortMode === 'levels' && <div className="chief-effort" role="radiogroup" aria-label="Chief effort" onKeyDown={event => moveRadio(event, 'effort')}>
-        {view.effortLevels.map(effort => <button type="button" role="radio" key={effort} disabled={busy} aria-checked={value.effort === effort} tabIndex={value.effort === effort ? 0 : -1} onClick={() => setDraft({ ...value, effort })}>{effort}</button>)}
-      </div>}
-      {!chief.agent && <label className="chief-notebook-folder">Notebook folder
-        <input aria-label="Notebook folder" value={folder} disabled={busy} onChange={event => setNotebookRoot(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } }} />
-        <small>Your chief works here. Crew charters and letters live in crew/.</small>
+      {harnesses.length > 1 && <section>
+        <span className="chief-pop-key">Harness</span>
+        <div className="chief-seg" role="radiogroup" aria-label="Chief harness">
+          {harnesses.map(candidate => <button ref={retainFocus} type="button" role="radio" key={candidate.id} disabled={busy} aria-checked={harness?.id === candidate.id} tabIndex={harness?.id === candidate.id ? 0 : -1} onClick={() => setDraft({ harness: candidate.id, model: '', provider: '', effort: 'low' })}>{candidate.name}</button>)}
+        </div>
+      </section>}
+      <section>
+        <span className="chief-pop-key">Model</span>
+        <div className="chief-pop-models" role="radiogroup" aria-label="Chief model">
+          {view.error ? <>
+            <p className="chief-setup-error" role="alert">{view.error}</p>
+            <button ref={retainFocus} type="button" className="chief-link" onClick={() => { focusRequested.current = 'primary'; view.discover(true); }}>Check again</button>
+          </> : models.map(({ model, stored, label }) => {
+            const checked = stored || (value.model === model?.id && value.provider === model?.provider);
+            return <button ref={retainFocus} type="button" role="radio" key={`${model?.provider ?? value.provider}/${model?.id ?? value.model}`} aria-checked={checked} tabIndex={checked ? 0 : -1} disabled={busy} onClick={() => { if (model) setDraft(view.withModel(model)); }}>
+              <span>{label}</span>{model === recommended ? <small>recommended</small> : model?.tier ? <small>{model.tier}</small> : null}
+            </button>;
+          })}
+          {view.loading && <p className="chief-quiet" role="status">Checking models…</p>}
+        </div>
+      </section>
+      {view.effortMode === 'levels' && <section>
+        <span className="chief-pop-key">Effort</span>
+        <div className="chief-seg" role="radiogroup" aria-label="Chief effort">
+          {view.effortLevels.map(effort => <button ref={retainFocus} type="button" role="radio" key={effort} disabled={busy} aria-checked={value.effort === effort} tabIndex={value.effort === effort ? 0 : -1} onClick={() => setDraft({ ...value, effort })}>{effort}</button>)}
+        </div>
+      </section>}
+      {firstRun && <label className="chief-folder">
+        <span className="chief-folder-key">Notebook</span>
+        <input aria-label="Notebook folder" spellCheck={false} value={folder} title={folder} disabled={busy} onChange={event => setNotebookRoot(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } }} />
       </label>}
-      <button type="button" className="chief-setup-primary" disabled={!canSave} onClick={() => submit()}>{chief.phase === 'configuring' ? 'Saving…' : chief.agent ? chief.sessionId ? 'Save for next wake' : 'Save' : `Wake ${chief.name}`}{!chief.agent && <kbd>⏎</kbd>}</button>
+      {chief.setupError && <p className="chief-setup-error" role="alert">{chief.setupError}</p>}
+      <footer className="chief-pop-foot">
+        <button type="button" className="chief-pop-primary" disabled={!canSave} onClick={submit}>{primaryLabel}<kbd aria-hidden="true">⏎</kbd></button>
+      </footer>
     </>}
-    {catalog.error && <div role="alert">{catalog.error}<button ref={retainFocus} type="button" onClick={catalog.retry}>Check again</button></div>}
-    {chief.setupError && <p className="chief-setup-error" role="alert">{chief.setupError}</p>}
-  </div>;
+    </div>
+  </div>, document.body);
 }

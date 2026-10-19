@@ -328,6 +328,10 @@ export async function runDomAutomationAction(
       return {
         bounds: rectSnapshot(element),
         animations: element.getAnimations({ subtree: true }).map((animation) => ({ state: animation.playState })),
+        clientWidth: element.clientWidth,
+        clientHeight: element.clientHeight,
+        scrollWidth: element.scrollWidth,
+        scrollHeight: element.scrollHeight,
         panel: panel ? {
           shellClass: panel.parentElement?.className,
           hidden: panel.getAttribute('aria-hidden'),

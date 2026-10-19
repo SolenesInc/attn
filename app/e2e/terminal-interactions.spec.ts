@@ -1,4 +1,4 @@
-import { test, expect, waitForMockPtyBanner } from './fixtures';
+import { test, expect, dismissChiefSetup, waitForMockPtyBanner } from './fixtures';
 
 async function createSession(
   page: import('@playwright/test').Page,
@@ -163,6 +163,7 @@ async function openTerminalSession(
   await daemon.start();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
+  await dismissChiefSetup(page);
   await createSession(page, daemon, sessionId);
   await page.locator(`[data-testid="session-${sessionId}"]`).click();
   const terminal = page.locator(`[data-pane-session-id="${sessionId}"][data-pane-kind="agent"] .terminal-container`);

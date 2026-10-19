@@ -52,6 +52,7 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
       if (!member || pending?.key === member.key) return false;
       const key = member.key;
       setError(null);
+      setEditor({ key, open: true });
       setPending({ key, phase: 'configuring' });
       try {
         const outcome = await sendCrewSet({ member: key, expectedRevision: member.revision, agent: route.harness, model: storedRouteModel(route), effort: route.effort, notebookRoot });
