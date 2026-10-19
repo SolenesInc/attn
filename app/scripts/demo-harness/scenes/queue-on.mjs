@@ -22,14 +22,13 @@ export default {
       return !turns.some((row) => row.id === fix.id);
     });
     await demo.ui('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-    await demo.ui('dom_click', { selector: 'button[aria-label="Close chief setup"]' });
 
     await demo.clip('queue-on', async () => {
       demo.caption('Open the command palette with `Cmd+Shift+K` (`Ctrl+Alt+K` on Linux)');
       await demo.pause(1500);
       await demo.press('ui.commandPalette');
       await demo.pause(300);
-      await demo.focus('.palette');
+      await demo.focus('.palette-box');
       await demo.pause(600);
       demo.caption('Run "Turn on the agent queue"');
       await demo.type('queue');
