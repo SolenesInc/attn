@@ -45,20 +45,34 @@ out = path.resolve(out ?? path.join(path.dirname(clip), `${name}.avif`));
 const run = (command, commandArgs, options = {}) => execFileSync(command, commandArgs, { stdio: 'inherit', ...options });
 const seconds = (file) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file], { encoding: 'utf8' }));
 
-const duration = Number(seconds(clip).toFixed(3));
-const events = fs.readFileSync(eventsFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
-const geometry = events.find((event) => event.action === 'window');
+const recorded = fs.readFileSync(eventsFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+const geometry = recorded.find((event) => event.action === 'window');
 if (!geometry) throw new Error(`${eventsFile} has no window event; record ${name} again with the current demo harness`);
 const scale = CANVAS_WIDTH / geometry.width;
 const stage = Math.round(((geometry.height - geometry.titlebar) * scale) / 2) * 2;
 const canvas = { width: CANVAS_WIDTH, height: stage + CAPTION_BAR, stage, scale };
-const edit = { canvas, window: { width: geometry.width, height: geometry.height, titlebar: geometry.titlebar }, duration, events };
+
+const segments = [{ start: 0, rate: 1 }];
+for (const { t, rate } of recorded.filter((event) => event.action === 'speed')) segments.push({ start: Math.max(t, segments.at(-1).start), rate });
+segments.forEach((segment, index) => { segment.end = segments[index + 1]?.start ?? seconds(clip); });
+const retime = (t) => segments.reduce((sum, { start, end, rate }) => sum + Math.max(0, Math.min(t, end) - start) / rate, 0);
+const events = segments.length > 1 ? recorded.map((event) => ({ ...event, t: Number(retime(event.t).toFixed(3)) })) : recorded;
 
 const project = fs.mkdtempSync(path.join(os.tmpdir(), `attn-polish-${name}-`));
 fs.mkdirSync(path.join(project, 'assets'));
-fs.copyFileSync(clip, path.join(project, 'assets', 'footage.mp4'));
+const footage = path.join(project, 'assets', 'footage.mp4');
+if (segments.length > 1) {
+  const pieces = segments.filter(({ start, end }) => end > start);
+  const filter = pieces.map(({ start, end, rate }, index) => `[0:v]trim=start=${start}:end=${end},setpts=(PTS-STARTPTS)/${rate}[v${index}]`).join(';')
+    + `;${pieces.map((_, index) => `[v${index}]`).join('')}concat=n=${pieces.length}:v=1:a=0,fps=${FPS}[out]`;
+  run('ffmpeg', ['-loglevel', 'error', '-y', '-i', clip, '-filter_complex', filter, '-map', '[out]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '16', footage]);
+} else {
+  fs.copyFileSync(clip, footage);
+}
+const duration = Number(seconds(footage).toFixed(3));
+const edit = { canvas, window: { width: geometry.width, height: geometry.height, titlebar: geometry.titlebar }, duration, events };
 const untaggedRgb = 'scale=in_color_matrix=bt709:in_range=tv:out_range=pc,format=rgb24,setparams=color_primaries=unknown:color_trc=unknown:colorspace=unknown:range=unknown';
-run('ffmpeg', ['-loglevel', 'error', '-y', '-i', clip, '-frames:v', '1', '-vf', untaggedRgb, path.join(project, 'assets', 'first.png')]);
+run('ffmpeg', ['-loglevel', 'error', '-y', '-i', footage, '-frames:v', '1', '-vf', untaggedRgb, path.join(project, 'assets', 'first.png')]);
 const composition = fs.readFileSync(COMPOSITION, 'utf8')
   .replace(/data-duration="[\d.]+"/g, `data-duration="${duration}"`)
   .replace(/data-width="\d+" data-height="\d+"/, `data-width="${canvas.width}" data-height="${canvas.height}"`)

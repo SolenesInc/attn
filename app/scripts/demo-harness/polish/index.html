@@ -95,6 +95,20 @@
         font-weight: 600;
         color: #f4f4f6;
       }
+      .speed {
+        position: absolute;
+        top: 28px;
+        right: 28px;
+        padding: 10px 18px;
+        border-radius: 14px;
+        background: rgba(12, 12, 14, 0.86);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        font-family: ui-monospace, monospace;
+        font-size: 30px;
+        font-weight: 600;
+        color: #f0763d;
+        opacity: 0;
+      }
       #bar {
         position: absolute;
         left: 0;
@@ -194,6 +208,15 @@
         tl.fromTo(keys, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.18, ease: "power2.out" }, start);
         if (next && next.t - 0.05 < event.t + KEYS_HOLD) tl.set(keys, { opacity: 0 }, Math.max(start + 0.18, next.t - 0.05));
         else tl.to(keys, { opacity: 0, duration: 0.3, ease: "power1.in" }, event.t + KEYS_HOLD);
+      });
+
+      const speeds = at("speed");
+      speeds.forEach((event, index) => {
+        if (event.rate === 1) return;
+        const end = speeds[index + 1]?.t ?? edit.duration - SEAM;
+        const badge = make(overlays, "div", { className: "speed", id: `speed-${index}` }, `${event.rate}×`);
+        tl.fromTo(badge, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, event.t);
+        tl.to(badge, { opacity: 0, duration: 0.2, ease: "power1.in" }, Math.max(event.t + 0.2, end - 0.2));
       });
 
       const bar = document.getElementById("bar");

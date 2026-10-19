@@ -23,9 +23,11 @@ import { createTurnRouter } from './turns.mjs';
 const DEMO_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const DEMO_INSTANCE = 'demo';
 export const REPOS_ROOT = path.join(os.homedir(), 'projects', 'attn-demo');
+export const NOTEBOOK_ROOT = path.join(REPOS_ROOT, 'notebook');
 export const WINDOW = { x: 80, y: 60, width: 1200, height: 800 };
 const STREAM_PACE = { chars: 12, ms: 25 };
 const THINK_MS = 1500;
+const GITHUB_SELF_THROTTLE_MS = 60_000;
 
 function git(cwd, ...args) {
   return execFileSync('git', ['-c', 'user.name=Demo', '-c', 'user.email=demo@example.com', ...args], { cwd, encoding: 'utf8' });
@@ -119,6 +121,8 @@ export async function startWorld({ repos, log }) {
 
     cleanups.push(() => fs.rmSync(REPOS_ROOT, { recursive: true, force: true }));
     const trustedFolders = createRepos(repos);
+    fs.mkdirSync(NOTEBOOK_ROOT);
+    trustedFolders.push(fs.realpathSync(NOTEBOOK_ROOT));
 
     world.router = createTurnRouter({ thinkMs: THINK_MS });
     const stub = await startStubModel(world.router.route, {
@@ -144,12 +148,14 @@ export async function startWorld({ repos, log }) {
     await client.waitForReady(30_000);
     await client.waitForFrontendResponsive(30_000);
     await client.request('dismiss_whats_new');
+    await client.request('set_setting', { key: 'notebook.root', value: `~/${path.relative(os.homedir(), NOTEBOOK_ROOT)}` });
     await client.request('dom_wait', { selector: '.dock-collapse-btn[aria-expanded="true"]', timeoutMs: 10_000 });
     await client.request('dom_click', { selector: '.dock-collapse-btn' });
     world.placeWindow = () => setFrontWindowBounds(WINDOW, { client });
     await world.placeWindow();
     const daemon = new DaemonObserver();
     await daemon.connect();
+    world.githubThrottleEndsAt = Date.now() + GITHUB_SELF_THROTTLE_MS;
     cleanups.push(() => daemon.close());
     await createWorktrees(daemon, repos);
     world.client = client;

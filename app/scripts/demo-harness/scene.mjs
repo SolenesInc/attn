@@ -82,6 +82,19 @@ export function createDemo({ world, outDir, log }) {
 
     read: (action, payload = {}) => client.request(action, payload),
 
+    async waitOutGitHubThrottle() {
+      await delay(Math.max(0, world.githubThrottleEndsAt - Date.now()));
+      await client.request('dom_wait', { selector: '.rate-limit-banner', absent: true, timeoutMs: 5_000 });
+    },
+
+    reply(prompt, builder, { cwd }) {
+      return router.expect(prompt, builder, { cwd }).requested;
+    },
+
+    speed(rate) {
+      note('speed', { rate });
+    },
+
     async press(shortcutId) {
       const { binding } = await client.request('shortcut_binding', { shortcutId });
       if (!binding) throw new Error(`shortcut ${shortcutId} is unbound in the app`);
@@ -162,36 +175,27 @@ export function createDemo({ world, outDir, log }) {
 
     async still(name, { crop, highlight } = {}) {
       const file = path.join(outDir, name);
+      const raw = `${file}.raw.png`;
       const windowId = await driver.mainWindowId();
-      execFileSync('/usr/sbin/screencapture', ['-x', '-o', '-l', String(windowId), file]);
-      if (crop || highlight) {
-        const { scaleFactor, titlebar } = await windowGeometry();
-        const px = (rect) => ({
-          x: Math.round(rect.x * scaleFactor),
-          y: Math.round((rect.y + titlebar) * scaleFactor),
-          w: Math.round(rect.width * scaleFactor),
-          h: Math.round(rect.height * scaleFactor),
-        });
-        const filters = [];
-        let origin = { x: 0, y: 0 };
-        if (highlight) {
-          const box = px(await bounds(highlight));
-          filters.push(`drawbox=x=${box.x - 8}:y=${box.y - 8}:w=${box.w + 16}:h=${box.h + 16}:color=0xff5fa2:t=6`);
-        }
-        if (crop) {
-          const rect = await bounds(crop.selector);
-          const area = px({ ...rect, height: rect.height + (crop.extendBottom ?? 0) });
-          origin = area;
-          filters.push(`crop=${area.w}:${area.h}:${area.x}:${area.y}`);
-        }
-        const raw = `${file}.raw.png`;
-        fs.renameSync(file, raw);
-        ffmpeg('-i', raw, '-vf', filters.join(','), file);
-        fs.rmSync(raw);
-        note('still', { name, origin });
-      } else {
-        note('still', { name });
+      execFileSync('/usr/sbin/screencapture', ['-x', '-o', '-l', String(windowId), raw]);
+      const { scaleFactor, titlebar } = await windowGeometry();
+      const px = (rect) => ({
+        x: Math.round(rect.x * scaleFactor),
+        y: Math.round((rect.y + titlebar) * scaleFactor),
+        w: Math.round(rect.width * scaleFactor),
+        h: Math.round(rect.height * scaleFactor),
+      });
+      const filters = [];
+      if (highlight) {
+        const box = px(await bounds(highlight));
+        filters.push(`drawbox=x=${box.x - 8}:y=${box.y - 8}:w=${box.w + 16}:h=${box.h + 16}:color=0xff5fa2:t=6`);
       }
+      const rect = await bounds(crop?.selector ?? '#root');
+      const area = px({ ...rect, height: rect.height + (crop?.extendBottom ?? 0) });
+      filters.push(`crop=${area.w}:${area.h}:${area.x}:${area.y}`);
+      ffmpeg('-i', raw, '-vf', filters.join(','), file);
+      fs.rmSync(raw);
+      note('still', { name, origin: area });
       return file;
     },
 

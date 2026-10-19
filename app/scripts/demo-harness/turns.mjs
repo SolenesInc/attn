@@ -137,6 +137,7 @@ export function createTurnRouter({ thinkMs }) {
       return { say: entry?.spec.title ?? (entry ? titleFrom(entry.prompt) : 'Demo session') };
     }
     const entry = scripted(request);
+    entry?.markRequested();
     if (!entry) {
       return { say: `The demo has no scripted reply for "${request.prompt.slice(0, 120)}". Register it with session.prompt(text, turn).` };
     }
@@ -158,7 +159,9 @@ export function createTurnRouter({ thinkMs }) {
     route,
     expect(prompt, builder, { cwd }) {
       const spec = builder.build();
-      turns.push({ prompt, spec, cwd });
+      const entry = { prompt, spec, cwd };
+      spec.requested = new Promise((resolve) => { entry.markRequested = resolve; });
+      turns.push(entry);
       return spec;
     },
   };

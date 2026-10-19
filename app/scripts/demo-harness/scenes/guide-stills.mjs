@@ -17,7 +17,7 @@ export default {
       .done('Both tests pass: flour converts at 120 g per cup and scaling doubles every ingredient.'));
 
     await demo.ui('dispatch_shortcut', { shortcutId: 'session.goToDashboard' });
-    await demo.until('the GitHub rate limit banner to clear', () => demo.read('dom_wait', { selector: '.rate-limit-banner', absent: true, timeoutMs: 1000 }).then(() => true, () => false));
+    await demo.waitOutGitHubThrottle();
     await demo.pause();
     await demo.still('home-screen.png');
     await demo.still('ledger-button.png', {
