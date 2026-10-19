@@ -57,19 +57,25 @@ const edit = { canvas, window: { width: geometry.width, height: geometry.height,
 const project = fs.mkdtempSync(path.join(os.tmpdir(), `attn-polish-${name}-`));
 fs.mkdirSync(path.join(project, 'assets'));
 fs.copyFileSync(clip, path.join(project, 'assets', 'footage.mp4'));
-run('ffmpeg', ['-loglevel', 'error', '-y', '-i', clip, '-frames:v', '1', path.join(project, 'assets', 'first.png')]);
+const untaggedRgb = 'scale=in_color_matrix=bt709:in_range=tv:out_range=pc,format=rgb24,setparams=color_primaries=unknown:color_trc=unknown:colorspace=unknown:range=unknown';
+run('ffmpeg', ['-loglevel', 'error', '-y', '-i', clip, '-frames:v', '1', '-vf', untaggedRgb, path.join(project, 'assets', 'first.png')]);
 const composition = fs.readFileSync(COMPOSITION, 'utf8')
   .replace(/data-duration="[\d.]+"/g, `data-duration="${duration}"`)
   .replace(/data-width="\d+" data-height="\d+"/, `data-width="${canvas.width}" data-height="${canvas.height}"`)
   .replace(/content="width=\d+, height=\d+"/, `content="width=${canvas.width}, height=${canvas.height}"`)
-  .replace(/(<script id="edit" type="application\/json">)[\s\S]*?(<\/script>)/, `$1${JSON.stringify(edit).replace(/</g, '\\u003c')}$2`);
+  .replace(/(<script id="edit" type="application\/json">)[\s\S]*?(<\/script>)/, (_, open, close) => `${open}${JSON.stringify(edit).replace(/</g, '\\u003c')}${close}`);
 fs.writeFileSync(path.join(project, 'index.html'), composition);
 
-const env = { ...process.env, HYPERFRAMES_NO_TELEMETRY: '1' };
+const env = { ...process.env, HYPERFRAMES_NO_TELEMETRY: '1', HYPERFRAMES_NO_UPDATE_CHECK: '1', HYPERFRAMES_SKIP_SKILLS: '1' };
 const rendered = path.join(project, `${name}.mp4`);
-run('npx', ['--yes', HYPERFRAMES, 'check', project], { env });
-run('npx', ['--yes', HYPERFRAMES, 'render', project, '--quality', 'high', '--fps', String(FPS), '--output', rendered], { env });
-run('ffmpeg', ['-loglevel', 'error', '-y', '-i', rendered, '-c:v', 'libsvtav1', '-preset', String(AVIF.preset), '-crf', String(AVIF.crf), '-pix_fmt', 'yuv420p', '-loop', '0', out]);
+try {
+  run('npx', ['--yes', HYPERFRAMES, 'check', project], { env });
+  run('npx', ['--yes', HYPERFRAMES, 'render', project, '--quality', 'high', '--fps', String(FPS), '--output', rendered], { env });
+  run('ffmpeg', ['-loglevel', 'error', '-y', '-i', rendered, '-c:v', 'libsvtav1', '-preset', String(AVIF.preset), '-crf', String(AVIF.crf), '-pix_fmt', 'yuv420p', '-loop', '0', out]);
+} catch (error) {
+  console.error(`[polish] failed; the HyperFrames project is still at ${project}`);
+  throw error;
+}
 
 console.log(`[polish] ${out}: ${(fs.statSync(out).size / 1024).toFixed(0)} KiB, ${duration}s`);
 if (keep) console.log(`[polish] project and render: ${project}`);
