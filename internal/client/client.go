@@ -527,6 +527,19 @@ func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, con
 	return resp.AgentMsgResult, nil
 }
 
+func (c *Client) AgentReload(targets []string, sourceSessionID protocol.SessionID, all bool) (*protocol.AgentReloadResult, error) {
+	resp, err := c.send(protocol.AgentReloadMessage{
+		Cmd: protocol.CmdAgentReload, Targets: targets, SourceSessionID: sourceSessionID, All: all,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AgentReloadResult == nil {
+		return nil, fmt.Errorf("daemon did not return an agent reload result")
+	}
+	return resp.AgentReloadResult, nil
+}
+
 func (c *Client) AgentClose(target string, sourceSessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
 	msg := protocol.AgentCloseMessage{
 		Cmd:             protocol.CmdAgentClose,

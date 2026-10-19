@@ -96,6 +96,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdAgentPeek:                     decodeInto[AgentPeekMessage],
 	CmdAgentMsg:                      decodeInto[AgentMsgMessage],
 	CmdAgentClose:                    decodeInto[AgentCloseMessage],
+	CmdAgentReload:                   decodeInto[AgentReloadMessage],
 	CmdAgentInbox:                    decodeInto[AgentInboxMessage],
 	CmdAgentMsgStatus:                decodeInto[AgentMsgStatusMessage],
 	CmdCrewList:                      decodeInto[CrewListMessage],

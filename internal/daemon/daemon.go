@@ -2610,6 +2610,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAgentMsg(conn, msg.(*protocol.AgentMsgMessage))
 	case protocol.CmdAgentClose:
 		d.handleAgentClose(conn, msg.(*protocol.AgentCloseMessage))
+	case protocol.CmdAgentReload:
+		d.handleAgentReload(conn, msg.(*protocol.AgentReloadMessage))
 	case protocol.CmdQuickCaptureAttachmentGet:
 		d.handleQuickCapture(conn, msg)
 	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentDiscard:

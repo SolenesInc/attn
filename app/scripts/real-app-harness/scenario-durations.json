@@ -308,6 +308,14 @@
         "seconds": 206.599,
         "runnerClass": "hosted macOS",
         "note": "Green quick-capture durationMs=206599 in last-matrix.json, revision221afcbcb, including the enable-first recording, native shortcut, focus, file delivery, history, disable/re-enable draft retention and cleanup. Artifact12154318251."
+      },
+      "agent-reload": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/39231395121",
+        "job": "Soak agent-reload",
+        "recordedAt": "2026-10-19",
+        "seconds": 13.867,
+        "runnerClass": "github-hosted Ubuntu24.04 amd64, 4vcpu/16GB",
+        "note": "Green isolated packaged scenario on 822ed03414a2. Iteration wall time 13867ms; ATTN_VERDICT durationMs=13277 including cleanup. Native keyboard input succeeds before and after CLI reload, with the same tile and desktop."
       }
     }
   },
@@ -372,6 +380,7 @@
     "agent-terminals": 6.524,
     "shell-titles": 14.058,
     "callouts": 39.5,
-    "quick-capture": 206.599
+    "quick-capture": 206.599,
+    "agent-reload": 13.867
   }
 }

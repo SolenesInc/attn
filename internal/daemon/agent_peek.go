@@ -55,15 +55,22 @@ func (d *Daemon) resolveAgentPeekTarget(target string) (*protocol.Session, strin
 }
 
 func (d *Daemon) resolveSessionByIDOrPrefix(target string) (*protocol.Session, string) {
+	return d.resolveSessionReference(target, "")
+}
+
+func (d *Daemon) resolveSessionReference(target, profileID string) (*protocol.Session, string) {
 	target = protocol.TrimID(target)
 	if target == "" {
 		return nil, "session_not_found"
 	}
-	if session := d.store.Get(protocol.SessionID(target)); session != nil {
+	if session := d.store.Get(protocol.SessionID(target)); session != nil && (profileID == "" || session.ProfileID == profileID) {
 		return session, ""
 	}
 	var match *protocol.Session
 	for _, session := range d.store.List("") {
+		if profileID != "" && session.ProfileID != profileID {
+			continue
+		}
 		if !strings.HasPrefix(string(session.ID), target) {
 			continue
 		}

@@ -671,6 +671,24 @@ model AgentCloseResult {
   seed_ids: string[];           // the seeds the closed session tended, each of which got the note
 }
 
+model AgentReloadMessage {
+  cmd: "agent_reload";
+  source_session_id: SessionID;
+  targets: string[];
+  all: boolean;
+}
+
+model AgentReloadOutcome {
+  target: string;
+  session_id?: SessionID;
+  success: boolean;
+  error?: string;
+}
+
+model AgentReloadResult {
+  outcomes: AgentReloadOutcome[];
+}
+
 enum QuickCaptureMailboxKind { chief, crew_member }
 model QuickCaptureMailbox {
   kind: QuickCaptureMailboxKind;
@@ -5734,6 +5752,7 @@ model Response {
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;
   agent_close_result?: AgentCloseResult;
+  agent_reload_result?: AgentReloadResult;
   quick_capture_result?: QuickCaptureResult;
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
