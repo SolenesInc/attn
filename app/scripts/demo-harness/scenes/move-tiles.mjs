@@ -15,7 +15,6 @@ export default {
     await search.prompt(SEARCH_PROMPT, searchByIngredient());
     const fix = await demo.session({ repo: 'recipes', worktree: 'fix-unit-conversion' });
     await fix.prompt(BUTTER_PROMPT, fixButterConversion().ask('Butter converts at 227 g per cup now. Should I add tablespoons too?'));
-    await demo.ui('dom_click', { selector: 'button[aria-label="Close chief setup"]' });
 
     const { arrangement } = await demo.read('get_state');
     const desktop2 = arrangement.desktops.find((desktop) => desktop.slot === 2);

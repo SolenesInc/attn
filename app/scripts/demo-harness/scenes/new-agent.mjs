@@ -6,7 +6,6 @@ export default {
   async run(demo) {
     const search = await demo.session({ repo: 'recipes', worktree: 'search-by-ingredient' });
     await search.prompt(SEARCH_PROMPT, searchByIngredient());
-    await demo.ui('dom_click', { selector: 'button[aria-label="Close chief setup"]' });
     await demo.clip('new-agent', async () => {
       demo.caption('`Cmd+N` (`Ctrl+Shift+N` on Linux) starts an agent');
       await demo.pause(1500);
