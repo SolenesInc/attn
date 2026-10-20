@@ -155,7 +155,7 @@ func (w *transcriptWatcher) resolveExactPath() string {
 		if path == "" {
 			continue
 		}
-		path = e.registry.host.LinkTranscriptPath(e, path)
+		path = e.registry.host.LinkTranscriptPath(e.linkKind(), path)
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
@@ -791,4 +791,10 @@ func (e *Entry) assistantWindowChanged() {
 	view := e.viewLocked()
 	e.mu.Unlock()
 	e.home.Applied(view)
+}
+
+func (e *Entry) linkKind() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.link
 }

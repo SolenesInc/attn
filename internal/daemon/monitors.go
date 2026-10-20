@@ -101,6 +101,7 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 		r.mu.Unlock()
 		r.policyMu.Unlock()
 	}
+	entry.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
 	entry.Arm()
 	d.syncMonitorConversation(sessionID)
 	if previous != nil && previous != entry {
@@ -119,6 +120,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 	launch := sessionmonitor.Launch{
 		Known:              true,
 		Agent:              session.Agent,
+		Link:               d.store.SessionLink(sessionID),
 		StartedAt:          d.store.SessionLaunchedAt(sessionID),
 		Directory:          session.Directory,
 		Branch:             branchFromSession(session),
@@ -220,8 +222,13 @@ func (h monitorHost) session(entry *sessionmonitor.Entry) protocol.SessionID {
 	return homeOf(entry).sessionID()
 }
 
-func (h monitorHost) PrimaryTerminal(entry *sessionmonitor.Entry) harness.TerminalID {
-	return h.daemon.primaryTerminal(h.session(entry))
+func (h monitorHost) LiveTerminals(ctx context.Context) map[harness.TerminalID]struct{} {
+	return h.daemon.liveTerminals(ctx)
+}
+
+func (h monitorHost) ViewOwner(terminal harness.TerminalID) string {
+	session, _ := h.daemon.shownIn(terminal)
+	return string(session)
 }
 
 func (h monitorHost) Input(ctx context.Context, terminal harness.TerminalID, data []byte) error {
@@ -253,8 +260,8 @@ func (l sessionLinkTo) Deliver(ctx context.Context, in harness.Input) harness.Cu
 	return l.Link.Deliver(ctx, in)
 }
 
-func (h monitorHost) LinkTranscriptPath(entry *sessionmonitor.Entry, path string) string {
-	if l := h.daemon.linkOf(h.session(entry)); l != nil {
+func (h monitorHost) LinkTranscriptPath(link, path string) string {
+	if l := h.daemon.linkNamed(link); l != nil {
 		return l.transcriptPath(path)
 	}
 	return path
@@ -270,4 +277,16 @@ func (h monitorHost) LastKey(terminal harness.TerminalID) time.Time {
 
 func (h monitorHost) EnqueueTitle(entry *sessionmonitor.Entry, conversation, source string) error {
 	return h.daemon.enqueueSessionTitle(h.session(entry), conversation, source)
+}
+
+func (d *Daemon) kickMonitorTerminals() {
+	if !d.monitorTerminalsDirty.CompareAndSwap(false, true) {
+		return
+	}
+	d.life.Go("pushMonitorTerminals", func() {
+		d.monitorTerminalsDirty.Store(false)
+		for sessionID, entry := range d.monitors().each() {
+			entry.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
+		}
+	})
 }

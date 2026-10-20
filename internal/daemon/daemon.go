@@ -159,6 +159,7 @@ type Daemon struct {
 	upgradingMu                sync.Mutex
 	upgradingWorkers           map[harness.TerminalID]chan struct{}
 	ptyRecovered               atomic.Bool
+	monitorTerminalsDirty      atomic.Bool
 
 	sessionTitleExec func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
 

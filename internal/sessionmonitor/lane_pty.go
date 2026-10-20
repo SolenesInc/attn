@@ -20,7 +20,7 @@ func (l *lane) ptySafetyLocked(allowUserComposer bool) error {
 	if allowUserComposer {
 		return nil
 	}
-	if remaining := quietRemaining(l.entry.registry.host.LastKey(l.entry.registry.host.PrimaryTerminal(l.entry)), QuietWindow); remaining > 0 {
+	if remaining := quietRemaining(l.entry.registry.host.LastKey(l.entry.primaryTerminalLocked()), QuietWindow); remaining > 0 {
 		return &quietError{retryAfter: remaining}
 	}
 	return nil
@@ -63,7 +63,7 @@ func (l *lane) placePTYLocked(ctx context.Context, delivery Delivery) Attempt {
 	input = append(input, pasteStart...)
 	input = append(input, delivery.Text...)
 	input = append(input, pasteEnd...)
-	terminal := e.registry.host.PrimaryTerminal(e)
+	terminal := e.primaryTerminalLocked()
 	if err := e.registry.host.Input(ctx, terminal, input); err != nil {
 		return Attempt{Stage: Failed, Err: err}
 	}

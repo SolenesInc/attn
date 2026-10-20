@@ -36,10 +36,11 @@ type Host interface {
 	Classify(ctx context.Context, request ClassifyRequest) (string, error)
 	ReadBranch(ctx context.Context, directory string) (*attngit.BranchInfo, error)
 
-	PrimaryTerminal(*Entry) harness.TerminalID
+	LiveTerminals(ctx context.Context) map[harness.TerminalID]struct{}
+	ViewOwner(harness.TerminalID) string
 	Input(ctx context.Context, terminal harness.TerminalID, data []byte) error
 	Link(*Entry, harness.Voice) harness.Link
-	LinkTranscriptPath(e *Entry, path string) string
+	LinkTranscriptPath(link, path string) string
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time
 	EnqueueTitle(e *Entry, conversation, source string) error
@@ -115,6 +116,8 @@ type Entry struct {
 	titleInitialPrompt  *[sha256.Size]byte
 	driverLaunch        *driverLaunch
 	touchedAt           time.Time
+	views               atomic.Pointer[terminalViews]
+	link                string
 	claimedNatives      map[string]bool
 	windowRevision      uint64
 }
@@ -248,6 +251,7 @@ func (e *Entry) initializeLocked(start Start) {
 	}
 	launch := start.Launch()
 	e.agent = launch.Agent
+	e.link = launch.Link
 	e.startedAt = launch.StartedAt
 	e.directory = launch.Directory
 	e.branch = launch.Branch

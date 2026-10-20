@@ -101,6 +101,7 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	}
 	if plan.spawnOpts.ID != "" {
 		d.terminals().unexpect(plan.spawnOpts.ID)
+		d.kickMonitorTerminals()
 		d.removeAgentLaunchDir(plan.spawnOpts.ID)
 	}
 	if plan.abandonLink != nil {
@@ -500,6 +501,7 @@ func (d *Daemon) spawnTerminal(req *spawnRequest) harness.TerminalID {
 		req.placement.terminal = terminal
 	}
 	d.terminals().expect(terminal, session)
+	d.kickMonitorTerminals()
 	return terminal
 }
 

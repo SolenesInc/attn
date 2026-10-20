@@ -35,7 +35,10 @@ func (d *Daemon) terminals() *terminalRegistry {
 }
 
 func (d *Daemon) loadTerminals() {
-	d.store.OnTerminalBindings(d.terminals().sync)
+	d.store.OnTerminalBindings(func(bindings []store.TerminalBinding) {
+		d.terminals().sync(bindings)
+		d.kickMonitorTerminals()
+	})
 }
 
 func (d *Daemon) shownIn(t harness.TerminalID) (protocol.SessionID, bool) {
