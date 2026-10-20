@@ -4,7 +4,7 @@ Follow the task and its authorization boundaries. Start further Attn delegations
 
 ## Start from the seed
 
-Your opening names the seed you tend. Read its current body and notes with `attn seed show <seed-id>` before starting. Read any handoff note for the next step and its authorization. Follow the references needed for your task; parent and sibling bodies require separate reads. You do not inherit the delegator's conversation.
+Your opening names the seed you tend. Read its current body and notes with `attn seed show <seed-id>` before starting, and again after a resume, since the brief may have changed while you were away. Read any handoff note for the next step and its authorization. Follow the references needed for your task; parent and sibling bodies require separate reads. You do not inherit the delegator's conversation.
 
 ## Report useful updates
 

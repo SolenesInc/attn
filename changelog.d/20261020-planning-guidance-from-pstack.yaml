@@ -4,5 +4,8 @@ change: >
   attn-workflow plans are easier to trust and execute: each plan states why it
   exists, the names it uses, the costs it accepts and the options it rejected,
   and every completion check names the evidence that proves it. A new technical
-  writing reference applies to plans, briefs, questions and reports, and design
-  reviews also check the structure behind an interface.
+  writing reference applies to plans, briefs, questions and reports; a new
+  Correction process makes a mistake that keeps coming back impossible to
+  repeat; design reviews also check the structure behind an interface; and
+  briefs state what an agent may change, what waits for the user and what to
+  report back.

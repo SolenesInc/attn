@@ -12,9 +12,12 @@ Do this even when you plan to do the work yourself.
 - Lead with the task and outcome: what to do and what done looks like.
 - Give starting context: the problem, relevant paths or evidence, and constraints.
   Point to shared context and say what the reader needs from it.
-- Define scope: what this seed owns and which decisions need the user.
+- Define scope: what this seed owns, what it may change and what it must leave
+  alone, which decisions need the user, and which actions wait for them, such
+  as merging or pushing to a shared branch.
 - Specify completion: the checks that verify the result, each naming the evidence
-  that proves it, and where to leave the deliverable and evidence.
+  that proves it, where to leave the deliverable and evidence, and what the
+  report back contains.
 
 Include an agreed design when there is one. Leave implementation choices open
 where they are still for the tender to make. Scale the detail to the task; a few
@@ -76,7 +79,8 @@ slug or full title. Pass `-` instead of a file to read the payload from stdin.
 
 Before planting or delegating, read each body with its named references as a
 fresh agent. Can you tell what to do, where to start, which constraints apply,
-and how to establish completion? Fill any gaps before handing it off. Read
+and how to establish completion? Fill any gaps before handing it off; a part you
+cannot fill means the work is not scoped yet. Read
 referenced seed bodies with `attn seed show <id>`.
 
 When an agreed decision changes, rewrite every part of the shared plan that

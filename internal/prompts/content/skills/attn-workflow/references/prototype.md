@@ -17,6 +17,6 @@ Make each option concrete enough to judge the decision, and no more. Build them 
 
 ## Compare and recommend
 
-For each option, state what it does well, what it costs, and where it breaks. Then recommend one option, or a combination, and give the reason, pointing to the call site, screen, or state that shows it. The user chooses.
+For each option, state what it does well, what it costs, and where it breaks. Then recommend one option, or a combination, and give the reason, pointing to the call site, screen, or state that shows it. For a combination, name the option it starts from and what it takes from each of the others. The user chooses.
 
 Record where the options live, the comparison, and the recommendation in the assigned seed, if there is one. Whoever presents the options to the user carries the result into the plan, as [Planning](planning.md) describes: the user's choice and its reason become a decision, and what the options revealed, such as an approach that broke on a realistic case, becomes a finding, with its evidence quoted from the option because the option is disposable.
