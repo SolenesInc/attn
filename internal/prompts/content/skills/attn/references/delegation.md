@@ -4,7 +4,7 @@ Attn delegation starts a separate agent session the user can inspect and steer. 
 
 The seed holds the work: its outcome, plan, constraints, and verification. Delegation assigns an agent to that work, selecting its role, model, effort, and checkout at launch. The agent reads the seed and keeps its plan and progress current. A later handover can assign a different agent to the same seed, with a note explaining the next step and its authorization. The agent does not receive your conversation automatically.
 
-Use `attn delegate --help` for the installed command syntax. Read the complete brief before dispatching: state the outcome, starting context, constraints, authorization and verification. Name parent sections, sibling results and artifacts the agent needs and why. Use `attn seed guide` for seed authoring.
+Use `attn delegate --help` for the installed command syntax. Write the brief as `attn seed guide` describes under WRITING A BODY, and read it back as that guide says before dispatching.
 
 ## Choose the assignment
 

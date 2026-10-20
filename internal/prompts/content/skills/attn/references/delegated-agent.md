@@ -4,7 +4,7 @@ Follow the task and its authorization boundaries. Start further Attn delegations
 
 ## Start from the seed
 
-Your opening names the seed you tend. Read its current body and notes with `attn seed show <seed-id>` before starting. Read any handoff note for the next step and its authorization. Follow the references needed for your task; parent and sibling bodies require separate reads. You do not inherit the delegator's conversation.
+Your opening names the seed you tend. Read its current body and notes with `attn seed show <seed-id>` before starting, and again after a resume, since the brief may have changed while you were away. Read any handoff note for the next step and its authorization. Follow the references needed for your task; parent and sibling bodies require separate reads. You do not inherit the delegator's conversation.
 
 ## Report useful updates
 
@@ -18,7 +18,7 @@ Add `--ring` only when the delegator needs to respond now. A note does not stop 
 
 ## Complete the assignment
 
-Make the result readable in the conversation and durable in the seed. Link supporting artifacts and record the verification, remaining gaps and next step. Before the final response, record the result. If it fits in the harvest reason, use it there; otherwise write one result note, then harvest with a concise summary.
+Make the result readable in the conversation and durable in the seed. Link supporting artifacts and record the verification, remaining gaps and next step. When the brief numbers its completion checks, report each check with the current evidence that proves it. Before the final response, record the result. If it fits in the harvest reason, use it there; otherwise write one result note, then harvest with a concise summary.
 
 ```sh
 attn seed harvest <seed-id> -m "<outcome and verification>"

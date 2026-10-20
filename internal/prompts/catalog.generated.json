@@ -3757,6 +3757,18 @@
           }
         },
         {
+          "id": "correction",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.correction",
+            "source": "content/skills/attn-workflow/references/correction.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "debugging",
           "delivery": "reference",
           "description": "Loaded on demand through the installed attn-workflow skill.",
@@ -3872,6 +3884,18 @@
             "kind": "text",
             "id": "attn-workflow-skill.review",
             "source": "content/skills/attn-workflow/references/review.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "technical-writing",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.technical-writing",
+            "source": "content/skills/attn-workflow/references/technical-writing.md",
             "verbatim": true,
             "keep_final_newline": true
           }

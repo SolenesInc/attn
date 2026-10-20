@@ -1,12 +1,12 @@
 # Review
 
-Assess a change against its intended outcome and return findings that help decide whether it is ready. Inspect the implementation and the evidence that it works.
+Assess a change against its intended outcome and return findings that help decide whether it is ready. Inspect the implementation and the evidence that it works. Review a diff, a pull request or the running product: a plan with no code behind it draws invented risks, so settle its open questions with a spike or prototype instead, as [Discuss](discuss.md) describes.
 
 ## Establish the review context
 
 For a PR, read its description and linked requirements or design context. Establish what the change is intended to do. If important intent is missing, identify the gap and ask a focused question while continuing checks that do not depend on it.
 
-For changes against a plan, read the agreed plan, its decisions, and any recorded amendments. Check that the implementation covers the requirements. Examine departures from the plan, including its findings, and explain their consequences; a departure may be justified by what implementation revealed.
+For changes against a plan, read the agreed plan, its decisions, and the seed notes that record how and why the plan changed. Check that the implementation covers the requirements. Examine departures from the plan, including its findings, and explain their consequences; a departure may be justified by what implementation revealed.
 
 Identify the revision under review. Read relevant repository guidance and inspect the surrounding code to understand how the changed paths fit the system.
 
@@ -22,7 +22,7 @@ When the assignment calls for exercising the running product, use realistic, iso
 
 ## Return findings
 
-Prioritize actionable findings by severity. For each finding, explain the affected behavior, the conditions that expose it, and its consequence. Include a file location or reproducible steps and supporting evidence, and label each finding measured, inferred or guessed, as the skill's engineering judgment defines them. Separate confirmed defects from unresolved questions and optional improvements.
+Prioritize actionable findings by severity. For each finding, explain the affected behavior, the conditions that expose it, and its consequence. Include a file location or reproducible steps and supporting evidence, and label each finding measured, inferred or guessed, as the skill's engineering judgment defines them. Separate confirmed defects from unresolved questions and optional improvements. When you weigh another reviewer's findings, give each one you dismiss its reason in one line; a finding two independent reviews raise is strong evidence. A finding that repeats an earlier one is a class: say so, and recommend fixing it with [Correction](correction.md).
 
 Summarize what you checked, the reviewed revision, coverage gaps, and your recommendation. If no actionable findings remain, say so and state any material limits on the review.
 

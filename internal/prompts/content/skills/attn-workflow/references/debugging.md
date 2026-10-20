@@ -18,7 +18,7 @@ Use experiments when they can resolve uncertainty. Run isolated checks within th
 
 ## Fix and verify
 
-When implementation is authorized, capture the failure in a regression test or repeatable reproduction. Make the smallest correction the evidence justifies; a change that merely might help is a hypothesis, not a fix, and when evidence refutes a hypothesis, revert what it motivated. Verify on the surface where the failure was reported: the original reproduction now passes. A unit test alone shows branch behavior, not the bug's absence. When the reproduction is a committed test, stage it before the fix in the change's commits, so a reviewer watches it go red, then green.
+When implementation is authorized, capture the failure in a regression test or repeatable reproduction. Make the smallest correction the evidence justifies; a change that merely might help is a hypothesis, not a fix, and when evidence refutes a hypothesis, revert what it motivated. Verify on the surface where the failure was reported: the original reproduction now passes. A unit test alone shows branch behavior, not the bug's absence. When the reproduction is a committed test, stage it before the fix in the change's commits, so a reviewer watches it go red, then green. When the cause is a mistake that has happened before, the class needs fixing too: follow [Correction](correction.md), or plant it as a seed when it falls outside the task.
 
 When two fixes that shared an assumption have failed the same check, attack the premise as the skill's engineering judgment describes: test the assumption before a third fix, and when it fails, reassess the diagnosis and approach. Consider a broader design problem when the evidence supports it, and discuss scope changes with the user.
 
