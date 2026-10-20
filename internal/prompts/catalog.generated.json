@@ -737,6 +737,16 @@
           }
         },
         {
+          "id": "inbox-quiet",
+          "delivery": "cli_output",
+          "description": "After the items, when a notification started the reader's run and quiet notifications keep its stop out of the queue.",
+          "body": {
+            "kind": "text",
+            "id": "session.inbox-quiet",
+            "source": "content/session/inbox-quiet.md"
+          }
+        },
+        {
           "id": "inbox-item",
           "delivery": "cli_output",
           "description": "An inbox item other than a peer message or maintenance prompt.",
@@ -5102,5 +5112,5 @@
       ]
     }
   ],
-  "definitions_hash": "7cab1066cacdb08810c09126517822c9f551b87ad68f2d42b88de179862cbe02"
+  "definitions_hash": "d1d786f8dde843f2dbf4ee70eac55fe44065d827aaeca991c4fafc79f4df0a8e"
 }

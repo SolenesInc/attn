@@ -145,6 +145,7 @@ const (
 	CmdQuery                         = "query"
 	CmdSetSessionPriority            = "set_session_priority"
 	CmdSettleTurn                    = "settle_turn"
+	CmdAgentTurn                     = "agent_turn"
 	CmdSnoozeTurn                    = "snooze_turn"
 	CmdWakeTurn                      = "wake_turn"
 	CmdCancelCountdown               = "cancel_countdown"

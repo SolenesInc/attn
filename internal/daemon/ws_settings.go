@@ -232,6 +232,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[SettingDirectAgentLaunchEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingDirectAgentLaunchEnabled]))
 	settings[SettingQueueCrewEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueCrewEnabled]))
 	settings[SettingQueueShowHiddenSessions] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingQueueShowHiddenSessions]))
+	settings[SettingQueueQuietNotifications] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueQuietNotifications]))
 	settings[SettingCodexSharedEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingCodexSharedEnabled]))
 	settings[SettingSidebarHarnessLogosEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingSidebarHarnessLogosEnabled]))
 	settings[SettingAutoApproveEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingAutoApproveEnabled]))

@@ -2621,6 +2621,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		}
 	case protocol.CmdSnoozeTurn:
 		d.handleSnoozeTurnConn(conn, msg.(*protocol.SnoozeTurnMessage))
+	case protocol.CmdAgentTurn:
+		d.handleAgentTurn(conn, msg.(*protocol.AgentTurnMessage))
 	case protocol.CmdWakeTurn:
 		d.handleWakeTurnConn(conn, msg.(*protocol.WakeTurnMessage))
 	case protocol.CmdRenameSession:

@@ -389,13 +389,13 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	var session protocol.Session
 	var labels SessionLabels
 	var stateSince, stateUpdatedAt, lastSeen string
-	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
+	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds string
 	var isWorktree, priority int
 	var contextWindowCap int
 	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
@@ -419,6 +419,7 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 		&turnOpenedAt,
 		&turnSettledAt,
 		&turnSnoozedUntil,
+		&turnAgentAt,
 		&succeeds,
 		&priority,
 	)
@@ -430,6 +431,7 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 		OpenedAt:     parseTurnStamp(turnOpenedAt),
 		SettledAt:    parseTurnStamp(turnSettledAt),
 		SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
+		AgentAt:      parseTurnStamp(turnAgentAt),
 	})
 
 	if priority != 0 {
@@ -557,11 +559,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
 			FROM sessions WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, succeeds, priority
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
@@ -574,7 +576,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var session protocol.Session
 		var labels SessionLabels
 		var stateSince, stateUpdatedAt, lastSeen string
-		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, succeeds string
+		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds string
 		var isWorktree, priority int
 		var contextWindowCap int
 		var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
@@ -602,6 +604,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&turnOpenedAt,
 			&turnSettledAt,
 			&turnSnoozedUntil,
+			&turnAgentAt,
 			&succeeds,
 			&priority,
 		)
@@ -613,6 +616,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			OpenedAt:     parseTurnStamp(turnOpenedAt),
 			SettledAt:    parseTurnStamp(turnSettledAt),
 			SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
+			AgentAt:      parseTurnStamp(turnAgentAt),
 		})
 
 		if priority != 0 {

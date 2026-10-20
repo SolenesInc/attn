@@ -1,0 +1,4 @@
+kind: added
+area: queue
+change: "Quiet notifications (experimental, off by default; Settings → Experimental): in queue flow, an agent woken by a notification (a message, a seed update, a pull request update) stays out of your queue when it stops unless it needs an approval, and an agent waiting for you leaves the queue when a notification sets it working, without moving you. Agents that need you run `attn turn open`, which keeps them in your queue through later notifications until you or `attn turn settle` close the turn."
+symptom: "Orchestrators and builders kept landing in the queue after delegate reports or CI updates, only to say nothing needed you, or were already busy again by the time you got to them."

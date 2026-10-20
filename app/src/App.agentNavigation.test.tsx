@@ -370,6 +370,7 @@ describe('queue', () => {
   const OWED = { turn_owed: true };
   const SETTLED = { turn_owed: false };
   const SNOOZED = { turn_owed: false, turn_snoozed_until: LATER };
+  const BY_AGENT = { turn_owed: false, turn_by_agent: true };
 
   it('drops a show still in flight when the user switches profile from the command palette, and the queue moves on there', async () => {
     const work = (id: string, hour: number, overrides: Partial<DaemonSession> = {}) => queueSession(id, hour, { profile_id: 'profile-work', ...overrides });
@@ -418,6 +419,7 @@ describe('queue', () => {
     ['stays while the watched turn is still owed', { s1: OWED, s2: OWED }, 's1', { s1: { ...OWED, state: 'waiting_input' }, s2: OWED }, 's1'],
     ['stays when the turn that closed was not the watched agent’s', { s1: SETTLED, s2: OWED }, 's1', { s1: SETTLED, s2: SETTLED }, 's1'],
     ['stays on an agent that left the queue for the crew', { s1: OWED, s2: OWED }, 's1', { s1: { turn_owed: false, crew_member: 'fern' }, s2: OWED }, 's1'],
+    ['stays on an agent whose turn it closed itself', { s1: OWED, s2: OWED }, 's1', { s1: { ...BY_AGENT, state: 'working' }, s2: OWED }, 's1'],
   ])('%s', async (_, turns, watched, update, landing) => {
     const view = await renderAgents(turns);
     await open(view.daemon, watched);
@@ -426,6 +428,18 @@ describe('queue', () => {
 
     if (landing) expect(selectedAgent()).toBe(landing);
     else expect(isHome()).toBe(true);
+  });
+
+  it('moves on from an agent that closed its own turn once the user settles it', async () => {
+    const view = await renderAgents({ s1: OWED, s2: OWED });
+    await open(view.daemon, 's1');
+    await view.update({ s1: { ...BY_AGENT, state: 'working' }, s2: OWED });
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    await gesture(view.daemon, () => pressShortcut('session.settle', window));
+
+    expect(view.daemon.sentOf('settle_turn')).toEqual([]);
+    expect(selectedAgent()).toBe('s2');
   });
 
   it('lets a pending launch finish before the queue moves on, and moves on after it', async () => {

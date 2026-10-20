@@ -44,6 +44,7 @@ export interface DaemonSessionSnapshot {
   turn_opened_at?: string;
   priority?: boolean;
   turn_snoozed_until?: string;
+  turn_by_agent?: boolean;
   crew_member?: string;
   parent_session_id?: string;
   hidden?: boolean;

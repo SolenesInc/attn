@@ -95,6 +95,9 @@ type AgentInboxBatchResult struct {
 	// Items corresponds to the JSON schema field "items".
 	Items []AgentInboxItem `json:"items"`
 
+	// QuietNotifications corresponds to the JSON schema field "quiet_notifications".
+	QuietNotifications *bool `json:"quiet_notifications,omitempty,omitzero"`
+
 	// Remaining corresponds to the JSON schema field "remaining".
 	Remaining int `json:"remaining"`
 }
@@ -337,6 +340,37 @@ type AgentReloadOutcome struct {
 type AgentReloadResult struct {
 	// Outcomes corresponds to the JSON schema field "outcomes".
 	Outcomes []AgentReloadOutcome `json:"outcomes"`
+}
+
+type AgentTurnAction string
+
+const AgentTurnActionOpen AgentTurnAction = "open"
+const AgentTurnActionSettle AgentTurnAction = "settle"
+
+type AgentTurnMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action AgentTurnAction `json:"action"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type AgentTurnOutcome string
+
+const AgentTurnOutcomeNotOpen AgentTurnOutcome = "not_open"
+const AgentTurnOutcomeOpened AgentTurnOutcome = "opened"
+const AgentTurnOutcomeOpensAtStop AgentTurnOutcome = "opens_at_stop"
+const AgentTurnOutcomeQueueOff AgentTurnOutcome = "queue_off"
+const AgentTurnOutcomeSettled AgentTurnOutcome = "settled"
+const AgentTurnOutcomeSnoozed AgentTurnOutcome = "snoozed"
+const AgentTurnOutcomeWithdrawn AgentTurnOutcome = "withdrawn"
+
+type AgentTurnResult struct {
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome AgentTurnOutcome `json:"outcome"`
 }
 
 type ApprovePRMessage struct {
@@ -7947,6 +7981,9 @@ type Response struct {
 	// AgentReloadResult corresponds to the JSON schema field "agent_reload_result".
 	AgentReloadResult *AgentReloadResult `json:"agent_reload_result,omitempty,omitzero"`
 
+	// AgentTurnResult corresponds to the JSON schema field "agent_turn_result".
+	AgentTurnResult *AgentTurnResult `json:"agent_turn_result,omitempty,omitzero"`
+
 	// AskListResult corresponds to the JSON schema field "ask_list_result".
 	AskListResult *AskListResult `json:"ask_list_result,omitempty,omitzero"`
 
@@ -9554,6 +9591,9 @@ type Session struct {
 
 	// Title corresponds to the JSON schema field "title".
 	Title *string `json:"title,omitempty,omitzero"`
+
+	// TurnByAgent corresponds to the JSON schema field "turn_by_agent".
+	TurnByAgent *bool `json:"turn_by_agent,omitempty,omitzero"`
 
 	// TurnOpenedAt corresponds to the JSON schema field "turn_opened_at".
 	TurnOpenedAt *string `json:"turn_opened_at,omitempty,omitzero"`

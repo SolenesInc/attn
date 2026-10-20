@@ -188,6 +188,7 @@ model Session {
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
   priority?: boolean;
+  turn_by_agent?: boolean;      // True when the agent made the latest change to its turn: it opened the turn with `attn turn open`, settled it with `attn turn settle`, or went back to work on a notification, which settles a turn that opened on its own. A notification run does not settle a turn the agent opened, and the app does not move the user when the turn they are looking at closes this way. Absent once the user or the session's state changes the turn.
   turn_snoozed_until?: string;  // ISO timestamp a live snooze runs to. Present only while the deferral holds; its presence is what puts the row in the sidebar's snoozed section, and while it is set no state can open a turn for this session except one that breaks through.
   auto_settle_fires_at?: string; // ISO timestamp the auto-settle countdown will close this session's turn. Present only while the countdown is running, which is the whole contract: it is what the terminal tile animates against, and its absence is what says nothing is pending. Absent during the arm delay, when auto-settle is off, and after a cancel.
   auto_settle_held?: boolean;   // True while the auto-settle countdown is frozen because the user is typing or moving the pointer in this session. Mutually exclusive with auto_settle_fires_at by construction: a frozen countdown has no deadline to animate against, so the tile draws a full paused bar and waits. It clears on its own five quiet seconds after the last interaction, when a fresh deadline replaces it.
@@ -1370,13 +1371,45 @@ model QueryMessage {
   caller_id?: TerminalID; // The caller's ATTN_TERMINAL_ID; the response's caller_session_id names the session its terminal shows.
 }
 
-// SettleTurnMessage closes the turn a session opened. It is the only way a turn
-// ever ends: no state transition removes a session from the queue, so an agent
-// stays there — running or not — until the user says they are done with it.
-// Fire-and-forget; the daemon broadcasts the session afterwards.
+// SettleTurnMessage is the user closing the turn a session opened. No state
+// transition removes a session from the queue: an agent stays there, running or
+// not, until the user settles its turn (or auto-settle does it for them), the
+// agent settles a turn it opened itself, or, with quiet notifications on, a
+// notification starts it working again. Fire-and-forget; the daemon broadcasts
+// the session afterwards.
 model SettleTurnMessage {
   cmd: "settle_turn";
   session_id: SessionID;
+}
+
+// AgentTurnMessage is an agent opening or settling its own turn (`attn turn`).
+// Open asks for the user: called while the agent works, the turn opens when that
+// run stops; called while it is stopped, the turn opens now. Settle closes only a
+// turn the agent opened itself. With the queue flow off both do nothing.
+model AgentTurnMessage {
+  cmd: "agent_turn";
+  session_id: SessionID;
+  action: AgentTurnAction;
+}
+
+enum AgentTurnAction {
+  open,
+  settle,
+}
+
+// What an agent turn command did.
+enum AgentTurnOutcome {
+  queue_off,      // The queue flow is off; nothing changed.
+  opens_at_stop,  // The turn opens when the agent's current run stops.
+  opened,         // The turn is open now.
+  snoozed,        // The user snoozed the agent; its turn opens once the snooze ends and the agent has stopped.
+  settled,        // The turn the agent opened is closed.
+  withdrawn,      // The turn was going to open at the stop; it no longer will.
+  not_open,       // No turn was open; nothing changed.
+}
+
+model AgentTurnResult {
+  outcome: AgentTurnOutcome;
 }
 
 model SetSessionPriorityMessage {
@@ -5815,6 +5848,7 @@ model Response {
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
+  agent_turn_result?: AgentTurnResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
   crew_charter_get_result?: CrewCharterGetResult;
@@ -6318,6 +6352,10 @@ model AgentInboxItem {
 model AgentInboxBatchResult {
   items: AgentInboxItem[];
   remaining: int32;
+  // True when the reader is in a run a notification started and quiet
+  // notifications apply: when that run stops the agent does not enter the
+  // user's queue unless it opens its turn.
+  quiet_notifications?: boolean;
 }
 
 model EvidenceExcerpt {

@@ -757,6 +757,17 @@ func (c *Client) AskList(sessionID protocol.SessionID) (*protocol.AskListResult,
 	return resp.AskListResult, nil
 }
 
+func (c *Client) AgentTurn(sessionID protocol.SessionID, action protocol.AgentTurnAction) (*protocol.AgentTurnResult, error) {
+	resp, err := c.send(protocol.AgentTurnMessage{Cmd: protocol.CmdAgentTurn, SessionID: sessionID, Action: action})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AgentTurnResult == nil {
+		return nil, errors.New("daemon returned no agent turn result")
+	}
+	return resp.AgentTurnResult, nil
+}
+
 func (c *Client) AskClose(sessionID protocol.SessionID, askID string) error {
 	_, err := c.send(protocol.AskCloseMessage{Cmd: protocol.CmdAskClose, SessionID: sessionID, AskID: askID})
 	return err

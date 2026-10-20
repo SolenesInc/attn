@@ -139,12 +139,11 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 		items = append(items, item)
 	}
 	d.kickInboxAfterCommit(addresses...)
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: true,
-		AgentInboxBatchResult: &protocol.AgentInboxBatchResult{
-			Items: items, Remaining: remaining,
-		},
-	})
+	result := &protocol.AgentInboxBatchResult{Items: items, Remaining: remaining}
+	if len(items) > 0 && d.quietNotifications() && d.inNotificationRun(recipientSessionID) {
+		result.QuietNotifications = protocol.Ptr(true)
+	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxBatchResult: result})
 }
 
 func mailboxItemContent(delivery store.InboxDelivery) string {

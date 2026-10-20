@@ -42,6 +42,7 @@ const (
 	SettingQueueModeEnabled              = "queue_mode_enabled"
 	SettingQueueCrewEnabled              = "queue_crew_enabled"
 	SettingQueueShowHiddenSessions       = "queue_show_hidden_sessions"
+	SettingQueueQuietNotifications       = "queue_quiet_notifications"
 	SettingCodexSharedEnabled            = "codex_shared_enabled"
 	SettingSidebarHarnessLogosEnabled    = "sidebar_harness_logos_enabled"
 	SettingAutoApproveEnabled            = "auto_approve_enabled"
@@ -121,6 +122,7 @@ var settingSpecs = []settingSpec{
 	{key: SettingDirectAgentLaunchEnabled, scope: daemonScope, description: "Launch agents directly: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingCodexSharedEnabled, scope: daemonScope, description: "Use the shared Codex app server: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingQueueShowHiddenSessions, scope: daemonScope, description: "Include hidden sessions in the queue: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingQueueQuietNotifications, scope: daemonScope, description: "Keep agents a notification woke out of the queue unless they open their turn: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingAsksEnabled, scope: daemonScope, description: "Enable agent asks: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingCalloutsEnabled, scope: daemonScope, description: "Let agents point at the app interface: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingChiefContextWindowCap, scope: daemonScope, description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
