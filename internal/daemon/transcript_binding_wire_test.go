@@ -1,9 +1,11 @@
 package daemon_test
 
 import (
-	"github.com/victorarias/attn/internal/client"
 	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/client"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -96,6 +98,38 @@ func TestCopilotSessionsSharingADirectoryEachFollowTheirOwnConversation(t *testi
 	resumed := w.Launched(second)
 	if !resumed.Resumed || resumed.ConversationID != secondRun.ConversationID {
 		t.Fatalf("respawn ran copilot %q, want --resume %s", resumed.Argv, secondRun.ConversationID)
+	}
+}
+
+func TestCopilotSessionsOfTwoProfilesLaunchedTogetherInADirectoryEachFollowTheirOwnConversation(t *testing.T) {
+	w := newWorld(t, fakeagent.Copilot)
+	app := w.App()
+	work := w.AppOn(createProfile(app, "Work").ID)
+	cwd := w.Path("shop")
+	first := w.Spawn(app, fakeagent.Copilot, cwd)
+	second := w.Spawn(work, fakeagent.Copilot, cwd)
+	firstRun, secondRun := w.Launched(first), w.Launched(second)
+	for _, run := range []struct {
+		peer    *testworld.Peer
+		session string
+		agent   *fakeagent.Run
+		reply   string
+	}{{app, first, firstRun, "Renamed the checkout module."}, {work, second, secondRun, "Added the discount field."}} {
+		run.peer.TypeLine(run.session, "go ahead")
+		run.agent.Prompted()
+		run.agent.Reply(run.reply + " <!-- attn:state=idle -->")
+		messageWindowShowing(run.peer, run.session, run.reply)
+	}
+	for _, run := range []struct {
+		peer    *testworld.Peer
+		session string
+		other   string
+	}{{app, first, "Added the discount field."}, {work, second, "Renamed the checkout module."}} {
+		for _, message := range messageMarkdowns(requestMessageWindow(run.peer, run.session, "check-"+run.session)) {
+			if strings.Contains(message, run.other) {
+				t.Fatalf("session %s follows the other profile's conversation: %q", run.session, message)
+			}
+		}
 	}
 }
 

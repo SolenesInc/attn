@@ -22,6 +22,12 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 			d.receiveSentFile(session, path)
 		}
 	}
+	if native := view.Conversation.V.NativeID; native != previous.Conversation.V.NativeID {
+		d.rememberDispatchResume(session, native)
+	}
+	if view.AssistantWindow.V != previous.AssistantWindow.V {
+		d.publishFact(FactSessionAssistantWindowChanged, string(session), nil)
+	}
 	if previous.Branch.V != view.Branch.V {
 		d.logf("Branch changed: session=%s branch=%s isWorktree=%v", session, view.Branch.V.Branch, view.Branch.V.IsWorktree)
 		d.publishFact(FactSessionBranchChanged, string(session), nil)

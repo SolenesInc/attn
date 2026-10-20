@@ -35,6 +35,14 @@ type Host interface {
 	HomeFor(*Entry) Home
 	Classify(ctx context.Context, request ClassifyRequest) (string, error)
 	ReadBranch(ctx context.Context, directory string) (*attngit.BranchInfo, error)
+
+	PrimaryTerminal(*Entry) harness.TerminalID
+	Input(ctx context.Context, terminal harness.TerminalID, data []byte) error
+	Link(*Entry, harness.Voice) harness.Link
+	LinkTranscriptPath(e *Entry, path string) string
+	NoteKey(terminal harness.TerminalID, at time.Time)
+	LastKey(terminal harness.TerminalID) time.Time
+	EnqueueTitle(e *Entry, conversation, source string) error
 }
 
 type ClassifyRequest struct {
@@ -106,6 +114,9 @@ type Entry struct {
 	titleAttempted      bool
 	titleInitialPrompt  *[sha256.Size]byte
 	driverLaunch        *driverLaunch
+	touchedAt           time.Time
+	claimedNatives      map[string]bool
+	windowRevision      uint64
 }
 
 type Evidence struct {
@@ -248,6 +259,7 @@ func (e *Entry) initializeLocked(start Start) {
 	e.loadCostLocked(launch.Cost)
 	e.exit = launch.Exit
 	e.conversationInput = Conversation{ConversationObservation: launch.Conversation}
+	e.touchedAt = launch.LastSeen
 	e.initialized = launch.Known
 }
 

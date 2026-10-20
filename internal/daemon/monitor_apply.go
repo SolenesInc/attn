@@ -60,18 +60,13 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 
 func (h *monitorHome) saveView(session protocol.SessionID, previous, view sessionmonitor.View) ([]string, bool, error) {
 	d := h.daemon
-	state, turn, driver := view.State.V, view.Turn.V, view.Driver.V
-	if !d.store.ApplySessionRuntimeState(session, store.SessionRuntimeState{
-		State: state.State, Since: state.Since, Updated: state.Updated,
-		Turn:               store.TurnStamps{OpenedAt: turn.OpenedAt, SettledAt: turn.SettledAt, SnoozedUntil: turn.SnoozedUntil, AgentAt: turn.AgentAt, RequestedAt: turn.RequestedAt},
-		LastModelRequestAt: view.LastModelRequestAt.V,
-		Driver:             store.AgentDriverReportCursor{PluginName: driver.Plugin, RunID: driver.Run, Seq: driver.Sequence},
-		DriverMetadata:     driver.Metadata,
-		DriverTranscript:   driver.TranscriptPath,
-		Branch:             view.Branch.V,
-		HarnessTitle:       view.HarnessTitle.V,
-	}) {
+	if runtime := runtimeStateOf(view); runtime != runtimeStateOf(previous) && !d.store.ApplySessionRuntimeState(session, runtime) {
 		return nil, false, fmt.Errorf("runtime state was not saved")
+	}
+	if conversation := view.Conversation.V.ConversationObservation; conversation != previous.Conversation.V.ConversationObservation && conversation.NativeID != "" {
+		if _, err := d.store.TransitionSessionResumeID(session, conversation.NativeID); err != nil {
+			return nil, false, fmt.Errorf("conversation: %w", err)
+		}
 	}
 	costChanged, costDurable, usageChanged := sessionmonitor.CostChange(previous, view)
 	if costChanged {
@@ -99,4 +94,18 @@ func (h *monitorHome) saveView(session protocol.SessionID, previous, view sessio
 		recordedPullRequests = append(recordedPullRequests, id)
 	}
 	return recordedPullRequests, usageChanged, nil
+}
+
+func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
+	state, turn, driver := view.State.V, view.Turn.V, view.Driver.V
+	return store.SessionRuntimeState{
+		State: state.State, Since: state.Since, Updated: state.Updated,
+		Turn:               store.TurnStamps{OpenedAt: turn.OpenedAt, SettledAt: turn.SettledAt, SnoozedUntil: turn.SnoozedUntil, AgentAt: turn.AgentAt, RequestedAt: turn.RequestedAt},
+		LastModelRequestAt: view.LastModelRequestAt.V,
+		Driver:             store.AgentDriverReportCursor{PluginName: driver.Plugin, RunID: driver.Run, Seq: driver.Sequence},
+		DriverMetadata:     driver.Metadata,
+		DriverTranscript:   driver.TranscriptPath,
+		Branch:             view.Branch.V,
+		HarnessTitle:       view.HarnessTitle.V,
+	}
 }

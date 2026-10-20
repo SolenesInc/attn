@@ -55,7 +55,7 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 // order, so only they may open or show a session.
 func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversationObservation) {
 	observation.SessionID = d.sessionInTerminal(t)
-	d.proposeMonitorConversation(observation, false, t)
+	d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, t)
 }
 
 func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation agentConversationObservation, candidate *sessionmonitor.Entry) bool {
@@ -138,8 +138,8 @@ func (o agentConversationObservation) monitored() sessionmonitor.ConversationObs
 	return sessionmonitor.ConversationObservation{NativeID: o.NativeID, TranscriptPath: o.TranscriptPath}
 }
 
-func (d *Daemon) proposeMonitorConversation(observation agentConversationObservation, claim bool, terminal harness.TerminalID) bool {
-	return d.monitorEntry(observation.SessionID).ProposeConversation(observation.monitored(), claim, terminal)
+func (d *Daemon) proposeMonitorConversation(observation agentConversationObservation, proposal sessionmonitor.ConversationProposal, terminal harness.TerminalID) bool {
+	return d.monitorEntry(observation.SessionID).ProposeConversation(observation.monitored(), proposal, terminal)
 }
 
 func (d *Daemon) admitMonitorConversation(entry *sessionmonitor.Entry, view sessionmonitor.View) bool {
@@ -163,19 +163,28 @@ func (d *Daemon) admitMonitorConversation(entry *sessionmonitor.Entry, view sess
 	if conversation.Terminal != "" {
 		return d.acceptMonitorConversation(conversation.Terminal, observation, entry)
 	}
-	transition := d.store.TransitionSessionConversation
-	if conversation.Claim {
-		transition = d.store.ClaimSessionConversation
+	switch conversation.Proposal {
+	case sessionmonitor.ConversationReported:
+		return d.applyAgentConversation(observation, d.store.ClaimSessionConversation, entry)
+	case sessionmonitor.ConversationGuessedAtLaunch:
+		guess := func(sessionID protocol.SessionID, nativeID, transcriptPath string) (bool, error) {
+			changed, err := d.store.ClaimLaunchConversation(sessionID, nativeID, transcriptPath)
+			if errors.Is(err, store.ErrConversationClaimed) {
+				d.monitorEntry(sessionID).ConversationClaimedElsewhere(nativeID)
+			}
+			return changed, err
+		}
+		return d.applyAgentConversation(observation, guess, entry)
 	}
-	return d.applyAgentConversation(observation, transition, entry)
+	return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, entry)
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
-	d.proposeMonitorConversation(observation, false, "")
+	d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, "")
 }
 
 func (d *Daemon) claimAgentConversation(observation agentConversationObservation) bool {
-	return d.proposeMonitorConversation(observation, true, "")
+	return d.proposeMonitorConversation(observation, sessionmonitor.ConversationReported, "")
 }
 
 func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error), candidate *sessionmonitor.Entry) bool {
@@ -189,6 +198,7 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 		return false
 	}
 	if !changed {
+		d.syncMonitorConversation(observation.SessionID)
 		d.monitorEntry(observation.SessionID).EnsureTranscriptWatcher(observation.TranscriptPath)
 		return true
 	}

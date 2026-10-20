@@ -102,6 +102,7 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 		r.policyMu.Unlock()
 	}
 	entry.Arm()
+	d.syncMonitorConversation(sessionID)
 	if previous != nil && previous != entry {
 		entry.TakeUserSubmit(previous)
 	}
@@ -130,6 +131,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 			AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt},
 		Driver:       d.driverInputFromRecord(sessionID),
 		Conversation: sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
+		LastSeen:     protocol.Timestamp(session.LastSeen).Time(),
 	}
 	if cost, err := d.store.SessionCostCheckpoint(sessionID); err == nil {
 		launch.Cost = cost
@@ -214,25 +216,23 @@ func (h *monitorHome) sessionID() protocol.SessionID {
 	return id
 }
 
-func (h *monitorHome) SnoozeWoke(at time.Time, cause string) {
-	if id := h.sessionID(); id != "" {
-		h.daemon.finishSnoozeWake(id, at, cause)
-	}
+func (h monitorHost) session(entry *sessionmonitor.Entry) protocol.SessionID {
+	return homeOf(entry).sessionID()
 }
 
-func (h *monitorHome) PrimaryTerminal() harness.TerminalID {
-	return h.daemon.primaryTerminal(h.sessionID())
+func (h monitorHost) PrimaryTerminal(entry *sessionmonitor.Entry) harness.TerminalID {
+	return h.daemon.primaryTerminal(h.session(entry))
 }
 
-func (h *monitorHome) Input(ctx context.Context, terminal harness.TerminalID, data []byte) error {
+func (h monitorHost) Input(ctx context.Context, terminal harness.TerminalID, data []byte) error {
 	if h.daemon.ptyBackend == nil {
 		return errNoPTYBackend
 	}
 	return h.daemon.ptyBackend.Input(ctx, terminal, data)
 }
 
-func (h *monitorHome) Link(voice harness.Voice) harness.Link {
-	session := h.daemon.store.Get(h.sessionID())
+func (h monitorHost) Link(entry *sessionmonitor.Entry, voice harness.Voice) harness.Link {
+	session := h.daemon.store.Get(h.session(entry))
 	if session == nil {
 		return nil
 	}
@@ -253,41 +253,21 @@ func (l sessionLinkTo) Deliver(ctx context.Context, in harness.Input) harness.Cu
 	return l.Link.Deliver(ctx, in)
 }
 
-func (h *monitorHome) NoteKey(terminal harness.TerminalID, at time.Time) {
-	h.daemon.terminals().noteKey(terminal, at)
-}
-
-func (h *monitorHome) LastKey() time.Time {
-	return h.daemon.terminals().lastKeyOf(h.PrimaryTerminal())
-}
-
-func (h *monitorHome) EnqueueTitle(conversation, source string) error {
-	return h.daemon.enqueueSessionTitle(h.sessionID(), conversation, source)
-}
-
-func (h *monitorHome) Conversation() sessionmonitor.ConversationObservation {
-	binding := h.daemon.store.GetSessionConversation(h.sessionID())
-	return sessionmonitor.ConversationObservation{NativeID: binding.NativeID, TranscriptPath: binding.TranscriptPath}
-}
-
-func (h *monitorHome) ConversationClaimedElsewhere(nativeID string) bool {
-	return h.daemon.store.ConversationBoundToOtherSession(h.sessionID(), nativeID)
-}
-
-func (h *monitorHome) LinkTranscriptPath(path string) string {
-	if l := h.daemon.linkOf(h.sessionID()); l != nil {
+func (h monitorHost) LinkTranscriptPath(entry *sessionmonitor.Entry, path string) string {
+	if l := h.daemon.linkOf(h.session(entry)); l != nil {
 		return l.transcriptPath(path)
 	}
 	return path
 }
 
-func (h *monitorHome) AssistantWindowChanged() {
-	h.daemon.publishFact(FactSessionAssistantWindowChanged, string(h.sessionID()), nil)
+func (h monitorHost) NoteKey(terminal harness.TerminalID, at time.Time) {
+	h.daemon.terminals().noteKey(terminal, at)
 }
 
-func (h *monitorHome) LastSeen() string {
-	if session := h.daemon.store.Get(h.sessionID()); session != nil {
-		return session.LastSeen
-	}
-	return ""
+func (h monitorHost) LastKey(terminal harness.TerminalID) time.Time {
+	return h.daemon.terminals().lastKeyOf(terminal)
+}
+
+func (h monitorHost) EnqueueTitle(entry *sessionmonitor.Entry, conversation, source string) error {
+	return h.daemon.enqueueSessionTitle(h.session(entry), conversation, source)
 }

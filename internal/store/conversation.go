@@ -18,19 +18,31 @@ type SessionConversation struct {
 
 var ErrConversationClaimed = errors.New("conversation is bound to another open session")
 
+type conversationClaim int
+
+const (
+	claimNothing conversationClaim = iota
+	claimInProfile
+	claimInEveryProfile
+)
+
 func (s *Store) TransitionSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error) {
-	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, false)
+	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, claimNothing)
 }
 
 func (s *Store) ClaimSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error) {
-	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, true)
+	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, claimInProfile)
+}
+
+func (s *Store) ClaimLaunchConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error) {
+	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, claimInEveryProfile)
 }
 
 func (s *Store) TransitionSessionResumeID(sessionID protocol.SessionID, nativeID string) (bool, error) {
-	return s.transitionSessionConversation(sessionID, nativeID, "", false, false)
+	return s.transitionSessionConversation(sessionID, nativeID, "", false, claimNothing)
 }
 
-func (s *Store) transitionSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string, pathRequired, exclusive bool) (bool, error) {
+func (s *Store) transitionSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string, pathRequired bool, claim conversationClaim) (bool, error) {
 	sessionID = protocol.TrimID(sessionID)
 	nativeID = strings.TrimSpace(nativeID)
 	transcriptPath = strings.TrimSpace(transcriptPath)
@@ -67,15 +79,15 @@ func (s *Store) transitionSessionConversation(sessionID protocol.SessionID, nati
 	}
 	current.NativeID = strings.TrimSpace(current.NativeID)
 	current.TranscriptPath = strings.TrimSpace(current.TranscriptPath)
-	if exclusive {
+	if claim != claimNothing {
+		query := `SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ? AND closed_at = ''`
+		args := []any{nativeID, sessionID}
+		if claim == claimInProfile {
+			query += ` AND profile_id = (SELECT profile_id FROM sessions WHERE id = ?)`
+			args = append(args, sessionID)
+		}
 		var claimed bool
-		if err := tx.QueryRow(
-			`SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ? AND closed_at = ''
-				AND profile_id = (SELECT profile_id FROM sessions WHERE id = ?))`,
-			nativeID,
-			sessionID,
-			sessionID,
-		).Scan(&claimed); err != nil {
+		if err := tx.QueryRow(query+`)`, args...).Scan(&claimed); err != nil {
 			return false, fmt.Errorf("check conversation claim for session %s: %w", sessionID, err)
 		}
 		if claimed {

@@ -5,7 +5,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 )
 
-func (e *Entry) ProposeConversation(observation ConversationObservation, claim bool, terminal harness.TerminalID) bool {
+func (e *Entry) ProposeConversation(observation ConversationObservation, proposal ConversationProposal, terminal harness.TerminalID) bool {
 	if e == nil {
 		return false
 	}
@@ -17,7 +17,7 @@ func (e *Entry) ProposeConversation(observation ConversationObservation, claim b
 	}
 	e.mu.Unlock()
 	successor := &Entry{registry: e.registry, monitor: m, conversation: observation.NativeID, succeeds: key,
-		conversationInput: Conversation{ConversationObservation: observation, Claim: claim, Terminal: terminal}}
+		conversationInput: Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal}}
 	successor.home = e.registry.host.HomeFor(successor)
 	successor.input = &lane{mu: &successor.mu, entry: successor}
 	return successor.home.Applied(successor.viewLocked())
@@ -57,4 +57,19 @@ func (e *Entry) TakePendingConversation() (ConversationObservation, bool) {
 		return ConversationObservation{}, false
 	}
 	return *observation, true
+}
+
+func (e *Entry) ObserveResumeID(nativeID string) bool {
+	if e == nil {
+		return false
+	}
+	e.mu.Lock()
+	if e.conversationInput.NativeID == nativeID {
+		e.mu.Unlock()
+		return true
+	}
+	e.conversationInput = Conversation{ConversationObservation: ConversationObservation{NativeID: nativeID}}
+	view := e.viewLocked()
+	e.mu.Unlock()
+	return e.home.Applied(view)
 }

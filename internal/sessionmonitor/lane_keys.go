@@ -12,7 +12,7 @@ func (e *Entry) noteUserInputLocked(terminal harness.TerminalID, source string, 
 		return false
 	}
 	now := time.Now()
-	e.home.NoteKey(terminal, now)
+	e.registry.host.NoteKey(terminal, now)
 	e.activityAt = now
 	return true
 }

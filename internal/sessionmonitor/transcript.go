@@ -150,12 +150,12 @@ func IsTranscriptWatchedAgent(agent protocol.SessionAgent) bool {
 }
 
 func (w *transcriptWatcher) resolveExactPath() string {
-	home := w.entry.home
-	for _, path := range []string{strings.TrimSpace(w.preferredPath), home.Conversation().TranscriptPath} {
+	e := w.entry
+	for _, path := range []string{strings.TrimSpace(w.preferredPath), e.boundConversation().TranscriptPath} {
 		if path == "" {
 			continue
 		}
-		path = home.LinkTranscriptPath(path)
+		path = e.registry.host.LinkTranscriptPath(e, path)
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
@@ -176,7 +176,7 @@ func FindTranscriptForResume(agent protocol.SessionAgent, resumeID string) strin
 }
 
 func (w *transcriptWatcher) discover() string {
-	path := FindTranscriptForResume(w.agent, w.entry.home.Conversation().NativeID)
+	path := FindTranscriptForResume(w.agent, w.entry.boundConversation().NativeID)
 	if path == "" {
 		return ""
 	}
@@ -192,7 +192,7 @@ func FindsLaunchConversation(agent protocol.SessionAgent) bool {
 }
 
 func (w *transcriptWatcher) awaitsLaunchConversation() bool {
-	return FindsLaunchConversation(w.agent) && w.entry.home.Conversation().NativeID == ""
+	return FindsLaunchConversation(w.agent) && w.entry.boundConversation().NativeID == ""
 }
 
 func (w *transcriptWatcher) bindLaunchConversation() bool {
@@ -201,13 +201,12 @@ func (w *transcriptWatcher) bindLaunchConversation() bool {
 	if !ok {
 		return false
 	}
-	home := w.entry.home
-	path := strings.TrimSpace(finder.FindLaunchTranscript(w.cwd, w.startedAt, home.ConversationClaimedElsewhere))
+	path := strings.TrimSpace(finder.FindLaunchTranscript(w.cwd, w.startedAt, w.entry.claimedElsewhere))
 	nativeID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, path)
 	if nativeID == "" {
 		return false
 	}
-	if !w.entry.ProposeConversation(ConversationObservation{NativeID: nativeID, TranscriptPath: path}, true, "") {
+	if !w.entry.ProposeConversation(ConversationObservation{NativeID: nativeID, TranscriptPath: path}, ConversationGuessedAtLaunch, "") {
 		return false
 	}
 	w.entry.logf("transcript watcher: bound launch conversation session=%s native=%s path=%s", w.entry.Label(), nativeID, path)
@@ -215,7 +214,7 @@ func (w *transcriptWatcher) bindLaunchConversation() bool {
 }
 
 func (w *transcriptWatcher) discoveryDeadline(now time.Time) time.Time {
-	if strings.TrimSpace(w.preferredPath) != "" || strings.TrimSpace(w.entry.home.Conversation().TranscriptPath) != "" {
+	if strings.TrimSpace(w.preferredPath) != "" || strings.TrimSpace(w.entry.boundConversation().TranscriptPath) != "" {
 		return now.Add(transcriptDiscoveryGrace)
 	}
 	return now
@@ -451,7 +450,7 @@ func (e *Entry) transcriptPathFor(path string) string {
 			return path
 		}
 	}
-	if bound := strings.TrimSpace(e.home.Conversation().TranscriptPath); bound != "" {
+	if bound := strings.TrimSpace(e.boundConversation().TranscriptPath); bound != "" {
 		if _, err := os.Stat(bound); err == nil {
 			return bound
 		}
@@ -574,7 +573,7 @@ func (w *transcriptWatcher) run() {
 			}
 			if transcriptPath == "" {
 				if w.setStatus(protocol.SessionMessageWindowStatusUnavailable, "no exact transcript is bound to this live session") {
-					e.home.AssistantWindowChanged()
+					e.assistantWindowChanged()
 				}
 				e.logf("transcript watcher: exact transcript unavailable session=%s agent=%s cwd=%s", label, w.agent, w.cwd)
 				return
@@ -583,7 +582,7 @@ func (w *transcriptWatcher) run() {
 			if err != nil {
 				e.logf("transcript watcher: transcript stat failed session=%s path=%s err=%v", label, transcriptPath, err)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be opened", false)
-				e.home.AssistantWindowChanged()
+				e.assistantWindowChanged()
 				return
 			}
 			startOffset := info.Size()
@@ -597,7 +596,7 @@ func (w *transcriptWatcher) run() {
 			if err != nil {
 				e.logf("transcript watcher: follower init failed session=%s path=%s err=%v", label, transcriptPath, err)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
-				e.home.AssistantWindowChanged()
+				e.assistantWindowChanged()
 				return
 			}
 			w.behavior.Reset()
@@ -612,7 +611,7 @@ func (w *transcriptWatcher) run() {
 		if err != nil {
 			e.logf("transcript watcher: transcript unavailable, rediscovering session=%s path=%s err=%v", label, transcriptPath, err)
 			w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript became unavailable", false)
-			e.home.AssistantWindowChanged()
+			e.assistantWindowChanged()
 			transcriptPath = ""
 			follower = nil
 			w.usageTracker = nil
@@ -632,13 +631,13 @@ func (w *transcriptWatcher) run() {
 			if errors.Is(readErr, transcript.ErrCursorMismatch) || errors.Is(readErr, transcript.ErrCursorPastEnd) {
 				e.logf("transcript watcher: transcript replaced session=%s path=%s", label, transcriptPath)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript was replaced", false)
-				e.home.AssistantWindowChanged()
+				e.assistantWindowChanged()
 				return
 			}
 			if readErr != nil {
 				e.logf("transcript watcher: read delta error session=%s path=%s err=%v", label, transcriptPath, readErr)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
-				e.home.AssistantWindowChanged()
+				e.assistantWindowChanged()
 				return
 			}
 
@@ -696,7 +695,7 @@ func (w *transcriptWatcher) run() {
 			readFileInfo = info
 		}
 		if windowChanged {
-			e.home.AssistantWindowChanged()
+			e.assistantWindowChanged()
 		}
 		if usageSettled && w.usageTracker != nil {
 			w.usageTracker.Reconcile()
@@ -721,7 +720,7 @@ func (w *transcriptWatcher) run() {
 			e.mu.Lock()
 			current := e.state.State
 			e.mu.Unlock()
-			if skip, reason := w.behavior.SkipClassification(current, e.home.LastSeen(), time.Now()); skip {
+			if skip, reason := w.behavior.SkipClassification(current, e.lastSeen(), time.Now()); skip {
 				if strings.TrimSpace(reason) == "" {
 					reason = "transcript watcher: skipping classification"
 				}
@@ -751,4 +750,45 @@ func staleTranscriptAbort(abortAt, sessionStartedAt time.Time) (bool, string) {
 		return true, "predates session"
 	}
 	return false, ""
+}
+
+func (e *Entry) boundConversation() ConversationObservation {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.conversationInput.ConversationObservation
+}
+
+func (e *Entry) claimedElsewhere(nativeID string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.claimedNatives[nativeID]
+}
+
+func (e *Entry) ConversationClaimedElsewhere(nativeID string) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.claimedNatives == nil {
+		e.claimedNatives = make(map[string]bool)
+	}
+	e.claimedNatives[nativeID] = true
+}
+
+func (e *Entry) lastSeen() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.touchedAt.IsZero() {
+		return ""
+	}
+	return string(protocol.NewTimestamp(e.touchedAt))
+}
+
+func (e *Entry) assistantWindowChanged() {
+	e.mu.Lock()
+	e.windowRevision++
+	view := e.viewLocked()
+	e.mu.Unlock()
+	e.home.Applied(view)
 }

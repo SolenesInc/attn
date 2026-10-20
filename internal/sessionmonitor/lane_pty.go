@@ -20,7 +20,7 @@ func (l *lane) ptySafetyLocked(allowUserComposer bool) error {
 	if allowUserComposer {
 		return nil
 	}
-	if remaining := quietRemaining(l.entry.home.LastKey(), QuietWindow); remaining > 0 {
+	if remaining := quietRemaining(l.entry.registry.host.LastKey(l.entry.registry.host.PrimaryTerminal(l.entry)), QuietWindow); remaining > 0 {
 		return &quietError{retryAfter: remaining}
 	}
 	return nil
@@ -42,7 +42,7 @@ func (e *Entry) WriteInput(ctx context.Context, terminal harness.TerminalID, dat
 	if e.noteUserInputLocked(terminal, source, data) && bytes.ContainsAny(data, "\r\n") {
 		l.userSubmit = true
 	}
-	return e.home.Input(ctx, terminal, data)
+	return e.registry.host.Input(ctx, terminal, data)
 }
 
 func (l *lane) clearUnstartedUserSubmitLocked() {
@@ -63,13 +63,13 @@ func (l *lane) placePTYLocked(ctx context.Context, delivery Delivery) Attempt {
 	input = append(input, pasteStart...)
 	input = append(input, delivery.Text...)
 	input = append(input, pasteEnd...)
-	terminal := e.home.PrimaryTerminal()
-	if err := e.home.Input(ctx, terminal, input); err != nil {
+	terminal := e.registry.host.PrimaryTerminal(e)
+	if err := e.registry.host.Input(ctx, terminal, input); err != nil {
 		return Attempt{Stage: Failed, Err: err}
 	}
 	pausepoint.At(pausepoint.SessionInputPasteGap)
 	time.Sleep(SubmitDelay)
-	if err := e.home.Input(ctx, terminal, []byte("\r")); err != nil {
+	if err := e.registry.host.Input(ctx, terminal, []byte("\r")); err != nil {
 		return Attempt{Stage: Failed, Err: err}
 	}
 	return Attempt{Stage: Placed, At: time.Now()}

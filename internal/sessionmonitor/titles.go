@@ -99,7 +99,7 @@ func (e *Entry) enqueueTitle(conversation string, source string) {
 	label := e.label
 	e.mu.Unlock()
 
-	err := e.home.EnqueueTitle(conversation, source)
+	err := e.registry.host.EnqueueTitle(e, conversation, source)
 	if err == nil {
 		return
 	}

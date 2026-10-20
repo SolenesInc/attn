@@ -7,6 +7,7 @@ import (
 	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/statetrace"
 )
 
 func (e *Entry) openTurnLocked(now time.Time, afterNotification bool) bool {
@@ -111,7 +112,7 @@ func (e *Entry) armWakeLocked() {
 		crashpoint.At("snooze-wake-running")
 		view, woken := e.Do(Command{Key: key, Kind: Wake, Until: deadline}, deadline)
 		if woken && e.home.Applied(view) {
-			e.home.SnoozeWoke(deadline, "deadline")
+			e.traceWake("deadline")
 		}
 	})
 }
@@ -164,4 +165,14 @@ func (e *Entry) InNotificationRun() bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.input.inNotificationRunLocked()
+}
+
+func (e *Entry) traceWake(cause string) {
+	e.mu.Lock()
+	state, label := e.state.State, e.label
+	e.mu.Unlock()
+	if e.registry.host.Debug() {
+		e.logf("snooze woken: session=%s cause=%s", label, cause)
+	}
+	e.Trace(statetrace.Observation{Source: "user", Claim: string(state), Detail: cause, Cause: "wake", Outcome: statetrace.OutcomeApplied})
 }

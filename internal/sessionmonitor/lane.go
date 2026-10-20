@@ -288,7 +288,7 @@ func (e *Entry) place(ctx context.Context, delivery Delivery) (Attempt, runRef) 
 
 	var attempt Attempt
 	handled := false
-	if e.home.Link(delivery.origin.voice()) != nil {
+	if e.registry.host.Link(e, delivery.origin.voice()) != nil {
 		attempt, handled = l.placeOverLinkLocked(ctx, delivery)
 	}
 	if !handled {
@@ -305,7 +305,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery) (Atte
 	l.placing = true
 	l.mu.Unlock()
 	// Resolve again after unlocking: a link gone meanwhile hands the input to the PTY.
-	link := l.entry.home.Link(voice)
+	link := l.entry.registry.host.Link(l.entry, voice)
 	var custody harness.Custody
 	if link != nil {
 		custody = link.Deliver(ctx, harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice})

@@ -1267,7 +1267,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		}
 
 		d.startSessionMonitor(sessionID)
-		d.store.Touch(sessionID)
+		d.touchSession(sessionID)
 		d.store.ClearSessionIntentionalClose(sessionID)
 
 		if existing.State == protocol.SessionStateScheduled {
@@ -2830,11 +2830,15 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 		entry, prompt := d.monitorEntry(sessionID), protocol.Deref(msg.Prompt)
 		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { entry.TitleFromPrompt(prompt, typed) })
 	}
-	d.store.Touch(sessionID)
+	d.touchSession(sessionID)
 	d.sendOK(conn)
 }
 
 func (d *Daemon) persistResumeSessionID(sessionID protocol.SessionID, resumeSessionID string) {
+	if entry := d.monitorEntry(sessionID); entry != nil {
+		entry.ObserveResumeID(resumeSessionID)
+		return
+	}
 	if _, err := d.store.TransitionSessionResumeID(sessionID, resumeSessionID); err != nil {
 		d.logf("persistResumeSessionID: update failed for session %s: %v", sessionID, err)
 	}
@@ -2884,7 +2888,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.monitorEntry(sessionID).RecordTurnEnded(classifies)
 
 	d.observeStoppedConversation(sessionID, msg.TranscriptPath)
-	d.store.Touch(sessionID)
+	d.touchSession(sessionID)
 	d.sendOK(conn)
 
 	if !classifies {

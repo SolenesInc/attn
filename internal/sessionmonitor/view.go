@@ -69,9 +69,17 @@ type ConversationObservation struct {
 	TranscriptPath string
 }
 
+type ConversationProposal int
+
+const (
+	ConversationObserved ConversationProposal = iota
+	ConversationReported
+	ConversationGuessedAtLaunch
+)
+
 type Conversation struct {
 	ConversationObservation
-	Claim    bool
+	Proposal ConversationProposal
 	Terminal harness.TerminalID
 }
 
@@ -104,6 +112,7 @@ type View struct {
 	HarnessTitle       Value[string]                         `fact:"session.renamed"`
 	Exit               Value[*Exit]                          `fact:"session.pty.exited"`
 	Live               Value[bool]                           `fact:"-"`
+	AssistantWindow    Value[uint64]                         `fact:"session.assistant_window.changed"`
 }
 
 func (e *Entry) viewLocked() View {
@@ -145,6 +154,7 @@ func (e *Entry) snapshotLocked() View {
 		HarnessTitle:       Value[string]{e.harnessTitle},
 		Exit:               Value[*Exit]{e.exit},
 		Live:               Value[bool]{live},
+		AssistantWindow:    Value[uint64]{e.windowRevision},
 	}
 }
 

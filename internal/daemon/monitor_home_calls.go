@@ -362,3 +362,13 @@ func (d *Daemon) quietNotifications() bool {
 func (d *Daemon) queueFlowOn() bool {
 	return parseBooleanSetting(d.daemonSetting(SettingQueueModeEnabled))
 }
+
+func (d *Daemon) touchSession(sessionID protocol.SessionID) {
+	d.store.Touch(sessionID)
+	d.monitorEntry(sessionID).Touch(time.Now())
+}
+
+func (d *Daemon) syncMonitorConversation(sessionID protocol.SessionID) {
+	binding := d.store.GetSessionConversation(sessionID)
+	d.monitorEntry(sessionID).SetConversation(sessionmonitor.ConversationObservation{NativeID: binding.NativeID, TranscriptPath: binding.TranscriptPath})
+}

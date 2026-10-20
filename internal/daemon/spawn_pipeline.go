@@ -525,11 +525,13 @@ func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan)
 	}
 	if clearPicker {
 		d.store.SetResumeSessionID(sessionID, "")
+		d.syncMonitorConversation(sessionID)
 		return
 	}
 	if _, err := d.store.TransitionSessionResumeID(sessionID, conversation); err != nil {
 		d.logf("spawn: persist launched conversation for session %s: %v", sessionID, err)
 	}
+	d.syncMonitorConversation(sessionID)
 }
 
 func (d *Daemon) killSessionRuntime(terminal harness.TerminalID) error {

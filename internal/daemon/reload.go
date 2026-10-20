@@ -299,11 +299,13 @@ func (d *Daemon) persistReloadedConversation(sessionID protocol.SessionID, opts 
 	}
 	if conversation == "" {
 		d.store.SetResumeSessionID(sessionID, "")
+		d.syncMonitorConversation(sessionID)
 		return
 	}
 	if _, err := d.store.TransitionSessionResumeID(sessionID, conversation); err != nil {
 		d.logf("reload: persist launched conversation for session %s: %v", sessionID, err)
 	}
+	d.syncMonitorConversation(sessionID)
 }
 
 // ptyRespawn names the terminal whose process a respawn replaced; the fact's subject is its session.

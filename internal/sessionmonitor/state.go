@@ -109,6 +109,9 @@ func (e *Entry) ApplyState(change Change) bool {
 	if accepted {
 		e.state.Origin = change.Origin
 		e.state.Cause = CauseName(change.Cause)
+		if effects, _ := EffectsOf(change.Cause); effects.Touch {
+			e.touchedAt = time.Now()
+		}
 		if e.firstReportAt.IsZero() && HarnessReportedState(change.Origin.Source) {
 			e.firstReportAt = time.Now()
 		}
