@@ -78,7 +78,6 @@ type monitorEntry struct {
 	pluginLaunching     *pluginSessionLaunch
 	pluginReports       []pendingPluginReport
 	pluginExit          *ptybackend.ExitInfo
-	turnAtStop          bool
 }
 
 type monitorEvidence struct {
@@ -263,7 +262,7 @@ func (d *Daemon) initializeMonitor(entry *monitorEntry, sessionID protocol.Sessi
 			entry.exit = &monitorExit{Text: saved.Text, Cols: saved.Cols, Rows: saved.Rows, Code: saved.ExitCode,
 				Signal: saved.ExitSignal, At: protocol.Timestamp(saved.ExitedAt).Time()}
 		}
-		entry.turn = monitorTurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil, AgentAt: stamps.AgentAt}
+		entry.turn = monitorTurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil, AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt}
 		entry.initialized = d.store.Get(sessionID) != nil
 	}
 }

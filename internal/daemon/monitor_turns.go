@@ -12,9 +12,8 @@ func (e *monitorEntry) openTurnLocked(now time.Time, afterNotification bool) boo
 	if !attention.OpensTurn(e.state.State) {
 		return false
 	}
-	byAgent := e.turnAtStop
-	e.turnAtStop = false
-	if afterNotification && !byAgent && !attention.OpensTurnAfterNotification(e.state.State) {
+	requested := !e.turn.RequestedAt.IsZero()
+	if afterNotification && !requested && !attention.OpensTurnAfterNotification(e.state.State) {
 		return false
 	}
 	if deadline := e.turn.SnoozedUntil; !deadline.IsZero() {
@@ -24,17 +23,20 @@ func (e *monitorEntry) openTurnLocked(now time.Time, afterNotification bool) boo
 		e.turn.SnoozedUntil = time.Time{}
 		e.stopWakeLocked()
 	}
-	if e.turnOwedLocked() {
-		if byAgent {
-			e.turn.AgentAt = e.turn.OpenedAt
-		}
-		return false
+	opened := !e.turnOwedLocked()
+	if opened {
+		e.turn.OpenedAt = now.UTC()
 	}
-	e.turn.OpenedAt = now.UTC()
-	if byAgent {
-		e.turn.AgentAt = e.turn.OpenedAt
+	e.grantTurnRequestLocked()
+	return opened
+}
+
+func (e *monitorEntry) grantTurnRequestLocked() {
+	if e.turn.RequestedAt.IsZero() || !e.turnOwedLocked() {
+		return
 	}
-	return true
+	e.turn.AgentAt = e.turn.OpenedAt
+	e.turn.RequestedAt = time.Time{}
 }
 
 func (e *monitorEntry) turnOwedLocked() bool {
@@ -53,8 +55,8 @@ func (e *monitorEntry) settleForAgentLocked(now time.Time) {
 
 func (e *monitorEntry) agentTurnLocked(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
 	if action == protocol.AgentTurnActionSettle {
-		withdrawn := e.turnAtStop
-		e.turnAtStop = false
+		withdrawn := !e.turn.RequestedAt.IsZero()
+		e.turn.RequestedAt = time.Time{}
 		switch {
 		case e.turnOwedLocked() && !e.turnByAgentLocked():
 			return "", errors.New("this turn opened when you stopped, not with attn turn open; only the user settles it")
@@ -66,17 +68,16 @@ func (e *monitorEntry) agentTurnLocked(action protocol.AgentTurnAction, now time
 		}
 		return protocol.AgentTurnOutcomeNotOpen, nil
 	}
-	if e.turn.SnoozedUntil.After(now) {
+	e.turn.RequestedAt = now.UTC()
+	switch {
+	case e.turn.SnoozedUntil.After(now):
 		return protocol.AgentTurnOutcomeSnoozed, nil
-	}
-	if e.state.State == protocol.SessionStateWorking {
-		e.turnAtStop = true
+	case !e.turnOwedLocked() && e.state.State == protocol.SessionStateWorking:
 		return protocol.AgentTurnOutcomeOpensAtStop, nil
-	}
-	if !e.turnOwedLocked() {
+	case !e.turnOwedLocked():
 		e.turn.OpenedAt = now.UTC()
 	}
-	e.turn.AgentAt = e.turn.OpenedAt
+	e.grantTurnRequestLocked()
 	return protocol.AgentTurnOutcomeOpened, nil
 }
 
@@ -117,6 +118,7 @@ func (e *monitorEntry) wakeLocked(deadline, at time.Time) bool {
 		}
 		e.turn.OpenedAt = at.UTC()
 	}
+	e.grantTurnRequestLocked()
 	return true
 }
 

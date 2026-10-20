@@ -73,13 +73,13 @@ func (s *Store) ApplySessionRuntimeState(id protocol.SessionID, state SessionRun
 		request = string(protocol.NewTimestamp(state.LastModelRequestAt))
 	}
 	result, err := s.db.Exec(`UPDATE sessions SET state = ?, state_since = ?, state_updated_at = ?,
-		turn_opened_at = ?, turn_settled_at = ?, turn_snoozed_until = ?, turn_agent_at = ?, last_model_request_at = NULLIF(?, ''),
+		turn_opened_at = ?, turn_settled_at = ?, turn_snoozed_until = ?, turn_agent_at = ?, turn_requested_at = ?, last_model_request_at = NULLIF(?, ''),
 		agent_driver_report_seq = CASE WHEN agent_driver_run_id = ? THEN max(agent_driver_report_seq, ?) ELSE agent_driver_report_seq END,
 		agent_metadata = CASE WHEN agent_driver_run_id = NULLIF(?, '') THEN ? ELSE agent_metadata END,
 		agent_driver_transcript_path = CASE WHEN agent_driver_run_id = NULLIF(?, '') THEN ? ELSE agent_driver_transcript_path END,
 		branch = ?, is_worktree = ?, main_repo = ?, repository = ?, harness_title = ?
 		WHERE id = ? AND closed_at = '' AND (? = '' OR agent_driver_run_id = ?)`, string(state.State), string(protocol.NewTimestamp(state.Since)), string(protocol.NewTimestamp(state.Updated)),
-		turnStamp(state.Turn.OpenedAt), turnStamp(state.Turn.SettledAt), turnStamp(state.Turn.SnoozedUntil), turnStamp(state.Turn.AgentAt), request, state.Driver.RunID, state.Driver.Seq,
+		turnStamp(state.Turn.OpenedAt), turnStamp(state.Turn.SettledAt), turnStamp(state.Turn.SnoozedUntil), turnStamp(state.Turn.AgentAt), turnStamp(state.Turn.RequestedAt), request, state.Driver.RunID, state.Driver.Seq,
 		state.Driver.RunID, state.DriverMetadata, state.Driver.RunID, state.DriverTranscript,
 		state.Branch.Branch, boolToInt(state.Branch.IsWorktree), state.Branch.MainRepo, state.Branch.Repository, state.HarnessTitle, id, state.Driver.RunID, state.Driver.RunID)
 	if err != nil {

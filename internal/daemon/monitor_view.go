@@ -46,6 +46,7 @@ type monitorTurnStamps struct {
 	SettledAt    time.Time
 	SnoozedUntil time.Time
 	AgentAt      time.Time
+	RequestedAt  time.Time
 }
 
 type monitorAutoSettleView struct {

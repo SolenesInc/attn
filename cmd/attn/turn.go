@@ -41,7 +41,7 @@ func agentTurnOutcomeText(outcome protocol.AgentTurnOutcome) string {
 	case protocol.AgentTurnOutcomeOpened:
 		return "Your turn is open; the user will come to you."
 	case protocol.AgentTurnOutcomeSnoozed:
-		return "The user snoozed you; your turn opens when the snooze ends."
+		return "The user snoozed you; your turn opens once the snooze ends and you have stopped."
 	case protocol.AgentTurnOutcomeSettled:
 		return "Your turn is settled; you are out of the user's queue."
 	case protocol.AgentTurnOutcomeWithdrawn:

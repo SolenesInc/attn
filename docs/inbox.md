@@ -171,7 +171,9 @@ on, a notification run does not bring the agent to the user:
   `attn turn open`.
 
 An agent that needs the user opens its own turn with `attn turn open`. Called
-while the agent works, it opens the turn when the agent stops. Notification
+while the agent works, it opens the turn when the agent stops; while the user
+has the agent snoozed, once the snooze ends and the agent has stopped. The
+request survives a daemon restart. Notification
 runs do not settle that turn: the user does, or the agent with
 `attn turn settle`, which refuses a turn that opened on its own. With the queue
 flow off, both commands change nothing.

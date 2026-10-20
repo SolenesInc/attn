@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -236,5 +237,56 @@ func TestAnAgentsOwnTurnOutlivesARestart(t *testing.T) {
 	registerSessions(t, w, w.Client(), "reviewer")
 	if working, _ := notificationRunStarts(t, app, w.Client(), resumed, session, restored, "the review is in"); !protocol.Deref(working.TurnOwed) {
 		t.Fatal("after a restart a notification settled the turn the agent opened")
+	}
+}
+
+func TestAnAgentsRequestForItsTurnWaitsOutTheUsersSnooze(t *testing.T) {
+	w, app, cli := quietNotificationsWorld(t, true)
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	snoozeUntil(app, session, time.Now().Add(time.Hour))
+	snoozed := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+		return s.StateSince == owed.StateSince && s.TurnSnoozedUntil != nil
+	})
+
+	working, _ := notificationRunStarts(t, app, cli, agent, session, snoozed, "the migration failed")
+	if asked, err := cli.AgentTurn(protocol.SessionID(session), protocol.AgentTurnActionOpen); err != nil || asked.Outcome != protocol.AgentTurnOutcomeSnoozed {
+		t.Fatalf("attn turn open while snoozed = %+v, %v; want snoozed", asked, err)
+	}
+	app.Send(protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: protocol.SessionID(session)})
+	awake := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+		return s.StateSince == working.StateSince && s.TurnSnoozedUntil == nil
+	})
+	if protocol.Deref(awake.TurnOwed) {
+		t.Fatal("the snooze ended into an owed turn while the agent still worked")
+	}
+	agent.Reply("The migration needs your call. <!-- attn:state=idle -->")
+	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(stopped.TurnOwed) || !protocol.Deref(stopped.TurnByAgent) {
+		t.Fatalf("the agent asked for its turn during the snooze and stopped after it with owed=%v by_agent=%v, want its turn open",
+			protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent))
+	}
+}
+
+func TestAnAgentsRequestForItsTurnOutlivesARestartBeforeItStops(t *testing.T) {
+	w, app, cli := quietNotificationsWorld(t, true)
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	settled := settleFromApp(app, owed)
+	notificationRunStarts(t, app, cli, agent, session, settled, "the migration failed")
+	if asked, err := cli.AgentTurn(protocol.SessionID(session), protocol.AgentTurnActionOpen); err != nil || asked.Outcome != protocol.AgentTurnOutcomeOpensAtStop {
+		t.Fatalf("attn turn open while working = %+v, %v; want it to open at the stop", asked, err)
+	}
+
+	w.restart()
+	app = w.App()
+	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.ID = protocol.SessionID(session)
+		m.ResumeSessionID = protocol.Ptr(session)
+	})
+	w.Launched(session)
+	stopped := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && protocol.Deref(s.TurnOwed)
+	})
+	if !protocol.Deref(stopped.TurnByAgent) {
+		t.Fatal("after a restart the agent's stop opened a turn that is not the agent's")
 	}
 }

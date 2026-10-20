@@ -28,15 +28,9 @@ func (d *Daemon) agentTurn(sessionID protocol.SessionID, action protocol.AgentTu
 	}
 	entry.mu.Lock()
 	outcome, err := entry.agentTurnLocked(action, time.Now())
-	changed := outcome == protocol.AgentTurnOutcomeOpened || outcome == protocol.AgentTurnOutcomeSettled
-	var view monitorView
-	if changed {
-		view = entry.viewLocked()
-	}
+	view := entry.viewLocked()
 	entry.mu.Unlock()
-	if changed {
-		entry.sink.Applied(view)
-	}
+	entry.sink.Applied(view)
 	return outcome, err
 }
 

@@ -1402,7 +1402,7 @@ enum AgentTurnOutcome {
   queue_off,      // The queue flow is off; nothing changed.
   opens_at_stop,  // The turn opens when the agent's current run stops.
   opened,         // The turn is open now.
-  snoozed,        // The user snoozed the agent; its turn opens when the snooze ends.
+  snoozed,        // The user snoozed the agent; its turn opens once the snooze ends and the agent has stopped.
   settled,        // The turn the agent opened is closed.
   withdrawn,      // The turn was going to open at the stop; it no longer will.
   not_open,       // No turn was open; nothing changed.
