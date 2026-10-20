@@ -14,7 +14,7 @@ Profile or read counters during a run and map what bounds the result to source: 
 
 ## Change one thing
 
-One hypothesis names one mechanism. Make the smallest change that tests it, measure before and after with the frozen command, and run the regression tests. Keep the change only when the metric moves past the noise and behavior holds; otherwise revert it in full. A tweak that might help is not kept. Commit each accepted change on its own, so a reviewer replays the sequence.
+One hypothesis names one mechanism. Make the smallest change that tests it, measure before and after with the frozen command, and run the regression tests. Keep the change only when the metric moves past the noise and behavior holds; otherwise revert it in full. A tweak that might help is not kept. Commit each accepted change on its own, so each keeps the before-and-after measurement that justified it.
 
 When the assignment is to keep improving one metric toward a target, loop: state the stop predicate up front, a target and a floor on attempts so a lucky early win cannot end the run, keep a decision log as a file attached to the seed, one line per attempt (hypothesis, change, before, after, kept or reverted), and read it before each attempt; the seed's notes carry what was kept, not every attempt. On a stall, change category or combine near misses before concluding the hill is climbed. Correctness and simplicity outrank the number: revert a win that breaks behavior, and keep a simplification that holds it. Do not relax the predicate to meet it.
 
