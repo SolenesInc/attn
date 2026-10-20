@@ -1,0 +1,3 @@
+kind: internal
+area: agents
+change: The debugging process says a reproduction test that goes red, then green, is how the agent proves the fix to itself.
