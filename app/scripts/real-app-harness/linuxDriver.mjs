@@ -188,6 +188,7 @@ export class LinuxDriver {
       return ids[0] || null;
     } catch (error) {
       if (error?.cause?.code === 1 || error?.code === 1) {
+        this.lastEmptyLookup = { searchArgs, stderr: String(error?.cause?.stderr ?? '').trim() };
         return null;
       }
       throw error;
@@ -418,7 +419,21 @@ export class LinuxDriver {
     const windowId = await this.mainWindowId(opts);
     if (windowId) return windowId;
     const title = opts.windowTitle || this.appName;
-    throw new Error(`Linux input driver found no visible window titled ${JSON.stringify(title)} on DISPLAY=${this.env.DISPLAY}`);
+    const lookup = this.lastEmptyLookup;
+    const attnWindows = await this.attnWindows().catch((error) => String(error?.message || error));
+    throw new Error(`Linux input driver found no visible window titled ${JSON.stringify(title)} on DISPLAY=${this.env.DISPLAY}`
+      + `; xdotool ${JSON.stringify(lookup?.searchArgs)} stderr=${JSON.stringify(lookup?.stderr ?? '')}`
+      + `; attn windows now: ${JSON.stringify(attnWindows)}`);
+  }
+
+  async attnWindows() {
+    const search = (extra) => this.runXdotoolCapture(['search', ...extra, '--name', '^attn']).then(parsePositiveIntegers, () => []);
+    const [all, visible] = await Promise.all([search([]), search(['--onlyvisible']).then((ids) => new Set(ids))]);
+    return Promise.all(all.map(async (id) => ({
+      id,
+      name: await this.runXdotoolCapture(['getwindowname', String(id)]).catch(() => null),
+      visible: visible.has(id),
+    })));
   }
 
   requireDisplay() {
