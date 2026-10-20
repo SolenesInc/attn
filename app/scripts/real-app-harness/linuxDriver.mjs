@@ -381,8 +381,8 @@ export class LinuxDriver {
       )),
       read(async () => {
         if (!pid) return null;
-        const [all, visible] = await Promise.all([searchPid([]), searchPid(['--onlyvisible'])]);
-        return Promise.all(all.map(async (id) => ({ ...await describeWindow(id), visible: visible.includes(id) })));
+        const [all, visible] = await Promise.all([searchPid([]), searchPid(['--onlyvisible']).then((ids) => new Set(ids))]);
+        return Promise.all(all.map(async (id) => ({ ...await describeWindow(id), visible: visible.has(id) })));
       }),
     ]);
     return { mainWindow, focusedWindow, pointer, appWindows };
