@@ -242,7 +242,7 @@ export function registerNativeFailureEvidence(runner, { client, driver, selector
   runner.registerFailureEvidence('window', () => request('get_window_bounds'));
   runner.registerFailureEvidence('dom', () => request('dom_focus_state', { selectors: selectors() }));
   runner.registerFailureEvidence('uiDiagnostics', () => request('ui_diagnostics'));
-  runner.registerFailureEvidence('native', () => driver.nativeFocusState());
+  runner.registerFailureEvidence('native', () => driver.nativeFocusState({ pid: client.readManifest()?.pid ?? null }));
 }
 
 export async function closeScenarioSessions(client, sessionIds) {
@@ -410,7 +410,7 @@ export function createScenarioRunner(options, {
     const expired = new Promise((_, reject) => {
       deadline = setTimeout(() => reject(new Error(`Failure evidence did not finish within ${FAILURE_EVIDENCE_DEADLINE_MS}ms`)), FAILURE_EVIDENCE_DEADLINE_MS);
     });
-    const results = await Promise.allSettled(failureEvidence.map(({ fn }) => Promise.race([fn(), expired])));
+    const results = await Promise.allSettled(failureEvidence.map(({ fn }) => Promise.race([Promise.resolve().then(fn), expired])));
     clearTimeout(deadline);
     const evidence = Object.fromEntries(failureEvidence.map(({ name }, index) => [name,
       results[index].status === 'fulfilled' ? results[index].value : { error: normalizeError(results[index].reason) },

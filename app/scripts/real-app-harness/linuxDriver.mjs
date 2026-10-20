@@ -359,7 +359,7 @@ export class LinuxDriver {
     ]));
   }
 
-  async nativeFocusState() {
+  async nativeFocusState({ pid = null } = {}) {
     const read = (fn) => fn().catch((error) => ({ error: String(error?.message || error) }));
     const describeWindow = async (id) => ({
       id,
@@ -367,7 +367,10 @@ export class LinuxDriver {
       pid: await this.runXdotoolCapture(['getwindowpid', String(id)]).catch(() => null),
       geometry: await this.windowGeometry(id).catch(() => null),
     });
-    const [mainWindow, focusedWindow, pointer] = await Promise.all([
+    const searchPid = async (extra) => parsePositiveIntegers(
+      await this.runXdotoolCapture(['search', ...extra, '--pid', String(pid)]).catch(() => ''),
+    );
+    const [mainWindow, focusedWindow, pointer, appWindows] = await Promise.all([
       read(async () => {
         const id = await this.mainWindowId();
         return id ? describeWindow(id) : null;
@@ -376,8 +379,13 @@ export class LinuxDriver {
       read(async () => Object.fromEntries(
         (await this.runXdotoolCapture(['getmouselocation', '--shell'])).split(/\r?\n/).map((line) => line.split('=', 2)),
       )),
+      read(async () => {
+        if (!pid) return null;
+        const [all, visible] = await Promise.all([searchPid([]), searchPid(['--onlyvisible'])]);
+        return Promise.all(all.map(async (id) => ({ ...await describeWindow(id), visible: visible.includes(id) })));
+      }),
     ]);
-    return { mainWindow, focusedWindow, pointer };
+    return { mainWindow, focusedWindow, pointer, appWindows };
   }
 
   async relativePoint(relativeX, relativeY, opts = {}) {
