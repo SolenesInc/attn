@@ -228,6 +228,23 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
   return release;
 }
 
+const FAILURE_EVIDENCE_DEADLINE_MS = 15_000;
+
+export function registerNativeFailureEvidence(runner, { client, driver, selectors = () => ({}) }) {
+  const request = (action, payload) => client.request(action, payload);
+  runner.registerFailureEvidence('screenshot', async () => {
+    const windowId = await driver.mainWindowId();
+    if (!windowId) throw new Error('The app has no capturable window');
+    const file = path.join(runner.runDir, 'failure-native.png');
+    await driver.screenshot(file, { windowId });
+    return file;
+  });
+  runner.registerFailureEvidence('window', () => request('get_window_bounds'));
+  runner.registerFailureEvidence('dom', () => request('dom_focus_state', { selectors: selectors() }));
+  runner.registerFailureEvidence('uiDiagnostics', () => request('ui_diagnostics'));
+  runner.registerFailureEvidence('native', () => driver.nativeFocusState({ pid: client.readManifest()?.pid ?? null }));
+}
+
 export async function closeScenarioSessions(client, sessionIds) {
   const failures = [];
   for (const sessionId of sessionIds) {
@@ -304,6 +321,7 @@ export function createScenarioRunner(options, {
   const steps = [];
   const assertions = [];
   const cleanupHandlers = [];
+  const failureEvidence = [];
   let cleanupPromise = null;
   let finalizationPromise = null;
   let reportedFailure = null;
@@ -383,6 +401,22 @@ export function createScenarioRunner(options, {
       return errors;
     })();
     return cleanupPromise;
+  };
+
+  const captureFailureEvidence = async () => {
+    if (cleanupPromise || failureEvidence.length === 0) return;
+    appendTrace('failure_evidence:start', { count: failureEvidence.length });
+    let deadline;
+    const expired = new Promise((_, reject) => {
+      deadline = setTimeout(() => reject(new Error(`Failure evidence did not finish within ${FAILURE_EVIDENCE_DEADLINE_MS}ms`)), FAILURE_EVIDENCE_DEADLINE_MS);
+    });
+    const results = await Promise.allSettled(failureEvidence.map(({ fn }) => Promise.race([Promise.resolve().then(fn), expired])));
+    clearTimeout(deadline);
+    const evidence = Object.fromEntries(failureEvidence.map(({ name }, index) => [name,
+      results[index].status === 'fulfilled' ? results[index].value : { error: normalizeError(results[index].reason) },
+    ]));
+    writeJson(path.join(runDir, 'failure-evidence.json'), evidence);
+    appendTrace('failure_evidence:done', { path: path.join(runDir, 'failure-evidence.json') });
   };
 
   const teardownError = (errors) => new Error(
@@ -470,6 +504,12 @@ export function createScenarioRunner(options, {
           cleanupHandlers.splice(index, 1);
         }
       };
+    },
+    registerFailureEvidence(name, fn) {
+      if (typeof fn !== 'function') {
+        throw new Error(`Failure evidence ${name} is missing a function`);
+      }
+      failureEvidence.push({ name, fn });
     },
     async step(name, details, fn) {
       const actualDetails = typeof details === 'function' ? null : (details || null);
@@ -606,6 +646,7 @@ export function createScenarioRunner(options, {
         return finalFailureSummary;
       }
       reportedFailure = { error, summary };
+      await captureFailureEvidence();
       const teardownErrors = await runRegisteredCleanup('finish');
       const recorderError = await finalizeRunner();
       const ledger = collectTripwireLedger();

@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: A failing packaged-app scenario saves a native screenshot, focus, pointer and geometry receipts before cleanup closes the app.

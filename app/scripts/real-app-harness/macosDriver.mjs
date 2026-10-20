@@ -123,6 +123,16 @@ export class MacOSDriver {
     return JSON.parse(await this.runInputDriverCapture(['display_state']));
   }
 
+  async nativeFocusState() {
+    const read = (fn) => fn().catch((error) => ({ error: String(error?.message || error) }));
+    const [frontmost, mainWindowId, windows] = await Promise.all([
+      read(() => this.frontmostBundleId()),
+      read(() => this.mainWindowId()),
+      read(() => this.windowList()),
+    ]);
+    return { frontmost, mainWindowId, windows };
+  }
+
   // System Events reports 0 windows for Tauri/wry apps even when one is
   // visible, so this reads CGWindowListCopyWindowInfo instead.
   async mainWindowId(opts = {}) {
@@ -333,7 +343,7 @@ export class MacOSDriver {
 
   async screenshot(outputPath, opts = {}) {
     const windowArgs = opts.windowId ? ['-l', String(opts.windowId)] : [];
-    await execFileAsync('/usr/sbin/screencapture', ['-x', ...windowArgs, outputPath]);
+    await execFileAsync('/usr/sbin/screencapture', ['-x', ...windowArgs, outputPath], { timeout: 10_000 });
   }
 
   serializeModifiers(modifiers = {}) {
