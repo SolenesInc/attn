@@ -1,0 +1,3 @@
+kind: internal
+area: build
+change: Builds and CI use Node 26.12.1, and the app, protocol schema, Tauri and Pi plugin lockfiles move past the October 2026 critical and high advisories for Vitest, Vite, happy-dom, tar, quick-xml and their dependencies.
