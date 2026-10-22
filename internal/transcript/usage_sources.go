@@ -114,12 +114,24 @@ func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
 		return []UsageSource{{ID: r.rootPath, Path: rootPath, Root: true}}, nil
 	}
 
+	startDir, _ := filepath.Rel(sessionsDir, filepath.Dir(r.rootPath))
+	startDate, dateErr := time.Parse("2006/01/02", filepath.ToSlash(startDir))
+	if dateErr != nil {
+		startDir = ""
+	}
 	paths := make([]string, 0)
 	err = filepath.WalkDir(sessionsDir, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
 		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" || path == rootPath {
+		if entry.IsDir() {
+			relative, _ := filepath.Rel(sessionsDir, path)
+			if relative != "." && relative < startDir && !strings.HasPrefix(startDir, relative+string(filepath.Separator)) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(entry.Name()) != ".jsonl" || path == rootPath {
 			return nil
 		}
 		paths = append(paths, path)
@@ -175,6 +187,9 @@ func (r *codexUsageSourceResolver) Discover() ([]UsageSource, error) {
 	}
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" {
+			continue
+		}
+		if date, err := codexRolloutDate(entry.Name()); err == nil && date.Before(startDate) {
 			continue
 		}
 		path := filepath.Join(archiveDir, entry.Name())
@@ -360,12 +375,16 @@ func codexUsageSourceIdentity(path string) string {
 	if filepath.Base(filepath.Dir(path)) != "archived_sessions" {
 		return path
 	}
-	stamp, _, _ := strings.Cut(strings.TrimPrefix(filepath.Base(path), "rollout-"), "T")
-	date, err := time.Parse("2006-01-02", stamp)
+	date, err := codexRolloutDate(path)
 	if err != nil {
 		return path
 	}
 	return filepath.Join(filepath.Dir(filepath.Dir(path)), "sessions", date.Format("2006/01/02"), filepath.Base(path))
+}
+
+func codexRolloutDate(path string) (time.Time, error) {
+	stamp, _, _ := strings.Cut(strings.TrimPrefix(filepath.Base(path), "rollout-"), "T")
+	return time.Parse("2006-01-02", stamp)
 }
 
 func NewReportedUsageSourceResolver(rootPath string) UsageSourceResolver {

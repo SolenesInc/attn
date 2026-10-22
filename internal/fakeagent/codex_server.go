@@ -954,6 +954,16 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			return t.c.approvals, nil
 		}
 		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
+	case methodSubagent:
+		path, cwd := s.findRollout(p.ThreadID)
+		if path == "" {
+			return nil, fmt.Errorf("no rollout for parent %s", p.ThreadID)
+		}
+		child := &codex{cfg: s.cfg, cwd: cwd, conversation: p.ThreadID}
+		if err := child.subagent(p.Text); err != nil {
+			return nil, err
+		}
+		return promptedResult{ConversationID: child.lastThread}, nil
 	case methodSpawnSubagent:
 		parent, err := s.loaded(p.ThreadID)
 		if err != nil {
