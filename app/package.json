@@ -141,15 +141,15 @@
     "@types/react-dom": "^19.1.6",
     "@types/unist": "^3.0.3",
     "@vitejs/plugin-react": "^4.6.0",
-    "happy-dom": "^20.0.11",
+    "happy-dom": "^20.8.9",
     "oxlint": "1.80.0",
     "pngjs": "^7.0.0",
     "remark-parse": "11.0.0",
     "remark-rehype": "11.1.2",
     "typescript": "~5.8.3",
     "unified": "11.0.5",
-    "vite": "^7.0.4",
-    "vitest": "^4.0.15",
-    "ws": "^8.18.3"
+    "vite": "^7.3.7",
+    "vitest": "^4.1.0",
+    "ws": "^8.21.0"
   }
 }
