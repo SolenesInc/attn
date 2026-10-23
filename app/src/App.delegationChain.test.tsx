@@ -160,6 +160,19 @@ describe('App delegation chain', () => {
       expect(daemon.sentOf('desktop_show_leaf').slice(selectedBefore)).toEqual([]);
     });
 
+    it('stays open while the sidebar scrolls on its own, and closes when the user scrolls outside it', async () => {
+      const daemon = await renderPanes();
+      fireEvent.click(within(buildPane()).getByRole('button', { name: /Show delegation chain for Build navigator/ }));
+      const sidebarList = document.querySelector<HTMLElement>('.session-list')!;
+
+      await gesture(daemon, () => fireEvent.scroll(sidebarList));
+      expect(chain()).not.toBeNull();
+      expect(within(chain()!).getByRole('button', { name: /Build navigator/ })).toHaveFocus();
+
+      await gesture(daemon, () => fireEvent.wheel(sidebarList, { deltaY: 120 }));
+      expect(chain()).toBeNull();
+    });
+
     it('closes on a pointer press in the terminal pane', async () => {
       const daemon = await renderPanes();
       fireEvent.click(within(buildPane()).getByRole('button', { name: /Show delegation chain for Build navigator/ }));
