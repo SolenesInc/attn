@@ -285,9 +285,11 @@ func (r *codexShared) closing(sessionID protocol.SessionID) (afterClose func()) 
 	if conversation == "" || session == nil {
 		return nil
 	}
-	finishUsage := r.d.finishMonitorUsage(sessionID)
-	r.settleUsage(sessionID)
-	finishUsage()
+	if entry := r.d.monitorEntry(sessionID); entry != nil {
+		release, tracker := entry.finishUsage()
+		r.settleUsage(sessionID, tracker)
+		release()
+	}
 	profile := session.ProfileID
 	r.mu.Lock()
 	r.archivingAfterClose[profile]++
@@ -324,13 +326,16 @@ func (r *codexShared) archiveUnheld(profile string, closed protocol.SessionID, c
 	}
 }
 
-func (r *codexShared) settleUsage(sessionID protocol.SessionID) {
-	path := r.d.store.GetSessionConversation(sessionID).TranscriptPath
-	if path == "" {
-		return
+func (r *codexShared) settleUsage(sessionID protocol.SessionID, tracker *sessionUsageTracker) {
+	if tracker == nil {
+		path := r.d.store.GetSessionConversation(sessionID).TranscriptPath
+		if path == "" {
+			return
+		}
+		w := &transcriptWatcher{sessionID: sessionID, agent: protocol.SessionAgentCodex}
+		tracker = r.d.newSessionUsageTracker(w, path)
 	}
-	w := &transcriptWatcher{sessionID: sessionID, agent: protocol.SessionAgentCodex}
-	if tracker := r.d.newSessionUsageTracker(w, path); tracker != nil {
+	if tracker != nil {
 		tracker.Reconcile()
 	}
 }

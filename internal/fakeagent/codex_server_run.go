@@ -41,6 +41,13 @@ func (s *CodexServer) Reply(conversation, text string) {
 	s.call(methodReply, serverThreadParams{ThreadID: conversation, Text: text}, nil)
 }
 
+func (s *CodexServer) Subagent(conversation, text string) string {
+	s.t.Helper()
+	var spawned promptedResult
+	s.call(methodSubagent, serverThreadParams{ThreadID: conversation, Text: text}, &spawned)
+	return spawned.ConversationID
+}
+
 func (s *CodexServer) Halt(conversation string) {
 	s.t.Helper()
 	s.call(methodHalt, serverThreadParams{ThreadID: conversation}, nil)

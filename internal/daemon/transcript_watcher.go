@@ -29,6 +29,7 @@ type transcriptWatcher struct {
 	startedAt     time.Time
 	preferredPath string
 	behavior      agentdriver.TranscriptWatcherBehavior
+	usageTracker  *sessionUsageTracker
 	stopCh        chan struct{}
 	doneCh        chan struct{}
 
@@ -437,12 +438,13 @@ func (e *monitorEntry) reconcileDeferredUsage() {
 
 func (d *Daemon) finishMonitorUsage(sessionID protocol.SessionID) func() {
 	if e := d.monitorEntry(sessionID); e != nil {
-		return e.finishUsage()
+		release, _ := e.finishUsage()
+		return release
 	}
 	return func() {}
 }
 
-func (e *monitorEntry) finishUsage() func() {
+func (e *monitorEntry) finishUsage() (func(), *sessionUsageTracker) {
 	e.mu.Lock()
 	e.usageDraining = true
 	watcher, plugin, idle := e.transcriptWatch, e.pluginUsageWatch, e.usageIdle
@@ -458,7 +460,11 @@ func (e *monitorEntry) finishUsage() func() {
 		<-idle
 	}
 	e.reconcileDeferredUsage()
-	return func() { e.mu.Lock(); e.usageDraining = false; e.mu.Unlock() }
+	var tracker *sessionUsageTracker
+	if watcher != nil {
+		tracker = watcher.usageTracker
+	}
+	return func() { e.mu.Lock(); e.usageDraining = false; e.mu.Unlock() }, tracker
 }
 
 func (d *Daemon) assistantWindow(sessionID protocol.SessionID, agent protocol.SessionAgent) (assistantWindowSnapshot, bool) {
@@ -504,7 +510,6 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 	var (
 		transcriptPath string
 		follower       *transcript.Follower
-		usageTracker   *sessionUsageTracker
 		readFileInfo   os.FileInfo
 
 		lastAssistantAt time.Time
@@ -517,8 +522,8 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		usageState        = w.state()
 	)
 	defer func() {
-		if usageTracker != nil {
-			usageTracker.Reconcile()
+		if w.usageTracker != nil {
+			w.usageTracker.Reconcile()
 		}
 	}()
 
@@ -528,9 +533,9 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			d.logf("transcript watcher: stopped session=%s", w.sessionID)
 			return
 		case <-d.life.Done():
-			if usageTracker != nil {
-				w.entry.deferFinalUsage(usageTracker.Reconcile)
-				usageTracker = nil
+			if w.usageTracker != nil {
+				w.entry.deferFinalUsage(w.usageTracker.Reconcile)
+				w.usageTracker = nil
 			}
 			return
 		case <-ticker.C:
@@ -593,7 +598,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			w.resetSource(protocol.SessionMessageWindowStatusReady, transcriptPath, "", startOffset > 0)
 			windowChanged = true
 			fallbackAttempted = false
-			usageTracker = d.newSessionUsageTracker(w, transcriptPath)
+			w.usageTracker = d.newSessionUsageTracker(w, transcriptPath)
 			d.logf("transcript watcher: transcript discovered session=%s path=%s offset=%d", w.sessionID, transcriptPath, startOffset)
 		}
 
@@ -604,7 +609,7 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 			transcriptPath = ""
 			follower = nil
-			usageTracker = nil
+			w.usageTracker = nil
 			readFileInfo = nil
 			discoveryDeadline = d.transcriptDiscoveryDeadline(w, time.Now())
 			fallbackAttempted = false
@@ -681,16 +686,16 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 			if err := d.applySessionUsageAvailability(w, batch); err != nil {
 				d.logf("transcript watcher: usage availability persist failed session=%s err=%v", w.sessionID, err)
 			}
-			if usageTracker != nil {
-				usageTracker.Reconcile()
+			if w.usageTracker != nil {
+				w.usageTracker.Reconcile()
 			}
 			readFileInfo = info
 		}
 		if windowChanged {
 			d.publishFact(FactSessionAssistantWindowChanged, string(w.sessionID), nil)
 		}
-		if usageSettled && usageTracker != nil {
-			usageTracker.Reconcile()
+		if usageSettled && w.usageTracker != nil {
+			w.usageTracker.Reconcile()
 		}
 
 		tickResult := w.behavior.Tick(time.Now(), sessionState)
