@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/victorarias/attn/internal/buildinfo"
 )
 
 func PrintInstanceBanner(w io.Writer) {
 	instance := Instance()
-	if instance == "" {
+	if instance == "" || buildinfo.Demo != "" {
 		return
 	}
 	fmt.Fprintf(w, "[attn instance=%s socket=%s port=%s]\n",

@@ -6,4 +6,5 @@ var (
 	SourceFingerprint = "unknown"
 	GitCommit         = "unknown"
 	SnapshotFormat    = "unknown"
+	Demo              = ""
 )

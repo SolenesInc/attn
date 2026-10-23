@@ -35,6 +35,8 @@ To open a shell next to the agent you're looking at, split it: Cmd+D
 (Ctrl+Shift+D on Linux) opens one beside it, Cmd+Shift+D (Ctrl+Alt+D on Linux)
 opens one below.
 
+![Cmd+D (Ctrl+Shift+D on Linux) opens a shell beside a Claude Code agent, and you run the tests in it. Cmd+Shift+D (Ctrl+Alt+D on Linux) then opens another shell below it.](../images/split-terminals.avif)
+
 Drag a tile to rearrange it on the desktop. Drag it over a desktop in the
 sidebar to switch to that desktop and drop it there.
 
@@ -54,6 +56,8 @@ When a desktop gets crowded:
 
 Cmd+Option+1–9 (Ctrl+Alt+1–9 on Linux) moves the active tile to that desktop and
 takes you with it. Add Shift to send it away and stay where you are.
+
+![You drag a tile onto desktop 2 in the sidebar and land there with it. Cmd+Option+1 (Ctrl+Alt+1 on Linux) then moves it back to desktop 1 and takes you with it.](../images/move-tiles.avif)
 
 When an agent has delegated work, its delegates can move with it: run "Move with
 delegates to…" from the command palette, or hold Option (Alt on Linux) when you
