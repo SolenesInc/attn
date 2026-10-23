@@ -251,9 +251,6 @@ func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newP
 			err = store.Rename(oldRel, newRel)
 			if err == nil {
 				result = &protocol.FsRenameResult{Path: oldRel, NewPath: newRel}
-				if inNotebook {
-					d.broadcastNotebookChanged(originUI, oldRel, newRel)
-				}
 				d.broadcastFsChanged(root, originUI, oldRel, newRel)
 			}
 		}
@@ -282,9 +279,6 @@ func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path, rawRoot
 		err = store.Delete(rel)
 		if err == nil {
 			result = &protocol.FsDeleteResult{Path: rel}
-			if inNotebook {
-				d.broadcastNotebookChanged(originUI, rel)
-			}
 			d.broadcastFsChanged(root, originUI, rel)
 		}
 	}

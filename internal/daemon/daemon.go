@@ -288,9 +288,6 @@ type Daemon struct {
 	harvestWhenMu        sync.Mutex
 	harvestWhenUntracked map[string]bool
 
-	notebookPendingMu    sync.Mutex
-	notebookPendingPaths map[string][]string
-
 	snapshotMu           sync.Mutex
 	snapshotDepth        int
 	pendingSnapshots     map[string]func()

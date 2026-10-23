@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/hooks"
@@ -63,18 +62,11 @@ func (d *Daemon) ensureNotebookWatcher(root string) {
 	}
 	w, err := d.notebookWatch(root, func(paths []string) {
 		d.broadcastFsChanged(root, originExternal, paths...)
-		var mdPaths []string
 		artifactSeeds := map[string]struct{}{}
 		for _, p := range paths {
-			if _, err := notebook.CleanPath(p); err == nil {
-				mdPaths = append(mdPaths, p)
-			}
 			if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {
 				artifactSeeds[seedID] = struct{}{}
 			}
-		}
-		if len(mdPaths) > 0 {
-			d.broadcastNotebookChanged(originExternal, mdPaths...)
 		}
 		if len(artifactSeeds) > 0 {
 			d.coalesceSnapshots(func() {
@@ -131,46 +123,6 @@ func (d *Daemon) notebookRoot() (string, error) {
 	return notebook.DefaultRoot(home, config.Instance()), nil
 }
 
-func (d *Daemon) broadcastNotebookChanged(origin string, paths ...string) {
-	d.coalesceSnapshots(func() {
-		for _, path := range paths {
-			d.publishFact(FactNotebookFileChanged, path, notebookChangeOrigin{Origin: origin})
-		}
-	})
-}
-
-type notebookChangeOrigin struct {
-	Origin string `json:"origin"`
-}
-
-func (d *Daemon) projectNotebookChanged(ev bus.Event) {
-	change, ok := decodeFact[notebookChangeOrigin](d, ev)
-	if !ok {
-		return
-	}
-	d.notebookPendingMu.Lock()
-	if d.notebookPendingPaths == nil {
-		d.notebookPendingPaths = map[string][]string{}
-	}
-	d.notebookPendingPaths[change.Origin] = append(d.notebookPendingPaths[change.Origin], ev.Subject)
-	d.notebookPendingMu.Unlock()
-
-	d.projectSnapshot("notebook_changed:"+change.Origin, func() {
-		d.notebookPendingMu.Lock()
-		paths := d.notebookPendingPaths[change.Origin]
-		delete(d.notebookPendingPaths, change.Origin)
-		d.notebookPendingMu.Unlock()
-		if len(paths) == 0 {
-			return
-		}
-		d.broadcastMessage(protocol.NotebookChangedMessage{
-			Event:  protocol.EventNotebookChanged,
-			Paths:  paths,
-			Origin: change.Origin,
-		})
-	})
-}
-
 func (d *Daemon) ensureNotebookScaffold() (root string, created bool, err error) {
 	store, err := d.notebookStoreFor()
 	if err != nil {
@@ -183,7 +135,7 @@ func (d *Daemon) ensureNotebookScaffold() (root string, created bool, err error)
 			writes[i] = notebook.SelfWrite{Rel: p}
 		}
 		d.noteNotebookSelfWrite(writes...)
-		d.broadcastNotebookChanged(originAgent, createdPaths...)
+		d.broadcastFsChanged(store.Root(), originAgent, createdPaths...)
 		d.ensureNotebookWatcher(store.Root())
 	}
 	if scaffoldErr != nil {
@@ -299,7 +251,7 @@ func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, co
 			} else {
 				result.Hash = protocol.Ptr(hash)
 				d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
-				d.broadcastNotebookChanged(originUI, changed)
+				d.broadcastFsChanged(store.Root(), originUI, changed)
 			}
 		}
 	}
@@ -335,7 +287,7 @@ func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, source
 		var relPath, hash string
 		if relPath, hash, err = store.AppendInbox(formatChiefInboxEntry(sourcePath, selection)); err == nil {
 			d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: relPath, Hash: hash})
-			d.broadcastNotebookChanged(originUI, relPath)
+			d.broadcastFsChanged(store.Root(), originUI, relPath)
 			result = &protocol.NotebookSendToChiefResult{
 				Path:   relPath,
 				Nudged: d.nudgeChiefOfStaff(d.profileForClient(client), requestID, chiefInboxNudgePrompt(store.Root())),

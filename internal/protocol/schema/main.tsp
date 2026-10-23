@@ -3278,13 +3278,6 @@ model SessionStateChangedMessage {
   session: Session;
 }
 
-// Broadcast when notebook content changes. origin is agent|ui|external.
-model NotebookChangedMessage {
-  event: "notebook_changed";
-  paths: string[];
-  origin: string;
-}
-
 model SessionsUpdatedMessage {
   event: "sessions_updated";
   sessions?: Session[];
@@ -6990,11 +6983,11 @@ model FsIndexResultMessage {
   truncated: boolean;
 }
 
-// Broadcast when files under the root change. origin is agent|ui|external, the
-// same vocabulary as notebook_changed. Fires for every changed path regardless of
-// file type: under the notebook root this rides the always-on notebook watcher;
-// under any other root it fires only while at least one client holds that root
-// open via fs_watch.
+// Broadcast when files under the root change. origin is agent|ui|external. Fires
+// for every changed path regardless of file type: under the notebook root this
+// rides the always-on notebook watcher and attn's own notebook writes; under any
+// other root it fires only while at least one client holds that root open via
+// fs_watch.
 model FsChangedMessage {
   event: "fs_changed";
   paths: string[];
@@ -7110,7 +7103,6 @@ alias DaemonEvent =
   | SessionUnregisteredMessage
   | SessionCloseResultMessage
   | SessionStateChangedMessage
-  | NotebookChangedMessage
   | SessionsUpdatedMessage
   | ProfileActionResultMessage
   | ProfilesChangedMessage
