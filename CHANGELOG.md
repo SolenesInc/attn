@@ -6,6 +6,185 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-10-24]
+
+### Added
+- **Shared Codex keeps every conversation live, even after you switch away.**
+  Turn it on in Settings → Experimental (off by default). New Codex terminals
+  share one Codex app-server per profile, and it keeps running through daemon
+  restarts. Each conversation is its own session. When you switch a terminal
+  with /new, /resume or /agents, the conversation you left stays alive as a
+  hidden session. It keeps its place in the queue, still takes annotations
+  and messages, and shows as hidden in the Sessions ledger and in
+  `attn session list`. When a hidden session needs you, choosing it opens it
+  in a tile on the current desktop with its approval waiting. Closing the last
+  tile of a session archives the conversation, and resuming it from the ledger
+  brings it back. attn's session name and Codex's conversation name stay in
+  sync. If you don't want hidden rows in the queue, turn off "Show hidden
+  sessions in the queue". With Shared Codex on, automations that start Codex
+  use it too, with their own model, effort and auto-approval.
+- **Agents can ask you questions, and you answer them all from one drawer.**
+  Asks are experimental and off by default (Settings → Experimental). An agent
+  that can't decide something alone runs `attn ask`, and you pick choices,
+  write answers or add a note without opening its terminal. Your answer goes
+  to the seed the agent is working on, or to its inbox if it has no seed.
+  Open asks are easy to spot: the Asks button counts them, the queue bar lists
+  them when the sidebar is collapsed, the desktop rail marks agents that
+  asked, and the asking agent's tile header shows its question. Agents treat
+  your answers as your own input, approvals included, and they ask again
+  instead of replying somewhere you won't see it.
+- **Quick Capture sends messages and files to Chief or crew from any Mac
+  app.** It's experimental and off by default. A global shortcut opens a
+  capture window that keeps your drafts and shows Sent and Read history.
+  Messages land in the agent's inbox, with read receipts.
+- **Quiet notifications keep agents out of your queue when they only woke up
+  for a notification.** It's experimental and off by default. In queue flow,
+  an agent woken by a message, seed update or PR update no longer lands in
+  your queue when it stops, unless it needs an approval. Agents that really
+  need you run `attn turn open` to stay in the queue.
+- **Agents can open and drive shell splits.** They can open a shell without
+  stealing focus, run commands and wait for the output, read the screen, send
+  keystrokes and close the shell. New background splits pulse when they
+  appear.
+- **Shell tiles show a live title and the state of the program inside.** The
+  title follows the running program, command or folder, and a name you set
+  replaces it. Programs that report their status over OSC 7501, like a
+  `claude` you start by hand, show as working or waiting for you. Claude Code
+  tiles now get their state from the same protocol instead of attn reading
+  title glyphs.
+- **Close desktops you no longer need.** Close a desktop from the sidebar or
+  the palette, or press ⌘W on an empty one. The confirmation asks once about
+  the desktop and everything on it. A crew member's or automation's desktop
+  comes back the next time it starts.
+- **Sort desktops, with Undo.** From the palette, sort desktops by number and
+  name, and undo to get your own order back.
+- **Move an agent together with its delegates.** From the palette, or with an
+  Option-drag in the sidebar, an agent moves with the delegates on its
+  desktop.
+- **Switch between queue flow and desktop flow in one click.** The toggle sits
+  in the sidebar header and works when the sidebar is collapsed too.
+- **Mark the current session as priority from the command palette.**
+- **New CLI commands for sessions, agents and settings.** `attn session list
+  --tree` shows live delegation chains with seeds and owed or snoozed turns.
+  You can snooze and unsnooze several sessions at once. `attn agent reload`
+  reloads agents in place, one, several, or the whole profile with `--all`.
+  `attn settings list|get|set` reads and changes daemon settings.
+- **An experimental one-screen launcher for new sessions.** Search projects,
+  press Tab to pick a worktree, and open a terminal with ⌘T.
+- **Agents can point at parts of the app.** Agent callouts are experimental
+  and off by default (Settings → Experimental).
+- **Agents can run without a separate launcher process, using less memory.**
+  Direct launches for Claude, Codex and Copilot are experimental and off by
+  default.
+- **Connect to attn on other computers (experimental).** Settings → Outposts
+  pairs daemons over SSH and shows connection state, refusal details,
+  re-pairing and removal. For now it only reports connection health. Agents,
+  terminals and files stay on their own machine.
+
+### Changed
+- **Auto mode is on by default for new Claude and Codex sessions.** This
+  applies to existing installs too, unless you turned it off. To turn it off,
+  disable Auto-approve in Settings → Agents. Running sessions keep their
+  current approval mode.
+- **Blocking dialogs show as "needs approval" right away.** Claude's
+  AskUserQuestion, Codex questions, and Claude approvals in auto mode used to
+  take up to a minute to show. Inbox rings, crew heartbeats and annotations
+  now wait until 30 seconds after your last keystroke, so they don't land
+  while you're answering.
+- **One model picker everywhere.** Settings, delegation roles and Crew share a
+  picker built from the models each harness reports, with tiers, filtering
+  and manual IDs. Settings → Models lets you adjust tiers and see the current
+  defaults.
+- **Settings are easier to find your way around.** Headings and navigation
+  are simpler, and all experimental toggles live together under Experimental
+  with clearer descriptions.
+- **The selected tile uses the spotlight style by default,** unless you chose
+  a different tile focus style.
+- **Seed tiles keep showing their content while refreshing,** and offer Reload
+  if an update fails.
+- **The attn-workflow skill writes plans you can trust.** Plans state why they
+  exist, the tradeoffs they accept and the options they rejected, and each
+  check names the evidence that proves it. New Refactoring, Perf and
+  Correction processes join the existing ones. Agents prove changes on the
+  real surface and label claims as measured, inferred or guessed.
+
+### Fixed
+- **A slow agent no longer freezes the rest of the app.** Launching, resuming,
+  closing or reviving one session after a restart used to block every other
+  action while it waited, for example on a shared Codex app-server starting.
+  Now only that session waits. Closing answers right away, and what you type
+  into a waiting pane still reaches its agent.
+- **Shared Codex holds up under real use.** Busy sessions no longer fail with
+  "Too many open files". Sessions launched with YOLO or auto-approve resume
+  again and keep their approval mode. A tile that switches conversations shows
+  the new session's name right away. The app-server runs the Codex executable
+  set in Settings, and crew members with awareness folders launch correctly.
+- **Opening a terminal right after an update works.** It used to fail with
+  "session not found" or "EOF" while the terminal kept running.
+- **Terminals on the shared PTY host survive updates.** They no longer come
+  back garbled after an update that changes the terminal engine.
+- **Reloading a session twice quickly keeps its agent running.**
+- **Stopped agents stay visible and can be resumed.** They keep their final
+  screen and offer Resume or Close. A terminal whose process exited keeps its
+  "Process exited" notice instead of going blank.
+- **New sessions always keep their conversation.** On fast machines, some
+  sessions lost track of their transcript, so they couldn't be resumed, showed
+  no cost, and couldn't take annotations.
+- **Delegates keep their chain after a daemon restart.** Older delegates used
+  to lose their dispatcher, seed and "delegated from" badge.
+- **The delegation chain stays open while the sidebar scrolls by itself.**
+- **Typing right after switching agents or desktops goes to the right
+  terminal.**
+- **Every empty ⌘1–⌘9 slot can become a desktop.** `attn session move`,
+  delegation, and crew or automation launches create the numbered desktop
+  they need. Moves and resizes no longer act on an outdated layout when
+  another window changed it.
+- **⌘P forgets recent files that are gone.** Deleted or unreadable files drop
+  out of the list, and opening one shows the real error.
+- **Ctrl+Return reaches the terminal on macOS** instead of opening the context
+  menu.
+- **Renaming the current session from the palette works.** Offline renames
+  fail right away so you can retry.
+- **The docked Garden opens next to an open drawer** instead of covering it.
+- **Resuming a seed's agent keeps your edits to the seed.**
+- **Worktree creation picks a starting branch that exists,** including in
+  local-only repositories and while offline.
+- **Worktree monitoring continues after the last worktree is removed,** and
+  finds worktrees created outside attn.
+- **PR monitoring recovers when GitHub becomes reachable after startup.**
+- **Automations stop retrying when the disk is full** and show the failure.
+- **Closing a Codex session stays fast** as its conversation history grows.
+- **Crew fixes.** Copied or moved data folders keep their crew roster working.
+  Members can file several letters in the same minute. Away time is measured
+  consistently.
+- **Older builds refuse a database upgraded by a newer build,** and explain
+  how to recover.
+- **Conversation archives survive database restores.**
+- **Starting a shortcut recording ends any other recording in progress.**
+
+### Removed
+- **Workflows.** The JavaScript workflow engine, `attn workflow` commands, the
+  run drawer and the setting are gone. Delegation, Garden seeds, automations
+  and the attn-workflow skill are still here.
+- **Present reviews.** The `attn present` commands, the review window and the
+  header chip are gone, and existing presentations are deleted on upgrade.
+- **Remote endpoints.** The endpoints list, the target bar in the session
+  picker (YOLO now has its own row), endpoint badges, the Sync banner and
+  their CLI commands are gone. A data folder enrolled to another daemon still
+  needs `attn enrollment leave` before it starts. WebSocket clients now
+  authenticate with a client token only.
+- **Model capture.** attn no longer records Claude and Codex screens. Files
+  captured earlier stay in `~/.attn/model-captures`, and you can delete that
+  folder yourself.
+- **Start fresh.** A closed session resumes its saved conversation or explains
+  why it can't. A failed Resume can be retried.
+- **Crew Restart.** Use Sleep to ask a member for a handoff and Wake to start
+  it again.
+
+<!-- changelog-fragments-sha256: a55cc1f2d66972410e59b57873a4b10782e85b9fea25dee73880d2378c9b8cb3 -->
+
+---
+
 ## [2026-10-07]
 
 ### Added

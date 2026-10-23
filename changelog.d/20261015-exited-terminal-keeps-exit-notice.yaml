@@ -1,3 +1,0 @@
-kind: fixed
-area: terminals
-change: A terminal whose process exits keeps its "Process exited" notice; the daemon no longer sometimes asks the app to reattach it while it shuts down, which cleared the screen.

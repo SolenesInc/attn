@@ -1,3 +1,0 @@
-kind: fixed
-area: crew
-change: Crew away time follows the last app presence report consistently, including after the app disconnects.

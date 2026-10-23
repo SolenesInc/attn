@@ -1,3 +1,0 @@
-kind: fixed
-area: sessions
-change: Reloading a session twice in quick succession no longer ends the session with no agent running; an exit from a replaced agent process no longer counts as the session's agent dying.

@@ -1,3 +1,0 @@
-kind: internal
-area: sessions
-change: The clear-opens-session scenario compares the row's position within its desktop, so an empty desktop removed above it during /clear no longer fails it.

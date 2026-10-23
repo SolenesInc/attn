@@ -1,5 +1,0 @@
-kind: fixed
-area: codex
-change: With Shared Codex on, the app-server runs the Codex executable set in Settings, the same one its terminals run.
-symptom: With a Codex executable set in Settings and ATTN_CODEX_EXECUTABLE set in the environment, the shared app-server ran the environment's Codex while its terminals ran the configured one.
-notes: The daemon also tracks the Codex version the app-server runs, the version installed, and the newest release (checked daily with codex doctor), and publishes them per profile for the coming update offer.

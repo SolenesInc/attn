@@ -1,3 +1,0 @@
-kind: added
-area: agents
-change: Add experimental Quick Capture, off by default, to save messages and files for Chief or crew, with inbox delivery, read receipts and file retrieval through the agent inbox.

@@ -1,3 +1,0 @@
-kind: added
-area: agents
-change: Direct agent launches are available in Settings → Experimental, off by default. Claude, Codex and Copilot can run without a separate attn launcher process to reduce memory use.

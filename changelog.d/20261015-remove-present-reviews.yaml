@@ -1,3 +1,0 @@
-kind: removed
-area: present
-change: Removed Present reviews, including the attn present commands, the review window, the session header chip, and the attn skill's Present guidance. Existing presentations and their feedback are deleted on upgrade.

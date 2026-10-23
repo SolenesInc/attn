@@ -1,3 +1,0 @@
-kind: added
-area: agents
-change: Agents can point at parts of the app with short callouts, behind Settings > Experimental > Agent callouts (off by default).

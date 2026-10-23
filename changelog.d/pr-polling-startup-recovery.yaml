@@ -1,3 +1,0 @@
-kind: fixed
-area: github
-change: PR monitoring resumes automatically when GitHub becomes available after daemon startup.

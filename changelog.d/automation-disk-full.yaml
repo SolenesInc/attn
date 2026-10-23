@@ -1,3 +1,0 @@
-kind: fixed
-area: automations
-change: Automation launches stop retrying when the disk is full and show the failure.

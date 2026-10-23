@@ -1,3 +1,0 @@
-kind: added
-area: terminals
-change: Shell tiles show a live program, command or folder title. Set a name to override it, or clear the name to restore automatic titles.

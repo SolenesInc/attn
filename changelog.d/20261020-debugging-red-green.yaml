@@ -1,3 +1,0 @@
-kind: internal
-area: agents
-change: Workflow guidance frames proof-first ordering (the failing test before the fix, the baseline before the change) as how the agent checks its own assumptions, not as a sequence for a reviewer.

@@ -1,4 +1,0 @@
-kind: fixed
-area: delegation
-change: The delegation chain stays open when the sidebar scrolls on its own, such as revealing the selected agent; it still closes when you scroll outside it.
-symptom: With a long sidebar, the delegation chain sometimes vanished right after opening it from the command palette or a sidebar row.

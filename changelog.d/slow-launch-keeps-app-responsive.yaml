@@ -1,4 +1,0 @@
-kind: fixed
-area: sessions
-symptom: While a session launch or Resume waited on something slow, such as a shared Codex app-server starting, the app stopped answering every other action until it finished.
-change: A slow launch or Resume now delays only its own session; the rest of the app keeps answering while it waits.

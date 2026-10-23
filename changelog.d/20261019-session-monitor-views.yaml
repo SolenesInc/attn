@@ -1,4 +1,0 @@
-kind: internal
-area: daemon
-change: Give session monitors ownership of runtime views and apply their changes at home.
-notes: Preserve session handoffs, snoozes and exit recovery; retain per-file usage and count copied requests once across transcript switches.

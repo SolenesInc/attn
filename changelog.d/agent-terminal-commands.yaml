@@ -1,3 +1,0 @@
-kind: added
-area: terminals
-change: Agents can open shell splits without moving focus, read terminals, run commands and wait for their output, send keystrokes, and close shells. New background splits pulse on arrival.

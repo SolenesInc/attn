@@ -1,3 +1,0 @@
-kind: fixed
-area: desktops
-change: Close desktop confirmations ask once about closing the desktop and everything inside it.

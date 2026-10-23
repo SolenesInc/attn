@@ -1,3 +1,0 @@
-kind: internal
-area: app
-change: Remove unused native directory-listing and build-instance commands and unused direct Rust dependencies.
