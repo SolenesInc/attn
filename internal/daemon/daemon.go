@@ -156,7 +156,7 @@ type Daemon struct {
 	ptySettingsChangeMu        sync.Mutex
 	sharedPTYHost              *ptybackend.WorkerBackend
 	upgradingMu                sync.Mutex
-	upgradingWorkers           map[harness.TerminalID]bool
+	upgradingWorkers           map[harness.TerminalID]chan struct{}
 	ptyRecovered               atomic.Bool
 
 	sessionTitleExec func(ctx context.Context, session *protocol.Session, conversation string) (string, error)

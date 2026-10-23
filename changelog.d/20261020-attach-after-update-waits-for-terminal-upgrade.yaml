@@ -1,0 +1,4 @@
+kind: fixed
+area: terminals
+change: After an update, the app receives its sessions once running terminals have moved to the new build, so opening one right away no longer fails.
+symptom: Opening a terminal right after the daemon restarted on a new version could fail with "session not found" or "EOF" while the terminal kept running.
