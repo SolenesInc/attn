@@ -56,8 +56,7 @@ func TestConversationKeepPassNotifiesOnceForMultipleCopies(t *testing.T) {
 		}
 	}
 	events := w.App()
-	plantSeedAs(t, cli, "", "refresh both changed copies")
-	testworld.AwaitTaskDone(events, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, w)
 	listed := testworld.Request(events, protocol.KeptConversationListMessage{Cmd: protocol.CmdKeptConversationList, RequestID: protocol.Ptr("after-pass")}, protocol.EventKeptConversationListResult, func(r protocol.KeptConversationListResultEvent) bool {
 		return protocol.Deref(r.RequestID) == "after-pass"
 	})
@@ -122,10 +121,7 @@ func TestConversationPinCopiesUnreferencedClosedSessionAndUnkeepExpires(t *testi
 	if released.Rows[0].Kept.PinnedAt != nil || released.Rows[0].Kept.DeleteAfter == nil || protocol.Deref(released.NextDeleteAfter) != *released.Rows[0].Kept.DeleteAfter {
 		t.Fatalf("unkeep grace: %+v", released)
 	}
-	if _, err := cli.SeedNote("", delegated.SeedID, "trigger next keep pass", "", "", false, nil); err != nil {
-		t.Fatal(err)
-	}
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, w)
 	if rows := conversationRows(t, cli, false); rows.Count != 0 || len(rows.Rows) != 0 || rows.StoredBytes != 0 || rows.NextDeleteAfter != nil {
 		t.Fatalf("expired totals: %+v", rows)
 	}
@@ -155,8 +151,7 @@ func TestConversationPinSurvivesSeedWitherAndRestart(t *testing.T) {
 	pinnedAt := protocol.Deref(conversationRows(t, cli, false).Rows[0].Kept.PinnedAt)
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "finished", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")
-	plantSeedAs(t, cli, "", "pass beyond zero grace")
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, w)
 	w.restart()
 	list := testworld.Request(w.App(), protocol.KeptConversationListMessage{Cmd: protocol.CmdKeptConversationList, RequestID: protocol.Ptr("list")}, protocol.EventKeptConversationListResult, func(r protocol.KeptConversationListResultEvent) bool { return protocol.Deref(r.RequestID) == "list" })
 	if !list.Success || list.KeptConversationListResult == nil {
@@ -222,8 +217,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	}
 	w.restart()
 	app, cli = w.App(), w.Client()
-	plantSeedAs(t, cli, "", "drain crash recovery")
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, w)
 	if _, err := os.Stat(archive); !os.IsNotExist(err) {
 		t.Fatalf("restart left forgotten archive: %v", err)
 	}
@@ -255,8 +249,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	if verdict.Reopenable || !strings.Contains(protocol.Deref(verdict.Reason), "you deleted attn's copy") || !strings.Contains(protocol.Deref(verdict.Reason), date) {
 		t.Fatalf("forget resume refusal: %+v", verdict)
 	}
-	plantSeedAs(t, cli, "", "verify forget removed the pin")
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, w)
 	if rows := conversationRows(t, cli, false); len(rows.Rows) != 0 {
 		t.Fatalf("forget left pin: %+v", rows)
 	}
@@ -391,8 +384,7 @@ func TestConversationSeedReferenceIsVisibleBeforeCopy(t *testing.T) {
 	run := w.Launched(string(delegated.SessionID))
 	run.Prompted()
 	run.Reply("live <!-- attn:state=waiting_input -->")
-	plantSeedAs(t, cli, "", "drain the keep pass")
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, w)
 	rows := conversationRows(t, cli, false)
 	if rows.Count != 0 || rows.StoredBytes != 0 || rows.PendingCount != 1 || len(rows.Rows) != 1 {
 		t.Fatalf("seed-only pending totals: %+v", rows)

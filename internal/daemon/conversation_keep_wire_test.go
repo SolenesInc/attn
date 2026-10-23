@@ -86,21 +86,12 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
-	// Lifecycle writes protect against cleanup, so their keep pass can skip retirement.
-	// Notes queue an unprotected pass; normal grace preserves release/replant checks.
-	keepPass := func() {
-		t.Helper()
-		if _, err := cli.SeedNote("", delegated.SeedID, "Record the abandoned work", "", "", false, nil); err != nil {
-			t.Fatal(err)
-		}
-		testworld.AwaitTaskDone(app, "conversation_keep")
-	}
 	first := w.Launched(string(delegated.SessionID))
 	first.Prompted()
 	closePane(app, sessionPane{session: string(delegated.SessionID)})
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned", "")
-	keepPass()
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	released := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if released == nil || protocol.Deref(released.DeleteAfter) == "" {
 		t.Fatalf("released copy: %+v", released)
@@ -114,9 +105,9 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 		t.Fatalf("replanted copy: %+v", retained)
 	}
 	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned again", "")
-	keepPass()
+	testworld.AwaitTaskDone(app, "conversation_keep")
 	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "0")
-	keepPass()
+	keepPassAfterAnotherSessionCloses(t, w)
 	deleted := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if deleted == nil || protocol.Deref(deleted.DeletedAt) == "" {
 		t.Fatalf("deleted copy: %+v", deleted)
@@ -141,8 +132,7 @@ func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testin
 	first := w.Launched(string(delegated.SessionID))
 	first.Prompted()
 	first.Reply("original full conversation <!-- attn:state=waiting_input -->")
-	lifeMove(t, cli, string(delegated.SessionID), delegated.SeedID, "park", "", "")
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, w)
 	if kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation; kept != nil {
 		t.Fatalf("active conversation was copied: %+v", kept)
 	}
@@ -155,8 +145,7 @@ func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testin
 	if err := os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
-	lifeMove(t, cli, string(delegated.SessionID), delegated.SeedID, "tend", "", "")
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, w)
 	kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
 	if kept == nil {
 		t.Fatal("quiet conversation was not copied")
@@ -662,7 +651,7 @@ func TestConversationRetirementWaitsForAnActiveWorktreeSweep(t *testing.T) {
 	runGit(t, shop, "update-ref", "refs/remotes/origin/main", "main")
 	refreshWorktrees(t, cli)
 	answer := pulls.awaitSweepAsking(t)
-	if _, err := cli.SeedNote("", delegated.SeedID, "Record the completed work", "", "", false, nil); err != nil {
+	if err := cli.KeptConversationKeep(string(delegated.SessionID), false); err != nil {
 		t.Fatal(err)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
@@ -673,4 +662,43 @@ func TestConversationRetirementWaitsForAnActiveWorktreeSweep(t *testing.T) {
 	if swept := sweepAwaitSwept(app, path); swept.Action != "removed" {
 		t.Errorf("sweep action = %s; want removed", swept.Action)
 	}
+}
+
+func TestSeedNotesLeaveConversationKeepIdleAndHarvestStillReleasesTheCopy(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	first := w.Launched(string(delegated.SessionID))
+	first.Prompted()
+	closePane(app, sessionPane{session: string(delegated.SessionID)})
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	kept := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
+	if kept == nil || kept.DeleteAfter != nil {
+		t.Fatalf("open seed's kept conversation: %+v", kept)
+	}
+	before := producedBy(busStatus(t, app), "task.changed")
+	if _, err := cli.SeedNote("", delegated.SeedID, "Record progress", "", "", false, nil); err != nil {
+		t.Fatal(err)
+	}
+	if after := producedBy(busStatus(t, app), "task.changed"); after != before {
+		t.Fatalf("a note changed tasks: %d task.changed facts before, %d after", before, after)
+	}
+	lifeMove(t, cli, "", delegated.SeedID, "harvest", "done", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	released := lifeShow(t, cli, delegated.SeedID).Seed.Continuation.KeptConversation
+	if released == nil || protocol.Deref(released.DeleteAfter) == "" {
+		t.Fatalf("harvested seed's kept conversation: %+v", released)
+	}
+}
+
+func keepPassAfterAnotherSessionCloses(t *testing.T, w *world) {
+	t.Helper()
+	app := w.App()
+	spawned, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("another"))
+	if !spawned.Success {
+		t.Fatalf("spawn another session: %+v", spawned)
+	}
+	w.Launched(string(spawned.ID))
+	closePane(app, sessionPane{session: string(spawned.ID)})
+	testworld.AwaitTaskDone(app, "conversation_keep")
 }
