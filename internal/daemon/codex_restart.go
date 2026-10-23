@@ -88,7 +88,7 @@ func (r *codexShared) forget(s *codexServer) {
 	gone := s.hold(nil)
 	client := s.control
 	s.control = nil
-	s.running = ""
+	s.running, s.binary = "", ""
 	s.mu.Unlock()
 	if client != nil {
 		client.Close()

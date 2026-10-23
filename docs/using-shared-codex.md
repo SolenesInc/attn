@@ -7,10 +7,11 @@ switch a terminal to another conversation, the one you left keeps running as a
 hidden session instead of closing.
 
 It runs the stock `codex` you already use, with your Codex account, model,
-settings and conversations. Shared terminals run the Codex executable set in
-Settings, and so does the app-server when it starts. After you install another
-Codex, attn moves the app-server to it, as [Codex updates](#codex-updates)
-describes. attn was checked against Codex 0.160.0.
+settings and conversations. The app-server runs the Codex executable set in
+Settings, and shared terminals run the same Codex as the app-server. After you
+install another Codex, attn moves the app-server to it, as
+[Codex updates](#codex-updates) describes. attn was checked against Codex
+0.160.0.
 
 ## Turn it on or off
 
@@ -73,11 +74,16 @@ The banner names the sessions it waits on, and you can jump to each.
   started, so with a few of them the terminals wait up to about 20 seconds.
 - A terminal still starting, or asking whether to trust its folder, couldn't
   reconnect, so the restart waits until it shows its conversation.
-- Terminals opened before you installed the update keep running the older
-  Codex. The banner offers **Reload tiles**, which restarts them on the new
-  Codex in the same conversations; text you typed in them and haven't sent is
-  lost. An older terminal doesn't know what the newer app-server added; an
-  approval of a kind it doesn't know is denied, and the turn carries on.
+- Until the restart, a new or reloaded terminal runs the app-server's Codex
+  while it is still installed. Codex's standalone installer keeps older
+  releases; npm and Homebrew replace them, so there it runs the newly installed
+  Codex.
+- A terminal keeps the Codex it started with, so after the restart the ones
+  that started before it run an older Codex. The banner offers **Reload
+  tiles**, which restarts them on the new Codex in the same conversations; text
+  you typed in them and haven't sent is lost. An older terminal doesn't know
+  what the newer app-server added; an approval of a kind it doesn't know is
+  denied, and the turn carries on.
 
 The banner's actions are also in the command palette while they apply:
 **Install Codex update**, **Restart shared Codex now** and **Reload old Codex

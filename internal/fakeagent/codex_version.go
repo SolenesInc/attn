@@ -145,6 +145,32 @@ func (k *Kit) InstallCodexAt(dir, version string) string {
 	return filepath.Join(dir, string(Codex))
 }
 
+func (k *Kit) InstallStandaloneCodex(root, version string) string {
+	k.t.Helper()
+	self, err := os.Executable()
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	encoded, err := json.Marshal(k.cfg)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	release := filepath.Join(root, "releases", version)
+	bin := filepath.Join(release, "bin")
+	mustInstall(k.t, bin, nil, map[string]string{configName: string(encoded), codexVersionFile: version + "\n"})
+	if err := os.Link(self, filepath.Join(bin, string(Codex))); err != nil {
+		k.t.Fatal(err)
+	}
+	current := filepath.Join(root, "current")
+	if err := os.Symlink(release, current+".next"); err != nil {
+		k.t.Fatal(err)
+	}
+	if err := os.Rename(current+".next", current); err != nil {
+		k.t.Fatal(err)
+	}
+	return filepath.Join(current, "bin", string(Codex))
+}
+
 func (s *CodexServer) Argv() []string { return s.fake.Argv }
 
 func (k *Kit) writeVersion(path, version string) {
