@@ -104,7 +104,6 @@ func evidence(t *rapid.T, p sessionstate.Policy) testEvidence {
 			Compacting:     sometimes(t, "compacting", 5),
 
 			InitialPromptOwed: sometimes(t, "initial_prompt_owed", 3),
-			PlacedInputOwed:   sometimes(t, "placed_input_owed", 3),
 
 			PromptIdleAt:     rarely(t, "prompt_idle", p),
 			ClassifyingSince: instantNear(t, "classifying_since", p)},

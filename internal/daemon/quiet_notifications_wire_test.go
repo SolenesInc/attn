@@ -91,12 +91,19 @@ func TestAnAgentANotificationWokeStaysOutOfTheQueueWhenItStops(t *testing.T) {
 func TestANotificationThatSetsAWaitingAgentWorkingSettlesItsTurn(t *testing.T) {
 	w, app, cli := quietNotificationsWorld(t, true)
 	session, agent, owed := owingIdleAgent(t, w, app, cli)
-	waiting := userRunStops(app, agent, settleFromApp(app, owed), "open the PR", "PR is open, CI is running. <!-- attn:state=waiting_input -->")
+	settled := settleFromApp(app, owed)
+	if got := submitSessionAnnotationFeedback(app, session, "open the PR"); got.status != "delivered" {
+		t.Fatalf("the user's annotation = %+v, want delivered", got)
+	}
+	agent.Prompted()
+	working := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("PR is open, CI is running. <!-- attn:state=waiting_input -->")
+	waiting := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
 	if !protocol.Deref(waiting.TurnOwed) {
 		t.Fatal("the user's run stopped without opening a turn")
 	}
 
-	working, _ := notificationRunStarts(t, app, cli, agent, session, waiting, "CI passed")
+	working, _ = notificationRunStarts(t, app, cli, agent, session, waiting, "CI passed")
 	if protocol.Deref(working.TurnOwed) || !protocol.Deref(working.TurnByAgent) {
 		t.Fatalf("once the notification set the agent working its turn shows owed=%v by_agent=%v, want settled by the agent",
 			protocol.Deref(working.TurnOwed), protocol.Deref(working.TurnByAgent))

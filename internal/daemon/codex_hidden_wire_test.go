@@ -747,7 +747,7 @@ func TestAHiddenSharedCodexQuestionWaitsForTheUserUntilItsAppServerExits(t *test
 	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	server.AskQuestion(conversation)
 	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool {
-		return protocol.Deref(s.Hidden) && s.State == protocol.SessionStateWaitingInput
+		return protocol.Deref(s.Hidden) && s.State == protocol.SessionStatePendingApproval
 	})
 
 	w.LogDaemonTail()

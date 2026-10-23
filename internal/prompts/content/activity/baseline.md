@@ -8,8 +8,8 @@ and the transcript events since then.
 
   working          - actively running, mid-task
   idle             - finished, sitting at the prompt
-  waiting_input    - asked the user a question and is blocked on the answer
-  pending_approval - blocked, waiting for the user to approve a tool call
+  waiting_input    - ended its turn on a question in its reply
+  pending_approval - blocked on a prompt the user must answer: a tool approval or a question
   recoverable      - the process died and can be revived
   launching        - starting up
 

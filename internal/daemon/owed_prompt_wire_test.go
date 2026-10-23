@@ -6,8 +6,6 @@ import (
 
 	"github.com/victorarias/attn/internal/testworld"
 
-	"github.com/google/uuid"
-
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -52,36 +50,6 @@ func TestASessionRespawnedWithAPromptOpensItsTurnOnlyAtTheVerdict(t *testing.T) 
 			workUntilTheVerdict(t, app, session, run, "list the checkout tests", protocol.SessionStateIdle, respawnedAt)
 		})
 	}
-}
-
-func TestInputPlacedWhileTheAgentBootsOpensItsTurnOnlyAtTheVerdict(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	boot := w.HoldNextBoot()
-	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	app.AwaitScreen(session, "? for shortcuts")
-	annotate(app, session, "the cart total is off by one")
-
-	boot()
-	run := w.Launched(session)
-	workUntilTheVerdict(t, app, session, run, "the cart total is off by one", protocol.SessionStateIdle, 0)
-}
-
-func TestInputTheUserTypesOverNoLongerHoldsABootingSessionOutOfIdle(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	boot := w.HoldNextBoot()
-	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	app.AwaitScreen(session, "? for shortcuts")
-	annotate(app, session, "the cart total is off by one")
-	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(session)), Data: "actually", ProbeID: protocol.Ptr("takeover")},
-		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == "takeover" })
-
-	boot()
-	w.Launched(session)
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "at_prompt"
-	})
 }
 
 func TestTheNextTurnSettlesOnItsOwnVerdict(t *testing.T) {
@@ -132,22 +100,6 @@ func workUntilTheVerdict(t *testing.T, app *testworld.Peer, session string, run 
 	if !opened.After(stateSince(t, working)) || opened.Before(stateSince(t, verdict)) {
 		t.Errorf("the turn opened at %s, want at the verdict (%s), after the working phase began (%s)",
 			opened, stateSince(t, verdict), stateSince(t, working))
-	}
-}
-
-func annotate(p *testworld.Peer, session, text string) {
-	p.T.Helper()
-	requestID := uuid.NewString()
-	result := testworld.Request(p, protocol.SessionAnnotationsSubmitMessage{
-		Cmd:       protocol.CmdSessionAnnotationsSubmit,
-		RequestID: requestID,
-		SessionID: protocol.SessionID(session),
-		Text:      text,
-	}, protocol.EventSessionAnnotationsSubmitResult, func(r protocol.SessionAnnotationsSubmitResultMessage) bool {
-		return r.RequestID == requestID
-	})
-	if result.Status != "delivered" {
-		p.T.Fatalf("annotation to %s was %s: %s", session, result.Status, protocol.Deref(result.Error))
 	}
 }
 

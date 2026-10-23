@@ -184,22 +184,23 @@ func TestEachNotificationTypeMovesTheSessionOnlyAsItsKindSays(t *testing.T) {
 	})
 }
 
-func TestClaudeLeavingAutoModeSurfacesApprovalsWithoutTheDwell(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+func TestClaudeInAutoModeSurfacesApprovalsWithoutADelay(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		guardedClaudeAtWork(t, app, cli, w)
-		if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "default"); err != nil {
-			t.Fatalf("report working in default mode: %v", err)
+		claude := w.bubbleClaude(t, app, "shop")
+		terminal := protocol.TerminalID(claude.self)
+		if err := cli.UpdateStateFromHook(terminal, protocol.StateWorking, "auto"); err != nil {
+			t.Fatalf("report working in auto mode: %v", err)
 		}
 		w.advance(time.Second)
 
 		asked := time.Now()
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
-			t.Fatalf("notify: %v", err)
+		if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
+			t.Fatalf("permission request: %v", err)
 		}
-		surfaced := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
-		if since := stateSince(t, surfaced); !since.Equal(asked) {
-			t.Fatalf("the approval surfaced at %s, want at once, %s", since, asked)
+		w.advance(0)
+		if surfaced := queriedSession(t, cli, claude.id); surfaced.State != protocol.SessionStatePendingApproval || !stateSince(t, surfaced).Equal(asked) {
+			t.Fatalf("an auto-mode approval reads %s since %s, want pending_approval at once, %s", surfaced.State, surfaced.StateSince, asked)
 		}
 	})
 }

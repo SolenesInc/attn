@@ -48,30 +48,26 @@ func (s *fakeOutputStream) ClosedCount() int {
 }
 
 type fakeSpawnBackend struct {
-	mu                sync.Mutex
-	spawnOpts         []ptybackend.SpawnOptions
-	killed            []string
-	removed           []string
-	onSpawn           func(ptybackend.SpawnOptions)
-	onInput           func(string, []byte)
-	onInputResult     func(string, []byte) error
-	onKill            func()
-	spawnErr          error
-	sessionIDs        []string
-	themeCalls        []pty.TerminalTheme
-	themeCallIDs      []string
-	setThemeErr       error
-	screen            string
-	screenUnavailable bool
-	onRecover         func()
+	mu            sync.Mutex
+	spawnOpts     []ptybackend.SpawnOptions
+	killed        []string
+	removed       []string
+	onSpawn       func(ptybackend.SpawnOptions)
+	onInput       func(string, []byte)
+	onInputResult func(string, []byte) error
+	onKill        func()
+	spawnErr      error
+	sessionIDs    []string
+	themeCalls    []pty.TerminalTheme
+	themeCallIDs  []string
+	setThemeErr   error
+	screen        string
+	onRecover     func()
 }
 
 func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.screenUnavailable {
-		return pty.ScreenSnapshotInfo{}, nil
-	}
 	text := b.screen
 	if text == "" {
 		text = "❯"

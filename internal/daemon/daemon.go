@@ -2833,7 +2833,6 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	sessionID := d.sessionInTerminal(msg.ID)
 	d.logf("hook evidence: id=%s state=%s", sessionID, msg.State)
 	d.tracePermissionMode(sessionID, protocol.Deref(msg.PermissionMode))
-	d.recordReviewerEvidenceFromPermissionMode(sessionID, protocol.Deref(msg.PermissionMode))
 	d.traceStateEvidence(sessionID, stateOrigin{source: stateSourceHook}, msg.State)
 	d.recordBracketEvidence(sessionID, msg.State)
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&

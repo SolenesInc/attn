@@ -141,9 +141,9 @@ agent inbox to read them." One ring covers every unread item at the address.
 The item text stays in the inbox. A session that holds several addresses with
 unread items gets one ring for each.
 
-- attn rings only when the agent is at a safe prompt. While the agent works,
-  needs approval, or the user types a draft, the ring waits. Waiting costs no
-  attempt.
+- attn rings only when the agent is at a safe prompt. While the agent works or
+  needs approval, or within 30 seconds of the user's last keystroke in its
+  terminal, the ring waits. Waiting costs no attempt.
 - A shell never gets a ring.
 - After a ring, the address has an outstanding ring. It ends when the agent
   reads, or 5 minutes after the ring. New items do not ring while it lasts.
