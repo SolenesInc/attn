@@ -3200,7 +3200,9 @@ func (d *Daemon) fetchPRDetailsForID(id string) ([]*protocol.PR, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch details for %s: %w", id, err)
 	}
-	d.store.UpdatePRDetails(id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+	if d.store.UpdatePRDetails(id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch) {
+		d.publishFact(FactPRDetailsChanged, id, nil)
+	}
 
 	return d.store.ListPRsByRepoHost(repo, host), nil
 }
@@ -3378,7 +3380,7 @@ func (d *Daemon) doDetailRefresh() {
 
 	d.logf("Detail refresh: %d PRs need refresh", len(prs))
 
-	var refreshedIDs []string
+	var changedIDs []string
 	limitedHosts := make(map[string]time.Time)
 	for _, pr := range prs {
 		if d.stopping() {
@@ -3427,16 +3429,19 @@ func (d *Daemon) doDetailRefresh() {
 			continue
 		}
 
+		var changed bool
 		stored := d.life.Do("doDetailRefresh", func() {
 			if prHeadSHA := protocol.Deref(pr.HeadSHA); prHeadSHA != "" && details.HeadSHA != prHeadSHA {
 				d.store.SetPRHot(pr.ID)
 			}
-			d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+			changed = d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
 		})
 		if !stored {
 			return
 		}
-		refreshedIDs = append(refreshedIDs, pr.ID)
+		if changed {
+			changedIDs = append(changedIDs, pr.ID)
+		}
 	}
 
 	if len(limitedHosts) > 0 {
@@ -3454,14 +3459,14 @@ func (d *Daemon) doDetailRefresh() {
 		}
 	}
 
-	d.life.Do("doDetailRefresh", func() { d.publishPRDetailsChanged("Detail refresh", refreshedIDs) })
+	d.life.Do("doDetailRefresh", func() { d.publishPRDetailsChanged("Detail refresh", changedIDs) })
 }
 
 func (d *Daemon) publishPRDetailsChanged(origin string, ids []string) {
 	if len(ids) == 0 {
 		return
 	}
-	d.logf("%s: updated %d PRs", origin, len(ids))
+	d.logf("%s: details changed on %d PRs", origin, len(ids))
 	d.coalesceSnapshots(func() {
 		for _, id := range ids {
 			d.publishFact(FactPRDetailsChanged, id, nil)
@@ -3481,7 +3486,7 @@ func (d *Daemon) fetchAllPRDetails() {
 
 	d.logf("App launch: fetching details for %d PRs", len(allPRs))
 
-	var refreshedIDs []string
+	var changedIDs []string
 	limitedHosts := make(map[string]time.Time)
 	for _, pr := range allPRs {
 		if d.stopping() {
@@ -3538,12 +3543,15 @@ func (d *Daemon) fetchAllPRDetails() {
 			continue
 		}
 
+		var changed bool
 		if !d.life.Do("fetchAllPRDetails", func() {
-			d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+			changed = d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
 		}) {
 			return
 		}
-		refreshedIDs = append(refreshedIDs, pr.ID)
+		if changed {
+			changedIDs = append(changedIDs, pr.ID)
+		}
 	}
 
 	if len(limitedHosts) > 0 {
@@ -3561,7 +3569,7 @@ func (d *Daemon) fetchAllPRDetails() {
 		}
 	}
 
-	d.life.Do("fetchAllPRDetails", func() { d.publishPRDetailsChanged("App launch", refreshedIDs) })
+	d.life.Do("fetchAllPRDetails", func() { d.publishPRDetailsChanged("App launch", changedIDs) })
 }
 
 func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMessage) {
@@ -3761,7 +3769,9 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 		return
 	}
 
-	d.store.UpdatePRDetails(prID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+	if d.store.UpdatePRDetails(prID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch) {
+		d.publishFact(FactPRDetailsChanged, prID, nil)
+	}
 	d.logf("Immediate fetch complete for %s (heat=hot)", prID)
 }
 

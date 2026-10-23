@@ -1,0 +1,4 @@
+kind: changed
+area: pull requests
+change: The daemon announces new pull request details (CI, mergeability, reviews, head) only when GitHub reports a change, instead of resending the whole dashboard every time it rereads them. Opening a pull request now shows its fresh CI status right away instead of after the next refresh.
+notes: pr.details.changed now means the stored details changed, not that they were fetched. A details read publishes only for the pull request it changed, not for every pull request in the repository.

@@ -1765,12 +1765,12 @@ func (s *Store) GetPR(id string) *protocol.PR {
 	return scanPR(row)
 }
 
-func (s *Store) UpdatePRDetails(id string, mergeable *bool, mergeableState, ciStatus, reviewStatus, headSHA, headBranch string) {
+func (s *Store) UpdatePRDetails(id string, mergeable *bool, mergeableState, ciStatus, reviewStatus, headSHA, headBranch string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.db == nil {
-		return
+		return false
 	}
 
 	var mergeableVal *int
@@ -1779,9 +1779,16 @@ func (s *Store) UpdatePRDetails(id string, mergeable *bool, mergeableState, ciSt
 		mergeableVal = &v
 	}
 
-	now := time.Now().Format(time.RFC3339)
-	s.execLog(`UPDATE prs SET details_fetched = 1, details_fetched_at = ?, mergeable = ?, mergeable_state = ?, ci_status = ?, review_status = ?, head_sha = ?, head_branch = ? WHERE id = ?`,
-		now, mergeableVal, mergeableState, ciStatus, reviewStatus, headSHA, headBranch, id)
+	s.execLog(`UPDATE prs SET details_fetched_at = ? WHERE id = ?`, time.Now().Format(time.RFC3339), id)
+	result, err := s.db.Exec(`UPDATE prs SET details_fetched = 1, mergeable = ?1, mergeable_state = ?2, ci_status = ?3, review_status = ?4, head_sha = ?5, head_branch = ?6
+		WHERE id = ?7 AND NOT (details_fetched = 1 AND mergeable IS ?1 AND mergeable_state IS ?2 AND ci_status IS ?3 AND review_status IS ?4 AND head_sha IS ?5 AND head_branch IS ?6)`,
+		mergeableVal, mergeableState, ciStatus, reviewStatus, headSHA, headBranch, id)
+	if err != nil {
+		log.Printf("[store] UpdatePRDetails: failed for %s: %v", id, err)
+		return false
+	}
+	updated, _ := result.RowsAffected()
+	return updated == 1
 }
 
 func (s *Store) ListPRsByRepo(repo string) []*protocol.PR {
