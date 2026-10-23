@@ -292,6 +292,12 @@ mod mac {
             if event.state != HotKeyState::Pressed {
                 return;
             }
+            if let Some(ms) = std::env::var("ATTN_SPIKE_HOTKEY_DELAY_MS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+            {
+                std::thread::sleep(std::time::Duration::from_millis(ms));
+            }
             let current = handle
                 .state::<Mutex<QuickCaptureState>>()
                 .lock()
