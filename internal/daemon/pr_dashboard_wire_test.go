@@ -200,3 +200,60 @@ func TestAPollPublishesAPullRequestUpdateOnlyWhenGitHubReportsAChange(t *testing
 		t.Errorf("a renamed pull request polled twice published %d pr.updated, want 1", updated)
 	}
 }
+
+func TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	checkout := mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Add checkout", Role: "reviewer"}
+	cart := mockserver.MockPR{Repo: "acme/shop", Number: 2, Title: "Fix the cart", Role: "author"}
+	gh.AddPR(checkout)
+	gh.AddPR(cart)
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := newWorld(t)
+	app := w.App()
+	for producedBy(busStatus(t, app), "pr.details.changed") < 2 {
+		testworld.Await[protocol.WebSocketEvent](app, protocol.EventPRsUpdated, nil)
+	}
+	checkoutID := prNumbered(t, queryPRs(t, w.Client(), ""), checkout.Number).ID
+	before := producedBy(busStatus(t, app), "pr.details.changed")
+	if before != 2 {
+		t.Fatalf("GitHub's first details for two pull requests published %d pr.details.changed, want 2", before)
+	}
+
+	fetchPRDetails(t, app, checkoutID)
+	fetchPRDetails(t, app, checkoutID)
+	if published := producedBy(busStatus(t, app), "pr.details.changed") - before; published != 0 {
+		t.Errorf("two reads of unchanged details published %d pr.details.changed, want 0", published)
+	}
+
+	setMergeableState(gh, "unstable", checkout, cart)
+	if pr := prNumbered(t, fetchPRDetails(t, app, checkoutID), 1); protocol.Deref(pr.CIStatus) != "pending" {
+		t.Fatalf("details after CI started = %+v, want CI pending", pr)
+	}
+	if published := producedBy(busStatus(t, app), "pr.details.changed") - before; published != 1 {
+		t.Errorf("a read after CI started published %d pr.details.changed, want 1", published)
+	}
+
+	setMergeableState(gh, "dirty", checkout, cart)
+	app.Send(protocol.PRVisitedMessage{Cmd: protocol.CmdPRVisited, ID: checkoutID})
+	prFlowAwait(app, checkoutID, func(pr protocol.PR) bool { return protocol.Deref(pr.CIStatus) == "failure" })
+}
+
+func fetchPRDetails(t *testing.T, app *testworld.Peer, id string) []protocol.PR {
+	t.Helper()
+	fetched := testworld.Request(app, protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: id},
+		protocol.EventFetchPRDetailsResult, func(protocol.FetchPRDetailsResultMessage) bool { return true })
+	if !fetched.Success {
+		t.Fatalf("fetch details %s: %s", id, protocol.Deref(fetched.Error))
+	}
+	return fetched.Prs
+}
+
+func setMergeableState(gh *mockserver.Server, state string, checkout, cart mockserver.MockPR) {
+	gh.Reset()
+	checkout.MergeableState = state
+	gh.AddPR(checkout)
+	gh.AddPR(cart)
+}
