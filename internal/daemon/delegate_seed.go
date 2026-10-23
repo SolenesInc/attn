@@ -71,12 +71,12 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	if profileErr != nil {
 		return "", profileErr
 	}
-	previousStatus := seed.Status
+	before := seed
 	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(protocol.SessionID) bool { return false })
 	if err != nil {
 		return "", err
 	}
-	if createSeed || seed.Status != previousStatus {
+	if createSeed || seed.Status != before.Status {
 		seed.StateChangedAt = formatGardenTime(d.gardenTime())
 	}
 	seed.LastExecutionID = sessionID
@@ -151,6 +151,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		d.announceCommittedWrite(commit.Fact, written[i].Seq)
 	}
 	announceGardenSeedEvents(d, eventSeqs)
+	d.queueConversationKeepIfReferenceMoved(before, seed)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
 	return seed.ID, nil
 }

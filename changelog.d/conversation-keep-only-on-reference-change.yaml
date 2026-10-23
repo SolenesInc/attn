@@ -1,0 +1,3 @@
+kind: changed
+area: garden
+change: Notes, edits, links and other seed changes no longer start a background conversation keep run; only opening, closing or reassigning a seed's work does, so the app re-renders less while agents work.

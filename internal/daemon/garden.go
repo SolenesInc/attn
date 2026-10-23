@@ -111,6 +111,7 @@ func (d *Daemon) plantSeedProtected(_ foregroundCleanupProtection, schema docsto
 	}
 	d.announceCommittedWrite(fact, written.Seq)
 	announceGardenSeedEvents(d, eventSeqs)
+	d.queueConversationKeepIfReferenceMoved(garden.Seed{}, seed)
 
 	doc, found, err := d.store.GetDocument(schema, seed.ID)
 	if err != nil || !found {
@@ -1555,6 +1556,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 		}
 		if err == nil {
+			d.queueConversationKeepIfReferenceMoved(seed, next)
 			if garden.Closed(next.Status) {
 				d.closeAsksTo(inbox.ToSeed(next.ID))
 			}

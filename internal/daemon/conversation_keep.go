@@ -79,6 +79,19 @@ func (d *Daemon) queueConversationKeepAfter(delay time.Duration) {
 	}
 }
 
+func (d *Daemon) queueConversationKeepIfReferenceMoved(before, after garden.Seed) {
+	if conversationReference(before) != conversationReference(after) {
+		d.queueConversationKeep()
+	}
+}
+
+func conversationReference(seed garden.Seed) protocol.SessionID {
+	if garden.Closed(seed.Status) {
+		return ""
+	}
+	return seed.LastExecutionID
+}
+
 type conversationKey struct{ agent, resumeID string }
 
 func conversationArchive(agent, resumeID string) string {
@@ -137,10 +150,11 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 			if err != nil {
 				return nil, err
 			}
-			if garden.Closed(seed.Status) || seed.LastExecutionID == "" {
+			executionID := conversationReference(seed)
+			if executionID == "" {
 				continue
 			}
-			entry := d.store.SessionLedgerEntry(seed.LastExecutionID)
+			entry := d.store.SessionLedgerEntry(executionID)
 			if entry == nil {
 				continue
 			}

@@ -129,8 +129,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 	s.StartWith("ATTN_CONVERSATION_KEEP_GRACE_DAYS=0")
 	app = s.App()
 	for _, pass := range []string{"first", "second"} {
-		plant(t, s, pass+" conversation keep sweep after restore")
-		testworld.AwaitTaskDone(app, "conversation_keep")
+		keepPassAfterAnotherSessionCloses(t, s, pass)
 	}
 	for _, c := range conversations {
 		if got, err := os.ReadFile(c.archive); err != nil || !bytes.Equal(got, c.original) {
@@ -162,8 +161,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 		}
 		testworld.AwaitTaskDone(app, "conversation_keep")
 	}
-	plant(t, s, "expire archives explicitly released after restore")
-	testworld.AwaitTaskDone(app, "conversation_keep")
+	keepPassAfterAnotherSessionCloses(t, s, "expire")
 	for _, c := range conversations {
 		if c.state == "missing" {
 			continue
@@ -319,4 +317,15 @@ func TestConversationCLIListPinUnkeepAndForget(t *testing.T) {
 	if shown.Code != 0 || !strings.Contains(shown.Stdout, "you deleted attn's copy") {
 		t.Fatalf("seed user tombstone: %+v", shown)
 	}
+}
+
+func keepPassAfterAnotherSessionCloses(t *testing.T, s *testworld.Stack, name string) {
+	t.Helper()
+	app := s.App()
+	id := s.Spawn(app, fakeagent.Claude, s.Path("another-"+name))
+	s.Launched(id)
+	if closed := s.Attn("agent", "close", id, "-m", "finished", "--source-session", id); closed.Code != 0 {
+		t.Fatalf("close another session: %+v", closed)
+	}
+	testworld.AwaitTaskDone(app, "conversation_keep")
 }
