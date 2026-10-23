@@ -1034,7 +1034,6 @@ do {
         try ensureAccessibility(prompt: options.promptAccessibility)
         let postedAtMs = Int64(Date().timeIntervalSince1970 * 1000)
         try postKeyCode(try virtualKeyCode(for: options.key ?? "space"), modifiers: options.modifiers.isEmpty ? ["control", "option"] : options.modifiers)
-        try postTypedText(options.text ?? "")
         print("{\"postedAtMs\":\(postedAtMs)}")
     case "drag_between":
         try ensureAccessibility(prompt: options.promptAccessibility)

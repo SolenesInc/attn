@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp } from './common.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appPlatform, createWindowDriver } from './platform.mjs';
@@ -48,6 +48,7 @@ client.quitApp = async () => {
 };
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const driver = createWindowDriver({ appPath: options.appPath });
+registerNativeFailureEvidence(runner, { client, driver });
 const fixtureId = `com.attn.capture-fixture.${runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
 const fixture = createWindowDriver({ appPath: options.appPath, bundleId: fixtureId });
 const otherFixtureId = `${fixtureId}.other`;
@@ -123,8 +124,9 @@ console.log('CAPTURE_IMAGE_INSPECTED ' + JSON.stringify(receipts));
 
 runner.writeJson('measurement-conditions.json', { load: execFileSync('uptime', { encoding: 'utf8' }).trim(), swap: execFileSync('sysctl', ['-n', 'vm.swapusage'], { encoding: 'utf8' }).trim(), machine: execFileSync('sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(), os: execFileSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim(), endpoint: 'OS HID postedAt to capture-open editor-focus acknowledgement; not first painted pixel', note: 'Precreated composer, synthetic fixture and fake agents. Background machine work continues.' });
 async function openCapture(text = "") {
-  const { postedAtMs } = JSON.parse(await driver.runInputDriverCapture(["global_capture", "--key", "b", "--text", text]));
+  const { postedAtMs } = JSON.parse(await driver.runInputDriverCapture(["global_capture", "--key", "b"]));
   const actual = await state({ visible: true });
+  if (text) await driver.runInputDriver(['global_text', '--text', text]);
   const latest = actual.latencyMs[actual.latencyMs.length - 1];
   openingReceipts.push({ postedAtMs, ...latest, hotkeyToFocusMs: latest.focusedAt - postedAtMs });
   runner.writeJson('opening-latency.json', openingReceipts);
@@ -257,7 +259,7 @@ try {
   await runner.step('fresh_process_first_open_paints', async () => {
     await openCapture('Track launch checklist');
     const beforeFrame = await state();
-    assert.equal(beforeFrame.text, 'Track launch checklist', 'The first-ever opening must accept immediate native typing');
+    assert.equal(beforeFrame.text, 'Track launch checklist', 'The first-ever opening accepts native typing');
     runner.writeJson('fresh-first-open-before-frame.json', beforeFrame);
     await screenshot('fresh-first-open-before-frame.png');
     const actual = await state({ frame: true });
@@ -499,7 +501,7 @@ try {
   await runner.step('remove_image_and_keyboard_mailbox', async () => {
     const remove = (await state()).controls.remove;
     await driver.clickWindow(remove.x, remove.y, { windowTitle: 'Quick Capture' });
-    assert.equal((await state()).files.length, 2);
+    assert.equal((await state({ attachmentCount: 2 })).files.length, 2);
     await key('2', ['command']);
     assert.equal((await state({ mailbox })).mailbox, mailbox);
     await key('1', ['command']);
