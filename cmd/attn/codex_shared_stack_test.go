@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"os"
 	"slices"
 	"testing"
 
@@ -208,6 +209,46 @@ func TestASharedCodexSessionShownInAnotherSessionsTerminalKeepsItsApprovalMode(t
 			want := fakeagent.CodexPermissions{ApprovalPolicy: "never", ApprovalsReviewer: "user", Sandbox: "danger-full-access"}
 			if got := server.Permissions(conversation); got != want {
 				t.Errorf("after the %s attn reloaded YOLO conversation %s with %+v, want %+v", disturbance, conversation, got, want)
+			}
+		})
+	}
+}
+
+func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhileItIsStillInstalled(t *testing.T) {
+	for _, backend := range []string{"worker", "shared host"} {
+		t.Run(backend, func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			if backend == "shared host" {
+				host := os.Getenv("ATTN_TEST_PTY_HOST")
+				if host == "" {
+					t.Skip("set ATTN_TEST_PTY_HOST to run the app-server on the shared host")
+				}
+				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
+			}
+			s.Start()
+			app := s.App()
+			if backend == "shared host" {
+				enableSharedHost(t, app)
+			}
+			codex := s.InstallStandaloneCodex("standalone", "0.162.1")
+			setSetting(t, app, "codex_executable", codex)
+			shareCodex(t, app)
+			spawn := func(project string) string {
+				session := s.Spawn(app, fakeagent.Codex, s.Path(project), func(m *protocol.SpawnSessionMessage) {
+					m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
+				})
+				return s.Launched(session).Argv[0]
+			}
+			spawn("shop")
+			s.InstallStandaloneCodex("standalone", "0.163.0")
+
+			s.Stop()
+			s.Start()
+			app = s.App()
+			running := s.Path("standalone", "releases", "0.162.1", "bin", "codex")
+			if got := spawn("cart"); got != running {
+				t.Errorf("a terminal opened after the restart ran %s, want the app-server's %s", got, running)
 			}
 		})
 	}

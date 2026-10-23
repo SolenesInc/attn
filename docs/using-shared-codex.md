@@ -8,8 +8,11 @@ hidden session instead of closing.
 
 It runs the stock `codex` you already use, with your Codex account, model,
 settings and conversations. Shared terminals run the Codex executable set in
-Settings, and so does the app-server when it starts; one already running keeps
-its Codex until it stops. attn was checked against Codex 0.160.0.
+Settings, and so does the app-server when it starts. An app-server already
+running keeps its Codex until it stops, and new or reloaded terminals run that
+same Codex while it is still installed. After an update, Codex's standalone
+installer keeps it; npm and Homebrew replace it, so terminals then run the new
+one. attn was checked against Codex 0.160.0.
 
 ## Turn it on or off
 

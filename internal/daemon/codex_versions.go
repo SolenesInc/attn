@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 const (
@@ -79,6 +81,52 @@ func (r *codexShared) installedVersion(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("%s --version printed %q, not codex-cli <version>", binary, strings.TrimSpace(string(out)))
 	}
 	return version, nil
+}
+
+func resolvedBinary(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
+}
+
+func (r *codexShared) recallBinary(ctx context.Context, s *codexServer) {
+	s.mu.Lock()
+	known := s.binary != ""
+	s.mu.Unlock()
+	provider, ok := r.d.ptyBackend.(ptybackend.SessionLaunchParamsProvider)
+	if known || !ok {
+		return
+	}
+	params, err := provider.SessionLaunchParams(ctx, s.terminal)
+	if err != nil {
+		r.d.logf("shared Codex: reading which Codex the app-server of profile %s runs: %v", s.profile, err)
+		return
+	}
+	s.mu.Lock()
+	s.binary = params.Executable
+	s.mu.Unlock()
+}
+
+func (r *codexShared) terminalBinary(profile, installed string) string {
+	r.mu.Lock()
+	s := r.servers[profile]
+	r.mu.Unlock()
+	if s == nil {
+		return installed
+	}
+	s.mu.Lock()
+	binary := s.binary
+	s.mu.Unlock()
+	if binary == "" || binary == resolvedBinary(installed) {
+		return installed
+	}
+	if _, err := os.Stat(binary); err != nil {
+		r.d.logf("shared Codex: the app-server of profile %s runs a Codex that is no longer installed at %s; new terminals run %s", profile, binary, installed)
+		return installed
+	}
+	r.d.logf("shared Codex: a new terminal of profile %s runs the app-server's Codex at %s instead of %s", profile, binary, installed)
+	return binary
 }
 
 func (r *codexShared) refreshInstalled() {

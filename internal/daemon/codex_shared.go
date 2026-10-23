@@ -68,6 +68,7 @@ type codexServer struct {
 	attempt  *codexAttempt
 	events   codexEvents
 	running  string
+	binary   string
 }
 
 type codexAttempt struct {
@@ -182,15 +183,15 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if err != nil {
 		return err
 	}
-	executable := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
-	if _, err := r.ensureServer(r.d.life.Context(), profile, executable); err != nil {
+	installed := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	if _, err := r.ensureServer(r.d.life.Context(), profile, installed); err != nil {
 		return err
 	}
 	if !opts.UnattendedLaunch.IsZero() {
 		r.trustIn(opts.ID, opts.CWD)
 	}
 	opts.CodexRemote = remote
-	opts.LaunchExecutable = executable
+	opts.LaunchExecutable = r.terminalBinary(profile, installed)
 	r.refreshInstalledSoon()
 	return nil
 }
@@ -215,10 +216,10 @@ func (r *codexShared) ensureServer(ctx context.Context, profile, executable stri
 	if s.client() != nil {
 		return s, nil
 	}
-	if !r.serverRunning(ctx, s.terminal) {
-		if err := r.startServer(ctx, s, executable); err != nil {
-			return nil, err
-		}
+	if r.serverRunning(ctx, s.terminal) {
+		r.recallBinary(ctx, s)
+	} else if err := r.startServer(ctx, s, executable); err != nil {
+		return nil, err
 	}
 	if err := r.connect(ctx, s); err != nil {
 		return nil, err
@@ -251,13 +252,15 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &files); err != nil {
 		return fmt.Errorf("read the open-file limit for the shared Codex app-server: %w", err)
 	}
-	command := []string{"/bin/sh", "-c", codexServerLaunchScript, "attn-codex-server", strconv.FormatUint(files.Cur, 10), r.binary(executable), "app-server"}
+	binary := r.binary(executable)
+	command := []string{"/bin/sh", "-c", codexServerLaunchScript, "attn-codex-server", strconv.FormatUint(files.Cur, 10), binary, "app-server"}
 	for _, override := range hooks.GenerateCodexServerConfigOverrides(r.d.wrapperPath(), r.d.socketPath, s.profile) {
 		command = append(command, "-c", override)
 	}
 	command = append(command, "--listen", "unix://"+s.socket)
 	opts := ptybackend.SpawnOptions{
 		ID: s.terminal, Agent: codexServerAgent, Label: "Codex app-server", CWD: r.dir(), Cols: 80, Rows: 24,
+		Executable:    resolvedBinary(binary),
 		AgentArgv:     command,
 		AgentEnv:      []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT="},
 		LoginShellEnv: r.d.loginShellEnvironment(),
@@ -266,6 +269,9 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err := r.d.ptyBackend.Spawn(ctx, withLifecycleID(opts)); err != nil {
 		return fmt.Errorf("start the shared Codex app-server: %w", err)
 	}
+	s.mu.Lock()
+	s.binary = opts.Executable
+	s.mu.Unlock()
 	r.d.logf("shared Codex: started the app-server of profile %s in terminal %s with an open-file limit of %d", s.profile, s.terminal, files.Cur)
 	return nil
 }
@@ -794,12 +800,16 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 }
 
 func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) {
-	opts.LaunchExecutable = r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	installed := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if v := r.views[opts.ID]; v != nil {
-		opts.CodexRemote = "unix://" + v.socket
+	v := r.views[opts.ID]
+	r.mu.Unlock()
+	if v == nil {
+		opts.LaunchExecutable = installed
+		return
 	}
+	opts.CodexRemote = "unix://" + v.socket
+	opts.LaunchExecutable = r.terminalBinary(v.profile, installed)
 }
 
 func (r *codexShared) terminalExited(t harness.TerminalID) {
@@ -827,7 +837,7 @@ func (r *codexShared) terminalExited(t harness.TerminalID) {
 		gone := exited.hold(nil)
 		client := exited.control
 		exited.control = nil
-		exited.running = ""
+		exited.running, exited.binary = "", ""
 		exited.mu.Unlock()
 		if client != nil {
 			client.Close()
