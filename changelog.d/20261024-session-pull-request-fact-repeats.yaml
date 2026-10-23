@@ -1,0 +1,3 @@
+kind: internal
+area: pull-requests
+change: The daemon tells the app about a session's pull requests once per refresh pass, and a watch that keeps failing the same way reports its outage once instead of on every poll.
