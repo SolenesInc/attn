@@ -1,0 +1,3 @@
+kind: internal
+area: quick-capture
+change: The packaged-app Quick Capture scenario types once the capture reports it is open instead of 20 ms after the hotkey, and waits for an attachment removal before counting. Both stop intermittent failures on hosted macOS.
