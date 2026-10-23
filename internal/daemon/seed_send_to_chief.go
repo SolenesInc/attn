@@ -153,14 +153,8 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	}
 	status, detail := d.deliverChiefSeedAssignment(chiefSessionID, seed.ID)
 
-	wire := seedToProtocol(next, written, false)
+	wire := d.seedWire(next, written)
 	d.decorateSeedContinuation(&wire, next)
-	if read, readErr := d.readGarden(seed.ProfileID); readErr == nil {
-		wire.Ready = read.ready[next.ID]
-		if progress, ok := read.progress(next.ID); ok {
-			wire.PlotProgress = progress
-		}
-	}
 	return &protocol.SeedSendToChiefResult{
 		Seed: wire, ChiefSessionID: chiefSessionID, DeliveryStatus: status, Detail: detail,
 	}, nil
