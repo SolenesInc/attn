@@ -105,8 +105,6 @@ func TestAPushToAPullRequestUnderReviewStartsAReviewOfTheNewHeadOnEachAutomation
 
 func (r *automationReviewWorld) readPullRequest(number int, head string) {
 	r.t.Helper()
-	// Detail reads reuse fresh cached heads; refresh the list before reading a simulated push.
-	r.refresh()
 	result := testworld.Request(r.app, protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: protocol.FormatPRID("github.test", "acme/shop", number)},
 		protocol.EventFetchPRDetailsResult, func(protocol.FetchPRDetailsResultMessage) bool { return true })
 	if !result.Success {

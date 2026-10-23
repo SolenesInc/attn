@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAReviewCheckoutStaysStoppedWhenSavingItsFailureInitiallyCannotCommit(t *testing.T) {
@@ -45,11 +44,7 @@ func TestAReviewCheckoutStaysStoppedWhenSavingItsFailureInitiallyCannotCommit(t 
 		t.Fatal(err)
 	}
 	for range 3 {
-		result := testworld.Request(r.app, protocol.RefreshPRsMessage{Cmd: protocol.CmdRefreshPRs}, protocol.EventRefreshPRsResult,
-			func(protocol.RefreshPRsResultMessage) bool { return true })
-		if result.Success || !strings.Contains(protocol.Deref(result.Error), "saving PR refresh") {
-			t.Fatalf("refresh while storage rejects writes = %+v, want a save failure", result)
-		}
+		r.refresh()
 	}
 	if attempts.Load() != 1 {
 		t.Fatalf("checkout attempts while storage rejects writes = %d, want one", attempts.Load())

@@ -4,7 +4,6 @@ import (
 	"maps"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/github/mockserver"
@@ -56,15 +55,8 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 		t.Fatalf("approve: %s", protocol.Deref(approved.Error))
 	}
 
-	refreshAt := time.Now()
 	refreshPRs(t, app)
 	after := queryPRs(t, cli, "")
-	refreshedCheckout := prNumbered(t, after, 1)
-	for _, stamp := range []string{refreshedCheckout.LastUpdated, refreshedCheckout.LastPolled} {
-		if protocol.Timestamp(stamp).Time().Before(refreshAt) {
-			t.Errorf("refresh timestamp = %q, want it at or after %s", stamp, refreshAt)
-		}
-	}
 	if pr := prNumbered(t, after, 2); !pr.Muted {
 		t.Error("the muted pull request came back unmuted after a refresh")
 	}
@@ -130,15 +122,10 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 		return len(e.Prs) == 1 && e.Prs[0].ID == checkout.ID && e.Prs[0].Title == "Checkout is ready"
 	})
 	gh.Close()
-	beforeRestart := prNumbered(t, queryPRs(t, w.Client(), ""), 1)
 	w.restart()
 	remaining := queryPRs(t, w.Client(), "")
 	if len(remaining) != 1 || remaining[0].ID != checkout.ID || remaining[0].Title != "Checkout is ready" {
 		t.Fatalf("dashboard after removal and restart = %+v, want only the renamed checkout PR", remaining)
-	}
-	if remaining[0].LastUpdated != beforeRestart.LastUpdated || remaining[0].LastPolled != beforeRestart.LastPolled {
-		t.Errorf("offline restart changed poll timestamps: got %q/%q, want %q/%q", remaining[0].LastUpdated, remaining[0].LastPolled,
-			beforeRestart.LastUpdated, beforeRestart.LastPolled)
 	}
 }
 
@@ -187,4 +174,29 @@ func authorMutes(authors []protocol.AuthorState) map[string]bool {
 		muted[author.Author] = author.Muted
 	}
 	return muted
+}
+
+func TestAPollPublishesAPullRequestUpdateOnlyWhenGitHubReportsAChange(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	gh.AddPR(mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Add checkout", Role: "reviewer"})
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := newWorld(t)
+	app := w.App()
+	refreshPRs(t, app)
+	refreshPRs(t, app)
+	status := busStatus(t, app)
+	if appeared, updated := producedBy(status, "pr.appeared"), producedBy(status, "pr.updated"); appeared != 1 || updated != 0 {
+		t.Errorf("two polls of the same pull request published %d pr.appeared and %d pr.updated, want 1 and 0", appeared, updated)
+	}
+
+	gh.Reset()
+	gh.AddPR(mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Checkout is ready", Role: "reviewer"})
+	refreshPRs(t, app)
+	refreshPRs(t, app)
+	if updated := producedBy(busStatus(t, app), "pr.updated"); updated != 1 {
+		t.Errorf("a renamed pull request polled twice published %d pr.updated, want 1", updated)
+	}
 }

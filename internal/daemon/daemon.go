@@ -3186,7 +3186,7 @@ func (d *Daemon) fetchPRDetailsForID(id string) ([]*protocol.PR, error) {
 		return nil, fmt.Errorf("GitHub client not available")
 	}
 
-	host, repo, _, err := protocol.ParsePRID(id)
+	host, repo, number, err := protocol.ParsePRID(id)
 	if err != nil {
 		return nil, err
 	}
@@ -3196,24 +3196,13 @@ func (d *Daemon) fetchPRDetailsForID(id string) ([]*protocol.PR, error) {
 		return nil, fmt.Errorf("no client for host %s", host)
 	}
 
-	prs := d.store.ListPRsByRepoHost(repo, host)
-
-	for _, pr := range prs {
-		if d.stopping() {
-			break
-		}
-		if pr.NeedsDetailRefresh() {
-			details, err := client.FetchPRDetails(pr.Repo, pr.Number)
-			if err != nil {
-				d.logf("Failed to fetch details for %s: %v", pr.ID, err)
-				continue
-			}
-			d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-		}
+	details, err := client.FetchPRDetails(repo, number)
+	if err != nil {
+		return nil, fmt.Errorf("fetch details for %s: %w", id, err)
 	}
+	d.store.UpdatePRDetails(id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
 
-	updatedPRs := d.store.ListPRsByRepoHost(repo, host)
-	return updatedPRs, nil
+	return d.store.ListPRsByRepoHost(repo, host), nil
 }
 
 func (d *Daemon) handleFetchPRDetails(conn net.Conn, msg *protocol.FetchPRDetailsMessage) {

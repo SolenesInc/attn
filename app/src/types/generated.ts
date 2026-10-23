@@ -4289,8 +4289,6 @@ export interface PRElement {
     host:                   string;
     id:                     string;
     last_heat_activity_at?: string;
-    last_polled:            string;
-    last_updated:           string;
     mergeable?:             boolean;
     mergeable_state?:       string;
     muted:                  boolean;
@@ -6858,8 +6856,6 @@ export interface PR {
     host:                   string;
     id:                     string;
     last_heat_activity_at?: string;
-    last_polled:            string;
-    last_updated:           string;
     mergeable?:             boolean;
     mergeable_state?:       string;
     muted:                  boolean;
@@ -18911,8 +18907,6 @@ const typeMap: any = {
         { json: "host", js: "host", typ: "" },
         { json: "id", js: "id", typ: "" },
         { json: "last_heat_activity_at", js: "last_heat_activity_at", typ: u(undefined, "") },
-        { json: "last_polled", js: "last_polled", typ: "" },
-        { json: "last_updated", js: "last_updated", typ: "" },
         { json: "mergeable", js: "mergeable", typ: u(undefined, true) },
         { json: "mergeable_state", js: "mergeable_state", typ: u(undefined, "") },
         { json: "muted", js: "muted", typ: true },
@@ -20498,8 +20492,6 @@ const typeMap: any = {
         { json: "host", js: "host", typ: "" },
         { json: "id", js: "id", typ: "" },
         { json: "last_heat_activity_at", js: "last_heat_activity_at", typ: u(undefined, "") },
-        { json: "last_polled", js: "last_polled", typ: "" },
-        { json: "last_updated", js: "last_updated", typ: "" },
         { json: "mergeable", js: "mergeable", typ: u(undefined, true) },
         { json: "mergeable_state", js: "mergeable_state", typ: u(undefined, "") },
         { json: "muted", js: "muted", typ: true },

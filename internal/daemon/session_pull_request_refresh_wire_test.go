@@ -37,6 +37,8 @@ type refreshedPullRequest struct {
 	snapshots, readinessReads  int
 }
 
+const dashboardPollInterval = 90 * time.Second
+
 func serveRefreshedPullRequest(t *testing.T) *refreshedPullRequest {
 	t.Helper()
 	gh := &refreshedPullRequest{title: "Keep session PR status fresh", mergeable: "clean"}
@@ -308,9 +310,9 @@ func TestAColdPullRequestTheInboxSeesChangeIsAskedAboutAtTheHotPaceAgain(t *test
 		gh.set(func(gh *refreshedPullRequest) { gh.inboxTitle = "Keep session PR status fresh" })
 		w.advance(2 * time.Minute)
 		gh.set(func(gh *refreshedPullRequest) { gh.inboxTitle = "Keep session PR status fresher" })
-		w.advance(2 * time.Minute)
-		if reheated, _ := gh.fetchesDuring(w, 2*time.Minute); reheated < 3 {
-			t.Errorf("after the inbox saw it change GitHub was asked %d times in 2m, want every %s", reheated, protocol.HeatHotInterval)
+		w.advance(dashboardPollInterval)
+		if reheated, _ := gh.fetchesDuring(w, protocol.HeatHotDuration-dashboardPollInterval); reheated < 3 {
+			t.Errorf("after the inbox saw it change GitHub was asked %d times in %s, want every %s", reheated, protocol.HeatHotDuration-dashboardPollInterval, protocol.HeatHotInterval)
 		}
 	})
 }
