@@ -7,9 +7,10 @@ switch a terminal to another conversation, the one you left keeps running as a
 hidden session instead of closing.
 
 It runs the stock `codex` you already use, with your Codex account, model,
-settings and conversations. The app-server runs the Codex executable set in
-Settings, and shared terminals run the same Codex as the app-server. After you
-install another Codex, attn moves the app-server to it, as
+settings and conversations. The app-server starts with the Codex executable set
+in Settings. New and reloaded shared terminals run the same Codex as the
+app-server while it is still installed, even after you change the executable in
+Settings. After you install another Codex, attn moves the app-server to it, as
 [Codex updates](#codex-updates) describes. attn was checked against Codex
 0.160.0.
 
@@ -75,9 +76,10 @@ The banner names the sessions it waits on, and you can jump to each.
 - A terminal still starting, or asking whether to trust its folder, couldn't
   reconnect, so the restart waits until it shows its conversation.
 - Until the restart, a new or reloaded terminal runs the app-server's Codex
-  while it is still installed. Codex's standalone installer keeps older
-  releases; npm and Homebrew replace them, so there it runs the newly installed
-  Codex.
+  while it is still installed. Codex's standalone installer keeps every
+  release. npm and Homebrew replace the old one, so after an update through
+  them new terminals run the new Codex against the old app-server until it
+  restarts, and Codex warns about it in its footer.
 - A terminal keeps the Codex it started with, so after the restart the ones
   that started before it run an older Codex. The banner offers **Reload
   tiles**, which restarts them on the new Codex in the same conversations; text
