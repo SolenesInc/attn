@@ -1,3 +1,0 @@
-kind: changed
-area: sessions
-change: Any dialog a harness reports as blocking, including Claude's AskUserQuestion and Codex questions, now shows as needs approval right away instead of waiting. Claude approvals in auto mode no longer take a minute to show. Inbox rings, crew heartbeats and annotations no longer read the terminal screen or track what sits in the composer; they wait only on the session's state and on 30 seconds since your last keystroke, so a ring lands at least 30 seconds after you answer a dialog or submit a prompt.

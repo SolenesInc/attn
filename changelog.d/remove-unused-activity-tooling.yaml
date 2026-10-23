@@ -1,3 +1,0 @@
-kind: internal
-area: activity
-change: Remove unused activity checks and custom-template tooling while preserving current summaries.

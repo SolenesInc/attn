@@ -1,3 +1,0 @@
-kind: internal
-area: crew
-change: The crew-management scenario deletes its members before closing their sessions, so it no longer leaves crew sessions with owed turns that break agent-queue later in a serial matrix.

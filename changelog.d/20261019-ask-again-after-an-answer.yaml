@@ -1,3 +1,0 @@
-kind: changed
-area: agents
-change: "Agents treat your answers to asks and your Quick Capture messages as your own input, approvals included, as if you had typed them in their conversation. They also learn that once you answer an ask you have likely moved on, so if they still need you they ask again instead of replying where you would not see it."

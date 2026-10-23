@@ -1,3 +1,0 @@
-kind: removed
-area: sessions
-change: Closed sessions resume their saved conversation or explain why they cannot. Start fresh actions are removed. Failed Resume keeps the attempt available for retry and retains any restored worktree.

@@ -1,3 +1,0 @@
-kind: internal
-area: build
-change: Builds and CI use Node 26.12.1, and the app, protocol schema, Tauri and Pi plugin lockfiles move past the October 2026 advisories for Vitest, Vite, happy-dom, tar, quick-xml, Mermaid, DOMPurify, Babel, TypeSpec's ajv and yaml, serde_with, rand, anyhow, event-listener and their dependencies.

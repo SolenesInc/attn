@@ -1,3 +1,0 @@
-kind: fixed
-area: database
-change: Older builds refuse databases upgraded by a newer build and explain how to recover.

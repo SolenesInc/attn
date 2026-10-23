@@ -1,3 +1,0 @@
-kind: internal
-area: app
-change: Remove unused frontend test machinery and orphan modules, and omit unwritten terminal counters from diagnostics.

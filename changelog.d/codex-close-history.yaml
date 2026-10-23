@@ -1,3 +1,0 @@
-kind: fixed
-area: codex
-change: Closing a Codex session stays responsive as older conversation history grows, while keeping subagent usage totals complete.

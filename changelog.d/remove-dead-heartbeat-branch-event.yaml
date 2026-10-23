@@ -1,3 +1,0 @@
-kind: internal
-area: protocol
-change: Remove the unused heartbeat command and branch_changed wire event.

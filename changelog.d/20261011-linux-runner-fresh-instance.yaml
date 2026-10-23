@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: The Linux runner's test action syncs, removes and reinstalls its guest instance before the serial matrix, so repeated runs start from empty data like CI instead of failing on leftovers from earlier runs.

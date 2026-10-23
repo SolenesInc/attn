@@ -1,4 +1,0 @@
-kind: fixed
-area: sessions
-symptom: Closing a session while its Resume waited on a slow shared Codex app-server froze the app until the Resume gave up, and closing a shared Codex session while its app-server was down froze it while the app-server started.
-change: Closing a session answers at once, even while its Resume is still waiting; the Resume then gives up quietly. Closing a shared Codex session archives its conversation in the background.

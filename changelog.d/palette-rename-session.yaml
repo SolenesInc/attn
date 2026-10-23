@@ -1,3 +1,0 @@
-kind: fixed
-area: palette
-change: Rename the current session from the command palette, updating its sidebar and tile name.

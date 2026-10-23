@@ -1,4 +1,0 @@
-kind: fixed
-area: terminals
-symptom: After a restart, while one pane's agent was slow to come back (for example waiting on the shared Codex app-server), every other pane and the rest of the app waited behind it.
-change: A pane coming back after a restart delays only that pane; other panes revive and the app answers meanwhile, and what you type into the waiting pane still reaches its agent.

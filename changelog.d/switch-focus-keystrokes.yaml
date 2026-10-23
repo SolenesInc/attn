@@ -1,3 +1,0 @@
-kind: fixed
-area: terminal
-change: Typing immediately after switching agents or desktops reaches the selected terminal, even while the daemon is answering.

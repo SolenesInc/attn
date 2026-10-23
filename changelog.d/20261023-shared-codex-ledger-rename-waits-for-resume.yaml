@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: The shared Codex ledger rename test waits for the reopened Codex to resume its conversation before it checks the name.

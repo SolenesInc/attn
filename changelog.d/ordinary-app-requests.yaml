@@ -1,3 +1,0 @@
-kind: internal
-area: app
-change: Reuse existing request helpers for ordinary app commands.
