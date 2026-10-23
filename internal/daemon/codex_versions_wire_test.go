@@ -167,3 +167,28 @@ func TestNewSharedCodexTerminalsRunTheAppServersCodexWhileItIsStillInstalled(t *
 		t.Errorf("a terminal opened after 0.162.1 was removed ran %s, want the installed %s", got, codex)
 	}
 }
+
+func TestNewSharedCodexTerminalsRunTheInstalledCodexWhenTheAppServerRanThroughAShim(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	shim := w.InstallMiseCodex("mise", "0.162.1")
+	standalone := w.InstallStandaloneCodex("standalone", "0.163.0")
+	setSetting(t, app, "codex_shared_enabled", "true")
+	spawn := func(project, codex string) string {
+		setSetting(t, app, "codex_executable", codex)
+		session := w.Spawn(app, fakeagent.Codex, w.Path(project), func(m *protocol.SpawnSessionMessage) {
+			m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
+		})
+		return w.Launched(session).Argv[0]
+	}
+	if got := spawn("shop", shim); got != shim {
+		t.Fatalf("the first terminal ran %s, want the mise shim %s", got, shim)
+	}
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return s != nil && protocol.Deref(s.RunningVersion) == "0.162.1"
+	})
+
+	if got := spawn("cart", standalone); got != standalone {
+		t.Errorf("a terminal opened after switching to the standalone Codex ran %s, want %s", got, standalone)
+	}
+}

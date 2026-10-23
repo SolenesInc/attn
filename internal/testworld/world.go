@@ -282,6 +282,11 @@ func (w *World) InstallStandaloneCodex(name, version string) string {
 	return w.kit.InstallStandaloneCodex(w.Path(name), version)
 }
 
+func (w *World) InstallMiseCodex(name, version string) string {
+	w.T.Helper()
+	return w.kit.InstallMiseCodex(w.Path(name), version)
+}
+
 func (w *World) CodexServers() []int {
 	return w.kit.CodexServers()
 }

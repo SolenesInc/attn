@@ -69,9 +69,12 @@ func codexOlder(version, than string) bool {
 }
 
 func (r *codexShared) installedVersion(ctx context.Context) (string, error) {
+	return r.versionOf(ctx, r.binary(""))
+}
+
+func (r *codexShared) versionOf(ctx context.Context, binary string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, codexVersionLimit)
 	defer cancel()
-	binary := r.binary("")
 	out, err := r.run(ctx, binary, "--version")
 	if err != nil {
 		return "", err
@@ -116,13 +119,17 @@ func (r *codexShared) terminalBinary(profile, installed string) string {
 		return installed
 	}
 	s.mu.Lock()
-	binary := s.binary
+	binary, running := s.binary, s.running
 	s.mu.Unlock()
-	if binary == "" || binary == resolvedBinary(installed) {
+	if binary == "" || running == "" || binary == resolvedBinary(installed) {
 		return installed
 	}
-	if _, err := os.Stat(binary); err != nil {
-		r.d.logf("shared Codex: the app-server of profile %s runs a Codex that is no longer installed at %s; new terminals run %s", profile, binary, installed)
+	version, err := r.versionOf(r.d.life.Context(), binary)
+	if err == nil && version != running {
+		err = fmt.Errorf("it reports Codex %s", version)
+	}
+	if err != nil {
+		r.d.logf("shared Codex: new terminals of profile %s run %s, not the app-server's Codex %s at %s: %v", profile, installed, running, binary, err)
 		return installed
 	}
 	r.d.logf("shared Codex: a new terminal of profile %s runs the app-server's Codex at %s instead of %s", profile, binary, installed)
