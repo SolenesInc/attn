@@ -213,14 +213,14 @@ func TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne(t *testing.T) 
 
 	w := newWorld(t)
 	app := w.App()
-	refreshPRs(t, app)
-	listed := queryPRs(t, w.Client(), "")
-	checkoutID, cartID := prNumbered(t, listed, checkout.Number).ID, prNumbered(t, listed, cart.Number).ID
-	fetchPRDetails(t, app, cartID)
-	if pr := prNumbered(t, fetchPRDetails(t, app, checkoutID), checkout.Number); !hasFetchedDetails(pr) {
-		t.Fatalf("details = %+v, want the details GitHub reported", pr)
+	for producedBy(busStatus(t, app), "pr.details.changed") < 2 {
+		testworld.Await[protocol.WebSocketEvent](app, protocol.EventPRsUpdated, nil)
 	}
+	checkoutID := prNumbered(t, queryPRs(t, w.Client(), ""), checkout.Number).ID
 	before := producedBy(busStatus(t, app), "pr.details.changed")
+	if before != 2 {
+		t.Fatalf("GitHub's first details for two pull requests published %d pr.details.changed, want 2", before)
+	}
 
 	fetchPRDetails(t, app, checkoutID)
 	fetchPRDetails(t, app, checkoutID)
