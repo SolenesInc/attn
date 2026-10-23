@@ -174,6 +174,11 @@ Read in the source at openai/codex rust-v0.162.1:
   `core/src/session/turn.rs`). attn admits the successor when those hooks
   report its conversation. That first prompt makes it working; the previous
   conversation's program status does not carry over.
+- `thread/name/set` appends the name to `$CODEX_HOME/session_index.jsonl`,
+  and the latest entry for a thread id is its name
+  (`rollout/src/session_index.rs`,
+  `thread-store/src/local/update_thread_metadata.rs`). Every app-server on one
+  `CODEX_HOME` sees a rename made through any of them.
 
 Probed on 0.163.0 with a real model:
 

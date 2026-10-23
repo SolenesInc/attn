@@ -604,6 +604,9 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 		if reopened := reopenOverTheWebSocket(sideApp, elsewhere); !reopened.Success {
 			t.Fatalf("resume %s from the ledger: %s", elsewhere, protocol.Deref(reopened.Error))
 		}
+		if back := w.Launched(elsewhere); !back.Resumed || back.ConversationID != conversation {
+			t.Fatalf("the reopened Codex shows %s (resumed=%v), want conversation %s", back.ConversationID, back.Resumed, conversation)
+		}
 	} else {
 		if closed := closeFromApp(sideApp, elsewhere); !closed.Accepted {
 			t.Fatalf("close %s: %s", elsewhere, protocol.Deref(closed.Error))

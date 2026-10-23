@@ -55,7 +55,6 @@ type codexAppServer struct {
 	conns    map[*codexServerConn]bool
 	nextID   int
 	prompts  map[string]chan string
-	names    map[string]string
 	named    chan struct{}
 	archived chan struct{}
 	listed   chan struct{}
@@ -132,7 +131,6 @@ func runCodexAppServer(cfg config) int {
 		threads:  map[string]*codexServerThread{},
 		conns:    map[*codexServerConn]bool{},
 		prompts:  map[string]chan string{},
-		names:    map[string]string{},
 		named:    make(chan struct{}),
 		archived: make(chan struct{}),
 		listed:   make(chan struct{}),
@@ -348,8 +346,10 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 				return nil, nil, err
 			}
 		}
+		if err := s.nameThread(p.ThreadID, p.Name); err != nil {
+			return nil, nil, err
+		}
 		s.mu.Lock()
-		s.names[p.ThreadID] = p.Name
 		close(s.named)
 		s.named = make(chan struct{})
 		s.mu.Unlock()
@@ -797,6 +797,47 @@ func (s *codexAppServer) archivedRollout(id string) string {
 	return ""
 }
 
+type codexSessionIndexEntry struct {
+	ID         string `json:"id"`
+	ThreadName string `json:"thread_name"`
+	UpdatedAt  string `json:"updated_at"`
+}
+
+func (s *codexAppServer) sessionIndexPath() string {
+	return filepath.Join(s.cfg.CodexHome, "session_index.jsonl")
+}
+
+func (s *codexAppServer) nameThread(id, name string) error {
+	line, err := json.Marshal(codexSessionIndexEntry{ID: id, ThreadName: name, UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano)})
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(s.sessionIndexPath(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(append(line, '\n'))
+	return err
+}
+
+func (s *codexAppServer) threadName(id string) string {
+	f, err := os.Open(s.sessionIndexPath())
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	var name string
+	lines := bufio.NewScanner(f)
+	for lines.Scan() {
+		var entry codexSessionIndexEntry
+		if json.Unmarshal(lines.Bytes(), &entry) == nil && entry.ID == id {
+			name = entry.ThreadName
+		}
+	}
+	return name
+}
+
 func (s *codexAppServer) unarchive(id string) (any, func(), error) {
 	name := s.archivedRollout(id)
 	if name == "" {
@@ -851,8 +892,9 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		deadline := time.After(HangGuard)
 		for {
 			s.mu.Lock()
-			name, named := s.names[p.ThreadID], s.named
+			named := s.named
 			s.mu.Unlock()
+			name := s.threadName(p.ThreadID)
 			if name == p.Text {
 				return struct{}{}, nil
 			}
