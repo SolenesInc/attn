@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -80,6 +81,45 @@ func TestGardenPushCarriesWhatAHarvestChangesElsewhere(t *testing.T) {
 	}
 	if progress := seeds[plot].PlotProgress; progress == nil || progress.Done != 1 || progress.Ready != 1 {
 		t.Errorf("the plot arrives with progress %+v, want one done and one ready", progress)
+	}
+}
+
+func TestGardenPushCarriesASeedWrittenTogetherWithANote(t *testing.T) {
+	github := newHarvestGitHub(t)
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	shipper := spawnPanes(w, app, w.Path("shipper"))[0].session
+	url := github.open(72, "Ship the push")
+	seed := plantSeedAs(t, cli, shipper, "ship the push")
+	lifeMove(t, cli, shipper, seed, "tend", "", "")
+
+	harvestArmAs(t, cli, shipper, "", seed, url)
+	changed := testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return len(m.Seeds) == 1 && m.Seeds[0].ID == seed && m.Seeds[0].Status == "dormant"
+	})
+	if changed.Seeds[0].HarvestWhen == nil {
+		t.Fatalf("the change after arming carries %+v, want the armed seed waiting on its pull request", changed.Seeds[0])
+	}
+	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "harvests when acme/shop#72 merges") {
+		t.Errorf("the log = %q, want the arming note committed with the seed", notes)
+	}
+}
+
+func TestGardenPushMarksASeedReadyWhenItsTenderSessionCloses(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	holder := spawnPanes(w, app, w.Path("holder"))[0]
+	seed := plantSeedAs(t, cli, holder.session, "held by a live session")
+	lifeMove(t, cli, holder.session, seed, "tend", "", "")
+	watcher := w.App()
+	if held := watcher.Initial.Seeds[0]; held.ID != seed || held.Ready {
+		t.Fatalf("initial state carries %s ready=%v, want %s not ready while its tender lives", held.ID, held.Ready, seed)
+	}
+
+	closePane(app, holder)
+	changed := testworld.Await(watcher, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool { return len(m.Seeds) > 0 })
+	if len(changed.Seeds) != 1 || changed.Seeds[0].ID != seed || !changed.Seeds[0].Ready {
+		t.Fatalf("the change after the tender session closed carries %+v, want the seed, ready", changed.Seeds)
 	}
 }
 
