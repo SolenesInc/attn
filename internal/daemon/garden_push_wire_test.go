@@ -83,6 +83,26 @@ func TestGardenPushCarriesWhatAHarvestChangesElsewhere(t *testing.T) {
 	}
 }
 
+func TestGardenPushCarriesASeedWrittenTogetherWithANote(t *testing.T) {
+	github := newHarvestGitHub(t)
+	w := newWorld(t)
+	cli := w.Client()
+	registerSessions(t, w, cli, "shipper")
+	url := github.open(72, "Ship the push")
+	seed := plantSeedAs(t, cli, "shipper", "ship the push")
+	lifeMove(t, cli, "shipper", seed, "tend", "", "")
+	app := w.App()
+
+	harvestArmAs(t, cli, "shipper", "", seed, url)
+	changed := nextGardenChange(app)
+	if len(changed.Seeds) != 1 || changed.Seeds[0].ID != seed || changed.Seeds[0].Status != "dormant" || changed.Seeds[0].HarvestWhen == nil {
+		t.Fatalf("the change after arming carries %+v, want the armed seed, dormant and waiting on its pull request", changed.Seeds)
+	}
+	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "harvests when acme/shop#72 merges") {
+		t.Errorf("the log = %q, want the arming note committed with the seed", notes)
+	}
+}
+
 func nextGardenChange(app *testworld.Peer) protocol.GardenSeedsChangedMessage {
 	app.T.Helper()
 	return testworld.Await[protocol.GardenSeedsChangedMessage](app, protocol.EventGardenSeedsChanged, nil)

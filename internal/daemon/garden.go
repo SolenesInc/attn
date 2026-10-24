@@ -411,6 +411,15 @@ func (d *Daemon) projectGardenSeeds() {
 	})
 }
 
+func (d *Daemon) projectGardenUnchanged() {
+	if d.store == nil || d.wsHub == nil {
+		return
+	}
+	d.projectSnapshotUnlessPending(snapshotGarden, func() {
+		d.wsHub.ForEachClient(d.sendGardenUnchanged)
+	})
+}
+
 func (d *Daemon) sendGardenError(conn net.Conn, verb string, err error) {
 	d.sendError(conn, fmt.Sprintf("seed %s: %v", verb, err))
 }

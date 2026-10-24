@@ -259,8 +259,20 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
-			filter: bus.Filter{"garden.seed.*", factConversationKeptChanged},
+			filter: bus.Filter{factConversationKeptChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
+		},
+		{
+			filter: bus.Filter{FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared},
+			apply: func(d *Daemon, ev bus.Event) {
+				if isGardenSeedsFact(ev.Subject) {
+					d.projectGardenSeeds()
+				}
+			},
+		},
+		{
+			filter: bus.Filter{"garden.seed.*"},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenUnchanged() },
 		},
 		{
 			filter: bus.Filter{FactGardenReviewChanged},
@@ -514,6 +526,14 @@ func (d *Daemon) coalesceSnapshots(fn func()) {
 }
 
 func (d *Daemon) projectSnapshot(key string, push func()) {
+	d.queueSnapshot(key, push, true)
+}
+
+func (d *Daemon) projectSnapshotUnlessPending(key string, push func()) {
+	d.queueSnapshot(key, push, false)
+}
+
+func (d *Daemon) queueSnapshot(key string, push func(), replacePending bool) {
 	d.snapshotMu.Lock()
 	if d.snapshotDepth == 0 {
 		d.snapshotMu.Unlock()
@@ -525,6 +545,9 @@ func (d *Daemon) projectSnapshot(key string, push func()) {
 	}
 	if _, seen := d.pendingSnapshots[key]; !seen {
 		d.pendingSnapshotOrder = append(d.pendingSnapshotOrder, key)
+	} else if !replacePending {
+		d.snapshotMu.Unlock()
+		return
 	}
 	d.pendingSnapshots[key] = push
 	d.snapshotMu.Unlock()
