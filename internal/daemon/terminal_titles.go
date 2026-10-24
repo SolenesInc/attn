@@ -12,12 +12,23 @@ func (d *Daemon) handlePTYTitle(terminal harness.TerminalID, title string) {
 	if r.titles == nil {
 		r.titles = make(map[harness.TerminalID]string)
 	}
-	changed := r.titles[terminal] != title
 	r.titles[terminal] = title
 	r.mu.Unlock()
-	if session, shown := d.shownIn(terminal); changed && shown {
-		d.publishFact(FactSessionTitleChanged, string(session), nil)
+	if session, shown := d.shownIn(terminal); shown {
+		d.reportTerminalTitle(session)
 	}
+}
+
+func (d *Daemon) reportTerminalTitle(session protocol.SessionID) {
+	monitor := d.sessionMonitor(session)
+	if monitor == nil {
+		return
+	}
+	r := d.terminals()
+	r.mu.RLock()
+	title := r.titles[d.primaryTerminal(session)]
+	r.mu.RUnlock()
+	monitor.ReportTerminalTitle(title)
 }
 
 func (d *Daemon) forgetTerminalTitle(terminal harness.TerminalID) {
@@ -37,11 +48,8 @@ func (d *Daemon) decorateSessionWithTitle(session *protocol.Session) {
 }
 
 func (d *Daemon) sessionTerminalTitle(sessionID protocol.SessionID) string {
-	terminal := d.primaryTerminal(sessionID)
-	r := d.terminals()
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.titles[terminal]
+	view, _ := d.monitorViewFor(sessionID)
+	return view.TerminalTitle.V
 }
 
 func (d *Daemon) decorateLedgerEntryWithTitle(entry *protocol.SessionLedgerEntry) {

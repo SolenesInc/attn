@@ -30,19 +30,23 @@ func (d *Daemon) sessionExit(session protocol.SessionID) *protocol.TerminalExit 
 	return d.store.GetSessionExit(session)
 }
 
-func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend.ExitInfo) {
-	if d.store == nil || d.store.Get(sessionID) == nil {
-		return
+func (d *Daemon) holdExit(sessionID protocol.SessionID, info ptybackend.ExitInfo) sessionmonitor.Exit {
+	exit := d.exitOf(sessionID, info)
+	exit.Held = true
+	if d.sessionMonitor(sessionID) != nil && d.store.Get(sessionID) != nil {
+		d.reportExit(sessionID, exit)
 	}
-	if monitor := d.sessionMonitor(sessionID); monitor != nil {
-		if offered, applied := monitor.ReofferExit(info.LifecycleID); offered {
-			if !applied {
-				d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
-			}
-			return
-		}
+	return exit
+}
+
+func (d *Daemon) reportExit(sessionID protocol.SessionID, exit sessionmonitor.Exit) {
+	if !d.sessionMonitor(sessionID).ReportExit(exit) {
+		d.logf("exit view not applied: session=%s terminal=%s", sessionID, exit.Terminal)
 	}
-	rec := store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
+}
+
+func (d *Daemon) exitOf(sessionID protocol.SessionID, info ptybackend.ExitInfo) sessionmonitor.Exit {
+	exit := sessionmonitor.Exit{LifecycleID: info.LifecycleID, Terminal: info.ID, Code: info.ExitCode, Signal: info.Signal}
 	if provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider); ok {
 		ctx, cancel := context.WithTimeout(context.Background(), exitScreenSnapshotTimeout)
 		snapshot, err := provider.ScreenSnapshot(ctx, info.ID)
@@ -51,18 +55,13 @@ func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend
 		case err != nil:
 			d.logf("exit screen unavailable: session=%s err=%v", sessionID, err)
 		case snapshot.Screen != nil && snapshot.Screen.HasText:
-			rec.Text = clampExitScreenText(snapshot.Screen.Text)
-			rec.Cols = int(snapshot.Screen.Cols)
-			rec.Rows = int(snapshot.Screen.Rows)
+			exit.Text = clampExitScreenText(snapshot.Screen.Text)
+			exit.Cols = int(snapshot.Screen.Cols)
+			exit.Rows = int(snapshot.Screen.Rows)
 		}
 	}
-	if monitor := d.sessionMonitor(sessionID); monitor != nil {
-		if !monitor.ReportExit(sessionmonitor.Exit{LifecycleID: info.LifecycleID, Text: rec.Text, Cols: rec.Cols, Rows: rec.Rows, Code: rec.ExitCode, Signal: rec.ExitSignal, At: time.Now()}) {
-			d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
-		}
-		return
-	}
-	d.saveExitScreen(rec, time.Now())
+	exit.At = time.Now()
+	return exit
 }
 
 func (d *Daemon) saveExitScreen(rec store.SessionExitScreen, at time.Time) bool {

@@ -32,7 +32,7 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 		return d.admitMonitorConversation(h.monitor, view)
 	}
 	previous := binding.applied
-	if previous.Revision.V >= view.Revision.V {
+	if previous.Epoch.V == view.Epoch.V && previous.Revision.V >= view.Revision.V {
 		r.applyMu.Unlock()
 		return true
 	}
@@ -90,13 +90,17 @@ func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionm
 			return fmt.Errorf("cost: %w", err)
 		}
 	}
-	if exit := view.Exit.V; exit != nil && exit != saved.Exit.V {
+	if exit := view.Exit.V; exit != nil && !sameExitScreen(exit, saved.Exit.V) {
 		if !d.saveExitScreen(store.SessionExitScreen{SessionID: session, Text: exit.Text, Cols: exit.Cols, Rows: exit.Rows,
 			ExitCode: exit.Code, ExitSignal: exit.Signal}, exit.At) {
 			return fmt.Errorf("exit screen was not saved")
 		}
 	}
 	return nil
+}
+
+func sameExitScreen(a, b *sessionmonitor.Exit) bool {
+	return b != nil && a.Text == b.Text && a.Cols == b.Cols && a.Rows == b.Rows && a.Code == b.Code && a.Signal == b.Signal && a.At.Equal(b.At)
 }
 
 func (h *monitorHome) recordPullRequests(session protocol.SessionID, previous, view sessionmonitor.View) ([]string, error) {

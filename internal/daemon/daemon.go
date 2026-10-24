@@ -1069,7 +1069,12 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 		}
 	}
 
-	reconcile := d.reconcileSessionsWithWorkerBackend(context.Background(), allowIdleDemotion, previousRunSessions, recoveryStartedAt)
+	reconcile := d.recoverSessions(context.Background(), recoveryRules{
+		allowIdleDemotion:     allowIdleDemotion,
+		allowTombstoneCleanup: allowIdleDemotion,
+		previousRunSessions:   previousRunSessions,
+		startedAt:             recoveryStartedAt,
+	})
 	if reconcile.Created > 0 || reconcile.StateUpdated > 0 || reconcile.MarkedIdle > 0 || reconcile.MarkedRecoverable > 0 || reconcile.Reaped > 0 || reconcile.SkippedIdle > 0 || reconcile.SkippedRecent > 0 || reconcile.SkippedShell > 0 || reconcile.LikelyAlive > 0 || reconcile.LivenessUnknown > 0 || reconcile.MissingMetadata > 0 {
 		d.logf(
 			"worker session reconciliation summary: created=%d state_updated=%d marked_idle=%d marked_recoverable=%d reaped=%d skipped_idle=%d skipped_recent=%d skipped_shell=%d likely_alive=%d liveness_unknown=%d missing_metadata=%d",
@@ -1139,36 +1144,124 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 	}
 }
 
-func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowIdleDemotion bool, previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
-	return d.reconcileSessionsWithWorkerBackendState(ctx, allowIdleDemotion, allowIdleDemotion, previousRunSessions, recoveryStartedAt)
+type recoveryRules struct {
+	allowIdleDemotion     bool
+	allowTombstoneCleanup bool
+	previousRunSessions   map[protocol.SessionID]struct{}
+	startedAt             time.Time
 }
 
-func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, allowIdleDemotion, allowTombstoneCleanup bool, previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
-	report := workerReconcileReport{}
-	if d.store == nil || d.ptyBackend == nil {
-		return report
-	}
+type machineReport struct {
+	live         map[protocol.SessionID]liveTerminal
+	probes       map[protocol.SessionID]livenessProbe
+	stateUpdated []protocol.SessionID
+}
 
-	liveTerminals := d.liveTerminals(ctx)
-	liveIDs := make(map[protocol.SessionID]struct{}, len(liveTerminals))
-	shownBy := make(map[protocol.SessionID]harness.TerminalID, len(liveTerminals))
-	placed := make(map[harness.TerminalID]bool, len(liveTerminals))
-	for terminalID := range liveTerminals {
-		sessionID, isPlaced := d.terminals().Showing(terminalID)
-		if !isPlaced {
+type liveTerminal struct {
+	terminal harness.TerminalID
+	link     bool
+	info     ptybackend.SessionInfo
+	haveInfo bool
+}
+
+type livenessProbe struct {
+	likelyAlive bool
+	err         error
+}
+
+func (d *Daemon) recoverSessions(ctx context.Context, rules recoveryRules) workerReconcileReport {
+	if d.store == nil || d.ptyBackend == nil {
+		return workerReconcileReport{}
+	}
+	machine := d.recoverMachine(ctx)
+	var sessions []protocol.SessionID
+	for _, session := range d.store.List("") {
+		sessions = append(sessions, session.ID)
+	}
+	return d.recoverRecords(machine, sessions, rules)
+}
+
+func (d *Daemon) recoverMachine(ctx context.Context) machineReport {
+	report := machineReport{live: make(map[protocol.SessionID]liveTerminal), probes: make(map[protocol.SessionID]livenessProbe)}
+	for terminalID := range d.liveTerminals(ctx) {
+		sessionID, placed := d.terminals().Showing(terminalID)
+		if !placed {
 			d.logf("worker reconciliation left runtime %s to the orphan prune: no pane places it", terminalID)
 			continue
 		}
-		liveIDs[sessionID] = struct{}{}
-		shownBy[sessionID] = terminalID
-		placed[terminalID] = isPlaced
+		report.live[sessionID] = liveTerminal{terminal: terminalID, link: d.linkProcess(terminalID)}
 	}
 
 	infoProvider, _ := d.ptyBackend.(ptybackend.SessionInfoProvider)
-	livenessProber, _ := d.ptyBackend.(ptybackend.SessionLivenessProber)
+	for sessionID, live := range report.live {
+		if live.link {
+			continue
+		}
+		existing := d.store.Get(sessionID)
+		if existing == nil && d.store.SessionClosed(sessionID) {
+			continue
+		}
+		if infoProvider != nil {
+			if info, err := infoProvider.SessionInfo(ctx, live.terminal); err == nil {
+				d.handlePTYTitle(live.terminal, info.Title)
+				live.info, live.haveInfo = info, true
+				report.live[sessionID] = live
+			}
+		}
+		if existing != nil && d.resumeMonitor(existing, live) {
+			report.stateUpdated = append(report.stateUpdated, sessionID)
+		}
+	}
 
-	for sessionID, terminalID := range shownBy {
-		if d.linkProcess(terminalID) {
+	if prober, ok := d.ptyBackend.(ptybackend.SessionLivenessProber); ok {
+		for _, session := range d.store.List("") {
+			if _, live := report.live[session.ID]; live {
+				continue
+			}
+			likelyAlive, err := prober.SessionLikelyAlive(ctx, d.primaryTerminal(session.ID))
+			report.probes[session.ID] = livenessProbe{likelyAlive: likelyAlive, err: err}
+		}
+	}
+	return report
+}
+
+func (d *Daemon) resumeMonitor(existing *protocol.Session, live liveTerminal) (stateUpdated bool) {
+	sessionID := existing.ID
+	d.startSessionMonitor(sessionID)
+	d.touchSession(sessionID)
+	if existing.State == protocol.SessionStateScheduled || !live.haveInfo {
+		return false
+	}
+	if run := d.store.GetAgentDriverRun(sessionID); run.RunID != "" &&
+		(d.pluginDriverReportsState(existing.Agent) ||
+			existing.State == protocol.SessionStateWaitingInput ||
+			existing.State == protocol.SessionStatePendingApproval) {
+		return false
+	}
+	nextState, ok := sessionStateFromRecoveredInfo(live.info)
+	if !ok && !sessionmonitor.ResolverOwnedStates[existing.State] {
+		nextState, ok = protocol.SessionStateLaunching, true
+	}
+	if ok && existing.State != nextState {
+		d.applyState(sessionID, sessionmonitor.Change{
+			State: string(nextState),
+			Cause: sessionmonitor.StartupRecovery{},
+		})
+		stateUpdated = true
+	}
+	d.seedRecoveredEvidence(sessionID, existing, live.info)
+	return stateUpdated
+}
+
+func (d *Daemon) recoverRecords(machine machineReport, sessions []protocol.SessionID, rules recoveryRules) workerReconcileReport {
+	report := workerReconcileReport{}
+	for _, sessionID := range machine.stateUpdated {
+		report.StateUpdated++
+		report.markChanged(sessionID)
+	}
+
+	for sessionID, live := range machine.live {
+		if live.link {
 			continue
 		}
 		existing := d.store.Get(sessionID)
@@ -1189,119 +1282,21 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			}
 			continue
 		}
-		if existing == nil && d.store.SessionClosed(sessionID) {
+		if existing != nil {
+			d.store.ClearSessionIntentionalClose(sessionID)
+			continue
+		}
+		if d.store.SessionClosed(sessionID) {
 			d.logf("worker reconciliation stopped runtime %s: its session is closed", sessionID)
 			d.terminateSession(sessionID, syscall.SIGTERM)
 			continue
 		}
-
-		var info ptybackend.SessionInfo
-		var haveInfo bool
-		if infoProvider != nil {
-			fetched, err := infoProvider.SessionInfo(ctx, terminalID)
-			if err == nil {
-				d.handlePTYTitle(terminalID, fetched.Title)
-				info = fetched
-				haveInfo = true
-			}
-		}
-
-		if existing == nil {
-			if !placed[terminalID] {
-				d.logf("worker reconciliation left runtime %s to the orphan prune: no pane places it", terminalID)
-				continue
-			}
-			if !haveInfo {
-				report.MissingMetadata++
-				continue
-			}
-			if normalizeSpawnAgent(info.Agent) == protocol.AgentShellValue {
-				report.SkippedShell++
-				continue
-			}
-
-			now := string(protocol.TimestampNow())
-			directory := strings.TrimSpace(info.CWD)
-			if directory == "" {
-				report.MissingMetadata++
-				continue
-			}
-			label := filepath.Base(directory)
-			if label == "" || label == "." || label == string(filepath.Separator) {
-				label = string(sessionID)
-			}
-
-			state, ok := sessionStateFromRecoveredInfo(info)
-			if !ok {
-				state = protocol.SessionStateLaunching
-			}
-
-			profile, err := d.store.MostRecentlyUsedProfile()
-			if err != nil {
-				d.logf("worker reconciliation left runtime %s without a session row: no profile to adopt it into: %v", sessionID, err)
-				report.MissingMetadata++
-				continue
-			}
-			recoveredSession := &protocol.Session{
-				ID:             sessionID,
-				Label:          label,
-				Agent:          normalizeSpawnAgent(info.Agent),
-				Directory:      directory,
-				ProfileID:      profile.ID,
-				State:          state,
-				StateSince:     now,
-				StateUpdatedAt: now,
-				LastSeen:       now,
-			}
-			if err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
-				if err := d.store.AddChecked(recoveredSession); err != nil {
-					return err
-				}
-				return d.placeLaunchedSession(recoveredSession, &launchPlacement{reopen: true}).err
-			}); err != nil {
-				d.logf("worker reconciliation could not adopt runtime %s: %v", sessionID, err)
-				report.MissingMetadata++
-				continue
-			}
-			d.startSessionMonitorSeeded(recoveredSession, sessionmonitor.Evidence{})
-			report.Created++
-			report.markChanged(sessionID)
-			continue
-		}
-
-		d.startSessionMonitor(sessionID)
-		d.touchSession(sessionID)
-		d.store.ClearSessionIntentionalClose(sessionID)
-
-		if existing.State == protocol.SessionStateScheduled {
-			continue
-		}
-		if haveInfo {
-			if run := d.store.GetAgentDriverRun(sessionID); run.RunID != "" &&
-				(d.pluginDriverReportsState(existing.Agent) ||
-					existing.State == protocol.SessionStateWaitingInput ||
-					existing.State == protocol.SessionStatePendingApproval) {
-				continue
-			}
-			nextState, ok := sessionStateFromRecoveredInfo(info)
-			if !ok && !sessionmonitor.ResolverOwnedStates[existing.State] {
-				nextState, ok = protocol.SessionStateLaunching, true
-			}
-			if ok && existing.State != nextState {
-				d.applyState(sessionID, sessionmonitor.Change{
-					State: string(nextState),
-					Cause: sessionmonitor.StartupRecovery{},
-				})
-				report.StateUpdated++
-				report.markChanged(sessionID)
-			}
-			d.seedRecoveredEvidence(sessionID, existing, info)
-			continue
-		}
+		d.adoptLiveTerminal(sessionID, live, &report)
 	}
-	if allowTombstoneCleanup {
+
+	if rules.allowTombstoneCleanup {
 		for _, sessionID := range d.store.SessionTeardownIntentIDs() {
-			if _, live := liveIDs[sessionID]; live {
+			if _, live := machine.live[sessionID]; live {
 				continue
 			}
 			if d.sessionTeardownInFlight(sessionID) {
@@ -1322,56 +1317,118 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 		}
 	}
 
-	for _, session := range d.store.List("") {
-		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
+	for _, sessionID := range sessions {
+		if _, fromPreviousRun := rules.previousRunSessions[sessionID]; !fromPreviousRun {
 			continue
 		}
-		if _, ok := liveIDs[session.ID]; ok || d.hidden(session.ID) {
+		if _, ok := machine.live[sessionID]; ok || d.hidden(sessionID) {
 			continue
 		}
-		if sessionUpdatedAfter(session, recoveryStartedAt) {
+		session := d.store.Get(sessionID)
+		if session == nil {
+			continue
+		}
+		if sessionUpdatedAfter(session, rules.startedAt) {
 			report.SkippedRecent++
 			continue
 		}
-		if livenessProber != nil {
-			likelyAlive, probeErr := livenessProber.SessionLikelyAlive(ctx, d.primaryTerminal(session.ID))
-			if probeErr != nil {
-				d.logf("worker liveness probe failed for session %s: %v", session.ID, probeErr)
+		if probe, probed := machine.probes[sessionID]; probed {
+			if probe.err != nil {
+				d.logf("worker liveness probe failed for session %s: %v", sessionID, probe.err)
 				report.LivenessUnknown++
 				continue
 			}
-			if likelyAlive {
+			if probe.likelyAlive {
 				report.LikelyAlive++
 				continue
 			}
 		}
-		if !allowIdleDemotion {
+		if !rules.allowIdleDemotion {
 			report.SkippedIdle++
 			continue
 		}
-		d.releaseExitedCrewBinding(session.ID)
-		if d.store.GetSessionExit(session.ID) != nil {
+		d.releaseExitedCrewBinding(sessionID)
+		if d.store.GetSessionExit(sessionID) != nil {
 			continue
 		}
 		if d.canReviveSession(session) {
 			if session.State == protocol.SessionStateRecoverable {
 				continue
 			}
-			d.applyState(session.ID, sessionmonitor.Change{
+			d.applyState(sessionID, sessionmonitor.Change{
 				State: string(protocol.SessionStateRecoverable),
 				Cause: sessionmonitor.StartupRecovery{},
 			})
 			report.StateUpdated++
 			report.MarkedRecoverable++
-			report.markChanged(session.ID)
+			report.markChanged(sessionID)
 		} else {
-			d.removeReapedSession(session.ID)
+			d.removeReapedSession(sessionID)
 			report.Reaped++
-			report.markChanged(session.ID)
+			report.markChanged(sessionID)
 		}
 	}
 
 	return report
+}
+
+func (d *Daemon) adoptLiveTerminal(sessionID protocol.SessionID, live liveTerminal, report *workerReconcileReport) {
+	if !live.haveInfo {
+		report.MissingMetadata++
+		return
+	}
+	info := live.info
+	if normalizeSpawnAgent(info.Agent) == protocol.AgentShellValue {
+		report.SkippedShell++
+		return
+	}
+
+	now := string(protocol.TimestampNow())
+	directory := strings.TrimSpace(info.CWD)
+	if directory == "" {
+		report.MissingMetadata++
+		return
+	}
+	label := filepath.Base(directory)
+	if label == "" || label == "." || label == string(filepath.Separator) {
+		label = string(sessionID)
+	}
+
+	state, ok := sessionStateFromRecoveredInfo(info)
+	if !ok {
+		state = protocol.SessionStateLaunching
+	}
+
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		d.logf("worker reconciliation left runtime %s without a session row: no profile to adopt it into: %v", sessionID, err)
+		report.MissingMetadata++
+		return
+	}
+	recoveredSession := &protocol.Session{
+		ID:             sessionID,
+		Label:          label,
+		Agent:          normalizeSpawnAgent(info.Agent),
+		Directory:      directory,
+		ProfileID:      profile.ID,
+		State:          state,
+		StateSince:     now,
+		StateUpdatedAt: now,
+		LastSeen:       now,
+	}
+	if err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
+		if err := d.store.AddChecked(recoveredSession); err != nil {
+			return err
+		}
+		return d.placeLaunchedSession(recoveredSession, &launchPlacement{reopen: true}).err
+	}); err != nil {
+		d.logf("worker reconciliation could not adopt runtime %s: %v", sessionID, err)
+		report.MissingMetadata++
+		return
+	}
+	d.startSessionMonitorSeeded(recoveredSession, sessionmonitor.Evidence{})
+	report.Created++
+	report.markChanged(sessionID)
 }
 
 func (d *Daemon) scheduleDeferredWorkerReconciliation(previousRunSessions map[protocol.SessionID]struct{}, recoveryStartedAt time.Time) {
@@ -1413,7 +1470,12 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 			continue
 		}
 
-		reconcile := d.reconcileSessionsWithWorkerBackendState(context.Background(), true, fullyRecovered, previousRunSessions, recoveryStartedAt)
+		reconcile := d.recoverSessions(context.Background(), recoveryRules{
+			allowIdleDemotion:     true,
+			allowTombstoneCleanup: fullyRecovered,
+			previousRunSessions:   previousRunSessions,
+			startedAt:             recoveryStartedAt,
+		})
 		d.publishSessionsReconciled(reconcile)
 		if reconcile.MarkedRecoverable > 0 {
 			d.addWarning(
@@ -1619,33 +1681,38 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
-	d.captureExitScreen(sessionID, info)
-	d.reactSessionExit(sessionID, info, stopped, unlockEnds)
+	monitor := d.sessionMonitor(sessionID)
+	exit, held := monitor.HeldExit(info.LifecycleID)
+	if !held {
+		exit = d.holdExit(sessionID, info)
+	}
+	monitor.FenceInput()
+	monitor.StopTranscriptWatchers()
+	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
+	if err := d.removePTYSession(info.ID); err != nil {
+		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
+	}
+	unlockEnds()
+	monitor.RecordProcessExit()
+	exit.Held, exit.Stopped = false, stopped
+	if monitor == nil || d.store.Get(sessionID) == nil {
+		d.reactSessionExit(sessionID, exit)
+		return true
+	}
+	d.reportExit(sessionID, exit)
 	return true
 }
 
-func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, info ptybackend.ExitInfo, stopped bool, unlockEnds func()) {
-	d.sessionMonitor(sessionID).FenceInput()
-	d.sessionMonitor(sessionID).StopTranscriptWatchers()
-	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
-	d.noteLaunchExited(sessionID, info)
-
-	if d.ptyBackend != nil {
-		if err := d.removePTYSession(info.ID); err != nil {
-			d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
-		}
-	}
-	unlockEnds()
+func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmonitor.Exit) {
+	d.noteLaunchExited(sessionID, exit)
 	d.releaseExitedCrewBinding(sessionID)
-
 	d.publishFact(FactSessionPTYExited, string(sessionID), ptyExit{
-		Terminal: string(info.ID),
-		ExitCode: info.ExitCode,
-		Signal:   info.Signal,
+		Terminal: string(exit.Terminal),
+		ExitCode: exit.Code,
+		Signal:   exit.Signal,
 	})
-	d.sessionMonitor(sessionID).RecordProcessExit()
 	d.broadcastSessionStateChanged(sessionID)
-	if info.ExitCode == 0 && info.Signal == "" && !stopped && d.sessionCloseError(sessionID) == nil {
+	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped && d.sessionCloseError(sessionID) == nil {
 		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
 		if err != nil {
 			d.logf("closing normally exited session %s: %v", sessionID, err)
@@ -1911,6 +1978,7 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 			d.teardownMu.Unlock()
 			close(done)
 		}()
+		crashpoint.At(crashBeforeTeardownKill)
 		if teardown == nil {
 			d.terminateSession(sessionID, sig)
 			return

@@ -110,6 +110,7 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 		r.policyMu.Unlock()
 	}
 	monitor.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
+	d.reportTerminalTitle(sessionID)
 	monitor.Arm()
 	d.syncMonitorConversation(sessionID)
 	if previous != nil && previous != monitor {

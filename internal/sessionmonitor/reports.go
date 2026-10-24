@@ -16,6 +16,21 @@ func (m *Monitor) ReportHarnessTitle(title string) bool {
 	return m.publish(view)
 }
 
+func (m *Monitor) ReportTerminalTitle(title string) bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	if m.terminalTitle == title {
+		m.mu.Unlock()
+		return true
+	}
+	m.terminalTitle = title
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
+}
+
 func (m *Monitor) ReportPullRequest(id string, link PullRequest) bool {
 	if m == nil {
 		return false
@@ -49,18 +64,16 @@ func (m *Monitor) ReportSentFiles(paths []string) bool {
 	return m.publish(view)
 }
 
-func (m *Monitor) ReofferExit(lifecycle string) (offered, applied bool) {
+func (m *Monitor) HeldExit(lifecycle string) (Exit, bool) {
 	if m == nil {
-		return false, false
+		return Exit{}, false
 	}
 	m.mu.Lock()
-	if m.exit == nil || lifecycle == "" || m.exit.LifecycleID != lifecycle {
-		m.mu.Unlock()
-		return false, false
+	defer m.mu.Unlock()
+	if m.exit == nil || !m.exit.Held || lifecycle == "" || m.exit.LifecycleID != lifecycle {
+		return Exit{}, false
 	}
-	view := m.viewLocked()
-	m.mu.Unlock()
-	return true, m.publish(view)
+	return *m.exit, true
 }
 
 func (m *Monitor) ReportExit(exit Exit) bool {
