@@ -322,6 +322,9 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", session.ID, err)
 	}
+	if err := seedSessionRuntime(s.db, session.ID, session.State, session.StateSince, session.StateUpdatedAt, session.LastSeen); err != nil {
+		return fmt.Errorf("seed runtime of session %s: %w", session.ID, err)
+	}
 	return nil
 }
 

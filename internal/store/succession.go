@@ -135,7 +135,10 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, string(launch),
 		sc.From,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return seedSessionRuntime(tx, sc.To, protocol.SessionStateLaunching, at, at, at)
 }
 
 // takeOverTx brings an existing To back as Reopen would, into From's terminal. Its launch counts
@@ -152,8 +155,10 @@ func takeOverTx(tx *sql.Tx, sc Succession, at string) error {
 	if _, err := tx.Exec(`DELETE FROM session_teardown_tombstones WHERE session_id = ?`, sc.To); err != nil {
 		return err
 	}
-	_, err := tx.Exec(`DELETE FROM session_exit_screens WHERE session_id = ?`, sc.To)
-	return err
+	if _, err := tx.Exec(`DELETE FROM session_exit_screens WHERE session_id = ?`, sc.To); err != nil {
+		return err
+	}
+	return seedSessionRuntime(tx, sc.To, protocol.SessionStateLaunching, at, at, at)
 }
 
 func unbindDeadTerminalsTx(tx *sql.Tx, session protocol.SessionID, live map[string]bool) error {
