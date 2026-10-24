@@ -32,8 +32,8 @@ func TestTheMirrorShipsAFactsUnclassifiedStringsAsLengthsAndItsSubjectHashed(t *
 		if written.Seq != int64(first.Seq) || records[1].Seq != int64(again.Seq) || records[2].Seq != int64(other.Seq) {
 			t.Errorf("records carry seqs %d, %d, %d; want the bus seqs %d, %d, %d", written.Seq, records[1].Seq, records[2].Seq, first.Seq, again.Seq, other.Seq)
 		}
-		if props := string(written.Props); props != `{"collection":"requests","id":{"s":12},"namespace":"test/approval-gate"}` {
-			t.Errorf("props = %s, want the document id as its length and the allowlisted namespace and collection as they are", props)
+		if props := string(written.Props); props != `{"collection":{"s":8},"id":{"s":12},"namespace":{"s":18}}` {
+			t.Errorf("props = %s, want each caller-chosen string as its length", props)
 		}
 		payload := `{"namespace":"test/approval-gate","collection":"requests","id":"request-0001"}`
 		if written.Bytes != len(payload) {

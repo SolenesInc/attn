@@ -1,15 +1,13 @@
 package analytics
 
 var SafeValues = map[string]Allowlist{
-	"document.changed":               {"namespace": true, "collection": true},
-	"document.collection.redeclared": {"namespace": true, "collection": true},
-	"garden.seed.edge.linked":        {"edge_kind": true},
-	"garden.seed.edge.unlinked":      {"edge_kind": true},
-	"git.operation.started":          {"kind": true, "status": true},
-	"git.operation.finished":         {"kind": true, "status": true},
-	"notebook.file.changed":          {"origin": true},
-	"ratelimit.hit":                  {"reset_at": true},
-	"session.background.launch":      {"event": true, "kind": true, "requested_by": true},
+	"garden.seed.edge.linked":   {"edge_kind": true},
+	"garden.seed.edge.unlinked": {"edge_kind": true},
+	"git.operation.started":     {"kind": true, "status": true},
+	"git.operation.finished":    {"kind": true, "status": true},
+	"notebook.file.changed":     {"origin": true},
+	"ratelimit.hit":             {"reset_at": true},
+	"session.background.launch": {"event": true, "kind": true},
 	"session.closed": {
 		"agent": true, "state": true,
 		"usage.models.model": true, "usage.models.purpose": true, "usage.models.unpriced_reason": true,
