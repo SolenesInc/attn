@@ -503,6 +503,7 @@ interface UseDaemonSocketOptions {
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
   onSeedsUpdate?: (seeds: Seed[], total: number) => void;
+  onSeedsChange?: (order: string[], changed: Seed[], total: number) => void;
   onCrewUpdate?: (members: CrewMember[]) => void;
   onPRsUpdate: (prs: DaemonPR[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
@@ -631,6 +632,7 @@ export function useDaemonSocket({
   onNotificationsUpdated,
   onFsChanged,
   onSeedsUpdate,
+  onSeedsChange,
   onCrewUpdate,
   onPRsUpdate,
   onPluginsUpdate,
@@ -658,6 +660,7 @@ export function useDaemonSocket({
     onNotificationsUpdated,
     onFsChanged,
     onSeedsUpdate,
+    onSeedsChange,
     onCrewUpdate,
     onPRsUpdate,
     onPluginsUpdate,
@@ -675,6 +678,7 @@ export function useDaemonSocket({
     onNotificationsUpdated,
     onFsChanged,
     onSeedsUpdate,
+    onSeedsChange,
     onCrewUpdate,
     onPRsUpdate,
     onPluginsUpdate,
@@ -1246,6 +1250,11 @@ export function useDaemonSocket({
               data.seeds || [],
               data.total ?? (data.seeds || []).length,
             );
+            break;
+
+          case 'garden_seeds_changed':
+            if (data.profile_id !== useProfilesStore.getState().selectedProfileId) break;
+            callbacksRef.current.onSeedsChange?.(data.order || [], data.seeds || [], data.total ?? (data.order || []).length);
             break;
 
           case 'garden_review_updated': {

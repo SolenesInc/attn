@@ -10,6 +10,7 @@ interface DaemonStore {
   seeds: Seed[];
   seedsTotal: number;
   setSeeds: (seeds: Seed[], total: number) => void;
+  applySeedChanges: (order: string[], changed: Seed[], total: number) => void;
 
   crew: CrewMember[];
   setCrew: (crew: CrewMember[]) => void;
@@ -39,6 +40,13 @@ export const useDaemonStore = create<DaemonStore>((set, get) => ({
   seeds: [],
   seedsTotal: 0,
   setSeeds: (seeds, total) => set({ seeds, seedsTotal: total }),
+  applySeedChanges: (order, changed, total) => {
+    const snapshot = new Map(get().seeds.map((seed) => [seed.id, { ...seed }]));
+    for (const seed of changed) snapshot.set(seed.id, seed);
+    const missing = order.filter((id) => !snapshot.has(id));
+    if (missing.length > 0) console.error(`[Garden] change lists seeds this app never received: ${missing.join(', ')}`);
+    set({ seeds: order.flatMap((id) => snapshot.get(id) ?? []), seedsTotal: total });
+  },
 
   crew: [],
   setCrew: (crew) => set({ crew }),

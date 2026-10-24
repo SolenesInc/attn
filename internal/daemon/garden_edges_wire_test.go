@@ -27,7 +27,7 @@ func TestBlockingEdgesGateReadiness(t *testing.T) {
 	}
 
 	edgeLink(t, cli, first, "blocks", second)
-	pushed := testworld.Await(app, protocol.EventGardenSeedsUpdated, func(m protocol.GardenSeedsUpdatedMessage) bool {
+	pushed := testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
 		return len(m.Seeds) == 2 && slices.ContainsFunc(m.Seeds, func(s protocol.Seed) bool { return len(s.Edges) == 1 })
 	})
 	for _, seed := range pushed.Seeds {

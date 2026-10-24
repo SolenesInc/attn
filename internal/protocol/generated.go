@@ -4777,6 +4777,23 @@ type GardenReviewUpdatedMessage struct {
 	Review GardenReview `json:"review"`
 }
 
+type GardenSeedsChangedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Order corresponds to the JSON schema field "order".
+	Order []string `json:"order"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []Seed `json:"seeds"`
+
+	// Total corresponds to the JSON schema field "total".
+	Total int `json:"total"`
+}
+
 type GardenSeedsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`

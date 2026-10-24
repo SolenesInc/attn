@@ -173,16 +173,6 @@ func (d *Daemon) seedBirthProfile(seed garden.Seed) (string, error) {
 	return profile.ID, nil
 }
 
-func (d *Daemon) gardenProfileSnapshot(profileID string) *protocol.GardenSeedsUpdatedMessage {
-	if profileID == "" {
-		return &protocol.GardenSeedsUpdatedMessage{Event: protocol.EventGardenSeedsUpdated, Seeds: []protocol.Seed{}}
-	}
-	return &protocol.GardenSeedsUpdatedMessage{
-		Event: protocol.EventGardenSeedsUpdated, ProfileID: profileID,
-		Seeds: d.seedsForBroadcast(profileID), Total: d.countSeedsForBroadcast(profileID),
-	}
-}
-
 func firstProfile(ids []string) string {
 	if len(ids) == 0 {
 		return ""

@@ -3242,8 +3242,8 @@ model InitialStateMessage {
   warnings?: DaemonWarning[];
   seeds?: Seed[];
   // How many seeds the garden holds, beside the bounded `seeds`. Carried here
-  // as well as on garden_seeds_updated so a client that connects to an
-  // over-large garden knows it is short before anything moves.
+  // as well as on garden pushes so a client that connects to an over-large
+  // garden knows it is short before anything moves.
   seeds_total?: int32;
   // The crew roster, so the sidebar draws every member — awake or asleep — from
   // the first push rather than asking for one.
@@ -4847,9 +4847,9 @@ model SeedEditResult {
   "seed": Seed;
 }
 
-// One-shot reader payload shared by the seed tile and GardenPanel drill. The
-// garden_seeds_updated carries the live seed for immediate body/tender updates;
-// clients also re-read this model for the ledger and bounded-snapshot fallback.
+// One-shot reader payload shared by the seed tile and GardenPanel drill. Garden
+// pushes carry the live seed for immediate body/tender updates; clients also
+// re-read this model for the ledger and bounded-snapshot fallback.
 model SeedDocumentGetMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
@@ -5262,13 +5262,25 @@ model SeedSendToChiefResultMessage {
   "result"?: SeedSendToChiefResult;
 }
 
-// The selected profile's garden, replaced on profile switches and seed changes.
+// The selected profile's whole push window, sent when a client connects or
+// switches profile; later seed changes arrive as garden_seeds_changed.
 model GardenSeedsUpdatedMessage {
   profile_id: string;
   event: "garden_seeds_updated";
   seeds: Seed[];
   // How many seeds the garden holds. Equal to `seeds`'s length until the
   // garden outgrows one push, and then the receipt that says so.
+  total: int32;
+}
+
+// What changed in the push window since this client's last garden message:
+// the window's ids newest first, and only the seeds whose wire form differs.
+// A seed in `order` but not in `seeds` is unchanged.
+model GardenSeedsChangedMessage {
+  profile_id: string;
+  event: "garden_seeds_changed";
+  order: string[];
+  seeds: Seed[];
   total: int32;
 }
 
@@ -7116,6 +7128,7 @@ alias DaemonEvent =
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage
   | GardenSeedsUpdatedMessage
+  | GardenSeedsChangedMessage
   | GardenReviewUpdatedMessage
   | SeedReviewResultMessage
   | SeedReviewDraftResultMessage

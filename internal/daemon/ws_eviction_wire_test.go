@@ -101,7 +101,7 @@ func TestGardenUpdatesKeepFlowingWhenAnotherClientFallsBehind(t *testing.T) {
 			}
 			synctest.Wait()
 		}
-		testworld.Await(app, protocol.EventGardenSeedsUpdated, func(m protocol.GardenSeedsUpdatedMessage) bool {
+		testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
 			return len(m.Seeds) == 1 && m.Seeds[0].ID == seed && m.Seeds[0].Body == finalBody
 		})
 		evictionDrain(t, stalled)

@@ -87,6 +87,28 @@ describe('App garden seeds', () => {
     expect(screen.queryByText('Side work')).toBeNull();
   });
 
+  it('applies a change onto the garden it holds, in the order the daemon sends', async () => {
+    const older = daemonSeed('s-aaa111', { title: 'older seed' });
+    const newer = daemonSeed('s-bbb222', { title: 'newer seed' });
+    const { daemon } = await openGarden([newer, older]);
+
+    await gesture(daemon, () => daemon.emit({
+      event: 'garden_seeds_changed', profile_id: 'profile-default', order: ['s-ccc333', newer.id, older.id],
+      seeds: [daemonSeed('s-ccc333', { title: 'just planted' }), { ...newer, title: 'newer seed, renamed' }], total: 3,
+    }));
+    expect(screen.queryByText('newer seed')).toBeNull();
+    const titles = ['just planted', 'newer seed, renamed', 'older seed'].map((title) => screen.getByText(title));
+    expect(titles[0].compareDocumentPosition(titles[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(titles[1].compareDocumentPosition(titles[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await gesture(daemon, () => daemon.emit({
+      event: 'garden_seeds_changed', profile_id: 'profile-default', order: ['s-ccc333', older.id], seeds: [], total: 2,
+    }));
+    expect(screen.queryByText('newer seed, renamed')).toBeNull();
+    expect(screen.getByText('just planted')).toBeInTheDocument();
+    expect(screen.getByText('older seed')).toBeInTheDocument();
+  });
+
   it('reads a garden-less daemon as an empty garden', async () => {
     const { daemon } = await openGarden([daemonSeed('s-aaa111', { title: 'already planted' })]);
     expect(screen.getByText('already planted')).toBeInTheDocument();
@@ -125,19 +147,19 @@ describe('App garden seeds', () => {
     expect(screen.getByText('1 more entry on the log.')).toBeInTheDocument();
   });
 
-  it('refreshes a seed tile on garden changes and reconnect and ignores obsolete responses', async () => {
+  it('refreshes a seed tile on garden changes that carry no seed, on reconnect, and ignores obsolete responses', async () => {
     const daemon = await openSeedTile(PLAN, { notes: [note('n-before', { body: 'Before the keep pass' })], notes_total: 1 });
     fireEvent.click(screen.getByText('Log').closest('summary')!);
     daemon.on('seed_document_get', () => undefined);
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
     expect(daemon.sentOf('seed_document_get')).toHaveLength(1);
-    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', profile_id: PLAN.profile_id, seeds: [PLAN], total: 1 }));
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_changed', profile_id: PLAN.profile_id, order: [PLAN.id], seeds: [], total: 1 }));
     const older = daemon.sentOf('seed_document_get')[1];
     daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true,
       document: seedDocument(PLAN, { notes: [note('n-after', { body: 'After the keep pass' })], notes_total: 1 }) }));
     await gesture(daemon, () => daemon.emit({ event: 'kept_conversations_changed' }));
     expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
-    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', profile_id: PLAN.profile_id, seeds: [PLAN], total: 1 }));
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_changed', profile_id: PLAN.profile_id, order: [PLAN.id], seeds: [], total: 1 }));
     await gesture(daemon, () => daemon.replyTo(older, { event: 'seed_document_get_result', success: true,
       request_id: older.request_id,
       document: seedDocument(PLAN, { notes: [note('n-old', { body: 'Superseded detail' })], notes_total: 1 }) }));

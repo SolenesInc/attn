@@ -398,20 +398,15 @@ func (d *Daemon) projectGardenSeeds() {
 		return
 	}
 	d.projectSnapshot(snapshotGarden, func() {
-		snapshots := map[string][]byte{}
+		windows := map[string]gardenWindow{}
 		d.wsHub.ForEachClient(func(client *wsClient) {
 			profileID := client.selectedProfile()
-			data, ok := snapshots[profileID]
+			window, ok := windows[profileID]
 			if !ok {
-				var err error
-				data, err = json.Marshal(d.gardenProfileSnapshot(profileID))
-				if err != nil {
-					d.logf("garden snapshot: %v", err)
-					return
-				}
-				snapshots[profileID] = data
+				window = d.gardenWindow(profileID)
+				windows[profileID] = window
 			}
-			d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
+			d.sendGardenChanges(client, window)
 		})
 	})
 }

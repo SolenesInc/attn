@@ -1,0 +1,7 @@
+kind: changed
+area: garden
+change: >
+  The daemon now sends the app only the seeds that changed instead of the whole
+  garden on every seed move or note. With a thousand seeds, each update drops
+  from about 4 MB to about 11 KB, so the app no longer parses the full garden
+  after every note, tend or harvest.
