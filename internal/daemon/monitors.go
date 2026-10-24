@@ -150,9 +150,10 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		LastModelRequestAt: protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time(),
 		Turn: sessionmonitor.TurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil,
 			AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt},
-		Driver:       d.driverInputFromRecord(sessionID),
-		Conversation: sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
-		LastSeen:     protocol.Timestamp(session.LastSeen).Time(),
+		Driver:        d.driverInputFromRecord(sessionID),
+		Conversation:  sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
+		LastSeen:      protocol.Timestamp(session.LastSeen).Time(),
+		PendingSwitch: decodePendingSwitch(d.store.SessionPendingSwitch(sessionID)),
 	}
 	if cost, err := d.store.SessionCostCheckpoint(sessionID); err == nil {
 		launch.Cost = cost

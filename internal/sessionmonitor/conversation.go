@@ -2,6 +2,7 @@ package sessionmonitor
 
 import (
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/harness"
 )
 
@@ -15,12 +16,52 @@ func (e *Entry) ProposeConversation(observation ConversationObservation, proposa
 	if m.runtime != "" {
 		m = &Monitor{terminalID: m.terminalID, runtime: RuntimeID(uuid.NewString()), entries: make(map[*Entry]struct{})}
 	}
+	proposed := Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal}
+	switching := terminal != "" && proposal != ConversationGuessedAtLaunch
+	var view View
+	if switching {
+		e.pendingSwitch = proposed
+		view = e.viewLocked()
+	}
 	e.mu.Unlock()
-	successor := &Entry{registry: e.registry, monitor: m, conversation: observation.NativeID, succeeds: key,
-		conversationInput: Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal}}
+	if switching {
+		e.publish(view)
+		crashpoint.At(CrashSwitchPending)
+	}
+	successor := &Entry{registry: e.registry, monitor: m, conversation: observation.NativeID, succeeds: key, conversationInput: proposed}
 	successor.home = e.registry.host.HomeFor(successor)
 	successor.input = &lane{mu: &successor.mu, entry: successor}
-	return successor.publish(successor.viewLocked())
+	decided := successor.publish(successor.viewLocked())
+	if switching {
+		e.SettleSwitch(observation.NativeID)
+	}
+	return decided
+}
+
+const CrashSwitchPending = "monitor-switch-pending"
+
+func (e *Entry) PendingSwitch() (Conversation, bool) {
+	if e == nil {
+		return Conversation{}, false
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.pendingSwitch, e.pendingSwitch.NativeID != ""
+}
+
+func (e *Entry) SettleSwitch(nativeID string) {
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	if e.pendingSwitch.NativeID == "" || e.pendingSwitch.NativeID != nativeID {
+		e.mu.Unlock()
+		return
+	}
+	e.pendingSwitch = Conversation{}
+	view := e.viewLocked()
+	e.mu.Unlock()
+	e.publish(view)
 }
 
 func (e *Entry) SetConversation(observation ConversationObservation) {
@@ -66,9 +107,11 @@ func (e *Entry) ObserveResumeID(nativeID string) bool {
 	e.mu.Lock()
 	if e.conversationInput.NativeID == nativeID {
 		e.mu.Unlock()
+		e.SettleSwitch(nativeID)
 		return true
 	}
 	e.conversationInput = Conversation{ConversationObservation: ConversationObservation{NativeID: nativeID}}
+	e.pendingSwitch = Conversation{ConversationObservation: e.conversationInput.ConversationObservation, Proposal: ConversationReported}
 	view := e.viewLocked()
 	e.mu.Unlock()
 	return e.publish(view)

@@ -116,6 +116,7 @@ type Entry struct {
 	usageIdle           chan struct{}
 	usageDraining       bool
 	pendingConversation *ConversationObservation
+	pendingSwitch       Conversation
 	titleAttempted      bool
 	titleInitialPrompt  *[sha256.Size]byte
 	driverLaunch        *driverLaunch
@@ -272,6 +273,7 @@ func (e *Entry) initializeLocked(start Start) {
 	e.exit = launch.Exit
 	e.conversationInput = Conversation{ConversationObservation: launch.Conversation}
 	e.touchedAt = launch.LastSeen
+	e.pendingSwitch = launch.PendingSwitch
 	e.initialized = launch.Known
 }
 

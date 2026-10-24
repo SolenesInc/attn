@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -34,7 +35,8 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 		r.applyMu.Unlock()
 		return true
 	}
-	if err := h.recordConversation(session, previous, view); err != nil {
+	recorded, err := h.recordConversation(session, previous, view)
+	if err != nil {
 		h.catchUp(session, binding, err)
 		r.applyMu.Unlock()
 		return false
@@ -42,6 +44,9 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	binding.applied = view
 	h.catchUp(session, binding, nil)
 	r.applyMu.Unlock()
+	if recorded != "" {
+		h.entry.SettleSwitch(recorded)
+	}
 	for id, link := range view.PullRequests.Entries {
 		if previous.PullRequests.Entries[id] != link {
 			d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: id})
@@ -54,15 +59,15 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	return true
 }
 
-func (h *monitorHome) recordConversation(session protocol.SessionID, previous, view sessionmonitor.View) error {
+func (h *monitorHome) recordConversation(session protocol.SessionID, previous, view sessionmonitor.View) (string, error) {
 	conversation := view.Conversation.V.ConversationObservation
 	if conversation == previous.Conversation.V.ConversationObservation || conversation.NativeID == "" {
-		return nil
+		return "", nil
 	}
 	if _, err := h.daemon.store.TransitionSessionResumeID(session, conversation.NativeID); err != nil {
-		return fmt.Errorf("conversation: %w", err)
+		return "", fmt.Errorf("conversation: %w", err)
 	}
-	return nil
+	return conversation.NativeID, nil
 }
 
 type storeSaver struct{ daemon *Daemon }
@@ -109,5 +114,25 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 		Branch:             view.Branch.V,
 		HarnessTitle:       view.HarnessTitle.V,
 		LastSeen:           view.LastSeen.V,
+		PendingSwitch:      encodePendingSwitch(view.PendingSwitch.V),
 	}
+}
+
+func encodePendingSwitch(pending sessionmonitor.Conversation) string {
+	if pending.NativeID == "" {
+		return ""
+	}
+	encoded, err := json.Marshal(pending)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+func decodePendingSwitch(raw string) sessionmonitor.Conversation {
+	var pending sessionmonitor.Conversation
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &pending)
+	}
+	return pending
 }

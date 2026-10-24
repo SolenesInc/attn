@@ -42,6 +42,7 @@ type Store struct {
 	writes                 *tableWrites
 	sessionRows            sessionRows
 	touchedAt              map[protocol.SessionID]time.Time
+	pendingSwitches        map[protocol.SessionID]string
 	costMu                 sync.Mutex
 	liveCosts              map[protocol.SessionID]*sessionCostEntry
 	profilesSeq            int64

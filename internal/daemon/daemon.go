@@ -1000,6 +1000,7 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
 		d.recoverLinkViews(context.Background())
 		d.restoreTranscriptWatchers()
+		d.replayPendingSwitches()
 		d.pruneRuntimesWithoutSession(context.Background())
 		return
 	}

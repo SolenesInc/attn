@@ -41,6 +41,7 @@ type Launch struct {
 	Exit               *Exit
 	Conversation       ConversationObservation
 	LastSeen           time.Time
+	PendingSwitch      Conversation
 }
 
 func (e *Entry) SetPolicy(policy Policy) {

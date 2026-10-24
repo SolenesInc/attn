@@ -246,3 +246,18 @@ func (d *Daemon) rebindTranscriptWatcherForConversation(event bus.Event) {
 	}
 	d.monitorEntry(session.ID).StartTranscriptWatcher(observation.TranscriptPath)
 }
+
+func (d *Daemon) replayPendingSwitches() {
+	for sessionID, entry := range d.monitors().each() {
+		pending, ok := entry.PendingSwitch()
+		if !ok {
+			continue
+		}
+		d.logf("agent conversation: replaying the switch session %s saved to %s before the restart", sessionID, pending.NativeID)
+		if pending.Terminal == "" {
+			entry.ObserveResumeID(pending.NativeID)
+			continue
+		}
+		d.conversationIn(pending.Terminal, agentConversationObservation{NativeID: pending.NativeID, TranscriptPath: pending.TranscriptPath})
+	}
+}
