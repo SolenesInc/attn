@@ -3573,6 +3573,9 @@ export function useDaemonSocket({
   const sendRecordCommandUsage = useCallback((profileId: string, commandId: string): Promise<boolean> =>
     sendRequest('record_command_usage', { profile_id: profileId, command_id: commandId }, 'Saving command history timed out'), [sendRequest]);
 
+  const sendRecordAnalytics = useCallback((name: string, props: Record<string, string | number>) =>
+    sendOrQueueCommand({ cmd: 'record_analytics', stream: 'app', name, props }), [sendOrQueueCommand]);
+
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
@@ -4279,6 +4282,7 @@ export function useDaemonSocket({
     sendFsIndex,
     sendGetCommandUsage,
     sendRecordCommandUsage,
+    sendRecordAnalytics,
     sendAskAnswer,
     sendRecentFiles,
     sendGetRecentLocations,

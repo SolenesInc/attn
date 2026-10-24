@@ -53,6 +53,7 @@ func runWorktree() {
 	case "-h", "--help", "help":
 		fmt.Print(worktreeUsage)
 	default:
+		recordUsageError("worktree", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown worktree command: %s\n\n", args[0])
 		fmt.Fprint(os.Stderr, worktreeUsage)
 		os.Exit(1)
@@ -64,7 +65,7 @@ func worktreeFlags(name string, args []string) (repo *string, limit *int, asJSON
 	repo = fs.String("repo", "", "only this repository")
 	limit = fs.Int("limit", worktreeListDefaultLimit, "how many rows to show")
 	asJSON = fs.Bool("json", false, "print the raw result")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 	return repo, limit, asJSON
 }
 
@@ -212,7 +213,7 @@ func worktreeKeep(args []string, keep bool) {
 func worktreeDelete(args []string) {
 	fs := flag.NewFlagSet("worktree delete", flag.ExitOnError)
 	force := fs.Bool("force", false, "delete even when the tree has uncommitted or untracked files")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 	if fs.NArg() == 0 {
 		fmt.Fprintln(os.Stderr, "usage: attn worktree delete <path> [--force]")
 		os.Exit(1)

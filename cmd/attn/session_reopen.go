@@ -34,7 +34,7 @@ func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
 	fs.SetOutput(io.Discard)
 	action := fs.String("action", "", "the action to perform; `attn session show` lists the ones offered")
 	jsonOut := fs.Bool("json", false, "print the result as JSON")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := parseFlags(fs, args[1:]); err != nil {
 		return sessionReopenArgs{}, err
 	}
 	if fs.NArg() != 0 {

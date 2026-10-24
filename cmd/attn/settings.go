@@ -32,7 +32,7 @@ func runSettings() {
 		return
 	}
 	verb := args[0]
-	fs := flag.NewFlagSet("settings "+verb, flag.ContinueOnError)
+	fs := flag.NewFlagSet("settings", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print JSON")
 	all := fs.Bool("all", false, "include read-only values")
@@ -44,7 +44,7 @@ func runSettings() {
 		os.Exit(2)
 	}
 	for {
-		if err := fs.Parse(rest); err != nil {
+		if err := parseFlags(fs, rest); err != nil {
 			usage(err.Error())
 		}
 		rest = fs.Args()
@@ -68,6 +68,7 @@ func runSettings() {
 			usage("set needs a key and value")
 		}
 	default:
+		recordUsageError("settings", usageErrorUnknownCommand)
 		usage(fmt.Sprintf("unknown command %q", verb))
 	}
 	c := client.New("")

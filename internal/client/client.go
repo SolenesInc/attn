@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -21,10 +23,11 @@ func DefaultSocketPath() string {
 }
 
 type Client struct {
-	gardenProfile string
-	gardenSession protocol.SessionID
-	socketPath    string
-	dial          func() (net.Conn, error)
+	gardenProfile  string
+	gardenSession  protocol.SessionID
+	callerTerminal protocol.TerminalID
+	socketPath     string
+	dial           func() (net.Conn, error)
 }
 
 type automationResult struct {
@@ -55,7 +58,7 @@ func (c *Client) sendAutomation(msg any, out any) error {
 		return err
 	}
 	defer conn.Close()
-	if err := json.NewEncoder(conn).Encode(msg); err != nil {
+	if err := c.writeFrame(conn, msg); err != nil {
 		return err
 	}
 	var raw json.RawMessage
@@ -164,7 +167,46 @@ func New(socketPath string) *Client {
 }
 
 func NewWithDial(socketPath string, dial func() (net.Conn, error)) *Client {
-	return &Client{socketPath: socketPath, dial: dial}
+	return &Client{socketPath: socketPath, dial: dial, callerTerminal: protocol.TrimID(harness.TerminalFromEnv())}
+}
+
+func (c *Client) writeFrame(conn net.Conn, msg any) error {
+	if c.callerTerminal == "" {
+		return json.NewEncoder(conn).Encode(msg)
+	}
+	frame, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	var named protocol.SocketCaller
+	if err := json.Unmarshal(frame, &named); err != nil {
+		return err
+	}
+	if named.CallerID != nil {
+		_, err = conn.Write(append(frame, '\n'))
+		return err
+	}
+	caller, err := json.Marshal(protocol.SocketCaller{CallerID: &c.callerTerminal})
+	if err != nil {
+		return err
+	}
+	caller[0] = ','
+	frame = append(append(frame[:len(frame)-1], caller...), '\n')
+	_, err = conn.Write(frame)
+	return err
+}
+
+func (c *Client) RecordAnalytics(stream, name string, props map[string]any) error {
+	conn, err := c.connect()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := c.writeFrame(conn, protocol.RecordAnalyticsMessage{Cmd: protocol.CmdRecordAnalytics, Stream: stream, Name: name, Props: props}); err != nil {
+		return err
+	}
+	_, err = io.Copy(io.Discard, conn)
+	return err
 }
 
 func (c *Client) connect() (net.Conn, error) {
@@ -209,7 +251,7 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	}
 	defer conn.Close()
 
-	if err := json.NewEncoder(conn).Encode(msg); err != nil {
+	if err := c.writeFrame(conn, msg); err != nil {
 		return nil, fmt.Errorf("send message: %w", err)
 	}
 

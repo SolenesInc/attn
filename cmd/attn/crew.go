@@ -28,6 +28,7 @@ func runCrew() {
 	case "set":
 		runCrewSet(os.Args[3:])
 	default:
+		recordUsageError("crew", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "crew: unknown command %q\n", os.Args[2])
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
@@ -80,7 +81,7 @@ func parseCrewListArgs(args []string) (crewListArgs, error) {
 	fs := flag.NewFlagSet("crew list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return crewListArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -127,7 +128,7 @@ func parseCrewWakeArgs(args []string) (crewWakeArgs, error) {
 }
 
 func parseMemberAndFlags(fs *flag.FlagSet, args []string, verb string) (string, error) {
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return "", err
 	}
 	if fs.NArg() == 0 {
@@ -135,7 +136,7 @@ func parseMemberAndFlags(fs *flag.FlagSet, args []string, verb string) (string, 
 	}
 	member, rest := fs.Arg(0), fs.Args()[1:]
 	if len(rest) > 0 {
-		if err := fs.Parse(rest); err != nil {
+		if err := parseFlags(fs, rest); err != nil {
 			return "", err
 		}
 		if fs.NArg() != 0 {

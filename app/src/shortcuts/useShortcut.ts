@@ -5,6 +5,7 @@ import { isShellCtrlLetter } from './platform';
 import { enterLeader, resolvePendingThen } from './chordState';
 import { matchChordLeader } from './chordDispatch';
 import { isRetainedTerminalEvent } from '../store/pendingTerminalInput';
+import { recordAppAction } from '../analytics/appActions';
 
 type Handler = () => void;
 const NATIVE_SHORTCUT_EVENT = 'attn:native-shortcut';
@@ -16,6 +17,7 @@ export function triggerShortcut(id: ShortcutId): boolean {
   if (!shortcutHandlers || shortcutHandlers.size === 0) {
     return false;
   }
+  recordAppAction('shortcut', { id });
   for (const handler of shortcutHandlers) {
     handler();
   }

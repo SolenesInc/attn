@@ -70,6 +70,7 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 			parsed.initialPromptFile = args[i+1]
 			i++
 		default:
+			recordUsageError("attn", usageErrorUnknownFlag)
 			return directLaunchArgs{}, fmt.Errorf("unknown flag %q", arg)
 		}
 	}

@@ -47,6 +47,7 @@ func writePrompts(stdout, stderr io.Writer, args []string) int {
 			return 0
 		default:
 			if strings.HasPrefix(args[i], "-") {
+				recordUsageError("prompts", usageErrorUnknownFlag)
 				return fail(fmt.Errorf("unknown option %q", args[i]))
 			}
 			positional = append(positional, args[i])
@@ -124,6 +125,7 @@ func writePrompts(stdout, stderr io.Writer, args []string) int {
 		fmt.Fprintln(stdout, "\nRendered content:")
 		fmt.Fprintln(stdout, result.Text)
 	default:
+		recordUsageError("prompts", usageErrorUnknownCommand)
 		return fail(fmt.Errorf("unknown command %q; use list, show, render, or explain", command))
 	}
 	return 0

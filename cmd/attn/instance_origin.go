@@ -77,6 +77,7 @@ func runInstanceSetOrigin(args []string) {
 			return
 		default:
 			if strings.HasPrefix(args[i], "-") {
+				recordUsageError("instance set-origin", usageErrorUnknownFlag)
 				instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 			}
 			if name != "" {

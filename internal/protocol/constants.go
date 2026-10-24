@@ -74,6 +74,7 @@ const (
 	CmdTaskRetry                     = "task_retry"
 	CmdNotificationList              = "notification_list"
 	CmdListAnalyticsRecords          = "list_analytics_records"
+	CmdRecordAnalytics               = "record_analytics"
 	CmdNotificationMarkRead          = "notification_mark_read"
 	CmdFsList                        = "fs_list"
 	CmdFsRead                        = "fs_read"

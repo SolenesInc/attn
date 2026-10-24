@@ -16,7 +16,7 @@ func runSessionPriority(args []string) {
 	}
 	fs := flag.NewFlagSet("session priority", flag.ExitOnError)
 	session := fs.String("session", "", "session to mark")
-	fs.Parse(args[1:])
+	parseFlags(fs, args[1:])
 	id := protocol.SessionID(strings.TrimSpace(*session))
 	if id == "" {
 		id = currentSessionOrExit()

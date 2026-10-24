@@ -1106,6 +1106,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetCommandUsage(client, msg.(*protocol.GetCommandUsageMessage))
 	case protocol.CmdRecordCommandUsage:
 		d.handleRecordCommandUsage(client, msg.(*protocol.RecordCommandUsageMessage))
+	case protocol.CmdRecordAnalytics:
+		d.handleRecordAnalytics(msg.(*protocol.RecordAnalyticsMessage), "")
 	case protocol.CmdRecentFiles:
 		d.life.Go("handleRecentFiles", func() {
 			d.handleRecentFilesWS(client, msg.(*protocol.RecentFilesMessage))

@@ -239,6 +239,7 @@ func main() {
 			maybePrintInstanceBanner()
 			runWrapper()
 		} else {
+			recordUsageError("attn", usageErrorUnknownCommand)
 			fmt.Fprintf(os.Stderr, "attn %s: unknown command %q\n\n", buildinfo.Version, os.Args[1])
 			writeHelp(os.Stderr)
 			os.Exit(1)
@@ -366,7 +367,7 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.OwnerStartedAt, "owner-started-at", "", "daemon owner started-at timestamp")
 	fs.StringVar(&cfg.OwnerNonce, "owner-nonce", "", "daemon owner nonce")
 
-	_ = fs.Parse(os.Args[2:])
+	_ = parseFlags(fs, os.Args[2:])
 	if approvalRoute != "" {
 		cfg.ApprovalRoute = launchcontract.ApprovalRoute(approvalRoute)
 		if !cfg.ApprovalRoute.Valid() {
@@ -438,6 +439,7 @@ func runDaemonCommand() {
 	case "stop":
 		runDaemonStop()
 	default:
+		recordUsageError("daemon", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown daemon subcommand %q (expected: ensure, stop)\n", os.Args[2])
 		os.Exit(1)
 	}
@@ -782,6 +784,7 @@ func runJournal() {
 		}
 		runJournalAppend(os.Args[3:])
 	default:
+		recordUsageError("journal", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "journal: unknown command %q\n", os.Args[2])
 		writeJournalHelp(os.Stderr)
 		os.Exit(2)
@@ -803,7 +806,7 @@ func parseJournalAppendArgs(args []string) (journalAppendArgs, error) {
 	date := fs.String("date", "", "journal date as YYYY-MM-DD (defaults to today)")
 	sessionID := fs.String("session", "", "session id (optional; defaults to the current session)")
 	jsonOutput := fs.Bool("json", false, "print the result as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return journalAppendArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -912,7 +915,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	preferencesRevision := fs.String("preferences-revision", "", "retired: preferences resolve when accepted")
 	requestID := fs.String("request-id", "", "stable delegation request id")
 	allowWorktreeReuse := fs.Bool("allow-worktree-reuse", false, "allow active sessions to share a worktree")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return delegateCLIArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -1128,7 +1131,7 @@ func parseOpenArgs(args []string) (rawPath string, sessionFlag string, profileFl
 	var positionals []string
 	rest := args
 	for {
-		if perr := fs.Parse(rest); perr != nil {
+		if perr := parseFlags(fs, rest); perr != nil {
 			return "", "", "", perr
 		}
 		rest = fs.Args()
@@ -1190,7 +1193,7 @@ func parseInterspersedFlagArgs(fs *flag.FlagSet, args []string) ([]string, error
 	var positionals []string
 	rest := args
 	for {
-		if err := fs.Parse(rest); err != nil {
+		if err := parseFlags(fs, rest); err != nil {
 			return nil, err
 		}
 		rest = fs.Args()
@@ -1263,7 +1266,7 @@ func runBrowser() {
 	}
 
 	subcommand := os.Args[2]
-	fs := flag.NewFlagSet("browser "+subcommand, flag.ContinueOnError)
+	fs := flag.NewFlagSet("browser", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	sessionFlag := fs.String("session", "", "session id (defaults to the current session, then the selected session)")
 	selector := fs.String("selector", "", "CSS selector")
@@ -1506,6 +1509,7 @@ func runBrowser() {
 		}
 		fmt.Println(absPath)
 	default:
+		recordUsageError("browser", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown browser command: %s\n", subcommand)
 		printBrowserUsage(os.Stderr)
 		os.Exit(1)
@@ -1729,7 +1733,7 @@ func runProbeTUI() {
 	fs := flag.NewFlagSet("_probe-tui", flag.ExitOnError)
 	styleFlag := fs.String("style", "", "agent vocabulary to mirror: codex or claude")
 	interval := fs.Duration("interval", 500*time.Millisecond, "frame repaint interval")
-	if err := fs.Parse(os.Args[2:]); err != nil {
+	if err := parseFlags(fs, os.Args[2:]); err != nil {
 		os.Exit(2)
 	}
 

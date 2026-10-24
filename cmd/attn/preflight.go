@@ -53,7 +53,7 @@ func parsePreflightArgs(args []string, getenv func(string) string) (preflight.Op
 	jsonOutput := fs.Bool("json", false, "emit the stable JSON report")
 	help := fs.Bool("help", false, "show help")
 	fs.BoolVar(help, "h", false, "show help")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return preflight.Options{}, false, false, err
 	}
 	if fs.NArg() != 0 {

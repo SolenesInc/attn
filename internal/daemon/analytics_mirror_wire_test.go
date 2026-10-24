@@ -110,9 +110,9 @@ func TestListAnalyticsRecordsPagesMirroredFactsNewestFirst(t *testing.T) {
 		}
 		synctest.Wait()
 
-		all := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 1000})
-		if len(all.Records) < 5 || all.Waiting != len(all.Records) {
-			t.Fatalf("the outbox lists %d records with %d waiting, want at least the 5 writes, all waiting", len(all.Records), all.Waiting)
+		all := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 1000, Stream: protocol.Ptr("bus")})
+		if len(all.Records) < 5 || all.Waiting < len(all.Records) {
+			t.Fatalf("the bus stream lists %d records with %d waiting, want at least the 5 writes, all waiting", len(all.Records), all.Waiting)
 		}
 		seqs := recordSeqs(t, all.Records)
 		for i := 1; i < len(all.Records); i++ {
@@ -122,18 +122,15 @@ func TestListAnalyticsRecordsPagesMirroredFactsNewestFirst(t *testing.T) {
 		}
 
 		var paged []protocol.AnalyticsOutboxRow
-		page := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 2})
+		page := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 2, Stream: protocol.Ptr("bus")})
 		for len(page.Records) > 0 {
 			paged = append(paged, page.Records...)
-			page = listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 2, BeforeID: protocol.Ptr(page.Records[len(page.Records)-1].ID)})
+			page = listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 2, Stream: protocol.Ptr("bus"), BeforeID: protocol.Ptr(page.Records[len(page.Records)-1].ID)})
 		}
 		if !slices.Equal(recordSeqs(t, paged), seqs) {
 			t.Errorf("paging by 2 with before_id gave seqs %v, want the single listing's %v", recordSeqs(t, paged), seqs)
 		}
 
-		if bus := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 1000, Stream: protocol.Ptr("bus")}); !slices.Equal(recordSeqs(t, bus.Records), seqs) {
-			t.Errorf("the bus stream lists seqs %v, want every mirrored fact %v", recordSeqs(t, bus.Records), seqs)
-		}
 		if other := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 1000, Stream: protocol.Ptr("app")}); len(other.Records) != 0 {
 			t.Errorf("the app stream lists %d records, want none: the mirror writes only bus records", len(other.Records))
 		}

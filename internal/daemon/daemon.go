@@ -2460,17 +2460,22 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		return
 	}
 
-	cmd, msg, err := protocol.ParseMessage(data)
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
 	release, held := d.life.Hold("handleConnection")
 	if !held {
 		d.sendError(conn, errDaemonStopping.Error())
 		return
 	}
 	defer release()
+	cmd, msg, err := protocol.ParseMessage(data)
+	if cmd != protocol.CmdRecordAnalytics && d.analyticsEnabled() {
+		reply, unanswered := d.recordingCLICommand(conn, data, err)
+		conn = reply
+		defer unanswered()
+	}
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
 
 	if err := d.scopeGardenRequest(cmd, msg, ""); err != nil {
 		d.sendError(conn, err.Error())
@@ -2478,6 +2483,9 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 
 	switch cmd {
+	case protocol.CmdRecordAnalytics:
+		_, caller := socketFrameCaller(data)
+		d.handleRecordAnalytics(msg.(*protocol.RecordAnalyticsMessage), caller)
 	case protocol.CmdGetSettings:
 		d.handleGetSettings(conn, msg.(*protocol.GetSettingsMessage))
 	case protocol.CmdSetSetting:

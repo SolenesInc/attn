@@ -51,6 +51,7 @@ func runPluginCommand() {
 	case "remove":
 		runPluginRemove()
 	default:
+		recordUsageError("plugin", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n", os.Args[2])
 		os.Exit(1)
 	}
@@ -67,7 +68,7 @@ func runPluginLink() {
 func runPluginInstallFromPath(verb string, link bool) {
 	fs := flag.NewFlagSet("plugin "+verb, flag.ExitOnError)
 	path := fs.String("path", "", "local plugin directory")
-	_ = fs.Parse(os.Args[3:])
+	_ = parseFlags(fs, os.Args[3:])
 	sourcePath := strings.TrimSpace(*path)
 	if sourcePath == "" {
 		fmt.Fprintf(os.Stderr, "plugin %s: --path is required\n", verb)

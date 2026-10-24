@@ -72,7 +72,7 @@ func parseSessionSnoozeArgs(args []string, snooze bool, now time.Time) (sessionS
 	}
 	var parsed sessionSnoozeArgs
 	for rest := args; ; {
-		if err := fs.Parse(rest); err != nil {
+		if err := parseFlags(fs, rest); err != nil {
 			return parsed, err
 		}
 		if fs.NArg() == 0 {

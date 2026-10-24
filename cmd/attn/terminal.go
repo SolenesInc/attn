@@ -151,6 +151,7 @@ func parseTerminalArgs(args []string) (terminalArgs, error) {
 				return parsed, errors.New("--keys needs at least one key")
 			}
 		default:
+			recordUsageError("terminal", usageErrorUnknownFlag)
 			return parsed, fmt.Errorf("unknown flag %s", arg)
 		}
 	}
@@ -159,6 +160,7 @@ func parseTerminalArgs(args []string) (terminalArgs, error) {
 	}
 	valid, ok := allowed[parsed.action]
 	if !ok {
+		recordUsageError("terminal", usageErrorUnknownCommand)
 		return parsed, fmt.Errorf("unknown terminal command %q", parsed.action)
 	}
 	for f := range flags {

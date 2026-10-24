@@ -102,6 +102,14 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		); err != nil {
 			d.logf("analytics: register outbox prune tick: %v", err)
 		}
+		if err := runner.RegisterCron(
+			analyticsSampleKind,
+			analyticsSampleInterval,
+			d.analyticsSampleHandler,
+			jobs.HandlerConfig{Timeout: analyticsSampleTimeout},
+		); err != nil {
+			d.logf("analytics: register resource sample tick: %v", err)
+		}
 		d.registerCrewLifecycleCron(runner)
 		d.registerSessionPullRequestRefreshCron(runner)
 		d.registerWorktreeSweepCron(runner)

@@ -15,7 +15,7 @@ func (c *Client) TerminalCommand(ctx context.Context, message any) (*protocol.Re
 	defer conn.Close()
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
-	if err := json.NewEncoder(conn).Encode(message); err != nil {
+	if err := c.writeFrame(conn, message); err != nil {
 		return nil, err
 	}
 	var response protocol.Response

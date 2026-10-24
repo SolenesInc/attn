@@ -65,17 +65,18 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) handleVars(w http.ResponseWriter, _ *http.Request) {
-	var ms runtime.MemStats
-	runtime.ReadMemStats(&ms)
-
 	var stats Stats
 	if s.stats != nil {
 		stats = s.stats()
 	}
+	process := Sample()
 
 	out := map[string]any{
 		"pid":               os.Getpid(),
-		"goroutines":        runtime.NumGoroutine(),
+		"goroutines":        process.Goroutines,
+		"resident_bytes":    process.ResidentBytes,
+		"cpu_time_ms":       process.CPUTimeMS,
+		"open_fds":          process.OpenFDs,
 		"gomaxprocs":        runtime.GOMAXPROCS(0),
 		"num_cpu":           runtime.NumCPU(),
 		"go_version":        runtime.Version(),
@@ -84,16 +85,16 @@ func (s *Server) handleVars(w http.ResponseWriter, _ *http.Request) {
 		"worker_pids":       stats.WorkerPIDs,
 		"doc_subscriptions": stats.DocSubscriptions,
 		"memstats": map[string]any{
-			"heap_alloc":        ms.HeapAlloc,
-			"heap_sys":          ms.HeapSys,
-			"heap_idle":         ms.HeapIdle,
-			"heap_inuse":        ms.HeapInuse,
-			"heap_released":     ms.HeapReleased,
-			"heap_objects":      ms.HeapObjects,
-			"sys":               ms.Sys,
-			"next_gc":           ms.NextGC,
-			"num_gc":            ms.NumGC,
-			"gc_pause_total_ns": ms.PauseTotalNs,
+			"heap_alloc":        process.HeapAlloc,
+			"heap_sys":          process.HeapSys,
+			"heap_idle":         process.HeapIdle,
+			"heap_inuse":        process.HeapInuse,
+			"heap_released":     process.HeapReleased,
+			"heap_objects":      process.HeapObjects,
+			"sys":               process.Sys,
+			"next_gc":           process.NextGC,
+			"num_gc":            process.NumGC,
+			"gc_pause_total_ns": process.GCPauseTotal,
 		},
 	}
 

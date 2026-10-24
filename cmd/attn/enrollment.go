@@ -26,6 +26,7 @@ func runEnrollment() {
 	case "--json":
 		runEnrollmentStatus(os.Args[2:])
 	default:
+		recordUsageError("enrollment", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "enrollment: unknown command %q\n", os.Args[2])
 		writeEnrollmentHelp(os.Stderr)
 		os.Exit(2)
@@ -55,7 +56,7 @@ func enrollmentDataRoot() string {
 func runEnrollmentStatus(args []string) {
 	fs := flag.NewFlagSet("enrollment status", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "print the status as JSON")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 
 	root := enrollmentDataRoot()
 	status, err := enrollment.Load(root)
@@ -97,7 +98,7 @@ func writeEnrollmentStatus(w io.Writer, status enrollment.Status) {
 func runEnrollmentLeave(args []string) {
 	fs := flag.NewFlagSet("enrollment leave", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "print the result as JSON")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 
 	result, err := enrollment.Leave(enrollmentDataRoot())
 	if err != nil {

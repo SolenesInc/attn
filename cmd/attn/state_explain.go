@@ -31,6 +31,7 @@ func runState() {
 		}
 		runStateExplain(os.Args[3:])
 	default:
+		recordUsageError("state", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "state: unknown command %q\n", os.Args[2])
 		writeStateHelp(os.Stderr)
 		os.Exit(2)
@@ -45,7 +46,7 @@ func parseStateExplainArgs(args []string) (stateExplainArgs, error) {
 	fs := flag.NewFlagSet("state explain", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := parseFlags(fs, args[1:]); err != nil {
 		return stateExplainArgs{}, err
 	}
 	if target == "" || fs.NArg() != 0 {

@@ -1,0 +1,8 @@
+kind: added
+area: settings
+change: >
+  With Usage analytics on, the local record now includes the shortcuts and
+  palette commands you use, the Settings sections you open, how long a turn
+  waited when the queue moves you to it, the kind of any UI error, the outcome
+  of each attn command (and whether an agent or a person ran it), and a
+  resource sample of the daemon every 5 minutes. Nothing is sent.
