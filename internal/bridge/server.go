@@ -22,6 +22,7 @@ type ServerConfig struct {
 	Admit          func(Identity) *Refusal
 	Logf           func(string, ...any)
 	OnError        func(error)
+	Handlers       Handlers
 }
 
 func Listen(ctx context.Context, cfg ServerConfig, onConn func(*Conn)) error {
@@ -104,11 +105,6 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	if control == nil {
 		return fmt.Errorf("bridge closed before control channel")
 	}
-	drains.Go(func() {
-		for incoming := range channels {
-			_ = incoming.Reject(ssh.Prohibited, "control channel already open")
-		}
-	})
 	decoder := json.NewDecoder(control)
 	var home hello
 	if err := decoder.Decode(&home); err != nil {
@@ -133,7 +129,7 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	if err := raw.SetDeadline(time.Time{}); err != nil {
 		return err
 	}
-	conn := newConn(ctx, transport, control, decoder, home.Identity)
+	conn := newConn(ctx, transport, channels, cfg.Handlers, control, decoder, home.Identity)
 	onConn(conn)
 	<-conn.Done()
 	return nil
