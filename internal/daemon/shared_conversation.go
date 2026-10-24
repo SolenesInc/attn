@@ -37,20 +37,9 @@ func conversationOpensInManyProcesses(agent protocol.SessionAgent) bool {
 	return agentdriver.EffectiveCapabilities(agentdriver.Get(string(agent))).ConversationOpensInManyProcesses
 }
 
-func (d *Daemon) projectSharedConversations() {
-	shared := d.conversationsSharedByLiveSessions()
-	d.sharedConversationsMu.Lock()
-	shown := d.sharedConversationsShown
-	d.sharedConversationsShown = shared
-	d.sharedConversationsMu.Unlock()
-	for id, others := range shown {
-		if !slices.Equal(others, shared[id]) {
-			d.projectSessionStateChanged(id)
-		}
+func (d *Daemon) projectSharedConversations(subject protocol.SessionID) {
+	if session := d.store.Get(subject); session != nil && !conversationOpensInManyProcesses(session.Agent) {
+		return
 	}
-	for id := range shared {
-		if _, wasShown := shown[id]; !wasShown {
-			d.projectSessionStateChanged(id)
-		}
-	}
+	d.projectSessionsUpdated()
 }

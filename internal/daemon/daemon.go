@@ -296,9 +296,6 @@ type Daemon struct {
 	pendingSnapshots     map[string]func()
 	pendingSnapshotOrder []string
 
-	sharedConversationsMu    sync.Mutex
-	sharedConversationsShown map[protocol.SessionID][]protocol.SessionID
-
 	conversationKeepMu   sync.Mutex
 	jobQueueMu           sync.RWMutex
 	jobQueue             *jobs.Runner

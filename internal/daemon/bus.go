@@ -194,7 +194,7 @@ func buildWireProjections() []projection {
 				FactSessionConversationChanged,
 				FactSessionClosed,
 			},
-			apply: func(d *Daemon, _ bus.Event) { d.projectSharedConversations() },
+			apply: func(d *Daemon, ev bus.Event) { d.projectSharedConversations(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionPullRequestChanged},
