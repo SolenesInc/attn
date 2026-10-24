@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"fmt"
+
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -54,6 +56,21 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 
 	result.Seed = &wire
 	result.Success = true
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) handleSeedPlantWS(client *wsClient, msg *protocol.SeedPlantMessage) {
+	result := protocol.SeedPlantResultMessage{
+		Event:     protocol.EventSeedPlantResult,
+		RequestID: protocol.Deref(msg.RequestID),
+	}
+	seed, err := d.plantSeedRequest(msg)
+	if err != nil {
+		result.Error = protocol.Ptr(fmt.Sprintf("seed plant: %v", err))
+	} else {
+		result.Seed = &seed
+		result.Success = true
+	}
 	d.sendToClient(client, result)
 }
 

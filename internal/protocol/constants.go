@@ -463,6 +463,7 @@ const (
 	EventSeedReviewResult                = "seed_review_result"
 	EventSeedReviewDraftResult           = "seed_review_draft_result"
 	EventSeedTransitionResult            = "seed_transition_result"
+	EventSeedPlantResult                 = "seed_plant_result"
 	EventSeedNoteResult                  = "seed_note_result"
 	EventSessionMessagesGetResult        = "session_messages_get_result"
 	EventSessionMessagesChanged          = "session_messages_changed"

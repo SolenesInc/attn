@@ -425,16 +425,26 @@ func (d *Daemon) sendGardenError(conn net.Conn, verb string, err error) {
 }
 
 func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) {
-	title := strings.TrimSpace(msg.Title)
-	body := protocol.Deref(msg.Body)
-	if err := garden.ValidatePlant(title, body); err != nil {
-		d.sendGardenError(conn, "plant", err)
-		return
-	}
-	schema, err := d.seedsCollection()
+	seed, err := d.plantSeedRequest(msg)
 	if err != nil {
 		d.sendGardenError(conn, "plant", err)
 		return
+	}
+	d.sendGardenResponse(conn, protocol.Response{
+		Ok:              true,
+		SeedPlantResult: &protocol.SeedPlantResult{Seed: seed},
+	})
+}
+
+func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed, error) {
+	title := strings.TrimSpace(msg.Title)
+	body := protocol.Deref(msg.Body)
+	if err := garden.ValidatePlant(title, body); err != nil {
+		return protocol.Seed{}, err
+	}
+	schema, err := d.seedsCollection()
+	if err != nil {
+		return protocol.Seed{}, err
 	}
 
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
@@ -451,27 +461,21 @@ func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) 
 	}
 	if plot := strings.TrimSpace(protocol.Deref(msg.PartOf)); plot != "" {
 		if _, _, err := d.readSeed(plot); err != nil {
-			d.sendGardenError(conn, "plant", err)
-			return
+			return protocol.Seed{}, err
 		}
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: plot})
 	}
 	if origin := strings.TrimSpace(protocol.Deref(msg.DiscoveredFrom)); origin != "" {
 		if _, _, err := d.readSeed(origin); err != nil {
-			d.sendGardenError(conn, "plant", err)
-			return
+			return protocol.Seed{}, err
 		}
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgeDiscoveredFrom, To: origin})
 	}
 	seed, doc, err := d.mintAndPlant(*schema, seed)
 	if err != nil {
-		d.sendGardenError(conn, "plant", err)
-		return
+		return protocol.Seed{}, err
 	}
-	d.sendGardenResponse(conn, protocol.Response{
-		Ok:              true,
-		SeedPlantResult: &protocol.SeedPlantResult{Seed: d.seedWire(seed, doc)},
-	})
+	return d.seedWire(seed, doc), nil
 }
 
 func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {

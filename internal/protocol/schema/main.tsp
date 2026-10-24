@@ -4798,6 +4798,8 @@ model SeedPlantMessage {
 
   "cmd": "seed_plant";
   "source_session_id"?: SessionID;
+  // Set by a WebSocket caller, as on seed_transition.
+  "request_id"?: string;
   "title": string;
   "body"?: string;
   // A crown to plant under: the seed is born part of that plot. Refused when
@@ -4812,6 +4814,16 @@ model SeedPlantMessage {
 
 model SeedPlantResult {
   "seed": Seed;
+}
+
+// SeedPlantResultMessage replies to a WebSocket seed_plant, correlated by
+// request_id.
+model SeedPlantResultMessage {
+  "event": "seed_plant_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "seed"?: Seed;
 }
 
 // Plant a whole plot in one move: the crown and its children, with the
@@ -7265,6 +7277,7 @@ alias DaemonEvent =
   | SeedArtifactTransferResultMessage
   | SeedArtifactTargetResultMessage
   | SeedTransitionResultMessage
+  | SeedPlantResultMessage
   | SeedNoteResultMessage
   | CrewUpdatedMessage
   | CrewCharterGetResultMessage
