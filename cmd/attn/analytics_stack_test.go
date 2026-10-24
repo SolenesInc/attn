@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestCLIOutcomesReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
+func TestCLIUsageErrorsReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
@@ -21,10 +21,7 @@ func TestCLIOutcomesReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
 	s.Launched(session)
 	run := func() {
 		t.Helper()
-		s.Attn("list")
-		s.Run(testworld.Invocation{Args: []string{"list"}, Session: session})
-		s.Attn("seed", "show", "s-zzzzzz")
-		s.Attn("seed", "frobnicate")
+		s.Run(testworld.Invocation{Args: []string{"seed", "frobnicate"}, Session: session})
 		s.Attn("seed", "ls", "--bogus")
 		s.Attn("frobnicate")
 	}
@@ -43,10 +40,7 @@ func TestCLIOutcomesReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
 		recorded[record.Name+" "+string(record.Props)] = true
 	}
 	for _, want := range []string{
-		`query {"caller":"human","ok":true}`,
-		`query {"caller":"agent","harness":"claude","ok":true}`,
-		`seed_show {"caller":"human","error_kind":"refused","ok":false}`,
-		`seed {"caller":"human","error_kind":"unknown_command","ok":false}`,
+		`seed {"caller":"agent","error_kind":"unknown_command","harness":"claude","ok":false}`,
 		`seed ls {"caller":"human","error_kind":"unknown_flag","ok":false}`,
 		`attn {"caller":"human","error_kind":"unknown_command","ok":false}`,
 	} {

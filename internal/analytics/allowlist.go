@@ -26,3 +26,13 @@ var SafeValues = map[string]Allowlist{
 	"worktree.state.changed":   {"origin": true, "merged_signal": true, "sweep_status": true},
 	"worktree.swept":           {"action": true},
 }
+
+var AppSafeValues = map[string]Allowlist{
+	"shortcut":         {"id": true},
+	"palette_command":  {"id": true},
+	"settings_section": {"section": true},
+	"queue_advance":    {"reason": true, "to": true},
+	"react_error":      {"kind": true},
+}
+
+var CLISafeValues = Allowlist{"error_kind": true, "caller": true, "harness": true}

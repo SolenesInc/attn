@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -24,7 +26,7 @@ func TestAppActionsReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
 	}
 
 	setAnalyticsEnabled(app, "true")
-	sendAppAction(app, "shortcut", map[string]any{"id": "dock.asks"})
+	sendAppAction(app, "shortcut", map[string]any{"id": "dock.asks", "label": "Open asks"})
 	sendAppAction(app, "queue_advance", map[string]any{"to": "session", "wait_ms": 42000})
 	recordPaletteCommand(app, "snooze-active-session")
 
@@ -32,7 +34,7 @@ func TestAppActionsReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
 	want := []string{
 		`palette_command {"id":"snooze-active-session"}`,
 		`queue_advance {"to":"session","wait_ms":42000}`,
-		`shortcut {"id":"dock.asks"}`,
+		`shortcut {"id":"dock.asks","label":{"s":9}}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("app records, newest first:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -40,6 +42,47 @@ func TestAppActionsReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
 	seqs := streamSeqs(t, app, analytics.StreamApp)
 	if seqs[0] != 3 || seqs[1] != 2 || seqs[2] != 1 {
 		t.Errorf("app seqs, newest first = %v, want 3 2 1", seqs)
+	}
+}
+
+func TestSocketCommandOutcomesReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(session)
+	commands := map[string]string{
+		"human query":     `{"cmd":"query"}`,
+		"agent query":     `{"cmd":"query","caller_id":"` + w.Terminal(session) + `"}`,
+		"refused command": `{"cmd":"seed_show","seed_id":"s-zzzzzz"}`,
+		"unknown command": `{"cmd":"no_such_command"}`,
+	}
+	run := func() {
+		for _, frame := range []string{commands["human query"], commands["agent query"], commands["refused command"], commands["unknown command"]} {
+			socketCommand(t, w, frame)
+		}
+	}
+
+	run()
+	if got := streamRecords(t, app, analytics.StreamCLI); len(got) != 0 {
+		t.Fatalf("with analytics off the outbox holds cli records %v", got)
+	}
+
+	setAnalyticsEnabled(app, "true")
+	run()
+	var got []string
+	for _, line := range streamRecords(t, app, analytics.StreamCLI) {
+		if strings.HasPrefix(line, "query ") || strings.HasPrefix(line, "seed_show ") || strings.HasPrefix(line, "no_such_command ") {
+			got = append(got, line)
+		}
+	}
+	want := []string{
+		`no_such_command {"caller":"human","error_kind":"unknown_command","ok":false}`,
+		`seed_show {"caller":"human","error_kind":"refused","ok":false}`,
+		`query {"caller":"agent","harness":"claude","ok":true}`,
+		`query {"caller":"human","ok":true}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("cli records, newest first:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 
@@ -124,4 +167,19 @@ func streamSeqs(t *testing.T, app *testworld.Peer, stream analytics.Stream) []in
 		seqs = append(seqs, record.Seq)
 	}
 	return seqs
+}
+
+func socketCommand(t *testing.T, w *world, frame string) {
+	t.Helper()
+	conn, err := w.DialUnix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := io.WriteString(conn, frame+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(io.Discard, conn); err != nil {
+		t.Fatalf("read %s until the daemon closed: %v", frame, err)
+	}
 }

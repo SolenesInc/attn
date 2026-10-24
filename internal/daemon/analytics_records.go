@@ -30,11 +30,22 @@ func (d *Daemon) appendAnalytics(stream analytics.Stream, name string, props any
 	if err != nil {
 		return fmt.Errorf("encode %s/%s props: %w", stream, name, err)
 	}
-	record := analytics.Record{Stream: stream, Name: name, At: time.Now().UTC(), Props: encoded}
+	record := analytics.Record{Stream: stream, Name: name, At: time.Now().UTC(), Props: analytics.Redact(encoded, analyticsSafeValues(stream, name))}
 	if err := d.store.AppendAnalyticsStreamRecord(record); err != nil {
 		return fmt.Errorf("record %s/%s: %w", stream, name, err)
 	}
 	return nil
+}
+
+func analyticsSafeValues(stream analytics.Stream, name string) analytics.Allowlist {
+	switch stream {
+	case analytics.StreamApp:
+		return analytics.AppSafeValues[name]
+	case analytics.StreamCLI:
+		return analytics.CLISafeValues
+	default:
+		return nil
+	}
 }
 
 func (d *Daemon) handleRecordAnalytics(msg *protocol.RecordAnalyticsMessage, caller protocol.TerminalID) {
@@ -76,6 +87,7 @@ type analyticsReplyConn struct {
 }
 
 func (c *analyticsReplyConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
 	if !c.replied {
 		c.replied = true
 		var reply struct {
@@ -87,7 +99,7 @@ func (c *analyticsReplyConn) Write(p []byte) (int, error) {
 			(protocol.Deref(reply.Error) != "" || (reply.Ok != nil && !*reply.Ok) || (reply.Success != nil && !*reply.Success))
 		c.answered(failed)
 	}
-	return c.Conn.Write(p)
+	return n, err
 }
 
 func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
