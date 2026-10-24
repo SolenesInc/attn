@@ -167,7 +167,7 @@ func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
 	if !reflect.DeepEqual(selected, []string{"session.chief", "delegation.boundary", "session.quick-capture-guidance", "session.garden"}) {
 		t.Fatalf("selected sources: %v", selected)
 	}
-	if !reflect.DeepEqual(skipped, []string{"session.agent", "delegation.boundary", "ask.guidance", "session.pull-request-guidance", "session.quick-capture-guidance"}) {
+	if !reflect.DeepEqual(skipped, []string{"session.agent", "delegation.boundary", "ask.guidance", "session.vent-guidance", "session.pull-request-guidance", "session.quick-capture-guidance"}) {
 		t.Fatalf("skipped sources: %v", skipped)
 	}
 	if !strings.HasSuffix(result.Text, "\n\nCrew {{literal}}.") {

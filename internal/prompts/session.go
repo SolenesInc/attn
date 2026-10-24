@@ -14,6 +14,7 @@ var (
 	selfReportPullRequests = FlagField("self_report_pull_requests", "Ask the agent to record PRs when the harness cannot report them.")
 	gardenAvailable        = FlagField("garden_available", "Include Garden guidance.")
 	asksEnabled            = FlagField("asks_enabled", "Include ask guidance when the session launched with asks.")
+	ventEnabled            = FlagField("vent_enabled", "Include vent guidance when the session launched with usage analytics on.")
 	quickCaptureEnabled    = FlagField("quick_capture_enabled", "Include Quick Capture guidance when the experimental feature is enabled.")
 	crewPriming            = ProducedBy(Trimmed(TextField("crew_priming", "Rendered crew identity and predecessor letter, supplied by internal/crew.")), "crew/priming")
 )
@@ -28,6 +29,7 @@ var (
 	quickCaptureGuidance = When(Enabled(quickCaptureEnabled), Use("session.quick-capture-guidance", "content/session/quick-capture.md"))
 	gardenGuidance       = Use("session.garden", "content/garden.md")
 	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
+	ventGuidance         = Use("session.vent-guidance", "content/session/vent-guidance.md")
 )
 
 var session = Recipient{
@@ -42,6 +44,7 @@ var session = Recipient{
 					agentGuidance),
 				When(Enabled(gardenAvailable), gardenGuidance),
 				When(Enabled(asksEnabled), askGuidance),
+				When(Enabled(ventEnabled), ventGuidance),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
 				When(Present(crewPriming), Compose(Input(crewPriming), Choose(Present(notebookRoot), Compose(), quickCaptureGuidance))),
 			)),
@@ -74,6 +77,7 @@ type Launch struct {
 	SelfReportPullRequests bool
 	Garden                 bool
 	Asks                   bool
+	Vent                   bool
 	QuickCapture           bool
 	Crew                   string
 }
@@ -84,6 +88,7 @@ func (l Launch) Values() Values {
 		selfReportPullRequests.Name: strconv.FormatBool(l.SelfReportPullRequests),
 		gardenAvailable.Name:        strconv.FormatBool(l.Garden),
 		asksEnabled.Name:            strconv.FormatBool(l.Asks),
+		ventEnabled.Name:            strconv.FormatBool(l.Vent),
 		quickCaptureEnabled.Name:    strconv.FormatBool(l.QuickCapture),
 		crewPriming.Name:            l.Crew,
 	}

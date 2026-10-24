@@ -2549,6 +2549,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAskList(conn, msg.(*protocol.AskListMessage))
 	case protocol.CmdAskClose:
 		d.handleAskClose(conn, msg.(*protocol.AskCloseMessage))
+	case protocol.CmdRecordVent:
+		d.handleRecordVent(conn, msg.(*protocol.RecordVentMessage))
+	case protocol.CmdWithdrawVent:
+		d.handleWithdrawVent(conn, msg.(*protocol.WithdrawVentMessage))
 
 	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))

@@ -1,11 +1,11 @@
 package ask
 
 import (
-	"crypto/rand"
 	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/shortid"
 )
 
 const (
@@ -305,20 +305,4 @@ func truncate(text string, limit int) string {
 	return strings.TrimSpace(string(runes[:limit-1])) + "…"
 }
 
-const (
-	idPrefix   = "a-"
-	idBodyLen  = 6
-	idAlphabet = "0123456789abcdefghjkmnpqrstvwxyz"
-)
-
-func NewID() (string, error) {
-	buf := make([]byte, idBodyLen)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("mint ask id: %w", err)
-	}
-	out := []byte(idPrefix)
-	for _, b := range buf {
-		out = append(out, idAlphabet[int(b)%len(idAlphabet)])
-	}
-	return string(out), nil
-}
+func NewID() (string, error) { return shortid.New("a-") }

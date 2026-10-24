@@ -143,6 +143,7 @@ func runAgentDirectly(requestedAgent string) {
 		WrapperPath:     resolveWrapperPath(),
 		CodexRemote:     consumeOneShotEnv("ATTN_CODEX_REMOTE"),
 		QuickCapture:    consumeOneShotEnv("ATTN_QUICK_CAPTURE_ENABLED") == "true",
+		Vent:            consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
 	}
 
 	if _, err := agentdriver.EnsureAttnSkillInstalled(driver.Name()); err != nil {

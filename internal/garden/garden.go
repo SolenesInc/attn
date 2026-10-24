@@ -1,13 +1,13 @@
 package garden
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/shortid"
 )
 
 const (
@@ -153,25 +153,11 @@ func DecodeDispatch(body []byte) (Dispatch, error) {
 const (
 	idPrefix     = "s-"
 	noteIDPrefix = "n-"
-	idBodyLen    = 6
-	idAlphabet   = "0123456789abcdefghjkmnpqrstvwxyz"
-	idAlphabetN  = 32
+	idBodyLen    = shortid.BodyLen
+	idAlphabet   = shortid.Alphabet
 )
 
-func NewID() (string, error) { return mintID(idPrefix) }
-
-func mintID(prefix string) (string, error) {
-	buf := make([]byte, idBodyLen)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("mint %sid: %w", prefix, err)
-	}
-	out := make([]byte, 0, len(prefix)+idBodyLen)
-	out = append(out, prefix...)
-	for _, b := range buf {
-		out = append(out, idAlphabet[int(b)%idAlphabetN])
-	}
-	return string(out), nil
-}
+func NewID() (string, error) { return shortid.New(idPrefix) }
 
 func ValidateID(id string) error {
 	body, ok := strings.CutPrefix(id, idPrefix)

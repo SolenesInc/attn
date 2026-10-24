@@ -19,6 +19,7 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harne
 	if !parseBooleanSetting(d.daemonSetting(SettingDirectAgentLaunchEnabled)) {
 		prepareLauncherLaunch(driver, opts, initialPrompt)
 		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", parseBooleanSetting(d.daemonSetting(SettingQuickCaptureEnabled))))
+		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_VENT_ENABLED=%t", d.launchedWithVent(sessionID)))
 		return nil
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
@@ -40,7 +41,7 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harne
 		Model:                 opts.Model, Effort: opts.Effort, AutoCompactWindow: opts.ContextWindowCap,
 		Executable: executable, SocketPath: d.socketPath,
 		WrapperPath:  launchenv.ActiveAttnExecutable(),
-		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks,
+		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks, Vent: launch.Vent,
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		QuickCapture:           launch.QuickCapture,

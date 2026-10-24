@@ -95,17 +95,18 @@ const (
 )
 
 type settingSpec struct {
-	key         string
-	scope       settingScope
-	description string
-	validate    func(*Daemon, string, string) error
-	readOnly    bool
+	key          string
+	scope        settingScope
+	description  string
+	validate     func(*Daemon, string, string) error
+	readOnly     bool
+	experimental bool
 }
 
 func (d *Daemon) daemonSetting(key daemonSettingKey) string { return d.store.GetSetting(string(key)) }
 
 var settingSpecs = []settingSpec{
-	{key: string(settingOutpostsEnabled), scope: daemonScope, description: "Connect to outposts from this home: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: string(settingOutpostsEnabled), scope: daemonScope, experimental: true, description: "Connect to outposts from this home: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(settingOutpostListen), scope: daemonScope, description: "Listen for a home bridge on this address:port. Empty disables the outpost listener.", validate: func(d *Daemon, key, value string) error {
 		if value == "" {
 			return nil
@@ -116,15 +117,15 @@ var settingSpecs = []settingSpec{
 	{key: string(settingOutpostHome), scope: daemonScope, description: "Recorded home daemon id. Release it with attn enrollment leave.", readOnly: true},
 	{key: string(settingOutpostLastError), scope: daemonScope, description: "Last outpost bridge error, kept until the next successful connection.", readOnly: true},
 	{key: SettingCaptureShortcut, scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: SettingQuickCaptureEnabled, scope: daemonScope, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: SettingNewSessionLauncherEnabled, scope: daemonScope, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: SettingDirectAgentLaunchEnabled, scope: daemonScope, description: "Launch agents directly: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: SettingCodexSharedEnabled, scope: daemonScope, description: "Use the shared Codex app server: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: SettingQueueShowHiddenSessions, scope: daemonScope, description: "Include hidden sessions in the queue: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: SettingQueueQuietNotifications, scope: daemonScope, description: "Keep agents a notification woke out of the queue unless they open their turn: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: SettingAsksEnabled, scope: daemonScope, description: "Enable agent asks: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: SettingAnalyticsEnabled, scope: daemonScope, description: "Record usage analytics on this machine: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: SettingCalloutsEnabled, scope: daemonScope, description: "Let agents point at the app interface: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingQuickCaptureEnabled, scope: daemonScope, experimental: true, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingNewSessionLauncherEnabled, scope: daemonScope, experimental: true, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingDirectAgentLaunchEnabled, scope: daemonScope, experimental: true, description: "Launch agents directly: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingCodexSharedEnabled, scope: daemonScope, experimental: true, description: "Use the shared Codex app server: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingQueueShowHiddenSessions, scope: daemonScope, experimental: true, description: "Include hidden sessions in the queue: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingQueueQuietNotifications, scope: daemonScope, experimental: true, description: "Keep agents a notification woke out of the queue unless they open their turn: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingAsksEnabled, scope: daemonScope, experimental: true, description: "Enable agent asks: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingAnalyticsEnabled, scope: daemonScope, experimental: true, description: "Record usage analytics on this machine: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingCalloutsEnabled, scope: daemonScope, experimental: true, description: "Let agents point at the app interface: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingChiefContextWindowCap, scope: daemonScope, description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
 	{key: "chief_model_<harness>", scope: daemonScope, description: "Model for chief sessions. Empty uses the deep intelligence tier.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "chief_effort_<harness>", scope: daemonScope, description: "Reasoning effort for chief sessions. Empty uses the default effort.", validate: func(d *Daemon, key, value string) error { return nil }},
@@ -155,7 +156,7 @@ var settingSpecs = []settingSpec{
 	{key: SettingTheme, scope: daemonScope, description: "App color theme: dark, light or system.", validate: func(d *Daemon, key, value string) error {
 		return validateTheme(value)
 	}},
-	{key: SettingSharedPTYHostEnabled, scope: daemonScope, description: "Use the experimental shared terminal host: true or false.", validate: func(d *Daemon, key, value string) error {
+	{key: SettingSharedPTYHostEnabled, scope: daemonScope, experimental: true, description: "Use the experimental shared terminal host: true or false.", validate: func(d *Daemon, key, value string) error {
 		return validateBooleanSetting(value)
 	}},
 	{key: SettingTailscaleEnabled, scope: daemonScope, description: "Expose attn through Tailscale: true or false.", validate: func(d *Daemon, key, value string) error {

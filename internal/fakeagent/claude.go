@@ -56,6 +56,8 @@ var claudePrintFlags = flagSpec{
 	},
 }
 
+const ClaudeVersion = "2.1.310"
+
 func runClaude(cfg config) int {
 	if slices.Contains(os.Args[1:], "--print") && slices.Contains(os.Args[1:], "--input-format") {
 		return claudeModelDiscovery()
@@ -358,6 +360,7 @@ func (c *claude) line(kind string, message map[string]any) map[string]any {
 		"uuid":      uuid.NewString(),
 		"timestamp": now(),
 		"sessionId": c.conversation,
+		"version":   ClaudeVersion,
 		"cwd":       c.cwd,
 		"message":   message,
 	}

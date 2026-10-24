@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/shortid"
 )
 
 type Verb string
@@ -267,7 +268,7 @@ func (n Note) Author() Tender {
 	return Tender{Session: n.AuthorSession, Member: n.AuthorMember}
 }
 
-func NewNoteID() (string, error) { return mintID(noteIDPrefix) }
+func NewNoteID() (string, error) { return shortid.New(noteIDPrefix) }
 
 func (n Note) Encode() ([]byte, error) { return json.Marshal(n) }
 

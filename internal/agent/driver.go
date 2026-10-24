@@ -183,6 +183,8 @@ type SpawnOpts struct {
 
 	Asks bool
 
+	Vent bool
+
 	CrewPriming  string
 	QuickCapture bool
 
@@ -208,6 +210,7 @@ func (o SpawnOpts) launchSpec() hooks.Launch {
 		NotebookRoot:           o.NotebookRoot,
 		Garden:                 o.Garden,
 		Asks:                   o.Asks,
+		Vent:                   o.Vent,
 		Crew:                   o.CrewPriming,
 		QuickCapture:           o.QuickCapture,
 		SelfReportPullRequests: o.SelfReportPullRequests,

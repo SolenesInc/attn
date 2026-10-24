@@ -1,0 +1,8 @@
+kind: added
+area: agents
+change: >
+  With Usage analytics on, agents launched from then on can run `attn vent` to
+  report what got in their way: a command that misbehaved, instructions that
+  contradict each other, a missing capability. Each vent keeps the session,
+  harness, model and build it came from, stays on this machine, and is limited
+  to one per turn; `attn vent withdraw` takes one back.
