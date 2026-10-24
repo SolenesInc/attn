@@ -74,6 +74,8 @@ export function useSettingsModalState({
   listTasks,
   retryTask,
   taskChangeSignal,
+  onOpenSession,
+  onOpenSeed,
 }: SettingsModalProps & { closeRef: ForwardedRef<SettingsModalHandle> }) {
   const {
     sendDelegationPreferencesGet,
@@ -647,10 +649,16 @@ export function useSettingsModalState({
             keywords:
               'event bus log durable facts producers consumers cursor lag retention compaction trim stalled disabled kill switch seq',
           },
+          ...(analyticsEnabled ? [{
+            id: 'analytics' as const,
+            label: 'Analytics',
+            description: '',
+            keywords: 'analytics usage telemetry vents vent agents outbox records recorded bus app cli sample retention',
+          }] : []),
         ],
       },
     ],
-    [outpostsEnabled],
+    [outpostsEnabled, analyticsEnabled],
   );
 
   const filteredNavGroups = useMemo(() => {
@@ -768,6 +776,8 @@ export function useSettingsModalState({
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
     sendHarnessModels,
+    onOpenSession,
+    onOpenSeed,
     closeSettings,
     settingsSearch,
     setSettingsSearch,

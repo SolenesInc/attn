@@ -116,6 +116,38 @@ func (d *Daemon) sendAnalyticsRecordsWSResult(client *wsClient, msg *protocol.Li
 	d.sendToClient(client, result)
 }
 
+func (d *Daemon) sendAnalyticsStatusWSResult(client *wsClient, msg *protocol.GetAnalyticsStatusMessage) {
+	result := protocol.GetAnalyticsStatusResultMessage{Event: protocol.EventGetAnalyticsStatusResult, RequestID: msg.RequestID}
+	if status, err := d.store.AnalyticsStatus(); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+		result.Records, result.Bytes, result.Waiting = int(status.Records), int(status.Bytes), int(status.Waiting)
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) sendClearAnalyticsRecordsWSResult(client *wsClient, msg *protocol.ClearAnalyticsRecordsMessage) {
+	result := protocol.ClearAnalyticsRecordsResultMessage{Event: protocol.EventClearAnalyticsRecordsResult, RequestID: msg.RequestID}
+	cleared, err := d.store.ClearAnalyticsOutbox()
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+		d.sendToClient(client, result)
+		return
+	}
+	result.Records = int(cleared)
+	vents, err := d.store.DeleteDismissedVents(client.selectedProfile())
+	if err != nil {
+		result.Error = protocol.Ptr(fmt.Sprintf("cleared %d records but not the dismissed vents: %v", cleared, err))
+		d.sendToClient(client, result)
+		return
+	}
+	d.announceDeletedVents(vents)
+	result.Success = true
+	result.Vents = len(vents)
+	d.sendToClient(client, result)
+}
+
 func (d *Daemon) analyticsRecords(msg *protocol.ListAnalyticsRecordsMessage) (store.AnalyticsPage, error) {
 	if msg.Limit < 1 || msg.Limit > analyticsPageLimit {
 		return store.AnalyticsPage{}, fmt.Errorf("limit must be between 1 and %d, got %d", analyticsPageLimit, msg.Limit)

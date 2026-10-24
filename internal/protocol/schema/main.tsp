@@ -1242,6 +1242,40 @@ model ListAnalyticsRecordsMessage {
   limit: int32;
 }
 
+// How much the analytics outbox holds on this machine.
+model GetAnalyticsStatusMessage {
+  cmd: "get_analytics_status";
+  request_id: string;
+}
+
+// records and bytes cover every outbox row; bytes counts the stored record
+// text. waiting counts rows not yet sent.
+model GetAnalyticsStatusResultMessage {
+  event: "get_analytics_status_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  records: safeint;
+  bytes: safeint;
+  waiting: safeint;
+}
+
+// Delete every analytics outbox row on this machine, and the selected
+// profile's dismissed vents.
+model ClearAnalyticsRecordsMessage {
+  cmd: "clear_analytics_records";
+  request_id: string;
+}
+
+model ClearAnalyticsRecordsResultMessage {
+  event: "clear_analytics_records_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  records: safeint;
+  vents: safeint;
+}
+
 // Record one app action or CLI outcome in the analytics outbox. No reply; the
 // daemon drops it while analytics.enabled is off. props holds code-defined
 // values only (ids, kinds, counts), never user text.
@@ -3493,7 +3527,8 @@ model VentContext {
 }
 
 // An agent's report of what got in its way. withdrawn_at is set when the agent
-// took it back, dismissed_at while the user has dismissed it.
+// took it back, dismissed_at while the user has dismissed it, planted_seed_id
+// once the user planted a seed from it.
 model Vent {
   id: string;
   session_id: SessionID;
@@ -3502,6 +3537,7 @@ model Vent {
   created_at: string;
   withdrawn_at?: string;
   dismissed_at?: string;
+  planted_seed_id?: string;
 }
 
 model RecordVentMessage {
@@ -3514,6 +3550,37 @@ model WithdrawVentMessage {
   cmd: "withdraw_vent";
   session_id: SessionID;
   vent_id: string;
+}
+
+// Plant a seed in the garden from a vent and link it to the vent, in one step.
+model PlantVentSeedMessage {
+  cmd: "plant_vent_seed";
+  request_id: string;
+  vent_id: string;
+}
+
+model PlantVentSeedResultMessage {
+  event: "plant_vent_seed_result";
+  request_id: string;
+  vent_id: string;
+  success: boolean;
+  error?: string;
+  seed?: Seed;
+}
+
+// Undo plant_vent_seed: wither the planted seed and put the vent back in New.
+model UnplantVentSeedMessage {
+  cmd: "unplant_vent_seed";
+  request_id: string;
+  vent_id: string;
+}
+
+model UnplantVentSeedResultMessage {
+  event: "unplant_vent_seed_result";
+  request_id: string;
+  vent_id: string;
+  success: boolean;
+  error?: string;
 }
 
 model SetVentDismissedMessage {
@@ -7375,6 +7442,10 @@ alias DaemonEvent =
   | AskAnswerResultMessage
   | AsksUpdatedMessage
   | SetVentDismissedResultMessage
+  | PlantVentSeedResultMessage
+  | UnplantVentSeedResultMessage
+  | GetAnalyticsStatusResultMessage
+  | ClearAnalyticsRecordsResultMessage
   | VentsUpdatedMessage
   | SharedCodexChangedMessage
   | OpenMarkdownResultMessage

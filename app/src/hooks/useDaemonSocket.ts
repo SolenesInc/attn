@@ -6,6 +6,8 @@ export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
+import { useVentsStore } from '../store/vents';
+import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
@@ -1141,6 +1143,7 @@ export function useDaemonSocket({
             );
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useAsksStore.getState().setAsks(data.asks || []);
+            useVentsStore.getState().setVents(data.vents || []);
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
@@ -2302,6 +2305,7 @@ export function useDaemonSocket({
             if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAskDaemonEvent(data, pending)) break;
+            if (handleAnalyticsDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -3576,6 +3580,28 @@ export function useDaemonSocket({
   const sendRecordAnalytics = useCallback((name: string, props: Record<string, string | number>) =>
     sendOrQueueCommand({ cmd: 'record_analytics', stream: 'app', name, props }), [sendOrQueueCommand]);
 
+  const sendListAnalyticsRecords = useCallback((stream: string | null, beforeId: number | null, limit: number): Promise<AnalyticsRecordPage> =>
+    sendRequest('list_analytics_records', {
+      limit,
+      ...(stream ? { stream } : {}),
+      ...(beforeId !== null ? { before_id: beforeId } : {}),
+    }, 'Reading the analytics records timed out'), [sendRequest]);
+
+  const sendSetVentDismissed = useCallback((ventId: string, dismissed: boolean): Promise<true> =>
+    sendRequest('set_vent_dismissed', { vent_id: ventId, dismissed }, 'Changing the vent timed out'), [sendRequest]);
+
+  const sendPlantVentSeed = useCallback((ventId: string): Promise<Seed> =>
+    sendRequest('plant_vent_seed', { vent_id: ventId }, 'Planting the seed timed out'), [sendRequest]);
+
+  const sendUnplantVentSeed = useCallback((ventId: string): Promise<true> =>
+    sendRequest('unplant_vent_seed', { vent_id: ventId }, 'Undoing the plant timed out'), [sendRequest]);
+
+  const sendGetAnalyticsStatus = useCallback((): Promise<AnalyticsStatus> =>
+    sendRequest('get_analytics_status', {}, 'Reading the analytics status timed out'), [sendRequest]);
+
+  const sendClearAnalyticsRecords = useCallback((): Promise<AnalyticsCleared> =>
+    sendRequest('clear_analytics_records', {}, 'Clearing the analytics records timed out'), [sendRequest]);
+
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
@@ -4283,6 +4309,12 @@ export function useDaemonSocket({
     sendGetCommandUsage,
     sendRecordCommandUsage,
     sendRecordAnalytics,
+    sendListAnalyticsRecords,
+    sendSetVentDismissed,
+    sendPlantVentSeed,
+    sendUnplantVentSeed,
+    sendGetAnalyticsStatus,
+    sendClearAnalyticsRecords,
     sendAskAnswer,
     sendRecentFiles,
     sendGetRecentLocations,

@@ -8,6 +8,8 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -190,4 +192,48 @@ func recordSeqs(t *testing.T, rows []protocol.AnalyticsOutboxRow) []int64 {
 		seqs = append(seqs, record.Seq)
 	}
 	return seqs
+}
+
+func TestTheUserSeesTheOutboxSizeAndClearsIt(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli, app := w.Client(), w.App()
+		defineRequests(t, cli, gateNS)
+		setAnalyticsEnabled(app, "true")
+		for _, id := range []string{"a", "b", "c"} {
+			put(t, cli, gateNS, id, `{}`)
+		}
+		synctest.Wait()
+
+		listed := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 1000})
+		bytes := 0
+		for _, row := range listed.Records {
+			bytes += len(row.Record)
+		}
+		status := analyticsStatus(app)
+		if status.Records != len(listed.Records) || status.Bytes != bytes || status.Waiting != listed.Waiting {
+			t.Fatalf("status = %d records, %d bytes, %d waiting; the listing holds %d records, %d bytes, %d waiting",
+				status.Records, status.Bytes, status.Waiting, len(listed.Records), bytes, listed.Waiting)
+		}
+
+		requestID := uuid.NewString()
+		cleared := testworld.Request(app, protocol.ClearAnalyticsRecordsMessage{Cmd: protocol.CmdClearAnalyticsRecords, RequestID: requestID},
+			protocol.EventClearAnalyticsRecordsResult, func(r protocol.ClearAnalyticsRecordsResultMessage) bool { return r.RequestID == requestID })
+		if !cleared.Success || cleared.Records < len(listed.Records) {
+			t.Fatalf("clear = %+v, want at least the %d listed records deleted", cleared, len(listed.Records))
+		}
+		if after := analyticsStatus(app); after.Records != 0 || after.Bytes != 0 || after.Waiting != 0 {
+			t.Errorf("after clearing, status = %d records, %d bytes, %d waiting; want none", after.Records, after.Bytes, after.Waiting)
+		}
+	})
+}
+
+func analyticsStatus(app *testworld.Peer) protocol.GetAnalyticsStatusResultMessage {
+	app.T.Helper()
+	requestID := uuid.NewString()
+	status := testworld.Request(app, protocol.GetAnalyticsStatusMessage{Cmd: protocol.CmdGetAnalyticsStatus, RequestID: requestID},
+		protocol.EventGetAnalyticsStatusResult, func(r protocol.GetAnalyticsStatusResultMessage) bool { return r.RequestID == requestID })
+	if !status.Success {
+		app.T.Fatalf("analytics status refused: %s", protocol.Deref(status.Error))
+	}
+	return status
 }

@@ -42,6 +42,8 @@ export interface SettingsModalProps {
   listTasks?: () => Promise<Task[]>;
   retryTask?: (taskId: string) => Promise<Task | null>;
   taskChangeSignal?: number;
+  onOpenSession?: (sessionId: string) => void;
+  onOpenSeed?: (seedId: string) => void;
 }
 
 export type SettingsSectionID =
@@ -58,7 +60,8 @@ export type SettingsSectionID =
   | 'outposts'
   | 'plugins'
   | 'backgroundTasks'
-  | 'eventBus';
+  | 'eventBus'
+  | 'analytics';
 
 export const DEFAULT_CONTEXT_WINDOW_CAP = 128000;
 

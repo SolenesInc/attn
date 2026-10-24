@@ -921,6 +921,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("sendNotificationListWSResult", func() { d.sendNotificationListWSResult(client, protocol.Deref(notifList.RequestID)) })
 	case protocol.CmdListAnalyticsRecords:
 		d.life.Go("sendAnalyticsRecordsWSResult", func() { d.sendAnalyticsRecordsWSResult(client, msg.(*protocol.ListAnalyticsRecordsMessage)) })
+	case protocol.CmdGetAnalyticsStatus:
+		d.life.Go("sendAnalyticsStatusWSResult", func() { d.sendAnalyticsStatusWSResult(client, msg.(*protocol.GetAnalyticsStatusMessage)) })
+	case protocol.CmdClearAnalyticsRecords:
+		d.life.Go("sendClearAnalyticsRecordsWSResult", func() { d.sendClearAnalyticsRecordsWSResult(client, msg.(*protocol.ClearAnalyticsRecordsMessage)) })
 	case protocol.CmdNotificationMarkRead:
 		notifMark := msg.(*protocol.NotificationMarkReadMessage)
 		d.life.Go("sendNotificationMarkReadWSResult", func() {
@@ -1135,6 +1139,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAskAnswer(client, msg.(*protocol.AskAnswerMessage))
 	case protocol.CmdSetVentDismissed:
 		d.handleSetVentDismissed(client, msg.(*protocol.SetVentDismissedMessage))
+	case protocol.CmdPlantVentSeed:
+		d.handlePlantVentSeed(client, msg.(*protocol.PlantVentSeedMessage))
+	case protocol.CmdUnplantVentSeed:
+		d.handleUnplantVentSeed(client, msg.(*protocol.UnplantVentSeedMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:

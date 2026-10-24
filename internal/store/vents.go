@@ -21,18 +21,19 @@ func (e *VentTurnTakenError) Error() string {
 }
 
 type Vent struct {
-	ID          string
-	ProfileID   string
-	SessionID   protocol.SessionID
-	Turn        string
-	Text        string
-	Context     protocol.VentContext
-	CreatedAt   time.Time
-	WithdrawnAt time.Time
-	DismissedAt time.Time
+	ID            string
+	ProfileID     string
+	SessionID     protocol.SessionID
+	Turn          string
+	Text          string
+	Context       protocol.VentContext
+	CreatedAt     time.Time
+	WithdrawnAt   time.Time
+	DismissedAt   time.Time
+	PlantedSeedID string
 }
 
-const ventColumns = "id, profile_id, session_id, turn, text, context, created_at, withdrawn_at, dismissed_at"
+const ventColumns = "id, profile_id, session_id, turn, text, context, created_at, withdrawn_at, dismissed_at, planted_seed_id"
 
 func ventTime(t time.Time) string { return t.UTC().Format(analyticsTimeLayout) }
 
@@ -88,6 +89,34 @@ func (s *Store) SetVentDismissed(id string, dismissed bool, at time.Time) (bool,
 	return n > 0, err
 }
 
+func (s *Store) SetVentPlanted(id, seedID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return false, nil
+	}
+	result, err := s.db.Exec("UPDATE vents SET planted_seed_id = ? WHERE id = ? AND planted_seed_id IS NULL AND withdrawn_at IS NULL", seedID, id)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n > 0, err
+}
+
+func (s *Store) ClearVentPlanted(id, seedID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return false, nil
+	}
+	result, err := s.db.Exec("UPDATE vents SET planted_seed_id = NULL WHERE id = ? AND planted_seed_id = ?", id, seedID)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n > 0, err
+}
+
 func (s *Store) Vent(id string) (Vent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -123,18 +152,35 @@ func (s *Store) Vents(profileID string) ([]Vent, error) {
 	return vents, rows.Err()
 }
 
-func (s *Store) PruneVents(before time.Time) (int64, error) {
+func (s *Store) PruneVents(before time.Time) ([]Vent, error) {
+	cutoff := ventTime(before)
+	return s.deleteVents("withdrawn_at < ? OR dismissed_at < ?", cutoff, cutoff)
+}
+
+func (s *Store) DeleteDismissedVents(profileID string) ([]Vent, error) {
+	return s.deleteVents("profile_id = ? AND dismissed_at IS NOT NULL", profileID)
+}
+
+func (s *Store) deleteVents(where string, args ...any) ([]Vent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
-		return 0, nil
+		return nil, nil
 	}
-	cutoff := ventTime(before)
-	result, err := s.db.Exec("DELETE FROM vents WHERE withdrawn_at < ? OR dismissed_at < ?", cutoff, cutoff)
+	rows, err := s.db.Query("DELETE FROM vents WHERE "+where+" RETURNING "+ventColumns, args...)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected()
+	defer rows.Close()
+	var deleted []Vent
+	for rows.Next() {
+		v, err := scanVent(rows)
+		if err != nil {
+			return nil, err
+		}
+		deleted = append(deleted, v)
+	}
+	return deleted, rows.Err()
 }
 
 func scanVent(row interface{ Scan(...any) error }) (Vent, error) {
@@ -142,8 +188,9 @@ func scanVent(row interface{ Scan(...any) error }) (Vent, error) {
 		v                    Vent
 		context, created     string
 		withdrawn, dismissed sql.NullString
+		planted              sql.NullString
 	)
-	if err := row.Scan(&v.ID, &v.ProfileID, &v.SessionID, &v.Turn, &v.Text, &context, &created, &withdrawn, &dismissed); err != nil {
+	if err := row.Scan(&v.ID, &v.ProfileID, &v.SessionID, &v.Turn, &v.Text, &context, &created, &withdrawn, &dismissed, &planted); err != nil {
 		return Vent{}, err
 	}
 	if err := json.Unmarshal([]byte(context), &v.Context); err != nil {
@@ -152,5 +199,6 @@ func scanVent(row interface{ Scan(...any) error }) (Vent, error) {
 	v.CreatedAt = parseStoreTime(created)
 	v.WithdrawnAt = parseStoreTime(withdrawn.String)
 	v.DismissedAt = parseStoreTime(dismissed.String)
+	v.PlantedSeedID = planted.String
 	return v, nil
 }

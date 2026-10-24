@@ -98,6 +98,8 @@ const (
 	FactVentWithdrawn = "vent.withdrawn"
 	FactVentDismissed = "vent.dismissed"
 	FactVentRestored  = "vent.restored"
+	FactVentPlanted   = "vent.planted"
+	FactVentDeleted   = "vent.deleted"
 
 	FactSharedCodexChanged = "shared_codex.changed"
 
@@ -412,7 +414,7 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
 		},
 		{
-			filter: bus.Filter{FactVentRecorded, FactVentWithdrawn, FactVentDismissed, FactVentRestored},
+			filter: bus.Filter{FactVentRecorded, FactVentWithdrawn, FactVentDismissed, FactVentRestored, FactVentPlanted, FactVentDeleted},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectVents() },
 		},
 		{

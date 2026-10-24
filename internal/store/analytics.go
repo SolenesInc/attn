@@ -114,6 +114,35 @@ func (s *Store) PruneAnalyticsOutbox(before time.Time) (int64, error) {
 	return result.RowsAffected()
 }
 
+type AnalyticsStatus struct {
+	Records, Bytes, Waiting int64
+}
+
+func (s *Store) AnalyticsStatus() (AnalyticsStatus, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var status AnalyticsStatus
+	if s.db == nil {
+		return status, nil
+	}
+	err := s.db.QueryRow("SELECT count(*), coalesce(sum(length(record)), 0), count(*) - count(sent_at) FROM analytics_outbox").
+		Scan(&status.Records, &status.Bytes, &status.Waiting)
+	return status, err
+}
+
+func (s *Store) ClearAnalyticsOutbox() (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, nil
+	}
+	result, err := s.db.Exec("DELETE FROM analytics_outbox")
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 func (s *Store) DatabaseBytes() (int64, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

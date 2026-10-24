@@ -2196,6 +2196,34 @@ type ChiefOfStaffResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type ClearAnalyticsRecordsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type ClearAnalyticsRecordsResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Records corresponds to the JSON schema field "records".
+	Records int `json:"records"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Vents corresponds to the JSON schema field "vents".
+	Vents int `json:"vents"`
+}
+
 type ClearSessionActivityMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -4851,6 +4879,37 @@ type GardenSeedsUpdatedMessage struct {
 	Total int `json:"total"`
 }
 
+type GetAnalyticsStatusMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type GetAnalyticsStatusResultMessage struct {
+	// Bytes corresponds to the JSON schema field "bytes".
+	Bytes int `json:"bytes"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Records corresponds to the JSON schema field "records".
+	Records int `json:"records"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Waiting corresponds to the JSON schema field "waiting".
+	Waiting int `json:"waiting"`
+}
+
 type GetCommandUsageMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7056,6 +7115,37 @@ type PathInspection struct {
 
 	// ResolvedPath corresponds to the JSON schema field "resolved_path".
 	ResolvedPath string `json:"resolved_path"`
+}
+
+type PlantVentSeedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// VentID corresponds to the JSON schema field "vent_id".
+	VentID string `json:"vent_id"`
+}
+
+type PlantVentSeedResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed *Seed `json:"seed,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// VentID corresponds to the JSON schema field "vent_id".
+	VentID string `json:"vent_id"`
 }
 
 type PluginActionResultMessage struct {
@@ -11519,6 +11609,34 @@ type UninstallPluginMessage struct {
 	Name string `json:"name"`
 }
 
+type UnplantVentSeedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// VentID corresponds to the JSON schema field "vent_id".
+	VentID string `json:"vent_id"`
+}
+
+type UnplantVentSeedResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// VentID corresponds to the JSON schema field "vent_id".
+	VentID string `json:"vent_id"`
+}
+
 type UnregisterMessage struct {
 	// CloseReason corresponds to the JSON schema field "close_reason".
 	CloseReason *string `json:"close_reason,omitempty,omitzero"`
@@ -11545,6 +11663,9 @@ type Vent struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+
+	// PlantedSeedID corresponds to the JSON schema field "planted_seed_id".
+	PlantedSeedID *string `json:"planted_seed_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`

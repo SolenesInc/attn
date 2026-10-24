@@ -15,6 +15,7 @@ const SETTINGS_SECTION_IDS = [
   'plugins',
   'backgroundTasks',
   'eventBus',
+  'analytics',
 ] as const;
 
 export type SettingsAutomationSectionID = (typeof SETTINGS_SECTION_IDS)[number];
