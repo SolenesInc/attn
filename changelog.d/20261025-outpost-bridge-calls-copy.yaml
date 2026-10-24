@@ -1,0 +1,3 @@
+kind: internal
+area: outposts
+change: The bridge carries calls and long-lived channels both ways, and a home keeps a copy of the session rows of each outpost's terminals on that outpost. `attn enrollment leave` drops that copy.
