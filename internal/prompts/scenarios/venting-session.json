@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "venting-session",
+  "description": "Ordinary session that launched with usage analytics on, so it can vent.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "",
+    "garden_available": "true",
+    "asks_enabled": "true",
+    "vent_enabled": "true",
+    "crew_priming": "",
+    "self_report_pull_requests": "false"
+  }
+}

@@ -110,6 +110,14 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		); err != nil {
 			d.logf("analytics: register resource sample tick: %v", err)
 		}
+		if err := runner.RegisterCron(
+			ventsPruneKind,
+			ventsPruneInterval,
+			d.ventsPruneHandler,
+			jobs.HandlerConfig{Timeout: ventsPruneTimeout},
+		); err != nil {
+			d.logf("vents: register prune tick: %v", err)
+		}
 		d.registerCrewLifecycleCron(runner)
 		d.registerSessionPullRequestRefreshCron(runner)
 		d.registerWorktreeSweepCron(runner)

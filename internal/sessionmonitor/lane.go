@@ -426,6 +426,15 @@ func (l *lane) stopFollowsNotificationLocked() bool {
 	return l.stoppedAfterNotification
 }
 
+func (e *Entry) LatestRun() uint64 {
+	if e == nil {
+		return 0
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.input.epoch
+}
+
 func (l *lane) currentUserRunLocked() (runRef, bool) {
 	if l.run == nil || !l.run.credited {
 		return runRef{}, false

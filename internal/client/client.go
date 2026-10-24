@@ -810,6 +810,22 @@ func (c *Client) AgentTurn(sessionID protocol.SessionID, action protocol.AgentTu
 	return resp.AgentTurnResult, nil
 }
 
+func (c *Client) RecordVent(sessionID protocol.SessionID, text string) (*protocol.Vent, error) {
+	resp, err := c.send(protocol.RecordVentMessage{Cmd: protocol.CmdRecordVent, SessionID: sessionID, Text: text})
+	if err != nil {
+		return nil, err
+	}
+	if resp.RecordVentResult == nil {
+		return nil, errors.New("daemon returned no vent")
+	}
+	return resp.RecordVentResult, nil
+}
+
+func (c *Client) WithdrawVent(sessionID protocol.SessionID, ventID string) error {
+	_, err := c.send(protocol.WithdrawVentMessage{Cmd: protocol.CmdWithdrawVent, SessionID: sessionID, VentID: strings.TrimSpace(ventID)})
+	return err
+}
+
 func (c *Client) AskClose(sessionID protocol.SessionID, askID string) error {
 	_, err := c.send(protocol.AskCloseMessage{Cmd: protocol.CmdAskClose, SessionID: sessionID, AskID: askID})
 	return err

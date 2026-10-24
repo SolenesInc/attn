@@ -3275,6 +3275,8 @@ model InitialStateMessage {
   crew?: CrewMember[];
   // The selected profile's open asks.
   asks?: Ask[];
+  // Every vent the selected profile keeps, newest first.
+  vents?: Vent[];
   // The selected profile's shared Codex versions, absent while Shared Codex is
   // off.
   shared_codex?: SharedCodexState;
@@ -3451,6 +3453,88 @@ model AsksUpdatedMessage {
   event: "asks_updated";
   profile_id: string;
   asks: Ask[];
+}
+
+// The build that recorded something, as analytics records carry it.
+model AnalyticsBuild {
+  version: string;
+  commit: string;
+  channel: string;
+  build_time: string;
+  fingerprint: string;
+  protocol: string;
+  os: string;
+  arch: string;
+  dirty: boolean;
+  app_version?: string;
+  app_channel?: string;
+}
+
+// Where the agent's transcript stood when it vented: its path and size.
+model VentTranscript {
+  path: string;
+  bytes: safeint;
+}
+
+// What attn knew about the venting agent, captured without the agent typing
+// it. harness_version is the version the harness wrote into its transcript.
+// experimental lists the experimental settings that were on when the session
+// launched.
+model VentContext {
+  session_label: string;
+  harness: string;
+  harness_version?: string;
+  `model`?: string;
+  seed_id?: string;
+  build: AnalyticsBuild;
+  experimental: string[];
+  transcript?: VentTranscript;
+}
+
+// An agent's report of what got in its way. withdrawn_at is set when the agent
+// took it back, dismissed_at while the user has dismissed it.
+model Vent {
+  id: string;
+  session_id: SessionID;
+  text: string;
+  context: VentContext;
+  created_at: string;
+  withdrawn_at?: string;
+  dismissed_at?: string;
+}
+
+model RecordVentMessage {
+  cmd: "record_vent";
+  session_id: SessionID;
+  text: string;
+}
+
+model WithdrawVentMessage {
+  cmd: "withdraw_vent";
+  session_id: SessionID;
+  vent_id: string;
+}
+
+model SetVentDismissedMessage {
+  cmd: "set_vent_dismissed";
+  request_id: string;
+  vent_id: string;
+  dismissed: boolean;
+}
+
+model SetVentDismissedResultMessage {
+  event: "set_vent_dismissed_result";
+  request_id: string;
+  vent_id: string;
+  success: boolean;
+  error?: string;
+}
+
+// Every vent the profile keeps, newest first.
+model VentsUpdatedMessage {
+  event: "vents_updated";
+  profile_id: string;
+  vents: Vent[];
 }
 
 // pending: the installed Codex differs from the one the profile's app-server
@@ -5856,6 +5940,7 @@ model Response {
   worktree_refresh_result?: WorktreeRefreshResult;
   ask_open_result?: Ask;
   ask_list_result?: AskListResult;
+  record_vent_result?: Vent;
   session_instructions_result?: SessionInstructionsResult;
   session_transcript_result?: SessionTranscriptResult;
   session_list_result?: SessionListResult;
@@ -7288,6 +7373,8 @@ alias DaemonEvent =
   | ClientEvictionNoticeMessage
   | AskAnswerResultMessage
   | AsksUpdatedMessage
+  | SetVentDismissedResultMessage
+  | VentsUpdatedMessage
   | SharedCodexChangedMessage
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage

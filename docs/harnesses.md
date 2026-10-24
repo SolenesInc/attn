@@ -29,6 +29,20 @@ Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
 terminal identity.
 
+## The running version in the transcript
+
+Each harness writes the version of the running process into its transcript, so
+it stays right after the binary on disk updates. Probed on the user's own
+transcripts on 2026-10-24:
+
+- Claude Code (2.1.302, 2.1.310): every line has a top-level `version`. The
+  newest one is at most 38.8 KB from the end of the file, across 300
+  transcripts with lines up to 1.8 MB.
+- Codex (0.162.1): the first line is `session_meta`, with
+  `payload.cli_version`; that line is about 23 KB.
+- Pi: the first line's `version` is the transcript format (3), not Pi's
+  version.
+
 ## Claude Code
 
 Probed on 2.1.288 with a mock API.

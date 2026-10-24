@@ -368,6 +368,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	intent.Asks = d.launchedWithAsks(sessionID)
+	intent.Vent, intent.Experimental = d.launchVentIntent(sessionID)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode

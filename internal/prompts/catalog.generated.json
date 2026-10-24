@@ -131,6 +131,24 @@
                 "kind": "when",
                 "condition": {
                   "field": {
+                    "name": "vent_enabled",
+                    "kind": "flag",
+                    "description": "Include vent guidance when the session launched with usage analytics on."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "session.vent-guidance",
+                    "source": "content/session/vent-guidance.md"
+                  }
+                ]
+              },
+              {
+                "kind": "when",
+                "condition": {
+                  "field": {
                     "name": "self_report_pull_requests",
                     "kind": "flag",
                     "description": "Ask the agent to record PRs when the harness cannot report them."
@@ -5136,5 +5154,5 @@
       ]
     }
   ],
-  "definitions_hash": "d1d786f8dde843f2dbf4ee70eac55fe44065d827aaeca991c4fafc79f4df0a8e"
+  "definitions_hash": "1dd586ffed6d9ac74d7ac55d9e51c9feb208a7913060edfb26bb44ec51ba8041"
 }

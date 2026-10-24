@@ -94,6 +94,11 @@ const (
 	FactAskOpened = "ask.opened"
 	FactAskClosed = "ask.closed"
 
+	FactVentRecorded  = "vent.recorded"
+	FactVentWithdrawn = "vent.withdrawn"
+	FactVentDismissed = "vent.dismissed"
+	FactVentRestored  = "vent.restored"
+
 	FactSharedCodexChanged = "shared_codex.changed"
 
 	FactDocumentChanged              = "document.changed"
@@ -384,6 +389,10 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
 		},
 		{
+			filter: bus.Filter{FactVentRecorded, FactVentWithdrawn, FactVentDismissed, FactVentRestored},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectVents() },
+		},
+		{
 			filter: bus.Filter{FactSharedCodexChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectSharedCodex() },
 		},
@@ -534,6 +543,7 @@ const (
 	snapshotSessions    = "sessions_updated"
 	snapshotGarden      = "garden_seeds_updated"
 	snapshotAsks        = "asks_updated"
+	snapshotVents       = "vents_updated"
 	snapshotSharedCodex = "shared_codex_changed"
 	snapshotCrew        = "crew_updated"
 	snapshotPRs         = "prs_updated"

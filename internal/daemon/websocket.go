@@ -582,6 +582,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Warnings:               d.getWarnings(),
 		Crew:                   state.Crew,
 		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
+		Vents:                  d.ventsSnapshot(client.selectedProfile()).Vents,
 		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
 	}
 	d.fillInitialMigrationPhase(event)
@@ -1132,6 +1133,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
 	case protocol.CmdAskAnswer:
 		d.handleAskAnswer(client, msg.(*protocol.AskAnswerMessage))
+	case protocol.CmdSetVentDismissed:
+		d.handleSetVentDismissed(client, msg.(*protocol.SetVentDismissedMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:
