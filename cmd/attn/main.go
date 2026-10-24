@@ -438,14 +438,48 @@ func runDaemonCommand() {
 	}
 	switch os.Args[2] {
 	case "ensure":
+		refuseDaemonCommandArgs("ensure", os.Args[3:])
 		runDaemonEnsure()
 	case "stop":
+		refuseDaemonCommandArgs("stop", os.Args[3:])
 		runDaemonStop()
+	case "help", "-h", "--help":
+		writeDaemonHelp(os.Stdout)
 	default:
 		recordUsageError("daemon", usageErrorUnknownCommand)
-		fmt.Fprintf(os.Stderr, "unknown daemon subcommand %q (expected: ensure, stop)\n", os.Args[2])
+		fmt.Fprintf(os.Stderr, "unknown daemon subcommand %q (expected: ensure, stop)\n\n", os.Args[2])
+		writeDaemonHelp(os.Stderr)
 		os.Exit(1)
 	}
+}
+
+func refuseDaemonCommandArgs(command string, args []string) {
+	if len(args) == 0 {
+		return
+	}
+	if hasHelpFlag(args) {
+		writeDaemonHelp(os.Stdout)
+		os.Exit(0)
+	}
+	recordUsageError("daemon "+command, usageErrorUnknownFlag)
+	fmt.Fprintf(os.Stderr, "daemon %s: unknown argument %q; it takes no arguments\n\n", command, args[0])
+	writeDaemonHelp(os.Stderr)
+	os.Exit(2)
+}
+
+func writeDaemonHelp(w io.Writer) {
+	fmt.Fprint(w, `usage: attn daemon [ensure|stop]
+
+With no command, runs the daemon in the foreground.
+
+commands:
+  ensure    start the daemon in the background, or restart one that does not
+            match this binary, and print the outcome as JSON: status is
+            started, already_running or restarted (with a reason)
+  stop      stop the running daemon
+
+Both act on the active instance's daemon; attn instance status names it.
+`)
 }
 
 func runDaemon() {
@@ -613,8 +647,7 @@ commands:
   handoff -m "<letter>"             file this crew member's letter; the day turns over
   doc <command>                     document store: collections, documents, live queries
   vision-check <image> <question>   answer a question about an image (single LLM call)
-  daemon <command>                  manage the daemon
-	  daemon ensure|stop                ensure the daemon is running, or stop it
+  daemon [ensure|stop]              run the daemon, ensure it is running, or stop it
   instance <status|resolve|list>    show / resolve the active instance's resources
   instance-env <instance|--unset>   print shell commands for selecting an instance
   skill [--reference <name>|--list] print the bundled agent skill and its references
