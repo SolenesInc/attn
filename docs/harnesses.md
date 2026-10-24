@@ -508,7 +508,11 @@ two `SessionManager`s on one file that share nothing but the file:
 - Each writer continues its own branch from its own entries in memory, so the
   file becomes a tree, and neither sees the other's entries. Opening the file
   again loads the branch ending at the last entry written.
+- Switching sessions with `/resume`, `/new` or `/fork` tears down every
+  extension with `session_shutdown` and loads a fresh instance of each for the
+  new session, which receives `session_start` with `reason` `resume`, `new` or
+  `fork` and `previousSessionFile` (`dist/core/agent-session-runtime.js`).
 
 Pi has no link either, so two Pi terminals on one conversation are two
-sessions and the file forks. attn does not yet record which conversation a Pi
-session runs, so no tile warns.
+sessions and the file forks, and both tiles warn until one process exits or
+moves to another conversation.

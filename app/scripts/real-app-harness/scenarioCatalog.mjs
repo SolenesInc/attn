@@ -160,6 +160,14 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-claude-shared-conversation'],
   },
   {
+    id: 'pi-shared-conversation',
+    runnerId: 'PI-SHARED-CONVERSATION',
+    label: 'Two Pi tiles on one conversation both warn until one of them closes',
+    command: ['pnpm', 'run', 'real-app:scenario-pi-shared-conversation'],
+    timeoutMs: 300_000,
+    allowRealAgents: ['pi'],
+  },
+  {
     id: 'session-reopen',
     runnerId: 'SESSION-REOPEN',
     label: 'A closed worktree session reopens under its own id, recreating a deleted worktree only when asked',

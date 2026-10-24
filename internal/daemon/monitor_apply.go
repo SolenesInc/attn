@@ -36,7 +36,7 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 		r.applyMu.Unlock()
 		return true
 	}
-	recorded, err := h.recordConversation(session, previous, view)
+	recorded, moved, err := h.recordConversation(session, previous, view)
 	var linked []string
 	if err == nil {
 		linked, err = h.recordPullRequests(session, previous, view)
@@ -52,6 +52,9 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	if recorded != "" {
 		h.monitor.SettleSwitch(recorded)
 	}
+	if moved {
+		d.publishFact(FactSessionConversationChanged, string(session), agentConversationObservation{SessionID: session, NativeID: recorded})
+	}
 	for _, id := range linked {
 		d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: id})
 	}
@@ -62,15 +65,16 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	return true
 }
 
-func (h *monitorHome) recordConversation(session protocol.SessionID, previous, view sessionmonitor.View) (string, error) {
+func (h *monitorHome) recordConversation(session protocol.SessionID, previous, view sessionmonitor.View) (string, bool, error) {
 	conversation := view.Conversation.V.ConversationObservation
 	if conversation == previous.Conversation.V.ConversationObservation || conversation.NativeID == "" {
-		return "", nil
+		return "", false, nil
 	}
-	if _, err := h.daemon.store.TransitionSessionResumeID(session, conversation.NativeID); err != nil {
-		return "", fmt.Errorf("conversation: %w", err)
+	moved, err := h.daemon.store.TransitionSessionResumeID(session, conversation.NativeID)
+	if err != nil {
+		return "", false, fmt.Errorf("conversation: %w", err)
 	}
-	return conversation.NativeID, nil
+	return conversation.NativeID, moved, nil
 }
 
 type storeSaver struct{ daemon *Daemon }
