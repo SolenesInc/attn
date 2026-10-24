@@ -94,12 +94,7 @@ const (
 	FactAskOpened = "ask.opened"
 	FactAskClosed = "ask.closed"
 
-	FactVentRecorded  = "vent.recorded"
-	FactVentWithdrawn = "vent.withdrawn"
-	FactVentDismissed = "vent.dismissed"
-	FactVentRestored  = "vent.restored"
-	FactVentPlanted   = "vent.planted"
-	FactVentDeleted   = "vent.deleted"
+	FactVentChanged = "vent.changed"
 
 	FactSharedCodexChanged = "shared_codex.changed"
 
@@ -414,7 +409,7 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
 		},
 		{
-			filter: bus.Filter{FactVentRecorded, FactVentWithdrawn, FactVentDismissed, FactVentRestored, FactVentPlanted, FactVentDeleted},
+			filter: bus.Filter{FactVentChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectVents() },
 		},
 		{
