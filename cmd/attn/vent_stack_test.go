@@ -1,11 +1,13 @@
 package main_test
 
 import (
+	"encoding/json"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -95,8 +97,24 @@ func TestAnAgentVentsOncePerTurnAndWithdrawsWithoutWritingTheOutbox(t *testing.T
 
 	listed := testworld.Request(app, protocol.ListAnalyticsRecordsMessage{Cmd: protocol.CmdListAnalyticsRecords, RequestID: protocol.Ptr("outbox"), Limit: 1000},
 		protocol.EventListAnalyticsRecordsResult, func(r protocol.ListAnalyticsRecordsResultMessage) bool { return r.RequestID == "outbox" })
-	if !listed.Success || len(listed.Records) != 0 || listed.Waiting != 0 {
-		t.Errorf("the outbox holds %d records (%d waiting, error %q) after six vents and a withdrawal, want none", len(listed.Records), listed.Waiting, protocol.Deref(listed.Error))
+	if !listed.Success {
+		t.Fatalf("listing the outbox: %s", protocol.Deref(listed.Error))
+	}
+	mirrored := 0
+	for _, row := range listed.Records {
+		var record analytics.Record
+		if err := json.Unmarshal([]byte(row.Record), &record); err != nil {
+			t.Fatalf("outbox row %d: %v", row.ID, err)
+		}
+		if record.Stream == analytics.StreamVent || strings.HasPrefix(record.Name, "vent.") {
+			t.Errorf("the outbox holds %s record %s, want vents kept off it until the user sends one", record.Stream, record.Name)
+		}
+		if record.Stream == analytics.StreamBus {
+			mirrored++
+		}
+	}
+	if mirrored == 0 {
+		t.Errorf("the outbox holds no bus records, so it cannot show that the mirror skips vent facts")
 	}
 }
 
