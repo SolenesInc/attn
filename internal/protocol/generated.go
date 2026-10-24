@@ -7823,6 +7823,20 @@ type RecentLocationsResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type RecordAnalyticsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Props corresponds to the JSON schema field "props".
+	Props RecordUnknown `json:"props,omitempty,omitzero"`
+
+	// Stream corresponds to the JSON schema field "stream".
+	Stream string `json:"stream"`
+}
+
 type RecordCommandUsageMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -7852,6 +7866,8 @@ type RecordCommandUsageResultMessage struct {
 }
 
 type RecordString map[string]interface{}
+
+type RecordUnknown map[string]interface{}
 
 type RefreshPRsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
@@ -10717,6 +10733,11 @@ type SnoozeTurnMessage struct {
 
 	// Until corresponds to the JSON schema field "until".
 	Until string `json:"until"`
+}
+
+type SocketCaller struct {
+	// CallerTerminalID corresponds to the JSON schema field "caller_terminal_id".
+	CallerTerminalID *TerminalID `json:"caller_terminal_id,omitempty,omitzero"`
 }
 
 type SpawnResultMessage struct {

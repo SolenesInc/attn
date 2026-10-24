@@ -2,6 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { isAsksEnabled } from '../utils/asks';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type ForwardedRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { recordAppAction } from '../analytics/appActions';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 import { DaemonSettings } from '../hooks/useDaemonSocket';
@@ -140,6 +141,9 @@ export function useSettingsModalState({
   useEffect(() => {
     if (selectedSection === 'outposts' && !outpostsEnabled) setSelectedSection('connectivity');
   }, [selectedSection, outpostsEnabled]);
+  useEffect(() => {
+    if (isOpen) recordAppAction('settings_section', { section: selectedSection });
+  }, [isOpen, selectedSection]);
   const delegationPolicy = useDelegationPreferences(
     isOpen,
     sendDelegationPreferencesGet,

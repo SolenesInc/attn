@@ -62,7 +62,7 @@ func runAutomationCommand() {
 		fs := flag.NewFlagSet("automation set", flag.ContinueOnError)
 		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
 		desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id")
-		if e := fs.Parse(args[4:]); e != nil {
+		if e := parseFlags(fs, args[4:]); e != nil {
 			os.Exit(2)
 		}
 		if *desktop == "" || len(fs.Args()) != 0 {
@@ -86,7 +86,7 @@ func runAutomationCommand() {
 		desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the automation name)")
 		desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id of the automation profile")
 		file := fs.String("file", "", "definition YAML")
-		if e := fs.Parse(args[3:]); e != nil {
+		if e := parseFlags(fs, args[3:]); e != nil {
 			os.Exit(2)
 		}
 		if *file == "" {
@@ -119,7 +119,7 @@ func runAutomationCommand() {
 	case "validate":
 		fs := flag.NewFlagSet("automation validate", flag.ContinueOnError)
 		file := fs.String("file", "", "definition YAML")
-		if e := fs.Parse(args[3:]); e != nil {
+		if e := parseFlags(fs, args[3:]); e != nil {
 			os.Exit(2)
 		}
 		if *file == "" {
@@ -160,7 +160,7 @@ func runAutomationCommand() {
 		inputFile := fs.String("input-file", "", "structured occurrence JSON")
 		prURL := fs.String("pr-url", "", "resolve one GitHub pull request into structured occurrence input")
 		requestID := fs.String("request-id", "", "stable idempotency key to reuse when retrying an uncertain request")
-		if e := fs.Parse(args[4:]); e != nil {
+		if e := parseFlags(fs, args[4:]); e != nil {
 			os.Exit(2)
 		}
 		if len(fs.Args()) != 0 {
@@ -245,6 +245,7 @@ func runAutomationCommand() {
 			})
 		}
 	default:
+		recordUsageError("automation", usageErrorUnknownCommand)
 		err = fmt.Errorf("unknown automation command %q", args[2])
 	}
 	if err != nil {

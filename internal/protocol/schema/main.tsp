@@ -1241,6 +1241,22 @@ model ListAnalyticsRecordsMessage {
   limit: int32;
 }
 
+// Record one app action or CLI outcome in the analytics outbox. No reply; the
+// daemon drops it while analytics.enabled is off. props holds code-defined
+// values only (ids, kinds, counts), never user text.
+model RecordAnalyticsMessage {
+  cmd: "record_analytics";
+  stream: string; // app or cli
+  name: string;
+  props?: Record<unknown>;
+}
+
+// Fields the CLI adds to every frame it writes to the daemon socket.
+// caller_terminal_id is ATTN_TERMINAL_ID, set in every terminal attn runs.
+model SocketCaller {
+  caller_terminal_id?: TerminalID;
+}
+
 // Notifications surface: a global, daemon-level feed of durable notifications.
 // The producer is the task
 // runner, which adds one when a background task reaches terminal `dead`. The

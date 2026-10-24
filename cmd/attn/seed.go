@@ -68,6 +68,7 @@ func runSeed() {
 	case "guide":
 		runSeedGuide(args)
 	default:
+		recordUsageError("seed", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "seed: unknown command %q\n", os.Args[2])
 		writeSeedHelp(os.Stderr)
 		os.Exit(2)
@@ -388,7 +389,7 @@ func (f *seedFlags) parse(verb string, args []string) []string {
 	var positionals []string
 	rest := args
 	for {
-		if err := f.fs.Parse(rest); err != nil {
+		if err := parseFlags(f.fs, rest); err != nil {
 			fmt.Fprintf(os.Stderr, "seed %s: %v\n", verb, err)
 			writeSeedHelp(os.Stderr)
 			os.Exit(2)
@@ -627,6 +628,7 @@ func runSeedReview(args []string) {
 			ReviewID: positionals[0], EvidenceVersion: receipt.EvidenceVersion,
 		})
 	default:
+		recordUsageError("seed review", usageErrorUnknownCommand)
 		seedFail("review", fmt.Errorf("unknown command %q; use start, show, cancel, retry, or keep", verb))
 	}
 	if err != nil {
@@ -662,6 +664,7 @@ func parseSeedReviewArgs(args []string, scope ...*seedFlags) ([]string, bool, er
 				*scope[0].session = args[i]
 			}
 		case strings.HasPrefix(arg, "-"):
+			recordUsageError("seed review", usageErrorUnknownFlag)
 			return nil, false, fmt.Errorf("unknown flag %q", arg)
 		default:
 			positionals = append(positionals, arg)

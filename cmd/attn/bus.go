@@ -30,6 +30,7 @@ func runBus() {
 	case "disable":
 		runBusSetEnabled(os.Args[3:], false)
 	default:
+		recordUsageError("bus", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "bus: unknown command %q\n", os.Args[2])
 		writeBusHelp(os.Stderr)
 		os.Exit(2)
@@ -198,6 +199,7 @@ func runBusStatus(args []string) {
 			writeBusHelp(os.Stdout)
 			return
 		default:
+			recordUsageError("bus status", usageErrorUnknownFlag)
 			fmt.Fprintf(os.Stderr, "bus status: unknown flag %q\n", a)
 			os.Exit(2)
 		}
@@ -329,6 +331,7 @@ func runBusTrim(args []string) {
 			writeBusHelp(os.Stdout)
 			return
 		default:
+			recordUsageError("bus trim", usageErrorUnknownFlag)
 			fmt.Fprintf(os.Stderr, "bus trim: unknown flag %q\n", a)
 			os.Exit(2)
 		}

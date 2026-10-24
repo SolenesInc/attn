@@ -42,6 +42,7 @@ func runDoc() {
 	case "watch":
 		runDocWatch(args)
 	default:
+		recordUsageError("doc", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "doc: unknown command %q\n", os.Args[2])
 		writeDocHelp(os.Stderr)
 		os.Exit(2)
@@ -434,6 +435,7 @@ func parseDocQueryFlags(verb, namespace, collection string, args []string) (prot
 			}
 			query.Filters = append(query.Filters, filter)
 		default:
+			recordUsageError("doc "+verb, usageErrorUnknownFlag)
 			docFail(verb, fmt.Errorf("unknown flag %q", args[i]))
 		}
 	}

@@ -27,6 +27,7 @@ func runActivity() {
 		}
 		activityClear(protocol.SessionID(strings.TrimSpace(args[1])))
 	default:
+		recordUsageError("activity", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown activity command: %s\n\n", args[0])
 		fmt.Fprint(os.Stderr, activityUsage)
 		os.Exit(1)

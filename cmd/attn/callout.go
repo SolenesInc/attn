@@ -34,6 +34,7 @@ func executeCallout(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if command != "show" && command != "anchors" {
+		recordUsageError("callout", usageErrorUnknownCommand)
 		return fail(fmt.Errorf("unknown command %q; use show or anchors", command))
 	}
 	fs := flag.NewFlagSet("callout "+command, flag.ContinueOnError)

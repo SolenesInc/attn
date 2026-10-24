@@ -72,6 +72,7 @@ func runAgent() {
 		}
 		runAgentMsgStatus(os.Args[3:])
 	default:
+		recordUsageError("agent", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "agent: unknown command %q\n", os.Args[2])
 		writeAgentHelp(os.Stderr)
 		os.Exit(2)
@@ -86,7 +87,7 @@ func parseAgentListArgs(args []string) (agentListArgs, error) {
 	fs := flag.NewFlagSet("agent list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return agentListArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -211,7 +212,7 @@ func parseAgentPeekArgs(args []string) (agentPeekArgs, error) {
 	fs := flag.NewFlagSet("agent peek", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := parseFlags(fs, args[1:]); err != nil {
 		return agentPeekArgs{}, err
 	}
 	if target == "" || fs.NArg() != 0 {
@@ -336,7 +337,7 @@ func parseAgentMsgArgs(args []string, envSessionID func() protocol.SessionID) (a
 	fs.SetOutput(io.Discard)
 	source := fs.String("source-session", "", "sender session id (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args[2:]); err != nil {
+	if err := parseFlags(fs, args[2:]); err != nil {
 		return agentMsgArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -432,7 +433,7 @@ func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) 
 	reason := fs.String("m", "", "why this session is done")
 	source := fs.String("source-session", "", "closing session id (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := parseFlags(fs, args[1:]); err != nil {
 		return agentCloseArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -530,7 +531,7 @@ func parseAgentInboxArgs(args []string, envSessionID func() protocol.SessionID) 
 	sessionID := fs.String("session", "", "authorized session id (defaults to the current session)")
 	fs.IntVar(&parsed.limit, "limit", inbox.DefaultInboxLimit, "maximum unread items to return")
 	fs.BoolVar(&parsed.json, "json", false, "print the machine result as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return agentInboxArgs{}, err
 	}
 	if fs.NArg() > 1 || (parsed.messageID != "" && fs.NArg() != 0) {
@@ -572,7 +573,7 @@ func parseAgentMailboxArgs(command string, args []string, envSessionID func() pr
 	fs.SetOutput(io.Discard)
 	sessionID := fs.String("session", "", "authorized session id (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := parseFlags(fs, args[1:]); err != nil {
 		return agentMailboxArgs{}, err
 	}
 	if fs.NArg() != 0 || strings.TrimSpace(args[0]) == "" {

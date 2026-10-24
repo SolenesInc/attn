@@ -52,6 +52,7 @@ func runInstance() {
 	case "help", "-h", "--help":
 		printInstanceHelp(os.Stdout)
 	default:
+		recordUsageError("instance", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown instance subcommand %q\n\n", os.Args[2])
 		printInstanceHelp(os.Stderr)
 		os.Exit(1)
@@ -202,6 +203,7 @@ func runInstanceResolve(args []string) {
 			printInstanceHelp(os.Stdout)
 			return
 		default:
+			recordUsageError("instance resolve", usageErrorUnknownFlag)
 			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
@@ -250,6 +252,7 @@ func runInstanceTauriConfig(args []string) {
 			printInstanceHelp(os.Stdout)
 			return
 		default:
+			recordUsageError("instance tauri-config", usageErrorUnknownFlag)
 			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
@@ -322,6 +325,7 @@ func cleanPlan(args []string) (normalized string, force bool, err error) {
 			force = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
+				recordUsageError("instance clean", usageErrorUnknownFlag)
 				return "", false, fmt.Errorf("unknown flag %q", args[i])
 			}
 			if name != "" {
@@ -604,6 +608,7 @@ func runInstanceStopApp(args []string) {
 			printInstanceHelp(os.Stdout)
 			return
 		default:
+			recordUsageError("instance stop-app", usageErrorUnknownFlag)
 			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
@@ -793,6 +798,7 @@ func runInstanceList(args []string) {
 			printInstanceHelp(os.Stdout)
 			return
 		default:
+			recordUsageError("instance list", usageErrorUnknownFlag)
 			instanceFatal(fmt.Sprintf("unknown flag %q for `attn instance list`", a))
 		}
 	}

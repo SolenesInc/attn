@@ -62,6 +62,7 @@ func runConversation() {
 			fmt.Printf("deleted attn's copy of conversation %s; Claude's own files are untouched\n", args[1])
 		}
 	default:
+		recordUsageError("conversation", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown conversation command: %s\n\n%s", args[0], conversationUsage)
 		os.Exit(1)
 	}
@@ -71,7 +72,7 @@ func conversationList(args []string) {
 	fs := flag.NewFlagSet("conversation list", flag.ExitOnError)
 	all := fs.Bool("all", false, "include deleted copies")
 	asJSON := fs.Bool("json", false, "print the raw result")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 	if fs.NArg() != 0 {
 		fmt.Fprint(os.Stderr, conversationUsage)
 		os.Exit(1)

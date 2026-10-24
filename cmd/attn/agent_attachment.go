@@ -69,7 +69,7 @@ func runAgentAttachment(args []string) {
 	fs.SetOutput(io.Discard)
 	out := fs.String("out", "", "local output path")
 	profile := fs.String("profile", "", "profile name or id when outside a session")
-	if err := fs.Parse(args[2:]); err != nil || *out == "" || fs.NArg() != 0 {
+	if err := parseFlags(fs, args[2:]); err != nil || *out == "" || fs.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "agent attachment: --out <path> is required")
 		os.Exit(2)
 	}

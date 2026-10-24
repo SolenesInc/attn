@@ -21,7 +21,7 @@ func runAgentReload(args []string) {
 	targets := []string{}
 	var err error
 	for rest := args; ; {
-		if err = fs.Parse(rest); err != nil || fs.NArg() == 0 {
+		if err = parseFlags(fs, rest); err != nil || fs.NArg() == 0 {
 			break
 		}
 		target := strings.TrimSpace(fs.Arg(0))

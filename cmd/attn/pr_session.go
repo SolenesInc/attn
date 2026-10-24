@@ -37,7 +37,7 @@ func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 
 	var positional []string
 	for rest := args; ; {
-		if err := fs.Parse(rest); err != nil {
+		if err := parseFlags(fs, rest); err != nil {
 			return sessionPRArgs{}, err
 		}
 		if fs.NArg() == 0 {

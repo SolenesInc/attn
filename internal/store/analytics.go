@@ -35,6 +35,32 @@ func (s *Store) AppendAnalyticsRecord(record analytics.Record) error {
 	return err
 }
 
+func (s *Store) AppendAnalyticsStreamRecord(record analytics.Record) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return fmt.Errorf("the analytics outbox needs the SQLite store")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := tx.QueryRow("INSERT INTO analytics_sequences (stream, seq) VALUES (?, 1) ON CONFLICT(stream) DO UPDATE SET seq = seq + 1 RETURNING seq",
+		record.Stream).Scan(&record.Seq); err != nil {
+		return err
+	}
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec("INSERT INTO analytics_outbox (stream, seq, at, record) VALUES (?, ?, ?, ?)",
+		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) AnalyticsRecords(stream analytics.Stream, beforeID int64, limit int) (AnalyticsPage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -86,4 +112,15 @@ func (s *Store) PruneAnalyticsOutbox(before time.Time) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+func (s *Store) DatabaseBytes() (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return 0, nil
+	}
+	var size int64
+	err := s.db.QueryRow("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&size)
+	return size, err
 }

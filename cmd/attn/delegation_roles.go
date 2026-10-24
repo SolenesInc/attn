@@ -55,6 +55,7 @@ func delegateRoles(w io.Writer, args []string) error {
 	case "add", "set", "copy", "rm", "enable", "disable":
 		return delegateRolesEdit(w, command, rest)
 	}
+	recordUsageError("delegate roles", usageErrorUnknownCommand)
 	return usagef("unknown command %q; attn delegate roles --help lists them", command)
 }
 
@@ -216,7 +217,7 @@ func delegateRolesHistory(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("delegate roles history", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	limit := fs.Int("limit", 10, "revisions to list")
-	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || *limit <= 0 {
+	if err := parseFlags(fs, args); err != nil || fs.NArg() > 0 || *limit <= 0 {
 		return usagef("usage: attn delegate roles history [--limit N]")
 	}
 	history, err := client.New("").DelegationPreferencesHistory(*limit)

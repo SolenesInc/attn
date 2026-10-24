@@ -67,7 +67,7 @@ func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (hand
 	nap := fs.Bool("nap", false, "start the next day even if the user is away")
 	session := fs.String("session", "", "the session closing its day (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return handoffArgs{}, err
 	}
 	if *sleep && *nap {

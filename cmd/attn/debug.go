@@ -54,6 +54,7 @@ func runDebug() {
 		}
 		runDebugDaemonLog(os.Args[3:])
 	default:
+		recordUsageError("debug", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "debug: unknown command %q\n", os.Args[2])
 		writeDebugHelp(os.Stderr)
 		os.Exit(2)
@@ -92,7 +93,7 @@ All commands honor the active ATTN_INSTANCE, the same as the rest of the CLI.
 func runDebugLs(args []string) {
 	fs := flag.NewFlagSet("debug ls", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(os.Stderr, "debug ls: %v\n", err)
 		os.Exit(2)
 	}
@@ -141,7 +142,7 @@ func runDebugJSONL(fileName, cmdName, kind string, args []string) {
 	tail := fs.Int("tail", defaultDebugTail, "only the last N lines (0 means no limit)")
 	grep := fs.String("grep", "", "only lines matching this Go regexp")
 	_ = fs.Bool("json", false, "no-op alias; JSONL lines are printed raw either way")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", cmdName, err)
 		os.Exit(2)
 	}
@@ -176,7 +177,7 @@ func runDebugDaemonLog(args []string) {
 	tail := fs.Int("tail", defaultDebugTail, "only the last N lines (0 means no limit)")
 	grep := fs.String("grep", "", "only lines matching this Go regexp")
 	since := fs.String("since", "", "only lines within this Go duration of now (e.g. 10m, 1h)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		fmt.Fprintf(os.Stderr, "debug daemon-log: %v\n", err)
 		os.Exit(2)
 	}

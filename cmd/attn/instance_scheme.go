@@ -35,6 +35,7 @@ func runInstanceRegisterScheme(args []string) {
 			printInstanceHelp(os.Stdout)
 			return
 		default:
+			recordUsageError("instance register-scheme", usageErrorUnknownFlag)
 			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
