@@ -38,7 +38,7 @@ func delegatePaneSessions(desktop protocol.Desktop) []string {
 }
 
 func TestADelegateStartsOnASeedPointerBesideItsCaller(t *testing.T) {
-	for _, agent := range []fakeagent.Harness{fakeagent.Codex, fakeagent.Copilot} {
+	for _, agent := range []fakeagent.Harness{fakeagent.Codex, fakeagent.Claude} {
 		t.Run(string(agent), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex, agent)
 			app, cli := w.App(), w.Client()
@@ -105,7 +105,7 @@ func delegateLaunchFlag(argv []string, name string) (string, bool) {
 }
 
 func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Copilot, fakeagent.Pi)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Pi)
 	cli := w.Client()
 	cwd := w.Path("api")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
@@ -118,11 +118,9 @@ func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testin
 	}{
 		{name: "claude pinned", agent: "claude", model: "claude-fable-5", effort: "Low", wantModel: "claude-fable-5", wantEffort: "low"},
 		{name: "claude at the default effort", agent: "claude", model: "opus", wantModel: "opus", wantEffort: "medium"},
-		{name: "copilot unpinned", agent: "copilot"},
 		{name: "pi unpinned", agent: "pi"},
-		{name: "copilot with a model", agent: "copilot", model: "gpt-5", refusal: `agent "copilot" does not support --model`},
-		{name: "copilot with an effort", agent: "copilot", effort: "high", refusal: `agent "copilot" does not support --effort`},
 		{name: "pi with a model", agent: "pi", model: "glm-5", refusal: `agent "pi" does not support --model`},
+		{name: "pi with an effort", agent: "pi", effort: "high", refusal: `agent "pi" does not support --effort`},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			request := brief(cwd, "Tighten the retry loop")
@@ -160,8 +158,8 @@ func TestADelegatesModelAndEffortReachItsCommandLineOrAreRefusedByFlag(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sessions) != 4 {
-		t.Errorf("%d sessions exist; want only the four delegates that were not refused", len(sessions))
+	if len(sessions) != 3 {
+		t.Errorf("%d sessions exist; want only the three delegates that were not refused", len(sessions))
 	}
 }
 

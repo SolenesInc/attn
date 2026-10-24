@@ -18,8 +18,6 @@ export function formatSessionAgentLabel(agent: SessionAgent): string {
       return 'Claude';
     case 'codex':
       return 'Codex';
-    case 'copilot':
-      return 'Copilot';
     default:
       return normalized
         .split(/[-_\s]+/)

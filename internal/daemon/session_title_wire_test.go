@@ -63,7 +63,7 @@ func answerTurnVerdict(t *testing.T, w *world, verdict string) {
 }
 
 func TestEachAgentTitlesASessionFromThePromptItWasSpawnedWith(t *testing.T) {
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		t.Run(string(h), func(t *testing.T) {
 			w := newTitlingWorld(t, h)
 			app := w.App()

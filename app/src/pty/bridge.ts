@@ -25,7 +25,6 @@ export interface PtySpawnArgs {
   executable?: string;
   claude_executable?: string;
   codex_executable?: string;
-  copilot_executable?: string;
   placement?: SessionPlacement;
 }
 

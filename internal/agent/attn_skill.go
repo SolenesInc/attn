@@ -123,14 +123,6 @@ func ensureAttnAgentsSkillInstalled() error {
 	return installAttnSkill(filepath.Join(homeDir, ".agents", "skills", "attn"))
 }
 
-func ensureAttnCopilotSkillInstalled() error {
-	homeDir, err := toolhome.Dir()
-	if err != nil {
-		return fmt.Errorf("resolve home directory for Copilot skills: %w", err)
-	}
-	return installAttnSkill(filepath.Join(homeDir, ".copilot", "skills", "attn"))
-}
-
 func userGlobalSkillSyncEnabled() bool {
 	instance := config.Instance()
 	if instance == "" || instance == "dev" {
@@ -148,8 +140,6 @@ func EnsureAttnSkillInstalled(harness string) (bool, error) {
 		return true, ensureAttnClaudeSkillInstalled()
 	case "codex":
 		return true, ensureAttnAgentsSkillInstalled()
-	case "copilot":
-		return true, ensureAttnCopilotSkillInstalled()
 	default:
 		return false, nil
 	}
@@ -170,8 +160,6 @@ func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {
 			wanted[filepath.Join(homeDir, ".claude", "skills", "attn-workflow")] = true
 		case "codex", "pi":
 			wanted[filepath.Join(homeDir, ".agents", "skills", "attn-workflow")] = true
-		case "copilot":
-			wanted[filepath.Join(homeDir, ".copilot", "skills", "attn-workflow")] = true
 		}
 	}
 	paths := make([]string, 0, len(wanted))

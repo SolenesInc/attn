@@ -104,7 +104,7 @@ const TEST_DAEMON_WS_URL = `ws://127.0.0.1:${TEST_DAEMON_PORT}/ws`;
 
 function createFakeAgentStubs(): { binDir: string; cleanup: () => void } {
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-e2e-stubs-'));
-  for (const name of ['claude', 'codex', 'copilot']) {
+  for (const name of ['claude', 'codex']) {
     const stubPath = path.join(binDir, name);
     fs.writeFileSync(stubPath, '#!/bin/sh\nsleep 600\n');
     fs.chmodSync(stubPath, 0o755);

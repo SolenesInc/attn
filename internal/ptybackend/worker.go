@@ -567,9 +567,6 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	if opts.CodexExecutable != "" {
 		args = append(args, "--codex-executable", opts.CodexExecutable)
 	}
-	if opts.CopilotExecutable != "" {
-		args = append(args, "--copilot-executable", opts.CopilotExecutable)
-	}
 	if opts.AgentLoginShell {
 		args = append(args, "--agent-login-shell")
 	}
@@ -1263,16 +1260,15 @@ func (b *WorkerBackend) SessionLaunchParams(ctx context.Context, id harness.Term
 		return SessionLaunchParams{}, err
 	}
 	return SessionLaunchParams{
-		Recorded:          entry.LaunchParamsRecorded,
-		YoloMode:          entry.YoloMode,
-		ApprovalRoute:     entry.ApprovalRoute,
-		Executable:        entry.Executable,
-		ClaudeExecutable:  entry.ClaudeExecutable,
-		CodexExecutable:   entry.CodexExecutable,
-		CopilotExecutable: entry.CopilotExecutable,
-		Model:             entry.Model,
-		Effort:            entry.Effort,
-		UnattendedLaunch:  entry.UnattendedLaunch,
+		Recorded:         entry.LaunchParamsRecorded,
+		YoloMode:         entry.YoloMode,
+		ApprovalRoute:    entry.ApprovalRoute,
+		Executable:       entry.Executable,
+		ClaudeExecutable: entry.ClaudeExecutable,
+		CodexExecutable:  entry.CodexExecutable,
+		Model:            entry.Model,
+		Effort:           entry.Effort,
+		UnattendedLaunch: entry.UnattendedLaunch,
 	}, nil
 }
 

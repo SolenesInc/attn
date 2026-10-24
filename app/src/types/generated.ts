@@ -10124,31 +10124,30 @@ export enum SpawnResultMessageEvent {
 }
 
 export interface SpawnSessionMessage {
-    agent:               string;
-    approval_policy?:    string;
-    auto_mode?:          boolean;
-    chief_of_staff?:     boolean;
-    claude_executable?:  string;
-    cmd:                 SpawnSessionMessageCmd;
-    codex_executable?:   string;
-    cols:                number;
-    copilot_executable?: string;
-    cwd:                 string;
-    effort?:             string;
-    executable?:         string;
-    id:                  string;
-    initial_prompt?:     string;
-    label?:              string;
-    model?:              string;
-    placement?:          Placement;
-    priority?:           boolean;
-    profile_id:          string;
-    resume_picker?:      boolean;
-    resume_session_id?:  string;
-    rows:                number;
-    sandbox_mode?:       string;
-    spawned_from?:       string;
-    yolo_mode?:          boolean;
+    agent:              string;
+    approval_policy?:   string;
+    auto_mode?:         boolean;
+    chief_of_staff?:    boolean;
+    claude_executable?: string;
+    cmd:                SpawnSessionMessageCmd;
+    codex_executable?:  string;
+    cols:               number;
+    cwd:                string;
+    effort?:            string;
+    executable?:        string;
+    id:                 string;
+    initial_prompt?:    string;
+    label?:             string;
+    model?:             string;
+    placement?:         Placement;
+    priority?:          boolean;
+    profile_id:         string;
+    resume_picker?:     boolean;
+    resume_session_id?: string;
+    rows:               number;
+    sandbox_mode?:      string;
+    spawned_from?:      string;
+    yolo_mode?:         boolean;
     [property: string]: any;
 }
 
@@ -22646,7 +22645,6 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("SpawnSessionMessageCmd") },
         { json: "codex_executable", js: "codex_executable", typ: u(undefined, "") },
         { json: "cols", js: "cols", typ: 0 },
-        { json: "copilot_executable", js: "copilot_executable", typ: u(undefined, "") },
         { json: "cwd", js: "cwd", typ: "" },
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "executable", js: "executable", typ: u(undefined, "") },

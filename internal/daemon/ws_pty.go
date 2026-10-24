@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
@@ -159,14 +158,10 @@ func (d *Daemon) detachAllSessions(client *wsClient) {
 }
 
 func normalizeSpawnAgent(raw string) string {
-	agent := strings.TrimSpace(strings.ToLower(raw))
-	if agent == protocol.AgentShellValue {
-		return protocol.AgentShellValue
+	if agent := strings.TrimSpace(strings.ToLower(raw)); agent != "" {
+		return agent
 	}
-	if d := agentdriver.Get(agent); d != nil {
-		return d.Name()
-	}
-	return protocol.NormalizeSpawnAgent(raw, string(protocol.SessionAgentCodex))
+	return string(protocol.SessionAgentCodex)
 }
 
 func legacyExecutableFromSpawnMessage(msg *protocol.SpawnSessionMessage, agent string) string {
@@ -175,8 +170,6 @@ func legacyExecutableFromSpawnMessage(msg *protocol.SpawnSessionMessage, agent s
 		return strings.TrimSpace(protocol.Deref(msg.ClaudeExecutable))
 	case string(protocol.SessionAgentCodex):
 		return strings.TrimSpace(protocol.Deref(msg.CodexExecutable))
-	case string(protocol.SessionAgentCopilot):
-		return strings.TrimSpace(protocol.Deref(msg.CopilotExecutable))
 	default:
 		return ""
 	}

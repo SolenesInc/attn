@@ -260,9 +260,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       ...(session.agent === 'codex' && selectedExecutable
         ? { codex_executable: selectedExecutable }
         : {}),
-      ...(session.agent === 'copilot' && selectedExecutable
-        ? { copilot_executable: selectedExecutable }
-        : {}),
     };
   },
 

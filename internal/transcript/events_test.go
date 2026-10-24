@@ -226,7 +226,7 @@ func TestReadEventPageRejectsCursorFromAnotherTranscript(t *testing.T) {
 	}
 }
 
-func TestReadEventPageClaudeAndCopilot(t *testing.T) {
+func TestReadEventPageClaude(t *testing.T) {
 	t.Run("claude", func(t *testing.T) {
 		path := writeEventTranscript(t,
 			`{"timestamp":"2026-07-19T11:00:00Z","type":"user","origin":{"kind":"human"},"message":{"content":[{"type":"text","text":"please inspect"}]}}`,
@@ -249,20 +249,6 @@ func TestReadEventPageClaudeAndCopilot(t *testing.T) {
 		}
 	})
 
-	t.Run("copilot", func(t *testing.T) {
-		path := writeEventTranscript(t,
-			`{"timestamp":"2026-07-19T12:00:00Z","type":"user.message","data":{"content":"please inspect"}}`,
-			`{"timestamp":"2026-07-19T12:00:01Z","type":"tool.execution_start","data":{"toolCallId":"tool-1","toolName":"bash","arguments":{"cmd":"pwd"}}}`,
-			`{"timestamp":"2026-07-19T12:00:02Z","type":"tool.execution_complete","data":{"toolCallId":"tool-1","success":false,"error":"exit 1"}}`,
-		)
-		page, err := ReadEventPage(path, "copilot", "", 10)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(page.Events) != 3 || page.Events[2].Kind != EventKindToolResult || !page.Events[2].IsError {
-			t.Fatalf("events = %#v", page.Events)
-		}
-	})
 }
 
 func TestRedactTextCoversCredentialForms(t *testing.T) {

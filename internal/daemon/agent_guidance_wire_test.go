@@ -1,8 +1,6 @@
 package daemon_test
 
 import (
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,39 +33,24 @@ func launchGuidance(t *testing.T, run *fakeagent.Run) string {
 			t.Fatalf("codex developer instructions are not one quoted string: %v", err)
 		}
 		return guidance
-	case fakeagent.Copilot:
-		dirs, _ := envEntry(run.Env, "COPILOT_CUSTOM_INSTRUCTIONS_DIRS")
-		list := strings.Split(dirs, ",")
-		files, _ := filepath.Glob(filepath.Join(list[len(list)-1], "*.instructions.md"))
-		if len(files) != 1 {
-			t.Fatalf("copilot's last instructions dir in %q holds %d instructions files", dirs, len(files))
-		}
-		content, err := os.ReadFile(files[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(content)
 	}
 	t.Fatalf("no guidance channel for %s", run.Harness)
 	return ""
 }
 
-func TestEachHarnessReadsAttnsGuidanceAndOnlyTheHooklessOneRecordsItsOwnPullRequests(t *testing.T) {
+func TestEachHarnessReadsAttnsGuidanceAndLeavesItsPullRequestsToItsHooks(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-
-			t.Setenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS", "/home/me/instructions")
-			w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)
+			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 			app := w.App()
 			if direct {
 				setSetting(t, app, "direct_agent_launch_enabled", "true")
 			}
 			yolo := map[fakeagent.Harness]string{
-				fakeagent.Claude:  "--dangerously-skip-permissions",
-				fakeagent.Codex:   "--dangerously-bypass-approvals-and-sandbox",
-				fakeagent.Copilot: "--yolo",
+				fakeagent.Claude: "--dangerously-skip-permissions",
+				fakeagent.Codex:  "--dangerously-bypass-approvals-and-sandbox",
 			}
-			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 				run := w.Launched(w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
 					m.YoloMode = protocol.Ptr(true)
 				}))
@@ -78,19 +61,10 @@ func TestEachHarnessReadsAttnsGuidanceAndOnlyTheHooklessOneRecordsItsOwnPullRequ
 				if !strings.Contains(guidance, agentGuidanceLead) {
 					t.Errorf("%s launched without attn's agent guidance:\n%s", h, guidance)
 				}
-				if recordsPRs := strings.Contains(guidance, "attn pr record"); recordsPRs != (h == fakeagent.Copilot) {
-					t.Errorf("%s is told to record its own pull requests: %t, want only the hookless copilot", h, recordsPRs)
-				}
-				if h == fakeagent.Copilot {
-					if dirs, _ := envEntry(run.Env, "COPILOT_CUSTOM_INSTRUCTIONS_DIRS"); !strings.HasPrefix(dirs, "/home/me/instructions,") {
-						t.Errorf("copilot's instructions dirs are %q, want the user's own kept ahead of attn's", dirs)
-					}
-					if strings.HasPrefix(strings.TrimSpace(guidance), "---") {
-						t.Errorf("copilot's attn instructions open with frontmatter, which scopes them away:\n%s", guidance)
-					}
+				if strings.Contains(guidance, "attn pr record") {
+					t.Errorf("%s, whose hooks report its pull requests, is told to record them itself", h)
 				}
 			}
-
 		})
 	}
 }
@@ -172,7 +146,7 @@ func TestACodexDefaultContextWindowCapBecomesItsCompactLimit(t *testing.T) {
 func TestQuickCaptureGuidanceFollowsTheExperimentAtEachLaunch(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)
+			w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 			app := w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
 			for i, enabled := range []bool{false, true, false} {
@@ -191,7 +165,7 @@ func TestQuickCaptureGuidanceFollowsTheExperimentAtEachLaunch(t *testing.T) {
 					}
 				}
 				member := []string{"alder", "keel", "trellis"}[i]
-				day := w.Launched(string(wakeCrew(t, w.Client(), member, "copilot").SessionID))
+				day := w.Launched(string(wakeCrew(t, w.Client(), member, "codex").SessionID))
 				if got := strings.Contains(launchGuidance(t, day), "The user can send you messages from Quick Capture"); got != enabled {
 					t.Fatalf("crew Quick Capture guidance=%v, enabled=%v", got, enabled)
 				}

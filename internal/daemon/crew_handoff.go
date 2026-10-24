@@ -251,7 +251,6 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 		spawnMsg.Executable = nil
 		spawnMsg.ClaudeExecutable = nil
 		spawnMsg.CodexExecutable = nil
-		spawnMsg.CopilotExecutable = nil
 		policy.unattendedLaunch = launchcontract.UnattendedLaunchSpec{}
 	}
 	if launch := policy.unattendedLaunch; !launch.IsZero() &&

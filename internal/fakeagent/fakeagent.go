@@ -24,10 +24,9 @@ import (
 type Harness string
 
 const (
-	Claude  Harness = "claude"
-	Codex   Harness = "codex"
-	Copilot Harness = "copilot"
-	Pi      Harness = "pi"
+	Claude Harness = "claude"
+	Codex  Harness = "codex"
+	Pi     Harness = "pi"
 )
 
 const (
@@ -102,12 +101,11 @@ type exitParams struct {
 }
 
 var programs = map[string]func(config) int{
-	string(Claude):  runClaude,
-	string(Codex):   runCodex,
-	string(Copilot): runCopilot,
-	string(Pi):      runPiTerminal,
-	piPluginName:    runPiPlugin,
-	wrapperName:     runWrapperTripwire,
+	string(Claude): runClaude,
+	string(Codex):  runCodex,
+	string(Pi):     runPiTerminal,
+	piPluginName:   runPiPlugin,
+	wrapperName:    runWrapperTripwire,
 }
 
 func Main() {

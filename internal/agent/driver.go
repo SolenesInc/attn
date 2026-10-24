@@ -190,9 +190,6 @@ type SpawnOpts struct {
 
 	SelfReportPullRequests bool
 
-	InheritedInstructionsDirs string
-	InstructionsDir           string
-
 	CodexRemote string
 }
 
@@ -227,10 +224,6 @@ type HookProvider interface {
 
 type ConfigOverrideProvider interface {
 	GenerateConfigOverrides(opts SpawnOpts) []string
-}
-
-type InstructionsFileProvider interface {
-	GenerateInstructionsFile(opts SpawnOpts) (name, content string)
 }
 
 type HeadlessTaskRequest struct {
@@ -270,10 +263,6 @@ type HeadlessTaskAvailabilityProvider interface {
 	HeadlessTaskAvailability() (bool, string)
 }
 
-type ToolFreeOnlyHeadlessTaskProvider interface {
-	HeadlessTasksAreToolFreeOnly() bool
-}
-
 func HeadlessTaskAvailability(driver Driver) (bool, string) {
 	if driver == nil {
 		return false, "agent is not installed"
@@ -287,29 +276,12 @@ func HeadlessTaskAvailability(driver Driver) (bool, string) {
 	return true, ""
 }
 
-func HeadlessTasksSupportTools(driver Driver) bool {
-	if driver == nil {
-		return false
-	}
-	if _, ok := driver.(HeadlessTaskProvider); !ok {
-		return false
-	}
-	if provider, ok := driver.(ToolFreeOnlyHeadlessTaskProvider); ok {
-		return !provider.HeadlessTasksAreToolFreeOnly()
-	}
-	return true
-}
-
 type TranscriptFinder interface {
 	FindTranscript(sessionID, cwd string, startedAt time.Time) string
 
 	FindTranscriptForResume(resumeID string) string
 
 	BootstrapBytes() int64
-}
-
-type LaunchTranscriptFinder interface {
-	FindLaunchTranscript(cwd string, launchedAt time.Time, claimed func(nativeID string) bool) string
 }
 
 type TranscriptUsageSourceProvider interface {
@@ -379,28 +351,12 @@ func GetConfigOverrideProvider(d Driver) (ConfigOverrideProvider, bool) {
 	return cp, ok
 }
 
-func GetInstructionsFileProvider(d Driver) (InstructionsFileProvider, bool) {
-	if d == nil {
-		return nil, false
-	}
-	ip, ok := d.(InstructionsFileProvider)
-	return ip, ok
-}
-
 func GetTranscriptFinder(d Driver) (TranscriptFinder, bool) {
 	if d == nil || !EffectiveCapabilities(d).HasTranscript {
 		return nil, false
 	}
 	tf, ok := d.(TranscriptFinder)
 	return tf, ok
-}
-
-func GetLaunchTranscriptFinder(d Driver) (LaunchTranscriptFinder, bool) {
-	if d == nil || !EffectiveCapabilities(d).HasTranscript {
-		return nil, false
-	}
-	finder, ok := d.(LaunchTranscriptFinder)
-	return finder, ok
 }
 
 func GetTranscriptUsageSourceProvider(d Driver) (TranscriptUsageSourceProvider, bool) {
@@ -428,13 +384,9 @@ func GetTranscriptWatcherBehavior(d Driver) (TranscriptWatcherBehavior, bool) {
 		return nil, false
 	}
 	if p, ok := d.(TranscriptWatcherBehaviorProvider); ok {
-		behavior := p.NewTranscriptWatcherBehavior()
-		if behavior != nil {
-			behavior.Reset()
+		if behavior := p.NewTranscriptWatcherBehavior(); behavior != nil {
 			return behavior, true
 		}
 	}
-	behavior := newDefaultTranscriptWatcherBehavior()
-	behavior.Reset()
-	return behavior, true
+	return newDefaultTranscriptWatcherBehavior(), true
 }

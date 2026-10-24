@@ -55,14 +55,13 @@ func titleTaskFor(t *testing.T, w *world, h fakeagent.Harness) *fakeagent.Headle
 
 func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *testing.T) {
 	for _, tc := range []struct {
-		harness      fakeagent.Harness
-		readOnly     [][]string
-		forbidden    []string
-		keptEnv      []string
-		droppedEnv   []string
-		fixedEnv     []string
-		capped       func(task *fakeagent.HeadlessTask) bool
-		homeIsTheRun bool
+		harness    fakeagent.Harness
+		readOnly   [][]string
+		forbidden  []string
+		keptEnv    []string
+		droppedEnv []string
+		fixedEnv   []string
+		capped     func(task *fakeagent.HeadlessTask) bool
 	}{
 		{
 			harness: fakeagent.Claude,
@@ -92,17 +91,6 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 				return slices.Contains(task.Argv, "model_auto_compact_token_limit=150000")
 			},
 		},
-		{
-			harness: fakeagent.Copilot,
-			readOnly: [][]string{
-				{"--available-tools=ask_user"}, {"--disable-builtin-mcps"}, {"--no-custom-instructions"}, {"--no-ask-user"},
-			},
-			forbidden:    []string{"--allow-all-tools", "--allow-tool", "--yolo"},
-			keptEnv:      []string{"GH_TOKEN"},
-			droppedEnv:   []string{"ANTHROPIC_BASE_URL", "OPENAI_BASE_URL", "COPILOT_ALLOW_ALL", "UNRELATED_SECRET", "ATTN_SESSION_ID"},
-			fixedEnv:     []string{"COPILOT_MCP_TOOL_CACHE=false"},
-			homeIsTheRun: true,
-		},
 	} {
 		t.Run(string(tc.harness), func(t *testing.T) {
 			w := newTitlingWorld(t, tc.harness)
@@ -112,7 +100,7 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 			for key, value := range map[string]string{
 				"ANTHROPIC_BASE_URL": "https://anthropic.example", "OPENAI_BASE_URL": "https://openai.example",
 				"GH_TOKEN": "gh-token", "UNRELATED_SECRET": "secret", "ATTN_SESSION_ID": "someone-else",
-				"CODEX_THREAD_ID": "thread", "COPILOT_ALLOW_ALL": "1",
+				"CODEX_THREAD_ID": "thread",
 			} {
 				t.Setenv(key, value)
 			}
@@ -151,9 +139,6 @@ func TestToolFreeHeadlessTasksRunReadOnlyWithOnlyTheirProvidersEnvironment(t *te
 			}
 			if tc.capped != nil && !tc.capped(task) {
 				t.Errorf("the title task ran %s without the headless context window cap: %q", tc.harness, task.Argv)
-			}
-			if home, _ := envEntry(task.Env, "COPILOT_HOME"); tc.homeIsTheRun && (home == "" || resolvedParent(t, home) != resolvedParent(t, task.Dir)) {
-				t.Errorf("the title task ran copilot with home %q from %q, want its own scratch directory", home, task.Dir)
 			}
 		})
 	}
@@ -259,15 +244,4 @@ func TestAgentsFindTheActiveAttnFirstOnTheirPath(t *testing.T) {
 			t.Errorf("%s runs with PATH starting at %q, want the active attn's %q", name, first, active)
 		}
 	}
-}
-
-// The run's scratch directory is gone by now; resolve its parent so macOS's
-// /var -> /private/var link does not make one directory look like two.
-func resolvedParent(t *testing.T, dir string) string {
-	t.Helper()
-	parent, err := filepath.EvalSymlinks(filepath.Dir(dir))
-	if err != nil {
-		t.Fatalf("resolve %s: %v", filepath.Dir(dir), err)
-	}
-	return filepath.Join(parent, filepath.Base(dir))
 }

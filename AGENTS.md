@@ -9,8 +9,8 @@ as a maintainer:
 
 - Durability. App, daemon, and machine restarts bring every session and terminal
   back.
-- Bring your own harness. attn wraps Claude Code, Codex, Copilot, and Pi as they
-  are; the user gets each harness's native experience and can use the bare CLI
+- Bring your own harness. attn wraps Claude Code, Codex, and Pi as they are;
+  the user gets each harness's native experience and can use the bare CLI
   at any time. Users can add new harnesses with plugins.
 - The queue mode sorts agents into "waiting for you" or "busy" and moves the
   user to the next one after every prompt. State classification and turn

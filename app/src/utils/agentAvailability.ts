@@ -3,7 +3,7 @@ import { formatSessionAgentLabel, normalizeSessionAgent, type SessionAgent } fro
 export type AgentAvailability = Record<SessionAgent, boolean>;
 export type AgentCapabilities = Record<SessionAgent, Record<string, boolean>>;
 
-const BUILTIN_AGENT_ORDER: SessionAgent[] = ['codex', 'claude', 'copilot'];
+const BUILTIN_AGENT_ORDER: SessionAgent[] = ['codex', 'claude'];
 
 export function isBuiltinAgent(agent: SessionAgent): boolean {
   return BUILTIN_AGENT_ORDER.includes(agent);
@@ -77,7 +77,6 @@ export function getAgentAvailability(settings: Record<string, string>): AgentAva
   const availability: AgentAvailability = {
     codex: true,
     claude: true,
-    copilot: true,
   };
 
   for (const [key, value] of Object.entries(settings)) {

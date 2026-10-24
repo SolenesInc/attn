@@ -2415,7 +2415,6 @@ export function useDaemonSocket({
       ...(args.executable && { executable: args.executable }),
       ...(args.claude_executable && { claude_executable: args.claude_executable }),
       ...(args.codex_executable && { codex_executable: args.codex_executable }),
-      ...(args.copilot_executable && { copilot_executable: args.copilot_executable }),
     }, 'Spawn session timed out', args.chief_of_staff ? MODEL_DISCOVERY_TIMEOUT_MS : 30000);
   }, [sendKeyedRequest]);
 

@@ -33,7 +33,6 @@ const sessions: Array<{
   { id: 'claude', agent: 'claude', label: 'Investigate logs' },
   { id: 'codex', agent: 'codex', label: 'Implement sidebar logos' },
   { id: 'pi', agent: 'pi', label: 'Check rendering' },
-  { id: 'copilot', agent: 'copilot', label: 'Review changes' },
   { id: 'shell', agent: 'shell', label: 'Run tests' },
   { id: 'plugin', agent: 'custom-driver', label: 'Plugin session' },
   { id: 'missing', agent: undefined, label: 'Older session' },
@@ -57,7 +56,7 @@ describe('sidebar harness identity', () => {
     const onSelectSession = vi.fn();
     render(<Sidebar {...baseProps} {...data} onSelectSession={onSelectSession} />);
     for (const [id, name] of [
-      ['claude', 'Claude'], ['codex', 'Codex'], ['pi', 'Pi'], ['copilot', 'Copilot'],
+      ['claude', 'Claude'], ['codex', 'Codex'], ['pi', 'Pi'],
       ['shell', 'Shell'], ['plugin', 'Custom Driver'], ['missing', 'Unknown harness'],
     ]) {
       const row = screen.getByTestId(`sidebar-session-${id}`);

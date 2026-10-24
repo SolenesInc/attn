@@ -442,10 +442,14 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	}
 
 	agent := normalizeSpawnAgent(session.Agent)
-	if pluginDriver, ok := d.ensurePluginRegistry().driver(session.Agent); ok {
+	pluginDriver, isPlugin := d.ensurePluginRegistry().driver(session.Agent)
+	if isPlugin {
 		agent = pluginDriver.Agent
 	}
 	driver := agentdriver.Get(agent)
+	if driver == nil && !isPlugin && agent != protocol.AgentShellValue {
+		return ptybackend.SpawnOptions{}, fmt.Errorf("agent %q is not available", session.Agent)
+	}
 	resumeSessionID := agentdriver.ResolveSpawnResumeSessionID(driver, sessionID, "", d.store.GetResumeSessionID(sessionID))
 	if resumeSessionID != "" && !d.conversationReady(driver, resumeSessionID) {
 		if d.conversationKnown(driver, resumeSessionID) {
@@ -456,25 +460,24 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	}
 
 	opts := ptybackend.SpawnOptions{
-		ID:                terminal,
-		CWD:               session.Directory,
-		Agent:             agent,
-		Label:             session.Label,
-		Cols:              cols,
-		Rows:              rows,
-		ResumeSessionID:   resumeSessionID,
-		Theme:             d.currentTerminalTheme(),
-		YoloMode:          params.YoloMode,
-		ApprovalRoute:     params.ApprovalRoute,
-		Executable:        params.Executable,
-		ClaudeExecutable:  params.ClaudeExecutable,
-		CodexExecutable:   params.CodexExecutable,
-		CopilotExecutable: params.CopilotExecutable,
-		Model:             params.Model,
-		Effort:            params.Effort,
-		LoginShellEnv:     d.cachedLoginShellEnv(),
-		AutoApprove:       false,
-		ContextWindowCap:  d.launchContextWindowCap(sessionID, session.Agent, d.isChiefOfStaffSession(sessionID)),
+		ID:               terminal,
+		CWD:              session.Directory,
+		Agent:            agent,
+		Label:            session.Label,
+		Cols:             cols,
+		Rows:             rows,
+		ResumeSessionID:  resumeSessionID,
+		Theme:            d.currentTerminalTheme(),
+		YoloMode:         params.YoloMode,
+		ApprovalRoute:    params.ApprovalRoute,
+		Executable:       params.Executable,
+		ClaudeExecutable: params.ClaudeExecutable,
+		CodexExecutable:  params.CodexExecutable,
+		Model:            params.Model,
+		Effort:           params.Effort,
+		LoginShellEnv:    d.cachedLoginShellEnv(),
+		AutoApprove:      false,
+		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent, d.isChiefOfStaffSession(sessionID)),
 	}
 	if !params.UnattendedLaunch.IsZero() {
 		if err := params.UnattendedLaunch.Validate(); err != nil {
@@ -555,7 +558,6 @@ func (d *Daemon) prepareSessionReload(session *protocol.Session, opts *ptybacken
 		}
 		if opts.Agent != "shell" {
 			if err := d.prepareAgentLaunch(session.ID, opts.ID, isChief, opts, ""); err != nil {
-				d.removeAgentLaunchDir(opts.ID)
 				return nil, err
 			}
 		}

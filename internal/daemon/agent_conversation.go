@@ -163,18 +163,8 @@ func (d *Daemon) admitMonitorConversation(entry *sessionmonitor.Entry, view sess
 	if conversation.Terminal != "" {
 		return d.acceptMonitorConversation(conversation.Terminal, observation, entry)
 	}
-	switch conversation.Proposal {
-	case sessionmonitor.ConversationReported:
+	if conversation.Proposal == sessionmonitor.ConversationReported {
 		return d.applyAgentConversation(observation, d.store.ClaimSessionConversation, entry)
-	case sessionmonitor.ConversationGuessedAtLaunch:
-		guess := func(sessionID protocol.SessionID, nativeID, transcriptPath string) (bool, error) {
-			changed, err := d.store.ClaimLaunchConversation(sessionID, nativeID, transcriptPath)
-			if errors.Is(err, store.ErrConversationClaimed) {
-				d.monitorEntry(sessionID).ConversationClaimedElsewhere(nativeID)
-			}
-			return changed, err
-		}
-		return d.applyAgentConversation(observation, guess, entry)
 	}
 	return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, entry)
 }

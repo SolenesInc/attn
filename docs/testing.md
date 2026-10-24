@@ -138,7 +138,7 @@ Playing the model, on a `fakeagent.Run`:
 - `StopReadingTerminal` stops reading input, so what the daemon types backs
   up in the terminal the way it does for a frozen agent.
 - `Halt` writes the harness's own record of the user interrupting the turn
-  (Claude, Codex and Copilot).
+  (Claude and Codex).
 - Claude only: `Stream` writes part of a reply that the next `Reply` revises
   under the same message. `Subagent` writes a subagent's transcript, and
   `DeleteSubagentTranscripts` removes those transcripts.

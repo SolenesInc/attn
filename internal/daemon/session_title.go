@@ -97,7 +97,7 @@ func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session
 }
 
 func titleProviderAgent(sessionAgent string) string {
-	candidates := []string{sessionAgent, "claude", "codex", "copilot"}
+	candidates := []string{sessionAgent, "claude", "codex"}
 	seen := make(map[string]struct{}, len(candidates))
 	for _, name := range candidates {
 		if name == "" {
@@ -220,8 +220,6 @@ func fallbackSessionTitleModel(agent string) string {
 		return "haiku"
 	case "codex":
 		return "gpt-5.6-luna"
-	case "copilot":
-		return "claude-haiku-4.5"
 	default:
 		return ""
 	}

@@ -211,9 +211,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	if _, ok := settings[SettingCodexAvailable]; !ok {
 		settings[SettingCodexAvailable] = settings[availabilitySettingKey(string(protocol.SessionAgentCodex))]
 	}
-	if _, ok := settings[SettingCopilotAvailable]; !ok {
-		settings[SettingCopilotAvailable] = settings[availabilitySettingKey(string(protocol.SessionAgentCopilot))]
-	}
 	settings[SettingPTYBackendMode] = d.ptyBackendMode()
 	sharedEnabled, sharedActive := d.sharedPTYHostSettings()
 	settings[SettingSharedPTYHostEnabled] = strconv.FormatBool(sharedEnabled)

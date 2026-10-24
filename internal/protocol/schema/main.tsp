@@ -1890,7 +1890,6 @@ model SpawnSessionMessage {
   executable?: string;         // Generic executable override for selected agent
   claude_executable?: string;  // Backward compatibility
   codex_executable?: string;   // Backward compatibility
-  copilot_executable?: string; // Backward compatibility
   `model`?: string;            // Pin the launched agent's model; empty = agent default (chief launches fall back to chief_model_<agent>)
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
 }

@@ -10719,9 +10719,6 @@ type SpawnSessionMessage struct {
 	// Cols corresponds to the JSON schema field "cols".
 	Cols int `json:"cols"`
 
-	// CopilotExecutable corresponds to the JSON schema field "copilot_executable".
-	CopilotExecutable *string `json:"copilot_executable,omitempty,omitzero"`
-
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd string `json:"cwd"`
 

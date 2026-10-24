@@ -102,3 +102,19 @@ func TestAPluginSessionKeepsRunningWhenItsDriverCannotRelaunchIt(t *testing.T) {
 		converse(t, app, session, run, "still there?")
 	}
 }
+
+func TestReloadingASessionWhoseHarnessIsGoneIsRefusedNamingTheHarness(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	driver := connectDriver(t, w, "attn-house", "house", map[string]bool{"state_reporting": true})
+	awaitDriverAvailable(app, "house")
+	session, _ := spawnDriven(w, app, driver, w.Path("shop"))
+	driver.leave(w)
+
+	if reloaded := reloadPi(app, session); reloaded.Success || !strings.Contains(protocol.Deref(reloaded.Error), `agent "house" is not available`) {
+		t.Fatalf("reloading a session whose harness is gone = %+v, want it refused naming the harness", reloaded)
+	}
+	if got := queriedSession(t, w.Client(), session); got.Agent != "house" {
+		t.Fatalf("the refused reload left the session as agent %q, want house", got.Agent)
+	}
+}
