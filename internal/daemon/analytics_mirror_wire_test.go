@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/protocol"
@@ -73,18 +74,8 @@ func TestDisablingAnalyticsUnregistersTheMirrorAndReenablingStartsAtTheHead(t *t
 		put(t, cli, gateNS, "ccc", `{}`)
 		synctest.Wait()
 
-		var idLengths []string
-		for _, record := range mirroredDocumentChanges(t, app) {
-			var props struct {
-				ID json.RawMessage `json:"id"`
-			}
-			if err := json.Unmarshal(record.Props, &props); err != nil {
-				t.Fatal(err)
-			}
-			idLengths = append(idLengths, string(props.ID))
-		}
-		if want := []string{`{"s":1}`, `{"s":3}`}; !slices.Equal(idLengths, want) {
-			t.Errorf("mirrored document ids %v, want %v: the write made while analytics was off is not captured", idLengths, want)
+		if got, want := mirroredDocumentIDLengths(t, app), []string{`{"s":1}`, `{"s":3}`}; !slices.Equal(got, want) {
+			t.Errorf("mirrored document ids %v, want %v: the write made while analytics was off is not captured", got, want)
 		}
 	})
 }
@@ -107,4 +98,98 @@ func mirroredDocumentChanges(t *testing.T, app *testworld.Peer) []analytics.Reco
 		}
 	}
 	return records
+}
+
+func TestListAnalyticsRecordsPagesMirroredFactsNewestFirst(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli, app := w.Client(), w.App()
+		defineRequests(t, cli, gateNS)
+		setAnalyticsEnabled(app, "true")
+		for _, id := range []string{"a", "b", "c", "d", "e"} {
+			put(t, cli, gateNS, id, `{}`)
+		}
+		synctest.Wait()
+
+		all := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 1000})
+		if len(all.Records) < 5 || all.Waiting != len(all.Records) {
+			t.Fatalf("the outbox lists %d records with %d waiting, want at least the 5 writes, all waiting", len(all.Records), all.Waiting)
+		}
+		seqs := recordSeqs(t, all.Records)
+		for i := 1; i < len(all.Records); i++ {
+			if all.Records[i].ID >= all.Records[i-1].ID || seqs[i] >= seqs[i-1] {
+				t.Fatalf("records %d and %d are ids %d, %d with seqs %d, %d; want newest first", i-1, i, all.Records[i-1].ID, all.Records[i].ID, seqs[i-1], seqs[i])
+			}
+		}
+
+		var paged []protocol.AnalyticsOutboxRow
+		page := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 2})
+		for len(page.Records) > 0 {
+			paged = append(paged, page.Records...)
+			page = listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 2, BeforeID: protocol.Ptr(page.Records[len(page.Records)-1].ID)})
+		}
+		if !slices.Equal(recordSeqs(t, paged), seqs) {
+			t.Errorf("paging by 2 with before_id gave seqs %v, want the single listing's %v", recordSeqs(t, paged), seqs)
+		}
+
+		if bus := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 1000, Stream: protocol.Ptr("bus")}); !slices.Equal(recordSeqs(t, bus.Records), seqs) {
+			t.Errorf("the bus stream lists seqs %v, want every mirrored fact %v", recordSeqs(t, bus.Records), seqs)
+		}
+		if other := listAnalyticsRecords(app, protocol.ListAnalyticsRecordsMessage{Limit: 1000, Stream: protocol.Ptr("app")}); len(other.Records) != 0 {
+			t.Errorf("the app stream lists %d records, want none: the mirror writes only bus records", len(other.Records))
+		}
+	})
+}
+
+func TestTheAnalyticsOutboxForgetsMirroredFactsAfterSevenDays(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		defineRequests(t, cli, gateNS)
+		setAnalyticsEnabled(w.App(), "true")
+		put(t, cli, gateNS, "a", `{}`)
+		synctest.Wait()
+		w.stop()
+		w.elapse(6 * 24 * time.Hour)
+		w.start()
+		put(t, w.Client(), gateNS, "bb", `{}`)
+		synctest.Wait()
+		if got, want := mirroredDocumentIDLengths(t, w.App()), []string{`{"s":1}`, `{"s":2}`}; !slices.Equal(got, want) {
+			t.Fatalf("after 6 days the outbox holds document writes %v, want both %v", got, want)
+		}
+		w.stop()
+		w.elapse(24 * time.Hour)
+		w.start()
+
+		w.advance(time.Hour + time.Minute)
+		if got, want := mirroredDocumentIDLengths(t, w.App()), []string{`{"s":2}`}; !slices.Equal(got, want) {
+			t.Errorf("after 7 days and an hour the outbox holds document writes %v, want only the one younger than 7 days %v", got, want)
+		}
+	})
+}
+
+func mirroredDocumentIDLengths(t *testing.T, app *testworld.Peer) []string {
+	t.Helper()
+	var lengths []string
+	for _, record := range mirroredDocumentChanges(t, app) {
+		var props struct {
+			ID json.RawMessage `json:"id"`
+		}
+		if err := json.Unmarshal(record.Props, &props); err != nil {
+			t.Fatal(err)
+		}
+		lengths = append(lengths, string(props.ID))
+	}
+	return lengths
+}
+
+func recordSeqs(t *testing.T, rows []protocol.AnalyticsOutboxRow) []int64 {
+	t.Helper()
+	seqs := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		var record analytics.Record
+		if err := json.Unmarshal([]byte(row.Record), &record); err != nil {
+			t.Fatalf("outbox row %d is not a record: %v", row.ID, err)
+		}
+		seqs = append(seqs, record.Seq)
+	}
+	return seqs
 }
