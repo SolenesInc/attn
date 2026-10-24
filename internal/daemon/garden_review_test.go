@@ -21,16 +21,16 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	cwd := t.TempDir()
 	toolHome := t.TempDir()
 	t.Setenv(toolhome.EnvVar, toolHome)
-	conversation := filepath.Join(toolHome, ".copilot", "session-state", "native-1")
-	if err := os.MkdirAll(conversation, 0o700); err != nil {
+	project := filepath.Join(toolHome, ".claude", "projects", "work")
+	if err := os.MkdirAll(project, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(conversation, "events.jsonl"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(project, "native-1.jsonl"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	d.store.Remove("sess-a")
 	d.store.Add(&protocol.Session{
-		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentCopilot, State: protocol.SessionStateIdle, ProfileID: defaultProfileID(t, d.store),
+		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentClaude, State: protocol.SessionStateIdle, ProfileID: defaultProfileID(t, d.store),
 	})
 	d.store.SetResumeSessionID("sess-a", "native-1")
 	d.store.SetLaunchIntent("sess-a", store.LaunchIntent{})

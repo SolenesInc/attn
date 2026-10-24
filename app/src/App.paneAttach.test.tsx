@@ -51,7 +51,7 @@ describe('App pane attach', () => {
       { ...agentPane('refused', 'ws'), title: 'claude', status: 'failed' as const, error: 'spawn refused' },
       { ...agentPane('bare-failure', 'ws'), title: 'claude', status: 'failed' as const },
       { ...agentPane('booting', 'ws'), title: 'codex', status: 'spawning' as const },
-      { ...agentPane('late', 'ws'), title: 'copilot' },
+      { ...agentPane('late', 'ws'), title: 'pi' },
     ];
     const root = panes.slice(1).reduce<unknown>(
       (left, { pane_id }, index) => ({ type: 'split', split_id: `split-${index}`, direction: 'vertical', ratio: 0.5, children: [left, { type: 'pane', pane_id }] }),
@@ -70,7 +70,7 @@ describe('App pane attach', () => {
     expect(notice('refused')).toBe('spawn refused');
     expect(notice('bare-failure')).toBe('Session failed to start');
     expect(notice('booting')).toBe('Starting codex...');
-    expect(notice('late')).toBe('Waiting for copilot...');
+    expect(notice('late')).toBe('Waiting for pi...');
     expect(document.querySelector('[data-pane-id="pane-refused"] [aria-label^="Rename session"]')).toBeNull();
 
     daemon.emit({ event: 'session_registered', session: daemonSession('late') });

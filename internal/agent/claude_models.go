@@ -30,7 +30,7 @@ func (c *Claude) DiscoverModels(ctx context.Context, executable, workDir string)
 		"--settings", `{"disableAllHooks":true}`, "--tools", "",
 	)
 	cmd.Dir = workDir
-	cmd.Env = headlessEnvironment("claude", workDir)
+	cmd.Env = headlessEnvironment("claude")
 	for _, name := range []string{"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN"} {
 		if value, ok := os.LookupEnv(name); ok {
 			cmd.Env = append(cmd.Env, name+"="+value)

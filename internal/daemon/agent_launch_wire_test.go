@@ -53,27 +53,6 @@ func TestAutoApproveDefaultsOnAndRespectsAnExplicitChoice(t *testing.T) {
 	}
 }
 
-func TestCopilotApprovalsReachTheUserWithoutAnAutomaticReviewer(t *testing.T) {
-	for _, stored := range []string{"", "false", "true"} {
-		t.Run("stored="+stored, func(t *testing.T) {
-			inBubbleWithAgents(t, func(t *testing.T, w *world) {
-				app, cli := w.App(), w.Client()
-				if stored != "" {
-					setSetting(t, app, "auto_approve_enabled", stored)
-				}
-				session := w.Spawn(app, fakeagent.Copilot, w.Path("shop"))
-				if err := cli.UpdateState(protocol.TerminalID(app.Terminal(session)), protocol.StatePendingApproval); err != nil {
-					t.Fatal(err)
-				}
-				w.advance(0)
-				if got := queriedSession(t, cli, session).State; got != protocol.SessionStatePendingApproval {
-					t.Fatalf("Copilot asking for approval is %s, want pending_approval without waiting for a reviewer", got)
-				}
-			})
-		})
-	}
-}
-
 func TestLaunchChoicesReachTheAgentAsFlagsAndLeaveNoOneShotVariableBehind(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {

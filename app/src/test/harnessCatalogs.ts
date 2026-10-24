@@ -7,7 +7,6 @@ export const reportedModel = (harness: string, id: string, name: string, tier?: 
 export const harnesses = [
   { id: 'claude', name: 'Claude', available: true, model_pin: true, effort_pin: true, discovery: true },
   { id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true },
-  { id: 'copilot', name: 'Copilot', available: true, model_pin: true, effort_pin: true, discovery: false },
   { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: true },
 ];
 export const catalogs: Record<string, Model[]> = {

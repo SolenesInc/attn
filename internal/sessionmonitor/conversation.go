@@ -17,7 +17,7 @@ func (e *Entry) ProposeConversation(observation ConversationObservation, proposa
 		m = &Monitor{terminalID: m.terminalID, runtime: RuntimeID(uuid.NewString()), entries: make(map[*Entry]struct{})}
 	}
 	proposed := Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal}
-	switching := terminal != "" && proposal != ConversationGuessedAtLaunch
+	switching := terminal != ""
 	var view View
 	if switching {
 		e.pendingSwitch = proposed

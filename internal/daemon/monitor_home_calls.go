@@ -222,7 +222,7 @@ func (d *Daemon) restoreTranscriptWatchers() {
 			continue
 		}
 		binding := d.store.GetSessionConversation(session.ID)
-		if binding.NativeID == "" && (!sessionmonitor.FindsLaunchConversation(session.Agent) || d.store.SessionLaunchedAt(session.ID).IsZero()) {
+		if binding.NativeID == "" {
 			continue
 		}
 		d.monitorEntry(session.ID).StartTranscriptWatcher(binding.TranscriptPath)

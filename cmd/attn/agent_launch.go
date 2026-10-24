@@ -153,13 +153,6 @@ func runAgentDirectly(requestedAgent string) {
 		}
 	}
 
-	cleanupFns := []func(){}
-	cleanup := func() {
-		for i := len(cleanupFns) - 1; i >= 0; i-- {
-			cleanupFns[i]()
-		}
-	}
-
 	hasHooks := false
 	if agentdriver.EffectiveCapabilities(driver).HasLaunchInstructions {
 		if guide, err := c.NotebookGuide(sessionID); err == nil && guide != nil && guide.SessionIsChief {
@@ -197,21 +190,6 @@ func runAgentDirectly(requestedAgent string) {
 		opts.HookSettings = hp.GenerateHooksConfig(opts)
 		hasHooks = true
 	}
-	if ip, ok := agentdriver.GetInstructionsFileProvider(driver); ok {
-		name, content := ip.GenerateInstructionsFile(opts)
-		if strings.TrimSpace(content) != "" {
-			dir, err := writeLauncherInstructions(string(terminalID), name, content)
-			if err != nil {
-				cleanup()
-				fmt.Fprintf(os.Stderr, "error writing launch instructions: %v\n", err)
-				os.Exit(1)
-			}
-			opts.InstructionsDir = dir
-			cleanupFns = append(cleanupFns, func() { _ = os.RemoveAll(dir) })
-		}
-	}
-
-	opts.InheritedInstructionsDirs = os.Getenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS")
 	cmd := driver.BuildCommand(opts)
 	cmd.Dir = cwd
 	cmd.Stdin = os.Stdin
@@ -221,7 +199,6 @@ func runAgentDirectly(requestedAgent string) {
 
 	startedAt := time.Now()
 	if err := cmd.Start(); err != nil {
-		cleanup()
 		fmt.Fprintf(os.Stderr, "error starting %s: %v\n", driver.Name(), err)
 		os.Exit(1)
 	}
@@ -252,8 +229,6 @@ func runAgentDirectly(requestedAgent string) {
 		}
 	}
 
-	cleanup()
-
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			os.Exit(exitErr.ExitCode())
@@ -280,15 +255,4 @@ func resolveWrapperPath() string {
 		return exePath
 	}
 	return "attn"
-}
-
-func writeLauncherInstructions(terminalID, name, content string) (string, error) {
-	dir := filepath.Join(os.TempDir(), "attn-instructions-"+terminalID)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
-		return "", err
-	}
-	return dir, nil
 }

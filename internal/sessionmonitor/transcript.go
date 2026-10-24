@@ -18,7 +18,6 @@ const (
 	transcriptQuietWindow    = 1500 * time.Millisecond
 	assistantDedupWindow     = 2 * time.Second
 	transcriptDiscoveryGrace = 2 * time.Second
-	launchConversationWindow = 2 * time.Minute
 )
 
 const (
@@ -184,33 +183,6 @@ func (w *transcriptWatcher) discover() string {
 		return ""
 	}
 	return path
-}
-
-func FindsLaunchConversation(agent protocol.SessionAgent) bool {
-	_, ok := agentdriver.GetLaunchTranscriptFinder(agentdriver.Get(string(agent)))
-	return ok
-}
-
-func (w *transcriptWatcher) awaitsLaunchConversation() bool {
-	return FindsLaunchConversation(w.agent) && w.entry.boundConversation().NativeID == ""
-}
-
-func (w *transcriptWatcher) bindLaunchConversation() bool {
-	driver := agentdriver.Get(string(w.agent))
-	finder, ok := agentdriver.GetLaunchTranscriptFinder(driver)
-	if !ok {
-		return false
-	}
-	path := strings.TrimSpace(finder.FindLaunchTranscript(w.cwd, w.startedAt, w.entry.claimedElsewhere))
-	nativeID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, path)
-	if nativeID == "" {
-		return false
-	}
-	if !w.entry.ProposeConversation(ConversationObservation{NativeID: nativeID, TranscriptPath: path}, ConversationGuessedAtLaunch, "") {
-		return false
-	}
-	w.entry.logf("transcript watcher: bound launch conversation session=%s native=%s path=%s", w.entry.Label(), nativeID, path)
-	return true
 }
 
 func (w *transcriptWatcher) discoveryDeadline(now time.Time) time.Time {
@@ -558,14 +530,6 @@ func (w *transcriptWatcher) run() {
 			if transcriptPath == "" && time.Now().Before(discoveryDeadline) {
 				continue
 			}
-			if transcriptPath == "" && w.awaitsLaunchConversation() {
-				if w.bindLaunchConversation() {
-					return
-				}
-				if time.Now().Before(w.startedAt.Add(launchConversationWindow)) {
-					continue
-				}
-			}
 			if transcriptPath == "" && sessionState == protocol.SessionStateLaunching {
 				continue
 			}
@@ -601,7 +565,6 @@ func (w *transcriptWatcher) run() {
 				e.assistantWindowChanged()
 				return
 			}
-			w.behavior.Reset()
 			w.resetSource(protocol.SessionMessageWindowStatusReady, transcriptPath, "", startOffset > 0)
 			windowChanged = true
 			fallbackAttempted = false
@@ -620,7 +583,6 @@ func (w *transcriptWatcher) run() {
 			readFileInfo = nil
 			discoveryDeadline = w.discoveryDeadline(time.Now())
 			fallbackAttempted = false
-			w.behavior.Reset()
 			continue
 		}
 
@@ -661,20 +623,12 @@ func (w *transcriptWatcher) run() {
 						classifiedSeq = assistantSeq
 					}
 				}
-				if lineResult.BracketClosed {
-					e.recordTurnBracketClosedEvidence(now)
-				}
-				if lineResult.State != "" && protocol.SessionState(lineResult.State) != sessionState {
-					e.recordTranscriptEvidence(lineResult.State, "transcript line", now)
-					sessionState = protocol.SessionState(lineResult.State)
-				}
 
 				for _, event := range record.Events {
 					if event.Kind != transcript.EventKindAssistant || strings.TrimSpace(event.Text) == "" {
 						continue
 					}
 					content := event.Text
-					w.behavior.HandleAssistantMessage(now)
 					if w.behavior.DeduplicateAssistantEvents() &&
 						isDuplicateAssistantEvent(lastAssistant, lastAssistantAt, content, now) {
 						continue
@@ -701,17 +655,6 @@ func (w *transcriptWatcher) run() {
 		}
 		if usageSettled && w.usageTracker != nil {
 			w.usageTracker.Reconcile()
-		}
-
-		tickResult := w.behavior.Tick(time.Now(), sessionState)
-		if tickResult.Log != "" {
-			e.logf("%s session=%s", tickResult.Log, label)
-		}
-		if tickResult.State != "" && protocol.SessionState(tickResult.State) != sessionState {
-			e.recordTranscriptEvidence(tickResult.State, "watcher tick", time.Now())
-		}
-		if tickResult.BlockClassification {
-			continue
 		}
 
 		quietSince := w.behavior.QuietSince(lastAssistantAt)
@@ -758,24 +701,6 @@ func (e *Entry) boundConversation() ConversationObservation {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.conversationInput.ConversationObservation
-}
-
-func (e *Entry) claimedElsewhere(nativeID string) bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.claimedNatives[nativeID]
-}
-
-func (e *Entry) ConversationClaimedElsewhere(nativeID string) {
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.claimedNatives == nil {
-		e.claimedNatives = make(map[string]bool)
-	}
-	e.claimedNatives[nativeID] = true
 }
 
 func (e *Entry) lastSeen() string {

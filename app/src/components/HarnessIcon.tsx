@@ -2,7 +2,6 @@ import { normalizeSessionAgent } from '../types/sessionAgent';
 import { harnessLabel } from './harnessLabel';
 import { ClaudeIcon } from './icons/ClaudeIcon';
 import { CodexIcon } from './icons/CodexIcon';
-import { CopilotIcon } from './icons/CopilotIcon';
 import { PiIcon } from './icons/PiIcon';
 
 export function HarnessIcon({ agent, title, ariaLabel }: { agent?: string; title?: string; ariaLabel?: string }) {
@@ -18,9 +17,6 @@ export function HarnessIcon({ agent, title, ariaLabel }: { agent?: string; title
       break;
     case 'pi':
       icon = <PiIcon />;
-      break;
-    case 'copilot':
-      icon = <CopilotIcon />;
       break;
     default:
       icon = (

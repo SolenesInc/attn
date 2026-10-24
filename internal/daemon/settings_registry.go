@@ -25,12 +25,10 @@ const (
 	SettingModelTierOverrides            = "model_tier_overrides"
 	SettingClaudeExecutable              = "claude_executable"
 	SettingCodexExecutable               = "codex_executable"
-	SettingCopilotExecutable             = "copilot_executable"
 	SettingEditorExecutable              = "editor_executable"
 	SettingNewSessionAgent               = "new_session_agent"
 	SettingClaudeAvailable               = "claude_available"
 	SettingCodexAvailable                = "codex_available"
-	SettingCopilotAvailable              = "copilot_available"
 	SettingPTYBackendMode                = "pty_backend_mode"
 	SettingNewSessionLauncherEnabled     = "new_session_launcher_enabled"
 	SettingDirectAgentLaunchEnabled      = "direct_agent_launch_enabled"
@@ -130,7 +128,6 @@ var settingSpecs = []settingSpec{
 	{key: "chief_effort_<harness>", scope: daemonScope, description: "Reasoning effort for chief sessions. Empty uses the default effort.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: SettingClaudeExecutable, scope: daemonScope, description: "Executable for Claude. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
 	{key: SettingCodexExecutable, scope: daemonScope, description: "Executable for Codex. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
-	{key: SettingCopilotExecutable, scope: daemonScope, description: "Executable for Copilot. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
 	{key: SettingModelTierOverrides, scope: daemonScope, description: "Models for each intelligence tier as a JSON object. Empty uses harness defaults.", validate: func(d *Daemon, key, value string) error {
 		_, err := modeltiers.ParseOverrides(value)
 		return err

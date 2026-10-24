@@ -94,7 +94,7 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
     onChange(next);
   };
   const pickHarness = (id: string) => { setPreview(id); setQuery(''); setProvider(''); };
-  const hasProvider = !['claude', 'codex', 'copilot'].includes(view.effectiveHarness);
+  const hasProvider = !['claude', 'codex'].includes(view.effectiveHarness);
   let manualModel = query.trim(), manualProvider = hasProvider ? provider.trim() : '';
   if (hasProvider && !manualProvider && manualModel.includes('/')) {
     const slash = manualModel.indexOf('/'); manualProvider = manualModel.slice(0, slash); manualModel = manualModel.slice(slash + 1);

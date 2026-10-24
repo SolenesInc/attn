@@ -65,7 +65,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		if !protocol.Deref(entry.Family) && strings.Contains(entry.Key, "_cap_") {
 			continue
 		}
-		if entry.Key == "claude_available" || entry.Key == "codex_available" || entry.Key == "copilot_available" {
+		if entry.Key == "claude_available" || entry.Key == "codex_available" {
 			continue
 		}
 		fmt.Fprintf(&registry, "%s\t%s\t%t\t%s\n", entry.Key, entry.Scope, protocol.Deref(entry.ReadOnly), entry.Description)

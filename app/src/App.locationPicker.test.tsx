@@ -253,7 +253,7 @@ describe('App location picker', () => {
     it('launches an interactive plugin absent from the initial-prompt harness catalog', async () => {
       const { daemon } = await openPicker({}, { settings: { interactive_available: 'true', interactive_cap_initial_prompt: 'false' } });
       const choices = within(screen.getByRole('radiogroup', { name: 'Session agent' })).getAllByRole('radio');
-      expect(choices.map(choice => within(choice).getByText(/Terminal|Claude|Codex|Copilot|Pi|Interactive/).textContent)).toEqual(['Terminal', 'Claude', 'Codex', 'Copilot', 'Pi', 'Interactive']);
+      expect(choices.map(choice => within(choice).getByText(/Terminal|Claude|Codex|Pi|Interactive/).textContent)).toEqual(['Terminal', 'Claude', 'Codex', 'Pi', 'Interactive']);
       await gesture(daemon, () => fireEvent.click(radio(/interactive/i)));
       await submitPath(daemon, '/tmp/interactive-plugin');
       expect(launchedAt(daemon)).toEqual([{ cwd: '/tmp/interactive-plugin', agent: 'interactive' }]);
@@ -303,13 +303,13 @@ describe('App location picker', () => {
     });
 
     it('switches agents with ⌥ and a digit, and neither advertises nor applies one for an unavailable agent', async () => {
-      const { daemon } = await openPicker({}, { settings: { codex_available: 'false', copilot_available: 'true' } });
+      const { daemon } = await openPicker({}, { settings: { codex_available: 'false', pi_available: 'true' } });
       expect(within(screen.getByRole('radiogroup', { name: 'Session agent' })).queryByText('⌥2')).toBeNull();
 
       await press(daemon, '™', { code: 'Digit2', altKey: true });
 
       expect(agentChosen(/claude/i)).toBe(true);
-      expect(agentChosen(/copilot/i)).toBe(false);
+      expect(agentChosen(/pi/i)).toBe(false);
     });
 
     it('offers Terminal on ⌥T and launches a shell without remembering it as the preferred agent', async () => {

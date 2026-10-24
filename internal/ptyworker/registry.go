@@ -31,7 +31,6 @@ type RegistryEntry struct {
 	Executable           string                              `json:"executable,omitempty"`
 	ClaudeExecutable     string                              `json:"claude_executable,omitempty"`
 	CodexExecutable      string                              `json:"codex_executable,omitempty"`
-	CopilotExecutable    string                              `json:"copilot_executable,omitempty"`
 	Model                string                              `json:"model,omitempty"`
 	Effort               string                              `json:"effort,omitempty"`
 	UnattendedLaunch     launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`

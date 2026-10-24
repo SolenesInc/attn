@@ -37,12 +37,6 @@ func TestSessionStateFromRecoveredInfo(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name:   "copilot pending approval",
-			info:   ptybackend.SessionInfo{Running: true, Agent: string(protocol.SessionAgentCopilot), State: protocol.StatePendingApproval},
-			want:   protocol.SessionStatePendingApproval,
-			wantOK: true,
-		},
-		{
 			name: "running with the worker's default working is no opinion",
 			info: ptybackend.SessionInfo{Running: true, State: protocol.StateWorking},
 		},

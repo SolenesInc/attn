@@ -74,7 +74,6 @@ type ConversationProposal int
 const (
 	ConversationObserved ConversationProposal = iota
 	ConversationReported
-	ConversationGuessedAtLaunch
 )
 
 type Conversation struct {

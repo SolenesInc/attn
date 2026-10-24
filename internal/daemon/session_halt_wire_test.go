@@ -9,19 +9,12 @@ import (
 )
 
 func TestAHaltedTurnSettlesIdleAndAnOldHaltDoesNotSettleTheNextRun(t *testing.T) {
-	for _, tc := range []struct {
-		agent   fakeagent.Harness
-		resumes bool
-	}{
-		{fakeagent.Claude, true},
-		{fakeagent.Codex, true},
-		{fakeagent.Copilot, false},
-	} {
-		t.Run(string(tc.agent), func(t *testing.T) {
-			w := newWorld(t, tc.agent)
+	for _, agent := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		t.Run(string(agent), func(t *testing.T) {
+			w := newWorld(t, agent)
 			app := w.App()
 			cwd := w.Path("shop")
-			session := w.Spawn(app, tc.agent, cwd)
+			session := w.Spawn(app, agent, cwd)
 			run := w.Launched(session)
 			app.TypeLine(session, "write an essay on checkout flows")
 			run.Prompted()
@@ -31,11 +24,8 @@ func TestAHaltedTurnSettlesIdleAndAnOldHaltDoesNotSettleTheNextRun(t *testing.T)
 			halted := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
 				return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "turn_aborted"
 			})
-			if !tc.resumes {
-				return
-			}
 
-			resumed := respawn(w, app, tc.agent, session, cwd)
+			resumed := respawn(w, app, agent, session, cwd)
 			app.TypeLine(session, "just the outline then")
 			resumed.Prompted()
 			working := testworld.AwaitStateAfter(app, halted, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })

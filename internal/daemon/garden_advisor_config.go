@@ -19,7 +19,6 @@ const (
 	gardenAdvisorCodexDefaultEffort  = "xhigh"
 	gardenAdvisorClaudeDefaultModel  = "sonnet"
 	gardenAdvisorClaudeDefaultEffort = "medium"
-	gardenAdvisorCopilotDefaultModel = "claude-sonnet-4.6"
 )
 
 type gardenAdvisorConfig struct {
@@ -37,10 +36,6 @@ func defaultGardenAdvisorConfig(agent string) (gardenAdvisorConfig, error) {
 	case "claude":
 		return gardenAdvisorConfig{
 			Agent: "claude",
-		}, nil
-	case "copilot":
-		return gardenAdvisorConfig{
-			Agent: "copilot",
 		}, nil
 	default:
 		return gardenAdvisorConfig{}, fmt.Errorf("garden advisor agent is not supported: %s", agent)
@@ -117,9 +112,6 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 	case "claude":
 		fallback = gardenAdvisorClaudeDefaultModel
 		defaultEffort = gardenAdvisorClaudeDefaultEffort
-	case "copilot":
-		fallback = gardenAdvisorCopilotDefaultModel
-		defaultEffort = ""
 	}
 	if config.Effort == "" {
 		config.Effort = defaultEffort

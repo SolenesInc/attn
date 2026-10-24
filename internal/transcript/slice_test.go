@@ -27,7 +27,7 @@ func TestExtractConversationSlice_Claude(t *testing.T) {
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"found the root cause"}]}}`,
 		`{"type":"user","isCompactSummary":true,"message":{"content":"summary: investigated X, did Y"}}`,
 		`{"type":"user","origin":{"kind":"human"},"message":{"content":"also handle codex transcripts"}}`,
-		`{"type":"user","origin":{"kind":"human"},"message":{"content":"and copilot too"}}`,
+		`{"type":"user","origin":{"kind":"human"},"message":{"content":"and pi too"}}`,
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"handling codex now"}]}}`,
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"done, opening PR"}]}}`,
 	}
@@ -41,7 +41,7 @@ func TestExtractConversationSlice_Claude(t *testing.T) {
 	if got.Brief != "fix the reconcile classifier budget bug" {
 		t.Errorf("Brief = %q", got.Brief)
 	}
-	wantRescoping := []string{"also handle codex transcripts", "and copilot too"}
+	wantRescoping := []string{"also handle codex transcripts", "and pi too"}
 	if len(got.Rescoping) != len(wantRescoping) {
 		t.Fatalf("Rescoping = %v, want %v", got.Rescoping, wantRescoping)
 	}
@@ -286,28 +286,6 @@ func TestExtractConversationSlice_CodexResponseItemsWithoutMetadata(t *testing.T
 	}
 	if len(got.AgentTurns) != 1 || got.AgentTurns[0] != "legacy response-only answer" {
 		t.Errorf("AgentTurns = %v", got.AgentTurns)
-	}
-}
-
-func TestExtractConversationSlice_Copilot(t *testing.T) {
-	lines := []string{
-		`{"type":"user.message","data":{"content":"please refactor this module"}}`,
-		`{"type":"assistant.message","data":{"content":"refactored, running tests"}}`,
-	}
-	path := writeJSONL(t, lines...)
-
-	got, err := ExtractConversationSlice(path, DefaultSliceOptions())
-	if err != nil {
-		t.Fatalf("ExtractConversationSlice: %v", err)
-	}
-	if got.Brief != "please refactor this module" {
-		t.Errorf("Brief = %q", got.Brief)
-	}
-	if len(got.AgentTurns) != 1 || got.AgentTurns[0] != "refactored, running tests" {
-		t.Errorf("AgentTurns = %v", got.AgentTurns)
-	}
-	if got.HumanCount != 1 || got.AgentCount != 1 {
-		t.Errorf("HumanCount=%d AgentCount=%d, want 1/1", got.HumanCount, got.AgentCount)
 	}
 }
 

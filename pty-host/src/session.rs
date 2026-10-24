@@ -135,8 +135,6 @@ pub struct RegistryEntry {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub codex_executable: String,
     #[serde(skip_serializing_if = "String::is_empty")]
-    pub copilot_executable: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
     pub model: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub effort: String,
@@ -383,7 +381,6 @@ impl Session {
             executable: params.executable,
             claude_executable: params.claude_executable,
             codex_executable: params.codex_executable,
-            copilot_executable: params.copilot_executable,
             model: params.model,
             effort: params.effort,
             unattended_launch: params.unattended_launch,

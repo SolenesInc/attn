@@ -336,7 +336,6 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.Executable, "executable", "", "selected agent executable override")
 	fs.StringVar(&cfg.ClaudeExecutable, "claude-executable", "", "claude executable override")
 	fs.StringVar(&cfg.CodexExecutable, "codex-executable", "", "codex executable override")
-	fs.StringVar(&cfg.CopilotExecutable, "copilot-executable", "", "copilot executable override")
 	var unattendedLaunchJSON string
 	fs.BoolVar(&cfg.AgentLoginShell, "agent-login-shell", false, "run the prepared agent through a login shell")
 	fs.Func("agent-arg", "prepared agent argument (repeat for each argument)", func(value string) error { cfg.AgentArgv = append(cfg.AgentArgv, value); return nil })

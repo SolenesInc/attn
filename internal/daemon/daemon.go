@@ -1706,7 +1706,6 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 	defer cancel()
 	err := d.ptyBackend.Remove(ctx, terminal)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
-		d.removeAgentLaunchDir(terminal)
 		return nil
 	}
 	d.life.Go("removePTYSession", func() {
@@ -1721,7 +1720,6 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 			retryErr := d.ptyBackend.Remove(ctx, terminal)
 			cancel()
 			if retryErr == nil || errors.Is(retryErr, pty.ErrSessionNotFound) || errors.Is(retryErr, os.ErrNotExist) {
-				d.removeAgentLaunchDir(terminal)
 				return
 			}
 			backoff *= 2

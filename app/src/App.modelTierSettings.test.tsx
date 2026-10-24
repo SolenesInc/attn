@@ -42,7 +42,7 @@ describe('App model tier settings', () => {
     expect(radio('gpt-6-luna', 'Light')).toBeChecked();
   });
   it('removes overrides for a known harness without discovery', async () => {
-    const daemon = await openSection('models', { settings: { model_tier_overrides: '[{"harness":"copilot","provider":"","model":"old-model","tier":"deep"}]' } });
+    const daemon = await openSection('models', { settings: { model_tier_overrides: '[{"harness":"pi","provider":"","model":"old-model","tier":"deep"}]' } });
     const row = screen.getByText('old-model').closest('.model-tier-row')!;
     await gesture(daemon, () => fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Remove' })));
     expect(savedSettings(daemon).slice(-1)[0]).toEqual(['model_tier_overrides', '[]']);

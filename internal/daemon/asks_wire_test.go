@@ -224,10 +224,10 @@ func TestAsksBelongToTheAskingSessionsProfile(t *testing.T) {
 }
 
 func TestEachHarnessLaunchedWithAsksIsTaughtThem(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "asks_enabled", "true")
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		if guidance := launchGuidance(t, w.Launched(w.Spawn(app, h, w.Path(string(h))))); !strings.Contains(guidance, askGuidanceLead) {
 			t.Errorf("%s launched with asks on was not taught them:\n%s", h, guidance)
 		}

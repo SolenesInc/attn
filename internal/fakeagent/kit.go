@@ -74,7 +74,7 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if wrapper != "" {
 		links[wrapperName] = wrapper
 	}
-	for _, h := range []Harness{Claude, Codex, Copilot, Pi} {
+	for _, h := range []Harness{Claude, Codex, Pi} {
 		links[string(h)] = self
 	}
 	mustInstall(t, cfg.Bin, links, map[string]string{configName: string(encoded)})
@@ -104,7 +104,6 @@ func (k *Kit) Env() []string {
 		"PATH=" + k.cfg.Bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"ATTN_CLAUDE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Claude)),
 		"ATTN_CODEX_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Codex)),
-		"ATTN_COPILOT_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Copilot)),
 		"ATTN_WRAPPER_PATH=" + filepath.Join(k.cfg.Bin, wrapperName),
 	}
 }

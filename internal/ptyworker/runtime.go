@@ -100,15 +100,14 @@ type Config struct {
 
 	Executable string
 
-	ClaudeExecutable  string
-	CodexExecutable   string
-	CopilotExecutable string
-	AgentLoginShell   bool
-	AgentArgv         []string
-	AgentEnv          []string
-	ExternalCWD       string
-	DaemonEnv         []string
-	UnattendedLaunch  launchcontract.UnattendedLaunchSpec
+	ClaudeExecutable string
+	CodexExecutable  string
+	AgentLoginShell  bool
+	AgentArgv        []string
+	AgentEnv         []string
+	ExternalCWD      string
+	DaemonEnv        []string
+	UnattendedLaunch launchcontract.UnattendedLaunchSpec
 
 	RegistryPath   string
 	SocketPath     string
@@ -381,7 +380,6 @@ func (r *Runtime) run(ctx context.Context) error {
 	entry.Executable = r.cfg.Executable
 	entry.ClaudeExecutable = r.cfg.ClaudeExecutable
 	entry.CodexExecutable = r.cfg.CodexExecutable
-	entry.CopilotExecutable = r.cfg.CopilotExecutable
 	if r.cfg.UnattendedLaunch.IsZero() {
 		entry.Model = strings.TrimSpace(r.cfg.Model)
 		entry.Effort = strings.TrimSpace(r.cfg.Effort)

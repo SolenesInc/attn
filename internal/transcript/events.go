@@ -354,8 +354,6 @@ func parseEventLine(agent string, line []byte) parsedEventLine {
 	switch strings.ToLower(strings.TrimSpace(agent)) {
 	case "claude":
 		parsed.events = parseClaudeEvent(envelope)
-	case "copilot":
-		parsed.events = parseCopilotEvent(envelope)
 	case "codex":
 		parsed.events = parseCodexEvent(envelope)
 		parsed.assistantEchoCandidate = envelope.Type == "response_item"
@@ -537,52 +535,6 @@ func parseClaudeEvent(envelope eventEnvelope) []Event {
 		}
 	}
 	return events
-}
-
-func parseCopilotEvent(envelope eventEnvelope) []Event {
-	var data struct {
-		Content    string          `json:"content"`
-		ToolCallID string          `json:"toolCallId"`
-		ToolName   string          `json:"toolName"`
-		Arguments  json.RawMessage `json:"arguments"`
-		Output     json.RawMessage `json:"output"`
-		Result     json.RawMessage `json:"result"`
-		Error      string          `json:"error"`
-		Message    string          `json:"message"`
-		Success    *bool           `json:"success"`
-		Timestamp  string          `json:"timestamp"`
-	}
-	if json.Unmarshal(envelope.Data, &data) != nil {
-		return nil
-	}
-	timestamp := firstNonEmpty(envelope.Timestamp, data.Timestamp)
-	switch envelope.Type {
-	case "user.message":
-		return textEvent(timestamp, EventKindUser, "user", data.Content)
-	case "assistant.message":
-		return textEvent(timestamp, EventKindAssistant, "assistant", data.Content)
-	case "tool.execution_start":
-		return []Event{{
-			Timestamp:  timestamp,
-			Kind:       EventKindToolCall,
-			ToolName:   data.ToolName,
-			ToolCallID: data.ToolCallID,
-			Text:       renderJSONValue(data.Arguments),
-		}}
-	case "tool.execution_complete":
-		isError := data.Error != "" || (data.Success != nil && !*data.Success)
-		return []Event{{
-			Timestamp:  timestamp,
-			Kind:       EventKindToolResult,
-			ToolCallID: data.ToolCallID,
-			Text:       firstNonEmpty(renderJSONValue(data.Output), renderJSONValue(data.Result), data.Error),
-			IsError:    isError,
-		}}
-	}
-	if strings.Contains(envelope.Type, "error") || data.Error != "" {
-		return textEvent(timestamp, EventKindError, "", firstNonEmpty(data.Error, data.Message, data.Content))
-	}
-	return nil
 }
 
 func decodeEventContent(raw json.RawMessage) []eventContentBlock {

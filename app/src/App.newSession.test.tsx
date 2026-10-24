@@ -57,22 +57,22 @@ describe('App new session', () => {
       [
         'the built-in agents when the daemon says nothing',
         {},
-        { offered: ['Terminal', 'Claude', 'Codex', 'Copilot'], unavailable: ['Pi'], chosen: ['Claude'] },
+        { offered: ['Terminal', 'Claude', 'Codex'], unavailable: ['Pi'], chosen: ['Claude'] },
       ],
       [
         'the agents the daemon advertises, plugins included',
         { claude_available: 'false', pi_available: 'true', 'gemini-cli_available': 'true' },
-        { offered: ['Terminal', 'Codex', 'Copilot', 'Gemini Cli', 'Pi'], unavailable: ['Claude'], chosen: ['Codex'] },
+        { offered: ['Terminal', 'Codex', 'Gemini Cli', 'Pi'], unavailable: ['Claude'], chosen: ['Codex'] },
       ],
       [
         'the first available agent when the preferred one is missing',
-        { new_session_agent: 'claude', claude_available: 'false', codex_available: 'false' },
-        { offered: ['Terminal', 'Copilot'], unavailable: ['Claude', 'Codex', 'Pi'], chosen: ['Copilot'] },
+        { new_session_agent: 'claude', claude_available: 'false', codex_available: 'false', pi_available: 'true' },
+        { offered: ['Terminal', 'Pi'], unavailable: ['Claude', 'Codex'], chosen: ['Pi'] },
       ],
       [
         'a terminal when no agent CLI is available',
-        { codex_available: 'false', claude_available: 'false', copilot_available: 'false' },
-        { offered: ['Terminal'], unavailable: ['Claude', 'Codex', 'Copilot', 'Pi'], chosen: ['Terminal'] },
+        { codex_available: 'false', claude_available: 'false' },
+        { offered: ['Terminal'], unavailable: ['Claude', 'Codex', 'Pi'], chosen: ['Terminal'] },
       ],
     ])('offers %s', async (_, settings, expected) => {
       expect(await openNewSession(settings)).toEqual(expected);
@@ -109,7 +109,6 @@ describe('App new session', () => {
         { name: 'Pi', capabilities: ['custom cap: Supported'] },
         { name: 'Codex', capabilities: ['Transcript watch: Supported', 'Classifier: Unavailable'] },
         { name: 'Claude', capabilities: [] },
-        { name: 'Copilot', capabilities: [] },
         { name: 'Mistral', capabilities: [] },
       ]);
     });
@@ -118,7 +117,7 @@ describe('App new session', () => {
       await openSection('agents', { settings: { codex_executable: '/usr/local/bin/codex', snipe_executable: '/opt/snipe' } });
 
       expect(screen.getByLabelText('Executable', { selector: '#settings-codex-exec' })).toHaveValue('/usr/local/bin/codex');
-      expect(settingsAgents().map(({ name }) => name)).toEqual(['Claude', 'Codex', 'Copilot']);
+      expect(settingsAgents().map(({ name }) => name)).toEqual(['Claude', 'Codex']);
     });
   });
 

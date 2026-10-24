@@ -16,8 +16,8 @@ agent brains, built as a harness augmenter. What it does today:
 
 - **Durability.** Restart the attn app, its daemon, even your computer. Open
   attn again and your agents and terminals are still there, waiting for you.
-- **Bring your own harness.** attn runs Claude Code, Codex, Copilot, Pi, and
-  other CLI agents. You get their native experience, but better. A big lab ships
+- **Bring your own harness.** attn runs Claude Code, Codex, Pi, and other
+  CLI agents. You get their native experience, but better. A big lab ships
   a fancy new feature? You get it immediately, as they designed it. Tired of
   attn? Just use the harness in the terminal.
 - **The queue mode.** A (currently non-default) mode for running many agents at
@@ -109,7 +109,6 @@ unpushed, pinned worktrees and those used by live sessions or open seeds.
 |---|---|---|
 | [Claude Code](https://claude.ai/code) | Hooks + classifier + terminal title | Yes |
 | [Codex](https://developers.openai.com/codex) | Hooks + classifier + terminal title | Yes |
-| [Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) | PTY heuristics + transcript classifier | Yes |
 | [Pi](https://github.com/badlogic/pi-mono) | attn plugin | Yes |
 
 ## Install

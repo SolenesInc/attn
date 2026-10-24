@@ -275,11 +275,6 @@ func (e *Entry) RecordBracket(state string) {
 	})
 }
 
-func (e *Entry) recordTranscriptEvidence(state, detail string, at time.Time) {
-	e.Trace(statetrace.Observation{Source: StateSourceTranscript, Detail: detail, Claim: state, ObservedAt: at, Outcome: statetrace.OutcomeObserved})
-	e.RecordBracket(state)
-}
-
 func (e *Entry) RecordTurnAborted(detail string, abortedAt, observedAt time.Time) {
 	if e == nil {
 		return
@@ -300,16 +295,6 @@ func (e *Entry) RecordTurnAborted(detail string, abortedAt, observedAt time.Time
 			Detail:     detail,
 			ObservedAt: at,
 		}
-	})
-}
-
-func (e *Entry) recordTurnBracketClosedEvidence(at time.Time) {
-	if at.IsZero() {
-		at = time.Now()
-	}
-	e.RecordEvidence(at, func(e *Evidence) {
-		e.TurnOpen = false
-		e.ToolOpen = false
 	})
 }
 

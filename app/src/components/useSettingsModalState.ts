@@ -182,7 +182,7 @@ export function useSettingsModalState({
     [agentAvailability, resolvedDefaultAgent],
   );
   const executableAgentList = useMemo(
-    () => orderedAgentList.filter((agent) => ['codex', 'claude', 'copilot'].includes(agent)),
+    () => orderedAgentList.filter((agent) => ['codex', 'claude'].includes(agent)),
     [orderedAgentList],
   );
   const chiefOverrideAgentList = useMemo(() => {
@@ -265,7 +265,7 @@ export function useSettingsModalState({
   const gardenAdvisorAgents = useMemo(() => {
     const eligible = orderedAgentList.filter(
       (agent) =>
-        ['codex', 'claude', 'copilot'].includes(agent) &&
+        ['codex', 'claude'].includes(agent) &&
         isAgentAvailable(agentAvailability, agent) &&
         actualAgentCapabilities[agent]?.headless_task === true,
     );
@@ -562,7 +562,7 @@ export function useSettingsModalState({
             label: 'Agents and models',
             description: 'Defaults for new sessions, with configuration for each agent.',
             keywords:
-              'agents executables claude codex copilot pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
+              'agents executables claude codex pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
           },
           {
             id: 'models', label: 'Models', description: 'Tiers describe how much intelligence a task needs. Your changes apply across profiles on this daemon; Reset restores attn’s mapping.', keywords: 'harness model tier light standard deep overrides defaults',
@@ -626,7 +626,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps',
+            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps',
           },
           {
             id: 'backgroundTasks',

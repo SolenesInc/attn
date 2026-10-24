@@ -443,7 +443,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
         title: areSidebarHarnessLogosEnabled(settings)
           ? 'Hide harness logos in the sidebar'
           : 'Show harness logos in the sidebar',
-        description: 'The Claude, Codex, Copilot or Pi mark beside each agent',
+        description: 'The Claude, Codex or Pi mark beside each agent',
         keywords: ['harness', 'logo', 'icon', 'sidebar', 'claude', 'codex'],
         icon: <ContextActionIcon />,
         run: handleToggleSidebarHarnessLogos,

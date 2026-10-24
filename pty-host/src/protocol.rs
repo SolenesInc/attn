@@ -95,8 +95,6 @@ pub struct SpawnParams {
     #[serde(default)]
     pub codex_executable: String,
     #[serde(default)]
-    pub copilot_executable: String,
-    #[serde(default)]
     pub model: String,
     #[serde(default)]
     pub effort: String,

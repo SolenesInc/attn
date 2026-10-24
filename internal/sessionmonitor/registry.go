@@ -123,7 +123,6 @@ type Entry struct {
 	touchedAt           time.Time
 	views               atomic.Pointer[terminalViews]
 	link                string
-	claimedNatives      map[string]bool
 	windowRevision      uint64
 }
 

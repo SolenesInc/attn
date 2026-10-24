@@ -14,7 +14,7 @@ import {
   instanceCliEnv,
 } from './harnessInstance.mjs';
 
-export const TRIPWIRE_BINARIES = ['claude', 'codex', 'copilot', 'pi'];
+export const TRIPWIRE_BINARIES = ['claude', 'codex', 'pi'];
 
 // Not 1 and not 127: an agent binary that fails on its own, or is missing, must
 // stay distinguishable from one the tripwire refused to run.
@@ -38,12 +38,11 @@ const LEDGER_ARGV_CHARS = 512;
 const POINTER_FILE = 'current-run';
 const UNATTRIBUTED_LEDGER = 'unattributed.ledger';
 
-// The Go drivers read the first three (internal/agent/resolve.go); the attn-pi
+// The Go drivers read the first two (internal/agent/resolve.go); the attn-pi
 // plugin reads ATTN_PI_EXECUTABLE (plugins/attn-pi/src/driver.ts).
 const EXECUTABLE_VARS = {
   claude: 'ATTN_CLAUDE_EXECUTABLE',
   codex: 'ATTN_CODEX_EXECUTABLE',
-  copilot: 'ATTN_COPILOT_EXECUTABLE',
   pi: 'ATTN_PI_EXECUTABLE',
 };
 

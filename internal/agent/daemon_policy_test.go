@@ -31,7 +31,6 @@ func TestRecoveredRunningSessionState(t *testing.T) {
 	}{
 		{plain, protocol.StateWaitingInput, protocol.SessionStateWaitingInput, true},
 		{plain, protocol.StateWorking, "", false},
-		{Get("copilot"), protocol.StatePendingApproval, protocol.SessionStatePendingApproval, true},
 		{Get("codex"), protocol.StateWaitingInput, "", false},
 		{Get("codex"), protocol.StatePendingApproval, "", false},
 		{Get("claude"), protocol.StateWorking, "", false},

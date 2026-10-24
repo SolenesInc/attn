@@ -175,8 +175,6 @@ func legacyExecutableFromSpawnMessage(msg *protocol.SpawnSessionMessage, agent s
 		return strings.TrimSpace(protocol.Deref(msg.ClaudeExecutable))
 	case string(protocol.SessionAgentCodex):
 		return strings.TrimSpace(protocol.Deref(msg.CodexExecutable))
-	case string(protocol.SessionAgentCopilot):
-		return strings.TrimSpace(protocol.Deref(msg.CopilotExecutable))
 	default:
 		return ""
 	}

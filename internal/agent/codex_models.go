@@ -16,7 +16,7 @@ func (c *Codex) DiscoverHarnessModels(ctx context.Context, executable, cwd strin
 	defer cancel()
 	cmd := exec.CommandContext(ctx, c.ResolveExecutable(executable), "app-server")
 	cmd.Dir = cwd
-	cmd.Env = headlessEnvironment("codex", cwd)
+	cmd.Env = headlessEnvironment("codex")
 	cmd.Stderr = io.Discard
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
