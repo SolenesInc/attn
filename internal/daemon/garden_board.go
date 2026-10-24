@@ -26,7 +26,7 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 			fail(err)
 			return
 		}
-		wire := d.seedTransitionWire(seed, doc)
+		wire := d.seedWire(seed, doc)
 		result.Seed = &wire
 		result.Success = true
 		d.sendToClient(client, result)
@@ -50,7 +50,7 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 	if err := d.resolveGardenReviewAction(msg.Review, msg.SeedID, string(verb)); err != nil {
 		d.logf("Garden review: settle %s after %s: %v", msg.SeedID, verb, err)
 	}
-	wire := d.seedTransitionWire(seed, doc)
+	wire := d.seedWire(seed, doc)
 
 	result.Seed = &wire
 	result.Success = true
