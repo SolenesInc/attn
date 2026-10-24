@@ -1,6 +1,8 @@
 package main_test
 
 import (
+	"fmt"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -12,19 +14,41 @@ func TestTheVersionFlagsPrintWhatBootstrapAndTheHarnessRead(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 
-	var build map[string]string
+	var build struct {
+		Version           string `json:"version"`
+		Channel           string `json:"channel"`
+		BuildTime         string `json:"buildTime"`
+		SourceFingerprint string `json:"sourceFingerprint"`
+		GitCommit         string `json:"gitCommit"`
+		Dirty             bool   `json:"dirty"`
+	}
 	built := s.Attn("--build-info-json")
 	built.JSON(t, &build)
-	for _, key := range []string{"version", "buildTime", "sourceFingerprint", "gitCommit"} {
-		if build[key] == "" {
+	for key, value := range map[string]string{"version": build.Version, "channel": build.Channel, "buildTime": build.BuildTime, "sourceFingerprint": build.SourceFingerprint} {
+		if value == "" {
 			t.Errorf("--build-info-json has no %s: %s", key, built.Stdout)
 		}
 	}
+	head, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := strings.TrimSpace(string(head)); build.GitCommit != want {
+		t.Errorf("--build-info-json reports commit %q, want the checkout's %q", build.GitCommit, want)
+	}
+	if got := s.Attn("version", "--json"); got.Stdout != built.Stdout {
+		t.Errorf("attn version --json printed %q, want what --build-info-json prints %q", got.Stdout, built.Stdout)
+	}
 
+	dirty := ""
+	if build.Dirty {
+		dirty = ", dirty"
+	}
+	line := fmt.Sprintf("%s (%s, %s%s)", build.Version, build.Channel, build.GitCommit[:8], dirty)
 	for _, args := range [][]string{{"--version"}, {"version"}} {
 		got := s.Attn(args...)
-		if got.Code != 0 || strings.TrimSpace(got.Stdout) != build["version"] {
-			t.Errorf("attn %s exited %d printing %q, want the build's version %q", args[0], got.Code, got.Stdout, build["version"])
+		if got.Code != 0 || strings.TrimSpace(got.Stdout) != line {
+			t.Errorf("attn %s exited %d printing %q, want %q", args[0], got.Code, got.Stdout, line)
 		}
 	}
 	if got := s.Attn("--protocol-version"); got.Code != 0 || strings.TrimSpace(got.Stdout) != protocol.ProtocolVersion {

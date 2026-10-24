@@ -76,7 +76,11 @@ func main() {
 	}
 
 	if isVersionCommand(os.Args) {
-		runVersion()
+		if len(os.Args) > 2 && os.Args[2] == "--json" {
+			runBuildInfoJSON()
+		} else {
+			runVersion()
+		}
 		return
 	}
 
@@ -293,7 +297,11 @@ func isBuildInfoJSONCommand(args []string) bool {
 }
 
 func runVersion() {
-	fmt.Println(buildinfo.Version)
+	dirty := ""
+	if buildinfo.Dirty {
+		dirty = ", dirty"
+	}
+	fmt.Printf("%s (%s, %s%s)\n", buildinfo.Version, buildinfo.Channel, shortSHA(buildinfo.GitCommit), dirty)
 }
 
 func runProtocolVersion() {
@@ -301,11 +309,13 @@ func runProtocolVersion() {
 }
 
 func runBuildInfoJSON() {
-	printJSON(map[string]string{
+	printJSON(map[string]any{
 		"version":           buildinfo.Version,
+		"channel":           buildinfo.Channel,
 		"buildTime":         buildinfo.BuildTime,
 		"sourceFingerprint": buildinfo.SourceFingerprint,
 		"gitCommit":         buildinfo.GitCommit,
+		"dirty":             buildinfo.Dirty,
 	})
 }
 
@@ -600,7 +610,7 @@ commands:
   instance-env <instance|--unset>   print shell commands for selecting an instance
   skill [--reference <name>|--list] print the bundled agent skill and its references
   prompts <command>                inspect prompt sources and scenario composition
-  version                           print version information
+  version [--json]                  print version, channel and commit
 `)
 }
 
