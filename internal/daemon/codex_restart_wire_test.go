@@ -23,17 +23,31 @@ func restartState(s *protocol.SharedCodexState, running, installed string, resta
 	return s != nil && protocol.Deref(s.RunningVersion) == running && protocol.Deref(s.InstalledVersion) == installed && s.Restart == restart
 }
 
+func sharedCodexOn(t *testing.T, version string) (w *world, app *testworld.Peer, session string, codex *fakeagent.Run) {
+	t.Helper()
+	w = newWorld(t, fakeagent.Codex)
+	w.SetCodexVersion(version)
+	app = w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	session = w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	return w, app, session, w.Launched(session)
+}
+
+func askingWhetherToTrust(w *world, app *testworld.Peer) (session, folder string) {
+	app.T.Helper()
+	folder = w.Path("untrusted")
+	w.LeaveCodexFolderTrustUnanswered(folder)
+	session = w.Spawn(app, fakeagent.Codex, folder)
+	app.AwaitScreen(session, "Trust this folder?")
+	return session, folder
+}
+
 func blockedBy(sessionID string, reason protocol.SharedCodexBlockerReason) []protocol.SharedCodexBlocker {
 	return []protocol.SharedCodexBlocker{{SessionID: protocol.SessionID(sessionID), Reason: reason}}
 }
 
 func TestSharedCodexMovesToTheInstalledCodexOnceNoTurnRunsAndItsTerminalsKeepWhatWasTyped(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	w.SetCodexVersion("0.162.1")
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	codex := w.Launched(session)
+	w, app, session, codex := sharedCodexOn(t, "0.162.1")
 	terminal := app.Terminal(session)
 	app.TypeLine(session, "add a discount field")
 	codex.Prompted()
@@ -59,12 +73,7 @@ func TestSharedCodexMovesToTheInstalledCodexOnceNoTurnRunsAndItsTerminalsKeepWha
 }
 
 func TestRestartNowStopsTurnsWaitingOnTheUserAndLetsTheOthersFinish(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	w.SetCodexVersion("0.162.1")
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	asking := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	askingCodex := w.Launched(asking)
+	w, app, asking, askingCodex := sharedCodexOn(t, "0.162.1")
 	app.TypeLine(asking, "migrate the database")
 	askingCodex.Prompted()
 	askingCodex.AskApproval()
@@ -91,12 +100,7 @@ func TestRestartNowStopsTurnsWaitingOnTheUserAndLetsTheOthersFinish(t *testing.T
 }
 
 func TestARestartKeepsTheAppServerRunningWhenTheInstalledCodexRefusesToStart(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	w.SetCodexVersion("0.162.1")
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	codex := w.Launched(session)
+	w, app, session, codex := sharedCodexOn(t, "0.162.1")
 
 	const refusal = `Error: approval_policy = "untrusted" is no longer supported`
 	w.SetCodexVersion("0.163.0")
@@ -121,11 +125,7 @@ func TestARestartKeepsTheAppServerRunningWhenTheInstalledCodexRefusesToStart(t *
 }
 
 func TestASharedCodexAppServerThatExitsBeforeAnsweringIsNotStartedAgainOnEveryConnection(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	codex := w.Launched(session)
+	w, app, _, codex := sharedCodexOn(t, "0.162.1")
 
 	w.RefuseCodexStart(`Error: approval_policy = "untrusted" is no longer supported`)
 	codex.CrashAppServer()
@@ -142,15 +142,8 @@ func TestASharedCodexAppServerThatExitsBeforeAnsweringIsNotStartedAgainOnEveryCo
 }
 
 func TestAQuietRestartWaitsForATerminalAskingWhetherToTrustItsFolder(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	w.SetCodexVersion("0.162.1")
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
-	folder := w.Path("untrusted")
-	w.LeaveCodexFolderTrustUnanswered(folder)
-	asking := w.Spawn(app, fakeagent.Codex, folder)
-	app.AwaitScreen(asking, "Trust this folder?")
+	w, app, _, _ := sharedCodexOn(t, "0.162.1")
+	asking, folder := askingWhetherToTrust(w, app)
 
 	w.SetCodexVersion("0.163.0")
 	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("cart")))
@@ -175,15 +168,8 @@ func TestAQuietRestartWaitsForATerminalAskingWhetherToTrustItsFolder(t *testing.
 }
 
 func TestRestartNowRelaunchesATerminalAskingWhetherToTrustItsFolder(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	w.SetCodexVersion("0.162.1")
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
-	folder := w.Path("untrusted")
-	w.LeaveCodexFolderTrustUnanswered(folder)
-	asking := w.Spawn(app, fakeagent.Codex, folder)
-	app.AwaitScreen(asking, "Trust this folder?")
+	w, app, _, _ := sharedCodexOn(t, "0.162.1")
+	asking, folder := askingWhetherToTrust(w, app)
 
 	w.SetCodexVersion("0.163.0")
 	if result := restartSharedCodex(t, app, true); !result.Success {
@@ -202,12 +188,7 @@ func TestRestartNowRelaunchesATerminalAskingWhetherToTrustItsFolder(t *testing.T
 }
 
 func TestARestartBacksOffWhenATurnStartsWhileItPrepares(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	w.SetCodexVersion("0.162.1")
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	codex := w.Launched(session)
+	w, app, session, codex := sharedCodexOn(t, "0.162.1")
 
 	w.SetCodexVersion("0.163.0")
 	preflight := w.HoldNextBoot()
@@ -230,11 +211,7 @@ func TestARestartBacksOffWhenATurnStartsWhileItPrepares(t *testing.T) {
 }
 
 func TestATerminalStillLaunchingHoldsTheRestartItsLaunchDiscovered(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	w.SetCodexVersion("0.162.1")
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
+	w, app, _, _ := sharedCodexOn(t, "0.162.1")
 
 	w.SetCodexVersion("0.163.0")
 	boot := w.HoldNextBoot()
@@ -256,12 +233,7 @@ func TestATerminalStillLaunchingHoldsTheRestartItsLaunchDiscovered(t *testing.T)
 }
 
 func TestARefusedRestartClearsOnceTheAppServerRunsTheInstalledCodex(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	w.SetCodexVersion("0.162.1")
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	codex := w.Launched(session)
+	w, app, _, codex := sharedCodexOn(t, "0.162.1")
 
 	w.SetCodexVersion("0.163.0")
 	w.RefuseCodexStart(`Error: approval_policy = "untrusted" is no longer supported`)

@@ -430,7 +430,7 @@ func (r *codexShared) observeServer(s *codexServer, a *codexAttempt, m codexshar
 	s.mu.Unlock()
 	r.lose(s, gone)
 	if tracked {
-		s.events.run(r.d, func() { r.statusesChanged(s) })
+		s.events.run(r.d, func() { r.blockersChanged(s) })
 	}
 }
 

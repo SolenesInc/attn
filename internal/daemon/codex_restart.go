@@ -207,7 +207,7 @@ func (r *codexShared) restartWhenQuiet(s *codexServer) {
 	}
 }
 
-func (r *codexShared) statusesChanged(s *codexServer) {
+func (r *codexShared) blockersChanged(s *codexServer) {
 	r.mu.Lock()
 	installed := r.installed
 	r.mu.Unlock()
@@ -225,7 +225,7 @@ func (r *codexShared) viewsChanged(profile string) {
 	s := r.servers[profile]
 	r.mu.Unlock()
 	if s != nil {
-		s.events.run(r.d, func() { r.restartWhenQuiet(s) })
+		s.events.run(r.d, func() { r.blockersChanged(s) })
 	}
 }
 
