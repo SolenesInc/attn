@@ -1,8 +1,8 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { gesture } from '../test/renderApp';
-import type { ScriptedDaemon } from '../test/scriptedDaemon';
-import { openSection } from '../test/settings';
+import { gesture } from '../../test/renderApp';
+import type { ScriptedDaemon } from '../../test/scriptedDaemon';
+import { openSection } from '../../test/settings';
 
 const record = (id: number, stream: string, name: string, at: string, extra: Record<string, unknown> = {}) =>
   ({ id, record: JSON.stringify({ stream, seq: id, name, at, ...extra }) });

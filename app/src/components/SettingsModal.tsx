@@ -1,7 +1,7 @@
 import { OutpostsSettings } from './OutpostsSettings';
 import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
-import { AnalyticsSettings } from './AnalyticsSettings';
+import { AnalyticsSettings } from './Analytics/AnalyticsSettings';
 import { AutoModeSettings } from './AutoModeSettings';
 import { DelegationSettings } from './DelegationSettings';
 import { SettingsAutosaveProvider, SettingsAutosaveStatus } from './SettingsAutosave';

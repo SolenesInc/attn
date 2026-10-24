@@ -1,11 +1,11 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { describe, expect, it, vi } from 'vitest';
-import type { Vent } from '../types/generated';
-import { daemonSeed, daemonSession, DEFAULT_PROFILE_ID } from '../test/daemonFixtures';
-import { gesture } from '../test/renderApp';
-import type { ScriptedDaemon } from '../test/scriptedDaemon';
-import { openSection } from '../test/settings';
+import type { Vent } from '../../types/generated';
+import { daemonSeed, daemonSession, DEFAULT_PROFILE_ID } from '../../test/daemonFixtures';
+import { gesture } from '../../test/renderApp';
+import type { ScriptedDaemon } from '../../test/scriptedDaemon';
+import { openSection } from '../../test/settings';
 
 function vent(id: string, overrides: Partial<Vent> = {}): Vent {
   return {
