@@ -1260,7 +1260,8 @@ model GetAnalyticsStatusResultMessage {
   waiting: safeint;
 }
 
-// Delete every analytics outbox row on this machine.
+// Delete every analytics outbox row on this machine, and the selected
+// profile's dismissed vents.
 model ClearAnalyticsRecordsMessage {
   cmd: "clear_analytics_records";
   request_id: string;
@@ -1272,6 +1273,7 @@ model ClearAnalyticsRecordsResultMessage {
   success: boolean;
   error?: string;
   records: safeint;
+  vents: safeint;
 }
 
 // Record one app action or CLI outcome in the analytics outbox. No reply; the

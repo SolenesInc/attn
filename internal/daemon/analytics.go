@@ -129,12 +129,22 @@ func (d *Daemon) sendAnalyticsStatusWSResult(client *wsClient, msg *protocol.Get
 
 func (d *Daemon) sendClearAnalyticsRecordsWSResult(client *wsClient, msg *protocol.ClearAnalyticsRecordsMessage) {
 	result := protocol.ClearAnalyticsRecordsResultMessage{Event: protocol.EventClearAnalyticsRecordsResult, RequestID: msg.RequestID}
-	if cleared, err := d.store.ClearAnalyticsOutbox(); err != nil {
+	cleared, err := d.store.ClearAnalyticsOutbox()
+	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
-	} else {
-		result.Success = true
-		result.Records = int(cleared)
+		d.sendToClient(client, result)
+		return
 	}
+	result.Records = int(cleared)
+	vents, err := d.store.DeleteDismissedVents(client.selectedProfile())
+	if err != nil {
+		result.Error = protocol.Ptr(fmt.Sprintf("cleared %d records but not the dismissed vents: %v", cleared, err))
+		d.sendToClient(client, result)
+		return
+	}
+	d.announceDeletedVents(vents)
+	result.Success = true
+	result.Vents = len(vents)
 	d.sendToClient(client, result)
 }
 

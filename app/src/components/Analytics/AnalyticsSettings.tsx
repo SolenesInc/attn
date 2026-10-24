@@ -74,8 +74,8 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
   };
 
   const clear = () => feedback.run(async () => {
-    const cleared = await sendClearAnalyticsRecords();
-    feedback.say(`Cleared ${recordCount(cleared)}.`);
+    const { records: clearedRecords, vents: clearedVents } = await sendClearAnalyticsRecords();
+    feedback.say(`Cleared ${recordCount(clearedRecords)} and ${clearedVents} dismissed vent${clearedVents === 1 ? '' : 's'}.`);
     refresh();
   });
 

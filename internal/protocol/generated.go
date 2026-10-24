@@ -2219,6 +2219,9 @@ type ClearAnalyticsRecordsResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+
+	// Vents corresponds to the JSON schema field "vents".
+	Vents int `json:"vents"`
 }
 
 type ClearSessionActivityMessage struct {

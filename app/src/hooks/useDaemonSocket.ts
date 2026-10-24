@@ -7,7 +7,7 @@ import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
 import { useVentsStore } from '../store/vents';
-import { handleAnalyticsDaemonEvent, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
+import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
@@ -3599,7 +3599,7 @@ export function useDaemonSocket({
   const sendGetAnalyticsStatus = useCallback((): Promise<AnalyticsStatus> =>
     sendRequest('get_analytics_status', {}, 'Reading the analytics status timed out'), [sendRequest]);
 
-  const sendClearAnalyticsRecords = useCallback((): Promise<number> =>
+  const sendClearAnalyticsRecords = useCallback((): Promise<AnalyticsCleared> =>
     sendRequest('clear_analytics_records', {}, 'Clearing the analytics records timed out'), [sendRequest]);
 
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>

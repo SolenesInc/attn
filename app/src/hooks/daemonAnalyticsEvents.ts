@@ -16,6 +16,11 @@ export interface AnalyticsRecordPage {
   waiting: number;
 }
 
+export interface AnalyticsCleared {
+  records: number;
+  vents: number;
+}
+
 export interface AnalyticsStatus {
   records: number;
   bytes: number;
@@ -50,7 +55,13 @@ export function handleAnalyticsDaemonEvent(event: { event?: string }, pending: P
       );
       return true;
     case 'clear_analytics_records_result':
-      settlePendingRequest(pending, 'clear_analytics_records', event as ClearAnalyticsRecordsResultMessage, (result) => result.records, 'Could not clear the analytics records');
+      settlePendingRequest(
+        pending,
+        'clear_analytics_records',
+        event as ClearAnalyticsRecordsResultMessage,
+        ({ records, vents }): AnalyticsCleared => ({ records, vents }),
+        'Could not clear the analytics records',
+      );
       return true;
     case 'list_analytics_records_result':
       settlePendingRequest(

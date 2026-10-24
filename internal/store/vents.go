@@ -152,18 +152,35 @@ func (s *Store) Vents(profileID string) ([]Vent, error) {
 	return vents, rows.Err()
 }
 
-func (s *Store) PruneVents(before time.Time) (int64, error) {
+func (s *Store) PruneVents(before time.Time) ([]Vent, error) {
+	cutoff := ventTime(before)
+	return s.deleteVents("withdrawn_at < ? OR dismissed_at < ?", cutoff, cutoff)
+}
+
+func (s *Store) DeleteDismissedVents(profileID string) ([]Vent, error) {
+	return s.deleteVents("profile_id = ? AND dismissed_at IS NOT NULL", profileID)
+}
+
+func (s *Store) deleteVents(where string, args ...any) ([]Vent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
-		return 0, nil
+		return nil, nil
 	}
-	cutoff := ventTime(before)
-	result, err := s.db.Exec("DELETE FROM vents WHERE withdrawn_at < ? OR dismissed_at < ?", cutoff, cutoff)
+	rows, err := s.db.Query("DELETE FROM vents WHERE "+where+" RETURNING "+ventColumns, args...)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected()
+	defer rows.Close()
+	var deleted []Vent
+	for rows.Next() {
+		v, err := scanVent(rows)
+		if err != nil {
+			return nil, err
+		}
+		deleted = append(deleted, v)
+	}
+	return deleted, rows.Err()
 }
 
 func scanVent(row interface{ Scan(...any) error }) (Vent, error) {

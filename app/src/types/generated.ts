@@ -2625,6 +2625,7 @@ export interface ClearAnalyticsRecordsResultMessage {
     records:    number;
     request_id: string;
     success:    boolean;
+    vents:      number;
     [property: string]: any;
 }
 
@@ -18398,6 +18399,7 @@ const typeMap: any = {
         { json: "records", js: "records", typ: 0 },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
+        { json: "vents", js: "vents", typ: 0 },
     ], "any"),
     "ClearSessionActivityMessage": o([
         { json: "cmd", js: "cmd", typ: r("ClearSessionActivityMessageCmd") },

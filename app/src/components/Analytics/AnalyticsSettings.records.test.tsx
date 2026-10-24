@@ -33,7 +33,7 @@ function serveRecords(daemon: ScriptedDaemon) {
   daemon.on('clear_analytics_records', () => {
     const records = stored.length;
     stored = [];
-    return { event: 'clear_analytics_records_result', success: true, records };
+    return { event: 'clear_analytics_records_result', success: true, records, vents: 1 };
   });
 }
 
@@ -87,7 +87,7 @@ describe('Settings › Analytics records', () => {
     expect(daemon.sentOf('clear_analytics_records')).toEqual([]);
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Clear' })));
     expect(daemon.sentOf('clear_analytics_records')).toHaveLength(1);
-    expect(screen.getByRole('status')).toHaveTextContent('Cleared 5 records.');
+    expect(screen.getByRole('status')).toHaveTextContent('Cleared 5 records and 1 dismissed vent.');
     expect(screen.getByTestId('analytics-machine')).toHaveTextContent('0 records, 0 B.');
     expect(daemon.sentOf('get_analytics_status')).toHaveLength(2);
   });

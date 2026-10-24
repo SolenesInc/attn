@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
@@ -136,4 +137,75 @@ func TestTheUserPlantsOneSeedFromAVent(t *testing.T) {
 	if replanted := plant(app, "replant", vent.ID); !replanted.Success || replanted.Seed.ID == planted.Seed.ID {
 		t.Errorf("planting again after undo: %+v", replanted)
 	}
+}
+
+func TestClearingTheLocalRecordDeletesThisProfilesDismissedVents(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "analytics.enabled", "true")
+	vent := func(peer *testworld.Peer, dir, text string) protocol.Vent {
+		t.Helper()
+		session := w.Spawn(peer, fakeagent.Claude, w.Path(dir))
+		w.Launched(session)
+		recorded, err := cli.RecordVent(protocol.SessionID(session), text)
+		if err != nil {
+			t.Fatalf("vent: %v", err)
+		}
+		return *recorded
+	}
+	dismiss := func(peer *testworld.Peer, id string) {
+		t.Helper()
+		result := testworld.Request(peer, protocol.SetVentDismissedMessage{Cmd: protocol.CmdSetVentDismissed, RequestID: "dismiss-" + id, VentID: id, Dismissed: true},
+			protocol.EventSetVentDismissedResult, func(r protocol.SetVentDismissedResultMessage) bool { return r.RequestID == "dismiss-"+id })
+		if !result.Success {
+			t.Fatalf("dismissing %s: %s", id, protocol.Deref(result.Error))
+		}
+	}
+	kept := vent(app, "kept", "the build is slow")
+	dismissed := vent(app, "dismissed", "a flaky test")
+	dismiss(app, dismissed.ID)
+	workID := createProfile(app, "Work").ID
+	work := w.AppOn(workID)
+	elsewhere := vent(work, "elsewhere", "another profile's vent")
+	dismiss(work, elsewhere.ID)
+
+	cleared := testworld.Request(app, protocol.ClearAnalyticsRecordsMessage{Cmd: protocol.CmdClearAnalyticsRecords, RequestID: "clear"},
+		protocol.EventClearAnalyticsRecordsResult, func(r protocol.ClearAnalyticsRecordsResultMessage) bool { return r.RequestID == "clear" })
+	if !cleared.Success || cleared.Vents != 1 {
+		t.Fatalf("clear = %+v, want one dismissed vent deleted", cleared)
+	}
+	testworld.Await(app, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool {
+		return len(m.Vents) == 1 && m.Vents[0].ID == kept.ID
+	})
+	if left := w.AppOn(workID).Initial.Vents; len(left) != 1 || left[0].ID != elsewhere.ID {
+		t.Errorf("clearing in Default touched Work's vents: %+v", left)
+	}
+}
+
+func TestOpenAppsDropADismissedVentThirtyDaysOn(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setAnalyticsEnabled(app, "true")
+		agent := w.bubbleClaude(t, app, "shop")
+		vent, err := agent.cli.RecordVent(protocol.SessionID(agent.id), "a flaky test")
+		if err != nil {
+			t.Fatalf("vent: %v", err)
+		}
+		dismissed := testworld.Request(app, protocol.SetVentDismissedMessage{Cmd: protocol.CmdSetVentDismissed, RequestID: "dismiss", VentID: vent.ID, Dismissed: true},
+			protocol.EventSetVentDismissedResult, func(r protocol.SetVentDismissedResultMessage) bool { return r.RequestID == "dismiss" })
+		if !dismissed.Success {
+			t.Fatalf("dismissing: %s", protocol.Deref(dismissed.Error))
+		}
+		testworld.Await(app, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool { return len(m.Vents) == 1 && m.Vents[0].DismissedAt != nil })
+
+		w.stop()
+		w.elapse(30 * 24 * time.Hour)
+		w.start()
+		reopened := w.App()
+		if len(reopened.Initial.Vents) != 1 {
+			t.Fatalf("before the prune runs the app shows %d vents, want the dismissed one", len(reopened.Initial.Vents))
+		}
+		w.advance(time.Hour + time.Minute)
+		testworld.Await(reopened, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool { return len(m.Vents) == 0 })
+	})
 }

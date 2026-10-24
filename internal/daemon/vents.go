@@ -264,6 +264,17 @@ func (d *Daemon) unplantVentSeed(id, profileID string) error {
 	return nil
 }
 
+func (d *Daemon) announceDeletedVents(vents []store.Vent) {
+	if len(vents) == 0 {
+		return
+	}
+	d.coalesceSnapshots(func() {
+		for _, vent := range vents {
+			d.publishFact(FactVentDeleted, vent.ID, storedVent{vent}.fact())
+		}
+	})
+}
+
 func (d *Daemon) publishVentFact(name, id string) {
 	vent, err := d.store.Vent(id)
 	if err != nil {
@@ -317,7 +328,8 @@ func (d *Daemon) ventsPruneHandler(_ context.Context, _ *jobs.Job) (any, error) 
 	if err != nil {
 		return nil, fmt.Errorf("pruning vents: %w", err)
 	}
-	return map[string]any{"pruned": pruned}, nil
+	d.announceDeletedVents(pruned)
+	return map[string]any{"pruned": len(pruned)}, nil
 }
 
 type storedVent struct{ store.Vent }

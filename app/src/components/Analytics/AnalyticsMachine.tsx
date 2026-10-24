@@ -38,7 +38,7 @@ export function AnalyticsMachine({ status, onDisableRecording, onClear }: {
       <div className="settings-row-card">
         <div>
           <p className="settings-row-title">Clear the local record</p>
-          <p className="settings-row-copy">{status ? `Deletes ${recordCount(status.records)} (${formatBytes(status.bytes)}).` : 'Deletes every record.'}</p>
+          <p className="settings-row-copy">{status ? `Deletes ${recordCount(status.records)} (${formatBytes(status.bytes)}) and dismissed vents.` : 'Deletes every record and dismissed vents.'}</p>
         </div>
         {confirmClear ? (
           <span className="analytics-confirm">
