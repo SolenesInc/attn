@@ -74,6 +74,12 @@ func (p *piTerminal) begin(term *terminal) error {
 		p.autoMode = json.RawMessage(config)
 	}
 	p.yolo = os.Getenv(piYoloEnv) == "true"
+	return p.startSuite()
+}
+
+// startSuite dials the relay and says hello as each instance of the attn suite does: pi loads one at
+// startup and a fresh one after every switch to another session.
+func (p *piTerminal) startSuite() error {
 	socket, token := os.Getenv(piRelaySocketEnv), os.Getenv(piRelayTokenEnv)
 	if socket == "" || token == "" {
 		return fmt.Errorf("pi launched without %s and %s from driver.spawn", piRelaySocketEnv, piRelayTokenEnv)
@@ -81,6 +87,9 @@ func (p *piTerminal) begin(term *terminal) error {
 	conn, err := net.Dial("unix", socket)
 	if err != nil {
 		return fmt.Errorf("dial pi relay: %w", err)
+	}
+	if p.relay != nil {
+		p.relay.close()
 	}
 	p.relay = newRPCPeer(conn, nil).start()
 	if err := p.relay.call(context.Background(), "hello", relayHello{Token: token, PiSessionID: p.conversation}, nil); err != nil {
@@ -155,8 +164,22 @@ func (p *piTerminal) launch() launch {
 
 func (p *piTerminal) initialPrompt() string { return p.prompt }
 
-func (p *piTerminal) submit(string) error {
+func (p *piTerminal) submit(prompt string) error {
+	if strings.TrimSpace(prompt) == "/new" {
+		return p.switchTo(uuid.NewString())
+	}
+	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
+		return p.switchTo(strings.TrimSpace(conversation))
+	}
 	return p.relay.call(context.Background(), "report_state", relayState{State: "working"}, nil)
+}
+
+func (p *piTerminal) switchTo(conversation string) error {
+	p.conversation = conversation
+	if err := p.openSession(); err != nil {
+		return err
+	}
+	return p.startSuite()
 }
 
 func (p *piTerminal) reply(text string, afterStop bool) error {
@@ -382,14 +405,7 @@ func (p *piPlugin) launchRun(raw json.RawMessage, resume bool) (any, error) {
 	p.mu.Lock()
 	p.runs[run.sessionID] = run
 	p.mu.Unlock()
-	err := p.daemon.call(context.Background(), "session.report_metadata", map[string]any{
-		"session_id":        run.sessionID,
-		"run_id":            run.runID,
-		"seq":               p.nextSeq(run),
-		"metadata":          piMetadata{Schema: 1, PiSessionID: run.piSessionID, PiVersion: piVersion},
-		"resume_session_id": run.piSessionID,
-	}, nil)
-	if err != nil {
+	if err := p.reportMetadata(run); err != nil {
 		return nil, err
 	}
 	env := map[string]string{piRelaySocketEnv: p.relayPath, piRelayTokenEnv: run.runID}
@@ -436,7 +452,11 @@ func (p *piPlugin) handleRelay(relay *rpcPeer, method string, params json.RawMes
 		if err := json.Unmarshal(params, &hello); err != nil {
 			return nil, err
 		}
-		return struct{}{}, p.adopt(relay, hello.Token)
+		run, err := p.adopt(relay, hello)
+		if err != nil {
+			return nil, err
+		}
+		return struct{}{}, p.reportMetadata(run)
 	}
 	run := p.runOn(relay)
 	if run == nil {
@@ -468,16 +488,27 @@ func (p *piPlugin) handleRelay(relay *rpcPeer, method string, params json.RawMes
 	}
 }
 
-func (p *piPlugin) adopt(relay *rpcPeer, token string) error {
+func (p *piPlugin) adopt(relay *rpcPeer, hello relayHello) (*piRun, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, run := range p.runs {
-		if run.runID == token {
+		if run.runID == hello.Token {
 			run.relay = relay
-			return nil
+			run.piSessionID = hello.PiSessionID
+			return run, nil
 		}
 	}
-	return errors.New("unknown pi relay token")
+	return nil, errors.New("unknown pi relay token")
+}
+
+func (p *piPlugin) reportMetadata(run *piRun) error {
+	p.mu.Lock()
+	piSessionID := run.piSessionID
+	p.mu.Unlock()
+	return p.report("session.report_metadata", run, map[string]any{
+		"metadata":          piMetadata{Schema: 1, PiSessionID: piSessionID, PiVersion: piVersion},
+		"resume_session_id": piSessionID,
+	})
 }
 
 func (p *piPlugin) runOn(relay *rpcPeer) *piRun {

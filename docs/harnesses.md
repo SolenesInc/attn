@@ -488,5 +488,6 @@ two `SessionManager`s on one file that share nothing but the file:
   again loads the branch ending at the last entry written.
 
 Pi has no link either, so two Pi terminals on one conversation are two
-sessions and the file forks. attn does not yet record which conversation a Pi
-session runs, so no tile warns.
+sessions and the file forks; both tiles warn. The attn suite reports the
+conversation each time Pi loads one: at startup and after every switch to
+another session, since Pi loads a fresh extension instance for each.
