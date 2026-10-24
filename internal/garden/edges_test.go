@@ -351,11 +351,11 @@ func TestInPlot(t *testing.T) {
 		seedWith("s-crown"),
 		seedWith("s-outside"),
 	}
-	got := ids(InPlot(seeds, "s-crown"))
+	got := ids(NewPlotTree(seeds).InPlot("s-crown"))
 	if !equal(got, []string{"s-leaf", "s-mid", "s-crown"}) {
 		t.Fatalf("InPlot = %v", got)
 	}
-	if got := ids(InPlot(seeds, "s-outside")); !equal(got, []string{"s-outside"}) {
+	if got := ids(NewPlotTree(seeds).InPlot("s-outside")); !equal(got, []string{"s-outside"}) {
 		t.Fatalf("InPlot(leaf crown) = %v", got)
 	}
 }

@@ -17,13 +17,60 @@ type Progress struct {
 	Blocked  int
 }
 
-func PlotProgress(seeds []Seed, crownID string, ready map[string]bool) Progress {
-	blocked := blockedIDs(seeds)
-	var p Progress
-	for _, seed := range InPlot(seeds, crownID) {
-		if seed.ID == crownID {
-			continue
+type PlotTree struct {
+	seeds    []Seed
+	children map[string][]Seed
+	blocked  map[string]bool
+}
+
+func NewPlotTree(seeds []Seed) PlotTree {
+	children := map[string][]Seed{}
+	for _, seed := range seeds {
+		if parent, ok := parentOf(seed); ok {
+			children[parent] = append(children[parent], seed)
 		}
+	}
+	return PlotTree{seeds: seeds, children: children, blocked: blockedIDs(seeds)}
+}
+
+func (t PlotTree) descendants(crownID string) []Seed {
+	if len(t.children[crownID]) == 0 {
+		return nil
+	}
+	seen := map[string]bool{crownID: true}
+	out := []Seed{}
+	for next := []string{crownID}; len(next) > 0; {
+		id := next[len(next)-1]
+		next = next[:len(next)-1]
+		for _, child := range t.children[id] {
+			if seen[child.ID] {
+				continue
+			}
+			seen[child.ID] = true
+			out = append(out, child)
+			next = append(next, child.ID)
+		}
+	}
+	return out
+}
+
+func (t PlotTree) InPlot(crownID string) []Seed {
+	inside := map[string]bool{crownID: true}
+	for _, seed := range t.descendants(crownID) {
+		inside[seed.ID] = true
+	}
+	out := make([]Seed, 0, len(inside))
+	for _, seed := range t.seeds {
+		if inside[seed.ID] {
+			out = append(out, seed)
+		}
+	}
+	return out
+}
+
+func (t PlotTree) Progress(crownID string, ready map[string]bool) Progress {
+	var p Progress
+	for _, seed := range t.descendants(crownID) {
 		p.Total++
 		switch {
 		case seed.Status == StatusHarvested:
@@ -38,7 +85,7 @@ func PlotProgress(seeds []Seed, crownID string, ready map[string]bool) Progress 
 		if ready[seed.ID] {
 			p.Ready++
 		}
-		if !Closed(seed.Status) && blocked[seed.ID] {
+		if !Closed(seed.Status) && t.blocked[seed.ID] {
 			p.Blocked++
 		}
 	}

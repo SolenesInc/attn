@@ -1,0 +1,3 @@
+kind: internal
+area: garden
+change: Plot progress reads each garden once per update instead of rescanning the garden for every plot.

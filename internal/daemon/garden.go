@@ -188,6 +188,7 @@ type gardenRead struct {
 	seeds []garden.Seed
 	docs  map[string]docstore.Document
 	ready map[string]bool
+	plots garden.PlotTree
 }
 
 func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
@@ -230,6 +231,7 @@ func (d *Daemon) readGardenTo(limit int, profileID ...string) (gardenRead, error
 	for _, seed := range garden.Ready(out.seeds, d.sessionActive) {
 		out.ready[seed.ID] = true
 	}
+	out.plots = garden.NewPlotTree(out.seeds)
 	return out, nil
 }
 
@@ -248,7 +250,7 @@ func (g gardenRead) seed(seed garden.Seed, doc docstore.Document) protocol.Seed 
 }
 
 func (g gardenRead) progress(id string) *protocol.SeedPlotProgress {
-	p := garden.PlotProgress(g.seeds, id, g.ready)
+	p := g.plots.Progress(id, g.ready)
 	if p.Total == 0 {
 		return nil
 	}
@@ -967,7 +969,7 @@ func (d *Daemon) gardenReadyResult(crown string, profileID ...string) (*protocol
 	result := &protocol.SeedReadyResult{Scope: "garden"}
 	if crown != "" {
 		inPlot := map[string]bool{}
-		for _, seed := range garden.InPlot(read.seeds, crown) {
+		for _, seed := range read.plots.InPlot(crown) {
 			inPlot[seed.ID] = true
 		}
 		scoped := make([]garden.Seed, 0, len(ready))
