@@ -282,7 +282,10 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
     case 'analytics':
       return state.analyticsEnabled ? (
         <AnalyticsSettings
-          onDisableRecording={() => state.onSetSetting('analytics.enabled', 'false')}
+          onDisableRecording={() => {
+            state.onSetSetting('analytics.enabled', 'false');
+            void state.selectSection('experimental');
+          }}
           onOpenSession={(sessionId) => void state.closeSettings().then(() => state.onOpenSession?.(sessionId))}
           onOpenSeed={(seedId) => void state.closeSettings().then(() => state.onOpenSeed?.(seedId))}
         />
