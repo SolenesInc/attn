@@ -54,6 +54,9 @@ var codexExecFlags = flagSpec{
 }
 
 func runCodex(cfg config) int {
+	if native := readVersionFile(filepath.Join(programDir(), codexNpmNativeFile), ""); native != "" {
+		return runNpmShim(native)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		return codexPrintVersion()
 	}

@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"os"
 	"slices"
 	"testing"
 
@@ -358,4 +359,47 @@ func hiddenWaitingSharedCodex(t *testing.T, s *testworld.Stack, app *testworld.P
 	}
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
 	return session, conversation
+}
+
+func TestRestartNowLetsARunningTurnFinishWhenCodexIsInstalledWithNpm(t *testing.T) {
+	for _, backend := range []string{"worker", "shared host"} {
+		t.Run(backend, func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			if backend == "shared host" {
+				host := os.Getenv("ATTN_TEST_PTY_HOST")
+				if host == "" {
+					t.Skip("set ATTN_TEST_PTY_HOST to run the app-server on the shared host")
+				}
+				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
+			}
+			s.Start()
+			app := s.App()
+			if backend == "shared host" {
+				enableSharedHost(t, app)
+			}
+			setSetting(t, app, "codex_executable", s.InstallNpmCodex("npm", "0.162.1"))
+			shareCodex(t, app)
+			session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+			codex := s.Launched(session)
+			app.TypeLine(session, "write the release notes")
+			codex.Prompted()
+			server := s.CodexServer()
+
+			s.InstallNpmCodex("npm", "0.163.0")
+			requestID := uuid.NewString()
+			restarted := testworld.Request(app, protocol.RestartSharedCodexMessage{Cmd: protocol.CmdRestartSharedCodex, ProfileID: app.SelectedProfile(), Now: true, RequestID: protocol.Ptr(requestID)},
+				protocol.EventRestartSharedCodexResult, func(m protocol.RestartSharedCodexResultMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+			if !restarted.Success {
+				t.Fatalf("restart now: %s", protocol.Deref(restarted.Error))
+			}
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return m.SharedCodex != nil && m.SharedCodex.Restart == protocol.SharedCodexRestartRestarting && m.SharedCodex.ForceAt != nil
+			})
+			server.Reply(codex.ConversationID, "Wrote the release notes.")
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.RunningVersion) == "0.163.0" && m.SharedCodex.Restart == protocol.SharedCodexRestartNone
+			})
+		})
+	}
 }

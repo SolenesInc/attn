@@ -596,6 +596,7 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 	terminal := app.Terminal(here)
 	moveOn(t, app, codex, terminal, "/resume "+conversation, "ship it")
 	resumed := sessionShownIn(t, w, app, terminal)
+	codex.Reply("Shipped. <!-- attn:state=idle -->")
 	typeInto(app, terminal, "/rename Release train\r")
 	codex.Prompted()
 	testworld.AwaitSession(app, resumed, func(s protocol.Session) bool { return s.Label == "Release train" })

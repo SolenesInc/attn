@@ -406,10 +406,7 @@ func (r *codexShared) profileReleased(profile string) {
 	if r.needed(profile) || !r.serverRunning(context.Background(), s.terminal) {
 		return
 	}
-	if err := r.stopServer(s); err != nil {
-		r.d.logf("shared Codex: stopping the idle app-server of profile %s: %v", profile, err)
-		return
-	}
+	r.stop(s, codexServerReleaseGrace)
 	r.d.logf("shared Codex: stopped the app-server of profile %s; nothing uses it", profile)
 }
 
@@ -443,7 +440,8 @@ func (r *codexShared) loadedElsewhere(profile, conversation string) string {
 	r.mu.Unlock()
 	for p, s := range servers {
 		s.mu.Lock()
-		held := p != profile && s.held[conversation]
+		_, held := s.held[conversation]
+		held = held && p != profile
 		s.mu.Unlock()
 		if held {
 			return p

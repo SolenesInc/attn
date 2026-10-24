@@ -124,7 +124,8 @@ func (r *codexShared) terminalMoved(t harness.TerminalID, profile string) {
 func (r *codexShared) learn(installed, latest *string) {
 	r.mu.Lock()
 	changed := false
-	if installed != nil && *installed != r.installed {
+	moved := installed != nil && *installed != r.installed
+	if moved {
 		r.installed, changed = *installed, true
 	}
 	if latest != nil && *latest != r.latest {
@@ -133,6 +134,9 @@ func (r *codexShared) learn(installed, latest *string) {
 	r.mu.Unlock()
 	if changed {
 		r.versionsChanged()
+	}
+	if moved {
+		r.restartAllWhenQuiet()
 	}
 }
 
@@ -221,10 +225,10 @@ func (r *codexShared) wireState(profile string) *protocol.SharedCodexState {
 		}
 	}
 	r.mu.Unlock()
-	running := ""
+	running, restart := "", codexRestart{}
 	if s != nil {
 		s.mu.Lock()
-		running = s.running
+		running, restart = s.running, s.restart
 		s.mu.Unlock()
 	}
 	state := &protocol.SharedCodexState{
@@ -233,8 +237,19 @@ func (r *codexShared) wireState(profile string) *protocol.SharedCodexState {
 		LatestVersion:    optionalVersion(latest),
 		Restart:          protocol.SharedCodexRestartNone,
 	}
-	if running != "" && installed != "" && running != installed {
+	switch {
+	case restart.swapping:
+		state.Restart = protocol.SharedCodexRestartRestarting
+	case restart.refusal != "" && restart.refusedOn == installed:
+		state.Restart, state.Error = protocol.SharedCodexRestartFailed, &restart.refusal
+	case running != "" && (restart.requested || (installed != "" && running != installed)):
 		state.Restart = protocol.SharedCodexRestartPending
+	}
+	if state.Restart == protocol.SharedCodexRestartPending || state.Restart == protocol.SharedCodexRestartRestarting {
+		state.Blockers = r.blockers(s)
+	}
+	if !restart.forceAt.IsZero() {
+		state.ForceAt = protocol.Ptr(restart.forceAt.UTC().Format(time.RFC3339Nano))
 	}
 	for terminal, version := range tuis {
 		if !codexOlder(version, running) {

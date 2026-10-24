@@ -33,7 +33,9 @@ func TestSharedCodexReportsTheVersionItRunsWhatIsInstalledAndTheNewestRelease(t 
 	})
 
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	w.Launched(session)
+	codex := w.Launched(session)
+	app.TypeLine(session, "add a discount field")
+	codex.Prompted()
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "0.162.1", "0.162.1", "0.163.0", protocol.SharedCodexRestartNone)
 	})

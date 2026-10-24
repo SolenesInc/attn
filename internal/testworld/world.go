@@ -32,6 +32,8 @@ type World struct {
 	DialUnix func() (net.Conn, error)
 	WSAddr   string
 	peers    []*Peer
+
+	unansweredTrust map[string]bool
 }
 
 func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
@@ -209,7 +211,7 @@ func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...f
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		w.T.Fatal(err)
 	}
-	if h == fakeagent.Codex {
+	if h == fakeagent.Codex && !w.unansweredTrust[cwd] {
 		w.SetCodexFolderTrust(cwd, "trusted")
 	}
 	msg := protocol.SpawnSessionMessage{
@@ -252,6 +254,13 @@ func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
 	return w.kit.HeadlessTask()
 }
 
+func (w *World) LeaveCodexFolderTrustUnanswered(dir string) {
+	if w.unansweredTrust == nil {
+		w.unansweredTrust = map[string]bool{}
+	}
+	w.unansweredTrust[dir] = true
+}
+
 func (w *World) SetCodexFolderTrust(dir, level string) {
 	w.T.Helper()
 	w.kit.SetCodexFolderTrust(dir, level)
@@ -265,6 +274,16 @@ func (w *World) CodexFolderTrust(dir string) string {
 func (w *World) SetCodexVersion(version string) {
 	w.T.Helper()
 	w.kit.SetCodexVersion(version)
+}
+
+func (w *World) InstallNpmCodex(name, version string) string {
+	w.T.Helper()
+	return w.kit.InstallNpmCodex(w.Path(name), version)
+}
+
+func (w *World) RefuseCodexStart(line string) {
+	w.T.Helper()
+	w.kit.RefuseCodexStart(line)
 }
 
 func (w *World) SetCodexLatest(version string) {

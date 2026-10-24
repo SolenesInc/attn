@@ -1223,6 +1223,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleKillSession(client, msg.(*protocol.KillSessionMessage))
 	case protocol.CmdReloadSession:
 		d.life.Go("handleReloadSession", func() { d.handleReloadSession(client, msg.(*protocol.ReloadSessionMessage)) })
+	case protocol.CmdRestartSharedCodex:
+		d.life.Go("handleRestartSharedCodex", func() { d.handleRestartSharedCodex(client, msg.(*protocol.RestartSharedCodexMessage)) })
 	case protocol.CmdSetTerminalTheme:
 		d.handleSetTerminalTheme(client, msg.(*protocol.SetTerminalThemeMessage))
 	case protocol.CmdSetClientPresence:
