@@ -89,7 +89,7 @@ func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation age
 		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 	case owner == "":
 		err = d.opened(t, session, observation, candidate)
-	case d.ownerLive(owner) && conversationOpensInManyProcesses(session.Agent):
+	case d.ownerLive(owner) && !d.conversationShowsInManyTerminals(session.ID):
 		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 	default:
 		err = d.shows(t, session, owner, observation, candidate)

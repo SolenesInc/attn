@@ -268,6 +268,15 @@ func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesI
 	if got := sessionShownIn(t, w, app, firstTerminal); got != checkout {
 		t.Fatalf("the first terminal shows session %s, want %s", got, checkout)
 	}
+	sessions, err := w.Client().Query("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range sessions {
+		if len(s.ConversationSharedWith) > 0 {
+			t.Errorf("session %s warns it shares its conversation with %v; both terminals show one session", s.ID, s.ConversationSharedWith)
+		}
+	}
 	reply := "Locked. <!-- attn:state=idle -->"
 	second.Reply(reply)
 	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })

@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 
-	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -16,9 +15,6 @@ func (d *Daemon) conversationsSharedByLiveSessions() map[protocol.SessionID][]pr
 	live := d.liveSessions(context.Background())
 	shared := make(map[protocol.SessionID][]protocol.SessionID)
 	for _, group := range groups {
-		if session := d.store.Get(group[0]); session == nil || !conversationOpensInManyProcesses(session.Agent) {
-			continue
-		}
 		running := slices.DeleteFunc(group, func(id protocol.SessionID) bool {
 			_, ok := live[id]
 			return !ok
@@ -33,12 +29,8 @@ func (d *Daemon) conversationsSharedByLiveSessions() map[protocol.SessionID][]pr
 	return shared
 }
 
-func conversationOpensInManyProcesses(agent protocol.SessionAgent) bool {
-	return agentdriver.EffectiveCapabilities(agentdriver.Get(string(agent))).ConversationOpensInManyProcesses
-}
-
 func (d *Daemon) projectSharedConversations(subject protocol.SessionID) {
-	if session := d.store.Get(subject); session != nil && !conversationOpensInManyProcesses(session.Agent) {
+	if d.conversationShowsInManyTerminals(subject) {
 		return
 	}
 	d.projectSessionsUpdated()
