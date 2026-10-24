@@ -426,8 +426,14 @@ func Refused(p *Peer) protocol.WebSocketEvent {
 
 func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protocol.Session {
 	p.T.Helper()
+	return AwaitSessionSince(p, 0, id, match)
+}
+
+// AwaitSessionSince is AwaitSession over the frames from mark on, a len(p.Log()) taken earlier.
+func AwaitSessionSince(p *Peer, mark int, id string, match func(protocol.Session) bool) protocol.Session {
+	p.T.Helper()
 	var found protocol.Session
-	scanned := 0
+	scanned := mark
 	p.until(func() string { return "an update of session " + id }, func() (bool, error) {
 		for ; scanned < len(p.frames); scanned++ {
 			f := &p.frames[scanned]

@@ -43,6 +43,7 @@ export function useAppSessions({
       autoSettleDismissArmed: daemonSession?.auto_settle_dismiss_armed ?? false,
       terminalExit: daemonSession?.terminal_exit,
       terminalBuildStale: daemonSession?.terminal_build_stale ?? false,
+      conversationSharedWith: daemonSession?.conversation_shared_with ?? [],
       usage: daemonSession?.usage,
       automation: daemonSession?.automation ?? s.automation,
       pullRequests: daemonSession?.pull_requests ?? s.pullRequests,

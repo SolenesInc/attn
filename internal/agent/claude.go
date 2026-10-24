@@ -61,18 +61,19 @@ func (c *Claude) ResolveExecutable(configured string) string {
 
 func (c *Claude) Capabilities() Capabilities {
 	return Capabilities{
-		HasHooks:              true,
-		HasTranscript:         true,
-		HasTranscriptWatcher:  true,
-		HasClassifier:         true,
-		HarnessSignals:        HarnessSignalsClaude,
-		HasResume:             true,
-		HasYolo:               true,
-		HasInitialPrompt:      true,
-		HasLaunchInstructions: true,
-		HasModelPin:           true,
-		HasEffortPin:          true,
-		ConversationIsSession: true,
+		HasHooks:                         true,
+		HasTranscript:                    true,
+		HasTranscriptWatcher:             true,
+		HasClassifier:                    true,
+		HarnessSignals:                   HarnessSignalsClaude,
+		HasResume:                        true,
+		HasYolo:                          true,
+		HasInitialPrompt:                 true,
+		HasLaunchInstructions:            true,
+		HasModelPin:                      true,
+		HasEffortPin:                     true,
+		ConversationIsSession:            true,
+		ConversationOpensInManyProcesses: true,
 	}
 }
 

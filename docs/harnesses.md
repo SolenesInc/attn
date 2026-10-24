@@ -18,12 +18,12 @@ Under shared Codex, hooks and commands run in the app-server and name their
 conversation instead: a hook by the `session_id` on its stdin, a command by
 `CODEX_THREAD_ID`. Native harness conversation ids remain separate text values.
 
-Removing a placement keeps the terminal addressable, including after daemon
-restart. Closing a session ends its terminal associations. A session is shown
-in at most one terminal: when another terminal resumes its conversation, that
-terminal takes the session over and the previous one stops showing it. Shared
-Codex is the exception: several terminals can show one conversation, and so one
-session.
+A session is attn's record of one conversation in one profile. A terminal
+shows one session at a time, and a session can show in any number of
+terminals. Removing a placement keeps the terminal addressable, including
+after daemon restart. Closing a session ends its terminal associations. When a
+terminal resumes the conversation of a session whose agent no longer runs, the
+session moves into that terminal and its old tile goes away.
 
 Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
@@ -66,6 +66,21 @@ Probed on 2.1.288 with a mock API.
 - `--settings <JSON>` accepts inline hook settings (probed on 2.1.296 on
   macOS and Linux). SessionStart, UserPromptSubmit and Stop use the
   `--session-id` conversation id.
+
+Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
+
+- Nothing stops a second process from opening a conversation another process
+  has open. `claude -r <id>` and `/resume <id>` both fire SessionStart
+  `resume` with that id, with no refusal and no fork.
+- Both processes then append to the one `<id>.jsonl`, each from its own
+  history in memory, and neither sees the other's turns. Each entry's
+  `parentUuid` continues its own process's branch, so the transcript becomes a
+  tree with two branches. A third process resuming the conversation loads the
+  branch with the newest leaf.
+- Every hook from either process carries the same conversation id.
+- attn leaves both sessions open on that conversation, each in its own
+  terminal, and both tiles warn that the other terminal has it open until one
+  process exits or moves to another conversation.
 
 Probed on 2.1.303 with synthetic prompts and a local mock API:
 
@@ -131,6 +146,24 @@ Read in the source at openai/codex 60947e2341.
   process for a PTY launch, so `ATTN_TERMINAL_ID` names the terminal (older launches use
   `ATTN_SESSION_ID` with the same meaning); the
   app-server for a `--remote` TUI, so a hook there cannot name the terminal.
+
+Probed on 0.162.1 with a mock model and an isolated `CODEX_HOME`:
+
+- A plain TUI refuses a conversation another process has open, both as
+  `codex resume <id>` and with `/resume <id>` inside a running TUI. It shows
+  "This conversation is open in another app. Close it there and press R to
+  continue here." with keys `r` retry, `f` fork, and Esc, `^C` or `q` to exit.
+  No hook fires and nothing is written.
+- `r` keeps the lock while the holder lives. Once it exits, `r` loads the
+  conversation; its first prompt fires SessionStart `resume`, then
+  UserPromptSubmit, and the turn appends to the conversation's rollout.
+- `f` starts a new conversation whose `session_meta` has `forked_from_id` and
+  which carries the old history. Its SessionStart `fork` fires on the first
+  prompt; attn's SessionStart matcher leaves `fork` out, so under attn's hooks
+  the fork first reports itself through UserPromptSubmit.
+- Esc on the lock screen exits the whole process with status 0 and prints "To
+  continue this session, run: codex resume <id>", even when that process never
+  held the conversation.
 
 ### Codex app-server and `--remote`
 

@@ -5464,6 +5464,7 @@ export interface SessionObject {
     branch?:                    string;
     chief_of_staff?:            boolean;
     context_window_cap?:        number;
+    conversation_shared_with?:  string[];
     crew_member?:               string;
     delegated_from_chief?:      boolean;
     delegation_role?:           DelegationRoleObject;
@@ -9486,6 +9487,7 @@ export interface Session {
     branch?:                    string;
     chief_of_staff?:            boolean;
     context_window_cap?:        number;
+    conversation_shared_with?:  string[];
     crew_member?:               string;
     delegated_from_chief?:      boolean;
     delegation_role?:           DelegationRoleObject;
@@ -19967,6 +19969,7 @@ const typeMap: any = {
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
+        { json: "conversation_shared_with", js: "conversation_shared_with", typ: u(undefined, a("")) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
         { json: "delegation_role", js: "delegation_role", typ: u(undefined, r("DelegationRoleObject")) },
@@ -22573,6 +22576,7 @@ const typeMap: any = {
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
+        { json: "conversation_shared_with", js: "conversation_shared_with", typ: u(undefined, a("")) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
         { json: "delegation_role", js: "delegation_role", typ: u(undefined, r("DelegationRoleObject")) },

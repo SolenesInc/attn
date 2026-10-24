@@ -195,3 +195,40 @@ func (s *Store) SessionLaunchedAt(sessionID protocol.SessionID) time.Time {
 	}
 	return parsed
 }
+
+// ConversationsOpenInManySessions groups the open sessions of one profile and agent that hold the
+// same conversation. Conversations held by a single open session are left out.
+func (s *Store) ConversationsOpenInManySessions() [][]protocol.SessionID {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+	rows, err := s.db.Query(`SELECT id, profile_id, agent, resume_session_id FROM sessions
+		WHERE closed_at = '' AND resume_session_id != ''
+		AND (profile_id, agent, resume_session_id) IN (
+			SELECT profile_id, agent, resume_session_id FROM sessions
+			WHERE closed_at = '' AND resume_session_id != ''
+			GROUP BY profile_id, agent, resume_session_id HAVING COUNT(*) > 1)
+		ORDER BY profile_id, agent, resume_session_id, id`)
+	if err != nil {
+		log.Printf("[store] ConversationsOpenInManySessions: %v", err)
+		return nil
+	}
+	defer rows.Close()
+	var groups [][]protocol.SessionID
+	var last string
+	for rows.Next() {
+		var id, profile, agent, native string
+		if err := rows.Scan(&id, &profile, &agent, &native); err != nil {
+			log.Printf("[store] ConversationsOpenInManySessions: %v", err)
+			return nil
+		}
+		if key := profile + "\x00" + agent + "\x00" + native; key != last || len(groups) == 0 {
+			groups = append(groups, nil)
+			last = key
+		}
+		groups[len(groups)-1] = append(groups[len(groups)-1], protocol.SessionID(id))
+	}
+	return groups
+}
