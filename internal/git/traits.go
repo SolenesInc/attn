@@ -9,6 +9,7 @@ import (
 
 type RepoTraits struct {
 	HasAgentsMD bool
+	HasClaudeMD bool
 	IsWorktree  bool
 	HasRemote   bool
 }
@@ -19,12 +20,17 @@ func ReadRepoTraits(dir string) (RepoTraits, bool) {
 		return RepoTraits{}, false
 	}
 	commonDir := commonGitDir(gitDir)
-	_, agentsErr := os.Stat(filepath.Join(root, "AGENTS.md"))
 	return RepoTraits{
-		HasAgentsMD: agentsErr == nil,
+		HasAgentsMD: fileExists(filepath.Join(root, "AGENTS.md")),
+		HasClaudeMD: fileExists(filepath.Join(root, "CLAUDE.md")),
 		IsWorktree:  commonDir != gitDir,
 		HasRemote:   configDeclaresRemote(commonDir),
 	}, true
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func configDeclaresRemote(gitDir string) bool {

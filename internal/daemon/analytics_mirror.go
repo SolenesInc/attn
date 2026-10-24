@@ -89,5 +89,5 @@ func repoTraits(dir string) *analytics.RepoTraits {
 	if !ok {
 		return nil
 	}
-	return &analytics.RepoTraits{AgentsMD: traits.HasAgentsMD, Worktree: traits.IsWorktree, Remote: traits.HasRemote}
+	return &analytics.RepoTraits{AgentsMD: traits.HasAgentsMD, ClaudeMD: traits.HasClaudeMD, Worktree: traits.IsWorktree, Remote: traits.HasRemote}
 }
