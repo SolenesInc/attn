@@ -1,0 +1,3 @@
+kind: internal
+area: analytics
+change: The analytics mirror re-enable test waits for the setting change it just made to reach the mirror before reading bus status, which stops an intermittent failure under load.
