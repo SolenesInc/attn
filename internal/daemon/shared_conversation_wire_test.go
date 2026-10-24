@@ -45,8 +45,18 @@ func TestClaudeSessionsShowTheirConversationIsSharedWhileBothProcessesRunIt(t *t
 
 	exited := len(app.Log())
 	one.Exit(1)
-	awaitSharedWith(app, exited, second)
-	awaitSharedWith(app, exited, first)
+	testworld.AwaitSince(app, exited, protocol.EventSessionsUpdated, func(e protocol.WebSocketEvent) bool {
+		var gone, survivor *protocol.Session
+		for i := range e.Sessions {
+			switch string(e.Sessions[i].ID) {
+			case first:
+				gone = &e.Sessions[i]
+			case second:
+				survivor = &e.Sessions[i]
+			}
+		}
+		return gone != nil && survivor != nil && len(gone.ConversationSharedWith) == 0 && len(survivor.ConversationSharedWith) == 0
+	})
 }
 
 func TestClaudeSessionsStopSharingWhenOneMovesToAnotherConversation(t *testing.T) {
