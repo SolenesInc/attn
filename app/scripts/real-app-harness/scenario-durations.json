@@ -169,7 +169,7 @@
         "run": "not yet measured",
         "job": "estimate",
         "recordedAt": "2026-10-24",
-        "seconds": 71.8,
+        "seconds": 20.6,
         "note": "Measured from a local macOS run against a named instance. Remeasure from the first green matrix-digest.txt."
       },
       "desktop-migration": {
@@ -399,7 +399,7 @@
     "crew-management": 55.269,
     "clear-opens-session": 15.0,
     "claude-shared-conversation": 47.2,
-    "pi-shared-conversation": 71.8,
+    "pi-shared-conversation": 20.6,
     "desktop-migration": 20.7,
     "profile-lifecycle": 18.5,
     "garden-profile-scope": 29.9,

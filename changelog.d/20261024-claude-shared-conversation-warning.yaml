@@ -1,4 +1,4 @@
 kind: added
 area: sessions
-change: When a Claude conversation is open in two terminals at once, both tiles warn that the other one has it open, until one process exits or moves to another conversation.
-symptom: Typing `/resume` with a conversation that another terminal still runs left two Claude processes writing one conversation, each with its own history, with nothing on screen saying so.
+change: When a Claude Code or Pi conversation is open in two terminals at once, both tiles warn that the other one has it open, until one process exits or moves to another conversation.
+symptom: Resuming a conversation that another terminal still ran left two agent processes writing one conversation, each with its own history, with nothing on screen saying so.

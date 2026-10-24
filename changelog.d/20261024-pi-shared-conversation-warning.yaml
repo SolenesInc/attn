@@ -1,3 +1,0 @@
-kind: fixed
-area: sessions
-change: Two live Pi terminals on one conversation now both warn that the conversation is open in another session, as Claude Code's do, and the warning clears when one exits or moves to another conversation.

@@ -131,7 +131,8 @@ Playing the model, on a `fakeagent.Run`:
 - `Prompted` returns the prompt the agent received and moves `ConversationID`
   to the agent's current conversation. Claude's `/clear` starts a new one and
   `/resume <id>` switches to that one; Codex switches on the first prompt after
-  `/new`, `/clear` or `/resume <id>`.
+  `/new`, `/clear` or `/resume <id>`; Pi's `/new` and `/resume <id>` switch
+  and say hello to the driver again, as a reloaded suite does.
 - `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
   marker. `ReplyAfterStop` writes that reply only after the Stop hook.
 - `Exit` quits with an exit code.
