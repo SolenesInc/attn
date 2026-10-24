@@ -884,7 +884,11 @@ func (s *codexAppServer) archive(id string) (any, func(), error) {
 }
 
 func (s *codexAppServer) archivedRollout(id string) string {
-	entries, _ := os.ReadDir(filepath.Join(s.cfg.CodexHome, "archived_sessions"))
+	return codexArchivedRollout(s.cfg.CodexHome, id)
+}
+
+func codexArchivedRollout(codexHome, id string) string {
+	entries, _ := os.ReadDir(filepath.Join(codexHome, "archived_sessions"))
 	for _, entry := range entries {
 		if strings.HasSuffix(entry.Name(), "-"+id+".jsonl") {
 			return entry.Name()

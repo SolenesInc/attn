@@ -172,7 +172,7 @@ func (k *Kit) CodexServer() *CodexServer {
 	if len(k.servers) == 0 {
 		k.t.Fatal("no Codex app-server was launched")
 	}
-	return &CodexServer{t: k.t, fake: k.servers[len(k.servers)-1]}
+	return &CodexServer{t: k.t, fake: k.servers[len(k.servers)-1], codexHome: k.cfg.CodexHome}
 }
 
 func (k *Kit) CodexServerOf(profile string) *CodexServer {
@@ -181,7 +181,7 @@ func (k *Kit) CodexServerOf(profile string) *CodexServer {
 	defer k.mu.Unlock()
 	for _, f := range slices.Backward(k.servers) {
 		if codexServerProfile(f.Argv) == profile {
-			return &CodexServer{t: k.t, fake: f}
+			return &CodexServer{t: k.t, fake: f, codexHome: k.cfg.CodexHome}
 		}
 	}
 	k.t.Fatalf("no Codex app-server was launched for profile %s", profile)
