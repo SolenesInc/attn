@@ -18,66 +18,66 @@ type Command struct {
 	Until time.Time
 }
 
-func (e *Entry) Do(command Command, now time.Time) (View, bool) {
-	if e == nil {
+func (m *Monitor) Do(command Command, now time.Time) (View, bool) {
+	if m == nil {
 		return View{}, false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.keyLocked() != command.Key {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.keyLocked() != command.Key {
 		return View{}, false
 	}
 	var applied bool
 	switch command.Kind {
 	case Settle:
-		applied = e.settleLocked(command.Turn, now)
+		applied = m.settleLocked(command.Turn, now)
 	case Snooze:
-		applied = e.snoozeLocked(command.Turn, command.Until, now)
+		applied = m.snoozeLocked(command.Turn, command.Until, now)
 	case Wake:
 		if command.Until.IsZero() {
-			command.Until = e.turn.SnoozedUntil
+			command.Until = m.turn.SnoozedUntil
 			if command.Until.IsZero() {
-				return e.snapshotLocked(), true
+				return m.snapshotLocked(), true
 			}
 		}
-		applied = e.wakeLocked(command.Until, now)
+		applied = m.wakeLocked(command.Until, now)
 	case CancelCountdown:
-		e.cancelCountdownLocked()
+		m.cancelCountdownLocked()
 		applied = true
 	}
 	if !applied {
 		return View{}, false
 	}
-	return e.viewLocked(), true
+	return m.viewLocked(), true
 }
 
-func (e *Entry) cancelCountdownLocked() {
-	removed, _ := e.stopAutoSettleLocked()
-	if e.dismissal != autoSettleDismissalOff && !removed {
-		e.dismissal = autoSettleDismissalOff
-	} else if e.state.State == "working" {
-		e.dismissal = autoSettleDismissalCovered
+func (m *Monitor) cancelCountdownLocked() {
+	removed, _ := m.stopAutoSettleLocked()
+	if m.dismissal != autoSettleDismissalOff && !removed {
+		m.dismissal = autoSettleDismissalOff
+	} else if m.state.State == "working" {
+		m.dismissal = autoSettleDismissalCovered
 	} else {
-		e.dismissal = autoSettleDismissalArmed
+		m.dismissal = autoSettleDismissalArmed
 	}
 }
 
-func (e *Entry) Key() Key {
-	if e == nil {
+func (m *Monitor) Key() Key {
+	if m == nil {
 		return Key{}
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.keyLocked()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.keyLocked()
 }
 
-func (e *Entry) Publish(view View) bool { return e.publish(view) }
+func (m *Monitor) Publish(view View) bool { return m.publish(view) }
 
-func (e *Entry) Revision() uint64 {
-	if e == nil {
+func (m *Monitor) Revision() uint64 {
+	if m == nil {
 		return 0
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.revision
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.revision
 }

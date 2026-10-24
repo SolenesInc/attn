@@ -10,8 +10,8 @@ func (d *Daemon) applyState(sessionID protocol.SessionID, change sessionmonitor.
 	if d.store == nil {
 		return false
 	}
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		return entry.ApplyState(change)
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		return monitor.ApplyState(change)
 	}
 	d.logf("state update discarded: session=%s state=%s: no monitor runs it", sessionID, change.State)
 	d.recordStateObservation(sessionID, sessionmonitor.ChangeObservation(change, statetrace.OutcomeDiscarded, "no_monitor"))

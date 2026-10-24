@@ -63,13 +63,13 @@ func (d *Daemon) pushMonitorPolicies() {
 	r := d.monitors()
 	r.policyMu.Lock()
 	defer r.policyMu.Unlock()
-	entries := r.each()
-	if len(entries) == 0 {
+	monitors := r.each()
+	if len(monitors) == 0 {
 		return
 	}
 	sources := d.monitorPolicySources()
-	for sessionID, entry := range entries {
-		entry.SetPolicy(d.monitorPolicyFrom(sources, sessionID))
+	for sessionID, monitor := range monitors {
+		monitor.SetPolicy(d.monitorPolicyFrom(sources, sessionID))
 	}
 }
 

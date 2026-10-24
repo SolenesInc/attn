@@ -2,27 +2,27 @@ package sessionmonitor
 
 import "context"
 
-func (e *Entry) CheckBranch() {
-	if e == nil {
+func (m *Monitor) CheckBranch() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	directory := e.directory
-	e.mu.Unlock()
+	m.mu.Lock()
+	directory := m.directory
+	m.mu.Unlock()
 	if directory == "" {
 		return
 	}
-	branch, err := e.registry.host.ReadBranch(context.Background(), directory)
+	branch, err := m.registry.host.ReadBranch(context.Background(), directory)
 	if err != nil {
 		return
 	}
-	e.mu.Lock()
-	if e.branch == *branch {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if m.branch == *branch {
+		m.mu.Unlock()
 		return
 	}
-	e.branch = *branch
-	view := e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+	m.branch = *branch
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 }

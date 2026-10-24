@@ -256,7 +256,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		delivery.Resend = func() {
 			d.actOnCrewMember(member, sessionID, action, cache, time.Now())
 		}
-		attempt := d.monitorEntry(sessionID).Place(context.Background(), delivery)
+		attempt := d.sessionMonitor(sessionID).Place(context.Background(), delivery)
 		if attempt.Stage != sessionmonitor.Placed {
 			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.Err)
 			return

@@ -20,29 +20,29 @@ func (l *lane) ptySafetyLocked(allowUserComposer bool) error {
 	if allowUserComposer {
 		return nil
 	}
-	if remaining := quietRemaining(l.entry.registry.host.LastKey(l.entry.primaryTerminalLocked()), QuietWindow); remaining > 0 {
+	if remaining := quietRemaining(l.monitor.registry.host.LastKey(l.monitor.primaryTerminalLocked()), QuietWindow); remaining > 0 {
 		return &quietError{retryAfter: remaining}
 	}
 	return nil
 }
 
-func (e *Entry) WriteInput(ctx context.Context, terminal harness.TerminalID, data []byte, source string) error {
-	if e == nil {
+func (m *Monitor) WriteInput(ctx context.Context, terminal harness.TerminalID, data []byte, source string) error {
+	if m == nil {
 		return ErrLaneClosed
 	}
-	if !e.mu.TryLock() {
+	if !m.mu.TryLock() {
 		pausepoint.At(pausepoint.SessionInputLaneContended)
-		e.mu.Lock()
+		m.mu.Lock()
 	}
-	defer e.mu.Unlock()
-	l := e.input
+	defer m.mu.Unlock()
+	l := m.input
 	if l.phase == "" {
-		l.phase = e.state.State
+		l.phase = m.state.State
 	}
-	if e.noteUserInputLocked(terminal, source, data) && bytes.ContainsAny(data, "\r\n") {
+	if m.noteUserInputLocked(terminal, source, data) && bytes.ContainsAny(data, "\r\n") {
 		l.userSubmit = true
 	}
-	return e.registry.host.Input(ctx, terminal, data)
+	return m.registry.host.Input(ctx, terminal, data)
 }
 
 func (l *lane) clearUnstartedUserSubmitLocked() {
@@ -52,7 +52,7 @@ func (l *lane) clearUnstartedUserSubmitLocked() {
 }
 
 func (l *lane) placePTYLocked(ctx context.Context, delivery Delivery) Attempt {
-	e := l.entry
+	m := l.monitor
 	if err := l.ptySafetyLocked(delivery.AllowUserComposer); err != nil {
 		l.armRetryLocked(delivery, err)
 		return Attempt{Stage: Deferred, Err: err}
@@ -63,13 +63,13 @@ func (l *lane) placePTYLocked(ctx context.Context, delivery Delivery) Attempt {
 	input = append(input, pasteStart...)
 	input = append(input, delivery.Text...)
 	input = append(input, pasteEnd...)
-	terminal := e.primaryTerminalLocked()
-	if err := e.registry.host.Input(ctx, terminal, input); err != nil {
+	terminal := m.primaryTerminalLocked()
+	if err := m.registry.host.Input(ctx, terminal, input); err != nil {
 		return Attempt{Stage: Failed, Err: err}
 	}
 	pausepoint.At(pausepoint.SessionInputPasteGap)
 	time.Sleep(SubmitDelay)
-	if err := e.registry.host.Input(ctx, terminal, []byte("\r")); err != nil {
+	if err := m.registry.host.Input(ctx, terminal, []byte("\r")); err != nil {
 		return Attempt{Stage: Failed, Err: err}
 	}
 	return Attempt{Stage: Placed, At: time.Now()}

@@ -113,70 +113,70 @@ type View struct {
 	AssistantWindow    Value[uint64]                         `fact:"session.assistant_window.changed"`
 }
 
-func (e *Entry) viewLocked() View {
-	e.revision++
-	return e.snapshotLocked()
+func (m *Monitor) viewLocked() View {
+	m.revision++
+	return m.snapshotLocked()
 }
 
-func (e *Entry) snapshotLocked() View {
-	auto := AutoSettleView{DismissArmed: e.dismissal != autoSettleDismissalOff}
-	if timer := e.autoSettle; timer != nil {
+func (m *Monitor) snapshotLocked() View {
+	auto := AutoSettleView{DismissArmed: m.dismissal != autoSettleDismissalOff}
+	if timer := m.autoSettle; timer != nil {
 		if timer.phase == autoSettleCounting {
 			auto.FiresAt = timer.firesAt
 		} else {
 			auto.Held = timer.visible()
 		}
 	}
-	state := e.state
-	state.Reason = e.reason
-	e.monitor.mu.Lock()
-	process := e.monitor.terminal.Process
-	live := e.exit == nil && (process == nil || process.Claim != sessionstate.ClaimExited)
-	e.monitor.mu.Unlock()
+	state := m.state
+	state.Reason = m.reason
+	m.watch.mu.Lock()
+	process := m.watch.terminal.Process
+	live := m.exit == nil && (process == nil || process.Claim != sessionstate.ClaimExited)
+	m.watch.mu.Unlock()
 	return View{
-		Conversation:       Value[Conversation]{e.conversationInput},
-		Succeeds:           Value[Key]{e.succeeds},
-		CostInitialized:    Value[bool]{e.costInitialized},
-		Cost:               KeyedSet[string, *sessioncost.Source]{Entries: e.cost},
-		Key:                Value[Key]{e.keyLocked()},
-		Revision:           Value[uint64]{e.revision},
+		Conversation:       Value[Conversation]{m.conversationInput},
+		Succeeds:           Value[Key]{m.succeeds},
+		CostInitialized:    Value[bool]{m.costInitialized},
+		Cost:               KeyedSet[string, *sessioncost.Source]{Entries: m.cost},
+		Key:                Value[Key]{m.keyLocked()},
+		Revision:           Value[uint64]{m.revision},
 		State:              Value[StateView]{state},
-		Turn:               Value[TurnStamps]{e.turn},
+		Turn:               Value[TurnStamps]{m.turn},
 		AutoSettle:         Value[AutoSettleView]{auto},
-		LastModelRequestAt: Value[time.Time]{e.lastModelRequestAt},
-		Driver:             Value[DriverMetadata]{e.driver},
-		FirstReportAt:      Value[time.Time]{e.firstReportAt},
-		Branch:             Value[attngit.BranchInfo]{e.branch},
-		PullRequests:       KeyedSet[string, PullRequest]{Entries: e.pullRequests},
-		SentFiles:          KeyedSet[string, uint64]{Entries: e.sentFiles},
-		HarnessTitle:       Value[string]{e.harnessTitle},
-		LastSeen:           Value[time.Time]{e.touchedAt},
-		PendingSwitch:      Value[Conversation]{e.pendingSwitch},
-		Exit:               Value[*Exit]{e.exit},
+		LastModelRequestAt: Value[time.Time]{m.lastModelRequestAt},
+		Driver:             Value[DriverMetadata]{m.driver},
+		FirstReportAt:      Value[time.Time]{m.firstReportAt},
+		Branch:             Value[attngit.BranchInfo]{m.branch},
+		PullRequests:       KeyedSet[string, PullRequest]{Entries: m.pullRequests},
+		SentFiles:          KeyedSet[string, uint64]{Entries: m.sentFiles},
+		HarnessTitle:       Value[string]{m.harnessTitle},
+		LastSeen:           Value[time.Time]{m.touchedAt},
+		PendingSwitch:      Value[Conversation]{m.pendingSwitch},
+		Exit:               Value[*Exit]{m.exit},
 		Live:               Value[bool]{live},
-		AssistantWindow:    Value[uint64]{e.windowRevision},
+		AssistantWindow:    Value[uint64]{m.windowRevision},
 	}
 }
 
-func (e *Entry) keyLocked() Key {
-	conversation := e.conversation
+func (m *Monitor) keyLocked() Key {
+	conversation := m.conversation
 	if conversation == "" {
-		conversation = e.localConversation
+		conversation = m.localConversation
 	}
-	return Key{Terminal: e.monitor.terminalID, Conversation: conversation}
+	return Key{Terminal: m.watch.terminalID, Conversation: conversation}
 }
 
-func (e *Entry) changeStateLocked(state string, cause Cause, request, now time.Time) bool {
+func (m *Monitor) changeStateLocked(state string, cause Cause, request, now time.Time) bool {
 	if driver, ok := cause.(LinkTurn); ok {
-		if driver.Run == "" || driver.Seq == 0 || e.driver.Run != driver.Run || e.driver.Sequence >= driver.Seq {
+		if driver.Run == "" || driver.Seq == 0 || m.driver.Run != driver.Run || m.driver.Sequence >= driver.Seq {
 			return false
 		}
-		e.driver.Sequence = driver.Seq
-		if request.After(e.lastModelRequestAt) {
-			e.lastModelRequestAt = request
+		m.driver.Sequence = driver.Seq
+		if request.After(m.lastModelRequestAt) {
+			m.lastModelRequestAt = request
 		}
 	}
 	effects, _ := EffectsOf(cause)
-	e.state = StateView{Sequence: e.state.Sequence + 1, Touch: effects.Touch, Broadcast: effects.Broadcast, Resolve: !Resolved(cause), State: protocol.SessionState(state), Since: now, Updated: now, Reason: e.reason}
+	m.state = StateView{Sequence: m.state.Sequence + 1, Touch: effects.Touch, Broadcast: effects.Broadcast, Resolve: !Resolved(cause), State: protocol.SessionState(state), Since: now, Updated: now, Reason: m.reason}
 	return true
 }

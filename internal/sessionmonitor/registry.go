@@ -30,18 +30,18 @@ type Host interface {
 	Life
 	Logf(format string, args ...any)
 	Debug() bool
-	HomeFor(*Entry) Home
+	HomeFor(*Monitor) Home
 	Classify(ctx context.Context, request ClassifyRequest) (string, error)
 	ReadBranch(ctx context.Context, directory string) (*attngit.BranchInfo, error)
 
 	LiveTerminals(ctx context.Context) map[harness.TerminalID]struct{}
 	ViewOwner(harness.TerminalID) string
 	Input(ctx context.Context, terminal harness.TerminalID, data []byte) error
-	Link(*Entry, harness.Voice) harness.Link
+	Link(*Monitor, harness.Voice) harness.Link
 	LinkTranscriptPath(link, path string) string
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time
-	EnqueueTitle(e *Entry, conversation, source string) error
+	EnqueueTitle(m *Monitor, conversation, source string) error
 }
 
 type ClassifyRequest struct {
@@ -51,15 +51,15 @@ type ClassifyRequest struct {
 	Timeout   time.Duration
 }
 
-type Monitor struct {
+type TerminalWatch struct {
 	mu         sync.Mutex
 	terminalID harness.TerminalID
 	linked     bool
 	terminal   sessionstate.TerminalEvidence
-	entries    map[*Entry]struct{}
+	monitors   map[*Monitor]struct{}
 }
 
-type Entry struct {
+type Monitor struct {
 	mu                  sync.Mutex
 	session             protocol.SessionID
 	stopped             bool
@@ -79,7 +79,7 @@ type Entry struct {
 	lastModelRequestAt  time.Time
 	firstReportAt       time.Time
 	wakeTimer           *time.Timer
-	monitor             *Monitor
+	watch               *TerminalWatch
 	conversationInput   Conversation
 	succeeds            Key
 	conversation        string
@@ -137,15 +137,15 @@ type Registry struct {
 	host      Host
 	saver     Saver
 	mu        sync.Mutex
-	physical  map[harness.TerminalID]*Monitor
-	entries   map[*Entry]struct{}
+	watches   map[harness.TerminalID]*TerminalWatch
+	monitors  map[*Monitor]struct{}
 	wake      chan struct{}
 	closed    atomic.Bool
 	nextLocal uint64
 }
 
 func NewRegistry(host Host, saver Saver) *Registry {
-	return &Registry{host: host, saver: saver, physical: make(map[harness.TerminalID]*Monitor), entries: make(map[*Entry]struct{}), wake: make(chan struct{}, 1)}
+	return &Registry{host: host, saver: saver, watches: make(map[harness.TerminalID]*TerminalWatch), monitors: make(map[*Monitor]struct{}), wake: make(chan struct{}, 1)}
 }
 
 type Start struct {
@@ -153,13 +153,13 @@ type Start struct {
 	Terminal     harness.TerminalID
 	Conversation string
 	Linked       bool
-	Candidate    *Entry
+	Candidate    *Monitor
 	Launch       func() Launch
 	Policy       Policy
 }
 
-func (r *Registry) Reuse(previous *Entry, start Start) bool {
-	if previous == nil || previous.monitor.terminalID != start.Terminal {
+func (r *Registry) Reuse(previous *Monitor, start Start) bool {
+	if previous == nil || previous.watch.terminalID != start.Terminal {
 		return false
 	}
 	previous.mu.Lock()
@@ -176,64 +176,64 @@ func (r *Registry) Reuse(previous *Entry, start Start) bool {
 	return false
 }
 
-func (r *Registry) Start(previous *Entry, start Start) *Entry {
+func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if previous != nil {
 		r.forgetLocked(previous)
 	}
-	var m *Monitor
+	var w *TerminalWatch
 	if !start.Linked {
-		m = r.physical[start.Terminal]
+		w = r.watches[start.Terminal]
 	}
-	if m == nil && start.Candidate != nil {
-		m = start.Candidate.monitor
+	if w == nil && start.Candidate != nil {
+		w = start.Candidate.watch
 	}
-	if m == nil {
-		m = &Monitor{terminalID: start.Terminal, linked: start.Linked, entries: make(map[*Entry]struct{})}
+	if w == nil {
+		w = &TerminalWatch{terminalID: start.Terminal, linked: start.Linked, monitors: make(map[*Monitor]struct{})}
 	}
 	if !start.Linked {
-		r.physical[start.Terminal] = m
+		r.watches[start.Terminal] = w
 	}
 	r.nextLocal++
-	e := start.Candidate
-	if e == nil {
-		e = &Entry{registry: r}
-		e.home = r.host.HomeFor(e)
+	m := start.Candidate
+	if m == nil {
+		m = &Monitor{registry: r}
+		m.home = r.host.HomeFor(m)
 	}
-	e.succeeds = Key{}
-	e.monitor, e.conversation, e.localConversation = m, start.Conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
-	e.input = &lane{mu: &e.mu, entry: e, stopped: r.closed.Load()}
-	e.session = start.Session
-	e.initializeLocked(start)
-	e.saved.view = e.snapshotLocked()
-	m.entries[e] = struct{}{}
-	r.entries[e] = struct{}{}
-	return e
+	m.succeeds = Key{}
+	m.watch, m.conversation, m.localConversation = w, start.Conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
+	m.input = &lane{mu: &m.mu, monitor: m, stopped: r.closed.Load()}
+	m.session = start.Session
+	m.initializeLocked(start)
+	m.saved.view = m.snapshotLocked()
+	w.monitors[m] = struct{}{}
+	r.monitors[m] = struct{}{}
+	return m
 }
 
-func (e *Entry) Arm() {
-	if e == nil {
+func (m *Monitor) Arm() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.armWakeLocked()
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.armWakeLocked()
+	m.mu.Unlock()
 }
 
-func (e *Entry) Home() Home { return e.home }
+func (m *Monitor) Home() Home { return m.home }
 
-func (e *Entry) Snapshot() View {
-	if e == nil {
+func (m *Monitor) Snapshot() View {
+	if m == nil {
 		return View{}
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.snapshotLocked()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.snapshotLocked()
 }
 
-func (e *Entry) TakeUserSubmit(previous *Entry) {
-	if e == nil {
+func (m *Monitor) TakeUserSubmit(previous *Monitor) {
+	if m == nil {
 		return
 	}
 	previous.mu.Lock()
@@ -241,97 +241,97 @@ func (e *Entry) TakeUserSubmit(previous *Entry) {
 	previous.input.userSubmit = false
 	previous.mu.Unlock()
 	if typed {
-		e.mu.Lock()
-		e.input.userSubmit = true
-		e.mu.Unlock()
+		m.mu.Lock()
+		m.input.userSubmit = true
+		m.mu.Unlock()
 	}
 }
 
-func (e *Entry) initializeLocked(start Start) {
-	e.policy = start.Policy
-	if e.initialized {
+func (m *Monitor) initializeLocked(start Start) {
+	m.policy = start.Policy
+	if m.initialized {
 		return
 	}
 	launch := start.Launch()
-	e.agent = launch.Agent
-	e.link = launch.Link
-	e.startedAt = launch.StartedAt
-	e.directory = launch.Directory
-	e.branch = launch.Branch
-	e.harnessTitle = launch.HarnessTitle
-	e.state = StateView{State: launch.State, Since: launch.StateSince, Updated: launch.StateUpdated}
-	e.lastModelRequestAt = launch.LastModelRequestAt
-	e.turn = launch.Turn
-	e.driver = launch.Driver
-	e.loadCostLocked(launch.Cost)
-	e.exit = launch.Exit
-	e.conversationInput = Conversation{ConversationObservation: launch.Conversation}
-	e.touchedAt = launch.LastSeen
-	e.pendingSwitch = launch.PendingSwitch
-	e.pullRequests = launch.PullRequests
-	e.initialized = launch.Known
+	m.agent = launch.Agent
+	m.link = launch.Link
+	m.startedAt = launch.StartedAt
+	m.directory = launch.Directory
+	m.branch = launch.Branch
+	m.harnessTitle = launch.HarnessTitle
+	m.state = StateView{State: launch.State, Since: launch.StateSince, Updated: launch.StateUpdated}
+	m.lastModelRequestAt = launch.LastModelRequestAt
+	m.turn = launch.Turn
+	m.driver = launch.Driver
+	m.loadCostLocked(launch.Cost)
+	m.exit = launch.Exit
+	m.conversationInput = Conversation{ConversationObservation: launch.Conversation}
+	m.touchedAt = launch.LastSeen
+	m.pendingSwitch = launch.PendingSwitch
+	m.pullRequests = launch.PullRequests
+	m.initialized = launch.Known
 }
 
-func (e *Entry) Forget() {
-	if e == nil {
+func (m *Monitor) Forget() {
+	if m == nil {
 		return
 	}
-	r := e.registry
-	e.Stop()
+	r := m.registry
+	m.Stop()
 	r.mu.Lock()
-	r.forgetLocked(e)
+	r.forgetLocked(m)
 	r.mu.Unlock()
 	r.rearm()
 }
 
-func (r *Registry) forgetLocked(e *Entry) {
-	m := e.monitor
-	delete(r.entries, e)
+func (r *Registry) forgetLocked(m *Monitor) {
+	w := m.watch
+	delete(r.monitors, m)
+	if w == nil {
+		return
+	}
+	delete(w.monitors, m)
+	if len(w.monitors) == 0 && r.watches[w.terminalID] == w {
+		delete(r.watches, w.terminalID)
+	}
+}
+
+func (r *Registry) each() []*Monitor {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	monitors := make([]*Monitor, 0, len(r.monitors))
+	for m := range r.monitors {
+		monitors = append(monitors, m)
+	}
+	return monitors
+}
+
+func (m *Monitor) Stop() {
 	if m == nil {
 		return
 	}
-	delete(m.entries, e)
-	if len(m.entries) == 0 && r.physical[m.terminalID] == m {
-		delete(r.physical, m.terminalID)
-	}
-}
-
-func (r *Registry) each() []*Entry {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entries := make([]*Entry, 0, len(r.entries))
-	for e := range r.entries {
-		entries = append(entries, e)
-	}
-	return entries
-}
-
-func (e *Entry) Stop() {
-	if e == nil {
-		return
-	}
-	e.FinishUsage()
-	e.saveMu.Lock()
-	e.mu.Lock()
-	lane := e.input
+	m.FinishUsage()
+	m.saveMu.Lock()
+	m.mu.Lock()
+	lane := m.input
 	lane.stopRetriesLocked()
-	if e.autoSettle != nil {
-		e.autoSettle.timer.Stop()
-		e.autoSettle = nil
+	if m.autoSettle != nil {
+		m.autoSettle.timer.Stop()
+		m.autoSettle = nil
 	}
-	if e.silence != nil {
-		e.silence.Stop()
-		e.silence = nil
+	if m.silence != nil {
+		m.silence.Stop()
+		m.silence = nil
 	}
-	if e.wakeTimer != nil {
-		e.wakeTimer.Stop()
-		e.wakeTimer = nil
+	if m.wakeTimer != nil {
+		m.wakeTimer.Stop()
+		m.wakeTimer = nil
 	}
-	e.resolvePending = false
-	e.stopped = true
-	e.stopSaveRetryLocked()
-	e.mu.Unlock()
-	e.saveMu.Unlock()
+	m.resolvePending = false
+	m.stopped = true
+	m.stopSaveRetryLocked()
+	m.mu.Unlock()
+	m.saveMu.Unlock()
 	lane.running.Wait()
 }
 
@@ -344,16 +344,16 @@ func (r *Registry) rearm() {
 
 func (r *Registry) Close() {
 	r.closed.Store(true)
-	entries := r.each()
-	lanes := make([]*lane, 0, len(entries))
-	for _, e := range entries {
-		e.mu.Lock()
-		lanes = append(lanes, e.input)
-		if e.silence != nil {
-			e.silence.Stop()
-			e.silence = nil
+	monitors := r.each()
+	lanes := make([]*lane, 0, len(monitors))
+	for _, m := range monitors {
+		m.mu.Lock()
+		lanes = append(lanes, m.input)
+		if m.silence != nil {
+			m.silence.Stop()
+			m.silence = nil
 		}
-		e.mu.Unlock()
+		m.mu.Unlock()
 	}
 	for _, lane := range lanes {
 		lane.mu.Lock()

@@ -342,7 +342,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		d.startSessionMonitor(msg.ID)
 		plan.pluginRunID = uuid.NewString()
 		plan.spawnOpts.LifecycleID = plan.pluginRunID
-		d.monitorEntry(msg.ID).BeginDriverLaunch(req.pluginDriver.PluginName, plan.pluginRunID)
+		d.sessionMonitor(msg.ID).BeginDriverLaunch(req.pluginDriver.PluginName, plan.pluginRunID)
 		params := pluginDriverSpawnParams{
 			Agent:           req.agent,
 			TerminalID:      terminal,
@@ -459,7 +459,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	d.persistLaunchedConversation(req, plan)
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
 	d.startSessionMonitorSeeded(session, sessionmonitor.Evidence{TerminalEvidence: sessionstate.TerminalEvidence{ReviewerInLoop: plan.spawnOpts.ApprovalRoute.ReviewerInLoop()}, ConversationEvidence: sessionstate.ConversationEvidence{InitialPromptOwed: hasInitialPrompt && sessionmonitor.ReportsTurnStarts(req.agent)}})
-	d.monitorEntry(msg.ID).RememberInitialPrompt(req.initialPrompt)
+	d.sessionMonitor(msg.ID).RememberInitialPrompt(req.initialPrompt)
 	if req.hasPluginDriver && !d.beginAgentDriverRun(session.ID, req.pluginDriver.PluginName, plan.pluginRunID) {
 		d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		if req.existingSession == nil {
@@ -470,7 +470,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		return &spawnOutcome{err: fmt.Errorf("initialize plugin driver run cursor")}
 	}
 	if err := d.spawnSessionRuntime(msg.ID, plan.spawnOpts); err != nil {
-		d.monitorEntry(msg.ID).ForgetInitialPrompt()
+		d.sessionMonitor(msg.ID).ForgetInitialPrompt()
 		if req.hasPluginDriver {
 			d.endAgentDriverRun(msg.ID)
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
@@ -487,7 +487,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	d.clearExitScreenBefore(msg.ID, req.spawnStartedAt)
 	if hasInitialPrompt {
-		d.monitorEntry(msg.ID).TitleFromPrompt(req.initialPrompt, false)
+		d.sessionMonitor(msg.ID).TitleFromPrompt(req.initialPrompt, false)
 	}
 	return &spawnOutcome{}
 }
@@ -518,7 +518,7 @@ func (d *Daemon) executeAddedTerminal(req *spawnRequest, plan *spawnPlan) *spawn
 func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) error {
 	err := d.startTerminalRuntime(opts)
 	if err == nil {
-		d.monitorEntry(sessionID).ResetInput()
+		d.sessionMonitor(sessionID).ResetInput()
 	}
 	return err
 }
@@ -630,17 +630,17 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
 	if !req.isShell && req.existingSession == nil && req.resumeSessionID == "" {
-		d.monitorEntry(session.ID).StartCost()
+		d.sessionMonitor(session.ID).StartCost()
 	}
 	if plan.launchedConversation != "" {
 		d.rememberDispatchResume(session.ID, plan.launchedConversation)
 	}
 
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
-	entry := d.monitorEntry(session.ID)
-	entry.Launched(req.spawnStartedAt)
+	monitor := d.sessionMonitor(session.ID)
+	monitor.Launched(req.spawnStartedAt)
 	if !req.isShell {
-		entry.StartTranscriptWatcher("")
+		monitor.StartTranscriptWatcher("")
 	}
 	if pending, ok := d.consumePendingAgentConversation(session.ID); ok {
 		d.observeAgentConversation(pending)
@@ -697,7 +697,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 		}
 		if !d.sessionHasLiveWorker(msg.ID) {
 			d.startSessionMonitor(msg.ID)
-			d.monitorEntry(msg.ID).RecordProcessExit()
+			d.sessionMonitor(msg.ID).RecordProcessExit()
 		}
 		d.publishFact(FactSessionReregistered, string(msg.ID), nil)
 	}()
@@ -736,7 +736,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 		return placementOutcome{session: msg.ID}, nil
 	}
 	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
-		d.monitorEntry(msg.ID).ForgetInitialPrompt()
+		d.sessionMonitor(msg.ID).ForgetInitialPrompt()
 		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	}
 	req.placed.session = msg.ID

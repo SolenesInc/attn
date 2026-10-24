@@ -15,8 +15,8 @@ func (d *Daemon) recordStateObservation(sessionID protocol.SessionID, obs statet
 	if protocol.TrimID(sessionID) == "" {
 		return
 	}
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		entry.Trace(obs)
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		monitor.Trace(obs)
 		return
 	}
 	obs = sessionmonitor.Stamped(obs)
@@ -60,7 +60,7 @@ func (d *Daemon) handleStateExplain(conn net.Conn, msg *protocol.StateExplainMes
 }
 
 func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateExplainResult {
-	recorded := d.monitorEntry(session.ID).TraceSnapshot()
+	recorded := d.sessionMonitor(session.ID).TraceSnapshot()
 	observations := make([]protocol.StateExplainEntry, 0, len(recorded))
 	for _, obs := range recorded {
 		entry := protocol.StateExplainEntry{
@@ -109,7 +109,7 @@ func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotific
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.Message))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookNotify, Detail: message}, kind)
-	d.monitorEntry(sessionID).RecordNotification(kind, message)
+	d.sessionMonitor(sessionID).RecordNotification(kind, message)
 	d.sendOK(conn)
 }
 
@@ -122,7 +122,7 @@ func (d *Daemon) handleHookStopFailure(conn net.Conn, msg *protocol.HookStopFail
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.ErrorMessage))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookStopFailure, Detail: message}, errorType)
-	d.monitorEntry(sessionID).RecordStopFailure(errorType, message)
+	d.sessionMonitor(sessionID).RecordStopFailure(errorType, message)
 	d.sendOK(conn)
 }
 
@@ -133,7 +133,7 @@ func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactio
 		phase = "started"
 	}
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookCompaction, Detail: strings.TrimSpace(protocol.Deref(msg.Trigger))}, phase)
-	d.monitorEntry(sessionID).RecordCompaction(msg.Active)
+	d.sessionMonitor(sessionID).RecordCompaction(msg.Active)
 	d.sendOK(conn)
 }
 

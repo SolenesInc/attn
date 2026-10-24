@@ -17,38 +17,38 @@ type savedView struct {
 	retryDelay time.Duration
 }
 
-func (e *Entry) Session() protocol.SessionID {
-	if e == nil {
+func (m *Monitor) Session() protocol.SessionID {
+	if m == nil {
 		return ""
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.session
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.session
 }
 
-func (e *Entry) publish(view View) bool {
-	e.mu.Lock()
-	stopped := e.stopped
-	e.mu.Unlock()
-	if stopped || !e.save(view) {
+func (m *Monitor) publish(view View) bool {
+	m.mu.Lock()
+	stopped := m.stopped
+	m.mu.Unlock()
+	if stopped || !m.save(view) {
 		return false
 	}
-	return e.home.Applied(view)
+	return m.home.Applied(view)
 }
 
-func (e *Entry) save(view View) bool {
-	saver := e.registry.saver
-	e.mu.Lock()
-	session := e.session
-	e.mu.Unlock()
+func (m *Monitor) save(view View) bool {
+	saver := m.registry.saver
+	m.mu.Lock()
+	session := m.session
+	m.mu.Unlock()
 	if saver == nil || session == "" {
 		return true
 	}
-	e.saveMu.Lock()
-	defer e.saveMu.Unlock()
-	e.mu.Lock()
-	saved, stopped := e.saved.view, e.stopped
-	e.mu.Unlock()
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
+	m.mu.Lock()
+	saved, stopped := m.saved.view, m.stopped
+	m.mu.Unlock()
 	if stopped {
 		return false
 	}
@@ -56,56 +56,56 @@ func (e *Entry) save(view View) bool {
 		return true
 	}
 	err := saver.SaveRuntime(session, saved, view)
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if err != nil {
-		e.logf("monitor save failed: session=%s: %v", session, err)
-		e.retrySaveLocked()
+		m.logf("monitor save failed: session=%s: %v", session, err)
+		m.retrySaveLocked()
 		return false
 	}
-	e.saved.view = view
-	e.stopSaveRetryLocked()
+	m.saved.view = view
+	m.stopSaveRetryLocked()
 	return true
 }
 
-func (e *Entry) retrySaveLocked() {
-	host := e.registry.host
-	if e.saved.retry != nil || e.stopped || host.Ended() {
+func (m *Monitor) retrySaveLocked() {
+	host := m.registry.host
+	if m.saved.retry != nil || m.stopped || host.Ended() {
 		return
 	}
-	if e.saved.retryDelay == 0 {
-		e.saved.retryDelay = jobs.DefaultBackoffBase
+	if m.saved.retryDelay == 0 {
+		m.saved.retryDelay = jobs.DefaultBackoffBase
 	} else {
-		e.saved.retryDelay = min(e.saved.retryDelay*2, jobs.DefaultBackoffCap)
+		m.saved.retryDelay = min(m.saved.retryDelay*2, jobs.DefaultBackoffCap)
 	}
 	var timer *time.Timer
-	timer = host.AfterFunc("monitorSaveRetry", e.saved.retryDelay, func() {
-		e.mu.Lock()
-		if e.saved.retry != timer {
-			e.mu.Unlock()
+	timer = host.AfterFunc("monitorSaveRetry", m.saved.retryDelay, func() {
+		m.mu.Lock()
+		if m.saved.retry != timer {
+			m.mu.Unlock()
 			return
 		}
-		e.saved.retry = nil
-		e.mu.Unlock()
-		e.Refresh()
+		m.saved.retry = nil
+		m.mu.Unlock()
+		m.Refresh()
 	})
-	e.saved.retry = timer
+	m.saved.retry = timer
 }
 
-func (e *Entry) stopSaveRetryLocked() {
-	if e.saved.retry != nil {
-		e.saved.retry.Stop()
-		e.saved.retry = nil
+func (m *Monitor) stopSaveRetryLocked() {
+	if m.saved.retry != nil {
+		m.saved.retry.Stop()
+		m.saved.retry = nil
 	}
-	e.saved.retryDelay = 0
+	m.saved.retryDelay = 0
 }
 
-func (e *Entry) Refresh() bool {
-	if e == nil {
+func (m *Monitor) Refresh() bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	m.mu.Lock()
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }

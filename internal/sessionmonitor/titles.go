@@ -12,14 +12,14 @@ const sessionTitleBriefCharCap = 1500
 
 var ErrNoTitleRunner = errors.New("no runner takes title jobs")
 
-func (e *Entry) TitleFromTranscript(transcriptPath string) {
-	if e == nil {
+func (m *Monitor) TitleFromTranscript(transcriptPath string) {
+	if m == nil {
 		return
 	}
-	if !e.wantsTitle() {
+	if !m.wantsTitle() {
 		return
 	}
-	path := e.transcriptPathFor(transcriptPath)
+	path := m.transcriptPathFor(transcriptPath)
 	if strings.TrimSpace(path) == "" {
 		return
 	}
@@ -32,84 +32,84 @@ func (e *Entry) TitleFromTranscript(transcriptPath string) {
 	if err != nil || slice.Empty() || slice.Brief == "" {
 		return
 	}
-	e.enqueueTitle(slice.Render(), "transcript")
+	m.enqueueTitle(slice.Render(), "transcript")
 }
 
-func (e *Entry) TitleFromPrompt(prompt string, userConversation bool) {
-	if e == nil {
+func (m *Monitor) TitleFromPrompt(prompt string, userConversation bool) {
+	if m == nil {
 		return
 	}
 	prompt = strings.TrimSpace(prompt)
-	if e == nil || prompt == "" || !e.wantsTitle() {
+	if m == nil || prompt == "" || !m.wantsTitle() {
 		return
 	}
-	if !userConversation && !e.matchesInitialPrompt(prompt) {
+	if !userConversation && !m.matchesInitialPrompt(prompt) {
 		return
 	}
 	if runes := []rune(prompt); len(runes) > sessionTitleBriefCharCap {
 		prompt = string(runes[:sessionTitleBriefCharCap])
 	}
-	e.enqueueTitle(transcript.ConversationSlice{Brief: prompt, HumanCount: 1}.Render(), "prompt")
+	m.enqueueTitle(transcript.ConversationSlice{Brief: prompt, HumanCount: 1}.Render(), "prompt")
 }
 
-func (e *Entry) RememberInitialPrompt(prompt string) {
-	if e == nil {
+func (m *Monitor) RememberInitialPrompt(prompt string) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	prompt = strings.TrimSpace(prompt)
-	e.titleInitialPrompt = nil
+	m.titleInitialPrompt = nil
 	if prompt != "" {
 		fingerprint := sha256.Sum256([]byte(prompt))
-		e.titleInitialPrompt = &fingerprint
+		m.titleInitialPrompt = &fingerprint
 	}
 }
 
-func (e *Entry) ForgetInitialPrompt() {
-	if e == nil {
+func (m *Monitor) ForgetInitialPrompt() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.titleInitialPrompt = nil
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.titleInitialPrompt = nil
+	m.mu.Unlock()
 }
 
-func (e *Entry) matchesInitialPrompt(prompt string) bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.titleInitialPrompt != nil && *e.titleInitialPrompt == sha256.Sum256([]byte(prompt))
+func (m *Monitor) matchesInitialPrompt(prompt string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.titleInitialPrompt != nil && *m.titleInitialPrompt == sha256.Sum256([]byte(prompt))
 }
 
-func (e *Entry) wantsTitle() bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.policy.TitlesAllowed && e.policy.Headless && !e.titleAttempted
+func (m *Monitor) wantsTitle() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.policy.TitlesAllowed && m.policy.Headless && !m.titleAttempted
 }
 
-func (e *Entry) enqueueTitle(conversation string, source string) {
-	e.mu.Lock()
-	if e.titleAttempted {
-		e.mu.Unlock()
+func (m *Monitor) enqueueTitle(conversation string, source string) {
+	m.mu.Lock()
+	if m.titleAttempted {
+		m.mu.Unlock()
 		return
 	}
-	e.titleAttempted = true
-	fingerprint := e.titleInitialPrompt
-	e.titleInitialPrompt = nil
-	label := e.label
-	e.mu.Unlock()
+	m.titleAttempted = true
+	fingerprint := m.titleInitialPrompt
+	m.titleInitialPrompt = nil
+	label := m.label
+	m.mu.Unlock()
 
-	err := e.registry.host.EnqueueTitle(e, conversation, source)
+	err := m.registry.host.EnqueueTitle(m, conversation, source)
 	if err == nil {
 		return
 	}
 	if !errors.Is(err, ErrNoTitleRunner) {
-		e.logf("session title %s: enqueue: %v", label, err)
+		m.logf("session title %s: enqueue: %v", label, err)
 	}
-	e.mu.Lock()
-	e.titleAttempted = false
-	if fingerprint != nil && e.titleInitialPrompt == nil {
-		e.titleInitialPrompt = fingerprint
+	m.mu.Lock()
+	m.titleAttempted = false
+	if fingerprint != nil && m.titleInitialPrompt == nil {
+		m.titleInitialPrompt = fingerprint
 	}
-	e.mu.Unlock()
+	m.mu.Unlock()
 }

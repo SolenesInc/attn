@@ -233,8 +233,8 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 		}
 	}
 	if len(paths) > 0 {
-		if entry := d.monitorEntry(sessionID); entry != nil {
-			if !entry.ReportSentFiles(paths) {
+		if monitor := d.sessionMonitor(sessionID); monitor != nil {
+			if !monitor.ReportSentFiles(paths) {
 				d.sendError(conn, "sent file monitor view was not applied")
 				return
 			}

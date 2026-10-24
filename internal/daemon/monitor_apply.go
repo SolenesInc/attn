@@ -16,7 +16,7 @@ func (r *monitorIndex) bindingOf(h *monitorHome) (protocol.SessionID, *monitorBi
 	session := h.sessionID()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if binding := r.sessions[session]; binding != nil && binding.entry == h.entry {
+	if binding := r.sessions[session]; binding != nil && binding.monitor == h.monitor {
 		return session, binding
 	}
 	return "", nil
@@ -29,7 +29,7 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	session, binding := r.bindingOf(h)
 	if session == "" {
 		r.applyMu.Unlock()
-		return d.admitMonitorConversation(h.entry, view)
+		return d.admitMonitorConversation(h.monitor, view)
 	}
 	previous := binding.applied
 	if previous.Revision.V >= view.Revision.V {
@@ -50,7 +50,7 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	h.catchUp(session, binding, nil)
 	r.applyMu.Unlock()
 	if recorded != "" {
-		h.entry.SettleSwitch(recorded)
+		h.monitor.SettleSwitch(recorded)
 	}
 	for _, id := range linked {
 		d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: id})

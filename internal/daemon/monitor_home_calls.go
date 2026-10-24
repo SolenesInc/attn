@@ -52,7 +52,7 @@ func (d *Daemon) answerAutoSettleByUser(sessionID protocol.SessionID) bool {
 	if !d.autoSettleAppliesTo(d.decoratedSession(sessionID)) {
 		return false
 	}
-	answered, hadPending, armed := d.monitorEntry(sessionID).AnswerCountdown()
+	answered, hadPending, armed := d.sessionMonitor(sessionID).AnswerCountdown()
 	if answered && d.debugLogging {
 		d.logf("auto-settle answered by user: session=%s had_pending=%v armed=%v", sessionID, hadPending, armed)
 	}
@@ -102,14 +102,14 @@ func (d *Daemon) decoratedSession(sessionID protocol.SessionID) *protocol.Sessio
 }
 
 func (d *Daemon) cancelAllAutoSettle() {
-	for _, e := range d.monitors().each() {
-		e.ClearAutoSettle()
+	for _, m := range d.monitors().each() {
+		m.ClearAutoSettle()
 	}
 }
 
 func (d *Daemon) stopAutoSettleTimers() {
-	for _, e := range d.monitors().each() {
-		e.StopAutoSettle()
+	for _, m := range d.monitors().each() {
+		m.StopAutoSettle()
 	}
 }
 
@@ -121,7 +121,7 @@ func (d *Daemon) armAutoSettleForRunningSessions() {
 		if session == nil || string(session.State) != protocol.StateWorking {
 			continue
 		}
-		d.monitorEntry(session.ID).ArmAutoSettle()
+		d.sessionMonitor(session.ID).ArmAutoSettle()
 	}
 }
 
@@ -206,7 +206,7 @@ func (d *Daemon) updateEvidence(sessionID protocol.SessionID, unchanged func(*se
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return false
 	}
-	return d.monitorEntry(sessionID).UpdateEvidence(unchanged, mutate)
+	return d.sessionMonitor(sessionID).UpdateEvidence(unchanged, mutate)
 }
 
 func (d *Daemon) restoreTranscriptWatchers() {
@@ -225,7 +225,7 @@ func (d *Daemon) restoreTranscriptWatchers() {
 		if binding.NativeID == "" {
 			continue
 		}
-		d.monitorEntry(session.ID).StartTranscriptWatcher(binding.TranscriptPath)
+		d.sessionMonitor(session.ID).StartTranscriptWatcher(binding.TranscriptPath)
 	}
 	d.restorePluginUsageWatchers()
 }
@@ -238,7 +238,7 @@ func (d *Daemon) restorePluginUsageWatchers() {
 		if strings.TrimSpace(run.TranscriptPath) == "" || d.store.Get(run.SessionID) == nil {
 			continue
 		}
-		d.monitorEntry(run.SessionID).WatchDriverUsage(run.TranscriptPath)
+		d.sessionMonitor(run.SessionID).WatchDriverUsage(run.TranscriptPath)
 	}
 }
 
@@ -247,7 +247,7 @@ func (d *Daemon) armPluginDriverSilenceWatch(pluginName string) {
 		return
 	}
 	for _, run := range d.store.ListAgentDriverRuns(pluginName) {
-		d.monitorEntry(run.SessionID).ArmDriverSilence(run.RunID, pluginName)
+		d.sessionMonitor(run.SessionID).ArmDriverSilence(run.RunID, pluginName)
 	}
 }
 
@@ -256,19 +256,19 @@ func (d *Daemon) armPluginDriverSilenceWatchForEveryRun() {
 		return
 	}
 	for _, run := range d.store.ListActiveAgentDriverRuns() {
-		d.monitorEntry(run.SessionID).ArmDriverSilence(run.RunID, run.PluginName)
+		d.sessionMonitor(run.SessionID).ArmDriverSilence(run.RunID, run.PluginName)
 	}
 }
 
 func (d *Daemon) notePluginDriverReport(sessionID protocol.SessionID) {
-	if d.monitorEntry(sessionID).NoteDriverReport() {
+	if d.sessionMonitor(sessionID).NoteDriverReport() {
 		d.logf("plugin driver silence cleared: session=%s", sessionID)
 	}
 }
 
 func (d *Daemon) observePromptSubmitted(sessionID protocol.SessionID, at time.Time) bool {
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		return entry.ObservePromptSubmitted(at)
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		return monitor.ObservePromptSubmitted(at)
 	}
 	d.markModelRequestStarted(sessionID, at)
 	return false
@@ -278,11 +278,11 @@ func (d *Daemon) markModelRequestStarted(sessionID protocol.SessionID, at time.T
 	if d.store == nil {
 		return false
 	}
-	return d.monitorEntry(sessionID).MarkModelRequestStarted(at)
+	return d.sessionMonitor(sessionID).MarkModelRequestStarted(at)
 }
 
 func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, source string) error {
-	return d.monitorEntry(sessionID).WriteInput(context.Background(), d.primaryTerminal(sessionID), data, strings.TrimSpace(source))
+	return d.sessionMonitor(sessionID).WriteInput(context.Background(), d.primaryTerminal(sessionID), data, strings.TrimSpace(source))
 }
 
 func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.TerminalID, data []byte, source string) error {
@@ -293,17 +293,17 @@ func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.Terminal
 		}
 		return d.ptyBackend.Input(ctx, terminal, data)
 	}
-	return d.monitorEntry(sessionID).WriteInput(ctx, terminal, data, strings.TrimSpace(source))
+	return d.sessionMonitor(sessionID).WriteInput(ctx, terminal, data, strings.TrimSpace(source))
 }
 
 var errNoPTYBackend = errors.New("session has no PTY backend")
 
 func (d *Daemon) beginAgentDriverRun(session protocol.SessionID, plugin, run string) bool {
-	return d.monitorEntry(session).BeginDriverRun(plugin, run)
+	return d.sessionMonitor(session).BeginDriverRun(plugin, run)
 }
 
 func (d *Daemon) endAgentDriverRun(session protocol.SessionID) store.AgentDriverReportCursor {
-	ended := d.monitorEntry(session).EndDriverRun()
+	ended := d.sessionMonitor(session).EndDriverRun()
 	return store.AgentDriverReportCursor{PluginName: ended.Plugin, RunID: ended.Run, Seq: ended.Sequence}
 }
 
@@ -336,10 +336,10 @@ func (d *Daemon) queueFlowOn() bool {
 }
 
 func (d *Daemon) touchSession(sessionID protocol.SessionID) {
-	d.monitorEntry(sessionID).Touch(time.Now())
+	d.sessionMonitor(sessionID).Touch(time.Now())
 }
 
 func (d *Daemon) syncMonitorConversation(sessionID protocol.SessionID) {
 	binding := d.store.GetSessionConversation(sessionID)
-	d.monitorEntry(sessionID).SetConversation(sessionmonitor.ConversationObservation{NativeID: binding.NativeID, TranscriptPath: binding.TranscriptPath})
+	d.sessionMonitor(sessionID).SetConversation(sessionmonitor.ConversationObservation{NativeID: binding.NativeID, TranscriptPath: binding.TranscriptPath})
 }

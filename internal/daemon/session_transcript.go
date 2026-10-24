@@ -91,7 +91,7 @@ func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
 			return binding.TranscriptPath
 		}
 	}
-	if path := d.monitorEntry(session.ID).LiveTranscriptPath(session.Agent); path != "" {
+	if path := d.sessionMonitor(session.ID).LiveTranscriptPath(session.Agent); path != "" {
 		return path
 	}
 	path := sessionmonitor.FindTranscriptForResume(session.Agent, binding.NativeID)

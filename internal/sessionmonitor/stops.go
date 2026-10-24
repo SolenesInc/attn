@@ -2,61 +2,61 @@ package sessionmonitor
 
 import "time"
 
-func (e *Entry) classifiedTurnID() string {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.classifiedTurn
+func (m *Monitor) classifiedTurnID() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.classifiedTurn
 }
 
-func (e *Entry) setClassifiedTurnID(turnID string) {
-	e.mu.Lock()
-	e.classifiedTurn = turnID
-	e.mu.Unlock()
+func (m *Monitor) setClassifiedTurnID(turnID string) {
+	m.mu.Lock()
+	m.classifiedTurn = turnID
+	m.mu.Unlock()
 }
 
-func (e *Entry) beginClassifyingTurn(turnID string) bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.classifiedTurn == turnID || e.classifyingTurn == turnID {
+func (m *Monitor) beginClassifyingTurn(turnID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.classifiedTurn == turnID || m.classifyingTurn == turnID {
 		return false
 	}
-	e.classifyingTurn = turnID
+	m.classifyingTurn = turnID
 	return true
 }
 
-func (e *Entry) clearClassifyingTurn() {
-	e.mu.Lock()
-	e.classifyingTurn = ""
-	e.mu.Unlock()
+func (m *Monitor) clearClassifyingTurn() {
+	m.mu.Lock()
+	m.classifyingTurn = ""
+	m.mu.Unlock()
 }
 
 const forcedStopSuppressTTL = 30 * time.Second
 
-func (e *Entry) MarkForcedStop() {
-	if e == nil {
+func (m *Monitor) MarkForcedStop() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.forcedStop = time.Now()
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.forcedStop = time.Now()
+	m.mu.Unlock()
 }
 
-func (e *Entry) ConsumeForcedStop() bool {
-	if e == nil {
+func (m *Monitor) ConsumeForcedStop() bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	at := e.forcedStop
-	e.forcedStop = time.Time{}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	at := m.forcedStop
+	m.forcedStop = time.Time{}
 	return !at.IsZero() && time.Since(at) <= forcedStopSuppressTTL
 }
 
-func (e *Entry) ClearForcedStop() {
-	if e == nil {
+func (m *Monitor) ClearForcedStop() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.forcedStop = time.Time{}
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.forcedStop = time.Time{}
+	m.mu.Unlock()
 }

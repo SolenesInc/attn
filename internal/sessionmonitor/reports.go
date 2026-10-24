@@ -5,102 +5,102 @@ import (
 	"time"
 )
 
-func (e *Entry) ReportHarnessTitle(title string) bool {
-	if e == nil {
+func (m *Monitor) ReportHarnessTitle(title string) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	e.harnessTitle = title
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	m.mu.Lock()
+	m.harnessTitle = title
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }
 
-func (e *Entry) ReportPullRequest(id string, link PullRequest) bool {
-	if e == nil {
+func (m *Monitor) ReportPullRequest(id string, link PullRequest) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	e.pullRequests = maps.Clone(e.pullRequests)
-	if e.pullRequests == nil {
-		e.pullRequests = make(map[string]PullRequest)
+	m.mu.Lock()
+	m.pullRequests = maps.Clone(m.pullRequests)
+	if m.pullRequests == nil {
+		m.pullRequests = make(map[string]PullRequest)
 	}
-	link.Sequence = e.revision + 1
-	e.pullRequests[id] = link
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	link.Sequence = m.revision + 1
+	m.pullRequests[id] = link
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }
 
-func (e *Entry) ReportSentFiles(paths []string) bool {
-	if e == nil {
+func (m *Monitor) ReportSentFiles(paths []string) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	e.sentFiles = maps.Clone(e.sentFiles)
-	if e.sentFiles == nil {
-		e.sentFiles = make(map[string]uint64)
+	m.mu.Lock()
+	m.sentFiles = maps.Clone(m.sentFiles)
+	if m.sentFiles == nil {
+		m.sentFiles = make(map[string]uint64)
 	}
 	for _, path := range paths {
-		e.sentFiles[path] = e.revision + 1
+		m.sentFiles[path] = m.revision + 1
 	}
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }
 
-func (e *Entry) ReofferExit(lifecycle string) (offered, applied bool) {
-	if e == nil {
+func (m *Monitor) ReofferExit(lifecycle string) (offered, applied bool) {
+	if m == nil {
 		return false, false
 	}
-	e.mu.Lock()
-	if e.exit == nil || lifecycle == "" || e.exit.LifecycleID != lifecycle {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if m.exit == nil || lifecycle == "" || m.exit.LifecycleID != lifecycle {
+		m.mu.Unlock()
 		return false, false
 	}
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return true, e.publish(view)
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return true, m.publish(view)
 }
 
-func (e *Entry) ReportExit(exit Exit) bool {
-	if e == nil {
+func (m *Monitor) ReportExit(exit Exit) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	e.exit = &exit
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	m.mu.Lock()
+	m.exit = &exit
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }
 
-func (e *Entry) ClearExitBefore(before time.Time) (cleared, applied bool) {
-	if e == nil {
+func (m *Monitor) ClearExitBefore(before time.Time) (cleared, applied bool) {
+	if m == nil {
 		return false, false
 	}
-	e.mu.Lock()
-	if e.exit == nil || !e.exit.At.Before(before) {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if m.exit == nil || !m.exit.At.Before(before) {
+		m.mu.Unlock()
 		return false, false
 	}
-	e.exit = nil
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return true, e.publish(view)
+	m.exit = nil
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return true, m.publish(view)
 }
 
-func (e *Entry) ForgetPullRequest(id string) bool {
-	if e == nil {
+func (m *Monitor) ForgetPullRequest(id string) bool {
+	if m == nil {
 		return true
 	}
-	e.mu.Lock()
-	if _, ok := e.pullRequests[id]; !ok {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if _, ok := m.pullRequests[id]; !ok {
+		m.mu.Unlock()
 		return true
 	}
-	e.pullRequests = maps.Clone(e.pullRequests)
-	delete(e.pullRequests, id)
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	m.pullRequests = maps.Clone(m.pullRequests)
+	delete(m.pullRequests, id)
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }

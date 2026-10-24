@@ -88,7 +88,7 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 	}
 	vent := storedVent{store.Vent{
 		ID: id, ProfileID: session.ProfileID, SessionID: sessionID, Text: text,
-		Turn:      fmt.Sprintf("%d:%d", d.startedAt.UnixNano(), d.monitorEntry(sessionID).LatestRun()),
+		Turn:      fmt.Sprintf("%d:%d", d.startedAt.UnixNano(), d.sessionMonitor(sessionID).LatestRun()),
 		Context:   d.ventContext(session),
 		CreatedAt: time.Now(),
 	}}

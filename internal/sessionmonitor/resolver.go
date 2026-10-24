@@ -6,29 +6,29 @@ import (
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
-func (e *Entry) ResolveSoon() {
-	if e == nil {
+func (m *Monitor) ResolveSoon() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.resolveSoonLocked()
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.resolveSoonLocked()
+	m.mu.Unlock()
 }
 
-func (e *Entry) resolveSoonLocked() {
-	e.resolveAt, e.resolvePending = time.Time{}, true
-	e.registry.rearm()
+func (m *Monitor) resolveSoonLocked() {
+	m.resolveAt, m.resolvePending = time.Time{}, true
+	m.registry.rearm()
 }
 
 func (r *Registry) next() (time.Time, bool) {
 	var earliest time.Time
 	found := false
-	for _, e := range r.each() {
-		e.mu.Lock()
-		if e.resolvePending && (!found || e.resolveAt.Before(earliest)) {
-			earliest, found = e.resolveAt, true
+	for _, m := range r.each() {
+		m.mu.Lock()
+		if m.resolvePending && (!found || m.resolveAt.Before(earliest)) {
+			earliest, found = m.resolveAt, true
 		}
-		e.mu.Unlock()
+		m.mu.Unlock()
 	}
 	return earliest, found
 }
@@ -56,38 +56,38 @@ func (r *Registry) Run() {
 }
 
 func (r *Registry) ResolveDue(now time.Time) {
-	for _, e := range r.each() {
-		e.mu.Lock()
-		due := e.resolvePending && !e.resolveAt.After(now)
+	for _, m := range r.each() {
+		m.mu.Lock()
+		due := m.resolvePending && !m.resolveAt.After(now)
 		if due {
-			e.resolvePending = false
+			m.resolvePending = false
 		}
-		e.mu.Unlock()
+		m.mu.Unlock()
 		if !due {
 			continue
 		}
-		at := e.resolve(now)
-		e.mu.Lock()
-		if !e.resolvePending && !at.IsZero() {
-			e.resolveAt, e.resolvePending = at, true
+		at := m.resolve(now)
+		m.mu.Lock()
+		if !m.resolvePending && !at.IsZero() {
+			m.resolveAt, m.resolvePending = at, true
 		}
-		e.mu.Unlock()
+		m.mu.Unlock()
 	}
 }
 
-func (e *Entry) resolve(now time.Time) time.Time {
-	evidence, _ := e.Evidence()
-	e.mu.Lock()
-	agent, current := e.agent, e.state.State
-	e.mu.Unlock()
+func (m *Monitor) resolve(now time.Time) time.Time {
+	evidence, _ := m.Evidence()
+	m.mu.Lock()
+	agent, current := m.agent, m.state.State
+	m.mu.Unlock()
 	policy := sessionstate.PolicyFor(agent)
 	resolution := sessionstate.Resolve(evidence.TerminalEvidence, evidence.ConversationEvidence, policy, now)
-	owned := e.publishResolution(current, resolution, sessionstate.DwellFor(resolution.State, evidence.TerminalEvidence, evidence.ConversationEvidence, policy), now)
+	owned := m.publishResolution(current, resolution, sessionstate.DwellFor(resolution.State, evidence.TerminalEvidence, evidence.ConversationEvidence, policy), now)
 	if !owned {
 		return time.Time{}
 	}
 	next, _ := sessionstate.NextChange(evidence.TerminalEvidence, evidence.ConversationEvidence, policy, now)
-	if dwellEnds := e.dwellDeadline(); dwellEnds.After(now) && (next.IsZero() || dwellEnds.Before(next)) {
+	if dwellEnds := m.dwellDeadline(); dwellEnds.After(now) && (next.IsZero() || dwellEnds.Before(next)) {
 		next = dwellEnds
 	}
 	return next

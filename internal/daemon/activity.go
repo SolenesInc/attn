@@ -121,7 +121,7 @@ func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time
 	if since.IsZero() {
 		return true
 	}
-	path := d.monitorEntry(session.ID).ActivityTranscript()
+	path := d.sessionMonitor(session.ID).ActivityTranscript()
 	if path == "" {
 		return false
 	}
@@ -152,7 +152,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 		return
 	}
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(sessionID))
-	if d.monitorEntry(sessionID).ActivityTranscript() == "" {
+	if d.sessionMonitor(sessionID).ActivityTranscript() == "" {
 		return
 	}
 	runner := d.jobQueueRef()
@@ -200,7 +200,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		return nil, err
 	}
 	resumeID := strings.TrimSpace(carried.ResumeID)
-	monitor := d.monitorEntry(sessionID)
+	monitor := d.sessionMonitor(sessionID)
 	transcriptPath := monitor.ActivityTranscript()
 	if transcriptPath == "" {
 		return nil, nil
@@ -303,7 +303,7 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	return nil, nil
 }
 
-func (d *Daemon) reseedSessionActivity(monitor *sessionmonitor.Entry, sessionID protocol.SessionID, resumeID string) error {
+func (d *Daemon) reseedSessionActivity(monitor *sessionmonitor.Monitor, sessionID protocol.SessionID, resumeID string) error {
 	head, err := monitor.TranscriptHead()
 	if err != nil {
 		return fmt.Errorf("session_activity: seed cursor for %s: %w", sessionID, err)

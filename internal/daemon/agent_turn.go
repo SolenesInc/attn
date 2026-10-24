@@ -22,13 +22,13 @@ func (d *Daemon) agentTurn(sessionID protocol.SessionID, action protocol.AgentTu
 	if !d.queueFlowOn() {
 		return protocol.AgentTurnOutcomeQueueOff, nil
 	}
-	entry := d.monitorEntry(sessionID)
-	if entry == nil {
+	monitor := d.sessionMonitor(sessionID)
+	if monitor == nil {
 		return "", fmt.Errorf("session %s is not running in attn", sessionID)
 	}
-	return entry.AgentTurn(action, time.Now())
+	return monitor.AgentTurn(action, time.Now())
 }
 
 func (d *Daemon) inNotificationRun(sessionID protocol.SessionID) bool {
-	return d.monitorEntry(sessionID).InNotificationRun()
+	return d.sessionMonitor(sessionID).InNotificationRun()
 }

@@ -26,7 +26,7 @@ func (d *Daemon) seedRecoveredEvidence(sessionID protocol.SessionID, existing *p
 		if signalAt.IsZero() {
 			signalAt = time.Now()
 		}
-		if signal, ok := sessionmonitor.PTYEvidence(info.LastSignal, signalAt); ok && !d.monitorEntry(sessionID).HoldsPTY(info.LastSignal) {
+		if signal, ok := sessionmonitor.PTYEvidence(info.LastSignal, signalAt); ok && !d.sessionMonitor(sessionID).HoldsPTY(info.LastSignal) {
 			seeds = append(seeds, signal)
 			at = signalAt
 		}
@@ -38,7 +38,7 @@ func (d *Daemon) seedRecoveredEvidence(sessionID protocol.SessionID, existing *p
 	if len(seeds) == 0 {
 		return
 	}
-	d.monitorEntry(sessionID).RecordEvidence(at, func(e *sessionmonitor.Evidence) {
+	d.sessionMonitor(sessionID).RecordEvidence(at, func(e *sessionmonitor.Evidence) {
 		for _, seed := range seeds {
 			seed(e)
 		}

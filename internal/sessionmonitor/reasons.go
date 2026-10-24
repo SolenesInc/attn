@@ -2,11 +2,11 @@ package sessionmonitor
 
 import "github.com/victorarias/attn/internal/sessionstate"
 
-func (e *Entry) recordStateReason(resolution sessionstate.Resolution) bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+func (m *Monitor) recordStateReason(resolution sessionstate.Resolution) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	reason := string(resolution.Reason)
-	changed := e.reason != reason
-	e.reason = reason
+	changed := m.reason != reason
+	m.reason = reason
 	return changed
 }

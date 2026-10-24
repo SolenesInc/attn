@@ -18,7 +18,7 @@ func (h *monitorHome) catchUp(session protocol.SessionID, binding *monitorBindin
 	if r.sessions[session] != binding {
 		return
 	}
-	caughtUp := binding.applied.Revision.V >= h.entry.Revision()
+	caughtUp := binding.applied.Revision.V >= h.monitor.Revision()
 	if caughtUp || d.life.Ended() {
 		binding.stopCatchUp()
 		return
@@ -39,7 +39,7 @@ func (h *monitorHome) catchUp(session protocol.SessionID, binding *monitorBindin
 			return
 		}
 		binding.catchUp = nil
-		view := h.entry.Snapshot()
+		view := h.monitor.Snapshot()
 		r.mu.Unlock()
 		h.Applied(view)
 	})

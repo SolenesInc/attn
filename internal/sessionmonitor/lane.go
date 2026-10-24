@@ -121,8 +121,8 @@ func (r *runState) startedByNotification() bool {
 }
 
 type lane struct {
-	mu    *sync.Mutex
-	entry *Entry
+	mu      *sync.Mutex
+	monitor *Monitor
 
 	retries                  map[string]*retry
 	run                      *runState
@@ -179,25 +179,25 @@ func DeferredError(err error) bool {
 		errors.Is(err, errInitialPrompt)
 }
 
-func (e *Entry) FenceInput() {
-	if e == nil {
+func (m *Monitor) FenceInput() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	lane := e.input
+	m.mu.Lock()
+	lane := m.input
 	lane.stopRetriesLocked()
-	e.mu.Unlock()
+	m.mu.Unlock()
 	lane.running.Wait()
 }
 
-func (e *Entry) ResetInput() {
-	if e == nil {
+func (m *Monitor) ResetInput() {
+	if m == nil {
 		return
 	}
-	e.FenceInput()
-	e.mu.Lock()
-	e.input = &lane{mu: &e.mu, entry: e, stopped: e.registry.closed.Load()}
-	e.mu.Unlock()
+	m.FenceInput()
+	m.mu.Lock()
+	m.input = &lane{mu: &m.mu, monitor: m, stopped: m.registry.closed.Load()}
+	m.mu.Unlock()
 }
 
 func (l *lane) armRetryLocked(delivery Delivery, err error) {
@@ -209,7 +209,7 @@ func (l *lane) armRetryLocked(delivery Delivery, err error) {
 }
 
 func (l *lane) scheduleLocked(key string, after time.Duration, resend func()) {
-	host := l.entry.registry.host
+	host := l.monitor.registry.host
 	if l.stopped || host.Ended() {
 		return
 	}
@@ -219,20 +219,20 @@ func (l *lane) scheduleLocked(key string, after time.Duration, resend func()) {
 	if existing := l.retries[key]; existing != nil {
 		existing.timer.Stop()
 	}
-	entry := &retry{resend: resend}
-	entry.timer = host.AfterFunc("sessionInputRetry", after, func() { l.entry.fireRetry(key, entry) })
-	l.retries[key] = entry
+	pending := &retry{resend: resend}
+	pending.timer = host.AfterFunc("sessionInputRetry", after, func() { l.monitor.fireRetry(key, pending) })
+	l.retries[key] = pending
 }
 
-func (e *Entry) fireRetry(key string, self *retry) {
-	e.mu.Lock()
-	l := e.input
+func (m *Monitor) fireRetry(key string, self *retry) {
+	m.mu.Lock()
+	l := m.input
 	owner := !l.stopped && l.retries[key] == self
 	if owner {
 		delete(l.retries, key)
 		l.running.Add(1)
 	}
-	e.mu.Unlock()
+	m.mu.Unlock()
 	if !owner {
 		return
 	}
@@ -242,14 +242,14 @@ func (e *Entry) fireRetry(key string, self *retry) {
 
 func (l *lane) stopRetriesLocked() {
 	l.stopped = true
-	for key, entry := range l.retries {
-		entry.timer.Stop()
+	for key, pending := range l.retries {
+		pending.timer.Stop()
 		delete(l.retries, key)
 	}
 }
 
-func (e *Entry) Place(ctx context.Context, delivery Delivery) Attempt {
-	if e == nil {
+func (m *Monitor) Place(ctx context.Context, delivery Delivery) Attempt {
+	if m == nil {
 		return Attempt{Stage: Deferred, Err: ErrLaneClosed}
 	}
 	if delivery.ID.String() == "" || strings.TrimSpace(delivery.Text) == "" {
@@ -257,18 +257,18 @@ func (e *Entry) Place(ctx context.Context, delivery Delivery) Attempt {
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	defer context.AfterFunc(e.registry.host.Context(), cancel)()
-	attempt, credited := e.place(ctx, delivery)
+	defer context.AfterFunc(m.registry.host.Context(), cancel)()
+	attempt, credited := m.place(ctx, delivery)
 	if credited.valid() {
-		e.armAutoSettleForUserInput(credited)
+		m.armAutoSettleForUserInput(credited)
 	}
 	return attempt
 }
 
-func (e *Entry) place(ctx context.Context, delivery Delivery) (Attempt, runRef) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	l := e.input
+func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l := m.input
 	deferred := func(err error) (Attempt, runRef) {
 		return Attempt{Stage: Deferred, Err: err}, runRef{}
 	}
@@ -279,16 +279,16 @@ func (e *Entry) place(ctx context.Context, delivery Delivery) (Attempt, runRef) 
 		l.armRetryLocked(delivery, errPlacingAnother)
 		return deferred(errPlacingAnother)
 	}
-	if !delivery.BypassInitialGate && e.evidence.InitialPromptOwed {
+	if !delivery.BypassInitialGate && m.evidence.InitialPromptOwed {
 		return deferred(errInitialPrompt)
 	}
-	if err := allowedForPhase(delivery.Placement, e.state.State); err != nil {
+	if err := allowedForPhase(delivery.Placement, m.state.State); err != nil {
 		return deferred(err)
 	}
 
 	var attempt Attempt
 	handled := false
-	if e.registry.host.Link(e, delivery.origin.voice()) != nil {
+	if m.registry.host.Link(m, delivery.origin.voice()) != nil {
 		attempt, handled = l.placeOverLinkLocked(ctx, delivery)
 	}
 	if !handled {
@@ -305,7 +305,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery) (Atte
 	l.placing = true
 	l.mu.Unlock()
 	// Resolve again after unlocking: a link gone meanwhile hands the input to the PTY.
-	link := l.entry.registry.host.Link(l.entry, voice)
+	link := l.monitor.registry.host.Link(l.monitor, voice)
 	var custody harness.Custody
 	if link != nil {
 		custody = link.Deliver(ctx, harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice})
@@ -339,8 +339,8 @@ func (l *lane) tookLocked(delivery Delivery) runRef {
 }
 
 func (l *lane) titleLocked(delivery Delivery) {
-	e, text, user := l.entry, delivery.Text, delivery.origin.kind == originUserConversation
-	e.registry.host.Go("maybeGenerateSessionTitleFromPrompt", func() { e.TitleFromPrompt(text, user) })
+	m, text, user := l.monitor, delivery.Text, delivery.origin.kind == originUserConversation
+	m.registry.host.Go("maybeGenerateSessionTitleFromPrompt", func() { m.TitleFromPrompt(text, user) })
 }
 
 func (l *lane) claimNextLocked() bool {
@@ -364,12 +364,12 @@ func PhaseAllows(placement Placement, state protocol.SessionState) bool {
 }
 
 // attn's own words earned credit at custody; this hook never matches prompt text.
-func (e *Entry) ObservePromptSubmitted(at time.Time) (typed bool) {
-	if e == nil {
+func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	l := e.input
+	m.mu.Lock()
+	l := m.input
 	typed = l.userSubmit
 	l.userSubmit = false
 	current := l.ensureRunLocked()
@@ -377,10 +377,10 @@ func (e *Entry) ObservePromptSubmitted(at time.Time) (typed bool) {
 		current.credited = true
 	}
 	run, credited := current.ref, current.credited
-	e.mu.Unlock()
-	e.MarkModelRequestStarted(at)
+	m.mu.Unlock()
+	m.MarkModelRequestStarted(at)
 	if credited {
-		e.armAutoSettleForUserInput(run)
+		m.armAutoSettleForUserInput(run)
 	}
 	return typed
 }
@@ -426,13 +426,13 @@ func (l *lane) stopFollowsNotificationLocked() bool {
 	return l.stoppedAfterNotification
 }
 
-func (e *Entry) LatestRun() uint64 {
-	if e == nil {
+func (m *Monitor) LatestRun() uint64 {
+	if m == nil {
 		return 0
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.input.epoch
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.input.epoch
 }
 
 func (l *lane) currentUserRunLocked() (runRef, bool) {
@@ -442,17 +442,17 @@ func (l *lane) currentUserRunLocked() (runRef, bool) {
 	return l.run.ref, true
 }
 
-func (e *Entry) MarkModelRequestStarted(at time.Time) bool {
-	if e == nil {
+func (m *Monitor) MarkModelRequestStarted(at time.Time) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	if at.IsZero() || !at.After(e.lastModelRequestAt) {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if at.IsZero() || !at.After(m.lastModelRequestAt) {
+		m.mu.Unlock()
 		return false
 	}
-	e.lastModelRequestAt = at
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	m.lastModelRequestAt = at
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }

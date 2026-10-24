@@ -40,36 +40,36 @@ func Stamped(obs statetrace.Observation) statetrace.Observation {
 	return obs
 }
 
-func (e *Entry) Trace(obs statetrace.Observation) {
-	if e == nil {
+func (m *Monitor) Trace(obs statetrace.Observation) {
+	if m == nil {
 		return
 	}
 	obs = Stamped(obs)
 	var report *View
-	e.mu.Lock()
-	if e.trace == nil {
-		e.trace = statetrace.NewRing(statetrace.DefaultCapacity)
+	m.mu.Lock()
+	if m.trace == nil {
+		m.trace = statetrace.NewRing(statetrace.DefaultCapacity)
 	}
-	e.trace.Record(obs)
-	if e.firstReportAt.IsZero() && HarnessReportedState(obs.Source) {
-		e.firstReportAt = obs.RecordedAt
-		view := e.viewLocked()
+	m.trace.Record(obs)
+	if m.firstReportAt.IsZero() && HarnessReportedState(obs.Source) {
+		m.firstReportAt = obs.RecordedAt
+		view := m.viewLocked()
 		report = &view
 	}
-	e.mu.Unlock()
-	e.logf("%s", obs.LogLine(protocol.SessionID(e.Label())))
+	m.mu.Unlock()
+	m.logf("%s", obs.LogLine(protocol.SessionID(m.Label())))
 	if report != nil {
-		e.publish(*report)
+		m.publish(*report)
 	}
 }
 
-func (e *Entry) TraceSnapshot() []statetrace.Observation {
-	if e == nil {
+func (m *Monitor) TraceSnapshot() []statetrace.Observation {
+	if m == nil {
 		return nil
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.trace.Snapshot()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.trace.Snapshot()
 }
 
 func ChangeObservation(change Change, outcome statetrace.Outcome, reason string) statetrace.Observation {
@@ -88,9 +88,9 @@ func ChangeObservation(change Change, outcome statetrace.Outcome, reason string)
 	}
 }
 
-func (e *Entry) TraceChange(change Change, outcome statetrace.Outcome, reason string) {
-	if e == nil {
+func (m *Monitor) TraceChange(change Change, outcome statetrace.Outcome, reason string) {
+	if m == nil {
 		return
 	}
-	e.Trace(ChangeObservation(change, outcome, reason))
+	m.Trace(ChangeObservation(change, outcome, reason))
 }

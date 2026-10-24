@@ -72,8 +72,8 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 		return nil, context.Canceled
 	}
 	defer job.CommitGuard.Leave()
-	entry := d.monitorEntry(sessionID)
-	if entry == nil || !entry.ReportHarnessTitle(title) {
+	monitor := d.sessionMonitor(sessionID)
+	if monitor == nil || !monitor.ReportHarnessTitle(title) {
 		return nil, fmt.Errorf("session %s: harness title view was not applied", sessionID)
 	}
 	d.logf("session title %s: %q from %s", sessionID, title, payload.Source)

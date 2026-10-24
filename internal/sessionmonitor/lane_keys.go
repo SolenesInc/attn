@@ -7,23 +7,23 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 )
 
-func (e *Entry) noteUserInputLocked(terminal harness.TerminalID, source string, data []byte) bool {
+func (m *Monitor) noteUserInputLocked(terminal harness.TerminalID, source string, data []byte) bool {
 	if !IsComposerKeystroke(source, data) {
 		return false
 	}
 	now := time.Now()
-	e.registry.host.NoteKey(terminal, now)
-	e.activityAt = now
+	m.registry.host.NoteKey(terminal, now)
+	m.activityAt = now
 	return true
 }
 
-func (e *Entry) NoteActivity() bool {
-	if e == nil {
+func (m *Monitor) NoteActivity() bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	e.activityAt = time.Now()
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.activityAt = time.Now()
+	m.mu.Unlock()
 	return true
 }
 

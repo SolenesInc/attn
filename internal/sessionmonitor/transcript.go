@@ -27,7 +27,7 @@ const (
 )
 
 type transcriptWatcher struct {
-	entry         *Entry
+	monitor       *Monitor
 	agent         protocol.SessionAgent
 	cwd           string
 	startedAt     time.Time
@@ -52,9 +52,9 @@ type AssistantWindow struct {
 	Detail   string
 }
 
-func newTranscriptWatcher(entry *Entry, agent protocol.SessionAgent, cwd string, startedAt time.Time, behavior agentdriver.TranscriptWatcherBehavior) *transcriptWatcher {
+func newTranscriptWatcher(monitor *Monitor, agent protocol.SessionAgent, cwd string, startedAt time.Time, behavior agentdriver.TranscriptWatcherBehavior) *transcriptWatcher {
 	return &transcriptWatcher{
-		entry:     entry,
+		monitor:   monitor,
 		agent:     agent,
 		cwd:       cwd,
 		startedAt: startedAt,
@@ -149,12 +149,12 @@ func IsTranscriptWatchedAgent(agent protocol.SessionAgent) bool {
 }
 
 func (w *transcriptWatcher) resolveExactPath() string {
-	e := w.entry
-	for _, path := range []string{strings.TrimSpace(w.preferredPath), e.boundConversation().TranscriptPath} {
+	m := w.monitor
+	for _, path := range []string{strings.TrimSpace(w.preferredPath), m.boundConversation().TranscriptPath} {
 		if path == "" {
 			continue
 		}
-		path = e.registry.host.LinkTranscriptPath(e.linkKind(), path)
+		path = m.registry.host.LinkTranscriptPath(m.linkKind(), path)
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
@@ -175,7 +175,7 @@ func FindTranscriptForResume(agent protocol.SessionAgent, resumeID string) strin
 }
 
 func (w *transcriptWatcher) discover() string {
-	path := FindTranscriptForResume(w.agent, w.entry.boundConversation().NativeID)
+	path := FindTranscriptForResume(w.agent, w.monitor.boundConversation().NativeID)
 	if path == "" {
 		return ""
 	}
@@ -186,7 +186,7 @@ func (w *transcriptWatcher) discover() string {
 }
 
 func (w *transcriptWatcher) discoveryDeadline(now time.Time) time.Time {
-	if strings.TrimSpace(w.preferredPath) != "" || strings.TrimSpace(w.entry.boundConversation().TranscriptPath) != "" {
+	if strings.TrimSpace(w.preferredPath) != "" || strings.TrimSpace(w.monitor.boundConversation().TranscriptPath) != "" {
 		return now.Add(transcriptDiscoveryGrace)
 	}
 	return now
@@ -201,26 +201,26 @@ func watcherStopped(w *transcriptWatcher) bool {
 	}
 }
 
-func (e *Entry) EnsureTranscriptWatcher(transcriptPath string) {
-	if e == nil {
+func (m *Monitor) EnsureTranscriptWatcher(transcriptPath string) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	agent := e.agent
-	e.mu.Unlock()
+	m.mu.Lock()
+	agent := m.agent
+	m.mu.Unlock()
 	if !IsTranscriptWatchedAgent(agent) {
 		return
 	}
 	transcriptPath = strings.TrimSpace(transcriptPath)
-	e.mu.Lock()
-	watcher := e.transcriptWatch
+	m.mu.Lock()
+	watcher := m.transcriptWatch
 	current := watcher != nil && watcher.agent == agent &&
 		strings.TrimSpace(watcher.preferredPath) == transcriptPath && !watcherStopped(watcher)
-	e.mu.Unlock()
+	m.mu.Unlock()
 	if current {
 		return
 	}
-	e.StartTranscriptWatcher(transcriptPath)
+	m.StartTranscriptWatcher(transcriptPath)
 }
 
 func transcriptBootstrapBytesForAgent(agent protocol.SessionAgent) int64 {
@@ -232,13 +232,13 @@ func transcriptBootstrapBytesForAgent(agent protocol.SessionAgent) int64 {
 	return 0
 }
 
-func (e *Entry) StartTranscriptWatcher(transcriptPath string) {
-	if e == nil {
+func (m *Monitor) StartTranscriptWatcher(transcriptPath string) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	agent, cwd, startedAt := e.agent, e.directory, e.startedAt
-	e.mu.Unlock()
+	m.mu.Lock()
+	agent, cwd, startedAt := m.agent, m.directory, m.startedAt
+	m.mu.Unlock()
 	if !IsTranscriptWatchedAgent(agent) {
 		return
 	}
@@ -249,38 +249,38 @@ func (e *Entry) StartTranscriptWatcher(transcriptPath string) {
 	if startedAt.IsZero() {
 		startedAt = time.Now()
 	}
-	e.mu.Lock()
-	if e.usageDraining {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if m.usageDraining {
+		m.mu.Unlock()
 		return
 	}
-	watcher := newTranscriptWatcher(e, agent, cwd, startedAt, behavior)
+	watcher := newTranscriptWatcher(m, agent, cwd, startedAt, behavior)
 	watcher.preferredPath = strings.TrimSpace(transcriptPath)
-	watcher.setState(e.state.State)
+	watcher.setState(m.state.State)
 
 	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
-	if !e.registry.host.Go("runTranscriptWatcher", watcher.run) {
-		e.mu.Unlock()
+	if !m.registry.host.Go("runTranscriptWatcher", watcher.run) {
+		m.mu.Unlock()
 		return
 	}
-	e.beginUsageRunLocked()
-	previous := e.transcriptWatch
-	e.transcriptWatch = watcher
-	label := e.label
-	e.mu.Unlock()
+	m.beginUsageRunLocked()
+	previous := m.transcriptWatch
+	m.transcriptWatch = watcher
+	label := m.label
+	m.mu.Unlock()
 	if previous != nil {
 		close(previous.stopCh)
 	}
-	e.logf("transcript watcher: started session=%s agent=%s cwd=%s", label, agent, cwd)
+	m.logf("transcript watcher: started session=%s agent=%s cwd=%s", label, agent, cwd)
 }
 
-func (e *Entry) UpdateTranscriptState(state protocol.SessionState) {
-	if e == nil {
+func (m *Monitor) UpdateTranscriptState(state protocol.SessionState) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	watcher := e.transcriptWatch
-	e.mu.Unlock()
+	m.mu.Lock()
+	watcher := m.transcriptWatch
+	m.mu.Unlock()
 	if watcher != nil {
 		watcher.setState(state)
 	}
@@ -292,22 +292,22 @@ func (w *transcriptWatcher) applyUsageAvailability(batch transcript.FollowBatch)
 	}
 	for _, event := range batch.Events {
 		if event.Kind == transcript.EventKindAssistant {
-			if w.entry.markCostSource(w.exactPath(), false, true, nil) {
-				w.entry.publishCost()
+			if w.monitor.markCostSource(w.exactPath(), false, true, nil) {
+				w.monitor.publishCost()
 			}
 			break
 		}
 	}
 }
 
-func (e *Entry) StopTranscriptWatchers() {
-	if e == nil {
+func (m *Monitor) StopTranscriptWatchers() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	watcher, plugin := e.transcriptWatch, e.pluginUsageWatch
-	e.transcriptWatch, e.pluginUsageWatch = nil, nil
-	e.mu.Unlock()
+	m.mu.Lock()
+	watcher, plugin := m.transcriptWatch, m.pluginUsageWatch
+	m.transcriptWatch, m.pluginUsageWatch = nil, nil
+	m.mu.Unlock()
 	if plugin != nil {
 		close(plugin.stopCh)
 	}
@@ -317,63 +317,63 @@ func (e *Entry) StopTranscriptWatchers() {
 }
 
 func (r *Registry) StopTranscriptWatchers() {
-	entries := r.each()
-	for _, e := range entries {
-		e.StopTranscriptWatchers()
+	monitors := r.each()
+	for _, m := range monitors {
+		m.StopTranscriptWatchers()
 	}
-	for _, e := range entries {
-		e.reconcileDeferredUsage()
-	}
-}
-
-func (e *Entry) deferFinalUsage(reconcile func()) {
-	e.mu.Lock()
-	e.finalUsage = append(e.finalUsage, reconcile)
-	e.mu.Unlock()
-}
-
-func (e *Entry) beginUsageRunLocked() {
-	e.usageRuns++
-	if e.usageIdle == nil {
-		e.usageIdle = make(chan struct{})
+	for _, m := range monitors {
+		m.reconcileDeferredUsage()
 	}
 }
 
-func (e *Entry) endUsageRun() {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.usageRuns--
-	if e.usageRuns > 0 {
+func (m *Monitor) deferFinalUsage(reconcile func()) {
+	m.mu.Lock()
+	m.finalUsage = append(m.finalUsage, reconcile)
+	m.mu.Unlock()
+}
+
+func (m *Monitor) beginUsageRunLocked() {
+	m.usageRuns++
+	if m.usageIdle == nil {
+		m.usageIdle = make(chan struct{})
+	}
+}
+
+func (m *Monitor) endUsageRun() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.usageRuns--
+	if m.usageRuns > 0 {
 		return
 	}
-	close(e.usageIdle)
-	e.usageIdle = nil
+	close(m.usageIdle)
+	m.usageIdle = nil
 }
 
-func (e *Entry) reconcileDeferredUsage() {
-	e.mu.Lock()
-	reconciles := e.finalUsage
-	e.finalUsage = nil
-	e.mu.Unlock()
+func (m *Monitor) reconcileDeferredUsage() {
+	m.mu.Lock()
+	reconciles := m.finalUsage
+	m.finalUsage = nil
+	m.mu.Unlock()
 	for _, reconcile := range reconciles {
 		reconcile()
 	}
 }
 
-func (e *Entry) FinishUsage() func() {
-	release, _ := e.finishUsage()
+func (m *Monitor) FinishUsage() func() {
+	release, _ := m.finishUsage()
 	return release
 }
 
-func (e *Entry) finishUsage() (func(), *usageTracker) {
-	if e == nil {
+func (m *Monitor) finishUsage() (func(), *usageTracker) {
+	if m == nil {
 		return func() {}, nil
 	}
-	e.mu.Lock()
-	e.usageDraining = true
-	watcher, plugin, idle := e.transcriptWatch, e.pluginUsageWatch, e.usageIdle
-	e.transcriptWatch, e.pluginUsageWatch = nil, nil
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.usageDraining = true
+	watcher, plugin, idle := m.transcriptWatch, m.pluginUsageWatch, m.usageIdle
+	m.transcriptWatch, m.pluginUsageWatch = nil, nil
+	m.mu.Unlock()
 	if plugin != nil {
 		close(plugin.stopCh)
 	}
@@ -383,87 +383,87 @@ func (e *Entry) finishUsage() (func(), *usageTracker) {
 	if idle != nil {
 		<-idle
 	}
-	e.reconcileDeferredUsage()
+	m.reconcileDeferredUsage()
 	var tracker *usageTracker
 	if watcher != nil {
 		tracker = watcher.usageTracker
 	}
-	return func() { e.mu.Lock(); e.usageDraining = false; e.mu.Unlock() }, tracker
+	return func() { m.mu.Lock(); m.usageDraining = false; m.mu.Unlock() }, tracker
 }
 
-func (e *Entry) AssistantWindow(agent protocol.SessionAgent) (AssistantWindow, bool) {
-	if e == nil {
+func (m *Monitor) AssistantWindow(agent protocol.SessionAgent) (AssistantWindow, bool) {
+	if m == nil {
 		return AssistantWindow{}, false
 	}
-	e.mu.Lock()
-	watcher := e.transcriptWatch
-	e.mu.Unlock()
+	m.mu.Lock()
+	watcher := m.transcriptWatch
+	m.mu.Unlock()
 	if watcher == nil || watcher.agent != agent {
 		return AssistantWindow{}, false
 	}
 	return watcher.snapshot(), true
 }
 
-func (e *Entry) LiveTranscriptPath(agent protocol.SessionAgent) string {
-	if e == nil {
+func (m *Monitor) LiveTranscriptPath(agent protocol.SessionAgent) string {
+	if m == nil {
 		return ""
 	}
-	e.mu.Lock()
-	watcher := e.transcriptWatch
-	e.mu.Unlock()
+	m.mu.Lock()
+	watcher := m.transcriptWatch
+	m.mu.Unlock()
 	if watcher == nil || watcher.agent != agent {
 		return ""
 	}
 	return watcher.exactPath()
 }
 
-func (e *Entry) transcriptPathFor(path string) string {
+func (m *Monitor) transcriptPathFor(path string) string {
 	path = strings.TrimSpace(path)
 	if path != "" {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
 	}
-	if bound := strings.TrimSpace(e.boundConversation().TranscriptPath); bound != "" {
+	if bound := strings.TrimSpace(m.boundConversation().TranscriptPath); bound != "" {
 		if _, err := os.Stat(bound); err == nil {
 			return bound
 		}
 	}
-	e.mu.Lock()
-	agent := e.agent
-	e.mu.Unlock()
-	if watched := e.LiveTranscriptPath(agent); watched != "" {
+	m.mu.Lock()
+	agent := m.agent
+	m.mu.Unlock()
+	if watched := m.LiveTranscriptPath(agent); watched != "" {
 		return watched
 	}
 	return path
 }
 
-func (e *Entry) ActivityTranscript() string {
-	if e == nil {
+func (m *Monitor) ActivityTranscript() string {
+	if m == nil {
 		return ""
 	}
-	return e.transcriptPathFor("")
+	return m.transcriptPathFor("")
 }
 
-func (e *Entry) TranscriptEvents(cursor string) (activity.Window, error) {
-	if e == nil {
+func (m *Monitor) TranscriptEvents(cursor string) (activity.Window, error) {
+	if m == nil {
 		return activity.Window{}, errNoActivityTranscript
 	}
-	path := e.ActivityTranscript()
+	path := m.ActivityTranscript()
 	if path == "" {
 		return activity.Window{}, errNoActivityTranscript
 	}
-	e.mu.Lock()
-	agent := e.agent
-	e.mu.Unlock()
+	m.mu.Lock()
+	agent := m.agent
+	m.mu.Unlock()
 	return activity.Read(path, string(agent), cursor)
 }
 
-func (e *Entry) TranscriptHead() (string, error) {
-	if e == nil {
+func (m *Monitor) TranscriptHead() (string, error) {
+	if m == nil {
 		return "", errNoActivityTranscript
 	}
-	path := e.ActivityTranscript()
+	path := m.ActivityTranscript()
 	if path == "" {
 		return "", errNoActivityTranscript
 	}
@@ -473,13 +473,13 @@ func (e *Entry) TranscriptHead() (string, error) {
 var errNoActivityTranscript = errors.New("the session has no live transcript")
 
 func (w *transcriptWatcher) run() {
-	e := w.entry
-	label := e.Label()
-	defer e.endUsageRun()
+	m := w.monitor
+	label := m.Label()
+	defer m.endUsageRun()
 	defer close(w.doneCh)
 
 	if w.behavior == nil {
-		e.logf("transcript watcher: no behavior configured session=%s agent=%s", label, w.agent)
+		m.logf("transcript watcher: no behavior configured session=%s agent=%s", label, w.agent)
 		return
 	}
 
@@ -509,11 +509,11 @@ func (w *transcriptWatcher) run() {
 	for {
 		select {
 		case <-w.stopCh:
-			e.logf("transcript watcher: stopped session=%s", label)
+			m.logf("transcript watcher: stopped session=%s", label)
 			return
-		case <-e.registry.host.Done():
+		case <-m.registry.host.Done():
 			if w.usageTracker != nil {
-				e.deferFinalUsage(w.usageTracker.Reconcile)
+				m.deferFinalUsage(w.usageTracker.Reconcile)
 				w.usageTracker = nil
 			}
 			return
@@ -539,16 +539,16 @@ func (w *transcriptWatcher) run() {
 			}
 			if transcriptPath == "" {
 				if w.setStatus(protocol.SessionMessageWindowStatusUnavailable, "no exact transcript is bound to this live session") {
-					e.assistantWindowChanged()
+					m.assistantWindowChanged()
 				}
-				e.logf("transcript watcher: exact transcript unavailable session=%s agent=%s cwd=%s", label, w.agent, w.cwd)
+				m.logf("transcript watcher: exact transcript unavailable session=%s agent=%s cwd=%s", label, w.agent, w.cwd)
 				return
 			}
 			info, err := os.Stat(transcriptPath)
 			if err != nil {
-				e.logf("transcript watcher: transcript stat failed session=%s path=%s err=%v", label, transcriptPath, err)
+				m.logf("transcript watcher: transcript stat failed session=%s path=%s err=%v", label, transcriptPath, err)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be opened", false)
-				e.assistantWindowChanged()
+				m.assistantWindowChanged()
 				return
 			}
 			startOffset := info.Size()
@@ -560,23 +560,23 @@ func (w *transcriptWatcher) run() {
 			}
 			follower, err = transcript.NewFollower(transcriptPath, string(w.agent), startOffset)
 			if err != nil {
-				e.logf("transcript watcher: follower init failed session=%s path=%s err=%v", label, transcriptPath, err)
+				m.logf("transcript watcher: follower init failed session=%s path=%s err=%v", label, transcriptPath, err)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
-				e.assistantWindowChanged()
+				m.assistantWindowChanged()
 				return
 			}
 			w.resetSource(protocol.SessionMessageWindowStatusReady, transcriptPath, "", startOffset > 0)
 			windowChanged = true
 			fallbackAttempted = false
 			w.usageTracker = newUsageTracker(w, transcriptPath)
-			e.logf("transcript watcher: transcript discovered session=%s path=%s offset=%d", label, transcriptPath, startOffset)
+			m.logf("transcript watcher: transcript discovered session=%s path=%s offset=%d", label, transcriptPath, startOffset)
 		}
 
 		info, err := os.Stat(transcriptPath)
 		if err != nil {
-			e.logf("transcript watcher: transcript unavailable, rediscovering session=%s path=%s err=%v", label, transcriptPath, err)
+			m.logf("transcript watcher: transcript unavailable, rediscovering session=%s path=%s err=%v", label, transcriptPath, err)
 			w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript became unavailable", false)
-			e.assistantWindowChanged()
+			m.assistantWindowChanged()
 			transcriptPath = ""
 			follower = nil
 			w.usageTracker = nil
@@ -593,15 +593,15 @@ func (w *transcriptWatcher) run() {
 		if follower != nil && transcriptMoved {
 			batch, readErr := follower.Read()
 			if errors.Is(readErr, transcript.ErrCursorMismatch) || errors.Is(readErr, transcript.ErrCursorPastEnd) {
-				e.logf("transcript watcher: transcript replaced session=%s path=%s", label, transcriptPath)
+				m.logf("transcript watcher: transcript replaced session=%s path=%s", label, transcriptPath)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript was replaced", false)
-				e.assistantWindowChanged()
+				m.assistantWindowChanged()
 				return
 			}
 			if readErr != nil {
-				e.logf("transcript watcher: read delta error session=%s path=%s err=%v", label, transcriptPath, readErr)
+				m.logf("transcript watcher: read delta error session=%s path=%s err=%v", label, transcriptPath, readErr)
 				w.resetSource(protocol.SessionMessageWindowStatusUnavailable, "", "the exact live transcript could not be read", false)
-				e.assistantWindowChanged()
+				m.assistantWindowChanged()
 				return
 			}
 
@@ -613,13 +613,13 @@ func (w *transcriptWatcher) run() {
 
 				lineResult := w.behavior.HandleLine(record.Raw)
 				if lineResult.Log != "" {
-					e.logf("%s session=%s", lineResult.Log, label)
+					m.logf("%s session=%s", lineResult.Log, label)
 				}
 				if lineResult.Aborted {
 					if skip, reason := staleTranscriptAbort(lineResult.AbortAt, w.startedAt); skip {
-						e.logf("transcript watcher: ignoring turn abort session=%s reason=%s abort_at=%s", label, reason, lineResult.AbortAt.Format(time.RFC3339Nano))
+						m.logf("transcript watcher: ignoring turn abort session=%s reason=%s abort_at=%s", label, reason, lineResult.AbortAt.Format(time.RFC3339Nano))
 					} else {
-						e.RecordTurnAborted(lineResult.AbortDetail, lineResult.AbortAt, now)
+						m.RecordTurnAborted(lineResult.AbortDetail, lineResult.AbortAt, now)
 						classifiedSeq = assistantSeq
 					}
 				}
@@ -640,7 +640,7 @@ func (w *transcriptWatcher) run() {
 					if len(logMsg) > 120 {
 						logMsg = logMsg[:120] + "..."
 					}
-					e.logf("transcript watcher: assistant event session=%s seq=%d chars=%d preview=%q", label, assistantSeq, len(content), logMsg)
+					m.logf("transcript watcher: assistant event session=%s seq=%d chars=%d preview=%q", label, assistantSeq, len(content), logMsg)
 				}
 			}
 			windowChanged = w.applyEvents(batch.Events) || windowChanged
@@ -651,7 +651,7 @@ func (w *transcriptWatcher) run() {
 			readFileInfo = info
 		}
 		if windowChanged {
-			e.assistantWindowChanged()
+			m.assistantWindowChanged()
 		}
 		if usageSettled && w.usageTracker != nil {
 			w.usageTracker.Reconcile()
@@ -662,19 +662,19 @@ func (w *transcriptWatcher) run() {
 			!lastAssistantAt.IsZero() &&
 			!quietSince.IsZero() &&
 			time.Since(quietSince) >= transcriptQuietWindow {
-			e.mu.Lock()
-			current := e.state.State
-			e.mu.Unlock()
-			if skip, reason := w.behavior.SkipClassification(current, e.lastSeen(), time.Now()); skip {
+			m.mu.Lock()
+			current := m.state.State
+			m.mu.Unlock()
+			if skip, reason := w.behavior.SkipClassification(current, m.lastSeen(), time.Now()); skip {
 				if strings.TrimSpace(reason) == "" {
 					reason = "transcript watcher: skipping classification"
 				}
-				e.logf("%s session=%s state=%s", reason, label, current)
+				m.logf("%s session=%s state=%s", reason, label, current)
 				continue
 			}
 
 			classifiedSeq = assistantSeq
-			e.logf(
+			m.logf(
 				"transcript watcher: quiet window reached session=%s seq=%d transcript=%s quiet_since=%s",
 				label,
 				assistantSeq,
@@ -682,7 +682,7 @@ func (w *transcriptWatcher) run() {
 				quietSince.Format(time.RFC3339Nano),
 			)
 			path := transcriptPath
-			e.registry.host.Go("classifySessionState", func() { e.ClassifyStop(path, StopClassification{}) })
+			m.registry.host.Go("classifySessionState", func() { m.ClassifyStop(path, StopClassification{}) })
 		}
 	}
 }
@@ -697,31 +697,31 @@ func staleTranscriptAbort(abortAt, sessionStartedAt time.Time) (bool, string) {
 	return false, ""
 }
 
-func (e *Entry) boundConversation() ConversationObservation {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.conversationInput.ConversationObservation
+func (m *Monitor) boundConversation() ConversationObservation {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.conversationInput.ConversationObservation
 }
 
-func (e *Entry) lastSeen() string {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.touchedAt.IsZero() {
+func (m *Monitor) lastSeen() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.touchedAt.IsZero() {
 		return ""
 	}
-	return string(protocol.NewTimestamp(e.touchedAt))
+	return string(protocol.NewTimestamp(m.touchedAt))
 }
 
-func (e *Entry) assistantWindowChanged() {
-	e.mu.Lock()
-	e.windowRevision++
-	view := e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+func (m *Monitor) assistantWindowChanged() {
+	m.mu.Lock()
+	m.windowRevision++
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 }
 
-func (e *Entry) linkKind() string {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.link
+func (m *Monitor) linkKind() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.link
 }

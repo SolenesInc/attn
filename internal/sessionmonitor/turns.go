@@ -10,169 +10,169 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-func (e *Entry) openTurnLocked(now time.Time, afterNotification bool) bool {
-	if !attention.OpensTurn(e.state.State) {
+func (m *Monitor) openTurnLocked(now time.Time, afterNotification bool) bool {
+	if !attention.OpensTurn(m.state.State) {
 		return false
 	}
-	requested := !e.turn.RequestedAt.IsZero()
-	if afterNotification && !requested && !attention.OpensTurnAfterNotification(e.state.State) {
+	requested := !m.turn.RequestedAt.IsZero()
+	if afterNotification && !requested && !attention.OpensTurnAfterNotification(m.state.State) {
 		return false
 	}
-	if deadline := e.turn.SnoozedUntil; !deadline.IsZero() {
-		if deadline.After(now) && !attention.BreaksSnooze(e.state.State, e.reason) {
+	if deadline := m.turn.SnoozedUntil; !deadline.IsZero() {
+		if deadline.After(now) && !attention.BreaksSnooze(m.state.State, m.reason) {
 			return false
 		}
-		e.turn.SnoozedUntil = time.Time{}
-		e.stopWakeLocked()
+		m.turn.SnoozedUntil = time.Time{}
+		m.stopWakeLocked()
 	}
-	opened := !e.turnOwedLocked()
+	opened := !m.turnOwedLocked()
 	if opened {
-		e.turn.OpenedAt = now.UTC()
+		m.turn.OpenedAt = now.UTC()
 	}
-	e.grantTurnRequestLocked()
+	m.grantTurnRequestLocked()
 	return opened
 }
 
-func (e *Entry) grantTurnRequestLocked() {
-	if e.turn.RequestedAt.IsZero() || !e.turnOwedLocked() {
+func (m *Monitor) grantTurnRequestLocked() {
+	if m.turn.RequestedAt.IsZero() || !m.turnOwedLocked() {
 		return
 	}
-	e.turn.AgentAt = e.turn.OpenedAt
-	e.turn.RequestedAt = time.Time{}
+	m.turn.AgentAt = m.turn.OpenedAt
+	m.turn.RequestedAt = time.Time{}
 }
 
-func (e *Entry) turnOwedLocked() bool {
-	return e.turn.OpenedAt.After(e.turn.SettledAt)
+func (m *Monitor) turnOwedLocked() bool {
+	return m.turn.OpenedAt.After(m.turn.SettledAt)
 }
 
-func (e *Entry) turnByAgentLocked() bool {
-	return attention.TurnByAgent(e.turn.OpenedAt, e.turn.SettledAt, e.turn.AgentAt)
+func (m *Monitor) turnByAgentLocked() bool {
+	return attention.TurnByAgent(m.turn.OpenedAt, m.turn.SettledAt, m.turn.AgentAt)
 }
 
-func (e *Entry) settleForAgentLocked(now time.Time) {
-	e.turn.SettledAt = now.UTC()
-	e.turn.AgentAt = e.turn.SettledAt
-	e.stopAutoSettleLocked()
+func (m *Monitor) settleForAgentLocked(now time.Time) {
+	m.turn.SettledAt = now.UTC()
+	m.turn.AgentAt = m.turn.SettledAt
+	m.stopAutoSettleLocked()
 }
 
-func (e *Entry) agentTurnLocked(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
+func (m *Monitor) agentTurnLocked(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
 	if action == protocol.AgentTurnActionSettle {
-		withdrawn := !e.turn.RequestedAt.IsZero()
-		e.turn.RequestedAt = time.Time{}
+		withdrawn := !m.turn.RequestedAt.IsZero()
+		m.turn.RequestedAt = time.Time{}
 		switch {
-		case e.turnOwedLocked() && !e.turnByAgentLocked():
+		case m.turnOwedLocked() && !m.turnByAgentLocked():
 			return "", errors.New("this turn opened when you stopped, not with attn turn open; only the user settles it")
-		case e.turnOwedLocked():
-			e.settleForAgentLocked(now)
+		case m.turnOwedLocked():
+			m.settleForAgentLocked(now)
 			return protocol.AgentTurnOutcomeSettled, nil
 		case withdrawn:
 			return protocol.AgentTurnOutcomeWithdrawn, nil
 		}
 		return protocol.AgentTurnOutcomeNotOpen, nil
 	}
-	e.turn.RequestedAt = now.UTC()
+	m.turn.RequestedAt = now.UTC()
 	switch {
-	case e.turn.SnoozedUntil.After(now):
+	case m.turn.SnoozedUntil.After(now):
 		return protocol.AgentTurnOutcomeSnoozed, nil
-	case !e.turnOwedLocked() && e.state.State == protocol.SessionStateWorking:
+	case !m.turnOwedLocked() && m.state.State == protocol.SessionStateWorking:
 		return protocol.AgentTurnOutcomeOpensAtStop, nil
-	case !e.turnOwedLocked():
-		e.turn.OpenedAt = now.UTC()
+	case !m.turnOwedLocked():
+		m.turn.OpenedAt = now.UTC()
 	}
-	e.grantTurnRequestLocked()
+	m.grantTurnRequestLocked()
 	return protocol.AgentTurnOutcomeOpened, nil
 }
 
-func (e *Entry) settleLocked(turn, now time.Time) bool {
-	if !e.turn.OpenedAt.Equal(turn) {
+func (m *Monitor) settleLocked(turn, now time.Time) bool {
+	if !m.turn.OpenedAt.Equal(turn) {
 		return false
 	}
-	e.turn.SettledAt = now.UTC()
-	e.stopAutoSettleLocked()
+	m.turn.SettledAt = now.UTC()
+	m.stopAutoSettleLocked()
 	return true
 }
 
-func (e *Entry) snoozeLocked(turn, until, now time.Time) bool {
-	if !e.settleLocked(turn, now) {
+func (m *Monitor) snoozeLocked(turn, until, now time.Time) bool {
+	if !m.settleLocked(turn, now) {
 		return false
 	}
-	e.turn.SnoozedUntil = until.UTC()
-	e.armWakeLocked()
+	m.turn.SnoozedUntil = until.UTC()
+	m.armWakeLocked()
 	return true
 }
 
-func (e *Entry) armWakeLocked() {
-	e.stopWakeLocked()
-	deadline := e.turn.SnoozedUntil
+func (m *Monitor) armWakeLocked() {
+	m.stopWakeLocked()
+	deadline := m.turn.SnoozedUntil
 	if deadline.IsZero() {
 		return
 	}
-	key := e.keyLocked()
-	e.wakeTimer = e.registry.host.AfterFunc("monitorSnoozeWake", max(0, time.Until(deadline)), func() {
+	key := m.keyLocked()
+	m.wakeTimer = m.registry.host.AfterFunc("monitorSnoozeWake", max(0, time.Until(deadline)), func() {
 		crashpoint.At("snooze-wake-running")
-		view, woken := e.Do(Command{Key: key, Kind: Wake, Until: deadline}, deadline)
-		if woken && e.publish(view) {
-			e.traceWake("deadline")
+		view, woken := m.Do(Command{Key: key, Kind: Wake, Until: deadline}, deadline)
+		if woken && m.publish(view) {
+			m.traceWake("deadline")
 		}
 	})
 }
 
-func (e *Entry) wakeLocked(deadline, at time.Time) bool {
-	if deadline.IsZero() || !e.turn.SnoozedUntil.Equal(deadline) {
+func (m *Monitor) wakeLocked(deadline, at time.Time) bool {
+	if deadline.IsZero() || !m.turn.SnoozedUntil.Equal(deadline) {
 		return false
 	}
-	e.turn.SnoozedUntil = time.Time{}
-	e.stopWakeLocked()
-	if attention.OpensTurn(e.state.State) && !e.turn.OpenedAt.After(e.turn.SettledAt) {
-		if !at.After(e.turn.SettledAt) {
+	m.turn.SnoozedUntil = time.Time{}
+	m.stopWakeLocked()
+	if attention.OpensTurn(m.state.State) && !m.turn.OpenedAt.After(m.turn.SettledAt) {
+		if !at.After(m.turn.SettledAt) {
 			at = time.Now()
 		}
-		e.turn.OpenedAt = at.UTC()
+		m.turn.OpenedAt = at.UTC()
 	}
-	e.grantTurnRequestLocked()
+	m.grantTurnRequestLocked()
 	return true
 }
 
-func (e *Entry) stopWakeLocked() {
-	if e.wakeTimer != nil {
-		e.wakeTimer.Stop()
-		e.wakeTimer = nil
+func (m *Monitor) stopWakeLocked() {
+	if m.wakeTimer != nil {
+		m.wakeTimer.Stop()
+		m.wakeTimer = nil
 	}
 }
 
-func (e *Entry) StopWake() {
-	if e == nil {
+func (m *Monitor) StopWake() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.stopWakeLocked()
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.stopWakeLocked()
+	m.mu.Unlock()
 }
 
-func (e *Entry) AgentTurn(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
-	e.mu.Lock()
-	outcome, err := e.agentTurnLocked(action, now)
-	view := e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+func (m *Monitor) AgentTurn(action protocol.AgentTurnAction, now time.Time) (protocol.AgentTurnOutcome, error) {
+	m.mu.Lock()
+	outcome, err := m.agentTurnLocked(action, now)
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 	return outcome, err
 }
 
-func (e *Entry) InNotificationRun() bool {
-	if e == nil {
+func (m *Monitor) InNotificationRun() bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.input.inNotificationRunLocked()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.input.inNotificationRunLocked()
 }
 
-func (e *Entry) traceWake(cause string) {
-	e.mu.Lock()
-	state, label := e.state.State, e.label
-	e.mu.Unlock()
-	if e.registry.host.Debug() {
-		e.logf("snooze woken: session=%s cause=%s", label, cause)
+func (m *Monitor) traceWake(cause string) {
+	m.mu.Lock()
+	state, label := m.state.State, m.label
+	m.mu.Unlock()
+	if m.registry.host.Debug() {
+		m.logf("snooze woken: session=%s cause=%s", label, cause)
 	}
-	e.Trace(statetrace.Observation{Source: "user", Claim: string(state), Detail: cause, Cause: "wake", Outcome: statetrace.OutcomeApplied})
+	m.Trace(statetrace.Observation{Source: "user", Claim: string(state), Detail: cause, Cause: "wake", Outcome: statetrace.OutcomeApplied})
 }

@@ -45,69 +45,69 @@ type Launch struct {
 	PullRequests       map[string]PullRequest
 }
 
-func (e *Entry) SetPolicy(policy Policy) {
-	if e == nil {
+func (m *Monitor) SetPolicy(policy Policy) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.policy = policy
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.policy = policy
+	m.mu.Unlock()
 }
 
-func (e *Entry) Policy() Policy {
-	if e == nil {
+func (m *Monitor) Policy() Policy {
+	if m == nil {
 		return Policy{}
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.policy
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.policy
 }
 
-func (e *Entry) Bind(label string) {
-	if e == nil {
+func (m *Monitor) Bind(label string) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.label = label
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.label = label
+	m.mu.Unlock()
 }
 
-func (e *Entry) Label() string {
-	if e == nil {
+func (m *Monitor) Label() string {
+	if m == nil {
 		return ""
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.label
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.label
 }
 
-func (e *Entry) logf(format string, args ...any) { e.registry.host.Logf(format, args...) }
+func (m *Monitor) logf(format string, args ...any) { m.registry.host.Logf(format, args...) }
 
-func (e *Entry) current() bool {
-	e.registry.mu.Lock()
-	defer e.registry.mu.Unlock()
-	_, ok := e.registry.entries[e]
+func (m *Monitor) current() bool {
+	m.registry.mu.Lock()
+	defer m.registry.mu.Unlock()
+	_, ok := m.registry.monitors[m]
 	return ok
 }
 
-func (e *Entry) Launched(at time.Time) {
-	if e == nil {
+func (m *Monitor) Launched(at time.Time) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.startedAt = at
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.startedAt = at
+	m.mu.Unlock()
 }
 
-func (e *Entry) Touch(at time.Time) bool {
-	if e == nil {
+func (m *Monitor) Touch(at time.Time) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	e.touchedAt = at
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	m.mu.Lock()
+	m.touchedAt = at
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }
 
 type terminalViews struct {
@@ -115,29 +115,29 @@ type terminalViews struct {
 	terminals []harness.TerminalID
 }
 
-func (e *Entry) SetTerminals(owner string, terminals []harness.TerminalID) {
-	if e == nil {
+func (m *Monitor) SetTerminals(owner string, terminals []harness.TerminalID) {
+	if m == nil {
 		return
 	}
-	e.views.Store(&terminalViews{owner: owner, terminals: terminals})
+	m.views.Store(&terminalViews{owner: owner, terminals: terminals})
 }
 
-func (e *Entry) terminalViews() terminalViews {
-	if views := e.views.Load(); views != nil {
+func (m *Monitor) terminalViews() terminalViews {
+	if views := m.views.Load(); views != nil {
 		return *views
 	}
 	return terminalViews{}
 }
 
-func (e *Entry) primaryTerminalLocked() harness.TerminalID {
-	current := e.terminalViews()
+func (m *Monitor) primaryTerminalLocked() harness.TerminalID {
+	current := m.terminalViews()
 	views := current.terminals
-	if len(views) == 0 && !e.monitor.linked {
-		views = []harness.TerminalID{e.monitor.terminalID}
+	if len(views) == 0 && !m.watch.linked {
+		views = []harness.TerminalID{m.watch.terminalID}
 	}
 	var shown []harness.TerminalID
 	for _, terminal := range views {
-		if e.registry.host.ViewOwner(terminal) == current.owner {
+		if m.registry.host.ViewOwner(terminal) == current.owner {
 			shown = append(shown, terminal)
 		}
 	}
@@ -147,7 +147,7 @@ func (e *Entry) primaryTerminalLocked() harness.TerminalID {
 	case 1:
 		return shown[0]
 	}
-	live := e.registry.host.LiveTerminals(context.Background())
+	live := m.registry.host.LiveTerminals(context.Background())
 	for _, terminal := range shown {
 		if _, ok := live[terminal]; ok {
 			return terminal

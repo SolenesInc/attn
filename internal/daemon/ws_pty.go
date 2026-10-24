@@ -698,7 +698,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 	if userTyped {
 		// Hold the existing timer before the agent can take this input and arm a new one.
 		if sessionID, shown := d.shownIn(terminal); shown {
-			d.monitorEntry(sessionID).HoldAutoSettle()
+			d.sessionMonitor(sessionID).HoldAutoSettle()
 		}
 	}
 	writeErr := d.writeTerminalPTY(context.Background(), terminal, []byte(msg.Data), source)
@@ -727,8 +727,8 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 
 func (d *Daemon) handleTerminalPointerActivity(msg *protocol.TerminalPointerActivityMessage) {
 	sessionID, shown := d.shownIn(msg.ID)
-	if shown && d.monitorEntry(sessionID).NoteActivity() {
-		d.monitorEntry(sessionID).HoldAutoSettle()
+	if shown && d.sessionMonitor(sessionID).NoteActivity() {
+		d.sessionMonitor(sessionID).HoldAutoSettle()
 	}
 }
 

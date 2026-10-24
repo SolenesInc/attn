@@ -133,8 +133,8 @@ func (d *Daemon) publishSessionPullRequestMembershipChanged(prID string, extraSe
 }
 
 func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	if entry := d.monitorEntry(rec.SessionID); entry != nil {
-		if !entry.ReportPullRequest(rec.PRID, sessionmonitor.PullRequest{Repository: rec.Repository, Number: rec.Number, URL: rec.URL}) {
+	if monitor := d.sessionMonitor(rec.SessionID); monitor != nil {
+		if !monitor.ReportPullRequest(rec.PRID, sessionmonitor.PullRequest{Repository: rec.Repository, Number: rec.Number, URL: rec.URL}) {
 			return fmt.Errorf("record pull request %s: monitor view was not applied", rec.PRID)
 		}
 		return nil
@@ -150,7 +150,7 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 }
 
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	if !d.monitorEntry(rec.SessionID).ForgetPullRequest(rec.PRID) {
+	if !d.sessionMonitor(rec.SessionID).ForgetPullRequest(rec.PRID) {
 		return fmt.Errorf("forget pull request %s: the session's monitor could not save it", rec.PRID)
 	}
 	addresses := d.inboxRoleAddresses(rec.SessionID)
@@ -162,7 +162,7 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 		}
 		for _, session := range sessions {
 			if session != rec.SessionID {
-				d.monitorEntry(session).ForgetPullRequest(rec.PRID)
+				d.sessionMonitor(session).ForgetPullRequest(rec.PRID)
 			}
 		}
 		forgotten = forgotten || removed

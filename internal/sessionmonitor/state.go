@@ -93,48 +93,48 @@ func Resolved(cause Cause) bool {
 	return resolved
 }
 
-func (e *Entry) ApplyState(change Change) bool {
-	if e == nil {
+func (m *Monitor) ApplyState(change Change) bool {
+	if m == nil {
 		return false
 	}
 	if _, ok := EffectsOf(change.Cause); !ok {
-		e.logf("state update discarded: session=%s state=%s cause=unknown", e.Label(), change.State)
-		e.TraceChange(change, statetrace.OutcomeDiscarded, "unknown_cause")
+		m.logf("state update discarded: session=%s state=%s cause=unknown", m.Label(), change.State)
+		m.TraceChange(change, statetrace.OutcomeDiscarded, "unknown_cause")
 		return false
 	}
-	e.mu.Lock()
-	accepted := e.changeStateLocked(change.State, change.Cause, change.RequestStartedAt, time.Now())
+	m.mu.Lock()
+	accepted := m.changeStateLocked(change.State, change.Cause, change.RequestStartedAt, time.Now())
 	var view View
 	var endedSnooze time.Time
 	if accepted {
-		e.state.Origin = change.Origin
-		e.state.Cause = CauseName(change.Cause)
+		m.state.Origin = change.Origin
+		m.state.Cause = CauseName(change.Cause)
 		if effects, _ := EffectsOf(change.Cause); effects.Touch {
-			e.touchedAt = time.Now()
+			m.touchedAt = time.Now()
 		}
-		if e.firstReportAt.IsZero() && HarnessReportedState(change.Origin.Source) {
-			e.firstReportAt = time.Now()
+		if m.firstReportAt.IsZero() && HarnessReportedState(change.Origin.Source) {
+			m.firstReportAt = time.Now()
 		}
-		deadline := e.turn.SnoozedUntil
-		e.openTurnLocked(time.Now(), e.policy.QuietNotifications && e.input.stopFollowsNotificationLocked())
-		if !deadline.IsZero() && e.turn.SnoozedUntil.IsZero() {
+		deadline := m.turn.SnoozedUntil
+		m.openTurnLocked(time.Now(), m.policy.QuietNotifications && m.input.stopFollowsNotificationLocked())
+		if !deadline.IsZero() && m.turn.SnoozedUntil.IsZero() {
 			endedSnooze = deadline
 		}
-		e.syncAutoSettleLocked()
-		view = e.viewLocked()
+		m.syncAutoSettleLocked()
+		view = m.viewLocked()
 	}
-	e.mu.Unlock()
-	if !accepted || !e.publish(view) {
-		e.logf("state update discarded: session=%s state=%s cause=%s", e.Label(), change.State, CauseName(change.Cause))
-		e.TraceChange(change, statetrace.OutcomeDiscarded, "store_rejected")
+	m.mu.Unlock()
+	if !accepted || !m.publish(view) {
+		m.logf("state update discarded: session=%s state=%s cause=%s", m.Label(), change.State, CauseName(change.Cause))
+		m.TraceChange(change, statetrace.OutcomeDiscarded, "store_rejected")
 		return false
 	}
-	if !endedSnooze.IsZero() && e.registry.host.Debug() {
+	if !endedSnooze.IsZero() && m.registry.host.Debug() {
 		cause := "broken"
 		if !endedSnooze.After(time.Now()) {
 			cause = "expired"
 		}
-		e.logf("snooze %s: session=%s state=%s reason=%s", cause, e.Label(), change.State, view.State.V.Reason)
+		m.logf("snooze %s: session=%s state=%s reason=%s", cause, m.Label(), change.State, view.State.V.Reason)
 	}
 	return true
 }

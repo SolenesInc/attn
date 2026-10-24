@@ -590,7 +590,7 @@ func (d *Daemon) applyPluginReportedStop(params pluginReportStopParams) {
 
 func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) bool {
 	d.notePluginDriverReport(params.SessionID)
-	if !d.monitorEntry(params.SessionID).ReportDriverMetadata(params.RunID, params.Seq, string(params.Metadata)) {
+	if !d.sessionMonitor(params.SessionID).ReportDriverMetadata(params.RunID, params.Seq, string(params.Metadata)) {
 		d.logf("plugin metadata report discarded: session=%s run=%s seq=%d", params.SessionID, params.RunID, params.Seq)
 		return false
 	}
@@ -601,13 +601,13 @@ func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) 
 }
 
 func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams, path string) {
-	if entry := d.monitorEntry(params.SessionID); entry != nil {
+	if monitor := d.sessionMonitor(params.SessionID); monitor != nil {
 		if session := d.store.Get(params.SessionID); session != nil && transcript.SupportsUsage(session.Agent) {
-			if !d.life.Do("seedPluginUsageBaseline", func() { d.monitorEntry(params.SessionID).SeedDriverUsageBaseline(path) }) {
+			if !d.life.Do("seedPluginUsageBaseline", func() { d.sessionMonitor(params.SessionID).SeedDriverUsageBaseline(path) }) {
 				return
 			}
 		}
-		if !entry.ReportDriverTranscript(params.RunID, path) {
+		if !monitor.ReportDriverTranscript(params.RunID, path) {
 			d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
 		}
 		return
@@ -617,7 +617,7 @@ func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscript
 
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID protocol.SessionID, report pendingPluginReport) bool {
 	var watch *launchWatch
-	queued := d.monitorEntry(sessionID).QueueDuringDriverLaunch(plugin.name, report.runID(), func() { d.replayPluginReport(report) }, func() {
+	queued := d.sessionMonitor(sessionID).QueueDuringDriverLaunch(plugin.name, report.runID(), func() { d.replayPluginReport(report) }, func() {
 		if report.State != nil || report.Stop != nil {
 			watch = d.claimLaunchWatch(sessionID)
 		}
@@ -642,7 +642,7 @@ func (d *Daemon) replayPluginReport(report pendingPluginReport) {
 
 func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info ptybackend.ExitInfo) bool {
 	var watch *launchWatch
-	queued := d.monitorEntry(sessionID).QueueExitDuringDriverLaunch(info, func() {
+	queued := d.sessionMonitor(sessionID).QueueExitDuringDriverLaunch(info, func() {
 		d.logf("deferring plugin PTY exit until launch completes: session=%s run=%s", sessionID, info.LifecycleID)
 		watch = d.claimLaunchWatch(sessionID)
 	})
@@ -655,7 +655,7 @@ func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info 
 }
 
 func (d *Daemon) finishPluginSessionLaunch(sessionID protocol.SessionID, success bool) *ptybackend.ExitInfo {
-	replays, exit := d.monitorEntry(sessionID).FinishDriverLaunch()
+	replays, exit := d.sessionMonitor(sessionID).FinishDriverLaunch()
 	if !success {
 		return nil
 	}
@@ -666,7 +666,7 @@ func (d *Daemon) finishPluginSessionLaunch(sessionID protocol.SessionID, success
 }
 
 func (d *Daemon) abortPluginSessionLaunch(sessionID protocol.SessionID, reason string) {
-	plugin, run, launching := d.monitorEntry(sessionID).AbortDriverLaunch()
+	plugin, run, launching := d.sessionMonitor(sessionID).AbortDriverLaunch()
 	if !launching {
 		return
 	}
@@ -697,7 +697,7 @@ func (d *Daemon) closePluginDriverSession(sessionID protocol.SessionID, reason s
 		d.logf("plugin session close skipped: session=%s reason=%s has no active driver run", sessionID, reason)
 		return
 	}
-	d.monitorEntry(sessionID).ResolveSoon()
+	d.sessionMonitor(sessionID).ResolveSoon()
 	d.notifyPluginDriverSessionClosed(run.PluginName, d.primaryTerminal(sessionID), run.RunID, reason, exitCode, signal)
 }
 

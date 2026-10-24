@@ -1582,7 +1582,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	if d.queueExitDuringPluginLaunch(sessionID, info) {
 		return false
 	}
-	if d.monitorEntry(sessionID).SupersededExitDuringDriverLaunch(info) {
+	if d.sessionMonitor(sessionID).SupersededExitDuringDriverLaunch(info) {
 		if activeRun := d.store.GetAgentDriverRun(sessionID); activeRun.RunID == info.LifecycleID {
 			d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
 		}
@@ -1625,8 +1625,8 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 }
 
 func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, info ptybackend.ExitInfo, stopped bool, unlockEnds func()) {
-	d.monitorEntry(sessionID).FenceInput()
-	d.monitorEntry(sessionID).StopTranscriptWatchers()
+	d.sessionMonitor(sessionID).FenceInput()
+	d.sessionMonitor(sessionID).StopTranscriptWatchers()
 	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
 	d.noteLaunchExited(sessionID, info)
 
@@ -1643,7 +1643,7 @@ func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, info ptybackend.
 		ExitCode: info.ExitCode,
 		Signal:   info.Signal,
 	})
-	d.monitorEntry(sessionID).RecordProcessExit()
+	d.sessionMonitor(sessionID).RecordProcessExit()
 	d.broadcastSessionStateChanged(sessionID)
 	if info.ExitCode == 0 && info.Signal == "" && !stopped && d.sessionCloseError(sessionID) == nil {
 		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
@@ -1732,13 +1732,13 @@ func (t *sessionTeardown) releaseLifecycle() {
 func (d *Daemon) terminateSession(sessionID protocol.SessionID, sig syscall.Signal) {
 	if err := d.terminateSessionChecked(sessionID, sig); err != nil {
 		d.logf("session teardown failed for %s: requested=%s error=%v", sessionID, signalName(sig), err)
-		d.monitorEntry(sessionID).MarkForcedStop()
+		d.sessionMonitor(sessionID).MarkForcedStop()
 		if d.store != nil {
 			if markErr := d.store.MarkSessionIntentionalClose(sessionID, time.Now()); markErr != nil {
 				d.logf("session teardown intent failed for %s: %v", sessionID, markErr)
 			}
 		}
-		d.monitorEntry(sessionID).StopTranscriptWatchers()
+		d.sessionMonitor(sessionID).StopTranscriptWatchers()
 		if d.ptyBackend != nil {
 			for _, terminal := range d.terminalsOf(sessionID) {
 				_ = d.ptyBackend.Remove(context.Background(), terminal)
@@ -1748,7 +1748,7 @@ func (d *Daemon) terminateSession(sessionID protocol.SessionID, sig syscall.Sign
 }
 
 func (d *Daemon) markSessionTerminationIntent(sessionID protocol.SessionID) error {
-	d.monitorEntry(sessionID).MarkForcedStop()
+	d.sessionMonitor(sessionID).MarkForcedStop()
 	if d.store != nil {
 		if err := d.store.MarkSessionIntentionalClose(sessionID, time.Now()); err != nil {
 			return err
@@ -1762,7 +1762,7 @@ func (d *Daemon) terminateSessionChecked(sessionID protocol.SessionID, sig sysca
 		return err
 	}
 	if err := d.terminateSessionRuntimeChecked(sessionID, d.terminalsOf(sessionID), sig); err != nil {
-		d.monitorEntry(sessionID).ClearForcedStop()
+		d.sessionMonitor(sessionID).ClearForcedStop()
 		if d.store != nil {
 			d.store.ClearSessionIntentionalClose(sessionID)
 		}
@@ -1774,7 +1774,7 @@ func (d *Daemon) terminateSessionChecked(sessionID protocol.SessionID, sig sysca
 
 func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, terminals []harness.TerminalID, sig syscall.Signal) error {
 	if d.ptyBackend == nil {
-		d.monitorEntry(sessionID).StopTranscriptWatchers()
+		d.sessionMonitor(sessionID).StopTranscriptWatchers()
 		return nil
 	}
 	for _, terminal := range terminals {
@@ -1787,7 +1787,7 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, te
 			return err
 		}
 	}
-	d.monitorEntry(sessionID).StopTranscriptWatchers()
+	d.sessionMonitor(sessionID).StopTranscriptWatchers()
 	for _, terminal := range terminals {
 		if err := d.ptyBackend.Remove(context.Background(), terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -1805,21 +1805,21 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
 		}
 	}
-	entry := d.monitorEntry(sessionID)
-	entry.MarkForcedStop()
-	retired := entry.EndDriverRun()
+	monitor := d.sessionMonitor(sessionID)
+	monitor.MarkForcedStop()
+	retired := monitor.EndDriverRun()
 	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID),
 		store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence}, time.Now())
 	if err != nil {
-		entry.ClearForcedStop()
+		monitor.ClearForcedStop()
 		if retired.Run != "" {
-			entry.RestoreDriverRun(retired)
+			monitor.RestoreDriverRun(retired)
 		}
 		lifecycleLock.Unlock()
 		return nil, err
 	}
 	pausepoint.At(pausepoint.SessionTeardownPrepared)
-	entry.RetireDriver(driverRun.RunID)
+	monitor.RetireDriver(driverRun.RunID)
 	return &sessionTeardown{session: session, terminals: d.terminalsOf(sessionID), driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
@@ -1829,9 +1829,9 @@ func (d *Daemon) commitSessionUnregister(sessionID protocol.SessionID, closed st
 
 func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *sessionTeardown) {
 	defer teardown.releaseLifecycle()
-	d.monitorEntry(sessionID).ClearForcedStop()
+	d.sessionMonitor(sessionID).ClearForcedStop()
 	if run := d.store.SessionTeardownDriverRun(sessionID); run.RunID != "" {
-		d.monitorEntry(sessionID).RestoreDriverRun(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
+		d.sessionMonitor(sessionID).RestoreDriverRun(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
 	}
 	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
 		d.logf("cancel session teardown failed for %s: %v", sessionID, err)
@@ -1968,10 +1968,10 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
 	}
-	defer d.monitorEntry(sessionID).FinishUsage()()
+	defer d.sessionMonitor(sessionID).FinishUsage()()
 	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
 	d.clearSnoozeState(sessionID)
-	d.monitorEntry(sessionID).FenceInput()
+	d.sessionMonitor(sessionID).FenceInput()
 	closure, err := commit()
 	if err != nil {
 		d.logf("close session %s: %v", sessionID, err)
@@ -2003,7 +2003,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	}
 	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
 	d.clearSnoozeState(sessionID)
-	d.monitorEntry(sessionID).FenceInput()
+	d.sessionMonitor(sessionID).FenceInput()
 	closedAsks := d.store.Remove(sessionID)
 	for _, terminal := range terminals {
 		d.forgetTerminalTitle(terminal)
@@ -2021,7 +2021,7 @@ func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation
 	}
 	state := obs.Claim
 	origin := sessionmonitor.Origin{Source: string(obs.Source), Detail: obs.Detail, ObservedAt: obs.At}
-	evidenceChanged := d.monitorEntry(sessionID).RecordPTY(obs)
+	evidenceChanged := d.sessionMonitor(sessionID).RecordPTY(obs)
 	if !obs.Source.ClaimsProtocolState() {
 		if evidenceChanged {
 			d.traceStateEvidence(sessionID, origin, state)
@@ -2816,20 +2816,20 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	d.logf("hook evidence: id=%s state=%s", sessionID, msg.State)
 	d.tracePermissionMode(sessionID, protocol.Deref(msg.PermissionMode))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHook}, msg.State)
-	d.monitorEntry(sessionID).RecordBracket(msg.State)
+	d.sessionMonitor(sessionID).RecordBracket(msg.State)
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
 		typed := d.observePromptSubmitted(sessionID, time.Now())
-		entry, prompt := d.monitorEntry(sessionID), protocol.Deref(msg.Prompt)
-		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { entry.TitleFromPrompt(prompt, typed) })
+		monitor, prompt := d.sessionMonitor(sessionID), protocol.Deref(msg.Prompt)
+		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { monitor.TitleFromPrompt(prompt, typed) })
 	}
 	d.touchSession(sessionID)
 	d.sendOK(conn)
 }
 
 func (d *Daemon) persistResumeSessionID(sessionID protocol.SessionID, resumeSessionID string) {
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		entry.ObserveResumeID(resumeSessionID)
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		monitor.ObserveResumeID(resumeSessionID)
 		return
 	}
 	if _, err := d.store.TransitionSessionResumeID(sessionID, resumeSessionID); err != nil {
@@ -2847,12 +2847,12 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	}
 	d.logf("handleStop: session=%s, transcript_path=%s", sessionID, msg.TranscriptPath)
 
-	relaxBackgroundWork := d.monitorEntry(sessionID).Policy().ChiefOfStaff
-	classifies := !d.monitorEntry(sessionID).ConsumeForcedStop()
+	relaxBackgroundWork := d.sessionMonitor(sessionID).Policy().ChiefOfStaff
+	classifies := !d.sessionMonitor(sessionID).ConsumeForcedStop()
 	if classifies {
-		d.monitorEntry(sessionID).CancelAutoSettle("stop judged")
+		d.sessionMonitor(sessionID).CancelAutoSettle("stop judged")
 	}
-	d.monitorEntry(sessionID).RecordStopFacts(!relaxBackgroundWork && hasActiveBackgroundTask(msg), hasPendingSessionCron(msg))
+	d.sessionMonitor(sessionID).RecordStopFacts(!relaxBackgroundWork && hasActiveBackgroundTask(msg), hasPendingSessionCron(msg))
 	if stopIsNonTerminal(msg, relaxBackgroundWork) {
 		tasks := describeBackgroundTasks(msg)
 		d.logf(
@@ -2873,12 +2873,12 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			Yielded:                true,
 			RunningBackgroundTasks: runningBackgroundTaskCount(msg),
 		}
-		entry := d.monitorEntry(sessionID)
-		d.life.Go("classifyStop", func() { entry.ClassifyStop(msg.TranscriptPath, classification) })
+		monitor := d.sessionMonitor(sessionID)
+		d.life.Go("classifyStop", func() { monitor.ClassifyStop(msg.TranscriptPath, classification) })
 		return
 	}
 
-	d.monitorEntry(sessionID).RecordTurnEnded(classifies)
+	d.sessionMonitor(sessionID).RecordTurnEnded(classifies)
 
 	d.observeStoppedConversation(sessionID, msg.TranscriptPath)
 	d.touchSession(sessionID)
@@ -2889,9 +2889,9 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	entry := d.monitorEntry(sessionID)
-	d.life.Go("classifySessionState", func() { entry.ClassifyStop(msg.TranscriptPath, sessionmonitor.StopClassification{}) })
-	d.life.Go("maybeGenerateSessionTitle", func() { d.monitorEntry(sessionID).TitleFromTranscript(msg.TranscriptPath) })
+	monitor := d.sessionMonitor(sessionID)
+	d.life.Go("classifySessionState", func() { monitor.ClassifyStop(msg.TranscriptPath, sessionmonitor.StopClassification{}) })
+	d.life.Go("maybeGenerateSessionTitle", func() { d.sessionMonitor(sessionID).TitleFromTranscript(msg.TranscriptPath) })
 }
 
 func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transcriptPath string) {
@@ -2938,7 +2938,7 @@ func (d *Daemon) resolveTranscriptPathForSession(session *protocol.Session, tran
 		}
 	}
 
-	if watched := d.monitorEntry(session.ID).LiveTranscriptPath(session.Agent); watched != "" {
+	if watched := d.sessionMonitor(session.ID).LiveTranscriptPath(session.Agent); watched != "" {
 		return watched
 	}
 
@@ -3775,8 +3775,8 @@ func (d *Daemon) monitorBranches() {
 
 func (d *Daemon) checkAllBranches() {
 	d.coalesceSnapshots(func() {
-		for _, entry := range d.monitors().each() {
-			entry.CheckBranch()
+		for _, monitor := range d.monitors().each() {
+			monitor.CheckBranch()
 		}
 	})
 }
