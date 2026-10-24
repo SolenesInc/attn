@@ -7,19 +7,20 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAPlotSharesItsChecksWithEverySeedBelowIt(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner", "builder")
-		plot := checksPlot(t, cli, "planner")
-		inner := gardenNudgePlant(t, cli, "planner", "inner plot", plot.Crown.ID)
-		innerLeaf := gardenNudgePlant(t, cli, "planner", "inner leaf", inner)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner", "builder")
+		plot := checksPlot(t, cli, sessions["planner"])
+		inner := gardenNudgePlant(t, cli, sessions["planner"], "inner plot", plot.Crown.ID)
+		innerLeaf := gardenNudgePlant(t, cli, sessions["planner"], "inner leaf", inner)
 		harvested := plot.Children[1].ID
-		gardenNudgeMove(t, cli, "builder", harvested, "harvest")
+		gardenNudgeMove(t, cli, sessions["builder"], harvested, "harvest")
 
 		daemonChild := checksShow(t, cli, plot.Children[0].ID)
 		if got := checkIDsFrom(daemonChild.Checks); !slices.Equal(got, []string{"C1", "C5@" + plot.Crown.ID}) {
@@ -53,10 +54,10 @@ func TestAPlotSharesItsChecksWithEverySeedBelowIt(t *testing.T) {
 }
 
 func TestEachCheckMoveChangesItsStateAndWritesOneCheckNote(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner", "builder", "reviewer")
-		plot := checksPlot(t, cli, "planner")
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner", "builder", "reviewer")
+		plot := checksPlot(t, cli, sessions["planner"])
 		seed := plot.Children[0].ID
 
 		steps := []struct {
@@ -67,14 +68,14 @@ func TestEachCheckMoveChangesItsStateAndWritesOneCheckNote(t *testing.T) {
 			verdict string
 			note    string
 		}{
-			{"builder", checkMove(seed, "C1", "report", "wire tests pass"), "reported", true, "", "C1 reported: wire tests pass"},
-			{"reviewer", checkMove(seed, "C1", "confirm", ""), "confirmed", true, "confirmed", "C1 confirmed"},
-			{"builder", checkMove(seed, "C1", "report", "a second run"), "reported", true, "", "C1 reported: a second run"},
-			{"reviewer", checkMove(seed, "C1", "reject", "cite the run on the head"), "rejected", true, "rejected", "C1 rejected: cite the run on the head"},
-			{"reviewer", checkMove(seed, "C1", "uncheck", ""), "reported", true, "", "C1 unchecked"},
-			{"reviewer", checkMove(seed, "C1", "reopen", ""), "open", false, "", "C1 reopened"},
-			{"reviewer", checkMove(seed, "C5", "confirm", "seen it myself"), "confirmed", false, "confirmed", "C5 confirmed, no report: seen it myself"},
-			{"reviewer", checkMove(plot.Children[1].ID, "C5", "reject", "show the run"), "rejected", false, "rejected", "C5 rejected, no report: show the run"},
+			{sessions["builder"], checkMove(seed, "C1", "report", "wire tests pass"), "reported", true, "", "C1 reported: wire tests pass"},
+			{sessions["reviewer"], checkMove(seed, "C1", "confirm", ""), "confirmed", true, "confirmed", "C1 confirmed"},
+			{sessions["builder"], checkMove(seed, "C1", "report", "a second run"), "reported", true, "", "C1 reported: a second run"},
+			{sessions["reviewer"], checkMove(seed, "C1", "reject", "cite the run on the head"), "rejected", true, "rejected", "C1 rejected: cite the run on the head"},
+			{sessions["reviewer"], checkMove(seed, "C1", "uncheck", ""), "reported", true, "", "C1 unchecked"},
+			{sessions["reviewer"], checkMove(seed, "C1", "reopen", ""), "open", false, "", "C1 reopened"},
+			{sessions["reviewer"], checkMove(seed, "C5", "confirm", "seen it myself"), "confirmed", false, "confirmed", "C5 confirmed, no report: seen it myself"},
+			{sessions["reviewer"], checkMove(plot.Children[1].ID, "C5", "reject", "show the run"), "rejected", false, "rejected", "C5 rejected, no report: show the run"},
 		}
 		for _, step := range steps {
 			step.move.SourceSessionID = protocol.Ptr(protocol.SessionID(step.session))
@@ -111,10 +112,10 @@ func TestEachCheckMoveChangesItsStateAndWritesOneCheckNote(t *testing.T) {
 }
 
 func TestPlotProgressCountsEveryCheckOnceByState(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner")
-		plot := checksPlot(t, cli, "planner")
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		plot := checksPlot(t, cli, sessions["planner"])
 		daemonChild, appChild := plot.Children[0].ID, plot.Children[1].ID
 		checkMoveOK(t, cli, checkMove(daemonChild, "C1", "report", "pass"))
 		checkMoveOK(t, cli, checkMove(daemonChild, "C5", "confirm", ""))
@@ -125,7 +126,7 @@ func TestPlotProgressCountsEveryCheckOnceByState(t *testing.T) {
 		if progress == nil || progress.Checks == nil || *progress.Checks != want {
 			t.Errorf("plot progress = %+v, want checks %+v", progress, want)
 		}
-		plain, err := cli.SeedPlot("planner", "", protocol.SeedPlotMessage{Title: "no checks", Children: []protocol.SeedPlotChild{{Title: "a"}}})
+		plain, err := cli.SeedPlot(protocol.SessionID(sessions["planner"]), "", protocol.SeedPlotMessage{Title: "no checks", Children: []protocol.SeedPlotChild{{Title: "a"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -136,10 +137,10 @@ func TestPlotProgressCountsEveryCheckOnceByState(t *testing.T) {
 }
 
 func TestACheckIDNamesOneStatementInAPlotTree(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner")
-		plot := checksPlot(t, cli, "planner")
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		plot := checksPlot(t, cli, sessions["planner"])
 		appChild := plot.Children[1].ID
 
 		add := checkMove(appChild, "C1", "add", "")
@@ -176,11 +177,11 @@ func TestACheckIDNamesOneStatementInAPlotTree(t *testing.T) {
 }
 
 func TestEvidenceNamesASeedArtifactOrAURL(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner")
-		seed := checksPlot(t, cli, "planner").Children[0].ID
-		if _, err := cli.SeedNote("planner", seed, "", "", "attach", false, &protocol.SeedArtifactReference{
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
+		if _, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "", "", "attach", false, &protocol.SeedArtifactReference{
 			Kind: "markdown_file", Path: protocol.Ptr("docs/proof.md"),
 		}); err != nil {
 			t.Fatal(err)
@@ -203,10 +204,10 @@ func TestEvidenceNamesASeedArtifactOrAURL(t *testing.T) {
 }
 
 func TestACheckLimitRefusalNamesTheLimitAndTheAsk(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner")
-		seed := checksPlot(t, cli, "planner").Children[0].ID
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
 		report := checkMove(seed, "C1", "report", strings.Repeat("x", 401))
 		_, err := cli.SeedCheck(report)
 		lifeRefusal(t, "a 401-character summary", err, "max_check_summary_chars=400", "401")
@@ -214,85 +215,85 @@ func TestACheckLimitRefusalNamesTheLimitAndTheAsk(t *testing.T) {
 }
 
 func TestARungCheckMoveNamesItsAudienceAndTheMoveInTheInbox(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner", "builder", "reviewer", "watcher")
-		plot := checksPlot(t, cli, "planner")
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner", "builder", "reviewer", "watcher")
+		plot := checksPlot(t, cli, sessions["planner"])
 		seed := plot.Children[0].ID
-		gardenNudgeWatch(t, cli, "watcher", seed, false)
+		gardenNudgeWatch(t, cli, sessions["watcher"], seed, false)
 
 		reject := checkMove(seed, "C1", "reject", "cite the run on the head")
-		reject.SourceSessionID = protocol.Ptr(protocol.SessionID("reviewer"))
+		reject.SourceSessionID = protocol.Ptr(protocol.SessionID(sessions["reviewer"]))
 		quiet := checkMoveOK(t, cli, reject)
 		w.advance(0)
-		gardenNudgeInboxIsEmpty(t, cli, "watcher", "after a check move without --ring")
+		gardenNudgeInboxIsEmpty(t, cli, sessions["watcher"], "after a check move without --ring")
 		if quiet.RingRecipients != nil {
 			t.Errorf("a move without --ring names recipients %v, want none", quiet.RingRecipients)
 		}
 
-		gardenNudgeWatch(t, cli, "reviewer", seed, false)
+		gardenNudgeWatch(t, cli, sessions["reviewer"], seed, false)
 		reject.Ring = protocol.Ptr(true)
 		reject.Member = protocol.Ptr("keel")
 		rung := checkMoveOK(t, cli, reject)
 		w.advance(0)
-		if !slices.Equal(rung.RingRecipients, []string{"watcher"}) {
+		if !slices.Equal(rung.RingRecipients, []string{sessions["watcher"]}) {
 			t.Errorf("the rung move's recipients = %v, want the watcher and not the reviewer who made it", rung.RingRecipients)
 		}
-		gardenNudgeOneBell(t, cli, "watcher", seed, "check C1 rejected by keel")
-		gardenNudgeInboxIsEmpty(t, cli, "reviewer", "after its own rung move as a member")
+		gardenNudgeOneBell(t, cli, sessions["watcher"], seed, "check C1 rejected by keel")
+		gardenNudgeInboxIsEmpty(t, cli, sessions["reviewer"], "after its own rung move as a member")
 
 		lonely := plot.Children[1].ID
-		gardenNudgeMove(t, cli, "builder", lonely, "harvest")
+		gardenNudgeMove(t, cli, sessions["builder"], lonely, "harvest")
 		lonelyReject := checkMove(lonely, "C2", "reject", "no recording")
-		lonelyReject.SourceSessionID = protocol.Ptr(protocol.SessionID("reviewer"))
+		lonelyReject.SourceSessionID = protocol.Ptr(protocol.SessionID(sessions["reviewer"]))
 		lonelyReject.Ring = protocol.Ptr(true)
 		if got := checkMoveOK(t, cli, lonelyReject).RingRecipients; len(got) != 0 {
 			t.Errorf("a rung move on a harvested seed with no watcher names %v, want nobody", got)
 		}
 
-		noted, err := cli.SeedNote("reviewer", seed, "please look", "", "", true, nil)
+		noted, err := cli.SeedNote(protocol.SessionID(sessions["reviewer"]), seed, "please look", "", "", true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !slices.Equal(noted.RingRecipients, []string{"watcher"}) {
+		if !slices.Equal(noted.RingRecipients, []string{sessions["watcher"]}) {
 			t.Errorf("a rung note's recipients = %v, want the watcher", noted.RingRecipients)
 		}
 	})
 }
 
 func TestAPlainNoteCitingACheckSaysSo(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner")
-		seed := checksPlot(t, cli, "planner").Children[0].ID
-		cited, err := cli.SeedNote("planner", seed, "C1 done and C5 too; C7 is elsewhere", "", "", false, nil)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
+		cited, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C1 done and C5 too; C7 is elsewhere", "", "", false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if !slices.Equal(cited.CitedChecks, []string{"C1", "C5"}) {
 			t.Errorf("the note cites %v, want the effective C1 and C5", cited.CitedChecks)
 		}
-		other, err := cli.SeedNote("planner", seed, "C6 is the plot's, not this seed's", "", "", false, nil)
+		other, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C6 is the plot's, not this seed's", "", "", false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(other.CitedChecks) != 0 {
 			t.Errorf("a note citing a check the seed does not prove cites %v, want none", other.CitedChecks)
 		}
-		_, err = cli.SeedNote("planner", seed, "C1 confirmed", "", "check", false, nil)
+		_, err = cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C1 confirmed", "", "check", false, nil)
 		lifeRefusal(t, "seed_note with the check kind", err, "attn seed check")
 	})
 }
 
 func TestAReportReachesTheAppWithTheSeedAndItsPlot(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner")
-		plot := checksPlot(t, cli, "planner")
-		bystander := plantSeedAs(t, cli, "planner", "no checks here")
-		app := w.App()
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		plot := checksPlot(t, cli, sessions["planner"])
+		bystander := plantSeedAs(t, cli, sessions["planner"], "no checks here")
+		viewer := w.App()
 		before := map[string]protocol.Seed{}
-		for _, seed := range app.Initial.Seeds {
+		for _, seed := range viewer.Initial.Seeds {
 			before[seed.ID] = seed
 		}
 		if seed := before[bystander]; seed.Checks != nil || seed.SharedChecks != nil {
@@ -307,7 +308,7 @@ func TestAReportReachesTheAppWithTheSeedAndItsPlot(t *testing.T) {
 		}
 
 		checkMoveOK(t, cli, checkMove(plot.Children[0].ID, "C5", "report", "green"))
-		changed := testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		changed := testworld.Await(viewer, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
 			return len(m.Seeds) > 0
 		})
 		seeds := map[string]protocol.Seed{}
@@ -331,15 +332,23 @@ func TestAReportReachesTheAppWithTheSeedAndItsPlot(t *testing.T) {
 }
 
 func TestHarvestIgnoresOpenChecksAndCarriesThem(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner", "builder")
-		seed := checksPlot(t, cli, "planner").Children[0].ID
-		harvested := gardenNudgeMove(t, cli, "builder", seed, "harvest")
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner", "builder")
+		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
+		harvested := gardenNudgeMove(t, cli, sessions["builder"], seed, "harvest")
 		if harvested.Seed.Status != "harvested" || len(harvested.Seed.Checks) != 2 || checkByID(harvested.Seed.Checks, "C1").State != "open" {
 			t.Errorf("harvest with open checks = %s with checks %+v, want harvested carrying both open checks", harvested.Seed.Status, harvested.Seed.Checks)
 		}
 	})
+}
+
+func spawnCheckSessions(w *world, app *testworld.Peer, names ...string) map[string]string {
+	sessions := map[string]string{}
+	for _, name := range names {
+		sessions[name] = w.Spawn(app, fakeagent.Claude, w.Path(name))
+	}
+	return sessions
 }
 
 func checksPlot(t *testing.T, cli *client.Client, planner string) *protocol.SeedPlotResult {
@@ -414,10 +423,10 @@ func rollupState(shared protocol.SeedSharedCheck, seedID string) string {
 }
 
 func TestTheAppConfirmsACheckOverTheWebSocket(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "planner")
-		seed := checksPlot(t, cli, "planner").Children[0].ID
+		sessions := spawnCheckSessions(w, app, "planner")
+		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
 
 		confirmed := testworld.Request(app, protocol.SeedCheckMessage{
 			Cmd: protocol.CmdSeedCheck, RequestID: protocol.Ptr("confirm"), SeedID: seed, CheckID: "C1", Verb: "confirm",
@@ -435,10 +444,10 @@ func TestTheAppConfirmsACheckOverTheWebSocket(t *testing.T) {
 }
 
 func TestAnInheritedResultAnswersOnlyThePlotThatDefinedIt(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planner")
-		first := checksPlot(t, cli, "planner")
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		first := checksPlot(t, cli, sessions["planner"])
 		leaf := first.Children[1].ID
 		checkMoveOK(t, cli, checkMove(leaf, "C5", "confirm", "seen it"))
 
