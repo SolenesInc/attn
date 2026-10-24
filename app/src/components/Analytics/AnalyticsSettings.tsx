@@ -108,7 +108,7 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
   };
 
   return (
-    <section ref={rootRef} className="settings-block analytics" data-testid="settings-analytics" role="region" aria-label="Analytics" tabIndex={-1} onKeyDown={onKeyDown}>
+    <section ref={rootRef} className="settings-block analytics" data-testid="settings-analytics" aria-label="Analytics" tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="analytics-strip">
         <Stat label="Recording" value="On" />
         <Stat label="Sharing" value="Off" dim />

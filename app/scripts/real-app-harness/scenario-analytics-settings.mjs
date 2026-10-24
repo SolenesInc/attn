@@ -112,8 +112,7 @@ try {
     await press('m');
   });
   await runner.step('idle_page_is_still', async () => {
-    const before = await text(page);
-    const { animations } = await client.request('dom_bounds', { selector: page });
+    const [before, { animations }] = await Promise.all([text(page), client.request('dom_bounds', { selector: page })]);
     await delay(IDLE_MS);
     runner.assert(animations.length === 0, 'no animation runs on the open page', animations);
     runner.assert((await text(page)) === before, `the page did not change in ${IDLE_MS}ms idle`, { before });
