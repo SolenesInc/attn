@@ -1,0 +1,3 @@
+kind: internal
+area: terminals
+change: Terminal commands reach their machine work through one router, with placement declared in the protocol schema, so a later change can run them on an outpost.
