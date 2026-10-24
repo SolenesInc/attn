@@ -4,5 +4,6 @@ change: >
   With Usage analytics on, Settings › System › Analytics shows what attn records
   on this machine. Agents' vents come first, new then done, each with its
   context; from the keyboard you can open the session or its transcript, plant
-  a seed from a vent, dismiss it and undo. The record lists show every stored
-  row by stream, exactly as stored.
+  a seed from a vent, dismiss it, and undo either. The record lists show every
+  stored row by stream, exactly as stored, and Machine settings shows how much
+  is kept and clears it.
