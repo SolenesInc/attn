@@ -50,6 +50,28 @@ func TestEveryAllowlistedFieldIsInARealPayloadShape(t *testing.T) {
 	}
 }
 
+func TestNoRealPayloadUsesAKeyTheDerivedTraitsTakeInProps(t *testing.T) {
+	var reserved map[string]json.RawMessage
+	derived, err := json.Marshal(analytics.Derived{Session: &analytics.SessionTraits{}, Repo: &analytics.RepoTraits{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(derived, &reserved); err != nil {
+		t.Fatal(err)
+	}
+	for name, payload := range loadPayloadShapes(t) {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(payload, &fields) != nil {
+			continue
+		}
+		for key := range reserved {
+			if _, taken := fields[key]; taken {
+				t.Errorf("%s has a top-level %q field, which Props overwrites with derived traits", name, key)
+			}
+		}
+	}
+}
+
 func TestRedactShipsNoTextOutsideTheAllowlist(t *testing.T) {
 	for _, tc := range []struct {
 		payload, want string

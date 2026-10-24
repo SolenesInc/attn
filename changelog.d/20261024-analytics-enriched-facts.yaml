@@ -1,0 +1,8 @@
+kind: added
+area: settings
+change: >
+  With Usage analytics on, session events in the local record also say which
+  harness and model the session runs, how it was launched (by you, a
+  delegation, an automation, a crew member or the chief) and its state, and
+  session and worktree events say whether the repository has an AGENTS.md, is
+  a worktree and has a remote. Repository names and paths are never recorded.

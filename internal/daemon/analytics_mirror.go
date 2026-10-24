@@ -1,16 +1,22 @@
 package daemon
 
 import (
+	"cmp"
 	"context"
 	"strings"
 
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 const (
 	analyticsMirrorConsumer = "analytics-mirror"
 	ventFactPrefix          = "vent."
+	sessionFactPrefix       = "session."
+	worktreeFactPrefix      = "worktree."
 )
 
 func (d *Daemon) startAnalyticsMirror(secret []byte) error {
@@ -28,11 +34,75 @@ func (d *Daemon) startAnalyticsMirror(secret []byte) error {
 			Subject: analytics.HashSubject(secret, ev.Subject),
 			At:      ev.CreatedAt,
 			Bytes:   len(ev.Payload),
-			Props:   analytics.Redact(ev.Payload, analytics.SafeValues[ev.Name]),
+			Props:   analytics.Props(ev.Payload, analytics.SafeValues[ev.Name], d.derivedFactTraits(ev)),
 		})
 	})
 }
 
 func (d *Daemon) stopAnalyticsMirror() error {
 	return d.eventBus.Unregister(analyticsMirrorConsumer)
+}
+
+func (d *Daemon) derivedFactTraits(ev bus.Event) analytics.Derived {
+	switch {
+	case strings.HasPrefix(ev.Name, sessionFactPrefix):
+		session := d.store.Get(protocol.SessionID(ev.Subject))
+		if session == nil {
+			return analytics.Derived{}
+		}
+		intent, _ := d.store.LaunchIntent(session.ID)
+		return analytics.Derived{
+			Session: &analytics.SessionTraits{
+				Harness: session.Agent,
+				Model:   cmp.Or(d.leadingAgentModel(session), intent.Model),
+				Launch:  d.sessionLaunch(session.ID, intent),
+				State:   string(session.State),
+			},
+			Repo: repoTraits(session.Directory),
+		}
+	case strings.HasPrefix(ev.Name, worktreeFactPrefix):
+		return analytics.Derived{Repo: repoTraits(ev.Subject)}
+	default:
+		return analytics.Derived{}
+	}
+}
+
+func (d *Daemon) leadingAgentModel(session *protocol.Session) string {
+	clone := cloneSession(session)
+	d.decorateSessionWithCost(clone)
+	if clone.Usage == nil {
+		return ""
+	}
+	leading, most := "", -1
+	for _, row := range clone.Usage.Models {
+		if row.Purpose == "agent" && row.TotalTokens > most {
+			leading, most = row.Model, row.TotalTokens
+		}
+	}
+	return leading
+}
+
+func (d *Daemon) sessionLaunch(id protocol.SessionID, intent store.LaunchIntent) analytics.Launch {
+	switch {
+	case intent.ChiefOfStaff:
+		return analytics.LaunchChief
+	case d.crewMemberBoundTo(id) != "":
+		return analytics.LaunchCrew
+	case d.automationProvenanceForSession(id) != nil:
+		return analytics.LaunchAutomation
+	case d.store.SessionDelegated(id):
+		return analytics.LaunchDelegation
+	}
+	return analytics.LaunchUser
+}
+
+func repoTraits(dir string) *analytics.RepoTraits {
+	if dir == "" {
+		return nil
+	}
+	traits, ok := git.ReadRepoTraits(dir)
+	if !ok {
+		return nil
+	}
+	return &analytics.RepoTraits{AgentsMD: traits.HasAgentsMD, Worktree: traits.IsWorktree, Remote: traits.HasRemote}
 }
