@@ -70,6 +70,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdTaskList:                      decodeInto[TaskListMessage],
 	CmdTaskRetry:                     decodeInto[TaskRetryMessage],
 	CmdNotificationList:              decodeInto[NotificationListMessage],
+	CmdListAnalyticsRecords:          decodeInto[ListAnalyticsRecordsMessage],
 	CmdNotificationMarkRead:          decodeInto[NotificationMarkReadMessage],
 	CmdFsList:                        decodeInto[FsListMessage],
 	CmdFsRead:                        decodeInto[FsReadMessage],

@@ -1231,6 +1231,16 @@ model TaskRetryMessage {
   task_id: string;
 }
 
+// Page the analytics outbox, newest first. before_id is the id of the last row
+// already shown; stream filters to one stream.
+model ListAnalyticsRecordsMessage {
+  cmd: "list_analytics_records";
+  request_id?: string;
+  stream?: string;
+  before_id?: safeint;
+  limit: int32;
+}
+
 // Notifications surface: a global, daemon-level feed of durable notifications.
 // The producer is the task
 // runner, which adds one when a background task reaches terminal `dead`. The
@@ -6754,6 +6764,22 @@ model Notification {
   read_at: string; // "" while unread
 }
 
+// One outbox row: its position and the record JSON exactly as stored and shipped.
+model AnalyticsOutboxRow {
+  id: safeint;
+  record: string;
+}
+
+// Result of list_analytics_records. waiting counts every row not yet sent.
+model ListAnalyticsRecordsResultMessage {
+  event: "list_analytics_records_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  records?: AnalyticsOutboxRow[];
+  waiting: int32;
+}
+
 // Result of notification_list: the whole feed, newest-created first, plus the
 // current unread count so the client can set its badge authoritatively.
 model NotificationListResultMessage {
@@ -7223,6 +7249,7 @@ alias DaemonEvent =
   | SessionReopenResultMessage
   | SessionClosedMessage
   | NotificationListResultMessage
+  | ListAnalyticsRecordsResultMessage
   | NotificationMarkReadResultMessage
   | NotificationsUpdatedMessage
   | SpawnResultMessage

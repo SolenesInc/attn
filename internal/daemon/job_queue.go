@@ -94,6 +94,14 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 				d.logf("bus: register retention-pin alarm tick: %v", err)
 			}
 		}
+		if err := runner.RegisterCron(
+			analyticsPruneKind,
+			analyticsPruneInterval,
+			d.analyticsPruneHandler,
+			jobs.HandlerConfig{Timeout: analyticsPruneTimeout},
+		); err != nil {
+			d.logf("analytics: register outbox prune tick: %v", err)
+		}
 		d.registerCrewLifecycleCron(runner)
 		d.registerSessionPullRequestRefreshCron(runner)
 		d.registerWorktreeSweepCron(runner)

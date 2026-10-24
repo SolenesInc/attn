@@ -636,6 +636,7 @@ func (d *Daemon) Start() error {
 	if d.outpostsEnabled() {
 		d.configureOutposts()
 	}
+	d.configureAnalytics()
 	d.ensureGardenCollections()
 	d.ensureCrewCollections()
 	d.importCrewHomes()

@@ -918,6 +918,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdNotificationList:
 		notifList := msg.(*protocol.NotificationListMessage)
 		d.life.Go("sendNotificationListWSResult", func() { d.sendNotificationListWSResult(client, protocol.Deref(notifList.RequestID)) })
+	case protocol.CmdListAnalyticsRecords:
+		d.life.Go("sendAnalyticsRecordsWSResult", func() { d.sendAnalyticsRecordsWSResult(client, msg.(*protocol.ListAnalyticsRecordsMessage)) })
 	case protocol.CmdNotificationMarkRead:
 		notifMark := msg.(*protocol.NotificationMarkReadMessage)
 		d.life.Go("sendNotificationMarkReadWSResult", func() {

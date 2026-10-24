@@ -373,6 +373,14 @@ type AgentTurnResult struct {
 	Outcome AgentTurnOutcome `json:"outcome"`
 }
 
+type AnalyticsOutboxRow struct {
+	// ID corresponds to the JSON schema field "id".
+	ID int `json:"id"`
+
+	// Record corresponds to the JSON schema field "record".
+	Record string `json:"record"`
+}
+
 type ApprovePRMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -5758,6 +5766,43 @@ type LeafMoved struct {
 
 	// ToLeafID corresponds to the JSON schema field "to_leaf_id".
 	ToLeafID string `json:"to_leaf_id"`
+}
+
+type ListAnalyticsRecordsMessage struct {
+	// BeforeID corresponds to the JSON schema field "before_id".
+	BeforeID *int `json:"before_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Limit corresponds to the JSON schema field "limit".
+	Limit int `json:"limit"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Stream corresponds to the JSON schema field "stream".
+	Stream *string `json:"stream,omitempty,omitzero"`
+}
+
+type ListAnalyticsRecordsResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Records corresponds to the JSON schema field "records".
+	Records []AnalyticsOutboxRow `json:"records,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Waiting corresponds to the JSON schema field "waiting".
+	Waiting int `json:"waiting"`
 }
 
 type ListBranchesMessage struct {
