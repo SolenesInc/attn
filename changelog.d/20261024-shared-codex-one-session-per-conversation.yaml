@@ -1,0 +1,4 @@
+kind: changed
+area: shared codex
+change: Launching Codex on a conversation that an open shared Codex session holds opens that session in a new tile instead of starting a second session on the same conversation.
+notes: The spawn result names the session that holds the conversation. Nothing in attn sends such a launch today; it was only reachable through a raw spawn request over the protocol.

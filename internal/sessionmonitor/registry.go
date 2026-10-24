@@ -8,8 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
-
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -56,7 +54,7 @@ type ClassifyRequest struct {
 type Monitor struct {
 	mu         sync.Mutex
 	terminalID harness.TerminalID
-	runtime    RuntimeID
+	linked     bool
 	terminal   sessionstate.TerminalEvidence
 	entries    map[*Entry]struct{}
 }
@@ -192,10 +190,7 @@ func (r *Registry) Start(previous *Entry, start Start) *Entry {
 		m = start.Candidate.monitor
 	}
 	if m == nil {
-		m = &Monitor{terminalID: start.Terminal, entries: make(map[*Entry]struct{})}
-		if start.Linked {
-			m.runtime = RuntimeID(uuid.NewString())
-		}
+		m = &Monitor{terminalID: start.Terminal, linked: start.Linked, entries: make(map[*Entry]struct{})}
 	}
 	if !start.Linked {
 		r.physical[start.Terminal] = m

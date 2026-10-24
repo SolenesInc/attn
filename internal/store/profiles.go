@@ -48,6 +48,14 @@ type SessionPlacementRequest struct {
 	Title        string
 	Status       profiles.PaneStatus
 	Focus        bool
+	AddsTerminal bool
+}
+
+func (r SessionPlacementRequest) anotherTile(paneID, now string) map[string]string {
+	if !r.AddsTerminal {
+		return nil
+	}
+	return map[string]string{paneID: now}
 }
 
 func firstChildRatio(leafShare float64, leafIsFirst bool) float64 {
@@ -1309,7 +1317,7 @@ func (s *Store) PlaceSession(request SessionPlacementRequest) (profiles.Desktop,
 		if err != nil {
 			return err
 		}
-		return writeCurrentDesktopArrangement(tx, now, &desktop)
+		return writeCurrentArrivingArrangement(tx, now, &desktop, request.anotherTile(paneID, now))
 	})
 	return desktop, paneID, err
 }
@@ -1368,7 +1376,7 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 		if err != nil {
 			return err
 		}
-		return writeCurrentDesktopArrangement(tx, now, &desktop)
+		return writeCurrentArrivingArrangement(tx, now, &desktop, request.anotherTile(paneID, now))
 	})
 	return desktop, paneID, err
 }

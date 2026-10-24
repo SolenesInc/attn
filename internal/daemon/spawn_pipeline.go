@@ -56,6 +56,7 @@ type spawnRequest struct {
 	parentSessionID protocol.SessionID
 	autoModeDriver  bool
 	link            linkRuntime
+	addsTerminal    bool
 }
 
 type spawnPlan struct {
@@ -151,11 +152,14 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	if err != nil {
 		return nil, &spawnRejection{err: err}
 	}
+	addsTerminal := d.addsTerminal(msg, policy)
 	placement := requestedLaunchPlacement(msg.Placement)
 	if policy.launchPlacement != nil || placement == nil {
-		_, placed, err := d.store.SessionPlacement(msg.ID)
-		if err != nil {
-			return nil, &spawnRejection{err: err}
+		placed := false
+		if !addsTerminal {
+			if _, placed, err = d.store.SessionPlacement(msg.ID); err != nil {
+				return nil, &spawnRejection{err: err}
+			}
 		}
 		if !placed {
 			placement = policy.launchPlacement
@@ -166,11 +170,17 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	}
 	if placement != nil {
 		placement.focus = policy.userStarted
+		placement.addsTerminal = addsTerminal
 	}
 	if err := d.checkLaunchPlacement(profile, placement); err != nil {
 		return nil, &spawnRejection{err: err}
 	}
-	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, profile: profile, placement: placement, autoModeDriver: autoModeDriver}, nil
+	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, profile: profile, placement: placement, autoModeDriver: autoModeDriver, addsTerminal: addsTerminal}, nil
+}
+
+func (d *Daemon) addsTerminal(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) bool {
+	conversation := d.linkConversation(msg.ID)
+	return !policy.fromLedger && conversation != "" && protocol.Deref(msg.ResumeSessionID) == conversation
 }
 
 func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejection {
@@ -181,7 +191,7 @@ func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejecti
 	if existing.ProfileID != "" && existing.ProfileID != req.profile.ID {
 		return &spawnRejection{err: fmt.Errorf("session %s belongs to profile %s, not %s; profile ownership cannot change", existing.ID, existing.ProfileID, req.profile.ID)}
 	}
-	if req.placement == nil {
+	if req.placement == nil || req.addsTerminal {
 		return nil
 	}
 	placement, placed, err := d.store.SessionPlacement(existing.ID)
@@ -318,6 +328,9 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 }
 
 func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
+	if req.addsTerminal {
+		return d.executeAddedTerminal(req, plan)
+	}
 	msg := req.msg
 	if req.existingSession != nil && d.sessionLive(context.Background(), msg.ID) {
 		plan.rollback(d, msg.ID)
@@ -479,20 +492,44 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	return &spawnOutcome{}
 }
 
+func (d *Daemon) executeAddedTerminal(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
+	sessionID := req.msg.ID
+	plan.spawnOpts.ID = d.spawnTerminal(req)
+	plan.abandonLink = func() { req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID) }
+	if err := req.link.prepareLaunch(&plan.spawnOpts, req.profile.ID); err != nil {
+		plan.rollback(d, sessionID)
+		return &spawnOutcome{err: err}
+	}
+	if err := d.prepareAgentLaunch(sessionID, plan.spawnOpts.ID, plan.isChief, &plan.spawnOpts, ""); err != nil {
+		plan.rollback(d, sessionID)
+		return &spawnOutcome{err: fmt.Errorf("prepare %s launch: %w", req.agent, err)}
+	}
+	plan.launchSession = req.existingSession
+	if err := d.startTerminalRuntime(plan.spawnOpts); err != nil {
+		plan.rollback(d, sessionID)
+		return &spawnOutcome{err: err}
+	}
+	return &spawnOutcome{}
+}
+
 func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) error {
-	opts.DaemonEnv = d.spawnRoutingEnv()
-	err := d.ptyBackend.Spawn(context.Background(), withLifecycleID(opts))
+	err := d.startTerminalRuntime(opts)
 	if err == nil {
 		d.monitorEntry(sessionID).ResetInput()
 	}
 	return err
 }
 
+func (d *Daemon) startTerminalRuntime(opts ptybackend.SpawnOptions) error {
+	opts.DaemonEnv = d.spawnRoutingEnv()
+	return d.ptyBackend.Spawn(context.Background(), withLifecycleID(opts))
+}
+
 // spawnTerminal picks the terminal a launch runs in before its worker starts: the one a pane already
-// holds for the session, else a new one its pane will record, else the session's own id when unplaced.
+// holds for the session unless the launch adds a terminal, else a new one its pane will record.
 func (d *Daemon) spawnTerminal(req *spawnRequest) harness.TerminalID {
 	session := req.msg.ID
-	if terminal, ok := d.terminals().Primary(session); ok {
+	if terminal, ok := d.terminals().Primary(session); ok && !req.addsTerminal {
 		return terminal
 	}
 
@@ -567,6 +604,9 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		return &spawnOutcome{err: persistErr}
 	}
 	session = current
+	if req.addsTerminal {
+		return d.commitAddedTerminal(req, plan, session)
+	}
 	fact := FactSessionRegistered
 	if req.existingSession != nil {
 		fact = FactSessionReregistered
@@ -618,6 +658,18 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	return &spawnOutcome{}
 }
 
+func (d *Daemon) commitAddedTerminal(req *spawnRequest, plan *spawnPlan, session *protocol.Session) *spawnOutcome {
+	req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
+	if req.placed.err != nil {
+		cleanupErr := errors.Join(d.killSessionRuntime(plan.spawnOpts.ID), d.removeSessionRuntime(plan.spawnOpts.ID))
+		plan.rollback(d, session.ID)
+		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
+	}
+	plan.commit()
+	d.publishFact(FactSessionReregistered, string(session.ID), nil)
+	return &spawnOutcome{}
+}
+
 func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
 	_, rejection := d.runSpawnPipelineReporting(msg, policy)
 	return rejection
@@ -652,6 +704,9 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	if rejection != nil {
 		return placementOutcome{}, rejection
 	}
+	if holder := d.linkHolder(req.profile.ID, protocol.Deref(msg.ResumeSessionID)); holder != "" && holder != msg.ID {
+		return d.showHolderProtected(protection, holder, msg, policy)
+	}
 	releaseSpawnLock := d.acquireSpawnLock(msg.ID)
 	defer releaseSpawnLock()
 
@@ -661,7 +716,7 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	if rejection := d.normalizeSpawnRequest(req); rejection != nil {
 		return placementOutcome{}, rejection
 	}
-	if req.existingSession != nil {
+	if req.existingSession != nil && !req.addsTerminal {
 		req.placed = d.placeAnsweringRequester(req.existingSession, req.placement, req.policy.requester)
 		if req.placed.err != nil {
 			return req.placed, &spawnRejection{err: req.placed.err}
@@ -675,11 +730,24 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	if outcome := d.executeSpawn(req, plan); outcome.err != nil {
 		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	} else if outcome.alreadyLive {
-		return placementOutcome{}, nil
+		return placementOutcome{session: msg.ID}, nil
 	}
 	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
 		d.monitorEntry(msg.ID).ForgetInitialPrompt()
 		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	}
+	req.placed.session = msg.ID
 	return req.placed, nil
+}
+
+func (d *Daemon) showHolderProtected(protection foregroundCleanupProtection, holder protocol.SessionID, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+	spawn, shown, err := d.spawnShowing(holder, msg.Cols, msg.Rows)
+	if err != nil {
+		return placementOutcome{}, &spawnRejection{err: err}
+	}
+	if placement := requestedLaunchPlacement(msg.Placement); placement != nil {
+		shown.launchPlacement = placement
+	}
+	shown.userStarted, shown.requester = policy.userStarted, policy.requester
+	return d.runSpawnPipelineProtected(protection, spawn, shown)
 }
