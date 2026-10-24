@@ -41,8 +41,15 @@ function serveVents(daemon: ScriptedDaemon) {
       { event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents },
     ];
   });
-  daemon.on('seed_plant', () => ({ event: 'seed_plant_result', success: true, seed: daemonSeed('s-planted', { step_slug: 'seed-tend-refused-held-session' }) }));
-  daemon.on('seed_transition', ({ seed_id }) => ({ event: 'seed_transition_result', success: true, seed: daemonSeed(seed_id, { status: 'withdrawn' }) }));
+  daemon.on('plant_vent_seed', ({ vent_id }) => {
+    vents = vents.map((v) => (v.id === vent_id ? { ...v, planted_seed_id: 's-planted' } : v));
+    return [
+      { event: 'plant_vent_seed_result', success: true, vent_id, seed: daemonSeed('s-planted', { step_slug: 'seed-tend-refused-held-session' }) },
+      { event: 'garden_seeds_updated', profile_id: DEFAULT_PROFILE_ID, seeds: [daemonSeed('s-stake1', { step_slug: 'garden-show-stale-bell' }), daemonSeed('s-planted', { step_slug: 'seed-tend-refused-held-session' })], total: 2 },
+      { event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents },
+    ];
+  });
+  daemon.on('get_analytics_status', () => ({ event: 'get_analytics_status_result', success: true, records: 0, bytes: 0, waiting: 0 }));
 }
 
 async function openVents() {
@@ -94,16 +101,14 @@ describe('Settings › Analytics vents', () => {
     expect(screen.getByTestId('analytics-inspector')).toHaveTextContent('`attn seed tend s-f68sja` refused');
   });
 
-  it('plants a seed from the vent with p and withers it on undo', async () => {
+  it('plants a seed from the vent with p and shows the vent done with its seed', async () => {
     const daemon = await openVents();
     await press(daemon, 'p');
-    expect(daemon.sentOf('seed_plant')).toEqual([expect.objectContaining({
-      title: '`attn seed tend s-f68sja` refused: held by a session that ended two hours ago.',
-      body: expect.stringMatching(/^`attn seed tend s-f68sja` refused.*\n\nFrom vent v-new by fix garden bell staleness \(Claude · opus-5\.5\)/s),
-    })]);
+    expect(daemon.sentOf('plant_vent_seed').map(({ vent_id }) => vent_id)).toEqual(['v-new']);
     expect(screen.getByRole('status')).toHaveTextContent('Planted seed-tend-refused-held-session from “fix garden bell staleness”.');
-    await press(daemon, 'u');
-    expect(daemon.sentOf('seed_transition')).toEqual([expect.objectContaining({ seed_id: 's-planted', verb: 'wither' })]);
+    expect(screen.getByRole('list', { name: 'Vents' })).toHaveTextContent(/^Done.*fix garden bell staleness.*seed-tend-refused-held-session/);
+    expect(inspector().getByText('Planted · seed-tend-refused-held-session')).toBeInTheDocument();
+    expect(inspector().queryByRole('button', { name: /Plant seed/ })).toBeNull();
   });
 
   it('opens the transcript with t and the stake seed with g, closing settings', async () => {

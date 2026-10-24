@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import type { AnalyticsRecordPage } from '../hooks/daemonAnalyticsEvents';
+import type { AnalyticsRecordPage, AnalyticsStatus } from '../hooks/daemonAnalyticsEvents';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useVentsStore } from '../store/vents';
-import type { AnalyticsBuild, Vent } from '../types/generated';
+import type { AnalyticsBuild, Seed, Vent } from '../types/generated';
 import { harnessLabel } from './harnessLabel';
 import './EventBusSettings.css';
 import './AnalyticsSettings.css';
@@ -21,7 +21,6 @@ const VIEW_LABEL: Record<View, string> = { vents: 'Vents', all: 'All records', b
 
 const PAGE_SIZE = 200;
 const LONG_VENT_CHARS = 420;
-const SEED_TITLE_CHARS = 100;
 
 interface StoredRecord {
   id: number;
@@ -52,8 +51,7 @@ interface Toast {
   undo?: () => Promise<unknown>;
 }
 
-const isDone = (vent: Vent) => Boolean(vent.dismissed_at || vent.withdrawn_at);
-const doneAt = (vent: Vent) => vent.withdrawn_at || vent.dismissed_at || '';
+const isDone = (vent: Vent) => Boolean(vent.dismissed_at || vent.withdrawn_at || vent.planted_seed_id);
 
 function parseRecord({ id, record }: { id: number; record: string }): StoredRecord {
   try {
@@ -78,9 +76,10 @@ function recordItems(records: StoredRecord[], openBursts: ReadonlySet<string>): 
   return items;
 }
 
-function ventItems(vents: Vent[]): VentItem[] {
+function ventItems(vents: Vent[], seeds: ReadonlyMap<string, Seed>): VentItem[] {
+  const doneAt = (vent: Vent) => vent.withdrawn_at || vent.dismissed_at || seeds.get(vent.planted_seed_id ?? '')?.created_at || vent.created_at;
   const fresh = vents.filter((vent) => !isDone(vent));
-  const done = vents.filter(isDone).sort((a, b) => doneAt(b).localeCompare(doneAt(a)));
+  const done = vents.filter(isDone).sort((a, b) => Date.parse(doneAt(b)) - Date.parse(doneAt(a)));
   return [...fresh, ...done].map((vent) => ({ kind: 'vent', key: vent.id, vent, done: isDone(vent) }));
 }
 
@@ -123,24 +122,20 @@ function settingName(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function seedTitle(text: string): string {
-  const line = text.trim().split('\n')[0].trim();
-  if (line.length <= SEED_TITLE_CHARS) return line;
-  const cut = line.slice(0, SEED_TITLE_CHARS);
-  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), SEED_TITLE_CHARS / 2))}…`;
-}
+const formatBytes = (n: number): string => {
+  if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} MB`;
+  if (n >= 1 << 10) return `${(n / (1 << 10)).toFixed(1)} KB`;
+  return `${n} B`;
+};
 
-function seedBody(vent: Vent): string {
-  const agent = [harnessLabel(vent.context.harness), vent.context.model].filter(Boolean).join(' · ');
-  return `${vent.text}\n\nFrom vent ${vent.id} by ${vent.context.session_label} (${agent}), ${when(vent.created_at)}.`;
-}
+const recordCount = (n: number) => `${n.toLocaleString()} record${n === 1 ? '' : 's'}`;
 
 function isTyping(target: EventTarget): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
 export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
-  const { sendListAnalyticsRecords, sendSetVentDismissed, sendSeedPlant, sendSeedTransition } = useDaemonApi();
+  const { sendListAnalyticsRecords, sendSetVentDismissed, sendPlantVentSeed, sendGetAnalyticsStatus, sendClearAnalyticsRecords } = useDaemonApi();
   const vents = useVentsStore((state) => state.vents);
   const sessions = useDaemonStore((state) => state.daemonSessions);
   const seeds = useDaemonStore((state) => state.seeds);
@@ -151,6 +146,8 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [records, setRecords] = useState<RecordsState | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [status, setStatus] = useState<AnalyticsStatus | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
   const loadSeq = useRef(0);
   const rootRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
@@ -172,18 +169,24 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
     }
   }, [sendListAnalyticsRecords]);
 
+  const loadStatus = useCallback(() => {
+    sendGetAnalyticsStatus().then(setStatus, () => setStatus(null));
+  }, [sendGetAnalyticsStatus]);
+
   useEffect(() => {
     rootRef.current?.focus({ preventScroll: true });
-  }, []);
+    loadStatus();
+  }, [loadStatus]);
 
   useEffect(() => {
     if (view !== 'vents') void load(view, []);
   }, [view, load]);
 
+  const seedsById = useMemo(() => new Map(seeds.map((seed) => [seed.id, seed])), [seeds]);
   const items: ListItem[] = useMemo(() => {
-    if (view === 'vents') return ventItems(vents);
+    if (view === 'vents') return ventItems(vents, seedsById);
     return records?.view === view ? recordItems(records.records, openBursts) : [];
-  }, [view, vents, records, openBursts]);
+  }, [view, vents, seedsById, records, openBursts]);
 
   const index = Math.max(0, items.findIndex((item) => item.key === selected));
   const current = items[index];
@@ -219,9 +222,24 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
   });
 
   const plant = (target: Vent) => run(async () => {
-    const seed = await sendSeedPlant(seedTitle(target.text), seedBody(target));
-    say(<>Planted <b>{seed.step_slug}</b> from “{target.context.session_label}”.</>, () => sendSeedTransition(seed.id, 'wither', 'Planted from a vent by mistake'));
+    const nextNew = items.slice(index + 1).find((item) => item.kind === 'vent' && !item.done);
+    const seed = await sendPlantVentSeed(target.id);
+    setSelected(nextNew ? nextNew.key : target.id);
+    say(<>Planted <b>{seed.step_slug}</b> from “{target.context.session_label}”.</>);
   });
+
+  const clear = () => run(async () => {
+    setConfirmClear(false);
+    const cleared = await sendClearAnalyticsRecords();
+    say(`Cleared ${recordCount(cleared)}.`);
+    loadStatus();
+    if (view !== 'vents') await load(view, []);
+  });
+
+  const refresh = () => {
+    loadStatus();
+    if (view !== 'vents') void load(view, []);
+  };
 
   const undo = () => {
     const action = toast?.undo;
@@ -241,7 +259,7 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
     if (key === 'o' && live.has(target.session_id)) onOpenSession(target.session_id);
     else if (key === 't' && target.context.transcript) void openPath(target.context.transcript.path).catch(fail);
     else if (key === 'g' && target.context.seed_id) onOpenSeed(target.context.seed_id);
-    else if (key === 'p' && !withdrawn) plant(target);
+    else if (key === 'p' && !withdrawn && !target.planted_seed_id) plant(target);
     else if (key === 'd' && !withdrawn) setDismissed(target, !target.dismissed_at);
     else return false;
     return true;
@@ -256,7 +274,7 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
     else if (key === ']' || key === '[') switchView(VIEWS[(VIEWS.indexOf(view) + (key === ']' ? 1 : VIEWS.length - 1)) % VIEWS.length]);
     else if (key === 'm') setMachineOpen((open) => !open);
     else if (key === 'u') handled = undo();
-    else if (key === 'r' && view !== 'vents') void load(view, []);
+    else if (key === 'r') refresh();
     else if (key === 'Enter' && current?.kind === 'burst') expandBurst(current);
     else if (key === 'c' && current && current.kind !== 'vent') copyRecord(current);
     else if (vent) handled = ventAction(key, vent);
@@ -270,7 +288,7 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
         <Stat label="Recording" value="On" />
         <Stat label="Sharing" value="Off" dim />
         <Stat label="Vents" value={`${vents.length} kept here`} dim={vents.length === 0} />
-        <Stat label="Kept here" value="7 days" />
+        <Stat label="Kept here" value={status ? `7 days · ${formatBytes(status.bytes)}` : '7 days'} />
         <button type="button" className="settings-action" aria-expanded={machineOpen} onClick={() => setMachineOpen((open) => !open)}>
           {machineOpen ? 'Done' : 'Machine settings'} <kbd>m</kbd>
         </button>
@@ -288,9 +306,23 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
           <div className="settings-row-card">
             <div>
               <p className="settings-row-title">Kept on this machine for 7 days</p>
-              <p className="settings-row-copy">Dismissed and withdrawn vents are kept 30 days.</p>
+              <p className="settings-row-copy">{status && `${recordCount(status.records)}, ${formatBytes(status.bytes)}. `}Dismissed and withdrawn vents are kept 30 days.</p>
             </div>
             <span />
+          </div>
+          <div className="settings-row-card">
+            <div>
+              <p className="settings-row-title">Clear the local record</p>
+              <p className="settings-row-copy">{status ? `Deletes ${recordCount(status.records)} (${formatBytes(status.bytes)}).` : 'Deletes every record.'}</p>
+            </div>
+            {confirmClear ? (
+              <span className="analytics-confirm">
+                <button type="button" className="settings-action danger" onClick={clear}>Clear</button>
+                <button type="button" className="settings-action" onClick={() => setConfirmClear(false)}>Keep</button>
+              </span>
+            ) : (
+              <button type="button" className="settings-action danger" onClick={() => setConfirmClear(true)}>Clear…</button>
+            )}
           </div>
         </div>
       )}
@@ -311,6 +343,7 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
               <ListRow
                 key={item.key}
                 item={item}
+                seeds={seedsById}
                 current={i === index}
                 groupHead={item.kind === 'vent' && (i === 0 || (items[i - 1] as VentItem).done !== item.done) ? (item.done ? 'Done' : 'New') : null}
                 onSelect={() => {
@@ -321,14 +354,14 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
               />
             ))}
           </ol>
-          {view !== 'vents' && <RecordsFooter state={records} empty={items.length === 0} onOlder={() => records && void load(view, records.records)} onRefresh={() => void load(view, [])} />}
+          {view !== 'vents' && <RecordsFooter state={records} empty={items.length === 0} onOlder={() => records && void load(view, records.records)} onRefresh={refresh} />}
         </div>
         <div className="analytics-inspector" data-testid="analytics-inspector">
           {vent ? (
             <VentDetail
               vent={vent}
               live={live.has(vent.session_id)}
-              seedSlug={seeds.find((seed) => seed.id === vent.context.seed_id)?.step_slug}
+              seeds={seedsById}
               expanded={expanded.has(vent.id)}
               onExpand={() => setExpanded((open) => new Set(open).add(vent.id))}
               onAction={(key) => ventAction(key, vent)}
@@ -385,17 +418,18 @@ function Stat({ label, value, dim = false }: { label: string; value: string; dim
   );
 }
 
-function ListRow({ item, current, groupHead, onSelect }: { item: ListItem; current: boolean; groupHead: 'New' | 'Done' | null; onSelect: () => void }) {
+function ListRow({ item, seeds, current, groupHead, onSelect }: { item: ListItem; seeds: ReadonlyMap<string, Seed>; current: boolean; groupHead: 'New' | 'Done' | null; onSelect: () => void }) {
   const now = Date.now();
   let row: ReactNode;
   if (item.kind === 'vent') {
     const { vent, done } = item;
-    const outcome = vent.withdrawn_at ? 'withdrawn' : 'dismissed';
+    const planted = vent.planted_seed_id;
+    const outcome = vent.withdrawn_at ? 'withdrawn' : planted ? 'planted' : 'dismissed';
     row = (
       <button type="button" className={`analytics-row vent${done ? ' done' : ''}`} aria-current={current} onClick={onSelect}>
         {!done && <span className="analytics-dot" />}
         <span className="analytics-row-text"><b>{vent.context.session_label}</b>{vent.text}</span>
-        {done && <span className={`analytics-outcome ${outcome}`}>{outcome}</span>}
+        {done && <span className={`analytics-outcome ${outcome}`}>{outcome === 'planted' ? seeds.get(planted ?? '')?.step_slug ?? planted : outcome}</span>}
         <span className="analytics-age">{age(vent.created_at, now)}</span>
       </button>
     );
@@ -465,10 +499,10 @@ function RecordDetail({ item }: { item: RecordItem }) {
   );
 }
 
-function VentDetail({ vent, live, seedSlug, expanded, onExpand, onAction }: {
+function VentDetail({ vent, live, seeds, expanded, onExpand, onAction }: {
   vent: Vent;
   live: boolean;
-  seedSlug?: string;
+  seeds: ReadonlyMap<string, Seed>;
   expanded: boolean;
   onExpand: () => void;
   onAction: (key: string) => void;
@@ -476,6 +510,8 @@ function VentDetail({ vent, live, seedSlug, expanded, onExpand, onAction }: {
   const now = Date.now();
   const { context } = vent;
   const withdrawn = Boolean(vent.withdrawn_at);
+  const planted = vent.planted_seed_id;
+  const slug = (id: string) => seeds.get(id)?.step_slug ?? id;
   const long = vent.text.length > LONG_VENT_CHARS && !expanded;
   const action = (key: string, label: string) => (
     <button type="button" onClick={() => onAction(key)}><kbd>{key}</kbd> {label}</button>
@@ -484,14 +520,14 @@ function VentDetail({ vent, live, seedSlug, expanded, onExpand, onAction }: {
     <>
       <div className="analytics-vent-head">
         <b>{context.session_label}</b>
-        {withdrawn ? <span className="settings-pill">Withdrawn by agent</span> : vent.dismissed_at ? <span className="settings-pill">Dismissed</span> : null}
+        {withdrawn ? <span className="settings-pill">Withdrawn by agent</span> : planted ? <span className="settings-pill good">Planted · {slug(planted)}</span> : vent.dismissed_at ? <span className="settings-pill">Dismissed</span> : null}
       </div>
       <div className={`analytics-vent-text${long ? ' clamped' : ''}${withdrawn ? ' struck' : ''}`}>{vent.text}</div>
       {long && <button type="button" className="analytics-more" onClick={onExpand}>Show all {vent.text.length.toLocaleString()} characters</button>}
       <dl className="analytics-context">
         <dt>When</dt><dd>{when(vent.created_at)} <span className="dim">· {longAgo(vent.created_at, now)}</span></dd>
         <dt>Agent</dt><dd>{[harnessLabel(context.harness), context.harness_version].filter(Boolean).join(' ')}{context.model && <> <span className="dim">·</span> {context.model}</>}</dd>
-        <dt>Stake seed</dt><dd>{context.seed_id ? seedSlug ?? context.seed_id : <span className="dim">none</span>}</dd>
+        <dt>Stake seed</dt><dd>{context.seed_id ? slug(context.seed_id) : <span className="dim">none</span>}</dd>
         <dt>Build</dt><dd>{buildLabel(context.build)}</dd>
         <dt>Experimental</dt><dd>{context.experimental.length ? context.experimental.map(settingName).join(', ') : <span className="dim">none</span>}</dd>
       </dl>
@@ -500,7 +536,7 @@ function VentDetail({ vent, live, seedSlug, expanded, onExpand, onAction }: {
           {live && action('o', 'Open session')}
           {context.transcript && action('t', 'Transcript')}
           {context.seed_id && action('g', 'Stake seed')}
-          {action('p', 'Plant seed')}
+          {!planted && action('p', 'Plant seed')}
           {action('d', vent.dismissed_at ? 'Restore' : 'Dismiss')}
         </div>
       )}

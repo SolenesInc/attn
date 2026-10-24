@@ -409,3 +409,12 @@
     grid-template-columns: 1fr;
   }
 }
+
+.analytics-outcome.planted {
+  color: #60c287;
+}
+
+.analytics-confirm {
+  display: flex;
+  gap: 8px;
+}

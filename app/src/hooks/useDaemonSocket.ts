@@ -7,7 +7,7 @@ import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
 import { useVentsStore } from '../store/vents';
-import { handleAnalyticsDaemonEvent, type AnalyticsRecordPage } from './daemonAnalyticsEvents';
+import { handleAnalyticsDaemonEvent, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
@@ -1461,18 +1461,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'seed_plant_result': {
-            const requestId = data.request_id;
-            if (typeof requestId !== 'string') break;
-            const key = `seed_plant:${requestId}`;
-            const pending = pendingActionsRef.current.get(key);
-            if (!pending) break;
-            pendingActionsRef.current.delete(key);
-            if (data.success && data.seed) pending.resolve(data.seed);
-            else pending.reject(new Error(data.error || 'The seed was not planted'));
-            break;
-          }
-
           case 'seed_note_result': {
             const requestId = data.request_id;
             if (typeof requestId !== 'string') break;
@@ -2884,9 +2872,6 @@ export function useDaemonSocket({
     [sendRequest],
   );
 
-  const sendSeedPlant = useCallback((title: string, body: string): Promise<Seed> =>
-    sendRequest('seed_plant', { title, body }, 'Planting the seed timed out'), [sendRequest]);
-
   const sendSeedNote = useCallback((seedId: string, body: string): Promise<void> => {
     return sendRequest('seed_note', { seed_id: seedId, body }, 'The note timed out').then(() => {});
   }, [sendRequest]);
@@ -3605,6 +3590,15 @@ export function useDaemonSocket({
   const sendSetVentDismissed = useCallback((ventId: string, dismissed: boolean): Promise<true> =>
     sendRequest('set_vent_dismissed', { vent_id: ventId, dismissed }, 'Changing the vent timed out'), [sendRequest]);
 
+  const sendPlantVentSeed = useCallback((ventId: string): Promise<Seed> =>
+    sendRequest('plant_vent_seed', { vent_id: ventId }, 'Planting the seed timed out'), [sendRequest]);
+
+  const sendGetAnalyticsStatus = useCallback((): Promise<AnalyticsStatus> =>
+    sendRequest('get_analytics_status', {}, 'Reading the analytics status timed out'), [sendRequest]);
+
+  const sendClearAnalyticsRecords = useCallback((): Promise<number> =>
+    sendRequest('clear_analytics_records', {}, 'Clearing the analytics records timed out'), [sendRequest]);
+
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
@@ -4314,6 +4308,9 @@ export function useDaemonSocket({
     sendRecordAnalytics,
     sendListAnalyticsRecords,
     sendSetVentDismissed,
+    sendPlantVentSeed,
+    sendGetAnalyticsStatus,
+    sendClearAnalyticsRecords,
     sendAskAnswer,
     sendRecentFiles,
     sendGetRecentLocations,
@@ -4356,7 +4353,6 @@ export function useDaemonSocket({
     sendSeedArtifactTransfer,
     sendSeedArtifactReferenceDetach,
     sendSeedTransition,
-    sendSeedPlant,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
     sendTerminalPointerActivity,

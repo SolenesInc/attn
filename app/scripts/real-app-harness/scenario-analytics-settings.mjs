@@ -86,6 +86,7 @@ try {
     await wait('[role="status"]', { textIncludes: 'Planted' });
     const found = await cli('seed', 'search', 'ANALYTICS7');
     runner.assert(found.includes('ANALYTICS7'), 'the garden holds a seed planted from the vent', found);
+    await wait('ol[aria-label="Vents"] .analytics-outcome.planted', { textIncludes: 'analytics7' });
     await shot('02-planted');
   });
   await runner.step('records_by_stream', async () => {
@@ -98,13 +99,22 @@ try {
     await wait('ol[aria-label="bus"] li');
     runner.assert(!(await text('ol[aria-label="bus"]')).includes('vent.'), 'vent facts stay out of the outbox', await text('ol[aria-label="bus"]'));
   });
+  await runner.step('clear_the_local_record', async () => {
+    await press('m');
+    await wait('[data-testid="analytics-machine"]', { textIncludes: 'records,' });
+    await client.request('dom_click', { selector: '[data-testid="analytics-machine"] button.danger' });
+    await client.request('dom_click', { selector: '.analytics-confirm button.danger' });
+    await wait('[role="status"]', { textIncludes: 'Cleared' });
+    await shot('04-cleared');
+    await press('m');
+  });
   await runner.step('idle_page_is_still', async () => {
     const before = await text(page);
     const { animations } = await client.request('dom_bounds', { selector: page });
     await delay(IDLE_MS);
     runner.assert(animations.length === 0, 'no animation runs on the open page', animations);
     runner.assert((await text(page)) === before, `the page did not change in ${IDLE_MS}ms idle`, { before });
-    await shot('04-idle');
+    await shot('05-idle');
   });
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
 } catch (error) {

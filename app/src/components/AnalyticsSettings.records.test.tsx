@@ -16,12 +16,25 @@ const RECORDS = [
 ];
 
 function serveRecords(daemon: ScriptedDaemon) {
+  let stored = RECORDS;
   daemon.on('list_analytics_records', ({ stream }) => ({
     event: 'list_analytics_records_result',
     success: true,
-    waiting: 0,
-    records: RECORDS.filter((r) => !stream || JSON.parse(r.record).stream === stream),
+    waiting: stored.length,
+    records: stored.filter((r) => !stream || JSON.parse(r.record).stream === stream),
   }));
+  daemon.on('get_analytics_status', () => ({
+    event: 'get_analytics_status_result',
+    success: true,
+    records: stored.length,
+    bytes: stored.reduce((sum, r) => sum + r.record.length, 0),
+    waiting: stored.length,
+  }));
+  daemon.on('clear_analytics_records', () => {
+    const records = stored.length;
+    stored = [];
+    return { event: 'clear_analytics_records_result', success: true, records };
+  });
 }
 
 const page = () => screen.getByTestId('settings-analytics');
@@ -62,6 +75,21 @@ describe('Settings › Analytics records', () => {
     await press(daemon, 'r');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Refresh' })));
     expect(daemon.sentOf('list_analytics_records')).toHaveLength(3);
+  });
+
+  it('shows the record count and size, and clears them after a confirm', async () => {
+    const daemon = await openSection('analytics', { settings: { 'analytics.enabled': 'true' } }, serveRecords);
+    const size = `${RECORDS.reduce((sum, r) => sum + r.record.length, 0)} B`;
+    expect(screen.getByText(`7 days · ${size}`)).toBeInTheDocument();
+    await press(daemon, 'm');
+    expect(screen.getByTestId('analytics-machine')).toHaveTextContent(`5 records, ${size}. Dismissed and withdrawn vents are kept 30 days.`);
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Clear…' })));
+    expect(daemon.sentOf('clear_analytics_records')).toEqual([]);
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Clear' })));
+    expect(daemon.sentOf('clear_analytics_records')).toHaveLength(1);
+    expect(screen.getByRole('status')).toHaveTextContent('Cleared 5 records.');
+    expect(screen.getByTestId('analytics-machine')).toHaveTextContent('0 records, 0 B.');
+    expect(daemon.sentOf('get_analytics_status')).toHaveLength(2);
   });
 
   it('is absent from the nav while analytics is off', async () => {
