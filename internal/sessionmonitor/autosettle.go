@@ -53,224 +53,224 @@ const (
 	autoSettleDismissalCovered
 )
 
-func (e *Entry) SyncAutoSettle() {
-	if e == nil {
+func (m *Monitor) SyncAutoSettle() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.syncAutoSettleLocked()
-	view := e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+	m.mu.Lock()
+	m.syncAutoSettleLocked()
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 }
 
-func (e *Entry) syncAutoSettleLocked() {
-	state := e.state.State
-	e.input.observePhaseLocked(state)
+func (m *Monitor) syncAutoSettleLocked() {
+	state := m.state.State
+	m.input.observePhaseLocked(state)
 	if state != protocol.SessionStateWorking {
-		if e.dismissal == autoSettleDismissalCovered {
-			e.dismissal = autoSettleDismissalOff
+		if m.dismissal == autoSettleDismissalCovered {
+			m.dismissal = autoSettleDismissalOff
 		}
-		e.stopAutoSettleLocked()
+		m.stopAutoSettleLocked()
 		return
 	}
-	if e.input.inNotificationRunLocked() && e.turnOwedLocked() && !e.turnByAgentLocked() && e.policy.QuietNotifications {
-		e.settleForAgentLocked(time.Now())
-		e.logf("turn settled by a notification run: session=%s", e.label)
+	if m.input.inNotificationRunLocked() && m.turnOwedLocked() && !m.turnByAgentLocked() && m.policy.QuietNotifications {
+		m.settleForAgentLocked(time.Now())
+		m.logf("turn settled by a notification run: session=%s", m.label)
 	}
-	if e.dismissal != autoSettleDismissalOff {
-		e.dismissal = autoSettleDismissalCovered
+	if m.dismissal != autoSettleDismissalOff {
+		m.dismissal = autoSettleDismissalCovered
 	}
-	e.armAutoSettleLocked()
+	m.armAutoSettleLocked()
 }
 
-func (e *Entry) armAutoSettleForUserInput(run runRef) {
+func (m *Monitor) armAutoSettleForUserInput(run runRef) {
 	if !run.valid() {
 		return
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	current, credited := e.input.currentUserRunLocked()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, credited := m.input.currentUserRunLocked()
 	if credited && current == run {
-		e.armAutoSettleLocked()
+		m.armAutoSettleLocked()
 	}
 }
 
-func (e *Entry) ArmAutoSettle() {
-	if e == nil {
+func (m *Monitor) ArmAutoSettle() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.armAutoSettleLocked()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.armAutoSettleLocked()
 }
 
-func (e *Entry) armAutoSettleLocked() {
-	cfg := e.policy.AutoSettle
-	if !cfg.Enabled || e.state.State != protocol.SessionStateWorking || e.dismissal != autoSettleDismissalOff || !e.owesUserLocked() {
+func (m *Monitor) armAutoSettleLocked() {
+	cfg := m.policy.AutoSettle
+	if !cfg.Enabled || m.state.State != protocol.SessionStateWorking || m.dismissal != autoSettleDismissalOff || !m.owesUserLocked() {
 		return
 	}
-	if _, credited := e.input.currentUserRunLocked(); !credited {
+	if _, credited := m.input.currentUserRunLocked(); !credited {
 		return
 	}
-	if e.autoSettle == nil {
-		e.startAutoSettleLocked(autoSettleArming, cfg.Arm)
+	if m.autoSettle == nil {
+		m.startAutoSettleLocked(autoSettleArming, cfg.Arm)
 	}
 }
 
-func (e *Entry) owesUserLocked() bool {
-	return e.turnOwedLocked() &&
-		!attention.Excluded(attention.Input{IsShell: e.agent == protocol.SessionAgentShell, ChiefOfStaff: e.policy.ChiefOfStaff})
+func (m *Monitor) owesUserLocked() bool {
+	return m.turnOwedLocked() &&
+		!attention.Excluded(attention.Input{IsShell: m.agent == protocol.SessionAgentShell, ChiefOfStaff: m.policy.ChiefOfStaff})
 }
 
-func (e *Entry) HoldAutoSettle() {
-	if e == nil {
+func (m *Monitor) HoldAutoSettle() {
+	if m == nil {
 		return
 	}
-	if !e.mu.TryLock() {
+	if !m.mu.TryLock() {
 		pausepoint.At(pausepoint.SessionInputLaneContended)
-		e.mu.Lock()
+		m.mu.Lock()
 	}
-	if e.autoSettle == nil || e.autoSettle.phase == autoSettleHeld {
-		e.mu.Unlock()
+	if m.autoSettle == nil || m.autoSettle.phase == autoSettleHeld {
+		m.mu.Unlock()
 		return
 	}
-	resume := e.autoSettle.phase
-	e.startAutoSettleHeldLocked(resume, autoSettleHoldQuietWindow)
-	view := e.viewLocked()
-	label := e.label
-	e.mu.Unlock()
-	e.publish(view)
-	if e.registry.host.Debug() {
-		e.logf("auto-settle held: session=%s resume_phase=%d", label, resume)
+	resume := m.autoSettle.phase
+	m.startAutoSettleHeldLocked(resume, autoSettleHoldQuietWindow)
+	view := m.viewLocked()
+	label := m.label
+	m.mu.Unlock()
+	m.publish(view)
+	if m.registry.host.Debug() {
+		m.logf("auto-settle held: session=%s resume_phase=%d", label, resume)
 	}
 }
 
-func (e *Entry) startAutoSettleHeldLocked(resume autoSettlePhase, window time.Duration) {
-	e.startAutoSettleLocked(autoSettleHeld, window)
-	e.autoSettle.resume = resume
+func (m *Monitor) startAutoSettleHeldLocked(resume autoSettlePhase, window time.Duration) {
+	m.startAutoSettleLocked(autoSettleHeld, window)
+	m.autoSettle.resume = resume
 }
 
-func (e *Entry) startAutoSettleLocked(phase autoSettlePhase, window time.Duration) {
-	e.stopAutoSettleLocked()
+func (m *Monitor) startAutoSettleLocked(phase autoSettlePhase, window time.Duration) {
+	m.stopAutoSettleLocked()
 	if window < 0 {
 		window = 0
 	}
 	firesAt := time.Now().Add(window)
-	run, _ := e.input.currentUserRunLocked()
-	timer := &autoSettleTimer{phase: phase, firesAt: firesAt, run: run, opened: e.turn.OpenedAt}
-	timer.timer = e.registry.host.AfterFunc("autoSettle", window, func() { e.autoSettleFire(timer) })
-	e.autoSettle = timer
+	run, _ := m.input.currentUserRunLocked()
+	timer := &autoSettleTimer{phase: phase, firesAt: firesAt, run: run, opened: m.turn.OpenedAt}
+	timer.timer = m.registry.host.AfterFunc("autoSettle", window, func() { m.autoSettleFire(timer) })
+	m.autoSettle = timer
 }
 
-func (e *Entry) stopAutoSettleLocked() (removed, wasVisible bool) {
-	timer := e.autoSettle
+func (m *Monitor) stopAutoSettleLocked() (removed, wasVisible bool) {
+	timer := m.autoSettle
 	if timer == nil {
 		return false, false
 	}
 	timer.timer.Stop()
-	e.autoSettle = nil
+	m.autoSettle = nil
 	return true, timer.visible()
 }
 
-func (e *Entry) CancelAutoSettle(reason string) {
-	if e == nil {
+func (m *Monitor) CancelAutoSettle(reason string) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	removed, _ := e.stopAutoSettleLocked()
+	m.mu.Lock()
+	removed, _ := m.stopAutoSettleLocked()
 	var view View
 	if removed {
-		view = e.viewLocked()
+		view = m.viewLocked()
 	}
-	label := e.label
-	e.mu.Unlock()
+	label := m.label
+	m.mu.Unlock()
 	if !removed {
 		return
 	}
-	e.publish(view)
-	if e.registry.host.Debug() {
-		e.logf("auto-settle canceled: session=%s reason=%s", label, reason)
+	m.publish(view)
+	if m.registry.host.Debug() {
+		m.logf("auto-settle canceled: session=%s reason=%s", label, reason)
 	}
 }
 
-func (e *Entry) StopAutoSettle() {
-	if e == nil {
+func (m *Monitor) StopAutoSettle() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.stopAutoSettleLocked()
-	e.mu.Unlock()
+	m.mu.Lock()
+	m.stopAutoSettleLocked()
+	m.mu.Unlock()
 }
 
-func (e *Entry) ClearAutoSettle() {
-	if e == nil {
+func (m *Monitor) ClearAutoSettle() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	_, wasVisible := e.stopAutoSettleLocked()
-	changed := wasVisible || e.dismissal != autoSettleDismissalOff
-	e.dismissal = autoSettleDismissalOff
+	m.mu.Lock()
+	_, wasVisible := m.stopAutoSettleLocked()
+	changed := wasVisible || m.dismissal != autoSettleDismissalOff
+	m.dismissal = autoSettleDismissalOff
 	var view View
 	if changed {
-		view = e.viewLocked()
+		view = m.viewLocked()
 	}
-	e.mu.Unlock()
+	m.mu.Unlock()
 	if changed {
-		e.publish(view)
+		m.publish(view)
 	}
 }
 
-func (e *Entry) autoSettleFire(self *autoSettleTimer) {
-	e.mu.Lock()
-	timer := e.autoSettle
+func (m *Monitor) autoSettleFire(self *autoSettleTimer) {
+	m.mu.Lock()
+	timer := m.autoSettle
 	if timer == nil || timer != self {
-		e.mu.Unlock()
+		m.mu.Unlock()
 		return
 	}
-	e.autoSettle = nil
-	action := e.runAutoSettleLocked(timer.phase, timer.resume, timer.run, timer.opened)
-	view := e.viewLocked()
-	label := e.label
-	e.mu.Unlock()
-	e.publish(view)
+	m.autoSettle = nil
+	action := m.runAutoSettleLocked(timer.phase, timer.resume, timer.run, timer.opened)
+	view := m.viewLocked()
+	label := m.label
+	m.mu.Unlock()
+	m.publish(view)
 	if action == "settled" {
-		e.TraceSettle()
+		m.TraceSettle()
 	}
-	if e.registry.host.Debug() {
-		e.logf("auto-settle fire: session=%s phase=%d outcome=%s", label, timer.phase, action)
+	if m.registry.host.Debug() {
+		m.logf("auto-settle fire: session=%s phase=%d outcome=%s", label, timer.phase, action)
 	}
 }
 
-func (e *Entry) TraceSettle() {
-	if e == nil {
+func (m *Monitor) TraceSettle() {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	state := e.state.State
-	e.mu.Unlock()
-	e.Trace(statetrace.Observation{Source: "user", Claim: string(state), Cause: "settle", Outcome: statetrace.OutcomeApplied})
+	m.mu.Lock()
+	state := m.state.State
+	m.mu.Unlock()
+	m.Trace(statetrace.Observation{Source: "user", Claim: string(state), Cause: "settle", Outcome: statetrace.OutcomeApplied})
 }
 
-func (e *Entry) runAutoSettleLocked(phase, resume autoSettlePhase, armedRun runRef, armedTurn time.Time) string {
-	cfg := e.policy.AutoSettle
+func (m *Monitor) runAutoSettleLocked(phase, resume autoSettlePhase, armedRun runRef, armedTurn time.Time) string {
+	cfg := m.policy.AutoSettle
 	if !cfg.Enabled {
 		return "disabled"
 	}
-	if sessionstate.ClassifierVerdictPending(e.evidence, sessionstate.PolicyFor(e.agent), time.Now()) {
+	if sessionstate.ClassifierVerdictPending(m.evidence, sessionstate.PolicyFor(m.agent), time.Now()) {
 		return "classifying"
 	}
-	if e.state.State != protocol.SessionStateWorking {
+	if m.state.State != protocol.SessionStateWorking {
 		return "not-working"
 	}
-	current, credited := e.input.currentUserRunLocked()
+	current, credited := m.input.currentUserRunLocked()
 	if !credited || current != armedRun {
 		return "wrong-run"
 	}
-	if opened := e.turn.OpenedAt; opened.IsZero() || !opened.Equal(armedTurn) {
+	if opened := m.turn.OpenedAt; opened.IsZero() || !opened.Equal(armedTurn) {
 		return "wrong-turn"
 	}
-	if !e.owesUserLocked() {
+	if !m.owesUserLocked() {
 		return "not-owed"
 	}
 	if phase == autoSettleHeld || phase == autoSettleArming {
@@ -278,8 +278,8 @@ func (e *Entry) runAutoSettleLocked(phase, resume autoSettlePhase, armedRun runR
 		if phase == autoSettleHeld {
 			hold = resume
 		}
-		if quiet := quietRemaining(e.activityAt, autoSettleHoldQuietWindow); quiet > 0 {
-			e.startAutoSettleHeldLocked(hold, quiet)
+		if quiet := quietRemaining(m.activityAt, autoSettleHoldQuietWindow); quiet > 0 {
+			m.startAutoSettleHeldLocked(hold, quiet)
 			return "held"
 		}
 		if phase == autoSettleHeld {
@@ -287,38 +287,38 @@ func (e *Entry) runAutoSettleLocked(phase, resume autoSettlePhase, armedRun runR
 			if resume == autoSettleCounting {
 				window = cfg.Countdown
 			}
-			e.startAutoSettleLocked(resume, window)
+			m.startAutoSettleLocked(resume, window)
 			return "resumed"
 		}
-		e.startAutoSettleLocked(autoSettleCounting, cfg.Countdown)
+		m.startAutoSettleLocked(autoSettleCounting, cfg.Countdown)
 		return "counting"
 	}
-	if quiet := quietRemaining(e.activityAt, autoSettleHoldQuietWindow); quiet > 0 {
-		e.startAutoSettleHeldLocked(autoSettleCounting, quiet)
+	if quiet := quietRemaining(m.activityAt, autoSettleHoldQuietWindow); quiet > 0 {
+		m.startAutoSettleHeldLocked(autoSettleCounting, quiet)
 		return "held"
 	}
-	if !e.settleLocked(armedTurn, time.Now()) {
+	if !m.settleLocked(armedTurn, time.Now()) {
 		return "settle-failed"
 	}
 	return "settled"
 }
 
-func (e *Entry) AnswerCountdown() (answered, hadPending, rearmed bool) {
-	if e == nil {
+func (m *Monitor) AnswerCountdown() (answered, hadPending, rearmed bool) {
+	if m == nil {
 		return false, false, false
 	}
-	e.mu.Lock()
-	hadPending = e.autoSettle != nil
-	disarm := e.dismissal != autoSettleDismissalOff && !hadPending
-	working := e.state.State == protocol.SessionStateWorking
-	key := e.keyLocked()
-	e.mu.Unlock()
-	view, applied := e.Do(Command{Key: key, Kind: CancelCountdown}, time.Now())
-	if !applied || !e.publish(view) {
+	m.mu.Lock()
+	hadPending = m.autoSettle != nil
+	disarm := m.dismissal != autoSettleDismissalOff && !hadPending
+	working := m.state.State == protocol.SessionStateWorking
+	key := m.keyLocked()
+	m.mu.Unlock()
+	view, applied := m.Do(Command{Key: key, Kind: CancelCountdown}, time.Now())
+	if !applied || !m.publish(view) {
 		return false, hadPending, false
 	}
 	if disarm && working {
-		e.ArmAutoSettle()
+		m.ArmAutoSettle()
 	}
 	return true, hadPending, !disarm
 }

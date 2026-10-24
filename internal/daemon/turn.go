@@ -18,16 +18,16 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 	if sessionID == "" {
 		return
 	}
-	entry := d.monitorEntry(sessionID)
-	if entry == nil {
+	monitor := d.sessionMonitor(sessionID)
+	if monitor == nil {
 		return
 	}
 	turn := d.store.TurnStamps(sessionID).OpenedAt
-	view, applied := entry.Do(sessionmonitor.Command{Key: entry.Key(), Kind: sessionmonitor.Settle, Turn: turn}, time.Now())
-	if !applied || !entry.Publish(view) {
+	view, applied := monitor.Do(sessionmonitor.Command{Key: monitor.Key(), Kind: sessionmonitor.Settle, Turn: turn}, time.Now())
+	if !applied || !monitor.Publish(view) {
 		return
 	}
-	entry.CancelAutoSettle("settled by user")
+	monitor.CancelAutoSettle("settled by user")
 	d.traceSettle(sessionID)
 }
 

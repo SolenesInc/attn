@@ -10,67 +10,67 @@ import (
 )
 
 type pluginUsageWatcher struct {
-	entry  *Entry
-	path   string
-	stopCh chan struct{}
-	doneCh chan struct{}
+	monitor *Monitor
+	path    string
+	stopCh  chan struct{}
+	doneCh  chan struct{}
 }
 
-func (e *Entry) WatchDriverUsage(path string) {
-	if e == nil {
+func (m *Monitor) WatchDriverUsage(path string) {
+	if m == nil {
 		return
 	}
 	path = strings.TrimSpace(path)
-	if e == nil || path == "" {
+	if m == nil || path == "" {
 		return
 	}
-	e.mu.Lock()
-	agent := string(e.agent)
-	e.mu.Unlock()
+	m.mu.Lock()
+	agent := string(m.agent)
+	m.mu.Unlock()
 	if !transcript.SupportsUsage(agent) {
 		return
 	}
-	host := e.registry.host
-	if !host.Do("seedPluginUsageBaseline", func() { e.SeedDriverUsageBaseline(path) }) {
+	host := m.registry.host
+	if !host.Do("seedPluginUsageBaseline", func() { m.SeedDriverUsageBaseline(path) }) {
 		return
 	}
-	e.mu.Lock()
-	previous := e.pluginUsageWatch
-	if e.usageDraining || previous != nil && previous.path == path {
-		e.mu.Unlock()
+	m.mu.Lock()
+	previous := m.pluginUsageWatch
+	if m.usageDraining || previous != nil && previous.path == path {
+		m.mu.Unlock()
 		return
 	}
-	watcher := &pluginUsageWatcher{entry: e, path: path, stopCh: make(chan struct{}), doneCh: make(chan struct{})}
-	tracker := newUsageTrackerAt(e, agent, path, transcript.NewReportedUsageSourceResolver(path))
+	watcher := &pluginUsageWatcher{monitor: m, path: path, stopCh: make(chan struct{}), doneCh: make(chan struct{})}
+	tracker := newUsageTrackerAt(m, agent, path, transcript.NewReportedUsageSourceResolver(path))
 	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
 	if !host.Go("runPluginUsageWatcher", func() { watcher.run(tracker) }) {
-		e.mu.Unlock()
+		m.mu.Unlock()
 		return
 	}
-	e.beginUsageRunLocked()
-	e.pluginUsageWatch = watcher
-	label := e.label
-	e.mu.Unlock()
+	m.beginUsageRunLocked()
+	m.pluginUsageWatch = watcher
+	label := m.label
+	m.mu.Unlock()
 	if previous != nil {
 		close(previous.stopCh)
 	}
-	e.logf("plugin usage watcher: started session=%s agent=%s path=%s", label, agent, path)
+	m.logf("plugin usage watcher: started session=%s agent=%s path=%s", label, agent, path)
 }
 
-func (e *Entry) SeedDriverUsageBaseline(path string) {
-	if e == nil {
+func (m *Monitor) SeedDriverUsageBaseline(path string) {
+	if m == nil {
 		return
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		return
 	}
-	if e.initializeCostSources(map[string]string{filepath.Clean(path): ""}, false) {
-		e.publishCost()
+	if m.initializeCostSources(map[string]string{filepath.Clean(path): ""}, false) {
+		m.publishCost()
 	}
 }
 
 func (w *pluginUsageWatcher) run(tracker *usageTracker) {
-	defer w.entry.endUsageRun()
+	defer w.monitor.endUsageRun()
 	defer close(w.doneCh)
 	ticker := time.NewTicker(transcriptPollInterval)
 	defer ticker.Stop()
@@ -80,11 +80,11 @@ func (w *pluginUsageWatcher) run(tracker *usageTracker) {
 		select {
 		case <-w.stopCh:
 			reconcilePluginUsageOnStop(w.path, read != nil, tracker)
-			w.entry.logf("plugin usage watcher: stopped session=%s", w.entry.Label())
+			w.monitor.logf("plugin usage watcher: stopped session=%s", w.monitor.Label())
 			return
-		case <-w.entry.registry.host.Done():
+		case <-w.monitor.registry.host.Done():
 			seen := read != nil
-			w.entry.deferFinalUsage(func() { reconcilePluginUsageOnStop(w.path, seen, tracker) })
+			w.monitor.deferFinalUsage(func() { reconcilePluginUsageOnStop(w.path, seen, tracker) })
 			return
 		case <-ticker.C:
 		}

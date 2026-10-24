@@ -332,7 +332,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 	ctx := context.Background()
 	terminal := opts.ID
-	d.monitorEntry(sessionID).FenceInput()
+	d.sessionMonitor(sessionID).FenceInput()
 	unlockEnds := d.replaceRuntime(sessionID, terminal)
 	opts = withLifecycleID(opts)
 
@@ -364,7 +364,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		}
 	}
 	unlockEnds()
-	d.monitorEntry(sessionID).ResetInput()
+	d.sessionMonitor(sessionID).ResetInput()
 
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	intent.Asks = d.launchedWithAsks(sessionID)
@@ -374,7 +374,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
 	}
 	d.store.SetLaunchIntent(sessionID, intent)
-	d.monitorEntry(sessionID).RecordReviewer(opts.ApprovalRoute.ReviewerInLoop())
+	d.sessionMonitor(sessionID).RecordReviewer(opts.ApprovalRoute.ReviewerInLoop())
 	d.publishFact(FactSessionRespawned, string(sessionID), ptyRespawn{Terminal: string(terminal)})
 	d.logf("reload: respawned %s (agent=%s resume=%t yolo=%t)", sessionID, opts.Agent, opts.ResumeSessionID != "", opts.YoloMode)
 	return nil
@@ -568,7 +568,7 @@ func (d *Daemon) prepareSessionReload(session *protocol.Session, opts *ptybacken
 		return nil, err
 	}
 	runID := uuid.NewString()
-	d.monitorEntry(session.ID).BeginDriverLaunch(reg.PluginName, runID)
+	d.sessionMonitor(session.ID).BeginDriverLaunch(reg.PluginName, runID)
 	prepared := &preparedPluginReload{
 		d: d, sessionID: session.ID, pluginName: reg.PluginName, runID: runID,
 	}

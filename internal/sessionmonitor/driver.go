@@ -7,133 +7,133 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func (e *Entry) BeginDriverRun(plugin, run string) bool {
-	if e == nil {
+func (m *Monitor) BeginDriverRun(plugin, run string) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	previous := e.driver
-	e.driver = DriverMetadata{Plugin: plugin, Run: run, Metadata: previous.Metadata}
-	view := e.viewLocked()
-	e.mu.Unlock()
-	if e.publish(view) {
+	m.mu.Lock()
+	previous := m.driver
+	m.driver = DriverMetadata{Plugin: plugin, Run: run, Metadata: previous.Metadata}
+	view := m.viewLocked()
+	m.mu.Unlock()
+	if m.publish(view) {
 		return true
 	}
-	e.mu.Lock()
-	if e.driver.Run == run {
-		e.driver = previous
+	m.mu.Lock()
+	if m.driver.Run == run {
+		m.driver = previous
 	}
-	view = e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+	view = m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 	return false
 }
 
-func (e *Entry) RestoreDriverRun(run DriverMetadata) {
-	if e == nil {
+func (m *Monitor) RestoreDriverRun(run DriverMetadata) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	if e.driver.Run != "" {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if m.driver.Run != "" {
+		m.mu.Unlock()
 		return
 	}
-	run.Metadata = e.driver.Metadata
-	e.driver = run
-	view := e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+	run.Metadata = m.driver.Metadata
+	m.driver = run
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 }
 
-func (e *Entry) EndDriverRun() DriverMetadata {
-	if e == nil {
+func (m *Monitor) EndDriverRun() DriverMetadata {
+	if m == nil {
 		return DriverMetadata{}
 	}
-	e.mu.Lock()
-	ended := e.driver
+	m.mu.Lock()
+	ended := m.driver
 	if ended.Run == "" {
-		e.mu.Unlock()
+		m.mu.Unlock()
 		return DriverMetadata{}
 	}
-	e.driver = DriverMetadata{Metadata: ended.Metadata}
-	view := e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+	m.driver = DriverMetadata{Metadata: ended.Metadata}
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 	return ended
 }
 
-func (e *Entry) Driver() DriverMetadata {
-	if e == nil {
+func (m *Monitor) Driver() DriverMetadata {
+	if m == nil {
 		return DriverMetadata{}
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.driver
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.driver
 }
 
-func (e *Entry) RetireDriver(run string) {
-	if e == nil {
+func (m *Monitor) RetireDriver(run string) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	if run == "" || e.driver.Run != run {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if run == "" || m.driver.Run != run {
+		m.mu.Unlock()
 		return
 	}
-	e.driver = DriverMetadata{Metadata: e.driver.Metadata}
-	view := e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+	m.driver = DriverMetadata{Metadata: m.driver.Metadata}
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 }
 
-func (e *Entry) ReportDriverMetadata(run string, sequence uint64, metadata string) bool {
-	if e == nil {
+func (m *Monitor) ReportDriverMetadata(run string, sequence uint64, metadata string) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	if run == "" || e.driver.Run != run || sequence <= e.driver.Sequence {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if run == "" || m.driver.Run != run || sequence <= m.driver.Sequence {
+		m.mu.Unlock()
 		return false
 	}
-	e.driver.Sequence = sequence
-	e.driver.Metadata = strings.TrimSpace(metadata)
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+	m.driver.Sequence = sequence
+	m.driver.Metadata = strings.TrimSpace(metadata)
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }
 
-func (e *Entry) ReportDriverTranscript(run, path string) bool {
-	if e == nil {
+func (m *Monitor) ReportDriverTranscript(run, path string) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	if run == "" || e.driver.Run != run {
-		e.mu.Unlock()
+	m.mu.Lock()
+	if run == "" || m.driver.Run != run {
+		m.mu.Unlock()
 		return false
 	}
-	e.driver.TranscriptPath = path
-	view := e.viewLocked()
-	e.mu.Unlock()
+	m.driver.TranscriptPath = path
+	view := m.viewLocked()
+	m.mu.Unlock()
 	pausepoint.At(pausepoint.DriverTranscriptCaptured)
-	return e.publish(view)
+	return m.publish(view)
 }
 
-func (e *Entry) BeginDriverLaunch(plugin, run string) {
-	if e == nil {
+func (m *Monitor) BeginDriverLaunch(plugin, run string) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.driverLaunch = &driverLaunch{plugin: plugin, run: run}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.driverLaunch = &driverLaunch{plugin: plugin, run: run}
 }
 
-func (e *Entry) QueueDuringDriverLaunch(plugin, run string, replay func(), whileQueued func()) bool {
-	if e == nil {
+func (m *Monitor) QueueDuringDriverLaunch(plugin, run string, replay func(), whileQueued func()) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	launch := e.driverLaunch
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	launch := m.driverLaunch
 	if launch == nil || launch.plugin != plugin || launch.run != run {
 		return false
 	}
@@ -142,13 +142,13 @@ func (e *Entry) QueueDuringDriverLaunch(plugin, run string, replay func(), while
 	return true
 }
 
-func (e *Entry) QueueExitDuringDriverLaunch(info ptybackend.ExitInfo, whileQueued func()) bool {
-	if e == nil {
+func (m *Monitor) QueueExitDuringDriverLaunch(info ptybackend.ExitInfo, whileQueued func()) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	launch := e.driverLaunch
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	launch := m.driverLaunch
 	if launch == nil || info.LifecycleID == "" || launch.run != info.LifecycleID {
 		return false
 	}
@@ -157,38 +157,38 @@ func (e *Entry) QueueExitDuringDriverLaunch(info ptybackend.ExitInfo, whileQueue
 	return true
 }
 
-func (e *Entry) SupersededExitDuringDriverLaunch(info ptybackend.ExitInfo) bool {
-	if e == nil {
+func (m *Monitor) SupersededExitDuringDriverLaunch(info ptybackend.ExitInfo) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	launch := e.driverLaunch
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	launch := m.driverLaunch
 	return launch != nil && info.LifecycleID != "" && launch.run != info.LifecycleID
 }
 
-func (e *Entry) FinishDriverLaunch() (replays []func(), exit *ptybackend.ExitInfo) {
-	if e == nil {
+func (m *Monitor) FinishDriverLaunch() (replays []func(), exit *ptybackend.ExitInfo) {
+	if m == nil {
 		return nil, nil
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	launch := e.driverLaunch
-	e.driverLaunch = nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	launch := m.driverLaunch
+	m.driverLaunch = nil
 	if launch == nil {
 		return nil, nil
 	}
 	return launch.replays, launch.exit
 }
 
-func (e *Entry) AbortDriverLaunch() (plugin, run string, launching bool) {
-	if e == nil {
+func (m *Monitor) AbortDriverLaunch() (plugin, run string, launching bool) {
+	if m == nil {
 		return "", "", false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	launch := e.driverLaunch
-	e.driverLaunch = nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	launch := m.driverLaunch
+	m.driverLaunch = nil
 	if launch == nil {
 		return "", "", false
 	}

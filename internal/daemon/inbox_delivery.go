@@ -247,7 +247,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	}
 	input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), inboxRingText, sessionmonitor.WhenPromptReady)
 	input.BypassInitialGate = true
-	placement := d.monitorEntry(holder.ID).Place(context.Background(), input)
+	placement := d.sessionMonitor(holder.ID).Place(context.Background(), input)
 	if placement.Stage == sessionmonitor.Placed {
 		now := time.Now()
 		if err := d.store.RingInbox(a, finishingWake, now); err != nil {

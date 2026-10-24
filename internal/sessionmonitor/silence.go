@@ -8,32 +8,32 @@ import (
 
 const pluginDriverSilenceGrace = 2 * time.Minute
 
-func (e *Entry) ArmDriverSilence(run, plugin string) {
-	if e == nil {
+func (m *Monitor) ArmDriverSilence(run, plugin string) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.registry.closed.Load() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.registry.closed.Load() {
 		return
 	}
-	if e.silence != nil {
-		e.silence.Stop()
+	if m.silence != nil {
+		m.silence.Stop()
 	}
-	e.silence = e.registry.host.AfterFunc("pluginDriverSilence", pluginDriverSilenceGrace, func() { e.declareDriverSilent(run, plugin) })
+	m.silence = m.registry.host.AfterFunc("pluginDriverSilence", pluginDriverSilenceGrace, func() { m.declareDriverSilent(run, plugin) })
 }
 
-func (e *Entry) declareDriverSilent(run, plugin string) {
-	e.mu.Lock()
-	state, current := e.state.State, e.driver.Run
-	label := e.label
-	e.mu.Unlock()
+func (m *Monitor) declareDriverSilent(run, plugin string) {
+	m.mu.Lock()
+	state, current := m.state.State, m.driver.Run
+	label := m.label
+	m.mu.Unlock()
 	if current != run || !pluginDriverDeclaredStates[state] {
 		return
 	}
-	e.logf("plugin driver silent: session=%s plugin=%s run=%s state=%s no report for %s; declaring unknown",
+	m.logf("plugin driver silent: session=%s plugin=%s run=%s state=%s no report for %s; declaring unknown",
 		label, plugin, run, state, pluginDriverSilenceGrace)
-	e.ApplyState(Change{
+	m.ApplyState(Change{
 		State:  protocol.StateUnknown,
 		Cause:  pluginDriverSilent{},
 		Origin: Origin{Source: StateSourcePluginDriver, Detail: "driver silent"},
@@ -47,16 +47,16 @@ var pluginDriverDeclaredStates = map[protocol.SessionState]bool{
 	protocol.SessionStatePendingApproval: true,
 }
 
-func (e *Entry) NoteDriverReport() bool {
-	if e == nil {
+func (m *Monitor) NoteDriverReport() bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.silence == nil {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.silence == nil {
 		return false
 	}
-	e.silence.Stop()
-	e.silence = nil
+	m.silence.Stop()
+	m.silence = nil
 	return true
 }

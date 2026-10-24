@@ -13,29 +13,29 @@ type costOwner struct {
 	Finalized bool
 }
 
-func (e *Entry) loadCostLocked(state sessioncost.Checkpoint) {
-	e.costInitialized, e.cost = state.Initialized, state.Sources
-	e.costOwners = make(map[string]costOwner)
-	for source, state := range e.cost {
+func (m *Monitor) loadCostLocked(state sessioncost.Checkpoint) {
+	m.costInitialized, m.cost = state.Initialized, state.Sources
+	m.costOwners = make(map[string]costOwner)
+	for source, state := range m.cost {
 		for id := range state.Observations {
-			e.costOwners[id] = costOwner{Source: source}
+			m.costOwners[id] = costOwner{Source: source}
 		}
 		for _, id := range state.Finalized {
-			e.costOwners[id] = costOwner{Source: source, Finalized: true}
+			m.costOwners[id] = costOwner{Source: source, Finalized: true}
 		}
 	}
 }
 
-func (e *Entry) costCheckpoint() sessioncost.Checkpoint {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return sessioncost.Checkpoint{Initialized: e.costInitialized, Sources: e.cost}
+func (m *Monitor) costCheckpoint() sessioncost.Checkpoint {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return sessioncost.Checkpoint{Initialized: m.costInitialized, Sources: m.cost}
 }
 
-func (e *Entry) initializeCostSources(cursors map[string]string, consumeLegacy bool) bool {
-	e.mu.Lock()
-	changed := !e.costInitialized
-	sources := maps.Clone(e.cost)
+func (m *Monitor) initializeCostSources(cursors map[string]string, consumeLegacy bool) bool {
+	m.mu.Lock()
+	changed := !m.costInitialized
+	sources := maps.Clone(m.cost)
 	if sources == nil {
 		sources = make(map[string]*sessioncost.Source)
 	}
@@ -55,15 +55,15 @@ func (e *Entry) initializeCostSources(cursors map[string]string, consumeLegacy b
 		changed = true
 	}
 	if changed {
-		e.costInitialized, e.cost = true, sources
+		m.costInitialized, m.cost = true, sources
 	}
-	e.mu.Unlock()
+	m.mu.Unlock()
 	return changed
 }
 
-func (e *Entry) applyCostObservations(sourceID, cursor string, observations []sessioncost.Observation) bool {
-	e.mu.Lock()
-	sources := maps.Clone(e.cost)
+func (m *Monitor) applyCostObservations(sourceID, cursor string, observations []sessioncost.Observation) bool {
+	m.mu.Lock()
+	sources := maps.Clone(m.cost)
 	if sources == nil {
 		sources = make(map[string]*sessioncost.Source)
 	}
@@ -77,10 +77,10 @@ func (e *Entry) applyCostObservations(sourceID, cursor string, observations []se
 		return source
 	}
 	observed := edit(sourceID)
-	changed := !e.costInitialized || !observed.Initialized || observed.Cursor != cursor
+	changed := !m.costInitialized || !observed.Initialized || observed.Cursor != cursor
 	observed.Cursor, observed.Initialized = cursor, true
-	if e.costOwners == nil {
-		e.costOwners = make(map[string]costOwner)
+	if m.costOwners == nil {
+		m.costOwners = make(map[string]costOwner)
 	}
 	for _, observation := range observations {
 		observation.ObservationID = strings.TrimSpace(observation.ObservationID)
@@ -89,13 +89,13 @@ func (e *Entry) applyCostObservations(sourceID, cursor string, observations []se
 		if observation.ObservationID == "" || observation.Model == "" || !observation.Usage.HasUsage() {
 			continue
 		}
-		owner, exists := e.costOwners[observation.ObservationID]
+		owner, exists := m.costOwners[observation.ObservationID]
 		if owner.Finalized {
 			continue
 		}
 		if !exists {
 			owner = costOwner{Source: sourceID}
-			e.costOwners[observation.ObservationID] = owner
+			m.costOwners[observation.ObservationID] = owner
 		}
 		source := sources[owner.Source]
 		prior, seen := source.Observations[observation.ObservationID]
@@ -121,15 +121,15 @@ func (e *Entry) applyCostObservations(sourceID, cursor string, observations []se
 		changed = true
 	}
 	if changed {
-		e.costInitialized, e.cost = true, sources
+		m.costInitialized, m.cost = true, sources
 	}
-	e.mu.Unlock()
+	m.mu.Unlock()
 	return changed
 }
 
-func (e *Entry) markCostSource(sourceID string, incomplete, unavailable bool, cursor *string) bool {
-	e.mu.Lock()
-	source := e.cost[sourceID].Clone()
+func (m *Monitor) markCostSource(sourceID string, incomplete, unavailable bool, cursor *string) bool {
+	m.mu.Lock()
+	source := m.cost[sourceID].Clone()
 	source.MeasurementIncomplete = source.MeasurementIncomplete || incomplete
 	source.UsageUnavailable = source.UsageUnavailable || unavailable
 	if cursor != nil {
@@ -138,26 +138,26 @@ func (e *Entry) markCostSource(sourceID string, incomplete, unavailable bool, cu
 	if unavailable {
 		source.Initialized = true
 	}
-	if e.costInitialized && reflect.DeepEqual(e.cost[sourceID], source) {
-		e.mu.Unlock()
+	if m.costInitialized && reflect.DeepEqual(m.cost[sourceID], source) {
+		m.mu.Unlock()
 		return false
 	}
-	sources := maps.Clone(e.cost)
+	sources := maps.Clone(m.cost)
 	if sources == nil {
 		sources = make(map[string]*sessioncost.Source)
 	}
 	sources[sourceID] = source
-	e.costInitialized = e.costInitialized || unavailable || cursor != nil
-	e.cost = sources
-	e.mu.Unlock()
+	m.costInitialized = m.costInitialized || unavailable || cursor != nil
+	m.cost = sources
+	m.mu.Unlock()
 	return true
 }
 
-func (e *Entry) publishCost() bool {
-	e.mu.Lock()
-	view := e.viewLocked()
-	e.mu.Unlock()
-	return e.publish(view)
+func (m *Monitor) publishCost() bool {
+	m.mu.Lock()
+	view := m.viewLocked()
+	m.mu.Unlock()
+	return m.publish(view)
 }
 
 func CostChange(previous, view View) (changed, durable, usageChanged bool) {
@@ -182,11 +182,11 @@ func CostChange(previous, view View) (changed, durable, usageChanged bool) {
 	return
 }
 
-func (e *Entry) StartCost() {
-	if e == nil {
+func (m *Monitor) StartCost() {
+	if m == nil {
 		return
 	}
-	if e.initializeCostSources(nil, false) {
-		e.publishCost()
+	if m.initializeCostSources(nil, false) {
+		m.publishCost()
 	}
 }

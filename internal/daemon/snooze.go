@@ -58,20 +58,20 @@ func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {
 	if !until.After(now) {
 		return fmt.Errorf("session %s: until %s is in the past; choose a future instant", sessionID, msg.Until)
 	}
-	entry := d.monitorEntry(sessionID)
-	if entry == nil {
+	monitor := d.sessionMonitor(sessionID)
+	if monitor == nil {
 		return fmt.Errorf("session %s: no monitor runs it, so its turn can't be snoozed", sessionID)
 	}
 	turn := d.store.TurnStamps(sessionID).OpenedAt
-	view, applied := entry.Do(sessionmonitor.Command{Key: entry.Key(), Kind: sessionmonitor.Snooze, Turn: turn, Until: until}, now)
+	view, applied := monitor.Do(sessionmonitor.Command{Key: monitor.Key(), Kind: sessionmonitor.Snooze, Turn: turn, Until: until}, now)
 	pausepoint.At(pausepoint.SessionSnoozeCommitted)
 	if !applied {
 		return fmt.Errorf("session %s: could not save snooze", sessionID)
 	}
-	if !entry.Publish(view) {
+	if !monitor.Publish(view) {
 		return fmt.Errorf("session %s: snooze is pending; attn will keep retrying until it is saved", sessionID)
 	}
-	entry.CancelAutoSettle("snoozed")
+	monitor.CancelAutoSettle("snoozed")
 	d.traceSettle(sessionID)
 	return nil
 }
@@ -85,15 +85,15 @@ func (d *Daemon) handleWakeTurn(msg *protocol.WakeTurnMessage) error {
 }
 
 func (d *Daemon) wakeSnooze(sessionID protocol.SessionID, at time.Time, cause string) error {
-	entry := d.monitorEntry(sessionID)
-	if entry == nil {
+	monitor := d.sessionMonitor(sessionID)
+	if monitor == nil {
 		return fmt.Errorf("session %s: no monitor runs it, so its turn can't be woken", sessionID)
 	}
-	view, accepted := entry.Do(sessionmonitor.Command{Key: entry.Key(), Kind: sessionmonitor.Wake}, at)
+	view, accepted := monitor.Do(sessionmonitor.Command{Key: monitor.Key(), Kind: sessionmonitor.Wake}, at)
 	if !accepted {
 		return fmt.Errorf("session %s: could not save unsnooze", sessionID)
 	}
-	if !entry.Publish(view) {
+	if !monitor.Publish(view) {
 		return fmt.Errorf("session %s: unsnooze is pending; attn will keep retrying until it is saved", sessionID)
 	}
 	d.finishSnoozeWake(sessionID, at, cause)
@@ -111,7 +111,7 @@ func (d *Daemon) finishSnoozeWake(sessionID protocol.SessionID, at time.Time, ca
 		Cause:   "wake",
 		Outcome: statetrace.OutcomeApplied,
 	})
-	if d.monitorEntry(sessionID) == nil {
+	if d.sessionMonitor(sessionID) == nil {
 		d.broadcastSessionStateChanged(sessionID)
 	}
 }
@@ -125,8 +125,8 @@ func (d *Daemon) currentStateClaim(sessionID protocol.SessionID) string {
 }
 
 func (d *Daemon) clearSnoozeState(sessionID protocol.SessionID) {
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		entry.StopWake()
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		monitor.StopWake()
 	}
 }
 

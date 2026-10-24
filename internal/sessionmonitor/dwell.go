@@ -11,32 +11,32 @@ type dwellPending struct {
 	until time.Time
 }
 
-func (e *Entry) dwellReady(state protocol.SessionState, dwell time.Duration, now time.Time) bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+func (m *Monitor) dwellReady(state protocol.SessionState, dwell time.Duration, now time.Time) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if dwell <= 0 {
-		e.dwell = dwellPending{}
+		m.dwell = dwellPending{}
 		return true
 	}
-	if e.dwell.state != state || e.dwell.until.IsZero() {
-		e.dwell = dwellPending{state: state, until: now.Add(dwell)}
+	if m.dwell.state != state || m.dwell.until.IsZero() {
+		m.dwell = dwellPending{state: state, until: now.Add(dwell)}
 		return false
 	}
-	if now.Before(e.dwell.until) {
+	if now.Before(m.dwell.until) {
 		return false
 	}
-	e.dwell = dwellPending{}
+	m.dwell = dwellPending{}
 	return true
 }
 
-func (e *Entry) dwellDeadline() time.Time {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.dwell.until
+func (m *Monitor) dwellDeadline() time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.dwell.until
 }
 
-func (e *Entry) clearDwell() {
-	e.mu.Lock()
-	e.dwell = dwellPending{}
-	e.mu.Unlock()
+func (m *Monitor) clearDwell() {
+	m.mu.Lock()
+	m.dwell = dwellPending{}
+	m.mu.Unlock()
 }

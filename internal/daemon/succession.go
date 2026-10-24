@@ -15,7 +15,7 @@ import (
 
 // opened opens a session in terminal t for a conversation no session holds; it takes only the terminal,
 // and from closes into the ledger whole. The caller holds from's lifecycle lock.
-func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation, candidate *sessionmonitor.Entry) error {
+func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observation agentConversationObservation, candidate *sessionmonitor.Monitor) error {
 	launch, _ := d.store.LaunchIntent(from.ID)
 	launch.ChiefOfStaff = false
 	to := protocol.SessionID(uuid.NewString())
@@ -28,7 +28,7 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 
 // shows puts owner, which holds the conversation t reports and runs in no live terminal, in t: a closed
 // owner reopens in place, an open one leaves its dead panes. The caller holds both lifecycle locks.
-func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner protocol.SessionID, observation agentConversationObservation, candidate *sessionmonitor.Entry) error {
+func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner protocol.SessionID, observation agentConversationObservation, candidate *sessionmonitor.Monitor) error {
 	return d.succeed(t, from, store.Succession{
 		To:     owner,
 		Close:  store.SessionClose{Reason: string("resumed; its terminal moved on to " + owner)},
@@ -36,7 +36,7 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner proto
 	}, observation, candidate)
 }
 
-func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation, candidate *sessionmonitor.Entry) error {
+func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation, candidate *sessionmonitor.Monitor) error {
 	unlockEnds := d.lockTerminalEnds(from.ID)
 	live := d.liveTerminals(context.Background())
 	sc.KeepFrom = d.othersRun(from.ID, t) || d.keepsWhenLeft(from.ID)
@@ -46,7 +46,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	release := func() {}
 	if !sc.KeepFrom {
-		release = d.monitorEntry(from.ID).FinishUsage()
+		release = d.sessionMonitor(from.ID).FinishUsage()
 		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
 			d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
 		}
@@ -54,27 +54,27 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	sc.From = from.ID
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
 	fresh := d.store.Get(sc.To) == nil
-	handedOver := d.monitorEntry(from.ID).Driver()
+	handedOver := d.sessionMonitor(from.ID).Driver()
 	_, closedAsks, err := d.store.CommitSuccession(sc, t)
 	unlockEnds()
 	defer release()
 	if err != nil {
 		release()
 		if !sc.KeepFrom {
-			d.monitorEntry(from.ID).EnsureTranscriptWatcher(d.store.GetSessionConversation(from.ID).TranscriptPath)
+			d.sessionMonitor(from.ID).EnsureTranscriptWatcher(d.store.GetSessionConversation(from.ID).TranscriptPath)
 		}
 		return err
 	}
 
-	entry := d.startSessionMonitorFrom(sc.To, from.ID, candidate)
+	monitor := d.startSessionMonitorFrom(sc.To, from.ID, candidate)
 	if !sc.KeepTo {
-		entry.Begin(d.successorLaunch(sc.To, from, handedOver, fresh))
+		monitor.Begin(d.successorLaunch(sc.To, from, handedOver, fresh))
 	}
 	if !sc.KeepTo {
-		d.monitorEntry(sc.To).ResolveSoon()
-		d.monitorEntry(sc.To).StartTranscriptWatcher(observation.TranscriptPath)
+		d.sessionMonitor(sc.To).ResolveSoon()
+		d.sessionMonitor(sc.To).StartTranscriptWatcher(observation.TranscriptPath)
 	} else {
-		d.monitorEntry(sc.To).EnsureTranscriptWatcher(observation.TranscriptPath)
+		d.sessionMonitor(sc.To).EnsureTranscriptWatcher(observation.TranscriptPath)
 	}
 	d.publishFact(FactSessionRegistered, string(sc.To), nil)
 	d.publishArrangementChanged(from.ProfileID)

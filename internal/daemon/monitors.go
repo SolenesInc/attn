@@ -13,7 +13,7 @@ import (
 )
 
 type monitorBinding struct {
-	entry      *sessionmonitor.Entry
+	monitor    *sessionmonitor.Monitor
 	applied    sessionmonitor.View
 	catchUp    *time.Timer
 	retryDelay time.Duration
@@ -34,40 +34,40 @@ func (d *Daemon) monitors() *monitorIndex {
 	return d.monitorState
 }
 
-func (r *monitorIndex) entry(sessionID protocol.SessionID) *sessionmonitor.Entry {
+func (r *monitorIndex) monitor(sessionID protocol.SessionID) *sessionmonitor.Monitor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if binding := r.sessions[sessionID]; binding != nil {
-		return binding.entry
+		return binding.monitor
 	}
 	return nil
 }
 
-func (d *Daemon) monitorEntry(sessionID protocol.SessionID) *sessionmonitor.Entry {
-	return d.monitors().entry(sessionID)
+func (d *Daemon) sessionMonitor(sessionID protocol.SessionID) *sessionmonitor.Monitor {
+	return d.monitors().monitor(sessionID)
 }
 
-func (r *monitorIndex) each() map[protocol.SessionID]*sessionmonitor.Entry {
+func (r *monitorIndex) each() map[protocol.SessionID]*sessionmonitor.Monitor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	entries := make(map[protocol.SessionID]*sessionmonitor.Entry, len(r.sessions))
+	monitors := make(map[protocol.SessionID]*sessionmonitor.Monitor, len(r.sessions))
 	for id, binding := range r.sessions {
-		entries[id] = binding.entry
+		monitors[id] = binding.monitor
 	}
-	return entries
+	return monitors
 }
 
-func (d *Daemon) startSessionMonitor(sessionID protocol.SessionID) *sessionmonitor.Entry {
+func (d *Daemon) startSessionMonitor(sessionID protocol.SessionID) *sessionmonitor.Monitor {
 	return d.startSessionMonitorFrom(sessionID, "", nil)
 }
 
-func (d *Daemon) startSessionMonitorSeeded(seed *protocol.Session, fresh sessionmonitor.Evidence) *sessionmonitor.Entry {
-	entry := d.startSessionMonitor(seed.ID)
-	entry.Restart(withSeed(d.monitorLaunch(seed.ID), seed), fresh)
-	return entry
+func (d *Daemon) startSessionMonitorSeeded(seed *protocol.Session, fresh sessionmonitor.Evidence) *sessionmonitor.Monitor {
+	monitor := d.startSessionMonitor(seed.ID)
+	monitor.Restart(withSeed(d.monitorLaunch(seed.ID), seed), fresh)
+	return monitor
 }
 
-func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID, candidate *sessionmonitor.Entry) *sessionmonitor.Entry {
+func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID, candidate *sessionmonitor.Monitor) *sessionmonitor.Monitor {
 	terminal := d.primaryTerminal(sessionID)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
 	linked := d.store.SessionLink(sessionID) == codexLinkKind
@@ -79,9 +79,9 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	if terminal == "" {
 		return nil
 	}
-	var previous *sessionmonitor.Entry
+	var previous *sessionmonitor.Monitor
 	if previousID != "" {
-		previous = d.monitorEntry(previousID)
+		previous = d.sessionMonitor(previousID)
 	}
 	r := d.monitors()
 	start := func() sessionmonitor.Start {
@@ -89,33 +89,33 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 			Launch: func() sessionmonitor.Launch { return d.monitorLaunch(sessionID) }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), sessionID)}
 	}
 	r.policyMu.Lock()
-	entry := r.entry(sessionID)
-	reused := r.registry.Reuse(entry, start())
+	monitor := r.monitor(sessionID)
+	reused := r.registry.Reuse(monitor, start())
 	r.policyMu.Unlock()
 	if !reused {
-		if entry != nil {
-			entry.Stop()
+		if monitor != nil {
+			monitor.Stop()
 		}
 		r.policyMu.Lock()
-		entry = r.registry.Start(entry, start())
+		monitor = r.registry.Start(monitor, start())
 		r.mu.Lock()
 		if old := r.sessions[sessionID]; old != nil {
 			old.stopCatchUp()
 		}
-		applied := entry.Snapshot()
+		applied := monitor.Snapshot()
 		applied.PullRequests.Entries = d.recordedLinks(sessionID)
-		r.sessions[sessionID] = &monitorBinding{entry: entry, applied: applied}
-		homeOf(entry).bind(sessionID)
+		r.sessions[sessionID] = &monitorBinding{monitor: monitor, applied: applied}
+		homeOf(monitor).bind(sessionID)
 		r.mu.Unlock()
 		r.policyMu.Unlock()
 	}
-	entry.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
-	entry.Arm()
+	monitor.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
+	monitor.Arm()
 	d.syncMonitorConversation(sessionID)
-	if previous != nil && previous != entry {
-		entry.TakeUserSubmit(previous)
+	if previous != nil && previous != monitor {
+		monitor.TakeUserSubmit(previous)
 	}
-	return entry
+	return monitor
 }
 
 func withSeed(launch sessionmonitor.Launch, seed *protocol.Session) sessionmonitor.Launch {
@@ -184,9 +184,9 @@ func (d *Daemon) driverInputFromRecord(session protocol.SessionID) sessionmonito
 
 func (d *Daemon) forgetMonitor(sessionID protocol.SessionID) {
 	r := d.monitors()
-	entry := r.entry(sessionID)
-	if entry != nil {
-		entry.Forget()
+	monitor := r.monitor(sessionID)
+	if monitor != nil {
+		monitor.Forget()
 	}
 	r.policyMu.Lock()
 	r.mu.Lock()
@@ -197,8 +197,8 @@ func (d *Daemon) forgetMonitor(sessionID protocol.SessionID) {
 	}
 	r.mu.Unlock()
 	r.policyMu.Unlock()
-	if binding != nil && binding.entry != entry {
-		binding.entry.Forget()
+	if binding != nil && binding.monitor != monitor {
+		binding.monitor.Forget()
 	}
 }
 
@@ -214,8 +214,8 @@ func (h monitorHost) Done() <-chan struct{}           { return h.daemon.life.Don
 func (h monitorHost) Ended() bool                     { return h.daemon.life.Ended() }
 func (h monitorHost) Logf(format string, args ...any) { h.daemon.logf(format, args...) }
 func (h monitorHost) Debug() bool                     { return h.daemon.debugLogging }
-func (h monitorHost) HomeFor(entry *sessionmonitor.Entry) sessionmonitor.Home {
-	return &monitorHome{daemon: h.daemon, entry: entry}
+func (h monitorHost) HomeFor(monitor *sessionmonitor.Monitor) sessionmonitor.Home {
+	return &monitorHome{daemon: h.daemon, monitor: monitor}
 }
 func (h monitorHost) Classify(ctx context.Context, request sessionmonitor.ClassifyRequest) (string, error) {
 	return h.daemon.runClassifier(ctx, request.Agent, request.Directory, request.Text, request.Timeout)
@@ -226,15 +226,15 @@ func (h monitorHost) ReadBranch(ctx context.Context, directory string) (*attngit
 
 type monitorHome struct {
 	daemon  *Daemon
-	entry   *sessionmonitor.Entry
+	monitor *sessionmonitor.Monitor
 	session atomic.Value
 }
 
-func homeOf(entry *sessionmonitor.Entry) *monitorHome { return entry.Home().(*monitorHome) }
+func homeOf(monitor *sessionmonitor.Monitor) *monitorHome { return monitor.Home().(*monitorHome) }
 
 func (h *monitorHome) bind(sessionID protocol.SessionID) {
 	h.session.Store(sessionID)
-	h.entry.Bind(string(sessionID))
+	h.monitor.Bind(string(sessionID))
 }
 
 func (h *monitorHome) sessionID() protocol.SessionID {
@@ -242,8 +242,8 @@ func (h *monitorHome) sessionID() protocol.SessionID {
 	return id
 }
 
-func (h monitorHost) session(entry *sessionmonitor.Entry) protocol.SessionID {
-	return homeOf(entry).sessionID()
+func (h monitorHost) session(monitor *sessionmonitor.Monitor) protocol.SessionID {
+	return homeOf(monitor).sessionID()
 }
 
 func (h monitorHost) LiveTerminals(ctx context.Context) map[harness.TerminalID]struct{} {
@@ -262,8 +262,8 @@ func (h monitorHost) Input(ctx context.Context, terminal harness.TerminalID, dat
 	return h.daemon.ptyBackend.Input(ctx, terminal, data)
 }
 
-func (h monitorHost) Link(entry *sessionmonitor.Entry, voice harness.Voice) harness.Link {
-	session := h.daemon.store.Get(h.session(entry))
+func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) harness.Link {
+	session := h.daemon.store.Get(h.session(monitor))
 	if session == nil {
 		return nil
 	}
@@ -299,8 +299,8 @@ func (h monitorHost) LastKey(terminal harness.TerminalID) time.Time {
 	return h.daemon.terminals().lastKeyOf(terminal)
 }
 
-func (h monitorHost) EnqueueTitle(entry *sessionmonitor.Entry, conversation, source string) error {
-	return h.daemon.enqueueSessionTitle(h.session(entry), conversation, source)
+func (h monitorHost) EnqueueTitle(monitor *sessionmonitor.Monitor, conversation, source string) error {
+	return h.daemon.enqueueSessionTitle(h.session(monitor), conversation, source)
 }
 
 func (d *Daemon) kickMonitorTerminals() {
@@ -309,8 +309,8 @@ func (d *Daemon) kickMonitorTerminals() {
 	}
 	d.life.Go("pushMonitorTerminals", func() {
 		d.monitorTerminalsDirty.Store(false)
-		for sessionID, entry := range d.monitors().each() {
-			entry.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
+		for sessionID, monitor := range d.monitors().each() {
+			monitor.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
 		}
 	})
 }

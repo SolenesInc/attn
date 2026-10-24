@@ -12,7 +12,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	driver := view.Driver.V
 	if driver.Run != "" && driver.TranscriptPath != "" && (driver.Run != previous.Driver.V.Run || driver.TranscriptPath != previous.Driver.V.TranscriptPath) {
 		pausepoint.At(pausepoint.DriverTranscriptApplied)
-		d.monitorEntry(session).WatchDriverUsage(driver.TranscriptPath)
+		d.sessionMonitor(session).WatchDriverUsage(driver.TranscriptPath)
 	}
 	if previous.HarnessTitle.V != view.HarnessTitle.V && d.store.SessionLabels(session).UserLabel == "" {
 		d.publishFact(FactSessionRenamed, string(session), nil)
@@ -44,7 +44,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 		d.enqueueSessionActivity(session)
 	}
 	if stateChanged && !state.Quiet {
-		d.monitorEntry(session).UpdateTranscriptState(state.State)
+		d.sessionMonitor(session).UpdateTranscriptState(state.State)
 		source := state.Origin.Source
 		if source == "" {
 			source = state.Cause
@@ -58,7 +58,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 			d.broadcastSessionStateChanged(session)
 		}
 		if state.Resolve {
-			d.monitorEntry(session).ResolveSoon()
+			d.sessionMonitor(session).ResolveSoon()
 		}
 	}
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {

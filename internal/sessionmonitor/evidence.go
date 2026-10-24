@@ -12,15 +12,15 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-func (e *Entry) Evidence() (Evidence, bool) {
-	if e == nil {
+func (m *Monitor) Evidence() (Evidence, bool) {
+	if m == nil {
 		return Evidence{}, false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.monitor.mu.Lock()
-	defer e.monitor.mu.Unlock()
-	return Evidence{e.monitor.terminal, e.evidence}, true
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	return Evidence{m.watch.terminal, m.evidence}, true
 }
 
 func movedAt(at time.Time, mutate func(*Evidence)) func(*Evidence) {
@@ -30,33 +30,33 @@ func movedAt(at time.Time, mutate func(*Evidence)) func(*Evidence) {
 	}
 }
 
-func (e *Entry) RecordEvidence(at time.Time, mutate func(*Evidence)) bool {
-	if e == nil {
+func (m *Monitor) RecordEvidence(at time.Time, mutate func(*Evidence)) bool {
+	if m == nil {
 		return false
 	}
-	return e.UpdateEvidence(nil, movedAt(at, mutate))
+	return m.UpdateEvidence(nil, movedAt(at, mutate))
 }
 
-func (e *Entry) UpdateEvidence(unchanged func(*Evidence) bool, mutate func(*Evidence)) bool {
-	if e == nil {
+func (m *Monitor) UpdateEvidence(unchanged func(*Evidence) bool, mutate func(*Evidence)) bool {
+	if m == nil {
 		return false
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.monitor.mu.Lock()
-	defer e.monitor.mu.Unlock()
-	evidence := Evidence{e.monitor.terminal, e.evidence}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.watch.mu.Lock()
+	defer m.watch.mu.Unlock()
+	evidence := Evidence{m.watch.terminal, m.evidence}
 	if unchanged != nil && unchanged(&evidence) {
 		return false
 	}
 	mutate(&evidence)
-	e.monitor.terminal, e.evidence = evidence.TerminalEvidence, evidence.ConversationEvidence
-	e.resolveSoonLocked()
+	m.watch.terminal, m.evidence = evidence.TerminalEvidence, evidence.ConversationEvidence
+	m.resolveSoonLocked()
 	return true
 }
 
-func (e *Entry) RecordPTY(obs pty.Observation) bool {
-	if e == nil {
+func (m *Monitor) RecordPTY(obs pty.Observation) bool {
+	if m == nil {
 		return false
 	}
 	at := obs.At
@@ -67,7 +67,7 @@ func (e *Entry) RecordPTY(obs pty.Observation) bool {
 	if !ok {
 		return false
 	}
-	return e.UpdateEvidence(func(e *Evidence) bool {
+	return m.UpdateEvidence(func(e *Evidence) bool {
 		return holdsPTYEvidence(e, obs)
 	}, movedAt(at, mutate))
 }
@@ -143,11 +143,11 @@ func holdsSettledHeartbeat(e *Evidence, obs pty.Observation) bool {
 		e.Heartbeat.Detail == obs.Detail
 }
 
-func (e *Entry) HoldsPTY(obs pty.Observation) bool {
-	if e == nil {
+func (m *Monitor) HoldsPTY(obs pty.Observation) bool {
+	if m == nil {
 		return false
 	}
-	evidence, ok := e.Evidence()
+	evidence, ok := m.Evidence()
 	return ok && holdsPTYEvidence(&evidence, obs)
 }
 
@@ -191,51 +191,51 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*Evidence), bool
 	}, true
 }
 
-func (e *Entry) Restart(launch Launch, fresh Evidence) {
-	if e == nil {
+func (m *Monitor) Restart(launch Launch, fresh Evidence) {
+	if m == nil {
 		return
 	}
-	e.Begin(launch)
-	e.UpdateEvidence(nil, func(e *Evidence) { *e = fresh })
+	m.Begin(launch)
+	m.UpdateEvidence(nil, func(e *Evidence) { *e = fresh })
 }
 
-func (e *Entry) Begin(launch Launch) {
-	if e == nil {
+func (m *Monitor) Begin(launch Launch) {
+	if m == nil {
 		return
 	}
-	e.mu.Lock()
-	e.directory, e.branch, e.startedAt = launch.Directory, launch.Branch, launch.StartedAt
-	e.state = StateView{Quiet: true, Sequence: e.state.Sequence + 1, State: launch.State, Since: launch.StateSince, Updated: launch.StateUpdated}
+	m.mu.Lock()
+	m.directory, m.branch, m.startedAt = launch.Directory, launch.Branch, launch.StartedAt
+	m.state = StateView{Quiet: true, Sequence: m.state.Sequence + 1, State: launch.State, Since: launch.StateSince, Updated: launch.StateUpdated}
 	if !launch.LastModelRequestAt.IsZero() {
-		e.lastModelRequestAt = launch.LastModelRequestAt
+		m.lastModelRequestAt = launch.LastModelRequestAt
 	}
 	if launch.Driver.Run != "" {
-		e.driver = launch.Driver
+		m.driver = launch.Driver
 	}
 	if !launch.LastSeen.IsZero() {
-		e.touchedAt = launch.LastSeen
+		m.touchedAt = launch.LastSeen
 	}
 	if launch.Cost.Initialized {
-		e.loadCostLocked(launch.Cost)
+		m.loadCostLocked(launch.Cost)
 	}
-	e.firstReportAt = time.Time{}
-	e.reason = ""
-	e.dwell = dwellPending{}
-	view := e.viewLocked()
-	e.mu.Unlock()
-	e.publish(view)
+	m.firstReportAt = time.Time{}
+	m.reason = ""
+	m.dwell = dwellPending{}
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
 }
 
 func ReportsTurnStarts(agent string) bool {
 	return agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasHooks
 }
 
-func (e *Entry) RecordBracket(state string) {
-	if e == nil {
+func (m *Monitor) RecordBracket(state string) {
+	if m == nil {
 		return
 	}
 	at := time.Now()
-	e.RecordEvidence(at, func(e *Evidence) {
+	m.RecordEvidence(at, func(e *Evidence) {
 		switch state {
 		case protocol.StateWorking:
 			e.TurnOpen = true
@@ -275,8 +275,8 @@ func (e *Entry) RecordBracket(state string) {
 	})
 }
 
-func (e *Entry) RecordTurnAborted(detail string, abortedAt, observedAt time.Time) {
-	if e == nil {
+func (m *Monitor) RecordTurnAborted(detail string, abortedAt, observedAt time.Time) {
+	if m == nil {
 		return
 	}
 	if observedAt.IsZero() {
@@ -286,7 +286,7 @@ func (e *Entry) RecordTurnAborted(detail string, abortedAt, observedAt time.Time
 	if at.IsZero() {
 		at = observedAt
 	}
-	e.RecordEvidence(observedAt, func(e *Evidence) {
+	m.RecordEvidence(observedAt, func(e *Evidence) {
 		e.TurnOpen = false
 		e.ToolOpen = false
 		e.LastHarnessEvent = &sessionstate.Observation{
@@ -298,12 +298,12 @@ func (e *Entry) RecordTurnAborted(detail string, abortedAt, observedAt time.Time
 	})
 }
 
-func (e *Entry) RecordTurnEnded(classifies bool) {
-	if e == nil {
+func (m *Monitor) RecordTurnEnded(classifies bool) {
+	if m == nil {
 		return
 	}
 	at := time.Now()
-	e.RecordEvidence(at, func(e *Evidence) {
+	m.RecordEvidence(at, func(e *Evidence) {
 		e.TurnOpen = false
 		e.ToolOpen = false
 		if classifies {
@@ -326,21 +326,21 @@ func classifierVerdictMutation(state string, observedAt time.Time) func(*Evidenc
 	}
 }
 
-func (e *Entry) RecordStopFacts(backgroundWork, pendingCron bool) {
-	if e == nil {
+func (m *Monitor) RecordStopFacts(backgroundWork, pendingCron bool) {
+	if m == nil {
 		return
 	}
-	e.RecordEvidence(time.Now(), func(e *Evidence) {
+	m.RecordEvidence(time.Now(), func(e *Evidence) {
 		e.BackgroundWork = backgroundWork
 		e.PendingCron = pendingCron
 	})
 }
 
-func (e *Entry) RecordReviewer(inLoop bool) {
-	if e == nil {
+func (m *Monitor) RecordReviewer(inLoop bool) {
+	if m == nil {
 		return
 	}
-	e.RecordEvidence(time.Now(), func(e *Evidence) {
+	m.RecordEvidence(time.Now(), func(e *Evidence) {
 		e.ReviewerInLoop = inLoop
 	})
 }
@@ -350,14 +350,14 @@ const (
 	notifyIdlePrompt       = "idle_prompt"
 )
 
-func (e *Entry) RecordNotification(notificationType string, message string) {
-	if e == nil {
+func (m *Monitor) RecordNotification(notificationType string, message string) {
+	if m == nil {
 		return
 	}
 	at := time.Now()
 	switch strings.TrimSpace(notificationType) {
 	case notifyPermissionPrompt:
-		e.RecordEvidence(at, func(e *Evidence) {
+		m.RecordEvidence(at, func(e *Evidence) {
 			e.LastHarnessEvent = &sessionstate.Observation{
 				Source:     sessionstate.SourceHarnessEvent,
 				Claim:      sessionstate.ClaimApprovalPending,
@@ -366,14 +366,14 @@ func (e *Entry) RecordNotification(notificationType string, message string) {
 			}
 		})
 	case notifyIdlePrompt:
-		e.RecordEvidence(at, func(e *Evidence) {
+		m.RecordEvidence(at, func(e *Evidence) {
 			e.PromptIdleAt = at
 		})
 	}
 }
 
-func (e *Entry) RecordStopFailure(errorType string, message string) {
-	if e == nil {
+func (m *Monitor) RecordStopFailure(errorType string, message string) {
+	if m == nil {
 		return
 	}
 	at := time.Now()
@@ -381,7 +381,7 @@ func (e *Entry) RecordStopFailure(errorType string, message string) {
 	if message = strings.TrimSpace(message); message != "" {
 		detail = detail + ": " + message
 	}
-	e.RecordEvidence(at, func(e *Evidence) {
+	m.RecordEvidence(at, func(e *Evidence) {
 		e.LastHarnessEvent = &sessionstate.Observation{
 			Source:     sessionstate.SourceHarnessEvent,
 			Claim:      sessionstate.ClaimStopFailed,
@@ -391,21 +391,21 @@ func (e *Entry) RecordStopFailure(errorType string, message string) {
 	})
 }
 
-func (e *Entry) RecordCompaction(active bool) {
-	if e == nil {
+func (m *Monitor) RecordCompaction(active bool) {
+	if m == nil {
 		return
 	}
-	e.RecordEvidence(time.Now(), func(e *Evidence) {
+	m.RecordEvidence(time.Now(), func(e *Evidence) {
 		e.Compacting = active
 	})
 }
 
-func (e *Entry) RecordProcessExit() {
-	if e == nil {
+func (m *Monitor) RecordProcessExit() {
+	if m == nil {
 		return
 	}
 	at := time.Now()
-	e.RecordEvidence(at, func(e *Evidence) {
+	m.RecordEvidence(at, func(e *Evidence) {
 		e.Process = &sessionstate.Observation{
 			Source:     sessionstate.SourceProcess,
 			Claim:      sessionstate.ClaimExited,
@@ -414,18 +414,18 @@ func (e *Entry) RecordProcessExit() {
 	})
 }
 
-func (e *Entry) recordClassifierStarted(at time.Time) {
-	e.RecordEvidence(at, func(e *Evidence) { e.ClassifyingSince = at })
-	if e.current() {
-		e.CancelAutoSettle("classification started")
+func (m *Monitor) recordClassifierStarted(at time.Time) {
+	m.RecordEvidence(at, func(e *Evidence) { e.ClassifyingSince = at })
+	if m.current() {
+		m.CancelAutoSettle("classification started")
 	}
 }
 
-func (e *Entry) concludeClassification(verdict func(*Evidence)) {
-	if e.current() {
-		e.SyncAutoSettle()
+func (m *Monitor) concludeClassification(verdict func(*Evidence)) {
+	if m.current() {
+		m.SyncAutoSettle()
 	}
-	e.RecordEvidence(time.Now(), func(e *Evidence) {
+	m.RecordEvidence(time.Now(), func(e *Evidence) {
 		if verdict != nil {
 			verdict(e)
 		}
@@ -443,36 +443,36 @@ var ResolverOwnedStates = map[protocol.SessionState]bool{
 	protocol.SessionStateUnknown:         true,
 }
 
-func (e *Entry) publishResolution(current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
-	linkOwns := e.linkOwnsState()
+func (m *Monitor) publishResolution(current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
+	linkOwns := m.linkOwnsState()
 	resolverOwnsState = ResolverOwnedStates[current] && !linkOwns
 	if resolution.Hold {
-		e.traceResolutionSkip(resolution, string(resolution.Reason))
+		m.traceResolutionSkip(resolution, string(resolution.Reason))
 		return resolverOwnsState
 	}
 	if resolution.Reason == sessionstate.ReasonNoEvidence {
 		return resolverOwnsState
 	}
 	if linkOwns {
-		e.traceResolutionSkip(resolution, "link_owns_state")
+		m.traceResolutionSkip(resolution, "link_owns_state")
 		return false
 	}
 	if !ResolverOwnedStates[current] || resolution.State == current {
-		e.clearDwell()
-		if e.recordStateReason(resolution) && ResolverOwnedStates[current] {
-			e.mu.Lock()
-			view := e.viewLocked()
-			e.mu.Unlock()
-			e.publish(view)
+		m.clearDwell()
+		if m.recordStateReason(resolution) && ResolverOwnedStates[current] {
+			m.mu.Lock()
+			view := m.viewLocked()
+			m.mu.Unlock()
+			m.publish(view)
 		}
 		return resolverOwnsState
 	}
-	if !e.dwellReady(resolution.State, dwell, now) {
-		e.traceResolutionSkip(resolution, "dwell")
+	if !m.dwellReady(resolution.State, dwell, now) {
+		m.traceResolutionSkip(resolution, "dwell")
 		return true
 	}
-	e.recordStateReason(resolution)
-	e.ApplyState(Change{
+	m.recordStateReason(resolution)
+	m.ApplyState(Change{
 		State:  string(resolution.State),
 		Cause:  resolverObservation{},
 		Origin: Origin{Source: StateSourceResolver, Detail: resolutionDetail(resolution)},
@@ -480,10 +480,10 @@ func (e *Entry) publishResolution(current protocol.SessionState, resolution sess
 	return true
 }
 
-func (e *Entry) linkOwnsState() bool {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.driver.Run != "" && e.policy.DriverReportsState
+func (m *Monitor) linkOwnsState() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.driver.Run != "" && m.policy.DriverReportsState
 }
 
 func resolutionDetail(resolution sessionstate.Resolution) string {
@@ -493,8 +493,8 @@ func resolutionDetail(resolution sessionstate.Resolution) string {
 	return string(resolution.Reason) + ": " + resolution.Detail
 }
 
-func (e *Entry) traceResolutionSkip(resolution sessionstate.Resolution, reason string) {
-	e.Trace(statetrace.Observation{
+func (m *Monitor) traceResolutionSkip(resolution sessionstate.Resolution, reason string) {
+	m.Trace(statetrace.Observation{
 		Source:  StateSourceResolver,
 		Claim:   string(resolution.State),
 		Detail:  resolution.Detail,

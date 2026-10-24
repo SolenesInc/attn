@@ -84,7 +84,7 @@ func (r *codexShared) Deliver(_ context.Context, in harness.Input) harness.Custo
 	}
 	if err == nil {
 		s.events.run(r.d, func() {
-			r.d.monitorEntry(session.ID).EnsureTranscriptWatcher(r.d.store.GetSessionConversation(session.ID).TranscriptPath)
+			r.d.sessionMonitor(session.ID).EnsureTranscriptWatcher(r.d.store.GetSessionConversation(session.ID).TranscriptPath)
 		})
 	}
 	if err != nil {
@@ -201,16 +201,16 @@ func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
 	}
 	now := time.Now()
 	if status == pty.ProgramIdle {
-		evidence, _ := r.d.monitorEntry(sessionID).Evidence()
+		evidence, _ := r.d.sessionMonitor(sessionID).Evidence()
 		bracketOpen := evidence.TurnOpen || evidence.ToolOpen
 		if !bracketOpen && !inTurn(session.State) {
 			return
 		}
 		if bracketOpen {
-			r.d.monitorEntry(sessionID).RecordTurnAborted("the shared Codex app-server ended the turn", now, now)
+			r.d.sessionMonitor(sessionID).RecordTurnAborted("the shared Codex app-server ended the turn", now, now)
 		}
 	}
-	r.d.monitorEntry(sessionID).RecordPTY(pty.Observation{Source: pty.SourceProgramStatus, Claim: status, At: now})
+	r.d.sessionMonitor(sessionID).RecordPTY(pty.Observation{Source: pty.SourceProgramStatus, Claim: status, At: now})
 }
 
 func inTurn(state protocol.SessionState) bool {
@@ -285,7 +285,7 @@ func (r *codexShared) closing(sessionID protocol.SessionID) (afterClose func()) 
 	if conversation == "" || session == nil {
 		return nil
 	}
-	r.d.monitorEntry(sessionID).FinishAndSettleUsage(protocol.SessionAgentCodex, r.d.store.GetSessionConversation(sessionID).TranscriptPath)()
+	r.d.sessionMonitor(sessionID).FinishAndSettleUsage(protocol.SessionAgentCodex, r.d.store.GetSessionConversation(sessionID).TranscriptPath)()
 	profile := session.ProfileID
 	r.mu.Lock()
 	r.archivingAfterClose[profile]++
@@ -363,8 +363,8 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 		if session == nil || name == "" {
 			return
 		}
-		if entry := r.d.monitorEntry(sessionID); entry != nil {
-			entry.ReportHarnessTitle(name)
+		if monitor := r.d.sessionMonitor(sessionID); monitor != nil {
+			monitor.ReportHarnessTitle(name)
 		}
 	})
 }

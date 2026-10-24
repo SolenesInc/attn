@@ -34,8 +34,8 @@ func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return
 	}
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		if offered, applied := entry.ReofferExit(info.LifecycleID); offered {
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		if offered, applied := monitor.ReofferExit(info.LifecycleID); offered {
 			if !applied {
 				d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
 			}
@@ -56,8 +56,8 @@ func (d *Daemon) captureExitScreen(sessionID protocol.SessionID, info ptybackend
 			rec.Rows = int(snapshot.Screen.Rows)
 		}
 	}
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		if !entry.ReportExit(sessionmonitor.Exit{LifecycleID: info.LifecycleID, Text: rec.Text, Cols: rec.Cols, Rows: rec.Rows, Code: rec.ExitCode, Signal: rec.ExitSignal, At: time.Now()}) {
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		if !monitor.ReportExit(sessionmonitor.Exit{LifecycleID: info.LifecycleID, Text: rec.Text, Cols: rec.Cols, Rows: rec.Rows, Code: rec.ExitCode, Signal: rec.ExitSignal, At: time.Now()}) {
 			d.logf("exit view not applied: session=%s terminal=%s", sessionID, info.ID)
 		}
 		return
@@ -75,8 +75,8 @@ func (d *Daemon) saveExitScreen(rec store.SessionExitScreen, at time.Time) bool 
 }
 
 func (d *Daemon) clearExitScreenBefore(session protocol.SessionID, before time.Time) {
-	if entry := d.monitorEntry(session); entry != nil {
-		cleared, applied := entry.ClearExitBefore(before)
+	if monitor := d.sessionMonitor(session); monitor != nil {
+		cleared, applied := monitor.ClearExitBefore(before)
 		if !cleared || !applied {
 			return
 		}
