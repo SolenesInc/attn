@@ -1,0 +1,4 @@
+kind: fixed
+area: cli
+change: attn daemon stop and attn daemon ensure print usage for -h/--help and refuse any other argument by name, instead of ignoring it and stopping or starting the daemon.
+symptom: Running attn daemon stop --help to read its flags stopped the running daemon.

@@ -145,3 +145,35 @@ func TestDaemonStopSignalsOnlyTheProcessThatHoldsTheDaemonLock(t *testing.T) {
 		t.Errorf("after attn daemon stop, attn agent list exited %d: %s", after.Code, after.Stdout)
 	}
 }
+
+func TestDaemonStopAndEnsurePrintHelpAndRefuseUnknownArgumentsWithoutActing(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	if got := s.Attn("daemon", "ensure"); got.Code != 0 {
+		t.Fatalf("attn daemon ensure exited %d: %s", got.Code, got.Stderr)
+	}
+	t.Cleanup(func() { s.Attn("daemon", "stop") })
+	daemonAnswers := func() bool {
+		t.Helper()
+		return s.Attn("agent", "list").Code == 0
+	}
+
+	for _, command := range []string{"stop", "ensure"} {
+		for _, help := range []string{"--help", "-h"} {
+			got := s.Attn("daemon", command, help)
+			if got.Code != 0 || !strings.HasPrefix(got.Stdout, "usage: attn daemon") || !daemonAnswers() {
+				t.Errorf("attn daemon %s %s exited %d printing %q (daemon still answers: %t), want usage and the daemon left running", command, help, got.Code, got.Stdout, daemonAnswers())
+			}
+		}
+		for _, unknown := range []string{"--bogus", "now"} {
+			got := s.Attn("daemon", command, unknown)
+			if got.Code != 2 || !strings.Contains(got.Stderr, fmt.Sprintf("daemon %s: unknown argument %q", command, unknown)) || got.Stdout != "" || !daemonAnswers() {
+				t.Errorf("attn daemon %s %s exited %d with stdout %q and stderr %q (daemon still answers: %t), want a refusal naming %s and the daemon left running", command, unknown, got.Code, got.Stdout, got.Stderr, daemonAnswers(), unknown)
+			}
+		}
+	}
+
+	if got := s.Attn("daemon", "--help"); got.Code != 0 || !strings.HasPrefix(got.Stdout, "usage: attn daemon") {
+		t.Errorf("attn daemon --help exited %d printing %q, want usage", got.Code, got.Stdout)
+	}
+}
