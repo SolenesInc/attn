@@ -48,8 +48,11 @@ session                 attn's record of one conversation; like one chat in a
 ├─ conversation (1)     the harness's chat history
 ├─ worktree (at most 1) the git worktree the agent works in; several
 │                       sessions can share one
-└─ stake (at most 1)    the seed assigned to the session by its delegation;
-                        it tends it and reports there; like an assignment
+├─ stake (at most 1)    the seed assigned to the session by its delegation;
+│                       it tends it and reports there; like an assignment
+└─ monitor (1 while live)  watches the session's agent on the machine it
+                           runs on, and keeps its live state: state, turn,
+                           cost, PR links
 ```
 
 ```text
