@@ -88,6 +88,9 @@ try {
     runner.assert(found.includes('ANALYTICS7'), 'the garden holds a seed planted from the vent', found);
     await wait('ol[aria-label="Vents"] .analytics-outcome.planted', { textIncludes: 'analytics7' });
     await shot('02-planted');
+    await press('u');
+    await wait('[role="status"]', { textIncludes: 'Undone.' });
+    await wait('ol[aria-label="Vents"] li:first-child', { textIncludes: 'ANALYTICS7' });
   });
   await runner.step('records_by_stream', async () => {
     await press(']');

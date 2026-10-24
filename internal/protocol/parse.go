@@ -64,6 +64,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdWithdrawVent:                  decodeInto[WithdrawVentMessage],
 	CmdSetVentDismissed:              decodeInto[SetVentDismissedMessage],
 	CmdPlantVentSeed:                 decodeInto[PlantVentSeedMessage],
+	CmdUnplantVentSeed:               decodeInto[UnplantVentSeedMessage],
 	CmdNotebookList:                  decodeInto[NotebookListMessage],
 	CmdNotebookRead:                  decodeInto[NotebookReadMessage],
 	CmdNotebookWrite:                 decodeInto[NotebookWriteMessage],

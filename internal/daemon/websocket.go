@@ -1141,6 +1141,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSetVentDismissed(client, msg.(*protocol.SetVentDismissedMessage))
 	case protocol.CmdPlantVentSeed:
 		d.handlePlantVentSeed(client, msg.(*protocol.PlantVentSeedMessage))
+	case protocol.CmdUnplantVentSeed:
+		d.handleUnplantVentSeed(client, msg.(*protocol.UnplantVentSeedMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:

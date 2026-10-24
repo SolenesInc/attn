@@ -4,6 +4,7 @@ import type {
   ListAnalyticsRecordsResultMessage,
   PlantVentSeedResultMessage,
   SetVentDismissedResultMessage,
+  UnplantVentSeedResultMessage,
   VentsUpdatedMessage,
 } from '../types/generated';
 import { useProfilesStore } from '../store/profiles';
@@ -35,6 +36,9 @@ export function handleAnalyticsDaemonEvent(event: { event?: string }, pending: P
       return true;
     case 'plant_vent_seed_result':
       settlePendingRequest(pending, 'plant_vent_seed', event as PlantVentSeedResultMessage, (result) => result.seed, 'Could not plant a seed from the vent');
+      return true;
+    case 'unplant_vent_seed_result':
+      settlePendingRequest(pending, 'unplant_vent_seed', event as UnplantVentSeedResultMessage, () => true, 'Could not undo the plant');
       return true;
     case 'get_analytics_status_result':
       settlePendingRequest(

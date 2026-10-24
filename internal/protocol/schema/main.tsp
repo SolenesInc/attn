@@ -3566,6 +3566,21 @@ model PlantVentSeedResultMessage {
   seed?: Seed;
 }
 
+// Undo plant_vent_seed: wither the planted seed and put the vent back in New.
+model UnplantVentSeedMessage {
+  cmd: "unplant_vent_seed";
+  request_id: string;
+  vent_id: string;
+}
+
+model UnplantVentSeedResultMessage {
+  event: "unplant_vent_seed_result";
+  request_id: string;
+  vent_id: string;
+  success: boolean;
+  error?: string;
+}
+
 model SetVentDismissedMessage {
   cmd: "set_vent_dismissed";
   request_id: string;
@@ -7426,6 +7441,7 @@ alias DaemonEvent =
   | AsksUpdatedMessage
   | SetVentDismissedResultMessage
   | PlantVentSeedResultMessage
+  | UnplantVentSeedResultMessage
   | GetAnalyticsStatusResultMessage
   | ClearAnalyticsRecordsResultMessage
   | VentsUpdatedMessage

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/analytics"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/shortid"
@@ -231,6 +232,36 @@ func (d *Daemon) plantVentSeed(id, profileID string) (protocol.Seed, error) {
 	}
 	d.publishFact(FactVentPlanted, id, stored.fact())
 	return seed, nil
+}
+
+const ventUnplantReason = "Planted from a vent by mistake"
+
+func (d *Daemon) handleUnplantVentSeed(client *wsClient, msg *protocol.UnplantVentSeedMessage) {
+	result := protocol.UnplantVentSeedResultMessage{Event: protocol.EventUnplantVentSeedResult, RequestID: msg.RequestID, VentID: msg.VentID}
+	if err := d.unplantVentSeed(strings.TrimSpace(msg.VentID), client.selectedProfile()); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) unplantVentSeed(id, profileID string) error {
+	vent, err := d.profileVent(id, profileID)
+	if err != nil {
+		return err
+	}
+	if vent.PlantedSeedID == "" {
+		return fmt.Errorf("vent %s has no planted seed", id)
+	}
+	if _, _, err := d.applySeedTransition(vent.PlantedSeedID, garden.VerbWither, garden.Ask{Reason: ventUnplantReason}); err != nil {
+		return fmt.Errorf("withering %s: %w", vent.PlantedSeedID, err)
+	}
+	if _, err := d.store.ClearVentPlanted(id, vent.PlantedSeedID); err != nil {
+		return err
+	}
+	d.publishFact(FactVentRestored, id, storedVent{vent}.fact())
+	return nil
 }
 
 func (d *Daemon) publishVentFact(name, id string) {

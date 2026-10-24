@@ -3593,6 +3593,9 @@ export function useDaemonSocket({
   const sendPlantVentSeed = useCallback((ventId: string): Promise<Seed> =>
     sendRequest('plant_vent_seed', { vent_id: ventId }, 'Planting the seed timed out'), [sendRequest]);
 
+  const sendUnplantVentSeed = useCallback((ventId: string): Promise<true> =>
+    sendRequest('unplant_vent_seed', { vent_id: ventId }, 'Undoing the plant timed out'), [sendRequest]);
+
   const sendGetAnalyticsStatus = useCallback((): Promise<AnalyticsStatus> =>
     sendRequest('get_analytics_status', {}, 'Reading the analytics status timed out'), [sendRequest]);
 
@@ -4309,6 +4312,7 @@ export function useDaemonSocket({
     sendListAnalyticsRecords,
     sendSetVentDismissed,
     sendPlantVentSeed,
+    sendUnplantVentSeed,
     sendGetAnalyticsStatus,
     sendClearAnalyticsRecords,
     sendAskAnswer,

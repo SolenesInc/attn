@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -119,5 +120,20 @@ func TestTheUserPlantsOneSeedFromAVent(t *testing.T) {
 	other := w.AppOn(createProfile(app, "Work").ID)
 	if elsewhere := plant(other, "elsewhere", vent.ID); elsewhere.Success || protocol.Deref(elsewhere.Error) != "no vent "+vent.ID+" in this profile" {
 		t.Errorf("another profile planted from the vent: %+v", elsewhere)
+	}
+
+	unplanted := testworld.Request(app, protocol.UnplantVentSeedMessage{Cmd: protocol.CmdUnplantVentSeed, RequestID: "undo", VentID: vent.ID},
+		protocol.EventUnplantVentSeedResult, func(r protocol.UnplantVentSeedResultMessage) bool { return r.RequestID == "undo" })
+	if !unplanted.Success {
+		t.Fatalf("undoing the plant: %s", protocol.Deref(unplanted.Error))
+	}
+	if withered, err := cli.WithGardenProfile(app.SelectedProfile(), "").SeedShow("", planted.Seed.ID); err != nil || withered.Seed.Status != string(garden.StatusWithered) {
+		t.Errorf("after undo the seed is %+v, %v; want withered", withered, err)
+	}
+	testworld.Await(app, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool {
+		return len(m.Vents) == 1 && m.Vents[0].PlantedSeedID == nil
+	})
+	if replanted := plant(app, "replant", vent.ID); !replanted.Success || replanted.Seed.ID == planted.Seed.ID {
+		t.Errorf("planting again after undo: %+v", replanted)
 	}
 }

@@ -103,6 +103,20 @@ func (s *Store) SetVentPlanted(id, seedID string) (bool, error) {
 	return n > 0, err
 }
 
+func (s *Store) ClearVentPlanted(id, seedID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return false, nil
+	}
+	result, err := s.db.Exec("UPDATE vents SET planted_seed_id = NULL WHERE id = ? AND planted_seed_id = ?", id, seedID)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n > 0, err
+}
+
 func (s *Store) Vent(id string) (Vent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

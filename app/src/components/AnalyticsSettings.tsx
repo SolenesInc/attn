@@ -135,7 +135,7 @@ function isTyping(target: EventTarget): boolean {
 }
 
 export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
-  const { sendListAnalyticsRecords, sendSetVentDismissed, sendPlantVentSeed, sendGetAnalyticsStatus, sendClearAnalyticsRecords } = useDaemonApi();
+  const { sendListAnalyticsRecords, sendSetVentDismissed, sendPlantVentSeed, sendUnplantVentSeed, sendGetAnalyticsStatus, sendClearAnalyticsRecords } = useDaemonApi();
   const vents = useVentsStore((state) => state.vents);
   const sessions = useDaemonStore((state) => state.daemonSessions);
   const seeds = useDaemonStore((state) => state.seeds);
@@ -225,7 +225,7 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
     const nextNew = items.slice(index + 1).find((item) => item.kind === 'vent' && !item.done);
     const seed = await sendPlantVentSeed(target.id);
     setSelected(nextNew ? nextNew.key : target.id);
-    say(<>Planted <b>{seed.step_slug}</b> from “{target.context.session_label}”.</>);
+    say(<>Planted <b>{seed.step_slug}</b> from “{target.context.session_label}”.</>, () => sendUnplantVentSeed(target.id));
   });
 
   const clear = () => run(async () => {
@@ -283,7 +283,7 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
   };
 
   return (
-    <section ref={rootRef} className="settings-block analytics" data-testid="settings-analytics" tabIndex={-1} onKeyDown={onKeyDown}>
+    <section ref={rootRef} className="settings-block analytics" data-testid="settings-analytics" role="region" aria-label="Analytics" tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="analytics-strip">
         <Stat label="Recording" value="On" />
         <Stat label="Sharing" value="Off" dim />

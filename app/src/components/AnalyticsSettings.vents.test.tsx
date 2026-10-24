@@ -49,6 +49,13 @@ function serveVents(daemon: ScriptedDaemon) {
       { event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents },
     ];
   });
+  daemon.on('unplant_vent_seed', ({ vent_id }) => {
+    vents = vents.map((v) => (v.id === vent_id ? { ...v, planted_seed_id: undefined } : v));
+    return [
+      { event: 'unplant_vent_seed_result', success: true, vent_id },
+      { event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents },
+    ];
+  });
   daemon.on('get_analytics_status', () => ({ event: 'get_analytics_status_result', success: true, records: 0, bytes: 0, waiting: 0 }));
 }
 
@@ -101,7 +108,7 @@ describe('Settings › Analytics vents', () => {
     expect(screen.getByTestId('analytics-inspector')).toHaveTextContent('`attn seed tend s-f68sja` refused');
   });
 
-  it('plants a seed from the vent with p and shows the vent done with its seed', async () => {
+  it('plants a seed from the vent with p, shows it done with its seed, and undoes with u', async () => {
     const daemon = await openVents();
     await press(daemon, 'p');
     expect(daemon.sentOf('plant_vent_seed').map(({ vent_id }) => vent_id)).toEqual(['v-new']);
@@ -109,6 +116,10 @@ describe('Settings › Analytics vents', () => {
     expect(screen.getByRole('list', { name: 'Vents' })).toHaveTextContent(/^Done.*fix garden bell staleness.*seed-tend-refused-held-session/);
     expect(inspector().getByText('Planted · seed-tend-refused-held-session')).toBeInTheDocument();
     expect(inspector().queryByRole('button', { name: /Plant seed/ })).toBeNull();
+    await press(daemon, 'u');
+    expect(daemon.sentOf('unplant_vent_seed').map(({ vent_id }) => vent_id)).toEqual(['v-new']);
+    expect(screen.getByRole('status')).toHaveTextContent('Undone.');
+    expect(within(screen.getByRole('list', { name: 'Vents' })).getAllByRole('listitem')[0]).toHaveTextContent(/^New.*fix garden bell staleness/);
   });
 
   it('opens the transcript with t and the stake seed with g, closing settings', async () => {
