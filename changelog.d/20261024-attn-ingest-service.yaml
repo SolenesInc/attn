@@ -1,0 +1,8 @@
+kind: internal
+area: analytics
+change: >
+  `cmd/attn-ingest` is the public service that will receive shared analytics:
+  self-issued install tokens, gzip NDJSON batches stored in ClickHouse once per
+  install, stream and seq, per-install and per-IP limits that name themselves
+  when they refuse, self-serve deletion and `/metrics`. Nothing in attn sends
+  to it yet.

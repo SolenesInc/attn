@@ -316,6 +316,9 @@ jobs:
       - name: Lint
         run: make lint-go
 
+      - name: Start ClickHouse for the attn-ingest tests
+        run: echo "ATTN_TEST_CLICKHOUSE_URL=$(./scripts/ingest-clickhouse.sh start)" >> "$GITHUB_ENV"
+
       - name: Test
         run: ./scripts/test-go.sh
 
