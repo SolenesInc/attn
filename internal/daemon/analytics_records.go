@@ -71,12 +71,11 @@ func (d *Daemon) withAnalyticsCaller(props map[string]any, terminal protocol.Ter
 
 type analyticsReplyConn struct {
 	net.Conn
-	replied bool
-	failed  bool
+	answered func(failed bool)
+	replied  bool
 }
 
 func (c *analyticsReplyConn) Write(p []byte) (int, error) {
-	n, err := c.Conn.Write(p)
 	if !c.replied {
 		c.replied = true
 		var reply struct {
@@ -84,11 +83,11 @@ func (c *analyticsReplyConn) Write(p []byte) (int, error) {
 			Success *bool   `json:"success"`
 			Error   *string `json:"error"`
 		}
-		if json.Unmarshal(p, &reply) == nil {
-			c.failed = protocol.Deref(reply.Error) != "" || (reply.Ok != nil && !*reply.Ok) || (reply.Success != nil && !*reply.Success)
-		}
+		failed := json.Unmarshal(p, &reply) == nil &&
+			(protocol.Deref(reply.Error) != "" || (reply.Ok != nil && !*reply.Ok) || (reply.Success != nil && !*reply.Success))
+		c.answered(failed)
 	}
-	return n, err
+	return c.Conn.Write(p)
 }
 
 func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
@@ -100,16 +99,31 @@ func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
 	return fields.Cmd, protocol.Deref(fields.CallerTerminalID)
 }
 
-func (d *Daemon) recordCLICommand(frame []byte, reply *analyticsReplyConn, parseErr error) {
+func (d *Daemon) recordingCLICommand(conn net.Conn, frame []byte, parseErr error) (*analyticsReplyConn, func()) {
+	reply := &analyticsReplyConn{Conn: conn}
+	reply.answered = func(failed bool) {
+		switch {
+		case parseErr != nil:
+			d.recordCLICommand(frame, cliErrorUnknownCommand)
+		case failed:
+			d.recordCLICommand(frame, cliErrorRefused)
+		default:
+			d.recordCLICommand(frame, "")
+		}
+	}
+	unanswered := func() {
+		if !reply.replied {
+			d.recordCLICommand(frame, cliErrorNoReply)
+		}
+	}
+	return reply, unanswered
+}
+
+func (d *Daemon) recordCLICommand(frame []byte, errorKind string) {
 	cmd, caller := socketFrameCaller(frame)
-	props := map[string]any{"ok": true}
-	switch {
-	case parseErr != nil:
-		props["ok"], props["error_kind"] = false, cliErrorUnknownCommand
-	case !reply.replied:
-		props["ok"], props["error_kind"] = false, cliErrorNoReply
-	case reply.failed:
-		props["ok"], props["error_kind"] = false, cliErrorRefused
+	props := map[string]any{"ok": errorKind == ""}
+	if errorKind != "" {
+		props["error_kind"] = errorKind
 	}
 	d.recordAnalytics(analytics.StreamCLI, cmd, d.withAnalyticsCaller(props, caller))
 }

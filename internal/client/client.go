@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -193,7 +194,11 @@ func (c *Client) RecordAnalytics(stream, name string, props map[string]any) erro
 		return err
 	}
 	defer conn.Close()
-	return c.writeFrame(conn, protocol.RecordAnalyticsMessage{Cmd: protocol.CmdRecordAnalytics, Stream: stream, Name: name, Props: props})
+	if err := c.writeFrame(conn, protocol.RecordAnalyticsMessage{Cmd: protocol.CmdRecordAnalytics, Stream: stream, Name: name, Props: props}); err != nil {
+		return err
+	}
+	_, err = io.Copy(io.Discard, conn)
+	return err
 }
 
 func (c *Client) connect() (net.Conn, error) {

@@ -77,9 +77,11 @@ function advanceQueue(
 }
 
 function queueAdvanceProps(advance: NavigationQueueAdvance): AppActionProps {
-  if (advance.to === 'dashboard') return { to: 'dashboard' };
+  if (advance.to === 'dashboard') return { reason: advance.reason, to: 'dashboard' };
   const openedAt = Date.parse(advance.session.turnOpenedAt ?? '');
-  return Number.isNaN(openedAt) ? { to: 'session' } : { to: 'session', wait_ms: Math.max(0, Date.now() - openedAt) };
+  return Number.isNaN(openedAt)
+    ? { reason: advance.reason, to: 'session' }
+    : { reason: advance.reason, to: 'session', wait_ms: Math.max(0, Date.now() - openedAt) };
 }
 
 export function arrangementOf(state: Pick<SessionStore, 'navigationProfileId' | 'navigationCurrentDesktopId' | 'navigationDesktops'>): Arrangement {

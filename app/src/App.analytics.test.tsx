@@ -43,7 +43,7 @@ describe('app actions in the analytics outbox', () => {
     const { daemon } = await launch('true');
     await useTheApp(daemon);
     expect(daemon.sentOf('record_analytics')).toEqual([
-      { cmd: 'record_analytics', stream: 'app', name: 'queue_advance', props: { to: 'session', wait_ms: 2 * 60 * 60 * 1000 } },
+      { cmd: 'record_analytics', stream: 'app', name: 'queue_advance', props: { reason: 'turn_closed', to: 'session', wait_ms: 2 * 60 * 60 * 1000 } },
       { cmd: 'record_analytics', stream: 'app', name: 'shortcut', props: { id: 'ui.openSettings' } },
       { cmd: 'record_analytics', stream: 'app', name: 'settings_section', props: { section: 'connectivity' } },
       { cmd: 'record_analytics', stream: 'app', name: 'settings_section', props: { section: 'desktop' } },

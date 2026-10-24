@@ -2468,9 +2468,9 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	defer release()
 	cmd, msg, err := protocol.ParseMessage(data)
 	if cmd != protocol.CmdRecordAnalytics && d.analyticsEnabled() {
-		reply := &analyticsReplyConn{Conn: conn}
+		reply, unanswered := d.recordingCLICommand(conn, data, err)
 		conn = reply
-		defer d.recordCLICommand(data, reply, err)
+		defer unanswered()
 	}
 	if err != nil {
 		d.sendError(conn, err.Error())

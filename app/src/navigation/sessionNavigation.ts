@@ -375,8 +375,8 @@ export function navigationQueue(
 }
 
 export type NavigationQueueAdvance =
-  | { to: 'session'; session: QueueBandSession }
-  | { to: 'dashboard' };
+  | { reason: 'follow' | 'turn_closed'; to: 'session'; session: QueueBandSession }
+  | { reason: 'turn_closed'; to: 'dashboard' };
 
 export function queueAdvance(
   state: SessionNavigationState,
@@ -387,14 +387,16 @@ export function queueAdvance(
   if (!next || state.intent) return null;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
-    return target ? { to: 'session', session: target.session } : null;
+    return target ? { reason: 'follow', to: 'session', session: target.session } : null;
   }
   if (state.view !== 'session') return null;
   const leaf = activeLeafOf(arrangement);
   if (leaf?.kind !== 'agent') return null;
   const advance = advanceAfterTurnClosed(previous?.turns ?? [], next, leaf.sessionId);
   if (!advance) return null;
-  return advance.to === 'session' ? { to: 'session', session: advance.row.session } : { to: 'dashboard' };
+  return advance.to === 'session'
+    ? { reason: 'turn_closed', to: 'session', session: advance.row.session }
+    : { reason: 'turn_closed', to: 'dashboard' };
 }
 
 export function applyQueueAdvance(
