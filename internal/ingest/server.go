@@ -25,7 +25,10 @@ var (
 	installsPerIPPerHour      = window{limit: "installs_per_ip_per_hour", value: 20, span: time.Hour, bucket: time.Minute}
 )
 
-const minIPSecretBytes = 32
+const (
+	minIPSecretBytes = 32
+	batchesInFlight  = 2
+)
 
 type Config struct {
 	ClickHouseURL  string
@@ -40,6 +43,8 @@ type Server struct {
 	clientIPHeader string
 	events         *quota
 	registrations  *quota
+	installs       keyedMutex
+	batchSlots     chan struct{}
 	metrics        *metrics
 	logf           func(format string, args ...any)
 }
@@ -61,6 +66,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		clientIPHeader: cfg.ClientIPHeader,
 		events:         newQuota(eventsPerInstallPerMinute, eventsPerInstallPerDay),
 		registrations:  newQuota(installsPerIPPerHour),
+		installs:       keyedMutex{held: map[string]*keyLock{}},
+		batchSlots:     make(chan struct{}, batchesInFlight),
 		metrics:        newMetrics(),
 		logf:           cfg.Logf,
 	}, nil
@@ -169,8 +176,12 @@ type installRow struct {
 }
 
 func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
-	now := time.Now().UTC()
-	inst, err := s.authenticate(r)
+	token, err := bearerTokenHash(r)
+	if err != nil {
+		return err
+	}
+	defer s.installs.lock(token)()
+	inst, err := s.authenticate(r.Context(), token)
 	if err != nil {
 		return err
 	}
@@ -178,6 +189,13 @@ func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
 	if err := s.checkQuarantine(r.Context(), inst.ID, ipHash); err != nil {
 		return err
 	}
+	select {
+	case s.batchSlots <- struct{}{}:
+		defer func() { <-s.batchSlots }()
+	case <-r.Context().Done():
+		return r.Context().Err()
+	}
+	now := time.Now().UTC()
 	batch, err := readBatch(r.Body, r.ContentLength)
 	if err != nil {
 		return err
@@ -299,7 +317,11 @@ func newEventRow(installID, ipHash string, receivedAt time.Time, build analytics
 }
 
 func (s *Server) holdings(w http.ResponseWriter, r *http.Request) error {
-	inst, err := s.authenticate(r)
+	token, err := bearerTokenHash(r)
+	if err != nil {
+		return err
+	}
+	inst, err := s.authenticate(r.Context(), token)
 	if err != nil {
 		return err
 	}
@@ -335,7 +357,12 @@ func (s *Server) holdings(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) deleteInstall(w http.ResponseWriter, r *http.Request) error {
-	inst, err := s.authenticate(r)
+	token, err := bearerTokenHash(r)
+	if err != nil {
+		return err
+	}
+	defer s.installs.lock(token)()
+	inst, err := s.authenticate(r.Context(), token)
 	if err != nil {
 		return err
 	}
@@ -358,15 +385,19 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, struct{}{})
 }
 
-func (s *Server) authenticate(r *http.Request) (install, error) {
+func bearerTokenHash(r *http.Request) (string, error) {
 	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok || token == "" {
-		return install{}, unauthorizedError{}
+		return "", unauthorizedError{}
 	}
+	return tokenHash(token), nil
+}
+
+func (s *Server) authenticate(ctx context.Context, tokenSHA256 string) (install, error) {
 	var found *install
-	err := s.db.rows(r.Context(),
+	err := s.db.rows(ctx,
 		"SELECT install_id, created_at FROM installs WHERE token_sha256 = {token:String} LIMIT 1",
-		map[string]string{"token": tokenHash(token)},
+		map[string]string{"token": tokenSHA256},
 		func(row json.RawMessage) error {
 			found = &install{}
 			return json.Unmarshal(row, found)

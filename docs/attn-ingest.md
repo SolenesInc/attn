@@ -3,8 +3,8 @@
 `attn-ingest` (`cmd/attn-ingest`) is the public service that receives the
 analytics an install shares and stores them in ClickHouse. An install
 registers once, keeps the token it gets back, and sends its outbox as batches.
-The envelope types it accepts are `analytics.Batch` and `analytics.Record`
-(`internal/analytics`), the same ones the daemon writes.
+A batch is an `analytics.Batch` of `analytics.Record`s (`internal/analytics`);
+the records are the ones the daemon writes to its outbox.
 
 ## API
 
@@ -48,11 +48,16 @@ would make it, and `429` also says when to retry:
 | `installs_per_ip_per_hour` | 20 in any hour | 429 | guessed; remeasure from real registrations |
 | `records_per_batch` | 10,000 | 413 | the minute limit; a larger batch could never be accepted |
 | `request_body_gzip_bytes` | 4 MiB | 413 | a redacted peak day is 613 KB gzipped |
-| `request_body_bytes` | 64 MiB | 413 | a redacted peak day is 10.9 MB uncompressed |
-| `record_line_bytes` | 64 KiB | 413 | 4× the 16 KB vent text limit |
+| `request_body_bytes` | 16 MiB | 413 | 10,000 redacted records are about 1.25 MB uncompressed (125 B each) |
+| `record_line_bytes` | 64 KiB | 413 | guessed: 4× the 16 KB vent text the vent tool will allow; remeasure from the largest real line |
 
 Records count against the per-install limits whether or not they turn out to
-be duplicates; a refused batch counts nothing. The counts live in memory and
+be duplicates; a refused batch counts nothing. One install's batches and its
+delete are handled one at a time, so concurrent retries are counted as
+duplicates and a delete leaves nothing behind. At most 2 batches are decoded
+at once across all installs, and the rest wait their turn: a batch at the
+16 MiB limit took the service to 130 MiB resident (measured 2026-10-24), while
+a real batch of 10,000 records is about 1.25 MB. The counts live in memory and
 reset when the service restarts. Read and write timeouts are 2 minutes: 4 MiB
 at 1 Mbit/s takes 32 s.
 

@@ -209,3 +209,57 @@ func TestOversizedRequestsAreRefusedNamingTheLimit(t *testing.T) {
 		t.Fatalf("refused requests stored %d events", holdings.Events)
 	}
 }
+
+func TestAQuarantinedInstallIsRefusedWithTheReason(t *testing.T) {
+	clickHouse := testworld.NewClickHouse(t)
+	ingest := testworld.StartIngest(t, clickHouse)
+	install := client{t: t, url: ingest.URL}.register()
+	installID := install.holdings().InstallID
+	clickHouse.Query(t, fmt.Sprintf("INSERT INTO quarantine (install_id, ip_hash, reason, at) VALUES ('%s', '', 'flooded garbage names', now64())", installID))
+
+	status, body := install.send(analytics.Batch{Build: analytics.CurrentBuild(), Records: busRecords(1, 1)})
+	if status != http.StatusForbidden || !bytes.Contains(body, []byte("flooded garbage names")) {
+		t.Fatalf("a quarantined install's batch: %d %s", status, body)
+	}
+
+	ipHash := clickHouse.Query(t, fmt.Sprintf("SELECT ip_hash FROM installs WHERE install_id = '%s'", installID))
+	clickHouse.Query(t, fmt.Sprintf("INSERT INTO quarantine (install_id, ip_hash, reason, at) VALUES ('', '%s', 'minted installs in a loop', now64())", ipHash))
+	status, body = client{t: t, url: ingest.URL}.do(http.MethodPost, "/v1/installs", nil)
+	if status != http.StatusForbidden || !bytes.Contains(body, []byte("minted installs in a loop")) {
+		t.Fatalf("registration from a quarantined address: %d %s", status, body)
+	}
+}
+
+func TestTheSameBatchSentConcurrentlyIsStoredOnce(t *testing.T) {
+	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	install := client{t: t, url: ingest.URL}.register()
+	batch := analytics.Batch{Build: analytics.CurrentBuild(), Records: busRecords(1, 2_000)}
+
+	replies := make(chan analytics.Accepted, 4)
+	for range 4 {
+		go func() {
+			var body bytes.Buffer
+			_ = analytics.WriteBatch(&body, batch)
+			req, _ := http.NewRequest(http.MethodPost, ingest.URL+"/v1/events", &body)
+			req.Header.Set("Authorization", "Bearer "+install.token)
+			var accepted analytics.Accepted
+			if resp, err := http.DefaultClient.Do(req); err == nil {
+				_ = json.NewDecoder(resp.Body).Decode(&accepted)
+				resp.Body.Close()
+			}
+			replies <- accepted
+		}()
+	}
+	var total analytics.Accepted
+	for range 4 {
+		reply := <-replies
+		total.Accepted += reply.Accepted
+		total.Duplicates += reply.Duplicates
+	}
+	if total != (analytics.Accepted{Accepted: 2_000, Duplicates: 6_000}) {
+		t.Fatalf("four concurrent copies of a 2000-record batch answered %+v in total", total)
+	}
+	if holdings := install.holdings(); holdings.Events != 2_000 {
+		t.Fatalf("the server holds %d events, want 2000", holdings.Events)
+	}
+}
