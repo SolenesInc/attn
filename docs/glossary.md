@@ -43,9 +43,11 @@ agent                   a harness that runs in a terminal; the user talks to
    ├─ idle              nothing to do
    ├─ recoverable       stopped; attn can bring it back
    └─ unknown           attn cannot tell; may be an error
-session                 attn's record of one conversation; like one chat in a
-                        chat app's history
+session                 attn's record of one conversation in one profile; like
+                        one chat in a chat app's history
 ├─ conversation (1)     the harness's chat history
+├─ terminal (0..n)      the terminals showing it; a terminal shows 1 session
+│                       at a time
 ├─ worktree (at most 1) the git worktree the agent works in; several
 │                       sessions can share one
 ├─ stake (at most 1)    the seed assigned to the session by its delegation;
