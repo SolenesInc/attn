@@ -1,0 +1,3 @@
+kind: internal
+area: agents
+change: Workflow guidance tells agents to update the docs, code, and guidance that a user decision overturns, and to look for that text when the same misunderstanding comes back.
