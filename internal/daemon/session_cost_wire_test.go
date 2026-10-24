@@ -2,7 +2,11 @@ package daemon_test
 
 import (
 	"math"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -119,4 +123,32 @@ func TestCodexFastPricingSurvivesTogglesAndRestart(t *testing.T) {
 	if usage == nil || usage.TotalTokens != tokens || usage.CostUsd == nil || math.Abs(*usage.CostUsd-want) > 1e-12 {
 		t.Fatalf("restored usage = %+v, want %d tokens costing %.9f", usage, tokens, want)
 	}
+}
+
+func TestRootAndSubagentUsageGrowingInOneTickTellTheAppOnce(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		subagent := filepath.Join(strings.TrimSuffix(agent.transcript.Path, ".jsonl"), "subagents", "agent-research.jsonl")
+		if err := os.MkdirAll(filepath.Dir(subagent), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		appendLegacyCostUsage(t, subagent, "research-1", "claude-opus-4-8", 3, 4)
+		appendLegacyCostUsage(t, agent.transcript.Path, "root-1", "claude-opus-4-8", 5, 6)
+		w.advance(time.Second)
+		if usage := queriedSession(t, w.Client(), agent.id).Usage; usage == nil || usage.TotalTokens != 18 {
+			t.Fatalf("usage = %+v, want 18 tokens from the root and its subagent", usage)
+		}
+
+		facts := producedBy(busStatus(t, app), "session.cost.changed")
+		appendLegacyCostUsage(t, subagent, "research-2", "claude-opus-4-8", 1, 2)
+		appendLegacyCostUsage(t, agent.transcript.Path, "root-2", "claude-opus-4-8", 7, 8)
+		w.advance(time.Second)
+		if usage := queriedSession(t, w.Client(), agent.id).Usage; usage == nil || usage.TotalTokens != 36 {
+			t.Fatalf("usage = %+v, want 36 tokens after both transcripts grew", usage)
+		}
+		if again := producedBy(busStatus(t, app), "session.cost.changed"); again != facts+1 {
+			t.Errorf("root and subagent usage growing together published %d session.cost.changed facts, want one", again-facts)
+		}
+	})
 }

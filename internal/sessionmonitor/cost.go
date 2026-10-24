@@ -54,14 +54,11 @@ func (e *Entry) initializeCostSources(cursors map[string]string, consumeLegacy b
 		sources[sessioncost.LegacySource] = source
 		changed = true
 	}
-	if !changed {
-		e.mu.Unlock()
-		return true
+	if changed {
+		e.costInitialized, e.cost = true, sources
 	}
-	e.costInitialized, e.cost = true, sources
-	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.publish(view)
+	return changed
 }
 
 func (e *Entry) applyCostObservations(sourceID, cursor string, observations []sessioncost.Observation) bool {
@@ -80,6 +77,7 @@ func (e *Entry) applyCostObservations(sourceID, cursor string, observations []se
 		return source
 	}
 	observed := edit(sourceID)
+	changed := !e.costInitialized || !observed.Initialized || observed.Cursor != cursor
 	observed.Cursor, observed.Initialized = cursor, true
 	if e.costOwners == nil {
 		e.costOwners = make(map[string]costOwner)
@@ -120,11 +118,13 @@ func (e *Entry) applyCostObservations(sourceID, cursor string, observations []se
 		key.FastMode = observation.FastMode
 		source.Ledger[key] = source.Ledger[key].Add(observation.Usage)
 		source.Observations[observation.ObservationID] = observation
+		changed = true
 	}
-	e.costInitialized, e.cost = true, sources
-	view := e.viewLocked()
+	if changed {
+		e.costInitialized, e.cost = true, sources
+	}
 	e.mu.Unlock()
-	return e.publish(view)
+	return changed
 }
 
 func (e *Entry) markCostSource(sourceID string, incomplete, unavailable bool, cursor *string) bool {
@@ -140,7 +140,7 @@ func (e *Entry) markCostSource(sourceID string, incomplete, unavailable bool, cu
 	}
 	if e.costInitialized && reflect.DeepEqual(e.cost[sourceID], source) {
 		e.mu.Unlock()
-		return true
+		return false
 	}
 	sources := maps.Clone(e.cost)
 	if sources == nil {
@@ -149,6 +149,12 @@ func (e *Entry) markCostSource(sourceID string, incomplete, unavailable bool, cu
 	sources[sourceID] = source
 	e.costInitialized = e.costInitialized || unavailable || cursor != nil
 	e.cost = sources
+	e.mu.Unlock()
+	return true
+}
+
+func (e *Entry) publishCost() bool {
+	e.mu.Lock()
 	view := e.viewLocked()
 	e.mu.Unlock()
 	return e.publish(view)
@@ -180,7 +186,7 @@ func (e *Entry) StartCost() {
 	if e == nil {
 		return
 	}
-	if e != nil {
-		e.initializeCostSources(nil, false)
+	if e.initializeCostSources(nil, false) {
+		e.publishCost()
 	}
 }
