@@ -37,8 +37,8 @@ func runEnrollment() {
 func writeEnrollmentHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn enrollment <command>
 
-Older attn versions could enroll a data folder to another daemon. This attn
-never does, and refuses to start in a folder that is still enrolled.
+An outpost's data folder is enrolled to the home it first accepts a bridge
+from, and the outpost refuses bridges from any other home.
 
 commands:
   status [--json]
@@ -46,9 +46,10 @@ commands:
         another daemon.
 
   leave [--json]
-        release the enrollment so the data folder is its own again. On an
-        outpost it also closes the bridge from its home and stops the
-        terminals it ran for that home.
+        release the enrollment so the data folder is its own again and
+        another home can pair. The daemon closes the bridge from the old home
+        and stops the terminals it ran for it: right away when it is running,
+        otherwise when it next starts.
 `)
 }
 
@@ -94,7 +95,7 @@ func writeEnrollmentStatus(w io.Writer, status enrollment.Status) {
 	fmt.Fprintf(w, "daemon:     %s\n", status.DaemonID)
 	fmt.Fprintf(w, "enrollment: %s\n", status.Describe())
 	if !status.IsHome() {
-		fmt.Fprintln(w, "\nThis data folder was enrolled to another daemon by an older attn; run `attn enrollment leave`.")
+		fmt.Fprintln(w, "\nThis data folder is enrolled to another daemon; run `attn enrollment leave` to release it.")
 	}
 }
 
