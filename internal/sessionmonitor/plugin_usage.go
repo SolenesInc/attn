@@ -64,7 +64,9 @@ func (e *Entry) SeedDriverUsageBaseline(path string) {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		return
 	}
-	e.initializeCostSources(map[string]string{filepath.Clean(path): ""}, false)
+	if e.initializeCostSources(map[string]string{filepath.Clean(path): ""}, false) {
+		e.publishCost()
+	}
 }
 
 func (w *pluginUsageWatcher) run(tracker *usageTracker) {

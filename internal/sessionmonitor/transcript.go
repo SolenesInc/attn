@@ -320,7 +320,9 @@ func (w *transcriptWatcher) applyUsageAvailability(batch transcript.FollowBatch)
 	}
 	for _, event := range batch.Events {
 		if event.Kind == transcript.EventKindAssistant {
-			w.entry.markCostSource(w.exactPath(), false, true, nil)
+			if w.entry.markCostSource(w.exactPath(), false, true, nil) {
+				w.entry.publishCost()
+			}
 			break
 		}
 	}
