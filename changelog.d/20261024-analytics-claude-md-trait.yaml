@@ -1,0 +1,6 @@
+kind: added
+area: settings
+change: >
+  With Usage analytics on, session and worktree events in the local record
+  also say whether the repository has a CLAUDE.md, beside whether it has an
+  AGENTS.md.
