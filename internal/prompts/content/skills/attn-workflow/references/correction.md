@@ -6,7 +6,7 @@ Assume the next contributor is an agent that sees only the files it opened, copi
 
 ## Find the class
 
-Name the class you arrived with, and find its earlier instances in recent commits, reverts, review comments, the repository's agent guidance, and code comments that explain a workaround. A class counts once it has happened twice; a one-off is fixed where it happened. The instances are the class's evidence, and the proof below needs one. When the user asks for a sweep instead, read the same sources for every mistake, group them into classes, and fix the most frequent first.
+Name the class you arrived with, and find its earlier instances in recent commits, reverts, review comments, the repository's agent guidance, and code comments that explain a workaround. Some classes are mistakes of understanding: agents act on what the user overturned. Find the text that still states what the user overturned, such as a doc, a brief, a seed note, a code comment, or a name in the code. That text is the old way that the first level below removes. A class counts once it has happened twice; a one-off is fixed where it happened. The instances are the class's evidence, and the proof below needs one. When the user asks for a sweep instead, read the same sources for every mistake, group them into classes, and fix the most frequent first.
 
 ## Fix it at the highest level that works
 
