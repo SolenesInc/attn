@@ -8,8 +8,9 @@ import (
 )
 
 type CodexServer struct {
-	t    testing.TB
-	fake *fake
+	t         testing.TB
+	fake      *fake
+	codexHome string
 }
 
 func (s *CodexServer) AwaitStopped() {
@@ -60,7 +61,12 @@ func (s *CodexServer) AwaitName(conversation, name string) {
 
 func (s *CodexServer) AwaitArchived(conversation string) {
 	s.t.Helper()
-	s.call(methodAwaitArchived, serverThreadParams{ThreadID: conversation}, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
+	defer cancel()
+	err := s.fake.peer.call(ctx, methodAwaitArchived, serverThreadParams{ThreadID: conversation}, nil)
+	if err != nil && codexArchivedRollout(s.codexHome, conversation) == "" {
+		s.t.Fatalf("Codex app-server %s: %v", methodAwaitArchived, err)
+	}
 }
 
 func (s *CodexServer) AskApproval(conversation string) {

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -43,11 +44,21 @@ const (
 	methodRunTool        = "run_tool"
 	methodSpawnSubagent  = "spawn_subagent"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
+	codexDrainRefusal    = "Server is draining; retry after reconnecting"
 )
+
+type codexRefusal string
+
+func (r codexRefusal) Error() string { return string(r) }
+
+var codexRefusedWhileDraining = map[string]bool{"turn/start": true, "turn/steer": true, "thread/start": true, "thread/resume": true, "thread/fork": true, "thread/archive": true}
 
 type codexAppServer struct {
 	cfg      config
 	version  string
+	control  *rpcPeer
+	listener net.Listener
+	draining bool
 	hooks    hookSet
 	toolEnv  []string
 	mu       sync.Mutex
@@ -116,6 +127,10 @@ func codexServerProfile(argv []string) string {
 }
 
 func runCodexAppServer(cfg config) int {
+	if refusal := readVersionFile(filepath.Join(programDir(), codexStartErrorFile), ""); refusal != "" {
+		fmt.Fprintln(os.Stderr, refusal)
+		return 1
+	}
 	args := codexServerFlags.parse(os.Args[2:])
 	path := codexListenPath(os.Args)
 	configured, err := codexHooks(args.values["-c"], "")
@@ -140,6 +155,7 @@ func runCodexAppServer(cfg config) int {
 		fmt.Fprintf(os.Stderr, "fake codex app-server: %v\n", err)
 		return 1
 	}
+	s.control = control
 	control.start()
 	var boot bootingResult
 	if err := control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: string(harness.TerminalFromEnv())}, &boot); err != nil {
@@ -157,15 +173,57 @@ func runCodexAppServer(cfg config) int {
 	if err := control.call(context.Background(), methodLaunched, report, nil); err != nil {
 		return 1
 	}
-	signals := make(chan os.Signal, 1)
+	s.listener = listener
+	signals := make(chan os.Signal, 2)
 	signal.Notify(signals, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
-	go func() {
-		sig := (<-signals).(syscall.Signal)
-		_ = listener.Close()
-		os.Exit(signalExitBase + int(sig))
-	}()
+	go s.drainOn(signals)
 	_ = http.Serve(listener, http.HandlerFunc(s.serve))
+	s.mu.Lock()
+	draining := s.draining
+	s.mu.Unlock()
+	if draining {
+		select {}
+	}
 	return 0
+}
+
+func (s *codexAppServer) drainOn(signals <-chan os.Signal) {
+	forcible := false
+	for received := range signals {
+		sig := received.(syscall.Signal)
+		if forcible && sig != syscall.SIGHUP {
+			os.Exit(signalExitBase + int(sig))
+		}
+		forcible = forcible || sig != syscall.SIGHUP
+		s.mu.Lock()
+		s.draining = true
+		s.mu.Unlock()
+		s.stopWhenDrained()
+	}
+}
+
+func (s *codexAppServer) stopWhenDrained() {
+	s.mu.Lock()
+	drained := s.draining
+	for _, t := range s.threads {
+		drained = drained && !t.active
+	}
+	conns := make([]*codexServerConn, 0, len(s.conns))
+	for conn := range s.conns {
+		conns = append(conns, conn)
+	}
+	s.mu.Unlock()
+	if !drained {
+		return
+	}
+	_ = s.listener.Close()
+	for _, conn := range conns {
+		_ = conn.ws.CloseNow()
+	}
+	go func() {
+		s.control.answering.Wait()
+		os.Exit(0)
+	}()
 }
 
 func (s *codexAppServer) serve(w http.ResponseWriter, req *http.Request) {
@@ -301,12 +359,20 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 			return nil, nil, err
 		}
 	}
+	s.mu.Lock()
+	refused := s.draining && codexRefusedWhileDraining[m.Method]
+	s.mu.Unlock()
+	if refused {
+		return nil, nil, codexRefusal(codexDrainRefusal)
+	}
 	switch m.Method {
 	case "initialize":
 		return map[string]any{"userAgent": "codex-tui/" + s.version + " (fake; fake) fakeagent", "codexHome": s.cfg.CodexHome, "platformFamily": "unix", "platformOs": "linux"}, nil, nil
 	case "config/read":
 		config, err := readCodexConfig(s.cfg.CodexHome)
 		return map[string]any{"config": config}, nil, err
+	case "config/batchWrite":
+		return map[string]any{}, nil, s.writeConfig(m.Params)
 	case "thread/start":
 		return s.start(conn, p)
 	case "thread/resume":
@@ -390,6 +456,8 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		return map[string]any{"data": ids}, nil, nil
 	case "turn/start":
 		return s.turn(conn, p)
+	case "turn/interrupt":
+		return s.endTurn(methodFakeHalt, p)
 	case methodFakeTerminal:
 		s.mu.Lock()
 		conn.terminal = true
@@ -404,6 +472,30 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 	default:
 		return nil, nil, fmt.Errorf("the fake app-server does not serve %s", m.Method)
 	}
+}
+
+func (s *codexAppServer) writeConfig(params json.RawMessage) error {
+	var batch struct {
+		Edits []struct {
+			KeyPath string `json:"keyPath"`
+			Value   string `json:"value"`
+		} `json:"edits"`
+	}
+	if err := json.Unmarshal(params, &batch); err != nil {
+		return err
+	}
+	for _, edit := range batch.Edits {
+		quoted, ok := strings.CutPrefix(edit.KeyPath, "projects.")
+		quoted, trust := strings.CutSuffix(quoted, ".trust_level")
+		folder, err := strconv.Unquote(quoted)
+		if !ok || !trust || err != nil {
+			return fmt.Errorf("the fake app-server writes only project trust levels, not %s", edit.KeyPath)
+		}
+		if err := setCodexFolderTrust(s.cfg.CodexHome, folder, edit.Value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *codexAppServer) loaded(id string) (*codexServerThread, error) {
@@ -649,7 +741,11 @@ func (s *codexAppServer) endTurn(method string, p codexServerParams) (any, func(
 	t.active, t.approval, t.approvalID, t.question = false, nil, "", false
 	s.mu.Unlock()
 	turn := map[string]any{"id": t.c.turnID, "status": "completed"}
+	if method == methodFakeHalt {
+		turn["status"] = "interrupted"
+	}
 	return map[string]any{}, func() {
+		defer s.stopWhenDrained()
 		if method == methodFakeReply {
 			s.tell(t, notification("item/completed", map[string]any{"threadId": t.c.conversation, "turnId": t.c.turnID, "item": map[string]any{"type": "agentMessage", "text": p.Text}}))
 		}
@@ -788,7 +884,11 @@ func (s *codexAppServer) archive(id string) (any, func(), error) {
 }
 
 func (s *codexAppServer) archivedRollout(id string) string {
-	entries, _ := os.ReadDir(filepath.Join(s.cfg.CodexHome, "archived_sessions"))
+	return codexArchivedRollout(s.cfg.CodexHome, id)
+}
+
+func codexArchivedRollout(codexHome, id string) string {
+	entries, _ := os.ReadDir(filepath.Join(codexHome, "archived_sessions"))
 	for _, entry := range entries {
 		if strings.HasSuffix(entry.Name(), "-"+id+".jsonl") {
 			return entry.Name()

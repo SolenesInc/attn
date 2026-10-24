@@ -8,8 +8,9 @@ hidden session instead of closing.
 
 It runs the stock `codex` you already use, with your Codex account, model,
 settings and conversations. Shared terminals run the Codex executable set in
-Settings, and so does the app-server when it starts; one already running keeps
-its Codex until it stops. attn was checked against Codex 0.160.0.
+Settings, and so does the app-server when it starts. After you install another
+Codex, attn moves the app-server to it, as [Codex updates](#codex-updates)
+describes. attn was checked against Codex 0.160.0.
 
 ## Turn it on or off
 
@@ -39,6 +40,30 @@ a plain Codex, since the app-server runs one Codex for the whole profile.
   rather than a second session.
 - When no open shared session and no shared terminal needs the server, it
   stops. The next shared Codex terminal starts it again.
+
+## Codex updates
+
+attn reads which Codex is installed when a shared terminal opens, when the
+app-server starts, and once a day. When that isn't the Codex the app-server
+runs, attn restarts the app-server on it once no conversation runs a turn,
+including one that waits on an approval or on your answer to a question, and
+every shared terminal has finished starting.
+
+- First attn starts the installed Codex on the side for a moment. If it
+  refuses to start, for example over a setting in your Codex config that the
+  new version no longer supports, the app-server keeps running the Codex it
+  ran and nothing is interrupted. attn tries again once the installed Codex
+  changes.
+- The terminals lose their connection during the restart and reconnect to the
+  new app-server on their own. What you typed and haven't sent stays where it
+  was. The old app-server first shuts down the MCP servers its conversations
+  started, so with a few of them the terminals wait up to about 20 seconds.
+- A terminal still starting, or asking whether to trust its folder, couldn't
+  reconnect, so the restart waits until it shows its conversation.
+- Terminals opened before you installed the update keep running the older
+  Codex until you reload them with **Reload session**. An older terminal
+  doesn't know what the newer app-server added; an approval of a kind it
+  doesn't know is denied, and the turn carries on.
 
 ## Switching conversations
 

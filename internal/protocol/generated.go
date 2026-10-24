@@ -8461,6 +8461,37 @@ type Response struct {
 	WorktreeSweepLogResult *WorktreeSweepLogResult `json:"worktree_sweep_log_result,omitempty,omitzero"`
 }
 
+type RestartSharedCodexMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Now corresponds to the JSON schema field "now".
+	Now bool `json:"now"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type RestartSharedCodexResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type RuntimeRespawnedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -10865,6 +10896,21 @@ type SettleTurnMessage struct {
 	SessionID SessionID `json:"session_id"`
 }
 
+type SharedCodexBlocker struct {
+	// Reason corresponds to the JSON schema field "reason".
+	Reason SharedCodexBlockerReason `json:"reason"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type SharedCodexBlockerReason string
+
+const SharedCodexBlockerReasonApproval SharedCodexBlockerReason = "approval"
+const SharedCodexBlockerReasonQuestion SharedCodexBlockerReason = "question"
+const SharedCodexBlockerReasonStarting SharedCodexBlockerReason = "starting"
+const SharedCodexBlockerReasonTurn SharedCodexBlockerReason = "turn"
+
 type SharedCodexChangedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -10878,10 +10924,21 @@ type SharedCodexChangedMessage struct {
 
 type SharedCodexRestart string
 
+const SharedCodexRestartFailed SharedCodexRestart = "failed"
 const SharedCodexRestartNone SharedCodexRestart = "none"
 const SharedCodexRestartPending SharedCodexRestart = "pending"
+const SharedCodexRestartRestarting SharedCodexRestart = "restarting"
 
 type SharedCodexState struct {
+	// Blockers corresponds to the JSON schema field "blockers".
+	Blockers []SharedCodexBlocker `json:"blockers,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// ForceAt corresponds to the JSON schema field "force_at".
+	ForceAt *string `json:"force_at,omitempty,omitzero"`
+
 	// InstalledVersion corresponds to the JSON schema field "installed_version".
 	InstalledVersion *string `json:"installed_version,omitempty,omitzero"`
 

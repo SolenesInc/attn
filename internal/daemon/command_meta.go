@@ -166,6 +166,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdPtyResize:                     commandMetadata(true, true),
 	protocol.CmdKillSession:                   commandMetadata(true, true),
 	protocol.CmdReloadSession:                 commandMetadata(true, true),
+	protocol.CmdRestartSharedCodex:            commandMetadata(true, true),
 	protocol.CmdProfileCreate:                 commandMetadata(false, true),
 	protocol.CmdProfileRename:                 commandMetadata(false, true),
 	protocol.CmdProfileDelete:                 commandMetadata(false, true),

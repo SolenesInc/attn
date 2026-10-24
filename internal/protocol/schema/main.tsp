@@ -3606,10 +3606,36 @@ model VentsUpdatedMessage {
 }
 
 // pending: the installed Codex differs from the one the profile's app-server
-// runs.
+// runs, or a restart was asked for. attn restarts the app-server once no
+// conversation it holds runs a turn and every shared terminal shows its
+// conversation.
+// restarting: attn is moving the app-server to the installed Codex. Terminals
+// reconnect once it answers.
+// failed: the installed Codex refused to start, so the app-server keeps
+// running the Codex it ran. Installing another Codex, or
+// restart_shared_codex, tries again.
 enum SharedCodexRestart {
   none,
   pending,
+  restarting,
+  failed,
+}
+
+// What keeps a restart waiting on a session: its conversation's turn is
+// running, waiting on an approval, or waiting on the user's answer to a
+// question; or its terminal is starting and shows no conversation yet, which
+// includes Codex asking whether to trust the folder.
+enum SharedCodexBlockerReason {
+  turn,
+  approval,
+  question,
+  starting,
+}
+
+// A session that keeps a restart waiting.
+model SharedCodexBlocker {
+  session_id: SessionID;
+  reason: SharedCodexBlockerReason;
 }
 
 // Versions are Codex release numbers, as `codex --version` prints them.
@@ -3621,8 +3647,40 @@ model SharedCodexState {
   // The newest release, checked once a day.
   latest_version?: string;
   restart: SharedCodexRestart;
+  // While pending or restarting.
+  blockers?: SharedCodexBlocker[];
+  // ISO timestamp. While a restart asked for now waits on running turns: when
+  // attn stops the app-server and the turns with it.
+  force_at?: string;
+  // failed: why the installed Codex refused to start: the last line it
+  // printed, or how it failed when it printed nothing.
+  error?: string;
   // Sessions shown in terminals whose Codex is older than the app-server.
   stale_sessions?: SessionID[];
+}
+
+// Restarts the profile's shared Codex app-server on the installed Codex, also
+// when that is the version it runs. attn first checks that the installed
+// Codex starts; when it refuses, nothing is interrupted and the restart is
+// failed. Without now, attn waits until no conversation runs a turn and every
+// shared terminal shows its conversation. With now, it drops the terminals'
+// connections, relaunches the terminals that show no conversation yet, stops
+// turns waiting on an approval or a question, lets the others finish for a
+// minute, then stops the app-server and whatever still runs. Clears a failed
+// restart.
+model RestartSharedCodexMessage {
+  cmd: "restart_shared_codex";
+  request_id?: string;
+  profile_id: string;
+  now: boolean;
+}
+
+model RestartSharedCodexResultMessage {
+  event: "restart_shared_codex_result";
+  request_id?: string;
+  profile_id: string;
+  success: boolean;
+  error?: string;
 }
 
 // The profile's shared Codex versions. shared_codex is absent while Shared
@@ -7448,6 +7506,7 @@ alias DaemonEvent =
   | ClearAnalyticsRecordsResultMessage
   | VentsUpdatedMessage
   | SharedCodexChangedMessage
+  | RestartSharedCodexResultMessage
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage
   | MarkdownAnnotationsSaveResultMessage

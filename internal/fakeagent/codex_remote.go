@@ -41,6 +41,8 @@ type codexRemoteThread struct {
 	} `json:"thread"`
 }
 
+const codexTrustQuestion = "Trust this folder? Codex can read, edit, and run files here."
+
 var codexReconnectBackoff = []time.Duration{20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond, 160 * time.Millisecond}
 
 func (c *codexRemote) begin(term *terminal) error {
@@ -72,9 +74,20 @@ func (c *codexRemote) begin(term *terminal) error {
 		return err
 	}
 	if codexFolderTrust(read.Config, c.cwd) == "" {
-		client.Close()
-		term.print("Trust this folder? Codex can read, edit, and run files here.")
-		return fmt.Errorf("codex --remote waits on the trust question for %s, which its app-server does not trust", c.cwd)
+		term.print(codexTrustQuestion)
+		if err := term.awaitEnter(); err != nil {
+			client.Close()
+			return err
+		}
+		if !client.Connected() {
+			term.print("config/batchWrite failed: remote app-server worker channel is closed")
+			select {}
+		}
+		trust := map[string]any{"edits": []any{map[string]any{"keyPath": fmt.Sprintf("projects.%q.trust_level", c.cwd), "value": "trusted"}}}
+		if err := call(client, "config/batchWrite", trust, nil); err != nil {
+			client.Close()
+			return err
+		}
 	}
 	var shown codexRemoteThread
 	if len(args.positionals) > 1 && args.positionals[0] == "resume" {

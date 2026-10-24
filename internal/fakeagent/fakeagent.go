@@ -381,13 +381,14 @@ type rpcError struct {
 type rpcHandler func(p *rpcPeer, method string, params json.RawMessage) (any, error)
 
 type rpcPeer struct {
-	conn    net.Conn
-	handle  rpcHandler
-	writeMu sync.Mutex
-	mu      sync.Mutex
-	nextID  uint64
-	pending map[string]chan rpcMessage
-	done    chan struct{}
+	conn      net.Conn
+	handle    rpcHandler
+	writeMu   sync.Mutex
+	mu        sync.Mutex
+	nextID    uint64
+	pending   map[string]chan rpcMessage
+	done      chan struct{}
+	answering sync.WaitGroup
 }
 
 func newRPCPeer(conn net.Conn, handle rpcHandler) *rpcPeer {
@@ -418,7 +419,7 @@ func (p *rpcPeer) read() {
 
 func (p *rpcPeer) dispatch(msg rpcMessage) {
 	if msg.Method != "" {
-		go p.answer(msg)
+		p.answering.Go(func() { p.answer(msg) })
 		return
 	}
 	p.mu.Lock()
