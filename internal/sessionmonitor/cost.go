@@ -61,7 +61,7 @@ func (e *Entry) initializeCostSources(cursors map[string]string, consumeLegacy b
 	e.costInitialized, e.cost = true, sources
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func (e *Entry) applyCostObservations(sourceID, cursor string, observations []sessioncost.Observation) bool {
@@ -124,7 +124,7 @@ func (e *Entry) applyCostObservations(sourceID, cursor string, observations []se
 	e.costInitialized, e.cost = true, sources
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func (e *Entry) markCostSource(sourceID string, incomplete, unavailable bool, cursor *string) bool {
@@ -151,7 +151,7 @@ func (e *Entry) markCostSource(sourceID string, incomplete, unavailable bool, cu
 	e.cost = sources
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func CostChange(previous, view View) (changed, durable, usageChanged bool) {

@@ -202,10 +202,6 @@ func (d *Daemon) classifierModel(ctx context.Context, harness string) string {
 	return d.resolveTierModel(ctx, harness, "", modeltiers.Light, explicit, fallback)
 }
 
-func (d *Daemon) startEvidence(sessionID protocol.SessionID, fresh sessionmonitor.Evidence) {
-	d.startSessionMonitor(sessionID).Restart(d.monitorLaunch(sessionID), fresh)
-}
-
 func (d *Daemon) updateEvidence(sessionID protocol.SessionID, unchanged func(*sessionmonitor.Evidence) bool, mutate func(*sessionmonitor.Evidence)) bool {
 	if d.store == nil || d.store.Get(sessionID) == nil {
 		return false
@@ -282,14 +278,7 @@ func (d *Daemon) markModelRequestStarted(sessionID protocol.SessionID, at time.T
 	if d.store == nil {
 		return false
 	}
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		return entry.MarkModelRequestStarted(at)
-	}
-	if !d.store.MarkModelRequestStarted(sessionID, at) {
-		return false
-	}
-	d.publishFact(FactSessionModelRequestStarted, string(sessionID), nil)
-	return true
+	return d.monitorEntry(sessionID).MarkModelRequestStarted(at)
 }
 
 func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, source string) error {
@@ -310,29 +299,12 @@ func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.Terminal
 var errNoPTYBackend = errors.New("session has no PTY backend")
 
 func (d *Daemon) beginAgentDriverRun(session protocol.SessionID, plugin, run string) bool {
-	entry := d.monitorEntry(session)
-	if entry == nil {
-		return d.store.BeginAgentDriverRun(session, plugin, run)
-	}
-	return entry.BeginDriverRun(func() (sessionmonitor.DriverMetadata, bool) {
-		if !d.store.BeginAgentDriverRun(session, plugin, run) {
-			return sessionmonitor.DriverMetadata{}, false
-		}
-		return d.driverInputFromRecord(session), true
-	})
+	return d.monitorEntry(session).BeginDriverRun(plugin, run)
 }
 
 func (d *Daemon) endAgentDriverRun(session protocol.SessionID) store.AgentDriverReportCursor {
-	entry := d.monitorEntry(session)
-	if entry == nil {
-		return d.store.EndAgentDriverRun(session)
-	}
-	var run store.AgentDriverReportCursor
-	entry.EndDriverRun(func() bool {
-		run = d.store.EndAgentDriverRun(session)
-		return run.RunID != ""
-	})
-	return run
+	ended := d.monitorEntry(session).EndDriverRun()
+	return store.AgentDriverReportCursor{PluginName: ended.Plugin, RunID: ended.Run, Seq: ended.Sequence}
 }
 
 func (d *Daemon) classifyPluginStop(session *protocol.Session, text string) (string, error) {
@@ -364,7 +336,6 @@ func (d *Daemon) queueFlowOn() bool {
 }
 
 func (d *Daemon) touchSession(sessionID protocol.SessionID) {
-	d.store.Touch(sessionID)
 	d.monitorEntry(sessionID).Touch(time.Now())
 }
 

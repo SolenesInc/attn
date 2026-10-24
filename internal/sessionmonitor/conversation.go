@@ -20,7 +20,7 @@ func (e *Entry) ProposeConversation(observation ConversationObservation, proposa
 		conversationInput: Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal}}
 	successor.home = e.registry.host.HomeFor(successor)
 	successor.input = &lane{mu: &successor.mu, entry: successor}
-	return successor.home.Applied(successor.viewLocked())
+	return successor.publish(successor.viewLocked())
 }
 
 func (e *Entry) SetConversation(observation ConversationObservation) {
@@ -71,5 +71,5 @@ func (e *Entry) ObserveResumeID(nativeID string) bool {
 	e.conversationInput = Conversation{ConversationObservation: ConversationObservation{NativeID: nativeID}}
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }

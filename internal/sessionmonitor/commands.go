@@ -71,7 +71,7 @@ func (e *Entry) Key() Key {
 	return e.keyLocked()
 }
 
-func (e *Entry) Publish(view View) bool { return e.home.Applied(view) }
+func (e *Entry) Publish(view View) bool { return e.publish(view) }
 
 func (e *Entry) Revision() uint64 {
 	if e == nil {

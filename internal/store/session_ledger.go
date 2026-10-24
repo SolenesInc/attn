@@ -169,7 +169,7 @@ func (s *Store) closeSessionTx(tx *sql.Tx, id protocol.SessionID, closed Session
 
 func finalizeSessionCostTx(tx *sql.Tx, id protocol.SessionID) error {
 	var raw string
-	if err := tx.QueryRow("SELECT session_cost_json FROM sessions WHERE id = ?", id).Scan(&raw); err != nil {
+	if err := tx.QueryRow("SELECT session_cost_json FROM sessions_with_runtime AS sessions WHERE id = ?", id).Scan(&raw); err != nil {
 		return err
 	}
 	state, err := decodeSessionMonitorCost(raw)
@@ -183,7 +183,7 @@ func finalizeSessionCostTx(tx *sql.Tx, id protocol.SessionID) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", string(encoded), id)
+	_, err = tx.Exec(upsertRuntimeCost+onRuntimeCostConflict, id, string(encoded), id)
 	return err
 }
 
@@ -257,7 +257,7 @@ func (s *Store) SessionLedgerEntry(id protocol.SessionID) *protocol.SessionLedge
 		return s.ledgerEntryMemoryLocked(id)
 	}
 
-	row := s.db.QueryRow(ledgerSelect+" FROM sessions WHERE id = ?", id)
+	row := s.db.QueryRow(ledgerSelect+" FROM sessions_with_runtime AS sessions WHERE id = ?", id)
 	entry, err := scanLedgerEntry(row)
 	if err != nil {
 		return nil
@@ -337,7 +337,7 @@ func (s *Store) sessionLedgerDB(query SessionLedgerQuery, limit int) (SessionLed
 
 	if cursor := strings.TrimSpace(query.Before); cursor != "" {
 		var at string
-		err := s.db.QueryRow("SELECT "+ledgerAt+" FROM sessions WHERE id = ?", cursor).Scan(&at)
+		err := s.db.QueryRow("SELECT "+ledgerAt+" FROM sessions_with_runtime AS sessions WHERE id = ?", cursor).Scan(&at)
 		if errors.Is(err, sql.ErrNoRows) {
 			return SessionLedgerPage{}, &ErrUnknownLedgerCursor{ID: cursor}
 		}
@@ -351,11 +351,11 @@ func (s *Store) sessionLedgerDB(query SessionLedgerQuery, limit int) (SessionLed
 	clause := whereClause(where)
 
 	var matching int
-	if err := s.db.QueryRow("SELECT COUNT(*) FROM sessions"+clause, args...).Scan(&matching); err != nil {
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM sessions_with_runtime"+clause, args...).Scan(&matching); err != nil {
 		return SessionLedgerPage{}, fmt.Errorf("count ledger rows: %w", err)
 	}
 
-	rows, err := s.db.Query(ledgerSelect+" FROM sessions"+clause+
+	rows, err := s.db.Query(ledgerSelect+" FROM sessions_with_runtime AS sessions"+clause+
 		" ORDER BY "+ledgerAt+" DESC, id DESC LIMIT ?", append(args, limit)...)
 	if err != nil {
 		return SessionLedgerPage{}, fmt.Errorf("read ledger rows: %w", err)
@@ -390,7 +390,7 @@ func (s *Store) ledgerFacetsDB(query SessionLedgerQuery) (*protocol.SessionLedge
 	clause := whereClause(where)
 
 	count := func(column string) ([]protocol.SessionLedgerFacet, error) {
-		rows, err := s.db.Query("SELECT "+column+", COUNT(*) FROM sessions"+clause+
+		rows, err := s.db.Query("SELECT "+column+", COUNT(*) FROM sessions_with_runtime"+clause+
 			" GROUP BY "+column+" ORDER BY "+column, args...)
 		if err != nil {
 			return nil, fmt.Errorf("count ledger %s: %w", column, err)
@@ -424,7 +424,7 @@ func (s *Store) ledgerFacetsDB(query SessionLedgerQuery) (*protocol.SessionLedge
 
 func (s *Store) ledgerProfileFacetsDB(clause string, args []any) ([]protocol.SessionLedgerProfileFacet, error) {
 	rows, err := s.db.Query(`SELECT counted.profile_id, COALESCE(p.name, ''), COALESCE(p.deleted_at, ''), counted.total
-		FROM (SELECT profile_id, COUNT(*) AS total FROM sessions`+clause+` GROUP BY profile_id) counted
+		FROM (SELECT profile_id, COUNT(*) AS total FROM sessions_with_runtime`+clause+` GROUP BY profile_id) counted
 		LEFT JOIN profiles p ON p.id = counted.profile_id
 		WHERE counted.profile_id <> ''
 		ORDER BY COALESCE(p.name, ''), counted.profile_id`, args...)

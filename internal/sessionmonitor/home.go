@@ -97,13 +97,15 @@ func (e *Entry) Launched(at time.Time) {
 	e.mu.Unlock()
 }
 
-func (e *Entry) Touch(at time.Time) {
+func (e *Entry) Touch(at time.Time) bool {
 	if e == nil {
-		return
+		return false
 	}
 	e.mu.Lock()
 	e.touchedAt = at
+	view := e.viewLocked()
 	e.mu.Unlock()
+	return e.publish(view)
 }
 
 type terminalViews struct {

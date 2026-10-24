@@ -59,7 +59,7 @@ func (e *Entry) Trace(obs statetrace.Observation) {
 	e.mu.Unlock()
 	e.logf("%s", obs.LogLine(protocol.SessionID(e.Label())))
 	if report != nil {
-		e.home.Applied(*report)
+		e.publish(*report)
 	}
 }
 

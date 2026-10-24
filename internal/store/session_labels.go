@@ -67,7 +67,7 @@ func (s *Store) SessionLabels(id protocol.SessionID) SessionLabels {
 		return s.sessionLabels[id]
 	}
 	var labels SessionLabels
-	if err := s.db.QueryRow(`SELECT user_label,harness_title FROM sessions WHERE id=?`, id).Scan(&labels.UserLabel, &labels.HarnessTitle); err != nil {
+	if err := s.db.QueryRow(`SELECT user_label,harness_title FROM sessions_with_runtime WHERE id=?`, id).Scan(&labels.UserLabel, &labels.HarnessTitle); err != nil {
 		return SessionLabels{}
 	}
 	return labels
@@ -77,7 +77,7 @@ func sessionLabelTx(tx *sql.Tx, id protocol.SessionID) (string, error) {
 	var labels SessionLabels
 	var directory string
 	var agent protocol.SessionAgent
-	if err := tx.QueryRow(`SELECT user_label,harness_title,directory,agent FROM sessions WHERE id=?`, id).Scan(&labels.UserLabel, &labels.HarnessTitle, &directory, &agent); err != nil {
+	if err := tx.QueryRow(`SELECT user_label,harness_title,directory,agent FROM sessions_with_runtime WHERE id=?`, id).Scan(&labels.UserLabel, &labels.HarnessTitle, &directory, &agent); err != nil {
 		return "", err
 	}
 	return labels.shown(id, directory, agent), nil

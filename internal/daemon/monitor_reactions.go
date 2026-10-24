@@ -53,9 +53,6 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 			Source: source, Claim: string(state.State), Detail: state.Origin.Detail,
 			Cause: state.Cause, Outcome: statetrace.OutcomeApplied, ObservedAt: state.Origin.ObservedAt,
 		})
-		if state.Touch {
-			d.store.Touch(session)
-		}
 		d.kickSessionInbox(session, string(state.State))
 		if state.Broadcast {
 			d.broadcastSessionStateChanged(session)

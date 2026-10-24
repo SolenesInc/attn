@@ -192,7 +192,7 @@ func openSessionPullRequestsReferencedByQuery(table, column string) string {
 		WHERE state NOT IN ('merged', 'closed')
 		AND (
 			EXISTS (
-				SELECT 1 FROM sessions
+				SELECT 1 FROM sessions_with_runtime AS sessions
 				WHERE sessions.id = session_pull_requests.session_id
 				AND sessions.closed_at = ''
 				AND sessions.state != ?

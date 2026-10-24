@@ -61,7 +61,7 @@ func (e *Entry) SyncAutoSettle() {
 	e.syncAutoSettleLocked()
 	view := e.viewLocked()
 	e.mu.Unlock()
-	e.home.Applied(view)
+	e.publish(view)
 }
 
 func (e *Entry) syncAutoSettleLocked() {
@@ -140,7 +140,7 @@ func (e *Entry) HoldAutoSettle() {
 	view := e.viewLocked()
 	label := e.label
 	e.mu.Unlock()
-	e.home.Applied(view)
+	e.publish(view)
 	if e.registry.host.Debug() {
 		e.logf("auto-settle held: session=%s resume_phase=%d", label, resume)
 	}
@@ -188,7 +188,7 @@ func (e *Entry) CancelAutoSettle(reason string) {
 	if !removed {
 		return
 	}
-	e.home.Applied(view)
+	e.publish(view)
 	if e.registry.host.Debug() {
 		e.logf("auto-settle canceled: session=%s reason=%s", label, reason)
 	}
@@ -217,7 +217,7 @@ func (e *Entry) ClearAutoSettle() {
 	}
 	e.mu.Unlock()
 	if changed {
-		e.home.Applied(view)
+		e.publish(view)
 	}
 }
 
@@ -233,7 +233,7 @@ func (e *Entry) autoSettleFire(self *autoSettleTimer) {
 	view := e.viewLocked()
 	label := e.label
 	e.mu.Unlock()
-	e.home.Applied(view)
+	e.publish(view)
 	if action == "settled" {
 		e.TraceSettle()
 	}
@@ -314,7 +314,7 @@ func (e *Entry) AnswerCountdown() (answered, hadPending, rearmed bool) {
 	key := e.keyLocked()
 	e.mu.Unlock()
 	view, applied := e.Do(Command{Key: key, Kind: CancelCountdown}, time.Now())
-	if !applied || !e.home.Applied(view) {
+	if !applied || !e.publish(view) {
 		return false, hadPending, false
 	}
 	if disarm && working {

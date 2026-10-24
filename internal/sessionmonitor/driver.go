@@ -7,36 +7,68 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func (e *Entry) BeginDriverRun(begin func() (DriverMetadata, bool)) bool {
+func (e *Entry) BeginDriverRun(plugin, run string) bool {
 	if e == nil {
 		return false
 	}
 	e.mu.Lock()
-	driver, ok := begin()
-	if !ok {
-		e.mu.Unlock()
-		return false
-	}
-	e.driver = driver
+	previous := e.driver
+	e.driver = DriverMetadata{Plugin: plugin, Run: run, Metadata: previous.Metadata}
 	view := e.viewLocked()
 	e.mu.Unlock()
-	e.home.Applied(view)
-	return true
+	if e.publish(view) {
+		return true
+	}
+	e.mu.Lock()
+	if e.driver.Run == run {
+		e.driver = previous
+	}
+	view = e.viewLocked()
+	e.mu.Unlock()
+	e.publish(view)
+	return false
 }
 
-func (e *Entry) EndDriverRun(end func() bool) {
+func (e *Entry) RestoreDriverRun(run DriverMetadata) {
 	if e == nil {
 		return
 	}
 	e.mu.Lock()
-	if !end() {
+	if e.driver.Run != "" {
 		e.mu.Unlock()
 		return
 	}
-	e.driver = DriverMetadata{Metadata: e.driver.Metadata}
+	run.Metadata = e.driver.Metadata
+	e.driver = run
 	view := e.viewLocked()
 	e.mu.Unlock()
-	e.home.Applied(view)
+	e.publish(view)
+}
+
+func (e *Entry) EndDriverRun() DriverMetadata {
+	if e == nil {
+		return DriverMetadata{}
+	}
+	e.mu.Lock()
+	ended := e.driver
+	if ended.Run == "" {
+		e.mu.Unlock()
+		return DriverMetadata{}
+	}
+	e.driver = DriverMetadata{Metadata: ended.Metadata}
+	view := e.viewLocked()
+	e.mu.Unlock()
+	e.publish(view)
+	return ended
+}
+
+func (e *Entry) Driver() DriverMetadata {
+	if e == nil {
+		return DriverMetadata{}
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.driver
 }
 
 func (e *Entry) RetireDriver(run string) {
@@ -51,7 +83,7 @@ func (e *Entry) RetireDriver(run string) {
 	e.driver = DriverMetadata{Metadata: e.driver.Metadata}
 	view := e.viewLocked()
 	e.mu.Unlock()
-	e.home.Applied(view)
+	e.publish(view)
 }
 
 func (e *Entry) ReportDriverMetadata(run string, sequence uint64, metadata string) bool {
@@ -67,7 +99,7 @@ func (e *Entry) ReportDriverMetadata(run string, sequence uint64, metadata strin
 	e.driver.Metadata = strings.TrimSpace(metadata)
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func (e *Entry) ReportDriverTranscript(run, path string) bool {
@@ -83,7 +115,7 @@ func (e *Entry) ReportDriverTranscript(run, path string) bool {
 	view := e.viewLocked()
 	e.mu.Unlock()
 	pausepoint.At(pausepoint.DriverTranscriptCaptured)
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func (e *Entry) BeginDriverLaunch(plugin, run string) {

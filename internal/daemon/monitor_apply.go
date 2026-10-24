@@ -34,13 +34,7 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 		r.applyMu.Unlock()
 		return true
 	}
-	recordedPullRequests, usageChanged, err := h.saveView(session, previous, view)
-	if err != nil && d.store.Get(session) == nil {
-		r.applyMu.Unlock()
-		d.life.Go("forgetClosedMonitor", func() { d.forgetMonitor(session) })
-		return false
-	}
-	if err != nil {
+	if err := h.recordConversation(session, previous, view); err != nil {
 		h.catchUp(session, binding, err)
 		r.applyMu.Unlock()
 		return false
@@ -48,52 +42,59 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	binding.applied = view
 	h.catchUp(session, binding, nil)
 	r.applyMu.Unlock()
-	for _, id := range recordedPullRequests {
-		d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: id})
+	for id, link := range view.PullRequests.Entries {
+		if previous.PullRequests.Entries[id] != link {
+			d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: id})
+		}
 	}
-	if usageChanged {
+	if _, _, usageChanged := sessionmonitor.CostChange(previous, view); usageChanged {
 		d.publishFact(FactSessionCostChanged, string(session), nil)
 	}
 	d.reactMonitorView(session, previous, view)
 	return true
 }
 
-func (h *monitorHome) saveView(session protocol.SessionID, previous, view sessionmonitor.View) ([]string, bool, error) {
-	d := h.daemon
-	if runtime := runtimeStateOf(view); runtime != runtimeStateOf(previous) && !d.store.ApplySessionRuntimeState(session, runtime) {
-		return nil, false, fmt.Errorf("runtime state was not saved")
+func (h *monitorHome) recordConversation(session protocol.SessionID, previous, view sessionmonitor.View) error {
+	conversation := view.Conversation.V.ConversationObservation
+	if conversation == previous.Conversation.V.ConversationObservation || conversation.NativeID == "" {
+		return nil
 	}
-	if conversation := view.Conversation.V.ConversationObservation; conversation != previous.Conversation.V.ConversationObservation && conversation.NativeID != "" {
-		if _, err := d.store.TransitionSessionResumeID(session, conversation.NativeID); err != nil {
-			return nil, false, fmt.Errorf("conversation: %w", err)
-		}
+	if _, err := h.daemon.store.TransitionSessionResumeID(session, conversation.NativeID); err != nil {
+		return fmt.Errorf("conversation: %w", err)
 	}
-	costChanged, costDurable, usageChanged := sessionmonitor.CostChange(previous, view)
+	return nil
+}
+
+type storeSaver struct{ daemon *Daemon }
+
+func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionmonitor.View) error {
+	d := s.daemon
+	if runtime := runtimeStateOf(view); runtime != runtimeStateOf(saved) && !d.store.SaveSessionRuntime(session, runtime) {
+		return fmt.Errorf("runtime state was not saved")
+	}
+	costChanged, costDurable, _ := sessionmonitor.CostChange(saved, view)
 	if costChanged {
 		if err := d.store.ApplySessionCostSnapshot(session, sessioncost.Checkpoint{Initialized: view.CostInitialized.V, Sources: view.Cost.Entries}, costDurable); err != nil {
-			return nil, false, fmt.Errorf("cost: %w", err)
+			return fmt.Errorf("cost: %w", err)
 		}
 	}
-	var recordedPullRequests []string
-	if exit := view.Exit.V; exit != nil && exit != previous.Exit.V {
+	if exit := view.Exit.V; exit != nil && exit != saved.Exit.V {
 		if !d.saveExitScreen(store.SessionExitScreen{SessionID: session, Text: exit.Text, Cols: exit.Cols, Rows: exit.Rows,
 			ExitCode: exit.Code, ExitSignal: exit.Signal}, exit.At) {
-			return nil, false, fmt.Errorf("exit screen was not saved")
+			return fmt.Errorf("exit screen was not saved")
 		}
 	}
 	for id, link := range view.PullRequests.Entries {
-		if previous.PullRequests.Entries[id] == link {
+		if saved.PullRequests.Entries[id] == link {
 			continue
 		}
-		_, err := d.store.RecordSessionPullRequest(store.SessionPullRequestRecord{
+		if _, err := d.store.RecordSessionPullRequest(store.SessionPullRequestRecord{
 			SessionID: session, PRID: id, Repository: link.Repository, Number: link.Number, URL: link.URL,
-		}, time.Now())
-		if err != nil {
-			return nil, false, fmt.Errorf("pull request %s: %w", id, err)
+		}, time.Now()); err != nil {
+			return fmt.Errorf("pull request %s: %w", id, err)
 		}
-		recordedPullRequests = append(recordedPullRequests, id)
 	}
-	return recordedPullRequests, usageChanged, nil
+	return nil
 }
 
 func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
@@ -107,5 +108,6 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 		DriverTranscript:   driver.TranscriptPath,
 		Branch:             view.Branch.V,
 		HarnessTitle:       view.HarnessTitle.V,
+		LastSeen:           view.LastSeen.V,
 	}
 }

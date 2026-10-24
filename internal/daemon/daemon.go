@@ -1261,7 +1261,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				report.MissingMetadata++
 				continue
 			}
-			d.startSessionMonitor(sessionID)
+			d.startSessionMonitorSeeded(recoveredSession, sessionmonitor.Evidence{})
 			report.Created++
 			report.markChanged(sessionID)
 			continue
@@ -1822,15 +1822,21 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
 		}
 	}
-	d.monitorEntry(sessionID).MarkForcedStop()
-	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), time.Now())
+	entry := d.monitorEntry(sessionID)
+	entry.MarkForcedStop()
+	retired := entry.EndDriverRun()
+	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID),
+		store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence}, time.Now())
 	if err != nil {
-		d.monitorEntry(sessionID).ClearForcedStop()
+		entry.ClearForcedStop()
+		if retired.Run != "" {
+			entry.RestoreDriverRun(retired)
+		}
 		lifecycleLock.Unlock()
 		return nil, err
 	}
 	pausepoint.At(pausepoint.SessionTeardownPrepared)
-	d.monitorEntry(sessionID).RetireDriver(driverRun.RunID)
+	entry.RetireDriver(driverRun.RunID)
 	return &sessionTeardown{session: session, terminals: d.terminalsOf(sessionID), driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
@@ -1841,19 +1847,10 @@ func (d *Daemon) commitSessionUnregister(sessionID protocol.SessionID, closed st
 func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *sessionTeardown) {
 	defer teardown.releaseLifecycle()
 	d.monitorEntry(sessionID).ClearForcedStop()
-	var err error
-	cancel := func() (sessionmonitor.DriverMetadata, bool) {
-		if err = d.store.CancelSessionTeardown(sessionID); err != nil {
-			return sessionmonitor.DriverMetadata{}, false
-		}
-		return d.driverInputFromRecord(sessionID), true
+	if run := d.store.SessionTeardownDriverRun(sessionID); run.RunID != "" {
+		d.monitorEntry(sessionID).RestoreDriverRun(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
 	}
-	if entry := d.monitorEntry(sessionID); entry != nil {
-		entry.BeginDriverRun(cancel)
-	} else {
-		cancel()
-	}
-	if err != nil {
+	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
 		d.logf("cancel session teardown failed for %s: %v", sessionID, err)
 	}
 }
@@ -3602,11 +3599,11 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		d.sendError(conn, err.Error())
 		return
 	}
-	d.publishFact(FactSessionRegistered, string(msg.Session.ID), nil)
 	if !protocol.Deref(msg.Unplaced) {
 		d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical, focus: true})
 	}
-	d.startSessionMonitor(msg.Session.ID)
+	d.startSessionMonitorSeeded(&msg.Session, sessionmonitor.Evidence{})
+	d.publishFact(FactSessionRegistered, string(msg.Session.ID), nil)
 	d.sendOK(conn)
 }
 

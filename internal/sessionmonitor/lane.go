@@ -445,5 +445,5 @@ func (e *Entry) MarkModelRequestStarted(at time.Time) bool {
 	e.lastModelRequestAt = at
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }

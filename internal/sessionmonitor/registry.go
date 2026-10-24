@@ -63,6 +63,10 @@ type Monitor struct {
 
 type Entry struct {
 	mu                  sync.Mutex
+	session             protocol.SessionID
+	stopped             bool
+	saveMu              sync.Mutex
+	saved               savedView
 	registry            *Registry
 	home                Home
 	label               string
@@ -133,6 +137,7 @@ func (e *Evidence) ClearProgramStatus() {
 
 type Registry struct {
 	host      Host
+	saver     Saver
 	mu        sync.Mutex
 	physical  map[harness.TerminalID]*Monitor
 	entries   map[*Entry]struct{}
@@ -141,11 +146,12 @@ type Registry struct {
 	nextLocal uint64
 }
 
-func NewRegistry(host Host) *Registry {
-	return &Registry{host: host, physical: make(map[harness.TerminalID]*Monitor), entries: make(map[*Entry]struct{}), wake: make(chan struct{}, 1)}
+func NewRegistry(host Host, saver Saver) *Registry {
+	return &Registry{host: host, saver: saver, physical: make(map[harness.TerminalID]*Monitor), entries: make(map[*Entry]struct{}), wake: make(chan struct{}, 1)}
 }
 
 type Start struct {
+	Session      protocol.SessionID
 	Terminal     harness.TerminalID
 	Conversation string
 	Linked       bool
@@ -203,7 +209,9 @@ func (r *Registry) Start(previous *Entry, start Start) *Entry {
 	e.succeeds = Key{}
 	e.monitor, e.conversation, e.localConversation = m, start.Conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
 	e.input = &lane{mu: &e.mu, entry: e, stopped: r.closed.Load()}
+	e.session = start.Session
 	e.initializeLocked(start)
+	e.saved.view = e.snapshotLocked()
 	m.entries[e] = struct{}{}
 	r.entries[e] = struct{}{}
 	return e
@@ -306,6 +314,7 @@ func (e *Entry) Stop() {
 		return
 	}
 	e.FinishUsage()
+	e.saveMu.Lock()
 	e.mu.Lock()
 	lane := e.input
 	lane.stopRetriesLocked()
@@ -322,7 +331,10 @@ func (e *Entry) Stop() {
 		e.wakeTimer = nil
 	}
 	e.resolvePending = false
+	e.stopped = true
+	e.stopSaveRetryLocked()
 	e.mu.Unlock()
+	e.saveMu.Unlock()
 	lane.running.Wait()
 }
 

@@ -590,13 +590,7 @@ func (d *Daemon) applyPluginReportedStop(params pluginReportStopParams) {
 
 func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) bool {
 	d.notePluginDriverReport(params.SessionID)
-	var applied bool
-	if entry := d.monitorEntry(params.SessionID); entry != nil {
-		applied = entry.ReportDriverMetadata(params.RunID, params.Seq, string(params.Metadata))
-	} else {
-		applied = d.store.ApplyAgentDriverMetadata(params.SessionID, params.RunID, params.Seq, string(params.Metadata))
-	}
-	if !applied {
+	if !d.monitorEntry(params.SessionID).ReportDriverMetadata(params.RunID, params.Seq, string(params.Metadata)) {
 		d.logf("plugin metadata report discarded: session=%s run=%s seq=%d", params.SessionID, params.RunID, params.Seq)
 		return false
 	}
@@ -618,15 +612,7 @@ func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscript
 		}
 		return
 	}
-	if !d.store.SetAgentDriverTranscriptPath(params.SessionID, params.RunID, path) {
-		d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
-		return
-	}
-	session := d.store.Get(params.SessionID)
-	if session == nil {
-		return
-	}
-	d.monitorEntry(params.SessionID).WatchDriverUsage(path)
+	d.logf("plugin transcript path report discarded: session=%s run=%s: no monitor runs it", params.SessionID, params.RunID)
 }
 
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID protocol.SessionID, report pendingPluginReport) bool {

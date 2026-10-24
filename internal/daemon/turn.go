@@ -19,23 +19,16 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 		return
 	}
 	entry := d.monitorEntry(sessionID)
-	settled := false
-	if entry != nil {
-		turn := d.store.TurnStamps(sessionID).OpenedAt
-		view, applied := entry.Do(sessionmonitor.Command{Key: entry.Key(), Kind: sessionmonitor.Settle, Turn: turn}, time.Now())
-		settled = applied
-		settled = settled && entry.Publish(view)
-	} else {
-		settled = d.store.SettleTurn(sessionID, time.Now())
-	}
-	if !settled {
+	if entry == nil {
 		return
 	}
-	d.monitorEntry(sessionID).CancelAutoSettle("settled by user")
-	d.traceSettle(sessionID)
-	if entry == nil {
-		d.broadcastSessionStateChanged(sessionID)
+	turn := d.store.TurnStamps(sessionID).OpenedAt
+	view, applied := entry.Do(sessionmonitor.Command{Key: entry.Key(), Kind: sessionmonitor.Settle, Turn: turn}, time.Now())
+	if !applied || !entry.Publish(view) {
+		return
 	}
+	entry.CancelAutoSettle("settled by user")
+	d.traceSettle(sessionID)
 }
 
 func (d *Daemon) traceSettle(sessionID protocol.SessionID) {

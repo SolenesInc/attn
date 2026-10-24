@@ -32,14 +32,19 @@ func TestASnoozeStillWakesWhenANewerStateArrivesBeforeItsReply(t *testing.T) {
 	if err := cli.UpdateState(terminal, protocol.StateWorking); err != nil {
 		t.Fatal(err)
 	}
-	testworld.AwaitSession(app, "waiting", func(x protocol.Session) bool {
+	working := testworld.AwaitSession(app, "waiting", func(x protocol.Session) bool {
 		return x.State == protocol.SessionStateWorking && protocol.Deref(x.TurnSnoozedUntil) == until
 	})
+	workedAt, err := time.Parse(time.RFC3339Nano, working.StateUpdatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {
 		t.Fatal(err)
 	}
 	newest := testworld.AwaitSession(app, "waiting", func(x protocol.Session) bool {
-		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnSnoozedUntil) == until
+		updated, err := time.Parse(time.RFC3339Nano, x.StateUpdatedAt)
+		return err == nil && updated.After(workedAt) && x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnSnoozedUntil) == until
 	})
 	committed.Release()
 	if err := <-answered; err != nil {

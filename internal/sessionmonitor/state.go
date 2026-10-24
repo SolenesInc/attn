@@ -124,7 +124,7 @@ func (e *Entry) ApplyState(change Change) bool {
 		view = e.viewLocked()
 	}
 	e.mu.Unlock()
-	if !accepted || !e.home.Applied(view) {
+	if !accepted || !e.publish(view) {
 		e.logf("state update discarded: session=%s state=%s cause=%s", e.Label(), change.State, CauseName(change.Cause))
 		e.TraceChange(change, statetrace.OutcomeDiscarded, "store_rejected")
 		return false

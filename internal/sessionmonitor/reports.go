@@ -13,7 +13,7 @@ func (e *Entry) ReportHarnessTitle(title string) bool {
 	e.harnessTitle = title
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func (e *Entry) ReportPullRequest(id string, link PullRequest) bool {
@@ -29,7 +29,7 @@ func (e *Entry) ReportPullRequest(id string, link PullRequest) bool {
 	e.pullRequests[id] = link
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func (e *Entry) ReportSentFiles(paths []string) bool {
@@ -46,7 +46,7 @@ func (e *Entry) ReportSentFiles(paths []string) bool {
 	}
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func (e *Entry) ReofferExit(lifecycle string) (offered, applied bool) {
@@ -60,7 +60,7 @@ func (e *Entry) ReofferExit(lifecycle string) (offered, applied bool) {
 	}
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return true, e.home.Applied(view)
+	return true, e.publish(view)
 }
 
 func (e *Entry) ReportExit(exit Exit) bool {
@@ -71,7 +71,7 @@ func (e *Entry) ReportExit(exit Exit) bool {
 	e.exit = &exit
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return e.home.Applied(view)
+	return e.publish(view)
 }
 
 func (e *Entry) ClearExitBefore(before time.Time) (cleared, applied bool) {
@@ -86,5 +86,5 @@ func (e *Entry) ClearExitBefore(before time.Time) (cleared, applied bool) {
 	e.exit = nil
 	view := e.viewLocked()
 	e.mu.Unlock()
-	return true, e.home.Applied(view)
+	return true, e.publish(view)
 }

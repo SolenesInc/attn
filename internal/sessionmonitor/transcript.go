@@ -790,7 +790,7 @@ func (e *Entry) assistantWindowChanged() {
 	e.windowRevision++
 	view := e.viewLocked()
 	e.mu.Unlock()
-	e.home.Applied(view)
+	e.publish(view)
 }
 
 func (e *Entry) linkKind() string {

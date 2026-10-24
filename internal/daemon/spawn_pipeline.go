@@ -445,7 +445,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	d.persistLaunchedConversation(req, plan)
 	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
-	d.startEvidence(msg.ID, sessionmonitor.Evidence{TerminalEvidence: sessionstate.TerminalEvidence{ReviewerInLoop: plan.spawnOpts.ApprovalRoute.ReviewerInLoop()}, ConversationEvidence: sessionstate.ConversationEvidence{InitialPromptOwed: hasInitialPrompt && sessionmonitor.ReportsTurnStarts(req.agent)}})
+	d.startSessionMonitorSeeded(session, sessionmonitor.Evidence{TerminalEvidence: sessionstate.TerminalEvidence{ReviewerInLoop: plan.spawnOpts.ApprovalRoute.ReviewerInLoop()}, ConversationEvidence: sessionstate.ConversationEvidence{InitialPromptOwed: hasInitialPrompt && sessionmonitor.ReportsTurnStarts(req.agent)}})
 	d.monitorEntry(msg.ID).RememberInitialPrompt(req.initialPrompt)
 	if req.hasPluginDriver && !d.beginAgentDriverRun(session.ID, req.pluginDriver.PluginName, plan.pluginRunID) {
 		d.abortPluginSessionLaunch(msg.ID, "launch_failed")

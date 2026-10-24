@@ -110,6 +110,7 @@ type View struct {
 	PullRequests       KeyedSet[string, PullRequest]         `fact:"session.pull_request.changed"`
 	SentFiles          KeyedSet[string, uint64]              `fact:"-"`
 	HarnessTitle       Value[string]                         `fact:"session.renamed"`
+	LastSeen           Value[time.Time]                      `fact:"-"`
 	Exit               Value[*Exit]                          `fact:"session.pty.exited"`
 	Live               Value[bool]                           `fact:"-"`
 	AssistantWindow    Value[uint64]                         `fact:"session.assistant_window.changed"`
@@ -152,6 +153,7 @@ func (e *Entry) snapshotLocked() View {
 		PullRequests:       KeyedSet[string, PullRequest]{Entries: e.pullRequests},
 		SentFiles:          KeyedSet[string, uint64]{Entries: e.sentFiles},
 		HarnessTitle:       Value[string]{e.harnessTitle},
+		LastSeen:           Value[time.Time]{e.touchedAt},
 		Exit:               Value[*Exit]{e.exit},
 		Live:               Value[bool]{live},
 		AssistantWindow:    Value[uint64]{e.windowRevision},

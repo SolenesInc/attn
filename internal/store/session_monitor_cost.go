@@ -30,7 +30,7 @@ func (s *Store) liveSessionCost(sessionID protocol.SessionID) (*sessionCostEntry
 		return entry, true, nil
 	}
 	var raw, closedAt string
-	if err := s.db.QueryRow("SELECT session_cost_json, closed_at FROM sessions WHERE id = ?", sessionID).Scan(&raw, &closedAt); err != nil {
+	if err := s.db.QueryRow("SELECT session_cost_json, closed_at FROM sessions_with_runtime WHERE id = ?", sessionID).Scan(&raw, &closedAt); err != nil {
 		return nil, false, err
 	}
 	state, err := decodeSessionMonitorCost(raw)
@@ -59,7 +59,7 @@ func (s *Store) writeSessionCost(sessionID protocol.SessionID, state sessioncost
 	if err != nil {
 		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
 	}
-	_, err = s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ? AND closed_at = ''", string(encoded), sessionID)
+	_, err = s.db.Exec(upsertRuntimeCost+" AND closed_at = ''"+onRuntimeCostConflict, sessionID, string(encoded), sessionID)
 	return err
 }
 
@@ -92,9 +92,14 @@ func (s *Store) saveUnsavedSessionCostTx(tx *sql.Tx, sessionID protocol.SessionI
 	if err != nil {
 		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
 	}
-	_, err = tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", string(encoded), sessionID)
+	_, err = tx.Exec(upsertRuntimeCost+onRuntimeCostConflict, sessionID, string(encoded), sessionID)
 	return err
 }
+
+const upsertRuntimeCost = `INSERT INTO session_runtime (session_id, session_cost_json)
+	SELECT ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ?`
+
+const onRuntimeCostConflict = `) ON CONFLICT (session_id) DO UPDATE SET session_cost_json = excluded.session_cost_json`
 
 func decodeSessionMonitorCost(raw string) (sessioncost.Checkpoint, error) {
 	var state sessioncost.Checkpoint
@@ -157,7 +162,7 @@ func (s *Store) SessionCostUsages(sessionIDs []protocol.SessionID) (map[protocol
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("SELECT id, session_cost_json FROM sessions WHERE id IN (SELECT value FROM json_each(?))", string(ids))
+	rows, err := s.db.Query("SELECT id, session_cost_json FROM sessions_with_runtime WHERE id IN (SELECT value FROM json_each(?))", string(ids))
 	if err != nil {
 		return nil, fmt.Errorf("read session costs: %w", err)
 	}

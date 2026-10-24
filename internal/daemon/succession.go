@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -51,6 +53,8 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	sc.From = from.ID
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
+	fresh := d.store.Get(sc.To) == nil
+	handedOver := d.monitorEntry(from.ID).Driver()
 	_, closedAsks, err := d.store.CommitSuccession(sc, t)
 	unlockEnds()
 	defer release()
@@ -62,7 +66,10 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		return err
 	}
 
-	d.startSessionMonitorFrom(sc.To, from.ID, candidate)
+	entry := d.startSessionMonitorFrom(sc.To, from.ID, candidate)
+	if !sc.KeepTo {
+		entry.Begin(d.successorLaunch(sc.To, from, handedOver, fresh))
+	}
 	if !sc.KeepTo {
 		d.monitorEntry(sc.To).ResolveSoon()
 		d.monitorEntry(sc.To).StartTranscriptWatcher(observation.TranscriptPath)
@@ -90,4 +97,17 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	}
 	d.logf("terminal %s moved on from session %s to %s for conversation %s", t, from.ID, sc.To, observation.NativeID)
 	return nil
+}
+
+func (d *Daemon) successorLaunch(to protocol.SessionID, from *protocol.Session, driver sessionmonitor.DriverMetadata, fresh bool) sessionmonitor.Launch {
+	now := time.Now()
+	launch := d.monitorLaunch(to)
+	launch.State, launch.StateSince, launch.StateUpdated, launch.LastSeen = protocol.SessionStateIdle, now, now, now
+	launch.Driver = driver
+	if fresh {
+		launch.Branch = branchFromSession(from)
+		launch.LastModelRequestAt = now
+		launch.Cost = sessioncost.Checkpoint{Initialized: true}
+	}
+	return launch
 }

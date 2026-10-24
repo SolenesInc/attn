@@ -29,7 +29,7 @@ type monitorIndex struct {
 
 func (d *Daemon) monitors() *monitorIndex {
 	d.monitorsOnce.Do(func() {
-		d.monitorState = &monitorIndex{sessions: make(map[protocol.SessionID]*monitorBinding), registry: sessionmonitor.NewRegistry(monitorHost{daemon: d})}
+		d.monitorState = &monitorIndex{sessions: make(map[protocol.SessionID]*monitorBinding), registry: sessionmonitor.NewRegistry(monitorHost{daemon: d}, d.monitorSaver())}
 	})
 	return d.monitorState
 }
@@ -61,6 +61,12 @@ func (d *Daemon) startSessionMonitor(sessionID protocol.SessionID) *sessionmonit
 	return d.startSessionMonitorFrom(sessionID, "", nil)
 }
 
+func (d *Daemon) startSessionMonitorSeeded(seed *protocol.Session, fresh sessionmonitor.Evidence) *sessionmonitor.Entry {
+	entry := d.startSessionMonitor(seed.ID)
+	entry.Restart(withSeed(d.monitorLaunch(seed.ID), seed), fresh)
+	return entry
+}
+
 func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID, candidate *sessionmonitor.Entry) *sessionmonitor.Entry {
 	terminal := d.primaryTerminal(sessionID)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
@@ -79,7 +85,7 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	}
 	r := d.monitors()
 	start := func() sessionmonitor.Start {
-		return sessionmonitor.Start{Terminal: terminal, Conversation: conversation, Linked: linked, Candidate: candidate,
+		return sessionmonitor.Start{Session: sessionID, Terminal: terminal, Conversation: conversation, Linked: linked, Candidate: candidate,
 			Launch: func() sessionmonitor.Launch { return d.monitorLaunch(sessionID) }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), sessionID)}
 	}
 	r.policyMu.Lock()
@@ -108,6 +114,19 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 		entry.TakeUserSubmit(previous)
 	}
 	return entry
+}
+
+func withSeed(launch sessionmonitor.Launch, seed *protocol.Session) sessionmonitor.Launch {
+	launch.Branch = branchFromSession(seed)
+	launch.State = seed.State
+	launch.StateSince = protocol.Timestamp(seed.StateSince).Time()
+	launch.StateUpdated = protocol.Timestamp(seed.StateUpdatedAt).Time()
+	launch.LastModelRequestAt = protocol.Timestamp(protocol.Deref(seed.LastModelRequestAt)).Time()
+	if launch.LastModelRequestAt.IsZero() {
+		launch.LastModelRequestAt = launch.StateUpdated
+	}
+	launch.LastSeen = protocol.Timestamp(seed.LastSeen).Time()
+	return launch
 }
 
 func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Launch {
@@ -289,4 +308,11 @@ func (d *Daemon) kickMonitorTerminals() {
 			entry.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
 		}
 	})
+}
+
+func (d *Daemon) monitorSaver() sessionmonitor.Saver {
+	if d.store == nil {
+		return nil
+	}
+	return storeSaver{daemon: d}
 }

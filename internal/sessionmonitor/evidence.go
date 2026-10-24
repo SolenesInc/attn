@@ -195,16 +195,35 @@ func (e *Entry) Restart(launch Launch, fresh Evidence) {
 	if e == nil {
 		return
 	}
+	e.Begin(launch)
+	e.UpdateEvidence(nil, func(e *Evidence) { *e = fresh })
+}
+
+func (e *Entry) Begin(launch Launch) {
+	if e == nil {
+		return
+	}
 	e.mu.Lock()
 	e.directory, e.branch, e.startedAt = launch.Directory, launch.Branch, launch.StartedAt
 	e.state = StateView{Quiet: true, Sequence: e.state.Sequence + 1, State: launch.State, Since: launch.StateSince, Updated: launch.StateUpdated}
+	if !launch.LastModelRequestAt.IsZero() {
+		e.lastModelRequestAt = launch.LastModelRequestAt
+	}
+	if launch.Driver.Run != "" {
+		e.driver = launch.Driver
+	}
+	if !launch.LastSeen.IsZero() {
+		e.touchedAt = launch.LastSeen
+	}
+	if launch.Cost.Initialized {
+		e.loadCostLocked(launch.Cost)
+	}
 	e.firstReportAt = time.Time{}
 	e.reason = ""
 	e.dwell = dwellPending{}
 	view := e.viewLocked()
 	e.mu.Unlock()
-	e.home.Applied(view)
-	e.UpdateEvidence(nil, func(e *Evidence) { *e = fresh })
+	e.publish(view)
 }
 
 func ReportsTurnStarts(agent string) bool {
@@ -459,7 +478,7 @@ func (e *Entry) publishResolution(current protocol.SessionState, resolution sess
 			e.mu.Lock()
 			view := e.viewLocked()
 			e.mu.Unlock()
-			e.home.Applied(view)
+			e.publish(view)
 		}
 		return resolverOwnsState
 	}

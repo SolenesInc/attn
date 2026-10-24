@@ -24,5 +24,5 @@ func (e *Entry) CheckBranch() {
 	e.branch = *branch
 	view := e.viewLocked()
 	e.mu.Unlock()
-	e.home.Applied(view)
+	e.publish(view)
 }

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 )
 
@@ -18,10 +17,9 @@ func TestSessionCostReadsLedgerKeysWrittenBeforePurposesExisted(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	s.Add(&protocol.Session{ID: "legacy", Label: "legacy"})
-
 	legacy := `{"initialized":true,"ledger":{"claude-opus-4-8":{"input_tokens":10,"output_tokens":2}}}`
-	if _, err := s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", legacy, "legacy"); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO sessions (id, user_label, directory, state, state_since, state_updated_at, last_seen, session_cost_json)
+		VALUES ('legacy', 'legacy', '', 'idle', '', '', '', ?)`, legacy); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {

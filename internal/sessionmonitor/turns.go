@@ -111,7 +111,7 @@ func (e *Entry) armWakeLocked() {
 	e.wakeTimer = e.registry.host.AfterFunc("monitorSnoozeWake", max(0, time.Until(deadline)), func() {
 		crashpoint.At("snooze-wake-running")
 		view, woken := e.Do(Command{Key: key, Kind: Wake, Until: deadline}, deadline)
-		if woken && e.home.Applied(view) {
+		if woken && e.publish(view) {
 			e.traceWake("deadline")
 		}
 	})
@@ -154,7 +154,7 @@ func (e *Entry) AgentTurn(action protocol.AgentTurnAction, now time.Time) (proto
 	outcome, err := e.agentTurnLocked(action, now)
 	view := e.viewLocked()
 	e.mu.Unlock()
-	e.home.Applied(view)
+	e.publish(view)
 	return outcome, err
 }
 
