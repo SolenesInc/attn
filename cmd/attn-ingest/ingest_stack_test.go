@@ -161,10 +161,15 @@ func TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted(t *testing.T) {
 		t.Fatalf("the deleted install's token still answers GET /v1/installs/me with %d", status)
 	}
 
+	var sent bytes.Buffer
+	if err := analytics.WriteBatch(&sent, batch); err != nil {
+		t.Fatal(err)
+	}
 	_, metrics := install.do(http.MethodGet, "/metrics", nil)
 	for _, line := range []string{
 		"attn_ingest_events_accepted_total 100",
 		"attn_ingest_events_duplicate_total 100",
+		fmt.Sprintf("attn_ingest_batch_bytes_accepted_total %d", 2*sent.Len()),
 		`attn_ingest_refusals_total{limit="events_per_install_per_minute"} 1`,
 	} {
 		if !bytes.Contains(metrics, []byte(line+"\n")) {

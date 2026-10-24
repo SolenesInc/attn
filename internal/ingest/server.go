@@ -192,7 +192,7 @@ func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
 		return r.Context().Err()
 	}
 	now := time.Now().UTC()
-	batch, err := readBatch(r.Body, r.ContentLength)
+	batch, gzipBytes, err := readBatch(r.Body, r.ContentLength)
 	if err != nil {
 		return err
 	}
@@ -215,6 +215,7 @@ func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
 	accepted := analytics.Accepted{Accepted: len(fresh), Duplicates: len(batch.Records) - len(fresh)}
 	s.metrics.accepted.Add(int64(accepted.Accepted))
 	s.metrics.duplicates.Add(int64(accepted.Duplicates))
+	s.metrics.acceptedBytes.Add(gzipBytes)
 	writeJSON(w, http.StatusOK, accepted)
 	return nil
 }
