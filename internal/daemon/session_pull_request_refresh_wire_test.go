@@ -394,12 +394,12 @@ func TestAnUnchangedWatchedPullRequestSendsTheAppNothing(t *testing.T) {
 func TestARepeatedWatchOutageTellsTheAppOnce(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "s1")
-		watchPullRequestOn(t, cli, "s1", protocol.PullRequestWatchModeGreen)
+		session := w.bubbleClaude(t, app, "shop").id
+		watchPullRequestOn(t, cli, session, protocol.PullRequestWatchModeGreen)
 		w.advance(protocol.HeatHotInterval)
-		if pr := onlyPullRequest(t, cli, "s1"); protocol.Deref(pr.WatchHealth) != "delayed" {
+		if pr := onlyPullRequest(t, cli, session); protocol.Deref(pr.WatchHealth) != "delayed" {
 			t.Fatalf("after a failed poll the watch = %+v, want it delayed", pr)
 		}
 
@@ -413,17 +413,17 @@ func TestARepeatedWatchOutageTellsTheAppOnce(t *testing.T) {
 
 func TestTwoPullRequestsChangingInOnePassTellTheAppOnce(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "s1")
-		recordPullRequest(t, cli, "s1", shopPull(71))
-		recordPullRequest(t, cli, "s1", shopPull(72))
+		session := w.bubbleClaude(t, app, "shop").id
+		recordPullRequest(t, cli, session, shopPull(71))
+		recordPullRequest(t, cli, session, shopPull(72))
 		w.advance(protocol.HeatHotInterval)
 
 		facts := producedBy(busStatus(t, app), "session.pull_request.changed")
 		gh.set(func(gh *refreshedPullRequest) { gh.mergeable = "dirty" })
 		w.advance(protocol.HeatHotInterval)
-		for _, pr := range queriedSession(t, cli, "s1").PullRequests {
+		for _, pr := range queriedSession(t, cli, session).PullRequests {
 			if protocol.Deref(pr.CIStatus) != "failure" {
 				t.Fatalf("pull request #%d shows ci %q, want failure", pr.Number, protocol.Deref(pr.CIStatus))
 			}
