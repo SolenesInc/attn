@@ -135,13 +135,3 @@ func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecor
 	}
 	return records
 }
-
-func seedSessionRuntime(db execer, id protocol.SessionID, state protocol.SessionState, since, updated, lastSeen string) error {
-	if state == "" {
-		state = protocol.SessionStateLaunching
-	}
-	_, err := db.Exec(`INSERT INTO session_runtime (session_id, state, state_since, state_updated_at, last_seen)
-		VALUES (?, ?, ?, ?, ?) ON CONFLICT (session_id) DO NOTHING`,
-		id, string(state), since, updated, lastSeen)
-	return err
-}
