@@ -41,6 +41,7 @@ INSTANCE_DAEMON_UNSET = $(foreach var,$(INSTANCE_ROUTING_VARS),-u $(var)) -u ATT
 WARN_LEAKED_ROUTING = leaked=""; for var in $(INSTANCE_ROUTING_VARS); do if printenv "$$var" >/dev/null; then leaked="$$leaked $$var"; fi; done; if [ -n "$$leaked" ]; then echo ">>> ignoring inherited routing env for this install:$$leaked"; echo ">>> this shell still routes elsewhere — select the instance with attn instance-env"; fi
 BUILD_DIR=./cmd/attn
 VERSION ?= $(shell bash ./scripts/version.sh)
+CHANNEL ?= source
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 SOURCE_FINGERPRINT ?= $(shell bash ./scripts/source-fingerprint.sh --field fingerprint)
 SOURCE_DIRTY_PATHS_BASE64 ?= $(shell bash ./scripts/source-fingerprint.sh --field dirty_paths_base64)
@@ -55,7 +56,7 @@ OUTPUT ?= $(BINARY_NAME)
 # ad-hoc linker signature inside a properly signed bundle, and macOS answered
 # `daemon ensure` with Killed: 9.
 UNAME_S := $(shell uname -s)
-GO_LDFLAGS = -X github.com/victorarias/attn/internal/buildinfo.Version=$(VERSION) -X github.com/victorarias/attn/internal/buildinfo.BuildTime=$(BUILD_TIME) -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=$(SOURCE_FINGERPRINT) -X github.com/victorarias/attn/internal/buildinfo.GitCommit=$(GIT_COMMIT) -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(SNAPSHOT_FORMAT)
+GO_LDFLAGS = -X github.com/victorarias/attn/internal/buildinfo.Version=$(VERSION) -X github.com/victorarias/attn/internal/buildinfo.Channel=$(CHANNEL) -X github.com/victorarias/attn/internal/buildinfo.BuildTime=$(BUILD_TIME) -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=$(SOURCE_FINGERPRINT) -X github.com/victorarias/attn/internal/buildinfo.GitCommit=$(GIT_COMMIT) -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(SNAPSHOT_FORMAT)
 # Honor the repository's .tool-versions even when an older standalone Zig is
 # earlier on PATH (the app's WASM builder follows the same order).
 ZIG ?= $(shell if command -v asdf >/dev/null 2>&1; then asdf which zig 2>/dev/null || command -v zig; else command -v zig; fi)
