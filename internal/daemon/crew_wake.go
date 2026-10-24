@@ -190,7 +190,7 @@ func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
 			ID:    plot.ID,
 			Slug:  plot.StepSlug,
 			Title: plot.Title,
-			Ready: garden.PlotProgress(read.seeds, plot.ID, read.ready).Ready,
+			Ready: read.plots.Progress(plot.ID, read.ready).Ready,
 		})
 	}
 }

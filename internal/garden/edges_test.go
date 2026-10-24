@@ -344,22 +344,6 @@ func TestTree(t *testing.T) {
 	}
 }
 
-func TestInPlot(t *testing.T) {
-	seeds := []Seed{
-		seedWith("s-leaf", partOf("s-mid")),
-		seedWith("s-mid", partOf("s-crown")),
-		seedWith("s-crown"),
-		seedWith("s-outside"),
-	}
-	got := ids(InPlot(seeds, "s-crown"))
-	if !equal(got, []string{"s-leaf", "s-mid", "s-crown"}) {
-		t.Fatalf("InPlot = %v", got)
-	}
-	if got := ids(InPlot(seeds, "s-outside")); !equal(got, []string{"s-outside"}) {
-		t.Fatalf("InPlot(leaf crown) = %v", got)
-	}
-}
-
 func TestRelations(t *testing.T) {
 	seeds := []Seed{
 		seedWith("s-a", blocks("s-b")),

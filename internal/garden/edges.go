@@ -205,29 +205,6 @@ func Blockers(seeds []Seed, id string) []string {
 	return out
 }
 
-func InPlot(seeds []Seed, crownID string) []Seed {
-	inside := map[string]bool{crownID: true}
-	for grew := true; grew; {
-		grew = false
-		for _, seed := range seeds {
-			if inside[seed.ID] {
-				continue
-			}
-			if parent, ok := parentOf(seed); ok && inside[parent] {
-				inside[seed.ID] = true
-				grew = true
-			}
-		}
-	}
-	out := make([]Seed, 0, len(inside))
-	for _, seed := range seeds {
-		if inside[seed.ID] {
-			out = append(out, seed)
-		}
-	}
-	return out
-}
-
 type Relation struct {
 	Label string
 	Seed  string
