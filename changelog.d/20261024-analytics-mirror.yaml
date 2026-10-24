@@ -1,0 +1,7 @@
+kind: added
+area: settings
+change: >
+  With Usage analytics on, the local record now holds every daemon event,
+  redacted: text becomes its length, the thing an event is about becomes a hash
+  keyed to this install, and only fixed values such as states and kinds stay
+  readable. Nothing is sent.

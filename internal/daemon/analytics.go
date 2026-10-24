@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/analytics"
@@ -32,18 +33,40 @@ func (d *Daemon) analyticsEnabled() bool {
 
 func (d *Daemon) configureAnalytics() {
 	if !d.analyticsEnabled() {
+		if err := d.stopAnalyticsMirror(); err != nil {
+			d.logf("analytics: %v", err)
+		}
 		return
 	}
-	if err := ensureAnalyticsSecret(d.dataRoot); err != nil {
+	secret, err := ensureAnalyticsSecret(d.dataRoot)
+	if err != nil {
+		d.logf("analytics: %v", err)
+		return
+	}
+	if err := d.startAnalyticsMirror(secret); err != nil {
 		d.logf("analytics: %v", err)
 	}
 }
 
-func ensureAnalyticsSecret(dataRoot string) error {
+func ensureAnalyticsSecret(dataRoot string) ([]byte, error) {
 	path := filepath.Join(dataRoot, analyticsSecretFile)
-	if _, err := os.Stat(path); err == nil {
-		return nil
+	if _, err := os.Stat(path); err != nil {
+		if err := createAnalyticsSecret(dataRoot, path); err != nil {
+			return nil, err
+		}
 	}
+	encoded, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	secret, err := hex.DecodeString(strings.TrimSpace(string(encoded)))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return secret, nil
+}
+
+func createAnalyticsSecret(dataRoot, path string) error {
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return fmt.Errorf("generate analytics secret: %w", err)
