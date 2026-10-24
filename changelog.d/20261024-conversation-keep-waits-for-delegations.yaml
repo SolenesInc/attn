@@ -1,0 +1,3 @@
+kind: changed
+area: garden
+change: While a delegation creates its worktree and starts its agent, the background conversation keep run waits for it to finish instead of retrying every second, so the app no longer re-renders its task list once a second during each delegation.

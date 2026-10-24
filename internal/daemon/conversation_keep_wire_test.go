@@ -664,6 +664,64 @@ func TestConversationRetirementWaitsForAnActiveWorktreeSweep(t *testing.T) {
 	}
 }
 
+func TestConversationRetirementWaitsForADelegationLaunchInsteadOfPolling(t *testing.T) {
+	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "0")
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	finished := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	w.Launched(string(finished.SessionID)).Prompted()
+	closePane(app, sessionPane{session: string(finished.SessionID)})
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	lifeMove(t, cli, "", finished.SeedID, "wither", "finished", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	if kept := lifeShow(t, cli, finished.SeedID).Seed.Continuation.KeptConversation; kept == nil || kept.DeleteAfter == nil {
+		t.Fatalf("released copy: %+v", kept)
+	}
+
+	repo := newRepo(t, "shop")
+	commitFile(t, repo, "web.txt", "shop\n")
+	request := delegateCheckoutAt(repo, delegateNewWorktree("feature/launch", "main"))
+	request.Agent = protocol.Ptr(string(fakeagent.Claude))
+	request.RequestID = "launch"
+	boot := w.HoldNextBoot()
+	accepted, err := cli.StartDelegation(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitSession(app, string(accepted.SessionID), func(protocol.Session) bool { return true })
+	if pass := awaitConversationKeepSettled(app); pass.State != "done" {
+		t.Errorf("while a delegation launches, conversation keep is %s again at %s; want it waiting for the launch to finish", pass.State, pass.NextAttemptAt)
+	}
+	if kept := lifeShow(t, cli, finished.SeedID).Seed.Continuation.KeptConversation; kept == nil || kept.DeletedAt != nil {
+		t.Errorf("retired copy while a delegation launched: %+v", kept)
+	}
+
+	boot()
+	if _, err := cli.Delegate(request); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if kept := lifeShow(t, cli, finished.SeedID).Seed.Continuation.KeptConversation; kept != nil && kept.DeletedAt != nil {
+			break
+		}
+		testworld.Await[protocol.TasksChangedMessage](app, protocol.EventTasksChanged, nil)
+	}
+}
+
+func awaitConversationKeepSettled(app *testworld.Peer) protocol.Task {
+	app.T.Helper()
+	for {
+		listed := testworld.Request(app, protocol.TaskListMessage{Cmd: protocol.CmdTaskList, RequestID: protocol.Ptr("keep-settled")},
+			protocol.EventTaskListResult, func(r protocol.TaskListResultMessage) bool { return r.RequestID == "keep-settled" })
+		for _, task := range listed.Tasks {
+			if task.Kind == "conversation_keep" && (task.State == "done" || task.State == "queued" && task.NextAttemptAt > task.UpdatedAt) {
+				return task
+			}
+		}
+		testworld.Await[protocol.TasksChangedMessage](app, protocol.EventTasksChanged, nil)
+	}
+}
+
 func TestSeedNotesLeaveConversationKeepIdleAndHarvestStillReleasesTheCopy(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

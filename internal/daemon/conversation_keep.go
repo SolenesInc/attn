@@ -27,7 +27,7 @@ import (
 const conversationKeepKind = "conversation_keep"
 const factConversationKeptChanged = "conversation.kept.changed"
 
-// Gate holds outside a sweep are single operations; retry after about one runner tick.
+// Only automatic removals hold the gate unannounced, and each is a single removal; retry after about one runner tick.
 const conversationKeepRetry = time.Second
 
 func conversationKeepGrace() time.Duration {
@@ -344,8 +344,8 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, changed map[c
 		return nil
 	})
 	if errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
-		if d.worktreeMaintenance.RunAfterSweep(d.queueConversationKeep) {
-			d.logf("conversation keep: retiring copies waits for the worktree sweep")
+		if d.worktreeMaintenance.RunWhenIdle(d.queueConversationKeep) {
+			d.logf("conversation keep: retiring copies waits for the worktree sweep and protected worktree work to finish")
 		} else {
 			d.logf("conversation keep: retiring copies yielded to a worktree hold; retrying in %s", conversationKeepRetry)
 			d.queueConversationKeepAfter(conversationKeepRetry)
