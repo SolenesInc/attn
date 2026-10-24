@@ -1982,6 +1982,7 @@ model DetachSessionMessage {
 // Read-only request for a terminal's current rendered screen. Unlike
 // attach_session it registers no subscriber and claims no PTY geometry; used to
 // seed observers that then dedup live output against last_seq.
+@extension("x-on", #{ terminal: "id" })
 model GetScreenSnapshotMessage {
   cmd: "get_screen_snapshot";
   id: TerminalID; // The terminal (pane runtime_id)
@@ -1996,6 +1997,7 @@ model GetScreenSnapshotMessage {
 // not the client advertised "kitty_images". What decides the shape of the
 // answer is "binary_pty_output" — with it the pixels come back as binary frame
 // 0x02, without it as base64 in kitty_image_result.
+@extension("x-on", #{ terminal: "id" })
 model GetKittyImageMessage {
   cmd: "get_kitty_image";
   id: TerminalID;
@@ -2055,6 +2057,7 @@ model SupportRuntimeEvidence {
   info_error_class?: string;
 }
 
+@extension("x-on", #{ terminal: "id" })
 model TerminalPointerActivityMessage {
   cmd: "terminal_pointer_activity";
   id: TerminalID; // The terminal (pane runtime_id)
@@ -2187,6 +2190,7 @@ model BusSetConsumerEnabledResultMessage {
 // size an image to the space they were given. Absent or 0 means the client has
 // no pixel geometry to report; the session then keeps the cell size it already
 // derived rather than reporting a lie.
+@extension("x-on", #{ terminal: "id" })
 model PtyResizeMessage {
   cmd: "pty_resize";
   id: TerminalID; // The terminal (pane runtime_id)
@@ -2931,6 +2935,123 @@ model TerminalCloseMessage {
   caller_session_id: SessionID;
   target: string;
   desktop?: string;
+}
+
+// Machine parts of terminal commands. The home runs a command's home part and
+// reaches its machine part through the router, on the machine its x-on names.
+
+// Launches a shell's terminal on the machine named by host (empty: the home's
+// machine). The machine expects the terminal, resolves cwd and ~, seeds the
+// session's monitor from session, and spawns with its own theme and login
+// environment. launch is ptybackend.SpawnOptions as encoding/json, as the home
+// built it; both sides run one build.
+@extension("x-on", #{ machine: "host" })
+model TerminalStartMessage {
+  cmd: "terminal_start";
+  host: string;
+  session: Session;
+  terminal_id: TerminalID;
+  launch: string;
+}
+model TerminalStartResult {
+  cwd: string; // The resolved working directory the terminal started in
+}
+
+// Kills and respawns a running terminal in place with launch
+// (ptybackend.SpawnOptions as encoding/json).
+@extension("x-on", #{ terminal: "terminal_id" })
+model TerminalRestartMessage {
+  cmd: "terminal_restart";
+  session_id: SessionID;
+  terminal_id: TerminalID;
+  launch: string;
+}
+
+// Reads what a terminal's runtime recorded about its launch, and its size.
+@extension("x-on", #{ terminal: "terminal_id" })
+model TerminalLaunchMessage {
+  cmd: "terminal_launch";
+  terminal_id: TerminalID;
+}
+model TerminalLaunchResult {
+  params?: string;        // ptybackend.SessionLaunchParams as encoding/json
+  unrecorded?: string;    // Why params is absent: nothing was recorded
+  unrecordable?: boolean; // The machine's backend records no launch params at all
+  read_error?: string;    // Why params is absent: the record could not be read
+  cols?: int32;
+  rows?: int32;
+}
+
+@extension("x-on", #{ terminal: "terminal_id" })
+model TerminalWriteMessage {
+  cmd: "terminal_write";
+  terminal_id: TerminalID;
+  data: string;
+  source: string; // As pty_input's source
+}
+
+@extension("x-on", #{ terminal: "terminal_id" })
+model TerminalReadTextMessage {
+  cmd: "terminal_read_text";
+  terminal_id: TerminalID;
+  mode: TerminalReadMode;
+  lines: int32;
+}
+model TerminalText {
+  text: string;
+  block?: TerminalBlock;
+  at_prompt: boolean;
+  integration_seen: boolean;
+  last_block_id: int64;
+}
+
+@extension("x-on", #{ terminal: "terminal_id" })
+model TerminalWaitBlockMessage {
+  cmd: "terminal_wait_block";
+  terminal_id: TerminalID;
+  until: TerminalWaitUntil;
+  after_block_id?: int64;
+  first_prompt?: boolean;
+}
+
+// Signals a terminal's process. stop records that the user stopped it;
+// ending_session_id notes that the terminal ends with that session.
+@extension("x-on", #{ terminal: "terminal_id" })
+model TerminalKillMessage {
+  cmd: "terminal_kill";
+  terminal_id: TerminalID;
+  signal: string; // "SIGTERM", "SIGINT", "SIGHUP", "SIGKILL"
+  stop?: boolean;
+  ending_session_id?: SessionID;
+}
+
+@extension("x-on", #{ terminal: "terminal_id" })
+model TerminalRemoveMessage {
+  cmd: "terminal_remove";
+  terminal_id: TerminalID;
+}
+
+// Sets the terminal theme every terminal on the machine named by host uses.
+@extension("x-on", #{ machine: "host" })
+model TerminalThemeMessage {
+  cmd: "terminal_theme";
+  host: string;
+  foreground: string;
+  background: string;
+  cursor: string;
+  ansi_palette: string[];
+}
+
+// The login shell on the machine named by host, and whether it is expected to
+// emit OSC 133 command marks.
+@extension("x-on", #{ machine: "host" })
+model TerminalShellMessage {
+  cmd: "terminal_shell";
+  host: string;
+}
+model TerminalShellResult {
+  shell: string;
+  integration_expected: boolean;
 }
 
 // Moves a session's pane to another desktop of its profile, beside that

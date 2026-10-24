@@ -95,6 +95,7 @@ jobs:
               - 'scripts/generate-schema/**'
               - 'internal/protocol/schema/**'
               - 'internal/protocol/generated.go'
+              - 'internal/protocol/placement_generated.go'
               - 'internal/protocol/protocol_version.go'
               - 'app/src/types/generated.ts'
               - 'app/src/types/protocolVersion.ts'

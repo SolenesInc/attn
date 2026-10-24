@@ -65,13 +65,7 @@ func kittyImageFormatCode(format ghosttyvt.KittyImageFormat) (byte, bool) {
 }
 
 func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyImageMessage) {
-	provider, ok := d.ptyBackend.(ptybackend.KittyImageProvider)
-	if !ok {
-		d.sendKittyImageFailure(client, msg.ID, msg.ImageID, "pty backend serves no kitty images")
-		return
-	}
-
-	image, err := provider.KittyImage(context.Background(), msg.ID, uint32(msg.ImageID))
+	image, err := Call[pty.KittyImage](context.Background(), d.router(), *msg)
 	if err != nil {
 		d.sendKittyImageFailure(client, msg.ID, msg.ImageID, err.Error())
 		return
