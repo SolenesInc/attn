@@ -204,6 +204,7 @@ model Session {
   terminal_exit?: TerminalExit; // How the agent last exited while the session keeps its final screen; absent while it runs and after Resume. Joined at broadcast from the session_exit_screens table.
   succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
   hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
+  conversation_shared_with?: SessionID[]; // The other open sessions whose live process has this session's conversation open while this one's does too. Only for a harness that lets several processes write one conversation (Claude Code), where each process keeps its own history and the transcript splits. Derived at broadcast; absent while one process holds the conversation.
   last_seen: string;            // ISO timestamp, always set
 }
 

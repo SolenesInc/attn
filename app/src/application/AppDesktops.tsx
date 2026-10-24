@@ -81,6 +81,14 @@ export function AppDesktops() {
     leafDragPreview,
   } = useLeafDragContext();
 
+  const whereOpen = (sessionId: string, viewing: Desktop) => {
+    const label = allSessions.find((session) => session.id === sessionId)?.label;
+    const named = label ? `“${label}”` : 'another terminal';
+    const home = desktops.find((desktop) => desktop.panes.some((pane) => pane.kind === 'agent' && pane.session_id === sessionId));
+    if (!home) return named;
+    return home.id === viewing.id ? `${named} on this desktop` : `${named} on ${desktopLabel(home, desktops)}`;
+  };
+
   const mounted = orderedDesktops(desktops).filter((desktop) => mountedDesktopIds.has(desktop.id));
 
   const renderDesktop = (desktop: Desktop) => {
@@ -112,6 +120,7 @@ export function AppDesktops() {
             terminalExit: entry.terminalExit,
             state_reason: entry.state_reason,
             terminalBuildStale: entry.terminalBuildStale,
+            conversationAlsoOpenIn: entry.conversationSharedWith.map((peer) => whereOpen(peer, desktop)),
             usage: entry.usage,
             isActive: isCurrent && entry.id === shownSessionId,
             seedId: entry.seedId,

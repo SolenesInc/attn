@@ -378,8 +378,14 @@ func (p *Peer) until(awaiting func() string, check func() (bool, error)) {
 
 func Await[T any](p *Peer, event string, match func(T) bool) T {
 	p.T.Helper()
+	return AwaitSince(p, 0, event, match)
+}
+
+// AwaitSince is Await over the frames from mark on, a len(p.Log()) taken earlier.
+func AwaitSince[T any](p *Peer, mark int, event string, match func(T) bool) T {
+	p.T.Helper()
 	var found T
-	p.take(event, func(f frame) (bool, error) {
+	p.takeSince(mark, event, func(f frame) (bool, error) {
 		if f.event != event {
 			return false, nil
 		}
@@ -426,8 +432,14 @@ func Refused(p *Peer) protocol.WebSocketEvent {
 
 func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protocol.Session {
 	p.T.Helper()
+	return AwaitSessionSince(p, 0, id, match)
+}
+
+// AwaitSessionSince is AwaitSession over the frames from mark on, a len(p.Log()) taken earlier.
+func AwaitSessionSince(p *Peer, mark int, id string, match func(protocol.Session) bool) protocol.Session {
+	p.T.Helper()
 	var found protocol.Session
-	scanned := 0
+	scanned := mark
 	p.until(func() string { return "an update of session " + id }, func() (bool, error) {
 		for ; scanned < len(p.frames); scanned++ {
 			f := &p.frames[scanned]
@@ -486,7 +498,12 @@ func stateSince(t testing.TB, s protocol.Session) time.Time {
 
 func (p *Peer) take(awaiting string, accept func(frame) (bool, error)) {
 	p.T.Helper()
-	scanned := 0
+	p.takeSince(0, awaiting, accept)
+}
+
+func (p *Peer) takeSince(mark int, awaiting string, accept func(frame) (bool, error)) {
+	p.T.Helper()
+	scanned := mark
 	p.until(func() string { return awaiting }, func() (bool, error) {
 		for ; scanned < len(p.frames); scanned++ {
 			f := &p.frames[scanned]

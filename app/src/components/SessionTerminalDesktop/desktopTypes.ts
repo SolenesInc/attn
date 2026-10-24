@@ -65,6 +65,7 @@ export interface SessionTerminalDesktopProps {
     autoSettleHeld?: boolean;
     autoSettleDismissArmed?: boolean;
     terminalBuildStale?: boolean;
+    conversationAlsoOpenIn?: string[];
     terminalExit?: import('../../types/generated').TerminalExit;
     isActive?: boolean;
     seedId?: string;

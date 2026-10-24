@@ -493,14 +493,14 @@ async function runMockAgent() {
     const id = agent === 'claude' && dictatedId ? dictatedId : `mock-${randomUUID()}`;
     openConversation(id, mockTranscriptPath({ agent, cwd, id, resumable }));
   };
-  const resumeConversation = () => {
-    if (launch.resumePicker) {
+  const resumeConversation = (id = launch.resumeSessionId, { atLaunch = true } = {}) => {
+    if (atLaunch && launch.resumePicker) {
       notice('no resume picker here; starting a fresh conversation');
       return false;
     }
-    const found = findMockTranscript({ agent, cwd, id: launch.resumeSessionId });
+    const found = findMockTranscript({ agent, cwd, id });
     if (!found) {
-      notice(`no transcript for ${launch.resumeSessionId}; starting a fresh conversation`);
+      notice(`no transcript for ${id}; ${atLaunch ? 'starting a fresh conversation' : `staying on ${conversation.id}`}`);
       return false;
     }
     const earlier = fs.readFileSync(found, 'utf8');
@@ -510,7 +510,7 @@ async function runMockAgent() {
     for (const turn of transcriptTurns(earlier)) {
       blocks.push(turn.role === 'assistant' ? `• ${turn.text.replaceAll('\n', '\n  ')}` : `${flavor.prompt}${turn.text}`);
     }
-    openConversation(launch.resumeSessionId, found, { headerWritten: true, recordLaunch: true });
+    openConversation(id, found, { headerWritten: true, recordLaunch: atLaunch });
     return true;
   };
 
@@ -614,6 +614,12 @@ async function runMockAgent() {
       blocks.length = 0;
       startConversation('');
       notice(`started a new conversation ${conversation.id}`);
+      repaint();
+      return;
+    }
+    if (agent === 'claude' && input.startsWith('/resume ')) {
+      blocks.length = 0;
+      resumeConversation(input.slice('/resume '.length).trim(), { atLaunch: false });
       repaint();
       return;
     }

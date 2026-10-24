@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AnnotatedTerminal } from '../TerminalAnnotations/AnnotatedTerminal';
 import { TerminalStaleBuildNotice } from '../TerminalStaleBuildNotice';
+import { SharedConversationNotice } from '../SharedConversationNotice';
 import { useDesktopContext } from './DesktopContext';
 import { paneNotice } from './paneNotice';
 import type { DesktopAgentProps } from './desktopTypes';
@@ -62,6 +63,9 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
         <TerminalStaleBuildNotice
           onDismiss={() => setStaleBuildDismissed((prev) => new Set(prev).add(agentPane.sessionId))}
         />
+      ) : null}
+      {paneSession?.conversationAlsoOpenIn?.length ? (
+        <SharedConversationNotice openIn={paneSession.conversationAlsoOpenIn} />
       ) : null}
       {notice ? (
         <div className={`desktop-pane-status desktop-pane-status--${notice.tone}`}>

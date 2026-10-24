@@ -303,8 +303,8 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
-		(id, user_label, agent, directory, profile_id, parent_session_id, priority)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		(id, user_label, agent, directory, profile_id, parent_session_id, priority, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			user_label = excluded.user_label,
 			agent = excluded.agent,
@@ -318,6 +318,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		session.ProfileID,
 		protocol.Deref(session.ParentSessionID),
 		boolToInt(protocol.Deref(session.Priority)),
+		string(protocol.TimestampNow()),
 	)
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", session.ID, err)

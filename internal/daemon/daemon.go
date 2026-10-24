@@ -2966,6 +2966,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
 		decorated.PullRequests = d.sessionPullRequestsForSession(decorated)
+		decorated.ConversationSharedWith = d.conversationsSharedByLiveSessions()[decorated.ID]
 	}
 	return decorated
 }
@@ -3019,11 +3020,13 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	bySession := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
+	sharedConversations := d.conversationsSharedByLiveSessions()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
+			decorated.ConversationSharedWith = sharedConversations[decorated.ID]
 			addresses := []inbox.Address{inbox.ToSession(decorated.ID)}
 			if member := crewBySession[decorated.ID]; member != "" {
 				addresses = append(addresses, inbox.ToMember(member))

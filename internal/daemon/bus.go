@@ -186,6 +186,17 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
 		{
+			filter: bus.Filter{
+				FactSessionRegistered,
+				FactSessionReregistered,
+				FactSessionRespawned,
+				FactSessionPTYExited,
+				FactSessionConversationChanged,
+				FactSessionClosed,
+			},
+			apply: func(d *Daemon, ev bus.Event) { d.projectSharedConversations(protocol.SessionID(ev.Subject)) },
+		},
+		{
 			filter: bus.Filter{FactSessionPullRequestChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
 		},
