@@ -48,7 +48,9 @@ The session you left stays open and **hidden**:
 
 - It keeps its state, so a session that was waiting for you still waits.
   From then on the app-server tells attn when its turn runs, waits on an
-  approval or asks you a question, and when that turn ends.
+  approval or asks you a question, and when that turn ends. Switch a terminal
+  back to it with `/resume` or `/agents` and the terminal takes over again: an
+  approval it was waiting on shows there, and you answer it as usual.
 - Annotations, messages from other agents and inbox notifications still reach
   it, through the app-server. The terminal's composer, with whatever you were
   typing, isn't touched.
@@ -77,8 +79,7 @@ you start with `/new` takes the mode of the session its terminal shows.
 Hidden sessions queue like any other, so a hidden session that needs an answer
 appears in the queue without a desktop chip. Choose it and attn opens it in a
 tile on the current desktop, resuming the conversation there. If it was waiting
-on an approval, the approval is waiting in the tile; answer it as usual. The
-same holds when you switch a terminal to it with `/resume` or `/agents`.
+on an approval, the approval is waiting in the tile; answer it as usual.
 
 To keep hidden sessions out of the queue, turn off Settings → Experimental →
 **Show hidden sessions in the queue**. They stay in the Sessions ledger.
