@@ -1,0 +1,4 @@
+kind: added
+area: sessions
+change: When a Pi conversation is open in two terminals at once, both tiles warn that the other one has it open, until one process exits or moves to another conversation.
+symptom: Resuming a Pi conversation that another terminal still ran left two Pi processes writing one session file, each with its own history, with nothing on screen saying so.
