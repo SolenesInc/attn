@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -34,10 +35,15 @@ func run() error {
 	if listen == "" {
 		listen = ":8080"
 	}
+	bytesPerDay, err := bytesPerDay()
+	if err != nil {
+		return err
+	}
 	server, err := ingest.New(ctx, ingest.Config{
 		ClickHouseURL:  clickHouseURL,
 		IPSecret:       []byte(os.Getenv("ATTN_INGEST_IP_SECRET")),
 		ClientIPHeader: os.Getenv("ATTN_INGEST_CLIENT_IP_HEADER"),
+		BytesPerDay:    bytesPerDay,
 		Logf:           log.Printf,
 	})
 	if err != nil {
@@ -65,4 +71,16 @@ func run() error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return httpServer.Shutdown(shutdown)
+}
+
+func bytesPerDay() (int64, error) {
+	raw := os.Getenv("ATTN_INGEST_BYTES_PER_DAY")
+	if raw == "" {
+		return ingest.DefaultBytesPerDay, nil
+	}
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value < 1 {
+		return 0, fmt.Errorf("ATTN_INGEST_BYTES_PER_DAY must be a positive number of bytes, such as %d, got %q", int64(ingest.DefaultBytesPerDay), raw)
+	}
+	return value, nil
 }

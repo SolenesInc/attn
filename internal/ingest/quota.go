@@ -14,79 +14,83 @@ type window struct {
 	bucket time.Duration
 }
 
+type charge struct {
+	window window
+	key    string
+	n      int64
+}
+
+type countKey struct {
+	limit string
+	key   string
+}
+
 type quota struct {
-	windows []window
 	mu      sync.Mutex
-	counts  map[string][]*slidingCount
+	counts  map[countKey]*slidingCount
+	longest time.Duration
 	swept   time.Time
 }
 
-func newQuota(windows ...window) *quota {
-	return &quota{windows: windows, counts: map[string][]*slidingCount{}}
+func newQuota() *quota {
+	return &quota{counts: map[countKey]*slidingCount{}}
 }
 
-func (q *quota) admit(key string, n int64, now time.Time) *analytics.Refusal {
+func (q *quota) admit(now time.Time, charges ...charge) *analytics.Refusal {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.sweep(now)
-	counts := q.countsFor(key)
-	for i, w := range q.windows {
-		counts[i].advance(w, now)
-		if observed := counts[i].total() + n; observed > w.value {
+	counts := make([]*slidingCount, len(charges))
+	for i, c := range charges {
+		counts[i] = q.countFor(c)
+		counts[i].advance(now)
+		if observed := counts[i].total() + c.n; observed > c.window.value {
 			return &analytics.Refusal{
-				Limit:       w.limit,
-				Value:       w.value,
+				Limit:       c.window.limit,
+				Value:       c.window.value,
 				Observed:    observed,
-				RetryAfterS: counts[i].secondsUntilFree(w, observed-w.value, now),
+				RetryAfterS: counts[i].secondsUntilFree(observed-c.window.value, now),
 			}
 		}
 	}
-	for i, w := range q.windows {
-		counts[i].add(w, n)
+	for i, c := range charges {
+		counts[i].add(c.n)
 	}
 	return nil
 }
 
-func (q *quota) countsFor(key string) []*slidingCount {
-	counts, ok := q.counts[key]
+func (q *quota) countFor(c charge) *slidingCount {
+	key := countKey{limit: c.window.limit, key: c.key}
+	count, ok := q.counts[key]
 	if !ok {
-		counts = make([]*slidingCount, len(q.windows))
-		for i, w := range q.windows {
-			counts[i] = &slidingCount{slots: make([]int64, w.span/w.bucket)}
-		}
-		q.counts[key] = counts
+		count = &slidingCount{window: c.window, slots: make([]int64, c.window.span/c.window.bucket)}
+		q.counts[key] = count
+		q.longest = max(q.longest, c.window.span)
 	}
-	return counts
+	return count
 }
 
 func (q *quota) sweep(now time.Time) {
-	var longest time.Duration
-	for _, w := range q.windows {
-		longest = max(longest, w.span)
-	}
-	if now.Sub(q.swept) < longest {
+	if now.Sub(q.swept) < q.longest {
 		return
 	}
 	q.swept = now
-	for key, counts := range q.counts {
-		empty := true
-		for i, w := range q.windows {
-			counts[i].advance(w, now)
-			empty = empty && counts[i].total() == 0
-		}
-		if empty {
+	for key, count := range q.counts {
+		count.advance(now)
+		if count.total() == 0 {
 			delete(q.counts, key)
 		}
 	}
 }
 
 type slidingCount struct {
+	window window
 	slots  []int64
 	newest int64
 }
 
-func (c *slidingCount) advance(w window, now time.Time) {
-	current := now.UnixNano() / int64(w.bucket)
+func (c *slidingCount) advance(now time.Time) {
+	current := now.UnixNano() / int64(c.window.bucket)
 	size := int64(len(c.slots))
 	for step := c.newest + 1; step <= current && step <= c.newest+size; step++ {
 		c.slots[step%size] = 0
@@ -104,19 +108,19 @@ func (c *slidingCount) total() int64 {
 	return sum
 }
 
-func (c *slidingCount) add(w window, n int64) {
+func (c *slidingCount) add(n int64) {
 	c.slots[c.newest%int64(len(c.slots))] += n
 }
 
-func (c *slidingCount) secondsUntilFree(w window, excess int64, now time.Time) int64 {
+func (c *slidingCount) secondsUntilFree(excess int64, now time.Time) int64 {
 	size := int64(len(c.slots))
 	var freed int64
 	for step := c.newest - size + 1; step <= c.newest; step++ {
 		freed += c.slots[step%size]
 		if freed >= excess {
-			expires := time.Unix(0, (step+size)*int64(w.bucket))
+			expires := time.Unix(0, (step+size)*int64(c.window.bucket))
 			return max(1, int64((expires.Sub(now)+time.Second-1)/time.Second))
 		}
 	}
-	return int64(w.span / time.Second)
+	return int64(c.window.span / time.Second)
 }

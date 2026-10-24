@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -178,6 +179,107 @@ func TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted(t *testing.T) {
 	}
 }
 
+func paddedRecords(t *testing.T, count int64) []analytics.Record {
+	t.Helper()
+	pad, err := json.Marshal(map[string]string{"pad": strings.Repeat("a", 60_000)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := busRecords(1, count)
+	for i := range records {
+		records[i].Props = pad
+	}
+	return records
+}
+
+func encodedBatch(t *testing.T, records []analytics.Record) ([]byte, int64) {
+	t.Helper()
+	var body bytes.Buffer
+	if err := analytics.WriteBatch(&body, analytics.Batch{Build: analytics.CurrentBuild(), Records: records}); err != nil {
+		t.Fatal(err)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := io.Copy(io.Discard, zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body.Bytes(), plain
+}
+
+type bytesSender struct {
+	t          *testing.T
+	body       []byte
+	plainBytes int64
+	sent       int64
+}
+
+func (b *bytesSender) accept(install client) {
+	b.t.Helper()
+	if status, reply := install.do(http.MethodPost, "/v1/events", b.body); status != http.StatusOK {
+		b.t.Fatalf("batch %d of %d uncompressed bytes: %d %s", b.sent+1, b.plainBytes, status, reply)
+	}
+	b.sent++
+}
+
+func (b *bytesSender) refused(install client, limit string, value, observed int64) {
+	b.t.Helper()
+	status, reply := install.do(http.MethodPost, "/v1/events", b.body)
+	var refusal analytics.Refusal
+	decode(b.t, reply, &refusal)
+	if status != http.StatusTooManyRequests || refusal.Limit != limit || refusal.Value != value || refusal.Observed != observed || refusal.RetryAfterS < 1 || refusal.RetryAfterS > 86_400 {
+		b.t.Fatalf("batch %d: %d %s, want %s at %d with %d observed and a retry within a day", b.sent+1, status, reply, limit, value, observed)
+	}
+	if !bytes.Contains(install.metrics(), []byte(fmt.Sprintf("attn_ingest_refusals_total{limit=%q} 1\n", limit))) {
+		b.t.Fatalf("/metrics does not count the %s refusal:\n%s", limit, install.metrics())
+	}
+}
+
+func (c client) metrics() []byte {
+	c.t.Helper()
+	_, body := c.do(http.MethodGet, "/metrics", nil)
+	return body
+}
+
+func TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected(t *testing.T) {
+	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	anonymous := client{t: t, url: ingest.URL}
+	body, plainBytes := encodedBatch(t, paddedRecords(t, 270))
+	sender := &bytesSender{t: t, body: body, plainBytes: plainBytes}
+	const budget = int64(128 << 20)
+
+	full := anonymous.register()
+	for range budget / plainBytes {
+		sender.accept(full)
+	}
+	sender.refused(full, "bytes_per_install_per_day", budget, (budget/plainBytes+1)*plainBytes)
+
+	fresh := anonymous.register()
+	sender.accept(fresh)
+	if holdings := fresh.holdings(); holdings.Events != 270 {
+		t.Fatalf("a fresh install's first batch stored %d events, want 270", holdings.Events)
+	}
+}
+
+func TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay(t *testing.T) {
+	const budget = int64(64 << 10)
+	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t), fmt.Sprintf("ATTN_INGEST_BYTES_PER_DAY=%d", budget))
+	anonymous := client{t: t, url: ingest.URL}
+	body, plainBytes := encodedBatch(t, busRecords(1, 100))
+	sender := &bytesSender{t: t, body: body, plainBytes: plainBytes}
+
+	for sender.sent < budget/plainBytes {
+		sender.accept(anonymous.register())
+	}
+	late := anonymous.register()
+	sender.refused(late, "bytes_per_day", budget, (budget/plainBytes+1)*plainBytes)
+	if holdings := late.holdings(); holdings.Events != 0 {
+		t.Fatalf("a batch past the budget for all installs stored %d events", holdings.Events)
+	}
+}
+
 func TestOneAddressRegistersAtMostTwentyInstallsAnHour(t *testing.T) {
 	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
 	anonymous := client{t: t, url: ingest.URL}
@@ -274,5 +376,35 @@ func TestTheSameBatchSentConcurrentlyIsStoredOnce(t *testing.T) {
 	}
 	if holdings := install.holdings(); holdings.Events != 2_000 {
 		t.Fatalf("the server holds %d events, want 2000", holdings.Events)
+	}
+}
+
+func TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes(t *testing.T) {
+	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	install := client{t: t, url: ingest.URL}.register()
+	streams := func(first, count int) []analytics.Record {
+		records := make([]analytics.Record, count)
+		for i := range records {
+			records[i] = analytics.Record{
+				Stream: analytics.Stream(fmt.Sprintf("s%031d", first+i)),
+				Seq:    1 << 62,
+				Name:   "made.up.stream",
+				At:     time.Date(2026, 10, 19, 14, 2, 11, 0, time.UTC),
+			}
+		}
+		return records
+	}
+	build := analytics.CurrentBuild()
+
+	status, body := install.send(analytics.Batch{Build: build, Records: streams(0, 3_000)})
+	if status != http.StatusOK || string(bytes.TrimSpace(body)) != `{"accepted":3000,"duplicates":0}` {
+		t.Fatalf("3000 new streams: %d %s", status, body)
+	}
+	status, body = install.send(analytics.Batch{Build: build, Records: streams(0, 5_000)})
+	if status != http.StatusOK || string(bytes.TrimSpace(body)) != `{"accepted":2000,"duplicates":3000}` {
+		t.Fatalf("the 3000 stored streams resent with 2000 new ones: %d %s", status, body)
+	}
+	if holdings := install.holdings(); holdings.Events != 5_000 || len(holdings.Streams) != 5_000 {
+		t.Fatalf("the server holds %d events in %d streams, want 5000 in 5000", holdings.Events, len(holdings.Streams))
 	}
 }

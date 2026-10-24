@@ -23,17 +23,20 @@ var (
 	eventsPerInstallPerMinute = window{limit: "events_per_install_per_minute", value: 10_000, span: time.Minute, bucket: time.Second}
 	eventsPerInstallPerDay    = window{limit: "events_per_install_per_day", value: 1_000_000, span: 24 * time.Hour, bucket: time.Minute}
 	installsPerIPPerHour      = window{limit: "installs_per_ip_per_hour", value: 20, span: time.Hour, bucket: time.Minute}
+	bytesPerInstallPerDay     = window{limit: "bytes_per_install_per_day", value: 128 << 20, span: 24 * time.Hour, bucket: time.Minute}
 )
 
 const (
-	minIPSecretBytes = 32
-	batchesInFlight  = 2
+	DefaultBytesPerDay = 2 << 30
+	minIPSecretBytes   = 32
+	batchesInFlight    = 2
 )
 
 type Config struct {
 	ClickHouseURL  string
 	IPSecret       []byte
 	ClientIPHeader string
+	BytesPerDay    int64
 	Logf           func(format string, args ...any)
 }
 
@@ -41,8 +44,8 @@ type Server struct {
 	db             *clickHouse
 	ipSecret       []byte
 	clientIPHeader string
-	events         *quota
-	registrations  *quota
+	quota          *quota
+	bytesPerDay    window
 	installs       keyedMutex
 	batchSlots     chan struct{}
 	metrics        *metrics
@@ -64,8 +67,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		db:             db,
 		ipSecret:       cfg.IPSecret,
 		clientIPHeader: cfg.ClientIPHeader,
-		events:         newQuota(eventsPerInstallPerMinute, eventsPerInstallPerDay),
-		registrations:  newQuota(installsPerIPPerHour),
+		quota:          newQuota(),
+		bytesPerDay:    window{limit: "bytes_per_day", value: cfg.BytesPerDay, span: 24 * time.Hour, bucket: time.Minute},
 		installs:       keyedMutex{held: map[string]*keyLock{}},
 		batchSlots:     make(chan struct{}, batchesInFlight),
 		metrics:        newMetrics(),
@@ -155,7 +158,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
 	if err := s.checkQuarantine(r.Context(), "", ipHash); err != nil {
 		return err
 	}
-	if refusal := s.registrations.admit(ipHash, 1, now); refusal != nil {
+	if refusal := s.quota.admit(now, charge{installsPerIPPerHour, ipHash, 1}); refusal != nil {
 		return &refusedError{status: http.StatusTooManyRequests, refusal: *refusal}
 	}
 	registration := analytics.Registration{InstallID: "i-" + randomHex(16), Token: randomToken()}
@@ -192,11 +195,18 @@ func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
 		return r.Context().Err()
 	}
 	now := time.Now().UTC()
-	batch, gzipBytes, err := readBatch(r.Body, r.ContentLength)
+	batch, size, err := readBatch(r.Body, r.ContentLength)
 	if err != nil {
 		return err
 	}
-	if refusal := s.events.admit(inst.ID, int64(len(batch.Records)), now); refusal != nil {
+	records := int64(len(batch.Records))
+	refusal := s.quota.admit(now,
+		charge{eventsPerInstallPerMinute, inst.ID, records},
+		charge{eventsPerInstallPerDay, inst.ID, records},
+		charge{bytesPerInstallPerDay, inst.ID, size.plain},
+		charge{s.bytesPerDay, "", size.plain},
+	)
+	if refusal != nil {
 		return &refusedError{status: http.StatusTooManyRequests, refusal: *refusal}
 	}
 	fresh, err := s.withoutStored(r.Context(), inst.ID, batch.Records)
@@ -215,7 +225,7 @@ func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
 	accepted := analytics.Accepted{Accepted: len(fresh), Duplicates: len(batch.Records) - len(fresh)}
 	s.metrics.accepted.Add(int64(accepted.Accepted))
 	s.metrics.duplicates.Add(int64(accepted.Duplicates))
-	s.metrics.acceptedBytes.Add(gzipBytes)
+	s.metrics.acceptedBytes.Add(size.gzip)
 	writeJSON(w, http.StatusOK, accepted)
 	return nil
 }
@@ -226,26 +236,29 @@ type streamSeq struct {
 }
 
 func (s *Server) withoutStored(ctx context.Context, installID string, records []analytics.Record) ([]analytics.Record, error) {
-	seqs := map[analytics.Stream][]string{}
-	for _, record := range records {
-		seqs[record.Stream] = append(seqs[record.Stream], strconv.FormatInt(record.Seq, 10))
+	submitted := make([]streamSeq, len(records))
+	for i, record := range records {
+		submitted[i] = streamSeq{Stream: record.Stream, Seq: record.Seq}
+	}
+	rows, err := jsonEachRow(submitted)
+	if err != nil {
+		return nil, err
 	}
 	seen := map[streamSeq]bool{}
-	for stream, submitted := range seqs {
-		err := s.db.rows(ctx,
-			"SELECT stream, seq FROM events WHERE install_id = {install:String} AND stream = {stream:String} AND seq IN {seqs:Array(Int64)}",
-			map[string]string{"install": installID, "stream": string(stream), "seqs": "[" + strings.Join(submitted, ",") + "]"},
-			func(row json.RawMessage) error {
-				var key streamSeq
-				if err := json.Unmarshal(row, &key); err != nil {
-					return err
-				}
-				seen[key] = true
-				return nil
-			})
-		if err != nil {
-			return nil, err
-		}
+	err = s.db.rowsWithTable(ctx,
+		externalTable{name: "submitted", structure: "stream String, seq Int64", rows: rows},
+		"SELECT stream, seq FROM events WHERE install_id = {install:String} AND (stream, seq) IN submitted",
+		map[string]string{"install": installID},
+		func(row json.RawMessage) error {
+			var key streamSeq
+			if err := json.Unmarshal(row, &key); err != nil {
+				return err
+			}
+			seen[key] = true
+			return nil
+		})
+	if err != nil {
+		return nil, err
 	}
 	fresh := records[:0:0]
 	for _, record := range records {

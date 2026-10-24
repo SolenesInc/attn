@@ -60,25 +60,30 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func readBatch(body io.Reader, declaredLength int64) (analytics.Batch, int64, error) {
+type batchSize struct {
+	gzip  int64
+	plain int64
+}
+
+func readBatch(body io.Reader, declaredLength int64) (analytics.Batch, batchSize, error) {
 	if declaredLength > maxBodyGzipBytes {
-		return analytics.Batch{}, 0, tooLarge("request_body_gzip_bytes", maxBodyGzipBytes, declaredLength)
+		return analytics.Batch{}, batchSize{}, tooLarge("request_body_gzip_bytes", maxBodyGzipBytes, declaredLength)
 	}
 	compressed := &countingReader{r: io.LimitReader(body, maxBodyGzipBytes+1)}
 	zr, err := gzip.NewReader(compressed)
 	if err != nil {
-		return analytics.Batch{}, 0, malformed("the body must be gzip: %v", err)
+		return analytics.Batch{}, batchSize{}, malformed("the body must be gzip: %v", err)
 	}
 	plain := &countingReader{r: io.LimitReader(zr, maxBodyBytes+1)}
 	lines := bufio.NewReaderSize(plain, maxLineBytes+1)
 	batch, err := decodeLines(lines)
 	if compressed.n > maxBodyGzipBytes {
-		return analytics.Batch{}, 0, tooLarge("request_body_gzip_bytes", maxBodyGzipBytes, compressed.n)
+		return analytics.Batch{}, batchSize{}, tooLarge("request_body_gzip_bytes", maxBodyGzipBytes, compressed.n)
 	}
 	if plain.n > maxBodyBytes {
-		return analytics.Batch{}, 0, tooLarge("request_body_bytes", maxBodyBytes, plain.n)
+		return analytics.Batch{}, batchSize{}, tooLarge("request_body_bytes", maxBodyBytes, plain.n)
 	}
-	return batch, compressed.n, err
+	return batch, batchSize{gzip: compressed.n, plain: plain.n}, err
 }
 
 func decodeLines(lines *bufio.Reader) (analytics.Batch, error) {
