@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"github.com/victorarias/attn/internal/store"
 	"net"
 	"os"
 	"path/filepath"
@@ -98,6 +99,8 @@ func addCharacterizationSession(
 		StateUpdatedAt: characterizationOldTimestamp,
 		LastSeen:       characterizationOldTimestamp,
 	})
+	old := protocol.Timestamp(characterizationOldTimestamp).Time()
+	d.store.SaveSessionRuntime(protocol.SessionID(id), store.SessionRuntimeState{State: state, Since: old, Updated: old, LastSeen: old})
 }
 
 const characterizationOldTimestamp = "2000-01-01T00:00:00Z"

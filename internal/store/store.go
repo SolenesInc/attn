@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/sessioncost"
 	"log"
 	"os"
 	"path/filepath"
@@ -29,7 +30,7 @@ type Store struct {
 	sessions               map[protocol.SessionID]*protocol.Session
 	turnStamps             map[protocol.SessionID]TurnStamps
 	activityCursors        map[protocol.SessionID]string
-	sessionCosts           map[protocol.SessionID]SessionMonitorCost
+	sessionCosts           map[protocol.SessionID]sessioncost.Checkpoint
 	sessionLabels          map[protocol.SessionID]SessionLabels
 	agentDriverRuns        map[protocol.SessionID]AgentDriverReportCursor
 	agentDriverTranscripts map[protocol.SessionID]string
@@ -41,16 +42,13 @@ type Store struct {
 	writes                 *tableWrites
 	sessionRows            sessionRows
 	touchedAt              map[protocol.SessionID]time.Time
+	runtimeRecords         map[protocol.SessionID]SessionRuntimeRecords
 	costMu                 sync.Mutex
 	liveCosts              map[protocol.SessionID]*sessionCostEntry
 	profilesSeq            int64
 	emptyDesktop           func(emptiedAt time.Time)
 	terminalBindings       func([]TerminalBinding)
 }
-
-// touchResolution bounds how stale last_seen may be; its tightest reader, the Claude
-// transcript watcher, treats hooks as active for two minutes.
-const touchResolution = 5 * time.Second
 
 type AgentDriverReportCursor struct {
 	TerminalID protocol.TerminalID
@@ -114,7 +112,7 @@ func newMapBackedStore() *Store {
 		agentDriverRuns: make(map[protocol.SessionID]AgentDriverReportCursor),
 		teardownIntents: make(map[protocol.SessionID]SessionTeardownIntent),
 		sessionCloses:   make(map[protocol.SessionID]sessionCloseMark),
-		sessionCosts:    make(map[protocol.SessionID]SessionMonitorCost),
+		sessionCosts:    make(map[protocol.SessionID]sessioncost.Checkpoint),
 		sessionLabels:   make(map[protocol.SessionID]SessionLabels),
 		agentMetadata:   make(map[protocol.SessionID]string),
 		recentLocations: make(map[string]*protocol.RecentLocation),
@@ -292,13 +290,9 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		normalizedAgent = string(protocol.SessionAgentCodex)
 	}
 	session.Agent = protocol.SessionAgent(normalizedAgent)
-	lastModelRequestAt := protocol.Deref(session.LastModelRequestAt)
-	if lastModelRequestAt == "" {
-		lastModelRequestAt = session.StateUpdatedAt
-	}
 	labels := initialSessionLabels(session)
 	var prior SessionLabels
-	err := s.db.QueryRow(`SELECT user_label,harness_title FROM sessions WHERE id=?`, session.ID).Scan(&prior.UserLabel, &prior.HarnessTitle)
+	err := s.db.QueryRow(`SELECT user_label,harness_title FROM sessions_with_runtime WHERE id=?`, session.ID).Scan(&prior.UserLabel, &prior.HarnessTitle)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -307,42 +301,20 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
-		(id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, priority)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, user_label, agent, directory, profile_id, parent_session_id, priority)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			user_label = excluded.user_label,
 			agent = excluded.agent,
 			directory = excluded.directory,
 			profile_id = CASE WHEN sessions.profile_id = '' THEN excluded.profile_id ELSE sessions.profile_id END,
-			branch = excluded.branch,
-			is_worktree = excluded.is_worktree,
-			main_repo = excluded.main_repo,
-			repository = excluded.repository,
-			state = excluded.state,
-			state_since = excluded.state_since,
-			state_updated_at = excluded.state_updated_at,
-			last_model_request_at = CASE
-				WHEN sessions.last_model_request_at IS NULL OR sessions.last_model_request_at = '' THEN excluded.last_model_request_at
-				ELSE sessions.last_model_request_at
-			END,
-			parent_session_id = excluded.parent_session_id,
-			last_seen = excluded.last_seen`,
+			parent_session_id = excluded.parent_session_id`,
 		session.ID,
 		labels.UserLabel,
-		labels.HarnessTitle,
 		session.Agent,
 		session.Directory,
 		session.ProfileID,
-		protocol.Deref(session.Branch),
-		boolToInt(protocol.Deref(session.IsWorktree)),
-		protocol.Deref(session.MainRepo),
-		protocol.Deref(session.Repository),
-		string(session.State),
-		session.StateSince,
-		session.StateUpdatedAt,
-		lastModelRequestAt,
 		protocol.Deref(session.ParentSessionID),
-		session.LastSeen,
 		boolToInt(protocol.Deref(session.Priority)),
 	)
 	if err != nil {
@@ -396,7 +368,7 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 
 	err := s.db.QueryRow(`
 		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
-		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
+		FROM sessions_with_runtime WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
 		&labels.HarnessTitle,
@@ -474,6 +446,7 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 }
 
 var sessionOwnedTables = []string{
+	"session_runtime",
 	"session_annotation_drafts",
 	"session_exit_screens",
 }
@@ -560,11 +533,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
 			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
-			FROM sessions WHERE closed_at = '' ORDER BY id`)
+			FROM sessions_with_runtime WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
 			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
-			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
+			FROM sessions_with_runtime WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
 		return nil
@@ -681,76 +654,11 @@ func (s *Store) HasSessionInDirectory(directory string) bool {
 	}
 
 	var count int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE directory = ? AND state != ? AND closed_at = ''`, directory, string(protocol.SessionStateIdle)).Scan(&count)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM sessions_with_runtime WHERE directory = ? AND state != ? AND closed_at = ''`, directory, string(protocol.SessionStateIdle)).Scan(&count)
 	if err != nil {
 		return false
 	}
 	return count > 0
-}
-
-func (s *Store) UpdateState(id protocol.SessionID, state string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.updateStateLocked(id, state, time.Now())
-}
-
-func (s *Store) updateStateLocked(id protocol.SessionID, state string, at time.Time) bool {
-	now := string(protocol.NewTimestamp(at))
-	if s.db == nil {
-		session := s.sessions[id]
-		if session == nil {
-			return false
-		}
-		session.State = protocol.SessionState(state)
-		session.StateSince = now
-		session.StateUpdatedAt = now
-		return true
-	}
-
-	result, err := s.db.Exec(`UPDATE sessions SET state = ?, state_since = ?, state_updated_at = ? WHERE id = ? AND closed_at = ''`,
-		state, now, now, id)
-	if err != nil {
-		log.Printf("[store] UpdateState: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, err := result.RowsAffected()
-	return err == nil && updated == 1
-}
-
-func (s *Store) MarkModelRequestStarted(id protocol.SessionID, at time.Time) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if protocol.TrimID(id) == "" || at.IsZero() {
-		return false
-	}
-	stamp := string(protocol.NewTimestamp(at))
-	if s.db == nil {
-		session := s.sessions[id]
-		if session == nil {
-			return false
-		}
-		current := protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time()
-		if !current.IsZero() && !at.After(current) {
-			return false
-		}
-		session.LastModelRequestAt = protocol.Ptr(stamp)
-		return true
-	}
-	var current sql.NullString
-	if err := s.db.QueryRow("SELECT last_model_request_at FROM sessions WHERE id = ?", id).Scan(&current); err != nil {
-		return false
-	}
-	currentAt := protocol.Timestamp(current.String).Time()
-	if !currentAt.IsZero() && !at.After(currentAt) {
-		return false
-	}
-	result, err := s.db.Exec("UPDATE sessions SET last_model_request_at = ? WHERE id = ? AND closed_at = ''", stamp, id)
-	if err != nil {
-		log.Printf("[store] MarkModelRequestStarted: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, _ := result.RowsAffected()
-	return updated == 1
 }
 
 func (s *Store) UpdateSessionLabel(id protocol.SessionID, label string) {
@@ -770,32 +678,6 @@ func (s *Store) UpdateSessionLabel(id protocol.SessionID, label string) {
 	if _, err := s.db.Exec(`UPDATE sessions SET user_label = ? WHERE id = ? AND closed_at = ''`, label, id); err != nil {
 		log.Printf("[store] UpdateSessionLabel: failed for session %s: %v", id, err)
 	}
-}
-
-func (s *Store) Touch(id protocol.SessionID) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		if session := s.sessions[id]; session != nil {
-			session.LastSeen = string(protocol.TimestampNow())
-		}
-		return
-	}
-
-	now := time.Now()
-	if now.Sub(s.touchedAt[id]) < touchResolution {
-		return
-	}
-	_, err := s.db.Exec("UPDATE sessions SET last_seen = ? WHERE id = ? AND closed_at = ''", string(protocol.NewTimestamp(now)), id)
-	if err != nil {
-		log.Printf("[store] Touch: failed for session %s: %v", id, err)
-		return
-	}
-	if s.touchedAt == nil {
-		s.touchedAt = make(map[protocol.SessionID]time.Time)
-	}
-	s.touchedAt[id] = now
 }
 
 func (s *Store) SetResumeSessionID(id protocol.SessionID, resumeSessionID string) {
@@ -930,16 +812,16 @@ func (s *Store) SessionCloseIntentional(id protocol.SessionID) bool {
 	return intentional
 }
 
-func (s *Store) PrepareSessionTeardown(id protocol.SessionID, terminalID protocol.TerminalID, now time.Time) (AgentDriverReportCursor, error) {
-	run, _, err := s.prepareSessionTeardown(id, terminalID, now, true)
+func (s *Store) PrepareSessionTeardown(id protocol.SessionID, terminalID protocol.TerminalID, current AgentDriverReportCursor, now time.Time) (AgentDriverReportCursor, error) {
+	run, _, err := s.prepareSessionTeardown(id, terminalID, &current, now, true)
 	return run, err
 }
 
 func (s *Store) PrepareExistingSessionTeardown(id protocol.SessionID, now time.Time) (AgentDriverReportCursor, bool, error) {
-	return s.prepareSessionTeardown(id, "", now, false)
+	return s.prepareSessionTeardown(id, "", nil, now, false)
 }
 
-func (s *Store) prepareSessionTeardown(id protocol.SessionID, terminalID protocol.TerminalID, now time.Time, create bool) (AgentDriverReportCursor, bool, error) {
+func (s *Store) prepareSessionTeardown(id protocol.SessionID, terminalID protocol.TerminalID, current *AgentDriverReportCursor, now time.Time, create bool) (AgentDriverReportCursor, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -956,7 +838,9 @@ func (s *Store) prepareSessionTeardown(id protocol.SessionID, terminalID protoco
 		}
 		if intent.DriverRun.RunID == "" {
 			intent.DriverRun = s.agentDriverRuns[id]
-			delete(s.agentDriverRuns, id)
+			if current != nil {
+				intent.DriverRun = *current
+			}
 		}
 		if intent.DriverRun.TerminalID == "" {
 			intent.DriverRun.TerminalID = terminalID
@@ -982,9 +866,11 @@ func (s *Store) prepareSessionTeardown(id protocol.SessionID, terminalID protoco
 	if !found && !create {
 		return AgentDriverReportCursor{}, false, nil
 	}
-	if run.RunID == "" {
+	if run.RunID == "" && current != nil {
+		run.PluginName, run.RunID, run.Seq = current.PluginName, current.RunID, current.Seq
+	} else if run.RunID == "" {
 		err = tx.QueryRow(`SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq
-			FROM sessions WHERE id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq)
+			FROM sessions_with_runtime WHERE id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return AgentDriverReportCursor{}, false, fmt.Errorf("read session %s driver owner: %w", id, err)
 		}
@@ -1004,12 +890,6 @@ func (s *Store) prepareSessionTeardown(id protocol.SessionID, terminalID protoco
 			driver_report_seq = CASE WHEN session_teardown_tombstones.driver_run_id = '' THEN excluded.driver_report_seq ELSE session_teardown_tombstones.driver_report_seq END`,
 		id, now.Format(time.RFC3339Nano), run.PluginName, run.RunID, run.Seq, run.TerminalID); err != nil {
 		return AgentDriverReportCursor{}, false, fmt.Errorf("persist session %s teardown owner: %w", id, err)
-	}
-	if run.RunID != "" {
-		if _, err := tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0
-			WHERE id = ? AND closed_at = '' AND agent_driver_plugin_name = ? AND agent_driver_run_id = ?`, id, run.PluginName, run.RunID); err != nil {
-			return AgentDriverReportCursor{}, false, fmt.Errorf("claim session %s driver owner: %w", id, err)
-		}
 	}
 	if err := tx.Commit(); err != nil {
 		return AgentDriverReportCursor{}, false, fmt.Errorf("commit session %s teardown: %w", id, err)
@@ -1073,37 +953,24 @@ func (s *Store) CancelSessionTeardown(id protocol.SessionID) error {
 	defer s.mu.Unlock()
 
 	if s.db == nil {
-		intent, found := s.teardownIntents[id]
-		if !found {
-			return nil
-		}
-		if intent.DriverRun.RunID != "" {
-			s.agentDriverRuns[id] = intent.DriverRun
-		}
 		delete(s.teardownIntents, id)
 		return nil
 	}
+	_, err := s.db.Exec("DELETE FROM session_teardown_tombstones WHERE session_id = ?", id)
+	return err
+}
 
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
+func (s *Store) SessionTeardownDriverRun(id protocol.SessionID) AgentDriverReportCursor {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return s.teardownIntents[id].DriverRun
 	}
-	defer tx.Rollback()
 	var run AgentDriverReportCursor
-	if err := tx.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq, driver_terminal_id
-		FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq, &run.TerminalID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+	if err := s.db.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		log.Printf("[store] session %s teardown driver run: %v", id, err)
 	}
-	if run.RunID != "" {
-		if _, err := tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = ?, agent_driver_run_id = ?, agent_driver_report_seq = ?
-			WHERE id = ? AND closed_at = '' AND agent_driver_run_id = ''`, run.PluginName, run.RunID, run.Seq, id); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.Exec("DELETE FROM session_teardown_tombstones WHERE session_id = ?", id); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return run
 }
 
 func (s *Store) ClearSessionIntentionalClose(id protocol.SessionID) {
@@ -1130,7 +997,7 @@ func (s *Store) GetAgentMetadata(id protocol.SessionID) string {
 	}
 
 	var metadata string
-	if err := s.db.QueryRow("SELECT agent_metadata FROM sessions WHERE id = ?", id).Scan(&metadata); err != nil {
+	if err := s.db.QueryRow("SELECT agent_metadata FROM sessions_with_runtime WHERE id = ?", id).Scan(&metadata); err != nil {
 		return ""
 	}
 	return strings.TrimSpace(metadata)
@@ -1163,7 +1030,7 @@ func (s *Store) ListAgentDriverRuns(pluginName string) []ActiveAgentDriverRun {
 
 	rows, err := s.db.Query(`
 		SELECT id, agent_driver_run_id, agent_metadata, agent_driver_report_seq
-		FROM sessions
+		FROM sessions_with_runtime
 		WHERE agent_driver_plugin_name = ? AND agent_driver_run_id <> '' AND closed_at = ''
 		ORDER BY id`, pluginName)
 	if err != nil {
@@ -1209,7 +1076,7 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	rows, err := s.db.Query(`
 		SELECT id, agent_driver_run_id, agent_metadata, agent_driver_report_seq, agent_driver_plugin_name,
 			agent_driver_transcript_path
-		FROM sessions
+		FROM sessions_with_runtime
 		WHERE agent_driver_run_id <> '' AND closed_at = ''
 		ORDER BY id`)
 	if err != nil {
@@ -1233,40 +1100,6 @@ func (s *Store) ListActiveAgentDriverRuns() []ActiveAgentDriverRun {
 	return runs
 }
 
-func (s *Store) SetAgentDriverTranscriptPath(id protocol.SessionID, runID string, path string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	runID = strings.TrimSpace(runID)
-	path = strings.TrimSpace(path)
-	if runID == "" || path == "" {
-		return false
-	}
-	if s.db == nil {
-		cursor := s.agentDriverRuns[id]
-		if s.sessions[id] == nil || strings.TrimSpace(cursor.RunID) != runID {
-			return false
-		}
-		if s.agentDriverTranscripts == nil {
-			s.agentDriverTranscripts = make(map[protocol.SessionID]string)
-		}
-		s.agentDriverTranscripts[id] = path
-		return true
-	}
-	result, err := s.db.Exec(
-		"UPDATE sessions SET agent_driver_transcript_path = ? WHERE id = ? AND closed_at = '' AND agent_driver_run_id = ?",
-		path,
-		id,
-		runID,
-	)
-	if err != nil {
-		log.Printf("[store] SetAgentDriverTranscriptPath: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, _ := result.RowsAffected()
-	return updated == 1
-}
-
 func (s *Store) GetAgentDriverTranscriptPath(id protocol.SessionID) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1276,45 +1109,11 @@ func (s *Store) GetAgentDriverTranscriptPath(id protocol.SessionID) string {
 	}
 	var path string
 	if err := s.db.QueryRow(
-		"SELECT agent_driver_transcript_path FROM sessions WHERE id = ?", id,
+		"SELECT agent_driver_transcript_path FROM sessions_with_runtime WHERE id = ?", id,
 	).Scan(&path); err != nil {
 		return ""
 	}
 	return strings.TrimSpace(path)
-}
-
-func (s *Store) BeginAgentDriverRun(id protocol.SessionID, pluginName string, runID string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	pluginName = strings.TrimSpace(pluginName)
-	runID = strings.TrimSpace(runID)
-	if pluginName == "" || runID == "" {
-		return false
-	}
-	if s.db == nil {
-		if s.sessions[id] == nil {
-			return false
-		}
-		if s.agentDriverRuns == nil {
-			s.agentDriverRuns = make(map[protocol.SessionID]AgentDriverReportCursor)
-		}
-		s.agentDriverRuns[id] = AgentDriverReportCursor{PluginName: pluginName, RunID: runID}
-		delete(s.agentDriverTranscripts, id)
-		return true
-	}
-	result, err := s.db.Exec(
-		"UPDATE sessions SET agent_driver_plugin_name = ?, agent_driver_run_id = ?, agent_driver_report_seq = 0, agent_driver_transcript_path = '' WHERE id = ? AND closed_at = ''",
-		pluginName,
-		runID,
-		id,
-	)
-	if err != nil {
-		log.Printf("[store] BeginAgentDriverRun: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, _ := result.RowsAffected()
-	return updated == 1
 }
 
 func (s *Store) GetAgentDriverRun(id protocol.SessionID) AgentDriverReportCursor {
@@ -1332,7 +1131,7 @@ func (s *Store) GetAgentDriverRun(id protocol.SessionID) AgentDriverReportCursor
 	}
 	var cursor AgentDriverReportCursor
 	if err := s.db.QueryRow(
-		"SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq FROM sessions WHERE id = ?",
+		"SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq FROM sessions_with_runtime WHERE id = ?",
 		id,
 	).Scan(&cursor.PluginName, &cursor.RunID, &cursor.Seq); err != nil {
 		return AgentDriverReportCursor{}
@@ -1343,149 +1142,6 @@ func (s *Store) GetAgentDriverRun(id protocol.SessionID) AgentDriverReportCursor
 		s.sessionRows.putDriver(id, gen, cursor)
 	}
 	return cursor
-}
-
-func (s *Store) EndAgentDriverRun(id protocol.SessionID) AgentDriverReportCursor {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		cursor := s.agentDriverRuns[id]
-		if cursor.RunID == "" || !s.sessionIsLiveLocked(id) {
-			return AgentDriverReportCursor{}
-		}
-		delete(s.agentDriverRuns, id)
-		delete(s.agentDriverTranscripts, id)
-		return cursor
-	}
-	var cursor AgentDriverReportCursor
-	if err := s.db.QueryRow(
-		"SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq FROM sessions WHERE id = ?",
-		id,
-	).Scan(&cursor.PluginName, &cursor.RunID, &cursor.Seq); err != nil {
-		return AgentDriverReportCursor{}
-	}
-	cursor.PluginName = strings.TrimSpace(cursor.PluginName)
-	cursor.RunID = strings.TrimSpace(cursor.RunID)
-	if cursor.RunID == "" {
-		return AgentDriverReportCursor{}
-	}
-	result, err := s.db.Exec(
-		"UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0, agent_driver_transcript_path = '' WHERE id = ? AND closed_at = '' AND agent_driver_plugin_name = ? AND agent_driver_run_id = ?",
-		id,
-		cursor.PluginName,
-		cursor.RunID,
-	)
-	if err != nil {
-		log.Printf("[store] EndAgentDriverRun: failed for session %s: %v", id, err)
-		return AgentDriverReportCursor{}
-	}
-	updated, _ := result.RowsAffected()
-	if updated != 1 {
-		return AgentDriverReportCursor{}
-	}
-	return cursor
-}
-
-func (s *Store) ApplyAgentDriverState(id protocol.SessionID, runID string, seq uint64, state string, requestStartedAt time.Time) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.applyAgentDriverStateLocked(id, runID, seq, state, requestStartedAt, time.Now())
-}
-
-func (s *Store) applyAgentDriverStateLocked(id protocol.SessionID, runID string, seq uint64, state string, requestStartedAt, at time.Time) bool {
-	runID = strings.TrimSpace(runID)
-	if runID == "" || seq == 0 {
-		return false
-	}
-	now := string(protocol.NewTimestamp(at))
-	if s.db == nil {
-		session := s.sessions[id]
-		cursor := s.agentDriverRuns[id]
-		if session == nil || cursor.RunID != runID || seq <= cursor.Seq {
-			return false
-		}
-		cursor.Seq = seq
-		s.agentDriverRuns[id] = cursor
-		session.State = protocol.SessionState(state)
-		session.StateSince = now
-		session.StateUpdatedAt = now
-		current := protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time()
-		if !requestStartedAt.IsZero() && (current.IsZero() || requestStartedAt.After(current)) {
-			session.LastModelRequestAt = protocol.Ptr(string(protocol.NewTimestamp(requestStartedAt)))
-		}
-		return true
-	}
-	requestStamp := ""
-	if !requestStartedAt.IsZero() {
-		var current sql.NullString
-		if err := s.db.QueryRow("SELECT last_model_request_at FROM sessions WHERE id = ?", id).Scan(&current); err != nil {
-			return false
-		}
-		currentAt := protocol.Timestamp(current.String).Time()
-		if currentAt.IsZero() || requestStartedAt.After(currentAt) {
-			requestStamp = string(protocol.NewTimestamp(requestStartedAt))
-		}
-	}
-	result, err := s.db.Exec(`
-		UPDATE sessions
-		SET state = ?, state_since = ?, state_updated_at = ?, agent_driver_report_seq = ?,
-			last_model_request_at = COALESCE(NULLIF(?, ''), last_model_request_at)
-		WHERE id = ? AND closed_at = '' AND agent_driver_run_id = ? AND agent_driver_report_seq < ?`,
-		state,
-		now,
-		now,
-		seq,
-		requestStamp,
-		id,
-		runID,
-		seq,
-	)
-	if err != nil {
-		log.Printf("[store] ApplyAgentDriverState: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, _ := result.RowsAffected()
-	return updated == 1
-}
-
-func (s *Store) ApplyAgentDriverMetadata(id protocol.SessionID, runID string, seq uint64, metadata string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	runID = strings.TrimSpace(runID)
-	if runID == "" || seq == 0 {
-		return false
-	}
-	if s.db == nil {
-		cursor := s.agentDriverRuns[id]
-		if s.sessions[id] == nil || cursor.RunID != runID || seq <= cursor.Seq {
-			return false
-		}
-		cursor.Seq = seq
-		s.agentDriverRuns[id] = cursor
-		if s.agentMetadata == nil {
-			s.agentMetadata = make(map[protocol.SessionID]string)
-		}
-		s.agentMetadata[id] = strings.TrimSpace(metadata)
-		return true
-	}
-	result, err := s.db.Exec(`
-		UPDATE sessions
-		SET agent_metadata = ?, agent_driver_report_seq = ?
-		WHERE id = ? AND closed_at = '' AND agent_driver_run_id = ? AND agent_driver_report_seq < ?`,
-		strings.TrimSpace(metadata),
-		seq,
-		id,
-		runID,
-		seq,
-	)
-	if err != nil {
-		log.Printf("[store] ApplyAgentDriverMetadata: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, _ := result.RowsAffected()
-	return updated == 1
 }
 
 const selectPRs = `SELECT id, host, repo, number, title, url, author, role, state, reason,

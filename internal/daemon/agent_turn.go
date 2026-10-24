@@ -26,20 +26,9 @@ func (d *Daemon) agentTurn(sessionID protocol.SessionID, action protocol.AgentTu
 	if entry == nil {
 		return "", fmt.Errorf("session %s is not running in attn", sessionID)
 	}
-	entry.mu.Lock()
-	outcome, err := entry.agentTurnLocked(action, time.Now())
-	view := entry.viewLocked()
-	entry.mu.Unlock()
-	entry.sink.Applied(view)
-	return outcome, err
+	return entry.AgentTurn(action, time.Now())
 }
 
 func (d *Daemon) inNotificationRun(sessionID protocol.SessionID) bool {
-	entry := d.monitorEntry(sessionID)
-	if entry == nil {
-		return false
-	}
-	entry.mu.Lock()
-	defer entry.mu.Unlock()
-	return entry.input.inNotificationRunLocked()
+	return d.monitorEntry(sessionID).InNotificationRun()
 }

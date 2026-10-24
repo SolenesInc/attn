@@ -464,7 +464,7 @@ func (r *codexShared) lost(s *codexServer, conversation string) {
 	if again || r.d.store.Get(sessionID) == nil {
 		return
 	}
-	r.d.finishMonitorUsage(sessionID)()
+	r.d.monitorEntry(sessionID).FinishUsage()()
 	r.observe(sessionID, pty.ProgramIdle)
 }
 

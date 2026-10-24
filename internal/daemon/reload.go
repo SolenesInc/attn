@@ -299,11 +299,13 @@ func (d *Daemon) persistReloadedConversation(sessionID protocol.SessionID, opts 
 	}
 	if conversation == "" {
 		d.store.SetResumeSessionID(sessionID, "")
+		d.syncMonitorConversation(sessionID)
 		return
 	}
 	if _, err := d.store.TransitionSessionResumeID(sessionID, conversation); err != nil {
 		d.logf("reload: persist launched conversation for session %s: %v", sessionID, err)
 	}
+	d.syncMonitorConversation(sessionID)
 }
 
 // ptyRespawn names the terminal whose process a respawn replaced; the fact's subject is its session.
@@ -330,7 +332,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 	ctx := context.Background()
 	terminal := opts.ID
-	d.sessionInputs().fenceSession(sessionID)
+	d.monitorEntry(sessionID).FenceInput()
 	unlockEnds := d.replaceRuntime(sessionID, terminal)
 	opts = withLifecycleID(opts)
 
@@ -362,7 +364,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		}
 	}
 	unlockEnds()
-	d.sessionInputs().resetSession(sessionID)
+	d.monitorEntry(sessionID).ResetInput()
 
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	intent.Asks = d.launchedWithAsks(sessionID)
@@ -371,7 +373,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
 	}
 	d.store.SetLaunchIntent(sessionID, intent)
-	d.recordReviewerEvidence(sessionID, opts.ApprovalRoute.ReviewerInLoop())
+	d.monitorEntry(sessionID).RecordReviewer(opts.ApprovalRoute.ReviewerInLoop())
 	d.publishFact(FactSessionRespawned, string(sessionID), ptyRespawn{Terminal: string(terminal)})
 	d.logf("reload: respawned %s (agent=%s resume=%t yolo=%t)", sessionID, opts.Agent, opts.ResumeSessionID != "", opts.YoloMode)
 	return nil
@@ -563,7 +565,7 @@ func (d *Daemon) prepareSessionReload(session *protocol.Session, opts *ptybacken
 		return nil, err
 	}
 	runID := uuid.NewString()
-	d.beginPluginSessionLaunch(session.ID, reg.PluginName, runID)
+	d.monitorEntry(session.ID).BeginDriverLaunch(reg.PluginName, runID)
 	prepared := &preparedPluginReload{
 		d: d, sessionID: session.ID, pluginName: reg.PluginName, runID: runID,
 	}

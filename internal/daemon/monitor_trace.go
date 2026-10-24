@@ -7,93 +7,43 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-const (
-	stateSourceHook            = "hook_state"
-	stateSourceStopHook        = "hook_stop"
-	stateSourceClassifier      = "classifier"
-	stateSourceTranscript      = "transcript_watcher"
-	stateSourcePluginDriver    = "plugin_driver"
-	stateSourceLink            = "link"
-	stateSourceHookNotify      = "hook_notify"
-	stateSourceHookStopFailure = "hook_stop_failure"
-	stateSourceHookCompaction  = "hook_compaction"
-	stateSourcePermissionMode  = "permission_mode"
-	stateSourceResolver        = "resolver"
-)
-
 func (d *Daemon) recordStateObservation(sessionID protocol.SessionID, obs statetrace.Observation) {
-	d.recordMonitorObservation(d.monitorEntry(sessionID), sessionID, obs)
-}
-
-func (d *Daemon) recordMonitorObservation(e *monitorEntry, sessionID protocol.SessionID, obs statetrace.Observation) {
 	if protocol.TrimID(sessionID) == "" {
 		return
 	}
-	if obs.RecordedAt.IsZero() {
-		obs.RecordedAt = time.Now()
+	if entry := d.monitorEntry(sessionID); entry != nil {
+		entry.Trace(obs)
+		return
 	}
-	if obs.ObservedAt.IsZero() {
-		obs.ObservedAt = obs.RecordedAt
-	}
-	var report *monitorView
-	if e != nil {
-		e.mu.Lock()
-		if e.trace == nil {
-			e.trace = statetrace.NewRing(statetrace.DefaultCapacity)
-		}
-		e.trace.Record(obs)
-		if e.firstReportAt.IsZero() && harnessReportedState(obs.Source) {
-			e.firstReportAt = obs.RecordedAt
-			view := e.viewLocked()
-			report = &view
-		}
-		e.mu.Unlock()
-	}
+	obs = sessionmonitor.Stamped(obs)
 	d.logf("%s", obs.LogLine(sessionID))
-	if report != nil {
-		e.sink.Applied(*report)
-	} else if e == nil && harnessReportedState(obs.Source) {
+	if sessionmonitor.HarnessReportedState(obs.Source) {
 		d.noteLaunchStarted(sessionID)
 	}
 }
 
-func (d *Daemon) traceStateChange(change sessionStateChange, outcome statetrace.Outcome, reason string) {
-	source := change.origin.source
-	if source == "" {
-		source = sessionStateCauseName(change.cause)
-	}
-	d.recordStateObservation(change.sessionID, statetrace.Observation{
-		Source:     source,
-		Claim:      change.state,
-		Detail:     change.origin.detail,
-		Cause:      sessionStateCauseName(change.cause),
-		Outcome:    outcome,
-		Reason:     reason,
-		ObservedAt: change.origin.observedAt,
-	})
-}
-
-func (d *Daemon) traceStateVeto(sessionID protocol.SessionID, origin stateOrigin, claim, reason string) {
+func (d *Daemon) traceStateVeto(sessionID protocol.SessionID, origin sessionmonitor.Origin, claim, reason string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
-		Source:     origin.source,
+		Source:     origin.Source,
 		Claim:      claim,
-		Detail:     origin.detail,
+		Detail:     origin.Detail,
 		Outcome:    statetrace.OutcomeVetoed,
 		Reason:     reason,
-		ObservedAt: origin.observedAt,
+		ObservedAt: origin.ObservedAt,
 	})
 }
 
-func (d *Daemon) traceStateEvidence(sessionID protocol.SessionID, origin stateOrigin, claim string) {
+func (d *Daemon) traceStateEvidence(sessionID protocol.SessionID, origin sessionmonitor.Origin, claim string) {
 	d.recordStateObservation(sessionID, statetrace.Observation{
-		Source:     origin.source,
+		Source:     origin.Source,
 		Claim:      claim,
-		Detail:     origin.detail,
+		Detail:     origin.Detail,
 		Outcome:    statetrace.OutcomeObserved,
-		ObservedAt: origin.observedAt,
+		ObservedAt: origin.ObservedAt,
 	})
 }
 
@@ -110,12 +60,7 @@ func (d *Daemon) handleStateExplain(conn net.Conn, msg *protocol.StateExplainMes
 }
 
 func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateExplainResult {
-	var recorded []statetrace.Observation
-	if e := d.monitorEntry(session.ID); e != nil {
-		e.mu.Lock()
-		recorded = e.trace.Snapshot()
-		e.mu.Unlock()
-	}
+	recorded := d.monitorEntry(session.ID).TraceSnapshot()
 	observations := make([]protocol.StateExplainEntry, 0, len(recorded))
 	for _, obs := range recorded {
 		entry := protocol.StateExplainEntry{
@@ -163,11 +108,8 @@ func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotific
 		return
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.Message))
-	d.traceStateEvidence(sessionID, stateOrigin{
-		source: stateSourceHookNotify,
-		detail: message,
-	}, kind)
-	d.recordNotificationEvidence(sessionID, kind, message)
+	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookNotify, Detail: message}, kind)
+	d.monitorEntry(sessionID).RecordNotification(kind, message)
 	d.sendOK(conn)
 }
 
@@ -179,11 +121,8 @@ func (d *Daemon) handleHookStopFailure(conn net.Conn, msg *protocol.HookStopFail
 		return
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.ErrorMessage))
-	d.traceStateEvidence(sessionID, stateOrigin{
-		source: stateSourceHookStopFailure,
-		detail: message,
-	}, errorType)
-	d.recordStopFailureEvidence(sessionID, errorType, message)
+	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookStopFailure, Detail: message}, errorType)
+	d.monitorEntry(sessionID).RecordStopFailure(errorType, message)
 	d.sendOK(conn)
 }
 
@@ -193,11 +132,8 @@ func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactio
 	if msg.Active {
 		phase = "started"
 	}
-	d.traceStateEvidence(sessionID, stateOrigin{
-		source: stateSourceHookCompaction,
-		detail: strings.TrimSpace(protocol.Deref(msg.Trigger)),
-	}, phase)
-	d.recordCompactionEvidence(sessionID, msg.Active)
+	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookCompaction, Detail: strings.TrimSpace(protocol.Deref(msg.Trigger))}, phase)
+	d.monitorEntry(sessionID).RecordCompaction(msg.Active)
 	d.sendOK(conn)
 }
 
@@ -206,5 +142,5 @@ func (d *Daemon) tracePermissionMode(sessionID protocol.SessionID, mode string) 
 	if mode == "" {
 		return
 	}
-	d.traceStateEvidence(sessionID, stateOrigin{source: stateSourcePermissionMode}, mode)
+	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourcePermissionMode}, mode)
 }

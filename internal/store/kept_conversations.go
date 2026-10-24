@@ -203,7 +203,7 @@ func (s *Store) ConversationSessions(identifier string) ([]ConversationSession, 
 	if s.db == nil {
 		return nil, sql.ErrConnDone
 	}
-	query := `SELECT id, user_label, harness_title, agent, directory, resume_session_id FROM sessions WHERE `
+	query := `SELECT id, user_label, harness_title, agent, directory, resume_session_id FROM sessions_with_runtime AS sessions WHERE `
 	var args []any
 	if identifier != "" {
 		query += `(id=? OR resume_session_id=?)`

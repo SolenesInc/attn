@@ -1,0 +1,3 @@
+kind: internal
+area: sessions
+change: The session monitor lives in its own package, reads a policy the daemon pushes instead of the store, and is the only writer of each session's runtime state, which moves off sessions into session_runtime.

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -40,6 +41,10 @@ func addLedgerSession(t *testing.T, s *Store, id, profileID, repository string, 
 		State:      protocol.SessionStateIdle,
 		StateSince: protocol.NewTimestamp(lastSeen).String(),
 		LastSeen:   protocol.NewTimestamp(lastSeen).String(),
+	})
+	s.SaveSessionRuntime(protocol.SessionID(id), SessionRuntimeState{
+		State: protocol.SessionStateIdle, Since: lastSeen, Updated: lastSeen, LastSeen: lastSeen,
+		Branch: git.BranchInfo{Repository: repository},
 	})
 }
 

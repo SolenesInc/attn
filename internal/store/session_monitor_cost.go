@@ -13,66 +13,12 @@ import (
 	"time"
 )
 
-const LegacySessionCostSource = "_legacy"
-
-type SessionMonitorCost struct {
-	Initialized bool                          `json:"initialized,omitempty"`
-	Sources     map[string]*SessionCostSource `json:"sources,omitempty"`
-}
-
-type SessionCostSource struct {
-	Initialized           bool                              `json:"initialized,omitempty"`
-	Cursor                string                            `json:"cursor,omitempty"`
-	UsageUnavailable      bool                              `json:"usage_unavailable,omitempty"`
-	MeasurementIncomplete bool                              `json:"measurement_incomplete,omitempty"`
-	Ledger                sessioncost.Ledger                `json:"ledger,omitempty"`
-	Observations          map[string]SessionCostObservation `json:"observations,omitempty"`
-	Finalized             []string                          `json:"finalized,omitempty"`
-}
-
-func (source *SessionCostSource) Clone() *SessionCostSource {
-	if source == nil {
-		return &SessionCostSource{}
-	}
-	clone := *source
-	clone.Ledger = maps.Clone(source.Ledger)
-	clone.Observations = maps.Clone(source.Observations)
-	clone.Finalized = slices.Clone(source.Finalized)
-	return &clone
-}
-
-func (state SessionMonitorCost) Clone() SessionMonitorCost {
-	clone := SessionMonitorCost{Initialized: state.Initialized, Sources: make(map[string]*SessionCostSource, len(state.Sources))}
-	for id, source := range state.Sources {
-		clone.Sources[id] = source.Clone()
-	}
-	return clone
-}
-
-type SessionCostUsage struct {
-	UsageUnavailable      bool
-	MeasurementIncomplete bool
-	Ledger                sessioncost.Ledger
-}
-
-func (state SessionMonitorCost) Usage() SessionCostUsage {
-	usage := SessionCostUsage{Ledger: make(sessioncost.Ledger)}
-	for _, source := range state.Sources {
-		usage.UsageUnavailable = usage.UsageUnavailable || source.UsageUnavailable
-		usage.MeasurementIncomplete = usage.MeasurementIncomplete || source.MeasurementIncomplete
-		for key, value := range source.Ledger {
-			usage.Ledger[key] = usage.Ledger[key].Add(value)
-		}
-	}
-	return usage
-}
-
 // sessionCostSaveInterval spaces saves of transcript-derived cost: each save is a consistent
 // snapshot with its cursor, so after a crash re-reading from that cursor rebuilds the rest.
 const sessionCostSaveInterval = 30 * time.Second
 
 type sessionCostEntry struct {
-	state   SessionMonitorCost
+	state   sessioncost.Checkpoint
 	unsaved bool
 	savedAt time.Time
 }
@@ -84,7 +30,7 @@ func (s *Store) liveSessionCost(sessionID protocol.SessionID) (*sessionCostEntry
 		return entry, true, nil
 	}
 	var raw, closedAt string
-	if err := s.db.QueryRow("SELECT session_cost_json, closed_at FROM sessions WHERE id = ?", sessionID).Scan(&raw, &closedAt); err != nil {
+	if err := s.db.QueryRow("SELECT session_cost_json, closed_at FROM sessions_with_runtime WHERE id = ?", sessionID).Scan(&raw, &closedAt); err != nil {
 		return nil, false, err
 	}
 	state, err := decodeSessionMonitorCost(raw)
@@ -108,12 +54,12 @@ func (s *Store) forgetSessionCost(sessionID protocol.SessionID) {
 	s.costMu.Unlock()
 }
 
-func (s *Store) writeSessionCost(sessionID protocol.SessionID, state SessionMonitorCost) error {
+func (s *Store) writeSessionCost(sessionID protocol.SessionID, state sessioncost.Checkpoint) error {
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
 	}
-	_, err = s.db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ? AND closed_at = ''", string(encoded), sessionID)
+	_, err = s.db.Exec(upsertRuntimeCost+" AND closed_at = ''"+onRuntimeCostConflict, sessionID, string(encoded), sessionID)
 	return err
 }
 
@@ -146,12 +92,17 @@ func (s *Store) saveUnsavedSessionCostTx(tx *sql.Tx, sessionID protocol.SessionI
 	if err != nil {
 		return fmt.Errorf("encode session cost for %s: %w", sessionID, err)
 	}
-	_, err = tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", string(encoded), sessionID)
+	_, err = tx.Exec(upsertRuntimeCost+onRuntimeCostConflict, sessionID, string(encoded), sessionID)
 	return err
 }
 
-func decodeSessionMonitorCost(raw string) (SessionMonitorCost, error) {
-	var state SessionMonitorCost
+const upsertRuntimeCost = `INSERT INTO session_runtime (session_id, session_cost_json)
+	SELECT ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ?`
+
+const onRuntimeCostConflict = `) ON CONFLICT (session_id) DO UPDATE SET session_cost_json = excluded.session_cost_json`
+
+func decodeSessionMonitorCost(raw string) (sessioncost.Checkpoint, error) {
+	var state sessioncost.Checkpoint
 	if strings.TrimSpace(raw) != "" {
 		if err := json.Unmarshal([]byte(raw), &state); err != nil {
 			return state, err
@@ -160,7 +111,7 @@ func decodeSessionMonitorCost(raw string) (SessionMonitorCost, error) {
 	return state, nil
 }
 
-func (s *Store) SessionCostCheckpoint(sessionID protocol.SessionID) (SessionMonitorCost, error) {
+func (s *Store) SessionCostCheckpoint(sessionID protocol.SessionID) (sessioncost.Checkpoint, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -168,12 +119,12 @@ func (s *Store) SessionCostCheckpoint(sessionID protocol.SessionID) (SessionMoni
 	}
 	entry, _, err := s.liveSessionCost(sessionID)
 	if err != nil {
-		return SessionMonitorCost{}, err
+		return sessioncost.Checkpoint{}, err
 	}
 	return entry.state.Clone(), nil
 }
 
-func (s *Store) SessionCost(sessionID protocol.SessionID) (SessionCostUsage, error) {
+func (s *Store) SessionCost(sessionID protocol.SessionID) (sessioncost.Totals, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -181,15 +132,15 @@ func (s *Store) SessionCost(sessionID protocol.SessionID) (SessionCostUsage, err
 	}
 	entry, _, err := s.liveSessionCost(sessionID)
 	if err != nil {
-		return SessionCostUsage{}, err
+		return sessioncost.Totals{}, err
 	}
 	return entry.state.Usage(), nil
 }
 
-func (s *Store) SessionCostUsages(sessionIDs []protocol.SessionID) (map[protocol.SessionID]SessionCostUsage, error) {
+func (s *Store) SessionCostUsages(sessionIDs []protocol.SessionID) (map[protocol.SessionID]sessioncost.Totals, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	usages := make(map[protocol.SessionID]SessionCostUsage, len(sessionIDs))
+	usages := make(map[protocol.SessionID]sessioncost.Totals, len(sessionIDs))
 	var stored []protocol.SessionID
 	s.costMu.Lock()
 	for _, id := range sessionIDs {
@@ -211,7 +162,7 @@ func (s *Store) SessionCostUsages(sessionIDs []protocol.SessionID) (map[protocol
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query("SELECT id, session_cost_json FROM sessions WHERE id IN (SELECT value FROM json_each(?))", string(ids))
+	rows, err := s.db.Query("SELECT id, session_cost_json FROM sessions_with_runtime WHERE id IN (SELECT value FROM json_each(?))", string(ids))
 	if err != nil {
 		return nil, fmt.Errorf("read session costs: %w", err)
 	}
@@ -232,7 +183,7 @@ func (s *Store) SessionCostUsages(sessionIDs []protocol.SessionID) (map[protocol
 	return usages, rows.Err()
 }
 
-func (s *Store) ApplySessionCostSnapshot(sessionID protocol.SessionID, state SessionMonitorCost, durable bool) error {
+func (s *Store) ApplySessionCostSnapshot(sessionID protocol.SessionID, state sessioncost.Checkpoint, durable bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -259,7 +210,7 @@ func (s *Store) ApplySessionCostSnapshot(sessionID protocol.SessionID, state Ses
 	return nil
 }
 
-func finalizeSessionCost(state *SessionMonitorCost) bool {
+func finalizeSessionCost(state *sessioncost.Checkpoint) bool {
 	changed := false
 	state.Sources = maps.Clone(state.Sources)
 	for id, source := range state.Sources {

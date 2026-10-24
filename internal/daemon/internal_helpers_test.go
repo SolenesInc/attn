@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -93,14 +94,14 @@ func fileAnnotationSource(path string) annotationDocumentSource {
 	return annotationDocumentSource{kind: annotationSourceFile, path: path}
 }
 
-var shippedSessionInputSubmitDelay = sessionInputSubmitDelay
+var shippedSessionInputSubmitDelay = sessionmonitor.SubmitDelay
 
 func TestMain(m *testing.M) {
 	fakeagent.Main()
 	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" {
 		os.Exit(m.Run())
 	}
-	sessionInputSubmitDelay = 0
+	sessionmonitor.SubmitDelay = 0
 	os.Exit(testworld.Main(m,
 		"ATTN_PTY_BACKEND=embedded",
 		"ATTN_PTY_SKIP_STARTUP_PROBE=1",

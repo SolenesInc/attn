@@ -57,6 +57,7 @@ func TestMigration161MovesTheChiefIntoItsProfile(t *testing.T) {
 	addProfileSession(t, s, "old-chief", work.ID)
 	if _, err := s.db.Exec(`
 		ALTER TABLE profiles DROP COLUMN chief_session_id;
+		ALTER TABLE sessions ADD COLUMN session_cost_json TEXT NOT NULL DEFAULT '';
 		CREATE TABLE instance_roles (role TEXT PRIMARY KEY, session_id TEXT NOT NULL);
 		INSERT INTO instance_roles (role, session_id) VALUES ('chief_of_staff', 'old-chief');
 		DELETE FROM schema_migrations WHERE version >= 161;

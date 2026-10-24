@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -37,8 +38,6 @@ type sessionActivityRun struct {
 	ObservedAt time.Time
 	SpentAt    time.Time
 	Err        string
-	Transcript string
-	ResumeID   string
 }
 
 func (d *Daemon) sessionActivityRunRecord(sessionID protocol.SessionID) sessionActivityRun {
@@ -122,7 +121,7 @@ func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time
 	if since.IsZero() {
 		return true
 	}
-	path := d.sessionActivityTranscript(session)
+	path := d.monitorEntry(session.ID).ActivityTranscript()
 	if path == "" {
 		return false
 	}
@@ -133,27 +132,8 @@ func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time
 	return info.ModTime().After(since)
 }
 
-func (d *Daemon) sessionActivityTranscript(session *protocol.Session) string {
-	if session == nil {
-		return ""
-	}
-	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(session.ID))
-	if cached := d.sessionActivityRunRecord(session.ID); cached.Transcript != "" && cached.ResumeID == resumeID {
-		if _, err := os.Stat(cached.Transcript); err == nil {
-			return cached.Transcript
-		}
-	}
-	path := strings.TrimSpace(d.resolveTranscriptPathForSession(session, ""))
-	d.noteSessionActivityRun(session.ID, func(run *sessionActivityRun) {
-		run.Transcript = path
-		run.ResumeID = resumeID
-	})
-	return path
-}
-
 type sessionActivityPayload struct {
-	Transcript string `json:"transcript,omitempty"`
-	ResumeID   string `json:"resume_id,omitempty"`
+	ResumeID string `json:"resume_id,omitempty"`
 }
 
 func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
@@ -172,8 +152,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 		return
 	}
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(sessionID))
-	transcriptPath := d.sessionActivityTranscript(session)
-	if transcriptPath == "" {
+	if d.monitorEntry(sessionID).ActivityTranscript() == "" {
 		return
 	}
 	runner := d.jobQueueRef()
@@ -182,10 +161,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 	}
 	if _, err := runner.Enqueue(sessionActivityKind, jobs.EnqueueOptions{
 		UniqueKey: string(sessionID),
-		Payload: sessionActivityPayload{
-			Transcript: transcriptPath,
-			ResumeID:   resumeID,
-		},
+		Payload:   sessionActivityPayload{ResumeID: resumeID},
 	}); err != nil {
 		d.logf("session_activity: enqueue %s: %v", sessionID, err)
 	}
@@ -224,10 +200,8 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		return nil, err
 	}
 	resumeID := strings.TrimSpace(carried.ResumeID)
-	transcriptPath := strings.TrimSpace(carried.Transcript)
-	if transcriptPath == "" {
-		transcriptPath = d.sessionActivityTranscript(session)
-	}
+	monitor := d.monitorEntry(sessionID)
+	transcriptPath := monitor.ActivityTranscript()
 	if transcriptPath == "" {
 		return nil, nil
 	}
@@ -237,16 +211,16 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 
 	stored := d.store.GetSessionActivity(sessionID)
 	if stored.Cursor == "" {
-		return nil, d.reseedSessionActivity(sessionID, resumeID, transcriptPath)
+		return nil, d.reseedSessionActivity(monitor, sessionID, resumeID)
 	}
-	window, err := activity.Read(transcriptPath, session.Agent, stored.Cursor)
+	window, err := monitor.TranscriptEvents(stored.Cursor)
 	switch {
 	case err == nil:
 	case errors.Is(err, transcript.ErrCursorMismatch) ||
 		errors.Is(err, transcript.ErrCursorPastEnd) ||
 		errors.Is(err, transcript.ErrInvalidCursor) ||
 		errors.Is(err, activity.ErrDeltaTooLarge):
-		return nil, d.reseedSessionActivity(sessionID, resumeID, transcriptPath)
+		return nil, d.reseedSessionActivity(monitor, sessionID, resumeID)
 	default:
 		return nil, fmt.Errorf("session_activity: read %s: %w", transcriptPath, err)
 	}
@@ -329,10 +303,10 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	return nil, nil
 }
 
-func (d *Daemon) reseedSessionActivity(sessionID protocol.SessionID, resumeID string, transcriptPath string) error {
-	head, err := activity.SeedCursor(transcriptPath)
+func (d *Daemon) reseedSessionActivity(monitor *sessionmonitor.Entry, sessionID protocol.SessionID, resumeID string) error {
+	head, err := monitor.TranscriptHead()
 	if err != nil {
-		return fmt.Errorf("session_activity: seed cursor for %s: %w", transcriptPath, err)
+		return fmt.Errorf("session_activity: seed cursor for %s: %w", sessionID, err)
 	}
 	d.store.SetSessionActivityCursorForConversation(sessionID, resumeID, head)
 	return nil

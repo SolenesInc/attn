@@ -79,6 +79,9 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 	if msg.Key == SettingHeadlessTasksEnabled {
 		d.applyHeadlessTasksMode()
 	}
+	if monitorPolicySetting(msg.Key) {
+		d.pushMonitorPolicies()
+	}
 	if msg.Key == SettingAutoSettleEnabled {
 		if parseBooleanSetting(msg.Value) {
 			d.armAutoSettleForRunningSessions()

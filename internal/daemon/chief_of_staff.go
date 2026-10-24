@@ -246,6 +246,7 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 		d.sendChiefOfStaffResult(client, sessionID, false, previousSessionID, err)
 		return
 	}
+	d.pushMonitorPolicies()
 
 	var reloadErr error
 	for _, reload := range prepared {

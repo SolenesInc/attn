@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,16 +14,15 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/transcript"
 )
 
 const (
-	maxSessionNameRunes      = store.SessionNameRunes
-	sessionTitleTimeout      = 90 * time.Second
-	sessionTitleBriefCharCap = 1500
-	sessionTitleKind         = "session_title"
-	sessionTitleAttempts     = 3
+	maxSessionNameRunes  = store.SessionNameRunes
+	sessionTitleTimeout  = 90 * time.Second
+	sessionTitleKind     = "session_title"
+	sessionTitleAttempts = 3
 )
 
 var sessionTitleInstructions = prompts.RenderText("session-title", "instructions", nil)
@@ -34,126 +32,17 @@ type sessionTitlePayload struct {
 	Source       string `json:"source"`
 }
 
-func (d *Daemon) maybeGenerateSessionTitle(sessionID protocol.SessionID, transcriptPath string) {
-	if !d.sessionWantsAutoTitle(sessionID) {
-		return
-	}
-	session := d.store.Get(sessionID)
-	path := d.resolveTranscriptPathForSession(session, transcriptPath)
-	if strings.TrimSpace(path) == "" {
-		return
-	}
-	slice, err := transcript.ExtractConversationSlice(path, transcript.SliceOptions{
-		MaxRescopingTurns: 2,
-		MaxAgentTurns:     1,
-		TurnCharCap:       sessionTitleBriefCharCap,
-		SummaryCharCap:    2000,
-	})
-	if err != nil || slice.Empty() || slice.Brief == "" {
-		return
-	}
-	d.enqueueSessionTitle(sessionID, slice.Render(), "transcript")
-}
-
-func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID protocol.SessionID, prompt string, origin sessionInputOrigin) {
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" || !d.sessionWantsAutoTitle(sessionID) {
-		return
-	}
-	if origin.kind != sessionInputOriginUserConversation && !d.matchSessionTitleInitialPrompt(sessionID, prompt) {
-		return
-	}
-	if runes := []rune(prompt); len(runes) > sessionTitleBriefCharCap {
-		prompt = string(runes[:sessionTitleBriefCharCap])
-	}
-	d.enqueueSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}.Render(), "prompt")
-}
-
-func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID protocol.SessionID, prompt string) {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	prompt = strings.TrimSpace(prompt)
-	e.titleInitialPrompt = nil
-	if prompt != "" {
-		fingerprint := sha256.Sum256([]byte(prompt))
-		e.titleInitialPrompt = &fingerprint
-	}
-}
-
-func (d *Daemon) forgetSessionTitleInitialPrompt(sessionID protocol.SessionID) {
-	if e := d.monitorEntry(sessionID); e != nil {
-		e.mu.Lock()
-		e.titleInitialPrompt = nil
-		e.mu.Unlock()
-	}
-}
-
-func (d *Daemon) matchSessionTitleInitialPrompt(sessionID protocol.SessionID, prompt string) bool {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return false
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.titleInitialPrompt != nil && *e.titleInitialPrompt == sha256.Sum256([]byte(prompt))
-}
-
-func (d *Daemon) sessionWantsAutoTitle(sessionID protocol.SessionID) bool {
-	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
-		return false
-	}
-	session := d.store.Get(sessionID)
-	if session == nil || !d.sessionMayBeAutoTitled(session) {
-		return false
-	}
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return false
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return !e.titleAttempted
-}
-
-func (d *Daemon) enqueueSessionTitle(sessionID protocol.SessionID, conversation string, source string) {
+func (d *Daemon) enqueueSessionTitle(sessionID protocol.SessionID, conversation string, source string) error {
 	runner := d.headlessJobQueue("session_title")
-	if runner == nil {
-		return
+	if runner == nil || sessionID == "" {
+		return sessionmonitor.ErrNoTitleRunner
 	}
-
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	if e.titleAttempted {
-		e.mu.Unlock()
-		return
-	}
-	e.titleAttempted = true
-	fingerprint := e.titleInitialPrompt
-	e.titleInitialPrompt = nil
-	e.mu.Unlock()
-
 	_, err := runner.Enqueue(sessionTitleKind, jobs.EnqueueOptions{
 		UniqueKey:   string(sessionID),
 		Payload:     sessionTitlePayload{Conversation: conversation, Source: source},
 		MaxAttempts: sessionTitleAttempts,
 	})
-	if err == nil {
-		return
-	}
-	d.logf("session title %s: enqueue: %v", sessionID, err)
-	e.mu.Lock()
-	e.titleAttempted = false
-	if fingerprint != nil && e.titleInitialPrompt == nil {
-		e.titleInitialPrompt = fingerprint
-	}
-	e.mu.Unlock()
+	return err
 }
 
 func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, error) {
@@ -184,7 +73,7 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 	}
 	defer job.CommitGuard.Leave()
 	entry := d.monitorEntry(sessionID)
-	if entry == nil || !entry.reportHarnessTitle(title) {
+	if entry == nil || !entry.ReportHarnessTitle(title) {
 		return nil, fmt.Errorf("session %s: harness title view was not applied", sessionID)
 	}
 	d.logf("session title %s: %q from %s", sessionID, title, payload.Source)

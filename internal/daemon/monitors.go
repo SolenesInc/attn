@@ -1,119 +1,40 @@
 package daemon
 
 import (
-	"crypto/sha256"
-	"strconv"
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
-
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/sessionstate"
-	"github.com/victorarias/attn/internal/statetrace"
-	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
-type sessionMonitor struct {
-	mu         sync.Mutex
-	terminalID harness.TerminalID
-	runtime    monitorRuntimeID
-	terminal   sessionstate.TerminalEvidence
-	entries    map[*monitorEntry]struct{}
-}
-
-type monitorEntry struct {
-	mu                  sync.Mutex
-	initialized         bool
-	revision            uint64
-	state               monitorStateView
-	driver              monitorDriverMetadata
-	turn                monitorTurnStamps
-	lastModelRequestAt  time.Time
-	firstReportAt       time.Time
-	wakeTimer           *time.Timer
-	wake                func(time.Time) *time.Timer
-	monitor             *sessionMonitor
-	sink                monitorSink
-	conversationInput   monitorConversation
-	succeeds            monitorKey
-	conversation        string
-	localConversation   string
-	directory           string
-	branch              attngit.BranchInfo
-	pullRequests        map[string]monitorPullRequest
-	sentFiles           map[string]uint64
-	harnessTitle        string
-	exit                *monitorExit
-	costInitialized     bool
-	cost                map[string]*store.SessionCostSource
-	costOwners          map[string]monitorCostOwner
-	evidence            sessionstate.ConversationEvidence
-	resolveAt           time.Time
-	resolvePending      bool
-	dwell               dwellPending
-	reason              string
-	trace               *statetrace.Ring
-	classifiedTurn      string
-	classifyingTurn     string
-	forcedStop          time.Time
-	silence             *time.Timer
-	input               *sessionInputLane
-	autoSettle          *autoSettleTimer
-	dismissal           autoSettleDismissal
-	activityAt          time.Time
-	transcriptWatch     *transcriptWatcher
-	pluginUsageWatch    *pluginUsageWatcher
-	finalUsage          []func()
-	usageRuns           int
-	usageIdle           chan struct{}
-	usageDraining       bool
-	pendingConversation *agentConversationObservation
-	titleAttempted      bool
-	titleInitialPrompt  *[sha256.Size]byte
-	pluginLaunching     *pluginSessionLaunch
-	pluginReports       []pendingPluginReport
-	pluginExit          *ptybackend.ExitInfo
-}
-
-type monitorEvidence struct {
-	sessionstate.TerminalEvidence
-	sessionstate.ConversationEvidence
-}
-
-func (e *monitorEvidence) ClearProgramStatus() {
-	sessionstate.ClearProgramStatus(&e.TerminalEvidence, &e.ConversationEvidence)
-}
-
 type monitorBinding struct {
-	entry      *monitorEntry
-	applied    monitorView
+	entry      *sessionmonitor.Entry
+	applied    sessionmonitor.View
 	catchUp    *time.Timer
 	retryDelay time.Duration
 }
 
-type monitorRegistry struct {
-	applyMu   sync.Mutex
-	mu        sync.Mutex
-	physical  map[harness.TerminalID]*sessionMonitor
-	sessions  map[protocol.SessionID]*monitorBinding
-	wake      chan struct{}
-	closed    atomic.Bool
-	nextLocal uint64
+type monitorIndex struct {
+	policyMu sync.Mutex
+	applyMu  sync.Mutex
+	mu       sync.Mutex
+	sessions map[protocol.SessionID]*monitorBinding
+	registry *sessionmonitor.Registry
 }
 
-func (d *Daemon) monitors() *monitorRegistry {
+func (d *Daemon) monitors() *monitorIndex {
 	d.monitorsOnce.Do(func() {
-		d.monitorState = &monitorRegistry{physical: make(map[harness.TerminalID]*sessionMonitor), sessions: make(map[protocol.SessionID]*monitorBinding), wake: make(chan struct{}, 1)}
+		d.monitorState = &monitorIndex{sessions: make(map[protocol.SessionID]*monitorBinding), registry: sessionmonitor.NewRegistry(monitorHost{daemon: d}, d.monitorSaver())}
 	})
 	return d.monitorState
 }
 
-func (r *monitorRegistry) entry(sessionID protocol.SessionID) *monitorEntry {
+func (r *monitorIndex) entry(sessionID protocol.SessionID) *sessionmonitor.Entry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if binding := r.sessions[sessionID]; binding != nil {
@@ -122,77 +43,31 @@ func (r *monitorRegistry) entry(sessionID protocol.SessionID) *monitorEntry {
 	return nil
 }
 
-func (d *Daemon) monitorEntry(sessionID protocol.SessionID) *monitorEntry {
+func (d *Daemon) monitorEntry(sessionID protocol.SessionID) *sessionmonitor.Entry {
 	return d.monitors().entry(sessionID)
 }
 
-func (r *monitorRegistry) start(terminal harness.TerminalID, conversation string, sessionID protocol.SessionID, linked bool, candidate *monitorEntry, initialize func(*monitorEntry)) *monitorEntry {
+func (r *monitorIndex) each() map[protocol.SessionID]*sessionmonitor.Entry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var old *monitorEntry
-	if binding := r.sessions[sessionID]; binding != nil {
-		old = binding.entry
+	entries := make(map[protocol.SessionID]*sessionmonitor.Entry, len(r.sessions))
+	for id, binding := range r.sessions {
+		entries[id] = binding.entry
 	}
-	if old != nil && old.monitor.terminalID == terminal {
-		old.mu.Lock()
-		if (conversation == "" && !linked) || old.conversation == conversation {
-			initialize(old)
-			old.mu.Unlock()
-			return old
-		}
-		if old.conversation == "" && conversation != "" {
-			old.conversation = conversation
-			initialize(old)
-			old.armWakeLocked()
-			old.mu.Unlock()
-			return old
-		}
-		old.mu.Unlock()
-	}
-	if old != nil {
-		r.mu.Unlock()
-		old.stop()
-		r.mu.Lock()
-	}
-	var m *sessionMonitor
-	if !linked {
-		m = r.physical[terminal]
-	}
-	if m == nil && candidate != nil {
-		m = candidate.monitor
-	}
-	if m == nil {
-		m = &sessionMonitor{terminalID: terminal, entries: make(map[*monitorEntry]struct{})}
-		if linked {
-			m.runtime = monitorRuntimeID(uuid.NewString())
-		}
-	}
-	r.forgetLocked(sessionID)
-	if !linked {
-		r.physical[terminal] = m
-	}
-	r.nextLocal++
-	e := candidate
-	if e == nil {
-		e = &monitorEntry{}
-	}
-	e.succeeds = monitorKey{}
-	e.monitor, e.conversation, e.localConversation = m, conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
-	e.input = &sessionInputLane{mu: &e.mu, entry: e, stopped: r.closed.Load()}
-	initialize(e)
-	m.entries[e] = struct{}{}
-	r.sessions[sessionID] = &monitorBinding{entry: e, applied: e.snapshotLocked()}
-	e.mu.Lock()
-	e.armWakeLocked()
-	e.mu.Unlock()
-	return e
+	return entries
 }
 
-func (d *Daemon) startSessionMonitor(sessionID protocol.SessionID) *monitorEntry {
+func (d *Daemon) startSessionMonitor(sessionID protocol.SessionID) *sessionmonitor.Entry {
 	return d.startSessionMonitorFrom(sessionID, "", nil)
 }
 
-func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID, candidate *monitorEntry) *monitorEntry {
+func (d *Daemon) startSessionMonitorSeeded(seed *protocol.Session, fresh sessionmonitor.Evidence) *sessionmonitor.Entry {
+	entry := d.startSessionMonitor(seed.ID)
+	entry.Restart(withSeed(d.monitorLaunch(seed.ID), seed), fresh)
+	return entry
+}
+
+func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID, candidate *sessionmonitor.Entry) *sessionmonitor.Entry {
 	terminal := d.primaryTerminal(sessionID)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
 	linked := d.store.SessionLink(sessionID) == codexLinkKind
@@ -204,132 +79,257 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	if terminal == "" {
 		return nil
 	}
-	var previous *monitorEntry
+	var previous *sessionmonitor.Entry
 	if previousID != "" {
 		previous = d.monitorEntry(previousID)
 	}
-	entry := d.monitors().start(terminal, conversation, sessionID, linked, candidate, func(entry *monitorEntry) {
-		d.initializeMonitor(entry, sessionID)
-	})
-	if previous != nil && previous != entry {
-		previous.mu.Lock()
-		typed := previous.input.userSubmit
-		previous.input.userSubmit = false
-		previous.mu.Unlock()
-		if typed {
-			entry.mu.Lock()
-			entry.input.userSubmit = true
-			entry.mu.Unlock()
+	r := d.monitors()
+	start := func() sessionmonitor.Start {
+		return sessionmonitor.Start{Session: sessionID, Terminal: terminal, Conversation: conversation, Linked: linked, Candidate: candidate,
+			Launch: func() sessionmonitor.Launch { return d.monitorLaunch(sessionID) }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), sessionID)}
+	}
+	r.policyMu.Lock()
+	entry := r.entry(sessionID)
+	reused := r.registry.Reuse(entry, start())
+	r.policyMu.Unlock()
+	if !reused {
+		if entry != nil {
+			entry.Stop()
 		}
+		r.policyMu.Lock()
+		entry = r.registry.Start(entry, start())
+		r.mu.Lock()
+		if old := r.sessions[sessionID]; old != nil {
+			old.stopCatchUp()
+		}
+		applied := entry.Snapshot()
+		applied.PullRequests.Entries = d.recordedLinks(sessionID)
+		r.sessions[sessionID] = &monitorBinding{entry: entry, applied: applied}
+		homeOf(entry).bind(sessionID)
+		r.mu.Unlock()
+		r.policyMu.Unlock()
+	}
+	entry.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
+	entry.Arm()
+	d.syncMonitorConversation(sessionID)
+	if previous != nil && previous != entry {
+		entry.TakeUserSubmit(previous)
 	}
 	return entry
 }
 
-func (d *Daemon) initializeMonitor(entry *monitorEntry, sessionID protocol.SessionID) {
-	if entry.sink == nil {
-		entry.sink = monitorHome{daemon: d, entry: entry}
+func withSeed(launch sessionmonitor.Launch, seed *protocol.Session) sessionmonitor.Launch {
+	launch.Branch = branchFromSession(seed)
+	launch.State = seed.State
+	launch.StateSince = protocol.Timestamp(seed.StateSince).Time()
+	launch.StateUpdated = protocol.Timestamp(seed.StateUpdatedAt).Time()
+	launch.LastModelRequestAt = protocol.Timestamp(protocol.Deref(seed.LastModelRequestAt)).Time()
+	if launch.LastModelRequestAt.IsZero() {
+		launch.LastModelRequestAt = launch.StateUpdated
 	}
-	if entry.wake == nil {
-		entry.wake = func(deadline time.Time) *time.Timer {
-			key := entry.keyLocked()
-			return d.life.AfterFunc("monitorSnoozeWake", max(0, time.Until(deadline)), func() {
-				crashAt(crashWhileWakingASnooze)
-				view, woken := entry.command(monitorCommand{Key: key, Kind: monitorWake, Until: deadline}, deadline)
-				if woken && entry.sink.Applied(view) {
-					d.finishSnoozeWake(sessionID, deadline, "deadline")
-				}
-			})
-		}
-	}
-	if !entry.initialized {
-		if session := d.store.Get(sessionID); session != nil {
-			conversation := d.store.GetSessionConversation(sessionID)
-			entry.conversationInput = monitorConversation{agentConversationObservation: agentConversationObservation{SessionID: sessionID, NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath}}
-			entry.directory = session.Directory
-			entry.branch = branchFromSession(session)
-			entry.harnessTitle = d.store.SessionLabels(sessionID).HarnessTitle
-			entry.state = monitorStateView{State: session.State, Since: protocol.Timestamp(session.StateSince).Time(), Updated: protocol.Timestamp(session.StateUpdatedAt).Time()}
-			entry.lastModelRequestAt = protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time()
-		}
-		stamps := d.store.TurnStamps(sessionID)
-		entry.driver = d.driverInputFromRecord(sessionID)
-		if cost, err := d.store.SessionCostCheckpoint(sessionID); err == nil {
-			entry.loadCostLocked(cost)
-		} else {
-			d.logf("monitor cost: session=%s load failed: %v", sessionID, err)
-		}
-		if saved := d.store.GetSessionExitScreen(sessionID); saved != nil {
-			entry.exit = &monitorExit{Text: saved.Text, Cols: saved.Cols, Rows: saved.Rows, Code: saved.ExitCode,
-				Signal: saved.ExitSignal, At: protocol.Timestamp(saved.ExitedAt).Time()}
-		}
-		entry.turn = monitorTurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil, AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt}
-		entry.initialized = d.store.Get(sessionID) != nil
-	}
+	launch.LastSeen = protocol.Timestamp(seed.LastSeen).Time()
+	return launch
 }
 
-func (r *monitorRegistry) each() map[protocol.SessionID]*monitorEntry {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entries := make(map[protocol.SessionID]*monitorEntry, len(r.sessions))
-	for id, binding := range r.sessions {
-		entries[id] = binding.entry
+func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Launch {
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return sessionmonitor.Launch{}
 	}
-	return entries
+	conversation := d.store.GetSessionConversation(sessionID)
+	stamps := d.store.TurnStamps(sessionID)
+	records := d.store.SessionRuntimeRecords(sessionID)
+	launch := sessionmonitor.Launch{
+		Known:              true,
+		Agent:              session.Agent,
+		Link:               d.store.SessionLink(sessionID),
+		StartedAt:          d.store.SessionLaunchedAt(sessionID),
+		Directory:          session.Directory,
+		Branch:             branchFromSession(session),
+		HarnessTitle:       d.store.SessionLabels(sessionID).HarnessTitle,
+		State:              session.State,
+		StateSince:         protocol.Timestamp(session.StateSince).Time(),
+		StateUpdated:       protocol.Timestamp(session.StateUpdatedAt).Time(),
+		LastModelRequestAt: protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time(),
+		Turn: sessionmonitor.TurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil,
+			AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt},
+		Driver:        d.driverInputFromRecord(sessionID),
+		Conversation:  sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
+		LastSeen:      protocol.Timestamp(session.LastSeen).Time(),
+		PendingSwitch: decodePendingSwitch(records.PendingSwitch),
+		PullRequests:  decodePullRequests(records.PullRequests),
+	}
+	if cost, err := d.store.SessionCostCheckpoint(sessionID); err == nil {
+		launch.Cost = cost
+	} else {
+		d.logf("monitor cost: session=%s load failed: %v", sessionID, err)
+	}
+	if saved := d.store.GetSessionExitScreen(sessionID); saved != nil {
+		launch.Exit = &sessionmonitor.Exit{Text: saved.Text, Cols: saved.Cols, Rows: saved.Rows, Code: saved.ExitCode,
+			Signal: saved.ExitSignal, At: protocol.Timestamp(saved.ExitedAt).Time()}
+	}
+	return launch
+}
+
+func branchFromSession(session *protocol.Session) attngit.BranchInfo {
+	return attngit.BranchInfo{Branch: protocol.Deref(session.Branch), IsWorktree: protocol.Deref(session.IsWorktree),
+		MainRepo: protocol.Deref(session.MainRepo), Repository: protocol.Deref(session.Repository)}
+}
+
+func (d *Daemon) driverInputFromRecord(session protocol.SessionID) sessionmonitor.DriverMetadata {
+	cursor := d.store.GetAgentDriverRun(session)
+	return sessionmonitor.DriverMetadata{Plugin: cursor.PluginName, Run: cursor.RunID, Sequence: cursor.Seq,
+		Metadata: d.store.GetAgentMetadata(session), TranscriptPath: d.store.GetAgentDriverTranscriptPath(session)}
 }
 
 func (d *Daemon) forgetMonitor(sessionID protocol.SessionID) {
 	r := d.monitors()
 	entry := r.entry(sessionID)
 	if entry != nil {
-		entry.stop()
+		entry.Forget()
 	}
+	r.policyMu.Lock()
 	r.mu.Lock()
-	r.forgetLocked(sessionID)
+	binding := r.sessions[sessionID]
+	if binding != nil {
+		binding.stopCatchUp()
+		delete(r.sessions, sessionID)
+	}
 	r.mu.Unlock()
-	r.rearm()
+	r.policyMu.Unlock()
+	if binding != nil && binding.entry != entry {
+		binding.entry.Forget()
+	}
 }
 
-func (r *monitorRegistry) forgetLocked(sessionID protocol.SessionID) *monitorEntry {
-	binding := r.sessions[sessionID]
-	if binding == nil {
+type monitorHost struct{ daemon *Daemon }
+
+func (h monitorHost) Go(name string, fn func()) bool { return h.daemon.life.Go(name, fn) }
+func (h monitorHost) Do(name string, fn func()) bool { return h.daemon.life.Do(name, fn) }
+func (h monitorHost) AfterFunc(name string, delay time.Duration, fn func()) *time.Timer {
+	return h.daemon.life.AfterFunc(name, delay, fn)
+}
+func (h monitorHost) Context() context.Context        { return h.daemon.life.Context() }
+func (h monitorHost) Done() <-chan struct{}           { return h.daemon.life.Done() }
+func (h monitorHost) Ended() bool                     { return h.daemon.life.Ended() }
+func (h monitorHost) Logf(format string, args ...any) { h.daemon.logf(format, args...) }
+func (h monitorHost) Debug() bool                     { return h.daemon.debugLogging }
+func (h monitorHost) HomeFor(entry *sessionmonitor.Entry) sessionmonitor.Home {
+	return &monitorHome{daemon: h.daemon, entry: entry}
+}
+func (h monitorHost) Classify(ctx context.Context, request sessionmonitor.ClassifyRequest) (string, error) {
+	return h.daemon.runClassifier(ctx, request.Agent, request.Directory, request.Text, request.Timeout)
+}
+func (h monitorHost) ReadBranch(ctx context.Context, directory string) (*attngit.BranchInfo, error) {
+	return h.daemon.readBranchInfo(ctx, gitTask{Kind: gitTaskSessionIdentity, Lane: gitDeferred}, directory)
+}
+
+type monitorHome struct {
+	daemon  *Daemon
+	entry   *sessionmonitor.Entry
+	session atomic.Value
+}
+
+func homeOf(entry *sessionmonitor.Entry) *monitorHome { return entry.Home().(*monitorHome) }
+
+func (h *monitorHome) bind(sessionID protocol.SessionID) {
+	h.session.Store(sessionID)
+	h.entry.Bind(string(sessionID))
+}
+
+func (h *monitorHome) sessionID() protocol.SessionID {
+	id, _ := h.session.Load().(protocol.SessionID)
+	return id
+}
+
+func (h monitorHost) session(entry *sessionmonitor.Entry) protocol.SessionID {
+	return homeOf(entry).sessionID()
+}
+
+func (h monitorHost) LiveTerminals(ctx context.Context) map[harness.TerminalID]struct{} {
+	return h.daemon.liveTerminals(ctx)
+}
+
+func (h monitorHost) ViewOwner(terminal harness.TerminalID) string {
+	session, _ := h.daemon.shownIn(terminal)
+	return string(session)
+}
+
+func (h monitorHost) Input(ctx context.Context, terminal harness.TerminalID, data []byte) error {
+	if h.daemon.ptyBackend == nil {
+		return errNoPTYBackend
+	}
+	return h.daemon.ptyBackend.Input(ctx, terminal, data)
+}
+
+func (h monitorHost) Link(entry *sessionmonitor.Entry, voice harness.Voice) harness.Link {
+	session := h.daemon.store.Get(h.session(entry))
+	if session == nil {
 		return nil
 	}
-	binding.stopCatchUp()
-	e := binding.entry
-	m := e.monitor
-	delete(r.sessions, sessionID)
-	delete(m.entries, e)
-	if len(m.entries) == 0 && r.physical[m.terminalID] == m {
-		delete(r.physical, m.terminalID)
+	link := h.daemon.sessionLink(session, voice)
+	if link == nil {
+		return nil
 	}
-	return e
+	return sessionLinkTo{Link: link, session: session.ID}
 }
 
-func (e *monitorEntry) stop() {
-	e.finishUsage()
-	e.mu.Lock()
-	lane := e.input
-	lane.stopRetriesLocked()
-	if e.autoSettle != nil {
-		e.autoSettle.timer.Stop()
-		e.autoSettle = nil
-	}
-	if e.silence != nil {
-		e.silence.Stop()
-		e.silence = nil
-	}
-	if e.wakeTimer != nil {
-		e.wakeTimer.Stop()
-		e.wakeTimer = nil
-	}
-	e.resolvePending = false
-	e.mu.Unlock()
-	lane.running.Wait()
+type sessionLinkTo struct {
+	harness.Link
+	session protocol.SessionID
 }
 
-func (r *monitorRegistry) rearm() {
-	select {
-	case r.wake <- struct{}{}:
-	default:
+func (l sessionLinkTo) Deliver(ctx context.Context, in harness.Input) harness.Custody {
+	in.Session = l.session
+	return l.Link.Deliver(ctx, in)
+}
+
+func (h monitorHost) LinkTranscriptPath(link, path string) string {
+	if l := h.daemon.linkNamed(link); l != nil {
+		return l.transcriptPath(path)
 	}
+	return path
+}
+
+func (h monitorHost) NoteKey(terminal harness.TerminalID, at time.Time) {
+	h.daemon.terminals().noteKey(terminal, at)
+}
+
+func (h monitorHost) LastKey(terminal harness.TerminalID) time.Time {
+	return h.daemon.terminals().lastKeyOf(terminal)
+}
+
+func (h monitorHost) EnqueueTitle(entry *sessionmonitor.Entry, conversation, source string) error {
+	return h.daemon.enqueueSessionTitle(h.session(entry), conversation, source)
+}
+
+func (d *Daemon) kickMonitorTerminals() {
+	if !d.monitorTerminalsDirty.CompareAndSwap(false, true) {
+		return
+	}
+	d.life.Go("pushMonitorTerminals", func() {
+		d.monitorTerminalsDirty.Store(false)
+		for sessionID, entry := range d.monitors().each() {
+			entry.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
+		}
+	})
+}
+
+func (d *Daemon) monitorSaver() sessionmonitor.Saver {
+	if d.store == nil {
+		return nil
+	}
+	return storeSaver{daemon: d}
+}
+
+func (d *Daemon) recordedLinks(sessionID protocol.SessionID) map[string]sessionmonitor.PullRequest {
+	records := d.store.ListSessionPullRequests(sessionID)
+	if len(records) == 0 {
+		return nil
+	}
+	links := make(map[string]sessionmonitor.PullRequest, len(records))
+	for _, record := range records {
+		links[record.PRID] = sessionmonitor.PullRequest{Repository: record.Repository, Number: record.Number, URL: record.URL}
+	}
+	return links
 }

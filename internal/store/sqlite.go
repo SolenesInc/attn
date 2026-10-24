@@ -1629,7 +1629,7 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 			conn.RegisterRollbackHook(func() { dirty = false })
 			conn.RegisterUpdateHook(func(_ int, _, table string, _ int64) {
 				dirty = true
-				if table == "sessions" {
+				if table == "sessions" || table == "session_runtime" {
 					writes.sessions.Add(1)
 				}
 			})

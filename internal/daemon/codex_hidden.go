@@ -84,7 +84,7 @@ func (r *codexShared) Deliver(_ context.Context, in harness.Input) harness.Custo
 	}
 	if err == nil {
 		s.events.run(r.d, func() {
-			r.d.ensureTranscriptWatcherAtPath(session.ID, r.d.store.GetSessionConversation(session.ID).TranscriptPath)
+			r.d.monitorEntry(session.ID).EnsureTranscriptWatcher(r.d.store.GetSessionConversation(session.ID).TranscriptPath)
 		})
 	}
 	if err != nil {
@@ -201,16 +201,16 @@ func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
 	}
 	now := time.Now()
 	if status == pty.ProgramIdle {
-		evidence, _ := r.d.evidenceSnapshot(sessionID)
+		evidence, _ := r.d.monitorEntry(sessionID).Evidence()
 		bracketOpen := evidence.TurnOpen || evidence.ToolOpen
 		if !bracketOpen && !inTurn(session.State) {
 			return
 		}
 		if bracketOpen {
-			r.d.monitorEntry(sessionID).recordTurnAbortedEvidence(r.d.monitors(), "the shared Codex app-server ended the turn", now, now)
+			r.d.monitorEntry(sessionID).RecordTurnAborted("the shared Codex app-server ended the turn", now, now)
 		}
 	}
-	r.d.recordPTYEvidence(sessionID, pty.Observation{Source: pty.SourceProgramStatus, Claim: status, At: now})
+	r.d.monitorEntry(sessionID).RecordPTY(pty.Observation{Source: pty.SourceProgramStatus, Claim: status, At: now})
 }
 
 func inTurn(state protocol.SessionState) bool {
@@ -285,11 +285,7 @@ func (r *codexShared) closing(sessionID protocol.SessionID) (afterClose func()) 
 	if conversation == "" || session == nil {
 		return nil
 	}
-	if entry := r.d.monitorEntry(sessionID); entry != nil {
-		release, tracker := entry.finishUsage()
-		r.settleUsage(sessionID, tracker)
-		release()
-	}
+	r.d.monitorEntry(sessionID).FinishAndSettleUsage(protocol.SessionAgentCodex, r.d.store.GetSessionConversation(sessionID).TranscriptPath)()
 	profile := session.ProfileID
 	r.mu.Lock()
 	r.archivingAfterClose[profile]++
@@ -323,20 +319,6 @@ func (r *codexShared) archiveUnheld(profile string, closed protocol.SessionID, c
 	}
 	if err != nil {
 		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, closed, err)
-	}
-}
-
-func (r *codexShared) settleUsage(sessionID protocol.SessionID, tracker *sessionUsageTracker) {
-	if tracker == nil {
-		path := r.d.store.GetSessionConversation(sessionID).TranscriptPath
-		if path == "" {
-			return
-		}
-		w := &transcriptWatcher{sessionID: sessionID, agent: protocol.SessionAgentCodex}
-		tracker = r.d.newSessionUsageTracker(w, path)
-	}
-	if tracker != nil {
-		tracker.Reconcile()
 	}
 }
 
@@ -382,7 +364,7 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 			return
 		}
 		if entry := r.d.monitorEntry(sessionID); entry != nil {
-			entry.reportHarnessTitle(name)
+			entry.ReportHarnessTitle(name)
 		}
 	})
 }

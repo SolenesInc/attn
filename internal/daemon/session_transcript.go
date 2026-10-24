@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -90,10 +91,10 @@ func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
 			return binding.TranscriptPath
 		}
 	}
-	if path := d.liveTranscriptPath(session.ID, session.Agent); path != "" {
+	if path := d.monitorEntry(session.ID).LiveTranscriptPath(session.Agent); path != "" {
 		return path
 	}
-	path := d.findTranscriptForResume(session.Agent, binding.NativeID)
+	path := sessionmonitor.FindTranscriptForResume(session.Agent, binding.NativeID)
 	if path == "" {
 		return ""
 	}

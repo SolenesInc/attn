@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"github.com/victorarias/attn/internal/store"
 	"testing"
 	"time"
 
@@ -98,14 +99,14 @@ func TestSessionPullRequestRefreshSkipsSessionsWithNoRuntime(t *testing.T) {
 	host := &fakePRHost{snapshot: openSnapshot("Fresh status", "clean", "sha-1"), review: "none"}
 	serveHost(d, "github.com", host)
 
-	if !d.store.UpdateState("s1", string(protocol.SessionStateRecoverable)) {
+	if !d.store.SaveSessionRuntime("s1", store.SessionRuntimeState{State: protocol.SessionStateRecoverable, Since: time.Now(), Updated: time.Now()}) {
 		t.Fatal("could not put the session in the recoverable state")
 	}
 	if fetched, _ := d.refreshSessionPullRequests(time.Now()); fetched != 0 {
 		t.Fatalf("fetched %d for a session with no runtime, want none", fetched)
 	}
 
-	if !d.store.UpdateState("s1", string(protocol.SessionStateIdle)) {
+	if !d.store.SaveSessionRuntime("s1", store.SessionRuntimeState{State: protocol.SessionStateIdle, Since: time.Now(), Updated: time.Now()}) {
 		t.Fatal("could not reload the session")
 	}
 	if fetched, _ := d.refreshSessionPullRequests(time.Now()); fetched != 1 {
@@ -118,7 +119,7 @@ func TestSessionPullRequestRefreshKeepsWatchingRecoverableSessions(t *testing.T)
 	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
 	host := &fakePRHost{readiness: readinessObservation()}
 	serveHost(d, "github.com", host)
-	if !d.store.UpdateState("s1", string(protocol.SessionStateRecoverable)) {
+	if !d.store.SaveSessionRuntime("s1", store.SessionRuntimeState{State: protocol.SessionStateRecoverable, Since: time.Now(), Updated: time.Now()}) {
 		t.Fatal("could not put the session in the recoverable state")
 	}
 

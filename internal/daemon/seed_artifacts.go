@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	attngit "github.com/victorarias/attn/internal/git"
@@ -602,7 +603,7 @@ func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destin
 			_ = os.Remove(staged.path)
 			return nil, false, err
 		}
-		crashAt(crashAfterSeedArtifactStaged)
+		crashpoint.At(crashAfterSeedArtifactStaged)
 	}
 
 	if receipt.State == seedTransferComplete {
@@ -620,7 +621,7 @@ func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destin
 		if err := writeSeedTransferReceipt(root, receipt); err != nil {
 			return nil, found, err
 		}
-		crashAt(crashAfterSeedArtifactInstalled)
+		crashpoint.At(crashAfterSeedArtifactInstalled)
 	}
 	if receipt.State != seedTransferInstalled {
 		return nil, found, fmt.Errorf("transfer receipt %s has unknown state %q", id, receipt.State)

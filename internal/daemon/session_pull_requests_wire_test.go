@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -205,4 +206,32 @@ func (s *pullRequestStates) merge(numbers ...int) {
 	for _, number := range numbers {
 		s.merged[number] = true
 	}
+}
+
+func TestAPullRequestTheNextChiefForgetsStaysForgottenForThePreviousChiefAfterARestart(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		previous, next := w.bubbleClaude(t, app, "shop"), w.bubbleClaude(t, app, "cart")
+		setChiefOfStaff(app, previous.id, true)
+		recordPullRequest(t, cli, previous.id, shopPull(5))
+		if err := cli.WatchSessionPullRequest(protocol.SessionID(previous.id), shopPull(5), protocol.PullRequestWatchModeCodex, ""); err != nil {
+			t.Fatal(err)
+		}
+		setChiefOfStaff(app, next.id, true)
+		if err := cli.ForgetSessionPullRequest(protocol.SessionID(next.id), shopPull(5)); err != nil {
+			t.Fatal(err)
+		}
+		if got := pullNumbers(queriedSession(t, cli, previous.id)); len(got) != 0 {
+			t.Fatalf("after the chief's forget the previous chief links %v, want none", got)
+		}
+
+		w.stop()
+		w.start()
+		previous.cli = w.Client()
+		previous.reply("Back. <!-- attn:state=waiting_input -->")
+		w.advance(time.Second)
+		if got := pullNumbers(queriedSession(t, w.Client(), previous.id)); len(got) != 0 {
+			t.Fatalf("after the restart the previous chief links %v again, want the forgotten pull request gone", got)
+		}
+	})
 }

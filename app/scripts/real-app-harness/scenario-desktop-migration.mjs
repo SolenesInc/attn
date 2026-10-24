@@ -42,8 +42,33 @@ function migrationCheckSpec(directory) {
   };
 }
 
+// The columns 1792793838148574 moved from sessions to session_runtime, as a pre-move schema had them.
+const RUNTIME_COLUMNS = [
+  ['state', "TEXT NOT NULL DEFAULT 'idle'"], ['state_since', "TEXT NOT NULL DEFAULT ''"], ['state_updated_at', "TEXT NOT NULL DEFAULT ''"],
+  ['last_seen', "TEXT NOT NULL DEFAULT ''"], ['branch', 'TEXT'], ['is_worktree', 'INTEGER NOT NULL DEFAULT 0'], ['main_repo', 'TEXT'],
+  ['repository', "TEXT NOT NULL DEFAULT ''"], ['agent_metadata', "TEXT NOT NULL DEFAULT ''"], ['agent_driver_plugin_name', "TEXT NOT NULL DEFAULT ''"],
+  ['agent_driver_run_id', "TEXT NOT NULL DEFAULT ''"], ['agent_driver_report_seq', 'INTEGER NOT NULL DEFAULT 0'],
+  ['agent_driver_transcript_path', "TEXT NOT NULL DEFAULT ''"], ['turn_settled_at', "TEXT NOT NULL DEFAULT ''"],
+  ['turn_opened_at', "TEXT NOT NULL DEFAULT ''"], ['turn_snoozed_until', "TEXT NOT NULL DEFAULT ''"], ['turn_agent_at', "TEXT NOT NULL DEFAULT ''"],
+  ['turn_requested_at', "TEXT NOT NULL DEFAULT ''"], ['last_model_request_at', 'TEXT'], ['harness_title', "TEXT NOT NULL DEFAULT ''"],
+  ['session_cost_json', "TEXT NOT NULL DEFAULT ''"],
+];
+
+function unmoveSessionRuntimeSql() {
+  return [
+    'DROP VIEW sessions_with_runtime;',
+    ...RUNTIME_COLUMNS.map(([column, type]) => `ALTER TABLE sessions ADD COLUMN ${column} ${type};`),
+    `UPDATE sessions SET ${RUNTIME_COLUMNS.map(([column]) => `${column} = (SELECT r.${column} FROM session_runtime r WHERE r.session_id = sessions.id)`).join(', ')}
+      WHERE id IN (SELECT session_id FROM session_runtime);`,
+    'DROP TABLE session_runtime;',
+    'CREATE INDEX idx_sessions_repository ON sessions(repository);',
+    'DELETE FROM schema_migrations WHERE version = 1792793838148574;',
+  ];
+}
+
 function legacyWorkspacesSql(fixtureDir) {
   const statements = [
+    ...unmoveSessionRuntimeSql(),
     'DELETE FROM desktop_panes;',
     'DELETE FROM desktops;',
     'DELETE FROM profiles;',

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
@@ -581,7 +582,7 @@ func (d *Daemon) gardenReviewClassifyHandler(ctx context.Context, job *jobs.Job)
 		return nil, err
 	}
 
-	crashAt(crashAfterGardenAdvice)
+	crashpoint.At(crashAfterGardenAdvice)
 	capture, err := d.captureGardenReview(run.ProfileID)
 	if err != nil {
 		return nil, err

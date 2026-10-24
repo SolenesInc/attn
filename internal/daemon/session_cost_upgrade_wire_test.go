@@ -58,7 +58,7 @@ func TestUpgradeFromASingleCostCursorKeepsUnreadRootUsageAndBaselinesExistingChi
 
 func loadLegacySingleCursorCostFixture(t *testing.T, w *world, session, cursor string) {
 	t.Helper()
-	blob, err := json.Marshal(map[string]any{"initialized": true, "cursor": cursor})
+	blob, err := json.Marshal(map[string]any{"initialized": true, "sources": map[string]any{"_legacy": map[string]any{"initialized": true, "cursor": cursor}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,10 +72,7 @@ func loadLegacyCostFixture(t *testing.T, w *world, session, blob string) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", blob, session); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec("DELETE FROM schema_migrations WHERE version=1792435339090792"); err != nil {
+	if _, err := db.Exec("UPDATE session_runtime SET session_cost_json = ? WHERE session_id = ?", blob, session); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -96,7 +93,7 @@ func TestAnUpgradedCostObservationRemainsRevisableAcrossSourceAdmissionAndRestar
 		if err != nil {
 			t.Fatal(err)
 		}
-		legacy := fmt.Sprintf(`{"initialized":true,"cursor":%q,"ledger":{"agent|claude-opus-4-8":{"input_tokens":10,"output_tokens":2}},"observations":{"claude:pending":{"observation_id":"claude:pending","model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":2}}}}`, cursor)
+		legacy := fmt.Sprintf(`{"initialized":true,"sources":{"_legacy":{"initialized":true,"cursor":%q,"ledger":{"agent|claude-opus-4-8":{"input_tokens":10,"output_tokens":2}},"observations":{"claude:pending":{"observation_id":"claude:pending","model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":2}}}}}}`, cursor)
 		w.stop()
 		loadLegacyCostFixture(t, w, agent.id, legacy)
 		appendLegacyCostUsage(t, agent.transcript.Path, "pending", "claude-opus-4-8", 20, 5)

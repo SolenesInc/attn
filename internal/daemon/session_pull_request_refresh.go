@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/github"
@@ -207,7 +208,7 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 			continue
 		}
 		if status.State == sessionPullRequestMerged {
-			crashAt(crashAfterMergePersisted)
+			crashpoint.At(crashAfterMergePersisted)
 		}
 		changed++
 		if err := d.store.TouchSessionPullRequestActivity(group.prID, now); err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 var inboxRingText = prompts.RenderText("session", "inbox-notification", nil)
@@ -244,10 +245,10 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		receipt.Detail = agentMessageQueuedDetail(errInboxNoPromptReader)
 		return receipt, nil
 	}
-	input := maintenanceSessionInput("inbox-ring", uuid.NewString(), holder.ID, inboxRingText, sessionInputWhenPromptReady)
-	input.bypassInitialGate = true
-	placement := d.sessionInputs().try(context.Background(), input)
-	if placement.stage == sessionInputPlaced {
+	input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), inboxRingText, sessionmonitor.WhenPromptReady)
+	input.BypassInitialGate = true
+	placement := d.monitorEntry(holder.ID).Place(context.Background(), input)
+	if placement.Stage == sessionmonitor.Placed {
 		now := time.Now()
 		if err := d.store.RingInbox(a, finishingWake, now); err != nil {
 			return receipt, err
@@ -261,8 +262,8 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		receipt.Detail = "notified " + sessionDisplayName(holder)
 		return receipt, nil
 	}
-	receipt.Detail = agentMessageQueuedDetail(placement.err)
-	delay, retry := sessionInputRetryDelay(placement.err)
+	receipt.Detail = agentMessageQueuedDetail(placement.Err)
+	delay, retry := sessionmonitor.RetryDelay(placement.Err)
 	if retry {
 		d.armInboxLocked(a, state, delay)
 	}
@@ -303,7 +304,7 @@ func (d *Daemon) recoverInbox() {
 	}
 }
 func (d *Daemon) kickSessionInbox(sessionID protocol.SessionID, state string) {
-	if sessionInputPhaseAllows(sessionInputWhenPromptReady, protocol.SessionState(state)) {
+	if sessionmonitor.PhaseAllows(sessionmonitor.WhenPromptReady, protocol.SessionState(state)) {
 		d.kickSessionInboxAddresses(sessionID)
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// sessionRows caches reads of the sessions table until the next write to it. Every write holds
+// sessionRows caches reads of the sessions and session_runtime tables until the next write to either. Every write holds
 // s.mu exclusively and cached reads hold it shared, so a row read under a generation stays current.
 type sessionRows struct {
 	mu      sync.Mutex
