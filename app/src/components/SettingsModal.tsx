@@ -282,6 +282,9 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
     case 'analytics':
       return state.analyticsEnabled ? (
         <AnalyticsSettings
+          sharing={state.settings['analytics.sharing_enabled'] === 'true'}
+          sendVents={state.settings['analytics.share_vents'] === 'true'}
+          onSetSetting={state.onSetSetting}
           onDisableRecording={() => {
             state.onSetSetting('analytics.enabled', 'false');
             void state.selectSection('experimental');

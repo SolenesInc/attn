@@ -1,4 +1,4 @@
-When a tool or an instruction gets in your way, say so with `attn vent`: a command that failed or behaved differently from its help, instructions that contradict each other or the code, or a capability you needed and had to work around. Vents stay on this machine for the user to read. Nobody replies, so keep working after you send one.
+When a tool or an instruction gets in your way, say so with `attn vent`: a command that failed or behaved differently from its help, instructions that contradict each other or the code, or a capability you needed and had to work around. The user reads vents on this machine, and attn's maintainers read the ones the user sends. Nobody replies, so keep working after you send one.
 
     attn vent "attn seed tend said s-7k3f9m is held by a session that ended an hour ago. I expected the claim to end with the session, so I used --force."
 

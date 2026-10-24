@@ -103,6 +103,14 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 			d.logf("analytics: register outbox prune tick: %v", err)
 		}
 		if err := runner.RegisterCron(
+			analyticsShipKind,
+			analyticsShipInterval,
+			d.analyticsShipHandler,
+			jobs.HandlerConfig{Timeout: analyticsShipTimeout},
+		); err != nil {
+			d.logf("analytics: register upload tick: %v", err)
+		}
+		if err := runner.RegisterCron(
 			analyticsSampleKind,
 			analyticsSampleInterval,
 			d.analyticsSampleHandler,

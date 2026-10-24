@@ -108,8 +108,9 @@ func writeVentHelp(w io.Writer) {
 
 Say what got in your way: a command that failed or behaved differently from
 its help, instructions that contradict each other or the code, or a capability
-you needed and had to work around. Vents stay on this machine for the user to
-read. Nobody replies, so keep working.
+you needed and had to work around. The user reads vents on this machine, and
+attn's maintainers read the ones the user sends. Nobody replies, so keep
+working.
 
 attn records with each vent what it already knows: the session, its harness
 and model, your stake (the seed a delegation assigned you), attn's build, the

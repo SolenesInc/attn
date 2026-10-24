@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -46,19 +47,80 @@ func (s *Store) AppendAnalyticsStreamRecord(record analytics.Record) error {
 		return err
 	}
 	defer tx.Rollback()
-	if err := tx.QueryRow("INSERT INTO analytics_sequences (stream, seq) VALUES (?, 1) ON CONFLICT(stream) DO UPDATE SET seq = seq + 1 RETURNING seq",
-		record.Stream).Scan(&record.Seq); err != nil {
-		return err
-	}
-	encoded, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec("INSERT INTO analytics_outbox (stream, seq, at, record) VALUES (?, ?, ?, ?)",
-		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded)); err != nil {
+	if _, err := appendStreamRecord(tx, record); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func appendStreamRecord(tx *sql.Tx, record analytics.Record) (int64, error) {
+	if err := tx.QueryRow("INSERT INTO analytics_sequences (stream, seq) VALUES (?, 1) ON CONFLICT(stream) DO UPDATE SET seq = seq + 1 RETURNING seq",
+		record.Stream).Scan(&record.Seq); err != nil {
+		return 0, err
+	}
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec("INSERT INTO analytics_outbox (stream, seq, at, record) VALUES (?, ?, ?, ?)",
+		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded)); err != nil {
+		return 0, err
+	}
+	return record.Seq, nil
+}
+
+func (s *Store) UnsentAnalyticsRecords(limit int) ([]AnalyticsRow, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, nil
+	}
+	rows, err := s.db.Query("SELECT id, record FROM analytics_outbox WHERE sent_at IS NULL ORDER BY id LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var unsent []AnalyticsRow
+	for rows.Next() {
+		var row AnalyticsRow
+		if err := rows.Scan(&row.ID, &row.Record); err != nil {
+			return nil, err
+		}
+		unsent = append(unsent, row)
+	}
+	return unsent, rows.Err()
+}
+
+func (s *Store) MarkAnalyticsSent(ids []int64, at time.Time) ([]Vent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return nil, nil
+	}
+	sentAt := at.UTC().Format(analyticsTimeLayout)
+	idList, err := json.Marshal(ids)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`UPDATE vents SET sent_at = ? WHERE sent_at IS NULL AND outbox_seq IN (
+		SELECT seq FROM analytics_outbox WHERE stream = ? AND sent_at IS NULL AND id IN (SELECT value FROM json_each(?))) RETURNING `+ventColumns,
+		sentAt, analytics.StreamVent, string(idList))
+	if err != nil {
+		return nil, err
+	}
+	sent, err := scanVents(rows)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec("UPDATE analytics_outbox SET sent_at = ? WHERE sent_at IS NULL AND id IN (SELECT value FROM json_each(?))", sentAt, string(idList)); err != nil {
+		return nil, err
+	}
+	return sent, tx.Commit()
 }
 
 func (s *Store) AnalyticsRecords(stream analytics.Stream, beforeID int64, limit int) (AnalyticsPage, error) {
@@ -101,13 +163,14 @@ func (s *Store) AnalyticsRecords(stream analytics.Stream, beforeID int64, limit 
 	return page, nil
 }
 
-func (s *Store) PruneAnalyticsOutbox(before time.Time) (int64, error) {
+func (s *Store) PruneAnalyticsOutbox(before, unsentBefore time.Time) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return 0, nil
 	}
-	result, err := s.db.Exec("DELETE FROM analytics_outbox WHERE at < ?", before.UTC().Format(analyticsTimeLayout))
+	result, err := s.db.Exec("DELETE FROM analytics_outbox WHERE at < ? AND (sent_at IS NOT NULL OR at < ?)",
+		before.UTC().Format(analyticsTimeLayout), unsentBefore.UTC().Format(analyticsTimeLayout))
 	if err != nil {
 		return 0, err
 	}
@@ -116,6 +179,7 @@ func (s *Store) PruneAnalyticsOutbox(before time.Time) (int64, error) {
 
 type AnalyticsStatus struct {
 	Records, Bytes, Waiting int64
+	LastSentAt              time.Time
 }
 
 func (s *Store) AnalyticsStatus() (AnalyticsStatus, error) {
@@ -125,8 +189,10 @@ func (s *Store) AnalyticsStatus() (AnalyticsStatus, error) {
 	if s.db == nil {
 		return status, nil
 	}
-	err := s.db.QueryRow("SELECT count(*), coalesce(sum(length(record)), 0), count(*) - count(sent_at) FROM analytics_outbox").
-		Scan(&status.Records, &status.Bytes, &status.Waiting)
+	var lastSent sql.NullString
+	err := s.db.QueryRow("SELECT count(*), coalesce(sum(length(record)), 0), count(*) - count(sent_at), max(sent_at) FROM analytics_outbox").
+		Scan(&status.Records, &status.Bytes, &status.Waiting, &lastSent)
+	status.LastSentAt = parseStoreTime(lastSent.String)
 	return status, err
 }
 

@@ -132,6 +132,8 @@ type Daemon struct {
 	harnessWSListenerFD        string
 	wsHub                      *wsHub
 	startedAt                  time.Time
+	analyticsUpload            analyticsUpload
+	appIdentity                atomic.Pointer[appIdentity]
 	lastPresentAt              time.Time
 	presenceMu                 sync.RWMutex
 	crewLifecycleState         *crewLifecycleMemo

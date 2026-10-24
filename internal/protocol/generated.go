@@ -2253,6 +2253,12 @@ type ClientEvictionNoticeMessage struct {
 }
 
 type ClientHelloMessage struct {
+	// AppChannel corresponds to the JSON schema field "app_channel".
+	AppChannel *string `json:"app_channel,omitempty,omitzero"`
+
+	// AppVersion corresponds to the JSON schema field "app_version".
+	AppVersion *string `json:"app_version,omitempty,omitzero"`
+
 	// BrowserHostToken corresponds to the JSON schema field "browser_host_token".
 	BrowserHostToken *string `json:"browser_host_token,omitempty,omitzero"`
 
@@ -4334,6 +4340,28 @@ type FilesEditedMessage struct {
 	Paths []string `json:"paths"`
 }
 
+type ForgetAnalyticsInstallMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type ForgetAnalyticsInstallResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type FsChangedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -4924,6 +4952,12 @@ type GetAnalyticsStatusResultMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// LastRefusal corresponds to the JSON schema field "last_refusal".
+	LastRefusal *string `json:"last_refusal,omitempty,omitzero"`
+
+	// LastSentAt corresponds to the JSON schema field "last_sent_at".
+	LastSentAt *string `json:"last_sent_at,omitempty,omitzero"`
 
 	// Records corresponds to the JSON schema field "records".
 	Records int `json:"records"`
@@ -11121,6 +11155,37 @@ type SetVentDismissedResultMessage struct {
 	VentID string `json:"vent_id"`
 }
 
+type SetVentSendMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Send corresponds to the JSON schema field "send".
+	Send bool `json:"send"`
+
+	// VentID corresponds to the JSON schema field "vent_id".
+	VentID string `json:"vent_id"`
+}
+
+type SetVentSendResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// VentID corresponds to the JSON schema field "vent_id".
+	VentID string `json:"vent_id"`
+}
+
 type SettingEntry struct {
 	// Description corresponds to the JSON schema field "description".
 	Description string `json:"description"`
@@ -12192,6 +12257,9 @@ type Vent struct {
 	// PlantedSeedID corresponds to the JSON schema field "planted_seed_id".
 	PlantedSeedID *string `json:"planted_seed_id,omitempty,omitzero"`
 
+	// Send corresponds to the JSON schema field "send".
+	Send *VentSend `json:"send,omitempty,omitzero"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
 
@@ -12227,6 +12295,11 @@ type VentContext struct {
 	// Transcript corresponds to the JSON schema field "transcript".
 	Transcript *VentTranscript `json:"transcript,omitempty,omitzero"`
 }
+
+type VentSend string
+
+const VentSendQueued VentSend = "queued"
+const VentSendSent VentSend = "sent"
 
 type VentTranscript struct {
 	// Bytes corresponds to the JSON schema field "bytes".

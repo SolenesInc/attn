@@ -1,5 +1,7 @@
 import type {
   ClearAnalyticsRecordsResultMessage,
+  ForgetAnalyticsInstallResultMessage,
+  SetVentSendResultMessage,
   GetAnalyticsStatusResultMessage,
   ListAnalyticsRecordsResultMessage,
   PlantVentSeedResultMessage,
@@ -25,6 +27,8 @@ export interface AnalyticsStatus {
   records: number;
   bytes: number;
   waiting: number;
+  lastSentAt?: string;
+  lastRefusal?: string;
 }
 
 export function handleAnalyticsDaemonEvent(event: { event?: string }, pending: PendingRequests): boolean {
@@ -50,7 +54,7 @@ export function handleAnalyticsDaemonEvent(event: { event?: string }, pending: P
         pending,
         'get_analytics_status',
         event as GetAnalyticsStatusResultMessage,
-        ({ records, bytes, waiting }): AnalyticsStatus => ({ records, bytes, waiting }),
+        ({ records, bytes, waiting, last_sent_at, last_refusal }): AnalyticsStatus => ({ records, bytes, waiting, lastSentAt: last_sent_at, lastRefusal: last_refusal }),
         'Could not read the analytics status',
       );
       return true;
@@ -62,6 +66,12 @@ export function handleAnalyticsDaemonEvent(event: { event?: string }, pending: P
         ({ records, vents }): AnalyticsCleared => ({ records, vents }),
         'Could not clear the analytics records',
       );
+      return true;
+    case 'forget_analytics_install_result':
+      settlePendingRequest(pending, 'forget_analytics_install', event as ForgetAnalyticsInstallResultMessage, () => true, 'Could not forget this install');
+      return true;
+    case 'set_vent_send_result':
+      settlePendingRequest(pending, 'set_vent_send', event as SetVentSendResultMessage, () => true, 'Could not change where the vent goes');
       return true;
     case 'list_analytics_records_result':
       settlePendingRequest(

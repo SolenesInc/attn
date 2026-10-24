@@ -245,6 +245,7 @@ func ScopeTestEnvironment(dataDir string) {
 	os.Unsetenv("ATTN_CLIENT_TOKEN")
 	os.Setenv("ATTN_AUTHORIZED_KEYS_PATH", filepath.Join(dataDir, "authorized_keys"))
 	os.Unsetenv("SSH_AUTH_SOCK")
+	os.Setenv(AnalyticsIngestURLEnv, unreachableAnalyticsIngest)
 	unsetInheritedGitConfig()
 }
 
@@ -269,6 +270,19 @@ func defaultAttnDir(instance string) string {
 		return base + "-" + instance
 	}
 	return base
+}
+
+const (
+	AnalyticsIngestURLEnv      = "ATTN_ANALYTICS_INGEST_URL"
+	defaultAnalyticsIngestURL  = "https://attn-telemetry.caketroll.cloud"
+	unreachableAnalyticsIngest = "http://127.0.0.1:1"
+)
+
+func AnalyticsIngestURL() string {
+	if url := strings.TrimSpace(os.Getenv(AnalyticsIngestURLEnv)); url != "" {
+		return strings.TrimRight(url, "/")
+	}
+	return defaultAnalyticsIngestURL
 }
 
 func DataDir() string {

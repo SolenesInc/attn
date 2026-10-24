@@ -1,0 +1,2 @@
+ALTER TABLE vents ADD COLUMN outbox_seq INTEGER;
+ALTER TABLE vents ADD COLUMN sent_at TEXT;

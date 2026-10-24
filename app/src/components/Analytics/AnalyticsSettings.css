@@ -422,3 +422,20 @@
 .analytics-inspector:empty {
   display: none;
 }
+
+.analytics-where-dot.sent {
+  background: #60c287;
+}
+
+.analytics-move {
+  min-height: 28px;
+  margin-left: auto;
+}
+
+.bus-stat-value.bad {
+  color: #ff746c;
+}
+
+.analytics-refusal {
+  margin: -4px 0 0;
+}

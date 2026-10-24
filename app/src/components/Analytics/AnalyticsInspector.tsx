@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Seed, Vent } from '../../types/generated';
+import { VentSend, type Seed, type Vent } from '../../types/generated';
 import { harnessLabel } from '../harnessLabel';
 import { buildLabel, longAgo, settingName, when } from './analyticsFormat';
 import type { RecordItem } from './analyticsItems';
@@ -35,9 +35,10 @@ function ventStatus(vent: Vent, slug: (id: string) => string): ReactNode {
   return null;
 }
 
-export function VentDetail({ vent, live, seeds, expanded, onExpand, onAction }: {
+export function VentDetail({ vent, live, sharing, seeds, expanded, onExpand, onAction }: {
   vent: Vent;
   live: boolean;
+  sharing: boolean;
   seeds: ReadonlyMap<string, Seed>;
   expanded: boolean;
   onExpand: () => void;
@@ -56,12 +57,26 @@ export function VentDetail({ vent, live, seeds, expanded, onExpand, onAction }: 
       {long && <button type="button" className="analytics-more" onClick={onExpand}>Show all {vent.text.length.toLocaleString()} characters</button>}
       <VentContext vent={vent} slug={slug} />
       {!withdrawn && <VentActions vent={vent} live={live} onAction={onAction} />}
-      <div className="analytics-where">
-        <span className="analytics-where-dot" />
-        <b>Kept on this machine</b>
-        {withdrawn && <span className="dim">· withdrawn</span>}
-      </div>
+      <VentWhere vent={vent} sharing={sharing} onAction={onAction} />
     </>
+  );
+}
+
+function VentWhere({ vent, sharing, onAction }: { vent: Vent; sharing: boolean; onAction: (key: string) => void }) {
+  const withdrawn = Boolean(vent.withdrawn_at);
+  const sent = vent.send === VentSend.Sent;
+  const queued = !withdrawn && vent.send === VentSend.Queued;
+  const sending = queued;
+  const label = sent ? "Sent to attn's maintainers" : !queued ? 'Kept on this machine' : sharing ? 'Sending with the next batch' : 'Sending once sharing is on';
+  const note = withdrawn ? 'withdrawn' : !sharing && !sent && !queued ? 'sharing is off' : '';
+  const movable = !withdrawn && !sent && (sharing || queued);
+  return (
+    <div className="analytics-where">
+      <span className={`analytics-where-dot${sent || sending ? ' sent' : ''}`} />
+      <b>{label}</b>
+      {note && <span className="dim">· {note}</span>}
+      {movable && <button type="button" className="settings-action analytics-move" onClick={() => onAction('x')}><kbd>x</kbd> {vent.send ? 'Keep here' : 'Send'}</button>}
+    </div>
   );
 }
 

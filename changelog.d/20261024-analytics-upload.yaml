@@ -1,0 +1,9 @@
+kind: added
+area: settings
+change: >
+  Settings › Analytics can share the local record with attn's maintainers.
+  With sharing on, attn uploads the outbox every 5 minutes and shows when it
+  last sent, how many records wait, and any refusal with the limit it hit.
+  Send vents sends each new vent with its text, and x sends or keeps one vent.
+  Turning sharing off offers deleting the server copy, and Forget this install
+  deletes it and starts a new install id. Both are off by default.

@@ -90,7 +90,12 @@ func createAnalyticsSecret(dataRoot, path string) error {
 }
 
 func (d *Daemon) analyticsPruneHandler(_ context.Context, _ *jobs.Job) (any, error) {
-	pruned, err := d.store.PruneAnalyticsOutbox(time.Now().Add(-analyticsRetention))
+	now := time.Now()
+	before, unsentBefore := now.Add(-analyticsRetention), now.Add(-analyticsRetention)
+	if d.analyticsSharing() {
+		unsentBefore = now.Add(-analyticsUnsentRetention)
+	}
+	pruned, err := d.store.PruneAnalyticsOutbox(before, unsentBefore)
 	if err != nil {
 		return nil, fmt.Errorf("pruning the analytics outbox: %w", err)
 	}
@@ -123,6 +128,12 @@ func (d *Daemon) sendAnalyticsStatusWSResult(client *wsClient, msg *protocol.Get
 	} else {
 		result.Success = true
 		result.Records, result.Bytes, result.Waiting = int(status.Records), int(status.Bytes), int(status.Waiting)
+		if !status.LastSentAt.IsZero() {
+			result.LastSentAt = protocol.Ptr(status.LastSentAt.UTC().Format(time.RFC3339Nano))
+		}
+		if refusal := d.analyticsUpload.lastRefusal(); refusal != "" {
+			result.LastRefusal = &refusal
+		}
 	}
 	d.sendToClient(client, result)
 }

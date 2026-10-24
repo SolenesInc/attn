@@ -52,6 +52,9 @@ session                 attn's record of one conversation in one profile; like
 │                       sessions can share one
 ├─ stake (at most 1)    the seed assigned to the session by its delegation;
 │                       it tends it and reports there; like an assignment
+├─ vent (0..n)          what got in the agent's way, in their words; like a
+│                       bug report the agent files; it stays on this machine
+│                       unless the user sends it
 └─ monitor (1 while live)  watches the session's agent on the machine it
                            runs on, and keeps its live state: state, turn,
                            cost, PR links
@@ -171,6 +174,9 @@ handover                a new session takes over a seed and its claim
 instance                a daemon, an app and a data folder under one name;
                         like a separate install. Production has no instance
                         name.
+└─ outbox (1)           the usage records attn keeps on this machine,
+                        redacted; sharing uploads only what it holds; like a
+                        mail outbox
 ```
 
 ```text

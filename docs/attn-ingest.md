@@ -4,7 +4,8 @@
 analytics an install shares and stores them in ClickHouse. An install
 registers once, keeps the token it gets back, and sends its outbox as batches.
 A batch is an `analytics.Batch` of `analytics.Record`s (`internal/analytics`);
-the records are the ones the daemon writes to its outbox.
+the records are the ones the daemon writes to its outbox, and
+[Telemetry](telemetry.md) lists what they hold.
 
 ## API
 

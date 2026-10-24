@@ -55,9 +55,88 @@ func (d *Daemon) handleRecordVent(conn net.Conn, msg *protocol.RecordVentMessage
 		d.sendError(conn, err.Error())
 		return
 	}
+	if d.analyticsSharing() && parseBooleanSetting(d.daemonSetting(SettingAnalyticsShareVents)) {
+		if err := d.queueVentRecord(vent); err != nil {
+			d.logf("vent %s: queueing its record: %v", vent.ID, err)
+		} else {
+			vent.Queued = true
+		}
+	}
 	wire := vent.wire()
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, RecordVentResult: &wire})
 	d.publishFact(FactVentChanged, vent.ID, nil)
+}
+
+func (d *Daemon) queueVentRecord(vent storedVent) error {
+	record, err := vent.record()
+	if err != nil {
+		return err
+	}
+	if line, err := json.Marshal(record); err != nil {
+		return err
+	} else if len(line) > analytics.RecordLineLimit {
+		return fmt.Errorf("vent %s cannot be sent: attn-ingest takes records of up to %d bytes, and this vent's record is %d", vent.ID, analytics.RecordLineLimit, len(line))
+	}
+	switch queued, err := d.store.QueueVentRecord(vent.ID, record); {
+	case errors.Is(err, store.ErrVentSent):
+		return fmt.Errorf("vent %s was already sent", vent.ID)
+	case err != nil:
+		return err
+	case !queued && !vent.WithdrawnAt.IsZero():
+		return fmt.Errorf("vent %s was withdrawn by its agent, so there is nothing to send", vent.ID)
+	}
+	return nil
+}
+
+func (d *Daemon) unqueueVentRecord(id string) (bool, error) {
+	d.analyticsUpload.run.Lock()
+	defer d.analyticsUpload.run.Unlock()
+	unqueued, err := d.store.UnqueueVentRecord(id)
+	if errors.Is(err, store.ErrVentSent) {
+		return false, fmt.Errorf("vent %s was already sent to attn's maintainers, so it cannot be kept here", id)
+	}
+	return unqueued, err
+}
+
+func (d *Daemon) handleSetVentSend(client *wsClient, msg *protocol.SetVentSendMessage) {
+	result := protocol.SetVentSendResultMessage{Event: protocol.EventSetVentSendResult, RequestID: msg.RequestID, VentID: msg.VentID}
+	if err := d.setVentSend(strings.TrimSpace(msg.VentID), msg.Send, client.selectedProfile()); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) setVentSend(id string, send bool, profileID string) error {
+	vent, err := d.profileVent(id, profileID)
+	if err != nil {
+		return err
+	}
+	stored := storedVent{vent}
+	if send {
+		if vent.Queued {
+			return nil
+		}
+		if err := d.queueVentRecord(stored); err != nil {
+			return err
+		}
+	} else if unqueued, err := d.unqueueVentRecord(id); err != nil || !unqueued {
+		return err
+	}
+	d.publishFact(FactVentChanged, id, nil)
+	return nil
+}
+
+func (d *Daemon) announceVentSends(vents []store.Vent) {
+	if len(vents) == 0 {
+		return
+	}
+	d.coalesceSnapshots(func() {
+		for _, vent := range vents {
+			d.publishFact(FactVentChanged, vent.ID, nil)
+		}
+	})
 }
 
 func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error) {
@@ -105,7 +184,7 @@ func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 	context := protocol.VentContext{
 		SessionLabel: session.Label,
 		Harness:      session.Agent,
-		Build:        analytics.CurrentBuild(),
+		Build:        d.analyticsBuild(),
 		Experimental: experimental,
 	}
 	if context.Experimental == nil {
@@ -147,7 +226,9 @@ func (d *Daemon) leadingAgentModel(session *protocol.Session) string {
 
 func (d *Daemon) handleWithdrawVent(conn net.Conn, msg *protocol.WithdrawVentMessage) {
 	sessionID, id := protocol.TrimID(msg.SessionID), strings.TrimSpace(msg.VentID)
+	d.analyticsUpload.run.Lock()
 	withdrawn, err := d.store.WithdrawVent(sessionID, id, time.Now())
+	d.analyticsUpload.run.Unlock()
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -315,6 +396,29 @@ func (d *Daemon) ventsPruneHandler(_ context.Context, _ *jobs.Job) (any, error) 
 
 type storedVent struct{ store.Vent }
 
+type ventRecordProps struct {
+	Text           string          `json:"text"`
+	Harness        string          `json:"harness"`
+	HarnessVersion string          `json:"harness_version,omitempty"`
+	Model          string          `json:"model,omitempty"`
+	Turn           string          `json:"turn"`
+	Experimental   []string        `json:"experimental"`
+	Build          analytics.Build `json:"build"`
+}
+
+func (v storedVent) record() (analytics.Record, error) {
+	props, err := json.Marshal(ventRecordProps{
+		Text:           v.Text,
+		Harness:        v.Context.Harness,
+		HarnessVersion: protocol.Deref(v.Context.HarnessVersion),
+		Model:          protocol.Deref(v.Context.Model),
+		Turn:           v.Turn,
+		Experimental:   v.Context.Experimental,
+		Build:          v.Context.Build,
+	})
+	return analytics.Record{Stream: analytics.StreamVent, Name: "vent", At: v.CreatedAt.UTC(), Props: props}, err
+}
+
 const ventSeedTitleRunes = 100
 
 func (v storedVent) seedTitle() string {
@@ -375,6 +479,12 @@ func (v storedVent) wire() protocol.Vent {
 	}
 	if v.PlantedSeedID != "" {
 		wire.PlantedSeedID = protocol.Ptr(v.PlantedSeedID)
+	}
+	switch {
+	case !v.SentAt.IsZero():
+		wire.Send = protocol.Ptr(protocol.VentSendSent)
+	case v.Queued:
+		wire.Send = protocol.Ptr(protocol.VentSendQueued)
 	}
 	return wire
 }
