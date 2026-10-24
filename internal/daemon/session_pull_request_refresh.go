@@ -219,7 +219,12 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 	d.broadcastSessionPullRequestLimits(limitedResources)
 	if len(changedSessions) > 0 {
 		d.coalesceSnapshots(func() {
+			published := make(map[string]bool, len(changedSessions))
 			for _, sessionID := range changedSessions {
+				if published[sessionID] {
+					continue
+				}
+				published[sessionID] = true
 				d.publishFact(FactSessionPullRequestChanged, sessionID, nil)
 			}
 		})
@@ -497,7 +502,7 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			watch, "outage:"+now.UTC().Format(time.RFC3339Nano), store.PullRequestWatchOutageCoalesceKey(watch.PRID),
 			"monitoring is delayed", []string{fetchErr.Error()},
 		)
-		delivery, err := d.store.RecordPullRequestWatchFailure(
+		delivery, projectionChanged, err := d.store.RecordPullRequestWatchFailure(
 			watch.To, watch.SessionID, watch.PRID, watch.CreatedAt, watch.Mode, watch.Reviewer,
 			fetchErr.Error(), item, now,
 		)
@@ -510,6 +515,9 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 		}
 		if delivery != nil {
 			d.deliverPullRequestMailbox(*delivery)
+		}
+		if !projectionChanged {
+			continue
 		}
 		changed = append(changed, string(watch.SessionID))
 		if holder := d.inboxHolder(watch.To); holder != nil && holder.ID != watch.SessionID {

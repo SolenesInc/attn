@@ -59,8 +59,10 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 	}
 	body, _ := io.ReadAll(r.Body)
 	var answer any
+	pullPath, isPull := strings.CutPrefix(r.URL.Path, "/repos/acme/shop/pulls/")
+	number, reviewsPath := strings.CutSuffix(pullPath, "/reviews")
 	switch {
-	case r.URL.Path == "/repos/acme/shop/pulls/71":
+	case isPull && !reviewsPath:
 		gh.snapshots++
 		if !gh.limitedUntil.IsZero() {
 			rw.Header().Set("X-RateLimit-Remaining", "0")
@@ -77,11 +79,12 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 		if gh.merged {
 			state = "closed"
 		}
+		pull, _ := strconv.Atoi(number)
 		answer = map[string]any{
-			"number": 71, "html_url": shopPull(71), "title": gh.title, "state": state, "merged": gh.merged,
+			"number": pull, "html_url": shopPull(pull), "title": gh.title, "state": state, "merged": gh.merged,
 			"mergeable_state": gh.mergeable, "head": map[string]any{"sha": "sha-1", "ref": "status-refresh"},
 		}
-	case r.URL.Path == "/repos/acme/shop/pulls/71/reviews":
+	case isPull:
 		if gh.reviewsFail {
 			rw.WriteHeader(http.StatusInternalServerError)
 			return
@@ -384,6 +387,49 @@ func TestAnUnchangedWatchedPullRequestSendsTheAppNothing(t *testing.T) {
 		}
 		if again := len(sessionUpdatesOf(app, "s1")); again != shown {
 			t.Errorf("three unchanged polls of a watched pull request sent the app %d session updates", again-shown)
+		}
+	})
+}
+
+func TestARepeatedWatchOutageTellsTheAppOnce(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		session := w.bubbleClaude(t, app, "shop").id
+		watchPullRequestOn(t, cli, session, protocol.PullRequestWatchModeGreen)
+		w.advance(protocol.HeatHotInterval)
+		if pr := onlyPullRequest(t, cli, session); protocol.Deref(pr.WatchHealth) != "delayed" {
+			t.Fatalf("after a failed poll the watch = %+v, want it delayed", pr)
+		}
+
+		facts := producedBy(busStatus(t, app), "session.pull_request.changed")
+		w.advance(3 * protocol.HeatHotInterval)
+		if again := producedBy(busStatus(t, app), "session.pull_request.changed"); again != facts {
+			t.Errorf("three more failed polls of the same outage published %d session.pull_request.changed facts, want none", again-facts)
+		}
+	})
+}
+
+func TestTwoPullRequestsChangingInOnePassTellTheAppOnce(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		session := w.bubbleClaude(t, app, "shop").id
+		recordPullRequest(t, cli, session, shopPull(71))
+		recordPullRequest(t, cli, session, shopPull(72))
+		w.advance(protocol.HeatHotInterval)
+
+		facts := producedBy(busStatus(t, app), "session.pull_request.changed")
+		gh.set(func(gh *refreshedPullRequest) { gh.mergeable = "dirty" })
+		w.advance(protocol.HeatHotInterval)
+		for _, pr := range queriedSession(t, cli, session).PullRequests {
+			if protocol.Deref(pr.CIStatus) != "failure" {
+				t.Fatalf("pull request #%d shows ci %q, want failure", pr.Number, protocol.Deref(pr.CIStatus))
+			}
+		}
+		if again := producedBy(busStatus(t, app), "session.pull_request.changed"); again != facts+1 {
+			t.Errorf("two pull requests turning red in one pass published %d session.pull_request.changed facts, want one", again-facts)
 		}
 	})
 }

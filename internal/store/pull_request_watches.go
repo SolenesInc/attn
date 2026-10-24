@@ -331,44 +331,48 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]I
 	return deliveries, projectionChanged, nil
 }
 
-func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID protocol.SessionID, prID string, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, error) {
+func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID protocol.SessionID, prID string, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer tx.Rollback()
 	var currentMode, currentReviewer, currentCreatedAt string
 	var active bool
 	if err := tx.QueryRow(`SELECT mode, reviewer, created_at, outage_active FROM pull_request_watches WHERE address=? AND pr_id=?`, to.String(), prID).Scan(&currentMode, &currentReviewer, &currentCreatedAt, &active); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if currentMode != string(mode) || !strings.EqualFold(currentReviewer, reviewer) || currentCreatedAt != createdAt {
-		return nil, sql.ErrNoRows
+		return nil, false, sql.ErrNoRows
+	}
+	var previousHealth, previousError string
+	if err := tx.QueryRow(`SELECT watch_health, watch_error FROM session_pull_requests WHERE session_id=? AND pr_id=?`, sessionID, prID).Scan(&previousHealth, &previousError); err != nil {
+		return nil, false, err
 	}
 	stamp := at.UTC().Format(sortableTimeFormat)
 	if _, err := tx.Exec(`UPDATE pull_request_watches SET last_error=?, outage_active=1 WHERE address=? AND pr_id=? AND (last_error IS NOT ? OR outage_active != 1)`, message, to.String(), prID, message); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if _, err := tx.Exec(`
 		UPDATE session_pull_requests SET watch_health='delayed', watch_error=?, watch_last_checked_at=?, status_checked_at=?
 		WHERE session_id=? AND pr_id=?
 	`, message, stamp, stamp, sessionID, prID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var delivery *InboxDelivery
 	if !active {
 		if err := putInbox(tx, outage, at); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		delivery = &InboxDelivery{Item: InboxItem{Item: outage}}
 
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return delivery, nil
+	return delivery, previousHealth != "delayed" || previousError != message, nil
 }
 
 type pullRequestWatchScanner interface{ Scan(...any) error }
