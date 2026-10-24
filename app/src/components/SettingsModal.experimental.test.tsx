@@ -58,3 +58,19 @@ describe('Experimental settings for the one-screen launcher', () => {
     ]);
   });
 });
+
+describe('Experimental settings for usage analytics', () => {
+  it('starts off and saves the setting in both directions', async () => {
+    const daemon = await openSection('experimental');
+    const analytics = () => screen.getByRole('switch', { name: 'Usage analytics' });
+    expect(analytics()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(analytics()));
+    expect(analytics()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(analytics()));
+    expect(analytics()).toHaveAttribute('aria-checked', 'false');
+    expect(savedSettings(daemon)).toEqual([
+      ['analytics.enabled', 'true'],
+      ['analytics.enabled', 'false'],
+    ]);
+  });
+});

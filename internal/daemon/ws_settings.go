@@ -70,6 +70,9 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 	if isSessionCostPriceSetting(msg.Key) {
 		d.publishSessionCostReprices()
 	}
+	if msg.Key == SettingAnalyticsEnabled {
+		d.configureAnalytics()
+	}
 	if msg.Key == SettingTailscaleEnabled {
 		d.ensureTailscaleServeFromSettings()
 	}
@@ -239,6 +242,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[SettingAutoSettleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoSettleEnabled]))
 	settings[SettingCalloutsEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingCalloutsEnabled]))
 	settings[SettingAsksEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAsksEnabled]))
+	settings[SettingAnalyticsEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAnalyticsEnabled]))
 	settings[SettingAutoSettleArmSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleArmSeconds], defaultAutoSettleArmSeconds) / time.Second))
 	settings[SettingAutoSettleCountdownSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleCountdownSeconds], defaultAutoSettleCountdownSeconds) / time.Second))
 	settings[SettingOpenSentFilesEnabled] = strconv.FormatBool(d.openSentFilesEnabled())

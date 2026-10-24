@@ -243,6 +243,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           quickCaptureEnabled={state.quickCaptureEnabled}
           asksEnabled={state.asksEnabled}
           calloutsEnabled={state.calloutsEnabled}
+          analyticsEnabled={state.analyticsEnabled}
           ptyBackendMode={state.ptyBackendMode}
           sharedPtyHostEnabled={state.sharedPtyHostEnabled}
           onSetSetting={state.onSetSetting}

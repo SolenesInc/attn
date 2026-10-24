@@ -644,6 +644,7 @@ export function ExperimentalSettings({
   directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
+  analyticsEnabled,
   ptyBackendMode,
   sharedPtyHostEnabled,
   onSetSetting,
@@ -658,6 +659,7 @@ export function ExperimentalSettings({
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
+  | 'analyticsEnabled'
   | 'ptyBackendMode'
   | 'sharedPtyHostEnabled'
   | 'onSetSetting'
@@ -839,6 +841,20 @@ export function ExperimentalSettings({
             className="settings-action" data-testid="settings-callouts-toggle"
             onClick={() => onSetSetting('callouts_enabled', calloutsEnabled ? 'false' : 'true')}>
             {calloutsEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Usage analytics</p>
+            <p className="settings-row-copy" id="settings-analytics-description">
+              Keep a redacted record of how attn is used on this machine. Nothing is sent.
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Usage analytics"
+            aria-checked={analyticsEnabled} aria-describedby="settings-analytics-description"
+            className="settings-action" data-testid="settings-analytics-toggle"
+            onClick={() => onSetSetting('analytics.enabled', analyticsEnabled ? 'false' : 'true')}>
+            {analyticsEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>

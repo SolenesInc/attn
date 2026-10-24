@@ -84,6 +84,7 @@ const (
 	SettingHeadlessTasksEnabledStored    = headless.SettingKey + ".stored"
 	SettingHeadlessTasksEnabledOverride  = headless.SettingKey + ".override"
 	SettingDBLastBackupAt                = "db.last_backup_at"
+	SettingAnalyticsEnabled              = "analytics.enabled"
 )
 
 type daemonSettingKey string
@@ -122,6 +123,7 @@ var settingSpecs = []settingSpec{
 	{key: SettingQueueShowHiddenSessions, scope: daemonScope, description: "Include hidden sessions in the queue: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingQueueQuietNotifications, scope: daemonScope, description: "Keep agents a notification woke out of the queue unless they open their turn: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingAsksEnabled, scope: daemonScope, description: "Enable agent asks: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingAnalyticsEnabled, scope: daemonScope, description: "Record usage analytics on this machine: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingCalloutsEnabled, scope: daemonScope, description: "Let agents point at the app interface: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingChiefContextWindowCap, scope: daemonScope, description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
 	{key: "chief_model_<harness>", scope: daemonScope, description: "Model for chief sessions. Empty uses the deep intelligence tier.", validate: func(d *Daemon, key, value string) error { return nil }},
