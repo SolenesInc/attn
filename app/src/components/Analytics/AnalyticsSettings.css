@@ -418,3 +418,7 @@
   display: flex;
   gap: 8px;
 }
+
+.analytics-inspector:empty {
+  display: none;
+}
