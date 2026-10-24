@@ -49,6 +49,7 @@ would make it, and `429` also says when to retry:
 | `records_per_batch` | 10,000 | 413 | the minute limit; a larger batch could never be accepted |
 | `request_body_gzip_bytes` | 4 MiB | 413 | a redacted peak day is 613 KB gzipped |
 | `request_body_bytes` | 16 MiB | 413 | 10,000 redacted records are about 1.25 MB uncompressed (125 B each) |
+| `build_line_bytes` | 2 KiB | 413 | a release build's line is 313 B; every stored row repeats it |
 | `record_line_bytes` | 64 KiB | 413 | guessed: 4× the 16 KB vent text the vent tool will allow; remeasure from the largest real line |
 
 Records count against the per-install limits whether or not they turn out to

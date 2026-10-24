@@ -18,6 +18,7 @@ const (
 	maxBodyGzipBytes = 4 << 20
 	maxBodyBytes     = 16 << 20
 	maxLineBytes     = 64 << 10
+	maxBuildBytes    = 2 << 10
 	maxStreamBytes   = 32
 	maxNameBytes     = 256
 	maxSubjectBytes  = 256
@@ -100,6 +101,9 @@ func decodeLines(lines *bufio.Reader) (analytics.Batch, error) {
 			continue
 		}
 		if !sawBuild {
+			if length > maxBuildBytes {
+				return batch, tooLarge("build_line_bytes", maxBuildBytes, length)
+			}
 			var header struct {
 				Build *analytics.Build `json:"build"`
 			}

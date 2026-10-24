@@ -205,6 +205,14 @@ func TestOversizedRequestsAreRefusedNamingTheLimit(t *testing.T) {
 	if status != http.StatusRequestEntityTooLarge || refusal.Limit != "records_per_batch" || refusal.Value != 10_000 || refusal.Observed != 10_001 {
 		t.Fatalf("a batch of 10001 records: %d %s", status, body)
 	}
+
+	build := analytics.CurrentBuild()
+	build.Version = strings.Repeat("v", 2<<10)
+	status, body = install.send(analytics.Batch{Build: build, Records: busRecords(1, 1)})
+	decode(t, body, &refusal)
+	if status != http.StatusRequestEntityTooLarge || refusal.Limit != "build_line_bytes" || refusal.Value != 2<<10 || refusal.Observed <= 2<<10 {
+		t.Fatalf("a build line past 2 KiB: %d %s", status, body)
+	}
 	if holdings := install.holdings(); holdings.Events != 0 {
 		t.Fatalf("refused requests stored %d events", holdings.Events)
 	}
