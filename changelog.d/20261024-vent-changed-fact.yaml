@@ -1,0 +1,3 @@
+kind: internal
+area: analytics
+change: Vents announce every change with one bus fact, vent.changed, carrying the vent id and no payload, in place of six per-verb facts that only one projection read.

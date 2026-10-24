@@ -27,11 +27,6 @@ const (
 	ventsRetention     = 30 * 24 * time.Hour
 )
 
-type ventFact struct {
-	Harness string `json:"harness"`
-	Model   string `json:"model"`
-}
-
 func (d *Daemon) launchVentIntent(sessionID protocol.SessionID) (bool, []string) {
 	if intent, ok := d.store.LaunchIntent(sessionID); ok {
 		return intent.Vent, intent.Experimental
@@ -62,7 +57,7 @@ func (d *Daemon) handleRecordVent(conn net.Conn, msg *protocol.RecordVentMessage
 	}
 	wire := vent.wire()
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, RecordVentResult: &wire})
-	d.publishFact(FactVentRecorded, vent.ID, vent.fact())
+	d.publishFact(FactVentChanged, vent.ID, nil)
 }
 
 func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error) {
@@ -162,7 +157,7 @@ func (d *Daemon) handleWithdrawVent(conn net.Conn, msg *protocol.WithdrawVentMes
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
-	d.publishVentFact(FactVentWithdrawn, id)
+	d.publishFact(FactVentChanged, id, nil)
 }
 
 func (d *Daemon) handleSetVentDismissed(client *wsClient, msg *protocol.SetVentDismissedMessage) {
@@ -185,19 +180,14 @@ func (d *Daemon) profileVent(id, profileID string) (store.Vent, error) {
 
 func (d *Daemon) setVentDismissed(msg *protocol.SetVentDismissedMessage, profileID string) error {
 	id := strings.TrimSpace(msg.VentID)
-	vent, err := d.profileVent(id, profileID)
-	if err != nil {
+	if _, err := d.profileVent(id, profileID); err != nil {
 		return err
 	}
 	changed, err := d.store.SetVentDismissed(id, msg.Dismissed, time.Now())
 	if err != nil || !changed {
 		return err
 	}
-	fact := FactVentRestored
-	if msg.Dismissed {
-		fact = FactVentDismissed
-	}
-	d.publishFact(fact, id, storedVent{vent}.fact())
+	d.publishFact(FactVentChanged, id, nil)
 	return nil
 }
 
@@ -230,7 +220,7 @@ func (d *Daemon) plantVentSeed(id, profileID string) (protocol.Seed, error) {
 	if _, err := d.store.SetVentPlanted(id, seed.ID); err != nil {
 		return protocol.Seed{}, fmt.Errorf("planted %s but could not link it to vent %s: %w", seed.ID, id, err)
 	}
-	d.publishFact(FactVentPlanted, id, stored.fact())
+	d.publishFact(FactVentChanged, id, nil)
 	return seed, nil
 }
 
@@ -260,7 +250,7 @@ func (d *Daemon) unplantVentSeed(id, profileID string) error {
 	if _, err := d.store.ClearVentPlanted(id, vent.PlantedSeedID); err != nil {
 		return err
 	}
-	d.publishFact(FactVentRestored, id, storedVent{vent}.fact())
+	d.publishFact(FactVentChanged, id, nil)
 	return nil
 }
 
@@ -270,18 +260,9 @@ func (d *Daemon) announceDeletedVents(vents []store.Vent) {
 	}
 	d.coalesceSnapshots(func() {
 		for _, vent := range vents {
-			d.publishFact(FactVentDeleted, vent.ID, storedVent{vent}.fact())
+			d.publishFact(FactVentChanged, vent.ID, nil)
 		}
 	})
-}
-
-func (d *Daemon) publishVentFact(name, id string) {
-	vent, err := d.store.Vent(id)
-	if err != nil {
-		d.logf("vent %s: %v", id, err)
-		return
-	}
-	d.publishFact(name, id, storedVent{vent}.fact())
 }
 
 func (d *Daemon) projectVents() {
@@ -333,10 +314,6 @@ func (d *Daemon) ventsPruneHandler(_ context.Context, _ *jobs.Job) (any, error) 
 }
 
 type storedVent struct{ store.Vent }
-
-func (v storedVent) fact() ventFact {
-	return ventFact{Harness: v.Context.Harness, Model: protocol.Deref(v.Context.Model)}
-}
 
 const ventSeedTitleRunes = 100
 
