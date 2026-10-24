@@ -68,6 +68,8 @@ func (c *clickHouse) requestURL(params map[string]string, query string) string {
 	values.Set("date_time_input_format", "best_effort")
 	values.Set("date_time_output_format", "iso")
 	values.Set("output_format_json_quote_64bit_integers", "0")
+	values.Set("wait_end_of_query", "1")
+	values.Set("send_progress_in_http_headers", "0")
 	if query != "" {
 		values.Set("query", query)
 	}
