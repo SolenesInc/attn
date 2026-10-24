@@ -89,8 +89,7 @@ func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation age
 		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 	case owner == "":
 		err = d.opened(t, session, observation, candidate)
-	case d.ownerLive(owner) && d.linkOf(session.ID) == nil:
-		// A live owner keeps its terminal, so this session takes the conversation over in place.
+	case d.ownerLive(owner) && conversationOpensInManyProcesses(session.Agent):
 		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
 	default:
 		err = d.shows(t, session, owner, observation, candidate)

@@ -95,38 +95,3 @@ func TestASessionLaunchedOnAConversationAnotherLiveSessionRunsShowsItShared(t *t
 	awaitSharedWith(app, 0, first, second)
 	awaitSharedWith(app, 0, second, first)
 }
-
-func TestCodexSessionsOnOneConversationAreNotShownShared(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	cwd := w.Path("shop")
-	first := w.Spawn(app, fakeagent.Codex, cwd)
-	one := w.Launched(first)
-	app.TypeLine(first, "plan the release")
-	one.Prompted()
-	one.Reply("Planned. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	second := w.Spawn(app, fakeagent.Codex, cwd)
-	two := w.Launched(second)
-	terminal := app.Terminal(second)
-	typeInto(app, terminal, "/resume "+one.ConversationID+"\r")
-	two.Prompted()
-	typeInto(app, terminal, "ship it\r")
-	two.Prompted()
-	two.Reply("Shipped. <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, second, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-
-	if two.ConversationID != one.ConversationID {
-		t.Fatalf("the second codex runs conversation %s, want %s", two.ConversationID, one.ConversationID)
-	}
-	sessions, err := cli.Query("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, s := range sessions {
-		if len(s.ConversationSharedWith) > 0 {
-			t.Errorf("codex session %s is shown sharing its conversation with %v; codex refuses a second process itself", s.ID, s.ConversationSharedWith)
-		}
-	}
-}

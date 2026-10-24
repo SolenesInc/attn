@@ -464,3 +464,17 @@ synthetic messages:
   file while preserving the inherited message entries' `id` and usage
   (`dist/core/session-manager.js`). An entry id can therefore occur in more
   than one session file.
+
+Read in the installed 1.3.0 source and probed through its session SDK, with
+two `SessionManager`s on one file that share nothing but the file:
+
+- Nothing stops a second process from opening a session file another process
+  has open. `SessionManager` holds no lock; once the file exists it appends
+  each entry with `appendFileSync` (`dist/core/session-manager.js`).
+- Each writer continues its own branch from its own entries in memory, so the
+  file becomes a tree, and neither sees the other's entries. Opening the file
+  again loads the branch ending at the last entry written.
+
+Unlike Claude Code, this never leaves two sessions on one conversation. A Pi
+conversation is not a session (Pi has no built-in driver), so a Pi terminal
+that resumes another terminal's conversation keeps its own session.

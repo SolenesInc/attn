@@ -1,0 +1,3 @@
+kind: internal
+area: sessions
+change: The daemon names Claude Code's ability to open one conversation in many processes where it lets a second Claude session take over a live conversation, and docs record that Pi has no session lock either.
