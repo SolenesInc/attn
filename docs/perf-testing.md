@@ -42,9 +42,10 @@ move-to-update latency for notes and for wither/replant moves:
 ATTN_INSTANCE=<name> go run ./scripts/gardenpushperf -seed <id> -n 20
 ```
 
-The app side needs a bundle built against that instance, then reports the
-socket handler, message-to-next-frame and `JSON.parse` per update in headless
-Chromium (`PROFILE=1` adds a CPU profile):
+`attn instance resolve --field dataDir` and `--field wsPort` give the data
+directory and port. The app side needs a bundle built against that instance,
+then reports the socket handler, message-to-next-frame and `JSON.parse` per
+update in headless Chromium (`PROFILE=1` adds a CPU profile):
 
 ```bash
 VITE_CLIENT_TOKEN=$(cat <instance data dir>/client-token) VITE_DAEMON_PORT=<instance ws port> \
