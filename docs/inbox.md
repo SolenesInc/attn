@@ -74,13 +74,23 @@ delegation, a handover or a seed sent to the chief.
 |---|---|
 | tend, park, harvest, wither, replant | yes, unless the move asks to stay quiet (automation acceptance does) |
 | note | only with `--ring`, or when the note is the user's answer to an ask, an automation run's outcome, or a delegate that exited before its first turn |
+| check move (add, edit, remove, restore, report, confirm, reject, uncheck, reopen) | only with `--ring` |
 | harvest-when set or cleared | yes |
 | unblocked: the last blocker closed | yes |
 | automation work ready | yes |
 | plant, body edit, artifact change, edge link or unlink, resume identity | no |
 
-A seed update names the seed and the kind of event. The agent reads the seed
-for the details.
+A seed update names the seed and the kind of event. For a check move it names
+the move and who made it instead: "s-x moved: check C4 rejected by c9b177e1".
+The agent reads the seed for the details.
+
+A ringing note or check move replies with who gets its seed update: the tender
+and the watchers, without the session that caused it. With nobody left, the
+reply says so, so a ring on a closed seed with no watcher is not silent. A
+recipient who already has an unread update on that seed gets the move merged
+into it, and no new ring (see [Coalescing](#coalescing)). The reply names the
+audience when the move commits; the update goes to the audience at delivery,
+so the two differ only when a tender or watch changes in between.
 
 `attn seed show` and `attn seed notes` mark the reader's unread update for that
 seed as read. attn withdraws a recipient's unread update for a seed when they
@@ -119,8 +129,9 @@ depends on its kind.
 Seed updates merge. They use the seed as the key, so an address has at most
 one unread update per seed. A later event on that seed leaves the unread update
 as it is: same attempts, no new ring. The update keeps the first event's kind,
-unless the later event is `unblocked`. So once a seed update has used its 3
-attempts, later events on that seed stay silent until the agent reads it.
+or its check move, unless the later event is `unblocked`. So once a seed update
+has used its 3 attempts, later events on that seed stay silent until the agent
+reads it; the seed's log still has every one of them.
 
 Other keyed items are replaced. The new item takes the old one's place and gets
 fresh attempts.

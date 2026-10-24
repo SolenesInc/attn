@@ -1,0 +1,10 @@
+kind: added
+area: garden
+change: >
+  Seeds can carry checks: numbered statements (C1) the seed must prove. Plant
+  them with `attn seed plant --check`, in a plot's JSON (a shared check is
+  proven by every child), or with `attn seed check add`. Agents record proof
+  with `attn seed check report` and judge it with confirm, reject, uncheck and
+  reopen. `attn seed show`, `ls`, `ready`, `export` and harvest show where each
+  check stands, a plain note citing a check points at `check report`, and a
+  rung note or check move names who it rang. Checks never block a move.

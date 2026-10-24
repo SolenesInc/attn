@@ -2646,6 +2646,8 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote:
 		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage))
+	case protocol.CmdSeedCheck:
+		d.handleSeedCheck(conn, msg.(*protocol.SeedCheckMessage))
 	case protocol.CmdSeedNotes:
 		d.handleSeedNotes(conn, msg.(*protocol.SeedNotesMessage))
 	case protocol.CmdSeedWatch:

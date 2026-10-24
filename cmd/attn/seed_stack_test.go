@@ -384,6 +384,44 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		requireLines(t, "review show", seedAs(t, s, "", "review", "show", started.Review.Run.ID),
 			"\n"+seed.ID+"  Drifted work\n", "\nactions\tsend_to_chief, keep_growing, park, harvest, wither\n")
 	})
+
+	t.Run("checks print where each stands, from a move to a harvest", func(t *testing.T) {
+		plot := plantPlot(t, s, `{"title": "Checked plot", "checks": [{"id": "C5", "text": "CI is green.", "shared": true}],
+			"children": [{"title": "Checked child", "checks": [{"id": "C1", "text": "Wire tests pass."}]}]}`)
+		child := plot.Children[0].ID
+		loose := plant(t, s, "Checked seed", "--check", "C2=It works.")
+		requireLines(t, "show", seedAs(t, s, "", "show", loose.ID), "\nchecks  0 of 1 confirmed · 1 open\n  C2  open\n      It works.\n")
+
+		requireLines(t, "report", seedAs(t, s, "", "check", "report", child, "C1", "-m", "tests pass", "--evidence", "https://example.test/run/1"),
+			"C1 reported on "+child+" (checked-child) · checks 0 of 2 confirmed · 1 to judge · 1 open\n")
+		requireFailure(t, s.Attn("seed", "check", "report", child, "C1", "-m", "x", "--shared"), "seed check report: ", "--shared belongs to add")
+		requireLines(t, "show", seedAs(t, s, "", "show", child),
+			"\n  C1  reported\n      Wire tests pass.\n      report  tests pass\n              https://example.test/run/1 · ",
+			"\n  C5  open · shared from "+plot.Crown.ID+"\n",
+			"\n  report with: attn seed check report "+child+" <C#> -m \"<summary>\" --evidence <artifact|url>\n")
+		requireLines(t, "plot show", seedAs(t, s, "", "show", plot.Crown.ID),
+			"\nplot checks  0 of 2 confirmed · 1 to judge · 1 open\n", "\n  shared by every seed below\n  C5  0 of 1 confirmed\n", "      open       "+child+"\n")
+		_, row := lineOf(t, seedAs(t, s, "", "ls"), plot.Crown.ID)
+		if !strings.HasSuffix(row, "[checks ✓0/2 · 1 to judge]") {
+			t.Errorf("the plot's ls row ends %q, want its check tally", row)
+		}
+		unchecked := plant(t, s, "Unchecked seed")
+		if _, row = lineOf(t, seedAs(t, s, "", "ls"), unchecked.ID); strings.Contains(row, "checks") {
+			t.Errorf("a seed without checks shows a tally: %q", row)
+		}
+
+		requireLines(t, "note", seedAs(t, s, "", "note", child, "-m", "C5 done"),
+			"noted on "+child+"\nhint: this note cites C5 but records no report. To record one:\n      attn seed check report "+child+" C5 -m \"<summary>\" --evidence <artifact|url>\n")
+		requireLines(t, "harvest", seedAs(t, s, "", "harvest", child, "-m", "done"),
+			"\nchecks: C5 is open. Checks never block a move; the tally stays on the seed.\n")
+		requireLines(t, "export", seedAs(t, s, "", "export", child, "--out", "-"), "\n## Checks\n\n0 of 2 confirmed · 1 to judge · 1 open\n\n- **C1** (reported) Wire tests pass.\n  - report: tests pass — https://example.test/run/1 · ")
+
+		register(t, s, "checkwatcher", "checkwatcher")
+		seedAs(t, s, "checkwatcher", "watch", child)
+		requireLines(t, "rung reject", seedAs(t, s, "", "check", "reject", child, "C5", "-m", "cite the run", "--ring"),
+			"C5 rejected on "+child+" (checked-child)", "\nrang checkwatcher\n", "\n"+child+" stays harvested: a check never reopens a seed\n")
+		requireLines(t, "rung note", seedAs(t, s, "", "note", loose.ID, "-m", "look", "--ring"), "\nrang nobody: nobody else tends or watches "+loose.ID+"\n")
+	})
 }
 
 func TestAMoveCrashedAfterStagingFinishesWhenRetried(t *testing.T) {

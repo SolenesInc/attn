@@ -64,6 +64,9 @@ type Seed struct {
 
 	HarvestWhen            *HarvestCondition `json:"harvest_when,omitempty"`
 	HarvestWhenPullRequest string            `json:"harvest_when_pull_request"`
+
+	Checks       []Check                `json:"checks,omitempty"`
+	CheckResults map[string]CheckResult `json:"check_results,omitempty"`
 }
 
 type HarvestCondition struct {

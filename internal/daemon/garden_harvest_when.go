@@ -134,7 +134,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 
 		d.lockGardenRoles()
-		written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes)
+		written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes, false)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
@@ -256,7 +256,7 @@ func (d *Daemon) clearHarvestWhen(
 		}
 		d.lockGardenRoles()
 		written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{cleared},
-			[]garden.Note{d.harvestWhenNote(seed.ID, noteBody, actor)})
+			[]garden.Note{d.harvestWhenNote(seed.ID, noteBody, actor)}, false)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
