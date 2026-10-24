@@ -12,18 +12,17 @@ import (
 )
 
 func TestAnAgentWithoutUsageReportingShowsNoUsage(t *testing.T) {
-	w := newWorld(t, fakeagent.Pi)
+	w := newWorld(t)
 	app := w.App()
-	awaitAgentAvailable(app, string(fakeagent.Pi))
-	session := w.Spawn(app, fakeagent.Pi, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.InitialPrompt = protocol.Ptr("rename the checkout module")
-	})
-	pi := w.Launched(session)
-	pi.Prompted()
-	pi.Reply("Renamed the checkout module. <!-- attn:state=idle -->")
+	driver := connectDriver(t, w, "attn-house", "house", map[string]bool{"state_reporting": true})
+	awaitDriverAvailable(app, "house")
+	session, run := spawnDriven(w, app, driver, w.Path("shop"))
+	if err := driver.state(run, 1, "idle"); err != nil {
+		t.Fatal(err)
+	}
 	settled := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if settled.Usage != nil {
-		t.Errorf("a pi session shows usage %+v, want none", settled.Usage)
+		t.Errorf("a session of a harness that reports no usage shows usage %+v, want none", settled.Usage)
 	}
 }
 

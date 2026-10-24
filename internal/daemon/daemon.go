@@ -1244,7 +1244,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			recoveredSession := &protocol.Session{
 				ID:             sessionID,
 				Label:          label,
-				Agent:          normalizeStoredSessionAgent(info.Agent, protocol.SessionAgentCodex),
+				Agent:          normalizeSpawnAgent(info.Agent),
 				Directory:      directory,
 				ProfileID:      profile.ID,
 				State:          state,
@@ -1484,28 +1484,11 @@ func sessionUpdatedAfter(session *protocol.Session, cutoff time.Time) bool {
 	return updatedAt.After(cutoff)
 }
 
-func normalizeStoredSessionAgent(agent string, fallback protocol.SessionAgent) protocol.SessionAgent {
-	normalized := strings.TrimSpace(strings.ToLower(agent))
-	if normalized == "" {
-		return protocol.NormalizeSessionAgent(fallback, protocol.SessionAgentCodex)
-	}
-	if normalized == protocol.AgentShellValue {
-		return protocol.SessionAgentShell
-	}
-	if agentdriver.Get(normalized) != nil {
-		return protocol.SessionAgent(normalized)
-	}
-	if normalizePluginAgent(normalized) != "" {
-		return protocol.SessionAgent(normalized)
-	}
-	return protocol.NormalizeSessionAgent(fallback, protocol.SessionAgentCodex)
-}
-
 func sessionStateFromRecoveredInfo(info ptybackend.SessionInfo) (protocol.SessionState, bool) {
 	if !info.Running {
 		return protocol.SessionStateIdle, true
 	}
-	agent := normalizeStoredSessionAgent(info.Agent, protocol.SessionAgentCodex)
+	agent := normalizeSpawnAgent(info.Agent)
 	return agentdriver.RecoveredRunningSessionState(agentdriver.Get(string(agent)), info.State)
 }
 
@@ -3579,7 +3562,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		return
 	}
 
-	msg.Session.Agent = normalizeStoredSessionAgent(msg.Session.Agent, protocol.SessionAgentCodex)
+	msg.Session.Agent = normalizeSpawnAgent(msg.Session.Agent)
 	stampSessionTimestamps(&msg.Session, string(protocol.TimestampNow()))
 	profile, err := d.requestedOrRecentProfile(msg.Session.ProfileID)
 	if err != nil {

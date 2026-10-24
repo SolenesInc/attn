@@ -3,8 +3,6 @@ package agent
 import (
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestWatcherBehaviorsDetectAHaltedTurn(t *testing.T) {
@@ -36,20 +34,20 @@ func TestWatcherBehaviorsDetectAHaltedTurn(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.behavior.HandleLine([]byte(tc.abort), time.Now(), protocol.SessionStateWorking)
+			got := tc.behavior.HandleLine([]byte(tc.abort))
 			if !got.Aborted || got.AbortDetail != tc.wantDetail {
 				t.Fatalf("got %+v, want the halt reported with detail %q", got, tc.wantDetail)
 			}
 			if got.AbortAt.UTC().Format(time.RFC3339Nano) != tc.wantAt {
 				t.Fatalf("abort at %s, want %s", got.AbortAt.UTC().Format(time.RFC3339Nano), tc.wantAt)
 			}
-			if got := tc.behavior.HandleLine([]byte(tc.ignored), time.Now(), protocol.SessionStateWorking); got.Aborted {
+			if got := tc.behavior.HandleLine([]byte(tc.ignored)); got.Aborted {
 				t.Fatalf("an ordinary line was read as a halt: %+v", got)
 			}
 			if tc.notAHalt == "" {
 				return
 			}
-			if got := tc.behavior.HandleLine([]byte(tc.notAHalt), time.Now(), protocol.SessionStateWorking); got.Aborted {
+			if got := tc.behavior.HandleLine([]byte(tc.notAHalt)); got.Aborted {
 				t.Fatalf("a turn the agent ended on its own was read as a user halt: %+v", got)
 			}
 		})

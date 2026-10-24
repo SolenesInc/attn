@@ -611,7 +611,7 @@ func (w *transcriptWatcher) run() {
 				}
 				now := time.Now()
 
-				lineResult := w.behavior.HandleLine(record.Raw, now, sessionState)
+				lineResult := w.behavior.HandleLine(record.Raw)
 				if lineResult.Log != "" {
 					e.logf("%s session=%s", lineResult.Log, label)
 				}

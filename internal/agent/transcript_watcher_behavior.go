@@ -15,7 +15,7 @@ type TranscriptWatcherBehaviorProvider interface {
 }
 
 type TranscriptWatcherBehavior interface {
-	HandleLine(line []byte, now time.Time, sessionState protocol.SessionState) WatcherLineResult
+	HandleLine(line []byte) WatcherLineResult
 
 	DeduplicateAssistantEvents() bool
 
@@ -38,7 +38,7 @@ func newDefaultTranscriptWatcherBehavior() TranscriptWatcherBehavior {
 
 type defaultTranscriptWatcherBehavior struct{}
 
-func (b *defaultTranscriptWatcherBehavior) HandleLine(line []byte, now time.Time, sessionState protocol.SessionState) WatcherLineResult {
+func (b *defaultTranscriptWatcherBehavior) HandleLine(line []byte) WatcherLineResult {
 	return WatcherLineResult{}
 }
 
@@ -54,7 +54,7 @@ func (b *defaultTranscriptWatcherBehavior) SkipClassification(sessionState proto
 
 type claudeTranscriptWatcherBehavior struct{}
 
-func (b *claudeTranscriptWatcherBehavior) HandleLine(line []byte, now time.Time, sessionState protocol.SessionState) WatcherLineResult {
+func (b *claudeTranscriptWatcherBehavior) HandleLine(line []byte) WatcherLineResult {
 	if abort, ok := transcript.ClaudeTurnAborted(line); ok {
 		return WatcherLineResult{
 			Aborted:     true,
@@ -91,7 +91,7 @@ func (b *claudeTranscriptWatcherBehavior) SkipClassification(sessionState protoc
 
 type codexTranscriptWatcherBehavior struct{}
 
-func (b *codexTranscriptWatcherBehavior) HandleLine(line []byte, now time.Time, sessionState protocol.SessionState) WatcherLineResult {
+func (b *codexTranscriptWatcherBehavior) HandleLine(line []byte) WatcherLineResult {
 	abort, ok := transcript.CodexTurnAborted(line)
 	if !ok {
 		return WatcherLineResult{}

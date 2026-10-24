@@ -442,10 +442,14 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 	}
 
 	agent := normalizeSpawnAgent(session.Agent)
-	if pluginDriver, ok := d.ensurePluginRegistry().driver(session.Agent); ok {
+	pluginDriver, isPlugin := d.ensurePluginRegistry().driver(session.Agent)
+	if isPlugin {
 		agent = pluginDriver.Agent
 	}
 	driver := agentdriver.Get(agent)
+	if driver == nil && !isPlugin && agent != protocol.AgentShellValue {
+		return ptybackend.SpawnOptions{}, fmt.Errorf("agent %q is not available", session.Agent)
+	}
 	resumeSessionID := agentdriver.ResolveSpawnResumeSessionID(driver, sessionID, "", d.store.GetResumeSessionID(sessionID))
 	if resumeSessionID != "" && !d.conversationReady(driver, resumeSessionID) {
 		if d.conversationKnown(driver, resumeSessionID) {

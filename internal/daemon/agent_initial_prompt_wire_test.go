@@ -1,6 +1,9 @@
 package daemon_test
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -47,4 +50,26 @@ func awaitAgentAvailable(p *testworld.Peer, agent string) {
 		return
 	}
 	testworld.Await(p, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[key] == "true" })
+}
+
+func TestARefusedLaunchPreparationReportsTheErrorAndCanBeRetried(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "direct_agent_launch_enabled", "true")
+	notebook := filepath.Join(w.Dir, "notebook")
+	if err := os.RemoveAll(notebook); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(notebook, []byte("not a folder"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	chief := func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) }
+	result, _, _ := w.RequestSpawn(app, fakeagent.Claude, w.Path("shop"), chief)
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), "prepare chief notebook") {
+		t.Fatalf("preparation failure returned %+v", result)
+	}
+	if err := os.Remove(notebook); err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("shop"), chief))
 }
