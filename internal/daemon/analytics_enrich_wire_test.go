@@ -27,6 +27,9 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 		runGit(t, shop, "-c", "user.name=attn", "-c", "user.email=attn@example.invalid", "commit", "-q", "-m", "guidance")
 		runGit(t, shop, "remote", "add", "origin", "https://github.com/example/shop.git")
 		runGit(t, shop, "worktree", "add", "-q", "-b", "checkout", checkout)
+		if err := os.WriteFile(filepath.Join(checkout, "CLAUDE.md"), []byte("be brief\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		setAnalyticsEnabled(app, "true")
 
 		user := w.bubbleClaude(t, app, "shop-checkout")
@@ -55,7 +58,7 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 		switch {
 		case created < 0:
 			t.Error("the delegation's new worktree left no worktree.created record")
-		case !strings.Contains(string(records[created].Props), `"repo":{"agents_md":true,"remote":true,"worktree":true}`):
+		case !strings.Contains(string(records[created].Props), `"repo":{"agents_md":true,"claude_md":false,"remote":true,"worktree":true}`):
 			t.Errorf("worktree.created carries %s, want the new worktree's repo traits", records[created].Props)
 		}
 		for _, tc := range []struct {
@@ -63,7 +66,7 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 			launch              analytics.Launch
 			repo                *analytics.RepoTraits
 		}{
-			{"user", user.id, "session.state.changed", analytics.LaunchUser, &analytics.RepoTraits{AgentsMD: true, Worktree: true, Remote: true}},
+			{"user", user.id, "session.state.changed", analytics.LaunchUser, &analytics.RepoTraits{AgentsMD: true, ClaudeMD: true, Worktree: true, Remote: true}},
 			{"delegated", string(delegated.SessionID), "session.state.changed", analytics.LaunchDelegation, &analytics.RepoTraits{AgentsMD: true, Worktree: true, Remote: true}},
 			{"chief", chief, "session.respawned", analytics.LaunchChief, nil},
 		} {

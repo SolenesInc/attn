@@ -29,6 +29,7 @@ type SessionTraits struct {
 
 type RepoTraits struct {
 	AgentsMD bool `json:"agents_md"`
+	ClaudeMD bool `json:"claude_md"`
 	Worktree bool `json:"worktree"`
 	Remote   bool `json:"remote"`
 }
