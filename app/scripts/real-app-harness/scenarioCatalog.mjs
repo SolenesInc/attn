@@ -256,6 +256,12 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-outposts-settings.mjs'],
   },
   {
+    id: 'analytics-settings',
+    runnerId: 'AnalyticsSettings',
+    label: 'Analytics settings: vents new then done, dismiss and undo by key, plant a seed, records by stream, still while idle',
+    command: ['node', 'scripts/real-app-harness/scenario-analytics-settings.mjs'],
+  },
+  {
     id: 'agent-settings',
     runnerId: 'AgentSettings',
     label: 'Agent settings: grouped defaults, background agents, autosave acknowledgements and close recovery',
