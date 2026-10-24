@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -85,4 +86,37 @@ func TestGardenPushCarriesWhatAHarvestChangesElsewhere(t *testing.T) {
 func nextGardenChange(app *testworld.Peer) protocol.GardenSeedsChangedMessage {
 	app.T.Helper()
 	return testworld.Await[protocol.GardenSeedsChangedMessage](app, protocol.EventGardenSeedsChanged, nil)
+}
+
+func TestGardenPushAfterAProfileSwitchSendsOnlyWhatChangedInTheNewProfile(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	original := app.SelectedProfile()
+	side := createProfile(app, "Side")
+	home := cli.WithGardenProfile(original, "")
+	away := cli.WithGardenProfile(side.ID, "")
+	homeSeed := plantSeedAs(t, home, "", "home seed")
+	awayFirst := plantSeedAs(t, away, "", "away first")
+	awaySecond := plantSeedAs(t, away, "", "away second")
+
+	for _, step := range []struct {
+		profile string
+		seeds   *client.Client
+		moved   string
+		window  []string
+	}{
+		{side.ID, away, awayFirst, []string{awaySecond, awayFirst}},
+		{original, home, homeSeed, []string{homeSeed}},
+	} {
+		selectProfile(app, step.profile)
+		testworld.Await(app, protocol.EventGardenSeedsUpdated, func(m protocol.GardenSeedsUpdatedMessage) bool { return m.ProfileID == step.profile })
+		lifeMove(t, step.seeds, "", step.moved, "wither", "", "")
+		changed := testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool { return m.ProfileID == step.profile })
+		if !slices.Equal(changed.Order, step.window) {
+			t.Errorf("after switching to %s, the change orders %v, want %v", step.profile, changed.Order, step.window)
+		}
+		if got := lifeSeedIDs(changed.Seeds); !slices.Equal(got, []string{step.moved}) {
+			t.Errorf("after switching to %s, the change carries %v, want only %s", step.profile, got, step.moved)
+		}
+	}
 }
