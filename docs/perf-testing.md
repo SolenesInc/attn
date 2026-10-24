@@ -30,6 +30,29 @@ Cold/warm and leak soak wipe their data, so they need a dedicated instance
 (`make install INSTANCE=perf`). Add `--record-baseline` only after an intended
 footprint change, never to silence a regression you don't understand.
 
+## Garden push
+
+`scripts/gardenpushperf` measures what one garden update costs on a real
+garden. Copy the database into a named instance (`sqlite3
+"file:$HOME/.attn/attn.db?mode=ro" ".backup <instance data dir>/attn.db"`),
+start its daemon, and plant a seed to move. The Go tool reports bytes and
+move-to-update latency for notes and for wither/replant moves:
+
+```bash
+ATTN_INSTANCE=<name> go run ./scripts/gardenpushperf -seed <id> -n 20
+```
+
+The app side needs a bundle built against that instance, then reports the
+socket handler, message-to-next-frame and `JSON.parse` per update in headless
+Chromium (`PROFILE=1` adds a CPU profile):
+
+```bash
+VITE_CLIENT_TOKEN=$(cat <instance data dir>/client-token) VITE_DAEMON_PORT=<instance ws port> \
+  pnpm --dir app exec vite build --outDir <dir>
+pnpm --dir app exec vite preview --outDir <dir> --port <port>
+ATTN_INSTANCE=<name> node scripts/gardenpushperf/app-push.mjs http://localhost:<port>/ <id> 20
+```
+
 ## Daemon profiling
 
 Start a non-production daemon with `ATTN_PPROF=1` (or a port) for a loopback

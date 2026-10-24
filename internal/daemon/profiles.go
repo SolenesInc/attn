@@ -156,6 +156,11 @@ func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.Initia
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
 	shown, seq := d.fillInitialProfileState(client, event)
+	client.gardenMu.Lock()
+	defer client.gardenMu.Unlock()
+	garden := d.gardenWindow(client.selectedProfile())
+	event.Seeds = garden.seeds
+	event.SeedsTotal = protocol.Ptr(garden.held.total)
 	data, err := json.Marshal(event)
 	if err != nil {
 		d.logf("initial state: encoding: %v", err)
@@ -164,6 +169,7 @@ func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.Initia
 	if d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data}) {
 		client.shownTiles = shown
 		client.arrangementSeq = seq
+		client.gardenHeld = &garden.held
 	}
 }
 
@@ -704,7 +710,7 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 
 func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	profileID := client.selectedProfile()
-	d.sendToClient(client, d.gardenProfileSnapshot(profileID))
+	d.sendGardenFull(client)
 	d.sendToClient(client, asksSnapshot(profileID, d.openAsks()))
 	if profileID != "" {
 		d.sendToClient(client, d.codexShared().changedMessage(profileID))

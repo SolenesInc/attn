@@ -50,8 +50,8 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 		record := func(move string) protocol.Seed {
 			t.Helper()
 			push := pushed(move)
-			if len(push.Seeds) != 2 || protocol.Deref(push.Total) != 2 {
-				t.Fatalf("%s pushed %d seeds with total %d, want the whole garden of 2", move, len(push.Seeds), protocol.Deref(push.Total))
+			if protocol.Deref(push.Total) != 2 {
+				t.Fatalf("%s pushed a garden of %d, want 2", move, protocol.Deref(push.Total))
 			}
 			for _, s := range push.Seeds {
 				if s.ID == seed {
@@ -71,7 +71,9 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 		if _, err := cli.SeedNote("gardener", seed, "found the seam in internal/daemon", "trellis", "", false, nil); err != nil {
 			t.Fatal(err)
 		}
-		record("note")
+		if note := pushed("note"); len(note.Seeds) != 0 {
+			t.Fatalf("the note pushed %v, want no changed seed", lifeSeedIDs(note.Seeds))
+		}
 		lifeMove(t, cli, "gardener", seed, "harvest", "shipped it", "trellis")
 		if harvested := record("harvest"); protocol.Deref(harvested.Reason) != "shipped it" || harvested.TenderSession != "" || harvested.TenderMember != "" {
 			t.Fatalf("the harvest reached the app as %+v, want the reason recorded and the claim released", harvested)
@@ -83,7 +85,7 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 		lifeMove(t, cli, "gardener", seed, "wither", "nobody is picking this up", "trellis")
 		record("wither")
 
-		if want := []string{"planted", "growing", "growing", "harvested", "planted", "withered"}; !slices.Equal(statuses, want) {
+		if want := []string{"planted", "growing", "harvested", "planted", "withered"}; !slices.Equal(statuses, want) {
 			t.Errorf("the app saw %v, want %v", statuses, want)
 		}
 
@@ -506,7 +508,7 @@ func lifeClockAt(t *testing.T, move string, seed protocol.Seed, want time.Time) 
 func lifeGardenPushes(app *testworld.Peer) []protocol.WebSocketEvent {
 	var pushes []protocol.WebSocketEvent
 	for _, event := range app.Received() {
-		if event.Event == protocol.EventGardenSeedsUpdated {
+		if event.Event == protocol.EventGardenSeedsChanged {
 			pushes = append(pushes, event)
 		}
 	}

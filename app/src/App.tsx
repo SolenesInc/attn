@@ -58,6 +58,7 @@ function App() {
     daemonSessions,
     setDaemonSessions,
     setSeeds,
+    applySeedChanges,
     setCrew,
     prs,
     setPRs,
@@ -111,6 +112,7 @@ function App() {
       setNotificationsChangeSignal((n) => n + 1);
     },
     onSeedsUpdate: setSeeds,
+    onSeedsChange: applySeedChanges,
     onCrewUpdate: setCrew,
     onPRsUpdate: setPRs,
     onPluginsUpdate: handlePluginsUpdate,

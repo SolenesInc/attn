@@ -5272,6 +5272,17 @@ model GardenSeedsUpdatedMessage {
   total: int32;
 }
 
+// What changed in the push window since this client's last garden message:
+// the window's ids newest first, and only the seeds whose wire form differs.
+// A seed in `order` but not in `seeds` is unchanged.
+model GardenSeedsChangedMessage {
+  profile_id: string;
+  event: "garden_seeds_changed";
+  order: string[];
+  seeds: Seed[];
+  total: int32;
+}
+
 model GardenReviewRecipe {
   "agent": string;
   "model": string;
@@ -7116,6 +7127,7 @@ alias DaemonEvent =
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage
   | GardenSeedsUpdatedMessage
+  | GardenSeedsChangedMessage
   | GardenReviewUpdatedMessage
   | SeedReviewResultMessage
   | SeedReviewDraftResultMessage

@@ -27,7 +27,7 @@ func TestASeedPlantedWhileAnotherUpdateOvertakesItsAnnouncementStillReachesTheAp
 	setSetting(t, app, "auto_approve_enabled", "false")
 
 	for _, e := range app.Received() {
-		if e.Event == protocol.EventGardenSeedsUpdated && slices.ContainsFunc(e.Seeds, func(s protocol.Seed) bool { return s.ID == seed.ID }) {
+		if (e.Event == protocol.EventGardenSeedsUpdated || e.Event == protocol.EventGardenSeedsChanged) && slices.ContainsFunc(e.Seeds, func(s protocol.Seed) bool { return s.ID == seed.ID }) {
 			return
 		}
 	}

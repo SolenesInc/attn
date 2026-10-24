@@ -282,7 +282,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 func gardenPlotPushes(app *testworld.Peer) int {
 	pushes := 0
 	for _, event := range app.Received() {
-		if event.Event == protocol.EventGardenSeedsUpdated {
+		if event.Event == protocol.EventGardenSeedsChanged {
 			pushes++
 		}
 	}

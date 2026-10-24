@@ -61,6 +61,9 @@ type wsClient struct {
 	arrangementPrint   [sha256.Size]byte
 	arrangementSeq     int64
 
+	gardenMu   sync.Mutex
+	gardenHeld *gardenHeld
+
 	presence   clientPresence
 	presenceMu sync.RWMutex
 }
@@ -562,7 +565,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {
-	state := d.currentStateProjection(client.selectedProfile())
+	state := d.currentStateProjection()
 	event := &protocol.InitialStateMessage{
 		TerminalBindings:       d.terminals().Bindings(),
 		Event:                  protocol.EventInitialState,
@@ -577,8 +580,6 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		GithubPollingOffReason: gitHubPollingOffReasonField(),
 		Settings:               d.daemonSettingsSnapshot(),
 		Warnings:               d.getWarnings(),
-		Seeds:                  state.Seeds,
-		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
 		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
 		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
