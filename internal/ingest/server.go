@@ -208,7 +208,7 @@ func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
 		for i, record := range fresh {
 			rows[i] = newEventRow(inst.ID, ipHash, now, batch.Build, record)
 		}
-		if err := insert(r.Context(), s.db, "events", rows); err != nil {
+		if err := insert(context.WithoutCancel(r.Context()), s.db, "events", rows); err != nil {
 			return err
 		}
 	}
@@ -355,10 +355,11 @@ func (s *Server) deleteInstall(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer release()
 	params := map[string]string{"install": inst.ID}
-	if err := s.db.exec(r.Context(), "DELETE FROM events WHERE install_id = {install:String}", params); err != nil {
+	settled := context.WithoutCancel(r.Context())
+	if err := s.db.exec(settled, "DELETE FROM events WHERE install_id = {install:String}", params); err != nil {
 		return err
 	}
-	if err := s.db.exec(r.Context(), "DELETE FROM installs WHERE install_id = {install:String}", params); err != nil {
+	if err := s.db.exec(settled, "DELETE FROM installs WHERE install_id = {install:String}", params); err != nil {
 		return err
 	}
 	w.WriteHeader(http.StatusNoContent)
