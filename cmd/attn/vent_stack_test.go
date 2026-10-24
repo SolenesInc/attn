@@ -81,10 +81,22 @@ func TestAnAgentVentsOncePerTurnAndWithdrawsWithoutWritingTheOutbox(t *testing.T
 		return len(m.Vents) == 4 && m.Vents[0].ID == third && m.Vents[1].ID == second && m.Vents[2].ID == both
 	})
 
+	s.Stop()
+	s.Start()
+	app = s.App()
+	recorded(vent(session, "attn daemon restarted under me and my terminal flickered."))
+	agent.Reply("Changelog done. <!-- attn:state=waiting_input -->")
+	stopped := testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+	app.TypeLine(session, "and the release notes")
+	agent.Prompted()
+	testworld.AwaitStateAfter(app, stopped, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	recorded(vent(session, "attn seed show printed the plot body twice."))
+	testworld.Await(app, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool { return len(m.Vents) == 6 })
+
 	listed := testworld.Request(app, protocol.ListAnalyticsRecordsMessage{Cmd: protocol.CmdListAnalyticsRecords, RequestID: protocol.Ptr("outbox"), Limit: 1000},
 		protocol.EventListAnalyticsRecordsResult, func(r protocol.ListAnalyticsRecordsResultMessage) bool { return r.RequestID == "outbox" })
 	if !listed.Success || len(listed.Records) != 0 || listed.Waiting != 0 {
-		t.Errorf("the outbox holds %d records (%d waiting, error %q) after four vents and a withdrawal, want none", len(listed.Records), listed.Waiting, protocol.Deref(listed.Error))
+		t.Errorf("the outbox holds %d records (%d waiting, error %q) after six vents and a withdrawal, want none", len(listed.Records), listed.Waiting, protocol.Deref(listed.Error))
 	}
 }
 
