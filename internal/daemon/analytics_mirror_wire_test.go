@@ -67,6 +67,7 @@ func TestDisablingAnalyticsUnregistersTheMirrorAndReenablingStartsAtTheHead(t *t
 		put(t, cli, gateNS, "bb", `{}`)
 
 		setAnalyticsEnabled(app, "true")
+		synctest.Wait()
 		status := busStatus(t, app)
 		if mirror := consumer(t, status, "analytics-mirror"); mirror.Cursor != status.Head || mirror.Lag != 0 {
 			t.Errorf("re-enabled analytics-mirror reads %+v, want it at the head %d", mirror, status.Head)
