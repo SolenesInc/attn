@@ -2351,6 +2351,22 @@ type CommandUsage struct {
 	Score float64 `json:"score"`
 }
 
+type CopyRow struct {
+	// Columns corresponds to the JSON schema field "columns".
+	Columns RecordUnknown `json:"columns,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Table corresponds to the JSON schema field "table".
+	Table CopyTable `json:"table"`
+}
+
+type CopyTable string
+
+const CopyTableSessions CopyTable = "sessions"
+const CopyTableTerminalBindings CopyTable = "terminal_bindings"
+
 type CreateWorktreeFromBranchMessage struct {
 	// Branch corresponds to the JSON schema field "branch".
 	Branch string `json:"branch"`
@@ -4227,6 +4243,11 @@ type DocumentSort struct {
 
 	// Field corresponds to the JSON schema field "field".
 	Field string `json:"field"`
+}
+
+type DropOutpostCopyMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
 }
 
 type EnsureRepoMessage struct {
@@ -10084,6 +10105,9 @@ type Session struct {
 
 	// Hidden corresponds to the JSON schema field "hidden".
 	Hidden *bool `json:"hidden,omitempty,omitzero"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`

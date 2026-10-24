@@ -910,7 +910,7 @@ func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[protocol.Sessio
 	removed := 0
 	recoverable := 0
 	for _, session := range sessions {
-		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
+		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun || session.Host != nil {
 			continue
 		}
 		if _, ok := liveIDs[session.ID]; ok || d.hidden(session.ID) {
@@ -1180,7 +1180,9 @@ func (d *Daemon) recoverSessions(ctx context.Context, rules recoveryRules) worke
 	machine := d.recoverMachine(ctx)
 	var sessions []protocol.SessionID
 	for _, session := range d.store.List("") {
-		sessions = append(sessions, session.ID)
+		if session.Host == nil {
+			sessions = append(sessions, session.ID)
+		}
 	}
 	return d.recoverRecords(machine, sessions, rules)
 }
@@ -2670,6 +2672,12 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleTerminalClose(conn, msg.(*protocol.TerminalCloseMessage))
 	case protocol.CmdDesktopMoveSession:
 		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
+	case protocol.CmdDropOutpostCopy:
+		if err := d.dropStaleCopy(); err != nil {
+			d.sendError(conn, err.Error())
+		} else {
+			d.sendOK(conn)
+		}
 	case protocol.CmdSetSessionPriority:
 		priority := msg.(*protocol.SetSessionPriorityMessage)
 		if err := d.setSessionPriority(priority); err != nil {

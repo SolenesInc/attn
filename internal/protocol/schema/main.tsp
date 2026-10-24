@@ -205,6 +205,7 @@ model Session {
   succeeds?: SessionID;            // The session this one replaced in its terminal, when the harness there moved to another conversation; that session closed into the ledger, unless it is a shared Codex session, which stays open. Durable: it stays set after the predecessor is reopened.
   hidden?: boolean;             // True while this open shared Codex session has no terminal tile: its terminal moved to another conversation. It keeps its state and takes input; desktop_show_session gives it a tile again. Derived at broadcast; absent otherwise.
   conversation_shared_with?: SessionID[]; // The other open sessions whose live process has this session's conversation open while this one's does too. Only for a harness that lets several processes write one conversation (Claude Code), where each process keeps its own history and the transcript splits. Derived at broadcast; absent while one process holds the conversation.
+  host?: string;                // The id of the outpost this terminal runs on; absent when it runs on the home's machine. Set once at spawn and never changed.
   last_seen: string;            // ISO timestamp, always set
 }
 
@@ -295,6 +296,18 @@ enum OutpostState {
   stalled,
   lost,
   refused,
+}
+
+// One row of an outpost's copy: the current columns of a sessions or terminal_bindings row the home holds for a terminal that outpost runs, or its deletion when columns is absent.
+enum CopyTable {
+  sessions,
+  terminal_bindings,
+}
+
+model CopyRow {
+  table: CopyTable;
+  key: string;
+  columns?: Record<unknown>;
 }
 
 model OutpostInfo {
@@ -1691,6 +1704,9 @@ model SettingsListResult {
 model AddOutpostMessage { cmd: "add_outpost"; name: string; address: string; }
 model RemoveOutpostMessage { cmd: "remove_outpost"; id: string; }
 model RepairOutpostMessage { cmd: "repair_outpost"; id: string; }
+
+// Sent by `attn enrollment leave`: the daemon keeps only the copy from the home it is still enrolled to, stopping the terminals it ran for any other home and closing that home's bridge.
+model DropOutpostCopyMessage { cmd: "drop_outpost_copy"; }
 
 model ListPluginsMessage {
   cmd: "list_plugins";

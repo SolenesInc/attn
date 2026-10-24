@@ -15,6 +15,7 @@ import (
 type outpostDial struct {
 	cancel      context.CancelFunc
 	done        chan struct{}
+	conn        *bridge.Conn
 	state       bridge.State
 	since       string
 	build       string
@@ -120,6 +121,17 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 	}
 }
 
+func (d *Daemon) setOutpostConn(id string, run *outpostDial, conn *bridge.Conn) bool {
+	r := &d.outposts
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.dialers[id] != run {
+		return false
+	}
+	run.conn = conn
+	return true
+}
+
 func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpostDial) {
 	for ctx.Err() == nil {
 		var pin *bridge.Pin
@@ -163,18 +175,31 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			}
 			continue
 		}
-		for state := range conn.States() {
-			if ctx.Err() != nil {
-				_ = conn.Close()
-				return
-			}
-			detail := ""
-			if state == bridge.StateLost {
-				detail = conn.Err().Error()
-			}
-			d.updateOutpost(row.ID, run, state, conn.Peer().Build.String(), detail)
+		d.bridgeOutpost(ctx, row.ID, run, conn)
+	}
+}
+
+func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial, conn *bridge.Conn) {
+	defer conn.Close()
+	if !d.setOutpostConn(id, run, conn) {
+		return
+	}
+	defer d.setOutpostConn(id, run, nil)
+	sending := make(chan struct{})
+	if !d.life.Go("outpostCopy:"+id, func() { defer close(sending); d.sendOutpostCopy(ctx, id, conn) }) {
+		return
+	}
+	defer func() { <-sending }()
+	defer conn.Close()
+	for state := range conn.States() {
+		if ctx.Err() != nil {
+			return
 		}
-		_ = conn.Close()
+		detail := ""
+		if state == bridge.StateLost {
+			detail = conn.Err().Error()
+		}
+		d.updateOutpost(id, run, state, conn.Peer().Build.String(), detail)
 	}
 }
 

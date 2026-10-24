@@ -303,8 +303,8 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
-		(id, user_label, agent, directory, profile_id, parent_session_id, priority, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		(id, user_label, agent, directory, profile_id, parent_session_id, priority, created_at, host)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			user_label = excluded.user_label,
 			agent = excluded.agent,
@@ -319,6 +319,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		protocol.Deref(session.ParentSessionID),
 		boolToInt(protocol.Deref(session.Priority)),
 		string(protocol.TimestampNow()),
+		protocol.Deref(session.Host),
 	)
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", session.ID, err)
@@ -364,13 +365,13 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	var session protocol.Session
 	var labels SessionLabels
 	var stateSince, stateUpdatedAt, lastSeen string
-	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds string
+	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host string
 	var isWorktree, priority int
 	var contextWindowCap int
 	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host
 		FROM sessions_with_runtime WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
@@ -397,6 +398,7 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 		&turnAgentAt,
 		&succeeds,
 		&priority,
+		&host,
 	)
 	if err != nil {
 		return nil
@@ -420,6 +422,9 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	}
 	if succeeds != "" {
 		session.Succeeds = protocol.Ptr(protocol.SessionID(succeeds))
+	}
+	if host != "" {
+		session.Host = protocol.Ptr(host)
 	}
 	applyActivity(&session, activity.String, activityAt.String)
 
@@ -535,11 +540,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host
 			FROM sessions_with_runtime WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host
 			FROM sessions_with_runtime WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
@@ -552,7 +557,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var session protocol.Session
 		var labels SessionLabels
 		var stateSince, stateUpdatedAt, lastSeen string
-		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds string
+		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host string
 		var isWorktree, priority int
 		var contextWindowCap int
 		var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
@@ -583,6 +588,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&turnAgentAt,
 			&succeeds,
 			&priority,
+			&host,
 		)
 		if err != nil {
 			continue
@@ -606,6 +612,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		}
 		if succeeds != "" {
 			session.Succeeds = protocol.Ptr(protocol.SessionID(succeeds))
+		}
+		if host != "" {
+			session.Host = protocol.Ptr(host)
 		}
 		applyActivity(&session, activity.String, activityAt.String)
 

@@ -80,6 +80,7 @@ func (d *Daemon) configureOutpostListener() {
 		Self: d.bridgeIdentity(), HostKeyPath: filepath.Join(d.dataRoot, "bridge_host_key"),
 		AuthorizedKeys: func() ([]byte, error) { return os.ReadFile(config.AuthorizedKeysPath()) },
 		Logf:           d.logf,
+		Handlers:       d.outpostHandlers(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
 			if _, err := enrollment.RecordHome(d.dataRoot, home.DaemonID); err != nil {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}

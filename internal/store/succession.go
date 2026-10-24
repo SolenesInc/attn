@@ -127,9 +127,9 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 	}
 	_, err = tx.Exec(`
 		INSERT INTO sessions (id, user_label, agent, directory, profile_id, launched_at, context_window_cap,
-			resume_session_id, transcript_path, launch_intent, succeeds, priority, created_at)
+			resume_session_id, transcript_path, launch_intent, succeeds, priority, created_at, host)
 		SELECT ?, ?, agent, directory, profile_id, launched_at, context_window_cap,
-			?, ?, ?, id, priority, ?
+			?, ?, ?, id, priority, ?, host
 		FROM sessions WHERE id = ?`,
 		sc.To, sc.Label,
 		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, string(launch), at,

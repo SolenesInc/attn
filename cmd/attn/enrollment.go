@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/enrollment"
 )
@@ -45,7 +46,9 @@ commands:
         another daemon.
 
   leave [--json]
-        release the enrollment so the data folder is its own again.
+        release the enrollment so the data folder is its own again. On an
+        outpost it also closes the bridge from its home and stops the
+        terminals it ran for that home.
 `)
 }
 
@@ -107,6 +110,12 @@ func runEnrollmentLeave(args []string) {
 			fmt.Fprintf(os.Stderr, "No daemon has started in %s yet, so there is nothing to release.\n", enrollmentDataRoot())
 		}
 		os.Exit(1)
+	}
+	if c := client.New(""); c.IsRunning() {
+		if err := c.DropOutpostCopy(); err != nil {
+			fmt.Fprintf(os.Stderr, "enrollment leave: released the enrollment, but the daemon could not stop the terminals it ran for its home: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	if *asJSON {
 		if err := fprintJSON(os.Stdout, result); err != nil {

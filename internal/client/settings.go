@@ -15,6 +15,11 @@ func (c *Client) Settings(key string, all bool) (*protocol.SettingsListResult, e
 	return resp.SettingsList, nil
 }
 
+func (c *Client) DropOutpostCopy() error {
+	_, err := c.send(protocol.DropOutpostCopyMessage{Cmd: protocol.CmdDropOutpostCopy})
+	return err
+}
+
 func (c *Client) SetSetting(key, value string) (*protocol.SettingEntry, error) {
 	resp, err := c.send(protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: key, Value: value})
 	if err != nil {

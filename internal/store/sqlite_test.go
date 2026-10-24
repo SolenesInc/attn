@@ -113,7 +113,6 @@ func TestMigrations_MigratedColumnsExist(t *testing.T) {
 		{"sessions", "agent"},
 		{"sessions", "resume_session_id"},
 		{"sessions", "transcript_path"},
-		{"sessions", "endpoint_id"},
 		{"session_runtime", "agent_metadata"},
 		{"session_runtime", "agent_driver_plugin_name"},
 		{"session_runtime", "agent_driver_run_id"},
