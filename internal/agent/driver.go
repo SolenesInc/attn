@@ -59,8 +59,6 @@ type Capabilities struct {
 	HasEffortPin bool
 
 	ConversationIsSession bool
-
-	ConversationOpensInManyProcesses bool
 }
 
 type HarnessSignalKind string

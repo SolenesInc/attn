@@ -1,0 +1,3 @@
+kind: internal
+area: sessions
+change: Whether a session shows in many terminals now comes from its link instead of a Claude driver flag, and the two-sessions warning no longer checks the harness.

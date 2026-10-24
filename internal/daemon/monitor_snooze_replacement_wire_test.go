@@ -1,34 +1,21 @@
 package daemon_test
 
 import (
-	"fmt"
+	"testing"
+	"time"
+
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
-	"os"
-	"testing"
-	"time"
 )
 
 func TestASnoozeStillWakesAfterTakingOverALiveConversation(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		cwd := w.Path("shop")
-		var sessions, paths []string
-		for _, native := range []string{"live-owner", "taking-over"} {
-			session := w.Spawn(app, fakeagent.Codex, cwd)
-			path := w.Path(native + ".jsonl")
-			if err := os.WriteFile(path, []byte(fmt.Sprintf("{\"type\":\"session_meta\",\"payload\":{\"id\":%q,\"cwd\":%q,\"source\":\"cli\"}}\n", native, cwd)), 0600); err != nil {
-				t.Fatal(err)
-			}
-			if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal(session)), native, path); err != nil {
-				t.Fatal(err)
-			}
-			sessions = append(sessions, session)
-			paths = append(paths, path)
-		}
-		session := sessions[1]
-		terminal := protocol.TerminalID(w.Terminal(session))
+		owner := w.bubbleClaude(t, app, "shop")
+		takingOver := w.bubbleClaude(t, app, "shop")
+		session := takingOver.id
+		terminal := protocol.TerminalID(takingOver.self)
 		if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {
 			t.Fatal(err)
 		}
@@ -36,7 +23,7 @@ func TestASnoozeStillWakesAfterTakingOverALiveConversation(t *testing.T) {
 		deadline := time.Now().Add(time.Minute)
 		snoozeUntil(app, session, deadline)
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return snoozedUntil(s).Equal(deadline) })
-		if err := cli.ObserveAgentConversation(terminal, "live-owner", paths[0]); err != nil {
+		if err := cli.ObserveAgentConversation(terminal, owner.transcript.ConversationID, owner.transcript.Path); err != nil {
 			t.Fatal(err)
 		}
 		if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {

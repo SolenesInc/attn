@@ -25,6 +25,17 @@ after daemon restart. Closing a session ends its terminal associations. When a
 terminal resumes the conversation of a session whose agent no longer runs, the
 session moves into that terminal and its old tile goes away.
 
+Showing one session in many terminals needs the session to run over a link
+whose server every terminal of the conversation joins, like shared Codex's
+app-server. A terminal on a link that resumes the conversation of a live
+session shows that session.
+An integration without a link starts one process per terminal, and falls short
+of the model when the harness lets a second process open a conversation
+another still runs: that terminal keeps its own session on the conversation,
+so two open sessions hold it. The tiles of every live session on one
+conversation warn until only one remains. Claude Code and Pi fall short this
+way; plain Codex refuses the second process.
+
 Plugin driver payloads retain the `session_id` wire spelling for the terminal.
 Close notifications, including those completed after restart, use the original
 terminal identity.
@@ -79,10 +90,8 @@ Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
   branch with the newest leaf.
 - Every hook from either process carries the same conversation id.
 
-Claude Code falls short of attn's session model here. When a terminal resumes
-the conversation of a session whose agent still runs, the second process gets
-its own session on the same conversation, so two open sessions hold it. Both
-tiles warn that the other terminal has the conversation open until one process
+Claude Code has no link, so a terminal that resumes a live session's
+conversation gets its own session on it, and both tiles warn until one process
 exits or moves to another conversation.
 
 Probed on 2.1.303 with synthetic prompts and a local mock API:
@@ -206,7 +215,10 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
   conversation, including ones another client resumed.
 - One process writes a conversation at a time: while an app-server holds it
   loaded, another app-server or a plain `codex resume` fails with `already has
-  an active writer`. Either can take it once the holder unloads it.
+  an active writer`. Either can take it once the holder unloads it. On 0.162.1,
+  while a `--remote` TUI holds it, a plain TUI shows the lock screen described
+  above, both as `codex resume <id>` and with `/resume <id>`, and writes
+  nothing.
 - `thread/archive` moves the rollout to `archived_sessions/` (flat, no dated
   directories) and refuses later resumes; `thread/unarchive` moves it back.
 
@@ -464,3 +476,17 @@ synthetic messages:
   file while preserving the inherited message entries' `id` and usage
   (`dist/core/session-manager.js`). An entry id can therefore occur in more
   than one session file.
+
+Read in the installed 1.3.0 source and probed through its session SDK, with
+two `SessionManager`s on one file that share nothing but the file:
+
+- Nothing stops a second process from opening a session file another process
+  has open. `SessionManager` holds no lock; once the file exists it appends
+  each entry with `appendFileSync` (`dist/core/session-manager.js`).
+- Each writer continues its own branch from its own entries in memory, so the
+  file becomes a tree, and neither sees the other's entries. Opening the file
+  again loads the branch ending at the last entry written.
+
+Pi has no link either, so two Pi terminals on one conversation are two
+sessions and the file forks. attn does not yet record which conversation a Pi
+session runs, so no tile warns.
