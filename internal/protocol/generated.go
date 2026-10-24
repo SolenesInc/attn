@@ -375,10 +375,10 @@ type AgentTurnResult struct {
 
 type AnalyticsBuild struct {
 	// AppChannel corresponds to the JSON schema field "app_channel".
-	AppChannel *string `json:"app_channel,omitempty,omitzero"`
+	AppChannel string `json:"app_channel"`
 
 	// AppVersion corresponds to the JSON schema field "app_version".
-	AppVersion *string `json:"app_version,omitempty,omitzero"`
+	AppVersion string `json:"app_version"`
 
 	// Arch corresponds to the JSON schema field "arch".
 	Arch string `json:"arch"`

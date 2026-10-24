@@ -1033,17 +1033,17 @@ export enum AgentTurnOutcome {
 }
 
 export interface AnalyticsBuild {
-    app_channel?: string;
-    app_version?: string;
-    arch:         string;
-    build_time:   string;
-    channel:      string;
-    commit:       string;
-    dirty:        boolean;
-    fingerprint:  string;
-    os:           string;
-    protocol:     string;
-    version:      string;
+    app_channel: string;
+    app_version: string;
+    arch:        string;
+    build_time:  string;
+    channel:     string;
+    commit:      string;
+    dirty:       boolean;
+    fingerprint: string;
+    os:          string;
+    protocol:    string;
+    version:     string;
     [property: string]: any;
 }
 
@@ -5615,17 +5615,17 @@ export interface Context {
 }
 
 export interface Build {
-    app_channel?: string;
-    app_version?: string;
-    arch:         string;
-    build_time:   string;
-    channel:      string;
-    commit:       string;
-    dirty:        boolean;
-    fingerprint:  string;
-    os:           string;
-    protocol:     string;
-    version:      string;
+    app_channel: string;
+    app_version: string;
+    arch:        string;
+    build_time:  string;
+    channel:     string;
+    commit:      string;
+    dirty:       boolean;
+    fingerprint: string;
+    os:          string;
+    protocol:    string;
+    version:     string;
     [property: string]: any;
 }
 
@@ -17218,8 +17218,8 @@ const typeMap: any = {
         { json: "outcome", js: "outcome", typ: r("AgentTurnOutcome") },
     ], "any"),
     "AnalyticsBuild": o([
-        { json: "app_channel", js: "app_channel", typ: u(undefined, "") },
-        { json: "app_version", js: "app_version", typ: u(undefined, "") },
+        { json: "app_channel", js: "app_channel", typ: "" },
+        { json: "app_version", js: "app_version", typ: "" },
         { json: "arch", js: "arch", typ: "" },
         { json: "build_time", js: "build_time", typ: "" },
         { json: "channel", js: "channel", typ: "" },
@@ -20078,8 +20078,8 @@ const typeMap: any = {
         { json: "transcript", js: "transcript", typ: u(undefined, r("Transcript")) },
     ], "any"),
     "Build": o([
-        { json: "app_channel", js: "app_channel", typ: u(undefined, "") },
-        { json: "app_version", js: "app_version", typ: u(undefined, "") },
+        { json: "app_channel", js: "app_channel", typ: "" },
+        { json: "app_version", js: "app_version", typ: "" },
         { json: "arch", js: "arch", typ: "" },
         { json: "build_time", js: "build_time", typ: "" },
         { json: "channel", js: "channel", typ: "" },

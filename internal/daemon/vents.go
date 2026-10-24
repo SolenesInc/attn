@@ -105,14 +105,10 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 	intent, _ := d.store.LaunchIntent(session.ID)
 	_, experimental := d.launchVentIntent(session.ID)
-	build := analytics.CurrentBuild()
 	context := protocol.VentContext{
 		SessionLabel: session.Label,
 		Harness:      session.Agent,
-		Build: protocol.AnalyticsBuild{
-			Version: build.Version, Commit: build.Commit, Channel: build.Channel, BuildTime: build.BuildTime,
-			Fingerprint: build.Fingerprint, Protocol: build.Protocol, Os: build.OS, Arch: build.Arch, Dirty: build.Dirty,
-		},
+		Build:        analytics.CurrentBuild(),
 		Experimental: experimental,
 	}
 	if context.Experimental == nil {

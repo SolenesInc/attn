@@ -3466,8 +3466,8 @@ model AnalyticsBuild {
   os: string;
   arch: string;
   dirty: boolean;
-  app_version?: string;
-  app_channel?: string;
+  app_version: string;
+  app_channel: string;
 }
 
 // Where the agent's transcript stood when it vented: its path and size.
