@@ -236,22 +236,28 @@ func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhil
 			codex := s.InstallStandaloneCodex("standalone", "0.162.1")
 			setSetting(t, app, "codex_executable", codex)
 			shareCodex(t, app)
-			spawn := func(project string) string {
+			spawn := func(project string) (string, *fakeagent.Run) {
 				session := s.Spawn(app, fakeagent.Codex, s.Path(project), func(m *protocol.SpawnSessionMessage) {
 					m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
 				})
-				return s.Launched(session).Argv[0]
+				return session, s.Launched(session)
 			}
-			spawn("shop")
+			shop, shopCodex := spawn("shop")
+			app.TypeLine(shop, "write the release notes")
+			shopCodex.Prompted()
 			s.InstallStandaloneCodex("standalone", "0.163.0")
 
 			s.Stop()
 			s.Start()
 			app = s.App()
 			running := s.Path("standalone", "releases", "0.162.1", "bin", "codex")
-			if got := spawn("cart"); got != running {
-				t.Errorf("a terminal opened after the restart ran %s, want the app-server's %s", got, running)
+			if _, cart := spawn("cart"); cart.Argv[0] != running {
+				t.Errorf("a terminal opened after the restart, while a turn held the app-server on its Codex, ran %s, want the app-server's %s", cart.Argv[0], running)
 			}
+			s.CodexServer().Reply(shopCodex.ConversationID, "Wrote the release notes.")
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.RunningVersion) == "0.163.0" && m.SharedCodex.Restart == protocol.SharedCodexRestartNone
+			})
 		})
 	}
 }
