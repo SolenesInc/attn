@@ -117,9 +117,14 @@ garden                  a profile's issue tracker
    ├─ watcher (0..n)    a session or crew member that follows the seed and
    │                    its subtasks; like a watcher on a ticket
    ├─ note (0..n)       a comment in the ticket's log
+   ├─ check (0..n)      something the seed must prove, numbered like C1; like
+   │  │                 an acceptance criterion
+   │  ├─ report (at most 1)   the proof someone recorded for it
+   │  └─ verdict (at most 1)  confirmed or rejected
    └─ edge (0..n)       blocks or discovered-from
 tend                    claim a seed; like assigning a ticket to yourself
 plot                    an epic: a seed with child seeds
+shared check            a check on a plot that every seed under it proves
 packet                  an epic template
 ```
 

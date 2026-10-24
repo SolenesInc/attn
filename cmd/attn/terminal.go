@@ -269,7 +269,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 	if len(args.positional) > 0 {
 		target = args.positional[0]
 	}
-	desktop := terminalOptional(args.desktop)
+	desktop := nonEmpty(args.desktop)
 	switch args.action {
 	case "ls":
 		message = protocol.TerminalListMessage{Cmd: protocol.CmdTerminalList, CallerSessionID: caller, Desktop: desktop, All: protocol.Ptr(args.all)}
@@ -278,7 +278,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 		if args.down {
 			direction = protocol.TerminalDirectionDown
 		}
-		message = protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: caller, Desktop: desktop, Direction: &direction, Cwd: terminalOptional(args.cwd), Command: terminalOptional(args.command)}
+		message = protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: caller, Desktop: desktop, Direction: &direction, Cwd: nonEmpty(args.cwd), Command: nonEmpty(args.command)}
 	case "send", "run":
 		data := args.text
 		if args.hasKeys {
@@ -379,7 +379,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 	return 0, nil
 }
 
-func terminalOptional(value string) *string {
+func nonEmpty(value string) *string {
 	if value == "" {
 		return nil
 	}

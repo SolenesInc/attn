@@ -149,7 +149,11 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 func mailboxItemContent(delivery store.InboxDelivery) string {
 	switch delivery.Item.Kind {
 	case inbox.SeedUpdate:
-		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "event_kind": delivery.Item.Hint})
+		change := delivery.Item.Text
+		if change == "" {
+			change = delivery.Item.Hint
+		}
+		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "change": change})
 	case inbox.PeerMessage:
 		if delivery.Peer != nil {
 			return delivery.Peer.Body

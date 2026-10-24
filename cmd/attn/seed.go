@@ -53,6 +53,8 @@ func runSeed() {
 		runSeedTransition(os.Args[2], args)
 	case "note":
 		runSeedNote(args)
+	case "check":
+		runSeedCheck(args)
 	case "watch", "unwatch":
 		runSeedWatch(os.Args[2], args)
 	case "attach", "detach":
@@ -84,17 +86,19 @@ how the seed is spoken of.
 Anything worth handing off, parking, or attributing is a seed.
 
 commands:
-  plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [flags]
+  plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]
         plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
         if the seed gains children, that body is the plot's plan. --part-of
-        plants it under a plot.
+        plants it under a plot. --check defines what the seed must prove.
 
   plot [-f <path>] [--json]
         plant a whole plot in one move from a JSON payload (-f, or stdin):
-        {"title": …, "body": …, "children": [{"title": …, "body": …,
+        {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}],
+        "children": [{"title": …, "body": …, "checks": […],
         "blocks": ["<sibling step slug>"]}]}. Children are parallel by
-        default; blocks names the siblings a child holds back. Prints the
-        plot's id and each child's id and step slug.
+        default; blocks names the siblings a child holds back. A shared
+        check is proven by every child. Prints the plot's id and each
+        child's id and step slug.
 
   ls [--stale [--window <duration>]] [--flat] [--json]
         the garden, newest first, with children nested under their plot.
@@ -184,6 +188,28 @@ commands:
         prints it on the claim, so it is read before any work.
         --ring tells the current tender and watchers to look; ordinary notes stay quiet.
 
+  check add <id> <C#> "<statement>" [--shared]
+  check edit <id> <C#> "<statement>"
+  check remove|restore <id> <C#>
+        define what this seed must prove. A check is a numbered statement
+        (C1) that the body cites by id. On a plot, --shared makes every seed
+        below it prove the check with its own report. Removed ids are never
+        reused. restore brings a check back with its result.
+
+  check report <id> <C#> -m "<summary>" [--evidence <artifact|url>]... [--commit <rev>]
+        record the proof for a check. --evidence is an artifact on the seed
+        or an http(s) URL, and can repeat. A new report clears the verdict.
+        If a check doesn't apply, report that too: say why and cite what
+        shows it. The verdict decides.
+
+  check confirm|reject|uncheck|reopen <id> <C#> [-m "<why>"]
+        judge the check, with or without a report. reject needs -m saying
+        what would prove it. uncheck clears the verdict. reopen clears the
+        report as well.
+
+        Every check verb takes --ring, --member, and --json. Checks never
+        block a move. harvest lists the checks still open or rejected.
+
   attach <id> --path <file> (--move | --copy)
         put a local regular file in durable seed-owned storage. Move is the
         recommended choice and leaves one editable canonical file; Copy keeps
@@ -224,7 +250,13 @@ flags:
   --window <d>       the stale window, like 72h or 14d (ls --stale)
   -f <path>          the plot payload to read (plot; default stdin)
   --handoff          write a note to whoever tends the seed next (note)
-  --ring             ring the current tender and watchers after this note lands (note)
+  --ring             give the current tender and watchers a seed update after
+                     this note or check move lands, and print who gets it (note, check)
+  --check "C1=<s>"   a check the seed must prove; repeats (plant)
+  --shared           every seed below this plot proves the check (check add)
+  --evidence <e>     an artifact on the seed or an http(s) URL; repeats (check report)
+  --commit <rev>     the commit the evidence came from, resolved with git
+                     rev-parse in the current directory (check report)
   --path <file>      local source, managed filename, or linked path
   --repo <name>      the repository that path lives in (attach, detach)
   --notebook <id>    a Notebook document (attach, detach)
@@ -329,12 +361,23 @@ type seedFlags struct {
 	clear          *bool
 	whenMerged     *bool
 	force          *bool
+	evidence       *repeatedFlag
+	checks         *repeatedFlag
+	commit         *string
+	shared         *bool
 }
 
 func newSeedFlags(verb string) *seedFlags {
 	fs := flag.NewFlagSet("seed "+verb, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	evidence, checks := &repeatedFlag{}, &repeatedFlag{}
+	fs.Var(evidence, "evidence", "an artifact on the seed or an http(s) URL that proves the check; repeats")
+	fs.Var(checks, "check", "a check the seed must prove, as C1=<statement>; repeats")
 	return &seedFlags{
+		evidence:       evidence,
+		checks:         checks,
+		commit:         fs.String("commit", "", "the commit the evidence came from"),
+		shared:         fs.Bool("shared", false, "every seed below this plot proves the check"),
 		fs:             fs,
 		profile:        fs.String("profile", "", "profile name or id outside an attn session"),
 		session:        fs.String("session", "", "session id (defaults to the current session)"),
@@ -458,7 +501,19 @@ func runSeedPlant(args []string) {
 	if len(positionals) != 1 {
 		seedFail("plant", fmt.Errorf(`needs exactly one title, got %d: attn seed plant "what this is" [-m "the detail"]`, len(positionals)))
 	}
-	result, err := f.client().SeedPlant(f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom), strings.TrimSpace(*f.member))
+	checks, err := parsePlantChecks(*f.checks)
+	if err != nil {
+		seedFail("plant", err)
+	}
+	msg := protocol.SeedPlantMessage{Title: positionals[0], Checks: checks}
+	if sessionID := f.sessionID(); sessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sessionID)
+	}
+	msg.Body = nonEmpty(f.text("plant"))
+	msg.PartOf = nonEmpty(strings.TrimSpace(*f.partOf))
+	msg.DiscoveredFrom = nonEmpty(strings.TrimSpace(*f.discoveredFrom))
+	msg.Member = nonEmpty(strings.TrimSpace(*f.member))
+	result, err := f.client().SeedPlantMessage(msg)
 	if err != nil {
 		seedFail("plant", err)
 	}
@@ -558,7 +613,7 @@ func runSeedList(args []string) {
 	for _, row := range seedRows(result.Seeds, *f.flat) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
 			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
-			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+harvestWhenSuffix(row.seed))
+			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+checkTallySuffix(row.seed)+harvestWhenSuffix(row.seed))
 	}
 	w.Flush()
 	if result.Total > len(result.Seeds) {
@@ -765,12 +820,12 @@ func runSeedPlot(args []string) {
 	if err != nil {
 		seedFail("plot", err)
 	}
-	msg := protocol.SeedPlotMessage{Title: spec.Title}
+	msg := protocol.SeedPlotMessage{Title: spec.Title, Checks: checkDefinitionsToProtocol(spec.Checks)}
 	if spec.Body != "" {
 		msg.Body = protocol.Ptr(spec.Body)
 	}
 	for _, child := range spec.Children {
-		wire := protocol.SeedPlotChild{Title: child.Title, Blocks: child.Blocks}
+		wire := protocol.SeedPlotChild{Title: child.Title, Blocks: child.Blocks, Checks: checkDefinitionsToProtocol(child.Checks)}
 		if child.Body != "" {
 			wire.Body = protocol.Ptr(child.Body)
 		}
@@ -935,6 +990,7 @@ func fprintArtifactReferences(w io.Writer, artifacts []protocol.SeedArtifactRefe
 func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	fprintHandoff(w, result.Handoff)
 	fprintSeed(w, result.Seed, result.Watching)
+	fprintSeedChecks(w, result.Seed)
 	if continuation := result.Seed.Continuation; continuation != nil && continuation.KeptConversation != nil {
 		kept := continuation.KeptConversation
 		switch {
@@ -998,7 +1054,11 @@ func withoutNote(notes []protocol.SeedNote, drop *protocol.SeedNote) []protocol.
 func fprintRelations(out io.Writer, relations []protocol.SeedRelation) {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	for _, relation := range relations {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", relation.Label, relation.SeedID, relation.Status, relation.Title)
+		tally := ""
+		if relation.Checks != nil {
+			tally = checkTallyShort(*relation.Checks)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s%s\n", relation.Label, relation.SeedID, relation.Status, relation.Title, tally)
 	}
 	w.Flush()
 }
@@ -1050,7 +1110,7 @@ func runSeedReady(args []string) {
 
 func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	if result.Crown != nil {
-		fmt.Fprintf(out, "%s%s\n\n", seedLine(*result.Crown), plotProgressSuffix(*result.Crown))
+		fmt.Fprintf(out, "%s%s%s\n\n", seedLine(*result.Crown), plotProgressSuffix(*result.Crown), checkTallySuffix(*result.Crown))
 	}
 	if len(result.Seeds) == 0 {
 		fmt.Fprintf(out, "nothing is ready %s — `attn seed ls` shows what is planted and what holds it\n", readyScopeName(result))
@@ -1077,7 +1137,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 			status = "plot"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n", seed.ID, seed.StepSlug, status, shortStamp(seed.CreatedAt),
-			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed)+harvestWhenSuffix(seed))
+			strings.Repeat("  ", row.depth), seed.Title, plotProgressSuffix(seed)+checkTallySuffix(seed)+harvestWhenSuffix(seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
 			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
 				orDash(crew.HolderName(handoff.AuthorMember, handoff.AuthorSession)), firstLine(handoff.Body))
@@ -1119,6 +1179,9 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	if p := seed.PlotProgress; p != nil {
 		fmt.Fprintf(w, "plot\t%d of %d done — %d growing, %d ready, %d blocked, %d dormant, %d withered\n",
 			p.Done, p.Total, p.Growing, p.Ready, p.Blocked, p.Dormant, p.Withered)
+		if tally := checkTallyLong(plotCheckTally(p)); tally != "" {
+			fmt.Fprintf(w, "plot checks\t%s\n", tally)
+		}
 	}
 	if seed.Template {
 		fmt.Fprintf(w, "packet\tyes\n")
@@ -1217,6 +1280,9 @@ func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleare
 	} else if len(cleared) > 0 && cleared[0] {
 		fmt.Fprintln(w, "harvest-on-merge cleared")
 	}
+	if unsettled := unsettledChecks(result.Seed.Checks); unsettled != "" && closedSeedStatus(result.Seed.Status) {
+		fmt.Fprintf(w, "checks: %s Checks never block a move; the tally stays on the seed.\n", unsettled)
+	}
 	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(result.Seed.Status) {
 		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n", open)
 	}
@@ -1293,9 +1359,13 @@ func runSeedNote(args []string) {
 	}
 	if result.Note.Kind == garden.NoteKindHandoff {
 		fmt.Printf("handoff left on %s — whoever tends it next reads this first\n", result.Note.SeedID)
-		return
+	} else {
+		fmt.Printf("noted on %s\n", result.Note.SeedID)
 	}
-	fmt.Printf("noted on %s\n", result.Note.SeedID)
+	if *f.ring {
+		fprintRang(os.Stdout, result.Note.SeedID, result.RingRecipients)
+	}
+	fprintCitedChecks(os.Stdout, result.Note.SeedID, result.CitedChecks)
 }
 
 func runSeedWatch(verb string, args []string) {
@@ -1553,7 +1623,7 @@ func runSeedExport(args []string) {
 	if err != nil {
 		seedFail("export", err)
 	}
-	rendered := garden.Export(gardenSeedFromWire(result.Seed))
+	rendered := garden.Export(gardenSeedFromWire(result.Seed)) + exportChecks(result.Seed)
 
 	out := strings.TrimSpace(*f.out)
 	if out == "-" {
