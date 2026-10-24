@@ -1,0 +1,3 @@
+kind: fixed
+area: shared codex
+change: A hidden shared Codex session that you switch a terminal to with `/resume` or `/agents` follows its terminal again, so an approval answered there no longer stays pending in the queue.

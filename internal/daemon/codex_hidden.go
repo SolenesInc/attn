@@ -210,7 +210,7 @@ func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
 			r.d.sessionMonitor(sessionID).RecordTurnAborted("the shared Codex app-server ended the turn", now, now)
 		}
 	}
-	r.d.sessionMonitor(sessionID).RecordPTY(pty.Observation{Source: pty.SourceProgramStatus, Claim: status, At: now})
+	r.d.sessionMonitor(sessionID).RecordServerStatus(status, now)
 }
 
 func inTurn(state protocol.SessionState) bool {

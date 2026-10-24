@@ -72,18 +72,48 @@ func (m *Monitor) RecordPTY(obs pty.Observation) bool {
 	}, movedAt(at, mutate))
 }
 
+func (m *Monitor) RecordServerStatus(status string, at time.Time) bool {
+	if m == nil {
+		return false
+	}
+	obs := pty.Observation{Source: pty.SourceProgramStatus, Claim: status, At: at}
+	return m.UpdateEvidence(func(e *Evidence) bool {
+		return holdsProgramStatus(e, obs, sessionstate.SourceAppServer)
+	}, movedAt(at, programStatusEvidence(obs, at, sessionstate.SourceAppServer)))
+}
+
 func PTYEvidence(obs pty.Observation, at time.Time) (func(*Evidence), bool) {
+	mutate, ok := terminalEvidence(obs, at)
+	if !ok {
+		return nil, false
+	}
+	return func(e *Evidence) {
+		if reportedByServer(e) {
+			e.ClearProgramStatus()
+		}
+		mutate(e)
+	}, true
+}
+
+func terminalEvidence(obs pty.Observation, at time.Time) (func(*Evidence), bool) {
 	if obs.Source == pty.SourceProgramStatus {
-		return programStatusEvidence(obs, at), true
+		return programStatusEvidence(obs, at, sessionstate.SourceProgramStatus), true
 	}
 	return heartbeatEvidence(obs, at)
 }
 
 func holdsPTYEvidence(e *Evidence, obs pty.Observation) bool {
+	if reportedByServer(e) {
+		return false
+	}
 	if obs.Source == pty.SourceProgramStatus {
-		return holdsProgramStatus(e, obs)
+		return holdsProgramStatus(e, obs, sessionstate.SourceProgramStatus)
 	}
 	return e.ProgramStatus != nil || holdsSettledHeartbeat(e, obs)
+}
+
+func reportedByServer(e *Evidence) bool {
+	return e.ProgramStatus != nil && e.ProgramStatus.Source == sessionstate.SourceAppServer
 }
 
 func ProgramStatusClaim(claim string) (sessionstate.Claim, bool) {
@@ -103,17 +133,18 @@ func ProgramStatusClaim(claim string) (sessionstate.Claim, bool) {
 	}
 }
 
-func holdsProgramStatus(e *Evidence, obs pty.Observation) bool {
+func holdsProgramStatus(e *Evidence, obs pty.Observation, source sessionstate.Source) bool {
 	claim, reported := ProgramStatusClaim(obs.Claim)
 	if !reported {
 		return e.ProgramStatus == nil
 	}
 	return e.ProgramStatus != nil &&
+		e.ProgramStatus.Source == source &&
 		e.ProgramStatus.Claim == claim &&
 		e.ProgramStatus.Detail == obs.Detail
 }
 
-func programStatusEvidence(obs pty.Observation, at time.Time) func(*Evidence) {
+func programStatusEvidence(obs pty.Observation, at time.Time, source sessionstate.Source) func(*Evidence) {
 	claim, reported := ProgramStatusClaim(obs.Claim)
 	return func(e *Evidence) {
 		if claim == sessionstate.ClaimBusy {
@@ -125,7 +156,7 @@ func programStatusEvidence(obs pty.Observation, at time.Time) func(*Evidence) {
 			return
 		}
 		e.ProgramStatus = &sessionstate.Observation{
-			Source:     sessionstate.SourceProgramStatus,
+			Source:     source,
 			Claim:      claim,
 			Detail:     obs.Detail,
 			ObservedAt: at,
