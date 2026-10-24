@@ -21,7 +21,8 @@ CREATE TABLE session_runtime (
     last_model_request_at TEXT,
     harness_title TEXT NOT NULL DEFAULT '',
     session_cost_json TEXT NOT NULL DEFAULT '',
-    pending_switch TEXT NOT NULL DEFAULT ''
+    pending_switch TEXT NOT NULL DEFAULT '',
+    pull_requests TEXT NOT NULL DEFAULT ''
 );
 
 INSERT INTO session_runtime (
@@ -86,6 +87,7 @@ SELECT
     r.last_model_request_at AS last_model_request_at,
     COALESCE(r.harness_title, '') AS harness_title,
     COALESCE(r.session_cost_json, '') AS session_cost_json,
-    COALESCE(r.pending_switch, '') AS pending_switch
+    COALESCE(r.pending_switch, '') AS pending_switch,
+    COALESCE(r.pull_requests, '') AS pull_requests
 FROM sessions s
 LEFT JOIN session_runtime r ON r.session_id = s.id;

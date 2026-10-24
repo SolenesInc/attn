@@ -7,4 +7,5 @@ const (
 	crashAfterWorktreeJournaled     = "delegation-worktree-journaled"
 	crashAfterWorktreeOwned         = "delegation-worktree-owned"
 	crashAfterGardenAdvice          = "garden-advice-received"
+	crashBeforeLinkRecorded         = "pull-request-link-saved-before-record"
 )

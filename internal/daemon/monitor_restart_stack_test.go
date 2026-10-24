@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -81,5 +82,46 @@ func TestASnoozeTheMonitorSavedIsStillSnoozedAfterARestart(t *testing.T) {
 	s.Start()
 	if got := snoozedUntil(restartedSession(s.App(), id)); !got.Equal(until) {
 		t.Fatalf("after the restart the session is snoozed until %v, want %v, as its monitor saved", got, until)
+	}
+}
+
+func TestAPullRequestLinkSavedJustBeforeACrashIsStillLinkedAfterTheRestart(t *testing.T) {
+	t.Parallel()
+	s, id := waitingAgentStack(t)
+	recordPullRequest(t, s.Client(), id, shopPull(1))
+	s.Stop()
+	s.StartCrashingAt("pull-request-link-saved-before-record")
+	_ = s.Client().RecordPullRequestCreated(protocol.SessionID(id), shopPull(2))
+	s.AwaitCrash()
+
+	s.Start()
+	app := s.App()
+	want := []int{1, 2}
+	got := pullNumbers(restartedSession(app, id))
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		shown := testworld.AwaitSession(app, id, func(x protocol.Session) bool { return len(x.PullRequests) == 2 })
+		got = pullNumbers(shown)
+		slices.Sort(got)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("after the crash the session links pull requests %v, want %v, as its monitor saved", got, want)
+	}
+}
+
+func TestAForgottenPullRequestLinkStaysForgottenAfterARestart(t *testing.T) {
+	t.Parallel()
+	s, id := waitingAgentStack(t)
+	cli := s.Client()
+	recordPullRequest(t, cli, id, shopPull(1))
+	recordPullRequest(t, cli, id, shopPull(2))
+	if err := cli.ForgetSessionPullRequest(protocol.SessionID(id), shopPull(2)); err != nil {
+		t.Fatal(err)
+	}
+	s.Stop()
+
+	s.Start()
+	if got := pullNumbers(restartedSession(s.App(), id)); !slices.Equal(got, []int{1}) {
+		t.Fatalf("after the restart the session links pull requests %v, want only #1", got)
 	}
 }

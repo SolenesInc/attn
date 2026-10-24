@@ -150,12 +150,20 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 }
 
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
+	if !d.monitorEntry(rec.SessionID).ForgetPullRequest(rec.PRID) {
+		return fmt.Errorf("forget pull request %s: the session's monitor could not save it", rec.PRID)
+	}
 	addresses := d.inboxRoleAddresses(rec.SessionID)
 	forgotten := false
 	for _, address := range addresses {
-		removed, err := d.store.ForgetSessionPullRequest(rec.SessionID, address, rec.PRID)
+		removed, sessions, err := d.store.ForgetSessionPullRequest(rec.SessionID, address, rec.PRID)
 		if err != nil {
 			return fmt.Errorf("forget pull request %s: %w", rec.PRID, err)
+		}
+		for _, session := range sessions {
+			if session != rec.SessionID {
+				d.monitorEntry(session).ForgetPullRequest(rec.PRID)
+			}
 		}
 		forgotten = forgotten || removed
 	}

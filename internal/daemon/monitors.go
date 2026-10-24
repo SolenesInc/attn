@@ -102,7 +102,9 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 		if old := r.sessions[sessionID]; old != nil {
 			old.stopCatchUp()
 		}
-		r.sessions[sessionID] = &monitorBinding{entry: entry, applied: entry.Snapshot()}
+		applied := entry.Snapshot()
+		applied.PullRequests.Entries = d.recordedLinks(sessionID)
+		r.sessions[sessionID] = &monitorBinding{entry: entry, applied: applied}
 		homeOf(entry).bind(sessionID)
 		r.mu.Unlock()
 		r.policyMu.Unlock()
@@ -136,6 +138,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 	}
 	conversation := d.store.GetSessionConversation(sessionID)
 	stamps := d.store.TurnStamps(sessionID)
+	records := d.store.SessionRuntimeRecords(sessionID)
 	launch := sessionmonitor.Launch{
 		Known:              true,
 		Agent:              session.Agent,
@@ -153,7 +156,8 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		Driver:        d.driverInputFromRecord(sessionID),
 		Conversation:  sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
 		LastSeen:      protocol.Timestamp(session.LastSeen).Time(),
-		PendingSwitch: decodePendingSwitch(d.store.SessionPendingSwitch(sessionID)),
+		PendingSwitch: decodePendingSwitch(records.PendingSwitch),
+		PullRequests:  decodePullRequests(records.PullRequests),
 	}
 	if cost, err := d.store.SessionCostCheckpoint(sessionID); err == nil {
 		launch.Cost = cost
@@ -316,4 +320,16 @@ func (d *Daemon) monitorSaver() sessionmonitor.Saver {
 		return nil
 	}
 	return storeSaver{daemon: d}
+}
+
+func (d *Daemon) recordedLinks(sessionID protocol.SessionID) map[string]sessionmonitor.PullRequest {
+	records := d.store.ListSessionPullRequests(sessionID)
+	if len(records) == 0 {
+		return nil
+	}
+	links := make(map[string]sessionmonitor.PullRequest, len(records))
+	for _, record := range records {
+		links[record.PRID] = sessionmonitor.PullRequest{Repository: record.Repository, Number: record.Number, URL: record.URL}
+	}
+	return links
 }

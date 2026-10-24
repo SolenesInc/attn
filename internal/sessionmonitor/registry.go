@@ -274,6 +274,7 @@ func (e *Entry) initializeLocked(start Start) {
 	e.conversationInput = Conversation{ConversationObservation: launch.Conversation}
 	e.touchedAt = launch.LastSeen
 	e.pendingSwitch = launch.PendingSwitch
+	e.pullRequests = launch.PullRequests
 	e.initialized = launch.Known
 }
 

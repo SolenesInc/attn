@@ -88,3 +88,19 @@ func (e *Entry) ClearExitBefore(before time.Time) (cleared, applied bool) {
 	e.mu.Unlock()
 	return true, e.publish(view)
 }
+
+func (e *Entry) ForgetPullRequest(id string) bool {
+	if e == nil {
+		return true
+	}
+	e.mu.Lock()
+	if _, ok := e.pullRequests[id]; !ok {
+		e.mu.Unlock()
+		return true
+	}
+	e.pullRequests = maps.Clone(e.pullRequests)
+	delete(e.pullRequests, id)
+	view := e.viewLocked()
+	e.mu.Unlock()
+	return e.publish(view)
+}

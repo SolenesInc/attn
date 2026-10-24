@@ -23,6 +23,7 @@ type SessionRuntimeState struct {
 	HarnessTitle       string
 	LastSeen           time.Time
 	PendingSwitch      string
+	PullRequests       string
 }
 
 func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeState) bool {
@@ -31,10 +32,6 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 	if s.db == nil {
 		session := s.sessions[id]
 		if session == nil {
-			return false
-		}
-		cursor := s.agentDriverRuns[id]
-		if state.Driver.RunID != "" && cursor.RunID != state.Driver.RunID {
 			return false
 		}
 		session.State = state.State
@@ -60,16 +57,23 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 		if !state.LastModelRequestAt.IsZero() {
 			session.LastModelRequestAt = protocol.Ptr(string(protocol.NewTimestamp(state.LastModelRequestAt)))
 		}
-		s.setTurnStampsLocked(id, state.Turn)
-		if state.Driver.RunID != "" {
-			cursor.Seq = max(cursor.Seq, state.Driver.Seq)
-			s.agentDriverRuns[id] = cursor
-			s.agentMetadata[id] = state.DriverMetadata
-			if s.agentDriverTranscripts == nil {
-				s.agentDriverTranscripts = make(map[protocol.SessionID]string)
-			}
-			s.agentDriverTranscripts[id] = state.DriverTranscript
+		if !state.LastSeen.IsZero() {
+			session.LastSeen = string(protocol.NewTimestamp(state.LastSeen))
 		}
+		s.setTurnStampsLocked(id, state.Turn)
+		if s.agentDriverRuns == nil {
+			s.agentDriverRuns = make(map[protocol.SessionID]AgentDriverReportCursor)
+		}
+		s.agentDriverRuns[id] = state.Driver
+		s.agentMetadata[id] = state.DriverMetadata
+		if s.agentDriverTranscripts == nil {
+			s.agentDriverTranscripts = make(map[protocol.SessionID]string)
+		}
+		s.agentDriverTranscripts[id] = state.DriverTranscript
+		if s.runtimeRecords == nil {
+			s.runtimeRecords = make(map[protocol.SessionID]SessionRuntimeRecords)
+		}
+		s.runtimeRecords[id] = SessionRuntimeRecords{PendingSwitch: state.PendingSwitch, PullRequests: state.PullRequests}
 		return true
 	}
 	request := ""
@@ -83,8 +87,8 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 	result, err := s.db.Exec(`INSERT INTO session_runtime (session_id, state, state_since, state_updated_at,
 		turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, turn_requested_at, last_model_request_at,
 		agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_metadata, agent_driver_transcript_path,
-		branch, is_worktree, main_repo, repository, harness_title, last_seen, pending_switch)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		branch, is_worktree, main_repo, repository, harness_title, last_seen, pending_switch, pull_requests)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')
 		ON CONFLICT (session_id) DO UPDATE SET state = excluded.state, state_since = excluded.state_since, state_updated_at = excluded.state_updated_at,
 		turn_opened_at = excluded.turn_opened_at, turn_settled_at = excluded.turn_settled_at, turn_snoozed_until = excluded.turn_snoozed_until,
@@ -94,11 +98,11 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 		agent_driver_transcript_path = excluded.agent_driver_transcript_path, branch = excluded.branch, is_worktree = excluded.is_worktree,
 		main_repo = excluded.main_repo, repository = excluded.repository, harness_title = excluded.harness_title,
 		last_seen = CASE WHEN excluded.last_seen = '' THEN session_runtime.last_seen ELSE excluded.last_seen END,
-		pending_switch = excluded.pending_switch`,
+		pending_switch = excluded.pending_switch, pull_requests = excluded.pull_requests`,
 		id, string(state.State), string(protocol.NewTimestamp(state.Since)), string(protocol.NewTimestamp(state.Updated)),
 		turnStamp(state.Turn.OpenedAt), turnStamp(state.Turn.SettledAt), turnStamp(state.Turn.SnoozedUntil), turnStamp(state.Turn.AgentAt), turnStamp(state.Turn.RequestedAt), request,
 		state.Driver.PluginName, state.Driver.RunID, state.Driver.Seq, state.DriverMetadata, state.DriverTranscript,
-		state.Branch.Branch, boolToInt(state.Branch.IsWorktree), state.Branch.MainRepo, state.Branch.Repository, state.HarnessTitle, lastSeen, state.PendingSwitch, id)
+		state.Branch.Branch, boolToInt(state.Branch.IsWorktree), state.Branch.MainRepo, state.Branch.Repository, state.HarnessTitle, lastSeen, state.PendingSwitch, state.PullRequests, id)
 	if err != nil {
 		log.Printf("[store] save session runtime: session=%s: %v", id, err)
 		return false
@@ -114,15 +118,20 @@ func turnStamp(at time.Time) string {
 	return at.UTC().Format(sortableTimeFormat)
 }
 
-func (s *Store) SessionPendingSwitch(id protocol.SessionID) string {
+type SessionRuntimeRecords struct {
+	PendingSwitch string
+	PullRequests  string
+}
+
+func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecords {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
-		return s.pendingSwitches[id]
+		return s.runtimeRecords[id]
 	}
-	var pending string
-	if err := s.db.QueryRow(`SELECT pending_switch FROM session_runtime WHERE session_id = ?`, id).Scan(&pending); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		log.Printf("[store] session %s pending switch: %v", id, err)
+	var records SessionRuntimeRecords
+	if err := s.db.QueryRow(`SELECT pending_switch, pull_requests FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingSwitch, &records.PullRequests); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		log.Printf("[store] session %s runtime records: %v", id, err)
 	}
-	return pending
+	return records
 }

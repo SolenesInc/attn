@@ -42,6 +42,7 @@ type Launch struct {
 	Conversation       ConversationObservation
 	LastSeen           time.Time
 	PendingSwitch      Conversation
+	PullRequests       map[string]PullRequest
 }
 
 func (e *Entry) SetPolicy(policy Policy) {

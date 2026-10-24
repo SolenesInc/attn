@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -36,6 +37,10 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 		return true
 	}
 	recorded, err := h.recordConversation(session, previous, view)
+	var linked []string
+	if err == nil {
+		linked, err = h.recordPullRequests(session, previous, view)
+	}
 	if err != nil {
 		h.catchUp(session, binding, err)
 		r.applyMu.Unlock()
@@ -47,10 +52,8 @@ func (h *monitorHome) Applied(view sessionmonitor.View) bool {
 	if recorded != "" {
 		h.entry.SettleSwitch(recorded)
 	}
-	for id, link := range view.PullRequests.Entries {
-		if previous.PullRequests.Entries[id] != link {
-			d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: id})
-		}
+	for _, id := range linked {
+		d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: id})
 	}
 	if _, _, usageChanged := sessionmonitor.CostChange(previous, view); usageChanged {
 		d.publishFact(FactSessionCostChanged, string(session), nil)
@@ -89,17 +92,55 @@ func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionm
 			return fmt.Errorf("exit screen was not saved")
 		}
 	}
+	return nil
+}
+
+func (h *monitorHome) recordPullRequests(session protocol.SessionID, previous, view sessionmonitor.View) ([]string, error) {
+	var inserted []string
 	for id, link := range view.PullRequests.Entries {
-		if saved.PullRequests.Entries[id] == link {
+		if sameLink(previous.PullRequests.Entries[id], link) {
 			continue
 		}
-		if _, err := d.store.RecordSessionPullRequest(store.SessionPullRequestRecord{
+		crashpoint.At(crashBeforeLinkRecorded)
+		recorded, err := h.daemon.store.RecordSessionPullRequest(store.SessionPullRequestRecord{
 			SessionID: session, PRID: id, Repository: link.Repository, Number: link.Number, URL: link.URL,
-		}, time.Now()); err != nil {
-			return fmt.Errorf("pull request %s: %w", id, err)
+		}, time.Now())
+		if err != nil {
+			return inserted, fmt.Errorf("pull request %s: %w", id, err)
+		}
+		if recorded {
+			inserted = append(inserted, id)
 		}
 	}
-	return nil
+	return inserted, nil
+}
+
+func sameLink(a, b sessionmonitor.PullRequest) bool {
+	return a.Repository == b.Repository && a.Number == b.Number && a.URL == b.URL
+}
+
+func encodePullRequests(links map[string]sessionmonitor.PullRequest) string {
+	if len(links) == 0 {
+		return ""
+	}
+	saved := make(map[string]sessionmonitor.PullRequest, len(links))
+	for id, link := range links {
+		saved[id] = sessionmonitor.PullRequest{Repository: link.Repository, Number: link.Number, URL: link.URL}
+	}
+	encoded, err := json.Marshal(saved)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+func decodePullRequests(raw string) map[string]sessionmonitor.PullRequest {
+	if raw == "" {
+		return nil
+	}
+	var links map[string]sessionmonitor.PullRequest
+	_ = json.Unmarshal([]byte(raw), &links)
+	return links
 }
 
 func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
@@ -115,6 +156,7 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 		HarnessTitle:       view.HarnessTitle.V,
 		LastSeen:           view.LastSeen.V,
 		PendingSwitch:      encodePendingSwitch(view.PendingSwitch.V),
+		PullRequests:       encodePullRequests(view.PullRequests.Entries),
 	}
 }
 
