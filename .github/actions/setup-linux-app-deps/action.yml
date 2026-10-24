@@ -7,10 +7,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install packages
+    - name: Resolve packages
+      id: resolve
       shell: bash
       env:
         ROLE: ${{ inputs.role }}
+        ARCHIVES: ${{ runner.temp }}/apt-archives
       run: |
         case "$ROLE" in
           build)
@@ -31,5 +33,49 @@ runs:
             ;;
         esac
         ./scripts/ci-retry.sh -- sudo apt-get update
+        mkdir -p "$ARCHIVES/partial"
         # shellcheck disable=SC2086 # the package list is a word list by construction
-        ./scripts/ci-retry.sh -- sudo apt-get install -y $packages
+        digest="$(apt-get install -y -qq --print-uris -o Dir::Cache::Archives="$ARCHIVES" $packages | sha256sum | cut -c1-16)"
+        echo "packages=$(tr -s '[:space:]' ' ' <<<"$packages")" >> "$GITHUB_OUTPUT"
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+    - name: Restore downloaded packages
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/apt-archives/*.deb
+        key: apt-archives-${{ runner.os }}-${{ runner.arch }}-${{ inputs.role }}-${{ steps.resolve.outputs.digest }}
+
+    - name: Download packages
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        PACKAGES: ${{ steps.resolve.outputs.packages }}
+        ARCHIVES: ${{ runner.temp }}/apt-archives
+      run: |
+        # 11s for 107 MB on a healthy runner (run 40029078354, shard 4/4).
+        download_timeout=300
+        status=0
+        # shellcheck disable=SC2086 # the package list is a word list by construction
+        sudo timeout "$download_timeout" apt-get install -y --download-only -o Acquire::Retries=3 \
+          -o Dir::Cache::Archives="$ARCHIVES" $PACKAGES || status=$?
+        if [ "$status" = 124 ]; then
+          printf '\n::error::apt download exceeded %ss (healthy: 11s for 107 MB); the Ubuntu mirror is slow from this runner, rerun the job\n' "$download_timeout"
+        fi
+        exit "$status"
+
+    - name: Save downloaded packages
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/apt-archives/*.deb
+        key: ${{ steps.restore.outputs.cache-primary-key }}
+
+    - name: Install packages
+      shell: bash
+      env:
+        PACKAGES: ${{ steps.resolve.outputs.packages }}
+        ARCHIVES: ${{ runner.temp }}/apt-archives
+      run: |
+        # shellcheck disable=SC2086 # the package list is a word list by construction
+        sudo apt-get install -y --no-download -o Dir::Cache::Archives="$ARCHIVES" $PACKAGES

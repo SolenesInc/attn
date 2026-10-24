@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Linux App acceptance restores its apt packages from the GitHub cache, and a slow Ubuntu mirror on a cache miss fails the install within five minutes, naming apt.
