@@ -27,7 +27,8 @@ session moves into that terminal and its old tile goes away.
 
 Showing one session in many terminals needs the session to run over a link
 whose server every terminal of the conversation joins, like shared Codex's
-app-server. A terminal on a link that resumes the conversation of a live session shows that session.
+app-server. A terminal on a link that resumes the conversation of a live
+session shows that session.
 An integration without a link starts one process per terminal, and falls short
 of the model when the harness lets a second process open a conversation
 another still runs: that terminal keeps its own session on the conversation,
