@@ -45,6 +45,8 @@ would make it, and `429` also says when to retry:
 |---|---|---|---|
 | `events_per_install_per_minute` | 10,000 in any 60 s | 429 | measured peak minute 882 |
 | `events_per_install_per_day` | 1,000,000 in any 24 h | 429 | measured peak day 87,414 |
+| `bytes_per_install_per_day` | 128 MiB uncompressed in any 24 h | 429 | a redacted peak day is 10.9 MB uncompressed; about 11×, the margin of the event limits |
+| `bytes_per_day` | 2 GiB uncompressed in any 24 h, across all installs; `ATTN_INGEST_BYTES_PER_DAY` | 429 | guessed: about 16 installs at their peak budget; remeasure from real traffic |
 | `installs_per_ip_per_hour` | 20 in any hour | 429 | guessed; remeasure from real registrations |
 | `records_per_batch` | 10,000 | 413 | the minute limit; a larger batch could never be accepted |
 | `request_body_gzip_bytes` | 4 MiB | 413 | a redacted peak day is 613 KB gzipped |
@@ -52,12 +54,12 @@ would make it, and `429` also says when to retry:
 | `build_line_bytes` | 2 KiB | 413 | a release build's line is 313 B; every stored row repeats it |
 | `record_line_bytes` | 64 KiB | 413 | guessed: 4× the 16 KB vent text the vent tool will allow; remeasure from the largest real line |
 
-Records count against the per-install limits whether or not they turn out to
-be duplicates; a refused batch counts nothing. One install's batches and its
-delete are handled one at a time, so concurrent retries are counted as
-duplicates and a delete leaves nothing behind. At most 2 batches are decoded
-at once across all installs, and the rest wait their turn: a batch at the
-16 MiB limit took the service to 130 MiB resident (measured 2026-10-24), while
+Records and bytes count against the event and byte limits whether or not they
+turn out to be duplicates; a refused batch counts nothing. One install's
+batches and its delete are handled one at a time, so concurrent retries are
+counted as duplicates and a delete leaves nothing behind. At most 2 batches
+are decoded at once across all installs, and the rest wait their turn: a batch
+at the 16 MiB limit took the service to 130 MiB resident (measured 2026-10-24), while
 a real batch of 10,000 records is about 1.25 MB. The counts live in memory and
 reset when the service restarts. Read and write timeouts are 2 minutes: 4 MiB
 at 1 Mbit/s takes 32 s.
@@ -83,6 +85,7 @@ DELETE FROM events WHERE install_id IN (SELECT install_id FROM quarantine WHERE 
 | `ATTN_INGEST_CLICKHOUSE_URL` | Required. ClickHouse's HTTP interface with credentials and the database, such as `http://user:password@clickhouse:8123/?database=attn`. The service creates its tables there on start. |
 | `ATTN_INGEST_IP_SECRET` | Required, at least 32 bytes. Rotating it stops new rows' address hashes from matching older ones. |
 | `ATTN_INGEST_LISTEN` | Listen address, `:8080` by default. |
+| `ATTN_INGEST_BYTES_PER_DAY` | The `bytes_per_day` limit in bytes, `2147483648` (2 GiB) by default. |
 | `ATTN_INGEST_CLIENT_IP_HEADER` | The header that carries the client address behind a proxy, such as `CF-Connecting-IP`. Unset, the connection's address is used. Set it only where the proxy is the only way in. |
 
 `/metrics` and `/healthz` are served on the same address as the API; expose

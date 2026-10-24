@@ -81,7 +81,7 @@ var ingestBinary = sync.OnceValues(func() (string, error) {
 	return binary, nil
 })
 
-func StartIngest(t testing.TB, clickHouse ClickHouse) Ingest {
+func StartIngest(t testing.TB, clickHouse ClickHouse, env ...string) Ingest {
 	t.Helper()
 	binary, err := ingestBinary()
 	if err != nil {
@@ -93,6 +93,7 @@ func StartIngest(t testing.TB, clickHouse ClickHouse) Ingest {
 		"ATTN_INGEST_LISTEN=127.0.0.1:0",
 		"ATTN_INGEST_IP_SECRET="+randomHex(t, 32),
 	)
+	cmd.Env = append(cmd.Env, env...)
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatal(err)

@@ -24,18 +24,19 @@ var (
 	eventsPerInstallPerDay    = window{limit: "events_per_install_per_day", value: 1_000_000, span: 24 * time.Hour, bucket: time.Minute}
 	installsPerIPPerHour      = window{limit: "installs_per_ip_per_hour", value: 20, span: time.Hour, bucket: time.Minute}
 	bytesPerInstallPerDay     = window{limit: "bytes_per_install_per_day", value: 128 << 20, span: 24 * time.Hour, bucket: time.Minute}
-	bytesPerDay               = window{limit: "bytes_per_day", value: 2 << 30, span: 24 * time.Hour, bucket: time.Minute}
 )
 
 const (
-	minIPSecretBytes = 32
-	batchesInFlight  = 2
+	DefaultBytesPerDay = 2 << 30
+	minIPSecretBytes   = 32
+	batchesInFlight    = 2
 )
 
 type Config struct {
 	ClickHouseURL  string
 	IPSecret       []byte
 	ClientIPHeader string
+	BytesPerDay    int64
 	Logf           func(format string, args ...any)
 }
 
@@ -44,6 +45,7 @@ type Server struct {
 	ipSecret       []byte
 	clientIPHeader string
 	quota          *quota
+	bytesPerDay    window
 	installs       keyedMutex
 	batchSlots     chan struct{}
 	metrics        *metrics
@@ -66,6 +68,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		ipSecret:       cfg.IPSecret,
 		clientIPHeader: cfg.ClientIPHeader,
 		quota:          newQuota(),
+		bytesPerDay:    window{limit: "bytes_per_day", value: cfg.BytesPerDay, span: 24 * time.Hour, bucket: time.Minute},
 		installs:       keyedMutex{held: map[string]*keyLock{}},
 		batchSlots:     make(chan struct{}, batchesInFlight),
 		metrics:        newMetrics(),
@@ -201,7 +204,7 @@ func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
 		charge{eventsPerInstallPerMinute, inst.ID, records},
 		charge{eventsPerInstallPerDay, inst.ID, records},
 		charge{bytesPerInstallPerDay, inst.ID, size.plain},
-		charge{bytesPerDay, "", size.plain},
+		charge{s.bytesPerDay, "", size.plain},
 	)
 	if refusal != nil {
 		return &refusedError{status: http.StatusTooManyRequests, refusal: *refusal}

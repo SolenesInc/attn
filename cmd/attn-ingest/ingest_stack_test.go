@@ -179,16 +179,21 @@ func TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted(t *testing.T) {
 	}
 }
 
-func paddedBatch(t *testing.T) ([]byte, int64) {
+func paddedRecords(t *testing.T, count int64) []analytics.Record {
 	t.Helper()
 	pad, err := json.Marshal(map[string]string{"pad": strings.Repeat("a", 60_000)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	records := busRecords(1, 270)
+	records := busRecords(1, count)
 	for i := range records {
 		records[i].Props = pad
 	}
+	return records
+}
+
+func encodedBatch(t *testing.T, records []analytics.Record) ([]byte, int64) {
+	t.Helper()
 	var body bytes.Buffer
 	if err := analytics.WriteBatch(&body, analytics.Batch{Build: analytics.CurrentBuild(), Records: records}); err != nil {
 		t.Fatal(err)
@@ -204,65 +209,74 @@ func paddedBatch(t *testing.T) ([]byte, int64) {
 	return body.Bytes(), plain
 }
 
-func TestByteBudgetsBoundEachInstallAndAllInstallsPerDay(t *testing.T) {
+type bytesSender struct {
+	t          *testing.T
+	body       []byte
+	plainBytes int64
+	sent       int64
+}
+
+func (b *bytesSender) accept(install client) {
+	b.t.Helper()
+	if status, reply := install.do(http.MethodPost, "/v1/events", b.body); status != http.StatusOK {
+		b.t.Fatalf("batch %d of %d uncompressed bytes: %d %s", b.sent+1, b.plainBytes, status, reply)
+	}
+	b.sent++
+}
+
+func (b *bytesSender) refused(install client, limit string, value, observed int64) {
+	b.t.Helper()
+	status, reply := install.do(http.MethodPost, "/v1/events", b.body)
+	var refusal analytics.Refusal
+	decode(b.t, reply, &refusal)
+	if status != http.StatusTooManyRequests || refusal.Limit != limit || refusal.Value != value || refusal.Observed != observed || refusal.RetryAfterS < 1 || refusal.RetryAfterS > 86_400 {
+		b.t.Fatalf("batch %d: %d %s, want %s at %d with %d observed and a retry within a day", b.sent+1, status, reply, limit, value, observed)
+	}
+	if !bytes.Contains(install.metrics(), []byte(fmt.Sprintf("attn_ingest_refusals_total{limit=%q} 1\n", limit))) {
+		b.t.Fatalf("/metrics does not count the %s refusal:\n%s", limit, install.metrics())
+	}
+}
+
+func (c client) metrics() []byte {
+	c.t.Helper()
+	_, body := c.do(http.MethodGet, "/metrics", nil)
+	return body
+}
+
+func TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected(t *testing.T) {
 	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
 	anonymous := client{t: t, url: ingest.URL}
-	body, plainBytes := paddedBatch(t)
-	const perInstallBudget, fleetBudget = int64(128 << 20), int64(2 << 30)
-	perInstall, fleet := perInstallBudget/plainBytes, fleetBudget/plainBytes
-	sent := int64(0)
-	accept := func(install client) {
-		t.Helper()
-		if status, reply := install.do(http.MethodPost, "/v1/events", body); status != http.StatusOK {
-			t.Fatalf("batch %d of %d uncompressed bytes: %d %s", sent+1, plainBytes, status, reply)
-		}
-		sent++
-	}
-	refused := func(install client, limit string, value, observed int64) {
-		t.Helper()
-		status, reply := install.do(http.MethodPost, "/v1/events", body)
-		var refusal analytics.Refusal
-		decode(t, reply, &refusal)
-		if status != http.StatusTooManyRequests || refusal.Limit != limit || refusal.Value != value || refusal.Observed != observed || refusal.RetryAfterS < 1 || refusal.RetryAfterS > 86_400 {
-			t.Fatalf("batch %d: %d %s, want %s at %d with %d observed and a retry within a day", sent+1, status, reply, limit, value, observed)
-		}
-	}
+	body, plainBytes := encodedBatch(t, paddedRecords(t, 270))
+	sender := &bytesSender{t: t, body: body, plainBytes: plainBytes}
+	const budget = int64(128 << 20)
 
-	first := anonymous.register()
-	for range perInstall {
-		accept(first)
+	full := anonymous.register()
+	for range budget / plainBytes {
+		sender.accept(full)
 	}
-	refused(first, "bytes_per_install_per_day", perInstallBudget, (perInstall+1)*plainBytes)
+	sender.refused(full, "bytes_per_install_per_day", budget, (budget/plainBytes+1)*plainBytes)
 
 	fresh := anonymous.register()
-	accept(fresh)
+	sender.accept(fresh)
 	if holdings := fresh.holdings(); holdings.Events != 270 {
 		t.Fatalf("a fresh install's first batch stored %d events, want 270", holdings.Events)
 	}
-	fill := func(install client, batches int64) {
-		t.Helper()
-		for range batches {
-			accept(install)
-		}
-	}
-	fill(fresh, perInstall-1)
-	for sent < fleet {
-		fill(anonymous.register(), min(perInstall, fleet-sent))
+}
+
+func TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay(t *testing.T) {
+	const budget = int64(64 << 10)
+	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t), fmt.Sprintf("ATTN_INGEST_BYTES_PER_DAY=%d", budget))
+	anonymous := client{t: t, url: ingest.URL}
+	body, plainBytes := encodedBatch(t, busRecords(1, 100))
+	sender := &bytesSender{t: t, body: body, plainBytes: plainBytes}
+
+	for sender.sent < budget/plainBytes {
+		sender.accept(anonymous.register())
 	}
 	late := anonymous.register()
-	refused(late, "bytes_per_day", fleetBudget, (fleet+1)*plainBytes)
+	sender.refused(late, "bytes_per_day", budget, (budget/plainBytes+1)*plainBytes)
 	if holdings := late.holdings(); holdings.Events != 0 {
-		t.Fatalf("a batch past the fleet budget stored %d events", holdings.Events)
-	}
-
-	_, metrics := anonymous.do(http.MethodGet, "/metrics", nil)
-	for _, line := range []string{
-		`attn_ingest_refusals_total{limit="bytes_per_day"} 1`,
-		`attn_ingest_refusals_total{limit="bytes_per_install_per_day"} 1`,
-	} {
-		if !bytes.Contains(metrics, []byte(line+"\n")) {
-			t.Errorf("/metrics lacks %q:\n%s", line, metrics)
-		}
+		t.Fatalf("a batch past the budget for all installs stored %d events", holdings.Events)
 	}
 }
 
