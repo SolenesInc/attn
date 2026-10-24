@@ -78,9 +78,12 @@ Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
   tree with two branches. A third process resuming the conversation loads the
   branch with the newest leaf.
 - Every hook from either process carries the same conversation id.
-- attn leaves both sessions open on that conversation, each in its own
-  terminal, and both tiles warn that the other terminal has it open until one
-  process exits or moves to another conversation.
+
+Claude Code falls short of attn's session model here. When a terminal resumes
+the conversation of a session whose agent still runs, the second process gets
+its own session on the same conversation, so two open sessions hold it. Both
+tiles warn that the other terminal has the conversation open until one process
+exits or moves to another conversation.
 
 Probed on 2.1.303 with synthetic prompts and a local mock API:
 
