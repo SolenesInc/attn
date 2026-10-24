@@ -220,6 +220,7 @@ const (
 	NoteKindHandoff = "handoff"
 	NoteKindAttach  = "attach"
 	NoteKindDetach  = "detach"
+	NoteKindCheck   = "check"
 )
 
 var NoteKinds = []string{NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach}
@@ -235,6 +236,9 @@ func ParseNoteKind(raw string) (string, error) {
 	}
 	if slices.Contains(NoteKinds, kind) {
 		return kind, nil
+	}
+	if kind == NoteKindCheck {
+		return "", fmt.Errorf("a check note is written by the check move it records: `attn seed check report|confirm|reject|uncheck|reopen <id> <C#>`; a plain note keeps kind note")
 	}
 	return "", fmt.Errorf("%q is not a kind of note; the kinds are %s", raw, strings.Join(NoteKinds, ", "))
 }

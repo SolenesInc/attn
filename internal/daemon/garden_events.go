@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -205,20 +206,37 @@ func (d *Daemon) handleGardenSeedEvent(_ context.Context, event bus.Event) error
 	return d.handleGardenSeedEventWithoutRoleLock(context.Background(), event)
 }
 
+type gardenSeedEventAudience struct {
+	decision  events.Interpreted
+	addresses []string
+}
+
+func (d *Daemon) gardenSeedEventRecipients(name, subject string, payload []byte) (gardenSeedEventAudience, error) {
+	decision, err := gardenSeedEventModel.Interpret(name, subject, payload)
+	if err != nil {
+		return gardenSeedEventAudience{}, err
+	}
+	audience := gardenSeedEventAudience{decision: decision}
+	if decision.Quiet() {
+		return audience, nil
+	}
+	resolver, err := d.readGardenEventRoles()
+	if err != nil {
+		return gardenSeedEventAudience{}, err
+	}
+	audience.addresses, err = gardenSeedEventModel.Recipients(subject, decision, resolver)
+	return audience, err
+}
+
 func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event bus.Event) error {
-	decision, err := gardenSeedEventModel.Interpret(event.Name, event.Subject, event.Payload)
+	audience, err := d.gardenSeedEventRecipients(event.Name, event.Subject, event.Payload)
 	if err != nil {
 		return err
 	}
-
-	var recipients []string
-	if !decision.Quiet() {
-		resolver, err := d.readGardenEventRoles()
-		if err != nil {
-			return err
-		}
-		recipients, err = gardenSeedEventModel.Recipients(event.Subject, decision, resolver)
-		if err != nil {
+	decision, recipients := audience.decision, audience.addresses
+	text := ""
+	if len(recipients) > 0 {
+		if text, err = d.gardenSeedEventText(event); err != nil {
 			return err
 		}
 	}
@@ -231,7 +249,7 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 		deliveries[i] = store.GardenSeedBellDelivery{To: address, ItemID: uuid.NewString()}
 	}
 	created, _, err := d.store.HandleGardenSeedEvent(
-		event.Seq, event.Subject, strings.TrimPrefix(event.Name, "garden.seed."), decision.BellName(), deliveries, time.Now(),
+		event.Seq, event.Subject, strings.TrimPrefix(event.Name, "garden.seed."), text, decision.BellName(), deliveries, time.Now(),
 	)
 	if err != nil {
 		return err
@@ -244,6 +262,29 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 		d.kickInboxAfterCommit(to)
 	}
 	return nil
+}
+
+func (d *Daemon) gardenSeedEventText(event bus.Event) (string, error) {
+	if event.Name != events.NameNoteAdded {
+		return "", nil
+	}
+	var payload events.NoteAddedPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return "", err
+	}
+	schema, err := d.notesCollection()
+	if err != nil {
+		return "", err
+	}
+	doc, found, err := d.store.GetDocument(*schema, payload.NoteID)
+	if err != nil || !found {
+		return "", err
+	}
+	note, err := garden.DecodeNote(doc.Body)
+	if err != nil || note.Kind != garden.NoteKindCheck {
+		return "", err
+	}
+	return checkNoteInboxText(note), nil
 }
 
 type gardenEventRoles struct {

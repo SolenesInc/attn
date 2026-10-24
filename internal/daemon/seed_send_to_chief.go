@@ -137,7 +137,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
 		Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
 		AuthorSession: cause,
-	}})
+	}}, false)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}

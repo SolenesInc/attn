@@ -1226,6 +1226,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSeedTransitionWS(client, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote:
 		d.handleSeedNoteWS(client, msg.(*protocol.SeedNoteMessage))
+	case protocol.CmdSeedCheck:
+		d.handleSeedCheckWS(client, msg.(*protocol.SeedCheckMessage))
 	case protocol.CmdSessionMessagesGet:
 		d.handleSessionMessagesGet(client, msg.(*protocol.SessionMessagesGetMessage))
 	case protocol.CmdSessionAnnotationsGet:

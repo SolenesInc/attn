@@ -835,13 +835,13 @@
                 }
               },
               {
-                "name": "event_kind",
+                "name": "change",
                 "node": {
                   "kind": "input",
                   "field": {
-                    "name": "event_kind",
+                    "name": "change",
                     "kind": "text",
-                    "description": "Garden event kind."
+                    "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
                   }
                 }
               }
@@ -5136,5 +5136,5 @@
       ]
     }
   ],
-  "definitions_hash": "d1d786f8dde843f2dbf4ee70eac55fe44065d827aaeca991c4fafc79f4df0a8e"
+  "definitions_hash": "9a3b8012d6f4dad38e59164ec2825e37a9b1a29185cf0b4d607a12c2b657c73a"
 }

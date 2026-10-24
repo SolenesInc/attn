@@ -8153,6 +8153,9 @@ type Response struct {
 	// "seed_artifact_transfer_result".
 	SeedArtifactTransferResult *SeedArtifactTransferResult `json:"seed_artifact_transfer_result,omitempty,omitzero"`
 
+	// SeedCheckResult corresponds to the JSON schema field "seed_check_result".
+	SeedCheckResult *SeedCheckResult `json:"seed_check_result,omitempty,omitzero"`
+
 	// SeedEditResult corresponds to the JSON schema field "seed_edit_result".
 	SeedEditResult *SeedEditResult `json:"seed_edit_result,omitempty,omitzero"`
 
@@ -8270,6 +8273,9 @@ type Seed struct {
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
+	// Checks corresponds to the JSON schema field "checks".
+	Checks []SeedCheck `json:"checks,omitempty,omitzero"`
+
 	// Continuation corresponds to the JSON schema field "continuation".
 	Continuation *SeedContinuation `json:"continuation,omitempty,omitzero"`
 
@@ -8311,6 +8317,9 @@ type Seed struct {
 
 	// Rev corresponds to the JSON schema field "rev".
 	Rev int `json:"rev"`
+
+	// SharedChecks corresponds to the JSON schema field "shared_checks".
+	SharedChecks []SeedSharedCheck `json:"shared_checks,omitempty,omitzero"`
 
 	// StateChangedAt corresponds to the JSON schema field "state_changed_at".
 	StateChangedAt string `json:"state_changed_at"`
@@ -8502,6 +8511,168 @@ type SeedArtifactTransferResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type SeedCheck struct {
+	// From corresponds to the JSON schema field "from".
+	From *string `json:"from,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Removed corresponds to the JSON schema field "removed".
+	Removed bool `json:"removed"`
+
+	// Report corresponds to the JSON schema field "report".
+	Report *SeedCheckReport `json:"report,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+
+	// Verdict corresponds to the JSON schema field "verdict".
+	Verdict *SeedCheckVerdict `json:"verdict,omitempty,omitzero"`
+}
+
+type SeedCheckDefinition struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Shared corresponds to the JSON schema field "shared".
+	Shared *bool `json:"shared,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type SeedCheckEvidence struct {
+	// Artifact corresponds to the JSON schema field "artifact".
+	Artifact *string `json:"artifact,omitempty,omitzero"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL *string `json:"url,omitempty,omitzero"`
+}
+
+type SeedCheckMessage struct {
+	// CheckID corresponds to the JSON schema field "check_id".
+	CheckID string `json:"check_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Commit corresponds to the JSON schema field "commit".
+	Commit *string `json:"commit,omitempty,omitzero"`
+
+	// Evidence corresponds to the JSON schema field "evidence".
+	Evidence []string `json:"evidence,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *string `json:"member,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Ring corresponds to the JSON schema field "ring".
+	Ring *bool `json:"ring,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// Shared corresponds to the JSON schema field "shared".
+	Shared *bool `json:"shared,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+
+	// Summary corresponds to the JSON schema field "summary".
+	Summary *string `json:"summary,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+
+	// Verb corresponds to the JSON schema field "verb".
+	Verb string `json:"verb"`
+}
+
+type SeedCheckReport struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// ByMember corresponds to the JSON schema field "by_member".
+	ByMember *string `json:"by_member,omitempty,omitzero"`
+
+	// BySession corresponds to the JSON schema field "by_session".
+	BySession *SessionID `json:"by_session,omitempty,omitzero"`
+
+	// Commit corresponds to the JSON schema field "commit".
+	Commit *string `json:"commit,omitempty,omitzero"`
+
+	// Evidence corresponds to the JSON schema field "evidence".
+	Evidence []SeedCheckEvidence `json:"evidence"`
+
+	// Summary corresponds to the JSON schema field "summary".
+	Summary string `json:"summary"`
+}
+
+type SeedCheckResult struct {
+	// Note corresponds to the JSON schema field "note".
+	Note SeedNote `json:"note"`
+
+	// RingRecipients corresponds to the JSON schema field "ring_recipients".
+	RingRecipients []string `json:"ring_recipients,omitempty,omitzero"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+}
+
+type SeedCheckResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed *Seed `json:"seed,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type SeedCheckRollupEntry struct {
+	// HasReport corresponds to the JSON schema field "has_report".
+	HasReport bool `json:"has_report"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+}
+
+type SeedCheckVerdict struct {
+	// At corresponds to the JSON schema field "at".
+	At string `json:"at"`
+
+	// ByMember corresponds to the JSON schema field "by_member".
+	ByMember *string `json:"by_member,omitempty,omitzero"`
+
+	// BySession corresponds to the JSON schema field "by_session".
+	BySession *SessionID `json:"by_session,omitempty,omitzero"`
+
+	// Confirmed corresponds to the JSON schema field "confirmed".
+	Confirmed bool `json:"confirmed"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *string `json:"reason,omitempty,omitzero"`
 }
 
 type SeedContinuation struct {
@@ -8807,8 +8978,14 @@ type SeedNoteMessage struct {
 }
 
 type SeedNoteResult struct {
+	// CitedChecks corresponds to the JSON schema field "cited_checks".
+	CitedChecks []string `json:"cited_checks,omitempty,omitzero"`
+
 	// Note corresponds to the JSON schema field "note".
 	Note SeedNote `json:"note"`
+
+	// RingRecipients corresponds to the JSON schema field "ring_recipients".
+	RingRecipients []string `json:"ring_recipients,omitempty,omitzero"`
 }
 
 type SeedNoteResultMessage struct {
@@ -8857,6 +9034,9 @@ type SeedPlantMessage struct {
 	// Body corresponds to the JSON schema field "body".
 	Body *string `json:"body,omitempty,omitzero"`
 
+	// Checks corresponds to the JSON schema field "checks".
+	Checks []SeedCheckDefinition `json:"checks,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -8891,6 +9071,9 @@ type SeedPlotChild struct {
 	// Body corresponds to the JSON schema field "body".
 	Body *string `json:"body,omitempty,omitzero"`
 
+	// Checks corresponds to the JSON schema field "checks".
+	Checks []SeedCheckDefinition `json:"checks,omitempty,omitzero"`
+
 	// Title corresponds to the JSON schema field "title".
 	Title string `json:"title"`
 }
@@ -8898,6 +9081,9 @@ type SeedPlotChild struct {
 type SeedPlotMessage struct {
 	// Body corresponds to the JSON schema field "body".
 	Body *string `json:"body,omitempty,omitzero"`
+
+	// Checks corresponds to the JSON schema field "checks".
+	Checks []SeedCheckDefinition `json:"checks,omitempty,omitzero"`
 
 	// Children corresponds to the JSON schema field "children".
 	Children []SeedPlotChild `json:"children"`
@@ -8921,6 +9107,18 @@ type SeedPlotMessage struct {
 type SeedPlotProgress struct {
 	// Blocked corresponds to the JSON schema field "blocked".
 	Blocked int `json:"blocked"`
+
+	// ChecksConfirmed corresponds to the JSON schema field "checks_confirmed".
+	ChecksConfirmed int `json:"checks_confirmed"`
+
+	// ChecksRejected corresponds to the JSON schema field "checks_rejected".
+	ChecksRejected int `json:"checks_rejected"`
+
+	// ChecksReported corresponds to the JSON schema field "checks_reported".
+	ChecksReported int `json:"checks_reported"`
+
+	// ChecksTotal corresponds to the JSON schema field "checks_total".
+	ChecksTotal int `json:"checks_total"`
 
 	// Done corresponds to the JSON schema field "done".
 	Done int `json:"done"`
@@ -9312,6 +9510,20 @@ type SeedSendToChiefResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type SeedSharedCheck struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Removed corresponds to the JSON schema field "removed".
+	Removed bool `json:"removed"`
+
+	// Seeds corresponds to the JSON schema field "seeds".
+	Seeds []SeedCheckRollupEntry `json:"seeds"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
 }
 
 type SeedShowMessage struct {

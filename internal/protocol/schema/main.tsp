@@ -4529,6 +4529,13 @@ model Seed {
   // whole garden on every read and push, like `ready`, so a crown row renders
   // progress instead of re-deriving the readiness rules.
   "plot_progress"?: SeedPlotProgress;
+  // What this seed must prove: its own checks, then those inherited from the
+  // plots above it, each with its state. Computed by the daemon on every read
+  // and push, like `ready`. Absent when the seed has none.
+  "checks"?: SeedCheck[];
+  // The shared checks this plot defines, each with its rollup: every seed
+  // below the plot with no children of its own, closed ones included.
+  "shared_checks"?: SeedSharedCheck[];
   // Why the seed was harvested or withered.
   "reason"?: string;
   // Present while the seed is armed to harvest itself when a pull request merges.
@@ -4679,6 +4686,124 @@ model SeedPlotProgress {
   "ready": int32;
   // Open with at least one open blocker.
   "blocked": int32;
+  // Over the crown's own checks and every descendant's effective checks.
+  // Each check counts once per seed that proves it, by state; open is the
+  // rest. Removed checks are not counted.
+  "checks_total": int32;
+  "checks_reported": int32;
+  "checks_confirmed": int32;
+  "checks_rejected": int32;
+}
+
+// A numbered statement a seed must prove, with its result on this seed.
+model SeedCheck {
+  // C and a number, unique across the plot tree.
+  "id": string;
+  "text": string;
+  // A removed check keeps its id and result; restore brings it back.
+  "removed": boolean;
+  // The plot that defines an inherited shared check. Absent for the seed's
+  // own checks.
+  "from"?: string;
+  // open | reported | confirmed | rejected.
+  "state": string;
+  "report"?: SeedCheckReport;
+  // Judges the current report, or the check itself when nothing is reported.
+  "verdict"?: SeedCheckVerdict;
+}
+
+// A shared check as the plot that defines it sees it.
+model SeedSharedCheck {
+  "id": string;
+  "text": string;
+  "removed": boolean;
+  "seeds": SeedCheckRollupEntry[];
+}
+
+model SeedCheckRollupEntry {
+  "seed_id": string;
+  // open | reported | confirmed | rejected.
+  "state": string;
+  "has_report": boolean;
+}
+
+model SeedCheckReport {
+  "summary": string;
+  "evidence": SeedCheckEvidence[];
+  // The commit the evidence came from, as a full hash.
+  "commit"?: string;
+  "by_session"?: SessionID;
+  "by_member"?: string;
+  "at": string;
+}
+
+// A seed artifact (a managed filename or a linked reference's label) or an
+// http(s) URL, recorded as cited when reported.
+model SeedCheckEvidence {
+  "artifact"?: string;
+  "url"?: string;
+}
+
+model SeedCheckVerdict {
+  "confirmed": boolean;
+  "reason"?: string;
+  "by_session"?: SessionID;
+  "by_member"?: string;
+  "at": string;
+}
+
+// A check defined when a seed or plot is planted.
+model SeedCheckDefinition {
+  "id": string;
+  "text": string;
+  // On a plot: every seed below it with no children of its own proves it.
+  "shared"?: boolean;
+}
+
+// Move one check. Every move writes one check note in the same commit as the
+// seed, and never blocks a lifecycle move.
+model SeedCheckMessage {
+  "profile_id"?: string;
+
+  "cmd": "seed_check";
+  "source_session_id"?: SessionID;
+  // Set by a WebSocket caller, as on seed_transition.
+  "request_id"?: string;
+  "seed_id": string;
+  "check_id": string;
+  // add | edit | remove | restore | report | confirm | reject | uncheck | reopen.
+  "verb": string;
+  // The statement, on add and edit.
+  "text"?: string;
+  // On add: every seed below this plot proves the check.
+  "shared"?: boolean;
+  // A report's summary, or a verdict's reason. reject requires one.
+  "summary"?: string;
+  // On report: each a seed artifact or an http(s) URL.
+  "evidence"?: string[];
+  // On report: the full commit hash the evidence came from.
+  "commit"?: string;
+  "member"?: string;
+  // Ring the seed's tender and covering watchers, as seed_note's ring does.
+  "ring"?: boolean;
+}
+
+model SeedCheckResult {
+  "seed": Seed;
+  "note": SeedNote;
+  // Present when the move rang: who the ring goes to, as session ids or
+  // member names. Empty rings nobody.
+  "ring_recipients"?: string[];
+}
+
+// SeedCheckResultMessage replies to a WebSocket seed_check, correlated by
+// request_id.
+model SeedCheckResultMessage {
+  "event": "seed_check_result";
+  "request_id": string;
+  "success": boolean;
+  "error"?: string;
+  "seed"?: Seed;
 }
 
 // Plant a seed. Planting costs one line: the daemon already knows who is
@@ -4698,6 +4823,8 @@ model SeedPlantMessage {
   "discovered_from"?: string;
   // The crew member planting, free-string until the crew primitive lands.
   "member"?: string;
+  // What the seed must prove, cited by id in its body.
+  "checks"?: SeedCheckDefinition[];
 }
 
 model SeedPlantResult {
@@ -4715,6 +4842,8 @@ model SeedPlotMessage {
   "member"?: string;
   "title": string;
   "body"?: string;
+  // The crown's checks; shared ones are proven by every child below it.
+  "checks"?: SeedCheckDefinition[];
   "children": SeedPlotChild[];
 }
 
@@ -4723,6 +4852,7 @@ model SeedPlotMessage {
 model SeedPlotChild {
   "title": string;
   "body"?: string;
+  "checks"?: SeedCheckDefinition[];
   "blocks"?: string[];
 }
 
@@ -5114,9 +5244,10 @@ model SeedArtifactReference {
 model SeedNote {
   "id": string;
   "seed_id": string;
-  // note, handoff, attach or detach. A handoff is written to whoever tends the
-  // seed next, and the freshest one is put in front of them by show and tend;
-  // attach and detach are the only kinds that carry an artifact.
+  // note, handoff, attach, detach or check. A handoff is written to whoever
+  // tends the seed next, and the freshest one is put in front of them by show
+  // and tend; attach and detach are the only kinds that carry an artifact.
+  // Only seed_check writes check.
   "kind": string;
   "body": string;
   "author_session": SessionID;
@@ -5149,6 +5280,12 @@ model SeedNoteMessage {
 
 model SeedNoteResult {
   "note": SeedNote;
+  // The seed's effective check ids a plain note's body cites, so the CLI can
+  // point at `attn seed check report`.
+  "cited_checks"?: string[];
+  // Present when the note rang: who the ring goes to, as session ids or
+  // member names. Empty rings nobody.
+  "ring_recipients"?: string[];
 }
 
 // SeedNoteResultMessage replies to a WebSocket seed_note, correlated by
@@ -5873,6 +6010,7 @@ model Response {
   seed_transition_result?: SeedTransitionResult;
   seed_send_to_chief_result?: SeedSendToChiefResult;
   seed_note_result?: SeedNoteResult;
+  seed_check_result?: SeedCheckResult;
   seed_notes_result?: SeedNotesResult;
   seed_watch_result?: SeedWatchResult;
   seed_link_result?: SeedLinkResult;
@@ -7139,6 +7277,7 @@ alias DaemonEvent =
   | SeedArtifactTargetResultMessage
   | SeedTransitionResultMessage
   | SeedNoteResultMessage
+  | SeedCheckResultMessage
   | CrewUpdatedMessage
   | CrewCharterGetResultMessage
   | CrewCharterSetResultMessage
