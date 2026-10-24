@@ -67,21 +67,6 @@ func (d *Daemon) derivedFactTraits(ev bus.Event) analytics.Derived {
 	}
 }
 
-func (d *Daemon) leadingAgentModel(session *protocol.Session) string {
-	clone := cloneSession(session)
-	d.decorateSessionWithCost(clone)
-	if clone.Usage == nil {
-		return ""
-	}
-	leading, most := "", -1
-	for _, row := range clone.Usage.Models {
-		if row.Purpose == "agent" && row.TotalTokens > most {
-			leading, most = row.Model, row.TotalTokens
-		}
-	}
-	return leading
-}
-
 func (d *Daemon) sessionLaunch(id protocol.SessionID, intent store.LaunchIntent) analytics.Launch {
 	switch {
 	case intent.ChiefOfStaff:
