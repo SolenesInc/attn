@@ -10,7 +10,7 @@ Read the `attn` skill's garden guidance and run `attn seed guide` for seed and p
 2. **Investigate the approach.** Start from the user's request, relevant conversation, and any vision referenced by the work or supplied by the user. Read vision seeds with `attn seed show <id>`. Read the results of any spikes and investigation for the work, including their code, notes, and reports. Read enough code to identify the components, entry points, state, interfaces, and ownership involved, and apply refactor first from the skill's engineering judgment: list the existing paths that do the same job, with how each is addressed, triggered, and recovered, and record the list as a finding. Trace production and test paths where they differ. When the change moves ownership or layering, find out why the current shape exists, from its history, its pull requests and the decisions recorded in the garden, and record the reason as a finding: a reason that still holds is a constraint, and one that no longer holds is what the plan removes.
 3. **Design it twice.** When the change adds or reshapes a boundary other code depends on, or moves ownership, sketch at least two structurally different shapes, whole designs rather than variations inside one, even when the first looks sufficient, and compare them with [Design](design.md). Other changes need one shape. When the choice is contested and costly to reverse, suggest building the shapes as [prototypes](prototype.md). The user decides whether to run them, as for any spike, and the delegation roles decide which models build them, as the skill's Start section describes. The chosen shape becomes the Design, and the others go under Alternatives rejected. Ask about choices or assumptions that could change the plan.
 4. **Write the plan.** Fill the template below into the seed or plot body. If there is a vision seed, reference its ID; do not overwrite its body with the implementation plan.
-5. **Organize execution.** Use a plot when the work has distinct pieces to scope and track separately, even within one PR. Use a single seed for one coherent task. Add or reuse child seeds for each unit of work, with an outcome, scope, and numbered completion checks; refer to the parent plan without repeating it. When delivery is by pull request, explain which changes belong in each one. Add `blocks` links only for actual prerequisites; otherwise leave children independent.
+5. **Organize execution.** Use a plot when the work has distinct pieces to scope and track separately, even within one PR. Use a single seed for one coherent task. Add or reuse child seeds for each unit of work, with an outcome, scope, and its own checks; refer to the parent plan without repeating it. When delivery is by pull request, explain which changes belong in each one. Add `blocks` links only for actual prerequisites; otherwise leave children independent.
 
 ## The plan body
 
@@ -31,8 +31,14 @@ The body has these sections in this order. Each design part is required; a part 
   - **Behavior**: how control and data flow through the changed parts, as a sequence for messages between processes, a call tree within one process, or pseudocode for a rule.
   - **State**: each piece of state with its one owner, what sets it, what reads it, what happens on failure and on restart, and, for state a retried or interruptible step writes, what a second or half-finished run leaves. In-memory state counts as state and has the same entry. State with two writers is a design problem to resolve, as Design describes, not an entry to record.
 - **Execution**: for a plot, the children, which changes belong to each pull request, and their order, with an agreed refactor as its own behavior-preserving change that blocks the work built on it; for a single seed, one line saying so; without pull requests, the delivery step. A detail only one child needs, such as the cases its tests cover or a mechanism inside its scope, goes in that child's body.
-- **Completion**: numbered checks (C1, C2), each naming the evidence that proves it and where that evidence goes: a test run, a recording, a measurement, a commit. Include the checks the repository's verification guidance requires for the affected surfaces, or the documented exemption when one applies. State each check at the level a reviewer judges the outcome, and name the child that owns it; a check that applies to every child is listed once, and every child's body cites it. Each child's body cites its checks by number and holds the detail behind them, such as the cases its tests cover.
+- **Completion**: what the checks cannot hold, citing them by id. The checks themselves are seed checks, defined as data on the seeds that must prove them, as Checks below describes. This section keeps a documented exemption, where long evidence goes, and any order the checks must be proven in. When nothing is left over, one line saying the checks are on the seeds.
 - **Alternatives rejected**: one line each, citing the decision the option lost to (D1) or naming the shape that lost when designing twice, and why it lost. Omit the section when nothing was rejected.
+
+## Checks
+
+A check is one numbered statement (C1, C2) a seed must prove, with the evidence that proves it and where that evidence goes: a test run, a recording, a measurement, a commit. attn keeps each check on the seed with its latest report and verdict, so define checks with `checks` in the plot JSON, or `attn seed check add` later, never as bullets in the body. Include the checks the repository's verification guidance requires for the affected surfaces, or the documented exemption when one applies. State each check at the level a reviewer judges the outcome.
+
+Put each check on the seed that proves it. A check every child must prove goes on the plot once, with `"shared": true`, and each child proves it with its own report. A check only one child owns goes on that child. A check the plot proves as a whole, such as a recording after every child merges, goes on the plot without `shared`. Ids are unique across the plot tree, so C5 names one statement wherever a body, note or report cites it. Each child's body cites its checks by id and holds the detail behind them, such as the cases its tests cover.
 
 ## Findings
 
@@ -200,17 +206,10 @@ app child waits for the daemon child's wire fields.>
 
 ## Completion
 
-- <C1, daemon child. A daemon wire test spawns a pi session with each preset,
-  restarts the daemon and gets the same pair back. A wsctl run against a
-  non-production daemon shows the same. Both outputs go on the daemon child.>
-- <C2, pi child. The pi plugin's approval tests for the switch and the
-  file-tool guard pass. The output goes on the pi child.>
-- <C3, app child. An app wire test picks Read Only and sees the spawn message
-  carry its pair. The output goes on the app child.>
-- <C4, app child. The real-app harness scenario creates a Read Only session,
-  sees a write refused, switches with /permissions, restarts the daemon and
-  sees Read Only again. The recording and the scenario output go on the app
-  child.>
+<The checks are on the seeds. C4's recording and scenario output go on the app
+child as one attachment, which its report cites. The pi child changes no daemon
+code, so the Linux build the verification guidance asks of daemon changes does
+not apply to it.>
 
 ## Alternatives rejected
 
@@ -221,15 +220,38 @@ app child waits for the daemon child's wire fields.>
   not keep.>
 ````
 
+The same plan planted with its checks. The plot holds the check every child proves, and each child holds its own:
+
+```json
+{
+  "title": "Pi permission presets",
+  "body": "<the plan body above>",
+  "checks": [
+    {"id": "C5", "shared": true, "text": "The child's pull request is green on CI, carries a changelog fragment and has its review addressed. PR link in the report."}
+  ],
+  "children": [
+    {"title": "Daemon presets and launch intent", "body": "…", "blocks": ["app-preset-picker"],
+     "checks": [{"id": "C1", "text": "A daemon wire test spawns a pi session with each preset, restarts the daemon and gets the same pair back. A wsctl run against a non-production daemon shows the same. Both outputs on this seed."}]},
+    {"title": "Pi permissions switch and file-tool guard", "body": "…",
+     "checks": [{"id": "C2", "text": "The pi plugin's approval tests for the switch and the file-tool guard pass. Output on this seed."}]},
+    {"title": "App preset picker", "body": "…",
+     "checks": [
+       {"id": "C3", "text": "An app wire test picks Read Only and sees the spawn message carry its pair. Output on this seed."},
+       {"id": "C4", "text": "The real-app harness scenario creates a Read Only session, sees a write refused, switches with /permissions, restarts the daemon and sees Read Only again. Recording on this seed."}
+     ]}
+  ]
+}
+```
+
 ## Tracking and handoff
 
 Seed states and notes carry progress. Plant deferred work as seeds. Do not keep a task checklist or activity log in the plan body.
 
-When the approach changes, rewrite every section of the body that depends on it, so the body reads as if the new decision had been the first one. A new approach usually changes the design, the tradeoffs, the completion checks and the alternatives rejected, not only the decision. Do not leave amendments, "superseded" markers or revision numbers in it; record what changed and why in a note. Keep the D, F and C numbers: a removed one leaves its number unused, so evidence already reported against a number still points at the same thing. When a term comes to mean something else, rename it or rewrite each use.
+When the approach changes, rewrite every section of the body that depends on it, so the body reads as if the new decision had been the first one. A new approach usually changes the design, the tradeoffs, the completion checks and the alternatives rejected, not only the decision. Do not leave amendments, "superseded" markers or revision numbers in it; record what changed and why in a note. Keep the D and F numbers: a removed one leaves its number unused, so a note or brief that cites a number still points at the same thing. attn holds check ids to the same rule: `attn seed check remove` keeps the id, and `restore` brings the check back with its result. `attn seed check edit` keeps a check's report and verdict, so reopen a check whose evidence no longer proves its new statement. When a term comes to mean something else, rename it or rewrite each use.
 
 Rewrite the briefs of children not yet harvested in the same way. A harvested child's body stays the record of what it delivered; work the change adds becomes a new child. A body edit does not reach a tender who is already working, so tell the tender of each growing child whose brief changed with `attn agent msg <seed-id>`.
 
-Read back the saved plan, children, and dependency links as a fresh agent: can you tell what to build, where to start, which constraints apply, and how to establish completion? Would an implementer who never saw the spikes avoid every trap they hit? Can a reader who doubts a decision find its reason, and the cost it accepts, without opening a note or a transcript? Check that every design part is present or explicitly waived, and that each learning from a spike is in the body rather than only in its artifacts. Then cut: delete each line an implementer would not act on and a reviewer would not question, and every statement made twice. Show the user the proposed plan and, when pull-request delivery applies, its proposed pull-request boundaries and ordering. Name the seed or plot for review.
+Read back the saved plan, children, and dependency links as a fresh agent: can you tell what to build, where to start, which constraints apply, and how to establish completion? Would an implementer who never saw the spikes avoid every trap they hit? Can a reader who doubts a decision find its reason, and the cost it accepts, without opening a note or a transcript? Check that every design part is present or explicitly waived, that `attn seed show` lists each check on the seed that must prove it, and that each learning from a spike is in the body rather than only in its artifacts. Then cut: delete each line an implementer would not act on and a reviewer would not question, and every statement made twice. Show the user the proposed plan and, when pull-request delivery applies, its proposed pull-request boundaries and ordering. Name the seed or plot for review.
 
 Recommend how to execute it. Recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders. Otherwise, recommend a single Builder. Explain the recommendation briefly.
 
