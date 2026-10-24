@@ -36,49 +36,10 @@ func (c *Client) GetBranchInfo(ctx context.Context, dir string) (*BranchInfo, er
 }
 
 func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchInfo, bool) {
-	root := CanonicalizePath(dir)
-	var gitDir string
-	for {
-		if context.Cause(ctx) != nil {
-			return nil, false
-		}
-		if _, err := os.Stat(filepath.Join(root, "HEAD")); err == nil {
-			if objects, err := os.Stat(filepath.Join(root, "objects")); err == nil && objects.IsDir() {
-				return nil, false
-			}
-		}
-		gitPath := filepath.Join(root, ".git")
-		entry, err := os.Lstat(gitPath)
-		if err == nil {
-			if !gitPathOwnedByCurrentUser(entry) || (!entry.IsDir() && !entry.Mode().IsRegular()) {
-				return nil, false
-			}
-			gitDir = gitPath
-			if !entry.IsDir() {
-				content, err := os.ReadFile(gitPath)
-				if err != nil || !strings.HasPrefix(string(content), "gitdir: ") {
-					return nil, false
-				}
-				gitDir = strings.TrimSpace(strings.TrimPrefix(string(content), "gitdir: "))
-				if gitDir == "" {
-					return nil, false
-				}
-				if !filepath.IsAbs(gitDir) {
-					gitDir = filepath.Join(root, gitDir)
-				}
-			}
-			break
-		}
-		if !os.IsNotExist(err) {
-			return nil, false
-		}
-		parent := filepath.Dir(root)
-		if parent == root {
-			return nil, false
-		}
-		root = parent
+	root, gitDir, ok := locateGitDir(ctx, dir)
+	if !ok {
+		return nil, false
 	}
-	gitDir = filepath.Clean(gitDir)
 	// Git owns safe.directory decisions for repositories owned by other users.
 	for _, path := range []string{root, gitDir} {
 		entry, err := os.Stat(path)
@@ -86,13 +47,7 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 			return nil, false
 		}
 	}
-	commonDir := gitDir
-	if content, err := os.ReadFile(filepath.Join(gitDir, "commondir")); err == nil {
-		commonDir = strings.TrimSpace(string(content))
-		if !filepath.IsAbs(commonDir) {
-			commonDir = filepath.Join(gitDir, commonDir)
-		}
-	}
+	commonDir := commonGitDir(gitDir)
 	if !recognizesWorktreeConfig(commonDir, root) {
 		return nil, false
 	}
@@ -140,6 +95,62 @@ func (c *Client) branchInfoFromFiles(ctx context.Context, dir string) (*BranchIn
 	}
 	info.Repository, _ = c.RepositoryRoot(ctx, dir)
 	return info, true
+}
+
+func locateGitDir(ctx context.Context, dir string) (root, gitDir string, ok bool) {
+	root = CanonicalizePath(dir)
+	for {
+		if context.Cause(ctx) != nil {
+			return "", "", false
+		}
+		if _, err := os.Stat(filepath.Join(root, "HEAD")); err == nil {
+			if objects, err := os.Stat(filepath.Join(root, "objects")); err == nil && objects.IsDir() {
+				return "", "", false
+			}
+		}
+		gitPath := filepath.Join(root, ".git")
+		entry, err := os.Lstat(gitPath)
+		if err == nil {
+			if !gitPathOwnedByCurrentUser(entry) || (!entry.IsDir() && !entry.Mode().IsRegular()) {
+				return "", "", false
+			}
+			gitDir = gitPath
+			if !entry.IsDir() {
+				content, err := os.ReadFile(gitPath)
+				if err != nil || !strings.HasPrefix(string(content), "gitdir: ") {
+					return "", "", false
+				}
+				gitDir = strings.TrimSpace(strings.TrimPrefix(string(content), "gitdir: "))
+				if gitDir == "" {
+					return "", "", false
+				}
+				if !filepath.IsAbs(gitDir) {
+					gitDir = filepath.Join(root, gitDir)
+				}
+			}
+			return root, filepath.Clean(gitDir), true
+		}
+		if !os.IsNotExist(err) {
+			return "", "", false
+		}
+		parent := filepath.Dir(root)
+		if parent == root {
+			return "", "", false
+		}
+		root = parent
+	}
+}
+
+func commonGitDir(gitDir string) string {
+	content, err := os.ReadFile(filepath.Join(gitDir, "commondir"))
+	if err != nil {
+		return gitDir
+	}
+	commonDir := strings.TrimSpace(string(content))
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(gitDir, commonDir)
+	}
+	return filepath.Clean(commonDir)
 }
 
 // Accept simple local config; git resolves includes and other config forms.

@@ -375,3 +375,14 @@ func (s *Store) DelegationSessionReserved(sessionID protocol.SessionID) bool {
 	err := s.db.QueryRow(`SELECT 1 FROM delegation_operations WHERE session_id = ? AND state IN (?, ?) LIMIT 1`, protocol.TrimID(sessionID), string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing)).Scan(&found)
 	return err == nil
 }
+
+func (s *Store) SessionDelegated(sessionID protocol.SessionID) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil || protocol.TrimID(sessionID) == "" {
+		return false
+	}
+	var found int
+	err := s.db.QueryRow(`SELECT 1 FROM delegation_operations WHERE session_id = ? AND state != ? LIMIT 1`, protocol.TrimID(sessionID), string(protocol.DelegationOperationStateFailed)).Scan(&found)
+	return err == nil
+}
