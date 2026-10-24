@@ -80,3 +80,44 @@ func TestTheUserDismissesAndRestoresAVentInTheirProfile(t *testing.T) {
 		t.Errorf("another profile dismissed the vent: %+v", result)
 	}
 }
+
+func TestTheUserPlantsOneSeedFromAVent(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "analytics.enabled", "true")
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	w.Launched(session)
+	vent, err := cli.RecordVent(protocol.SessionID(session), "attn seed tend refused a seed held by a session that ended.\nRetried twice, then used --force.")
+	if err != nil {
+		t.Fatalf("vent: %v", err)
+	}
+	plant := func(peer *testworld.Peer, request, id string) protocol.PlantVentSeedResultMessage {
+		t.Helper()
+		return testworld.Request(peer, protocol.PlantVentSeedMessage{Cmd: protocol.CmdPlantVentSeed, RequestID: request, VentID: id},
+			protocol.EventPlantVentSeedResult, func(r protocol.PlantVentSeedResultMessage) bool { return r.RequestID == request })
+	}
+
+	planted := plant(app, "plant", vent.ID)
+	if !planted.Success || planted.Seed == nil {
+		t.Fatalf("planting from the vent: %s", protocol.Deref(planted.Error))
+	}
+	shown, err := cli.SeedShow("", planted.Seed.ID)
+	if err != nil {
+		t.Fatalf("the planted seed: %v", err)
+	}
+	if shown.Seed.Title != "attn seed tend refused a seed held by a session that ended." ||
+		!strings.HasPrefix(shown.Seed.Body, vent.Text+"\n\n## Context\n") || !strings.Contains(shown.Seed.Body, "- Vent: "+vent.ID) {
+		t.Errorf("the planted seed reads %q / %q, want the vent's first line and its text with context", shown.Seed.Title, shown.Seed.Body)
+	}
+	testworld.Await(app, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool {
+		return len(m.Vents) == 1 && protocol.Deref(m.Vents[0].PlantedSeedID) == planted.Seed.ID
+	})
+
+	if again := plant(app, "again", vent.ID); again.Success || protocol.Deref(again.Error) != "vent "+vent.ID+" already planted seed "+planted.Seed.ID {
+		t.Errorf("planting the vent twice: %+v", again)
+	}
+	other := w.AppOn(createProfile(app, "Work").ID)
+	if elsewhere := plant(other, "elsewhere", vent.ID); elsewhere.Success || protocol.Deref(elsewhere.Error) != "no vent "+vent.ID+" in this profile" {
+		t.Errorf("another profile planted from the vent: %+v", elsewhere)
+	}
+}

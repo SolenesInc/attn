@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/jobs"
@@ -173,12 +174,17 @@ func (d *Daemon) handleSetVentDismissed(client *wsClient, msg *protocol.SetVentD
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) setVentDismissed(msg *protocol.SetVentDismissedMessage, profileID string) error {
-	id := strings.TrimSpace(msg.VentID)
+func (d *Daemon) profileVent(id, profileID string) (store.Vent, error) {
 	vent, err := d.store.Vent(id)
 	if errors.Is(err, store.ErrVentNotFound) || (err == nil && vent.ProfileID != profileID) {
-		return fmt.Errorf("no vent %s in this profile", id)
+		return store.Vent{}, fmt.Errorf("no vent %s in this profile", id)
 	}
+	return vent, err
+}
+
+func (d *Daemon) setVentDismissed(msg *protocol.SetVentDismissedMessage, profileID string) error {
+	id := strings.TrimSpace(msg.VentID)
+	vent, err := d.profileVent(id, profileID)
 	if err != nil {
 		return err
 	}
@@ -192,6 +198,39 @@ func (d *Daemon) setVentDismissed(msg *protocol.SetVentDismissedMessage, profile
 	}
 	d.publishFact(fact, id, storedVent{vent}.fact())
 	return nil
+}
+
+func (d *Daemon) handlePlantVentSeed(client *wsClient, msg *protocol.PlantVentSeedMessage) {
+	result := protocol.PlantVentSeedResultMessage{Event: protocol.EventPlantVentSeedResult, RequestID: msg.RequestID, VentID: msg.VentID}
+	if seed, err := d.plantVentSeed(strings.TrimSpace(msg.VentID), client.selectedProfile()); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Seed = &seed
+		result.Success = true
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) plantVentSeed(id, profileID string) (protocol.Seed, error) {
+	vent, err := d.profileVent(id, profileID)
+	switch {
+	case err != nil:
+		return protocol.Seed{}, err
+	case !vent.WithdrawnAt.IsZero():
+		return protocol.Seed{}, fmt.Errorf("vent %s was withdrawn by its agent, so there is nothing to plant", id)
+	case vent.PlantedSeedID != "":
+		return protocol.Seed{}, fmt.Errorf("vent %s already planted seed %s", id, vent.PlantedSeedID)
+	}
+	stored := storedVent{vent}
+	seed, err := d.plantSeedRequest(&protocol.SeedPlantMessage{ProfileID: &vent.ProfileID, Title: stored.seedTitle(), Body: protocol.Ptr(stored.seedBody())})
+	if err != nil {
+		return protocol.Seed{}, fmt.Errorf("seed plant: %w", err)
+	}
+	if _, err := d.store.SetVentPlanted(id, seed.ID); err != nil {
+		return protocol.Seed{}, fmt.Errorf("planted %s but could not link it to vent %s: %w", seed.ID, id, err)
+	}
+	d.publishFact(FactVentPlanted, id, stored.fact())
+	return seed, nil
 }
 
 func (d *Daemon) publishVentFact(name, id string) {
@@ -256,6 +295,56 @@ func (v storedVent) fact() ventFact {
 	return ventFact{Harness: v.Context.Harness, Model: protocol.Deref(v.Context.Model)}
 }
 
+const ventSeedTitleRunes = 100
+
+func (v storedVent) seedTitle() string {
+	line, _, _ := strings.Cut(v.Text, "\n")
+	line = strings.TrimSpace(line)
+	if utf8.RuneCountInString(line) <= ventSeedTitleRunes {
+		return line
+	}
+	cut := string([]rune(line)[:ventSeedTitleRunes])
+	if space := strings.LastIndex(cut, " "); space > len(cut)/2 {
+		cut = cut[:space]
+	}
+	return cut + "…"
+}
+
+func (v storedVent) seedBody() string {
+	agent := strings.Join(nonEmpty(v.Context.Harness, protocol.Deref(v.Context.HarnessVersion)), " ")
+	if model := protocol.Deref(v.Context.Model); model != "" {
+		agent += " · " + model
+	}
+	build := strings.Join(nonEmpty(v.Context.Build.Channel, v.Context.Build.Version, v.Context.Build.Commit), " ")
+	if v.Context.Build.Dirty {
+		build += ", uncommitted changes"
+	}
+	lines := []string{
+		v.Text, "", "## Context", "",
+		fmt.Sprintf("- Vent: %s, %s", v.ID, v.CreatedAt.UTC().Format(time.RFC3339)),
+		"- Session: " + v.Context.SessionLabel,
+		"- Agent: " + agent,
+		"- Build: " + build,
+	}
+	if seed := protocol.Deref(v.Context.SeedID); seed != "" {
+		lines = append(lines, "- Stake seed: "+seed)
+	}
+	if len(v.Context.Experimental) > 0 {
+		lines = append(lines, "- Experimental: "+strings.Join(v.Context.Experimental, ", "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func nonEmpty(values ...string) []string {
+	kept := values[:0:0]
+	for _, value := range values {
+		if value != "" {
+			kept = append(kept, value)
+		}
+	}
+	return kept
+}
+
 func (v storedVent) wire() protocol.Vent {
 	wire := protocol.Vent{ID: v.ID, SessionID: v.SessionID, Text: v.Text, Context: v.Context, CreatedAt: v.CreatedAt.UTC().Format(time.RFC3339Nano)}
 	if !v.WithdrawnAt.IsZero() {
@@ -263,6 +352,9 @@ func (v storedVent) wire() protocol.Vent {
 	}
 	if !v.DismissedAt.IsZero() {
 		wire.DismissedAt = protocol.Ptr(v.DismissedAt.UTC().Format(time.RFC3339Nano))
+	}
+	if v.PlantedSeedID != "" {
+		wire.PlantedSeedID = protocol.Ptr(v.PlantedSeedID)
 	}
 	return wire
 }

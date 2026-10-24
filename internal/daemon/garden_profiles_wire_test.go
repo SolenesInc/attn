@@ -347,33 +347,3 @@ func TestGardenReviewsBelongToTheRequestingProfile(t *testing.T) {
 		}
 	})
 }
-
-func TestTheAppPlantsASeedInItsOwnProfile(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		side := createProfile(app, "Side")
-		sideApp := w.AppOn(side.ID)
-		plant := func(request, title string) protocol.SeedPlantResultMessage {
-			t.Helper()
-			return testworld.Request(sideApp, protocol.SeedPlantMessage{
-				Cmd: protocol.CmdSeedPlant, RequestID: protocol.Ptr(request), Title: title, Body: protocol.Ptr("The vent, word for word."),
-			}, protocol.EventSeedPlantResult, func(m protocol.SeedPlantResultMessage) bool { return m.RequestID == request })
-		}
-
-		planted := plant("plant", "Seed tend refuses a seed held by an ended session")
-		if !planted.Success || planted.Seed == nil {
-			t.Fatalf("the app's plant: %s", protocol.Deref(planted.Error))
-		}
-		shown, err := cli.WithGardenProfile(side.ID, "").SeedShow("", planted.Seed.ID)
-		if err != nil || shown.Seed.Body != "The vent, word for word." || shown.Seed.Status != string(garden.StatusPlanted) {
-			t.Fatalf("the planted seed in Side: %+v %v", shown, err)
-		}
-		if _, err := cli.SeedShow("", planted.Seed.ID); err == nil {
-			t.Fatal("the seed the app planted in Side is visible from Default")
-		}
-
-		if refused := plant("empty", "  "); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "seed plant:") {
-			t.Fatalf("an untitled plant: %+v", refused)
-		}
-	})
-}

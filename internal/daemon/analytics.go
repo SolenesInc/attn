@@ -116,6 +116,28 @@ func (d *Daemon) sendAnalyticsRecordsWSResult(client *wsClient, msg *protocol.Li
 	d.sendToClient(client, result)
 }
 
+func (d *Daemon) sendAnalyticsStatusWSResult(client *wsClient, msg *protocol.GetAnalyticsStatusMessage) {
+	result := protocol.GetAnalyticsStatusResultMessage{Event: protocol.EventGetAnalyticsStatusResult, RequestID: msg.RequestID}
+	if status, err := d.store.AnalyticsStatus(); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+		result.Records, result.Bytes, result.Waiting = int(status.Records), int(status.Bytes), int(status.Waiting)
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) sendClearAnalyticsRecordsWSResult(client *wsClient, msg *protocol.ClearAnalyticsRecordsMessage) {
+	result := protocol.ClearAnalyticsRecordsResultMessage{Event: protocol.EventClearAnalyticsRecordsResult, RequestID: msg.RequestID}
+	if cleared, err := d.store.ClearAnalyticsOutbox(); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+		result.Records = int(cleared)
+	}
+	d.sendToClient(client, result)
+}
+
 func (d *Daemon) analyticsRecords(msg *protocol.ListAnalyticsRecordsMessage) (store.AnalyticsPage, error) {
 	if msg.Limit < 1 || msg.Limit > analyticsPageLimit {
 		return store.AnalyticsPage{}, fmt.Errorf("limit must be between 1 and %d, got %d", analyticsPageLimit, msg.Limit)
