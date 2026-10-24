@@ -303,10 +303,6 @@ func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	return overrides
 }
 
-func (c *Codex) FindTranscript(sessionID, cwd string, startedAt time.Time) string {
-	return transcript.FindCodexTranscript(cwd, startedAt)
-}
-
 func (c *Codex) FindTranscriptForResume(resumeID string) string {
 	return transcript.FindCodexTranscriptForResume(resumeID)
 }

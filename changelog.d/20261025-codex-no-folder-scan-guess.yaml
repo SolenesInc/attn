@@ -1,0 +1,4 @@
+kind: fixed
+area: codex
+change: A Codex session that exits without ever starting a conversation no longer takes its state from another Codex session's conversation in the same folder.
+symptom: Quitting an unused Codex session showed the verdict of the newest conversation in its folder, which could belong to another session.

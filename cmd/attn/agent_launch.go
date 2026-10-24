@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 )
 
 type directLaunchArgs struct {
@@ -199,7 +198,6 @@ func runAgentDirectly(requestedAgent string) {
 	cmd.Stderr = os.Stderr
 	cmd.Env = pty.MergeEnvironment(config.WithoutAgentSessionIdentityEnv(os.Environ()), driver.BuildEnv(opts))
 
-	startedAt := time.Now()
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "error starting %s: %v\n", driver.Name(), err)
 		os.Exit(1)
@@ -218,13 +216,8 @@ func runAgentDirectly(requestedAgent string) {
 
 	if !hasHooks {
 		transcriptPath := ""
-		if tf, ok := agentdriver.GetTranscriptFinder(driver); ok {
-			if opts.ResumeSessionID != "" {
-				transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)
-			}
-			if transcriptPath == "" {
-				transcriptPath = tf.FindTranscript(string(terminalID), cwd, startedAt)
-			}
+		if tf, ok := agentdriver.GetTranscriptFinder(driver); ok && opts.ResumeSessionID != "" {
+			transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)
 		}
 		if sendErr := c.SendStop(terminalID, transcriptPath, client.StopFacts{}); sendErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not send stop: %v\n", sendErr)

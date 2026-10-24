@@ -169,7 +169,7 @@ func (c *codex) begin(term *terminal) error {
 				return fmt.Errorf("codex resume %s: no rollout under %s", c.conversation, c.sessionsDir())
 			}
 		}
-	} else if err := c.startRollout(); err != nil {
+	} else if err := c.newConversation(); err != nil {
 		return err
 	} else {
 		c.unstarted = true
@@ -186,14 +186,24 @@ func (c *codex) sessionsDir() string {
 }
 
 func (c *codex) startRollout() error {
+	if err := c.newConversation(); err != nil {
+		return err
+	}
+	return c.writeSessionMeta()
+}
+
+func (c *codex) newConversation() error {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return err
 	}
 	c.conversation = id.String()
-	started := time.Now().UTC()
-	c.transcript = codexRolloutPath(c.sessionsDir(), c.conversation, started)
-	return appendLines(c.transcript, codexSessionMeta(c.conversation, c.cwd, "codex_cli_rs", started))
+	c.transcript = codexRolloutPath(c.sessionsDir(), c.conversation, time.Now().UTC())
+	return nil
+}
+
+func (c *codex) writeSessionMeta() error {
+	return appendLines(c.transcript, codexSessionMeta(c.conversation, c.cwd, "codex_cli_rs", time.Now().UTC()))
 }
 
 func codexRolloutPath(sessions, conversation string, started time.Time) string {
@@ -280,6 +290,9 @@ func (c *codex) submit(prompt string) error {
 			return err
 		}
 	} else if c.unstarted {
+		if err := c.writeSessionMeta(); err != nil {
+			return err
+		}
 		next.source = "startup"
 	}
 	if c.unstarted = false; next.source != "" {

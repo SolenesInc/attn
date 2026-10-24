@@ -1606,9 +1606,6 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		if driver != nil && !agentdriver.EffectiveCapabilities(driver).HasHooks {
 			if finder, ok := agentdriver.GetTranscriptFinder(driver); ok {
 				path := finder.FindTranscriptForResume(d.store.GetResumeSessionID(sessionID))
-				if path == "" {
-					path = finder.FindTranscript(string(info.ID), session.Directory, d.store.SessionLaunchedAt(sessionID))
-				}
 				d.observeStoppedConversation(sessionID, d.resolveStopTranscriptPath(session, path))
 			}
 		}
