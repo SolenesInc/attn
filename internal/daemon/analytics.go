@@ -41,25 +41,29 @@ func (d *Daemon) configureAnalytics() {
 
 func ensureAnalyticsSecret(dataRoot string) error {
 	path := filepath.Join(dataRoot, analyticsSecretFile)
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if errors.Is(err, fs.ErrExist) {
+	if _, err := os.Stat(path); err == nil {
 		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("create %s: %w", path, err)
 	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
-		file.Close()
-		os.Remove(path)
 		return fmt.Errorf("generate analytics secret: %w", err)
 	}
-	if _, err := file.WriteString(hex.EncodeToString(secret)); err != nil {
-		file.Close()
-		os.Remove(path)
-		return fmt.Errorf("write %s: %w", path, err)
+	draft, err := os.CreateTemp(dataRoot, analyticsSecretFile+".*")
+	if err != nil {
+		return fmt.Errorf("create analytics secret draft: %w", err)
 	}
-	return file.Close()
+	defer os.Remove(draft.Name())
+	if _, err := draft.WriteString(hex.EncodeToString(secret)); err != nil {
+		draft.Close()
+		return fmt.Errorf("write analytics secret draft: %w", err)
+	}
+	if err := draft.Close(); err != nil {
+		return fmt.Errorf("write analytics secret draft: %w", err)
+	}
+	if err := os.Link(draft.Name(), path); err != nil && !errors.Is(err, fs.ErrExist) {
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	return nil
 }
 
 func (d *Daemon) analyticsPruneHandler(_ context.Context, _ *jobs.Job) (any, error) {
