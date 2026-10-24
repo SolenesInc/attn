@@ -24,22 +24,3 @@ type Record struct {
 	Bytes   int             `json:"bytes,omitempty"`
 	Props   json.RawMessage `json:"props,omitempty"`
 }
-
-type Build struct {
-	Version     string `json:"version"`
-	Commit      string `json:"commit"`
-	Channel     string `json:"channel"`
-	BuildTime   string `json:"build_time"`
-	Fingerprint string `json:"fingerprint"`
-	Protocol    string `json:"protocol"`
-	OS          string `json:"os"`
-	Arch        string `json:"arch"`
-	Dirty       bool   `json:"dirty"`
-	AppVersion  string `json:"app_version,omitempty"`
-	AppChannel  string `json:"app_channel,omitempty"`
-}
-
-type Batch struct {
-	Build   Build    `json:"build"`
-	Records []Record `json:"records"`
-}
