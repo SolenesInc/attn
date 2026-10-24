@@ -12,6 +12,7 @@ type Source string
 const (
 	SourceHeartbeat     Source = "heartbeat"
 	SourceProgramStatus Source = "program_status"
+	SourceAppServer     Source = "app_server"
 	SourceBracket       Source = "hook_bracket"
 	SourceHarnessEvent  Source = "harness_event"
 	SourceClassifier    Source = "classifier"
@@ -236,7 +237,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 		if signal.Claim == ClaimBusy && !heartbeatSilentFor(e, now, policy.HeartbeatSettleAfter) {
 			return running(e)
 		}
-		if signal.Source == SourceProgramStatus {
+		if e.ProgramStatus != nil {
 			return settled(e, ReasonProgramSettled, policy, now)
 		}
 		return settled(e, ReasonHeartbeatSettled, policy, now)

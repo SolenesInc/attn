@@ -77,7 +77,8 @@ you start with `/new` takes the mode of the session its terminal shows.
 Hidden sessions queue like any other, so a hidden session that needs an answer
 appears in the queue without a desktop chip. Choose it and attn opens it in a
 tile on the current desktop, resuming the conversation there. If it was waiting
-on an approval, the approval is waiting in the tile; answer it as usual.
+on an approval, the approval is waiting in the tile; answer it as usual. The
+same holds when you switch a terminal to it with `/resume` or `/agents`.
 
 To keep hidden sessions out of the queue, turn off Settings → Experimental →
 **Show hidden sessions in the queue**. They stay in the Sessions ledger.

@@ -505,9 +505,6 @@ func (d *Daemon) executeAddedTerminal(req *spawnRequest, plan *spawnPlan) *spawn
 		return &spawnOutcome{err: fmt.Errorf("prepare %s launch: %w", req.agent, err)}
 	}
 	plan.launchSession = req.existingSession
-	if len(d.terminals().Of(sessionID)) == 1 {
-		d.forgetProgramStatus(sessionID)
-	}
 	if err := d.startTerminalRuntime(plan.spawnOpts); err != nil {
 		plan.rollback(d, sessionID)
 		return &spawnOutcome{err: err}

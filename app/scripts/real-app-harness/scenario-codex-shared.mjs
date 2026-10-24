@@ -110,6 +110,7 @@ try {
   let discount;
   let terminal;
   let checkoutConversation;
+  let discountConversation;
 
   await runner.step('a_codex_terminal_runs_against_the_shared_server', async () => {
     checkout = await createSessionAndWaitForInitialPane({
@@ -131,7 +132,8 @@ try {
     discount = observer.desktops.flatMap((desktop) => desktop.panes).find((entry) => entry.runtime_id === terminal)?.session_id;
     runner.assert(discount && discount !== checkout, 'the terminal now shows another session', { discount });
     sessions.push(discount);
-    await waitForPaneText(client, discount, pane.paneId, (text) => Boolean(lastConversation(text)) && lastConversation(text) !== checkoutConversation, 'the terminal shows a new conversation');
+    const fresh = await waitForPaneText(client, discount, pane.paneId, (text) => Boolean(lastConversation(text)) && lastConversation(text) !== checkoutConversation, 'the terminal shows a new conversation');
+    discountConversation = lastConversation(fresh.text);
     await submit(discount, pane.paneId, 'look at the tax table');
     runner.assert(session(checkout).state === 'waiting_input', 'the hidden session keeps its queue state', session(checkout));
     await client.request('dom_wait', { selector: '[data-testid="sidebar-queue"]', timeoutMs: observer.connectTimeoutMs });
@@ -176,6 +178,27 @@ try {
     await observer.waitFor(() => session(discount)?.state === 'waiting_input', 'Enter answers the approval and the turn finishes');
     await waitForPaneText(client, discount, pane.paneId, (text) => text.includes('migrated'), 'the reply shows in the tile');
     await setSetting('queue_mode_enabled', 'false');
+  });
+
+  await runner.step('resuming_a_hidden_approval_answers_it_in_the_tile', async () => {
+    const pane = await paneOf(discount);
+    await submit(discount, pane.paneId, '/new');
+    await observer.waitFor(() => isHidden(discount), 'discount is hidden once its terminal moved on');
+    const blank = observer.desktops.flatMap((desktop) => desktop.panes).find((entry) => entry.pane_id === pane.paneId)?.session_id;
+    runner.assert(blank && blank !== discount, 'the tile now shows another session', { blank });
+    sessions.push(blank);
+    const sent = await observer.requestResult({ cmd: 'session_annotations_submit', session_id: discount, text: 'needs approval to run the migration again' }, 'session_annotations_submit_result');
+    runner.assert(sent.success && sent.status === 'delivered', 'feedback reaches the hidden session', sent);
+    await observer.waitFor(() => session(discount)?.state === 'pending_approval' && isHidden(discount), 'the hidden session waits on an approval');
+    await client.request('click_pane', { sessionId: blank, paneId: pane.paneId });
+    await waitForPaneInputFocus(client, blank, pane.paneId, 15_000);
+    await submit(blank, pane.paneId, `/resume ${discountConversation}`);
+    await observer.waitFor(() => tileOf(discount)?.pane.pane_id === pane.paneId && !isHidden(discount), 'discount is shown again in the same tile');
+    await waitForPaneText(client, discount, pane.paneId, (text) => text.includes(APPROVAL), 'the approval shows after the resume');
+    await waitForPaneInputFocus(client, discount, pane.paneId, 15_000, { stableMs: 500 });
+    await driver.pressEnter();
+    await waitForPaneText(client, discount, pane.paneId, (text) => text.includes('migrated'), 'the reply shows in the tile');
+    await observer.waitFor(() => session(discount)?.state === 'waiting_input', 'the session leaves the approval once its turn finishes');
   });
 
   await runner.step('closing_the_last_tile_leaves_the_session_closed_in_the_ledger', async () => {

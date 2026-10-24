@@ -366,7 +366,7 @@ export const scenarioCatalog = [
   {
     id: 'codex-shared',
     runnerId: 'CODEX-SHARED',
-    label: 'Shared Codex: Settings switch, hidden sessions in the queue, focus after a conversation switch, hidden approval answered in a tile, last tile closes into the ledger',
+    label: 'Shared Codex: Settings switch, hidden sessions in the queue, focus after a conversation switch, hidden approval answered in a tile from the queue and after /resume, last tile closes into the ledger',
     command: ['node', 'scripts/real-app-harness/scenario-codex-shared.mjs'],
     freshWorldAfter: true,
   },
