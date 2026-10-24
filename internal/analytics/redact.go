@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"regexp"
 )
 
 const hashedSubjectHexLen = 12
@@ -15,6 +16,12 @@ type Allowlist map[string]bool
 type redactedString struct {
 	S int `json:"s"`
 }
+
+type redactedObject struct {
+	N int `json:"n"`
+}
+
+var identifierKey = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 
 func Redact(payload json.RawMessage, allow Allowlist) json.RawMessage {
 	if len(bytes.TrimSpace(payload)) == 0 {
@@ -41,6 +48,11 @@ func redactValue(value any, path string, allow Allowlist) any {
 		}
 		return redactedString{S: len(v)}
 	case map[string]any:
+		for key := range v {
+			if !identifierKey.MatchString(key) {
+				return redactedObject{N: len(v)}
+			}
+		}
 		for key, field := range v {
 			v[key] = redactValue(field, joinPath(path, key), allow)
 		}

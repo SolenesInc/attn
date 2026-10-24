@@ -50,7 +50,7 @@ func TestEveryAllowlistedFieldIsInARealPayloadShape(t *testing.T) {
 	}
 }
 
-func TestRedactTurnsAnyUnlistedStringIntoItsLength(t *testing.T) {
+func TestRedactShipsNoTextOutsideTheAllowlist(t *testing.T) {
 	for _, tc := range []struct {
 		payload, want string
 		allow         analytics.Allowlist
@@ -59,6 +59,8 @@ func TestRedactTurnsAnyUnlistedStringIntoItsLength(t *testing.T) {
 		{`{"kind":"refresh_repository","path":"/a"}`, `{"kind":"refresh_repository","path":{"s":2}}`, analytics.Allowlist{"kind": true}},
 		{`{"items":[{"kind":"x","title":"secret"}]}`, `{"items":[{"kind":"x","title":{"s":6}}]}`, analytics.Allowlist{"items.kind": true}},
 		{`{"kind":{"kind":"nested"}}`, `{"kind":{"kind":{"s":6}}}`, analytics.Allowlist{"kind": true}},
+		{`{"by_path":{"/Users/someone/repo":"dirty","0095c903-0123-4029":"idle"},"n":2}`, `{"by_path":{"n":2},"n":2}`, nil},
+		{`{"empty":{}}`, `{"empty":{}}`, nil},
 		{`"bare"`, `{"s":4}`, nil},
 		{`{"big":12345678901234567890}`, `{"big":12345678901234567890}`, nil},
 	} {
