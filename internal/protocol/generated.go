@@ -10736,8 +10736,8 @@ type SnoozeTurnMessage struct {
 }
 
 type SocketCaller struct {
-	// CallerTerminalID corresponds to the JSON schema field "caller_terminal_id".
-	CallerTerminalID *TerminalID `json:"caller_terminal_id,omitempty,omitzero"`
+	// CallerID corresponds to the JSON schema field "caller_id".
+	CallerID *TerminalID `json:"caller_id,omitempty,omitzero"`
 }
 
 type SpawnResultMessage struct {

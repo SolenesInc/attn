@@ -178,7 +178,15 @@ func (c *Client) writeFrame(conn net.Conn, msg any) error {
 	if err != nil {
 		return err
 	}
-	caller, err := json.Marshal(protocol.SocketCaller{CallerTerminalID: &c.callerTerminal})
+	var named protocol.SocketCaller
+	if err := json.Unmarshal(frame, &named); err != nil {
+		return err
+	}
+	if named.CallerID != nil {
+		_, err = conn.Write(append(frame, '\n'))
+		return err
+	}
+	caller, err := json.Marshal(protocol.SocketCaller{CallerID: &c.callerTerminal})
 	if err != nil {
 		return err
 	}

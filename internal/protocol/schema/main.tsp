@@ -1252,9 +1252,9 @@ model RecordAnalyticsMessage {
 }
 
 // Fields the CLI adds to every frame it writes to the daemon socket.
-// caller_terminal_id is ATTN_TERMINAL_ID, set in every terminal attn runs.
+// caller_id is the caller's ATTN_TERMINAL_ID, the same field query carries.
 model SocketCaller {
-  caller_terminal_id?: TerminalID;
+  caller_id?: TerminalID;
 }
 
 // Notifications surface: a global, daemon-level feed of durable notifications.

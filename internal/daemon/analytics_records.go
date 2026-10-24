@@ -96,7 +96,7 @@ func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
 		protocol.SocketCaller
 	}
 	_ = json.Unmarshal(frame, &fields)
-	return fields.Cmd, protocol.Deref(fields.CallerTerminalID)
+	return fields.Cmd, protocol.Deref(fields.CallerID)
 }
 
 func (d *Daemon) recordingCLICommand(conn net.Conn, frame []byte, parseErr error) (*analyticsReplyConn, func()) {

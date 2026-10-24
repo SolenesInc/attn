@@ -10166,7 +10166,7 @@ export enum SnoozeTurnMessageCmd {
 }
 
 export interface SocketCaller {
-    caller_terminal_id?: string;
+    caller_id?: string;
     [property: string]: any;
 }
 
@@ -22759,7 +22759,7 @@ const typeMap: any = {
         { json: "until", js: "until", typ: "" },
     ], "any"),
     "SocketCaller": o([
-        { json: "caller_terminal_id", js: "caller_terminal_id", typ: u(undefined, "") },
+        { json: "caller_id", js: "caller_id", typ: u(undefined, "") },
     ], "any"),
     "SpawnResultMessage": o([
         { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },
