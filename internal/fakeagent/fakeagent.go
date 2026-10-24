@@ -108,6 +108,7 @@ var programs = map[string]func(config) int{
 	string(Pi):      runPiTerminal,
 	piPluginName:    runPiPlugin,
 	wrapperName:     runWrapperTripwire,
+	miseName:        runMise,
 }
 
 func Main() {
@@ -125,7 +126,7 @@ func Main() {
 	if name == piPluginName {
 		harness = Pi
 	}
-	if name != wrapperName && !slices.Contains(cfg.Harnesses, harness) {
+	if name != wrapperName && name != miseName && !slices.Contains(cfg.Harnesses, harness) {
 		os.Exit(tripwire(cfg, name, fmt.Sprintf("%s spawned in a world that did not install it", name)))
 	}
 	os.Exit(program(cfg))
