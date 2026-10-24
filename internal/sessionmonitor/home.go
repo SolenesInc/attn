@@ -132,7 +132,7 @@ func (e *Entry) terminalViews() terminalViews {
 func (e *Entry) primaryTerminalLocked() harness.TerminalID {
 	current := e.terminalViews()
 	views := current.terminals
-	if len(views) == 0 && e.monitor.runtime == "" {
+	if len(views) == 0 && !e.monitor.linked {
 		views = []harness.TerminalID{e.monitor.terminalID}
 	}
 	var shown []harness.TerminalID

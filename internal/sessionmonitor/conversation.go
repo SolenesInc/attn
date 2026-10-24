@@ -1,7 +1,6 @@
 package sessionmonitor
 
 import (
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/harness"
 )
@@ -13,8 +12,8 @@ func (e *Entry) ProposeConversation(observation ConversationObservation, proposa
 	e.mu.Lock()
 	key := e.keyLocked()
 	m := e.monitor
-	if m.runtime != "" {
-		m = &Monitor{terminalID: m.terminalID, runtime: RuntimeID(uuid.NewString()), entries: make(map[*Entry]struct{})}
+	if m.linked {
+		m = &Monitor{terminalID: m.terminalID, linked: true, entries: make(map[*Entry]struct{})}
 	}
 	proposed := Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal}
 	switching := terminal != ""

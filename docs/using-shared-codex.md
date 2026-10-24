@@ -34,7 +34,9 @@ a plain Codex, since the app-server runs one Codex for the whole profile.
   it as a terminal of its own, so it keeps running through app and daemon
   restarts. The terminals reconnect and resume the conversations they show.
 - Each conversation is one session, with its own name, queue state, inbox and
-  usage. A Codex terminal shows one conversation at a time.
+  usage. A Codex terminal shows one conversation at a time. Launching Codex on
+  a conversation an open session holds opens that session in a new tile
+  rather than a second session.
 - When no open shared session and no shared terminal needs the server, it
   stops. The next shared Codex terminal starts it again.
 

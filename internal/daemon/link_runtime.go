@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -107,6 +108,13 @@ func (d *Daemon) hidden(sessionID protocol.SessionID) bool {
 	return d.store.Get(sessionID) != nil && d.linkConversation(sessionID) != ""
 }
 
+func (d *Daemon) forgetProgramStatus(sessionID protocol.SessionID) {
+	d.updateEvidence(sessionID, nil, func(e *sessionmonitor.Evidence) {
+		e.Heartbeat = nil
+		e.ClearProgramStatus()
+	})
+}
+
 func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
 	return d.linkConversation(sessionID) != ""
 }
@@ -175,17 +183,33 @@ func (d *Daemon) decorateLedgerEntryHidden(entry *protocol.SessionLedgerEntry) {
 	}
 }
 
-func (d *Daemon) showHidden(sessionID protocol.SessionID) error {
+func (d *Daemon) linkHolder(profile, conversation string) protocol.SessionID {
+	sessionID := d.store.OpenSessionHolding(profile, conversation)
+	if sessionID == "" || d.linkOf(sessionID) == nil {
+		return ""
+	}
+	return sessionID
+}
+
+func (d *Daemon) spawnShowing(sessionID protocol.SessionID, cols, rows int) (*protocol.SpawnSessionMessage, internalSpawnPolicy, error) {
 	session := d.store.Get(sessionID)
 	intent, ok := d.store.LaunchIntent(sessionID)
 	conversation := d.linkConversation(sessionID)
 	if session == nil || !ok || conversation == "" {
-		return fmt.Errorf("session %s holds no linked conversation to show", sessionID)
+		return nil, internalSpawnPolicy{}, fmt.Errorf("session %s holds no linked conversation to show", sessionID)
 	}
-	spawn, policy := buildStoredIntentSpawn(session, intent, 80, 24)
+	spawn, policy := buildStoredIntentSpawn(session, intent, cols, rows)
 	spawn.ResumeSessionID = protocol.Ptr(conversation)
 	policy.launchPlacement = &launchPlacement{direction: layouttree.DirectionVertical}
 	policy.userStarted = true
+	return spawn, policy, nil
+}
+
+func (d *Daemon) showHidden(sessionID protocol.SessionID) error {
+	spawn, policy, err := d.spawnShowing(sessionID, 80, 24)
+	if err != nil {
+		return err
+	}
 	if rejection := d.runSpawnPipeline(spawn, policy); rejection != nil {
 		return fmt.Errorf("show session %s: %w", sessionID, rejection.reason())
 	}

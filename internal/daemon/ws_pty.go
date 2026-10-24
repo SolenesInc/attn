@@ -264,7 +264,7 @@ func (d *Daemon) answerSpawn(client *wsClient, sessionID protocol.SessionID, pla
 		d.sendSpawnRejection(client, sessionID, rejection)
 		return
 	}
-	result := protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: sessionID, Success: true}
+	result := protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: placed.session, Success: true}
 	if placed.paneID != "" {
 		result.DesktopID = protocol.Ptr(placed.desktopID)
 		result.PaneID = protocol.Ptr(placed.paneID)

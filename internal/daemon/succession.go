@@ -88,10 +88,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		d.publishSessionUnregistered(from)
 	} else {
 		if d.hidden(from.ID) {
-			d.updateEvidence(from.ID, nil, func(e *sessionmonitor.Evidence) {
-				e.Heartbeat = nil
-				e.ClearProgramStatus()
-			})
+			d.forgetProgramStatus(from.ID)
 		}
 		d.publishFact(FactSessionReregistered, string(from.ID), nil)
 	}

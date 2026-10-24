@@ -11,11 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
-type RuntimeID string
-
 type Key struct {
 	Terminal     harness.TerminalID
-	Runtime      RuntimeID
 	Conversation string
 }
 
@@ -166,7 +163,7 @@ func (e *Entry) keyLocked() Key {
 	if conversation == "" {
 		conversation = e.localConversation
 	}
-	return Key{Terminal: e.monitor.terminalID, Runtime: e.monitor.runtime, Conversation: conversation}
+	return Key{Terminal: e.monitor.terminalID, Conversation: conversation}
 }
 
 func (e *Entry) changeStateLocked(state string, cause Cause, request, now time.Time) bool {
