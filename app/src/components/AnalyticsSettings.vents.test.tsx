@@ -86,6 +86,14 @@ describe('Settings › Analytics vents', () => {
     expect(inspector().queryByRole('button', { name: /Dismiss|Restore/ })).toBeNull();
   });
 
+  it('moves on to the next new vent after dismissing one', async () => {
+    const daemon = await openVents();
+    await gesture(daemon, () => daemon.emit({ event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents: [vent('v-newer', { text: 'make test ran the Go suite for an app-only change.' }), ...VENTS] }));
+    await press(daemon, 'd');
+    expect(daemon.sentOf('set_vent_dismissed').map(({ vent_id }) => vent_id)).toEqual(['v-newer']);
+    expect(screen.getByTestId('analytics-inspector')).toHaveTextContent('`attn seed tend s-f68sja` refused');
+  });
+
   it('plants a seed from the vent with p and withers it on undo', async () => {
     const daemon = await openVents();
     await press(daemon, 'p');

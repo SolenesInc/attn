@@ -33,7 +33,7 @@ const binary = appDaemonInTree(options.appPath);
 const cli = async (...args) => (await promisify(execFile)(binary, args, { env: instanceCliEnv(instance) })).stdout;
 const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
 const text = async selector => (await client.request('dom_text', { selector })).text;
-const shot = async name => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
+const shot = name => client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, `${name}.png`) });
 const page = '[data-testid="settings-analytics"]';
 const inspector = '[data-testid="analytics-inspector"]';
 async function press(key) {
@@ -72,13 +72,14 @@ try {
   });
   await runner.step('dismiss_undo_with_keys', async () => {
     await press('d');
-    await wait(inspector, { textIncludes: 'Dismissed' });
     await wait('[role="status"]', { textIncludes: 'Dismissed “fix garden bell staleness”' });
+    await wait('ol[aria-label="Vents"] .analytics-row.done', { textIncludes: 'ANALYTICS7' });
     await shot('01-dismissed');
     await press('u');
     await wait('[role="status"]', { textIncludes: 'Undone.' });
-    await wait(inspector, { textIncludes: 'Dismiss' });
-    runner.assert(!(await text(inspector)).includes('Restore'), 'undo restores the vent', await text(inspector));
+    await wait('ol[aria-label="Vents"] li:first-child', { textIncludes: 'ANALYTICS7' });
+    await client.request('dom_click', { selector: 'ol[aria-label="Vents"] li:first-child button' });
+    await wait(inspector, { textIncludes: 'ANALYTICS7' });
   });
   await runner.step('plant_seed_from_vent', async () => {
     await press('p');

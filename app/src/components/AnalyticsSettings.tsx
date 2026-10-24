@@ -211,6 +211,8 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
   };
 
   const setDismissed = (target: Vent, dismissed: boolean) => run(async () => {
+    const nextNew = items.slice(index + 1).find((item) => item.kind === 'vent' && !item.done);
+    setSelected(dismissed && nextNew ? nextNew.key : target.id);
     await sendSetVentDismissed(target.id, dismissed);
     const name = `“${target.context.session_label}”`;
     say(dismissed ? `Dismissed ${name}.` : `Restored ${name}.`, () => sendSetVentDismissed(target.id, !dismissed));
