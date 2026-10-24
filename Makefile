@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -191,6 +191,12 @@ test: git-hooks $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 	if [ -z "$(FORCE)" ] && ! printf '%s' "$$changed" | grep -qE '$(GO_SUITE_READS)' && ! printf '%s' "$$changed" | grep -qvE '$(GO_SUITE_IGNORES)'; then \
 		echo "make test: skipped the Go suite, only docs and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
 	else ./scripts/test-go.sh; fi
+
+ingest-clickhouse:
+	@./scripts/ingest-clickhouse.sh start
+
+ingest-clickhouse-stop:
+	@./scripts/ingest-clickhouse.sh stop
 
 test-scripts:
 	@set -e; for script_test in $(sort $(wildcard scripts/*_test.sh)); do bash "$$script_test"; done

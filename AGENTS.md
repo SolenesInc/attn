@@ -304,6 +304,7 @@ working on:
 - CPU, memory, or benchmarks => docs/perf-testing.md
 - Terminal input that stops working => docs/diagnosing-terminal-input.md
 - Shared Rust PTY host => docs/pty-host-verification.md
+- The analytics ingest service (`cmd/attn-ingest`) => docs/attn-ingest.md
 
 ## Diagnostics
 
