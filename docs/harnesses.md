@@ -206,7 +206,10 @@ Probed on 0.160.0 with a mock model. Shared Codex relies on these.
   conversation, including ones another client resumed.
 - One process writes a conversation at a time: while an app-server holds it
   loaded, another app-server or a plain `codex resume` fails with `already has
-  an active writer`. Either can take it once the holder unloads it.
+  an active writer`. Either can take it once the holder unloads it. On 0.162.1,
+  while a `--remote` TUI holds it, a plain TUI shows the lock screen described
+  above, both as `codex resume <id>` and with `/resume <id>`, and writes
+  nothing.
 - `thread/archive` moves the rollout to `archived_sessions/` (flat, no dated
   directories) and refuses later resumes; `thread/unarchive` moves it back.
 
@@ -475,6 +478,7 @@ two `SessionManager`s on one file that share nothing but the file:
   file becomes a tree, and neither sees the other's entries. Opening the file
   again loads the branch ending at the last entry written.
 
-Unlike Claude Code, this never leaves two sessions on one conversation. A Pi
-conversation is not a session (Pi has no built-in driver), so a Pi terminal
-that resumes another terminal's conversation keeps its own session.
+Pi falls short of attn's session model too. attn does not key Pi sessions by
+conversation (Pi has no built-in driver), so each Pi terminal is its own
+session, and two Pi terminals on one conversation are two sessions. The file
+forks, and no tile warns.
