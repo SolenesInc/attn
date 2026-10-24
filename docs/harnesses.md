@@ -301,9 +301,10 @@ these.
   `app-server/src/lib.rs`).
 - At the end the server stops listening, removes its socket and drops every
   connection without a WebSocket close frame, so clients see EOF before the
-  process exits. It then shuts its conversations down, waiting up to 10 s per
-  conversation, and reads no signals while it does
-  (`shutdown_all_threads_bounded` in `app-server/src/lib.rs` and
+  process exits. It then drains its background tasks and shuts all its
+  conversations down at once, giving each up to 10 s, and reads no signals
+  while it does (`app-server/src/lib.rs`, `shutdown_all_threads_bounded` in
+  `core/src/thread_manager.rs`, called from
   `request_processors/thread_processor.rs`).
 - While a server answers on `PATH`, a second one there exits 1 with
   `app-server control socket is already in use`. Once the process is gone, a
@@ -327,8 +328,10 @@ plugins and MCP servers, and with a 0.162.1 `--remote` TUI:
   stopped. With conversations only resumed and no MCP server running, it
   exited 22–533 ms after SIGTERM.
 - A new `--remote` TUI starts its conversation by itself a few seconds after
-  launch, before any prompt. Until then, losing its connection makes it exit
-  1.
+  launch, before any prompt; one that asks whether to trust its folder starts
+  it once the user answers. Before its conversation starts, losing its
+  connection makes it exit 1, except at the trust question, where it stays
+  open and never reconnects, as described below.
 - After it reconnects, a `--remote` TUI shows busy in its title for a few
   seconds: about 2 s when its server restarted, 7 s and more after attn's
   daemon restarted.

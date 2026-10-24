@@ -78,12 +78,17 @@ type codexAttempt struct {
 	early     []codexshared.Message
 }
 
+type codexProxy struct {
+	drop context.CancelFunc
+}
+
 type codexView struct {
 	terminal   harness.TerminalID
 	profile    string
 	socket     string
 	server     *http.Server
-	proxies    map[*context.CancelFunc]bool
+	proxies    map[*codexProxy]bool
+	started    bool
 	thread     string
 	shownSeq   uint64
 	trusted    string
@@ -316,6 +321,9 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			s.mu.Lock()
 			s.control = client
 			s.running = client.ServerVersion()
+			if s.running == s.restart.refusedOn {
+				s.restart.refusal, s.restart.refusedOn = "", ""
+			}
 			gone := s.hold(list.Data)
 			for _, m := range a.early {
 				gone = append(gone, s.trackLocked(m)...)
@@ -483,7 +491,7 @@ func (r *codexShared) openView(t harness.TerminalID, profile string) (string, er
 	if err := r.ensureDir(); err != nil {
 		return "", err
 	}
-	v := &codexView{terminal: t, profile: profile, socket: r.viewSocket(t), proxies: make(map[*context.CancelFunc]bool)}
+	v := &codexView{terminal: t, profile: profile, socket: r.viewSocket(t), proxies: make(map[*codexProxy]bool)}
 	listener, err := listenUnixAtomically(v.socket)
 	if err != nil {
 		return "", fmt.Errorf("open the Codex proxy of terminal %s: %w", t, err)
@@ -560,8 +568,8 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 		return
 	}
 	defer release()
-	ctx, drop := r.proxying(v)
-	defer r.proxied(v, &drop)
+	ctx, proxy := r.proxying(v)
+	defer r.proxied(v, proxy)
 	s, err := r.ensureServer(r.d.life.Context(), v.profile, "")
 	if err == nil && ctx.Err() != nil {
 		err = fmt.Errorf("attn restarted the shared Codex app-server of profile %s while this connection waited; connect again", v.profile)
@@ -584,18 +592,19 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 	codexshared.Proxy(ctx, down, up, func(m *codexshared.Message) (func(*codexshared.Message), error) { return r.prepare(v, m) }, nil)
 }
 
-func (r *codexShared) proxying(v *codexView) (context.Context, context.CancelFunc) {
+func (r *codexShared) proxying(v *codexView) (context.Context, *codexProxy) {
 	ctx, drop := context.WithCancel(r.d.life.Context())
+	proxy := &codexProxy{drop: drop}
 	r.mu.Lock()
-	v.proxies[&drop] = true
+	v.proxies[proxy] = true
 	r.mu.Unlock()
-	return ctx, drop
+	return ctx, proxy
 }
 
-func (r *codexShared) proxied(v *codexView, drop *context.CancelFunc) {
-	(*drop)()
+func (r *codexShared) proxied(v *codexView, proxy *codexProxy) {
+	proxy.drop()
 	r.mu.Lock()
-	delete(v.proxies, drop)
+	delete(v.proxies, proxy)
 	r.mu.Unlock()
 	r.viewsChanged(v.profile)
 }
@@ -660,6 +669,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 				Parent string `json:"parentThreadId"`
 			} `json:"thread"`
 		}
+		r.started(v)
 		if len(reply.Error) > 0 || json.Unmarshal(reply.Result, &result) != nil || result.Thread.ID == "" {
 			return
 		}
@@ -677,11 +687,20 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 			return
 		}
 		r.show(v, thread.ID, opened)
-		r.viewsChanged(v.profile)
 		if !firstOfItsSession {
 			r.d.conversationIn(v.terminal, agentConversationObservation{NativeID: thread.ID, TranscriptPath: thread.Path})
 		}
 	}, nil
+}
+
+func (r *codexShared) started(v *codexView) {
+	r.mu.Lock()
+	was := v.started
+	v.started = true
+	r.mu.Unlock()
+	if !was {
+		r.viewsChanged(v.profile)
+	}
 }
 
 func (r *codexShared) followPrompt(v *codexView, m *codexshared.Message) {
@@ -826,9 +845,17 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) {
 	opts.LaunchExecutable = r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if v := r.views[opts.ID]; v != nil {
-		opts.CodexRemote = "unix://" + v.socket
+	v := r.views[opts.ID]
+	if v != nil {
+		v.started = false
+	}
+	r.mu.Unlock()
+	if v == nil {
+		return
+	}
+	opts.CodexRemote = "unix://" + v.socket
+	if _, err := r.ensureServer(r.d.life.Context(), v.profile, ""); err != nil {
+		r.d.logf("shared Codex: relaunching terminal %s before its app-server answers: %v", opts.ID, err)
 	}
 }
 
@@ -915,7 +942,13 @@ func (r *codexShared) recoverViews(ctx context.Context) {
 		}
 		if _, err := r.openView(id, t.ProfileID); err != nil {
 			r.d.logf("shared Codex: %v", err)
+			continue
 		}
+		r.mu.Lock()
+		if v := r.views[id]; v != nil {
+			v.started = true
+		}
+		r.mu.Unlock()
 	}
 	r.mu.Lock()
 	profiles := make([]string, 0, len(r.servers))

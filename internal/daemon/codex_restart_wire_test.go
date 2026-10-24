@@ -155,7 +155,8 @@ func TestAQuietRestartWaitsForATerminalAskingWhetherToTrustItsFolder(t *testing.
 	w.SetCodexVersion("0.163.0")
 	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("cart")))
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
-		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending)
+		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
+			slices.Equal(s.Blockers, blockedBy(asking, protocol.SharedCodexBlockerReasonStarting))
 	})
 	app.TypeLine(asking, "")
 	w.Launched(asking)
@@ -225,5 +226,53 @@ func TestARestartBacksOffWhenATurnStartsWhileItPrepares(t *testing.T) {
 	codex.Reply("Added the discount field. <!-- attn:state=idle -->")
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return restartState(s, "0.163.0", "0.163.0", protocol.SharedCodexRestartNone)
+	})
+}
+
+func TestATerminalStillLaunchingHoldsTheRestartItsLaunchDiscovered(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	w.SetCodexVersion("0.162.1")
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
+
+	w.SetCodexVersion("0.163.0")
+	boot := w.HoldNextBoot()
+	cart := w.Spawn(app, fakeagent.Codex, w.Path("cart"))
+	w.AwaitHeldBoot()
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
+			slices.Equal(s.Blockers, blockedBy(cart, protocol.SharedCodexBlockerReasonStarting))
+	})
+	boot()
+	codex := w.Launched(cart)
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.163.0", "0.163.0", protocol.SharedCodexRestartNone)
+	})
+	app.TypeLine(cart, "add a tax field")
+	if got := codex.Prompted(); got != "add a tax field" {
+		t.Fatalf("the terminal launched during the upgrade took %q after the restart", got)
+	}
+}
+
+func TestARefusedRestartClearsOnceTheAppServerRunsTheInstalledCodex(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	w.SetCodexVersion("0.162.1")
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(session)
+
+	w.SetCodexVersion("0.163.0")
+	w.RefuseCodexStart(`Error: approval_policy = "untrusted" is no longer supported`)
+	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("cart")))
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartFailed)
+	})
+
+	w.RefuseCodexStart("")
+	codex.CrashAppServer()
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.163.0", "0.163.0", protocol.SharedCodexRestartNone) && s.Error == nil
 	})
 }

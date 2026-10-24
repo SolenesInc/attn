@@ -313,7 +313,7 @@ func (r *codexShared) archiveUnheld(profile string, closed protocol.SessionID, c
 	defer cancel()
 	_, client, err := r.control(ctx, profile)
 	if err == nil {
-		callCtx, cancelCall := context.WithTimeout(ctx, codexServerCallLimit)
+		callCtx, cancelCall := context.WithTimeout(context.Background(), codexServerCallLimit)
 		_, err = client.Call(callCtx, "thread/archive", map[string]any{"threadId": conversation})
 		cancelCall()
 	}
@@ -336,7 +336,7 @@ func (r *codexShared) restore(profile, conversation string) error {
 	if err != nil {
 		return err
 	}
-	callCtx, cancelCall := context.WithTimeout(ctx, codexServerCallLimit)
+	callCtx, cancelCall := context.WithTimeout(context.Background(), codexServerCallLimit)
 	defer cancelCall()
 	if _, err := client.Call(callCtx, "thread/unarchive", map[string]any{"threadId": conversation}); err != nil {
 		return fmt.Errorf("unarchive Codex conversation %s: %w", conversation, err)

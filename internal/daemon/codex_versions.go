@@ -246,7 +246,7 @@ func (r *codexShared) wireState(profile string) *protocol.SharedCodexState {
 		state.Restart = protocol.SharedCodexRestartPending
 	}
 	if state.Restart == protocol.SharedCodexRestartPending || state.Restart == protocol.SharedCodexRestartRestarting {
-		state.Blockers = r.blockers(s)
+		state.Blockers, _ = r.waitingOn(s)
 	}
 	if !restart.forceAt.IsZero() {
 		state.ForceAt = protocol.Ptr(restart.forceAt.UTC().Format(time.RFC3339Nano))

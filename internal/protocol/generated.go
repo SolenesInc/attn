@@ -10908,6 +10908,7 @@ type SharedCodexBlockerReason string
 
 const SharedCodexBlockerReasonApproval SharedCodexBlockerReason = "approval"
 const SharedCodexBlockerReasonQuestion SharedCodexBlockerReason = "question"
+const SharedCodexBlockerReasonStarting SharedCodexBlockerReason = "starting"
 const SharedCodexBlockerReasonTurn SharedCodexBlockerReason = "turn"
 
 type SharedCodexChangedMessage struct {

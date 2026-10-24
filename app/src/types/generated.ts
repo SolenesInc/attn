@@ -5654,6 +5654,7 @@ export interface BlockerElement {
 export enum SharedCodexBlockerReason {
     Approval = "approval",
     Question = "question",
+    Starting = "starting",
     Turn = "turn",
 }
 
@@ -24741,6 +24742,7 @@ const typeMap: any = {
     "SharedCodexBlockerReason": [
         "approval",
         "question",
+        "starting",
         "turn",
     ],
     "SharedCodexRestart": [
