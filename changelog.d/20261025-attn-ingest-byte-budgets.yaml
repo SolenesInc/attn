@@ -1,0 +1,6 @@
+kind: internal
+area: analytics
+change: >
+  `attn-ingest` refuses batches past 128 MiB of uncompressed bytes per install
+  per day or 2 GiB across all installs per day, and checks a batch for stored
+  records with one ClickHouse query however many streams it spans.

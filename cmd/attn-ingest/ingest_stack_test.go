@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -178,6 +179,93 @@ func TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted(t *testing.T) {
 	}
 }
 
+func paddedBatch(t *testing.T) ([]byte, int64) {
+	t.Helper()
+	pad, err := json.Marshal(map[string]string{"pad": strings.Repeat("a", 60_000)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := busRecords(1, 270)
+	for i := range records {
+		records[i].Props = pad
+	}
+	var body bytes.Buffer
+	if err := analytics.WriteBatch(&body, analytics.Batch{Build: analytics.CurrentBuild(), Records: records}); err != nil {
+		t.Fatal(err)
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := io.Copy(io.Discard, zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body.Bytes(), plain
+}
+
+func TestByteBudgetsBoundEachInstallAndAllInstallsPerDay(t *testing.T) {
+	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	anonymous := client{t: t, url: ingest.URL}
+	body, plainBytes := paddedBatch(t)
+	const perInstallBudget, fleetBudget = int64(128 << 20), int64(2 << 30)
+	perInstall, fleet := perInstallBudget/plainBytes, fleetBudget/plainBytes
+	sent := int64(0)
+	accept := func(install client) {
+		t.Helper()
+		if status, reply := install.do(http.MethodPost, "/v1/events", body); status != http.StatusOK {
+			t.Fatalf("batch %d of %d uncompressed bytes: %d %s", sent+1, plainBytes, status, reply)
+		}
+		sent++
+	}
+	refused := func(install client, limit string, value, observed int64) {
+		t.Helper()
+		status, reply := install.do(http.MethodPost, "/v1/events", body)
+		var refusal analytics.Refusal
+		decode(t, reply, &refusal)
+		if status != http.StatusTooManyRequests || refusal.Limit != limit || refusal.Value != value || refusal.Observed != observed || refusal.RetryAfterS < 1 || refusal.RetryAfterS > 86_400 {
+			t.Fatalf("batch %d: %d %s, want %s at %d with %d observed and a retry within a day", sent+1, status, reply, limit, value, observed)
+		}
+	}
+
+	first := anonymous.register()
+	for range perInstall {
+		accept(first)
+	}
+	refused(first, "bytes_per_install_per_day", perInstallBudget, (perInstall+1)*plainBytes)
+
+	fresh := anonymous.register()
+	accept(fresh)
+	if holdings := fresh.holdings(); holdings.Events != 270 {
+		t.Fatalf("a fresh install's first batch stored %d events, want 270", holdings.Events)
+	}
+	fill := func(install client, batches int64) {
+		t.Helper()
+		for range batches {
+			accept(install)
+		}
+	}
+	fill(fresh, perInstall-1)
+	for sent < fleet {
+		fill(anonymous.register(), min(perInstall, fleet-sent))
+	}
+	late := anonymous.register()
+	refused(late, "bytes_per_day", fleetBudget, (fleet+1)*plainBytes)
+	if holdings := late.holdings(); holdings.Events != 0 {
+		t.Fatalf("a batch past the fleet budget stored %d events", holdings.Events)
+	}
+
+	_, metrics := anonymous.do(http.MethodGet, "/metrics", nil)
+	for _, line := range []string{
+		`attn_ingest_refusals_total{limit="bytes_per_day"} 1`,
+		`attn_ingest_refusals_total{limit="bytes_per_install_per_day"} 1`,
+	} {
+		if !bytes.Contains(metrics, []byte(line+"\n")) {
+			t.Errorf("/metrics lacks %q:\n%s", line, metrics)
+		}
+	}
+}
+
 func TestOneAddressRegistersAtMostTwentyInstallsAnHour(t *testing.T) {
 	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
 	anonymous := client{t: t, url: ingest.URL}
@@ -274,5 +362,35 @@ func TestTheSameBatchSentConcurrentlyIsStoredOnce(t *testing.T) {
 	}
 	if holdings := install.holdings(); holdings.Events != 2_000 {
 		t.Fatalf("the server holds %d events, want 2000", holdings.Events)
+	}
+}
+
+func TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes(t *testing.T) {
+	ingest := testworld.StartIngest(t, testworld.NewClickHouse(t))
+	install := client{t: t, url: ingest.URL}.register()
+	streams := func(first, count int) []analytics.Record {
+		records := make([]analytics.Record, count)
+		for i := range records {
+			records[i] = analytics.Record{
+				Stream: analytics.Stream(fmt.Sprintf("s%031d", first+i)),
+				Seq:    1 << 62,
+				Name:   "made.up.stream",
+				At:     time.Date(2026, 10, 19, 14, 2, 11, 0, time.UTC),
+			}
+		}
+		return records
+	}
+	build := analytics.CurrentBuild()
+
+	status, body := install.send(analytics.Batch{Build: build, Records: streams(0, 3_000)})
+	if status != http.StatusOK || string(bytes.TrimSpace(body)) != `{"accepted":3000,"duplicates":0}` {
+		t.Fatalf("3000 new streams: %d %s", status, body)
+	}
+	status, body = install.send(analytics.Batch{Build: build, Records: streams(0, 5_000)})
+	if status != http.StatusOK || string(bytes.TrimSpace(body)) != `{"accepted":2000,"duplicates":3000}` {
+		t.Fatalf("the 3000 stored streams resent with 2000 new ones: %d %s", status, body)
+	}
+	if holdings := install.holdings(); holdings.Events != 5_000 || len(holdings.Streams) != 5_000 {
+		t.Fatalf("the server holds %d events in %d streams, want 5000 in 5000", holdings.Events, len(holdings.Streams))
 	}
 }
