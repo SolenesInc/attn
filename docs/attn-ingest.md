@@ -88,6 +88,16 @@ DELETE FROM events WHERE install_id IN (SELECT install_id FROM quarantine WHERE 
 `/metrics` and `/healthz` are served on the same address as the API; expose
 only `/v1/` publicly.
 
+## Image
+
+`.github/workflows/ingest-image.yml` publishes
+`ghcr.io/solenesinc/attn-ingest:sha-<short>` for every push to `main` that
+changes the service, and on demand. The image holds only the static binary and
+runs as a non-root user. The deployment pins one of those tags.
+
+`attn_ingest_batch_bytes_accepted_total` counts the gzip bytes of every batch
+answered `200`, duplicates included: the volume the deployment alerts on.
+
 ## Running locally
 
 ```bash

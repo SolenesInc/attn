@@ -10,12 +10,13 @@ import (
 )
 
 type metrics struct {
-	accepted   atomic.Int64
-	duplicates atomic.Int64
-	registered atomic.Int64
-	mu         sync.Mutex
-	requests   map[routeStatus]int64
-	refusals   map[string]int64
+	accepted      atomic.Int64
+	duplicates    atomic.Int64
+	acceptedBytes atomic.Int64
+	registered    atomic.Int64
+	mu            sync.Mutex
+	requests      map[routeStatus]int64
+	refusals      map[string]int64
 }
 
 type routeStatus struct {
@@ -46,6 +47,7 @@ func (m *metrics) serve(w http.ResponseWriter, _ *http.Request) {
 	}
 	counter("attn_ingest_events_accepted_total", "Records stored.", m.accepted.Load())
 	counter("attn_ingest_events_duplicate_total", "Records already stored for their install, stream and seq.", m.duplicates.Load())
+	counter("attn_ingest_batch_bytes_accepted_total", "Gzip request bytes of batches answered 200, duplicates included.", m.acceptedBytes.Load())
 	counter("attn_ingest_installs_registered_total", "Installs registered.", m.registered.Load())
 
 	m.mu.Lock()

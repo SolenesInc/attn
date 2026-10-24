@@ -1,0 +1,49 @@
+name: Ingest image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - cmd/attn-ingest/**
+      - internal/ingest/**
+      - internal/analytics/**
+      - go.mod
+      - go.sum
+      - .github/workflows/ingest-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ingest-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build attn-ingest
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o cmd/attn-ingest/attn-ingest ./cmd/attn-ingest
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push ghcr.io/solenesinc/attn-ingest:sha-<short>
+        run: |
+          image="ghcr.io/solenesinc/attn-ingest:sha-${GITHUB_SHA::7}"
+          docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "$image" cmd/attn-ingest
+          docker push "$image"
+          echo "Pushed $image" >> "$GITHUB_STEP_SUMMARY"
