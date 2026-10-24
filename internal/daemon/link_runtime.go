@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -105,6 +106,13 @@ func (d *Daemon) hidden(sessionID protocol.SessionID) bool {
 		return false
 	}
 	return d.store.Get(sessionID) != nil && d.linkConversation(sessionID) != ""
+}
+
+func (d *Daemon) forgetProgramStatus(sessionID protocol.SessionID) {
+	d.updateEvidence(sessionID, nil, func(e *sessionmonitor.Evidence) {
+		e.Heartbeat = nil
+		e.ClearProgramStatus()
+	})
 }
 
 func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
