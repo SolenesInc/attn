@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
+  captureScreenshot,
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
   parseCommonArgs,
@@ -33,7 +34,7 @@ const binary = appDaemonInTree(options.appPath);
 const cli = async (...args) => (await promisify(execFile)(binary, args, { env: instanceCliEnv(instance) })).stdout;
 const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
 const text = async selector => (await client.request('dom_text', { selector })).text;
-const shot = name => client.request('capture_native_window_screenshot', { path: path.join(runner.runDir, `${name}.png`) });
+const shot = name => captureScreenshot(driver, path.join(runner.runDir, `${name}.png`));
 const page = '[data-testid="settings-analytics"]';
 const inspector = '[data-testid="analytics-inspector"]';
 async function press(key) {
