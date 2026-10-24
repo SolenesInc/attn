@@ -1,4 +1,4 @@
-/** Notebook daemon events: `notebook_changed` and the `notebook_*_result` answers. Kept out
+/** Notebook daemon events: the `notebook_*_result` answers. Kept out
  * of `useDaemonSocket.ts` so grepping a `notebook_` wire name lands in a notebook file. */
 
 import type { PendingRequests } from './daemonPendingRequests';
@@ -10,28 +10,12 @@ type NotebookEvent = {
   request_id?: unknown;
   success?: boolean;
   error?: string;
-  origin?: unknown;
-  paths?: unknown;
   entries?: unknown;
   result?: Record<string, unknown>;
 };
 
-/** What the notebook handlers need from the hook. */
-export interface NotebookEventContext {
-  pending: PendingRequests;
-  onNotebookChanged?: (origin: string, paths: string[]) => void;
-}
-
-export function handleNotebookDaemonEvent(event: NotebookEvent, ctx: NotebookEventContext): boolean {
-  const { pending } = ctx;
+export function handleNotebookDaemonEvent(event: NotebookEvent, pending: PendingRequests): boolean {
   switch (event.event) {
-    case 'notebook_changed':
-      ctx.onNotebookChanged?.(
-        typeof event.origin === 'string' ? event.origin : '',
-        Array.isArray(event.paths) ? event.paths : [],
-      );
-      return true;
-
     case 'notebook_list_result':
     case 'notebook_backlinks_result':
       settlePendingRequest(

@@ -6337,17 +6337,6 @@ type NotebookBacklinksResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type NotebookChangedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Origin corresponds to the JSON schema field "origin".
-	Origin string `json:"origin"`
-
-	// Paths corresponds to the JSON schema field "paths".
-	Paths []string `json:"paths"`
-}
-
 type NotebookEntry struct {
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`

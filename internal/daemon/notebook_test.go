@@ -53,8 +53,8 @@ func TestNotebookWatcherFollowsRootChange(t *testing.T) {
 	for {
 		select {
 		case message := <-client.send:
-			var changed protocol.NotebookChangedMessage
-			if json.Unmarshal(message.payload, &changed) != nil || changed.Event != protocol.EventNotebookChanged || changed.Origin != originExternal {
+			var changed protocol.FsChangedMessage
+			if json.Unmarshal(message.payload, &changed) != nil || changed.Event != protocol.EventFsChanged || changed.Origin != originExternal {
 				continue
 			}
 			if slices.Contains(changed.Paths, "a.md") {

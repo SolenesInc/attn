@@ -218,11 +218,6 @@ func TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin(t *testing.T) {
 	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
 		return m.Root == root && m.Origin == "external" && slices.Contains(m.Paths, "note.md")
 	})
-	if note := testworld.Await(app, protocol.EventNotebookChanged, func(m protocol.NotebookChangedMessage) bool {
-		return slices.Contains(m.Paths, "plain.txt") || slices.Contains(m.Paths, "note.md")
-	}); slices.Contains(note.Paths, "plain.txt") || !slices.Contains(note.Paths, "note.md") || note.Origin != "external" {
-		t.Fatalf("the notebook heard %+v, want the note alone as an external change", note)
-	}
 }
 
 func TestFsWatchRefusesPastItsCapAndGuardsExplicitRoots(t *testing.T) {

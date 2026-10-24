@@ -342,7 +342,6 @@ const (
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"
 	EventSessionStateChanged             = "session_state_changed"
-	EventNotebookChanged                 = "notebook_changed"
 	EventTerminalBindingsUpdated         = "terminal_bindings_updated"
 	EventSessionsUpdated                 = "sessions_updated"
 	EventRenameResult                    = "rename_result"

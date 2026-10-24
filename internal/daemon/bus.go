@@ -91,8 +91,6 @@ const (
 	FactAutomationChanged = "automation.changed"
 	FactTaskChanged       = "task.changed"
 
-	FactNotebookFileChanged = "notebook.file.changed"
-
 	FactAskOpened = "ask.opened"
 	FactAskClosed = "ask.closed"
 
@@ -380,10 +378,6 @@ func buildWireProjections() []projection {
 				d.projectTasksChanged()
 				d.projectGardenReviewJob(ev.Subject)
 			},
-		},
-		{
-			filter: bus.Filter{FactNotebookFileChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectNotebookChanged(ev) },
 		},
 		{
 			filter: bus.Filter{FactAskOpened, FactAskClosed},

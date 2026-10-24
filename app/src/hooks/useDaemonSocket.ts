@@ -499,7 +499,6 @@ export interface RecentFile {
 
 interface UseDaemonSocketOptions {
   onSessionsUpdate: (sessions: DaemonSession[]) => void;
-  onNotebookChanged?: (origin: string, paths: string[]) => void;
   onTasksChanged?: () => void;
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
@@ -628,7 +627,6 @@ async function retryTransientAttachRequest<T>(
 
 export function useDaemonSocket({
   onSessionsUpdate,
-  onNotebookChanged,
   onTasksChanged,
   onNotificationsUpdated,
   onFsChanged,
@@ -656,7 +654,6 @@ export function useDaemonSocket({
   const harnessPluginSignatureRef = useRef('[]');
   const callbacksRef = useRef({
     onSessionsUpdate,
-    onNotebookChanged,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
@@ -674,7 +671,6 @@ export function useDaemonSocket({
   });
   callbacksRef.current = {
     onSessionsUpdate,
-    onNotebookChanged,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
@@ -2282,7 +2278,7 @@ export function useDaemonSocket({
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
-            if (handleNotebookDaemonEvent(data, { pending, onNotebookChanged: callbacksRef.current.onNotebookChanged })) break;
+            if (handleNotebookDaemonEvent(data, pending)) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
             if (handleSessionAnnotationDaemonEvent(data, pending, (sessionId) => {
               for (const listener of sessionMessageListenersRef.current.get(sessionId) ?? []) {
