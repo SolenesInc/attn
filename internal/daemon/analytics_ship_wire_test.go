@@ -150,6 +150,30 @@ func TestForgettingWhileAttnIngestIsUnreachableChangesNothing(t *testing.T) {
 	})
 }
 
+func TestTurningSharingOffDuringTheFirstRegistrationSendsNothing(t *testing.T) {
+	clickHouse := testworld.NewClickHouse(t)
+	link := testworld.StartIngest(t, clickHouse).Link(t)
+	arrived, release := link.HoldNextRegistration()
+	defer release()
+	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {
+		app := w.App()
+		setSetting(t, app, "analytics.enabled", "true")
+		setSetting(t, app, "analytics.sharing_enabled", "true")
+		<-arrived
+		setSetting(t, app, "analytics.sharing_enabled", "false")
+		release()
+		w.advance(3 * uploadInterval)
+		for _, request := range link.Requests() {
+			if request != "POST /v1/installs" {
+				t.Fatalf("after sharing went off mid-registration attn sent %v", link.Requests())
+			}
+		}
+		if status := analyticsStatus(app); status.LastRefusal != nil {
+			t.Errorf("withdrawing consent left the refusal %q", *status.LastRefusal)
+		}
+	})
+}
+
 func TestWithAnalyticsOffNothingIsSentEvenWithSharingOnAndRecordsWaiting(t *testing.T) {
 	link := testworld.UnreachableIngestLink(t)
 	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {

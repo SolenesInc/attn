@@ -172,6 +172,8 @@ type IngestLink struct {
 	faults   []http.HandlerFunc
 	requests []string
 	cut      bool
+
+	registrationHold http.HandlerFunc
 }
 
 func (i Ingest) Link(t testing.TB) *IngestLink {
@@ -212,6 +214,21 @@ func (l *IngestLink) RefuseNextEvents(status int, body string) {
 	})
 }
 
+func (l *IngestLink) HoldNextRegistration() (arrived <-chan struct{}, release func()) {
+	reached, released := make(chan struct{}), make(chan struct{})
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.registrationHold = func(w http.ResponseWriter, r *http.Request) {
+		close(reached)
+		select {
+		case <-released:
+			l.forward(w, r)
+		case <-r.Context().Done():
+		}
+	}
+	return reached, sync.OnceFunc(func() { close(released) })
+}
+
 func (l *IngestLink) Cut() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -242,6 +259,8 @@ func (l *IngestLink) serve(w http.ResponseWriter, r *http.Request) {
 	handle := l.forward
 	if l.cut {
 		handle = abort
+	} else if r.URL.Path == "/v1/installs" && l.registrationHold != nil {
+		handle, l.registrationHold = l.registrationHold, nil
 	} else if r.URL.Path == "/v1/events" && len(l.faults) > 0 {
 		handle, l.faults = l.faults[0], l.faults[1:]
 	}

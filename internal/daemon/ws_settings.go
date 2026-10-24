@@ -75,7 +75,7 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 	}
 	if msg.Key == SettingAnalyticsEnabled || msg.Key == SettingAnalyticsSharingEnabled {
 		if !d.analyticsSharing() {
-			d.analyticsUpload.settle(nil, time.Now())
+			d.analyticsUpload.withdraw()
 		}
 		d.queueAnalyticsShip()
 	}

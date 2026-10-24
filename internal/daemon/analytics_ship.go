@@ -35,6 +35,29 @@ type analyticsUpload struct {
 	mu      sync.Mutex
 	refusal string
 	retryAt time.Time
+	cancel  context.CancelFunc
+}
+
+func (u *analyticsUpload) begin(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	u.mu.Lock()
+	u.cancel = cancel
+	u.mu.Unlock()
+	return ctx, func() {
+		u.mu.Lock()
+		u.cancel = nil
+		u.mu.Unlock()
+		cancel()
+	}
+}
+
+func (u *analyticsUpload) withdraw() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.cancel != nil {
+		u.cancel()
+	}
+	u.refusal, u.retryAt = "", time.Time{}
 }
 
 func (u *analyticsUpload) settle(err error, now time.Time) {
@@ -92,10 +115,15 @@ func (d *Daemon) queueAnalyticsShip() {
 func (d *Daemon) analyticsShipHandler(ctx context.Context, _ *jobs.Job) (any, error) {
 	d.analyticsUpload.run.Lock()
 	defer d.analyticsUpload.run.Unlock()
+	ctx, end := d.analyticsUpload.begin(ctx)
+	defer end()
 	if !d.analyticsSharing() || d.analyticsUpload.waiting(time.Now()) {
 		return nil, nil
 	}
 	sent, err := d.shipAnalyticsBatch(ctx)
+	if !d.analyticsSharing() {
+		return nil, nil
+	}
 	d.analyticsUpload.settle(err, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("uploading analytics: %w", err)
