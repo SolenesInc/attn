@@ -176,15 +176,11 @@ type installRow struct {
 }
 
 func (s *Server) acceptEvents(w http.ResponseWriter, r *http.Request) error {
-	token, err := bearerTokenHash(r)
+	inst, release, err := s.holdInstall(r)
 	if err != nil {
 		return err
 	}
-	defer s.installs.lock(token)()
-	inst, err := s.authenticate(r.Context(), token)
-	if err != nil {
-		return err
-	}
+	defer release()
 	ipHash := s.ipHash(r)
 	if err := s.checkQuarantine(r.Context(), inst.ID, ipHash); err != nil {
 		return err
@@ -229,19 +225,15 @@ type streamSeq struct {
 }
 
 func (s *Server) withoutStored(ctx context.Context, installID string, records []analytics.Record) ([]analytics.Record, error) {
-	ranges := map[analytics.Stream][2]int64{}
+	seqs := map[analytics.Stream][]string{}
 	for _, record := range records {
-		span, ok := ranges[record.Stream]
-		if !ok {
-			span = [2]int64{record.Seq, record.Seq}
-		}
-		ranges[record.Stream] = [2]int64{min(span[0], record.Seq), max(span[1], record.Seq)}
+		seqs[record.Stream] = append(seqs[record.Stream], strconv.FormatInt(record.Seq, 10))
 	}
 	seen := map[streamSeq]bool{}
-	for stream, span := range ranges {
+	for stream, submitted := range seqs {
 		err := s.db.rows(ctx,
-			"SELECT stream, seq FROM events WHERE install_id = {install:String} AND stream = {stream:String} AND seq BETWEEN {lo:Int64} AND {hi:Int64}",
-			map[string]string{"install": installID, "stream": string(stream), "lo": strconv.FormatInt(span[0], 10), "hi": strconv.FormatInt(span[1], 10)},
+			"SELECT stream, seq FROM events WHERE install_id = {install:String} AND stream = {stream:String} AND seq IN {seqs:Array(Int64)}",
+			map[string]string{"install": installID, "stream": string(stream), "seqs": "[" + strings.Join(submitted, ",") + "]"},
 			func(row json.RawMessage) error {
 				var key streamSeq
 				if err := json.Unmarshal(row, &key); err != nil {
@@ -357,15 +349,11 @@ func (s *Server) holdings(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) deleteInstall(w http.ResponseWriter, r *http.Request) error {
-	token, err := bearerTokenHash(r)
+	inst, release, err := s.holdInstall(r)
 	if err != nil {
 		return err
 	}
-	defer s.installs.lock(token)()
-	inst, err := s.authenticate(r.Context(), token)
-	if err != nil {
-		return err
-	}
+	defer release()
 	params := map[string]string{"install": inst.ID}
 	if err := s.db.exec(r.Context(), "DELETE FROM events WHERE install_id = {install:String}", params); err != nil {
 		return err
@@ -383,6 +371,20 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, struct{}{})
+}
+
+func (s *Server) holdInstall(r *http.Request) (install, func(), error) {
+	token, err := bearerTokenHash(r)
+	if err != nil {
+		return install{}, nil, err
+	}
+	release := s.installs.lock(token)
+	inst, err := s.authenticate(r.Context(), token)
+	if err != nil {
+		release()
+		return install{}, nil, err
+	}
+	return inst, release, nil
 }
 
 func bearerTokenHash(r *http.Request) (string, error) {
