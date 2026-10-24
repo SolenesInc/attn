@@ -76,9 +76,12 @@ func main() {
 	}
 
 	if isVersionCommand(os.Args) {
-		if len(os.Args) > 2 && os.Args[2] == "--json" {
+		switch {
+		case os.Args[1] == "--version":
+			fmt.Println(buildinfo.Version)
+		case len(os.Args) > 2 && os.Args[2] == "--json":
 			runBuildInfoJSON()
-		} else {
+		default:
 			runVersion()
 		}
 		return

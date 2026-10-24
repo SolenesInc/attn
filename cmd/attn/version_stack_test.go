@@ -45,11 +45,11 @@ func TestTheVersionFlagsPrintWhatBootstrapAndTheHarnessRead(t *testing.T) {
 		dirty = ", dirty"
 	}
 	line := fmt.Sprintf("%s (%s, %s%s)", build.Version, build.Channel, build.GitCommit[:8], dirty)
-	for _, args := range [][]string{{"--version"}, {"version"}} {
-		got := s.Attn(args...)
-		if got.Code != 0 || strings.TrimSpace(got.Stdout) != line {
-			t.Errorf("attn %s exited %d printing %q, want %q", args[0], got.Code, got.Stdout, line)
-		}
+	if got := s.Attn("version"); got.Code != 0 || strings.TrimSpace(got.Stdout) != line {
+		t.Errorf("attn version exited %d printing %q, want %q", got.Code, got.Stdout, line)
+	}
+	if got := s.Attn("--version"); got.Code != 0 || strings.TrimSpace(got.Stdout) != build.Version {
+		t.Errorf("attn --version exited %d printing %q, want the bare version %q that release preflight compares", got.Code, got.Stdout, build.Version)
 	}
 	if got := s.Attn("--protocol-version"); got.Code != 0 || strings.TrimSpace(got.Stdout) != protocol.ProtocolVersion {
 		t.Errorf("attn --protocol-version exited %d printing %q, want %q", got.Code, got.Stdout, protocol.ProtocolVersion)
