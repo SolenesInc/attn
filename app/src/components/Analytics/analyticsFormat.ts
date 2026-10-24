@@ -1,3 +1,4 @@
+import type { AnalyticsStatus } from '../../hooks/daemonAnalyticsEvents';
 import type { AnalyticsBuild } from '../../types/generated';
 
 export const clockTime = (iso: string) => {
@@ -44,5 +45,11 @@ export const formatBytes = (n: number): string => {
   if (n >= 1 << 10) return `${(n / (1 << 10)).toFixed(1)} KB`;
   return `${n} B`;
 };
+
+export function sharingLine(status: AnalyticsStatus | null): string {
+  if (!status) return '';
+  const sent = status.lastSentAt ? `Last sent ${clockTime(status.lastSentAt)}` : 'Nothing sent yet';
+  return `${sent} · ${status.waiting.toLocaleString()} waiting`;
+}
 
 export const recordCount = (n: number) => `${n.toLocaleString()} record${n === 1 ? '' : 's'}`;

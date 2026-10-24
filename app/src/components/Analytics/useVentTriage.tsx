@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { useDaemonStore } from '../../store/daemonSessions';
-import { VentSend, type Vent } from '../../types/generated';
-import { nextNewVent, type ListItem } from './analyticsItems';
+import type { Vent } from '../../types/generated';
+import { nextNewVent, ventDestination, type ListItem } from './analyticsItems';
 import type { UndoToast } from './useUndoToast';
 
 function doIf<T>(subject: T | null | undefined | false, action: (subject: T) => void): boolean {
@@ -52,7 +52,7 @@ export function useVentTriage({ items, index, sharing, select, feedback, onOpenS
     g: ({ context: { seed_id } }) => doIf(seed_id, onOpenSeed),
     p: (vent) => doIf(!vent.withdrawn_at && !vent.planted_seed_id, () => plant(vent)),
     d: (vent) => doIf(!vent.withdrawn_at, () => setDismissed(vent, !vent.dismissed_at)),
-    x: (vent) => doIf(!vent.withdrawn_at && vent.send !== VentSend.Sent && (sharing || Boolean(vent.send)), () => setSend(vent, !vent.send)),
+    x: (vent) => doIf(ventDestination(vent, sharing).movable, () => setSend(vent, !vent.send)),
   };
 
   return {

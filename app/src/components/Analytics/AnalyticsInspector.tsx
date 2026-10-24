@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
-import { VentSend, type Seed, type Vent } from '../../types/generated';
+import type { Seed, Vent } from '../../types/generated';
 import { harnessLabel } from '../harnessLabel';
 import { buildLabel, longAgo, settingName, when } from './analyticsFormat';
-import type { RecordItem } from './analyticsItems';
+import { ventDestination, type RecordItem } from './analyticsItems';
 
 const LONG_VENT_CHARS = 420;
 
@@ -63,16 +63,10 @@ export function VentDetail({ vent, live, sharing, seeds, expanded, onExpand, onA
 }
 
 function VentWhere({ vent, sharing, onAction }: { vent: Vent; sharing: boolean; onAction: (key: string) => void }) {
-  const withdrawn = Boolean(vent.withdrawn_at);
-  const sent = vent.send === VentSend.Sent;
-  const queued = !withdrawn && vent.send === VentSend.Queued;
-  const sending = queued;
-  const label = sent ? "Sent to attn's maintainers" : !queued ? 'Kept on this machine' : sharing ? 'Sending with the next batch' : 'Sending once sharing is on';
-  const note = withdrawn ? 'withdrawn' : !sharing && !sent && !queued ? 'sharing is off' : '';
-  const movable = !withdrawn && !sent && (sharing || queued);
+  const { label, note, leaving, movable } = ventDestination(vent, sharing);
   return (
     <div className="analytics-where">
-      <span className={`analytics-where-dot${sent || sending ? ' sent' : ''}`} />
+      <span className={`analytics-where-dot${leaving ? ' sent' : ''}`} />
       <b>{label}</b>
       {note && <span className="dim">· {note}</span>}
       {movable && <button type="button" className="settings-action analytics-move" onClick={() => onAction('x')}><kbd>x</kbd> {vent.send ? 'Keep here' : 'Send'}</button>}
