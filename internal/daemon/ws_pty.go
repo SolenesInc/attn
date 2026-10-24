@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -174,21 +173,16 @@ func legacyExecutableFromSpawnMessage(msg *protocol.SpawnSessionMessage, agent s
 	}
 }
 
-func resolveSpawnCWD(cwd string) string {
+func namesHome(cwd string) bool {
 	trimmed := strings.TrimSpace(cwd)
-	switch {
-	case trimmed == "~":
-		home, err := os.UserHomeDir()
-		if err == nil && home != "" {
-			return home
-		}
-	case strings.HasPrefix(trimmed, "~/"):
-		home, err := os.UserHomeDir()
-		if err == nil && home != "" {
-			return filepath.Join(home, trimmed[2:])
-		}
+	return trimmed == "~" || strings.HasPrefix(trimmed, "~/")
+}
+
+func expandHome(cwd, home string) string {
+	if home == "" || !namesHome(cwd) {
+		return cwd
 	}
-	return cwd
+	return filepath.Join(home, strings.TrimPrefix(strings.TrimSpace(cwd), "~"))
 }
 
 func (d *Daemon) sendSpawnFailure(client *wsClient, sessionID protocol.SessionID, err error) {

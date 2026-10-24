@@ -683,22 +683,6 @@ func (s *Store) UpdateSessionLabel(id protocol.SessionID, label string) {
 	}
 }
 
-func (s *Store) SetSessionDirectory(id protocol.SessionID, directory string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		if session := s.sessions[id]; session != nil {
-			session.Directory = directory
-			session.Label = s.sessionLabels[id].shown(id, directory, session.Agent)
-		}
-		return nil
-	}
-
-	_, err := s.db.Exec(`UPDATE sessions SET directory = ? WHERE id = ? AND closed_at = ''`, directory, id)
-	return err
-}
-
 func (s *Store) SetResumeSessionID(id protocol.SessionID, resumeSessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

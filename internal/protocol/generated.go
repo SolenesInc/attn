@@ -11924,6 +11924,9 @@ type TerminalShellMessage struct {
 }
 
 type TerminalShellResult struct {
+	// Home corresponds to the JSON schema field "home".
+	Home string `json:"home"`
+
 	// IntegrationExpected corresponds to the JSON schema field
 	// "integration_expected".
 	IntegrationExpected bool `json:"integration_expected"`
@@ -11947,11 +11950,6 @@ type TerminalStartMessage struct {
 
 	// TerminalID corresponds to the JSON schema field "terminal_id".
 	TerminalID TerminalID `json:"terminal_id"`
-}
-
-type TerminalStartResult struct {
-	// Cwd corresponds to the JSON schema field "cwd".
-	Cwd string `json:"cwd"`
 }
 
 type TerminalText struct {

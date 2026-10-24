@@ -2941,10 +2941,10 @@ model TerminalCloseMessage {
 // reaches its machine part through the router, on the machine its x-on names.
 
 // Launches a shell's terminal on the machine named by host (empty: the home's
-// machine). The machine expects the terminal, resolves cwd and ~, seeds the
-// session's monitor from session, and spawns with its own theme and login
-// environment. launch is ptybackend.SpawnOptions as encoding/json, as the home
-// built it; both sides run one build.
+// machine). The machine expects the terminal, seeds the session's monitor from
+// session and its own read of the branch, and spawns with its own theme and
+// login environment. launch is ptybackend.SpawnOptions as encoding/json, as the
+// home built it; both sides run one build.
 @extension("x-on", #{ machine: "host" })
 model TerminalStartMessage {
   cmd: "terminal_start";
@@ -2952,9 +2952,6 @@ model TerminalStartMessage {
   session: Session;
   terminal_id: TerminalID;
   launch: string;
-}
-model TerminalStartResult {
-  cwd: string; // The resolved working directory the terminal started in
 }
 
 // Kills and respawns a running terminal in place with launch
@@ -3042,8 +3039,8 @@ model TerminalThemeMessage {
   ansi_palette: string[];
 }
 
-// The login shell on the machine named by host, and whether it is expected to
-// emit OSC 133 command marks.
+// The login shell on the machine named by host, whether it is expected to emit
+// OSC 133 command marks, and the home directory ~ stands for there.
 @extension("x-on", #{ machine: "host" })
 model TerminalShellMessage {
   cmd: "terminal_shell";
@@ -3052,6 +3049,7 @@ model TerminalShellMessage {
 model TerminalShellResult {
   shell: string;
   integration_expected: boolean;
+  home: string; // Empty when the machine cannot tell
 }
 
 // Moves a session's pane to another desktop of its profile, beside that

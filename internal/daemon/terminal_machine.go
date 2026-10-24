@@ -52,24 +52,23 @@ func (d *Daemon) decodeLaunch(launch string) (ptybackend.SpawnOptions, error) {
 	return opts, nil
 }
 
-func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMessage) (protocol.TerminalStartResult, error) {
+func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMessage) (struct{}, error) {
 	opts, err := d.decodeLaunch(msg.Launch)
 	if err != nil {
-		return protocol.TerminalStartResult{}, err
+		return struct{}{}, err
 	}
 	session := msg.Session
 	d.expectTerminal(msg.TerminalID, session.ID)
-	session.Directory = resolveSpawnCWD(session.Directory)
-	opts.ID, opts.CWD = msg.TerminalID, session.Directory
+	opts.ID = msg.TerminalID
 	branchInfo, _ := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, session.Directory)
 	applyBranchInfo(&session, branchInfo)
 	d.startSessionMonitorSeeded(&session, sessionmonitor.Evidence{TerminalEvidence: sessionstate.TerminalEvidence{ReviewerInLoop: opts.ApprovalRoute.ReviewerInLoop()}})
 	d.sessionMonitor(session.ID).RememberInitialPrompt("")
 	if err := d.spawnSessionRuntime(session.ID, opts); err != nil {
 		d.sessionMonitor(session.ID).ForgetInitialPrompt()
-		return protocol.TerminalStartResult{}, err
+		return struct{}{}, err
 	}
-	return protocol.TerminalStartResult{Cwd: session.Directory}, nil
+	return struct{}{}, nil
 }
 
 func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalRestartMessage) (struct{}, error) {
@@ -223,7 +222,8 @@ func (d *Daemon) themeTerminals(ctx context.Context, msg protocol.TerminalThemeM
 func (d *Daemon) loginShell(_ context.Context, _ protocol.TerminalShellMessage) (protocol.TerminalShellResult, error) {
 	shell := pty.GetUserLoginShell()
 	env := pty.MergeEnvironment(os.Environ(), d.cachedLoginShellEnv())
-	return protocol.TerminalShellResult{Shell: shell, IntegrationExpected: pty.ShellIntegrationExpected(shell, env)}, nil
+	home, _ := os.UserHomeDir()
+	return protocol.TerminalShellResult{Shell: shell, IntegrationExpected: pty.ShellIntegrationExpected(shell, env), Home: home}, nil
 }
 
 func (d *Daemon) screenSnapshot(ctx context.Context, msg protocol.GetScreenSnapshotMessage) (protocol.GetScreenSnapshotResultMessage, error) {

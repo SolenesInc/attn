@@ -208,8 +208,12 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	req.spawnStartedAt = time.Now()
 	req.existingSession = d.store.Get(req.msg.ID)
 	req.cwd = req.msg.Cwd
-	if !req.isShell {
-		req.cwd = resolveSpawnCWD(req.cwd)
+	if namesHome(req.cwd) {
+		machine, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell})
+		if err != nil {
+			return &spawnRejection{err: err}
+		}
+		req.cwd = expandHome(req.cwd, machine.Home)
 	}
 	req.label = protocol.Deref(req.msg.Label)
 	if req.label == "" && !req.isShell {
@@ -525,8 +529,7 @@ func (d *Daemon) executeShellSpawn(req *spawnRequest, plan *spawnPlan) *spawnOut
 		d.logf("spawn: %v", err)
 	}
 	d.persistLaunchedConversation(req, plan)
-	started, err := d.startShellTerminal(session, terminal, plan.spawnOpts)
-	if err != nil {
+	if err := d.startShellTerminal(session, terminal, plan.spawnOpts); err != nil {
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
 			d.forgetMonitor(msg.ID)
@@ -537,22 +540,17 @@ func (d *Daemon) executeShellSpawn(req *spawnRequest, plan *spawnPlan) *spawnOut
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
 	}
-	if started.Cwd != req.cwd {
-		req.cwd = started.Cwd
-		if err := d.store.SetSessionDirectory(session.ID, started.Cwd); err != nil {
-			d.logf("spawn: recording the started directory of session %s: %v", session.ID, err)
-		}
-	}
 	d.clearExitScreenBefore(msg.ID, req.spawnStartedAt)
 	return &spawnOutcome{}
 }
 
-func (d *Daemon) startShellTerminal(session *protocol.Session, terminal harness.TerminalID, opts ptybackend.SpawnOptions) (protocol.TerminalStartResult, error) {
+func (d *Daemon) startShellTerminal(session *protocol.Session, terminal harness.TerminalID, opts ptybackend.SpawnOptions) error {
 	launch, err := encodeLaunch(opts)
 	if err != nil {
-		return protocol.TerminalStartResult{}, err
+		return err
 	}
-	return Call[protocol.TerminalStartResult](context.Background(), d.router(), protocol.TerminalStartMessage{Cmd: protocol.CmdTerminalStart, Session: *session, TerminalID: terminal, Launch: launch})
+	_, err = Call[struct{}](context.Background(), d.router(), protocol.TerminalStartMessage{Cmd: protocol.CmdTerminalStart, Session: *session, TerminalID: terminal, Launch: launch})
+	return err
 }
 
 func (d *Daemon) executeAddedTerminal(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
