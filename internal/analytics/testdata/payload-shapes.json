@@ -1,0 +1,355 @@
+{
+  "ask.closed": null,
+  "ask.opened": null,
+  "automation.changed": null,
+  "backup.written": null,
+  "conversation.kept.changed": null,
+  "crew.bound": null,
+  "crew.released": null,
+  "crew.updated": null,
+  "delegation.preferences.changed": null,
+  "document.changed": {
+    "collection": "string",
+    "id": "string",
+    "namespace": "string"
+  },
+  "document.collection.redeclared": {
+    "collection": "string",
+    "namespace": "string"
+  },
+  "garden.seed.artifact.changed": {
+    "caused_by_session_id": "string"
+  },
+  "garden.seed.body.edited": null,
+  "garden.seed.edge.linked": {
+    "caused_by_session_id": "string",
+    "edge_kind": "string",
+    "target_seed_id": "string"
+  },
+  "garden.seed.edge.unlinked": {
+    "edge_kind": "string",
+    "target_seed_id": "string"
+  },
+  "garden.seed.harvest_when.cleared": {
+    "caused_by_session_id": "string",
+    "pull_request_id": "string"
+  },
+  "garden.seed.harvest_when.configured": {
+    "caused_by_session_id": "string",
+    "pull_request_id": "string"
+  },
+  "garden.seed.harvested": {
+    "attention_requested": false,
+    "caused_by_session_id": "string"
+  },
+  "garden.seed.note.added": {
+    "attention_requested": false,
+    "caused_by_session_id": "string",
+    "note_id": "string"
+  },
+  "garden.seed.parked": {
+    "attention_requested": false,
+    "caused_by_session_id": "string"
+  },
+  "garden.seed.planted": {
+    "caused_by_session_id": "string"
+  },
+  "garden.seed.replanted": {
+    "attention_requested": false,
+    "caused_by_session_id": "string"
+  },
+  "garden.seed.tended": {
+    "attention_requested": false,
+    "caused_by_session_id": "string",
+    "directly_notified_session_id": "string"
+  },
+  "garden.seed.unblocked": {
+    "blocker_seed_id": "string",
+    "caused_by_session_id": "string"
+  },
+  "garden.seed.withered": {
+    "attention_requested": false,
+    "caused_by_session_id": "string"
+  },
+  "garden.seed.work.ready": {
+    "automation_run_id": "string",
+    "caused_by_session_id": "string"
+  },
+  "git.operation.finished": {
+    "duration_ms": 0,
+    "finished_at": "string",
+    "id": "string",
+    "kind": "string",
+    "path": "string",
+    "started_at": "string",
+    "status": "string"
+  },
+  "git.operation.started": {
+    "id": "string",
+    "kind": "string",
+    "path": "string",
+    "started_at": "string",
+    "status": "string"
+  },
+  "github.host.added": null,
+  "github.host.removed": null,
+  "notebook.file.changed": {
+    "origin": "string"
+  },
+  "notification.created": null,
+  "notification.read": null,
+  "plugin.connected": null,
+  "plugin.disconnected": null,
+  "plugin.driver.registered": null,
+  "plugin.health.changed": null,
+  "pr.appeared": null,
+  "pr.details.changed": null,
+  "pr.disappeared": null,
+  "pr.updated": null,
+  "profile.arrangement.changed": {
+    "from_desktop_id": "string",
+    "from_leaf_id": "string",
+    "to_desktop_id": "string",
+    "to_leaf_id": "string"
+  },
+  "profile.created": null,
+  "profile.migration.changed": null,
+  "ratelimit.hit": {
+    "reset_at": "string"
+  },
+  "session.activity.changed": null,
+  "session.assistant_window.changed": null,
+  "session.background.launch": {
+    "desktop_id": "string",
+    "desktop_label": "string",
+    "event": "string",
+    "kind": "string",
+    "name": "string",
+    "profile_id": "string",
+    "requested_by": "string",
+    "session_id": "string"
+  },
+  "session.branch.changed": null,
+  "session.chief_role.changed": null,
+  "session.closed": {
+    "agent": "string",
+    "branch": "string",
+    "close_reason": "string",
+    "closed_at": "string",
+    "closed_by": "string",
+    "conversation_pinned_at": "string",
+    "directory": "string",
+    "id": "string",
+    "is_worktree": false,
+    "label": "string",
+    "last_seen": "string",
+    "main_repo": "string",
+    "priority": false,
+    "profile_id": "string",
+    "profile_name": "string",
+    "repository": "string",
+    "state": "string",
+    "usage": {
+      "cost_usd": 0,
+      "has_unpriced_usage": false,
+      "measurement_incomplete": false,
+      "models": [
+        {
+          "cache_read_tokens": 0,
+          "cache_write_1h_tokens": 0,
+          "cache_write_5m_tokens": 0,
+          "cache_write_unclassified_tokens": 0,
+          "cost_usd": 0,
+          "has_unpriced_usage": false,
+          "input_tokens": 0,
+          "model": "string",
+          "output_tokens": 0,
+          "purpose": "string",
+          "total_tokens": 0,
+          "unpriced_reason": "string"
+        }
+      ],
+      "total_tokens": 0
+    },
+    "workspace_id": "string"
+  },
+  "session.conversation.changed": {
+    "transcript_path": "string"
+  },
+  "session.cost.changed": null,
+  "session.model_request.started": null,
+  "session.pin.changed": null,
+  "session.pty.exited": {
+    "exit_code": 0,
+    "signal": "string",
+    "terminal": "string"
+  },
+  "session.pull_request.changed": {
+    "pr_id": "string"
+  },
+  "session.registered": null,
+  "session.renamed": null,
+  "session.reregistered": null,
+  "session.respawned": {
+    "terminal": "string"
+  },
+  "session.state.changed": null,
+  "session.terminal_build.changed": null,
+  "session.terminated": null,
+  "session.title.changed": null,
+  "session.unregistered": {
+    "activity": "string",
+    "activity_at": "string",
+    "agent": "string",
+    "automation": {
+      "definition_id": 0,
+      "definition_name": "string",
+      "run_id": "string",
+      "trigger_type": "string"
+    },
+    "branch": "string",
+    "delegated_from_chief": false,
+    "directory": "string",
+    "dispatcher_session_id": "string",
+    "id": "string",
+    "is_worktree": false,
+    "label": "string",
+    "last_model_request_at": "string",
+    "last_seen": "string",
+    "main_repo": "string",
+    "parent_session_id": "string",
+    "pinned_at": "string",
+    "priority": false,
+    "profile_id": "string",
+    "pull_requests": [
+      {
+        "ci_status": "string",
+        "created_at": "string",
+        "mergeable_state": "string",
+        "number": 0,
+        "readiness_reason": "string",
+        "readiness_state": "string",
+        "repository": "string",
+        "review_status": "string",
+        "state": "string",
+        "status_fetched_at": "string",
+        "title": "string",
+        "url": "string",
+        "watch_error": "string",
+        "watch_health": "string",
+        "watch_last_checked_at": "string",
+        "watch_mode": "string",
+        "watching": false
+      }
+    ],
+    "repository": "string",
+    "seed_id": "string",
+    "state": "string",
+    "state_since": "string",
+    "state_updated_at": "string",
+    "succeeds": "string",
+    "terminal_exit": {
+      "at": "string",
+      "code": 0
+    },
+    "turn_by_agent": false,
+    "turn_opened_at": "string",
+    "turn_owed": false,
+    "turn_snoozed_until": "string",
+    "usage": {
+      "cost_usd": 0,
+      "has_unpriced_usage": false,
+      "measurement_incomplete": false,
+      "models": [
+        {
+          "cache_read_tokens": 0,
+          "cache_write_1h_tokens": 0,
+          "cache_write_5m_tokens": 0,
+          "cache_write_unclassified_tokens": 0,
+          "cost_usd": 0,
+          "has_unpriced_usage": false,
+          "input_tokens": 0,
+          "model": "string",
+          "output_tokens": 0,
+          "purpose": "string",
+          "total_tokens": 0,
+          "unpriced_reason": "string"
+        }
+      ],
+      "total_tokens": 0
+    },
+    "workspace_id": "string"
+  },
+  "session.workspace.changed": null,
+  "setting.changed": null,
+  "shared_codex.changed": null,
+  "tailscale.serve.changed": null,
+  "task.changed": null,
+  "ticket.commented": null,
+  "workspace.layout.changed": {
+    "active_pane_id": "string",
+    "layout_json": "string",
+    "panes": [
+      {
+        "kind": "string",
+        "pane_id": "string",
+        "runtime_id": "string",
+        "session_id": "string",
+        "status": "string",
+        "title": "string",
+        "workspace_id": "string"
+      }
+    ],
+    "updated_at": "string",
+    "workspace_id": "string"
+  },
+  "workspace.registered": null,
+  "workspace.session.associated": null,
+  "workspace.session.dissociated": null,
+  "workspace.status.changed": null,
+  "workspace.unregistered": {
+    "directory": "string",
+    "id": "string",
+    "muted": false,
+    "pinned": false,
+    "rank": "string",
+    "status": "string",
+    "title": "string"
+  },
+  "worktree.created": {
+    "branch": "string",
+    "created_at": "string",
+    "main_repo": "string",
+    "path": "string"
+  },
+  "worktree.deleted": null,
+  "worktree.state.changed": {
+    "branch": "string",
+    "created_at": "string",
+    "detached": false,
+    "dirty": false,
+    "dirty_files": 0,
+    "head_sha": "string",
+    "last_activity_at": "string",
+    "main_repo": "string",
+    "merged_signal": "string",
+    "observed_at": "string",
+    "origin": "string",
+    "path": "string",
+    "pinned": false,
+    "prunable": false,
+    "sweep_at": "string",
+    "sweep_reason": "string",
+    "sweep_status": "string",
+    "unpushed": 0
+  },
+  "worktree.swept": {
+    "action": "string",
+    "at": "string",
+    "branch": "string",
+    "id": "string",
+    "main_repo": "string",
+    "path": "string",
+    "reason": "string"
+  }
+}

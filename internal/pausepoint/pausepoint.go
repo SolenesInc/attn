@@ -24,6 +24,7 @@ const (
 	PtyWatchReplay     = "pty-watch-replay"
 	PtyWorkerUpgrade   = "pty-worker-upgrade"
 	BusAnnounce        = "bus-announce"
+	BusEventHandled    = "bus-event-handled"
 
 	DaemonStartupRecovery     = "daemon-startup-recovery"
 	SessionInputPasteGap      = "session-input-paste-gap"
