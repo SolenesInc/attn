@@ -1,18 +1,12 @@
 .shared-conversation-notice {
-  background: var(--color-bg-panel);
-  border: 1px solid var(--color-warning);
-  border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 2px;
-  left: 50%;
-  max-width: min(520px, calc(100% - 24px));
-  padding: 10px 14px;
-  position: absolute;
-  top: 12px;
-  transform: translateX(-50%);
-  z-index: 20;
+  padding: 8px 12px;
 }
 
 .shared-conversation-notice p {

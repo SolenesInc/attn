@@ -337,7 +337,7 @@ describe('App pane header', () => {
     );
     const notice = () => screen.queryByTestId('shared-conversation-notice');
     expect(notice()).toHaveTextContent('This conversation is also open in “ledger sweep, again” on Reviews.');
-    expect(notice()).toHaveTextContent('Two Claude processes on one conversation split its history. Close one.');
+    expect(notice()).toHaveTextContent('Two Claude processes on one conversation split its history. Close one of them.');
 
     await update(daemon, daemonSession('s1', { label: 'ledger sweep', state: 'idle' }));
 

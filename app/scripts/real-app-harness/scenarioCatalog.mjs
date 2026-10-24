@@ -154,6 +154,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-clear-opens-session'],
   },
   {
+    id: 'claude-shared-conversation',
+    runnerId: 'CLAUDE-SHARED-CONVERSATION',
+    label: 'Two Claude tiles on one conversation both warn above their terminals until one of them closes',
+    command: ['pnpm', 'run', 'real-app:scenario-claude-shared-conversation'],
+  },
+  {
     id: 'session-reopen',
     runnerId: 'SESSION-REOPEN',
     label: 'A closed worktree session reopens under its own id, recreating a deleted worktree only when asked',

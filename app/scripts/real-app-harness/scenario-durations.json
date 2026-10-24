@@ -158,6 +158,13 @@
         "seconds": 15.0,
         "note": "Estimated from session-close-ledger (9.9s) plus two mock turns and a /clear. Remeasure from the first green matrix-digest.txt."
       },
+      "claude-shared-conversation": {
+        "run": "not yet measured",
+        "job": "estimate",
+        "recordedAt": "2026-10-24",
+        "seconds": 47.2,
+        "note": "Measured from a local macOS run against a named instance. Remeasure from the first green matrix-digest.txt."
+      },
       "desktop-migration": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/36256347056",
         "job": "App acceptance shard 4/4",
@@ -376,6 +383,7 @@
     "worktree-surface": 25.748,
     "crew-management": 55.269,
     "clear-opens-session": 15.0,
+    "claude-shared-conversation": 47.2,
     "desktop-migration": 20.7,
     "profile-lifecycle": 18.5,
     "garden-profile-scope": 29.9,
