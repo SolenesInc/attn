@@ -78,6 +78,13 @@ export function SectionStatusPills({
       return (
         <DesktopStatusPills hasProjectsDirChange={hasProjectsDirChange} openSentFilesEnabled={openSentFilesEnabled} />
       );
+    case 'analytics':
+      return (
+        <>
+          <span className="settings-pill good">Recording</span>
+          <span className="settings-pill">Local only</span>
+        </>
+      );
     case 'general':
     default:
       return null;

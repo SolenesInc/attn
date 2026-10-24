@@ -1,6 +1,7 @@
 import { OutpostsSettings } from './OutpostsSettings';
 import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
+import { AnalyticsSettings } from './AnalyticsSettings';
 import { AutoModeSettings } from './AutoModeSettings';
 import { DelegationSettings } from './DelegationSettings';
 import { SettingsAutosaveProvider, SettingsAutosaveStatus } from './SettingsAutosave';
@@ -278,6 +279,14 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           sendBusSetConsumerEnabled={state.sendBusSetConsumerEnabled}
         />
       );
+    case 'analytics':
+      return state.analyticsEnabled ? (
+        <AnalyticsSettings
+          onDisableRecording={() => state.onSetSetting('analytics.enabled', 'false')}
+          onOpenSession={(sessionId) => void state.closeSettings().then(() => state.onOpenSession?.(sessionId))}
+          onOpenSeed={(seedId) => void state.closeSettings().then(() => state.onOpenSeed?.(seedId))}
+        />
+      ) : null;
     case 'delegation':
       return <DelegationSettings policy={delegationPolicy} loadModels={sendHarnessModels} />;
     case 'autoMode':

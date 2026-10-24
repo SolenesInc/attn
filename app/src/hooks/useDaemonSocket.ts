@@ -6,6 +6,8 @@ export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
+import { useVentsStore } from '../store/vents';
+import { handleAnalyticsDaemonEvent, type AnalyticsRecordPage } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
@@ -1141,6 +1143,7 @@ export function useDaemonSocket({
             );
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useAsksStore.getState().setAsks(data.asks || []);
+            useVentsStore.getState().setVents(data.vents || []);
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
@@ -1455,6 +1458,18 @@ export function useDaemonSocket({
             pendingActionsRef.current.delete(key);
             if (data.success && data.seed) pending.resolve(data.seed);
             else pending.reject(new Error(data.error || 'The move was refused'));
+            break;
+          }
+
+          case 'seed_plant_result': {
+            const requestId = data.request_id;
+            if (typeof requestId !== 'string') break;
+            const key = `seed_plant:${requestId}`;
+            const pending = pendingActionsRef.current.get(key);
+            if (!pending) break;
+            pendingActionsRef.current.delete(key);
+            if (data.success && data.seed) pending.resolve(data.seed);
+            else pending.reject(new Error(data.error || 'The seed was not planted'));
             break;
           }
 
@@ -2302,6 +2317,7 @@ export function useDaemonSocket({
             if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAskDaemonEvent(data, pending)) break;
+            if (handleAnalyticsDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -2867,6 +2883,9 @@ export function useDaemonSocket({
     },
     [sendRequest],
   );
+
+  const sendSeedPlant = useCallback((title: string, body: string): Promise<Seed> =>
+    sendRequest('seed_plant', { title, body }, 'Planting the seed timed out'), [sendRequest]);
 
   const sendSeedNote = useCallback((seedId: string, body: string): Promise<void> => {
     return sendRequest('seed_note', { seed_id: seedId, body }, 'The note timed out').then(() => {});
@@ -3576,6 +3595,16 @@ export function useDaemonSocket({
   const sendRecordAnalytics = useCallback((name: string, props: Record<string, string | number>) =>
     sendOrQueueCommand({ cmd: 'record_analytics', stream: 'app', name, props }), [sendOrQueueCommand]);
 
+  const sendListAnalyticsRecords = useCallback((stream: string | null, beforeId: number | null, limit: number): Promise<AnalyticsRecordPage> =>
+    sendRequest('list_analytics_records', {
+      limit,
+      ...(stream ? { stream } : {}),
+      ...(beforeId !== null ? { before_id: beforeId } : {}),
+    }, 'Reading the analytics records timed out'), [sendRequest]);
+
+  const sendSetVentDismissed = useCallback((ventId: string, dismissed: boolean): Promise<true> =>
+    sendRequest('set_vent_dismissed', { vent_id: ventId, dismissed }, 'Changing the vent timed out'), [sendRequest]);
+
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
@@ -4283,6 +4312,8 @@ export function useDaemonSocket({
     sendGetCommandUsage,
     sendRecordCommandUsage,
     sendRecordAnalytics,
+    sendListAnalyticsRecords,
+    sendSetVentDismissed,
     sendAskAnswer,
     sendRecentFiles,
     sendGetRecentLocations,
@@ -4325,6 +4356,7 @@ export function useDaemonSocket({
     sendSeedArtifactTransfer,
     sendSeedArtifactReferenceDetach,
     sendSeedTransition,
+    sendSeedPlant,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
     sendTerminalPointerActivity,
