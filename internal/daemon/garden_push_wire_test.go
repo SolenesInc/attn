@@ -103,6 +103,26 @@ func TestGardenPushCarriesASeedWrittenTogetherWithANote(t *testing.T) {
 	}
 }
 
+func TestGardenPushMarksASeedReadyWhenItsTenderSessionEnds(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	registerSessions(t, w, cli, "holder")
+	seed := plantSeedAs(t, cli, "holder", "held by a live session")
+	lifeMove(t, cli, "holder", seed, "tend", "", "")
+	app := w.App()
+	if held := app.Initial.Seeds[0]; held.ID != seed || held.Ready {
+		t.Fatalf("initial state carries %s ready=%v, want %s not ready while its tender lives", held.ID, held.Ready, seed)
+	}
+
+	if err := cli.Unregister("holder"); err != nil {
+		t.Fatal(err)
+	}
+	changed := testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool { return len(m.Seeds) > 0 })
+	if len(changed.Seeds) != 1 || changed.Seeds[0].ID != seed || !changed.Seeds[0].Ready {
+		t.Fatalf("the change after the tender session ended carries %+v, want the seed, ready", changed.Seeds)
+	}
+}
+
 func nextGardenChange(app *testworld.Peer) protocol.GardenSeedsChangedMessage {
 	app.T.Helper()
 	return testworld.Await[protocol.GardenSeedsChangedMessage](app, protocol.EventGardenSeedsChanged, nil)
