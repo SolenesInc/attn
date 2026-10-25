@@ -340,12 +340,12 @@
         "note": "Green isolated packaged scenario on 822ed03414a2. Iteration wall time 13867ms; ATTN_VERDICT durationMs=13277 including cleanup. Native keyboard input succeeds before and after CLI reload, with the same tile and desktop."
       },
       "outposts-settings": {
-        "run": "outposts-settings-2026-10-18T22-46-44-691Z",
-        "job": "Local packaged scenario, bridge-ui named instance",
-        "recordedAt": "2026-10-19",
-        "seconds": 28.103,
+        "run": "outposts-settings-2026-10-25T19-41-56-583Z",
+        "job": "Local packaged scenario, remote-shell-app named instance",
+        "recordedAt": "2026-10-25",
+        "seconds": 71.931,
         "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=28103, including cleanup. Covers native keyboard opt-in, add/pair, SIGSTOP stalled/lost/recovery, full refusal, re-pair/remove and opt-out. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=71931, including cleanup and recording. Covers pairing, CLI remote shell, native Cmd+D host/start-directory proof, SIGSTOP stalled/lost screen preservation, refused typing/finite flash, current-screen recovery, Remove confirmation and three CPU observation windows. Remeasure on Linux CI."
       },
       "analytics-settings": {
         "run": "analytics-settings-2026-10-24T18-33-09-799Z",
@@ -423,7 +423,7 @@
     "callouts": 39.5,
     "quick-capture": 206.599,
     "agent-reload": 13.867,
-    "outposts-settings": 28.103,
+    "outposts-settings": 71.931,
     "analytics-settings": 28.012
   }
 }

@@ -77,17 +77,14 @@ directory on the outpost. The shell opens beside your agent and preserves
 focus. Read it and type into it with `attn terminal read`, `run`, and `send`,
 using the terminal id printed by `open`.
 
-A split from an outpost shell stays on that outpost, in the original shell's
-start directory. Removing the outpost closes its terminals. If it is
-unreachable, the home closes the terminals on its side. Run
-`attn enrollment leave` on the outpost later to stop the shells still running
-there.
+In an outpost shell, **⌘D** opens another shell on the same outpost, in the
+original shell's start directory.
 
 A lost connection leaves the shell running. The screen comes from the
 outpost again when it reconnects. Shells also survive a restart of either
 daemon. If the shell process on the outpost is gone when the daemons
-reconnect, the home marks the shell recoverable. Revive it to start a new
-shell in its place.
+reconnect, the home marks the shell recoverable. **Resume** starts a new shell
+in its place.
 
 Only shells run on outposts for now. Spawning an agent with a host fails.
 An `attn` command that needs a daemon also fails inside an outpost shell,
@@ -108,11 +105,7 @@ detect_env_vars = ["SSH_CONNECTION", "ATTN_HOST"]
 The hostname then appears over SSH and inside an outpost shell. It stays
 hidden in a local shell. `ssh_only = true` does not detect `ATTN_HOST`.
 
-## Work in a shell on an outpost
-
-To open the first shell, ask an agent to run `attn terminal open --host <name>`.
-It opens beside the agent's tile. In that shell, **⌘D** opens another shell on
-its outpost, using the first shell's start directory.
+## Work while an outpost is offline
 
 When the bridge is lost or refused, each terminal stays in place. Its state
 dot becomes hollow and crossed, and its sidebar and home screen rows have a
