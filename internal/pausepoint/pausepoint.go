@@ -13,6 +13,7 @@ const (
 	EnvPoints = "ATTN_PAUSE_AT"
 	EnvSocket = "ATTN_PAUSE_SOCK"
 	Release   = "go"
+	Every     = "*"
 )
 
 const (
@@ -33,6 +34,8 @@ const (
 	SessionTeardownPrepared   = "session-teardown-prepared"
 	DriverTranscriptCaptured  = "driver-transcript-captured"
 	DriverTranscriptApplied   = "driver-transcript-applied"
+	CopyBatchStaged           = "copy-batch-staged"
+	CopyBatchApplied          = "copy-batch-applied"
 )
 
 type armed struct {
@@ -49,7 +52,8 @@ var load = sync.OnceValue(func() *armed {
 	a := &armed{socket: socket, points: map[string]bool{}}
 	for _, name := range strings.Split(names, ",") {
 		if name = strings.TrimSpace(name); name != "" {
-			a.points[name] = true
+			trimmed := strings.TrimSuffix(name, Every)
+			a.points[trimmed] = trimmed != name
 		}
 	}
 	return a
@@ -63,9 +67,11 @@ func At(name string) {
 
 func (a *armed) pause(name string) {
 	a.mu.Lock()
-	armed := a.points[name]
-	// Once per process: a worker that re-execs itself for an upgrade arms again.
-	delete(a.points, name)
+	every, armed := a.points[name]
+	// Once per process unless armed for every hit: a worker that re-execs itself for an upgrade arms again.
+	if !every {
+		delete(a.points, name)
+	}
 	a.mu.Unlock()
 	if !armed {
 		return

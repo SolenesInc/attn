@@ -186,6 +186,7 @@ const (
 	CmdAddOutpost                    = "add_outpost"
 	CmdRemoveOutpost                 = "remove_outpost"
 	CmdRepairOutpost                 = "repair_outpost"
+	CmdDropOutpostCopy               = "drop_outpost_copy"
 	CmdListPlugins                   = "list_plugins"
 	CmdInstallPlugin                 = "install_plugin"
 	CmdInstallBundledPlugin          = "install_bundled_plugin"

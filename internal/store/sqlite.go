@@ -1507,11 +1507,35 @@ func sqliteDSN(dbPath string) string {
 	return u.String()
 }
 
-// tableWrites counts row writes to the tables the store caches reads of. SQLite's update
-// hook bumps it on every connection, so no write path can skip invalidating the cache.
+// tableWrites counts row writes to the tables the store caches reads of, and signals copy changes
+// waiting for an outpost. SQLite's update hook feeds it on every connection, so no write path can skip it.
 type tableWrites struct {
 	sessions    atomic.Uint64
 	commitFault atomic.Bool
+	outbox      outboxSignal
+}
+
+type outboxSignal struct {
+	mu      sync.Mutex
+	changed chan struct{}
+}
+
+func (o *outboxSignal) wait() <-chan struct{} {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.changed == nil {
+		o.changed = make(chan struct{})
+	}
+	return o.changed
+}
+
+func (o *outboxSignal) notify() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.changed != nil {
+		close(o.changed)
+		o.changed = nil
+	}
 }
 
 type sqliteConnector struct {
@@ -1627,10 +1651,13 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 				return 0
 			})
 			conn.RegisterRollbackHook(func() { dirty = false })
-			conn.RegisterUpdateHook(func(_ int, _, table string, _ int64) {
+			conn.RegisterUpdateHook(func(op int, _, table string, _ int64) {
 				dirty = true
-				if table == "sessions" || table == "session_runtime" {
+				switch {
+				case table == "sessions" || table == "session_runtime":
 					writes.sessions.Add(1)
+				case table == "outpost_outbox" && op == sqlite3.SQLITE_INSERT:
+					writes.outbox.notify()
 				}
 			})
 			return nil

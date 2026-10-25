@@ -355,6 +355,11 @@ func (w *World) InjectSession(id, label, dir string, agent protocol.SessionAgent
 	return w.inject(session)
 }
 
+// InjectSessionOn registers a placed session whose terminal runs on the outpost host.
+func (w *World) InjectSessionOn(host, id, label, dir string, agent protocol.SessionAgent) error {
+	return w.inject(protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching, Host: protocol.Ptr(host)})
+}
+
 func (w *World) InjectCrewSession(id, label, dir, member string) error {
 	return w.inject(protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: protocol.SessionAgentClaude, State: protocol.SessionStateLaunching, CrewMember: protocol.Ptr(member)})
 }

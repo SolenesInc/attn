@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/bridge/memnet"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -45,7 +46,7 @@ type pairWorld struct {
 	t       *testing.T
 	ctx     context.Context
 	cancel  context.CancelFunc
-	network *memoryListener
+	network *memnet.Listener
 	server  chan *bridge.Conn
 	served  chan error
 	workers sync.WaitGroup
@@ -61,7 +62,7 @@ func pair(t *testing.T) *pairWorld {
 	if err := keyring.Add(agent.AddedKey{PrivateKey: key}); err != nil {
 		t.Fatal(err)
 	}
-	w := &pairWorld{t: t, ctx: ctx, cancel: cancel, network: memoryNetwork(), server: make(chan *bridge.Conn, 1), served: make(chan error, 1), keyring: keyring}
+	w := &pairWorld{t: t, ctx: ctx, cancel: cancel, network: memnet.Listen(), server: make(chan *bridge.Conn, 1), served: make(chan error, 1), keyring: keyring}
 	w.cfg = bridge.ServerConfig{Self: outpost, HostKeyPath: filepath.Join(t.TempDir(), "bridge_host_key"), AuthorizedKeys: func() ([]byte, error) { return []byte(publicKey(t, key)), nil }}
 	return w
 }
@@ -78,14 +79,24 @@ func (w *pairWorld) start() {
 }
 
 func (w *pairWorld) dial(identity bridge.Identity, pin *bridge.Pin) (*bridge.Conn, *bridge.Pin, error) {
-	return bridge.Dial(w.ctx, bridge.DialConfig{Self: identity, Pin: pin, Address: "outpost", AgentSocket: "agent", DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+	return w.dialConfig(bridge.DialConfig{Self: identity, Pin: pin})
+}
+
+func (w *pairWorld) dialWith(handlers bridge.Handlers) (*bridge.Conn, *bridge.Pin, error) {
+	return w.dialConfig(bridge.DialConfig{Self: home, Handlers: handlers})
+}
+
+func (w *pairWorld) dialConfig(cfg bridge.DialConfig) (*bridge.Conn, *bridge.Pin, error) {
+	cfg.Address, cfg.AgentSocket = "outpost", "agent"
+	cfg.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
 		if network == "tcp" {
-			return w.network.dial(ctx)
+			return w.network.Dial(ctx)
 		}
 		a, b := net.Pipe()
 		w.workers.Go(func() { defer b.Close(); _ = agent.ServeAgent(w.keyring, b) })
 		return a, nil
-	}})
+	}
+	return bridge.Dial(w.ctx, cfg)
 }
 
 func state(t *testing.T, c *bridge.Conn, want bridge.State) {
@@ -116,14 +127,14 @@ func TestBridgeLiveness(t *testing.T) {
 				if client.Peer() != outpost || server.Peer() != home {
 					t.Fatal("wrong peer identity")
 				}
-				w.network.cut.Store(true)
+				w.network.Cut(true)
 				time.Sleep(3 * time.Second)
 				synctest.Wait()
 				state(t, client, bridge.StateStalled)
 				state(t, server, bridge.StateStalled)
 				if recovery {
 					time.Sleep(2 * time.Second)
-					w.network.cut.Store(false)
+					w.network.Cut(false)
 					time.Sleep(bridge.HeartbeatInterval)
 					synctest.Wait()
 					state(t, client, bridge.StateConnected)
@@ -217,7 +228,7 @@ func TestBridgeCancellationDuringHandshake(t *testing.T) {
 				}
 				w.start()
 				if phase == "ssh" {
-					w.network.cut.Store(true)
+					w.network.Cut(true)
 				}
 				finished := make(chan error, 1)
 				go func() {

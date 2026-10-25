@@ -51,8 +51,19 @@ func (s *Store) ClearOutpostPins(id string) error {
 }
 
 func (s *Store) DeleteOutpost(id string) error {
-	result, err := s.db.Exec(`DELETE FROM outposts WHERE id=?`, id)
-	return outpostWriteResult(id, result, err)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`DELETE FROM outposts WHERE id=?`, id)
+	if err := outpostWriteResult(id, result, err); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM outpost_outbox WHERE host=?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func outpostWriteResult(id string, result sql.Result, err error) error {

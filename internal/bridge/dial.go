@@ -32,6 +32,7 @@ type DialConfig struct {
 	AgentSocket  string
 	DialContext  func(context.Context, string, string) (net.Conn, error)
 	CheckHostKey func(string) *Refusal
+	Handlers     Handlers
 }
 
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
@@ -99,22 +100,23 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 		}
 		return nil, seen, err
 	}
-	client := ssh.NewClient(transport, channels, requests)
+	requestDrain := make(chan struct{})
+	go func() { defer close(requestDrain); ssh.DiscardRequests(requests) }()
+	closeTransport := func() {
+		_ = transport.Close()
+		<-requestDrain
+	}
 	defer func() {
 		if !success {
-			_ = client.Close()
-			_ = client.Wait()
+			closeTransport()
 		}
 	}()
-	control, channelRequests, err := client.OpenChannel(controlChannel, nil)
+	control, channelRequests, err := transport.OpenChannel(controlChannel, nil)
 	if err != nil {
 		return nil, seen, err
 	}
-	requestDrain := make(chan struct{})
-	go func() { defer close(requestDrain); ssh.DiscardRequests(channelRequests) }()
+	go ssh.DiscardRequests(channelRequests)
 	if err := json.NewEncoder(control).Encode(greeting(cfg.Self)); err != nil {
-		_ = client.Close()
-		<-requestDrain
 		return nil, seen, err
 	}
 	decoder := json.NewDecoder(control)
@@ -135,26 +137,18 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 		}
 	}
 	if err != nil {
-		_ = client.Close()
-		<-requestDrain
 		return nil, seen, err
 	}
 	if handshakeCtx.Err() != nil {
-		_ = client.Close()
-		<-requestDrain
 		return nil, seen, handshakeCtx.Err()
 	}
 	if !stopRaw() && handshakeCtx.Err() != nil {
-		_ = client.Close()
-		<-requestDrain
 		return nil, seen, handshakeCtx.Err()
 	}
 	if err := raw.SetDeadline(time.Time{}); err != nil {
-		_ = client.Close()
-		<-requestDrain
 		return nil, seen, err
 	}
-	conn := newConn(ctx, client, control, decoder, answer.Identity, requestDrain)
+	conn := newConn(ctx, transport, channels, cfg.Handlers, control, decoder, answer.Identity, requestDrain)
 	success = true
 	return conn, seen, nil
 }

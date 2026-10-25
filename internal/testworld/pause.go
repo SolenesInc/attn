@@ -37,6 +37,17 @@ type pauses struct {
 
 func (s *Stack) PauseAt(name string) *Pause {
 	s.T.Helper()
+	return s.arm(name, name)
+}
+
+// PauseEvery holds a process each time it reaches name, not only the first time.
+func (s *Stack) PauseEvery(name string) *Pause {
+	s.T.Helper()
+	return s.arm(name, name+pausepoint.Every)
+}
+
+func (s *Stack) arm(name, armed string) *Pause {
+	s.T.Helper()
 	if s.daemon != nil {
 		s.T.Fatalf("PauseAt(%q): arm pause points before Start; the daemon and its workers read them once", name)
 	}
@@ -46,7 +57,7 @@ func (s *Stack) PauseAt(name string) *Pause {
 	p := &Pause{t: s.T, name: name, held: make(chan pausedAt, 8)}
 	s.pauses.mu.Lock()
 	s.pauses.points[name] = p
-	s.pauses.order = append(s.pauses.order, name)
+	s.pauses.order = append(s.pauses.order, armed)
 	s.pauses.mu.Unlock()
 	return p
 }

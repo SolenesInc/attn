@@ -183,6 +183,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdAddOutpost:                    decodeInto[AddOutpostMessage],
 	CmdRemoveOutpost:                 decodeInto[RemoveOutpostMessage],
 	CmdRepairOutpost:                 decodeInto[RepairOutpostMessage],
+	CmdDropOutpostCopy:               decodeInto[DropOutpostCopyMessage],
 	CmdListPlugins:                   decodeInto[ListPluginsMessage],
 	CmdInstallPlugin:                 decodeInto[InstallPluginMessage],
 	CmdInstallBundledPlugin:          decodeInto[InstallBundledPluginMessage],
