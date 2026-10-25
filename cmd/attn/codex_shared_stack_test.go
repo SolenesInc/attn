@@ -546,7 +546,9 @@ func TestACodexUpdateOfferKeepsItsInstallActionAcrossADaemonRestart(t *testing.T
 
 	s.Stop()
 	s.Start()
-	if after := offers(s.App()); len(after) != 1 || len(after[0].Actions) == 0 || after[0].ReadAt != "" {
-		t.Errorf("after a daemon restart, with 0.162.1 still installed, the 0.163.0 offer is %+v, want it unread with Install", after)
+	for _, connection := range []string{"on restart", "after the version check"} {
+		if after := offers(s.App()); len(after) != 1 || len(after[0].Actions) == 0 || after[0].ReadAt != "" {
+			t.Errorf("connecting %s, with 0.162.1 still installed, the 0.163.0 offer is %+v, want it unread with Install", connection, after)
+		}
 	}
 }
