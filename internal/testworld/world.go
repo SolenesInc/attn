@@ -93,6 +93,7 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness)
 		"ATTN_AUTHORIZED_KEYS_PATH=" + filepath.Join(dir, "authorized_keys"),
 		"SSH_AUTH_SOCK=",
 		"ATTN_HEADLESS_TASKS=off",
+		config.AnalyticsIngestURLEnv + "=http://127.0.0.1:1",
 		"SHELL=/bin/sh",
 	}, w.kit.Env()...)
 	return w
@@ -142,8 +143,15 @@ func (w *World) appHello() protocol.ClientHelloMessage {
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
+		AppVersion:   protocol.Ptr(AppVersion),
+		AppChannel:   protocol.Ptr(AppChannel),
 	}
 }
+
+const (
+	AppVersion = "0.0.0-testworld"
+	AppChannel = "source"
+)
 
 func (w *World) Connect(hello protocol.ClientHelloMessage, header http.Header) *Peer {
 	w.T.Helper()

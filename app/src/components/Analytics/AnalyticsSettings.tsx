@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { useDaemonStore } from '../../store/daemonSessions';
 import { useVentsStore } from '../../store/vents';
-import { formatBytes, recordCount } from './analyticsFormat';
+import type { AnalyticsStatus } from '../../hooks/daemonAnalyticsEvents';
+import { VentSend } from '../../types/generated';
+import { formatBytes, recordCount, sharingLine } from './analyticsFormat';
 import { isDone, recordItems, ventItems, VIEW_LABEL, VIEWS, type BurstItem, type ListItem, type View } from './analyticsItems';
 import { RecordDetail, VentDetail } from './AnalyticsInspector';
 import { AnalyticsList, RecordsFooter } from './AnalyticsList';
@@ -14,6 +16,9 @@ import '../EventBusSettings.css';
 import './AnalyticsSettings.css';
 
 interface AnalyticsSettingsProps {
+  sharing: boolean;
+  sendVents: boolean;
+  onSetSetting: (key: string, value: string) => void;
   onDisableRecording: () => void;
   onOpenSession: (sessionId: string) => void;
   onOpenSeed: (seedId: string) => void;
@@ -23,8 +28,8 @@ function isTyping(target: EventTarget): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
-export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
-  const { sendClearAnalyticsRecords } = useDaemonApi();
+export function AnalyticsSettings({ sharing, sendVents, onSetSetting, onDisableRecording, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
+  const { sendClearAnalyticsRecords, sendForgetAnalyticsInstall } = useDaemonApi();
   const vents = useVentsStore((state) => state.vents);
   const seeds = useDaemonStore((state) => state.seeds);
   const [view, setView] = useState<View>('vents');
@@ -47,7 +52,8 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
   const current = items[index];
   const vent = current?.kind === 'vent' ? current.vent : undefined;
   const newCount = useMemo(() => vents.filter((v) => !isDone(v)).length, [vents]);
-  const triage = useVentTriage({ items, index, select: setSelected, feedback, onOpenSession, onOpenSeed });
+  const sentVents = useMemo(() => vents.filter((v) => v.send === VentSend.Sent).length, [vents]);
+  const triage = useVentTriage({ items, index, sharing, select: setSelected, feedback, onOpenSession, onOpenSeed });
 
   useEffect(() => {
     rootRef.current?.focus({ preventScroll: true });
@@ -78,6 +84,17 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
     feedback.say(`Cleared ${recordCount(clearedRecords)} and ${clearedVents} dismissed vent${clearedVents === 1 ? '' : 's'}.`);
     refresh();
   });
+
+  const forget = () => feedback.run(async () => {
+    await sendForgetAnalyticsInstall();
+    feedback.say('Forgot this install. The next upload starts a new one.');
+    refresh();
+  });
+
+  const setSetting = (key: string, value: string) => {
+    onSetSetting(key, value);
+    status.reload();
+  };
 
   const copyRecord = () => {
     if (!current || current.kind === 'vent') return false;
@@ -111,15 +128,27 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
     <section ref={rootRef} className="settings-block analytics" data-testid="settings-analytics" aria-label="Analytics" tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="analytics-strip">
         <Stat label="Recording" value="On" />
-        <Stat label="Sharing" value="Off" dim />
-        <Stat label="Vents" value={`${vents.length} kept here`} dim={vents.length === 0} />
+        <Stat label="Sharing" value={sharingStat(sharing, status.status)} dim={!sharing} bad={sharing && Boolean(status.status?.lastRefusal)} />
+        <Stat label="Vents" value={sharing ? `${sentVents} sent · ${vents.length - sentVents} kept here` : `${vents.length} kept here`} dim={vents.length === 0} />
         <Stat label="Kept here" value={status.status ? `7 days · ${formatBytes(status.status.bytes)}` : '7 days'} />
         <button type="button" className="settings-action" aria-expanded={machineOpen} onClick={() => setMachineOpen((open) => !open)}>
           {machineOpen ? 'Done' : 'Machine settings'} <kbd>m</kbd>
         </button>
       </div>
 
-      {machineOpen && <AnalyticsMachine status={status.status} onDisableRecording={onDisableRecording} onClear={clear} />}
+      {sharing && status.status?.lastRefusal && <p className="settings-warning analytics-refusal">{status.status.lastRefusal}</p>}
+
+      {machineOpen && (
+        <AnalyticsMachine
+          status={status.status}
+          sharing={sharing}
+          sendVents={sendVents}
+          onSetSetting={setSetting}
+          onDisableRecording={onDisableRecording}
+          onClear={clear}
+          onForget={forget}
+        />
+      )}
 
       <div className="analytics-views" role="tablist" aria-label="Show">
         {VIEWS.map((v) => (
@@ -151,6 +180,7 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
             <VentDetail
               vent={vent}
               live={triage.isLive(vent)}
+              sharing={sharing}
               seeds={seedsById}
               expanded={expanded.has(vent.id)}
               onExpand={() => setExpanded((open) => new Set(open).add(vent.id))}
@@ -167,30 +197,38 @@ export function AnalyticsSettings({ onDisableRecording, onOpenSession, onOpenSee
         </div>
       </div>
 
-      <KeyHints view={view} />
+      <KeyHints view={view} sharing={sharing} />
       <UndoToastBar toast={feedback.toast} />
     </section>
   );
 }
 
-function Stat({ label, value, dim = false }: { label: string; value: string; dim?: boolean }) {
+function sharingStat(sharing: boolean, status: AnalyticsStatus | null): string {
+  if (!sharing) return 'Off';
+  if (!status) return 'On';
+  if (status.lastRefusal) return `Refused · ${status.waiting.toLocaleString()} waiting`;
+  return `On · ${sharingLine(status).replace('Last sent', 'sent')}`;
+}
+
+function Stat({ label, value, dim = false, bad = false }: { label: string; value: string; dim?: boolean; bad?: boolean }) {
   return (
     <div className="bus-stat">
       <span className="bus-stat-label">{label}</span>
-      <span className={`bus-stat-value${dim ? ' dim' : ''}`}>{value}</span>
+      <span className={`bus-stat-value${dim ? ' dim' : ''}${bad ? ' bad' : ''}`}>{value}</span>
     </div>
   );
 }
 
 const VENT_KEYS = [['o', 'open session'], ['t', 'transcript'], ['g', 'stake seed'], ['p', 'plant'], ['d', 'dismiss'], ['u', 'undo']];
+const SHARING_VENT_KEYS = [...VENT_KEYS, ['x', 'send or keep']];
 const RECORD_KEYS = [['↵', 'expand a burst'], ['c', 'copy JSON'], ['r', 'refresh']];
 
-function KeyHints({ view }: { view: View }) {
+function KeyHints({ view, sharing }: { view: View; sharing: boolean }) {
   return (
     <div className="analytics-keys">
       <span><kbd>j</kbd><kbd>k</kbd> move</span>
       <span><kbd>[</kbd><kbd>]</kbd> switch list</span>
-      {(view === 'vents' ? VENT_KEYS : RECORD_KEYS).map(([key, label]) => <span key={key}><kbd>{key}</kbd> {label}</span>)}
+      {(view !== 'vents' ? RECORD_KEYS : sharing ? SHARING_VENT_KEYS : VENT_KEYS).map(([key, label]) => <span key={key}><kbd>{key}</kbd> {label}</span>)}
       <span><kbd>m</kbd> machine settings</span>
     </div>
   );

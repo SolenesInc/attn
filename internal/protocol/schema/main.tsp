@@ -491,6 +491,10 @@ model ClientHelloMessage {
   // daemon scopes the client to the most recently used profile instead and says
   // which in initial_state.selected_profile_id.
   profile_id?: string;
+  // The app's own version and install channel (source, release, homebrew,
+  // cask, dmg). Analytics batches carry them in their build block.
+  app_version?: string;
+  app_channel?: string;
 }
 
 model UnregisterMessage {
@@ -1249,7 +1253,10 @@ model GetAnalyticsStatusMessage {
 }
 
 // records and bytes cover every outbox row; bytes counts the stored record
-// text. waiting counts rows not yet sent.
+// text. waiting counts rows not yet sent. last_sent_at is when the newest sent
+// row still kept went to attn-ingest. last_refusal says why the last upload
+// failed, naming the limit when attn-ingest refused it; it clears once a batch
+// is accepted.
 model GetAnalyticsStatusResultMessage {
   event: "get_analytics_status_result";
   request_id: string;
@@ -1258,6 +1265,23 @@ model GetAnalyticsStatusResultMessage {
   records: safeint;
   bytes: safeint;
   waiting: safeint;
+  last_sent_at?: string;
+  last_refusal?: string;
+}
+
+// Delete everything attn-ingest holds for this install, then start a new
+// install: a new install id, token and subject secret. When attn-ingest cannot
+// be reached, nothing changes and the error says so.
+model ForgetAnalyticsInstallMessage {
+  cmd: "forget_analytics_install";
+  request_id: string;
+}
+
+model ForgetAnalyticsInstallResultMessage {
+  event: "forget_analytics_install_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
 }
 
 // Delete every analytics outbox row on this machine, and the selected
@@ -3645,9 +3669,17 @@ model VentContext {
   transcript?: VentTranscript;
 }
 
+// queued: the vent's record waits in the analytics outbox for the next
+// upload. sent: attn-ingest accepted it.
+enum VentSend {
+  queued,
+  sent,
+}
+
 // An agent's report of what got in its way. withdrawn_at is set when the agent
 // took it back, dismissed_at while the user has dismissed it, planted_seed_id
-// once the user planted a seed from it.
+// once the user planted a seed from it. send is absent while the vent stays on
+// this machine.
 model Vent {
   id: string;
   session_id: SessionID;
@@ -3657,6 +3689,7 @@ model Vent {
   withdrawn_at?: string;
   dismissed_at?: string;
   planted_seed_id?: string;
+  send?: VentSend;
 }
 
 model RecordVentMessage {
@@ -3711,6 +3744,23 @@ model SetVentDismissedMessage {
 
 model SetVentDismissedResultMessage {
   event: "set_vent_dismissed_result";
+  request_id: string;
+  vent_id: string;
+  success: boolean;
+  error?: string;
+}
+
+// send true queues the vent's record for the next upload; false takes a queued
+// record back. A sent vent cannot be taken back.
+model SetVentSendMessage {
+  cmd: "set_vent_send";
+  request_id: string;
+  vent_id: string;
+  send: boolean;
+}
+
+model SetVentSendResultMessage {
+  event: "set_vent_send_result";
   request_id: string;
   vent_id: string;
   success: boolean;
@@ -7815,6 +7865,8 @@ alias DaemonEvent =
   | UnplantVentSeedResultMessage
   | GetAnalyticsStatusResultMessage
   | ClearAnalyticsRecordsResultMessage
+  | ForgetAnalyticsInstallResultMessage
+  | SetVentSendResultMessage
   | VentsUpdatedMessage
   | SharedCodexChangedMessage
   | RestartSharedCodexResultMessage

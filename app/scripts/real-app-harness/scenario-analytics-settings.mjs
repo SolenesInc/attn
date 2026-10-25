@@ -106,7 +106,7 @@ try {
   await runner.step('clear_the_local_record', async () => {
     await press('m');
     await wait('[data-testid="analytics-machine"]', { textIncludes: 'records,' });
-    await client.request('dom_click', { selector: '[data-testid="analytics-machine"] button.danger' });
+    await client.request('dom_click', { selector: '[data-testid="analytics-machine"] .settings-row-card:last-child button.danger' });
     await client.request('dom_click', { selector: '.analytics-confirm button.danger' });
     await wait('[role="status"]', { textIncludes: 'Cleared' });
     await shot('04-cleared');

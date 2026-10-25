@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { Seed, Vent } from '../../types/generated';
 import { harnessLabel } from '../harnessLabel';
 import { buildLabel, longAgo, settingName, when } from './analyticsFormat';
-import type { RecordItem } from './analyticsItems';
+import { ventDestination, type RecordItem } from './analyticsItems';
 
 const LONG_VENT_CHARS = 420;
 
@@ -35,9 +35,10 @@ function ventStatus(vent: Vent, slug: (id: string) => string): ReactNode {
   return null;
 }
 
-export function VentDetail({ vent, live, seeds, expanded, onExpand, onAction }: {
+export function VentDetail({ vent, live, sharing, seeds, expanded, onExpand, onAction }: {
   vent: Vent;
   live: boolean;
+  sharing: boolean;
   seeds: ReadonlyMap<string, Seed>;
   expanded: boolean;
   onExpand: () => void;
@@ -56,12 +57,20 @@ export function VentDetail({ vent, live, seeds, expanded, onExpand, onAction }: 
       {long && <button type="button" className="analytics-more" onClick={onExpand}>Show all {vent.text.length.toLocaleString()} characters</button>}
       <VentContext vent={vent} slug={slug} />
       {!withdrawn && <VentActions vent={vent} live={live} onAction={onAction} />}
-      <div className="analytics-where">
-        <span className="analytics-where-dot" />
-        <b>Kept on this machine</b>
-        {withdrawn && <span className="dim">· withdrawn</span>}
-      </div>
+      <VentWhere vent={vent} sharing={sharing} onAction={onAction} />
     </>
+  );
+}
+
+function VentWhere({ vent, sharing, onAction }: { vent: Vent; sharing: boolean; onAction: (key: string) => void }) {
+  const { label, note, leaving, movable } = ventDestination(vent, sharing);
+  return (
+    <div className="analytics-where">
+      <span className={`analytics-where-dot${leaving ? ' sent' : ''}`} />
+      <b>{label}</b>
+      {note && <span className="dim">· {note}</span>}
+      {movable && <button type="button" className="settings-action analytics-move" onClick={() => onAction('x')}><kbd>x</kbd> {vent.send ? 'Keep here' : 'Send'}</button>}
+    </div>
   );
 }
 

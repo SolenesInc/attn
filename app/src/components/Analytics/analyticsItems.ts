@@ -1,4 +1,4 @@
-import type { Seed, Vent } from '../../types/generated';
+import { VentSend, type Seed, type Vent } from '../../types/generated';
 
 export const VIEWS = ['vents', 'all', 'bus', 'app', 'cli', 'sample'] as const;
 export type View = (typeof VIEWS)[number];
@@ -19,6 +19,22 @@ export type RecordItem =
 export type BurstItem = Extract<RecordItem, { kind: 'burst' }>;
 export type VentItem = { kind: 'vent'; key: string; vent: Vent; done: boolean };
 export type ListItem = VentItem | RecordItem;
+
+export interface VentDestination {
+  label: string;
+  note: string;
+  leaving: boolean;
+  movable: boolean;
+}
+
+export function ventDestination(vent: Vent, sharing: boolean): VentDestination {
+  const withdrawn = Boolean(vent.withdrawn_at);
+  const sent = vent.send === VentSend.Sent;
+  const queued = !withdrawn && vent.send === VentSend.Queued;
+  if (sent) return { label: "Sent to attn's maintainers", note: '', leaving: true, movable: false };
+  if (queued) return { label: sharing ? 'Sending with the next batch' : 'Sending once sharing is on', note: '', leaving: true, movable: true };
+  return { label: 'Kept on this machine', note: withdrawn ? 'withdrawn' : sharing ? '' : 'sharing is off', leaving: false, movable: sharing && !withdrawn };
+}
 
 export const isDone = (vent: Vent) => Boolean(vent.dismissed_at || vent.withdrawn_at || vent.planted_seed_id);
 

@@ -925,6 +925,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("sendAnalyticsStatusWSResult", func() { d.sendAnalyticsStatusWSResult(client, msg.(*protocol.GetAnalyticsStatusMessage)) })
 	case protocol.CmdClearAnalyticsRecords:
 		d.life.Go("sendClearAnalyticsRecordsWSResult", func() { d.sendClearAnalyticsRecordsWSResult(client, msg.(*protocol.ClearAnalyticsRecordsMessage)) })
+	case protocol.CmdForgetAnalyticsInstall:
+		d.life.Go("handleForgetAnalyticsInstall", func() { d.handleForgetAnalyticsInstall(client, msg.(*protocol.ForgetAnalyticsInstallMessage)) })
+	case protocol.CmdSetVentSend:
+		d.life.Go("handleSetVentSend", func() { d.handleSetVentSend(client, msg.(*protocol.SetVentSendMessage)) })
 	case protocol.CmdNotificationMarkRead:
 		notifMark := msg.(*protocol.NotificationMarkReadMessage)
 		d.life.Go("sendNotificationMarkReadWSResult", func() {

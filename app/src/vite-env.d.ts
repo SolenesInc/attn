@@ -25,3 +25,4 @@ interface ImportMeta {
 
 // The snapshot wire format this bundle decodes, defined by vite.config.ts.
 declare const __ATTN_SNAPSHOT_FORMAT__: string;
+declare const __ATTN_APP_VERSION__: string;

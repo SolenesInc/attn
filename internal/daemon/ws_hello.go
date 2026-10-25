@@ -22,6 +22,9 @@ func (d *Daemon) handleClientHello(client *wsClient, msg *protocol.ClientHelloMe
 			subtle.ConstantTimeCompare([]byte(requiredToken), []byte(providedToken)) == 1,
 	)
 	client.setIdentity(msg.ClientKind, msg.Version, msg.Capabilities)
+	if version, channel := protocol.Deref(msg.AppVersion), protocol.Deref(msg.AppChannel); version != "" || channel != "" {
+		d.appIdentity.Store(&appIdentity{Version: version, Channel: channel})
+	}
 	clientID := strings.TrimSpace(protocol.Deref(msg.ClientID))
 	client.setClientID(clientID)
 	client.updateReadLimit()

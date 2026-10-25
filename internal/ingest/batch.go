@@ -17,7 +17,7 @@ import (
 const (
 	maxBodyGzipBytes = 4 << 20
 	maxBodyBytes     = 16 << 20
-	maxLineBytes     = 64 << 10
+	maxLineBytes     = analytics.RecordLineLimit
 	maxBuildBytes    = 2 << 10
 	maxStreamBytes   = 32
 	maxNameBytes     = 256

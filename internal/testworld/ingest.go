@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -53,7 +56,7 @@ func (c ClickHouse) Query(t testing.TB, query string) string {
 
 func clickHouseQuery(t testing.TB, server, query string) string {
 	t.Helper()
-	resp, err := http.Post(server, "text/plain", strings.NewReader(query))
+	resp, err := oneShotHTTP.Post(server, "text/plain", strings.NewReader(query))
 	if err != nil {
 		t.Fatalf("clickhouse %q: %v", query, err)
 	}
@@ -65,8 +68,31 @@ func clickHouseQuery(t testing.TB, server, query string) string {
 	return strings.TrimSpace(string(body))
 }
 
+var oneShotHTTP = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+
 type Ingest struct {
 	URL string
+}
+
+func (i Ingest) Metric(t testing.TB, name string) int64 {
+	t.Helper()
+	resp, err := oneShotHTTP.Get(i.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	for _, line := range strings.Split(string(body), "\n") {
+		if value, ok := strings.CutPrefix(line, name+" "); ok {
+			n, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				t.Fatalf("%s: %v", line, err)
+			}
+			return n
+		}
+	}
+	t.Fatalf("/metrics has no %s:\n%s", name, body)
+	return 0
 }
 
 var ingestBinary = sync.OnceValues(func() (string, error) {
@@ -137,4 +163,138 @@ func randomHex(t testing.TB, n int) string {
 		t.Fatal(err)
 	}
 	return hex.EncodeToString(b)
+}
+
+type IngestLink struct {
+	URL      string
+	upstream *url.URL
+	mu       sync.Mutex
+	faults   []http.HandlerFunc
+	requests []string
+	cut      bool
+
+	registrationHold http.HandlerFunc
+}
+
+func (i Ingest) Link(t testing.TB) *IngestLink {
+	t.Helper()
+	upstream, err := url.Parse(i.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return startLink(t, upstream)
+}
+
+func UnreachableIngestLink(t testing.TB) *IngestLink {
+	t.Helper()
+	return startLink(t, nil)
+}
+
+func startLink(t testing.TB, upstream *url.URL) *IngestLink {
+	t.Helper()
+	link := &IngestLink{upstream: upstream}
+	server := httptest.NewServer(http.HandlerFunc(link.serve))
+	t.Cleanup(server.Close)
+	link.URL = server.URL
+	return link
+}
+
+func (l *IngestLink) DropNextEventsReply() {
+	l.injectEventsFault(func(_ http.ResponseWriter, r *http.Request) {
+		l.forward(httptest.NewRecorder(), r)
+		panic(http.ErrAbortHandler)
+	})
+}
+
+func (l *IngestLink) RefuseNextEvents(status int, body string) {
+	l.injectEventsFault(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, body)
+	})
+}
+
+func (l *IngestLink) HoldNextRegistration() (arrived <-chan struct{}, release func()) {
+	reached, released := make(chan struct{}), make(chan struct{})
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.registrationHold = func(w http.ResponseWriter, r *http.Request) {
+		close(reached)
+		select {
+		case <-released:
+			l.forward(w, r)
+		case <-r.Context().Done():
+		}
+	}
+	return reached, sync.OnceFunc(func() { close(released) })
+}
+
+func (l *IngestLink) HoldNextEventsReply() (stored <-chan struct{}, release func()) {
+	reached, released := make(chan struct{}), make(chan struct{})
+	l.injectEventsFault(func(w http.ResponseWriter, r *http.Request) {
+		reply := httptest.NewRecorder()
+		l.forward(reply, r)
+		close(reached)
+		select {
+		case <-released:
+		case <-r.Context().Done():
+			return
+		}
+		for key, values := range reply.Header() {
+			w.Header()[key] = values
+		}
+		w.WriteHeader(reply.Code)
+		_, _ = w.Write(reply.Body.Bytes())
+	})
+	return reached, sync.OnceFunc(func() { close(released) })
+}
+
+func (l *IngestLink) Cut() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.cut = true
+}
+
+func (l *IngestLink) Restore() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.cut = false
+}
+
+func (l *IngestLink) Requests() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]string(nil), l.requests...)
+}
+
+func (l *IngestLink) injectEventsFault(fault http.HandlerFunc) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.faults = append(l.faults, fault)
+}
+
+func (l *IngestLink) serve(w http.ResponseWriter, r *http.Request) {
+	l.mu.Lock()
+	l.requests = append(l.requests, r.Method+" "+r.URL.Path)
+	handle := l.forward
+	if l.cut {
+		handle = abort
+	} else if r.URL.Path == "/v1/installs" && l.registrationHold != nil {
+		handle, l.registrationHold = l.registrationHold, nil
+	} else if r.URL.Path == "/v1/events" && len(l.faults) > 0 {
+		handle, l.faults = l.faults[0], l.faults[1:]
+	}
+	l.mu.Unlock()
+	handle(w, r)
+}
+
+func abort(http.ResponseWriter, *http.Request) {
+	panic(http.ErrAbortHandler)
+}
+
+func (l *IngestLink) forward(w http.ResponseWriter, r *http.Request) {
+	if l.upstream == nil {
+		abort(w, r)
+	}
+	httputil.NewSingleHostReverseProxy(l.upstream).ServeHTTP(w, r)
 }

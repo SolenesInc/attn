@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import type { AnalyticsStatus } from '../../hooks/daemonAnalyticsEvents';
-import { formatBytes, recordCount } from './analyticsFormat';
+import { formatBytes, recordCount, sharingLine } from './analyticsFormat';
 
 export function useAnalyticsStatus() {
   const { sendGetAnalyticsStatus } = useDaemonApi();
@@ -13,42 +13,86 @@ export function useAnalyticsStatus() {
   return { status, reload };
 }
 
-export function AnalyticsMachine({ status, onDisableRecording, onClear }: {
+type Confirm = 'clear' | 'forget' | 'deleteServerCopy' | null;
+
+function Row({ title, copy, children }: { title: string; copy: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="settings-row-card">
+      <div>
+        <p className="settings-row-title">{title}</p>
+        <p className="settings-row-copy">{copy}</p>
+      </div>
+      {children ?? <span />}
+    </div>
+  );
+}
+
+function Confirmable({ asking, label, onYes, onDone, children }: {
+  asking: boolean;
+  label: string;
+  onYes: () => void;
+  onDone: () => void;
+  children: ReactNode;
+}) {
+  if (!asking) return children;
+  return (
+    <span className="analytics-confirm">
+      <button type="button" className="settings-action danger" onClick={() => { onDone(); onYes(); }}>{label}</button>
+      <button type="button" className="settings-action" onClick={onDone}>Keep</button>
+    </span>
+  );
+}
+
+function shareCopy(sharing: boolean, status: AnalyticsStatus | null, offeringDelete: boolean): ReactNode {
+  if (offeringDelete) return 'Sharing is off. Delete what the server already holds?';
+  if (!sharing) return status && `${recordCount(status.waiting)} would be sent.`;
+  if (status?.lastRefusal) return <span className="settings-warning">{status.lastRefusal}</span>;
+  return sharingLine(status);
+}
+
+const toggled = (on: boolean) => (on ? 'false' : 'true');
+
+export function AnalyticsMachine({ status, sharing, sendVents, onSetSetting, onDisableRecording, onClear, onForget }: {
   status: AnalyticsStatus | null;
+  sharing: boolean;
+  sendVents: boolean;
+  onSetSetting: (key: string, value: string) => void;
   onDisableRecording: () => void;
   onClear: () => void;
+  onForget: () => void;
 }) {
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [confirm, setConfirm] = useState<Confirm>(null);
+  const done = () => setConfirm(null);
+  const toggleSharing = () => {
+    onSetSetting('analytics.sharing_enabled', toggled(sharing));
+    setConfirm(sharing && status?.lastSentAt ? 'deleteServerCopy' : null);
+  };
   return (
     <div className="analytics-machine" data-testid="analytics-machine">
-      <div className="settings-row-card">
-        <div>
-          <p className="settings-row-title">Record on this machine</p>
-          <p className="settings-row-copy">Redacted bus facts, app actions, CLI outcomes and resource samples. New sessions get <code>attn vent</code>.</p>
-        </div>
+      <Row title="Record on this machine" copy={<>Redacted bus facts, app actions, CLI outcomes and resource samples. New sessions get <code>attn vent</code>.</>}>
         <button type="button" className="settings-action" onClick={onDisableRecording}>Disable</button>
-      </div>
-      <div className="settings-row-card">
-        <div>
-          <p className="settings-row-title">Kept on this machine for 7 days</p>
-          <p className="settings-row-copy">{status && `${recordCount(status.records)}, ${formatBytes(status.bytes)}. `}Dismissed and withdrawn vents are kept 30 days.</p>
-        </div>
-        <span />
-      </div>
-      <div className="settings-row-card">
-        <div>
-          <p className="settings-row-title">Clear the local record</p>
-          <p className="settings-row-copy">{status ? `Deletes ${recordCount(status.records)} (${formatBytes(status.bytes)}) and dismissed vents.` : 'Deletes every record and dismissed vents.'}</p>
-        </div>
-        {confirmClear ? (
-          <span className="analytics-confirm">
-            <button type="button" className="settings-action danger" onClick={() => { setConfirmClear(false); onClear(); }}>Clear</button>
-            <button type="button" className="settings-action" onClick={() => setConfirmClear(false)}>Keep</button>
-          </span>
-        ) : (
-          <button type="button" className="settings-action danger" onClick={() => setConfirmClear(true)}>Clear…</button>
-        )}
-      </div>
+      </Row>
+      <Row title="Share with attn's maintainers" copy={shareCopy(sharing, status, confirm === 'deleteServerCopy')}>
+        <Confirmable asking={confirm === 'deleteServerCopy'} label="Delete from server" onYes={onForget} onDone={done}>
+          <button type="button" className="settings-action" onClick={toggleSharing}>{sharing ? 'Disable' : 'Enable'}</button>
+        </Confirmable>
+      </Row>
+      {(sharing || sendVents) && (
+        <Row title="Send vents" copy={sendVents ? 'New vents are sent with their text.' : 'Vents stay here unless you send one.'}>
+          <button type="button" className="settings-action" onClick={() => onSetSetting('analytics.share_vents', toggled(sendVents))}>{sendVents ? 'Disable' : 'Enable'}</button>
+        </Row>
+      )}
+      <Row title="Kept on this machine for 7 days" copy={`${status ? `${recordCount(status.records)}, ${formatBytes(status.bytes)}. ` : ''}Dismissed and withdrawn vents are kept 30 days.`} />
+      <Row title="Forget this install" copy="Deletes this install's data on the server and starts a new install id.">
+        <Confirmable asking={confirm === 'forget'} label="Delete from server" onYes={onForget} onDone={done}>
+          <button type="button" className="settings-action danger" onClick={() => setConfirm('forget')}>Forget…</button>
+        </Confirmable>
+      </Row>
+      <Row title="Clear the local record" copy={status ? `Deletes ${recordCount(status.records)} (${formatBytes(status.bytes)}) and dismissed vents.` : 'Deletes every record and dismissed vents.'}>
+        <Confirmable asking={confirm === 'clear'} label="Clear" onYes={onClear} onDone={done}>
+          <button type="button" className="settings-action danger" onClick={() => setConfirm('clear')}>Clear…</button>
+        </Confirmable>
+      </Row>
     </div>
   );
 }

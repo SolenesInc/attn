@@ -2,6 +2,7 @@ import { handleCalloutDaemonEvent } from './daemonCalloutEvents';
 import { clearHarnesses } from './useHarnesses';
 import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
+import { normalizeInstallChannel } from '../utils/installChannel';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
@@ -1052,6 +1053,8 @@ export function useDaemonSocket({
           client_token: clientToken || undefined,
           browser_host_token: browserHostToken || undefined,
           profile_id: readSelectedProfileId(),
+          app_version: __ATTN_APP_VERSION__,
+          app_channel: normalizeInstallChannel(import.meta.env.VITE_INSTALL_CHANNEL),
         }),
       );
 
@@ -3607,6 +3610,12 @@ export function useDaemonSocket({
   const sendClearAnalyticsRecords = useCallback((): Promise<AnalyticsCleared> =>
     sendRequest('clear_analytics_records', {}, 'Clearing the analytics records timed out'), [sendRequest]);
 
+  const sendForgetAnalyticsInstall = useCallback((): Promise<true> =>
+    sendRequest('forget_analytics_install', {}, 'Forgetting this install timed out'), [sendRequest]);
+
+  const sendSetVentSend = useCallback((ventId: string, send: boolean): Promise<true> =>
+    sendRequest('set_vent_send', { vent_id: ventId, send }, 'Changing where the vent goes timed out'), [sendRequest]);
+
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
@@ -4326,6 +4335,8 @@ export function useDaemonSocket({
     sendUnplantVentSeed,
     sendGetAnalyticsStatus,
     sendClearAnalyticsRecords,
+    sendForgetAnalyticsInstall,
+    sendSetVentSend,
     sendAskAnswer,
     sendRestartSharedCodex,
     sendInstallCodexUpdate,
