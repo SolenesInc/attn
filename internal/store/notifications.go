@@ -148,16 +148,19 @@ func (s *Store) UnreadCriticalNotifications() (int, string, error) {
 	return n, title, nil
 }
 
-func (s *Store) DeleteNotification(id string) (bool, error) {
+func (s *Store) ResolveNotification(id string, now time.Time) (bool, error) {
 	if s.db == nil {
 		return false, fmt.Errorf("store: no database")
 	}
-	result, err := s.db.Exec(`DELETE FROM notifications WHERE id = ?`, id)
+	result, err := s.db.Exec(
+		`UPDATE notifications SET actions_json = '[]', read_at = CASE WHEN read_at = '' THEN ? ELSE read_at END
+		 WHERE id = ? AND (read_at = '' OR actions_json NOT IN ('[]', 'null'))`,
+		now.UTC().Format(sortableTimeFormat), id)
 	if err != nil {
-		return false, fmt.Errorf("store: delete notification %s: %w", id, err)
+		return false, fmt.Errorf("store: resolve notification %s: %w", id, err)
 	}
-	deleted, err := result.RowsAffected()
-	return deleted > 0, err
+	resolved, err := result.RowsAffected()
+	return resolved > 0, err
 }
 
 func (s *Store) MarkNotificationRead(id string, now time.Time) error {

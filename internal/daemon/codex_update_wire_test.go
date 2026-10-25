@@ -9,15 +9,15 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func codexUpdateOffers(app *testworld.Peer) []protocol.Notification {
+func codexUpdateNotifications(app *testworld.Peer) map[string]protocol.Notification {
 	app.T.Helper()
-	var offers []protocol.Notification
+	byTitle := map[string]protocol.Notification{}
 	for _, n := range listNotifications(app).Notifications {
 		if n.Kind == "codex_update_available" {
-			offers = append(offers, n)
+			byTitle[n.Title] = n
 		}
 	}
-	return offers
+	return byTitle
 }
 
 func TestANewerCodexIsOfferedWithAnInstallActionUntilItIsInstalled(t *testing.T) {
@@ -29,10 +29,12 @@ func TestANewerCodexIsOfferedWithAnInstallActionUntilItIsInstalled(t *testing.T)
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "", "0.162.1", "0.163.0", protocol.SharedCodexRestartNone)
 	})
-	offers := codexUpdateOffers(app)
 	install := []protocol.NotificationAction{{Kind: "install_codex_update", Label: "Install", TargetID: ""}}
-	if len(offers) != 1 || offers[0].Title != "Codex 0.163.0 is available" || !slices.Equal(offers[0].Actions, install) {
-		t.Fatalf("with Codex 0.162.1 installed and 0.163.0 out, the notifications offer %+v, want one for 0.163.0 with Install", offers)
+	offered := func(n protocol.Notification) bool { return n.ReadAt == "" && slices.Equal(n.Actions, install) }
+	resolved := func(n protocol.Notification) bool { return n.ReadAt != "" && len(n.Actions) == 0 }
+	notes := codexUpdateNotifications(app)
+	if len(notes) != 1 || !offered(notes["Codex 0.163.0 is available"]) {
+		t.Fatalf("with Codex 0.162.1 installed and 0.163.0 out, the notifications hold %+v, want one unread for 0.163.0 with Install", notes)
 	}
 
 	w.SetCodexLatest("0.164.0")
@@ -41,8 +43,9 @@ func TestANewerCodexIsOfferedWithAnInstallActionUntilItIsInstalled(t *testing.T)
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "", "0.162.1", "0.164.0", protocol.SharedCodexRestartNone)
 	})
-	if offers := codexUpdateOffers(app); len(offers) != 1 || offers[0].Title != "Codex 0.164.0 is available" {
-		t.Fatalf("after Codex 0.164.0 came out, the notifications offer %+v, want only 0.164.0", offers)
+	notes = codexUpdateNotifications(app)
+	if len(notes) != 2 || !resolved(notes["Codex 0.163.0 is available"]) || !offered(notes["Codex 0.164.0 is available"]) {
+		t.Fatalf("after Codex 0.164.0 came out, the notifications hold %+v, want 0.163.0 read without Install and 0.164.0 offered", notes)
 	}
 
 	w.SetCodexVersion("0.164.0")
@@ -50,7 +53,8 @@ func TestANewerCodexIsOfferedWithAnInstallActionUntilItIsInstalled(t *testing.T)
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "0.164.0", "0.164.0", "0.164.0", protocol.SharedCodexRestartNone)
 	})
-	if offers := codexUpdateOffers(app); len(offers) != 0 {
-		t.Fatalf("with Codex 0.164.0 installed, the notifications still offer %+v", offers)
+	notes = codexUpdateNotifications(app)
+	if len(notes) != 2 || !resolved(notes["Codex 0.163.0 is available"]) || !resolved(notes["Codex 0.164.0 is available"]) {
+		t.Fatalf("with Codex 0.164.0 installed, the notifications hold %+v, want both read without Install", notes)
 	}
 }

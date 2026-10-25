@@ -113,13 +113,13 @@ func (r *codexShared) offerUpdate() {
 		if n.Kind != notificationKindCodexUpdate || n.SourceID == offered {
 			continue
 		}
-		removed, err := r.d.store.DeleteNotification(n.ID)
+		resolved, err := r.d.store.ResolveNotification(n.ID, time.Now())
 		if err != nil {
 			r.d.logf("shared Codex: resolve the Codex %s update notification: %v", n.SourceID, err)
 			continue
 		}
-		if removed {
-			r.d.publishFact(FactNotificationResolved, n.ID, nil)
+		if resolved {
+			r.d.publishFact(FactNotificationRead, n.ID, nil)
 		}
 	}
 	if offered == "" {
