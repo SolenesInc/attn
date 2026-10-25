@@ -91,14 +91,18 @@ func (s *Store) UnsentAnalyticsRecords(limit int) ([]AnalyticsRow, error) {
 	return unsent, rows.Err()
 }
 
-func (s *Store) MarkAnalyticsSent(ids []int64, at time.Time) ([]Vent, error) {
+func (s *Store) MarkAnalyticsSent(records []analytics.Record, at time.Time) ([]Vent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return nil, nil
 	}
 	sentAt := at.UTC().Format(analyticsTimeLayout)
-	idList, err := json.Marshal(ids)
+	keys := make([][2]any, len(records))
+	for i, record := range records {
+		keys[i] = [2]any{record.Stream, record.Seq}
+	}
+	keyList, err := json.Marshal(keys)
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +112,8 @@ func (s *Store) MarkAnalyticsSent(ids []int64, at time.Time) ([]Vent, error) {
 	}
 	defer tx.Rollback()
 	rows, err := tx.Query(`UPDATE vents SET sent_at = ? WHERE sent_at IS NULL AND outbox_seq IN (
-		SELECT seq FROM analytics_outbox WHERE stream = ? AND sent_at IS NULL AND id IN (SELECT value FROM json_each(?))) RETURNING `+ventColumns,
-		sentAt, analytics.StreamVent, string(idList))
+		SELECT json_extract(value, '$[1]') FROM json_each(?) WHERE json_extract(value, '$[0]') = ?) RETURNING `+ventColumns,
+		sentAt, string(keyList), analytics.StreamVent)
 	if err != nil {
 		return nil, err
 	}
@@ -117,20 +121,21 @@ func (s *Store) MarkAnalyticsSent(ids []int64, at time.Time) ([]Vent, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec("UPDATE analytics_outbox SET sent_at = ? WHERE sent_at IS NULL AND id IN (SELECT value FROM json_each(?))", sentAt, string(idList)); err != nil {
+	if _, err := tx.Exec(`UPDATE analytics_outbox SET sent_at = ? WHERE sent_at IS NULL AND (stream, seq) IN (
+		SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?))`, sentAt, string(keyList)); err != nil {
 		return nil, err
 	}
 	return sent, tx.Commit()
 }
 
-func (s *Store) AnalyticsRecords(stream analytics.Stream, beforeID int64, limit int) (AnalyticsPage, error) {
+func (s *Store) AnalyticsRecords(profileID string, stream analytics.Stream, beforeID int64, limit int) (AnalyticsPage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
 		return AnalyticsPage{}, nil
 	}
-	query := "SELECT id, record FROM analytics_outbox WHERE 1 = 1"
-	var args []any
+	query := "SELECT id, record FROM analytics_outbox WHERE (stream != ? OR seq IN (SELECT outbox_seq FROM vents WHERE profile_id = ?))"
+	args := []any{analytics.StreamVent, profileID}
 	if stream != "" {
 		query += " AND stream = ?"
 		args = append(args, stream)

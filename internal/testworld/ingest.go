@@ -229,6 +229,26 @@ func (l *IngestLink) HoldNextRegistration() (arrived <-chan struct{}, release fu
 	return reached, sync.OnceFunc(func() { close(released) })
 }
 
+func (l *IngestLink) HoldNextEventsReply() (stored <-chan struct{}, release func()) {
+	reached, released := make(chan struct{}), make(chan struct{})
+	l.injectEventsFault(func(w http.ResponseWriter, r *http.Request) {
+		reply := httptest.NewRecorder()
+		l.forward(reply, r)
+		close(reached)
+		select {
+		case <-released:
+		case <-r.Context().Done():
+			return
+		}
+		for key, values := range reply.Header() {
+			w.Header()[key] = values
+		}
+		w.WriteHeader(reply.Code)
+		_, _ = w.Write(reply.Body.Bytes())
+	})
+	return reached, sync.OnceFunc(func() { close(released) })
+}
+
 func (l *IngestLink) Cut() {
 	l.mu.Lock()
 	defer l.mu.Unlock()

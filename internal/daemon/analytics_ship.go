@@ -137,9 +137,7 @@ func (d *Daemon) shipAnalyticsBatch(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	records := make([]analytics.Record, len(rows))
-	ids := make([]int64, len(rows))
 	for i, row := range rows {
-		ids[i] = row.ID
 		if err := json.Unmarshal([]byte(row.Record), &records[i]); err != nil {
 			return 0, fmt.Errorf("outbox row %d: %w", row.ID, err)
 		}
@@ -155,7 +153,7 @@ func (d *Daemon) shipAnalyticsBatch(ctx context.Context) (int, error) {
 		}
 		return 0, err
 	}
-	vents, err := d.store.MarkAnalyticsSent(ids, time.Now())
+	vents, err := d.store.MarkAnalyticsSent(records, time.Now())
 	if err != nil {
 		return 0, fmt.Errorf("attn-ingest accepted %d records, but marking them sent failed, so they will be sent again and counted as duplicates: %w", len(rows), err)
 	}

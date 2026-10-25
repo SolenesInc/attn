@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -202,6 +203,40 @@ func TestTurningSharingOffDuringTheFirstRegistrationSendsNothing(t *testing.T) {
 	})
 }
 
+func TestRecordsMadeAfterClearingDuringAnUploadAreStillSent(t *testing.T) {
+	clickHouse := testworld.NewClickHouse(t)
+	link := testworld.StartIngest(t, clickHouse).Link(t)
+	stored, release := link.HoldNextEventsReply()
+	defer release()
+	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {
+		app := w.App()
+		setSetting(t, app, "analytics.enabled", "true")
+		sendAppAction(app, "settings_section", map[string]any{"section": "analytics"})
+		setSetting(t, app, "analytics.sharing_enabled", "true")
+		<-stored
+		first := clickHouse.Query(t, "SELECT count() FROM events FINAL")
+		cleared := testworld.Request(app, protocol.ClearAnalyticsRecordsMessage{Cmd: protocol.CmdClearAnalyticsRecords, RequestID: "clear"},
+			protocol.EventClearAnalyticsRecordsResult, func(r protocol.ClearAnalyticsRecordsResultMessage) bool { return r.RequestID == "clear" })
+		if !cleared.Success {
+			t.Fatalf("clear: %s", protocol.Deref(cleared.Error))
+		}
+		sendAppAction(app, "settings_section", map[string]any{"section": "analytics"})
+		if status := analyticsStatus(app); status.Records == 0 {
+			t.Fatal("nothing was recorded after the clear")
+		}
+		release()
+		w.advance(uploadInterval)
+		status := analyticsStatus(app)
+		firstCount, err := strconv.Atoi(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want, got := strconv.Itoa(firstCount+status.Records-status.Waiting), clickHouse.Query(t, "SELECT count() FROM events FINAL"); got != want {
+			t.Fatalf("ClickHouse holds %s events, want the %d from before the clear plus the %d rows marked sent since", got, firstCount, status.Records-status.Waiting)
+		}
+	})
+}
+
 func TestWithAnalyticsOffNothingIsSentEvenWithSharingOnAndRecordsWaiting(t *testing.T) {
 	link := testworld.UnreachableIngestLink(t)
 	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {
@@ -278,6 +313,31 @@ func TestTheUserSendsOrKeepsOneVentAndAWithdrawnVentIsNeverSent(t *testing.T) {
 	}
 	if sent := setVentSend(app, vent.ID, true); sent.Success || !strings.Contains(protocol.Deref(sent.Error), "withdrawn") {
 		t.Fatalf("x send on a withdrawn vent = success %v, error %q; want refused as withdrawn", sent.Success, protocol.Deref(sent.Error))
+	}
+}
+
+func TestAQueuedVentsRecordIsListedOnlyInItsProfile(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "analytics.enabled", "true")
+	setSetting(t, app, "analytics.sharing_enabled", "true")
+	setSetting(t, app, "analytics.share_vents", "true")
+	side := w.AppOn(createProfile(app, "Side").ID)
+	session := w.Spawn(app, fakeagent.Claude, w.Path("home"))
+	w.Launched(session)
+	if _, err := w.Client().RecordVent(protocol.SessionID(session), "the home profile's private vent"); err != nil {
+		t.Fatalf("vent: %v", err)
+	}
+	if got := streamOutbox(t, app, analytics.StreamVent); len(got) != 1 {
+		t.Fatalf("the vent's own profile lists %d vent records, want 1", len(got))
+	}
+	if got := streamOutbox(t, side, analytics.StreamVent); len(got) != 0 {
+		t.Fatalf("another profile lists the vent records %+v", got)
+	}
+	for _, row := range listAnalyticsRecords(side, protocol.ListAnalyticsRecordsMessage{Limit: 1000}).Records {
+		if strings.Contains(row.Record, "private vent") {
+			t.Fatalf("another profile's All records shows %s", row.Record)
+		}
 	}
 }
 

@@ -106,7 +106,7 @@ const analyticsPageLimit = 1000
 
 func (d *Daemon) sendAnalyticsRecordsWSResult(client *wsClient, msg *protocol.ListAnalyticsRecordsMessage) {
 	result := protocol.ListAnalyticsRecordsResultMessage{Event: protocol.EventListAnalyticsRecordsResult, RequestID: protocol.Deref(msg.RequestID)}
-	page, err := d.analyticsRecords(msg)
+	page, err := d.analyticsRecords(msg, client.selectedProfile())
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
@@ -159,7 +159,7 @@ func (d *Daemon) sendClearAnalyticsRecordsWSResult(client *wsClient, msg *protoc
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) analyticsRecords(msg *protocol.ListAnalyticsRecordsMessage) (store.AnalyticsPage, error) {
+func (d *Daemon) analyticsRecords(msg *protocol.ListAnalyticsRecordsMessage, profileID string) (store.AnalyticsPage, error) {
 	if msg.Limit < 1 || msg.Limit > analyticsPageLimit {
 		return store.AnalyticsPage{}, fmt.Errorf("limit must be between 1 and %d, got %d", analyticsPageLimit, msg.Limit)
 	}
@@ -169,5 +169,5 @@ func (d *Daemon) analyticsRecords(msg *protocol.ListAnalyticsRecordsMessage) (st
 	default:
 		return store.AnalyticsPage{}, fmt.Errorf("unknown analytics stream %q: use bus, app, cli, sample or vent", stream)
 	}
-	return d.store.AnalyticsRecords(stream, int64(protocol.Deref(msg.BeforeID)), msg.Limit)
+	return d.store.AnalyticsRecords(profileID, stream, int64(protocol.Deref(msg.BeforeID)), msg.Limit)
 }

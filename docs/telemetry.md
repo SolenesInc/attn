@@ -61,7 +61,8 @@ nothing:
 ```
 
 The session title, machine, repository, worktree, stake seed and transcript
-stay on the machine.
+stay on the machine. Settings › Analytics lists a vent record only in the
+profile the vent belongs to.
 
 ## What is sent
 
