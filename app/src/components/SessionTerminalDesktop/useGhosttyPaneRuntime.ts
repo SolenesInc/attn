@@ -23,6 +23,7 @@ export interface PaneRuntimeSpec {
   testSessionId?: string;
   state?: string;
   offline?: boolean;
+  canAttach?: boolean;
   state_reason?: string;
   terminalExit?: import('../../types/generated').TerminalExit;
 }
@@ -119,7 +120,7 @@ export function useGhosttyPaneRuntime(
     const terminal = handlesRef.current.get(paneId);
     if (!terminal) return;
     const pane = paneFor(paneId);
-    if (pane?.offline) return;
+    if (pane?.canAttach === false) return;
     if (pane) {
       readyRuntimesRef.current.add(pane.runtimeId);
     }
@@ -205,7 +206,7 @@ export function useGhosttyPaneRuntime(
       paneId: pane.paneId,
       runtimeId: pane.runtimeId,
       onEvent: (event) => deliverEvent(pane.paneId, event),
-      isLive: () => terminalsLiveRef.current && !paneFor(pane.paneId)?.offline && handlesRef.current.has(pane.paneId),
+      isLive: () => terminalsLiveRef.current && paneFor(pane.paneId)?.canAttach !== false && handlesRef.current.has(pane.paneId),
     }));
     return () => {
       disposers.forEach((dispose) => dispose());
@@ -267,11 +268,11 @@ export function useGhosttyPaneRuntime(
   const handleTerminalReady = useCallback((paneId: string) => async (terminal: GhosttyTerminalHandle) => {
     handlesRef.current.set(paneId, terminal);
     const pane = paneFor(paneId);
-    if (!pane || pane.offline || !terminalsLiveRef.current) return;
+    if (!pane || pane.canAttach === false || !terminalsLiveRef.current) return;
     const terminalIsCurrent = () => (
       terminalsLiveRef.current
       && panesRef.current.some((entry) => (
-        entry.paneId === paneId && entry.runtimeId === pane.runtimeId && !entry.offline
+        entry.paneId === paneId && entry.runtimeId === pane.runtimeId && entry.canAttach !== false
       ))
       && handlesRef.current.get(paneId) === terminal
     );
@@ -350,7 +351,7 @@ export function useGhosttyPaneRuntime(
       attachedRuntimesRef.current.add(pane.runtimeId);
       flushPendingResize(pane.runtimeId);
     } catch (error) {
-      if (attachGenerationRef.current.get(pane.runtimeId) === attachGeneration && !paneFor(paneId)?.offline) {
+      if (attachGenerationRef.current.get(pane.runtimeId) === attachGeneration && paneFor(paneId)?.canAttach !== false) {
         if (
           !attachedRuntimesRef.current.has(pane.runtimeId)
           && runtimeAttachHolds.release(pane.runtimeId, attachHolderRef.current) === 0
@@ -367,12 +368,12 @@ export function useGhosttyPaneRuntime(
     }
   }, [flushPendingResize, paneFor]);
 
-  const offlineRuntimesRef = useRef(new Set<string>());
+  const unavailableRuntimesRef = useRef(new Set<string>());
   useEffect(() => {
-    const previous = offlineRuntimesRef.current;
-    offlineRuntimesRef.current = new Set(panes.filter((pane) => pane.offline).map((pane) => pane.runtimeId));
+    const previous = unavailableRuntimesRef.current;
+    unavailableRuntimesRef.current = new Set(panes.filter((pane) => pane.canAttach === false).map((pane) => pane.runtimeId));
     for (const pane of panes) {
-      if (pane.offline) {
+      if (pane.canAttach === false) {
         if (!previous.has(pane.runtimeId)) cancelRuntimeConnection(pane.runtimeId);
       } else if (previous.has(pane.runtimeId) && terminalsLive) {
         const terminal = handlesRef.current.get(pane.paneId);

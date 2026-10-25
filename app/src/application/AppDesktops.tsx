@@ -116,6 +116,7 @@ export function AppDesktops() {
             host: entry.host,
             hostName: entry.hostName,
             offline: entry.offline,
+            canAttach: entry.canAttach,
             state: entry.state,
             autoSettleFiresAt: entry.autoSettleFiresAt,
             autoSettleHeld: entry.autoSettleHeld,

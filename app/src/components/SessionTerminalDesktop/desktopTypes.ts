@@ -61,6 +61,7 @@ export interface SessionTerminalDesktopProps {
     host?: string;
     hostName?: string;
     offline?: boolean;
+    canAttach?: boolean;
     state?: UISessionState;
     state_reason?: string;
     usage?: SessionUsage;

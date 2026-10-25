@@ -34,6 +34,7 @@ export function useAppSessions({
       host,
       hostName: outpost?.name ?? host,
       offline: Boolean(host && (outpost?.state === 'lost' || outpost?.state === 'refused')),
+      canAttach: !host || outpost?.state === 'connected' || outpost?.state === 'stalled',
       ...sessionAttentionFields(daemonSession),
       state: paneState || normalizeSessionState(rawState),
       branch: daemonSession?.branch ?? s.branch,

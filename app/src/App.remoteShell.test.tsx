@@ -98,6 +98,29 @@ describe('Remote shells in the app', () => {
     expect(within(tile()).queryByText(/unreachable/)).toBeNull();
   });
 
+  it('waits to attach a tile mounted while connecting, then attaches when connected', async () => {
+    const { daemon } = await setup('connecting');
+    await openSession(daemon, 'remote');
+    expect(daemon.sentOf('attach_session')).toEqual([]);
+    expect(tile()).not.toHaveAttribute('data-offline', 'true');
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
+    expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['remote']);
+    await gesture(daemon, () => fireEvent.keyDown(within(tile()).getByRole('textbox', { name: 'Terminal input' }), { key: 'z', code: 'KeyZ' }));
+    expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);
+  });
+
+  it('waits through re-pair connecting before attaching an unreachable terminal again', async () => {
+    const { daemon } = await setup();
+    await openSession(daemon, 'remote');
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state: 'refused' }] }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state: 'connecting' }] }));
+    expect(tile()).not.toHaveAttribute('data-offline', 'true');
+    expect(daemon.sentOf('attach_session')).toHaveLength(1);
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
+    expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['remote', 'remote']);
+  });
+
   it('ignores a pending attach completed while offline, then attaches once on recovery', async () => {
     const { daemon } = await setup();
     daemon.on('attach_session', () => undefined);
