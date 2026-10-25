@@ -441,6 +441,10 @@ func TestACodexUpdateInstalledFromTheAppRunsInATileAndSharedCodexMovesToIt(t *te
 	if failed := install(); failed.Success || !strings.Contains(protocol.Deref(failed.Error), "exited 1") {
 		t.Fatalf("an update that exits 1 answered %+v, want a failure naming its exit code", failed)
 	}
+	tile := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && e.Session.Agent == protocol.SessionAgentShell && e.Session.Label == "Codex update"
+	})
+	app.AwaitScreen(string(tile.Session.ID), "Could not detect how Codex was installed")
 	s.FailCodexUpdate("")
 	if installed := install(); !installed.Success || installed.SharedCodex == nil || protocol.Deref(installed.SharedCodex.InstalledVersion) != "0.163.0" {
 		t.Fatalf("install the update answered %+v, want success carrying the installed 0.163.0", installed)
