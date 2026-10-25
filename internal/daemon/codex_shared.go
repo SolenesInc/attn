@@ -196,7 +196,7 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if _, err := r.ensureServer(r.d.life.Context(), profile, installed); err != nil {
 		return err
 	}
-	if !opts.UnattendedLaunch.IsZero() {
+	if !opts.UnattendedLaunch.IsZero() || r.d.store.HasRecentLocation(opts.CWD) {
 		r.trustIn(opts.ID, opts.CWD)
 	}
 	opts.CodexRemote = remote

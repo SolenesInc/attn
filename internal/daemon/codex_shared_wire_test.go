@@ -283,6 +283,28 @@ func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *test
 	}
 }
 
+func TestSharedCodexAsksToTrustAFolderOnlyInARepositoryAttnHasNotWorkedIn(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	known, unknown := newRepo(t, "shop"), newRepo(t, "warehouse")
+	worktree := filepath.Join(filepath.Dir(known), "shop--discount")
+	runGit(t, known, "worktree", "add", "-b", "discount", worktree)
+	w.LeaveCodexFolderTrustUnanswered(worktree)
+	w.LeaveCodexFolderTrustUnanswered(unknown)
+
+	workIn(t, w, app, known)
+	codex := w.Launched(w.Spawn(app, fakeagent.Codex, worktree))
+	if codex.ConversationID == "" {
+		t.Errorf("the Codex in %s started no conversation, want it started without asking to trust its folder", worktree)
+	}
+	if got := w.CodexFolderTrust(worktree); got != "" {
+		t.Errorf("Codex saves %s as %q, want attn to write nothing to the Codex config", worktree, got)
+	}
+
+	app.AwaitScreen(w.Spawn(app, fakeagent.Codex, unknown), "Trust this folder?")
+}
+
 func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
 	for _, saved := range []string{"", "untrusted"} {
 		t.Run("saved trust "+strconv.Quote(saved), func(t *testing.T) {

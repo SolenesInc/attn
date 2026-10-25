@@ -1938,6 +1938,23 @@ func (s *Store) UpsertRecentLocation(path string) {
 		path, now)
 }
 
+func (s *Store) HasRecentLocation(path string) bool {
+	path = resolveRecentLocationPath(path)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		return s.recentLocations[path] != nil
+	}
+
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM recent_locations WHERE path = ?`, path).Scan(&count); err != nil {
+		return false
+	}
+	return count > 0
+}
+
 func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {
 	if limit <= 0 {
 		limit = 20

@@ -391,6 +391,19 @@ Read in the source at openai/codex rust-v0.160.0:
   the conversation's sandbox can write there
   (`app-server/src/request_processors/thread_processor.rs`).
 
+Read in the source at openai/codex rust-v0.164.0:
+
+- The app-server and a plain TUI take a folder's trust from that folder, else
+  from the main repository of its worktree, and from no other parent folder
+  (`config/src/config_toml.rs`). A `--remote` TUI on any socket but Codex's own
+  daemon socket looks only at the exact folder in the `config/read` reply, so
+  it asks in every new worktree of a trusted repository. It doesn't ask when
+  the reply has an enabled project layer, a `.codex/` folder the server
+  trusts through the repository (`tui/src/config_update.rs`,
+  `tui/src/lib.rs`).
+- `thread/start` saves the trust on the main repository of a worktree, not on
+  the worktree (`app-server/src/request_processors/thread_processor.rs`).
+
 Read in the source at openai/codex 1ffa95e:
 
 - `active` carries `waitingOnUserInput` while a turn waits on the user's
