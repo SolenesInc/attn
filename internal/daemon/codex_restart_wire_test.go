@@ -248,3 +248,20 @@ func TestARefusedRestartClearsOnceTheAppServerRunsTheInstalledCodex(t *testing.T
 		return restartState(s, "0.163.0", "0.163.0", protocol.SharedCodexRestartNone) && s.Error == nil
 	})
 }
+
+func TestARestartNamesEachSessionOnceByWhatMostNeedsTheUser(t *testing.T) {
+	w, app, session, codex := sharedCodexOn(t, "0.162.1")
+	app.TypeLine(session, "plan the release")
+	codex.Prompted()
+	server := w.CodexServer()
+	subagent := server.SpawnSubagent(codex.ConversationID)
+	server.Work(subagent)
+	server.AskQuestion(subagent)
+
+	w.SetCodexVersion("0.163.0")
+	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("cart")))
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
+			slices.Equal(s.Blockers, blockedBy(session, protocol.SharedCodexBlockerReasonQuestion))
+	})
+}

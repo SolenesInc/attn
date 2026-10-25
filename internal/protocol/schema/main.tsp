@@ -3751,7 +3751,9 @@ enum SharedCodexBlockerReason {
   starting,
 }
 
-// A session that keeps a restart waiting.
+// A session that keeps a restart waiting, once per session: when several of
+// its conversations do, the reason that most needs the user (a question, an
+// approval, a starting terminal, then a running turn).
 model SharedCodexBlocker {
   session_id: SessionID;
   reason: SharedCodexBlockerReason;
