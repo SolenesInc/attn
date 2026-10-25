@@ -214,7 +214,6 @@ html, body, #root {
   height: 100%;
   width: 100%;
   display: flex;
-  flex-direction: column;
   background: var(--color-bg-app);
   position: relative;
   overflow: clip;
@@ -264,6 +263,13 @@ html, body, #root {
 
 ::-webkit-scrollbar-corner {
   background: transparent;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-frame {

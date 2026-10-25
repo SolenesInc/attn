@@ -87,19 +87,6 @@ export function AppSurface() {
               style={{ outline: 'none' }}
               onPointerDownCapture={handleAppPointerDownCapture}
             >
-              <BannerStack
-                connectionError={connectionError}
-                warnings={warnings}
-                updateAvailableVersion={updateAvailableVersion}
-                onOpenWarningUrl={(url) => {
-                  openUrl(url).catch((err) => {
-                    console.error('[App] Failed to open warning link:', err);
-                  });
-                }}
-                onClearWarnings={clearWarnings}
-                onOpenLatestRelease={onOpenLatestRelease}
-                onDismissLatestRelease={onDismissLatestRelease}
-              />
               {openPRLauncherJob && (
                 <OpenPRLauncherProgress
                   repo={openPRLauncherJob.pr.repo}
@@ -108,19 +95,34 @@ export function AppSurface() {
                   step={openPRLauncherJob.progress.step}
                 />
               )}
-              <div className="app-frame">
-                <AppSidebar />
-                <div className="view-stack">
-                  {/* Always rendered; shown/hidden via z-index. */}
-                  <AppDashboard />
-                  {/* Always rendered, to keep terminals alive. */}
-                  <div className={`view-container ${view === 'session' ? 'visible' : 'hidden'}`}>
-                    <div className="terminal-pane">
-                      <AppDesktops />
+              <div className="app-main">
+                <BannerStack
+                  connectionError={connectionError}
+                  warnings={warnings}
+                  updateAvailableVersion={updateAvailableVersion}
+                  onOpenWarningUrl={(url) => {
+                    openUrl(url).catch((err) => {
+                      console.error('[App] Failed to open warning link:', err);
+                    });
+                  }}
+                  onClearWarnings={clearWarnings}
+                  onOpenLatestRelease={onOpenLatestRelease}
+                  onDismissLatestRelease={onDismissLatestRelease}
+                />
+                <div className="app-frame">
+                  <AppSidebar />
+                  <div className="view-stack">
+                    {/* Always rendered; shown/hidden via z-index. */}
+                    <AppDashboard />
+                    {/* Always rendered, to keep terminals alive. */}
+                    <div className={`view-container ${view === 'session' ? 'visible' : 'hidden'}`}>
+                      <div className="terminal-pane">
+                        <AppDesktops />
+                      </div>
                     </div>
+                    <AppDock />
+                    <AppCrewPanel />
                   </div>
-                  <AppDock />
-                  <AppCrewPanel />
                 </div>
               </div>
 
