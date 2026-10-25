@@ -3802,6 +3802,45 @@ model RestartSharedCodexResultMessage {
   error?: string;
 }
 
+// Opens a shell tile on the desktop, in the connection's profile, and runs
+// `update` there with the Codex executable shared terminals launch. The
+// result arrives once that command finishes or the tile closes. Either way
+// attn then reads the installed Codex again, so shared Codex restarts on a
+// new one once its agents are idle.
+model InstallCodexUpdateMessage {
+  cmd: "install_codex_update";
+  request_id?: string;
+  desktop_id: string;
+}
+
+// success: Codex's update exited 0. error: why it didn't, such as its exit
+// code, the tile closing first, or a shell that never showed its prompt.
+model InstallCodexUpdateResultMessage {
+  event: "install_codex_update_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+}
+
+// attn codex status. With refresh, attn first reads the installed Codex again,
+// as attn codex update asks after running Codex's update.
+model CodexStatusMessage {
+  cmd: "codex_status";
+  caller_session_id?: SessionID;
+  // A profile name or id. Absent: the caller's profile, else the only one.
+  profile?: string;
+  refresh?: boolean;
+}
+
+model CodexStatusResult {
+  profile_id: string;
+  profile_name: string;
+  // The Codex executable shared terminals launch.
+  executable: string;
+  // Absent while Shared Codex is off.
+  shared_codex?: SharedCodexState;
+}
+
 // The profile's shared Codex versions. shared_codex is absent while Shared
 // Codex is off.
 model SharedCodexChangedMessage {
@@ -6336,6 +6375,7 @@ model Response {
   session_reopen_result?: SessionReopenResult;
   terminal_entries?: TerminalEntry[];
   terminal_open_result?: TerminalOpenResult;
+  codex_status_result?: CodexStatusResult;
   terminal_input_result?: TerminalInputResult;
   terminal_read_result?: TerminalReadResult;
   terminal_wait_result?: TerminalWaitResult;
@@ -7771,6 +7811,7 @@ alias DaemonEvent =
   | VentsUpdatedMessage
   | SharedCodexChangedMessage
   | RestartSharedCodexResultMessage
+  | InstallCodexUpdateResultMessage
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage
   | MarkdownAnnotationsSaveResultMessage

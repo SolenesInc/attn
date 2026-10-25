@@ -227,6 +227,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdKillSession:                   decodeInto[KillSessionMessage],
 	CmdReloadSession:                 decodeInto[ReloadSessionMessage],
 	CmdRestartSharedCodex:            decodeInto[RestartSharedCodexMessage],
+	CmdInstallCodexUpdate:            decodeInto[InstallCodexUpdateMessage],
+	CmdCodexStatus:                   decodeInto[CodexStatusMessage],
 	CmdSetClientPresence:             decodeInto[SetClientPresenceMessage],
 	CmdActivityStatus:                decodeInto[ActivityStatusMessage],
 	CmdClearSessionActivity:          decodeInto[ClearSessionActivityMessage],

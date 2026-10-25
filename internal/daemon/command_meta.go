@@ -168,6 +168,8 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdKillSession:                   commandMetadata(true, true),
 	protocol.CmdReloadSession:                 commandMetadata(true, true),
 	protocol.CmdRestartSharedCodex:            commandMetadata(true, true),
+	protocol.CmdInstallCodexUpdate:            commandMetadata(true, true),
+	protocol.CmdCodexStatus:                   commandMetadata(false, true),
 	protocol.CmdProfileCreate:                 commandMetadata(false, true),
 	protocol.CmdProfileRename:                 commandMetadata(false, true),
 	protocol.CmdProfileDelete:                 commandMetadata(false, true),
