@@ -1,9 +1,8 @@
-import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { useEffect, useState } from 'react';
 import type { SeedArtifact, SeedArtifactReference } from '../types/generated';
-import { useOptionalDaemonApi, type DaemonApi } from '../contexts/DaemonApiContext';
-import { artifactKey } from './seedArtifacts';
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
+import { artifactKey, openSeedArtifact } from './seedArtifacts';
 import { isSafeLocalMarkdownTarget } from './MarkdownReader/markdownLinks';
 import './SeedArtifactRows.css';
 
@@ -99,13 +98,6 @@ function useMissingPaths(
   }, [check, pathsKey]);
 
   return missing;
-}
-
-export async function openSeedArtifact(daemon: DaemonApi | null, seedId: string, artifact: SeedArtifact, reveal: boolean) {
-  if (!daemon) throw new Error('The daemon is not connected');
-  const target = await daemon.sendSeedArtifactTarget(seedId, artifact.relative_target, 'artifact');
-  if (!target.path) throw new Error('The daemon returned no artifact path');
-  await invoke('open_safe_seed_artifact_target', { path: target.path, reveal });
 }
 
 function managedKey(artifact: SeedArtifact): string {

@@ -28,6 +28,10 @@ export function checkTally(seed: Seed): SeedCheckTally | undefined {
   return tallyOfChecks(seed.checks ?? []);
 }
 
+export function hasChecks(seed: Seed): boolean {
+  return (seed.checks?.length ?? 0) + (seed.shared_checks?.length ?? 0) > 0;
+}
+
 export function tallyWords(tally: SeedCheckTally): string {
   const parts = [`✓${tally.confirmed}/${tally.total}`];
   if (tally.reported) parts.push(`${tally.reported} to judge`);

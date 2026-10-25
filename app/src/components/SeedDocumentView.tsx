@@ -8,8 +8,8 @@ import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
-import { CheckTally, CheckTallyLink, hasChecks, SeedChecks } from './SeedChecks';
-import { checkTally } from './seedCheckPresentation';
+import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
+import { checkTally, hasChecks } from './seedCheckPresentation';
 import type { SeedDocumentNote } from './seedArtifacts';
 import './SeedDocumentView.css';
 

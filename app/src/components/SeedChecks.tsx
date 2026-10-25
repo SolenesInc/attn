@@ -6,8 +6,7 @@ import type { SeedCheckVerb } from '../hooks/useDaemonSocket';
 import type { Seed, SeedArtifact, SeedArtifactReference } from '../types/generated';
 import { GardenCompose } from './GardenCompose';
 import { isSafeLocalMarkdownTarget } from './MarkdownReader/markdownLinks';
-import { openSeedArtifact } from './SeedArtifactRows';
-import { artifactLabel } from './seedArtifacts';
+import { artifactLabel, openSeedArtifact } from './seedArtifacts';
 import {
   checkAuthor,
   checkState,
@@ -38,10 +37,6 @@ export interface SeedChecksProps {
   onCheckFocused?: () => void;
   sectionRef?: RefObject<HTMLElement | null>;
   className?: string;
-}
-
-export function hasChecks(seed: Seed): boolean {
-  return (seed.checks?.length ?? 0) + (seed.shared_checks?.length ?? 0) > 0;
 }
 
 export function CheckTallyLink({ tally, target }: { tally: SeedCheckTally; target: RefObject<HTMLElement | null> }) {
