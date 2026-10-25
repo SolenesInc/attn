@@ -138,12 +138,19 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
 	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(host) })
 	terminal := protocol.TerminalID(app.Terminal(id))
+	reattach := func() {
+		result := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+		if !result.Success {
+			t.Fatalf("reattach after reconnect: %s", protocol.Deref(result.Error))
+		}
+	}
 	app.TypeLine(id, "echo before-$((1+1))")
 	app.AwaitScreen(id, "before-2")
 	remote.Signal(syscall.SIGSTOP)
 	defer remote.Signal(syscall.SIGCONT)
 	outpostState(app, "outpost", protocol.OutpostStateStalled)
 	outpostState(app, "outpost", protocol.OutpostStateLost)
+	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	for _, command := range []any{
 		protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "echo forbidden\r"},
 		protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: terminal, Cols: 90, Rows: 30},
@@ -174,16 +181,17 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	}
 	remote.Signal(syscall.SIGCONT)
 	outpostState(app, "outpost", protocol.OutpostStateConnected)
-	app = home.App()
+	reattach()
 	app.TypeLine(id, "echo reconnected-$((2+2))")
 	app.AwaitScreen(id, "reconnected-4")
 	mark := len(app.Log())
 	remote.Stop()
 	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark = len(app.Log())
 	remote.Start()
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
-	app = home.App()
+	reattach()
 	app.TypeLine(id, "echo outpost-restart-$((3+3))")
 	app.AwaitScreen(id, "outpost-restart-6")
 	home.Stop()
