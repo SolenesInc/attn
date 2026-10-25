@@ -168,11 +168,15 @@ func TestUserAndPeerMessagesShareInboxWithoutChangingAuthorship(t *testing.T) {
 	cli, app := w.Client(), w.TrustedApp()
 	registerSessions(t, w, cli, "chief", "peer")
 	setChiefOfStaff(app, "chief", true)
-	sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "user request")
+	capture := sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "user request")
 	sendAgentMessage(t, cli, "peer", "chief", "peer suggestion")
 	batch := readInbox(t, cli, "chief", 0)
-	if len(batch.Items) != 2 || batch.Items[0].Kind != "quick_capture" || batch.Items[0].SenderSessionID != nil || batch.Items[1].Kind != "peer_message" || protocol.Deref(batch.Items[1].SenderSessionID) != "peer" {
-		t.Fatalf("mixed authorship %+v", batch)
+	if len(batch.Items) != 1 || batch.Items[0].Kind != "peer_message" || protocol.Deref(batch.Items[0].SenderSessionID) != "peer" || batch.Remaining != 0 {
+		t.Fatalf("the inbox read %+v, want only the peer message, attributed to its sender, with the quick capture left for the ring", batch)
+	}
+	_, item, err := cli.AgentInboxEntry(capture.CaptureID, "chief")
+	if err != nil || item == nil || item.Kind != "quick_capture" || item.SenderSessionID != nil || item.Content != "user request" {
+		t.Fatalf("the quick capture reads %+v (%v), want the user's words with no sender session", item, err)
 	}
 }
 
@@ -296,11 +300,11 @@ func TestQuickCaptureWaitsForTheNextChief(t *testing.T) {
 	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt != nil {
 		t.Fatal("inspection marked quick capture read")
 	}
-	items := readInbox(t, cli, "chief", 0).Items
-	if len(items) != 1 || items[0].Kind != "quick_capture" || items[0].Content != msg.Content || items[0].SenderSessionID != nil || items[0].Address != "chief:"+app.SelectedProfile() {
-		t.Fatalf("user attribution: %+v", items)
+	_, item, err := cli.AgentInboxEntry(msg.CaptureID, "chief")
+	if err != nil || item == nil || item.Kind != "quick_capture" || item.Content != msg.Content || item.SenderSessionID != nil || item.Address != "chief:"+app.SelectedProfile() {
+		t.Fatalf("user attribution: %+v %v", item, err)
 	}
-	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt == nil || *r.ReadAt != items[0].ReadAt {
+	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt == nil || *r.ReadAt != item.ReadAt {
 		t.Fatalf("history read receipt: %+v", r)
 	}
 	if replay, err := app.QuickCapture(msg); err != nil || replay.Record.ID != msg.CaptureID || replay.Record.ReadAt == nil {
@@ -317,20 +321,20 @@ func TestQuickCaptureWaitsForTheNextChief(t *testing.T) {
 	}
 }
 
-func TestQuickCaptureDeliveryWakeIsChargedOnce(t *testing.T) {
+func TestQuickCapturesWakeAMemberWithoutSpendingItsWakeLimit(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.TrustedApp(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
 		setSetting(t, app, "crew.autosleep_enabled", "false")
-		setSetting(t, app, "crew.wake_limit", "1")
+		setSetting(t, app, "crew.wake_limit", "0")
 		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("trellis")}
 		first := sendQuickCapture(t, app, mailbox, "first user request")
 		synctest.Wait()
 		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
 		if dayID == "" {
-			t.Fatal("quick capture did not wake the member")
+			t.Fatal("a quick capture did not wake the member under crew.wake_limit=0")
 		}
 		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(e protocol.BackgroundLaunchMessage) bool { return e.SessionID == dayID })
 		if arrival.RequestedBy != "a quick capture" {
@@ -356,13 +360,50 @@ func TestQuickCaptureDeliveryWakeIsChargedOnce(t *testing.T) {
 		if _, err := cli.CrewHandoff(dayID, "finished the quick captures", false, protocol.CrewDayCloseSleep); err != nil {
 			t.Fatal(err)
 		}
-		third := sendQuickCapture(t, app, mailbox, "wait for the next manual wake")
-		w.advance(15 * time.Minute)
-		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
-			t.Fatalf("quick capture bypassed charged wake_limit=1: %s", *binding)
+
+		third := sendQuickCapture(t, app, mailbox, "one more thing")
+		synctest.Wait()
+		nextID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		if nextID == "" || nextID == dayID {
+			t.Fatalf("a quick capture right after the member slept woke %q, want a new session at once", nextID)
 		}
-		if r := quickCaptureRecord(t, app, third.CaptureID); r.ReadAt != nil || r.Content != third.Content {
-			t.Fatalf("wake limit lost quick capture: %+v", r)
+		next := w.bootBubbleClaude(t, string(nextID))
+		next.reply("Ready. <!-- attn:state=idle -->")
+		if got := next.promptsContaining(third.Content); got != 1 {
+			t.Fatalf("the second wake typed the quick capture %d times, want once: %q", got, next.prompts())
+		}
+	})
+}
+
+func TestAQuickCaptureOutlastsFailedWakesUntilTheMemberIsUp(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		app, cli := w.TrustedApp(), w.Client()
+		setSetting(t, app, "crew.heartbeat_enabled", "false")
+		setSetting(t, app, "crew.autosleep_enabled", "false")
+		workDir := w.Path("trellis-work")
+		if err := os.MkdirAll(workDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		setCrew(t, cli, "trellis", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir)})
+		if err := os.Remove(workDir); err != nil {
+			t.Fatal(err)
+		}
+		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("trellis")}
+		sent := sendQuickCapture(t, app, mailbox, "look at this when you can")
+		w.advance(30 * time.Minute)
+		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
+			t.Fatalf("a member whose launch directory is gone was woken in %s", *binding)
+		}
+
+		if err := os.MkdirAll(workDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		day.reply("Ready. <!-- attn:state=idle -->")
+		if got := day.promptsContaining(sent.Content); got != 1 {
+			t.Fatalf("after the failed wakes the manual wake typed the quick capture %d times, want once: %q", got, day.prompts())
 		}
 	})
 }
@@ -406,9 +447,6 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		if _, _, err := cli.AgentInboxEntry(quickCapture, "chief-b"); err == nil {
 			t.Fatal("other Chief read A quick capture")
 		}
-		if got := readInbox(t, cli, "chief-b", 0); len(got.Items) != 0 {
-			t.Fatalf("other Chief received A quick capture: %+v", got)
-		}
 		list, err := b.QuickCapture(protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 1})
 		if err != nil || len(list.List.Items) != 0 || len(list.List.DraftAssets) != 0 {
 			t.Fatalf("other-profile history: %+v %v", list, err)
@@ -433,18 +471,20 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		if _, err := b.QuickCapture(msg); err != nil {
 			t.Fatal(err)
 		}
-		itemsB := readInbox(t, cli, "chief-b", 0).Items
-		if len(itemsB) != 1 || itemsB[0].Content != "B request" {
-			t.Fatalf("B inbox: %+v", itemsB)
+		if _, itemB, err := cli.AgentInboxEntry(quickCapture, "chief-b"); err != nil || itemB == nil || itemB.Content != "B request" {
+			t.Fatalf("B chief reads %+v, %v", itemB, err)
 		}
 		if r := quickCaptureRecord(t, a, quickCapture); r.ReadAt != nil {
 			t.Fatal("B read A receipt")
 		}
-		itemsA := readInbox(t, cli, "chief-a", 0).Items
+		_, itemA, err := cli.AgentInboxEntry(quickCapture, "chief-a")
+		if err != nil || itemA == nil || itemA.Content != "A request" {
+			t.Fatalf("A chief reads %+v, %v", itemA, err)
+		}
 		receipt := testworld.Await[protocol.QuickCaptureReadMessage](a, protocol.EventQuickCaptureRead, func(e protocol.QuickCaptureReadMessage) bool {
 			return e.CaptureID == quickCapture && e.ProfileID == profileA
 		})
-		if receipt.ReadAt != itemsA[0].ReadAt {
+		if receipt.ReadAt != itemA.ReadAt {
 			t.Fatalf("read receipt: %+v", receipt)
 		}
 
@@ -464,9 +504,6 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 			t.Fatalf("re-reading emitted %d read events, want 1", readEvents)
 		}
 
-		if len(itemsA) != 1 || itemsA[0].Content != "A request" {
-			t.Fatalf("A inbox: %+v", itemsA)
-		}
 		w.restart()
 		for _, owner := range []struct {
 			profile string

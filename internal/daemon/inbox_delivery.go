@@ -176,13 +176,16 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	if holder == nil || !finishingWake {
 		state.wakeSession = ""
 	}
+	var bellHeldUntil time.Time
 	if !finishingWake {
-		if attempt.Live == 0 {
+		if attempt.Live == 0 && (holder == nil || attempt.FromUser == 0) {
 			return receipt, nil
 		}
 		now := time.Now()
 		due := inbox.Due(attempt.Last, now)
-		if due.After(now) {
+		if due.After(now) && attempt.FromUser > 0 {
+			bellHeldUntil = due
+		} else if due.After(now) {
 			d.armInboxLocked(a, state, due.Sub(now))
 			receipt.Outstanding = holder != nil && memberID == ""
 			receipt.Detail = agentMessageQueuedDetail(errInboxDoorbellOutstanding)
@@ -200,7 +203,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		if holder == nil {
 			if member := memberID; member != "" {
 				d.crewWakeMu.Lock()
-				result, err := d.crewWakeDayWithChargeLocked(member, "", true, func() error {
+				result, err := d.crewWakeDayWithChargeLocked(member, "", attempt.FromUser == 0, func() error {
 					started, err := d.store.StampInboxAttempt(a, now)
 					if err != nil {
 						return err
@@ -245,7 +248,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		receipt.Detail = agentMessageQueuedDetail(errInboxNoPromptReader)
 		return receipt, nil
 	}
-	paste, err := d.inboxPaste(a, holder.ProfileID)
+	paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero())
 	if err != nil {
 		return receipt, err
 	}
@@ -266,6 +269,8 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		}
 		if paste.notified {
 			d.armInboxLocked(a, state, inbox.AttemptDelay)
+		} else if !bellHeldUntil.IsZero() {
+			d.armInboxLocked(a, state, time.Until(bellHeldUntil))
 		}
 		receipt.Rang = true
 		receipt.Detail = "notified " + sessionDisplayName(holder)
@@ -286,7 +291,7 @@ type inboxPaste struct {
 	notified bool
 }
 
-func (d *Daemon) inboxPaste(a inbox.Address, profileID string) (inboxPaste, error) {
+func (d *Daemon) inboxPaste(a inbox.Address, profileID string, bell bool) (inboxPaste, error) {
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil {
 		return inboxPaste{}, err
@@ -306,7 +311,7 @@ func (d *Daemon) inboxPaste(a inbox.Address, profileID string) (inboxPaste, erro
 			texts = append(texts, inbox.QuickCaptureText(item.Text, item.Source, record.Attachments))
 			paste.captures = append(paste.captures, item.Source)
 		default:
-			paste.notified = true
+			paste.notified = bell
 			continue
 		}
 		paste.typed = append(paste.typed, item.ID)

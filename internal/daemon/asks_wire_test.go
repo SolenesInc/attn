@@ -3,6 +3,8 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -120,6 +122,87 @@ func TestATypedAnswerEndsWithTheDoorbellForTheItemsLeftUnread(t *testing.T) {
 	left := readInbox(t, cli, asker, 0).Items
 	if len(left) != 1 || left[0].Kind != "peer_message" {
 		t.Fatalf("the inbox holds %+v, want only the peer message the doorbell rang for", left)
+	}
+}
+
+func TestAnAnswerIsTypedWithoutWaitingOutTheDoorbellsQuietWindow(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "peer")
+		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")
+		asker.reply("Later. <!-- attn:state=idle -->")
+		if got := asker.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("the peer message rang %d times, want once: %q", got, asker.prompts())
+		}
+
+		w.advance(time.Minute)
+		answerCacheAsk(t, app, asked.ID)
+		synctest.Wait()
+		prompts := asker.prompts()
+		if last := prompts[len(prompts)-1]; !strings.Contains(last, "Answer: Postgres") || strings.Contains(last, inboxDoorbell) {
+			t.Fatalf("a minute into the doorbell's quiet window the agent was typed %q, want the answer alone", last)
+		}
+
+		asker.reply("Using Postgres. <!-- attn:state=idle -->")
+		w.advance(4*time.Minute - time.Second)
+		if got := asker.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("the answer brought the peer message's reminder forward: %q", asker.prompts())
+		}
+		w.advance(time.Second)
+		if got := asker.promptsContaining(inboxDoorbell); got != 2 {
+			t.Fatalf("the peer message's reminder did not ring 5 minutes after its doorbell: %q", asker.prompts())
+		}
+	})
+}
+
+func TestAnAgentReadingItsInboxLeavesAnAnswerToBeTyped(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "peer")
+		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")
+		if got := asker.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("the peer message rang %d times, want once: %q", got, asker.prompts())
+		}
+		testworld.AwaitSession(app, asker.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+		answerCacheAsk(t, app, asked.ID)
+		synctest.Wait()
+		read := readInbox(t, cli, asker.id, 0)
+		if got := inboxContents(read.Items); got != "the staging cache is already Postgres" || read.Remaining != 0 {
+			t.Fatalf("the working agent read %q with %d remaining, want only the peer message", got, read.Remaining)
+		}
+		if got := asker.promptsContaining("Answer: Postgres"); got != 0 {
+			t.Fatalf("the answer was typed into a working agent: %q", asker.prompts())
+		}
+
+		asker.reply("Read the peer message. <!-- attn:state=idle -->")
+		if got := asker.promptsContaining("Answer: Postgres"); got != 1 {
+			t.Fatalf("the answer was typed %d times once the agent stopped, want once: %q", got, asker.prompts())
+		}
+	})
+}
+
+func answerCacheAsk(t *testing.T, app *testworld.Peer, askID string) {
+	t.Helper()
+	requestID := uuid.NewString()
+	answered := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: requestID, AskID: askID,
+		Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == requestID })
+	if !answered.Success {
+		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
 	}
 }
 

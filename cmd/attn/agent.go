@@ -675,7 +675,7 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 			continue
 		}
 		if item.Kind != string(inbox.PeerMessage) {
-			if item.Kind == string(inbox.Notice) || item.Kind == string(inbox.AskAnswer) {
+			if item.Kind == string(inbox.Notice) {
 				fmt.Fprintln(w, content)
 			} else {
 				fmt.Fprintln(w, prompts.RenderText("session", "inbox-item", prompts.Values{"content": content}))

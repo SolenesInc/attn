@@ -162,10 +162,10 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, 
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
-		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = ''
+		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = '' AND i.kind NOT IN (?, ?)
 		ORDER BY i.created_at, i.id
 		LIMIT ?
-	`, inbox.PeerMessage, addressJSON, normalizeAgentInboxLimit(limit))
+	`, inbox.PeerMessage, addressJSON, inbox.AskAnswer, inbox.QuickCapture, normalizeAgentInboxLimit(limit))
 	if err != nil {
 		return nil, 0, fmt.Errorf("list unread inbox items: %w", err)
 	}
@@ -219,8 +219,8 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, 
 	var remaining int
 	if err := tx.QueryRow(`
 		SELECT COUNT(*) FROM inbox_items
-		WHERE address IN (SELECT value FROM json_each(?)) AND read_at = ''
-	`, addressJSON).Scan(&remaining); err != nil {
+		WHERE address IN (SELECT value FROM json_each(?)) AND read_at = '' AND kind NOT IN (?, ?)
+	`, addressJSON, inbox.AskAnswer, inbox.QuickCapture).Scan(&remaining); err != nil {
 		return nil, 0, fmt.Errorf("count unread inbox items: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -303,9 +303,10 @@ func (s *Store) WithdrawInbox(to inbox.Address, kind inbox.Kind, key string) err
 }
 
 type InboxAttempt struct {
-	Live   int
-	Unread int
-	Last   time.Time
+	Live     int
+	FromUser int
+	Unread   int
+	Last     time.Time
 }
 
 func (s *Store) InboxAttempt(to inbox.Address) (InboxAttempt, error) {
@@ -317,7 +318,7 @@ func (s *Store) InboxAttempt(to inbox.Address) (InboxAttempt, error) {
 		return result, err
 	}
 	result.Last, _ = time.Parse(time.RFC3339Nano, last)
-	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, to.String()).Scan(&result.Unread, &result.Live)
+	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0),COALESCE(SUM(kind IN (?, ?)),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, inbox.AskAnswer, inbox.QuickCapture, to.String()).Scan(&result.Unread, &result.Live, &result.FromUser)
 	return result, err
 }
 
