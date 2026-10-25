@@ -90,6 +90,10 @@ func main() {
 		return
 	}
 
+	if host := os.Getenv("ATTN_HOST"); host != "" && remoteShellNeedsHome(os.Args[1:]) {
+		fmt.Fprintf(os.Stderr, "outpost limit: attn commands that need a daemon are not supported in a shell on %s yet; run this from an agent at the home\n", host)
+		os.Exit(1)
+	}
 	daemonStart := len(os.Args) == 2 && os.Args[1] == "daemon"
 	if !daemonStart {
 		if err := config.ValidateInstance(); err != nil {
@@ -399,6 +403,7 @@ func runPTYWorker() {
 		}
 	}
 
+	cfg.HostName = os.Getenv("ATTN_PTY_HOST_NAME")
 	if daemonEnvJSON := os.Getenv("ATTN_PTY_DAEMON_ENV"); daemonEnvJSON != "" {
 		if err := json.Unmarshal([]byte(daemonEnvJSON), &cfg.DaemonEnv); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_DAEMON_ENV: %v\n", err)
@@ -1892,4 +1897,20 @@ func runTicket() {
 		verb = os.Args[2]
 	}
 	signpostTicketVerb(verb)
+}
+
+func remoteShellNeedsHome(args []string) bool {
+	if len(args) == 0 {
+		return true
+	}
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return false
+		}
+	}
+	switch args[0] {
+	case "help", "skill", "prompts", "instance-env", "instance", "preflight", "vision-check", "_probe-tui", "pty-worker":
+		return false
+	}
+	return true
 }

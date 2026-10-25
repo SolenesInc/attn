@@ -160,6 +160,10 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 	if previous != nil {
 		_ = previous.Close()
 	}
+	if !d.life.Go("outpostViews", func() { d.sendOutpostViews(d.life.Context(), conn) }) {
+		_ = conn.Close()
+		return
+	}
 	if !d.life.Go("outpostBridge", func() {
 		for state := range conn.States() {
 			r.mu.Lock()

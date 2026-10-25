@@ -23,7 +23,9 @@ desktop                 one arrangement of tiles; like a macOS Space or a
 
 ```text
 terminal                one PTY process in a terminal tile
-└─ runs 1 harness or 1 shell
+├─ runs 1 harness or 1 shell
+├─ host (at most 1)    the outpost it runs on; no host means the home's machine
+└─ offline             its host's bridge is lost or refused; typing is not sent
 harness                 the agent CLI: Claude Code, Codex, pi
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
@@ -180,6 +182,13 @@ instance                a daemon, an app and a data folder under one name;
 ```text
 home                    the main daemon the user's app connects to
 └─ bridge (0..n)       an SSH connection to one outpost
+   ├─ state (1)
+   │  ├─ connecting    the home is dialing the outpost
+   │  ├─ connected     heartbeats arrive (every 0.5 s)
+   │  ├─ stalled       no heartbeat for 3 s on an open connection; usually clears
+   │  ├─ lost          no heartbeat for 10 s, or no connection; the home redials
+   │  └─ refused       the outpost was reached, but no key was accepted, its
+   │                   identity changed, or it runs a different build
    └─ outpost (1)     a remote daemon paired to that home
 ```
 

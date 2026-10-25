@@ -28,23 +28,27 @@ const (
 )
 
 type Conn struct {
-	peer      Identity
-	transport ssh.Conn
-	states    chan State
-	done      chan struct{}
-	cancel    context.CancelFunc
-	err       error
+	ctx        context.Context
+	outputOnce sync.Once
+	output     *outputCredit
+	peer       Identity
+	transport  ssh.Conn
+	states     chan State
+	done       chan struct{}
+	cancel     context.CancelFunc
+	err        error
 }
 
-func (c *Conn) Peer() Identity        { return c.peer }
-func (c *Conn) States() <-chan State  { return c.states }
-func (c *Conn) Done() <-chan struct{} { return c.done }
-func (c *Conn) Err() error            { <-c.done; return c.err }
-func (c *Conn) Close() error          { c.cancel(); <-c.done; return nil }
+func (c *Conn) Context() context.Context { return c.ctx }
+func (c *Conn) Peer() Identity           { return c.peer }
+func (c *Conn) States() <-chan State     { return c.states }
+func (c *Conn) Done() <-chan struct{}    { return c.done }
+func (c *Conn) Err() error               { <-c.done; return c.err }
+func (c *Conn) Close() error             { c.cancel(); <-c.done; return nil }
 
 func newConn(ctx context.Context, transport ssh.Conn, channels <-chan ssh.NewChannel, handlers Handlers, channel ssh.Channel, decoder *json.Decoder, peer Identity, drains ...<-chan struct{}) *Conn {
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Conn{peer: peer, transport: transport, states: make(chan State, 1), done: make(chan struct{}), cancel: cancel}
+	c := &Conn{ctx: ctx, peer: peer, transport: transport, states: make(chan State, 1), done: make(chan struct{}), cancel: cancel}
 	go func() {
 		defer close(c.done)
 		c.run(ctx, transport, channels, handlers, channel, decoder)

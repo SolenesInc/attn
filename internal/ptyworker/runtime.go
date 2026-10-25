@@ -107,6 +107,7 @@ type Config struct {
 	AgentEnv         []string
 	ExternalCWD      string
 	DaemonEnv        []string
+	HostName         string
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec
 
 	RegistryPath   string
@@ -326,6 +327,7 @@ func (r *Runtime) run(ctx context.Context) error {
 		AgentEnv:        r.cfg.AgentEnv,
 		ExternalCWD:     r.cfg.ExternalCWD,
 		DaemonEnv:       r.cfg.DaemonEnv,
+		HostName:        r.cfg.HostName,
 	}); err != nil {
 		return fmt.Errorf("spawn PTY session: %w", err)
 	}
@@ -915,6 +917,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		}
 		c.waiting = true
 		go func() {
+			pausepoint.At(pausepoint.PtyWaitBlock)
 			result, err := c.runtime.manager.WaitBlock(c.waitCtx, c.runtime.cfg.SessionID, params)
 			if err != nil {
 				c.sendError(req.ID, ErrBadRequest, err.Error())

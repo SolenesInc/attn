@@ -416,6 +416,20 @@ type AnalyticsOutboxRow struct {
 	Record string `json:"record"`
 }
 
+type ApplyMonitorViewMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Epoch corresponds to the JSON schema field "epoch".
+	Epoch string `json:"epoch"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// View corresponds to the JSON schema field "view".
+	View string `json:"view"`
+}
+
 type ApprovePRMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -11399,6 +11413,9 @@ type SpawnSessionMessage struct {
 	// Executable corresponds to the JSON schema field "executable".
 	Executable *string `json:"executable,omitempty,omitzero"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`
 
@@ -11975,6 +11992,9 @@ type TerminalOpenMessage struct {
 
 	// Direction corresponds to the JSON schema field "direction".
 	Direction *TerminalDirection `json:"direction,omitempty,omitzero"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 }
 
 type TerminalOpenResult struct {
@@ -12056,6 +12076,9 @@ type TerminalRestartMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// HostName corresponds to the JSON schema field "host_name".
+	HostName *string `json:"host_name,omitempty,omitzero"`
+
 	// Launch corresponds to the JSON schema field "launch".
 	Launch string `json:"launch"`
 
@@ -12090,8 +12113,14 @@ type TerminalStartMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Copy corresponds to the JSON schema field "copy".
+	Copy []CopyRow `json:"copy,omitempty,omitzero"`
+
 	// Host corresponds to the JSON schema field "host".
 	Host string `json:"host"`
+
+	// HostName corresponds to the JSON schema field "host_name".
+	HostName *string `json:"host_name,omitempty,omitzero"`
 
 	// Launch corresponds to the JSON schema field "launch".
 	Launch string `json:"launch"`

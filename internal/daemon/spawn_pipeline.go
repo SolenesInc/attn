@@ -123,6 +123,22 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q is not available", requestedAgent)}
 	}
 	isShell := agent == protocol.AgentShellValue
+	if host := protocol.Deref(msg.Host); host != "" {
+		if !isShell {
+			return nil, &spawnRejection{err: fmt.Errorf("outpost limit: only shells can run on %s; agents on outposts are not supported", host)}
+		}
+		if !d.outpostsEnabled() {
+			return nil, &spawnRejection{err: errors.New("outposts_enabled is off; remote shells need it on")}
+		}
+		row, err := d.resolveOutpost(host)
+		if err != nil {
+			return nil, &spawnRejection{err: err}
+		}
+		msg.Host = protocol.Ptr(row.ID)
+		if _, _, err = d.outpostConn(row.ID); err != nil {
+			return nil, &spawnRejection{err: err}
+		}
+	}
 	initialPrompt := protocol.Deref(msg.InitialPrompt)
 	if isShell && strings.TrimSpace(initialPrompt) != "" {
 		return nil, &spawnRejection{err: errors.New("shell sessions do not accept an initial prompt")}
@@ -207,9 +223,17 @@ func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejecti
 func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	req.spawnStartedAt = time.Now()
 	req.existingSession = d.store.Get(req.msg.ID)
+	if req.existingSession != nil {
+		req.msg.Host = req.existingSession.Host
+	}
+	if host := protocol.Deref(req.msg.Host); host != "" {
+		if _, _, err := d.outpostConn(host); err != nil {
+			return &spawnRejection{err: err}
+		}
+	}
 	req.cwd = req.msg.Cwd
 	if namesHome(req.cwd) {
-		machine, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell})
+		machine, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell, Host: protocol.Deref(req.msg.Host)})
 		if err != nil {
 			return &spawnRejection{err: err}
 		}
@@ -443,6 +467,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	branchInfo, _ := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, req.cwd)
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, branchInfo)
 	session := plan.launchSession
+	session.Host = msg.Host
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
@@ -513,6 +538,7 @@ func (d *Daemon) executeShellSpawn(req *spawnRequest, plan *spawnPlan) *spawnOut
 	plan.spawnOpts.ID = terminal
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, true, false, req.parentSessionID, nil)
 	session := plan.launchSession
+	session.Host = msg.Host
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if plan.chiefAssigned {
 			d.clearChiefOfStaffIfSession(msg.ID)
@@ -549,7 +575,19 @@ func (d *Daemon) startShellTerminal(session *protocol.Session, terminal harness.
 	if err != nil {
 		return err
 	}
-	_, err = Call[struct{}](context.Background(), d.router(), protocol.TerminalStartMessage{Cmd: protocol.CmdTerminalStart, Session: *session, TerminalID: terminal, Launch: launch})
+	msg := protocol.TerminalStartMessage{Cmd: protocol.CmdTerminalStart, Host: protocol.Deref(session.Host), Session: *session, TerminalID: terminal, Launch: launch}
+	if msg.Host != "" {
+		_, name, err := d.outpostConn(msg.Host)
+		if err != nil {
+			return err
+		}
+		msg.HostName = protocol.Ptr(name)
+		msg.Copy, err = d.store.SessionCopy(session.ID)
+		if err != nil {
+			return err
+		}
+	}
+	_, err = Call[struct{}](context.Background(), d.router(), msg)
 	return err
 }
 

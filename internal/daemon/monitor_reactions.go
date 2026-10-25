@@ -64,7 +64,14 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {
 		d.broadcastSessionStateChanged(session)
 	}
-	if exit := view.Exit.V; exit != nil && !exit.Held && !sessionmonitor.SameExit(exit, previous.Exit.V) {
+	if exit := view.Exit.V; exit != nil && !exit.Held && !sameAppliedExit(exit, previous.Exit.V) {
 		d.reactSessionExit(session, *exit)
 	}
+}
+
+func sameAppliedExit(a, b *sessionmonitor.Exit) bool {
+	if b != nil && (b.Terminal != "" || b.LifecycleID != "") {
+		return sessionmonitor.SameExit(a, b)
+	}
+	return sameExitScreen(a, b)
 }

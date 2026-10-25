@@ -90,6 +90,10 @@ func (d *Daemon) terminalLive(t harness.TerminalID) bool {
 }
 
 func (d *Daemon) sessionLive(ctx context.Context, sessionID protocol.SessionID) bool {
+	if d.sessionHost(sessionID) != "" {
+		view, ok := d.monitorViewFor(sessionID)
+		return ok && view.Live.V
+	}
 	live := d.liveTerminals(ctx)
 	for _, id := range d.terminalsOf(sessionID) {
 		if _, ok := live[id]; ok {
@@ -258,4 +262,13 @@ func (d *Daemon) projectTerminalBindings() {
 	d.projectSnapshot(protocol.EventTerminalBindingsUpdated, func() {
 		d.wsHub.BroadcastValue(&protocol.TerminalBindingsUpdatedMessage{Event: protocol.EventTerminalBindingsUpdated, TerminalBindings: d.terminals().Bindings()})
 	})
+}
+
+func (r *terminalRegistry) owner(t harness.TerminalID) protocol.SessionID {
+	if id, ok := r.Showing(t); ok {
+		return id
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.ending[t].session
 }

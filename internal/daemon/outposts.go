@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -122,6 +123,8 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 }
 
 func (d *Daemon) setOutpostConn(id string, run *outpostDial, conn *bridge.Conn) bool {
+	d.monitors().applyMu.Lock()
+	defer d.monitors().applyMu.Unlock()
 	r := &d.outposts
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -138,7 +141,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		if row.HostKey != "" {
 			pin = &bridge.Pin{HostKey: row.HostKey, DaemonID: row.DaemonID}
 		}
-		conn, seen, err := bridge.Dial(ctx, bridge.DialConfig{Address: row.Address, Pin: pin, Self: d.bridgeIdentity(), AgentSocket: os.Getenv("SSH_AUTH_SOCK"), CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
+		conn, seen, err := bridge.Dial(ctx, bridge.DialConfig{Address: row.Address, Pin: pin, Self: d.bridgeIdentity(), AgentSocket: os.Getenv("SSH_AUTH_SOCK"), Handlers: d.homeHandlers(row.ID), CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
 		if ctx.Err() != nil {
 			if conn != nil {
 				_ = conn.Close()
@@ -186,7 +189,11 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 	}
 	defer d.setOutpostConn(id, run, nil)
 	sending := make(chan struct{})
-	if !d.life.Go("outpostCopy:"+id, func() { defer close(sending); d.sendOutpostCopy(ctx, id, conn) }) {
+	if !d.life.Go("outpostCopy:"+id, func() {
+		defer close(sending)
+		defer conn.Close()
+		d.syncOutpost(ctx, id, conn)
+	}) {
 		return
 	}
 	defer func() { <-sending }()
@@ -201,6 +208,32 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 		}
 		d.updateOutpost(id, run, state, conn.Peer().Build.String(), detail)
 	}
+}
+
+func (d *Daemon) syncOutpost(ctx context.Context, id string, conn *bridge.Conn) {
+	if err := d.store.RequeueOutpostCopy(id); err != nil {
+		d.logf("outpost %s requeue copy: %v", id, err)
+		return
+	}
+	for {
+		sent, err := d.sendOutpostCopyBatch(ctx, id, conn)
+		if err != nil {
+			d.logf("outpost %s initial copy: %v", id, err)
+			return
+		}
+		if !sent {
+			break
+		}
+	}
+	if err := d.recoverOutpost(ctx, id, conn); err != nil {
+		d.logf("outpost %s recovery: %v", id, err)
+		return
+	}
+	theme := d.currentTerminalTheme()
+	if err := conn.Call(ctx, bridgeCallTerminal, protocol.TerminalThemeMessage{Cmd: protocol.CmdTerminalTheme, Host: id, Foreground: theme.Foreground, Background: theme.Background, Cursor: theme.Cursor, AnsiPalette: theme.ANSIPalette[:]}, nil); err != nil {
+		d.logf("outpost %s theme: %v", id, err)
+	}
+	d.sendOutpostCopy(ctx, id, conn)
 }
 
 func waitOutpostRetry(ctx context.Context, delay time.Duration) bool {

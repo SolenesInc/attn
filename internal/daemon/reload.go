@@ -312,7 +312,10 @@ type ptyRespawn struct {
 }
 
 func (d *Daemon) handleReloadSession(client *wsClient, msg *protocol.ReloadSessionMessage) {
-	err := d.reloadSessionForClient(msg.ID, msg.Cols, msg.Rows)
+	err := d.requireSessionHost(msg.ID)
+	if err == nil {
+		err = d.reloadSessionForClient(msg.ID, msg.Cols, msg.Rows)
+	}
 	result := protocol.ReloadSessionResultMessage{
 		Event:   protocol.EventReloadSessionResult,
 		ID:      msg.ID,
@@ -328,11 +331,19 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	if opts.Agent != protocol.AgentShellValue {
 		return d.reloadAgent(sessionID, opts, pluginReload)
 	}
+	var name *string
+	if host := d.sessionHost(sessionID); host != "" {
+		_, hostName, err := d.outpostConn(host)
+		if err != nil {
+			return err
+		}
+		name = protocol.Ptr(hostName)
+	}
 	launch, err := encodeLaunch(opts)
 	if err != nil {
 		return err
 	}
-	if _, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalRestartMessage{Cmd: protocol.CmdTerminalRestart, SessionID: sessionID, TerminalID: opts.ID, Launch: launch}); err != nil {
+	if _, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalRestartMessage{Cmd: protocol.CmdTerminalRestart, HostName: name, SessionID: sessionID, TerminalID: opts.ID, Launch: launch}); err != nil {
 		return err
 	}
 	d.recordReload(sessionID, opts)

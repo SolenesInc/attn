@@ -12,6 +12,9 @@ type sessionCloseInFlight struct {
 }
 
 func (d *Daemon) beginSessionCloseAsUser(sessionID protocol.SessionID, closed store.SessionClose, client *wsClient) (sessionCloseInFlight, error) {
+	if err := d.requireSessionHost(sessionID); err != nil {
+		return sessionCloseInFlight{}, err
+	}
 	if err := d.sessionCloseError(sessionID); err != nil {
 		d.logf("refusing to close protected session %s: %v", sessionID, err)
 		return sessionCloseInFlight{}, err
@@ -41,6 +44,9 @@ func (d *Daemon) beginSessionClose(
 
 func (d *Daemon) finishSessionClose(sessionID protocol.SessionID, closing sessionCloseInFlight) {
 	if closing.teardown != nil {
-		d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)
+		done := d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)
+		if d.sessionHost(sessionID) != "" {
+			<-done
+		}
 	}
 }

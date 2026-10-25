@@ -22,10 +22,11 @@ const (
 )
 
 type SpawnOptions struct {
-	ID    harness.TerminalID
-	CWD   string
-	Agent string
-	Label string
+	HostName string
+	ID       harness.TerminalID
+	CWD      string
+	Agent    string
+	Label    string
 
 	Cols uint16
 	Rows uint16

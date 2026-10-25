@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -153,9 +154,12 @@ func (s *Store) AckOutbox(ids []int64) error {
 
 // ApplyCopy writes a batch of home's copy in one transaction. It is the only writer of rows with a host on
 // an outpost, and marks the sessions it writes as copied from home.
-func (s *Store) ApplyCopy(home string, rows []protocol.CopyRow) error {
+func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.CopyRow) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -289,4 +293,47 @@ func jsonList(values []string) string {
 	}
 	encoded, _ := json.Marshal(values)
 	return string(encoded)
+}
+
+func (s *Store) SessionCopy(session protocol.SessionID) ([]protocol.CopyRow, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	row, err := copyRow(s.db, protocol.CopyTableSessions, string(session), `SELECT * FROM sessions WHERE id = ?`, session)
+	if err != nil {
+		return nil, err
+	}
+	return []protocol.CopyRow{row}, nil
+}
+
+func (s *Store) RequeueOutpostCopy(host string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT host,'sessions',id FROM sessions WHERE host = ? ON CONFLICT(tbl,key) DO NOTHING`, host); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT s.host,'terminal_bindings',b.terminal_id FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE s.host = ? ON CONFLICT(tbl,key) DO NOTHING`, host); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) SessionHost(id protocol.SessionID) (host, origin string) {
+	if s.db == nil {
+		if session := s.Get(id); session != nil {
+			return protocol.Deref(session.Host), ""
+		}
+		return
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_ = s.db.QueryRow(`SELECT host,copied_from FROM sessions WHERE id = ?`, id).Scan(&host, &origin)
+	return
 }

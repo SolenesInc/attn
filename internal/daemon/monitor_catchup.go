@@ -8,6 +8,9 @@ import (
 )
 
 func (h *monitorHome) catchUp(session protocol.SessionID, binding *monitorBinding, failure error) {
+	if h.monitor == nil {
+		return
+	}
 	d := h.daemon
 	r := d.monitors()
 	r.mu.Lock()

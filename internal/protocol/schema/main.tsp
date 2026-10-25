@@ -1961,6 +1961,7 @@ model AutomationSetEnabledMessage {
 
 model SpawnSessionMessage {
   cmd: "spawn_session";
+  host?: string;
   id: SessionID;
   cwd: string;
   profile_id: string;       // The profile the session belongs to; empty over WebSocket means the connection's selected profile. Refused before any side effect when it resolves to nothing or to a deleted profile
@@ -2916,6 +2917,7 @@ model TerminalEntry {
 }
 model TerminalOpenMessage {
   cmd: "terminal_open";
+  host?: string;
   caller_session_id: SessionID;
   desktop?: string;
   direction?: TerminalDirection;
@@ -2989,6 +2991,8 @@ model TerminalCloseMessage {
 model TerminalStartMessage {
   cmd: "terminal_start";
   host: string;
+  host_name?: string;
+  copy?: CopyRow[];
   session: Session;
   terminal_id: TerminalID;
   launch: string;
@@ -2999,6 +3003,7 @@ model TerminalStartMessage {
 @extension("x-on", #{ terminal: "terminal_id" })
 model TerminalRestartMessage {
   cmd: "terminal_restart";
+  host_name?: string;
   session_id: SessionID;
   terminal_id: TerminalID;
   launch: string;
@@ -7902,3 +7907,11 @@ alias DaemonEvent =
   | AutoModeDiscardResultMessage
   | AutoModeEnvSetResultMessage
   | AutoModeStateChangedMessage;
+
+@extension("x-on", #{ home: true })
+model ApplyMonitorViewMessage {
+  cmd: "apply_monitor_view";
+  session_id: SessionID;
+  epoch: string;
+  view: string;
+}
