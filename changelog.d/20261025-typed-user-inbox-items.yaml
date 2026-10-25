@@ -1,0 +1,4 @@
+kind: changed
+area: asks
+change: Ask answers and Quick Captures are typed into the agent's conversation as the user's message, so auto-mode reviewers in Claude Code, Codex and Pi accept the approvals in them.
+symptom: An agent in auto mode was blocked from an action the user had approved in an ask answer, because the answer reached it as tool output.

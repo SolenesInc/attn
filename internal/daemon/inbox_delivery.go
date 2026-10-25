@@ -245,19 +245,28 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		receipt.Detail = agentMessageQueuedDetail(errInboxNoPromptReader)
 		return receipt, nil
 	}
-	input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), inboxRingText, sessionmonitor.WhenPromptReady)
+	paste, err := d.inboxPaste(a, holder.ProfileID)
+	if err != nil {
+		return receipt, err
+	}
+	input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), paste.text, sessionmonitor.WhenPromptReady)
 	input.BypassInitialGate = true
 	placement := d.sessionMonitor(holder.ID).Place(context.Background(), input)
 	if placement.Stage == sessionmonitor.Placed {
-		now := time.Now()
-		if err := d.store.RingInbox(a, finishingWake, now); err != nil {
+		readAt, err := d.store.RingInbox(a, finishingWake, paste.typed, holder.ID, paste.notified, time.Now())
+		if err != nil {
 			return receipt, err
+		}
+		for _, captureID := range paste.captures {
+			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
 		state.wakeSession = ""
 		if !finishingWake {
 			d.logInboxExhaustion(a)
 		}
-		d.armInboxLocked(a, state, inbox.AttemptDelay)
+		if paste.notified {
+			d.armInboxLocked(a, state, inbox.AttemptDelay)
+		}
 		receipt.Rang = true
 		receipt.Detail = "notified " + sessionDisplayName(holder)
 		return receipt, nil
@@ -268,6 +277,45 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		d.armInboxLocked(a, state, delay)
 	}
 	return receipt, nil
+}
+
+type inboxPaste struct {
+	text     string
+	typed    []string
+	captures []string
+	notified bool
+}
+
+func (d *Daemon) inboxPaste(a inbox.Address, profileID string) (inboxPaste, error) {
+	deliveries, err := d.store.UnreadInboxDeliveries(a)
+	if err != nil {
+		return inboxPaste{}, err
+	}
+	var paste inboxPaste
+	var texts []string
+	for _, delivery := range deliveries {
+		item := delivery.Item
+		switch item.Kind {
+		case inbox.AskAnswer:
+			texts = append(texts, item.Text)
+		case inbox.QuickCapture:
+			record, err := d.store.QuickCapture(profileID, item.Source)
+			if err != nil {
+				return inboxPaste{}, fmt.Errorf("quick capture %s: %w", item.Source, err)
+			}
+			texts = append(texts, inbox.QuickCaptureText(item.Text, item.Source, record.Attachments))
+			paste.captures = append(paste.captures, item.Source)
+		default:
+			paste.notified = true
+			continue
+		}
+		paste.typed = append(paste.typed, item.ID)
+	}
+	if paste.notified {
+		texts = append(texts, inboxRingText)
+	}
+	paste.text = strings.Join(texts, "\n\n")
+	return paste, nil
 }
 func (d *Daemon) logInboxExhaustion(a inbox.Address) {
 	attempt, err := d.store.InboxAttempt(a)

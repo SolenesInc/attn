@@ -342,31 +342,38 @@ func (s *Store) StampInboxAttempt(to inbox.Address, at time.Time) (bool, error) 
 	}
 	return true, tx.Commit()
 }
-func (s *Store) RingInbox(to inbox.Address, finishingWake bool, at time.Time) error {
+func (s *Store) RingInbox(to inbox.Address, finishingWake bool, typed []string, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	stamp := at.UTC().Format(sortableTimeFormat)
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer tx.Rollback()
-	stamp := at.UTC().Format(sortableTimeFormat)
+	for _, id := range typed {
+		if _, err := tx.Exec(`UPDATE inbox_items SET notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END,read_at=?,read_by=? WHERE id=? AND address=? AND read_at=''`, stamp, stamp, readBy, id, to.String()); err != nil {
+			return "", fmt.Errorf("read typed inbox item %s: %w", id, err)
+		}
+	}
+	if !notified {
+		return stamp, tx.Commit()
+	}
 	// A wake's completion charges only items added since the wake began.
 	result, err := tx.Exec(`UPDATE inbox_items SET attempts=attempts+CASE WHEN attempts<? AND (NOT ? OR attempts=0) THEN 1 ELSE 0 END,attempted_at=?,notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END WHERE address=? AND read_at=''`, inbox.MaxAttempts, finishingWake, stamp, stamp, to.String())
 	if err != nil {
-		return err
+		return "", err
 	}
 	changed, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return "", err
 	}
-	if changed == 0 {
-		return tx.Commit()
+	if changed > 0 {
+		if err := setInboxOutstanding(tx, to, at); err != nil {
+			return "", err
+		}
 	}
-	if err := setInboxOutstanding(tx, to, at); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return stamp, tx.Commit()
 }
 func setInboxOutstanding(tx *sql.Tx, to inbox.Address, at time.Time) error {
 	_, err := tx.Exec(`INSERT INTO inbox_delivery(address,outstanding_at) VALUES(?,?) ON CONFLICT(address) DO UPDATE SET outstanding_at=excluded.outstanding_at`, to.String(), at.UTC().Format(sortableTimeFormat))

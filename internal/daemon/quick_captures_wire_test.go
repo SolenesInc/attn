@@ -339,12 +339,19 @@ func TestQuickCaptureDeliveryWakeIsChargedOnce(t *testing.T) {
 		second := sendQuickCapture(t, app, mailbox, "second user request")
 		day := w.bootBubbleClaude(t, string(dayID))
 		day.reply("Ready. <!-- attn:state=idle -->")
-		if got := day.promptsContaining(inboxDoorbell); got != 1 {
-			t.Fatalf("wake rings=%d, want one", got)
+		if got := day.promptsContaining(first.Content); got != 1 {
+			t.Fatalf("the wake typed the first quick capture %d times, want once", got)
 		}
-		items := readInbox(t, cli, string(dayID), 0).Items
-		if len(items) != 2 || !((items[0].ItemID == first.CaptureID && items[1].ItemID == second.CaptureID) || (items[0].ItemID == second.CaptureID && items[1].ItemID == first.CaptureID)) {
-			t.Fatalf("quick capture inbox: %+v", items)
+		if got := day.promptsContaining(second.Content); got != 1 || day.promptsContaining(inboxDoorbell) != 0 {
+			t.Fatalf("the wake typed the second quick capture %d times and rang %d times; want it typed once with the first and no doorbell", got, day.promptsContaining(inboxDoorbell))
+		}
+		for _, sent := range []protocol.QuickCaptureSendMessage{first, second} {
+			if r := quickCaptureRecord(t, app, sent.CaptureID); r.ReadAt == nil {
+				t.Fatalf("a typed quick capture is unread in history: %+v", r)
+			}
+		}
+		if items := readInbox(t, cli, string(dayID), 0).Items; len(items) != 0 {
+			t.Fatalf("typed quick captures stayed in the inbox: %+v", items)
 		}
 		if _, err := cli.CrewHandoff(dayID, "finished the quick captures", false, protocol.CrewDayCloseSleep); err != nil {
 			t.Fatal(err)

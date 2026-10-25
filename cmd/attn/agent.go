@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -672,15 +671,11 @@ func printAgentInboxBatch(w io.Writer, result *protocol.AgentInboxBatchResult) {
 			}
 		}
 		if item.Kind == string(inbox.QuickCapture) {
-			var files strings.Builder
-			for _, a := range item.Attachments {
-				fmt.Fprintln(&files, prompts.RenderText("session", "quick-capture-file", prompts.Values{"name": strconv.Quote(a.Name), "media_type": a.MediaType, "bytes": strconv.Itoa(a.Bytes), "capture_id": protocol.Deref(item.SourceID), "attachment_id": a.ID}))
-			}
-			fmt.Fprintln(w, prompts.RenderText("session", "quick-capture", prompts.Values{"message": item.Content, "files": files.String()}))
+			fmt.Fprintln(w, inbox.QuickCaptureText(item.Content, protocol.Deref(item.SourceID), item.Attachments))
 			continue
 		}
 		if item.Kind != string(inbox.PeerMessage) {
-			if item.Kind == string(inbox.Notice) {
+			if item.Kind == string(inbox.Notice) || item.Kind == string(inbox.AskAnswer) {
 				fmt.Fprintln(w, content)
 			} else {
 				fmt.Fprintln(w, prompts.RenderText("session", "inbox-item", prompts.Values{"content": content}))

@@ -89,7 +89,7 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 		t.Fatalf("old chief read %+v", empty)
 	}
 	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox"}, Session: "second"})
-	if read.Code != 0 || !strings.Contains(read.Stdout, "Message from the user, sent through Quick Capture:") || !strings.Contains(read.Stdout, msg.Content) || !strings.Contains(read.Stdout, "attn agent attachment "+quickCapture+" "+id) || strings.Contains(read.Stdout, "another agent") {
+	if read.Code != 0 || !strings.Contains(read.Stdout, "Message from the user, sent through Quick Capture.") || !strings.Contains(read.Stdout, msg.Content) || !strings.Contains(read.Stdout, "attn agent attachment "+quickCapture+" "+id) || strings.Contains(read.Stdout, "another agent") {
 		t.Fatalf("CLI attribution %+v", read)
 	}
 	reread := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture, "--json"}, Session: "second"})

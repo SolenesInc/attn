@@ -83,10 +83,12 @@ address                 who an item is for: a session or a mailbox
    ├─ seed (at most 1)  the work the ask is about; the ask is addressed to
    │                    the seed's tender
    ├─ question (0..n)   pick one, pick any, or write an answer
-   └─ answer (at most 1) the user's reply: a note on the seed, or an
-                        inbox item when there is no seed
-ring                    one prompt that tells an agent that they have unread
-                        items; like a push notification
+   └─ answer (at most 1) the user's reply, typed into the conversation of
+                        the ask's addressee as the user's message; a seed
+                        also keeps it as a note
+ring                    one prompt for an agent with unread items: it types
+                        answers and quick captures as the user's message and
+                        tells of the rest; like a push notification
 quick capture           a quick message (with optional attachments) the user
                         can send to chief or crew, from outside attn, using a
                         global shortcut; like macOS Quick Note

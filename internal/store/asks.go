@@ -133,9 +133,12 @@ func (s *Store) AnswerAsk(id string, answer inbox.Item, at time.Time) error {
 	return tx.Commit()
 }
 
-func (s *Store) AnswerAskWithNote(id string, note DocumentWrite, fact BusEvent, events []BusEvent, now time.Time) (DocumentWriteResult, []int64, error) {
+func (s *Store) AnswerAskWithNote(id string, answer inbox.Item, note DocumentWrite, fact BusEvent, events []BusEvent, now time.Time) (DocumentWriteResult, []int64, error) {
 	results, eventSeqs, err := s.commitDocumentWrites([]DocumentCommit{{Write: note, Fact: fact}}, events, now, true, func(tx *sql.Tx) (bool, error) {
-		return true, closeAsk(tx, id)
+		if err := closeAsk(tx, id); err != nil {
+			return true, err
+		}
+		return true, putInbox(tx, answer, now)
 	})
 	if err != nil {
 		return DocumentWriteResult{}, nil, err

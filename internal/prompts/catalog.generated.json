@@ -679,8 +679,8 @@
         },
         {
           "id": "quick-capture",
-          "delivery": "cli_output",
-          "description": "User-authored Quick Capture inbox content.",
+          "delivery": "user_message",
+          "description": "A Quick Capture the user sent: typed into the conversation by its ring, or printed by attn agent inbox when read first.",
           "body": {
             "kind": "text",
             "id": "session.quick-capture",
@@ -4175,7 +4175,7 @@
         {
           "id": "answer",
           "delivery": "inbox_content",
-          "description": "The user's answer: a note on the ask's seed for its tender, or an item in the asking agent's inbox when the ask is about no seed. The adapter validates answers against the ask.",
+          "description": "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.",
           "body": {
             "kind": "compose",
             "children": [
@@ -5154,5 +5154,5 @@
       ]
     }
   ],
-  "definitions_hash": "5b31caafa642e6a898c0f0135437e0df447694751736d1dd3db5a988d94da39d"
+  "definitions_hash": "9852ac1f9b5adecc88ebecd516f33759e4c406cc3ae8b83282bee526d79a8b88"
 }
