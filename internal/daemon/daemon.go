@@ -1713,7 +1713,7 @@ func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmoni
 		ExitCode: exit.Code,
 		Signal:   exit.Signal,
 	})
-	d.sessionMonitor(sessionID).RecordProcessExit()
+	d.sessionMonitor(sessionID).RecordExitPublished(exit)
 	pausepoint.At(pausepoint.SessionExitObserved)
 	d.broadcastSessionStateChanged(sessionID)
 	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped {
