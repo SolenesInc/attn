@@ -230,7 +230,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		return
 	}
 	if protocol.Deref(msg.Command) != "" {
-		shell, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell})
+		shell, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell, Host: protocol.Deref(msg.Host)})
 		if err != nil {
 			d.sendError(conn, err.Error())
 			return
@@ -282,9 +282,12 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 	cwd := protocol.Deref(msg.Cwd)
 	if cwd == "" {
 		cwd = caller.Directory
+		if protocol.Deref(msg.Host) != "" {
+			cwd = "~"
+		}
 	}
 	id := protocol.SessionID(uuid.NewString())
-	placed, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: caller.ProfileID, Agent: protocol.AgentShellValue, Cwd: cwd, Cols: 80, Rows: 24}, internalSpawnPolicy{launchPlacement: &launchPlacement{desktopID: desktop.ID, anchorPaneID: anchor, direction: direction}, parentSessionID: caller.ID})
+	placed, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: caller.ProfileID, Agent: protocol.AgentShellValue, Host: msg.Host, Cwd: cwd, Cols: 80, Rows: 24}, internalSpawnPolicy{launchPlacement: &launchPlacement{desktopID: desktop.ID, anchorPaneID: anchor, direction: direction}, parentSessionID: caller.ID})
 	if rejection != nil {
 		d.sendError(conn, rejection.reason().Error())
 		return
@@ -441,6 +444,10 @@ func (d *Daemon) handleTerminalClose(conn net.Conn, msg *protocol.TerminalCloseM
 		return
 	}
 	if err := d.terminalAct(caller, target, protocol.Deref(msg.Desktop)); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	if err := d.requireSessionHost(target.ID); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -79,7 +80,15 @@ func TestAPluginCloseInterruptedAfterItsPaneDisappearsRecoversOnRestart(t *testi
 	}
 	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(session)})
 	s.AwaitCrash()
-	s.Start()
+	recovering := s.PauseAt(pausepoint.DaemonStartupRecovery)
+	s.StartHeldAt(recovering)
+	driver = dialDriverAt(t, s.DialUnix, "snipe-plugin")
+	driver.register("snipe", map[string]bool{"state_reporting": true})
+	recovering.Release()
+	notification := driver.closed()
+	if notification.RunID != run.RunID || notification.SessionID != run.SessionID {
+		t.Fatalf("recovered close notification=%+v, want run %s in terminal %s", notification, run.RunID, run.SessionID)
+	}
 	closed := showSession(t, s.Client(), session)
 	if protocol.Deref(closed.ClosedAt) == "" {
 		t.Fatal("restart lost the committed close")

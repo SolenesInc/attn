@@ -24,7 +24,7 @@ type echo struct {
 func answering(self string) bridge.Handlers {
 	return bridge.Handlers{
 		"echo": func(_ *bridge.Conn, incoming ssh.NewChannel) {
-			go bridge.Answer(incoming, func(request []byte) (any, error) {
+			go bridge.Answer(incoming, func(_ context.Context, request []byte) (any, error) {
 				var in echo
 				if err := json.Unmarshal(request, &in); err != nil {
 					return nil, err
@@ -33,7 +33,7 @@ func answering(self string) bridge.Handlers {
 			})
 		},
 		"refuse": func(_ *bridge.Conn, incoming ssh.NewChannel) {
-			go bridge.Answer(incoming, func([]byte) (any, error) { return nil, errors.New("terminal t-1 is not here") })
+			go bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) { return nil, errors.New("terminal t-1 is not here") })
 		},
 	}
 }
@@ -110,12 +110,12 @@ func TestBridgeRejectedCallsCarryTheirReason(t *testing.T) {
 	})
 }
 
-func TestBridgeCallRequestLimit(t *testing.T) {
+func TestBridgeCallsCarryRequestsLargerThanTheOpenPayload(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := pair(t)
 		kind := strings.Repeat("k", 64)
 		w.cfg.Handlers = bridge.Handlers{kind: func(_ *bridge.Conn, incoming ssh.NewChannel) {
-			go bridge.Answer(incoming, func(request []byte) (any, error) { return len(request), nil })
+			go bridge.Answer(incoming, func(_ context.Context, request []byte) (any, error) { return len(request), nil })
 		}}
 		w.start()
 		client, _ := bridged(t, w, nil)
@@ -127,9 +127,9 @@ func TestBridgeCallRequestLimit(t *testing.T) {
 		if err := client.Call(w.ctx, kind, string(largest), &size); err != nil || size != bridge.MaxCallRequest {
 			t.Fatalf("request at the limit: %d, %v", size, err)
 		}
-		err := client.Call(w.ctx, kind, string(largest)+"x", &size)
-		if err == nil || !strings.Contains(err.Error(), fmt.Sprintf("%d-byte limit", bridge.MaxCallRequest)) {
-			t.Fatalf("request over the limit: %v", err)
+		large := strings.Repeat("x", bridge.MaxCallRequest*2)
+		if err := client.Call(w.ctx, kind, large, &size); err != nil || size != len(large)+2 {
+			t.Fatalf("request in channel body: size=%d err=%v", size, err)
 		}
 	})
 }
@@ -145,7 +145,7 @@ func TestBridgeHandlersSeeCallsInSendOrder(t *testing.T) {
 				t.Error(err)
 			}
 			arrived = append(arrived, in.N)
-			go bridge.Answer(incoming, func([]byte) (any, error) { <-release; return nil, nil })
+			go bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) { <-release; return nil, nil })
 		}}
 		w.start()
 		client, _ := bridged(t, w, nil)
@@ -189,7 +189,7 @@ func TestBridgeChannelsEndWithTheTransport(t *testing.T) {
 				served <- channel
 			},
 			"hang": func(_ *bridge.Conn, incoming ssh.NewChannel) {
-				go bridge.Answer(incoming, func([]byte) (any, error) { <-w.ctx.Done(); return nil, nil })
+				go bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) { <-w.ctx.Done(); return nil, nil })
 			},
 		}
 		w.start()
@@ -251,5 +251,31 @@ func TestBridgeIdleChannelKeepsHeartbeats(t *testing.T) {
 			default:
 			}
 		}
+	})
+}
+
+func TestBridgeCallCancellationEndsItsHandler(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := pair(t)
+		entered, ended := make(chan struct{}), make(chan struct{})
+		w.cfg.Handlers = bridge.Handlers{"wait": func(_ *bridge.Conn, incoming ssh.NewChannel) {
+			go bridge.Answer(incoming, func(ctx context.Context, _ []byte) (any, error) {
+				close(entered)
+				<-ctx.Done()
+				close(ended)
+				return nil, ctx.Err()
+			})
+		}}
+		w.start()
+		client, _ := bridged(t, w, nil)
+		ctx, cancel := context.WithCancel(w.ctx)
+		result := make(chan error, 1)
+		go func() { result <- client.Call(ctx, "wait", struct{}{}, nil) }()
+		<-entered
+		cancel()
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled call: %v", err)
+		}
+		<-ended
 	})
 }

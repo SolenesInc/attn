@@ -20,20 +20,20 @@ import (
 
 func (d *Daemon) machineParts() map[string]machinePart {
 	parts := map[string]machinePart{}
-	runs(parts, d.startTerminal)
-	runs(parts, d.restartTerminal)
-	runs(parts, d.readTerminalLaunch)
-	runs(parts, d.writeTerminal)
-	runs(parts, d.readTerminalText)
-	runs(parts, d.waitTerminalBlock)
-	runs(parts, d.killTerminal)
-	runs(parts, d.removeTerminal)
-	runs(parts, d.themeTerminals)
-	runs(parts, d.loginShell)
-	runs(parts, d.screenSnapshot)
-	runs(parts, d.kittyImage)
-	runs(parts, d.resizeTerminal)
-	runs(parts, d.notePointerActivity)
+	runs(parts, false, d.startTerminal)
+	runs(parts, false, d.restartTerminal)
+	runs(parts, true, d.readTerminalLaunch)
+	runs(parts, false, d.writeTerminal)
+	runs(parts, true, d.readTerminalText)
+	runs(parts, true, d.waitTerminalBlock)
+	runs(parts, false, d.killTerminal)
+	runs(parts, false, d.removeTerminal)
+	runs(parts, false, d.themeTerminals)
+	runs(parts, true, d.loginShell)
+	runs(parts, true, d.screenSnapshot)
+	runs(parts, true, d.kittyImage)
+	runs(parts, false, d.resizeTerminal)
+	runs(parts, false, d.notePointerActivity)
 	return parts
 }
 
@@ -57,7 +57,19 @@ func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMess
 	if err != nil {
 		return struct{}{}, err
 	}
+	startedAt := time.Now()
 	session := msg.Session
+	if len(msg.Copy) > 0 {
+		home := d.homeBridge()
+		if home == nil {
+			return struct{}{}, errors.New("home bridge is not connected")
+		}
+		if err := d.store.ApplyCopy(home.Context(), home.Peer().DaemonID, msg.Copy); err != nil {
+			return struct{}{}, err
+		}
+		d.forgetMonitor(session.ID)
+	}
+	opts.HostName = protocol.Deref(msg.HostName)
 	d.expectTerminal(msg.TerminalID, session.ID)
 	opts.ID = msg.TerminalID
 	branchInfo, _ := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, session.Directory)
@@ -68,6 +80,9 @@ func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMess
 		d.sessionMonitor(session.ID).ForgetInitialPrompt()
 		return struct{}{}, err
 	}
+	if len(msg.Copy) > 0 {
+		d.clearExitScreenBefore(session.ID, startedAt)
+	}
 	return struct{}{}, nil
 }
 
@@ -76,6 +91,7 @@ func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalResta
 	if err != nil {
 		return struct{}{}, err
 	}
+	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
 	d.sessionMonitor(sessionID).FenceInput()
 	unlockEnds := d.replaceRuntime(sessionID, terminal)

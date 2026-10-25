@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -66,16 +67,25 @@ func (c *Conn) Open(ctx context.Context, kind string, payload []byte) (ssh.Chann
 	}
 }
 
-// Call sends request in the channel-open payload and decodes the peer's response into response.
 func (c *Conn) Call(ctx context.Context, kind string, request, response any) error {
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return fmt.Errorf("bridge call %s: encode request: %w", kind, err)
 	}
-	if len(payload) > MaxCallRequest {
-		return fmt.Errorf("bridge call %s: request is %d bytes, over the %d-byte limit (bridge.MaxCallRequest)", kind, len(payload), MaxCallRequest)
+	large := len(payload) > MaxCallRequest
+	header := payload
+	if large {
+		route := map[string]string{}
+		if placed, ok := request.(protocol.Placed); ok {
+			route["cmd"] = placed.Command()
+			if field := placed.Placement().Field; field != "" {
+				route[field] = placed.Locate()
+			}
+		}
+		header, _ = json.Marshal(callBodyHeader{Body: true, Route: route})
 	}
-	channel, requests, err := c.Open(ctx, kind, payload)
+
+	channel, requests, err := c.Open(ctx, kind, header)
 	if err != nil {
 		return err
 	}
@@ -83,34 +93,76 @@ func (c *Conn) Call(ctx context.Context, kind string, request, response any) err
 	defer channel.Close()
 	stop := context.AfterFunc(ctx, func() { _ = channel.Close() })
 	defer stop()
-	if response == nil {
-		_, err = io.Copy(io.Discard, channel)
-	} else {
-		err = json.NewDecoder(channel).Decode(response)
+	if large {
+		if _, err = channel.Write(append(payload, '\n')); err != nil {
+			return err
+		}
 	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	if err != nil {
+	var reply callReply
+	if err = json.NewDecoder(channel).Decode(&reply); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return fmt.Errorf("bridge call %s: read response: %w", kind, err)
+	}
+	if reply.Error != "" {
+		return &CallRejected{Kind: kind, Reason: reply.Error}
+	}
+	if response != nil {
+		return json.Unmarshal(reply.Response, response)
 	}
 	return nil
 }
 
-// Answer runs handle on a call's request, then replies with its response, or rejects the call with
-// its error. It blocks until the reply is sent, so run it off the dispatch loop.
-func Answer(incoming ssh.NewChannel, handle func(request []byte) (any, error)) {
-	response, err := handle(incoming.ExtraData())
-	if err != nil {
-		_ = incoming.Reject(ssh.Prohibited, err.Error())
-		return
+type callBodyHeader struct {
+	Body  bool              `json:"bridge_body"`
+	Route map[string]string `json:"route"`
+}
+
+type callReply struct {
+	Response json.RawMessage `json:"response,omitempty"`
+	Error    string          `json:"error,omitempty"`
+}
+
+func CallHeader(incoming ssh.NewChannel) []byte {
+	var header callBodyHeader
+	if json.Unmarshal(incoming.ExtraData(), &header) == nil && header.Body {
+		route, _ := json.Marshal(header.Route)
+		return route
 	}
+	return incoming.ExtraData()
+}
+
+func Answer(incoming ssh.NewChannel, handle func(context.Context, []byte) (any, error)) {
 	channel, requests, err := incoming.Accept()
 	if err != nil {
 		return
 	}
 	go ssh.DiscardRequests(requests)
 	defer channel.Close()
-	_ = json.NewEncoder(channel).Encode(response)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request := json.RawMessage(incoming.ExtraData())
+	var header callBodyHeader
+	if json.Unmarshal(request, &header) == nil && header.Body {
+		if err = json.NewDecoder(channel).Decode(&request); err != nil {
+			return
+		}
+	}
+	readEnded := make(chan struct{})
+	go func() { defer close(readEnded); _, _ = io.Copy(io.Discard, channel); cancel() }()
+	response, err := handle(ctx, request)
+	reply := callReply{}
+	if err != nil {
+		reply.Error = err.Error()
+	} else {
+		reply.Response, err = json.Marshal(response)
+		if err != nil {
+			reply.Error = err.Error()
+		}
+	}
+	_ = json.NewEncoder(channel).Encode(reply)
 	_ = channel.CloseWrite()
+	_ = channel.Close()
+	<-readEnded
 }

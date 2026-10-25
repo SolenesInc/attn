@@ -1149,6 +1149,7 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 }
 
 type recoveryRules struct {
+	host                  string
 	allowIdleDemotion     bool
 	allowTombstoneCleanup bool
 	previousRunSessions   map[protocol.SessionID]struct{}
@@ -1302,6 +1303,10 @@ func (d *Daemon) recoverRecords(machine machineReport, sessions []protocol.Sessi
 
 	if rules.allowTombstoneCleanup {
 		for _, sessionID := range d.store.SessionTeardownIntentIDs() {
+			host, origin := d.store.SessionHost(sessionID)
+			if host != rules.host || origin != "" {
+				continue
+			}
 			if _, live := machine.live[sessionID]; live {
 				continue
 			}
@@ -1361,10 +1366,7 @@ func (d *Daemon) recoverRecords(machine machineReport, sessions []protocol.Sessi
 			if session.State == protocol.SessionStateRecoverable {
 				continue
 			}
-			d.applyState(sessionID, sessionmonitor.Change{
-				State: string(protocol.SessionStateRecoverable),
-				Cause: sessionmonitor.StartupRecovery{},
-			})
+			d.recoverSessionState(sessionID)
 			report.StateUpdated++
 			report.MarkedRecoverable++
 			report.markChanged(sessionID)
@@ -1698,6 +1700,9 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	unlockEnds()
 	exit.Held, exit.Stopped = false, stopped
 	if monitor == nil || d.store.Get(sessionID) == nil {
+		if d.copiedSession(sessionID) {
+			return true
+		}
 		d.reactSessionExit(sessionID, exit)
 		return true
 	}

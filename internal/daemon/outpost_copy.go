@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -62,9 +63,41 @@ func (d *Daemon) sendOutpostCopyBatch(ctx context.Context, host string, conn *br
 
 func (d *Daemon) outpostHandlers() bridge.Handlers {
 	return bridge.Handlers{
+		bridgeCallTerminal: d.terminalBridgeHandler(),
+		bridgeCallRecovery: func(conn *bridge.Conn, incoming ssh.NewChannel) {
+			if !d.life.Go("reportOutpostMachine", func() {
+				bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) {
+					select {
+					case <-d.recoverySettledSignal():
+					case <-d.life.Done():
+						return nil, errDaemonStopping
+					}
+					return d.outpostMachineReport(), nil
+				})
+			}) {
+				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
+			}
+		},
+		bridge.AttachChannel: func(conn *bridge.Conn, incoming ssh.NewChannel) {
+			if !d.life.Go("bridgeAttach", func() {
+				if err := conn.ServeAttach(d.life.Context(), incoming, func(req bridge.AttachRequest) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+					info, stream, err := d.ptyBackend.Attach(d.life.Context(), req.Terminal, req.Subscriber, req.Options)
+					if err != nil {
+						return info, nil, err
+					}
+					return info, d.watchTerminalStream(req.Terminal, stream), nil
+				}); err != nil {
+					d.logf("outpost attach: %v", err)
+				}
+			}) {
+				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
+			}
+		},
 		bridgeCallCopy: func(home *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("applyCopy", func() {
-				bridge.Answer(incoming, func(request []byte) (any, error) { return d.applyCopyCall(home.Peer().DaemonID, request) })
+				bridge.Answer(incoming, func(_ context.Context, request []byte) (any, error) {
+					return d.applyCopyCall(home.Context(), home.Peer().DaemonID, request)
+				})
 			}) {
 				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
 			}
@@ -72,14 +105,15 @@ func (d *Daemon) outpostHandlers() bridge.Handlers {
 	}
 }
 
-func (d *Daemon) applyCopyCall(home string, request []byte) (any, error) {
+func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte) (any, error) {
 	var rows []protocol.CopyRow
 	if err := json.Unmarshal(request, &rows); err != nil {
 		return nil, fmt.Errorf("decode copy batch: %w", err)
 	}
-	if err := d.store.ApplyCopy(home, rows); err != nil {
+	if err := d.store.ApplyCopy(ctx, home, rows); err != nil {
 		return nil, err
 	}
+	d.pruneRuntimesWithoutSession(d.life.Context())
 	pausepoint.At(pausepoint.CopyBatchApplied)
 	return nil, nil
 }
@@ -98,7 +132,11 @@ func (d *Daemon) dropStaleCopy() error {
 	if conn := d.homeBridge(); conn != nil && conn.Peer().DaemonID != home {
 		_ = conn.Close()
 	}
-	return d.store.DropCopyNotFrom(home)
+	if err := d.store.DropCopyNotFrom(home); err != nil {
+		return err
+	}
+	d.pruneRuntimesWithoutSession(d.life.Context())
+	return nil
 }
 
 func (d *Daemon) homeBridge() *bridge.Conn {

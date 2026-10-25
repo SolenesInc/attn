@@ -5,6 +5,7 @@ import "github.com/victorarias/attn/internal/pty"
 func toPTYSpawnOptions(opts SpawnOptions) pty.SpawnOptions {
 	return pty.SpawnOptions{
 		ID:              string(opts.ID),
+		HostName:        opts.HostName,
 		CWD:             opts.CWD,
 		Agent:           opts.Agent,
 		Cols:            opts.Cols,

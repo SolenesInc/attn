@@ -124,6 +124,15 @@ func (p *Peer) recordEvent(data []byte) {
 	}
 	p.frames = append(p.frames, frame{event: envelope.Event, raw: data})
 	switch envelope.Event {
+	case protocol.EventRuntimeRespawned:
+		var event protocol.RuntimeRespawnedMessage
+		if json.Unmarshal(data, &event) == nil {
+			id := string(event.ID)
+			delete(p.attached, id)
+			delete(p.received, id)
+			delete(p.watermark, id)
+			delete(p.screens, id)
+		}
 	case protocol.EventAttachResult:
 		p.recordSnapshot(data)
 	case protocol.EventGetScreenSnapshotResult:
@@ -184,6 +193,9 @@ func (p *Peer) recordSnapshot(data []byte) {
 		return
 	}
 	p.attached[string(result.ID)] = true
+	if protocol.Deref(result.Revived) {
+		delete(p.received, string(result.ID))
+	}
 	if result.Snapshot == nil {
 		p.seed(string(result.ID), nil, nil)
 		return

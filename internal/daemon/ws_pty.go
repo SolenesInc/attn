@@ -85,17 +85,30 @@ func (c *wsClient) streamsTo(terminal protocol.TerminalID) bool {
 	return attached
 }
 
+type terminalCommand struct {
+	run    func()
+	inputs []*protocol.PtyInputMessage
+}
+
 type terminalOrder struct {
-	mu     sync.Mutex
-	queued map[protocol.TerminalID][]func()
+	mu        sync.Mutex
+	queued    map[protocol.TerminalID][]*terminalCommand
+	lastInput *terminalCommand
+}
+
+func (o *terminalOrder) breakInputBatch() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.lastInput = nil
 }
 
 func (o *terminalOrder) queueBehindRunning(terminal protocol.TerminalID, command func()) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	o.lastInput = nil
 	queue, running := o.queued[terminal]
 	if running {
-		o.queued[terminal] = append(queue, command)
+		o.queued[terminal] = append(queue, &terminalCommand{run: command})
 	}
 	return running
 }
@@ -104,10 +117,32 @@ func (o *terminalOrder) queue(terminal protocol.TerminalID, command func()) (sta
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.queued == nil {
-		o.queued = make(map[protocol.TerminalID][]func())
+		o.queued = make(map[protocol.TerminalID][]*terminalCommand)
 	}
+	o.lastInput = nil
 	queue, running := o.queued[terminal]
-	o.queued[terminal] = append(queue, command)
+	o.queued[terminal] = append(queue, &terminalCommand{run: command})
+	return !running
+}
+
+func (o *terminalOrder) queueInput(msg *protocol.PtyInputMessage, write func([]*protocol.PtyInputMessage)) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.queued == nil {
+		o.queued = make(map[protocol.TerminalID][]*terminalCommand)
+	}
+	queue, running := o.queued[msg.ID]
+	if len(queue) > 0 {
+		last := queue[len(queue)-1]
+		if last == o.lastInput && strings.TrimSpace(protocol.Deref(last.inputs[0].Source)) == strings.TrimSpace(protocol.Deref(msg.Source)) {
+			last.inputs = append(last.inputs, msg)
+			return false
+		}
+	}
+	command := &terminalCommand{inputs: []*protocol.PtyInputMessage{msg}}
+	command.run = func() { write(command.inputs) }
+	o.lastInput = command
+	o.queued[msg.ID] = append(queue, command)
 	return !running
 }
 
@@ -121,13 +156,20 @@ func (o *terminalOrder) runQueued(terminal protocol.TerminalID) {
 			return
 		}
 		next := queue[0]
+		if o.lastInput == next {
+			o.lastInput = nil
+		}
 		o.queued[terminal] = queue[1:]
 		o.mu.Unlock()
-		next()
+		next.run()
 	}
 }
 
 func (d *Daemon) inTerminalOrder(client *wsClient, terminal protocol.TerminalID, command func()) {
+	if d.sessionHost(d.terminals().owner(terminal)) != "" {
+		d.offPumpInTerminalOrder(client, terminal, command)
+		return
+	}
 	if !client.terminalOrder.queueBehindRunning(terminal, command) {
 		command()
 	}
@@ -137,6 +179,10 @@ func (d *Daemon) offPumpInTerminalOrder(client *wsClient, terminal protocol.Term
 	if !client.terminalOrder.queue(terminal, command) {
 		return
 	}
+	d.runTerminalOrder(client, terminal)
+}
+
+func (d *Daemon) runTerminalOrder(client *wsClient, terminal protocol.TerminalID) {
 	if !d.life.Go("terminalOrder", func() { client.terminalOrder.runQueued(terminal) }) {
 		client.terminalOrder.runQueued(terminal)
 	}
@@ -282,6 +328,7 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 	spawnMsg := &protocol.SpawnSessionMessage{
 		Cmd:       protocol.CmdSpawnSession,
 		ID:        session.ID,
+		Host:      session.Host,
 		Cwd:       session.Directory,
 		Agent:     session.Agent,
 		ProfileID: session.ProfileID,
@@ -406,12 +453,6 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 	if previous != nil && previous != stream {
 		_ = previous.Close()
 	}
-	// An attached stream nobody drains backs up the PTY; a refused forward detaches it again.
-	if !d.life.Go("forwardPTYStreamEvents", func() { d.forwardPTYStreamEvents(client, msg.ID, stream) }) {
-		d.detachSession(client, msg.ID)
-		return
-	}
-
 	result := protocol.AttachResultMessage{
 		Event:   protocol.EventAttachResult,
 		ID:      msg.ID,
@@ -437,6 +478,9 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 		}
 	}
 	d.sendToClient(client, result)
+	if !d.life.Go("forwardPTYStreamEvents", func() { d.forwardPTYStreamEvents(client, msg.ID, stream) }) {
+		d.detachSession(client, msg.ID)
+	}
 }
 
 func attachBlocksToProtocol(blocks []pty.AttachBlockData) []protocol.AttachBlock {
@@ -520,6 +564,11 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, terminalID protocol.Te
 	}()
 
 	for event := range stream.Events() {
+		acknowledge := func() {
+			if acknowledged, ok := stream.(interface{ Acknowledge() }); ok {
+				acknowledged.Acknowledge()
+			}
+		}
 		switch event.Kind {
 		case ptybackend.OutputEventKindOutput:
 			if d.debugLogging {
@@ -534,6 +583,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, terminalID protocol.Te
 			outbound, err := encodePtyOutputMessage(client, terminalID, event)
 			if err != nil {
 				d.logf("pty_output marshal failed: id=%s seq=%d err=%v", terminalID, event.Seq, err)
+				acknowledge()
 				continue
 			}
 			if !d.sendStream(client, outbound) {
@@ -543,11 +593,13 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, terminalID protocol.Te
 			}
 		case ptybackend.OutputEventKindPlacements:
 			if !client.HasCapability(protocol.CapabilityKittyImages) {
+				acknowledge()
 				continue
 			}
 			outbound, err := encodeKittyPlacementsMessage(terminalID, event)
 			if err != nil {
 				d.logf("kitty_placements marshal failed: id=%s seq=%d err=%v", terminalID, event.Seq, err)
+				acknowledge()
 				continue
 			}
 			if !d.sendStream(client, outbound) {
@@ -568,6 +620,7 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, terminalID protocol.Te
 			}
 			payload, err := json.Marshal(wsEvent)
 			if err != nil {
+				acknowledge()
 				continue
 			}
 			if !d.sendStream(client, outboundMessage{kind: messageKindText, payload: payload}) {
@@ -585,13 +638,20 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, terminalID protocol.Te
 			}
 			payload, err := json.Marshal(wsEvent)
 			if err != nil {
+				acknowledge()
 				continue
 			}
 			if !d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: payload}) {
 				_ = stream.Close()
 				return
 			}
+			if event.Kind == ptybackend.OutputEventKindDesync {
+				acknowledge()
+				_ = stream.Close()
+				return
+			}
 		}
+		acknowledge()
 	}
 
 	d.logf("pty stream events closed: id=%s", terminalID)
@@ -602,18 +662,11 @@ func (d *Daemon) resyncEndedStream(client *wsClient, terminalID protocol.Termina
 	client.attachMu.Lock()
 	current, attached := client.attachedStreams[terminalID]
 	client.attachMu.Unlock()
-	provider, canProbe := d.ptyBackend.(ptybackend.SessionInfoProvider)
-	if !attached || current != stream || !canProbe || d.stopping() {
+	if !attached || current != stream {
 		return
 	}
 	terminal := harness.TerminalID(terminalID)
-	ctx, cancel := context.WithTimeout(d.life.Context(), endedStreamProbeTimeout)
-	defer cancel()
-	info, err := provider.SessionInfo(ctx, terminal)
-	if errors.Is(err, pty.ErrSessionNotFound) || err == nil && !info.Running {
-		return
-	}
-	if sessionID, shown := d.shownIn(terminal); shown && d.store.GetSessionExit(sessionID) != nil {
+	if !d.terminalNeedsResync(d.life.Context(), terminal) {
 		return
 	}
 	d.logf("pty stream ended while its terminal runs: id=%s; asking the app to reattach", terminalID)
@@ -637,43 +690,51 @@ func (d *Daemon) sendPTYDesync(client *wsClient, terminalID protocol.TerminalID,
 }
 
 func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage) {
+	d.handlePtyInputs(client, []*protocol.PtyInputMessage{msg})
+}
+
+func (d *Daemon) queueRemoteInput(client *wsClient, msg *protocol.PtyInputMessage) {
+	if client.terminalOrder.queueInput(msg, func(inputs []*protocol.PtyInputMessage) { d.handlePtyInputs(client, inputs) }) {
+		d.runTerminalOrder(client, msg.ID)
+	}
+}
+
+func (d *Daemon) handlePtyInputs(client *wsClient, inputs []*protocol.PtyInputMessage) {
 	receivedAt := time.Now()
-	source := strings.TrimSpace(protocol.Deref(msg.Source))
-	probeID := strings.TrimSpace(protocol.Deref(msg.ProbeID))
-	var probeStartedAt time.Time
-	if probeID != "" {
-		probeStartedAt = time.Now()
+	first := inputs[0]
+	source := strings.TrimSpace(protocol.Deref(first.Source))
+	data := first.Data
+	if len(inputs) > 1 {
+		var joined strings.Builder
+		for _, msg := range inputs {
+			joined.WriteString(msg.Data)
+		}
+		data = joined.String()
 	}
 	if d.debugLogging {
-		d.logf(
-			"pty_input: id=%s bytes=%d preview=%q source=%s",
-			msg.ID,
-			len(msg.Data),
-			previewBinaryForLog([]byte(msg.Data)),
-			strings.TrimSpace(protocol.Deref(msg.Source)),
-		)
+		d.logf("pty_input: id=%s bytes=%d preview=%q source=%s", first.ID, len(data), previewBinaryForLog([]byte(data)), source)
 	}
-	_, writeErr := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: msg.ID, Data: msg.Data, Source: source})
-	d.recordSupportInputTrace(msg, receivedAt, time.Since(receivedAt), writeErr)
-	if writeErr != nil {
-		if shouldLogPtyCommandError(writeErr) {
-			d.logf("pty_input failed for %s: %v", msg.ID, writeErr)
-		}
-	} else if d.debugLogging {
-		d.logf("pty_input ok: id=%s bytes=%d", msg.ID, len(msg.Data))
-	}
-	if probeID != "" && client != nil {
-		result := &protocol.PtyInputProbeResultMessage{
-			Event:           protocol.EventPtyInputProbeResult,
-			ID:              msg.ID,
-			ProbeID:         probeID,
-			Success:         writeErr == nil,
-			WriteDurationUs: int(time.Since(probeStartedAt).Microseconds()),
-		}
+	_, writeErr := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: first.ID, Data: data, Source: source})
+	elapsed := time.Since(receivedAt)
+	for _, msg := range inputs {
+		d.recordSupportInputTrace(msg, receivedAt, elapsed, writeErr)
 		if writeErr != nil {
-			result.Error = protocol.Ptr(writeErr.Error())
+			if d.sessionHost(d.terminals().owner(msg.ID)) != "" {
+				d.sendCommandError(client, protocol.CmdPtyInput, writeErr.Error())
+			}
+			if shouldLogPtyCommandError(writeErr) {
+				d.logf("pty_input failed for %s: %v", msg.ID, writeErr)
+			}
+		} else if d.debugLogging {
+			d.logf("pty_input ok: id=%s bytes=%d", msg.ID, len(msg.Data))
 		}
-		d.sendToClient(client, result)
+		if probeID := strings.TrimSpace(protocol.Deref(msg.ProbeID)); probeID != "" && client != nil {
+			result := &protocol.PtyInputProbeResultMessage{Event: protocol.EventPtyInputProbeResult, ID: msg.ID, ProbeID: probeID, Success: writeErr == nil, WriteDurationUs: int(elapsed.Microseconds())}
+			if writeErr != nil {
+				result.Error = protocol.Ptr(writeErr.Error())
+			}
+			d.sendToClient(client, result)
+		}
 	}
 }
 
@@ -713,6 +774,9 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 	}
 	if _, err := Call[struct{}](context.Background(), d.router(), *msg); err != nil && shouldLogPtyCommandError(err) {
 		d.logf("pty_resize failed for %s: %v", msg.ID, err)
+		if d.sessionHost(d.terminals().owner(msg.ID)) != "" {
+			d.sendCommandError(client, protocol.CmdPtyResize, err.Error())
+		}
 	}
 }
 
@@ -752,6 +816,15 @@ func (d *Daemon) handleSetTerminalTheme(client *wsClient, msg *protocol.SetTermi
 	_, _ = Call[struct{}](context.Background(), d.router(), protocol.TerminalThemeMessage{
 		Cmd: protocol.CmdTerminalTheme, Foreground: theme.Foreground, Background: theme.Background, Cursor: theme.Cursor, AnsiPalette: theme.ANSIPalette[:],
 	})
+	for _, outpost := range d.outpostsUpdatedMessage().Outposts {
+		if outpost.State == protocol.OutpostStateConnected || outpost.State == protocol.OutpostStateStalled {
+			d.life.Go("outpostTheme", func() {
+				if err := d.sendOutpostTheme(d.life.Context(), outpost.ID); err != nil {
+					d.logf("outpost theme: %v", err)
+				}
+			})
+		}
+	}
 }
 
 func parseSignal(name string) syscall.Signal {
@@ -771,12 +844,20 @@ func parseSignal(name string) syscall.Signal {
 
 func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMessage) {
 	sessionID := msg.ID
+	if err := d.requireSessionHost(sessionID); err != nil {
+		d.sendCommandError(client, protocol.CmdKillSession, err.Error())
+		return
+	}
 	terminals := d.terminalsOf(sessionID)
 	for _, terminal := range terminals {
 		d.detachSession(client, terminal)
 	}
 	sig := parseSignal(protocol.Deref(msg.Signal))
-	d.life.Go("killSessionRuntimeAsync", func() { d.killSessionRuntimeAsync(sessionID, terminals, sig) })
+	if d.sessionHost(sessionID) != "" {
+		d.killSessionRuntimeAsync(sessionID, terminals, sig)
+	} else {
+		d.life.Go("killSessionRuntimeAsync", func() { d.killSessionRuntimeAsync(sessionID, terminals, sig) })
+	}
 }
 
 func (d *Daemon) killSessionRuntimeAsync(sessionID protocol.SessionID, terminals []harness.TerminalID, sig syscall.Signal) {

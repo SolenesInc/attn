@@ -23,6 +23,7 @@ type Placed interface {
 }
 
 var Placements = map[string]Placement{
+	"apply_monitor_view":        {LocatorHome, ""},
 	"get_kitty_image":           {LocatorTerminal, "id"},
 	"get_screen_snapshot":       {LocatorTerminal, "id"},
 	"pty_resize":                {LocatorTerminal, "id"},
@@ -37,6 +38,18 @@ var Placements = map[string]Placement{
 	"terminal_theme":            {LocatorMachine, "host"},
 	"terminal_wait_block":       {LocatorTerminal, "terminal_id"},
 	"terminal_write":            {LocatorTerminal, "terminal_id"},
+}
+
+func (ApplyMonitorViewMessage) Command() string {
+	return "apply_monitor_view"
+}
+
+func (ApplyMonitorViewMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (ApplyMonitorViewMessage) Locate() string {
+	return ""
 }
 
 func (GetKittyImageMessage) Command() string {

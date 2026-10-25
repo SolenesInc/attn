@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/victorarias/attn/internal/bridge"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -13,6 +14,7 @@ import (
 )
 
 type monitorBinding struct {
+	copied     bool
 	monitor    *sessionmonitor.Monitor
 	applied    sessionmonitor.View
 	catchUp    *time.Timer
@@ -20,16 +22,17 @@ type monitorBinding struct {
 }
 
 type monitorIndex struct {
-	policyMu sync.Mutex
-	applyMu  sync.Mutex
-	mu       sync.Mutex
-	sessions map[protocol.SessionID]*monitorBinding
-	registry *sessionmonitor.Registry
+	policyMu     sync.Mutex
+	applyMu      sync.Mutex
+	mu           sync.Mutex
+	sessions     map[protocol.SessionID]*monitorBinding
+	registry     *sessionmonitor.Registry
+	viewsChanged chan struct{}
 }
 
 func (d *Daemon) monitors() *monitorIndex {
 	d.monitorsOnce.Do(func() {
-		d.monitorState = &monitorIndex{sessions: make(map[protocol.SessionID]*monitorBinding), registry: sessionmonitor.NewRegistry(monitorHost{daemon: d}, d.monitorSaver())}
+		d.monitorState = &monitorIndex{sessions: make(map[protocol.SessionID]*monitorBinding), viewsChanged: make(chan struct{}), registry: sessionmonitor.NewRegistry(monitorHost{daemon: d}, d.monitorSaver())}
 	})
 	return d.monitorState
 }
@@ -47,12 +50,27 @@ func (d *Daemon) sessionMonitor(sessionID protocol.SessionID) *sessionmonitor.Mo
 	return d.monitors().monitor(sessionID)
 }
 
+func (r *monitorIndex) viewChanges() <-chan struct{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.viewsChanged
+}
+
+func (r *monitorIndex) notifyViewsChanged() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	close(r.viewsChanged)
+	r.viewsChanged = make(chan struct{})
+}
+
 func (r *monitorIndex) each() map[protocol.SessionID]*sessionmonitor.Monitor {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	monitors := make(map[protocol.SessionID]*sessionmonitor.Monitor, len(r.sessions))
 	for id, binding := range r.sessions {
-		monitors[id] = binding.monitor
+		if binding.monitor != nil {
+			monitors[id] = binding.monitor
+		}
 	}
 	return monitors
 }
@@ -68,6 +86,9 @@ func (d *Daemon) startSessionMonitorSeeded(seed *protocol.Session, fresh session
 }
 
 func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionID, candidate *sessionmonitor.Monitor) *sessionmonitor.Monitor {
+	if d.sessionHost(sessionID) != "" {
+		return nil
+	}
 	terminal := d.primaryTerminal(sessionID)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
 	linked := d.store.SessionLink(sessionID) == codexLinkKind
@@ -104,7 +125,7 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 		}
 		applied := monitor.Snapshot()
 		applied.PullRequests.Entries = d.recordedLinks(sessionID)
-		r.sessions[sessionID] = &monitorBinding{monitor: monitor, applied: applied}
+		r.sessions[sessionID] = &monitorBinding{monitor: monitor, applied: applied, copied: d.copiedSession(sessionID)}
 		homeOf(monitor).bind(sessionID)
 		r.mu.Unlock()
 		r.policyMu.Unlock()
@@ -226,6 +247,8 @@ func (h monitorHost) ReadBranch(ctx context.Context, directory string) (*attngit
 }
 
 type monitorHome struct {
+	bridge  *bridge.Conn
+	host    string
 	daemon  *Daemon
 	monitor *sessionmonitor.Monitor
 	session atomic.Value
@@ -311,6 +334,17 @@ func (d *Daemon) kickMonitorTerminals() {
 	d.life.Go("pushMonitorTerminals", func() {
 		d.monitorTerminalsDirty.Store(false)
 		for sessionID, monitor := range d.monitors().each() {
+			if d.store.Get(sessionID) == nil {
+				r := d.monitors()
+				r.mu.Lock()
+				binding := r.sessions[sessionID]
+				copied := binding != nil && binding.copied
+				r.mu.Unlock()
+				if copied {
+					d.forgetMonitor(sessionID)
+					continue
+				}
+			}
 			monitor.SetTerminals(string(sessionID), d.terminals().Of(sessionID))
 		}
 	})

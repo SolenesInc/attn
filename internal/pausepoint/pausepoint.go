@@ -24,6 +24,7 @@ const (
 	PtySubscriberDrop  = "pty-subscriber-drop"
 	PtyWatchReplay     = "pty-watch-replay"
 	PtyWorkerUpgrade   = "pty-worker-upgrade"
+	PtyWaitBlock       = "pty-wait-block"
 	BusAnnounce        = "bus-announce"
 	BusEventHandled    = "bus-event-handled"
 

@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -56,21 +57,23 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 			}
 		}
 	}
+	spawnRemote := func(label, directory string) protocol.SessionID {
+		t.Helper()
+		return protocol.SessionID(home.Spawn(p, fakeagent.Harness(protocol.SessionAgentShell), remote.Path(directory), func(msg *protocol.SpawnSessionMessage) {
+			msg.Host = &host
+			msg.Label = &label
+		}))
+	}
+	remoteShell := spawnRemote("remote shell", "remote")
+	home.Spawn(p, fakeagent.Harness(protocol.SessionAgentShell), home.Path("local"))
 	priority := func(on bool) {
 		t.Helper()
-		p.Send(protocol.SetSessionPriorityMessage{Cmd: protocol.CmdSetSessionPriority, SessionID: "remote-shell", Priority: on})
-		testworld.AwaitSession(p, "remote-shell", func(s protocol.Session) bool { return protocol.Deref(s.Priority) == on })
-	}
-
-	if err := home.InjectSessionOn(host, "remote-shell", "remote shell", home.Path("remote"), protocol.SessionAgentShell); err != nil {
-		t.Fatal(err)
-	}
-	if err := home.InjectSession("local-shell", "local shell", home.Path("local"), protocol.SessionAgentShell); err != nil {
-		t.Fatal(err)
+		p.Send(protocol.SetSessionPriorityMessage{Cmd: protocol.CmdSetSessionPriority, SessionID: remoteShell, Priority: on})
+		testworld.AwaitSession(p, string(remoteShell), func(s protocol.Session) bool { return protocol.Deref(s.Priority) == on })
 	}
 	awaitCopy()
 	created := sessionsOn(t, remote, "")
-	if _, ok := created["remote-shell"]; !ok || len(created) != 1 {
+	if _, ok := created[remoteShell]; !ok || len(created) != 1 {
 		t.Fatalf("copy after create = %v, want only the shell whose host is the outpost", created)
 	}
 
@@ -99,16 +102,14 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	staged.Await()
 	staged.Release()
 	awaitCopy()
-	if !sessionsOn(t, remote, "")["remote-shell"].Priority {
+	if !sessionsOn(t, remote, "")[remoteShell].Priority {
 		t.Fatal("the batch the outpost lost was not sent again")
 	}
 
-	testworld.Request(p, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: "remote-shell"}, protocol.EventSessionCloseResult,
-		func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == "remote-shell" })
+	testworld.Request(p, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: remoteShell}, protocol.EventSessionCloseResult,
+		func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == remoteShell })
 	awaitCopy()
-	if err := home.InjectSessionOn(host, "kept-shell", "kept shell", home.Path("kept"), protocol.SessionAgentShell); err != nil {
-		t.Fatal(err)
-	}
+	spawnRemote("kept shell", "kept")
 	awaitCopy()
 
 	remote.Stop()
@@ -121,20 +122,47 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 		t.Fatalf("a daemon started after an offline leave kept the copy: %v", got)
 	}
 
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "again", Address: address})
-	host = outpostState(p, "again", protocol.OutpostStateConnected).ID
-	if err := home.InjectSessionOn(host, "second-shell", "second shell", home.Path("second"), protocol.SessionAgentShell); err != nil {
-		t.Fatal(err)
+}
+
+func TestReconnectRestoresTheCopyAfterAnOutpostLeaves(t *testing.T) {
+	a := testworld.NewSSHAgent(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	applied := remote.PauseEvery(pausepoint.CopyBatchApplied)
+	for _, s := range []*testworld.Stack{remote, home} {
+		a.Authorize(s.World)
+		s.Start()
 	}
-	staged.Await()
-	staged.Release()
+	address := bridgeAddress(t)
+	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	p := enableOutposts(t, home)
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+	host := outpostState(p, "outpost", protocol.OutpostStateConnected).ID
+	home.Spawn(p, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	awaitCopy := func() {
+		t.Helper()
+		for {
+			applied.Await()
+			equal := reflect.DeepEqual(sessionsOn(t, home, host), sessionsOn(t, remote, ""))
+			applied.Release()
+			if equal {
+				return
+			}
+		}
+	}
 	awaitCopy()
-	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
-	if got := sessionsOn(t, remote, ""); len(got) != 0 {
-		t.Fatalf("attn enrollment leave on a running outpost kept the copy: %v", got)
-	}
 	requireStdout(t, home.Attn("enrollment", "leave"), "not enrolled")
 	if kept := sessionsOn(t, home, host); len(kept) != 1 {
-		t.Fatalf("attn enrollment leave on the home dropped its own sessions: %v", kept)
+		t.Fatalf("a home leaving enrollment dropped its own shell: %v", kept)
+	}
+	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
+	awaitCopy()
+	if copied := sessionsOn(t, remote, ""); len(copied) != 1 {
+		t.Fatalf("re-pairing did not restore the home's shell: %v", copied)
+	}
+	p.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host})
+	testworld.Await(p, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
+	if copied := sessionsOn(t, remote, ""); len(copied) != 0 {
+		t.Fatalf("leave after Remove kept copied shells: %v", copied)
 	}
 }

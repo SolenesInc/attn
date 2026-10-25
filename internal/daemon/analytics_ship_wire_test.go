@@ -187,6 +187,7 @@ func TestTurningSharingOffDuringTheFirstRegistrationSendsNothing(t *testing.T) {
 	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {
 		app := w.App()
 		setSetting(t, app, "analytics.enabled", "true")
+		sendAppAction(app, "settings_section", map[string]any{"section": "analytics"})
 		setSetting(t, app, "analytics.sharing_enabled", "true")
 		<-arrived
 		setSetting(t, app, "analytics.sharing_enabled", "false")

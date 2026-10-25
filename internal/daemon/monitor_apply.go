@@ -3,9 +3,9 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/crashpoint"
 	"time"
 
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -23,18 +23,42 @@ func (r *monitorIndex) bindingOf(h *monitorHome) (protocol.SessionID, *monitorBi
 }
 
 func (h *monitorHome) Applied(view sessionmonitor.View) bool {
+	return h.apply(view, false)
+}
+
+func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 	d := h.daemon
 	r := d.monitors()
 	r.applyMu.Lock()
+	if h.bridge != nil {
+		if !d.isOutpostConn(h.host, h.bridge) {
+			r.applyMu.Unlock()
+			return false
+		}
+	}
 	session, binding := r.bindingOf(h)
 	if session == "" {
 		r.applyMu.Unlock()
 		return d.admitMonitorConversation(h.monitor, view)
 	}
 	previous := binding.applied
+	if binding.copied {
+		if previous.Epoch.V != view.Epoch.V || previous.Revision.V < view.Revision.V {
+			binding.applied = view
+			r.notifyViewsChanged()
+		}
+		r.applyMu.Unlock()
+		return true
+	}
 	if previous.Epoch.V == view.Epoch.V && previous.Revision.V >= view.Revision.V {
 		r.applyMu.Unlock()
 		return true
+	}
+	if save {
+		if err := (storeSaver{daemon: d}).SaveRuntime(session, previous, view); err != nil {
+			r.applyMu.Unlock()
+			return false
+		}
 	}
 	recorded, moved, err := h.recordConversation(session, previous, view)
 	var linked []string

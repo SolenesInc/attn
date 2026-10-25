@@ -33,9 +33,10 @@ var ErrSessionNotFound = errors.New("session not found")
 type LogFunc func(format string, args ...interface{})
 
 type SpawnOptions struct {
-	ID    string
-	CWD   string
-	Agent string
+	HostName string
+	ID       string
+	CWD      string
+	Agent    string
 
 	Cols uint16
 	Rows uint16
@@ -671,6 +672,10 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_TRUST_WORKING_DIRECTORY", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 	env = MergeEnvironment(env, opts.DaemonEnv)
+	env = filterEnvKeys(env, "ATTN_HOST", "ATTN_PTY_HOST_NAME")
+	if agent == "shell" && opts.HostName != "" {
+		env = MergeEnvironment(env, []string{"ATTN_HOST=" + opts.HostName})
+	}
 	return env
 }
 

@@ -799,6 +799,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		return
 	}
 
+	if cmd != protocol.CmdPtyInput {
+		client.terminalOrder.breakInputBatch()
+	}
 	switch cmd {
 	case protocol.CmdProfileCreate:
 		d.handleProfileCreate(client, msg.(*protocol.ProfileCreateMessage))
@@ -1108,7 +1111,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSetPluginPriority:
 		d.handleSetPluginPriorityWS(client, msg.(*protocol.SetPluginPriorityMessage))
 	case protocol.CmdUnregister:
-		d.handleUnregisterWS(client, msg.(*protocol.UnregisterMessage))
+		close := msg.(*protocol.UnregisterMessage)
+		if d.sessionHost(close.ID) != "" {
+			d.offPumpInTerminalOrder(client, d.primaryTerminal(close.ID), func() { d.handleUnregisterWS(client, close) })
+		} else {
+			d.handleUnregisterWS(client, close)
+		}
 	case protocol.CmdGetRecentLocations:
 		d.handleGetRecentLocationsWS(client, msg.(*protocol.GetRecentLocationsMessage))
 	case protocol.CmdGetCommandUsage:
@@ -1186,14 +1194,20 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		snapshot := msg.(*protocol.GetScreenSnapshotMessage)
 		d.inTerminalOrder(client, snapshot.ID, func() { d.handleGetScreenSnapshot(client, snapshot) })
 	case protocol.CmdGetKittyImage:
-		d.handleGetKittyImage(client, msg.(*protocol.GetKittyImageMessage))
+		image := msg.(*protocol.GetKittyImageMessage)
+		d.inTerminalOrder(client, image.ID, func() { d.handleGetKittyImage(client, image) })
 	case protocol.CmdPtyInput:
 		input := msg.(*protocol.PtyInputMessage)
-		d.inTerminalOrder(client, input.ID, func() { d.handlePtyInput(client, input) })
+		if d.sessionHost(d.terminals().owner(input.ID)) != "" {
+			d.queueRemoteInput(client, input)
+		} else {
+			d.inTerminalOrder(client, input.ID, func() { d.handlePtyInput(client, input) })
+		}
 	case protocol.CmdSupportSnapshot:
 		d.handleSupportSnapshot(client, msg.(*protocol.SupportSnapshotMessage))
 	case protocol.CmdTerminalPointerActivity:
-		d.handleTerminalPointerActivity(msg.(*protocol.TerminalPointerActivityMessage))
+		pointer := msg.(*protocol.TerminalPointerActivityMessage)
+		d.inTerminalOrder(client, pointer.ID, func() { d.handleTerminalPointerActivity(pointer) })
 	case protocol.CmdBusStatusGet:
 		d.handleBusStatusGet(client, msg.(*protocol.BusStatusGetMessage))
 	case protocol.CmdBusSetConsumerEnabled:
@@ -1224,9 +1238,19 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		resize := msg.(*protocol.PtyResizeMessage)
 		d.inTerminalOrder(client, resize.ID, func() { d.handlePtyResize(client, resize) })
 	case protocol.CmdKillSession:
-		d.handleKillSession(client, msg.(*protocol.KillSessionMessage))
+		kill := msg.(*protocol.KillSessionMessage)
+		if d.sessionHost(kill.ID) != "" {
+			d.offPumpInTerminalOrder(client, d.primaryTerminal(kill.ID), func() { d.handleKillSession(client, kill) })
+		} else {
+			d.handleKillSession(client, kill)
+		}
 	case protocol.CmdReloadSession:
-		d.life.Go("handleReloadSession", func() { d.handleReloadSession(client, msg.(*protocol.ReloadSessionMessage)) })
+		reload := msg.(*protocol.ReloadSessionMessage)
+		if d.sessionHost(reload.ID) != "" {
+			d.offPumpInTerminalOrder(client, d.primaryTerminal(reload.ID), func() { d.handleReloadSession(client, reload) })
+		} else {
+			d.life.Go("handleReloadSession", func() { d.handleReloadSession(client, reload) })
+		}
 	case protocol.CmdRestartSharedCodex:
 		d.life.Go("handleRestartSharedCodex", func() { d.handleRestartSharedCodex(client, msg.(*protocol.RestartSharedCodexMessage)) })
 	case protocol.CmdInstallCodexUpdate:

@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"strings"
+	"syscall"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/protocol"
@@ -46,6 +47,26 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	if row == nil {
 		return fmt.Errorf("outpost %q does not exist", id)
 	}
+	if action == "remove" {
+		_, _, reachable := d.outpostConn(id)
+		for _, session := range d.store.List("") {
+			if protocol.Deref(session.Host) != id {
+				continue
+			}
+			closed := store.SessionClose{By: store.SessionClosedByUser, Reason: "outpost removed"}
+			if reachable == nil {
+				closing, err := d.beginSessionClose(session.ID, closed, nil)
+				if err != nil {
+					return err
+				}
+				if closing.teardown != nil {
+					<-d.terminateSessionAsync(session.ID, syscall.SIGTERM, closing.teardown)
+				}
+			} else {
+				d.closeSession(session.ID, closed)
+			}
+		}
+	}
 	d.stopOutpostDial(id)
 	if action == "remove" {
 		err = d.store.DeleteOutpost(id)
@@ -69,9 +90,11 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 }
 
 func (d *Daemon) handleOutpostCommand(client *wsClient, action, id, name, address string) {
-	if err := d.changeOutpost(action, id, name, address); err != nil {
-		d.sendCommandError(client, action+"_outpost", err.Error())
-	}
+	d.life.Go("outpostCommand", func() {
+		if err := d.changeOutpost(action, id, name, address); err != nil {
+			d.sendCommandError(client, action+"_outpost", err.Error())
+		}
+	})
 }
 
 func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
