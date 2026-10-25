@@ -33,6 +33,7 @@ type sessionReopenVerdict struct {
 	SessionID      protocol.SessionID
 	Entry          *protocol.SessionLedgerEntry
 	Execution      garden.Dispatch
+	Resume         string
 	Live           bool
 	Reopenable     bool
 	Reason         string
@@ -93,7 +94,6 @@ func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) g
 	if execution.RepositoryRoot == "" {
 		execution.RepositoryRoot = protocol.Deref(entry.MainRepo)
 	}
-	execution.Resume = d.store.GetResumeSessionID(entry.ID)
 	return execution
 }
 
@@ -117,8 +117,8 @@ func (d *Daemon) decideReopenPlace(
 	hasLaunchIntent bool,
 	gitView reopenGit,
 ) error {
-	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.DirectoryState == directoryMissing)
-	if l := d.linkOf(verdict.SessionID); !conversation && l != nil && l.setAsideAtClose(verdict.SessionID, strings.TrimSpace(verdict.Execution.Resume)) {
+	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.Resume, verdict.DirectoryState == directoryMissing)
+	if l := d.linkOf(verdict.SessionID); !conversation && l != nil && l.setAsideAtClose(verdict.SessionID, verdict.Resume) {
 		conversation, conversationReason = true, ""
 	}
 	if !hasLaunchIntent {
@@ -229,8 +229,7 @@ func (d *Daemon) branchMerged(sessionID protocol.SessionID, branch string) bool 
 	return false
 }
 
-func (d *Daemon) reopenConversation(execution garden.Dispatch, directoryMissing bool) (bool, string) {
-	resumeID := strings.TrimSpace(execution.Resume)
+func (d *Daemon) reopenConversation(execution garden.Dispatch, resumeID string, directoryMissing bool) (bool, string) {
 	if resumeID == "" {
 		return false, "no conversation id was saved for this session, so there is nothing to resume"
 	}
@@ -398,7 +397,7 @@ func (d *Daemon) performReopenLocked(
 	if created != "" {
 		execution := verdict.Execution
 		execution.Cwd = plan.Directory
-		if available, reason := d.reopenConversation(execution, false); !available {
+		if available, reason := d.reopenConversation(execution, verdict.Resume, false); !available {
 			return nil, fmt.Errorf("cannot reopen after restoring the worktree: %s", reason)
 		}
 	}

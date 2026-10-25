@@ -29,6 +29,7 @@ func (d *Daemon) resolveReopen(
 		SessionID: entry.ID,
 		Entry:     &entry,
 		Execution: d.reopenExecutionFromLedger(&entry),
+		Resume:    strings.TrimSpace(d.store.GetResumeSessionID(entry.ID)),
 		Live:      protocol.Deref(entry.ClosedAt) == "" && d.sessionActive(entry.ID),
 	}
 	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)

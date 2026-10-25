@@ -694,9 +694,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	if !req.isShell && req.existingSession == nil && req.resumeSessionID == "" {
 		d.sessionMonitor(session.ID).StartCost()
 	}
-	if plan.launchedConversation != "" {
-		d.rememberDispatchResume(session.ID, plan.launchedConversation)
-	}
 
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	monitor := d.sessionMonitor(session.ID)
