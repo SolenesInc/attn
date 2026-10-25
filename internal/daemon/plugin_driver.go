@@ -649,8 +649,8 @@ func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info 
 	if !queued {
 		return false
 	}
-	d.captureExitScreen(sessionID, info)
-	watch.settle(launchOutcome{exit: d.exitScreenOrBare(sessionID, info)})
+	exit := d.holdExit(sessionID, info)
+	watch.settle(launchOutcome{exit: d.exitScreenOrBare(sessionID, exit)})
 	return true
 }
 

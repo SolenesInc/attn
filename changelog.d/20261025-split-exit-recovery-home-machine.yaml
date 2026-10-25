@@ -1,0 +1,4 @@
+kind: internal
+area: terminals
+change: A terminal's exit and startup recovery split into the part that runs on its machine and the part that updates records, so a terminal on another machine can share them.
+notes: While the database refuses writes, a terminal's exit now reaches the app when the save retry lands instead of at once.

@@ -6,15 +6,17 @@ import (
 	"strings"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAnExitReleasesItsRuntimeWhenStorageIsUnavailable(t *testing.T) {
+func TestAnExitReleasesItsRuntimeAtOnceAndReportsTheExitOnceStorageReturns(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app := w.App()
 		launched := make(chan *testworld.Terminal, 1)
@@ -26,10 +28,11 @@ func TestAnExitReleasesItsRuntimeWhenStorageIsUnavailable(t *testing.T) {
 		defer restore()
 		terminal.Exit(1)
 		synctest.Wait()
-		restore()
 		if _, err := w.terms.SessionInfo(context.Background(), terminal.Options.ID); !errors.Is(err, pty.ErrSessionNotFound) {
 			t.Fatalf("exited runtime remains after storage failure: %v", err)
 		}
+		restore()
+		time.Sleep(jobs.DefaultBackoffBase)
 		exited := testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
 		if exited.ExitCode != 1 {
 			t.Fatalf("exit code = %d, want 1", exited.ExitCode)

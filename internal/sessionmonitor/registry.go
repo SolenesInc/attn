@@ -2,6 +2,7 @@ package sessionmonitor
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"strconv"
 	"sync"
@@ -72,6 +73,7 @@ type Monitor struct {
 	policy              Policy
 	agent               protocol.SessionAgent
 	startedAt           time.Time
+	epoch               string
 	revision            uint64
 	state               StateView
 	driver              DriverMetadata
@@ -89,6 +91,7 @@ type Monitor struct {
 	pullRequests        map[string]PullRequest
 	sentFiles           map[string]uint64
 	harnessTitle        string
+	terminalTitle       string
 	exit                *Exit
 	costInitialized     bool
 	cost                map[string]*sessioncost.Source
@@ -198,7 +201,7 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	r.nextLocal++
 	m := start.Candidate
 	if m == nil {
-		m = &Monitor{registry: r}
+		m = &Monitor{registry: r, epoch: rand.Text()}
 		m.home = r.host.HomeFor(m)
 	}
 	m.succeeds = Key{}

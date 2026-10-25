@@ -81,6 +81,9 @@ type Conversation struct {
 
 type Exit struct {
 	LifecycleID string
+	Terminal    harness.TerminalID
+	Stopped     bool
+	Held        bool
 	Text        string
 	Cols        int
 	Rows        int
@@ -89,12 +92,22 @@ type Exit struct {
 	At          time.Time
 }
 
+func SameExit(a, b *Exit) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	x, y := *a, *b
+	x.At, y.At = time.Time{}, time.Time{}
+	return x == y && a.At.Equal(b.At)
+}
+
 type View struct {
 	Conversation       Value[Conversation]                   `fact:"session.conversation.changed"`
 	CostInitialized    Value[bool]                           `fact:"session.cost.changed"`
 	Cost               KeyedSet[string, *sessioncost.Source] `fact:"session.cost.changed"`
 	FirstReportAt      Value[time.Time]                      `fact:"-"`
 	Key                Value[Key]                            `fact:"-"`
+	Epoch              Value[string]                         `fact:"-"`
 	Revision           Value[uint64]                         `fact:"-"`
 	Succeeds           Value[Key]                            `fact:"-"`
 	State              Value[StateView]                      `fact:"session.state.changed"`
@@ -106,6 +119,7 @@ type View struct {
 	PullRequests       KeyedSet[string, PullRequest]         `fact:"session.pull_request.changed"`
 	SentFiles          KeyedSet[string, uint64]              `fact:"-"`
 	HarnessTitle       Value[string]                         `fact:"session.renamed"`
+	TerminalTitle      Value[string]                         `fact:"session.title.changed"`
 	LastSeen           Value[time.Time]                      `fact:"-"`
 	PendingSwitch      Value[Conversation]                   `fact:"-"`
 	Exit               Value[*Exit]                          `fact:"session.pty.exited"`
@@ -139,6 +153,7 @@ func (m *Monitor) snapshotLocked() View {
 		CostInitialized:    Value[bool]{m.costInitialized},
 		Cost:               KeyedSet[string, *sessioncost.Source]{Entries: m.cost},
 		Key:                Value[Key]{m.keyLocked()},
+		Epoch:              Value[string]{m.epoch},
 		Revision:           Value[uint64]{m.revision},
 		State:              Value[StateView]{state},
 		Turn:               Value[TurnStamps]{m.turn},
@@ -150,6 +165,7 @@ func (m *Monitor) snapshotLocked() View {
 		PullRequests:       KeyedSet[string, PullRequest]{Entries: m.pullRequests},
 		SentFiles:          KeyedSet[string, uint64]{Entries: m.sentFiles},
 		HarnessTitle:       Value[string]{m.harnessTitle},
+		TerminalTitle:      Value[string]{m.terminalTitle},
 		LastSeen:           Value[time.Time]{m.touchedAt},
 		PendingSwitch:      Value[Conversation]{m.pendingSwitch},
 		Exit:               Value[*Exit]{m.exit},

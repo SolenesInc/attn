@@ -17,6 +17,9 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if previous.HarnessTitle.V != view.HarnessTitle.V && d.store.SessionLabels(session).UserLabel == "" {
 		d.publishFact(FactSessionRenamed, string(session), nil)
 	}
+	if previous.TerminalTitle.V != view.TerminalTitle.V {
+		d.publishFact(FactSessionTitleChanged, string(session), nil)
+	}
 	for path, sequence := range view.SentFiles.Entries {
 		if previous.SentFiles.Entries[path] != sequence {
 			d.receiveSentFile(session, path)
@@ -63,5 +66,8 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	}
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {
 		d.broadcastSessionStateChanged(session)
+	}
+	if exit := view.Exit.V; exit != nil && !exit.Held && !sessionmonitor.SameExit(exit, previous.Exit.V) {
+		d.reactSessionExit(session, *exit)
 	}
 }
