@@ -469,3 +469,38 @@ func TestACodexUpdateInstalledFromTheAppRunsInATileAndSharedCodexMovesToIt(t *te
 	})
 	sharedCodexOn("0.164.0", "0.164.0")
 }
+
+func TestACodexUpdateOfferKeepsItsInstallActionAcrossADaemonRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.SetCodexVersion("0.162.1")
+	s.SetCodexLatest("0.163.0")
+	s.Start()
+	offers := func(app *testworld.Peer) []protocol.Notification {
+		t.Helper()
+		testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+			return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.LatestVersion) == "0.163.0" && protocol.Deref(m.SharedCodex.InstalledVersion) == "0.162.1"
+		})
+		requestID := uuid.NewString()
+		listed := testworld.Request(app, protocol.NotificationListMessage{Cmd: protocol.CmdNotificationList, RequestID: protocol.Ptr(requestID)},
+			protocol.EventNotificationListResult, func(r protocol.NotificationListResultMessage) bool { return r.RequestID == requestID })
+		var found []protocol.Notification
+		for _, n := range listed.Notifications {
+			if n.Kind == "codex_update_available" {
+				found = append(found, n)
+			}
+		}
+		return found
+	}
+	app := s.App()
+	shareCodex(t, app)
+	if before := offers(app); len(before) != 1 || len(before[0].Actions) == 0 {
+		t.Fatalf("with Codex 0.162.1 installed and 0.163.0 out, the offers are %+v, want one with Install", before)
+	}
+
+	s.Stop()
+	s.Start()
+	if after := offers(s.App()); len(after) != 1 || len(after[0].Actions) == 0 || after[0].ReadAt != "" {
+		t.Errorf("after a daemon restart, with 0.162.1 still installed, the 0.163.0 offer is %+v, want it unread with Install", after)
+	}
+}

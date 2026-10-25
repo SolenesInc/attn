@@ -110,7 +110,9 @@ func (r *codexShared) offerUpdate() {
 		return
 	}
 	for _, n := range existing {
-		if n.Kind != notificationKindCodexUpdate || n.SourceID == offered {
+		installedIt := codexReleaseVersion(installed) && !codexOlder(installed, n.SourceID)
+		replaced := codexOlder(n.SourceID, offered)
+		if n.Kind != notificationKindCodexUpdate || !(installedIt || replaced) {
 			continue
 		}
 		resolved, err := r.d.store.ResolveNotification(n.ID, time.Now())
