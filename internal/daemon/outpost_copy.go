@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"golang.org/x/crypto/ssh"
@@ -15,23 +17,30 @@ import (
 const bridgeCallCopy = "copy"
 
 func (d *Daemon) sendOutpostCopy(ctx context.Context, host string, conn *bridge.Conn) {
+	var retry time.Duration
 	for {
 		changed := d.store.OutboxChanged()
-		batch, err := d.store.OutboxBatch(host, bridge.MaxCallRequest)
-		if err == nil && len(batch.IDs) > 0 {
-			err = conn.Call(ctx, bridgeCallCopy, batch.Rows, nil)
-			if err == nil {
-				err = d.store.AckOutbox(batch.IDs)
-			}
-			if err == nil {
-				continue
-			}
+		sent, err := d.sendOutpostCopyBatch(ctx, host, conn)
+		if sent && err == nil {
+			retry = 0
+			continue
 		}
-		if err != nil && ctx.Err() == nil {
-			d.logf("outpost %s copy: %v", host, err)
+		var again <-chan time.Time
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			if retry == 0 {
+				retry = jobs.DefaultBackoffBase
+			} else {
+				retry = min(retry*2, jobs.DefaultBackoffCap)
+			}
+			d.logf("outpost %s copy: %v; sending again in %s", host, err, retry)
+			again = time.After(retry)
 		}
 		select {
 		case <-changed:
+		case <-again:
 		case <-conn.Done():
 			return
 		case <-ctx.Done():
@@ -40,12 +49,25 @@ func (d *Daemon) sendOutpostCopy(ctx context.Context, host string, conn *bridge.
 	}
 }
 
+func (d *Daemon) sendOutpostCopyBatch(ctx context.Context, host string, conn *bridge.Conn) (bool, error) {
+	batch, err := d.store.OutboxBatch(host, bridge.MaxCallRequest)
+	if err != nil || len(batch.IDs) == 0 {
+		return false, err
+	}
+	if err := conn.Call(ctx, bridgeCallCopy, batch.Rows, nil); err != nil {
+		return false, err
+	}
+	return true, d.store.AckOutbox(batch.IDs)
+}
+
 func (d *Daemon) outpostHandlers() bridge.Handlers {
 	return bridge.Handlers{
 		bridgeCallCopy: func(home *bridge.Conn, incoming ssh.NewChannel) {
-			d.life.Go("applyCopy", func() {
+			if !d.life.Go("applyCopy", func() {
 				bridge.Answer(incoming, func(request []byte) (any, error) { return d.applyCopyCall(home.Peer().DaemonID, request) })
-			})
+			}) {
+				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
+			}
 		},
 	}
 }
