@@ -1,15 +1,14 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { AnnotatedTerminal } from '../TerminalAnnotations/AnnotatedTerminal';
 import { TerminalStaleBuildNotice } from '../TerminalStaleBuildNotice';
 import { SharedConversationNotice } from '../SharedConversationNotice';
 import { useDesktopContext } from './DesktopContext';
 import { paneNotice } from './paneNotice';
+import { DesktopOfflineNotice } from './DesktopOfflineNotice';
 import type { DesktopAgentProps } from './desktopTypes';
 import { useSessionStore } from '../../store/sessions';
 
 export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRefused }: DesktopAgentProps & { onInputRefused: () => void }) {
-  const wasOnline = useRef(Boolean(paneSession && !paneSession.offline));
-  if (paneSession && !paneSession.offline) wasOnline.current = true;
   const [resuming, setResuming] = useState(false);
   const [resumeError, setResumeError] = useState('');
   const {
@@ -55,12 +54,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRef
 
   return (
     <div className="desktop-pane-body">
-      {paneSession?.offline ? (
-        <div className="desktop-pane-offline-strip" role="status">
-          <span>{paneSession.hostName} unreachable · typing is not sent</span>
-          {!wasOnline.current ? <span>The screen is on {paneSession.hostName}.</span> : null}
-        </div>
-      ) : null}
+      <DesktopOfflineNotice paneSession={paneSession} />
       {stopped ? (
         <div className="desktop-agent-stopped" role="status">
           <div>
