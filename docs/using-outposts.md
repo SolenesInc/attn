@@ -115,7 +115,7 @@ It opens beside the agent's tile. In that shell, **⌘D** opens another shell on
 its outpost, using the first shell's start directory.
 
 When the bridge is lost or refused, each terminal stays in place. Its state
-dot becomes hollow and crossed, and its sidebar and Dashboard rows have a
+dot becomes hollow and crossed, and its sidebar and home screen rows have a
 faint red tint. A strip over the terminal says "<name> unreachable · typing
 is not sent" without changing the terminal's size. Each refused key flashes
 the tile red. Typing and resizes are not sent, and close, split, kill, and
@@ -152,11 +152,13 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 | no ssh-agent, no keys in it, or no key accepted | Load your key with `ssh-add`, and check it is in the outpost's `authorized_keys`. |
 | it is the same outpost as another row | You added it twice under two addresses. Remove one. |
 
+## Remove an outpost
+
 **Remove** closes the outpost's terminals across all profiles, then forgets
 the outpost and its identity. When it has terminals, the row asks you to
 confirm with **Remove and close N terminals**, or **Cancel**. When it has
 none, removal happens immediately. If the outpost is unreachable, the home
-closes its records; run `attn enrollment leave` on the outpost to stop its
+closes its records. Run `attn enrollment leave` on the outpost to stop its
 remaining shells.
 
 Turning Outposts off disconnects every outpost and keeps the list for next
