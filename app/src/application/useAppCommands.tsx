@@ -43,6 +43,7 @@ import {
 } from './AppIcons';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
+import { useSharedCodexCommands } from './useSharedCodex';
 
 export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
@@ -105,6 +106,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     whatsNew,
   } = useAppPanelsContext();
   const { openActiveSessionInEditor, editorUnavailableReason } = useOpenInEditor();
+  const sharedCodexCommands = useSharedCodexCommands();
   const navigationCommands = useMemo<PaletteCommand[]>(() => {
     const keys = (id: ShortcutId) => [shortcutTokens(id)];
     const commands: PaletteCommand[] = [
@@ -675,7 +677,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
   }, [actionMenuItemsWithDesktopActions, handleWakeActiveSession, handleSnoozeActiveSession]);
 
   return useMemo(
-    () => [...navigationCommands, ...actionMenuItemsWithQueueActions],
-    [navigationCommands, actionMenuItemsWithQueueActions],
+    () => [...navigationCommands, ...sharedCodexCommands, ...actionMenuItemsWithQueueActions],
+    [navigationCommands, sharedCodexCommands, actionMenuItemsWithQueueActions],
   );
 }

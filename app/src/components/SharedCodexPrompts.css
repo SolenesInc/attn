@@ -1,0 +1,45 @@
+.shared-codex-prompt {
+  margin: auto;
+  width: min(480px, calc(100vw - 32px));
+}
+
+.shared-codex-prompt .mp-dialog-body {
+  display: grid;
+  gap: 12px;
+}
+
+.shared-codex-prompt .mp-dialog-body p {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+}
+
+.shared-codex-prompt-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shared-codex-prompt-list li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-app);
+  font-size: var(--font-size-md);
+}
+
+.shared-codex-prompt-detail {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.shared-codex-prompt .mp-dialog-actions {
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 0;
+  padding: 0 24px 22px;
+}

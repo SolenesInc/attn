@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "codex-update": {
+        "run": "scenario-codex-update-2026-10-25T01-05-28-467Z",
+        "job": "Local packaged scenario, cxu isolated instance",
+        "recordedAt": "2026-10-25",
+        "seconds": 23.919,
+        "runnerClass": "local macOS",
+        "note": "Green serial-matrix ATTN_VERDICT durationMs=23919 with a cold app launch (18.1 s), including cleanup. Covers the Codex update banner: the offer, Install in a shell tile, the restart onto the new Codex, and Reload tiles. Remeasure on Linux CI."
+      },
       "terminal-input": {
         "run": "terminal-input-2026-10-08T22-27-28-485Z",
         "job": "Local packaged scenario, ctrlreturn isolated instance",
@@ -378,6 +386,7 @@
     "notebook-editor-undo": 32.8,
     "prompt-composition": 29.596,
     "codex-shared": 25,
+    "codex-update": 23.919,
     "pty-host-setting": 8.3,
     "session-close-ledger": 9.9,
     "session-reopen": 6.2,

@@ -291,6 +291,11 @@ func (w *World) SetCodexLatest(version string) {
 	w.kit.SetCodexLatest(version)
 }
 
+func (w *World) FailCodexUpdate(line string) {
+	w.T.Helper()
+	w.kit.FailCodexUpdate(line)
+}
+
 func (w *World) InstallCodexAt(name, version string) string {
 	w.T.Helper()
 	return w.kit.InstallCodexAt(w.Path(name), version)

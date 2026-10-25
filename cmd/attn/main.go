@@ -151,6 +151,9 @@ func main() {
 	case "terminal":
 		maybePrintInstanceBanner()
 		runTerminal()
+	case "codex":
+		maybePrintInstanceBanner()
+		runCodex()
 	case "agent":
 		maybePrintInstanceBanner()
 		runAgent()
@@ -631,6 +634,7 @@ commands:
   settings list|get|set             read and change daemon settings
   preflight                         diagnose tools, paths, routing, and launch settings
   pr <command>                      watch or inspect pull request readiness
+  codex status|update|restart       shared Codex versions, its update and restart
   list                              list sessions and profiles
   activity [clear <id>]             what each agent is doing right now
   conversation <command>            list, keep forever or forget attn's conversation copies

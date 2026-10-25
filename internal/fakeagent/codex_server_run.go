@@ -74,6 +74,11 @@ func (s *CodexServer) AskApproval(conversation string) {
 	s.call(methodAskApproval, serverThreadParams{ThreadID: conversation}, nil)
 }
 
+func (s *CodexServer) Work(conversation string) {
+	s.t.Helper()
+	s.call(methodWork, serverThreadParams{ThreadID: conversation}, nil)
+}
+
 func (s *CodexServer) AskQuestion(conversation string) {
 	s.t.Helper()
 	s.call(methodAskQuestion, serverThreadParams{ThreadID: conversation}, nil)

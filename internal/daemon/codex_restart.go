@@ -181,9 +181,19 @@ func (r *codexShared) waitingOn(s *codexServer) (blockers []protocol.SharedCodex
 		}
 	}
 	slices.SortFunc(blockers, func(a, b protocol.SharedCodexBlocker) int {
-		return strings.Compare(string(a.SessionID)+string(a.Reason), string(b.SessionID)+string(b.Reason))
+		if c := strings.Compare(string(a.SessionID), string(b.SessionID)); c != 0 {
+			return c
+		}
+		return slices.Index(blockerReasonsByUrgency, a.Reason) - slices.Index(blockerReasonsByUrgency, b.Reason)
 	})
-	return slices.CompactFunc(blockers, func(a, b protocol.SharedCodexBlocker) bool { return a == b }), quiet
+	return slices.CompactFunc(blockers, func(a, b protocol.SharedCodexBlocker) bool { return a.SessionID == b.SessionID }), quiet
+}
+
+var blockerReasonsByUrgency = []protocol.SharedCodexBlockerReason{
+	protocol.SharedCodexBlockerReasonQuestion,
+	protocol.SharedCodexBlockerReasonApproval,
+	protocol.SharedCodexBlockerReasonStarting,
+	protocol.SharedCodexBlockerReasonTurn,
 }
 
 func (r *codexShared) restartWhenQuiet(s *codexServer) {

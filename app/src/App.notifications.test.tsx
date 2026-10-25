@@ -102,6 +102,34 @@ describe('App notifications', () => {
     expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'session-1' });
   });
 
+  it('installs a Codex update from its notification on the current desktop, and shows it installing until it finishes', async () => {
+    const daemon = await openNotifications([
+      notification({
+        id: 'codex',
+        kind: 'codex_update_available',
+        title: 'Codex 0.163.0 is available',
+        actions: [{ kind: 'install_codex_update', label: 'Install', target_id: '' }],
+      }),
+    ]);
+    daemon.on('install_codex_update', () => undefined);
+
+    await gesture(daemon, () => fireEvent.click(row('Codex 0.163.0 is available')));
+    await click(daemon, 'Install');
+    expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
+    const [install] = daemon.sentOf('install_codex_update');
+    expect(daemon.sentOf('install_codex_update')).toEqual([
+      { cmd: 'install_codex_update', request_id: expect.any(String), desktop_id: daemon.arrangement.profile.current_desktop_id },
+    ]);
+
+    await click(daemon, 'Show Notifications');
+    await gesture(daemon, () => fireEvent.click(row('Codex 0.163.0 is available')));
+    expect(panel().getByRole('button', { name: 'Installing…' })).toBeDisabled();
+
+    await gesture(daemon, () => daemon.replyTo(install, { event: 'install_codex_update_result', success: true, profile_id: daemon.arrangement.profile.id }));
+    expect(panel().getByRole('button', { name: 'Install' })).toBeEnabled();
+    expect(daemon.sentOf('install_codex_update')).toHaveLength(1);
+  });
+
   it('offers no Retry the daemon did not supply, even for a task’s notification', async () => {
     const daemon = await openNotifications([notification({ source_kind: 'task', source_id: 'task-1', actions: [] })]);
 

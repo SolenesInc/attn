@@ -11,7 +11,7 @@ import {
   findMockTranscript,
   markerStateForActions,
   messageRecords,
-  MOCK_CODEX_VERSION,
+  mockCodexVersion,
   mockAgentFlavor,
   mockAgentSplash,
   mockAgentTitle,
@@ -55,6 +55,7 @@ function runShell(command, cwd, env, input) {
 
 export async function runSharedMockServer() {
   const args = process.argv.slice(3);
+  const version = mockCodexVersion();
   const hooks = hookCommands(args);
   const sessionsDir = agentHomeRoots().codexSessions;
   const codexHome = path.dirname(sessionsDir);
@@ -155,7 +156,7 @@ export async function runSharedMockServer() {
   const promptOf = (params) => (params.input || []).map((item) => item.text || '').join('\n');
 
   const handlers = {
-    initialize: () => ({ result: { userAgent: `codex-mock/${MOCK_CODEX_VERSION} (mock)`, codexHome, platformFamily: 'unix', platformOs: process.platform } }),
+    initialize: () => ({ result: { userAgent: `codex-mock/${version} (mock)`, codexHome, platformFamily: 'unix', platformOs: process.platform } }),
     'thread/start': (conn, params) => {
       const id = `mock-${randomUUID()}`;
       const started = new Date();
@@ -415,7 +416,7 @@ export async function runSharedMockView() {
     }
   });
 
-  await call('initialize', { clientInfo: { name: 'codex-tui', version: MOCK_CODEX_VERSION } });
+  await call('initialize', { clientInfo: { name: 'codex-tui', version: mockCodexVersion() } });
   peer.send(JSON.stringify({ method: 'initialized' }));
   let shown;
   try {

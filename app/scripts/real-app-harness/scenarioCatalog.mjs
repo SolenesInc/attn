@@ -385,6 +385,13 @@ export const scenarioCatalog = [
     freshWorldAfter: true,
   },
   {
+    id: 'codex-update',
+    runnerId: 'CODEX-UPDATE',
+    label: 'Shared Codex update: the banner offers a newer Codex, Install runs it in a tile, shared Codex restarts on it, Reload tiles moves the old tile',
+    command: ['node', 'scripts/real-app-harness/scenario-codex-update.mjs'],
+    freshWorldAfter: true,
+  },
+  {
     id: 'terminal-md-link',
     runnerId: 'TERMINAL-MD-LINK',
     label: 'Markdown path Cmd+click docks a session-bound markdown tile',

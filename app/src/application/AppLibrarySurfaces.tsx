@@ -6,6 +6,8 @@ import { LedgerSurface } from '../components/ledger/LedgerSurface';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
+import { useSharedCodexStore } from '../store/sharedCodex';
+import { useSharedCodexActions } from './useSharedCodex';
 import {
   useAppGardenActionsContext,
   useAppInputs,
@@ -28,6 +30,8 @@ export function AppLibrarySurfaces() {
     [profiles],
   );
   const daemonSessions = useDaemonStore((state) => state.daemonSessions);
+  const installingCodexUpdate = useSharedCodexStore((state) => state.installing);
+  const { install: installCodexUpdate } = useSharedCodexActions();
   const profileMembership = useMemo(() => [
     ...profiles.map((profile) => `${profile.id}:${profile.name}`),
     ...daemonSessions.map((session) => `${session.id}@${session.profile_id}`),
@@ -194,6 +198,8 @@ export function AppLibrarySurfaces() {
         markRead={sendNotificationMarkRead}
         retryTask={sendTaskRetry}
         onOpenSession={handleSelectSession}
+        installingCodexUpdate={installingCodexUpdate}
+        onInstallCodexUpdate={installCodexUpdate}
         changeSignal={notificationsChangeSignal}
       />
     </>

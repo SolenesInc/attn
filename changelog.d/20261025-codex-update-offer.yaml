@@ -1,0 +1,3 @@
+kind: added
+area: codex
+change: With Shared Codex on, attn offers a newer Codex in a banner and a notification, both with Install, which runs Codex's update in a terminal tile. The banner follows the restart that moves shared Codex to the installed version, names what it waits on, offers Restart now and Retry, and offers to reload tiles still on an older Codex. attn codex status, update and restart do the same from the CLI.

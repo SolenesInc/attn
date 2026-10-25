@@ -2278,6 +2278,34 @@ type ClientHelloMessage struct {
 	Version string `json:"version"`
 }
 
+type CodexStatusMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile *string `json:"profile,omitempty,omitzero"`
+
+	// Refresh corresponds to the JSON schema field "refresh".
+	Refresh *bool `json:"refresh,omitempty,omitzero"`
+}
+
+type CodexStatusResult struct {
+	// Executable corresponds to the JSON schema field "executable".
+	Executable string `json:"executable"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// ProfileName corresponds to the JSON schema field "profile_name".
+	ProfileName string `json:"profile_name"`
+
+	// SharedCodex corresponds to the JSON schema field "shared_codex".
+	SharedCodex *SharedCodexState `json:"shared_codex,omitempty,omitzero"`
+}
+
 type CollapseRepoMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -5415,6 +5443,37 @@ type InstallBundledPluginMessage struct {
 	Name string `json:"name"`
 }
 
+type InstallCodexUpdateMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type InstallCodexUpdateResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SharedCodex corresponds to the JSON schema field "shared_codex".
+	SharedCodex *SharedCodexState `json:"shared_codex,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type InstallPluginMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -8217,6 +8276,9 @@ type Response struct {
 	// CalloutAnchorsResult corresponds to the JSON schema field
 	// "callout_anchors_result".
 	CalloutAnchorsResult *CalloutAnchorsResult `json:"callout_anchors_result,omitempty,omitzero"`
+
+	// CodexStatusResult corresponds to the JSON schema field "codex_status_result".
+	CodexStatusResult *CodexStatusResult `json:"codex_status_result,omitempty,omitzero"`
 
 	// CrewCharterGetResult corresponds to the JSON schema field
 	// "crew_charter_get_result".

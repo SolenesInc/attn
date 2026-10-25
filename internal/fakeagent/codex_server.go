@@ -36,6 +36,7 @@ const (
 	methodThreadName     = "thread_name"
 	methodAwaitArchived  = "await_archived"
 	methodAskQuestion    = "ask_question"
+	methodWork           = "work"
 	methodInstructions   = "instructions"
 	methodCompactLimit   = "compact_limit"
 	methodWorkspaceRoots = "workspace_roots"
@@ -1025,6 +1026,16 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			after()
 		}
 		return struct{}{}, err
+	case methodWork:
+		t, err := s.loaded(p.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		t.active = true
+		s.mu.Unlock()
+		s.status(t)
+		return struct{}{}, nil
 	case methodAskQuestion:
 		t, err := s.loaded(p.ThreadID)
 		if err != nil {

@@ -9,6 +9,8 @@ interface NotificationsPanelProps {
   markRead: (notificationId?: string) => Promise<number>;
   retryTask: (taskId: string) => Promise<Task | null>;
   onOpenSession: (sessionId: string) => void;
+  installingCodexUpdate: boolean;
+  onInstallCodexUpdate: () => void;
   changeSignal: number;
 }
 
@@ -35,6 +37,8 @@ export function NotificationsPanel({
   markRead,
   retryTask,
   onOpenSession,
+  installingCodexUpdate,
+  onInstallCodexUpdate,
   changeSignal,
 }: NotificationsPanelProps) {
   const [notifications, setNotifications] = useState<DaemonNotification[]>([]);
@@ -207,6 +211,22 @@ export function NotificationsPanel({
                                     disabled={retryingIds.has(n.id)}
                                   >
                                     {retryingIds.has(n.id) ? 'Retrying…' : action.label}
+                                  </button>
+                                );
+                              }
+                              if (action.kind === 'install_codex_update') {
+                                return (
+                                  <button
+                                    key={action.kind}
+                                    type="button"
+                                    className="notification-row-action"
+                                    onClick={() => {
+                                      onClose();
+                                      onInstallCodexUpdate();
+                                    }}
+                                    disabled={installingCodexUpdate}
+                                  >
+                                    {installingCodexUpdate ? 'Installing…' : action.label}
                                   </button>
                                 );
                               }

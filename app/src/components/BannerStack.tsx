@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useRef, useState, type RefObject } from 'react';
+import { Fragment } from 'react';
 import { renderWarningSegments } from '../utils/warningLinks';
+import { SharedCodexBanner } from './SharedCodexBanner';
 
 export interface BannerStackWarning {
   code: string;
@@ -16,26 +17,6 @@ interface BannerStackProps {
   onDismissLatestRelease: () => void;
 }
 
-// useBannerHeight tracks a banner's border-box height. Null while the banner
-// is absent or unmeasurable; then the fixed CSS offsets apply as before.
-function useBannerHeight(active: boolean): [RefObject<HTMLDivElement | null>, number | null] {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [height, setHeight] = useState<number | null>(null);
-  useEffect(() => {
-    setHeight(null);
-    if (!active || !ref.current || typeof ResizeObserver === 'undefined') return;
-    const el = ref.current;
-    setHeight(el.offsetHeight);
-    const observer = new ResizeObserver((entries) => {
-      const target = entries[entries.length - 1]?.target as HTMLElement | undefined;
-      setHeight(target?.offsetHeight ?? el.offsetHeight);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [active]);
-  return [ref, height];
-}
-
 export function BannerStack({
   connectionError,
   warnings,
@@ -45,28 +26,15 @@ export function BannerStack({
   onOpenLatestRelease,
   onDismissLatestRelease,
 }: BannerStackProps) {
-  const [connectionRef, connectionHeight] = useBannerHeight(connectionError != null);
-  const [warningRef, warningHeight] = useBannerHeight(warnings.length > 0);
-  // Inline offsets only once every banner above is measured; otherwise the
-  // fixed with-connection-error/with-warning classes hold the first paint.
-  const connH = connectionError ? connectionHeight : 0;
-  const warnH = warnings.length > 0 ? warningHeight : 0;
-  const warningTop = connH;
-  const updateTop = connH != null && warnH != null ? connH + warnH : null;
-
   return (
-    <>
+    <div className="banner-stack">
       {connectionError && (
-        <div ref={connectionRef} className="connection-error-banner">
+        <div className="connection-error-banner">
           {connectionError}
         </div>
       )}
       {warnings.length > 0 && (
-        <div
-          ref={warningRef}
-          className={`warning-banner ${connectionError ? 'with-connection-error' : ''}`}
-          style={warningTop != null ? { top: warningTop } : undefined}
-        >
+        <div className="warning-banner">
           <span>
             {warnings.map((w, i) => (
               <Fragment key={`${w.code}-${i}`}>
@@ -75,23 +43,20 @@ export function BannerStack({
               </Fragment>
             ))}
           </span>
-          <button className="warning-dismiss" onClick={onClearWarnings} title="Dismiss">
+          <button className="banner-dismiss" onClick={onClearWarnings} title="Dismiss">
             ×
           </button>
         </div>
       )}
       {updateAvailableVersion && (
-        <div
-          className={`update-banner ${connectionError ? 'with-connection-error' : ''} ${warnings.length > 0 ? 'with-warning' : ''}`}
-          style={updateTop != null ? { top: updateTop } : undefined}
-        >
+        <div className="update-banner">
           <span>Version {updateAvailableVersion} is available on GitHub.</span>
-          <button type="button" className="update-install" onClick={() => void onOpenLatestRelease()}>
+          <button type="button" className="banner-button" onClick={() => void onOpenLatestRelease()}>
             View Release
           </button>
           <button
             type="button"
-            className="update-dismiss"
+            className="banner-dismiss"
             onClick={onDismissLatestRelease}
             title="Dismiss"
             aria-label="Dismiss update banner"
@@ -100,6 +65,7 @@ export function BannerStack({
           </button>
         </div>
       )}
-    </>
+      <SharedCodexBanner />
+    </div>
   );
 }

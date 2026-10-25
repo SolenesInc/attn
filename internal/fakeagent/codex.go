@@ -63,6 +63,9 @@ func runCodex(cfg config) int {
 	if len(os.Args) > 2 && os.Args[1] == "doctor" && os.Args[2] == "--json" {
 		return codexDoctor(cfg)
 	}
+	if len(os.Args) == 2 && os.Args[1] == "update" {
+		return codexUpdate(cfg)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "app-server" {
 		if codexServerFlags.parse(os.Args[2:]).value("--listen") != "" {
 			return runCodexAppServer(cfg)
@@ -154,6 +157,9 @@ func (c *codex) begin(term *terminal) error {
 	c.model = args.value("--model", "-m")
 	c.prompt = strings.Join(args.afterDashes, " ")
 	if c.hooks, err = codexHooks(args.values["-c"], c.cwd); err != nil {
+		return err
+	}
+	if err := offerCodexUpdate(c.cfg, term, args.values["-c"]); err != nil {
 		return err
 	}
 	source := "startup"

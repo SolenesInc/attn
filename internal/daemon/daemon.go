@@ -2654,6 +2654,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleTerminalList(conn, msg.(*protocol.TerminalListMessage))
 	case protocol.CmdTerminalOpen:
 		d.handleTerminalOpen(conn, msg.(*protocol.TerminalOpenMessage))
+	case protocol.CmdCodexStatus:
+		d.handleCodexStatus(conn, msg.(*protocol.CodexStatusMessage))
+	case protocol.CmdRestartSharedCodex:
+		d.handleRestartSharedCodexCLI(conn, msg.(*protocol.RestartSharedCodexMessage))
 	case protocol.CmdTerminalInput:
 		d.handleTerminalInput(conn, msg.(*protocol.TerminalInputMessage))
 	case protocol.CmdTerminalRead:
