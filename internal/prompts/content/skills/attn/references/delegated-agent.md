@@ -24,7 +24,7 @@ Make the result readable in the conversation and durable in the seed. Link suppo
 attn seed check report <seed-id> <C#> -m "<summary>" --evidence <artifact|url> --commit <rev>
 ```
 
-A check that does not apply gets a report saying why. When the brief numbers checks that are not on the seed, report each one in a note with its evidence. Before the final response, record the result. If it fits in the harvest reason, use it there; otherwise write one result note, then harvest with a concise summary.
+A check that does not apply gets a report saying why and citing what shows it. When the brief numbers checks that are not on the seed, report each one in a note with its evidence. Before the final response, record the result. If it fits in the harvest reason, use it there; otherwise write one result note, then harvest with a concise summary.
 
 ```sh
 attn seed harvest <seed-id> -m "<outcome and verification>"

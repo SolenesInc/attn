@@ -24,6 +24,8 @@ attn delegate --seed s-example --role builder \
   --cwd /repo --reuse-checkout --branch feature-x
 ```
 
+A brief cannot carry checks. When new work has checks, plant its seed first, with the brief as the body and each check as `--check "C1=<statement>"` (add `--part-of <stake>` when you have a stake), then dispatch that seed. Add checks to an existing seed with `attn seed check add` before dispatching it.
+
 An existing seed may be a leaf or a plot. Its relationships remain intact. Closed work must be deliberately replanted before dispatch. Garden unavailable means delegation fails; there is no seedless fallback.
 
 ## Hand work to another agent
