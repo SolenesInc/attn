@@ -24,12 +24,23 @@ move its conversation yourself, for example with `/resume` in a Codex of the
 other kind.
 
 An automation that starts shared Codex runs with its own model, effort and
-auto-approval, as a plain one does. It doesn't stop at Codex's question
-whether to trust the folder, and attn writes nothing to your Codex config for
-it. A folder you marked untrusted stays untrusted. One you never answered for
-gets saved as trusted by Codex itself when the conversation starts, as in any
-shared Codex terminal. An automation that names its own Codex executable runs
-a plain Codex, since the app-server runs one Codex for the whole profile.
+auto-approval, as a plain one does. An automation that names its own Codex
+executable runs a plain Codex, since the app-server runs one Codex for the
+whole profile.
+
+## Folder trust
+
+Codex asks whether to trust a folder before it works there. A shared Codex
+terminal only accepts trust saved for that exact folder, so it asks in every
+new worktree, even of a repository you trusted, unless the repository has a
+`.codex/` folder. attn answers yes for it when attn has run an agent or a shell
+in that folder before. For a folder at the top of a worktree, a run at the top
+of any other worktree of the same repository, its main checkout included,
+counts too. attn also answers for every automation. Any other folder still
+asks the first time. attn writes nothing to your Codex config when it answers.
+A folder you marked untrusted stays untrusted. One you never answered for gets
+saved as trusted by Codex itself when a conversation that can write there
+starts, for its whole repository when it is in one.
 
 ## One conversation, one session
 

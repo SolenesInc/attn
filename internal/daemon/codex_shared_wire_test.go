@@ -15,6 +15,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -281,6 +282,50 @@ func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *test
 	if roots := w.CodexServer().WorkspaceRoots(codex.ConversationID); !slices.Equal(roots, []string{workDir, notes}) {
 		t.Errorf("keel's conversation has workspace roots %q, want its cwd and awareness dir", roots)
 	}
+}
+
+func TestSharedCodexAsksToTrustAFolderOnlyInARepositoryAttnHasNotWorkedIn(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	known, unknown := newRepo(t, "shop"), newRepo(t, "warehouse")
+	worktree := filepath.Join(filepath.Dir(known), "shop--discount")
+	runGit(t, known, "worktree", "add", "-b", "discount", worktree)
+	w.LeaveCodexFolderTrustUnanswered(worktree)
+	w.LeaveCodexFolderTrustUnanswered(unknown)
+
+	workIn(t, w, app, known)
+	w.Launched(w.Spawn(app, fakeagent.Codex, worktree))
+	if got := w.CodexFolderTrust(worktree); got != "" {
+		t.Errorf("Codex saves %s as %q, want attn to write nothing to the Codex config", worktree, got)
+	}
+
+	app.AwaitScreen(w.Spawn(app, fakeagent.Codex, unknown), "Trust this folder?")
+}
+
+func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionInARepositoryAttnHasWorkedIn(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "worker")
+	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	w := newWorld(t, fakeagent.Codex)
+	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	repo := newRepo(t, "shop")
+	worktree := filepath.Join(filepath.Dir(repo), "shop--discount")
+	runGit(t, repo, "worktree", "add", "-b", "discount", worktree)
+	w.LeaveCodexFolderTrustUnanswered(worktree)
+	workIn(t, w, app, repo)
+	session := w.Spawn(app, fakeagent.Codex, worktree)
+	w.Launched(session)
+
+	w.restart()
+	app = w.App()
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+	if !reloaded.Success {
+		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
+	}
+	w.Launched(session)
 }
 
 func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
