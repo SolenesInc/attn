@@ -6,7 +6,7 @@ import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseComm
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { installMockCodex } from './mockAgent.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { waitForPaneText, waitForSessionDesktop } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -18,6 +18,7 @@ if (!instance) throw new Error('The Codex update scenario requires a named, non-
 const runner = createScenarioRunner(options, { scenarioId: 'CODEX-UPDATE', tier: 'tier2-local-mock-agent', prefix: 'scenario-codex-update' });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const daemonBinary = appDaemonInTree(options.appPath);
 const attn = (...args) => execFileSync(daemonBinary, args, { encoding: 'utf8', env: instanceCliEnv(instance) });
 
@@ -34,18 +35,23 @@ async function setSetting(key, value) {
 }
 
 async function bannerText() {
-  return (await client.request('dom_text', { selector: BANNER }).catch(() => null))?.text ?? '';
+  return (await client.request('dom_text', { selector: BANNER })).text;
 }
 
-async function waitForBanner(expected, description, timeoutMs = 30_000) {
-  const started = Date.now();
-  let last = '';
-  while (Date.now() - started < timeoutMs) {
-    last = await bannerText();
-    if (last.includes(expected)) return last;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`timed out waiting for the Codex banner to show ${description}; it shows ${JSON.stringify(last)}`);
+async function waitForBanner(expected, timeoutMs = 30_000) {
+  await client.request('dom_wait', { selector: BANNER, textIncludes: expected, timeoutMs });
+}
+
+async function click(selector) {
+  const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
+    client.request('dom_bounds', { selector }),
+    client.request('get_window_bounds'),
+    client.request('get_terminal_context_menu_state'),
+  ]);
+  await driver.clickWindow(
+    (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
+    (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
+  );
 }
 
 async function paneOf(sessionId) {
@@ -74,12 +80,12 @@ try {
       client, observer, cwd, label: 'shop', agent: 'codex', promptReadyFn: ensureCodexInitialPanePromptReady,
     });
     sessions.push(shop);
-    await waitForBanner('Codex 1.1.0 is available.', 'the 1.1.0 offer');
+    await waitForBanner('Codex 1.1.0 is available.');
   });
 
   await runner.step('install_runs_in_a_tile_and_shared_codex_moves_to_it', async () => {
     const before = new Set(observer.sessionsById.keys());
-    await client.request('dom_click', { selector: BANNER_ACTION });
+    await click(BANNER_ACTION);
     const shell = await observer.waitFor(
       () => [...observer.sessionsById.values()].find((session) => !before.has(session.id) && session.agent === 'shell')?.id,
       'a shell tile running Codex\'s update',
@@ -88,16 +94,16 @@ try {
     sessions.push(shell);
     const tile = await paneOf(shell);
     await waitForPaneText(client, shell, tile.paneId, (text) => text.includes('Codex updated to 1.1.0'), 'Codex\'s update output in the new tile', 30_000);
-    await waitForBanner('1 tile still runs an older Codex.', 'the restart onto 1.1.0 with the shop tile left on 1.0.0', 60_000);
+    await waitForBanner('1 tile still runs an older Codex.', 60_000);
     runner.assert((await bannerText()).startsWith('Codex 1.1.0 is running.'), 'shared Codex runs 1.1.0 after the install', await bannerText());
     const status = attn('codex', 'status');
     runner.assert(/^server\s+1\.1\.0$/m.test(status), 'attn codex status reports the app-server on 1.1.0', status);
   });
 
   await runner.step('reload_tiles_moves_the_old_tile_to_the_new_codex', async () => {
-    await client.request('dom_click', { selector: BANNER_ACTION });
+    await click(BANNER_ACTION);
     await client.request('dom_wait', { selector: CONFIRM, timeoutMs: 10_000 });
-    await client.request('dom_click', { selector: CONFIRM });
+    await click(CONFIRM);
     await client.request('dom_wait', { selector: BANNER, absent: true, timeoutMs: 30_000 });
     const status = attn('codex', 'status');
     runner.assert(/^server\s+1\.1\.0$/m.test(status) && !/^old tiles/m.test(status), 'no tile runs an older Codex after the reload', status);
