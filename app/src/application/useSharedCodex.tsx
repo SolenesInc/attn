@@ -43,7 +43,8 @@ export function codexUpdateAvailable(state: SharedCodexState): boolean {
 
 export function oldTilesDismissed(state: SharedCodexState, dismissal: OldTilesDismissal | null): boolean {
   if (!dismissal || dismissal.running !== (state.running_version ?? '')) return false;
-  return staleSessionsOf(state).every((session) => dismissal.sessions.includes(session));
+  const dismissed = new Set(dismissal.sessions);
+  return staleSessionsOf(state).every((session) => dismissed.has(session));
 }
 
 export function sharedCodexStage(
