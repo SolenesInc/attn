@@ -457,7 +457,11 @@ func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
 	app := w.App()
 	cwd := w.Path("api")
 	earlier := w.Spawn(app, fakeagent.Codex, cwd)
-	conversation := w.Launched(earlier).ConversationID
+	codex := w.Launched(earlier)
+	app.TypeLine(earlier, "list the endpoints")
+	codex.Prompted()
+	codex.Reply("Three endpoints. <!-- attn:state=idle -->")
+	conversation := codex.ConversationID
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(earlier)})
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == earlier })
 

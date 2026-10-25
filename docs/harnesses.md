@@ -161,6 +161,8 @@ Read in the source at openai/codex 60947e2341.
 
 Probed on 0.162.1 with a mock model and an isolated `CODEX_HOME`:
 
+- A TUI writes no rollout until its first prompt. The rollout's file name
+  carries the launch time; its `session_meta` timestamp is the first prompt's.
 - A plain TUI refuses a conversation another process has open, both as
   `codex resume <id>` and with `/resume <id>` inside a running TUI. It shows
   "This conversation is open in another app. Close it there and press R to

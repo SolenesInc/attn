@@ -361,10 +361,6 @@ func claudeSettingsEnv(opts SpawnOpts) map[string]string {
 	}
 }
 
-func (c *Claude) FindTranscript(sessionID, cwd string, startedAt time.Time) string {
-	return transcript.FindClaudeTranscript(sessionID)
-}
-
 func (c *Claude) FindTranscriptForResume(resumeID string) string {
 	return transcript.FindClaudeTranscript(resumeID)
 }

@@ -280,8 +280,6 @@ func HeadlessTaskAvailability(driver Driver) (bool, string) {
 }
 
 type TranscriptFinder interface {
-	FindTranscript(sessionID, cwd string, startedAt time.Time) string
-
 	FindTranscriptForResume(resumeID string) string
 
 	BootstrapBytes() int64
