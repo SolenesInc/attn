@@ -46,10 +46,11 @@ commands:
         another daemon.
 
   leave [--json]
-        release the enrollment so the data folder is its own again and
-        another home can pair. The daemon closes the bridge from the old home
-        and stops the terminals it ran for it: right away when it is running,
-        otherwise when it next starts.
+        release the enrollment so the data folder is its own again. The
+        daemon closes the bridge from the old home and stops the terminals it
+        ran for it: right away when it is running, otherwise when it next
+        starts. Remove the outpost from the old home first; a home that still
+        has it pairs again on its next connection.
 `)
 }
 
