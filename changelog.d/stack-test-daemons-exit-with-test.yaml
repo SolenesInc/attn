@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: A stack test's daemon exits when its test process dies, on macOS as on Linux, instead of running on for hours after a test timeout or kill.
