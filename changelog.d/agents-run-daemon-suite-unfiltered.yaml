@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Agent guidance says to run the whole daemon test package through make test, which shards it, and never to filter go test output, so a slow run is not mistaken for a hang.

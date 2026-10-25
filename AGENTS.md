@@ -148,6 +148,12 @@ count.
 changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares
 against another branch.
 
+Run the whole `internal/daemon` package through `make test`, which shards it;
+a plain `go test ./internal/daemon` takes about 11 minutes on a busy Mac, past
+`go test`'s default 10-minute `-timeout`. Targeted `go test -run` runs need no
+sharding. Never filter `go test` output with `grep` or `tail`: a timeout's
+panic names the running test, and a filter hides it.
+
 Before reporting a change done, run it on the surface it touches and show the
 output: the CLI, the daemon over `wsctl`, a non-production instance, the app.
 A green build or test run is not that evidence, and a check you could not run
