@@ -17,6 +17,7 @@ const (
 	codexLatestFile     = "codex-latest"
 	codexStartErrorFile = "codex-start-error"
 	codexNpmNativeFile  = "codex-npm-native"
+	codexUpdateFailFile = "codex-update-error"
 	codexBaseVersion    = "1.0.0"
 )
 
@@ -60,6 +61,32 @@ func codexDoctor(cfg config) int {
 		return 1
 	}
 	return 0
+}
+
+func codexUpdate(cfg config) int {
+	if line := readVersionFile(filepath.Join(programDir(), codexUpdateFailFile), ""); line != "" {
+		fmt.Fprintln(os.Stderr, line)
+		return 1
+	}
+	latest := latestCodexVersion(cfg)
+	if err := os.WriteFile(filepath.Join(programDir(), codexVersionFile), []byte(latest+"\n"), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "fake codex update: %v\n", err)
+		return 1
+	}
+	fmt.Println("Codex updated to " + latest)
+	return 0
+}
+
+func (k *Kit) FailCodexUpdate(line string) {
+	k.t.Helper()
+	path := filepath.Join(k.cfg.Bin, codexUpdateFailFile)
+	if line == "" {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			k.t.Fatal(err)
+		}
+		return
+	}
+	k.writeVersion(path, line)
 }
 
 func (k *Kit) SetCodexVersion(version string) {

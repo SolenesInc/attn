@@ -43,17 +43,29 @@ a plain Codex, since the app-server runs one Codex for the whole profile.
 
 ## Codex updates
 
-attn reads which Codex is installed when a shared terminal opens, when the
-app-server starts, and once a day. When that isn't the Codex the app-server
-runs, attn restarts the app-server on it once no conversation runs a turn,
-including one that waits on an approval or on your answer to a question, and
-every shared terminal has finished starting.
+Once a day attn asks `codex doctor` whether a newer Codex is out. When one
+is, a banner at the top of attn offers it with **Install**. Close the banner
+and the same offer stays under the bell in the sidebar. Install opens a
+terminal tile running Codex's own update, so what it prints, a failure
+included, stays in that tile. `attn codex update` runs it in your terminal
+instead, and a plain `codex update` works too.
+
+attn also reads which Codex is installed when a shared terminal opens and when
+the app-server starts. When that isn't the Codex the app-server runs, attn
+restarts the app-server on it once no conversation runs a turn, including one
+that waits on an approval or on your answer to a question, and every shared
+terminal has finished starting. The banner names the sessions it waits on, and
+you can jump to each.
 
 - First attn starts the installed Codex on the side for a moment. If it
   refuses to start, for example over a setting in your Codex config that the
   new version no longer supports, the app-server keeps running the Codex it
-  ran and nothing is interrupted. attn tries again once the installed Codex
-  changes.
+  ran and nothing is interrupted. The banner shows what Codex printed, with
+  **Retry**. attn also tries again once the installed Codex changes.
+- **Restart now** doesn't wait. It first lists what each session would lose,
+  then stops turns waiting on an approval or a question, gives running turns a
+  minute to finish and stops what still runs. Terminals still starting
+  relaunch.
 - The terminals lose their connection during the restart and reconnect to the
   new app-server on their own. What you typed and haven't sent stays where it
   was. The old app-server first shuts down the MCP servers its conversations
@@ -61,9 +73,15 @@ every shared terminal has finished starting.
 - A terminal still starting, or asking whether to trust its folder, couldn't
   reconnect, so the restart waits until it shows its conversation.
 - Terminals opened before you installed the update keep running the older
-  Codex until you reload them with **Reload session**. An older terminal
-  doesn't know what the newer app-server added; an approval of a kind it
-  doesn't know is denied, and the turn carries on.
+  Codex. The banner offers **Reload tiles**, which restarts them on the new
+  Codex in the same conversations; text you typed in them and haven't sent is
+  lost. An older terminal doesn't know what the newer app-server added; an
+  approval of a kind it doesn't know is denied, and the turn carries on.
+
+`attn codex status` shows the Codex the app-server runs, the installed and
+latest ones, a restart and what it waits on. `attn codex restart` restarts the
+app-server once no turn runs, also on the Codex it already runs, and
+`attn codex restart --now` does what Restart now does.
 
 ## Switching conversations
 

@@ -133,6 +133,7 @@ func (r *codexShared) learn(installed, latest *string) {
 	}
 	r.mu.Unlock()
 	if changed {
+		r.offerUpdate()
 		r.versionsChanged()
 	}
 	if moved {

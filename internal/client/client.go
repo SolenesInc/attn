@@ -821,6 +821,29 @@ func (c *Client) RecordVent(sessionID protocol.SessionID, text string) (*protoco
 	return resp.RecordVentResult, nil
 }
 
+func (c *Client) CodexStatus(caller protocol.SessionID, profile string, refresh bool) (*protocol.CodexStatusResult, error) {
+	msg := protocol.CodexStatusMessage{Cmd: protocol.CmdCodexStatus, Refresh: protocol.Ptr(refresh)}
+	if caller != "" {
+		msg.CallerSessionID = protocol.Ptr(caller)
+	}
+	if profile = strings.TrimSpace(profile); profile != "" {
+		msg.Profile = protocol.Ptr(profile)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.CodexStatusResult == nil {
+		return nil, errors.New("daemon returned no shared Codex status")
+	}
+	return resp.CodexStatusResult, nil
+}
+
+func (c *Client) RestartSharedCodex(profileID string, now bool) error {
+	_, err := c.send(protocol.RestartSharedCodexMessage{Cmd: protocol.CmdRestartSharedCodex, ProfileID: profileID, Now: now})
+	return err
+}
+
 func (c *Client) WithdrawVent(sessionID protocol.SessionID, ventID string) error {
 	_, err := c.send(protocol.WithdrawVentMessage{Cmd: protocol.CmdWithdrawVent, SessionID: sessionID, VentID: strings.TrimSpace(ventID)})
 	return err

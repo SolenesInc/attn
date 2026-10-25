@@ -80,8 +80,9 @@ const (
 	FactBackupWritten         = "backup.written"
 	FactTailscaleServeChanged = "tailscale.serve.changed"
 
-	FactNotificationCreated = "notification.created"
-	FactNotificationRead    = "notification.read"
+	FactNotificationCreated  = "notification.created"
+	FactNotificationRead     = "notification.read"
+	FactNotificationResolved = "notification.resolved"
 
 	FactAutoModeDenied = "automode.denied"
 

@@ -63,6 +63,9 @@ func runCodex(cfg config) int {
 	if len(os.Args) > 2 && os.Args[1] == "doctor" && os.Args[2] == "--json" {
 		return codexDoctor(cfg)
 	}
+	if len(os.Args) == 2 && os.Args[1] == "update" {
+		return codexUpdate(cfg)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "app-server" {
 		if codexServerFlags.parse(os.Args[2:]).value("--listen") != "" {
 			return runCodexAppServer(cfg)

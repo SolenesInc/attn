@@ -2,7 +2,9 @@ package main_test
 
 import (
 	"os"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -402,4 +404,64 @@ func TestRestartNowLetsARunningTurnFinishWhenCodexIsInstalledWithNpm(t *testing.
 			})
 		})
 	}
+}
+
+func TestACodexUpdateInstalledFromTheAppRunsInATileAndSharedCodexMovesToIt(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	s.SetCodexVersion("0.162.1")
+	s.SetCodexLatest("0.163.0")
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	s.Launched(s.Spawn(app, fakeagent.Codex, s.Path("shop")))
+	sharedCodexOn := func(running, installed string) {
+		t.Helper()
+		testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+			return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.RunningVersion) == running &&
+				protocol.Deref(m.SharedCodex.InstalledVersion) == installed && m.SharedCodex.Restart == protocol.SharedCodexRestartNone
+		})
+	}
+	sharedCodexOn("0.162.1", "0.162.1")
+	desktop := ""
+	for _, profile := range app.Initial.Profiles {
+		if profile.ID == app.SelectedProfile() {
+			desktop = profile.CurrentDesktopID
+		}
+	}
+	install := func() protocol.InstallCodexUpdateResultMessage {
+		t.Helper()
+		requestID := uuid.NewString()
+		return testworld.Request(app, protocol.InstallCodexUpdateMessage{Cmd: protocol.CmdInstallCodexUpdate, DesktopID: desktop, RequestID: protocol.Ptr(requestID)},
+			protocol.EventInstallCodexUpdateResult, func(m protocol.InstallCodexUpdateResultMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+	}
+
+	s.FailCodexUpdate("Could not detect how Codex was installed")
+	if failed := install(); failed.Success || !strings.Contains(protocol.Deref(failed.Error), "exited 1") {
+		t.Fatalf("an update that exits 1 answered %+v, want a failure naming its exit code", failed)
+	}
+	s.FailCodexUpdate("")
+	if installed := install(); !installed.Success {
+		t.Fatalf("install the update: %s", protocol.Deref(installed.Error))
+	}
+	sharedCodexOn("0.163.0", "0.163.0")
+
+	s.SetCodexLatest("0.164.0")
+	updated := s.Run(testworld.Invocation{Args: []string{"codex", "update"}})
+	if updated.Code != 0 || !strings.Contains(updated.Stdout, "Codex updated to 0.164.0") || !regexp.MustCompile(`(?m)^installed\s+0\.164\.0$`).MatchString(updated.Stdout) {
+		t.Fatalf("attn codex update = %+v, want Codex's update output and 0.164.0 installed", updated)
+	}
+	sharedCodexOn("0.164.0", "0.164.0")
+	status := s.Run(testworld.Invocation{Args: []string{"codex", "status"}})
+	if status.Code != 0 || !regexp.MustCompile(`(?m)^server\s+0\.164\.0$`).MatchString(status.Stdout) || !regexp.MustCompile(`(?m)^restart\s+none$`).MatchString(status.Stdout) {
+		t.Fatalf("attn codex status = %+v, want the server on 0.164.0 and no restart", status)
+	}
+	if restart := s.Run(testworld.Invocation{Args: []string{"codex", "restart"}}); restart.Code != 0 {
+		t.Fatalf("attn codex restart = %+v", restart)
+	}
+	testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+		return m.SharedCodex != nil && m.SharedCodex.Restart == protocol.SharedCodexRestartRestarting
+	})
+	sharedCodexOn("0.164.0", "0.164.0")
 }
