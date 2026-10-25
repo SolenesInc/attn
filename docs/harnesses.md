@@ -379,30 +379,32 @@ Read in the source at openai/codex rust-v0.160.0:
   it exits. On `/resume`, or `/agents` to a conversation that is not loaded,
   it shows the error and stays on its conversation (`tui/src/app/startup.rs`,
   `tui/src/app/config_persistence.rs`, `tui/src/resume_permissions.rs`).
-- Before its first `thread/start` or `thread/resume`, a `--remote` TUI given
-  `-C` asks the server whether that folder is trusted with `config/read`, so
-  `-c projects."<folder>".trust_level` given to the TUI does not count. It
-  asks the trust question when that reply has no trust level under that exact
-  folder, and not for one saved untrusted or inside a folder saved untrusted.
-  Answering it writes
-  `projects."<folder>".trust_level = "trusted"` with `config/batchWrite`
-  (`tui/src/onboarding/directory_trust.rs`, `tui/src/config_update.rs`).
-- `thread/start` in a folder with no saved trust level saves it as trusted when
-  the conversation's sandbox can write there
-  (`app-server/src/request_processors/thread_processor.rs`).
 
 Read in the source at openai/codex rust-v0.164.0:
 
 - The app-server and a plain TUI take a folder's trust from that folder, else
-  from the main repository of its worktree, and from no other parent folder
-  (`config/src/config_toml.rs`). A `--remote` TUI on any socket but Codex's own
-  daemon socket looks only at the exact folder in the `config/read` reply, so
-  it asks in every new worktree of a trusted repository. It doesn't ask when
-  the reply has an enabled project layer, a `.codex/` folder the server
-  trusts through the repository (`tui/src/config_update.rs`,
-  `tui/src/lib.rs`).
-- `thread/start` saves the trust on the main repository of a worktree, not on
-  the worktree (`app-server/src/request_processors/thread_processor.rs`).
+  from the root of its repository (the main repository for a worktree), and
+  from no other parent folder (`config/src/config_toml.rs`,
+  `git-utils/src/trust.rs`).
+- Before its first `thread/start` or `thread/resume`, a `--remote` TUI given
+  `-C` asks the server whether that folder is trusted with `config/read`, so
+  `-c projects."<folder>".trust_level` given to the TUI does not count. On any
+  socket but Codex's own daemon socket it looks only at the exact folder in
+  the reply, so it asks in every new worktree of a trusted repository. It
+  doesn't ask for a folder saved untrusted, or when the reply has an enabled
+  project layer: a `.codex/` folder, even one without `config.toml`, that the
+  server trusts through the repository. Inside a folder saved untrusted with
+  neither, it exits at launch with `remote project directory is inside an
+  explicitly untrusted project`. Answering the question writes
+  `projects."<folder>".trust_level = "trusted"` with `config/batchWrite`
+  (`tui/src/config_update.rs`, `tui/src/onboarding/directory_trust.rs`,
+  `tui/src/lib.rs`, `config/src/loader/mod.rs`).
+- Declining the question saves nothing, so the next launch there asks again
+  (`tui/src/onboarding/trust_directory.rs`).
+- `thread/start` in a folder with no saved trust level saves trust when the
+  conversation's sandbox can write there: on the root of its repository (the
+  main repository for a worktree), or on the folder outside git
+  (`app-server/src/request_processors/thread_processor.rs`).
 
 Read in the source at openai/codex 1ffa95e:
 

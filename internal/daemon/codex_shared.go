@@ -196,20 +196,21 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if _, err := r.ensureServer(r.d.life.Context(), profile, installed); err != nil {
 		return err
 	}
-	if !opts.UnattendedLaunch.IsZero() || r.d.store.HasRecentLocation(opts.CWD) {
-		r.trustIn(opts.ID, opts.CWD)
-	}
+	r.answerTrustIfKnown(opts)
 	opts.CodexRemote = remote
 	opts.LaunchExecutable = r.terminalBinary(profile, installed)
 	r.refreshInstalledSoon()
 	return nil
 }
 
-func (r *codexShared) trustIn(t harness.TerminalID, folder string) {
+func (r *codexShared) answerTrustIfKnown(opts *ptybackend.SpawnOptions) {
+	if opts.UnattendedLaunch.IsZero() && !r.d.store.HasRecentLocation(opts.CWD) {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if v := r.views[t]; v != nil {
-		v.trusted = folder
+	if v := r.views[opts.ID]; v != nil {
+		v.trusted = opts.CWD
 	}
 }
 
@@ -863,6 +864,7 @@ func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) {
 		return
 	}
 	opts.CodexRemote = "unix://" + v.socket
+	r.answerTrustIfKnown(opts)
 	if _, err := r.ensureServer(r.d.life.Context(), v.profile, ""); err != nil {
 		r.d.logf("shared Codex: relaunching terminal %s before its app-server answers: %v", opts.ID, err)
 	}
