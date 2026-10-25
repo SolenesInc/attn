@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent, Ref, RefObject } from 'react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { browserHostLabel, claimBrowserHostFocus, controlBrowserHost } from '../../browser/host';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import type { Seed } from '../../hooks/useDaemonSocket';
@@ -340,6 +340,8 @@ function SeedTileBody({
     [daemonSessions],
   );
   const seedByID = useMemo(() => new Map(gardenSeeds.map((seed) => [seed.id, seed])), [gardenSeeds]);
+  const [checkFocus, setCheckFocus] = useState<{ seedId: string; checkId: string } | null>(null);
+  const clearCheckFocus = useCallback(() => setCheckFocus(null), []);
 
   if (!document) {
     return (
@@ -357,6 +359,12 @@ function SeedTileBody({
       onAnnotationsCountChange={onAnnotationsCountChange}
       annotationsSendRef={annotationsSendRef}
       onOpenSeed={onOpenSeed}
+      onOpenSeedCheck={onOpenSeed ? (seedId, checkId) => {
+        setCheckFocus({ seedId, checkId });
+        onOpenSeed(seedId);
+      } : undefined}
+      focusCheckId={checkFocus?.seedId === document.seed.id ? checkFocus.checkId : undefined}
+      onCheckFocused={clearCheckFocus}
       seedById={(id) => seedByID.get(id)}
       sessionLabels={sessionLabels}
       arrival={arrival}

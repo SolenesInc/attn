@@ -97,10 +97,22 @@ export function SeedChecks({
   const rejectInput = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  useEscapeStack(() => setRejecting(null), rejecting !== null);
+  const composedFor = useRef<string | null>(null);
+
+  useEscapeStack(() => {
+    setRejecting(null);
+    setFailure(null);
+  }, rejecting !== null);
 
   useEffect(() => {
-    if (rejecting) rejectInput.current?.focus();
+    if (rejecting) {
+      composedFor.current = rejecting;
+      rejectInput.current?.focus();
+      return;
+    }
+    const returnTo = composedFor.current;
+    composedFor.current = null;
+    if (returnTo) listRef.current?.querySelector<HTMLElement>(`[data-check-row="${returnTo}"] .seed-check__box`)?.focus();
   }, [rejecting]);
 
   useEffect(() => {

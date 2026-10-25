@@ -8,7 +8,7 @@ import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
-import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
+import { CheckTally, CheckTallyLink, hasChecks, SeedChecks } from './SeedChecks';
 import { checkTally } from './seedCheckPresentation';
 import type { SeedDocumentNote } from './seedArtifacts';
 import './SeedDocumentView.css';
@@ -24,6 +24,9 @@ export interface SeedDocumentViewProps {
   annotationsSendRef?: Ref<MarkdownAnnotationsSendHandle | null>;
   onOpenMarkdownArtifact?: (path: string) => void;
   onOpenSeed?: (seedId: string) => void;
+  onOpenSeedCheck?: (seedId: string, checkId: string) => void;
+  focusCheckId?: string;
+  onCheckFocused?: () => void;
   seedById?: (seedId: string) => Seed | undefined;
   sessionLabels?: ReadonlyMap<string, string>;
   arrival?: 'in' | 'out';
@@ -118,6 +121,9 @@ export function SeedDocumentView({
   annotationsSendRef,
   onOpenMarkdownArtifact,
   onOpenSeed,
+  onOpenSeedCheck,
+  focusCheckId,
+  onCheckFocused,
   seedById,
   sessionLabels,
   arrival = 'in',
@@ -153,7 +159,7 @@ export function SeedDocumentView({
         <HarvestWhenLine condition={seed.harvest_when} />
         {tender && <span>tended by {tender}</span>}
         {progress && <span>{progress}</span>}
-        {tally && <CheckTallyLink tally={tally} target={checksRef} />}
+        {tally && (hasChecks(seed) ? <CheckTallyLink tally={tally} target={checksRef} /> : <CheckTally seed={seed} />)}
         <span className="seed-document__id">{seed.id}</span>
       </div>
 
@@ -216,7 +222,9 @@ export function SeedDocumentView({
         seedById={lookUpSeed}
         sessionLabels={sessionLabels}
         onOpenMarkdownArtifact={onOpenMarkdownArtifact}
-        onOpenSeedCheck={onOpenSeed ? (seedId) => onOpenSeed(seedId) : undefined}
+        onOpenSeedCheck={onOpenSeedCheck}
+        focusCheckId={focusCheckId}
+        onCheckFocused={onCheckFocused}
         sectionRef={checksRef}
       />
 

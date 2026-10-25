@@ -23,7 +23,7 @@ import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
-import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
+import { CheckTally, CheckTallyLink, hasChecks, SeedChecks } from './SeedChecks';
 import { checkTally } from './seedCheckPresentation';
 import { SeedContinuationNotes } from './SeedContinuationNotes';
 import { DelegationCheckoutFields } from './DelegationCheckoutFields';
@@ -1251,7 +1251,9 @@ export function GardenPanel({
           <div className="garden-head__progress">
             <ProgressBar seed={here} />
             <span>{progressWords(here)}</span>
-            {hereTally && <CheckTallyLink tally={hereTally} target={checksRef} />}
+            {hereTally && (hasChecks(here)
+              ? <CheckTallyLink tally={hereTally} target={checksRef} />
+              : <CheckTally seed={here} />)}
           </div>
         )}
         {composingContinuation && continuationDraft && (

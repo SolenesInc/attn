@@ -176,10 +176,16 @@ describe('App garden seed checks', () => {
       { cmd: 'seed_check', request_id: expect.any(String), seed_id: 's-leaf11', check_id: 'C1', verb: 'reject', summary: 'Cite the run on da2b3b9.' },
     ]);
     expect(within(checkRow('C1')).queryByRole('textbox')).toBeNull();
+    expect(within(checkRow('C1')).getByRole('button', { name: 'Confirm C1' })).toHaveFocus();
+    await gesture(garden.daemon, () => garden.push([withCheck(leaf(), {
+      ...C1, state: 'rejected', verdict: { confirmed: false, reason: 'Cite the run on da2b3b9.', at: AT },
+    }), monitorPlot(), done, table]));
+    expect(checkRow('C1')).toHaveTextContent('rejected by you: Cite the run on da2b3b9.');
 
     await gesture(garden.daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reject C5' })));
     await gesture(garden.daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
     expect(within(checkRow('C5')).queryByRole('textbox')).toBeNull();
+    expect(within(checkRow('C5')).getByRole('button', { name: 'Confirm C5' })).toHaveFocus();
     expect(seedHeading()).toBe('View and home reactions');
   });
 
@@ -190,6 +196,14 @@ describe('App garden seed checks', () => {
     await gesture(garden.daemon, () => fireEvent.click(within(checkRow('C4')).getByRole('button', { name: 'Uncheck' })));
 
     expect(garden.daemon.sentOf('seed_check').map(({ check_id, verb }) => [check_id, verb])).toEqual([['C1', 'reopen'], ['C4', 'uncheck']]);
+
+    let next = withCheck(leaf(), { ...C1, state: 'open', report: undefined });
+    next = withCheck(next, { ...C4, state: 'reported', verdict: undefined });
+    await gesture(garden.daemon, () => garden.push([next, monitorPlot(), done, table]));
+    expect(within(checkRow('C1')).getByRole('button', { name: 'Confirm C1' })).toHaveTextContent('');
+    expect(checkRow('C1')).not.toHaveTextContent('report');
+    expect(within(checkRow('C4')).getByRole('button', { name: 'Confirm C4' })).toHaveTextContent('?');
+    expect(checkRow('C4')).not.toHaveTextContent('rejected by');
   });
 
   it('shows the daemon’s refusal on the check it refused', async () => {
@@ -225,8 +239,8 @@ describe('App garden seed checks', () => {
   });
 
   it('scrolls from the header tally to the checks section', async () => {
-    const scrolled = vi.fn();
-    HTMLElement.prototype.scrollIntoView = scrolled;
+    if (!HTMLElement.prototype.scrollIntoView) HTMLElement.prototype.scrollIntoView = () => {};
+    const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
     await openLeaf();
 
     const tally = within(gardenRegion()).getByRole('button', { name: 'Checks: 2 of 5 confirmed · 1 to judge · 1 rejected' });
@@ -235,6 +249,7 @@ describe('App garden seed checks', () => {
 
     expect(scrolled.mock.contexts[scrolled.mock.contexts.length - 1]).toBe(screen.getByRole('region', { name: 'Checks' }));
     expect(within(gardenRegion()).getByRole('heading', { name: 'Checks' })).toHaveFocus();
+    scrolled.mockRestore();
   });
 
   it('counts a fresh report as to judge on child rows, plot progress and board cards', async () => {
@@ -273,6 +288,17 @@ describe('App garden seed checks', () => {
     const entry = log().getByText('C4 rejected: That run is on 869dc03.').closest('li')!;
     expect(entry).toHaveTextContent('trellischeck');
     expect(log().queryByText('attached run.log')).toBeNull();
+  });
+
+  it('counts a plot’s descendants without a link when the plot has no checks section of its own', async () => {
+    const bare = plot('s-plot11', 'The monitor plot', '', { total: 3, done: 1, growing: 1, ready: 1, checks: TALLY });
+    const garden = await openGarden([leaf(), bare, done, table]);
+
+    await openRow(garden.daemon, 'The monitor plot');
+
+    expect(within(gardenRegion()).queryByRole('heading', { name: 'Checks' })).toBeNull();
+    expect(within(gardenRegion()).queryByRole('button', { name: /^Checks:/ })).toBeNull();
+    expect(gardenRegion().querySelector('.garden-head__progress')).toHaveTextContent('✓2/5 · 1 to judge · 1 rejected');
   });
 
   it('renders no checks section and no tally for a seed without checks', async () => {

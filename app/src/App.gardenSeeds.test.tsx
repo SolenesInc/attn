@@ -168,6 +168,28 @@ describe('App garden seeds', () => {
     ]);
   });
 
+  it('opens an inheriting seed’s check from a plot tile’s shared-check row', async () => {
+    const leaf = daemonSeed('s-leaf11', { title: 'The view', edges: [{ kind: 'part-of', to: 's-plot11' }], checks: [
+      { id: 'C4', text: 'CI is green on the head.', removed: false, state: 'open', from: 's-plot11' },
+    ] });
+    const crown = daemonSeed('s-plot11', {
+      title: 'The monitor plot', body: '# A long plan',
+      plot_progress: { total: 1, done: 0, withered: 0, growing: 1, dormant: 0, ready: 0, blocked: 0, checks: { total: 1, reported: 0, confirmed: 0, rejected: 0 } },
+      shared_checks: [{ id: 'C4', text: 'CI is green on the head.', removed: false, seeds: [{ seed_id: leaf.id, state: 'open', has_report: false }] }],
+    });
+    const daemon = await openSeedTile(crown);
+    daemon.emit({ event: 'garden_seeds_changed', profile_id: crown.profile_id, order: [crown.id, leaf.id], seeds: [leaf], total: 2 });
+    daemon.on('seed_document_get', ({ seed_id }) => ({ event: 'seed_document_get_result', success: true,
+      document: seedDocument(seed_id === leaf.id ? leaf : crown, seed_id === crown.id ? { children: [leaf] } : {}) }));
+    daemon.on('desktop_update_tile', () => undefined);
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /C4.*0 of 1 confirmed/ })));
+    await gesture(daemon, () => fireEvent.click(within(screen.getByRole('list', { name: 'Seeds that prove C4' })).getByRole('button')));
+
+    expect(daemon.sentOf('desktop_update_tile')).toEqual([expect.objectContaining({ tile_params: leaf.id })]);
+    expect(screen.getByRole('button', { name: 'Confirm C4' })).toHaveFocus();
+  });
+
   it('refreshes a seed tile on garden changes that carry no seed, on reconnect, and ignores obsolete responses', async () => {
     const daemon = await openSeedTile(PLAN, { notes: [note('n-before', { body: 'Before the keep pass' })], notes_total: 1 });
     fireEvent.click(screen.getByText('Log').closest('summary')!);
