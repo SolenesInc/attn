@@ -45,6 +45,20 @@ describe('App pane attach', () => {
     expect(daemon.sentOf('attach_session').map((command) => command.id)).toEqual(['s1', 's1']);
   });
 
+  it('does not attach a closed tile after a transient failure enters its retry delay', async () => {
+    const view = await renderSessions();
+    const { daemon } = view;
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: false, error: WORKER_NOT_LISTENING }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
+    await daemon.idle();
+    expect(daemon.sentOf('attach_session')).toHaveLength(1);
+    daemon.arrange((desktops) => desktops.filter((desktop) => desktop.id !== 'desktop-s1'));
+    await daemon.idle();
+    await act(() => vi.runOnlyPendingTimersAsync());
+    expect(daemon.sentOf('detach_session')).toEqual([{ cmd: 'detach_session', id: 's1' }]);
+    expect(daemon.sentOf('attach_session')).toHaveLength(1);
+  });
+
   it('tells the user why a pane has no terminal yet: failed, starting, or waiting for its session', async () => {
     const panes = [
       agentPane('s1', 'ws'),

@@ -64,6 +64,7 @@ export function useAppController({
 
   const {
     connectionError,
+    outposts,
     connectionGeneration,
     hasReceivedInitialState,
     sendSetSetting,
@@ -99,7 +100,7 @@ export function useAppController({
     sendSupportSnapshot,
   } = useDaemonApi();
 
-  const { connect, sessions, reloadSession, selectLeaf } = useSessionStore();
+  const { connect, sessions, selectLeaf } = useSessionStore();
   const shownAgentId = useAgentOnScreen();
   const contextSessionId = useSessionBehindScreen();
 
@@ -131,6 +132,7 @@ export function useAppController({
     sessions,
     daemonSessions,
     connect,
+    outposts,
   });
   const { enrichedLocalSessions, desktopViews, profileSessions, hiddenSessions } = appSessions;
 
@@ -178,7 +180,7 @@ export function useAppController({
 
   const sessionLaunch = useSessionLaunch({
     settings,
-    sessions,
+    sessions: enrichedLocalSessions,
     shownAgentId,
     selectCreatedSession,
     showError,
@@ -475,7 +477,7 @@ export function useAppController({
     selectDesktop: handleSelectDesktop,
     moveDesktopLeaf: sendDesktopMoveLeaf,
     closeSession: handleCloseSession,
-    reloadSession,
+    reloadSession: sessionLifecycle.reloadSession,
     setSetting: sendSetSetting,
     openDockPanel: (panelId: string) => openDockPanel(panelId as DockPanelId),
     openShortcutEditor: () => setShortcutEditorOpen(true),

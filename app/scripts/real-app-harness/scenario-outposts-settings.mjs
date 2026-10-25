@@ -6,12 +6,14 @@ import net from 'node:net';
 import { spawn, execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
-import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { appPids, captureWebKitPids, readLiveDaemonPid, snapshot } from './perfMeasure.mjs';
+import { waitForFirstDesktopPane, waitForPaneAttached, waitForPaneInputFocus, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const instance = currentHarnessInstance();
@@ -25,6 +27,7 @@ const driver = createWindowDriver({ appPath: options.appPath, client });
 const binary = appDaemonInTree(options.appPath);
 const exec = promisify(execFile);
 const children = [];
+const created = [];
 const env = instanceCliEnv(instance, { SSH_AUTH_SOCK: socket });
 const run = (command, args, childEnv = env) => exec(command, args, { env: childEnv });
 const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
@@ -34,6 +37,37 @@ const alias = '.settings-outpost[aria-label="Studio alias"]';
 const toggle = '[role="switch"][aria-label="Outposts"]';
 const shot = async name => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
 const receive = predicate => observer.waitForMessage(event => event.event === 'outposts_updated' && predicate(event.outposts) && event.outposts, 'outposts state', observer.connectTimeoutMs);
+const webkitBaseline = await captureWebKitPids();
+let callerEnv;
+let remote;
+let remotePane;
+let split;
+let splitPane;
+const cli = async (...args) => (await run(binary, args, callerEnv)).stdout;
+const tile = pane => `[data-pane-id="${pane}"]`;
+const paneText = async (sessionId, paneId) => (await client.request('read_pane_text', { sessionId, paneId })).text;
+async function cpuTimes(pids) {
+  const { stdout } = await run('ps', ['-p', pids.join(','), '-o', 'pid=,time=']);
+  return Object.fromEntries(stdout.trim().split('\n').map(line => {
+    const [pid, time] = line.trim().split(/\s+/);
+    return [pid, time.split(':').reduce((seconds, part) => seconds * 60 + Number(part), 0)];
+  }));
+}
+async function measureCpu(name, action = null) {
+  const processes = await snapshot(client.readManifest().pid, readLiveDaemonPid(instance), webkitBaseline);
+  const pids = [...appPids(processes), readLiveDaemonPid(instance)];
+  const before = await cpuTimes(pids);
+  const started = Date.now();
+  for (let sample = 0; sample < 10; sample++) {
+    if (action) await action();
+    await delay(1000);
+  }
+  const after = await cpuTimes(pids);
+  const durationMs = Date.now() - started;
+  const cpuPct = Object.fromEntries(pids.map(pid => [pid, ((after[pid] ?? before[pid]) - before[pid]) * 100_000 / durationMs]));
+  runner.writeJson(`${name}-cpu.json`, { durationMs, before, after, cpuPct, processes });
+  runner.log(`${name} CPU`, { durationMs, totalCpuPct: Object.values(cpuPct).reduce((sum, value) => sum + value, 0), cpuPct });
+}
 async function port() {
   const server = net.createServer();
   server.listen(0, '127.0.0.1');
@@ -98,8 +132,17 @@ try {
   await run(binary, ['settings', 'set', 'outpost_listen', address], outpostEnv);
   await run(binary, ['daemon', 'stop']);
   await launchFreshAppAndConnect(client, observer);
+  const window = await client.request('get_window_bounds');
+  await client.request('set_window_bounds', { logicalBounds: { ...window.logicalBounds, x: 0, y: 0, width: 1200, height: 800 } });
+  await driver.activateApp();
   const previous = observer.getSetting('outposts_enabled');
   runner.registerCleanup('restore_switch', () => client.request('set_setting', { key: 'outposts_enabled', value: previous }));
+  runner.registerCleanup('close_created_terminals', async () => {
+    outpost.kill('SIGCONT');
+    for (const sessionId of created.toReversed()) {
+      if (observer.getSession(sessionId)) await client.request('close_session', { sessionId });
+    }
+  });
   await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
   await runner.step('keyboard_opt_in_and_add', async () => {
     await wait('[data-testid="settings-nav-outposts"]', { absent: true });
@@ -117,22 +160,83 @@ try {
     await wait(studio, { textIncludes: row.host_key_fingerprint });
     await shot('01-connected');
   });
+  await runner.step('remote_cli_shell_and_native_split', async () => {
+    await driver.pressKey('Escape');
+    const caller = await createSessionAndWaitForInitialPane({ client, observer, cwd: runner.sessionDir, label: 'Outpost operator', agent: 'claude' });
+    created.push(caller);
+    callerEnv = instanceCliEnv(instance, { SSH_AUTH_SOCK: socket, ATTN_TERMINAL_ID: observer.terminalOf(caller) });
+    const startDirectory = path.join(fs.realpathSync(root), 'remote-project');
+    fs.mkdirSync(startDirectory);
+    remote = JSON.parse(await cli('terminal', 'open', '--host', 'Studio', '--cwd', startDirectory, '--json'));
+    created.push(remote.session_id);
+    remotePane = { sessionId: remote.session_id, paneId: remote.pane_id };
+    await waitForPaneAttached(client, remote.session_id, remote.pane_id);
+    await waitForPaneShellReady(client, remote.session_id, remote.pane_id);
+    await wait(`${tile(remote.pane_id)} .desktop-pane-host`, { textIncludes: 'Studio' });
+    const firstOutput = await cli('terminal', 'run', remote.terminal_id, 'printf "ATTN_HOST=%s\\n" "$ATTN_HOST"; pwd; cd /', '--wait');
+    runner.assert(firstOutput.includes('ATTN_HOST=Studio') && firstOutput.replace(/\s+/g, '').includes(startDirectory), 'the CLI opens the shell on its outpost in the requested start directory', firstOutput);
+    const spawned = observer.waitForMessage(message => message.event === 'session_registered' && message.session?.host && message.session.id !== remote.session_id && message.session, 'native Cmd+D remote split');
+    await client.request('click_pane', remotePane);
+    await waitForPaneInputFocus(client, remote.session_id, remote.pane_id);
+    await pressShortcutKeys(client, driver, 'terminal.splitVertical');
+    split = await spawned;
+    created.push(split.id);
+    const pane = await waitForFirstDesktopPane(client, split.id, 'remote split tile');
+    splitPane = { sessionId: split.id, paneId: pane.paneId };
+    await waitForPaneAttached(client, split.id, pane.paneId);
+    await waitForPaneShellReady(client, split.id, pane.paneId);
+    const splitOutput = await cli('terminal', 'run', observer.terminalOf(split.id), 'printf "ATTN_HOST=%s\\n" "$ATTN_HOST"; pwd', '--wait');
+    runner.assert(split.host === observer.getSession(remote.session_id).host && splitOutput.includes('ATTN_HOST=Studio') && splitOutput.replace(/\s+/g, '').includes(startDirectory), 'native Cmd+D stays on the same outpost and uses the original start directory after cd /', { split, startDirectory, firstOutput, splitOutput });
+    runner.writeJson('remote-split.json', { remote, split, startDirectory, firstOutput, splitOutput });
+    await waitForPaneText(client, split.id, pane.paneId, value => value.includes('ATTN_HOST=Studio') && value.replace(/\s+/g, '').includes('remote-project'), 'split host and cwd rendered');
+    await shot('02-remote-split');
+    await measureCpu('online-idle');
+  });
   await runner.step('frozen_outpost_and_recovery', async () => {
+    const fifo = path.join(root, 'screen-update');
+    await run('mkfifo', [fifo]);
+    await cli('terminal', 'run', observer.terminalOf(split.id), `printf 'C13_%s\\n' WAITING; cat '${fifo}'`);
+    await waitForPaneText(client, split.id, splitPane.paneId, value => value.includes('C13_WAITING'), 'outpost shell waiting for external output');
+    await client.request('click_pane', splitPane);
+    await waitForPaneInputFocus(client, split.id, splitPane.paneId);
+    const before = await client.request('read_pane_text', splitPane);
     const stalled = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'stalled'));
     const lost = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'lost'));
     outpost.kill('SIGSTOP');
     await stalled;
-    await wait(`${studio} .settings-pill`, { textIncludes: 'stalled' });
-    await shot('02-stalled');
+    await wait(`${tile(splitPane.paneId)}[data-offline]`, { absent: true });
+    await shot('03-stalled-shell');
     await lost;
-    await wait(`${studio} .settings-pill`, { textIncludes: 'lost' });
-    await shot('03-lost');
+    await wait(`${tile(splitPane.paneId)}[data-offline="true"] .desktop-pane-offline-strip`, { textIncludes: 'Studio unreachable · typing is not sent' });
+    const offline = await client.request('read_pane_text', splitPane);
+    runner.assert(JSON.stringify(before.size) === JSON.stringify(offline.size) && before.text === offline.text, 'going offline preserves the screen and terminal size', { before, offline });
+    await measureCpu('offline-idle');
+    const flashing = wait(`${tile(splitPane.paneId)} .desktop-pane-refusal`);
+    await driver.typeText('C13_REFUSED_INPUT');
+    await flashing;
+    await shot('04-refused-input');
+    await driver.pressEnter();
+    await measureCpu('offline-refused-input', () => driver.pressKey('x'));
+    await wait(`${tile(splitPane.paneId)} .desktop-pane-refusal`, { absent: true });
+    const bounds = await client.request('dom_bounds', { selector: tile(splitPane.paneId) });
+    runner.assert(bounds.animations.every(animation => animation.state !== 'running'), 'the refusal flash finishes with no running tile animation', bounds);
+    runner.assert((await paneText(split.id, splitPane.paneId)) === before.text, 'refused native typing does not change the offline screen');
+    await fs.promises.writeFile(fifo, 'C13_SCREEN_CURRENT\n');
     const recovered = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'connected' && !row.last_error));
     outpost.kill('SIGCONT');
     await recovered;
+    await wait(`${tile(splitPane.paneId)} .desktop-pane-offline-strip`, { absent: true });
+    await waitForPaneText(client, split.id, splitPane.paneId, value => value.includes('C13_SCREEN_CURRENT'), 'current outpost screen after reconnect');
+    await cli('terminal', 'wait', observer.terminalOf(split.id), '--until', 'prompt');
+    await driver.typeText("printf 'C13_%s\\n' RECOVERED");
+    await driver.pressEnter();
+    const current = await waitForPaneText(client, split.id, splitPane.paneId, value => value.includes('C13_RECOVERED'), 'native typing after reconnect');
+    runner.assert(!current.text.includes('C13_REFUSED_INPUT'), 'refused typing is never replayed', current);
+    runner.writeJson('recovered-screen.json', current);
+    await shot('05-recovered-shell');
+    await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
+    await press('[data-testid="settings-nav-outposts"]');
     await wait(`${studio} .settings-pill`, { textIncludes: 'connected' });
-    await wait(`${studio} .settings-outpost-error`, { absent: true });
-    await shot('04-recovered');
   });
   await runner.step('full_refusal_keyboard_repair_and_remove', async () => {
     const refusal = receive(rows => rows.some(row => row.name === 'Studio alias' && row.state === 'refused'));
@@ -153,7 +257,12 @@ try {
     await repaired;
     const empty = receive(rows => rows.length === 0);
     await press(`${studio} button:last-child`);
+    await wait(`${studio} .settings-outpost-actions button:nth-child(2)`, { textIncludes: 'Remove and close 2 terminals' });
+    await shot('06-remove-confirmation');
+    await press(`${studio} .settings-outpost-actions button:nth-child(2)`);
     await empty;
+    created.splice(created.indexOf(remote.session_id), 1);
+    created.splice(created.indexOf(split.id), 1);
     await wait(studio, { absent: true });
     await press('[data-testid="settings-nav-experimental"]');
     await press(toggle, 'space');

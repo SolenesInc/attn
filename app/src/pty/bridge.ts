@@ -5,6 +5,7 @@ import type { SeededBlock } from '../utils/terminalBlocks';
 import type { PlacementElement } from '../types/generated';
 
 export interface PtySpawnArgs {
+  host?: string;
   id: string;
   cwd: string;
   intent?: 'create';
@@ -73,11 +74,16 @@ export interface PtyPixelGeometry {
   ypixel?: number;
 }
 
+export interface PtyAttachOptions {
+  forceResizeBeforeAttach?: boolean;
+  signal?: AbortSignal;
+}
+
 export interface PtyBackend {
   spawn: (args: PtySpawnArgs) => Promise<void>;
   attach: (
     args: PtyAttachArgs,
-    options?: { forceResizeBeforeAttach?: boolean }
+    options?: PtyAttachOptions
   ) => Promise<void>;
   write: (id: string, data: string, source?: string, traceId?: string) => Promise<void>;
   resize: (
@@ -177,6 +183,7 @@ export async function ptyWrite(request: { id: string; data: string; source?: str
 export async function ptyAttach(request: {
   args: PtyAttachArgs;
   forceResizeBeforeAttach?: boolean;
+  signal?: AbortSignal;
 }) {
   if (mockEnabled()) {
     if (!mockSessions.has(request.args.id)) {
@@ -201,6 +208,7 @@ export async function ptyAttach(request: {
   }
   await backend.attach(request.args, {
     forceResizeBeforeAttach: request.forceResizeBeforeAttach,
+    signal: request.signal,
   });
 }
 

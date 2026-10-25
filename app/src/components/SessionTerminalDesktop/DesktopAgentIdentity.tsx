@@ -21,6 +21,7 @@ export function DesktopAgentIdentity({ agentPane, paneSession, paneTitle }: Desk
       <span className="desktop-pane-identity">
         <span className="desktop-pane-identity-main">
           <span className="desktop-pane-title">{paneTitle}</span>
+          {paneSession?.host ? <span className="desktop-pane-host">{paneSession.hostName}</span> : null}
           <HeaderSessionUsage
             usage={paneSession?.usage}
             sessionId={agentPane.sessionId}

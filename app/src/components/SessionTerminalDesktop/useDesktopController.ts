@@ -209,6 +209,8 @@ export function useDesktopController(
         sessionId: pane.sessionId,
         testSessionId: pane.sessionId,
         state: paneSession?.state,
+        offline: paneSession?.offline,
+        canAttach: paneSession?.canAttach,
         state_reason: paneSession?.state_reason,
         terminalExit: paneSession?.terminalExit,
       });

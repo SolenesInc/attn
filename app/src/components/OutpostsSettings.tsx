@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useDaemonStore } from '../store/daemonSessions';
 import type { OutpostInfo } from '../types/generated';
 
 const stateTone: Record<OutpostInfo['state'], string> = {
@@ -12,6 +13,9 @@ function Timestamp({ value }: { value: string }) {
 
 export function OutpostsSettings() {
   const { outposts, outpostCommandError, sendAddOutpost, sendRepairOutpost, sendRemoveOutpost, isConnected } = useDaemonApi();
+  const sessions = useDaemonStore((state) => state.daemonSessions);
+  const removeButton = useRef<HTMLButtonElement>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [submitted, setSubmitted] = useState<{ name: string; address: string } | null>(null);
@@ -55,28 +59,49 @@ export function OutpostsSettings() {
       <section className="settings-block">
         <div className="settings-block-intro">
           <h3>Outposts</h3>
-          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove disconnects and forgets this outpost.</p>
+          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, then disconnects and forgets this outpost.</p>
         </div>
         <div className="settings-block-body">
           {outposts.length === 0 ? <p className="settings-empty">No outposts added.</p> : (
             <ul className="settings-outposts" aria-label="Outposts">
-              {outposts.map(row => (
-                <li key={row.id} className="settings-outpost" aria-label={row.name}>
-                  <div className="settings-row-card">
-                    <div><h4 className="settings-row-title">{row.name}</h4><p className="settings-row-copy">{row.address}</p></div>
-                    <span className={`settings-pill ${stateTone[row.state]}`}>{row.state}</span>
-                  </div>
-                  <div className="settings-meta-row"><span>Since</span><Timestamp value={row.state_since} /></div>
-                  <div className="settings-meta-row"><span>Build</span><code>{row.build || 'Not yet known'}</code></div>
-                  {row.daemon_id && <div className="settings-meta-row"><span>Daemon</span><code>{row.daemon_id}</code></div>}
-                  {row.host_key_fingerprint && <div className="settings-meta-row"><span>Host key</span><code>{row.host_key_fingerprint}</code></div>}
-                  {row.last_error && <div className="settings-warning settings-outpost-error"><p>{row.last_error}</p>{row.last_error_at && <Timestamp value={row.last_error_at} />}</div>}
-                  <div className="settings-outpost-actions">
-                    <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
-                    <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRemoveOutpost(row.id)}>Remove</button>
-                  </div>
-                </li>
-              ))}
+              {outposts.map(row => {
+                const count = sessions.filter((session) => session.host === row.id).length;
+                return (
+                  <li key={row.id} className="settings-outpost" aria-label={row.name}>
+                    <div className="settings-row-card">
+                      <div><h4 className="settings-row-title">{row.name}</h4><p className="settings-row-copy">{row.address}</p></div>
+                      <span className={`settings-pill ${stateTone[row.state]}`}>{row.state}</span>
+                    </div>
+                    <div className="settings-meta-row"><span>Since</span><Timestamp value={row.state_since} /></div>
+                    <div className="settings-meta-row"><span>Build</span><code>{row.build || 'Not yet known'}</code></div>
+                    {row.daemon_id && <div className="settings-meta-row"><span>Daemon</span><code>{row.daemon_id}</code></div>}
+                    {row.host_key_fingerprint && <div className="settings-meta-row"><span>Host key</span><code>{row.host_key_fingerprint}</code></div>}
+                    {row.last_error && <div className="settings-warning settings-outpost-error"><p>{row.last_error}</p>{row.last_error_at && <Timestamp value={row.last_error_at} />}</div>}
+                    <div className="settings-outpost-actions">
+                      <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
+                      <button
+                        ref={removing === row.id ? removeButton : undefined}
+                        type="button"
+                        className="settings-action"
+                        disabled={!isConnected}
+                        onClick={() => {
+                          if (count > 0 && removing !== row.id) {
+                            setRemoving(row.id);
+                            return;
+                          }
+                          sendRemoveOutpost(row.id);
+                          setRemoving(null);
+                        }}
+                      >
+                        {removing === row.id && count > 0 ? `Remove and close ${count} ${count === 1 ? 'terminal' : 'terminals'}` : 'Remove'}
+                      </button>
+                      {removing === row.id && count > 0 ? (
+                        <button type="button" className="settings-action" onClick={() => { removeButton.current?.focus(); setRemoving(null); }}>Cancel</button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

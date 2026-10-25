@@ -15,7 +15,7 @@ import {
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const VENT = 'ANALYTICS7 attn seed tend refused a seed held by a session that ended two hours ago. Retried twice, then used --force.';
@@ -30,6 +30,7 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-analytics-'));
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
+const created = [];
 const binary = appDaemonInTree(options.appPath);
 const cli = async (...args) => (await promisify(execFile)(binary, args, { env: instanceCliEnv(instance) })).stdout;
 const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
@@ -49,6 +50,7 @@ async function vent(session, words) {
 runner.registerCleanup('remove_scratch', () => fs.rmSync(root, { recursive: true, force: true }));
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_observer', () => observer.close());
+runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, created.toReversed()));
 try {
   await launchFreshAppAndConnect(client, observer);
   queueDaemonSettingRestore(observer, 'analytics.enabled');
@@ -57,7 +59,9 @@ try {
   fs.mkdirSync(first);
   fs.mkdirSync(second);
   const venting = await createSessionAndWaitForInitialPane({ client, observer, cwd: first, label: 'fix garden bell staleness', agent: 'claude' });
+  created.push(venting);
   const withdrawing = await createSessionAndWaitForInitialPane({ client, observer, cwd: second, label: 'songcheck deploy', agent: 'claude' });
+  created.push(withdrawing);
   await vent(venting, VENT);
   await cli('vent', 'withdraw', '--session', withdrawing, await vent(withdrawing, WITHDRAWN));
 

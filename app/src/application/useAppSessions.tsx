@@ -1,3 +1,4 @@
+import type { OutpostInfo } from '../types/generated';
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useEffect, useMemo } from 'react';
 import { useProfilesStore } from '../store/profiles';
@@ -8,6 +9,7 @@ import { sessionAttentionFields } from '../navigation/sessionNavigation';
 import { buildDesktopViewModels } from '../utils/desktopViewModels';
 import { AppContentProps } from './appSupport';
 interface Options {
+  outposts?: OutpostInfo[];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
   connect: ReturnType<typeof useSessionStore.getState>['connect'];
@@ -16,9 +18,12 @@ export function useAppSessions({
   sessions,
   daemonSessions,
   connect,
+  outposts = [],
 }: Options) {
   const enrichedLocalSessions = sessions.map((s) => {
     const daemonSession = daemonSessions.find((ds) => ds.id === s.id);
+    const host = daemonSession?.host;
+    const outpost = outposts.find((row) => row.id === host);
     const rawState = daemonSession?.state ?? s.state;
     const paneStatus = s.desktop.agents.find((pane) => pane.sessionId === s.id)?.status;
     const paneState =
@@ -26,6 +31,10 @@ export function useAppSessions({
     return {
       ...s,
       title: daemonSession?.title,
+      host,
+      hostName: outpost?.name ?? host,
+      offline: Boolean(host && (outpost?.state === 'lost' || outpost?.state === 'refused')),
+      canAttach: !host || outpost?.state === 'connected' || outpost?.state === 'stalled',
       ...sessionAttentionFields(daemonSession),
       state: paneState || normalizeSessionState(rawState),
       branch: daemonSession?.branch ?? s.branch,

@@ -4,9 +4,10 @@ Outposts are experimental. An outpost is another computer running attn, such
 as a Linux box or a cloud VM, that your home connects to. Your home is the attn
 on the Mac whose app you use, and it can connect to several outposts.
 
-You can open a shell on an outpost in a terminal tile. Input, screen updates,
-and terminal commands pass through your home. Agents and file tiles stay on
-the home's machine.
+Shells on an outpost appear in terminal tiles beside your local terminals.
+The tile header shows the outpost's name after the title. Input, screen
+updates, and terminal commands pass through your home. Agents and file tiles
+stay on the home's machine.
 
 ## Set up an outpost
 
@@ -76,17 +77,14 @@ directory on the outpost. The shell opens beside your agent and preserves
 focus. Read it and type into it with `attn terminal read`, `run`, and `send`,
 using the terminal id printed by `open`.
 
-A split from an outpost shell stays on that outpost, in the original shell's
-start directory. Removing the outpost closes its terminals. If it is
-unreachable, the home closes the terminals on its side. Run
-`attn enrollment leave` on the outpost later to stop the shells still running
-there.
+In an outpost shell, **⌘D** opens another shell on the same outpost, in the
+original shell's start directory.
 
 A lost connection leaves the shell running. The screen comes from the
 outpost again when it reconnects. Shells also survive a restart of either
 daemon. If the shell process on the outpost is gone when the daemons
-reconnect, the home marks the shell recoverable. Revive it to start a new
-shell in its place.
+reconnect, the home marks the shell recoverable. **Resume** starts a new shell
+in its place.
 
 Only shells run on outposts for now. Spawning an agent with a host fails.
 An `attn` command that needs a daemon also fails inside an outpost shell,
@@ -106,6 +104,22 @@ detect_env_vars = ["SSH_CONNECTION", "ATTN_HOST"]
 
 The hostname then appears over SSH and inside an outpost shell. It stays
 hidden in a local shell. `ssh_only = true` does not detect `ATTN_HOST`.
+
+## Work while an outpost is offline
+
+When the connection is lost or refused, each terminal stays in place. Its state
+dot becomes hollow and crossed, and its sidebar and home screen rows have a
+faint red tint. A strip over the terminal says "<name> unreachable · typing
+is not sent" without changing the terminal's size. Each refused key flashes
+the tile red. Typing and resizes are not sent, and close, split, kill, and
+reload refuse immediately, naming the outpost. A stalled or connecting
+connection does not mark terminals offline.
+
+A tile that stays open keeps its last screen. If you switch desktops or
+restart the app while the terminal is offline, its tile shows an empty
+terminal and tells you that the screen is on the outpost. When the connection
+returns, the tile attaches and shows the current screen. Refused typing is
+never replayed.
 
 ## Connection states
 
@@ -131,8 +145,17 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 | no ssh-agent, no keys in it, or no key accepted | Load your key with `ssh-add`, and check it is in the outpost's `authorized_keys`. |
 | it is the same outpost as another row | You added it twice under two addresses. Remove one. |
 
-**Remove** closes its terminals and forgets the outpost and its identity.
-Turning Outposts off disconnects every outpost and keeps the list for next time.
+## Remove an outpost
+
+**Remove** closes the outpost's terminals across all profiles, then forgets
+the outpost and its identity. When it has terminals, the row asks you to
+confirm with **Remove and close N terminals**, or **Cancel**. When it has
+none, removal happens immediately. If the outpost is unreachable, Remove
+closes its tiles at the home while its shells keep running on the outpost.
+Run `attn enrollment leave` on the outpost to stop those shells.
+
+Turning Outposts off disconnects every outpost and keeps the list for next
+time.
 
 ## Checking a change to outposts (for contributors)
 
