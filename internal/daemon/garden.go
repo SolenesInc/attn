@@ -1051,13 +1051,11 @@ func (d *Daemon) recordGardenDispatchProtected(protection foregroundCleanupProte
 
 func (d *Daemon) observeGardenDispatchExecution(sessionID protocol.SessionID, cwd string, agent string) garden.Dispatch {
 	sessionID = protocol.TrimID(sessionID)
-	observed := d.observedGardenExecution(&protocol.Session{
-		ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent),
-	}, "", d.gardenTime())
-	if session := d.store.Get(sessionID); session != nil {
-		observed = d.observedGardenExecution(session, d.store.GetResumeSessionID(sessionID), d.gardenTime())
+	session := d.store.Get(sessionID)
+	if session == nil {
+		session = &protocol.Session{ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent)}
 	}
-	return observed
+	return d.observedGardenExecution(session, d.gardenTime())
 }
 
 func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtection, sessionID protocol.SessionID, crown string, dispatcherSession protocol.SessionID, fromChief bool, observed garden.Dispatch) error {
@@ -1077,24 +1075,6 @@ func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtec
 		next.FromChief = fromChief
 		return next, true, nil
 	})
-	return err
-}
-
-func (d *Daemon) rememberDispatchResume(sessionID protocol.SessionID, resumeSessionID string) error {
-	sessionID, resumeSessionID = protocol.TrimID(sessionID), strings.TrimSpace(resumeSessionID)
-	if sessionID == "" || resumeSessionID == "" {
-		return nil
-	}
-	_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
-		if current.Resume == resumeSessionID {
-			return current, false, nil
-		}
-		current.Resume = resumeSessionID
-		return current, true, nil
-	})
-	if err != nil {
-		d.logf("garden: recording the resume id for session %s: %v", sessionID, err)
-	}
 	return err
 }
 

@@ -22,9 +22,6 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 			d.receiveSentFile(session, path)
 		}
 	}
-	if native := view.Conversation.V.NativeID; native != previous.Conversation.V.NativeID {
-		d.rememberDispatchResume(session, native)
-	}
 	if view.AssistantWindow.V != previous.AssistantWindow.V {
 		d.publishFact(FactSessionAssistantWindowChanged, string(session), nil)
 	}

@@ -130,7 +130,6 @@ type Dispatch struct {
 	SupersededBy      protocol.SessionID `json:"superseded_by,omitempty"`
 	OperationID       string             `json:"operation_id,omitempty"`
 	FromChief         bool               `json:"from_chief,omitempty"`
-	Resume            string             `json:"resume,omitempty"`
 }
 
 func DispatchesSchema() docstore.CollectionSchema {

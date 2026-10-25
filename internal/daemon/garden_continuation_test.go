@@ -34,7 +34,7 @@ func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	continuation := d.continuationForSeed(tended)
-	if continuation == nil || !continuation.ResumeAvailable || continuation.Execution.Resume != "snipe-conv-3" {
+	if continuation == nil || !continuation.ResumeAvailable || continuation.Resume != "snipe-conv-3" {
 		t.Fatalf("continuation = %+v, want a resumable snipe-conv-3", continuation)
 	}
 }

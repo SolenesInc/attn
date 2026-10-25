@@ -1,0 +1,3 @@
+kind: internal
+area: garden
+change: A seed's continuation and session reopen read the conversation from the session itself; the dispatch record no longer keeps its own copy.

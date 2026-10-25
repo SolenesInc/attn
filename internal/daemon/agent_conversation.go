@@ -194,7 +194,6 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 
 	monitor := d.startSessionMonitorFrom(observation.SessionID, "", candidate)
 	monitor.SetConversation(observation.monitored())
-	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, string(observation.SessionID), observation)
 	d.mirrorLabel(observation.SessionID)

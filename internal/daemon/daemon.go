@@ -2837,7 +2837,6 @@ func (d *Daemon) persistResumeSessionID(sessionID protocol.SessionID, resumeSess
 	if _, err := d.store.TransitionSessionResumeID(sessionID, resumeSessionID); err != nil {
 		d.logf("persistResumeSessionID: update failed for session %s: %v", sessionID, err)
 	}
-	d.rememberDispatchResume(sessionID, resumeSessionID)
 }
 
 func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
@@ -2905,9 +2904,8 @@ func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transc
 		case resumeSessionID == "":
 		case agentdriver.EffectiveCapabilities(driver).HasHooks:
 			d.observeAgentConversation(observation)
-			d.rememberDispatchResume(sessionID, resumeSessionID)
-		case d.claimAgentConversation(observation):
-			d.rememberDispatchResume(sessionID, resumeSessionID)
+		default:
+			d.claimAgentConversation(observation)
 		}
 	}
 }
