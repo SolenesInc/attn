@@ -902,11 +902,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("sendNotebookWriteWSResult", func() {
 			d.sendNotebookWriteWSResult(client, protocol.Deref(nbWrite.RequestID), nbWrite.Path, nbWrite.Content, protocol.Deref(nbWrite.BaseHash), notebookScope)
 		})
-	case protocol.CmdNotebookSendToChief:
-		nbChief := msg.(*protocol.NotebookSendToChiefMessage)
-		d.life.Go("sendNotebookToChiefWSResult", func() {
-			d.sendNotebookToChiefWSResult(client, protocol.Deref(nbChief.RequestID), protocol.Deref(nbChief.SourcePath), nbChief.Selection, notebookScope)
-		})
 	case protocol.CmdTaskList:
 		nbTaskList := msg.(*protocol.TaskListMessage)
 		d.life.Go("sendTaskListWSResult", func() { d.sendTaskListWSResult(client, protocol.Deref(nbTaskList.RequestID)) })

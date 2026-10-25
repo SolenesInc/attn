@@ -80,8 +80,6 @@ func (d *Daemon) sendNotebookScopeError(client *wsClient, cmd string, scope note
 		reply = protocol.NotebookBacklinksResultMessage{Event: protocol.EventNotebookBacklinksResult, RequestID: scope.requestID, Success: false, Error: &message}
 	case protocol.CmdNotebookWrite:
 		reply = protocol.NotebookWriteResultMessage{Event: protocol.EventNotebookWriteResult, RequestID: scope.requestID, Success: false, Error: &message}
-	case protocol.CmdNotebookSendToChief:
-		reply = protocol.NotebookSendToChiefResultMessage{Event: protocol.EventNotebookSendToChiefResult, RequestID: scope.requestID, Success: false, Error: &message}
 	default:
 		d.sendCommandError(client, cmd, message)
 		return

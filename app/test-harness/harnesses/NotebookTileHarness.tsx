@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import '../../src/App.css';
 import { NotebookSurfaceProvider, type NotebookSurfaceDaemon, type NotebookSurfaceContextValue } from '../../src/contexts/NotebookSurfaceContext';
 import { NotebookTile } from '../../src/components/notebook/NotebookTile';
-import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWatchResult, FsWriteResult, NotebookEntry, NotebookSendToChiefResult } from '../../src/hooks/useDaemonSocket';
+import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWatchResult, FsWriteResult, NotebookEntry } from '../../src/hooks/useDaemonSocket';
 import type { HarnessProps } from '../types';
 
 const TREE: Record<string, FsEntry[]> = {
@@ -57,10 +57,6 @@ export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProp
   const existsFile = useCallback(async (path: string): Promise<FsExistsResult> => ({ path, exists: true }), []);
   const readAsset = useCallback(async (path: string): Promise<FsReadAssetResult> => ({ path, mimeType: 'image/png', dataBase64: '' }), []);
   const backlinksNotebook = useCallback(async (): Promise<NotebookEntry[]> => [], []);
-  const sendToChief = useCallback(async (selection: string, sourcePath?: string): Promise<NotebookSendToChiefResult> => {
-    window.__HARNESS__.recordCall('sendToChief', [selection, sourcePath]);
-    return { path: 'inbox.md', nudged: false };
-  }, []);
   const listFiles = useCallback(async (): Promise<NotebookEntry[]> => FILES, []);
 
   const daemon = useMemo<NotebookSurfaceDaemon>(() => ({
@@ -70,9 +66,8 @@ export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProp
     existsFile,
     readAsset,
     backlinksNotebook,
-    sendToChief,
     listFiles,
-  }), [listDir, readFile, writeFile, existsFile, readAsset, backlinksNotebook, sendToChief, listFiles]);
+  }), [listDir, readFile, writeFile, existsFile, readAsset, backlinksNotebook, listFiles]);
 
   const sendFsWatch = useCallback(async (root?: string): Promise<FsWatchResult> => ({ root: root ?? '' }), []);
   const sendFsUnwatch = useCallback(async (root?: string): Promise<FsWatchResult> => ({ root: root ?? '' }), []);

@@ -10,7 +10,6 @@ import (
 const (
 	FileIndex = "index.md"
 	FileLog   = "log.md"
-	FileInbox = "inbox.md"
 
 	DirJournal   = "journal"
 	DirKnowledge = "knowledge"
@@ -157,11 +156,6 @@ frontmatter field, and links are root-absolute markdown, e.g.
 const logTemplate = `# Log
 
 Change history, newest first.
-`
-
-const inboxTemplate = `# Chief inbox
-
-Selections sent to the chief of staff from the Notebook, oldest first.
 `
 
 const knowledgeIndexTemplate = `# Knowledge base

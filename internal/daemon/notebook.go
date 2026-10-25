@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/notebook"
-	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -270,80 +269,6 @@ func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, co
 		msg.Error = protocol.Ptr(err.Error())
 	}
 	d.sendToClient(client, msg)
-}
-
-const maxInboxSelection = 32 << 10
-
-func chiefInboxNudgePrompt(root string) string {
-	return prompts.RenderText("chief", "inbox", prompts.Values{"inbox_path": filepath.Join(root, "inbox.md")})
-}
-
-func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, sourcePath, selection string, scope notebookRequestScope) {
-	var result *protocol.NotebookSendToChiefResult
-	store, err := d.notebookStoreAt(string(scope.root))
-	if err == nil {
-		if strings.TrimSpace(selection) == "" {
-			err = fmt.Errorf("notebook: empty selection")
-		} else if len(selection) > maxInboxSelection {
-			err = fmt.Errorf("notebook: selection exceeds %d bytes", maxInboxSelection)
-		}
-	}
-	if err == nil {
-		var relPath, hash string
-		if relPath, hash, err = store.AppendInbox(formatChiefInboxEntry(sourcePath, selection)); err == nil {
-			d.noteSelfWrite(store.Root(), notebook.SelfWrite{Rel: relPath, Hash: hash})
-			d.broadcastNotebookChanged(originUI, relPath)
-			d.broadcastFsChanged(store.Root(), originUI, relPath)
-			result = &protocol.NotebookSendToChiefResult{
-				Path:   relPath,
-				Nudged: d.nudgeChief(scope.profileID, requestID, chiefInboxNudgePrompt(store.Root())),
-			}
-		}
-	}
-	msg := protocol.NotebookSendToChiefResultMessage{
-		Event:     protocol.EventNotebookSendToChiefResult,
-		RequestID: requestID,
-		Success:   err == nil,
-		Result:    result,
-	}
-	if err != nil {
-		msg.Error = protocol.Ptr(err.Error())
-	}
-	d.sendToClient(client, msg)
-}
-
-func formatChiefInboxEntry(sourcePath, selection string) string {
-	var b strings.Builder
-	b.WriteString(chiefInboxSourceHeading(sourcePath))
-	b.WriteString("\n\n")
-	normalized := strings.ReplaceAll(selection, "\r\n", "\n")
-	normalized = strings.ReplaceAll(normalized, "\r", "\n")
-	for _, line := range strings.Split(strings.TrimRight(normalized, "\n"), "\n") {
-		b.WriteString("> ")
-		b.WriteString(line)
-		b.WriteByte('\n')
-	}
-	return b.String()
-}
-
-func chiefInboxSourceHeading(sourcePath string) string {
-	rel, err := notebook.CleanPath(sourcePath)
-	if err != nil {
-		return "## From the Notebook"
-	}
-	rel = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || r == '`' {
-			return -1
-		}
-		return r
-	}, rel)
-	if rel == "" {
-		return "## From the Notebook"
-	}
-	if !strings.ContainsAny(rel, " \t()[]<>") {
-		return fmt.Sprintf("## From [/%s](/%s)", rel, rel)
-	}
-	return fmt.Sprintf("## From `/%s`", rel)
 }
 
 func notebookEntriesToProtocol(entries []notebook.Entry) []protocol.NotebookEntry {

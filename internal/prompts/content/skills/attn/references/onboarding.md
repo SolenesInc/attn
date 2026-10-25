@@ -46,7 +46,6 @@ Keep this checklist privately. Each item can be done or skipped.
 
    ```text
    index.md             where agents orient and learn the user's layout
-   inbox.md             quick captures
    journal/<date>.md    the lasting record of the day
    knowledge/           projects, areas, resources and archive by convention
    seeds/<id>/          seed artifacts
@@ -54,7 +53,7 @@ Keep this checklist privately. Each item can be done or skipped.
    .attn/               attn's machine state
    ```
 
-   `journal/`, `inbox.md`, `seeds/`, `crew/` and `.attn/` are fixed.
+   `journal/`, `seeds/`, `crew/` and `.attn/` are fixed.
    The knowledge layout is the user's to reshape. Ask whether it suits them;
    record any agreed layout in `index.md` so other agents follow it. The
    Notebook folder was picked before this wake; do not ask for it again.

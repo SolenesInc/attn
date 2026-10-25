@@ -27,7 +27,6 @@ const notebookSurface: NotebookSurfaceContextValue = {
     existsFile: vi.fn(),
     readAsset: vi.fn(),
     backlinksNotebook: vi.fn(),
-    sendToChief: vi.fn(),
     listFiles: vi.fn(),
     changeSignal: 0,
   }),

@@ -10,7 +10,6 @@ interface Options {
   sendFsExists: ReturnType<typeof useDaemonApi>['sendFsExists'];
   sendFsReadAsset: ReturnType<typeof useDaemonApi>['sendFsReadAsset'];
   sendNotebookBacklinks: ReturnType<typeof useDaemonApi>['sendNotebookBacklinks'];
-  sendNotebookToChief: ReturnType<typeof useDaemonApi>['sendNotebookToChief'];
   sendFsIndex: ReturnType<typeof useDaemonApi>['sendFsIndex'];
   fsChangeSignals: AppContentProps['fsChangeSignals'];
   effectiveNotebookRoot: string;
@@ -25,7 +24,6 @@ export function useAppNotebookSurface({
   sendFsExists,
   sendFsReadAsset,
   sendNotebookBacklinks,
-  sendNotebookToChief,
   sendFsIndex,
   fsChangeSignals,
   effectiveNotebookRoot,
@@ -45,10 +43,9 @@ export function useAppNotebookSurface({
       existsFile: (path: string) => sendFsExists(path, requestRoot, scope),
       readAsset: (path: string) => sendFsReadAsset(path, requestRoot, scope),
       backlinksNotebook: (path: string) => sendNotebookBacklinks(path, scope),
-      sendToChief: (selection: string, sourcePath?: string) => sendNotebookToChief(selection, sourcePath, scope),
       listFiles: () => sendFsIndex(requestRoot, undefined, scope).then(fsIndexToNotebookEntries),
     };
-  }, [sendFsList, sendFsRead, sendFsWrite, sendFsExists, sendFsReadAsset, sendNotebookBacklinks, sendNotebookToChief, sendFsIndex, profileId, effectiveNotebookRoot]);
+  }, [sendFsList, sendFsRead, sendFsWrite, sendFsExists, sendFsReadAsset, sendNotebookBacklinks, sendFsIndex, profileId, effectiveNotebookRoot]);
 
   const changeSignalFor = useCallback(
     (root?: string) => fsChangeSignals[fsChangeSignalKey(root || '', effectiveNotebookRoot)] || 0,

@@ -78,7 +78,6 @@ export const NotebookTile = forwardRef<NotebookSurfaceHandle, {
       existsFile={daemon.existsFile}
       readAsset={daemon.readAsset}
       backlinksNotebook={offRoot ? undefined : daemon.backlinksNotebook}
-      sendToChief={offRoot ? undefined : daemon.sendToChief}
       changeSignal={changeSignalFor(effectiveRoot)}
       listFiles={daemon.listFiles}
     />
