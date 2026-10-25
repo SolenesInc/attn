@@ -624,6 +624,13 @@
   white-space: nowrap;
 }
 
+.garden-columns .garden-column:not(.garden-column--reader) .seed-checks-tally-compact {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The reader. Wider than the lists, but the prose inside it is still capped: a
    column that grows to 900px is as unreadable as one squeezed to 300. */
 .garden-column--reader { padding: 0; }
