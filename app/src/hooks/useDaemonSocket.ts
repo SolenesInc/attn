@@ -190,6 +190,7 @@ export interface SeedSendToChiefOptions {
   review?: SeedReviewActionContext;
 }
 export type SeedSendToChiefResult = GeneratedSeedSendToChiefResult;
+export type SeedCheckVerb = 'confirm' | 'reject' | 'uncheck' | 'reopen';
 export interface SeedReviewActionContext {
   reviewId: string;
   evidenceVersion: string;
@@ -1458,6 +1459,18 @@ export function useDaemonSocket({
             pendingActionsRef.current.delete(key);
             if (data.success && data.seed) pending.resolve(data.seed);
             else pending.reject(new Error(data.error || 'The move was refused'));
+            break;
+          }
+
+          case 'seed_check_result': {
+            const requestId = data.request_id;
+            if (typeof requestId !== 'string') break;
+            const key = `seed_check:${requestId}`;
+            const pending = pendingActionsRef.current.get(key);
+            if (!pending) break;
+            pendingActionsRef.current.delete(key);
+            if (data.success && data.seed) pending.resolve(data.seed);
+            else pending.reject(new Error(data.error || 'The check move was refused'));
             break;
           }
 
@@ -2868,6 +2881,18 @@ export function useDaemonSocket({
         ...(force ? { force: true } : {}),
         ...(review ? { review: { review_id: review.reviewId, evidence_version: review.evidenceVersion } } : {}),
       }, 'The move timed out');
+    },
+    [sendRequest],
+  );
+
+  const sendSeedCheck = useCallback(
+    (seedId: string, checkId: string, verb: SeedCheckVerb, summary?: string): Promise<Seed> => {
+      return sendRequest('seed_check', {
+        seed_id: seedId,
+        check_id: checkId,
+        verb,
+        ...(summary ? { summary } : {}),
+      }, 'The check move timed out');
     },
     [sendRequest],
   );
@@ -4357,6 +4382,7 @@ export function useDaemonSocket({
     sendSeedArtifactTransfer,
     sendSeedArtifactReferenceDetach,
     sendSeedTransition,
+    sendSeedCheck,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
     sendTerminalPointerActivity,

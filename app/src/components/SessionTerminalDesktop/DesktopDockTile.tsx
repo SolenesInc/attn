@@ -4,6 +4,8 @@ import { browserHostLabel, claimBrowserHostFocus, controlBrowserHost } from '../
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import type { Seed } from '../../hooks/useDaemonSocket';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
+import { useDaemonStore } from '../../store/daemonSessions';
+import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import {
   parseNotebookTileParams,
@@ -251,6 +253,7 @@ export function DesktopDockTile({
           setAnnotationCount={setAnnotationCount}
           seedDocument={seedDocument}
           seedDocumentError={seedDocumentError}
+          gardenSeeds={gardenSeeds}
           onUpdateParams={onUpdateParams}
           navigateSeed={navigateSeed}
           seedArrival={seedArrival}
@@ -316,6 +319,7 @@ function MarkdownBody({
 function SeedTileBody({
   document,
   error,
+  gardenSeeds,
   onAnnotationsCountChange,
   annotationsSendRef,
   onOpenSeed,
@@ -323,12 +327,19 @@ function SeedTileBody({
 }: {
   document: SeedDocument | null;
   error: string | null;
+  gardenSeeds: Seed[];
   onAnnotationsCountChange: (count: number) => void;
   annotationsSendRef: RefObject<MarkdownAnnotationsSendHandle | null>;
   onOpenSeed?: (seedId: string) => void;
   arrival: 'in' | 'out';
 }) {
   const { sendOpenMarkdown } = useDaemonApi();
+  const daemonSessions = useDaemonStore((state) => state.daemonSessions);
+  const sessionLabels = useMemo(
+    () => new Map(daemonSessions.map((session) => [session.id, sessionDisplayName(session)])),
+    [daemonSessions],
+  );
+  const seedByID = useMemo(() => new Map(gardenSeeds.map((seed) => [seed.id, seed])), [gardenSeeds]);
 
   if (!document) {
     return (
@@ -346,6 +357,8 @@ function SeedTileBody({
       onAnnotationsCountChange={onAnnotationsCountChange}
       annotationsSendRef={annotationsSendRef}
       onOpenSeed={onOpenSeed}
+      seedById={(id) => seedByID.get(id)}
+      sessionLabels={sessionLabels}
       arrival={arrival}
       onOpenMarkdownArtifact={(path) => {
         void sendOpenMarkdown(path, '').catch((openError) => {
@@ -364,6 +377,7 @@ interface ContentProps {
   setAnnotationCount: (count: number) => void;
   seedDocument: SeedDocument | null;
   seedDocumentError: string | null;
+  gardenSeeds: Seed[];
   onUpdateParams?: (params: string) => Promise<unknown> | void;
   navigateSeed: (id: string) => void;
   seedArrival: 'in' | 'out';
@@ -381,6 +395,7 @@ function DesktopTileContent({
   setAnnotationCount,
   seedDocument,
   seedDocumentError,
+  gardenSeeds,
   onUpdateParams,
   navigateSeed,
   seedArrival,
@@ -404,6 +419,7 @@ function DesktopTileContent({
       <SeedTileBody
         document={seedDocument}
         error={seedDocumentError}
+        gardenSeeds={gardenSeeds}
         onAnnotationsCountChange={setAnnotationCount}
         annotationsSendRef={annotationsSendRef}
         onOpenSeed={onUpdateParams ? navigateSeed : undefined}

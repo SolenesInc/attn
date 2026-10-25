@@ -147,6 +147,27 @@ describe('App garden seeds', () => {
     expect(screen.getByText('1 more entry on the log.')).toBeInTheDocument();
   });
 
+  it('lists a seed tile’s checks under its plan, with the header tally, and moves one from the tile', async () => {
+    const checked = { ...PLAN, checks: [
+      { id: 'C1', text: 'Wire tests cover the reader.', removed: false, state: 'reported',
+        report: { summary: 'Reader wire tests pass', evidence: [], by_member: 'trellis', at: '2026-08-15T09:00:00Z' } },
+      { id: 'C2', text: 'The reader is recorded.', removed: false, state: 'open' },
+    ] };
+    const daemon = await openSeedTile(checked);
+    daemon.on('seed_check', () => ({ event: 'seed_check_result', success: true, seed: checked }));
+
+    expect(within(seedDetails()).getByRole('button', { name: 'Checks: 0 of 2 confirmed · 1 to judge' })).toHaveTextContent('✓0/2 · 1 to judge');
+    const checks = within(screen.getByRole('region', { name: 'Checks' }));
+    expect(screen.getByRole('heading', { name: 'Rendered plan' }).compareDocumentPosition(checks.getByText('Wire tests cover the reader.'))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(checks.getByText('Reader wire tests pass')).toBeInTheDocument();
+
+    await gesture(daemon, () => fireEvent.click(checks.getByRole('button', { name: 'Confirm C1' })));
+    expect(daemon.sentOf('seed_check')).toEqual([
+      { cmd: 'seed_check', request_id: expect.any(String), seed_id: PLAN.id, check_id: 'C1', verb: 'confirm' },
+    ]);
+  });
+
   it('refreshes a seed tile on garden changes that carry no seed, on reconnect, and ignores obsolete responses', async () => {
     const daemon = await openSeedTile(PLAN, { notes: [note('n-before', { body: 'Before the keep pass' })], notes_total: 1 });
     fireEvent.click(screen.getByText('Log').closest('summary')!);
