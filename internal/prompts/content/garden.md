@@ -19,6 +19,7 @@ The loop:
     attn seed tend <id>              claim it; one tender at a time, a held seed refuses you by name
     attn seed note <id> -m "…"       what happened and what you learned, tending it or not; --handoff addresses the next tender
                                      --ring tells watchers to look
+    attn seed check report <id> <C#> -m "…" --evidence <artifact|url>    the proof for one of the seed's checks; `attn seed --help` has the other check verbs
     attn seed harvest <id> -m "…"    done; the reason is required and fits in 400 characters, the long version goes in a note
     attn seed harvest <id> --when-merged [pr-url]    only when a merge is all that is left: the seed lets go and harvests itself when that pull request merges
                                      with no url it takes this session's single open pull request; --when-merged --clear takes the arming back

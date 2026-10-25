@@ -4,7 +4,7 @@ Own execution of the agreed plan. Read the plan in the seed and inspect enough r
 
 Delegate implementation where a cheaper model can carry it out reliably. Make small changes directly when delegation would cost more effort than it saves.
 
-Write each Builder's brief as `attn seed guide` describes under WRITING A BODY, with the plan's seed, the code location, the decisions and findings that constrain the work, and the completion checks it cites. Identify yourself and provide your contact as the point of contact for unforeseen issues requiring advice. Specify progress checkpoints when useful for the assignment.
+Write each Builder's brief as `attn seed guide` describes under WRITING A BODY, with the plan's seed, the code location, the decisions and findings that constrain the work, and the checks it cites. Put the Builder's checks on its seed as data, with `attn seed check add`, when the plot JSON did not already define them. Identify yourself and provide your contact as the point of contact for unforeseen issues requiring advice. Specify progress checkpoints when useful for the assignment.
 
 After delegating, wait for updates. Updates may report completion, a progress checkpoint, or a question needing advice. Use those updates to decide when to inspect code, answer questions, review results, or adjust assignments. Avoid following every implementation step in parallel with Builder. The brief is the standing record of the assignment: when you redirect a Builder, change its brief first, then message it, because a resumed or replacement Builder reads the brief, not your earlier messages.
 
@@ -18,7 +18,16 @@ Record the question before asking it, as an open item under the plan's Decisions
 
 When the answer comes, write the decision and its reason into the plan's Decisions, rewrite every part of the plan that depends on it as [Planning](planning.md) describes under Tracking and handoff, record who decided it in a note, remove it from the open questions, and pass it to each Builder whose brief it changed. A question that work has overtaken is withdrawn the same way, with the note saying why.
 
-Review each Builder's completed work against the plan yourself, completion check by completion check, from the evidence each check names. You did not write the Builder's code, so your review is the independent one; a change you make yourself has no independent review, and you say so when you report it. Check how the pieces work together and return needed corrections to the Builder. When the work grows a parallel mechanism beside an existing one, bring it to the user as a scope question rather than working around it. Evidence counts for the commit it ran on: after a new commit, rerun the checks the change could affect and reuse the rest, and run further checks when gaps or contradictions warrant them. Judge the overall outcome complete only when the evidence supports it.
+Review each Builder's completed work against the plan yourself, check by check. You did not write the Builder's code, so your review is the independent one; a change you make yourself has no independent review, and you say so when you report it. `attn seed show <seed-id>` lists the child's checks, the shared ones included, each with its report and verdict. For each report, open the evidence it cites and compare its commit with the pull request head: evidence counts for the commit it ran on. Then record the verdict:
+
+```sh
+attn seed check confirm <seed-id> <C#>
+attn seed check reject <seed-id> <C#> -m "<what would prove it>" --ring
+```
+
+Pass `--ring` when the Builder must act. A rejection does not reopen a harvested seed, which has no tender: the ring reaches the Builder only through the watch its delegation started, and the reply names who it rang. When it rang nobody, reach the Builder with `attn agent msg <session>`. Confirm a check with no report only when you verified it yourself, and say how in `-m`.
+
+Check how the pieces work together and return needed corrections to the Builder. When the work grows a parallel mechanism beside an existing one, bring it to the user as a scope question rather than working around it. After a new commit, rerun the checks the change could affect and reuse the rest, and run further checks when gaps or contradictions warrant them. Read where the children stand from their tallies, on the plot's rows in `attn seed ls` and `attn seed show <plot>`, and from each shared check's rollup on the plot, which counts harvested children too. The plot's own checks are yours to see proven. Judge the overall outcome complete only when the evidence supports it.
 
 Make the result readable in the conversation and durable in the seed. Follow the task's authorization for delivery steps.
 

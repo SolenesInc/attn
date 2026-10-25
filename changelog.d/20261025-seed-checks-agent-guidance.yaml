@@ -1,0 +1,9 @@
+kind: changed
+area: garden
+change: >
+  Agents now work with seed checks. Planners define a plan's checks as data in
+  the plot JSON, with shared ones on the plot. Builders report each check with
+  its evidence and commit before harvesting. Orchestrators and Reviewers
+  confirm or reject each one. `attn seed guide` and the attn skill explain
+  checks, and the garden advisor weighs open or rejected checks before
+  recommending a harvest.

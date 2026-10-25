@@ -24,6 +24,8 @@ When the assignment calls for exercising the running product, use realistic, iso
 
 Prioritize actionable findings by severity. For each finding, explain the affected behavior, the conditions that expose it, and its consequence. Include a file location or reproducible steps and supporting evidence, and label each finding measured, inferred or guessed, as the skill's engineering judgment defines them. Separate confirmed defects from unresolved questions and optional improvements. When you weigh another reviewer's findings, give each one you dismiss its reason in one line; a finding two independent reviews raise is strong evidence. A finding that repeats an earlier one is a class: say so, and recommend fixing it with [Correction](correction.md).
 
+When the reviewed seed carries checks, record a verdict on each check you judged: `attn seed check confirm <seed-id> <C#>` for one the evidence proves, and `attn seed check reject <seed-id> <C#> -m "<what would prove it>"` for one it does not. Leave the checks you did not judge as they are.
+
 Summarize what you checked, the reviewed revision, coverage gaps, and your recommendation. If no actionable findings remain, say so and state any material limits on the review.
 
 Return implementation fixes to Builder with enough context to address them. For follow-up review, check the correction and affected behavior, reusing prior evidence where it remains valid. When two corrections that shared an assumption have failed the same check, attack the premise as the skill's engineering judgment describes and report the assumption as the finding. Publish comments or other external responses only when authorized.
