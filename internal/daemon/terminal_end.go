@@ -46,7 +46,7 @@ func (d *Daemon) closeTerminal(sessionID protocol.SessionID, t harness.TerminalI
 	if !d.othersRun(sessionID, t) {
 		return true
 	}
-	if err := d.ptyBackend.Kill(context.Background(), t, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+	if err := d.killTerminalRuntime(t, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
 		d.logf("stopping terminal %s: %v", t, err)
 	}
 	d.dropTerminal(t)
@@ -65,4 +65,14 @@ func (d *Daemon) dropTerminal(t harness.TerminalID) {
 	} else if removed {
 		d.publishArrangementChanged(desktop.ProfileID)
 	}
+}
+
+func (d *Daemon) killTerminalRuntime(t harness.TerminalID, sig syscall.Signal) error {
+	_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalKillMessage{Cmd: protocol.CmdTerminalKill, TerminalID: t, Signal: signalName(sig)})
+	return err
+}
+
+func (d *Daemon) removeTerminalRuntime(ctx context.Context, t harness.TerminalID) error {
+	_, err := Call[struct{}](ctx, d.router(), protocol.TerminalRemoveMessage{Cmd: protocol.CmdTerminalRemove, TerminalID: t})
+	return err
 }

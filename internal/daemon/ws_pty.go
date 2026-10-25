@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -21,7 +20,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -175,21 +173,16 @@ func legacyExecutableFromSpawnMessage(msg *protocol.SpawnSessionMessage, agent s
 	}
 }
 
-func resolveSpawnCWD(cwd string) string {
+func namesHome(cwd string) bool {
 	trimmed := strings.TrimSpace(cwd)
-	switch {
-	case trimmed == "~":
-		home, err := os.UserHomeDir()
-		if err == nil && home != "" {
-			return home
-		}
-	case strings.HasPrefix(trimmed, "~/"):
-		home, err := os.UserHomeDir()
-		if err == nil && home != "" {
-			return filepath.Join(home, trimmed[2:])
-		}
+	return trimmed == "~" || strings.HasPrefix(trimmed, "~/")
+}
+
+func expandHome(cwd, home string) string {
+	if home == "" || !namesHome(cwd) {
+		return cwd
 	}
-	return cwd
+	return filepath.Join(home, strings.TrimPrefix(strings.TrimSpace(cwd), "~"))
 }
 
 func (d *Daemon) sendSpawnFailure(client *wsClient, sessionID protocol.SessionID, err error) {
@@ -237,21 +230,26 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 	if parentSessionID != "" {
 		session.ParentSessionID = protocol.Ptr(parentSessionID)
 	}
-	if branchInfo != nil {
-		if branchInfo.Branch != "" {
-			session.Branch = protocol.Ptr(branchInfo.Branch)
-		}
-		if branchInfo.IsWorktree {
-			session.IsWorktree = protocol.Ptr(true)
-		}
-		if branchInfo.MainRepo != "" {
-			session.MainRepo = protocol.Ptr(branchInfo.MainRepo)
-		}
-		if branchInfo.Repository != "" {
-			session.Repository = protocol.Ptr(branchInfo.Repository)
-		}
-	}
+	applyBranchInfo(session, branchInfo)
 	return session
+}
+
+func applyBranchInfo(session *protocol.Session, branchInfo *git.BranchInfo) {
+	if branchInfo == nil {
+		return
+	}
+	if branchInfo.Branch != "" {
+		session.Branch = protocol.Ptr(branchInfo.Branch)
+	}
+	if branchInfo.IsWorktree {
+		session.IsWorktree = protocol.Ptr(true)
+	}
+	if branchInfo.MainRepo != "" {
+		session.MainRepo = protocol.Ptr(branchInfo.MainRepo)
+	}
+	if branchInfo.Repository != "" {
+		session.Repository = protocol.Ptr(branchInfo.Repository)
+	}
 }
 
 func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSessionMessage) {
@@ -348,14 +346,14 @@ func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessi
 	attachOptions := ptybackend.AttachOptions{OmitReplay: !shouldIncludeAttachReplay(policy)}
 
 	terminal := msg.ID
-	info, stream, err := d.ptyBackend.Attach(context.Background(), terminal, subID, attachOptions)
+	info, stream, err := d.router().Attach(context.Background(), terminal, subID, attachOptions)
 	revived := false
 	if err != nil && errors.Is(err, pty.ErrSessionNotFound) && protocol.Deref(msg.AttachPolicy) == protocol.AttachPolicyRevive {
 		attachErr := err
 		if reviveErr := d.reviveSessionForAttach(msg); reviveErr != nil {
 			err = errors.Join(attachErr, reviveErr)
 		} else {
-			info, stream, err = d.ptyBackend.Attach(context.Background(), terminal, subID, attachOptions)
+			info, stream, err = d.router().Attach(context.Background(), terminal, subID, attachOptions)
 			if err == nil {
 				revived = true
 			}
@@ -471,53 +469,15 @@ func int32PtrToInt(v *int32) *int {
 }
 
 func (d *Daemon) handleGetScreenSnapshot(client *wsClient, msg *protocol.GetScreenSnapshotMessage) {
-	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
-	if !ok {
-		d.sendToClient(client, protocol.GetScreenSnapshotResultMessage{
-			Event:   protocol.EventGetScreenSnapshotResult,
-			ID:      msg.ID,
-			Success: false,
-			Error:   protocol.Ptr("screen snapshot not supported"),
-		})
-		return
-	}
-
-	info, err := provider.ScreenSnapshot(context.Background(), msg.ID)
+	result, err := Call[protocol.GetScreenSnapshotResultMessage](context.Background(), d.router(), *msg)
 	if err != nil {
-		d.sendToClient(client, protocol.GetScreenSnapshotResultMessage{
+		result = protocol.GetScreenSnapshotResultMessage{
 			Event:   protocol.EventGetScreenSnapshotResult,
 			ID:      msg.ID,
 			Success: false,
 			Error:   protocol.Ptr(err.Error()),
-		})
-		return
+		}
 	}
-
-	result := protocol.GetScreenSnapshotResultMessage{
-		Event:   protocol.EventGetScreenSnapshotResult,
-		ID:      msg.ID,
-		Success: true,
-		LastSeq: protocol.Ptr(int(info.LastSeq)),
-		Cols:    protocol.Ptr(int(info.Cols)),
-		Rows:    protocol.Ptr(int(info.Rows)),
-		Running: protocol.Ptr(info.Running),
-	}
-	snapshotBytes := 0
-	screenCols := 0
-	screenRows := 0
-	if info.Screen != nil {
-		snapshotBytes = len(info.Screen.Payload)
-		screenCols = int(info.Screen.Cols)
-		screenRows = int(info.Screen.Rows)
-		result.ScreenSnapshot = protocol.Ptr(base64.StdEncoding.EncodeToString(info.Screen.Payload))
-		result.ScreenRows = protocol.Ptr(screenRows)
-		result.ScreenCols = protocol.Ptr(screenCols)
-	}
-	d.logf(
-		"PTY screen snapshot: id=%s running=%v last_seq=%d snapshot_bytes=%d screen=%dx%d have_screen=%v",
-		msg.ID, info.Running, info.LastSeq, snapshotBytes,
-		screenCols, screenRows, info.Screen != nil,
-	)
 	d.sendToClient(client, result)
 }
 
@@ -684,7 +644,6 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 	if probeID != "" {
 		probeStartedAt = time.Now()
 	}
-	userTyped := sessionmonitor.IsComposerKeystroke(source, []byte(msg.Data))
 	if d.debugLogging {
 		d.logf(
 			"pty_input: id=%s bytes=%d preview=%q source=%s",
@@ -694,14 +653,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 			strings.TrimSpace(protocol.Deref(msg.Source)),
 		)
 	}
-	terminal := msg.ID
-	if userTyped {
-		// Hold the existing timer before the agent can take this input and arm a new one.
-		if sessionID, shown := d.shownIn(terminal); shown {
-			d.sessionMonitor(sessionID).HoldAutoSettle()
-		}
-	}
-	writeErr := d.writeTerminalPTY(context.Background(), terminal, []byte(msg.Data), source)
+	_, writeErr := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: msg.ID, Data: msg.Data, Source: source})
 	d.recordSupportInputTrace(msg, receivedAt, time.Since(receivedAt), writeErr)
 	if writeErr != nil {
 		if shouldLogPtyCommandError(writeErr) {
@@ -726,10 +678,7 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 }
 
 func (d *Daemon) handleTerminalPointerActivity(msg *protocol.TerminalPointerActivityMessage) {
-	sessionID, shown := d.shownIn(msg.ID)
-	if shown && d.sessionMonitor(sessionID).NoteActivity() {
-		d.sessionMonitor(sessionID).HoldAutoSettle()
-	}
+	_, _ = Call[struct{}](context.Background(), d.router(), *msg)
 }
 
 type ptyGeometry struct {
@@ -762,28 +711,9 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		d.sendCommandError(client, protocol.CmdPtyResize, fmt.Sprintf("invalid terminal size cols=%d rows=%d (expected 1..%d)", msg.Cols, msg.Rows, maxPTYDimValue))
 		return
 	}
-	xpixel, ypixel := protocol.Deref(msg.Xpixel), protocol.Deref(msg.Ypixel)
-	if xpixel < 0 || ypixel < 0 || xpixel > maxPTYPixelValue || ypixel > maxPTYPixelValue {
-		d.logf("pty_resize: id=%s ignoring pixel geometry xpixel=%d ypixel=%d (expected 0..%d)", msg.ID, xpixel, ypixel, maxPTYPixelValue)
-		xpixel, ypixel = 0, 0
+	if _, err := Call[struct{}](context.Background(), d.router(), *msg); err != nil && shouldLogPtyCommandError(err) {
+		d.logf("pty_resize failed for %s: %v", msg.ID, err)
 	}
-	if xpixel == 0 || ypixel == 0 {
-		xpixel, ypixel = 0, 0
-	}
-	d.logf("pty_resize: id=%s cols=%d rows=%d xpixel=%d ypixel=%d", msg.ID, msg.Cols, msg.Rows, xpixel, ypixel)
-	result, err := d.ptyBackend.Resize(context.Background(), msg.ID, uint16(msg.Cols), uint16(msg.Rows), uint16(xpixel), uint16(ypixel))
-	if err != nil {
-		if shouldLogPtyCommandError(err) {
-			d.logf("pty_resize failed for %s: %v", msg.ID, err)
-		}
-		return
-	}
-	if result.StreamOrdered {
-		return
-	}
-	d.publishFact(FactSessionPTYResized, string(msg.ID), ptyGeometry{
-		Cols: msg.Cols, Rows: msg.Rows, XPixel: xpixel, YPixel: ypixel,
-	})
 }
 
 var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -819,14 +749,9 @@ func (d *Daemon) handleSetTerminalTheme(client *wsClient, msg *protocol.SetTermi
 	if theme.Foreground != msg.Foreground || theme.Background != msg.Background || theme.Cursor != msg.Cursor || !paletteOK {
 		d.logf("set_terminal_theme: invalid color field(s) blanked, got fg=%q bg=%q cursor=%q palette_len=%d", msg.Foreground, msg.Background, msg.Cursor, len(msg.AnsiPalette))
 	}
-	d.setCurrentTerminalTheme(theme)
-
-	ctx := context.Background()
-	for _, terminal := range d.ptyBackend.TerminalIDs(ctx) {
-		if err := d.ptyBackend.SetTheme(ctx, terminal, theme); err != nil {
-			d.logf("set_terminal_theme: SetTheme failed for %s: %v", terminal, err)
-		}
-	}
+	_, _ = Call[struct{}](context.Background(), d.router(), protocol.TerminalThemeMessage{
+		Cmd: protocol.CmdTerminalTheme, Foreground: theme.Foreground, Background: theme.Background, Cursor: theme.Cursor, AnsiPalette: theme.ANSIPalette[:],
+	})
 }
 
 func parseSignal(name string) syscall.Signal {
@@ -849,7 +774,6 @@ func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMe
 	terminals := d.terminalsOf(sessionID)
 	for _, terminal := range terminals {
 		d.detachSession(client, terminal)
-		d.markTerminalExitIntent(terminal, terminalExitStop)
 	}
 	sig := parseSignal(protocol.Deref(msg.Signal))
 	d.life.Go("killSessionRuntimeAsync", func() { d.killSessionRuntimeAsync(sessionID, terminals, sig) })
@@ -858,8 +782,7 @@ func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMe
 func (d *Daemon) killSessionRuntimeAsync(sessionID protocol.SessionID, terminals []harness.TerminalID, sig syscall.Signal) {
 	var err error
 	for _, terminal := range terminals {
-		if killErr := d.ptyBackend.Kill(context.Background(), terminal, sig); killErr != nil {
-			d.clearTerminalExitIntent(terminal, terminalExitStop)
+		if _, killErr := Call[struct{}](context.Background(), d.router(), protocol.TerminalKillMessage{Cmd: protocol.CmdTerminalKill, TerminalID: terminal, Signal: signalName(sig), Stop: protocol.Ptr(true)}); killErr != nil {
 			if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
 				err = killErr
 			}

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,7 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -159,14 +157,6 @@ func (d *Daemon) terminalAct(caller *protocol.Session, target *selectedTerminal,
 	return nil
 }
 
-func (d *Daemon) terminalText() (ptybackend.TerminalTextProvider, error) {
-	provider, ok := d.ptyBackend.(ptybackend.TerminalTextProvider)
-	if !ok {
-		return nil, fmt.Errorf("terminal backend does not support read_text and wait_block")
-	}
-	return provider, nil
-}
-
 func (d *Daemon) terminalContext(conn net.Conn) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(d.life.Context())
 	d.life.Go("terminalCommandDisconnect", func() { _, _ = io.Copy(io.Discard, conn); cancel() })
@@ -240,10 +230,13 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		return
 	}
 	if protocol.Deref(msg.Command) != "" {
-		shell := pty.GetUserLoginShell()
-		env := pty.MergeEnvironment(os.Environ(), d.cachedLoginShellEnv())
-		if !pty.ShellIntegrationExpected(shell, env) {
-			d.sendError(conn, fmt.Sprintf("OSC 133 rule: shell %s is known to provide no command marks (or ATTN_NO_SHELL_INTEGRATION is set); open with a command needs its first prompt. No terminal was opened; use open without a command and send instead", shell))
+		shell, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell})
+		if err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+		if !shell.IntegrationExpected {
+			d.sendError(conn, fmt.Sprintf("OSC 133 rule: shell %s is known to provide no command marks (or ATTN_NO_SHELL_INTEGRATION is set); open with a command needs its first prompt. No terminal was opened; use open without a command and send instead", shell.Shell))
 			return
 		}
 	}
@@ -302,16 +295,12 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		defer cancelConnection()
 		ctx, cancel := context.WithTimeout(connectionCtx, terminalFirstPromptTripwire)
 		defer cancel()
-		provider, err := d.terminalText()
-		if err == nil {
-			var result pty.WaitBlockResult
-			result, err = provider.WaitBlock(ctx, terminal, pty.WaitBlockParams{Until: "prompt", FirstPrompt: true})
-			if err == nil && result.Exited {
-				err = fmt.Errorf("terminal %s exited before its first prompt (exit code %v)", id, protocol.Deref(result.ExitCode))
-			}
+		result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, FirstPrompt: protocol.Ptr(true)})
+		if err == nil && protocol.Deref(result.Exited) {
+			err = fmt.Errorf("terminal %s exited before its first prompt (exit code %v)", id, protocol.Deref(result.ExitCode))
 		}
 		if err == nil && ctx.Err() == nil {
-			err = d.writeTerminalPTY(ctx, terminal, []byte(command+"\r"), "agent")
+			_, err = Call[struct{}](ctx, d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: terminal, Data: command + "\r", Source: "agent"})
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			d.sendError(conn, fmt.Sprintf("first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use attn terminal send %s to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id))
@@ -348,12 +337,7 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 			d.sendError(conn, "run rule: run requires a shell; use send to type into an agent")
 			return
 		}
-		provider, err := d.terminalText()
-		if err != nil {
-			d.sendError(conn, err.Error())
-			return
-		}
-		state, err := provider.ReadText(context.Background(), target.terminal, "screen", 0)
+		state, err := Call[protocol.TerminalText](context.Background(), d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
 		if err != nil {
 			d.sendError(conn, err.Error())
 			return
@@ -366,9 +350,9 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 			d.sendError(conn, "prompt rule: shell is busy; use send to type into its running program")
 			return
 		}
-		result.LastBlockID = protocol.Ptr(strconv.FormatUint(state.LastBlockID, 10))
+		result.LastBlockID = protocol.Ptr(state.LastBlockID)
 	}
-	if err := d.writeTerminalPTY(context.Background(), target.terminal, []byte(msg.Data), "agent"); err != nil {
+	if _, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: target.terminal, Data: msg.Data, Source: "agent"}); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
@@ -397,21 +381,16 @@ func (d *Daemon) handleTerminalRead(conn net.Conn, msg *protocol.TerminalReadMes
 		d.sendError(conn, err.Error())
 		return
 	}
-	provider, err := d.terminalText()
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
 	if protocol.Deref(msg.Lines) < 0 {
 		d.sendError(conn, "lines rule: --lines must be positive")
 		return
 	}
-	info, err := provider.ReadText(context.Background(), target.terminal, string(msg.Mode), protocol.Deref(msg.Lines))
+	info, err := Call[protocol.TerminalText](context.Background(), d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: msg.Mode, Lines: protocol.Deref(msg.Lines)})
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalReadResult: &protocol.TerminalReadResult{Text: info.Text, Block: protocolTerminalBlock(info.Block)}})
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalReadResult: &protocol.TerminalReadResult{Text: info.Text, Block: info.Block}})
 }
 
 func (d *Daemon) handleTerminalWait(conn net.Conn, msg *protocol.TerminalWaitMessage) {
@@ -429,27 +408,13 @@ func (d *Daemon) handleTerminalWait(conn net.Conn, msg *protocol.TerminalWaitMes
 		d.sendError(conn, "prompt rule: wait --until prompt requires a shell; use wait --until exit for an agent")
 		return
 	}
-	provider, err := d.terminalText()
-	if err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
-	params := pty.WaitBlockParams{Until: string(msg.Until)}
-	if msg.AfterBlockID != nil {
-		id, err := strconv.ParseUint(*msg.AfterBlockID, 10, 64)
-		if err != nil {
-			d.sendError(conn, "block rule: after_block_id must be an unsigned integer")
-			return
-		}
-		params.AfterBlockID = &id
-	}
 	ctx, cancel := d.terminalContext(conn)
 	defer cancel()
-	result, err := provider.WaitBlock(ctx, target.terminal, params)
+	result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: target.terminal, Until: msg.Until, AfterBlockID: msg.AfterBlockID})
 	if err != nil && ctx.Err() == nil {
 		if terminals := d.terminalsOf(target.ID); len(terminals) == 1 && terminals[0] == target.terminal {
 			if exit := d.store.GetSessionExit(target.ID); exit != nil {
-				result, err = pty.WaitBlockResult{Exited: true, ExitCode: protocol.Ptr(exit.Code)}, nil
+				result, err = protocol.TerminalWaitResult{Exited: protocol.Ptr(true), ExitCode: protocol.Ptr(exit.Code)}, nil
 			}
 		}
 	}
@@ -457,7 +422,7 @@ func (d *Daemon) handleTerminalWait(conn net.Conn, msg *protocol.TerminalWaitMes
 		d.sendError(conn, err.Error())
 		return
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalWaitResult: &protocol.TerminalWaitResult{Block: protocolTerminalBlock(result.Block), Exited: protocol.Ptr(result.Exited), ExitCode: result.ExitCode}})
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalWaitResult: &result})
 }
 
 func (d *Daemon) handleTerminalClose(conn net.Conn, msg *protocol.TerminalCloseMessage) {

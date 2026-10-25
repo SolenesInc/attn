@@ -437,7 +437,7 @@ generate-types: ensure-go-jsonschema
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
 
 MIGRATION_BASE ?= origin/main
 

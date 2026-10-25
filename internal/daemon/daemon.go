@@ -185,6 +185,8 @@ type Daemon struct {
 	spawnLocks            map[protocol.SessionID]*spawnLock
 
 	terminalsOnce            sync.Once
+	routerOnce               sync.Once
+	routes                   *Router
 	terminalState            *terminalRegistry
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
@@ -1688,7 +1690,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := d.ptyBackend.Remove(ctx, terminal)
+	err := d.removeTerminalRuntime(ctx, terminal)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -1701,7 +1703,7 @@ func (d *Daemon) removePTYSession(terminal harness.TerminalID) error {
 				return
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			retryErr := d.ptyBackend.Remove(ctx, terminal)
+			retryErr := d.removeTerminalRuntime(ctx, terminal)
 			cancel()
 			if retryErr == nil || errors.Is(retryErr, pty.ErrSessionNotFound) || errors.Is(retryErr, os.ErrNotExist) {
 				return
@@ -1741,7 +1743,7 @@ func (d *Daemon) terminateSession(sessionID protocol.SessionID, sig syscall.Sign
 		d.sessionMonitor(sessionID).StopTranscriptWatchers()
 		if d.ptyBackend != nil {
 			for _, terminal := range d.terminalsOf(sessionID) {
-				_ = d.ptyBackend.Remove(context.Background(), terminal)
+				_ = d.removeTerminalRuntime(context.Background(), terminal)
 			}
 		}
 	}
@@ -1778,18 +1780,14 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, te
 		return nil
 	}
 	for _, terminal := range terminals {
-		d.terminals().noteEnding(terminal, sessionID, time.Now())
-		err := d.ptyBackend.Kill(context.Background(), terminal, sig)
-		if err != nil {
-			d.terminals().takeEnding(terminal)
-		}
+		_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalKillMessage{Cmd: protocol.CmdTerminalKill, TerminalID: terminal, Signal: signalName(sig), EndingSessionID: protocol.Ptr(sessionID)})
 		if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
 			return err
 		}
 	}
 	d.sessionMonitor(sessionID).StopTranscriptWatchers()
 	for _, terminal := range terminals {
-		if err := d.ptyBackend.Remove(context.Background(), terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
+		if err := d.removeTerminalRuntime(context.Background(), terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}

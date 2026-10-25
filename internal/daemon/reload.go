@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -17,7 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -327,6 +325,22 @@ func (d *Daemon) handleReloadSession(client *wsClient, msg *protocol.ReloadSessi
 }
 
 func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload) error {
+	if opts.Agent != protocol.AgentShellValue {
+		return d.reloadAgent(sessionID, opts, pluginReload)
+	}
+	launch, err := encodeLaunch(opts)
+	if err != nil {
+		return err
+	}
+	if _, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalRestartMessage{Cmd: protocol.CmdTerminalRestart, SessionID: sessionID, TerminalID: opts.ID, Launch: launch}); err != nil {
+		return err
+	}
+	d.recordReload(sessionID, opts)
+	d.announceReload(sessionID, opts)
+	return nil
+}
+
+func (d *Daemon) reloadAgent(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload) error {
 	if pluginReload != nil {
 		defer pluginReload.abort()
 	}
@@ -365,7 +379,18 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	}
 	unlockEnds()
 	d.sessionMonitor(sessionID).ResetInput()
+	d.recordReload(sessionID, opts)
+	d.sessionMonitor(sessionID).RecordReviewer(opts.ApprovalRoute.ReviewerInLoop())
+	d.announceReload(sessionID, opts)
+	return nil
+}
 
+func (d *Daemon) announceReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
+	d.publishFact(FactSessionRespawned, string(sessionID), ptyRespawn{Terminal: string(opts.ID)})
+	d.logf("reload: respawned %s (agent=%s resume=%t yolo=%t)", sessionID, opts.Agent, opts.ResumeSessionID != "", opts.YoloMode)
+}
+
+func (d *Daemon) recordReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	intent.Asks = d.launchedWithAsks(sessionID)
 	intent.Vent, intent.Experimental = d.launchVentIntent(sessionID)
@@ -374,32 +399,30 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
 	}
 	d.store.SetLaunchIntent(sessionID, intent)
-	d.sessionMonitor(sessionID).RecordReviewer(opts.ApprovalRoute.ReviewerInLoop())
-	d.publishFact(FactSessionRespawned, string(sessionID), ptyRespawn{Terminal: string(terminal)})
-	d.logf("reload: respawned %s (agent=%s resume=%t yolo=%t)", sessionID, opts.Agent, opts.ResumeSessionID != "", opts.YoloMode)
-	return nil
 }
 
 func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.SpawnOptions, error) {
 	sessionID := session.ID
 	terminal := d.primaryTerminal(sessionID)
-	paramsProvider, ok := d.ptyBackend.(ptybackend.SessionLaunchParamsProvider)
-	if !ok {
-		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, fmt.Errorf("backend does not record launch params"))
+	recorded, err := Call[protocol.TerminalLaunchResult](context.Background(), d.router(), protocol.TerminalLaunchMessage{Cmd: protocol.CmdTerminalLaunch, TerminalID: terminal})
+	if err != nil {
+		return ptybackend.SpawnOptions{}, err
+	}
+	if protocol.Deref(recorded.Unrecordable) {
+		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, recorded, fmt.Errorf("backend does not record launch params"))
 	}
 	if !d.terminalCarriesLaunch(sessionID) {
-		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, fmt.Errorf("terminal %s runs a link, not session %s's own launch", terminal, sessionID))
+		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, recorded, fmt.Errorf("terminal %s runs a link, not session %s's own launch", terminal, sessionID))
 	}
-	params, err := paramsProvider.SessionLaunchParams(context.Background(), terminal)
-	if err != nil {
-		registryErr := fmt.Errorf("read launch params: %w", err)
-		if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
-			return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, registryErr)
-		}
-		return ptybackend.SpawnOptions{}, registryErr
+	if recorded.ReadError != nil {
+		return ptybackend.SpawnOptions{}, errors.New(*recorded.ReadError)
 	}
-	if !params.Recorded {
-		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, fmt.Errorf("launch params not recorded (pre-reload worker)"))
+	if recorded.Params == nil {
+		return d.buildReloadSpawnOptionsFromStoredIntent(session, terminal, recorded, errors.New(protocol.Deref(recorded.Unrecorded)))
+	}
+	var params ptybackend.SessionLaunchParams
+	if err := json.Unmarshal([]byte(*recorded.Params), &params); err != nil {
+		return ptybackend.SpawnOptions{}, fmt.Errorf("decode launch params: %w", err)
 	}
 	if _, known, routeErr := recordedApprovalRoute(params.ApprovalRoute, params.YoloMode, params.UnattendedLaunch); routeErr != nil {
 		return ptybackend.SpawnOptions{}, fmt.Errorf("read launch params: %w", routeErr)
@@ -408,16 +431,16 @@ func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.
 			params.ApprovalRoute = intent.ApprovalRoute
 		}
 	}
-	return d.buildReloadSpawnOptionsFromLaunchParams(session, terminal, params)
+	return d.buildReloadSpawnOptionsFromLaunchParams(session, terminal, recorded, params)
 }
 
-func (d *Daemon) buildReloadSpawnOptionsFromStoredIntent(session *protocol.Session, terminal harness.TerminalID, unrecorded error) (ptybackend.SpawnOptions, error) {
+func (d *Daemon) buildReloadSpawnOptionsFromStoredIntent(session *protocol.Session, terminal harness.TerminalID, recorded protocol.TerminalLaunchResult, unrecorded error) (ptybackend.SpawnOptions, error) {
 	intent, ok := d.store.LaunchIntent(session.ID)
 	if !ok {
 		return ptybackend.SpawnOptions{}, fmt.Errorf("%w; no stored launch intent exists either", unrecorded)
 	}
 	d.logf("reload: using stored launch intent for %s: %v", session.ID, unrecorded)
-	return d.buildReloadSpawnOptionsFromLaunchParams(session, terminal, ptybackend.SessionLaunchParams{
+	return d.buildReloadSpawnOptionsFromLaunchParams(session, terminal, recorded, ptybackend.SessionLaunchParams{
 		Recorded:         true,
 		YoloMode:         intent.YoloMode,
 		ApprovalRoute:    intent.ApprovalRoute,
@@ -428,18 +451,14 @@ func (d *Daemon) buildReloadSpawnOptionsFromStoredIntent(session *protocol.Sessi
 	})
 }
 
-func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Session, terminal harness.TerminalID, params ptybackend.SessionLaunchParams) (ptybackend.SpawnOptions, error) {
+func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Session, terminal harness.TerminalID, recorded protocol.TerminalLaunchResult, params ptybackend.SessionLaunchParams) (ptybackend.SpawnOptions, error) {
 	sessionID := session.ID
 	cols, rows := uint16(80), uint16(24)
-	if infoProvider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider); ok {
-		if info, err := infoProvider.SessionInfo(context.Background(), terminal); err == nil {
-			if info.Cols > 0 {
-				cols = info.Cols
-			}
-			if info.Rows > 0 {
-				rows = info.Rows
-			}
-		}
+	if recorded.Cols != nil {
+		cols = uint16(*recorded.Cols)
+	}
+	if recorded.Rows != nil {
+		rows = uint16(*recorded.Rows)
 	}
 
 	agent := normalizeSpawnAgent(session.Agent)

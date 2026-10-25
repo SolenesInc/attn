@@ -207,7 +207,14 @@ func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejecti
 func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	req.spawnStartedAt = time.Now()
 	req.existingSession = d.store.Get(req.msg.ID)
-	req.cwd = resolveSpawnCWD(req.msg.Cwd)
+	req.cwd = req.msg.Cwd
+	if namesHome(req.cwd) {
+		machine, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell})
+		if err != nil {
+			return &spawnRejection{err: err}
+		}
+		req.cwd = expandHome(req.cwd, machine.Home)
+	}
 	req.label = protocol.Deref(req.msg.Label)
 	if req.label == "" && !req.isShell {
 		req.label = filepath.Base(req.cwd)
@@ -331,12 +338,16 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if req.addsTerminal {
 		return d.executeAddedTerminal(req, plan)
 	}
+	if req.isShell {
+		return d.executeShellSpawn(req, plan)
+	}
 	msg := req.msg
 	if req.existingSession != nil && d.sessionLive(context.Background(), msg.ID) {
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{alreadyLive: true}
 	}
-	terminal := d.spawnTerminal(req)
+	terminal := d.launchTerminal(req)
+	d.expectTerminal(terminal, req.msg.ID)
 	plan.spawnOpts.ID = terminal
 	if req.hasPluginDriver {
 		d.startSessionMonitor(msg.ID)
@@ -492,9 +503,60 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	return &spawnOutcome{}
 }
 
+func (d *Daemon) executeShellSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
+	msg := req.msg
+	if req.existingSession != nil && d.sessionLive(context.Background(), msg.ID) {
+		plan.rollback(d, msg.ID)
+		return &spawnOutcome{alreadyLive: true}
+	}
+	terminal := d.launchTerminal(req)
+	plan.spawnOpts.ID = terminal
+	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, true, false, req.parentSessionID, nil)
+	session := plan.launchSession
+	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
+		if plan.chiefAssigned {
+			d.clearChiefOfStaffIfSession(msg.ID)
+		}
+		plan.rollback(d, msg.ID)
+		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
+	}
+	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
+	intent.Asks = d.launchedWithAsks(session.ID)
+	intent.Vent, intent.Experimental = d.launchVentIntent(session.ID)
+	intent.AutoMode = msg.AutoMode
+	d.store.SetLaunchIntent(session.ID, intent)
+	if err := d.store.SetSessionLink(session.ID, linkKind(req.link)); err != nil {
+		d.logf("spawn: %v", err)
+	}
+	d.persistLaunchedConversation(req, plan)
+	if err := d.startShellTerminal(session, terminal, plan.spawnOpts); err != nil {
+		if req.existingSession == nil {
+			d.store.Remove(msg.ID)
+			d.forgetMonitor(msg.ID)
+		}
+		if plan.chiefAssigned {
+			d.clearChiefOfStaffIfSession(msg.ID)
+		}
+		plan.rollback(d, msg.ID)
+		return &spawnOutcome{err: err}
+	}
+	d.clearExitScreenBefore(msg.ID, req.spawnStartedAt)
+	return &spawnOutcome{}
+}
+
+func (d *Daemon) startShellTerminal(session *protocol.Session, terminal harness.TerminalID, opts ptybackend.SpawnOptions) error {
+	launch, err := encodeLaunch(opts)
+	if err != nil {
+		return err
+	}
+	_, err = Call[struct{}](context.Background(), d.router(), protocol.TerminalStartMessage{Cmd: protocol.CmdTerminalStart, Session: *session, TerminalID: terminal, Launch: launch})
+	return err
+}
+
 func (d *Daemon) executeAddedTerminal(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	sessionID := req.msg.ID
-	plan.spawnOpts.ID = d.spawnTerminal(req)
+	plan.spawnOpts.ID = d.launchTerminal(req)
+	d.expectTerminal(plan.spawnOpts.ID, sessionID)
 	plan.abandonLink = func() { req.link.launchFailed(plan.spawnOpts.ID, req.profile.ID) }
 	if err := req.link.prepareLaunch(&plan.spawnOpts, req.profile.ID); err != nil {
 		plan.rollback(d, sessionID)
@@ -525,21 +587,24 @@ func (d *Daemon) startTerminalRuntime(opts ptybackend.SpawnOptions) error {
 	return d.ptyBackend.Spawn(context.Background(), withLifecycleID(opts))
 }
 
-// spawnTerminal picks the terminal a launch runs in before its worker starts: the one a pane already
+// launchTerminal picks the terminal a launch runs in before its worker starts: the one a pane already
 // holds for the session unless the launch adds a terminal, else a new one its pane will record.
-func (d *Daemon) spawnTerminal(req *spawnRequest) harness.TerminalID {
-	session := req.msg.ID
-	if terminal, ok := d.terminals().Primary(session); ok && !req.addsTerminal {
+func (d *Daemon) launchTerminal(req *spawnRequest) harness.TerminalID {
+	if terminal, ok := d.terminals().Primary(req.msg.ID); ok && !req.addsTerminal {
 		return terminal
 	}
-
 	terminal := harness.TerminalID(uuid.NewString())
 	if req.placement != nil {
 		req.placement.terminal = terminal
 	}
-	d.terminals().expect(terminal, session)
-	d.kickMonitorTerminals()
 	return terminal
+}
+
+func (d *Daemon) expectTerminal(terminal harness.TerminalID, session protocol.SessionID) {
+	if _, shown := d.shownIn(terminal); !shown {
+		d.terminals().expect(terminal, session)
+		d.kickMonitorTerminals()
+	}
 }
 
 // launchedHere reports whether a resume id names the conversation a launch of this session
@@ -574,11 +639,11 @@ func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan)
 }
 
 func (d *Daemon) killSessionRuntime(terminal harness.TerminalID) error {
-	return d.ptyBackend.Kill(context.Background(), terminal, syscall.SIGTERM)
+	return d.killTerminalRuntime(terminal, syscall.SIGTERM)
 }
 
 func (d *Daemon) removeSessionRuntime(terminal harness.TerminalID) error {
-	return d.ptyBackend.Remove(context.Background(), terminal)
+	return d.removeTerminalRuntime(context.Background(), terminal)
 }
 
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
