@@ -28,7 +28,7 @@ func (e *RefusalError) Error() string {
 	}
 	message := fmt.Sprintf("attn-ingest refused the batch: %s is %d, and this batch would make it %d", e.Refusal.Limit, e.Refusal.Value, e.Refusal.Observed)
 	if e.Refusal.RetryAfterS > 0 {
-		message += fmt.Sprintf("; retrying in %d s", e.Refusal.RetryAfterS)
+		message += fmt.Sprintf("; retrying in %s", time.Duration(e.Refusal.RetryAfterS)*time.Second)
 	}
 	return message
 }

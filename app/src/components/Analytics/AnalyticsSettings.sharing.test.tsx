@@ -6,7 +6,7 @@ import { gesture } from '../../test/renderApp';
 import type { ScriptedDaemon } from '../../test/scriptedDaemon';
 import { openSection, savedSettings } from '../../test/settings';
 
-const REFUSAL = 'attn-ingest refused the batch: events_per_install_per_minute is 10000, and this batch would make it 10200; retrying in 41 s';
+const REFUSAL = 'attn-ingest refused the batch: events_per_install_per_minute is 10000, and this batch would make it 10200; retrying in 41s';
 
 const VENT: Vent = {
   id: 'v-new',

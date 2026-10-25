@@ -91,7 +91,7 @@ func TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall(t *tes
 		link.RefuseNextEvents(http.StatusTooManyRequests, minuteLimitRefusal)
 		recordAndAdvance(w, app, uploadInterval)
 		refusal := protocol.Deref(analyticsStatus(app).LastRefusal)
-		if want := "events_per_install_per_minute is 10000, and this batch would make it 10200; retrying in 600 s"; !strings.Contains(refusal, want) {
+		if want := "events_per_install_per_minute is 10000, and this batch would make it 10200; retrying in 10m0s"; !strings.Contains(refusal, want) {
 			t.Fatalf("the status shows the refusal %q, want it to contain %q", refusal, want)
 		}
 		before := len(link.Requests())
@@ -114,6 +114,34 @@ func TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall(t *tes
 		recordAndAdvance(w, app, uploadInterval)
 		if now := clickHouse.Query(t, "SELECT install_id FROM installs"); now == "" || now == installs {
 			t.Fatalf("after forget the next upload registered %q, want a new install (was %q)", now, installs)
+		}
+	})
+}
+
+func TestAttnIngestRefusingTheDaysBytesIsShownAndWaitedOut(t *testing.T) {
+	clickHouse := testworld.NewClickHouse(t)
+	ingest := testworld.StartIngest(t, clickHouse, "ATTN_INGEST_BYTES_PER_DAY=1")
+	link := ingest.Link(t)
+	inBubbleUploadingTo(t, link, func(t *testing.T, w *world) {
+		app := w.App()
+		setSetting(t, app, "analytics.enabled", "true")
+		setSetting(t, app, "analytics.sharing_enabled", "true")
+		recordAndAdvance(w, app, uploadInterval)
+		status := analyticsStatus(app)
+		refusal := protocol.Deref(status.LastRefusal)
+		if !strings.Contains(refusal, "bytes_per_day is 1, and this batch would make it ") || !strings.HasSuffix(refusal, "; retrying in 24h0m0s") {
+			t.Fatalf("the status shows the refusal %q, want bytes_per_day named with its value and a 24h wait", refusal)
+		}
+		if status.LastSentAt != nil || status.Waiting == 0 {
+			t.Fatalf("after a refused upload last_sent_at is %v and %d records wait", status.LastSentAt, status.Waiting)
+		}
+		before := len(link.Requests())
+		recordAndAdvance(w, app, uploadInterval)
+		if after := link.Requests(); len(after) != before {
+			t.Fatalf("an upload went out before retry_after_s passed: %v", after[before:])
+		}
+		if events := clickHouse.Query(t, "SELECT count() FROM events"); events != "0" {
+			t.Fatalf("ClickHouse holds %s events after every batch was refused", events)
 		}
 	})
 }
