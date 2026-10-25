@@ -17,7 +17,7 @@ APP_BINARY=$(APP_BUNDLE)/Contents/MacOS/attn
 # com.attn.manager.agent7 with its own data dir + port. `make dev` ==
 # `make install INSTANCE=dev`. See docs/internal/instances.md.
 INSTANCE ?=
-# DEMO=1 builds a named instance for recordings: no instance chip, window titled attn.
+# DEMO=1 builds a named instance for recordings: no instance chip or banner, window titled attn.
 DEMO ?=
 # An explicitly empty command-line INSTANCE indicates failed shell instance selection.
 # Fail during parsing before any target can silently fall back to the prod bundle.
@@ -55,7 +55,7 @@ OUTPUT ?= $(BINARY_NAME)
 # ad-hoc linker signature inside a properly signed bundle, and macOS answered
 # `daemon ensure` with Killed: 9.
 UNAME_S := $(shell uname -s)
-GO_LDFLAGS = -X github.com/victorarias/attn/internal/buildinfo.Version=$(VERSION) -X github.com/victorarias/attn/internal/buildinfo.BuildTime=$(BUILD_TIME) -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=$(SOURCE_FINGERPRINT) -X github.com/victorarias/attn/internal/buildinfo.GitCommit=$(GIT_COMMIT) -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(SNAPSHOT_FORMAT)
+GO_LDFLAGS = -X github.com/victorarias/attn/internal/buildinfo.Version=$(VERSION) -X github.com/victorarias/attn/internal/buildinfo.BuildTime=$(BUILD_TIME) -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=$(SOURCE_FINGERPRINT) -X github.com/victorarias/attn/internal/buildinfo.GitCommit=$(GIT_COMMIT) -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(SNAPSHOT_FORMAT) -X github.com/victorarias/attn/internal/buildinfo.Demo=$(DEMO)
 # Honor the repository's .tool-versions even when an older standalone Zig is
 # earlier on PATH (the app's WASM builder follows the same order).
 ZIG ?= $(shell if command -v asdf >/dev/null 2>&1; then asdf which zig 2>/dev/null || command -v zig; else command -v zig; fi)
