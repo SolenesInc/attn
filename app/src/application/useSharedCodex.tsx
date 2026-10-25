@@ -154,10 +154,21 @@ export function useSharedCodexCommands(): PaletteCommand[] {
   const state = useSharedCodexState();
   const installing = useSharedCodexStore((store) => store.installing);
   const openConfirm = useSharedCodexStore((store) => store.openConfirm);
-  const { install } = useSharedCodexActions();
+  const { install, restart } = useSharedCodexActions();
   return useMemo(() => {
     if (!state) return [];
     const commands: PaletteCommand[] = [];
+    if (state.restart === SharedCodexRestart.Failed) {
+      commands.push({
+        id: 'retry-shared-codex-restart',
+        pinned: true,
+        title: 'Retry shared Codex restart',
+        description: `Try starting Codex ${state.installed_version} again`,
+        keywords: ['codex', 'shared', 'restart', 'retry', 'update', 'app-server'],
+        icon: <ContextActionIcon />,
+        run: () => restart(false),
+      });
+    }
     if (codexUpdateAvailable(state) && !installing) {
       commands.push({
         id: 'install-codex-update',
@@ -193,5 +204,5 @@ export function useSharedCodexCommands(): PaletteCommand[] {
       });
     }
     return commands;
-  }, [install, installing, openConfirm, state]);
+  }, [install, installing, openConfirm, restart, state]);
 }

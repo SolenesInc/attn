@@ -431,6 +431,17 @@ html, body, #root {
   gap: 12px;
 }
 
+.codex-banner > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.banner-countdown {
+  font-variant-numeric: tabular-nums;
+}
+
 .update-banner.is-failed {
   background: #b45309;
 }

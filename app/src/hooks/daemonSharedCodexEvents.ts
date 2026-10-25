@@ -3,6 +3,7 @@ import type {
   RestartSharedCodexResultMessage,
   SharedCodexChangedMessage,
 } from '../types/generated';
+import { useProfilesStore } from '../store/profiles';
 import { useSharedCodexStore } from '../store/sharedCodex';
 import { settlePendingRequest, type PendingRequests } from './daemonPendingRequests';
 
@@ -27,7 +28,9 @@ export function handleSharedCodexDaemonEvent(event: { event?: string }, pending:
       return true;
     case 'install_codex_update_result': {
       const result = event as InstallCodexUpdateResultMessage;
-      useSharedCodexStore.getState().received(result.profile_id, result.shared_codex ?? null);
+      if (result.profile_id === useProfilesStore.getState().selectedProfileId) {
+        useSharedCodexStore.getState().received(result.profile_id, result.shared_codex ?? null);
+      }
       settlePendingRequest(pending, INSTALL_CODEX_UPDATE, result, () => true, 'Installing the Codex update failed');
       return true;
     }

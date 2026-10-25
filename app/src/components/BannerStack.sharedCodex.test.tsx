@@ -170,7 +170,7 @@ describe('the Codex banner', () => {
       'nightly-triage (hidden)Asking you a question. The question is lost.',
       'plan-cacheStill starting. Its tile relaunches.',
     ]);
-    expect(dialog.getByRole('button', { name: 'Restart now' })).toHaveFocus();
+    expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveFocus();
 
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
     expect(screen.queryByRole('dialog', { name: 'Restart shared Codex now?' })).toBeNull();
@@ -374,5 +374,33 @@ describe('the Codex banner', () => {
 
     await change(daemon, codex({ installed_version: '0.163.0', latest_version: '0.163.0', restart: 'pending' }), side.id);
     expect(banner()).toHaveTextContent('Codex 0.163.0 installed. Restarts when agents are idle.');
+  });
+
+  it('keeps the profile on screen when an install started in another profile finishes', async () => {
+    const side = defaultProfile('side-desktop', { id: 'profile-side', name: 'Side' });
+    const { daemon } = await renderApp({
+      initialState: {
+        profiles: [defaultProfile(DEFAULT_DESKTOP_ID), side],
+        desktops: [emptyDesktop(DEFAULT_DESKTOP_ID), emptyDesktop('side-desktop', { profile_id: side.id })],
+        shared_codex: codex({ latest_version: '0.163.0' }),
+      },
+    });
+    daemon.on('install_codex_update', () => undefined);
+    await click(daemon, inBanner().getByRole('button', { name: 'Install' }));
+    const [install] = daemon.sentOf('install_codex_update');
+    await runCommand(daemon, 'Switch to Side');
+    await change(daemon, codex({ latest_version: '0.164.0' }), side.id);
+
+    await gesture(daemon, () => daemon.replyTo(install, {
+      event: 'install_codex_update_result', success: false, error: 'codex update exited 1', profile_id: DEFAULT_PROFILE_ID, shared_codex: codex({ latest_version: '0.163.0' }),
+    }));
+
+    expect(banner()).toHaveTextContent('Codex 0.164.0 is available. Install failed: codex update exited 1.');
+  });
+
+  it('offers Retry in the command palette while the installed Codex refuses to start', async () => {
+    const { daemon } = await renderCodex(codex({ installed_version: '0.163.0', latest_version: '0.163.0', restart: 'failed', error: FAILURE }));
+    await runCommand(daemon, 'Retry shared Codex restart');
+    expect(daemon.sentOf('restart_shared_codex')).toEqual([expect.objectContaining({ now: false })]);
   });
 });

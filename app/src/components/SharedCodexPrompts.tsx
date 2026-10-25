@@ -20,7 +20,7 @@ function useInitialFocus() {
 }
 
 function RestartNowPrompt({ state, onConfirm, onCancel }: { state: SharedCodexState; onConfirm: () => void; onCancel: () => void }) {
-  const confirmRef = useInitialFocus();
+  const cancelRef = useInitialFocus();
   const ids = useMemo(() => blockerSessionIds(state.blockers), [state.blockers]);
   const sessions = useNamedSessions(ids);
   const blockers = state.blockers ?? [];
@@ -43,15 +43,15 @@ function RestartNowPrompt({ state, onConfirm, onCancel }: { state: SharedCodexSt
         )}
       </div>
       <div className="mp-dialog-actions">
-        <button type="button" className="mp-button" onClick={onCancel}>Cancel</button>
-        <button ref={confirmRef} type="button" className="mp-button primary" onClick={onConfirm}>Restart now</button>
+        <button ref={cancelRef} type="button" className="mp-button" onClick={onCancel}>Cancel</button>
+        <button type="button" className="mp-button primary" onClick={onConfirm}>Restart now</button>
       </div>
     </ModalDialog>
   );
 }
 
 function ReloadTilesPrompt({ state, onConfirm, onCancel }: { state: SharedCodexState; onConfirm: () => void; onCancel: () => void }) {
-  const confirmRef = useInitialFocus();
+  const cancelRef = useInitialFocus();
   const ids = useMemo(() => staleSessionsOf(state), [state]);
   const sessions = useNamedSessions(ids);
   const one = sessions.length === 1;
@@ -70,8 +70,8 @@ function ReloadTilesPrompt({ state, onConfirm, onCancel }: { state: SharedCodexS
         </ul>
       </div>
       <div className="mp-dialog-actions">
-        <button type="button" className="mp-button" onClick={onCancel}>Cancel</button>
-        <button ref={confirmRef} type="button" className="mp-button primary" onClick={onConfirm}>{one ? 'Reload tile' : 'Reload tiles'}</button>
+        <button ref={cancelRef} type="button" className="mp-button" onClick={onCancel}>Cancel</button>
+        <button type="button" className="mp-button primary" onClick={onConfirm}>{one ? 'Reload tile' : 'Reload tiles'}</button>
       </div>
     </ModalDialog>
   );

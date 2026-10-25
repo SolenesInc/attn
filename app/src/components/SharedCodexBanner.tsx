@@ -32,7 +32,7 @@ function countdown(forceAt: string, now: number): string {
 
 function ForceStopCountdown({ forceAt }: { forceAt: string }) {
   const now = useNow(COUNTDOWN_TICK_MS);
-  return <>{countdown(forceAt, now)}</>;
+  return <span className="banner-countdown">{countdown(forceAt, now)}</span>;
 }
 
 export function SharedCodexBanner() {
@@ -176,7 +176,7 @@ export function SharedCodexBanner() {
   }
 
   return (
-    <div className={`update-banner${stage === 'failed' ? ' is-failed' : ''}`} role="region" aria-label="Codex updates">
+    <div className={`update-banner codex-banner${stage === 'failed' ? ' is-failed' : ''}`} role="region" aria-label="Codex updates">
       {content}
     </div>
   );
