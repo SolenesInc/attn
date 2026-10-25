@@ -734,71 +734,6 @@
   }
 }
 
-/* ----------------------------------------------------------------- composer */
-
-.garden-compose {
-  align-items: baseline;
-  background: var(--garden-board-card);
-  border: 1px solid var(--garden-board-card-border);
-  border-radius: 6px;
-  display: flex;
-  flex: none;
-  /* The trailing lines drop below rather than squeeze the field: a column is
-     narrow, and the one that says whose work this is has to be readable — it is
-     the whole confirmation. */
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  padding: 7px 8px;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .garden-compose {
-    animation: garden-board-rise 140ms ease-out;
-  }
-}
-
-.garden-compose__verb {
-  color: var(--accent);
-  flex: none;
-  font-size: var(--font-size-sm);
-}
-
-.garden-compose__id {
-  color: var(--color-text-muted);
-  flex: none;
-  font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.garden-compose__input {
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  flex: 1 1 auto;
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  min-width: 0;
-  outline: none;
-  padding: 1px 0 2px;
-}
-
-.garden-compose__input:focus {
-  border-bottom-color: var(--accent);
-}
-
-.garden-compose__input::placeholder {
-  color: var(--color-text-dimmed);
-}
-
-.garden-compose__keys {
-  display: flex;
-  flex: none;
-  gap: 4px;
-}
-
-.garden-compose__keys kbd,
 .garden-board kbd {
   background: var(--color-bg-button);
   border-radius: 3px;
@@ -806,22 +741,6 @@
   font-family: var(--font-mono, ui-monospace, 'DejaVu Sans Mono', monospace);
   font-size: var(--font-size-xs);
   padding: 1px 4px;
-}
-
-.garden-compose__where {
-  color: var(--color-text-dimmed);
-  flex: none;
-  font-size: var(--font-size-sm);
-}
-
-/* The one line that says this seed is somebody else's live work. It carries the
-   same warning colour a card uses for a tender that walked away, because both
-   say the same thing: read this before you act. */
-.garden-compose__taking {
-  color: var(--color-warning);
-  /* Its own line, always whole. */
-  flex: 1 0 100%;
-  font-size: var(--font-size-sm);
 }
 
 @media (max-width: 1100px) {

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type Ref } from 'react';
+import { useEffect, useId, useRef, useState, type Ref } from 'react';
 import type {
   Seed,
   SeedDocument as GeneratedSeedDocument,
@@ -8,6 +8,8 @@ import { Markdown } from './Markdown';
 import { MarkdownReader, type MarkdownAnnotationsSendHandle } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
+import { checkTally, hasChecks } from './seedCheckPresentation';
 import type { SeedDocumentNote } from './seedArtifacts';
 import './SeedDocumentView.css';
 
@@ -22,6 +24,11 @@ export interface SeedDocumentViewProps {
   annotationsSendRef?: Ref<MarkdownAnnotationsSendHandle | null>;
   onOpenMarkdownArtifact?: (path: string) => void;
   onOpenSeed?: (seedId: string) => void;
+  onOpenSeedCheck?: (seedId: string, checkId: string) => void;
+  focusCheckId?: string;
+  onCheckFocused?: () => void;
+  seedById?: (seedId: string) => Seed | undefined;
+  sessionLabels?: ReadonlyMap<string, string>;
   arrival?: 'in' | 'out';
   ledgerInitiallyOpen?: boolean;
 }
@@ -114,6 +121,11 @@ export function SeedDocumentView({
   annotationsSendRef,
   onOpenMarkdownArtifact,
   onOpenSeed,
+  onOpenSeedCheck,
+  focusCheckId,
+  onCheckFocused,
+  seedById,
+  sessionLabels,
   arrival = 'in',
   ledgerInitiallyOpen = false,
 }: SeedDocumentViewProps) {
@@ -123,6 +135,9 @@ export function SeedDocumentView({
   const progress = progressWords(seed);
   const plotHeadingId = useId();
   const artifactsHeadingId = useId();
+  const checksRef = useRef<HTMLElement | null>(null);
+  const tally = checkTally(seed);
+  const lookUpSeed = (id: string) => seedById?.(id) ?? children.find((child) => child.id === id);
 
   useEffect(() => {
     if (!seed.body.trim()) onAnnotationsCountChange?.(0);
@@ -144,6 +159,7 @@ export function SeedDocumentView({
         <HarvestWhenLine condition={seed.harvest_when} />
         {tender && <span>tended by {tender}</span>}
         {progress && <span>{progress}</span>}
+        {tally && (hasChecks(seed) ? <CheckTallyLink tally={tally} target={checksRef} /> : <CheckTally seed={seed} />)}
         <span className="seed-document__id">{seed.id}</span>
       </div>
 
@@ -168,6 +184,7 @@ export function SeedDocumentView({
                       <span className="seed-document__child-state" aria-label={child.status} />
                       <span className="seed-document__child-title">{child.title}</span>
                       {signal && <span className="seed-document__child-status">{signal}</span>}
+                      <CheckTally seed={child} />
                       <span className="seed-document__child-id">{child.id}</span>
                       {onOpenSeed && <span className="seed-document__child-chevron" aria-hidden="true">›</span>}
                     </button>
@@ -196,6 +213,20 @@ export function SeedDocumentView({
       ) : (
         <p className="seed-document__empty-body">No body — the title is the whole seed.</p>
       )}
+
+      <SeedChecks
+        className="seed-document__checks"
+        seed={seed}
+        artifacts={artifacts}
+        references={references}
+        seedById={lookUpSeed}
+        sessionLabels={sessionLabels}
+        onOpenMarkdownArtifact={onOpenMarkdownArtifact}
+        onOpenSeedCheck={onOpenSeedCheck}
+        focusCheckId={focusCheckId}
+        onCheckFocused={onCheckFocused}
+        sectionRef={checksRef}
+      />
 
       {artifacts.length + references.length > 0 && (
         <section className="seed-document__artifacts" aria-labelledby={artifactsHeadingId}>

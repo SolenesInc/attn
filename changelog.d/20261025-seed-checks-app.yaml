@@ -1,0 +1,9 @@
+kind: added
+area: garden
+change: >
+  The Garden and seed tiles show a seed's checks under its body, with a tally
+  in the header that jumps to them. Confirm, uncheck, reject (with a reason)
+  and reopen a check from its row; open the evidence a report cites. A plot
+  lists each shared check with how many of its seeds have proven it, and
+  expands to every seed that inherits it. Child rows, plot progress and board
+  cards count checks waiting for a verdict as "to judge".
