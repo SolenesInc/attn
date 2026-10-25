@@ -81,7 +81,11 @@ func (d *Daemon) outpostHandlers() bridge.Handlers {
 		bridge.AttachChannel: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("bridgeAttach", func() {
 				if err := conn.ServeAttach(d.life.Context(), incoming, func(req bridge.AttachRequest) (ptybackend.AttachInfo, ptybackend.Stream, error) {
-					return d.ptyBackend.Attach(d.life.Context(), req.Terminal, req.Subscriber, req.Options)
+					info, stream, err := d.ptyBackend.Attach(d.life.Context(), req.Terminal, req.Subscriber, req.Options)
+					if err != nil {
+						return info, nil, err
+					}
+					return info, d.watchTerminalStream(req.Terminal, stream), nil
 				}); err != nil {
 					d.logf("outpost attach: %v", err)
 				}

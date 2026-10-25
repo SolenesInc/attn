@@ -2,11 +2,10 @@ package bridge
 
 import (
 	"context"
-	"fmt"
 )
 
-const TerminalOutputCredit = 512 << 10
-const BridgeOutputCredit = 384 << 10
+const TerminalOutputCredit = 64 << 10
+const BridgeOutputCredit = 448 << 10
 
 type outputFlow struct {
 	served               uint64
@@ -35,9 +34,6 @@ func newOutputCredit(done <-chan struct{}) *outputCredit {
 }
 
 func (c *outputCredit) reserve(ctx context.Context, flow *outputFlow, n int) error {
-	if n > BridgeOutputCredit || n > TerminalOutputCredit {
-		return fmt.Errorf("bridge output limits: bridge_credit=%d, attach_credit=%d, asked for %d bytes", BridgeOutputCredit, TerminalOutputCredit, n)
-	}
 	request := &outputReservation{ctx: ctx, flow: flow, bytes: n, ready: make(chan struct{})}
 	select {
 	case c.changes <- request:
@@ -130,6 +126,10 @@ func (c *outputCredit) run() {
 					waiting = append(waiting[:i], waiting[i+1:]...)
 					continue
 				}
+				if account.outstanding >= TerminalOutputCredit && request.bytes > 0 {
+					i++
+					continue
+				}
 				if (request.bytes > 0 || account.outstanding == 0) && (selected < 0 || request.finish < waiting[selected].finish) {
 					selected = i
 				}
@@ -140,7 +140,7 @@ func (c *outputCredit) run() {
 			}
 			request := waiting[selected]
 			account := request.flow
-			if request.bytes > available || account.outstanding+request.bytes > TerminalOutputCredit {
+			if request.bytes > 0 && available <= 0 {
 				break
 			}
 			waiting = append(waiting[:selected], waiting[selected+1:]...)

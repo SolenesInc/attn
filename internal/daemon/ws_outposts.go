@@ -90,9 +90,11 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 }
 
 func (d *Daemon) handleOutpostCommand(client *wsClient, action, id, name, address string) {
-	if err := d.changeOutpost(action, id, name, address); err != nil {
-		d.sendCommandError(client, action+"_outpost", err.Error())
-	}
+	d.life.Go("outpostCommand", func() {
+		if err := d.changeOutpost(action, id, name, address); err != nil {
+			d.sendCommandError(client, action+"_outpost", err.Error())
+		}
+	})
 }
 
 func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {

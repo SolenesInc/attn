@@ -92,7 +92,7 @@ func (c *Conn) Attach(ctx context.Context, request AttachRequest) (ptybackend.At
 	return info, stream, nil
 }
 
-func (c *Conn) ServeAttach(parent context.Context, incoming ssh.NewChannel, open func(AttachRequest) (ptybackend.AttachInfo, ptybackend.Stream, error)) (failure error) {
+func (c *Conn) ServeAttach(parent context.Context, incoming ssh.NewChannel, open func(AttachRequest) (ptybackend.AttachInfo, ptybackend.Stream, error)) error {
 	var request AttachRequest
 	if err := json.Unmarshal(incoming.ExtraData(), &request); err != nil {
 		_ = incoming.Reject(ssh.Prohibited, err.Error())
@@ -140,11 +140,11 @@ func (c *Conn) ServeAttach(parent context.Context, incoming ssh.NewChannel, open
 		select {
 		case next, ok := <-stream.Events():
 			if !ok {
-				return
+				return nil
 			}
 			event = next
 		case <-ctx.Done():
-			return
+			return nil
 		}
 		raw, err := json.Marshal(event)
 		if err != nil {
@@ -152,27 +152,23 @@ func (c *Conn) ServeAttach(parent context.Context, incoming ssh.NewChannel, open
 		}
 		if event.Kind != ptybackend.OutputEventKindDesync {
 			if err := credit.reserve(ctx, flow, len(raw)); err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				failure = err
-				event.Kind = ptybackend.OutputEventKindDesync
+				return nil
 			}
 		}
 		if event.Kind == ptybackend.OutputEventKindDesync {
 			if err := credit.reserve(ctx, flow, 0); err != nil {
-				return
+				return nil
 			}
-			raw, _ = json.Marshal(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindDesync, Reason: "bridge_backpressure"})
+			raw, _ = json.Marshal(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindDesync, Reason: event.Reason})
 			if err := credit.reserve(ctx, flow, len(raw)); err != nil {
-				return
+				return nil
 			}
 		}
 		if _, err := channel.Write(append(raw, '\n')); err != nil {
 			return err
 		}
 		if event.Kind == ptybackend.OutputEventKindDesync {
-			return
+			return nil
 		}
 	}
 }

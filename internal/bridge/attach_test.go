@@ -2,12 +2,16 @@ package bridge_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/bridge/memnet"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"golang.org/x/crypto/ssh"
 )
@@ -76,12 +80,78 @@ func TestBridgeAttachWaitsForAppCreditAndEndsOnSubscriberOverflow(t *testing.T) 
 		}
 		ack(stream)
 		next := <-stream.Events()
-		if next.Kind != ptybackend.OutputEventKindDesync || next.Reason != "bridge_backpressure" {
+		if next.Kind != ptybackend.OutputEventKindDesync || next.Reason != "subscriber_backpressure" {
 			t.Fatalf("after draining: %+v", next)
 		}
 		ack(stream)
 		if _, open := <-stream.Events(); open {
 			t.Fatal("attach continued after its desync")
+		}
+	})
+}
+func TestHeldAttachLeavesCreditForAnotherTerminal(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		data := bytes.Repeat([]byte("x"), pty.OutputCoalesceTargetBytes+pty.OutputReadBufferBytes)
+		raw, err := json.Marshal(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Seq: ^uint32(0), Data: data})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bridge.BridgeOutputCredit <= bridge.TerminalOutputCredit+len(raw) {
+			t.Fatalf("bridge isolation needs shared_threshold > attach_threshold + encoded_event: shared_threshold=%d attach_threshold=%d encoded_event=%d", bridge.BridgeOutputCredit, bridge.TerminalOutputCredit, len(raw))
+		}
+		t.Logf("coalescing target plus read overshoot: raw_bytes=%d encoded_bytes=%d attach_threshold=%d shared_threshold=%d", len(data), len(raw), bridge.TerminalOutputCredit, bridge.BridgeOutputCredit)
+		w := pair(t)
+		w.network = memnet.Listen(memnet.Rate(2_800_000))
+		held, echo := newTerminalOutput(), newTerminalOutput()
+		w.cfg.Handlers = bridge.Handlers{
+			bridge.AttachChannel: func(conn *bridge.Conn, incoming ssh.NewChannel) {
+				go conn.ServeAttach(w.ctx, incoming, func(req bridge.AttachRequest) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+					if req.Terminal == "held" {
+						return ptybackend.AttachInfo{}, held, nil
+					}
+					return ptybackend.AttachInfo{}, echo, nil
+				})
+			},
+			"input": func(conn *bridge.Conn, incoming ssh.NewChannel) {
+				go bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) {
+					echo.write(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Data: []byte("echo")})
+					return nil, nil
+				})
+			},
+		}
+		w.start()
+		client, _ := bridged(t, w, nil)
+		_, flood, err := client.Attach(w.ctx, bridge.AttachRequest{Terminal: "held"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer flood.Close()
+		_, typing, err := client.Attach(w.ctx, bridge.AttachRequest{Terminal: "echo"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer typing.Close()
+		go func() {
+			for n := uint32(1); held.write(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Seq: n, Data: data}); n++ {
+			}
+		}()
+		<-flood.Events()
+		synctest.Wait()
+		ctx, cancel := context.WithTimeout(w.ctx, bridge.StallAfter)
+		defer cancel()
+		began := time.Now()
+		if err := client.Call(ctx, "input", struct{}{}, nil); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case event := <-typing.Events():
+			ack(typing)
+			if string(event.Data) != "echo" {
+				t.Fatalf("echo=%q", event.Data)
+			}
+			t.Logf("held coalesced attach: echo=%s", time.Since(began))
+		case <-ctx.Done():
+			t.Fatal("held coalesced attach consumed the shared budget; typing got no output before the heartbeat stall guard")
 		}
 	})
 }

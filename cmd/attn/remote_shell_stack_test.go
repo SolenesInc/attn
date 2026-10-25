@@ -234,6 +234,63 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	t.Log("lost bridge refused input/resize/close/split/kill/reload/attach; live shell survived both daemon restarts; missing worker became recoverable")
 }
 
+func TestRemoteOutputResumesAfterAWorkerUpgradeWithoutDroppingTheBridge(t *testing.T) {
+	old := testworld.AttnBinaryWithSnapshotFormat(t, "remote-stream-old")
+	current := testworld.AttnBinaryWithSnapshotFormat(t, "remote-stream-current")
+	a := testworld.NewSSHAgent(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	for _, s := range []*testworld.Stack{remote, home} {
+		a.Authorize(s.World)
+		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	}
+	upgrade := remote.PauseAt(pausepoint.PtyWorkerUpgrade)
+	remote.StartBinary(old)
+	home.StartBinary(current)
+	address := bridgeAddress(t)
+	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
+	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	terminal := protocol.TerminalID(app.Terminal(id))
+	app.TypeLine(id, "echo before-upgrade-$((1+1))")
+	app.AwaitScreen(id, "before-upgrade-2")
+	mark := len(app.Log())
+	remote.Stop()
+	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
+	mark = len(app.Log())
+	remote.StartBinaryHeldAt(current, upgrade)
+	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	if !attached.Success {
+		t.Fatalf("attach before worker handoff: %s", protocol.Deref(attached.Error))
+	}
+	mark = len(app.Log())
+	upgrade.Release()
+	t.Log("worker handoff released with the remote stream attached and bridge connected")
+	desync := testworld.Await(app, protocol.EventPtyDesync, func(r protocol.WebSocketEvent) bool { return protocol.Deref(r.ID) == string(terminal) })
+	if protocol.Deref(desync.Reason) != "runtime_stream_ended" {
+		t.Fatalf("worker handoff desync: %s", protocol.Deref(desync.Reason))
+	}
+	attached = testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	if !attached.Success {
+		t.Fatalf("attach after worker handoff: %s", protocol.Deref(attached.Error))
+	}
+	app.TypeLine(id, "echo after-upgrade-$((2+2))")
+	app.AwaitScreen(id, "after-upgrade-4")
+	for _, frame := range app.Log()[mark:] {
+		var update protocol.OutpostsUpdatedMessage
+		if json.Unmarshal(frame, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
+			for _, row := range update.Outposts {
+				if row.ID == host && row.State != protocol.OutpostStateConnected {
+					t.Fatalf("worker upgrade interrupted the bridge: %s", row.State)
+				}
+			}
+		}
+	}
+}
+
 func TestRemovingAnOutpostClosesItsTerminals(t *testing.T) {
 	for _, online := range []bool{true, false} {
 		t.Run(fmt.Sprintf("online=%v", online), func(t *testing.T) {
@@ -438,6 +495,80 @@ func TestRemoteInputKeepsItsBytesAndProbesWithoutBlockingALocalTile(t *testing.T
 		if !traces[fmt.Sprintf("batch-%03d", i)] {
 			t.Fatalf("trace %d was lost from joined input", i)
 		}
+	}
+}
+
+func TestRemoteTileActionsDoNotBlockALocalTile(t *testing.T) {
+	for _, command := range []string{protocol.CmdTerminalPointerActivity, protocol.CmdGetKittyImage, protocol.CmdDesktopCloseTile, protocol.CmdRemoveOutpost} {
+		t.Run(command, func(t *testing.T) {
+			a := testworld.NewSSHAgent(t)
+			remote, home := testworld.NewStack(t), testworld.NewStack(t)
+			for _, s := range []*testworld.Stack{remote, home} {
+				a.Authorize(s.World)
+				s.Vars = append(s.Vars, "SHELL=/bin/bash")
+				s.Start()
+			}
+			address := bridgeAddress(t)
+			requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+			app := enableOutposts(t, home)
+			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+			host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
+			spawned, desktop, tile := home.RequestSpawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+			if !spawned.Success {
+				t.Fatalf("remote spawn: %s", protocol.Deref(spawned.Error))
+			}
+			id := string(spawned.ID)
+			terminal := protocol.TerminalID(app.Terminal(id))
+			local := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), home.Path("local"))
+			app.TypeLine(id, "echo remote-$((1+1))")
+			app.AwaitScreen(id, "remote-2")
+			app.TypeLine(local, "echo local-$((1+1))")
+			app.AwaitScreen(local, "local-2")
+			remote.Signal(syscall.SIGSTOP)
+			defer remote.Signal(syscall.SIGCONT)
+			outpostState(app, "outpost", protocol.OutpostStateStalled)
+			mark := len(app.Log())
+			switch command {
+			case protocol.CmdTerminalPointerActivity:
+				app.Send(protocol.TerminalPointerActivityMessage{Cmd: command, ID: terminal})
+			case protocol.CmdGetKittyImage:
+				app.Send(protocol.GetKittyImageMessage{Cmd: command, ID: terminal, ImageID: 1})
+			case protocol.CmdDesktopCloseTile:
+				app.Send(protocol.DesktopCloseTileMessage{Cmd: command, RequestID: "close-held", DesktopID: desktop, TileID: tile})
+			case protocol.CmdRemoveOutpost:
+				app.Send(protocol.RemoveOutpostMessage{Cmd: command, ID: host})
+			}
+			app.TypeLine(local, "echo local-during-action-$((2+2))")
+			app.AwaitScreen(local, "local-during-action-4")
+			for _, frame := range app.Log()[mark:] {
+				var update protocol.OutpostsUpdatedMessage
+				if json.Unmarshal(frame, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
+					for _, row := range update.Outposts {
+						if row.ID == host && row.State == protocol.OutpostStateLost {
+							t.Fatal("local input waited until the remote bridge was lost")
+						}
+					}
+				}
+			}
+			remote.Signal(syscall.SIGCONT)
+			switch command {
+			case protocol.CmdTerminalPointerActivity:
+				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, ProbeID: protocol.Ptr("after-pointer")})
+				result := testworld.Await(app, protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == "after-pointer" })
+				if !result.Success {
+					t.Fatalf("input after pointer: %s", protocol.Deref(result.Error))
+				}
+			case protocol.CmdGetKittyImage:
+				testworld.Await(app, protocol.EventKittyImageResult, func(r protocol.KittyImageResultMessage) bool { return r.ID == terminal && r.ImageID == 1 })
+			case protocol.CmdDesktopCloseTile:
+				result := testworld.Await(app, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "close-held" })
+				if !result.Success {
+					t.Fatalf("close tile: %s", protocol.Deref(result.Error))
+				}
+			case protocol.CmdRemoveOutpost:
+				testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(r protocol.OutpostsUpdatedMessage) bool { return len(r.Outposts) == 0 })
+			}
+		})
 	}
 }
 

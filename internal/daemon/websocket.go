@@ -1194,7 +1194,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		snapshot := msg.(*protocol.GetScreenSnapshotMessage)
 		d.inTerminalOrder(client, snapshot.ID, func() { d.handleGetScreenSnapshot(client, snapshot) })
 	case protocol.CmdGetKittyImage:
-		d.handleGetKittyImage(client, msg.(*protocol.GetKittyImageMessage))
+		image := msg.(*protocol.GetKittyImageMessage)
+		d.inTerminalOrder(client, image.ID, func() { d.handleGetKittyImage(client, image) })
 	case protocol.CmdPtyInput:
 		input := msg.(*protocol.PtyInputMessage)
 		if d.sessionHost(d.terminals().owner(input.ID)) != "" {
@@ -1205,7 +1206,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSupportSnapshot:
 		d.handleSupportSnapshot(client, msg.(*protocol.SupportSnapshotMessage))
 	case protocol.CmdTerminalPointerActivity:
-		d.handleTerminalPointerActivity(msg.(*protocol.TerminalPointerActivityMessage))
+		pointer := msg.(*protocol.TerminalPointerActivityMessage)
+		d.inTerminalOrder(client, pointer.ID, func() { d.handleTerminalPointerActivity(pointer) })
 	case protocol.CmdBusStatusGet:
 		d.handleBusStatusGet(client, msg.(*protocol.BusStatusGetMessage))
 	case protocol.CmdBusSetConsumerEnabled:

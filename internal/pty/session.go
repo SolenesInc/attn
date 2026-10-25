@@ -229,9 +229,9 @@ func (s *Session) forceResync(reason string) {
 }
 
 const (
-	ptyReadBufBytes     = 16 * 1024
-	ptyCoalesceMaxBytes = 256 * 1024
-	ptyCoalesceWindow   = 5 * time.Millisecond
+	OutputReadBufferBytes     = 16 * 1024
+	OutputCoalesceTargetBytes = 256 * 1024
+	ptyCoalesceWindow         = 5 * time.Millisecond
 )
 
 type ptyRead struct {
@@ -265,7 +265,7 @@ func nextCoalescedReadAdmitted(
 	select {
 	case r := <-reads:
 		r.acknowledgeAdmission()
-		batch = append(make([]byte, 0, maxBytes+ptyReadBufBytes), first.data...)
+		batch = append(make([]byte, 0, maxBytes+OutputReadBufferBytes), first.data...)
 		batch = append(batch, r.data...)
 		if r.err != nil {
 			return batch, r.err
@@ -304,7 +304,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	reads := make(chan ptyRead, 4)
 	go func() {
 		for {
-			buf := make([]byte, ptyReadBufBytes)
+			buf := make([]byte, OutputReadBufferBytes)
 			n, err := s.ptmx.Read(buf)
 			admitted := make(chan struct{})
 			s.deliveryAdmissionMu.Lock()
@@ -329,7 +329,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	for {
 		batch, err := nextCoalescedReadAdmitted(
 			reads,
-			ptyCoalesceMaxBytes,
+			OutputCoalesceTargetBytes,
 			ptyCoalesceWindow,
 			s.deliveryMu.Lock,
 		)

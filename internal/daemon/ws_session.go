@@ -34,7 +34,9 @@ func (d *Daemon) handleUnregisterWS(client *wsClient, msg *protocol.UnregisterMe
 		return
 	}
 	d.answerSessionClose(client, msg.ID, nil)
-	d.finishSessionClose(msg.ID, closing)
+	if done := d.finishSessionClose(msg.ID, closing); done != nil && d.sessionHost(msg.ID) != "" {
+		<-done
+	}
 }
 
 func (d *Daemon) answerSessionClose(client *wsClient, sessionID protocol.SessionID, refusal error) {

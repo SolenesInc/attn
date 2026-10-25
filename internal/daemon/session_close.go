@@ -42,11 +42,9 @@ func (d *Daemon) beginSessionClose(
 	return sessionCloseInFlight{teardown: teardown}, nil
 }
 
-func (d *Daemon) finishSessionClose(sessionID protocol.SessionID, closing sessionCloseInFlight) {
+func (d *Daemon) finishSessionClose(sessionID protocol.SessionID, closing sessionCloseInFlight) <-chan struct{} {
 	if closing.teardown != nil {
-		done := d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)
-		if d.sessionHost(sessionID) != "" {
-			<-done
-		}
+		return d.terminateSessionAsync(sessionID, syscall.SIGTERM, closing.teardown)
 	}
+	return nil
 }
