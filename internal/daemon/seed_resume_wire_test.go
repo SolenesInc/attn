@@ -250,7 +250,11 @@ func TestSeedEditsAndHarvestSurviveReviewedResume(t *testing.T) {
 		Cmd: protocol.CmdSeedResume, SeedID: seed, RequestID: protocol.Ptr("resume"),
 		Review: &protocol.SeedReviewActionContext{ReviewID: review.Run.ID, EvidenceVersion: gardenReviewItem(t, &review, seed).EvidenceVersion},
 	})
-	reply := driver.asked("driver.resume", nil)
+	var launch driverLaunch
+	reply := driver.asked("driver.resume", &launch)
+	if launch.ResumeSessionID != "saved-conversation" {
+		t.Errorf("the resume asked the driver to pick up %q, want saved-conversation, the conversation it reported", launch.ResumeSessionID)
+	}
 	if _, err := cli.SeedEdit(seed, "Updated assignment while the agent starts."); err != nil {
 		t.Fatal(err)
 	}
