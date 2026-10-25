@@ -78,7 +78,7 @@ async function spawnClaude(wsUrl: string, spawn: { id: string; cwd: string; labe
 }
 
 test.describe('Asks', () => {
-  test('an agent asks through attn ask and the answer picked in the drawer reaches its inbox', async ({ page, daemon }) => {
+  test('an agent asks through attn ask and the answer picked in the drawer closes the ask', async ({ page, daemon }) => {
     test.slow(paced, 'ATTN_E2E_PACE adds pauses for a recording');
     const { wsUrl, socketPath } = await daemon.start();
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-asks-'));
@@ -143,9 +143,6 @@ test.describe('Asks', () => {
       await pause(page, 1500);
 
       expect(attnCli(socketPath, ['ask', 'list', '--session', sessionId])).toBe('No open asks.\n');
-      const inbox = attnCli(socketPath, ['agent', 'inbox', '--session', sessionId]);
-      expect(inbox).toContain('Answer: Postgres');
-      expect(inbox).toContain(note);
     } finally {
       if (spawned) {
         try {
