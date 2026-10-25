@@ -22,10 +22,12 @@ func askRecipient() Recipient {
 		Bind("answer", answer))
 	entries := ProducedBy(text("entries", "Each question's entry in order, joined by the adapter."), "ask/entry")
 	note := text("note", "The user's note, quoted by the adapter.")
-	reply := Compose(
-		fragment("answer", text("subject", "Quoted ask subject."), text("ask_id", "Ask ID.")),
-		When(Present(entries), Input(entries)),
-		When(Present(note), fragment("note", note)))
+	reply := Use("ask.answer", "content/ask/answer.md",
+		Bind("subject", Input(text("subject", "Quoted ask subject."))),
+		Bind("ask_id", Input(text("ask_id", "Ask ID."))),
+		Bind("body", Compose(
+			When(Present(entries), Input(entries)),
+			When(Present(note), fragment("note", note)))))
 	return Recipient{ID: "ask", Description: "Asks: questions an agent asks the user through attn, and the answers that come back.", Events: []Event{
 		On("guidance", "message_fragment", "Launch guidance for a session that launched with asks.", askGuidance),
 		On("answer", "inbox_content", "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.", reply),

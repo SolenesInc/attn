@@ -1,0 +1,3 @@
+kind: changed
+area: asks
+change: Ask answers end with the reminder to ask again if more user input is needed, separated from the answers by a horizontal rule.

@@ -4177,90 +4177,93 @@
           "delivery": "inbox_content",
           "description": "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.",
           "body": {
-            "kind": "compose",
-            "children": [
+            "kind": "text",
+            "id": "ask.answer",
+            "source": "content/ask/answer.md",
+            "bindings": [
               {
-                "kind": "text",
-                "id": "ask.answer",
-                "source": "content/ask/answer.md",
-                "bindings": [
-                  {
+                "name": "subject",
+                "node": {
+                  "kind": "input",
+                  "field": {
                     "name": "subject",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "subject",
-                        "kind": "text",
-                        "description": "Quoted ask subject."
-                      }
-                    }
-                  },
-                  {
+                    "kind": "text",
+                    "description": "Quoted ask subject."
+                  }
+                }
+              },
+              {
+                "name": "ask_id",
+                "node": {
+                  "kind": "input",
+                  "field": {
                     "name": "ask_id",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "ask_id",
-                        "kind": "text",
-                        "description": "Ask ID."
-                      }
-                    }
+                    "kind": "text",
+                    "description": "Ask ID."
                   }
-                ]
+                }
               },
               {
-                "kind": "when",
-                "condition": {
-                  "field": {
-                    "name": "entries",
-                    "kind": "text",
-                    "description": "Each question's entry in order, joined by the adapter.",
-                    "from": "ask/entry"
-                  },
-                  "test": "present"
-                },
-                "children": [
-                  {
-                    "kind": "input",
-                    "field": {
-                      "name": "entries",
-                      "kind": "text",
-                      "description": "Each question's entry in order, joined by the adapter.",
-                      "from": "ask/entry"
-                    }
-                  }
-                ]
-              },
-              {
-                "kind": "when",
-                "condition": {
-                  "field": {
-                    "name": "note",
-                    "kind": "text",
-                    "description": "The user's note, quoted by the adapter."
-                  },
-                  "test": "present"
-                },
-                "children": [
-                  {
-                    "kind": "text",
-                    "id": "ask.note",
-                    "source": "content/ask/note.md",
-                    "bindings": [
-                      {
-                        "name": "note",
-                        "node": {
+                "name": "body",
+                "node": {
+                  "kind": "compose",
+                  "children": [
+                    {
+                      "kind": "when",
+                      "condition": {
+                        "field": {
+                          "name": "entries",
+                          "kind": "text",
+                          "description": "Each question's entry in order, joined by the adapter.",
+                          "from": "ask/entry"
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
                           "kind": "input",
                           "field": {
-                            "name": "note",
+                            "name": "entries",
                             "kind": "text",
-                            "description": "The user's note, quoted by the adapter."
+                            "description": "Each question's entry in order, joined by the adapter.",
+                            "from": "ask/entry"
                           }
                         }
-                      }
-                    ]
-                  }
-                ]
+                      ]
+                    },
+                    {
+                      "kind": "when",
+                      "condition": {
+                        "field": {
+                          "name": "note",
+                          "kind": "text",
+                          "description": "The user's note, quoted by the adapter."
+                        },
+                        "test": "present"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "ask.note",
+                          "source": "content/ask/note.md",
+                          "bindings": [
+                            {
+                              "name": "note",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "note",
+                                  "kind": "text",
+                                  "description": "The user's note, quoted by the adapter."
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
               }
             ]
           }
@@ -5154,5 +5157,5 @@
       ]
     }
   ],
-  "definitions_hash": "9852ac1f9b5adecc88ebecd516f33759e4c406cc3ae8b83282bee526d79a8b88"
+  "definitions_hash": "2e9bc1de70f6079ab717c0c0829a16730a3a45a3463fc25484c6f5d169a8d021"
 }
