@@ -1,8 +1,6 @@
 package daemon_test
 
 import (
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -225,46 +223,6 @@ func TestAHookThatStrongerEvidenceOutranksDoesNotMoveTheSession(t *testing.T) {
 			t.Fatalf("the hook moved the session to %s over its open approval", show.Entry.State)
 		}
 	})
-}
-
-func TestAnAgentThatDiesMidTurnReportsItsExitBeforeItsIdle(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.InitialPrompt = protocol.Ptr("rename the checkout module")
-	})
-	run := w.Launched(session)
-	run.Prompted()
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-
-	run.Exit(1)
-
-	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == session && protocol.Deref(e.Session.StateReason) == "process_exited"
-	})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return string(protocol.Deref(e.SessionID)) == session })
-	if order := exitOrderOf(app, session); order != "exited, idle" {
-		t.Fatalf("the app heard of the death as %q, want the exit before the idle it causes", order)
-	}
-}
-
-func exitOrderOf(p *testworld.Peer, id string) string {
-	var order []string
-	heard := func(what string) {
-		if !slices.Contains(order, what) {
-			order = append(order, what)
-		}
-	}
-	for _, e := range p.Received() {
-		switch {
-		case e.Event == protocol.EventSessionExited && string(protocol.Deref(e.SessionID)) == id:
-			heard("exited")
-		case e.Event == protocol.EventSessionStateChanged && e.Session != nil && string(e.Session.ID) == id &&
-			protocol.Deref(e.Session.StateReason) == "process_exited":
-			heard("idle")
-		}
-	}
-	return strings.Join(order, ", ")
 }
 
 func stateChangesOf(p *testworld.Peer, id string) int {

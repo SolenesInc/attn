@@ -445,6 +445,20 @@ func (m *Monitor) RecordProcessExit() {
 	})
 }
 
+func (m *Monitor) RecordExitPublished(exit Exit) {
+	if m == nil {
+		return
+	}
+	at := time.Now()
+	m.UpdateEvidence(func(*Evidence) bool { return !SameExit(m.exit, &exit) }, movedAt(at, func(e *Evidence) {
+		e.Process = &sessionstate.Observation{
+			Source:     sessionstate.SourceProcess,
+			Claim:      sessionstate.ClaimExited,
+			ObservedAt: at,
+		}
+	}))
+}
+
 func (m *Monitor) recordClassifierStarted(at time.Time) {
 	m.RecordEvidence(at, func(e *Evidence) { e.ClassifyingSince = at })
 	if m.current() {

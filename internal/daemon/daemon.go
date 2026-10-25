@@ -1696,7 +1696,6 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 	}
 	unlockEnds()
-	monitor.RecordProcessExit()
 	exit.Held, exit.Stopped = false, stopped
 	if monitor == nil || d.store.Get(sessionID) == nil {
 		d.reactSessionExit(sessionID, exit)
@@ -1714,6 +1713,8 @@ func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmoni
 		ExitCode: exit.Code,
 		Signal:   exit.Signal,
 	})
+	d.sessionMonitor(sessionID).RecordExitPublished(exit)
+	pausepoint.At(pausepoint.SessionExitObserved)
 	d.broadcastSessionStateChanged(sessionID)
 	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped {
 		d.life.Go("closeNormallyExitedSession", func() { d.closeNormallyExitedSession(sessionID) })
