@@ -4,6 +4,7 @@ import { NewSessionLauncher } from '../components/NewSessionLauncher';
 import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
 import { SessionCreationProgress } from '../components/SessionCreationProgress';
+import { SharedCodexPrompts } from '../components/SharedCodexPrompts';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import {
   useAppErrorsContext,
@@ -72,6 +73,7 @@ export function AppSessionPrompts() {
           onCancel={cancelCloseDesktop}
         />
       )}
+      <SharedCodexPrompts />
       {experimental ? (
         <NewSessionLauncher
           {...pickerProps}

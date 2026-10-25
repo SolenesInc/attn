@@ -433,7 +433,30 @@ html, body, #root {
   gap: 12px;
 }
 
+.update-banner.is-failed {
+  background: #b45309;
+}
+
+.banner-note {
+  opacity: 0.85;
+  font-weight: 400;
+}
+
+.banner-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 .banner-button {
+  flex-shrink: 0;
+  white-space: nowrap;
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 6px;
@@ -453,7 +476,20 @@ html, body, #root {
   opacity: 0.8;
 }
 
+.banner-button.small {
+  padding: 1px 8px;
+  font-size: var(--font-size-sm);
+}
+
+.banner-button:focus-visible,
+.banner-dismiss:focus-visible,
+.banner-link:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
 .banner-dismiss {
+  flex-shrink: 0;
   background: transparent;
   border: none;
   color: white;

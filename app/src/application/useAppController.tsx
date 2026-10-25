@@ -16,6 +16,7 @@ import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { getAgentAvailability } from '../utils/agentAvailability';
 import { appOverlayPolicy } from './appOverlayPolicy';
+import { useSharedCodexConfirm } from './useSharedCodex';
 import { AppContentProps, diagnosticFocusKind } from './appSupport';
 import { useAppAppearance } from './useAppAppearance';
 import { useAppDeepLinks } from './useAppDeepLinks';
@@ -331,6 +332,7 @@ export function useAppController({
     setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen]);
 
   const calloutOpen = useCalloutStore((state) => state.callout !== null);
+  const sharedCodexConfirmOpen = useSharedCodexConfirm() !== null;
   const { otherOverlayOpen, blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
     calloutOpen,
     desktopOverviewOpen,
@@ -348,6 +350,7 @@ export function useAppController({
     gardenHoldsWindow,
     chiefTransferOpen: Boolean(chiefTransferTarget),
     desktopCloseOpen: sessionLifecycle.desktopClosePrompt !== null,
+    sharedCodexConfirmOpen,
     contextCapOpen: Boolean(contextCapPromptSession),
     sessionCreationOpen: Boolean(sessionCreationJob),
     prLauncherOpen: Boolean(openPRLauncherJob),

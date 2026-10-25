@@ -7,6 +7,8 @@ import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
 import { useVentsStore } from '../store/vents';
+import { useSharedCodexStore } from '../store/sharedCodex';
+import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDATE } from './daemonSharedCodexEvents';
 import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
@@ -940,7 +942,7 @@ export function useDaemonSocket({
     cmd: string,
     body: Record<string, unknown>,
     timeoutMessage: string,
-    timeoutMs?: number,
+    timeoutMs?: number | null,
   ): Promise<T> => {
     const requestId = nextRequestID(cmd);
     return sendKeyedRequest<T>(
@@ -1144,6 +1146,7 @@ export function useDaemonSocket({
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useAsksStore.getState().setAsks(data.asks || []);
             useVentsStore.getState().setVents(data.vents || []);
+            useSharedCodexStore.getState().received(data.selected_profile_id ?? '', data.shared_codex ?? null);
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
@@ -2305,6 +2308,7 @@ export function useDaemonSocket({
             if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAskDaemonEvent(data, pending)) break;
+            if (handleSharedCodexDaemonEvent(data, pending)) break;
             if (handleAnalyticsDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
@@ -2329,6 +2333,7 @@ export function useDaemonSocket({
       setIsReady(false);
       const quickCaptureFailure = event.reason || 'Disconnected. Quick capture acceptance is unconfirmed.';
       rejectPendingByPredicate(key => key.startsWith('quick_capture_'), new Error(quickCaptureFailure));
+      rejectPendingByPredicate(key => key.startsWith(`${INSTALL_CODEX_UPDATE}:`), new CodexInstallUntracked());
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
@@ -3605,6 +3610,12 @@ export function useDaemonSocket({
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
+  const sendRestartSharedCodex = useCallback((profileId: string, now: boolean): Promise<true> =>
+    sendRequest('restart_shared_codex', { profile_id: profileId, now }, 'Restarting shared Codex timed out'), [sendRequest]);
+
+  const sendInstallCodexUpdate = useCallback((desktopId: string): Promise<true> =>
+    sendRequest(INSTALL_CODEX_UPDATE, { desktop_id: desktopId }, 'Installing the Codex update never finished', null), [sendRequest]);
+
   const sendRecentFiles = useCallback((limit?: number, root?: string): Promise<RecentFile[]> => {
     const requestId = nextRequestID('recent_files');
     const key = `recent_files:${requestId}`;
@@ -4316,6 +4327,8 @@ export function useDaemonSocket({
     sendGetAnalyticsStatus,
     sendClearAnalyticsRecords,
     sendAskAnswer,
+    sendRestartSharedCodex,
+    sendInstallCodexUpdate,
     sendRecentFiles,
     sendGetRecentLocations,
     sendBrowseDirectory,
