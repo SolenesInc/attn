@@ -233,6 +233,30 @@ describe('App terminal runtime', () => {
     expect(daemon.sentOf('reload_session')).toEqual([]);
   });
 
+  it('keeps offline terminal geometry local and fits the outpost when its bridge returns', async () => {
+    const resize = resizableTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { agent: 'shell', state: 'idle', host: 'studio' }));
+    const outpost = { id: 'studio', name: 'Studio', address: 'studio:2200', state: 'connected' as const, state_since: '2026-10-18T18:00:00Z' };
+    daemon.emit({ event: 'outposts_updated', outposts: [outpost] });
+    open('s1');
+    await daemon.idle();
+    daemon.emit(snapshotReply('s1'));
+    await daemon.idle();
+    daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state: 'lost' }] });
+    await daemon.idle();
+    const before = daemon.sentOf('pty_resize').length;
+    await resize(1000, 800);
+    expect(daemon.sentOf('pty_resize')).toHaveLength(before);
+    expect(visibleText('s1')).toContain('row-1200 tail');
+    daemon.on('attach_session', ({ id }) => snapshotReply(id));
+    daemon.emit({ event: 'outposts_updated', outposts: [outpost] });
+    await daemon.idle();
+    expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['s1', 's1']);
+    await act(() => vi.advanceTimersByTimeAsync(DESKTOP_RESIZE_COALESCE_MS));
+    await daemon.idle();
+    expect(daemon.sentOf('pty_resize').slice(before)).toContainEqual(expect.objectContaining({ id: 's1', cols: 125 }));
+  });
+
   it.each([
     ['a snapshot it cannot decode at all', new Uint8Array([1, 2, 3, 4]), 'raced\nlive'],
     ['a snapshot cut off inside its history', NATIVE_SNAPSHOT.slice(0, NATIVE_SNAPSHOT.length - 1000), `${RESTORED_SCREEN} live`],

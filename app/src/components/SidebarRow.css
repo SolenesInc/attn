@@ -77,3 +77,12 @@
 .sidebar-leaf-row[data-crew-state='asleep'] > .session-actions {
   right: calc(8px + 20px + 6px);
 }
+
+.session-item[data-offline='true'] {
+  background: color-mix(in srgb, var(--color-error) 7%, transparent);
+}
+
+.session-item[data-offline='true']:hover,
+.session-item[data-offline='true'].selected {
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-bg-elevated));
+}

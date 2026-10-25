@@ -21,7 +21,7 @@ import {
 
 interface Options {
   settings: AppContentProps['settings'];
-  sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
+  sessions: Array<ReturnType<typeof useSessionStore.getState>['sessions'][number] & { host?: string; hostName?: string; offline?: boolean }>;
   shownAgentId: string | null;
   selectCreatedSession: (id: string, focusOwner?: Element | null) => boolean;
   showError: ReturnType<typeof useToast>['showError'];
@@ -107,6 +107,7 @@ export function useSessionLaunch({
       anchorPaneId?: string;
       spawnedFrom?: string;
       desktopId?: string;
+      host?: string;
     }) => {
       // A pick lands on the desktop it was made for, even when it answers after the user moved on;
       // then it starts in the background instead of pulling the user back.
@@ -136,6 +137,7 @@ export function useSessionLaunch({
         await ptySpawn({
           args: {
             ...spawnArgs,
+            ...(spawn.host ? { host: spawn.host } : {}),
             placement: target.placement,
             ...(spawn.spawnedFrom ? { spawned_from: spawn.spawnedFrom } : {}),
           },
@@ -197,6 +199,10 @@ export function useSessionLaunch({
       ).focusedSessionId;
       const baseId = options.baseSessionId ?? activeLocalSession?.id ?? focusedSessionId;
       const base = sessions.find((session) => session.id === baseId) ?? null;
+      if (base?.offline) {
+        showError(`${base.hostName} is unreachable; this needs it now`);
+        return;
+      }
       const cwd = options.cwd || base?.cwd;
       if (!cwd) {
         handleNewSession(direction);
@@ -213,6 +219,7 @@ export function useSessionLaunch({
           direction,
           anchorPaneId: targetPaneId,
           spawnedFrom: base?.id,
+          host: base?.host,
           desktopId: options.desktopId,
         });
       } catch (error) {

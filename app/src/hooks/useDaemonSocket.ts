@@ -75,6 +75,7 @@ import {
   emitPtyEvent,
   setPtyBackend,
   type PtyAttachArgs,
+  type PtyAttachOptions,
   type PtyAttachPolicy,
   type PtyPixelGeometry,
   type PtySpawnArgs,
@@ -604,30 +605,44 @@ function isTransientAttachError(error: unknown): boolean {
   );
 }
 
-function waitForAttachRetry(delayMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, delayMs);
+function waitForAttachRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const cancel = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', cancel);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', cancel, { once: true });
   });
 }
 
 async function retryTransientAttachRequest<T>(
   request: () => Promise<T>,
   onRetry: (attempt: number, error: unknown, elapsedMs: number) => void,
+  signal?: AbortSignal,
 ): Promise<T> {
   const startedAt = Date.now();
   let attempt = 0;
 
   for (;;) {
+    signal?.throwIfAborted();
     attempt += 1;
     try {
-      return await request();
+      const result = await request();
+      signal?.throwIfAborted();
+      return result;
     } catch (error) {
+      signal?.throwIfAborted();
       const elapsedMs = Date.now() - startedAt;
       if (!isTransientAttachError(error) || elapsedMs >= ATTACH_RETRY_TIMEOUT_MS) {
         throw error;
       }
       onRetry(attempt, error, elapsedMs);
-      await waitForAttachRetry(ATTACH_RETRY_DELAY_MS);
+      await waitForAttachRetry(ATTACH_RETRY_DELAY_MS, signal);
     }
   }
 }
@@ -2418,6 +2433,7 @@ export function useDaemonSocket({
       cmd: 'spawn_session',
       id: args.id,
       cwd: args.cwd,
+      ...(args.host && { host: args.host }),
       placement: args.placement ?? {},
       agent: args.shell ? 'shell' : (args.agent || 'codex'),
       cols: args.cols,
@@ -2488,13 +2504,16 @@ export function useDaemonSocket({
 
   // Attaches to the same session must not overlap (see attachQueue.ts): a second in-flight attach
   // overwrites the first's pending entry, resolves with the FIRST attach's result, and misclassifies its replay.
-  const sendAttachSession = useCallback((id: string, context?: AttachRequestContext): Promise<AttachResult> => {
-    return enqueuePerKey(attachQueueRef.current, id, () => sendAttachSessionNow(id, context));
+  const sendAttachSession = useCallback((id: string, context?: AttachRequestContext, signal?: AbortSignal): Promise<AttachResult> => {
+    return enqueuePerKey(attachQueueRef.current, id, () => {
+      signal?.throwIfAborted();
+      return sendAttachSessionNow(id, context);
+    });
   }, [sendAttachSessionNow]);
 
-  const sendAttachSessionWithRetry = useCallback(async (id: string, context?: AttachRequestContext): Promise<AttachResult> => {
+  const sendAttachSessionWithRetry = useCallback(async (id: string, context?: AttachRequestContext, signal?: AbortSignal): Promise<AttachResult> => {
     return retryTransientAttachRequest(
-      () => sendAttachSession(id, context),
+      () => sendAttachSession(id, context, signal),
       (attempt, error, elapsedMs) => {
         console.warn('[DaemonSocket] Retrying transient attach failure', {
           id,
@@ -2503,6 +2522,7 @@ export function useDaemonSocket({
           error: error instanceof Error ? error.message : String(error),
         });
       },
+      signal,
     );
   }, [sendAttachSession]);
 
@@ -2828,8 +2848,10 @@ export function useDaemonSocket({
     options: {
       policy: Extract<PtyAttachPolicy, 'relaunch_restore' | 'same_app_remount' | 'revive'>;
       forceResizeBeforeAttach?: boolean;
+      signal?: AbortSignal;
     },
   ): Promise<void> => {
+    options.signal?.throwIfAborted();
     const attachContext = createAttachRequestContext({
       ...args,
       agent: args.agent ?? null,
@@ -2842,7 +2864,9 @@ export function useDaemonSocket({
     const attachResult = await sendAttachSessionWithRetry(
       args.id,
       attachContext,
+      options.signal,
     );
+    options.signal?.throwIfAborted();
     reconcileAttachedRuntimeGeometry(args, attachResult, {
       attachPolicy: options.policy,
       attachContext,
@@ -2956,12 +2980,13 @@ export function useDaemonSocket({
           if (!isAlreadyExistsError(error)) throw error;
         }
       },
-      attach: async (args: PtyAttachArgs, options?: { forceResizeBeforeAttach?: boolean }) => {
+      attach: async (args: PtyAttachArgs, options?: PtyAttachOptions) => {
         await attachExistingRuntime({
           ...args,
         }, {
           policy: normalizeAttachPolicy(args.policy),
           forceResizeBeforeAttach: options?.forceResizeBeforeAttach,
+          signal: options?.signal,
         });
       },
       write: async (id: string, data: string, source?: string, traceId?: string) => {

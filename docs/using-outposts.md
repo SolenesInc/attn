@@ -4,9 +4,10 @@ Outposts are experimental. An outpost is another computer running attn, such
 as a Linux box or a cloud VM, that your home connects to. Your home is the attn
 on the Mac whose app you use, and it can connect to several outposts.
 
-You can open a shell on an outpost in a terminal tile. Input, screen updates,
-and terminal commands pass through your home. Agents and file tiles stay on
-the home's machine.
+Shells on an outpost appear in terminal tiles beside your local terminals.
+The tile header shows the outpost's name after the title. Input, screen
+updates, and terminal commands pass through your home. Agents and file tiles
+stay on the home's machine.
 
 ## Set up an outpost
 
@@ -107,6 +108,26 @@ detect_env_vars = ["SSH_CONNECTION", "ATTN_HOST"]
 The hostname then appears over SSH and inside an outpost shell. It stays
 hidden in a local shell. `ssh_only = true` does not detect `ATTN_HOST`.
 
+## Work in a shell on an outpost
+
+To open the first shell, ask an agent to run `attn terminal open --host <name>`.
+It opens beside the agent's tile. In that shell, **⌘D** opens another shell on
+its outpost, using the first shell's start directory.
+
+When the bridge is lost or refused, each terminal stays in place. Its state
+dot becomes hollow and crossed, and its sidebar and Dashboard rows have a
+faint red tint. A strip over the terminal says "<name> unreachable · typing
+is not sent" without changing the terminal's size. Each refused key flashes
+the tile red. Typing and resizes are not sent, and close, split, kill, and
+reload refuse immediately, naming the outpost. A stalled or connecting
+bridge does not mark terminals offline.
+
+A tile that stays open keeps its last screen. If you switch desktops or
+restart the app while the terminal is offline, its tile shows an empty
+terminal and tells you that the screen is on the outpost. When the bridge
+returns, the tile attaches and shows the current screen. Refused typing is
+never replayed.
+
 ## Connection states
 
 | State | Meaning |
@@ -131,8 +152,15 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 | no ssh-agent, no keys in it, or no key accepted | Load your key with `ssh-add`, and check it is in the outpost's `authorized_keys`. |
 | it is the same outpost as another row | You added it twice under two addresses. Remove one. |
 
-**Remove** closes its terminals and forgets the outpost and its identity.
-Turning Outposts off disconnects every outpost and keeps the list for next time.
+**Remove** closes the outpost's terminals across all profiles, then forgets
+the outpost and its identity. When it has terminals, the row asks you to
+confirm with **Remove and close N terminals**, or **Cancel**. When it has
+none, removal happens immediately. If the outpost is unreachable, the home
+closes its records; run `attn enrollment leave` on the outpost to stop its
+remaining shells.
+
+Turning Outposts off disconnects every outpost and keeps the list for next
+time.
 
 ## Checking a change to outposts (for contributors)
 

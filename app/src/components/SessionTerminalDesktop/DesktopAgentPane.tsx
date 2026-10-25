@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { SuspendedDesktopPane } from './SuspendedDesktopPane';
 import type { CSSProperties } from 'react';
@@ -18,6 +19,7 @@ export function DesktopAgentPane({
   path: string;
   frameStyle: CSSProperties;
 }) {
+  const [refusal, setRefusal] = useState(0);
   const {
     sessionById,
     activeLeafId,
@@ -35,13 +37,14 @@ export function DesktopAgentPane({
         leafId={agentPane.id}
         title={paneTitle}
         kind="agent"
+        offline={paneSession?.offline}
         sessionId={agentPane.sessionId}
         bounds={bounds}
         path={path}
         frameStyle={frameStyle}
       >
         {paneSession?.state ? (
-          <StateIndicator state={paneSession.state} size="sm" seed={agentPane.sessionId} />
+          <StateIndicator state={paneSession.state} offline={paneSession.offline} size="sm" seed={agentPane.sessionId} />
         ) : (
           <span className="desktop-suspended-state" />
         )}
@@ -57,12 +60,14 @@ export function DesktopAgentPane({
       onMouseDown={() => focusLeaf(agentPane.id)}
       data-pane-session-id={agentPane.sessionId}
       data-pane-id={agentPane.id}
+      data-offline={paneSession?.offline || undefined}
       data-pane-kind="agent"
       data-pane-path={path}
       style={frameStyle}
     >
       <DesktopAgentHeader agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} />
-      <DesktopAgentBody agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} />
+      <DesktopAgentBody agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} onInputRefused={() => setRefusal((value) => value + 1)} />
+      {paneSession?.offline && refusal > 0 ? <div key={refusal} className="desktop-pane-refusal" aria-hidden="true" onAnimationEnd={() => setRefusal(0)} /> : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AnnotatedTerminal } from '../TerminalAnnotations/AnnotatedTerminal';
 import { TerminalStaleBuildNotice } from '../TerminalStaleBuildNotice';
 import { SharedConversationNotice } from '../SharedConversationNotice';
@@ -7,7 +7,9 @@ import { paneNotice } from './paneNotice';
 import type { DesktopAgentProps } from './desktopTypes';
 import { useSessionStore } from '../../store/sessions';
 
-export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopAgentProps) {
+export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRefused }: DesktopAgentProps & { onInputRefused: () => void }) {
+  const wasOnline = useRef(Boolean(paneSession && !paneSession.offline));
+  if (paneSession && !paneSession.offline) wasOnline.current = true;
   const [resuming, setResuming] = useState(false);
   const [resumeError, setResumeError] = useState('');
   const {
@@ -36,6 +38,10 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
   const notice = paneNotice(agentPane, paneSession, paneTitle);
   const stopped = Boolean(paneSession?.terminalExit) || paneSession?.state_reason === 'process_exited';
   const resume = async () => {
+    if (paneSession?.offline) {
+      setResumeError(`${paneSession.hostName} is unreachable; this needs it now`);
+      return;
+    }
     setResumeError('');
     setResuming(true);
     try {
@@ -49,6 +55,12 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
 
   return (
     <div className="desktop-pane-body">
+      {paneSession?.offline ? (
+        <div className="desktop-pane-offline-strip" role="status">
+          <span>{paneSession.hostName} unreachable · typing is not sent</span>
+          {!wasOnline.current ? <span>The screen is on {paneSession.hostName}.</span> : null}
+        </div>
+      ) : null}
       {stopped ? (
         <div className="desktop-agent-stopped" role="status">
           <div>
@@ -99,7 +111,10 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
             isActiveSession,
             paneCount: paneIds.length,
           }}
-          onInput={runtime.handleTerminalInput(agentPane.id)}
+          onInput={(data, source, traceId) => {
+            if (paneSession?.offline && source !== 'response') onInputRefused();
+            runtime.handleTerminalInput(agentPane.id)(data, source, traceId);
+          }}
           onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
           onOpenMarkdown={onOpenMarkdown}
           gardenSeeds={gardenSeeds}

@@ -6,6 +6,7 @@ interface Props {
   leafId: string;
   title: string;
   kind: 'agent' | 'tile';
+  offline?: boolean;
   tileKind?: string;
   sessionId?: string;
   bounds: NormalizedPaneBounds;
@@ -18,6 +19,7 @@ export function SuspendedDesktopPane({
   leafId,
   title,
   kind,
+  offline,
   tileKind,
   sessionId,
   bounds,
@@ -31,6 +33,7 @@ export function SuspendedDesktopPane({
     <div
       className={`desktop-pane ${kind === 'tile' ? 'desktop-pane--tile' : ''} desktop-pane--suspended desktop-pane--suspended-${column ? 'column' : 'row'}`}
       data-pane-id={leafId}
+      data-offline={offline || undefined}
       data-pane-kind={kind}
       data-tile-kind={tileKind}
       data-pane-session-id={sessionId}

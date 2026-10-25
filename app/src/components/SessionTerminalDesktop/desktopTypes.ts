@@ -58,6 +58,9 @@ export interface SessionTerminalDesktopProps {
     priority?: boolean;
     agent: SessionAgent;
     cwd: string;
+    host?: string;
+    hostName?: string;
+    offline?: boolean;
     state?: UISessionState;
     state_reason?: string;
     usage?: SessionUsage;

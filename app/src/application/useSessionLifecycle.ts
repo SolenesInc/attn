@@ -35,11 +35,18 @@ export function useSessionLifecycle({
   onReopened,
 }: Options) {
   const { sendUnregisterSession, sendDesktopCloseTile, sendSessionReopen, sendDesktopClose } = useDaemonApi();
-  const { closeSession, reloadSession } = useSessionStore();
+  const { closeSession, reloadSession: reloadSessionInStore } = useSessionStore();
   const [desktopClosePrompt, setDesktopClosePrompt] = useState<{
     desktop: Desktop; label: string;
   } | null>(null);
+  const refuseOffline = useCallback((id: string) => {
+    const session = enrichedLocalSessions.find((entry) => entry.id === id);
+    if (!session?.offline) return false;
+    showError(`${session.hostName} is unreachable; this needs it now`);
+    return true;
+  }, [enrichedLocalSessions, showError]);
   const closeProtection = useCallback((desktop: Desktop) => {
+    if (desktop.panes.some((pane) => refuseOffline(pane.session_id))) return true;
     const protectedNames = desktop.panes.flatMap((pane) => {
       if (!sessionCloseProtectionHint(daemonSessions, pane.session_id)) return [];
       const session = daemonSessions.find((entry) => entry.id === pane.session_id);
@@ -48,7 +55,7 @@ export function useSessionLifecycle({
     if (!protectedNames.length) return false;
     showError(`Cannot close desktop: move these protected sessions first: ${protectedNames.join(', ')}.`);
     return true;
-  }, [daemonSessions, showError]);
+  }, [daemonSessions, refuseOffline, showError]);
   const closeDesktop = useCallback(async (desktop: Desktop) => {
     if (closeProtection(desktop)) return;
     try {
@@ -76,6 +83,7 @@ export function useSessionLifecycle({
 
   const closeWith = useCallback(
     async (id: string, close: () => Promise<unknown>) => {
+      if (refuseOffline(id)) return;
       const session = enrichedLocalSessions.find((s) => s.id === id);
 
       const localDaemonSession = daemonSessions.find((ds) => ds.id === session?.id);
@@ -85,7 +93,7 @@ export function useSessionLifecycle({
         closeSession(id);
       }
     },
-    [closeSession, daemonSessions, enrichedLocalSessions],
+    [closeSession, daemonSessions, enrichedLocalSessions, refuseOffline],
   );
   const handleCloseSession = useCallback(
     async (id: string) => {
@@ -115,8 +123,15 @@ export function useSessionLifecycle({
     [handleCloseSession, sessions],
   );
 
+  const reloadSession = useCallback(async (id: string, size?: { cols: number; rows: number }) => {
+    const session = enrichedLocalSessions.find((entry) => entry.id === id);
+    if (session?.offline) throw new Error(`${session.hostName} is unreachable; this needs it now`);
+    await reloadSessionInStore(id, size);
+  }, [enrichedLocalSessions, reloadSessionInStore]);
+
   const handleReloadSession = useCallback(
     (id: string) => {
+      if (refuseOffline(id)) return;
       const session = sessions.find((entry) => entry.id === id);
       const paneId = session?.desktop.agents.find((pane) => pane.sessionId === id)?.id;
       const size = paneId ? getPaneSize(id, paneId) || undefined : undefined;
@@ -126,7 +141,7 @@ export function useSessionLifecycle({
         showError(`Failed to reload session: ${message}`);
       });
     },
-    [getPaneSize, reloadSession, sessions, showError],
+    [getPaneSize, refuseOffline, reloadSession, sessions, showError],
   );
 
   const handleReopenSession = useCallback(
@@ -194,6 +209,7 @@ export function useSessionLifecycle({
     handleCloseTerminalTile,
     handleRequestCloseSession,
     handleReloadSession,
+    reloadSession,
     handleReopenSession,
   };
 }
