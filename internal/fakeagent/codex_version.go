@@ -22,6 +22,8 @@ const (
 	codexNpmNativeFile  = "codex-npm-native"
 	codexUpdateFailFile = "codex-update-error"
 	codexBaseVersion    = "1.0.0"
+	miseName            = "mise"
+	miseVersion         = "2026.9.4 macos-arm64 (2026-09-30)"
 )
 
 func installedCodexVersion() string {
@@ -133,16 +135,65 @@ func (k *Kit) SetCodexLatest(version string) {
 
 func (k *Kit) InstallCodexAt(dir, version string) string {
 	k.t.Helper()
+	self, encoded := k.program()
+	mustInstall(k.t, dir, map[string]string{string(Codex): self}, map[string]string{configName: encoded, codexVersionFile: version + "\n"})
+	return filepath.Join(dir, string(Codex))
+}
+
+func (k *Kit) InstallStandaloneCodex(root, version string) string {
+	k.t.Helper()
+	self, encoded := k.program()
+	release := filepath.Join(root, "releases", version)
+	bin := filepath.Join(release, "bin")
+	mustInstall(k.t, bin, nil, map[string]string{configName: encoded, codexVersionFile: version + "\n"})
+	k.link(self, filepath.Join(bin, string(Codex)))
+	current := filepath.Join(root, "current")
+	if err := os.Symlink(release, current+".next"); err != nil {
+		k.t.Fatal(err)
+	}
+	if err := os.Rename(current+".next", current); err != nil {
+		k.t.Fatal(err)
+	}
+	return filepath.Join(current, "bin", string(Codex))
+}
+
+func (k *Kit) InstallMiseCodex(root, version string) string {
+	k.t.Helper()
+	self, encoded := k.program()
+	mustInstall(k.t, root, nil, map[string]string{configName: encoded})
+	mise := filepath.Join(root, miseName)
+	k.link(self, mise)
+	shims := filepath.Join(root, "shims")
+	mustInstall(k.t, shims, map[string]string{string(Codex): mise}, map[string]string{configName: encoded, codexVersionFile: version + "\n"})
+	return filepath.Join(shims, string(Codex))
+}
+
+func runMise(cfg config) int {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Println(miseVersion)
+		return 0
+	}
+	return tripwire(cfg, miseName, "mise ran with Codex's arguments; its shims reach Codex only through the name codex")
+}
+
+func (k *Kit) program() (self, encoded string) {
+	k.t.Helper()
 	self, err := os.Executable()
 	if err != nil {
 		k.t.Fatal(err)
 	}
-	encoded, err := json.Marshal(k.cfg)
+	data, err := json.Marshal(k.cfg)
 	if err != nil {
 		k.t.Fatal(err)
 	}
-	mustInstall(k.t, dir, map[string]string{string(Codex): self}, map[string]string{configName: string(encoded), codexVersionFile: version + "\n"})
-	return filepath.Join(dir, string(Codex))
+	return self, string(data)
+}
+
+func (k *Kit) link(self, path string) {
+	k.t.Helper()
+	if err := os.Link(self, path); err != nil {
+		k.t.Fatal(err)
+	}
 }
 
 func (s *CodexServer) Argv() []string { return s.fake.Argv }

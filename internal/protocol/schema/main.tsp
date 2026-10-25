@@ -3763,7 +3763,7 @@ model SharedCodexBlocker {
 model SharedCodexState {
   // The profile's app-server; absent while none runs.
   running_version?: string;
-  // What a new Codex terminal launches.
+  // The Codex a restarted app-server would run.
   installed_version?: string;
   // The newest release, checked once a day.
   latest_version?: string;

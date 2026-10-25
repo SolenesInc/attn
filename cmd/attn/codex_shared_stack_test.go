@@ -216,6 +216,52 @@ func TestASharedCodexSessionShownInAnotherSessionsTerminalKeepsItsApprovalMode(t
 	}
 }
 
+func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhileItIsStillInstalled(t *testing.T) {
+	for _, backend := range []string{"worker", "shared host"} {
+		t.Run(backend, func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			if backend == "shared host" {
+				host := os.Getenv("ATTN_TEST_PTY_HOST")
+				if host == "" {
+					t.Skip("set ATTN_TEST_PTY_HOST to run the app-server on the shared host")
+				}
+				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
+			}
+			s.Start()
+			app := s.App()
+			if backend == "shared host" {
+				enableSharedHost(t, app)
+			}
+			codex := s.InstallStandaloneCodex("standalone", "0.162.1")
+			setSetting(t, app, "codex_executable", codex)
+			shareCodex(t, app)
+			spawn := func(project string) (string, *fakeagent.Run) {
+				session := s.Spawn(app, fakeagent.Codex, s.Path(project), func(m *protocol.SpawnSessionMessage) {
+					m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
+				})
+				return session, s.Launched(session)
+			}
+			shop, shopCodex := spawn("shop")
+			app.TypeLine(shop, "write the release notes")
+			shopCodex.Prompted()
+			s.InstallStandaloneCodex("standalone", "0.163.0")
+
+			s.Stop()
+			s.Start()
+			app = s.App()
+			running := s.Path("standalone", "releases", "0.162.1", "bin", "codex")
+			if _, cart := spawn("cart"); cart.Argv[0] != running {
+				t.Errorf("a terminal opened after the restart, while a turn held the app-server on its Codex, ran %s, want the app-server's %s", cart.Argv[0], running)
+			}
+			s.CodexServer().Reply(shopCodex.ConversationID, "Wrote the release notes.")
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.RunningVersion) == "0.163.0" && m.SharedCodex.Restart == protocol.SharedCodexRestartNone
+			})
+		})
+	}
+}
+
 func shareCodex(t *testing.T, app *testworld.Peer) {
 	t.Helper()
 	requestID := uuid.NewString()
