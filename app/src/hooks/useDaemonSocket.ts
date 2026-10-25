@@ -1462,17 +1462,9 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'seed_check_result': {
-            const requestId = data.request_id;
-            if (typeof requestId !== 'string') break;
-            const key = `seed_check:${requestId}`;
-            const pending = pendingActionsRef.current.get(key);
-            if (!pending) break;
-            pendingActionsRef.current.delete(key);
-            if (data.success && data.seed) pending.resolve(data.seed);
-            else pending.reject(new Error(data.error || 'The check move was refused'));
+          case 'seed_check_result':
+            settlePendingRequest(pendingActionsRef.current, 'seed_check', data, (event) => event.seed, 'The check move was refused');
             break;
-          }
 
           case 'seed_note_result': {
             const requestId = data.request_id;
