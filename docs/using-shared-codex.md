@@ -48,7 +48,9 @@ is, a banner at the top of attn offers it with **Install**. Close the banner
 and the same offer stays under the bell in the sidebar. Install opens a
 terminal tile running Codex's own update, so what it prints, a failure
 included, stays in that tile. `attn codex update` runs it in your terminal
-instead, and a plain `codex update` works too.
+instead, and a plain `codex update` works too. Shared Codex terminals don't
+show Codex's own update prompt, since its Update now would exit the terminal,
+which closes the session and archives its conversation.
 
 attn also reads which Codex is installed when a shared terminal opens and when
 the app-server starts. When that isn't the Codex the app-server runs, attn

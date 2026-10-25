@@ -1,0 +1,4 @@
+kind: fixed
+area: codex
+change: Shared Codex terminals no longer show Codex's own update prompt; attn's banner offers the update instead.
+symptom: When a newer Codex was out, a shared Codex tile could open on Codex's full-screen update prompt, and choosing Update now there closed the session and archived its conversation.

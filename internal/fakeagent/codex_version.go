@@ -8,8 +8,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
+
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -38,6 +41,23 @@ func readVersionFile(path, fallback string) string {
 		return version
 	}
 	return fallback
+}
+
+const codexUpdatePrompt = "✨ Update available!"
+
+func offerCodexUpdate(cfg config, term *terminal, overrides []string) error {
+	installed, latest := installedCodexVersion(), latestCodexVersion(cfg)
+	if slices.Contains(overrides, "check_for_update_on_startup=false") || semver.Compare("v"+latest, "v"+installed) <= 0 {
+		return nil
+	}
+	term.print(codexUpdatePrompt + " " + installed + " -> " + latest)
+	term.print("› 1. Update now")
+	term.print("  2. Skip")
+	if err := term.awaitEnter(); err != nil {
+		return err
+	}
+	os.Exit(0)
+	return nil
 }
 
 func codexPrintVersion() int {

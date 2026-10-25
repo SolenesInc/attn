@@ -59,6 +59,9 @@ func (c *codexRemote) begin(term *terminal) error {
 			return err
 		}
 	}
+	if err := offerCodexUpdate(c.cfg, term, args.values["-c"]); err != nil {
+		return err
+	}
 	c.model = args.value("--model", "-m")
 	c.overrides = codexPermissionOverride(args)
 	c.prompt = strings.Join(args.afterDashes, " ")

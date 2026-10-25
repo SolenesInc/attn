@@ -159,6 +159,9 @@ func (c *codex) begin(term *terminal) error {
 	if c.hooks, err = codexHooks(args.values["-c"], c.cwd); err != nil {
 		return err
 	}
+	if err := offerCodexUpdate(c.cfg, term, args.values["-c"]); err != nil {
+		return err
+	}
 	source := "startup"
 	if len(args.positionals) > 0 && args.positionals[0] == "resume" {
 		if len(args.positionals) < 2 {

@@ -66,7 +66,7 @@ func (c *Codex) BuildCommand(opts SpawnOpts) *exec.Cmd {
 		args = append(args, "resume")
 	}
 	if opts.CodexRemote != "" {
-		args = append(args, "--remote", opts.CodexRemote)
+		args = append(args, "--remote", opts.CodexRemote, "-c", "check_for_update_on_startup=false")
 	}
 
 	for _, override := range opts.ConfigOverrides {
