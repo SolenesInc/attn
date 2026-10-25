@@ -441,11 +441,6 @@ function readCriticalState(data: Record<string, unknown>): CriticalNotificationS
   return { count, title };
 }
 
-export interface NotebookSendToChiefResult {
-  path: string;
-  nudged: boolean;
-}
-
 export interface FsEntry {
   path: string;
   name: string;
@@ -3505,9 +3500,6 @@ export function useDaemonSocket({
   const sendNotebookBacklinks = useCallback((path: string, scope?: NotebookScope): Promise<NotebookEntry[]> =>
     sendRequest<NotebookEntry[]>('notebook_backlinks', { path, ...scope }, 'Notebook backlinks timed out'), [sendRequest]);
 
-  const sendNotebookToChief = useCallback((selection: string, sourcePath?: string, scope?: NotebookScope): Promise<NotebookSendToChiefResult> =>
-    sendRequest<NotebookSendToChiefResult>('notebook_send_to_chief', { ...scope, selection, ...(sourcePath ? { source_path: sourcePath } : {}) }, 'Send to chief timed out'), [sendRequest]);
-
   const sendFsList = useCallback((path?: string, root?: string, scope?: NotebookScope): Promise<FsEntry[]> =>
     sendRequest<FsEntry[]>('fs_list', { ...scope, ...(path ? { path } : {}), ...(root ? { root } : {}) }, 'Filesystem list timed out'), [sendRequest]);
 
@@ -4231,7 +4223,6 @@ export function useDaemonSocket({
     sendNotificationList,
     sendNotificationMarkRead,
     sendNotebookBacklinks,
-    sendNotebookToChief,
     sendFsList,
     sendFsRead,
     sendFsReadAsset,

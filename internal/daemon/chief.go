@@ -4,7 +4,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 
@@ -273,24 +272,6 @@ func (d *Daemon) wakeChiefsAwaitingUser() {
 	for key := range waiting {
 		d.kickInbox(who.Member(key).Address())
 	}
-}
-
-func (d *Daemon) nudgeChief(profileID, attemptKey, text string) bool {
-	key, err := d.chief(profileID)
-	if err != nil {
-		d.logf("chief inbox: %v", err)
-		return false
-	}
-	itemID := "chief-inbox/" + strings.TrimSpace(attemptKey)
-	if strings.TrimSpace(attemptKey) == "" {
-		itemID = "chief-inbox/" + uuid.NewString()
-	}
-	receipt, err := d.sendToInbox(inbox.Item{ID: itemID, To: who.Member(key).Address(), Kind: inbox.Notice, Source: "notebook-inbox", Text: text})
-	if err != nil {
-		d.logf("chief inbox: %v", err)
-		return false
-	}
-	return receipt.Rang
 }
 
 func (d *Daemon) delegatedFromChiefSessionIDs() map[protocol.SessionID]bool {

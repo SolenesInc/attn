@@ -65,16 +65,6 @@ export function handleNotebookDaemonEvent(event: NotebookEvent, ctx: NotebookEve
       );
       return true;
 
-    case 'notebook_send_to_chief_result':
-      settlePendingRequest(
-        pending,
-        'notebook_send_to_chief',
-        event,
-        (e) => e.result && { path: e.result.path, nudged: !!e.result.nudged },
-        'Send to chief failed',
-      );
-      return true;
-
     default:
       return false;
   }

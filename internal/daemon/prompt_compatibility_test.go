@@ -17,7 +17,6 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	out := map[string]string{
 		"wake": crewWakePrompt, "successor": crewNapPrompt, "sleep-requested": crewRequestedSleepPrompt,
 		"heartbeat": crewHeartbeatPrompt, "sleep-away": crewSleepPrompt,
-		"chief-inbox": chiefInboxNudgePrompt("/tmp/book {{literal}}"),
 	}
 	for _, body := range []string{"", " Brief λ {{literal}}\nnext line "} {
 		for _, seed := range []string{"", "s-example"} {

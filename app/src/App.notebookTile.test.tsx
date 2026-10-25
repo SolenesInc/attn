@@ -53,11 +53,6 @@ function focusAndOpenFinder(tile: HTMLElement) {
   pressShortcut('file.open', surface);
 }
 
-async function selectNote(daemon: ScriptedDaemon, tile: HTMLElement) {
-  act(() => tileEditor(tile).dispatch({ selection: { anchor: 2, head: 6 } }));
-  await daemon.idle();
-}
-
 describe('App notebook tile', () => {
   it('saves a dirty Notebook draft in the old profile before switching', async () => {
     stubTextLayout();
@@ -88,15 +83,13 @@ describe('App notebook tile', () => {
     expect(within(tile('tile-other')).getByRole('main')).toHaveTextContent('from /tmp/other');
     expect(daemon.sentOf('notebook_backlinks')).toEqual([]);
     expect(tile('tile-other').querySelector('[aria-label="Context"]')).toBeNull();
-    await selectNote(daemon, tile('tile-other'));
-    expect(screen.queryByRole('button', { name: 'Send to chief' })).toBeNull();
 
     await layout([]);
 
     expect(watches(daemon)).toEqual([['fs_watch', '/tmp/other'], ['fs_unwatch', '/private/tmp/other']]);
   });
 
-  it('watches nothing for tiles on the notebook, and offers backlinks and send to chief there', async () => {
+  it('watches nothing for tiles on the notebook, and offers backlinks there', async () => {
     stubTextLayout();
     const { daemon, tile } = await openNotebookTiles([{ id: 'tile-default' }, { id: 'tile-notebook', root: NOTEBOOK_ROOT }]);
 
@@ -107,8 +100,6 @@ describe('App notebook tile', () => {
     ]);
     for (const id of ['tile-default', 'tile-notebook']) {
       expect(tile(id).querySelector('[aria-label="Context"]')).toHaveTextContent('Backlinks');
-      await selectNote(daemon, tile(id));
-      expect(within(tile(id)).getByRole('button', { name: 'Send to chief' })).toBeInTheDocument();
     }
   });
 

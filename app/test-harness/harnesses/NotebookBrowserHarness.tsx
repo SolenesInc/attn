@@ -10,7 +10,6 @@ import type {
   FsReadResult,
   FsWriteResult,
   NotebookEntry,
-  NotebookSendToChiefResult,
 } from '../../src/hooks/useDaemonSocket';
 import type { HarnessProps } from '../types';
 
@@ -166,10 +165,6 @@ export function NotebookBrowserHarness({ onReady, setTriggerRerender }: HarnessP
     }
     throw new Error(`asset not found: ${path}`);
   }, []);
-  const sendToChief = useCallback(async (selection: string, sourcePath?: string): Promise<NotebookSendToChiefResult> => {
-    window.__HARNESS__.recordCall('sendToChief', [selection, sourcePath]);
-    return { path: 'inbox.md', nudged: false };
-  }, []);
   // The whole vault (recursive, .md only) for the Cmd+P finder — the same shape
   // notebook_list returns. Titles let the finder rank/label by heading.
   const listFiles = useCallback(async (): Promise<NotebookEntry[]> => [
@@ -209,7 +204,6 @@ export function NotebookBrowserHarness({ onReady, setTriggerRerender }: HarnessP
       writeFile={writeFile}
       existsFile={existsFile}
       readAsset={readAsset}
-      sendToChief={sendToChief}
       listFiles={listFiles}
       changeSignal={changeSignal}
       chief={{ name: 'Chief', presence: 'working' }}

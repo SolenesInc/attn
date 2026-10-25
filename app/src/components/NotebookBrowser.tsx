@@ -1,4 +1,4 @@
-import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWriteResult, NotebookEntry, NotebookSendToChiefResult } from '../hooks/useDaemonSocket';
+import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWriteResult, NotebookEntry } from '../hooks/useDaemonSocket';
 import { NotebookSurface } from './NotebookSurface';
 
 interface NotebookBrowserProps {
@@ -11,7 +11,6 @@ interface NotebookBrowserProps {
   existsFile: (path: string) => Promise<FsExistsResult>;
   readAsset: (path: string) => Promise<FsReadAssetResult>;
   backlinksNotebook: (path: string) => Promise<NotebookEntry[]>;
-  sendToChief: (selection: string, sourcePath?: string) => Promise<NotebookSendToChiefResult>;
   changeSignal?: number;
   listFiles: () => Promise<NotebookEntry[]>;
   chief?: { name: string; presence: 'working' | 'idle' | 'asleep' | 'unconfigured' };

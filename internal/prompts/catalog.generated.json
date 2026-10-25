@@ -1645,29 +1645,6 @@
               }
             ]
           }
-        },
-        {
-          "id": "inbox",
-          "delivery": "user_message",
-          "description": "internal/daemon/notebook.go: chiefInboxNudgePrompt",
-          "body": {
-            "kind": "text",
-            "id": "chief.inbox",
-            "source": "content/chief/inbox.md",
-            "bindings": [
-              {
-                "name": "inbox_path",
-                "node": {
-                  "kind": "input",
-                  "field": {
-                    "name": "inbox_path",
-                    "kind": "text",
-                    "description": "Inbox path"
-                  }
-                }
-              }
-            ]
-          }
         }
       ]
     },
@@ -5287,5 +5264,5 @@
       ]
     }
   ],
-  "definitions_hash": "f0659f2ac835ac8a5ad139a205847ae3cac83076af3b1df7f234e7a2e307d93a"
+  "definitions_hash": "963e277be592253a6cc64b107ad466589dae3b706f51c431ca27b60132576084"
 }

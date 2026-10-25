@@ -268,7 +268,7 @@ func TestTheFirstArtifactCreatesItsProfilesNotebookFolder(t *testing.T) {
 }
 
 func TestFirstNotebookWritesObserveLaterExternalEdits(t *testing.T) {
-	for _, entry := range []string{"journal", "notebook", "filesystem", "inbox"} {
+	for _, entry := range []string{"journal", "notebook", "filesystem"} {
 		t.Run(entry, func(t *testing.T) {
 			w := newWorld(t)
 			app := w.App()
@@ -289,10 +289,6 @@ func TestFirstNotebookWritesObserveLaterExternalEdits(t *testing.T) {
 				}
 			case "filesystem":
 				if result := fsAskWrite(app, "", "first.md", notebookNote("first note"), ""); !result.Success {
-					t.Fatal(result)
-				}
-			case "inbox":
-				if result := notebookAskSendToChief(app, "first.md", "first selection"); !result.Success {
 					t.Fatal(result)
 				}
 			}

@@ -327,30 +327,19 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await expect(content).toContainText('a horizontal rule');
   });
 
-  test('anchors the send-to-chief pill below the selection end, not over the line above it', async ({ page }) => {
-    await page.goto('/test-harness/?component=NotebookBrowser');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
-    await page.getByRole('heading', { level: 2, name: 'index' }).waitFor();
+  for (const component of ['NotebookBrowser', 'NotebookTile']) {
+    test(`${component} keeps text selection in the editor without a Chief action`, async ({ page }) => {
+      await page.goto(`/test-harness/?component=${component}`);
+      await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+      const editor = page.locator('.cm-content');
+      await expect(editor).toContainText('distilled');
 
-    await page.getByRole('treeitem', { name: 'fences.md' }).click();
-    await expect(page.getByRole('heading', { level: 2, name: 'fences' })).toBeVisible();
+      await dblclickWord(page, 'distilled');
 
-    await dblclickWord(page, 'quoted');
-
-    const pill = page.getByRole('button', { name: 'Send to chief' });
-    await expect(pill).toBeVisible();
-
-    const selectionBottom = await page.evaluate(() => {
-      const sel = window.getSelection();
-      const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
-      return range ? range.getBoundingClientRect().bottom : null;
+      expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('distilled');
+      await expect(page.getByRole('button', { name: /chief/i })).toHaveCount(0);
     });
-    expect(selectionBottom).not.toBeNull();
-
-    const pillBox = await pill.boundingBox();
-    expect(pillBox).not.toBeNull();
-    expect(pillBox!.y).toBeGreaterThanOrEqual(selectionBottom!);
-  });
+  }
 
   test('restores editor focus after resolving a save conflict via "Reload from disk"', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');

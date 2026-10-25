@@ -89,27 +89,6 @@ test.describe('LiveMarkdownEditor (live preview)', () => {
     expect(calls[0][0]).toBe('/knowledge/areas/foo.md');
   });
 
-  test('selecting text reports a non-empty selection', async ({ page }) => {
-    await page.goto('/test-harness/?component=LiveMarkdownEditor');
-    await page.waitForFunction(() => window.__HARNESS__?.ready === true);
-    await page.waitForSelector('.cm-content');
-
-    await page.locator('.cm-line').first().click();
-    await page.keyboard.press('Home');
-    await page.keyboard.press('Shift+End');
-
-    await page.waitForFunction(() => {
-      const calls = window.__HARNESS__.getCalls('selectionChange');
-      const last = calls[calls.length - 1]?.[0] as { text?: string } | null;
-      return !!last && typeof last.text === 'string' && last.text.length > 0;
-    });
-    const last = await page.evaluate(() => {
-      const calls = window.__HARNESS__.getCalls('selectionChange');
-      return calls[calls.length - 1][0] as { text: string; top: number; left: number };
-    });
-    expect(last.text).toContain('Notebook heading');
-  });
-
   test('keeps the reader scrolled in place when an on-disk change is applied (minimal edit)', async ({ page }) => {
     await page.goto('/test-harness/?component=LiveMarkdownEditor&long=1');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
