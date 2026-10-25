@@ -61,9 +61,9 @@ async function paneOf(sessionId) {
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
-runner.registerCleanup('restore_settings', async () => {
-  for (const [key, value] of baseline) await client.request('set_setting', { key, value }).catch(() => {});
-});
+runner.registerCleanup('restore_settings', () => Promise.all(
+  [...baseline].map(([key, value]) => client.request('set_setting', { key, value }).catch(() => {})),
+));
 runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, sessions.filter((id) => observer.getSession(id))));
 
 try {
