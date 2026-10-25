@@ -88,8 +88,8 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	if len(empty.Items) != 0 {
 		t.Fatalf("old chief read %+v", empty)
 	}
-	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox"}, Session: "second"})
-	if read.Code != 0 || !strings.Contains(read.Stdout, "Message from the user, sent through Quick Capture:") || !strings.Contains(read.Stdout, msg.Content) || !strings.Contains(read.Stdout, "attn agent attachment "+quickCapture+" "+id) || strings.Contains(read.Stdout, "another agent") {
+	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: "second"})
+	if read.Code != 0 || !strings.Contains(read.Stdout, "Message from the user, sent through Quick Capture.") || !strings.Contains(read.Stdout, msg.Content) || !strings.Contains(read.Stdout, "attn agent attachment "+quickCapture+" "+id) || strings.Contains(read.Stdout, "another agent") {
 		t.Fatalf("CLI attribution %+v", read)
 	}
 	reread := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture, "--json"}, Session: "second"})
@@ -118,10 +118,11 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	s.Start()
 	register(t, s, "first", "first")
 	quickCaptureSetChief(t, s.TrustedApp(), "first")
-	final := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json"}, Session: "first"})
-	final.JSON(t, &empty)
-	if len(empty.Items) != 0 {
-		t.Fatalf("read message redelivered after restart %+v", empty)
+	final := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture, "--json"}, Session: "first"})
+	var kept protocol.AgentInboxItem
+	final.JSON(t, &kept)
+	if kept.ReadAt != entry.ReadAt {
+		t.Fatalf("the read receipt changed across a restart: %+v, was read at %s", kept, entry.ReadAt)
 	}
 }
 func TestQuickCaptureInstalledFileRecoversAfterProcessCrash(t *testing.T) {
@@ -160,7 +161,7 @@ func TestQuickCapturePDFAttachmentRoundTripsThroughCLI(t *testing.T) {
 	quickCapture, id := uuid.NewString(), uuid.NewString()
 	quickCaptureCall(t, app, protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true})
 	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, AttachmentIds: []string{id}})
-	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox"}, Session: "chief"})
+	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: "chief"})
 	if read.Code != 0 || !strings.Contains(read.Stdout, "File \"notes.pdf\" (application/pdf") || !strings.Contains(read.Stdout, "Inspect the saved file with your tools.") {
 		t.Fatalf("PDF inbox: %+v", read)
 	}

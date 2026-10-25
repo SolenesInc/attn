@@ -162,10 +162,10 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, 
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
 		LEFT JOIN peer_messages p ON i.kind = ? AND p.id = i.source_id
-		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = ''
+		WHERE i.address IN (SELECT value FROM json_each(?)) AND i.read_at = '' AND i.kind NOT IN (?, ?)
 		ORDER BY i.created_at, i.id
 		LIMIT ?
-	`, inbox.PeerMessage, addressJSON, normalizeAgentInboxLimit(limit))
+	`, inbox.PeerMessage, addressJSON, inbox.AskAnswer, inbox.QuickCapture, normalizeAgentInboxLimit(limit))
 	if err != nil {
 		return nil, 0, fmt.Errorf("list unread inbox items: %w", err)
 	}
@@ -219,8 +219,8 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, 
 	var remaining int
 	if err := tx.QueryRow(`
 		SELECT COUNT(*) FROM inbox_items
-		WHERE address IN (SELECT value FROM json_each(?)) AND read_at = ''
-	`, addressJSON).Scan(&remaining); err != nil {
+		WHERE address IN (SELECT value FROM json_each(?)) AND read_at = '' AND kind NOT IN (?, ?)
+	`, addressJSON, inbox.AskAnswer, inbox.QuickCapture).Scan(&remaining); err != nil {
 		return nil, 0, fmt.Errorf("count unread inbox items: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -303,9 +303,10 @@ func (s *Store) WithdrawInbox(to inbox.Address, kind inbox.Kind, key string) err
 }
 
 type InboxAttempt struct {
-	Live   int
-	Unread int
-	Last   time.Time
+	Live     int
+	FromUser int
+	Unread   int
+	Last     time.Time
 }
 
 func (s *Store) InboxAttempt(to inbox.Address) (InboxAttempt, error) {
@@ -317,7 +318,7 @@ func (s *Store) InboxAttempt(to inbox.Address) (InboxAttempt, error) {
 		return result, err
 	}
 	result.Last, _ = time.Parse(time.RFC3339Nano, last)
-	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, to.String()).Scan(&result.Unread, &result.Live)
+	err := s.db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(attempts < ?),0),COALESCE(SUM(kind IN (?, ?)),0) FROM inbox_items WHERE address=? AND read_at=''`, inbox.MaxAttempts, inbox.AskAnswer, inbox.QuickCapture, to.String()).Scan(&result.Unread, &result.Live, &result.FromUser)
 	return result, err
 }
 
@@ -342,31 +343,38 @@ func (s *Store) StampInboxAttempt(to inbox.Address, at time.Time) (bool, error) 
 	}
 	return true, tx.Commit()
 }
-func (s *Store) RingInbox(to inbox.Address, finishingWake bool, at time.Time) error {
+func (s *Store) RingInbox(to inbox.Address, finishingWake bool, typed []string, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	stamp := at.UTC().Format(sortableTimeFormat)
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer tx.Rollback()
-	stamp := at.UTC().Format(sortableTimeFormat)
+	for _, id := range typed {
+		if _, err := tx.Exec(`UPDATE inbox_items SET notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END,read_at=?,read_by=? WHERE id=? AND address=? AND read_at=''`, stamp, stamp, readBy, id, to.String()); err != nil {
+			return "", fmt.Errorf("read typed inbox item %s: %w", id, err)
+		}
+	}
+	if !notified {
+		return stamp, tx.Commit()
+	}
 	// A wake's completion charges only items added since the wake began.
 	result, err := tx.Exec(`UPDATE inbox_items SET attempts=attempts+CASE WHEN attempts<? AND (NOT ? OR attempts=0) THEN 1 ELSE 0 END,attempted_at=?,notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END WHERE address=? AND read_at=''`, inbox.MaxAttempts, finishingWake, stamp, stamp, to.String())
 	if err != nil {
-		return err
+		return "", err
 	}
 	changed, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return "", err
 	}
-	if changed == 0 {
-		return tx.Commit()
+	if changed > 0 {
+		if err := setInboxOutstanding(tx, to, at); err != nil {
+			return "", err
+		}
 	}
-	if err := setInboxOutstanding(tx, to, at); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return stamp, tx.Commit()
 }
 func setInboxOutstanding(tx *sql.Tx, to inbox.Address, at time.Time) error {
 	_, err := tx.Exec(`INSERT INTO inbox_delivery(address,outstanding_at) VALUES(?,?) ON CONFLICT(address) DO UPDATE SET outstanding_at=excluded.outstanding_at`, to.String(), at.UTC().Format(sortableTimeFormat))

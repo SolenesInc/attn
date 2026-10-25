@@ -329,8 +329,9 @@ depend on the answer.
 
 Press **Cmd+Shift+R** to answer every agent from one drawer, waiting agents first.
 Pick choices, write answers, add a note and send with **Cmd+Enter**; the drawer
-brings the next ask. Your answer settles the agent's turn. **Open agent** jumps to
-its terminal.
+brings the next ask. Your answer settles the agent's turn, and attn types it into
+the agent's conversation as your message at its next prompt, so its auto mode
+accepts the approvals in it. **Open agent** jumps to its terminal.
 
 The queue, the sidebar and the home screen mark the agents that asked, and the
 sidebar's Asks button counts open asks. With the sidebar collapsed, the queue bar
@@ -340,10 +341,10 @@ shows its ask: hover it to read the question, click it to answer.
 
 An ask is about the seed its agent works on: the one a delegation assigned them,
 or another seed they tend. The drawer names the seed, and **Open in Garden** shows
-it beside the ask. Your answer becomes a note on the seed for whoever tends it
-then, so the ask outlives the agent that asked. Harvest or wither the seed and its
-asks close. An agent with no seed gets your answer in their attn inbox. Agents
-keep the setting they launched with, reloads included.
+it beside the ask. Your answer goes to whoever tends the seed then, and the seed
+keeps it as a note, so the ask outlives the agent that asked. Harvest or wither
+the seed and its asks close. Agents keep the setting they launched with, reloads
+included.
 
 ### The Chief
 

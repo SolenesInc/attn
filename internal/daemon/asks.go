@@ -207,10 +207,11 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if err != nil {
 		return err
 	}
+	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
 	if seedID := stored.To.SeedID(); seedID != "" {
-		err = d.noteAnswer(stored.ID, seedID, text)
+		err = d.noteAnswer(stored.ID, seedID, answer)
 	} else {
-		err = d.inboxAnswer(stored, text)
+		err = d.store.AnswerAsk(stored.ID, answer, time.Now())
 	}
 	if errors.Is(err, store.ErrAskNotOpen) {
 		return errAskGone
@@ -218,6 +219,7 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if err != nil {
 		return fmt.Errorf("save the answer: %w", err)
 	}
+	d.kickInboxAfterCommit(stored.To)
 	d.publishFact(FactAskClosed, stored.ID, nil)
 	if holder := d.inboxHolder(stored.To); holder != nil && holder.State != protocol.SessionStatePendingApproval {
 		d.handleSettleTurn(&protocol.SettleTurnMessage{SessionID: holder.ID})
@@ -225,25 +227,16 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	return nil
 }
 
-func (d *Daemon) noteAnswer(askID, seedID, text string) error {
+func (d *Daemon) noteAnswer(askID, seedID string, answer inbox.Item) error {
 	schema, err := d.notesCollection()
 	if err != nil {
 		return err
 	}
-	note := garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: text}
-	_, _, err = d.mintAndWriteNote(*schema, note, true, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
-		return d.store.AnswerAskWithNote(askID, write, fact, events, now)
+	note := garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: answer.Text}
+	_, _, err = d.mintAndWriteNote(*schema, note, false, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
+		return d.store.AnswerAskWithNote(askID, answer, write, fact, events, now)
 	})
 	return err
-}
-
-func (d *Daemon) inboxAnswer(stored store.Ask, text string) error {
-	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}
-	if err := d.store.AnswerAsk(stored.ID, answer, time.Now()); err != nil {
-		return err
-	}
-	d.kickInboxAfterCommit(stored.To)
-	return nil
 }
 
 func (d *Daemon) closeAsksTo(to inbox.Address) {

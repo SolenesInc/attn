@@ -28,7 +28,7 @@ func askRecipient() Recipient {
 		When(Present(note), fragment("note", note)))
 	return Recipient{ID: "ask", Description: "Asks: questions an agent asks the user through attn, and the answers that come back.", Events: []Event{
 		On("guidance", "message_fragment", "Launch guidance for a session that launched with asks.", askGuidance),
-		On("answer", "inbox_content", "The user's answer: a note on the ask's seed for its tender, or an item in the asking agent's inbox when the ask is about no seed. The adapter validates answers against the ask.", reply),
+		On("answer", "inbox_content", "The user's answer, typed into the conversation of the ask's addressee: the seed's tender, or the asking agent when the ask is about no seed. A seed also keeps it as a note. The adapter validates answers against the ask.", reply),
 		On("entry", "message_fragment", "One question and the user's answer to it.", entry),
 	}}
 }

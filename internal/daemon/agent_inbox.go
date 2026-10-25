@@ -20,7 +20,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	if strings.TrimSpace(protocol.Deref(msg.MessageID)) == "" {
-		d.handleAgentInboxBatch(conn, recipient.ID, recipient.ProfileID, protocol.Deref(msg.Limit))
+		d.handleAgentInboxBatch(conn, recipient.ID, protocol.Deref(msg.Limit))
 		return
 	}
 	addresses, err := d.inboxAddressesOf(recipient.ID)
@@ -86,7 +86,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 	}
 }
 
-func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protocol.SessionID, profileID string, limit int) {
+func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protocol.SessionID, limit int) {
 	d.lockGardenRoles()
 	addresses, err := d.inboxAddressesOf(recipientSessionID)
 	for _, address := range addresses {
@@ -117,16 +117,6 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 		}
 		if delivery.Item.Hint != "" {
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
-		}
-		if delivery.Item.Kind == inbox.QuickCapture {
-			item.ItemID = delivery.Item.Source
-			record, err := d.store.QuickCapture(profileID, delivery.Item.Source)
-			if err != nil {
-				d.logf("inbox quick capture assets: %v", err)
-			} else {
-				item.Attachments = record.Attachments
-			}
-			d.publishQuickCaptureRead(profileID, delivery.Item.Source, delivery.Item.ReadAt)
 		}
 		if delivery.Peer != nil {
 			item.SenderSessionID = protocol.Ptr(delivery.Peer.SenderSessionID)

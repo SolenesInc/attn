@@ -3,13 +3,15 @@
 ## What the inbox is
 
 The inbox is how attn puts something in front of an agent: messages from other
-agents, seed updates, answers to asks and attn's own notices. A sender saves an
-item for an address. attn then decides when to ring the agent, when to wake an
-asleep crew member first, and when to stop. The agent reads its items with
-`attn agent inbox`.
+agents, seed updates, the user's answers and Quick Captures, and attn's own
+notices. A sender saves an item for an address. attn then decides when to ring
+the agent, when to wake an asleep crew member first, and when to stop. A ring
+types what the user wrote into the conversation as the user's message; the
+agent reads everything else with `attn agent inbox`.
 
 Items are durable. They survive app, daemon and machine restarts. An item stays
-unread until an agent reads it, or until attn withdraws or replaces it. The
+unread until an agent reads it or a ring types it, or until attn withdraws or
+replaces it. The
 sections below say when attn does that. Time and unanswered rings never remove
 an item.
 
@@ -73,7 +75,7 @@ delegation, a handover or a seed sent to the chief.
 | Event | Seed update |
 |---|---|
 | tend, park, harvest, wither, replant | yes, unless the move asks to stay quiet (automation acceptance does) |
-| note | only with `--ring`, or when the note is the user's answer to an ask, an automation run's outcome, or a delegate that exited before its first turn |
+| note | only with `--ring`, or when the note is an automation run's outcome or a delegate that exited before its first turn |
 | check move (add, edit, remove, restore, report, confirm, reject, uncheck, reopen) | only with `--ring` |
 | harvest-when set or cleared | yes |
 | unblocked: the last blocker closed | yes |
@@ -99,10 +101,19 @@ closes. A new tender does not get updates from before they tended the seed.
 
 ### User messages
 
-A user message is the user's answer to an ask that is not about a seed: the ask
-names no seed, and the asking session has no stake. It goes to the address the
-ask came from. The answer to an ask about a seed is a note on that seed, and
-that note rings (see [Seed updates](#seed-updates)).
+A user message is text the user wrote or picked in attn: an answer to an ask,
+or a Quick Capture. It stands for the user typing into the agent, so a ring
+types it into the agent's conversation as the user's message (see
+[Rings](#rings)), and harness auto-mode reviewers count an approval in it as
+the user's. Neither the 5 minutes between rings nor a crew member's wake
+limit holds it back, and `attn agent inbox` never returns it. Each one is its
+own item.
+
+- An answer goes to the ask's address: the asking session or its mailbox, or
+  the seed when the ask is about one, so it reaches whoever tends the seed by
+  then. An answer to an ask about a seed is also a note on the seed, and that
+  note does not ring.
+- A Quick Capture goes to the chief or the crew member the user picked.
 
 ### PR watch updates
 
@@ -147,22 +158,30 @@ Rings coalesce too. One ring covers every unread item at an address; see
 
 ## Rings
 
-A ring is one prompt: "📬 You have unread items in your attn inbox. Run attn
-agent inbox to read them." One ring covers every unread item at the address.
-The item text stays in the inbox. A session that holds several addresses with
-unread items gets one ring for each.
+A ring is one prompt that covers every unread item at the address. It types
+the text of each unread user message, oldest first. When other unread items
+remain, it ends with "📬 You have unread items in your attn inbox. Run attn
+agent inbox to read them.", and their text stays in the inbox. A session that
+holds several addresses with unread items gets one ring for each.
+
+Once attn has placed the ring in the session, its user messages are read by
+that session. attn never checks that the agent acted on them; a ring lost to
+an open menu in the harness stays lost.
 
 - attn rings only when the agent is at a safe prompt. While the agent works or
   needs approval, or within 30 seconds of the user's last keystroke in its
   terminal, the ring waits. Waiting costs no attempt.
 - A shell never gets a ring.
-- After a ring, the address has an outstanding ring. It ends when the agent
-  reads, or 5 minutes after the ring. New items do not ring while it lasts.
-  They wait for the read or the next ring.
+- After a ring that ends with 📬, the address has an outstanding ring. It ends
+  when the agent reads, or 5 minutes after the ring. New items do not ring while it lasts.
+  They wait for the read or the next ring. A user message does not wait: it
+  is typed at the next safe prompt, without the 📬 until the outstanding ring
+  ends.
 - After 5 minutes with unread items, attn rings again.
-- Each ring is one attempt for every unread item it covers. An item gets at
-  most 3 attempts. Then attn stops ringing for it. The item stays unread, and
-  the daemon log records the stop.
+- Each ring that ends with 📬 is one attempt for every unread item it covers.
+  An item gets at most 3 attempts. Then attn stops ringing for it. The item
+  stays unread, and the daemon log records the stop. Typing a user message
+  uses no attempt.
 - A new item has 3 fresh attempts. Its ring also covers the older items.
 
 ## Notification runs
@@ -198,26 +217,29 @@ wakes the member before it rings.
   when it first reaches a safe prompt. That ring is part of the same attempt.
   Items that arrive during the wake share it.
 - A member has at most one inbox wake at a time.
-- Every inbox wake counts against the member's wake limit, items from the user
-  included. The limit is 8 wakes per 12 hours, set by `crew.wake_limit` and
-  `crew.wake_limit_window_seconds`. A wake from the sidebar or `attn crew wake`
-  does not count.
+- An inbox wake counts against the member's wake limit: 8 wakes per 12 hours,
+  set by `crew.wake_limit` and `crew.wake_limit_window_seconds`. A wake from
+  the sidebar or `attn crew wake` does not count, and neither does a wake for
+  an unread user message: like those, it is the user's.
 - A wake that fails still uses an attempt, including one the wake limit
   refuses. attn tries again after 5 minutes. After 3 attempts the items wait
   for a read or a new item.
 - A member that goes back to sleep with unread items that have attempts left
-  is woken again, 5 minutes after the last attempt.
+  is woken again, 5 minutes after the last attempt, or at once for a user
+  message.
 - attn never wakes the chief.
 - A manual wake does not ring for items that have no attempts left. The agent
-  still finds them with `attn agent inbox`.
+  still finds them with `attn agent inbox`. User messages are typed whatever
+  their attempts.
 
 ## Reading and receipts
 
 `attn agent inbox` returns the unread items of every address the session holds,
-oldest first. It returns 20 items by default; `--limit` allows up to 50. It
-marks them read, records which session read them, and says how many unread
-items remain. It ends the outstanding ring of every address it read, even when
-`--limit` left items unread. Those items ring again at the next safe prompt.
+oldest first, except user messages, which only a ring delivers. It returns 20
+items by default; `--limit` allows up to 50. It marks them read, records which
+session read them, and says how many unread items remain. It ends the
+outstanding ring of every address it read, even when `--limit` left items
+unread. Those items ring again at the next safe prompt.
 
 `attn agent inbox <message-id>` reads one peer message once it has been rung,
 whether or not it was read before.
@@ -232,7 +254,7 @@ shows the sender whether their message is queued, notified or read.
 
 | Limit | Value | Where | Receipt |
 |---|---|---|---|
-| Time between attempts | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
+| Time between attempts (user messages do not wait) | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
 | Attempts per item | 3 | `inbox.MaxAttempts` | One ring was enough for over 99% of items; the repeats were harness outages. |
 | Inbox wakes per member | 8 per 12 hours | `crew.wake_limit`, `crew.wake_limit_window_seconds` | |
 | Peer message size | 32 KiB | `protocol.AgentMessageMaxChars` | |
