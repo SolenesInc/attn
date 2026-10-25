@@ -120,16 +120,20 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 	app.AwaitScreen(string(opened.SessionID), "paste-ready")
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: opened.TerminalID, Data: strings.Repeat("x", 300000)})
 	app.AwaitScreen(string(opened.SessionID), "paste-bytes=300000")
+	mark := len(app.Log())
 	got = run("run", string(opened.TerminalID), "exit 1")
 	if got.Code != 0 {
 		t.Fatalf("exit: %+v", got)
 	}
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == opened.SessionID })
+	testworld.AwaitSince(app, mark, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == opened.SessionID && e.ExitCode == 1 })
+	testworld.AwaitSince(app, mark, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && e.Session.ID == opened.SessionID && e.Session.State == protocol.SessionStateIdle && protocol.Deref(e.Session.StateReason) == "process_exited"
+	})
 	exited := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: opened.TerminalID}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == opened.TerminalID })
 	if !exited.Success || exited.Exit == nil || exited.Exit.Code != 1 {
 		t.Fatalf("exit attach: %+v", exited)
 	}
-	t.Logf("host=%s terminal=%s remote input/read/exit verified", host, opened.TerminalID)
+	t.Logf("host=%s terminal=%s remote input/read/exit verified; exit 1 reached process_exited idle", host, opened.TerminalID)
 }
 
 func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {

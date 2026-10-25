@@ -85,6 +85,9 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 				break
 			}
 			acknowledged[id] = view
+			if exit := view.Exit.V; exit != nil && !exit.Held && (previous.Epoch.V != view.Epoch.V || !sessionmonitor.SameExit(exit, previous.Exit.V)) {
+				monitor.RecordExitPublished(*exit)
+			}
 		}
 		var again <-chan time.Time
 		if failure != nil {
