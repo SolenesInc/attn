@@ -3831,7 +3831,8 @@ model InstallCodexUpdateResultMessage {
 model CodexStatusMessage {
   cmd: "codex_status";
   caller_session_id?: SessionID;
-  // A profile name or id. Absent: the caller's profile, else the only one.
+  // A profile name or id, read only without caller_session_id: a caller's own
+  // profile always wins. Without either, the only profile.
   profile?: string;
   refresh?: boolean;
 }

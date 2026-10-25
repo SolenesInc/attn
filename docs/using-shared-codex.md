@@ -47,17 +47,16 @@ Once a day attn asks `codex doctor` whether a newer Codex is out. When one
 is, a banner at the top of attn offers it with **Install**. Close the banner
 and the same offer stays under the bell in the sidebar. Install opens a
 terminal tile running Codex's own update, so what it prints, a failure
-included, stays in that tile. `attn codex update` runs it in your terminal
-instead, and a plain `codex update` works too. Shared Codex terminals don't
-show Codex's own update prompt, since its Update now would exit the terminal,
-which closes the session and archives its conversation.
+included, stays in that tile. Shared Codex terminals don't show Codex's own
+update prompt, since its Update now would exit the terminal, which closes the
+session and archives its conversation.
 
-attn also reads which Codex is installed when a shared terminal opens and when
-the app-server starts. When that isn't the Codex the app-server runs, attn
-restarts the app-server on it once no conversation runs a turn, including one
-that waits on an approval or on your answer to a question, and every shared
-terminal has finished starting. The banner names the sessions it waits on, and
-you can jump to each.
+attn reads which Codex is installed when a shared terminal opens, when the
+app-server starts, once a day, and when an update it ran finishes. When that
+isn't the Codex the app-server runs, attn restarts the app-server on it once
+no conversation runs a turn, including one that waits on an approval or on
+your answer to a question, and every shared terminal has finished starting.
+The banner names the sessions it waits on, and you can jump to each.
 
 - First attn starts the installed Codex on the side for a moment. If it
   refuses to start, for example over a setting in your Codex config that the
@@ -82,10 +81,17 @@ you can jump to each.
 
 The banner's actions are also in the command palette while they apply:
 **Install Codex update**, **Restart shared Codex now** and **Reload old Codex
-tiles**. `attn codex status` shows the Codex the app-server runs, the installed
-and latest ones, a restart and what it waits on. `attn codex restart` restarts the
-app-server once no turn runs, also on the Codex it already runs, and
-`attn codex restart --now` does what Restart now does.
+tiles**. From a terminal:
+
+- `attn codex status` shows the Codex the app-server runs, the installed and
+  latest ones, a restart and what it waits on, and the tiles still on an
+  older Codex.
+- `attn codex update` runs Codex's own update in your terminal, then has attn
+  read the installed Codex. After a plain `codex update`, attn notices the new
+  Codex at its next read; `attn codex restart` reads it at once.
+- `attn codex restart` restarts the app-server once no turn runs, also on the
+  Codex it already runs. `attn codex restart --now` does what Restart now
+  does, without first listing what each session would lose.
 
 ## Switching conversations
 

@@ -8,6 +8,7 @@ import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { installMockCodex } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
+import { waitForPaneText, waitForSessionDesktop } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -47,6 +48,11 @@ async function waitForBanner(expected, description, timeoutMs = 30_000) {
   throw new Error(`timed out waiting for the Codex banner to show ${description}; it shows ${JSON.stringify(last)}`);
 }
 
+async function paneOf(sessionId) {
+  const desktop = await waitForSessionDesktop(client, sessionId, (entry) => entry.panes.some((pane) => pane.sessionId === sessionId && pane.runtimeId), `a tile showing ${sessionId}`);
+  return desktop.panes.find((pane) => pane.sessionId === sessionId);
+}
+
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_settings', async () => {
@@ -80,6 +86,8 @@ try {
       30_000,
     );
     sessions.push(shell);
+    const tile = await paneOf(shell);
+    await waitForPaneText(client, shell, tile.paneId, (text) => text.includes('Codex updated to 1.1.0'), 'Codex\'s update output in the new tile', 30_000);
     await waitForBanner('1 tile still runs an older Codex.', 'the restart onto 1.1.0 with the shop tile left on 1.0.0', 60_000);
     runner.assert((await bannerText()).startsWith('Codex 1.1.0 is running.'), 'shared Codex runs 1.1.0 after the install', await bannerText());
     const status = attn('codex', 'status');
@@ -91,6 +99,8 @@ try {
     await client.request('dom_wait', { selector: CONFIRM, timeoutMs: 10_000 });
     await client.request('dom_click', { selector: CONFIRM });
     await client.request('dom_wait', { selector: BANNER, absent: true, timeoutMs: 30_000 });
+    const status = attn('codex', 'status');
+    runner.assert(/^server\s+1\.1\.0$/m.test(status) && !/^old tiles/m.test(status), 'no tile runs an older Codex after the reload', status);
   });
 
   console.log(JSON.stringify(await runner.finishSuccess({ sessions }), null, 2));

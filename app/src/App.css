@@ -214,6 +214,7 @@ html, body, #root {
   height: 100%;
   width: 100%;
   display: flex;
+  flex-direction: column;
   background: var(--color-bg-app);
   position: relative;
   overflow: clip;
@@ -268,6 +269,7 @@ html, body, #root {
 .app-frame {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   position: relative;
 }
@@ -371,11 +373,7 @@ html, body, #root {
 }
 
 .banner-stack {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 9999;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
 }

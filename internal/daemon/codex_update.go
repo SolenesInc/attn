@@ -49,7 +49,7 @@ func (d *Daemon) installCodexUpdate(profileID, desktopID string) error {
 		return err
 	}
 	id := protocol.SessionID(uuid.NewString())
-	spawn := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: profileID, Agent: protocol.AgentShellValue, Cwd: home, Cols: 80, Rows: 24}
+	spawn := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, ProfileID: profileID, Agent: protocol.AgentShellValue, Cwd: home, Cols: 80, Rows: 24, Label: protocol.Ptr("Codex update")}
 	policy := internalSpawnPolicy{launchPlacement: &launchPlacement{desktopID: desktopID, direction: layouttree.DirectionVertical}, userStarted: true}
 	if rejection := d.runSpawnPipeline(spawn, policy); rejection != nil {
 		return fmt.Errorf("open a terminal tile for Codex's update: %w", rejection.reason())
