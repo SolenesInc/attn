@@ -4,8 +4,8 @@ import (
 	"context"
 )
 
-const TerminalOutputCredit = 64 << 10
-const BridgeOutputCredit = 448 << 10
+const TerminalOutputCredit = 1024 << 10
+const BridgeOutputCredit = 1408 << 10
 
 type outputFlow struct {
 	served               uint64
