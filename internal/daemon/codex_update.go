@@ -81,7 +81,7 @@ func (d *Daemon) installCodexUpdate(profileID, desktopID string) error {
 	case err != nil || finished.Exited:
 		return errors.New("the tile closed before Codex's update finished")
 	case finished.Block != nil && finished.Block.ExitCode != nil && *finished.Block.ExitCode != 0:
-		return fmt.Errorf("Codex's update exited %d; its output is in the tile", *finished.Block.ExitCode)
+		return fmt.Errorf("the update exited %d; its output is in the tile", *finished.Block.ExitCode)
 	}
 	return nil
 }
