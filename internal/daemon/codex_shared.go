@@ -20,6 +20,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/codexshared"
+	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
@@ -204,7 +205,7 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 }
 
 func (r *codexShared) answerTrustIfKnown(opts *ptybackend.SpawnOptions) {
-	if opts.UnattendedLaunch.IsZero() && !r.d.store.HasRecentLocation(opts.CWD) {
+	if opts.UnattendedLaunch.IsZero() && !r.d.store.HasStartedConversationIn(append([]string{opts.CWD}, git.RepositoryWorktrees(opts.CWD)...)) {
 		return
 	}
 	r.mu.Lock()
