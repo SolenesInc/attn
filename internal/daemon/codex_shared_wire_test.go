@@ -284,37 +284,43 @@ func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *test
 	}
 }
 
-func TestSharedCodexAsksToTrustAFolderOnlyInARepositoryAttnHasNotWorkedIn(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	known, unknown := newRepo(t, "shop"), newRepo(t, "warehouse")
-	worktree := filepath.Join(filepath.Dir(known), "shop--discount")
-	runGit(t, known, "worktree", "add", "-b", "discount", worktree)
-	w.LeaveCodexFolderTrustUnanswered(worktree)
-	w.LeaveCodexFolderTrustUnanswered(unknown)
-
-	workIn(t, w, app, known)
-	w.Launched(w.Spawn(app, fakeagent.Codex, worktree))
-	if got := w.CodexFolderTrust(worktree); got != "" {
-		t.Errorf("Codex saves %s as %q, want attn to write nothing to the Codex config", worktree, got)
-	}
-
-	app.AwaitScreen(w.Spawn(app, fakeagent.Codex, unknown), "Trust this folder?")
+func newWorktree(t *testing.T, name, branch string) (repo, worktree string) {
+	t.Helper()
+	repo = newRepo(t, name)
+	worktree = filepath.Join(filepath.Dir(repo), name+"--"+branch)
+	runGit(t, repo, "worktree", "add", "-b", branch, worktree)
+	return repo, worktree
 }
 
-func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionInARepositoryAttnHasWorkedIn(t *testing.T) {
+func TestSharedCodexSkipsTheTrustQuestionOnlyInARepositoryWhereAnAgentSessionStarted(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	worked, workedWorktree := newWorktree(t, "shop", "discount")
+	browsed, browsedWorktree := newWorktree(t, "warehouse", "audit")
+	w.LeaveCodexFolderTrustUnanswered(workedWorktree)
+	w.LeaveCodexFolderTrustUnanswered(browsedWorktree)
+
+	w.Launched(w.Spawn(app, fakeagent.Claude, worked))
+	workIn(t, w, app, browsed)
+
+	w.Launched(w.Spawn(app, fakeagent.Codex, workedWorktree))
+	if got := w.CodexFolderTrust(workedWorktree); got != "" {
+		t.Errorf("Codex saves %s as %q, want attn to write nothing to the Codex config", workedWorktree, got)
+	}
+	app.AwaitScreen(w.Spawn(app, fakeagent.Codex, browsedWorktree), "Trust this folder?")
+}
+
+func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionAttnAnsweredAtLaunch(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
-	w := newWorld(t, fakeagent.Codex)
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	repo := newRepo(t, "shop")
-	worktree := filepath.Join(filepath.Dir(repo), "shop--discount")
-	runGit(t, repo, "worktree", "add", "-b", "discount", worktree)
+	repo, worktree := newWorktree(t, "shop", "discount")
 	w.LeaveCodexFolderTrustUnanswered(worktree)
-	workIn(t, w, app, repo)
+	w.Launched(w.Spawn(app, fakeagent.Claude, repo))
 	session := w.Spawn(app, fakeagent.Codex, worktree)
 	w.Launched(session)
 

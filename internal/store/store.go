@@ -649,6 +649,32 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 	return result
 }
 
+func (s *Store) HasStartedConversationIn(directories []string) bool {
+	if len(directories) == 0 {
+		return false
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil {
+		return false
+	}
+
+	args := []any{protocol.AgentShellValue}
+	for _, directory := range directories {
+		args = append(args, directory)
+	}
+	var started bool
+	err := s.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id
+			WHERE s.agent != ?
+				AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')
+				AND s.directory IN (?`+strings.Repeat(", ?", len(directories)-1)+`))`, args...).Scan(&started)
+	return err == nil && started
+}
+
 func (s *Store) HasSessionInDirectory(directory string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1936,23 +1962,6 @@ func (s *Store) UpsertRecentLocation(path string) {
 			last_seen = excluded.last_seen,
 			use_count = use_count + 1`,
 		path, now)
-}
-
-func (s *Store) HasRecentLocation(path string) bool {
-	path = resolveRecentLocationPath(path)
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.db == nil {
-		return s.recentLocations[path] != nil
-	}
-
-	var count int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM recent_locations WHERE path = ?`, path).Scan(&count); err != nil {
-		return false
-	}
-	return count > 0
 }
 
 func (s *Store) GetRecentLocations(limit int) []*protocol.RecentLocation {

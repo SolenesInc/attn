@@ -214,6 +214,26 @@ func GetMainRepoFromWorktree(worktreePath string) string {
 	return gitdir[:idx]
 }
 
+func RepositoryWorktrees(worktreePath string) []string {
+	mainRepo := GetMainRepoFromWorktree(worktreePath)
+	if mainRepo == "" {
+		if info, err := os.Stat(filepath.Join(worktreePath, ".git")); err != nil || !info.IsDir() {
+			return nil
+		}
+		mainRepo = worktreePath
+	}
+	worktrees := []string{mainRepo}
+	linked, _ := os.ReadDir(filepath.Join(mainRepo, ".git", "worktrees"))
+	for _, entry := range linked {
+		content, err := os.ReadFile(filepath.Join(mainRepo, ".git", "worktrees", entry.Name(), "gitdir"))
+		if err != nil {
+			continue
+		}
+		worktrees = append(worktrees, strings.TrimSuffix(strings.TrimSpace(string(content)), "/.git"))
+	}
+	return worktrees
+}
+
 func (c *Client) IsWorktreeClean(ctx context.Context, path string) (bool, error) {
 	out, err := c.Output(ctx, OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
 	if err != nil {

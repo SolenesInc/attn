@@ -180,9 +180,10 @@ func TestRestartNowRelaunchesATerminalAskingWhetherToTrustItsFolder(t *testing.T
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return restartState(s, "0.163.0", "0.163.0", protocol.SharedCodexRestartNone)
 	})
+	app.TypeLine(asking, "")
 	w.Launched(asking)
-	if got := w.CodexFolderTrust(folder); got != "" {
-		t.Errorf("Codex saves %s as %q, want the relaunched terminal to start without asking, since attn ran Codex there before, and nothing written to the Codex config", folder, got)
+	if got := w.CodexFolderTrust(folder); got != "trusted" {
+		t.Errorf("Codex saved %s as %q after the relaunched terminal's question was answered, want trusted", folder, got)
 	}
 }
 

@@ -1,0 +1,3 @@
+kind: internal
+area: codex
+change: The pending shared Codex folder trust fix counts only agent sessions that started a conversation, not shells or launches that stopped at the trust question; its fragment describes the final behavior.
