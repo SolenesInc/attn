@@ -421,6 +421,7 @@ func (d *Daemon) handleProfileSelect(client *wsClient, msg *protocol.ProfileSele
 		client.selectProfile(profile.ID)
 		return profileActionOutcome{arranges: true, publish: func() {
 			d.publishArrangementChanged(profile.ID)
+			d.codexShared().versionsChanged(profile.ID)
 		}}, nil
 	})
 }

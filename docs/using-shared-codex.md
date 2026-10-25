@@ -80,8 +80,10 @@ you can jump to each.
   lost. An older terminal doesn't know what the newer app-server added; an
   approval of a kind it doesn't know is denied, and the turn carries on.
 
-`attn codex status` shows the Codex the app-server runs, the installed and
-latest ones, a restart and what it waits on. `attn codex restart` restarts the
+The banner's actions are also in the command palette while they apply:
+**Install Codex update**, **Restart shared Codex now** and **Reload old Codex
+tiles**. `attn codex status` shows the Codex the app-server runs, the installed
+and latest ones, a restart and what it waits on. `attn codex restart` restarts the
 app-server once no turn runs, also on the Codex it already runs, and
 `attn codex restart --now` does what Restart now does.
 

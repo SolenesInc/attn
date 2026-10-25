@@ -442,8 +442,8 @@ func TestACodexUpdateInstalledFromTheAppRunsInATileAndSharedCodexMovesToIt(t *te
 		t.Fatalf("an update that exits 1 answered %+v, want a failure naming its exit code", failed)
 	}
 	s.FailCodexUpdate("")
-	if installed := install(); !installed.Success {
-		t.Fatalf("install the update: %s", protocol.Deref(installed.Error))
+	if installed := install(); !installed.Success || installed.SharedCodex == nil || protocol.Deref(installed.SharedCodex.InstalledVersion) != "0.163.0" {
+		t.Fatalf("install the update answered %+v, want success carrying the installed 0.163.0", installed)
 	}
 	sharedCodexOn("0.163.0", "0.163.0")
 

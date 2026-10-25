@@ -5909,10 +5909,12 @@ export enum InstallCodexUpdateMessageCmd {
 }
 
 export interface InstallCodexUpdateResultMessage {
-    error?:      string;
-    event:       InstallCodexUpdateResultMessageEvent;
-    request_id?: string;
-    success:     boolean;
+    error?:        string;
+    event:         InstallCodexUpdateResultMessageEvent;
+    profile_id:    string;
+    request_id?:   string;
+    shared_codex?: SharedCodex;
+    success:       boolean;
     [property: string]: any;
 }
 
@@ -21142,7 +21144,9 @@ const typeMap: any = {
     "InstallCodexUpdateResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("InstallCodexUpdateResultMessageEvent") },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
+        { json: "shared_codex", js: "shared_codex", typ: u(undefined, r("SharedCodex")) },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "InstallPluginMessage": o([

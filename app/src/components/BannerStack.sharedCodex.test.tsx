@@ -239,14 +239,14 @@ describe('the Codex banner', () => {
     expect(banner()).toHaveTextContent('Installing Codex 0.163.0 in a terminal tile…');
 
     const [first] = daemon.sentOf('install_codex_update');
-    await gesture(daemon, () => daemon.replyTo(first, { event: 'install_codex_update_result', success: false, error: 'codex update exited 1' }));
+    await gesture(daemon, () => daemon.replyTo(first, { event: 'install_codex_update_result', success: false, error: 'codex update exited 1', profile_id: DEFAULT_PROFILE_ID, shared_codex: codex({ latest_version: '0.163.0' }) }));
     expect(banner()).toHaveTextContent('Codex 0.163.0 is available. Install failed: codex update exited 1.Install×');
 
     await click(daemon, inBanner().getByRole('button', { name: 'Install' }));
     expect(banner()).toHaveTextContent('Installing Codex 0.163.0 in a terminal tile…');
     const [, second] = daemon.sentOf('install_codex_update');
-    await gesture(daemon, () => daemon.replyTo(second, { event: 'install_codex_update_result', success: true }));
-    await change(daemon, codex({ installed_version: '0.163.0', latest_version: '0.163.0', restart: 'pending' }));
+    const installed = codex({ installed_version: '0.163.0', latest_version: '0.163.0', restart: 'pending' });
+    await gesture(daemon, () => daemon.replyTo(second, { event: 'install_codex_update_result', success: true, profile_id: DEFAULT_PROFILE_ID, shared_codex: installed }));
     expect(banner()).toHaveTextContent('Codex 0.163.0 installed. Restarts when agents are idle.');
   });
 
@@ -287,7 +287,7 @@ describe('the Codex banner', () => {
 
   it('brings a closed update back to show why an install from elsewhere failed', async () => {
     const { daemon } = await renderCodex(codex({ latest_version: '0.163.0' }));
-    daemon.on('install_codex_update', () => ({ event: 'install_codex_update_result', success: false, error: 'codex update exited 1' }));
+    daemon.on('install_codex_update', () => ({ event: 'install_codex_update_result', success: false, error: 'codex update exited 1', profile_id: DEFAULT_PROFILE_ID, shared_codex: codex({ latest_version: '0.163.0' }) }));
     await click(daemon, inBanner().getByRole('button', { name: 'Dismiss Codex update' }));
 
     await runCommand(daemon, 'Install Codex update');
@@ -341,7 +341,7 @@ describe('the Codex banner', () => {
     const [install] = daemon.sentOf('install_codex_update');
     expect(install).toMatchObject({ desktop_id: DEFAULT_DESKTOP_ID });
     expect(await titles()).toEqual([]);
-    await gesture(daemon, () => daemon.replyTo(install, { event: 'install_codex_update_result', success: true }));
+    await gesture(daemon, () => daemon.replyTo(install, { event: 'install_codex_update_result', success: true, profile_id: DEFAULT_PROFILE_ID, shared_codex: codex({ installed_version: '0.163.0', latest_version: '0.163.0', restart: 'pending' }) }));
 
     await change(daemon, codex({ installed_version: '0.163.0', latest_version: '0.163.0', restart: 'pending', blockers: [{ session_id: 'fix-auth', reason: 'turn' }] }));
     expect(await titles()).toEqual(['Restart shared Codex now']);

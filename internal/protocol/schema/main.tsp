@@ -3820,6 +3820,10 @@ model InstallCodexUpdateResultMessage {
   request_id?: string;
   success: boolean;
   error?: string;
+  // The connection's profile and its shared Codex once attn read the installed
+  // Codex again; shared_codex is absent while Shared Codex is off.
+  profile_id: string;
+  shared_codex?: SharedCodexState;
 }
 
 // attn codex status. With refresh, attn first reads the installed Codex again,

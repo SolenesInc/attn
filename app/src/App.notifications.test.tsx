@@ -125,7 +125,7 @@ describe('App notifications', () => {
     await gesture(daemon, () => fireEvent.click(row('Codex 0.163.0 is available')));
     expect(panel().getByRole('button', { name: 'Installing…' })).toBeDisabled();
 
-    await gesture(daemon, () => daemon.replyTo(install, { event: 'install_codex_update_result', success: true }));
+    await gesture(daemon, () => daemon.replyTo(install, { event: 'install_codex_update_result', success: true, profile_id: daemon.arrangement.profile.id }));
     expect(panel().getByRole('button', { name: 'Install' })).toBeEnabled();
     expect(daemon.sentOf('install_codex_update')).toHaveLength(1);
   });

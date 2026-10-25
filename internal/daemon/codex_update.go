@@ -24,8 +24,9 @@ const (
 )
 
 func (d *Daemon) handleInstallCodexUpdate(client *wsClient, msg *protocol.InstallCodexUpdateMessage) {
-	err := d.installCodexUpdate(client.selectedProfile(), msg.DesktopID)
-	result := protocol.InstallCodexUpdateResultMessage{Event: protocol.EventInstallCodexUpdateResult, RequestID: msg.RequestID, Success: err == nil}
+	profile := client.selectedProfile()
+	err := d.installCodexUpdate(profile, msg.DesktopID)
+	result := protocol.InstallCodexUpdateResultMessage{Event: protocol.EventInstallCodexUpdateResult, RequestID: msg.RequestID, Success: err == nil, ProfileID: profile, SharedCodex: d.codexShared().wireState(profile)}
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}
