@@ -524,9 +524,14 @@ func TestACodexUpdateOfferKeepsItsInstallActionAcrossADaemonRestart(t *testing.T
 	s.Start()
 	offers := func(app *testworld.Peer) []protocol.Notification {
 		t.Helper()
-		testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
-			return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.LatestVersion) == "0.163.0" && protocol.Deref(m.SharedCodex.InstalledVersion) == "0.162.1"
-		})
+		versionsReady := func(state *protocol.SharedCodexState) bool {
+			return state != nil && protocol.Deref(state.LatestVersion) == "0.163.0" && protocol.Deref(state.InstalledVersion) == "0.162.1"
+		}
+		if !versionsReady(app.Initial.SharedCodex) {
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return versionsReady(m.SharedCodex)
+			})
+		}
 		requestID := uuid.NewString()
 		listed := testworld.Request(app, protocol.NotificationListMessage{Cmd: protocol.CmdNotificationList, RequestID: protocol.Ptr(requestID)},
 			protocol.EventNotificationListResult, func(r protocol.NotificationListResultMessage) bool { return r.RequestID == requestID })
