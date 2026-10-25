@@ -97,6 +97,15 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 	if !reloaded.Success {
 		t.Fatalf("remote reload: %s", protocol.Deref(reloaded.Error))
 	}
+	got = run("send", string(opened.TerminalID), "--text", "printf '__reload_%s\\n' ready\r")
+	if got.Code != 0 {
+		t.Fatalf("send after remote reload: %+v", got)
+	}
+	app.AwaitScreen(string(opened.SessionID), "__reload_ready")
+	got = run("wait", string(opened.TerminalID), "--until", "prompt")
+	if got.Code != 0 {
+		t.Fatalf("first prompt after remote reload: %+v", got)
+	}
 	got = run("run", string(opened.TerminalID), "printf 'reloaded-host=%s' \"$ATTN_HOST\"", "--wait")
 	if got.Code != 0 || !strings.Contains(got.Stdout, "reloaded-host=outpost") {
 		t.Fatalf("reload host: %+v", got)
