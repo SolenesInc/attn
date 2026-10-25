@@ -149,7 +149,6 @@ func (s *Stack) launch(vars ...string) {
 	defer stderr.Close()
 	cmd := exec.Command(s.binary, "daemon")
 	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3", "GOTRACEBACK=all")
-	dieWithTestProcess(cmd)
 	cmd.ExtraFiles = []*os.File{signal}
 	file, err := s.wsListener.File()
 	if err != nil {
@@ -158,14 +157,26 @@ func (s *Stack) launch(vars ...string) {
 	defer file.Close()
 	cmd.ExtraFiles = append(cmd.ExtraFiles, file)
 	cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=4")
+	lifeline, holder, err := os.Pipe()
+	if err != nil {
+		s.T.Fatal(err)
+	}
+	cmd.ExtraFiles = append(cmd.ExtraFiles, lifeline)
+	cmd.Env = append(cmd.Env, "ATTN_HARNESS_LIFELINE_FD=5")
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	err = cmd.Start()
 	signal.Close()
+	lifeline.Close()
 	if err != nil {
+		holder.Close()
 		s.T.Fatalf("start attn daemon: %v", err)
 	}
 	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	go func() {
+		err := cmd.Wait()
+		holder.Close()
+		exited <- err
+	}()
 	s.daemon, s.exited = cmd.Process, exited
 
 	line := make(chan string, 1)

@@ -491,6 +491,11 @@ func runDaemon() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if err := daemonctl.ExitWhenHarnessGoes(); err != nil {
+		startupSignal.Failed(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	socketPath, err := daemonPreflight()
 	if err != nil {
 		startupSignal.Failed(err)
