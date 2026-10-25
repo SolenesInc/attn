@@ -1712,14 +1712,21 @@ func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmoni
 		Signal:   exit.Signal,
 	})
 	d.broadcastSessionStateChanged(sessionID)
-	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped && d.sessionCloseError(sessionID) == nil {
-		closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
-		if err != nil {
-			d.logf("closing normally exited session %s: %v", sessionID, err)
-		} else {
-			d.finishSessionClose(sessionID, closing)
-		}
+	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped {
+		d.life.Go("closeNormallyExitedSession", func() { d.closeNormallyExitedSession(sessionID) })
 	}
+}
+
+func (d *Daemon) closeNormallyExitedSession(sessionID protocol.SessionID) {
+	if d.sessionCloseError(sessionID) != nil {
+		return
+	}
+	closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: string(sessionID), Reason: "Agent exited normally"}, nil)
+	if err != nil {
+		d.logf("closing normally exited session %s: %v", sessionID, err)
+		return
+	}
+	d.finishSessionClose(sessionID, closing)
 }
 
 type ptyExit struct {

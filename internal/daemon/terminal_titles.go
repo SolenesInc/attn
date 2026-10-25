@@ -24,9 +24,10 @@ func (d *Daemon) reportTerminalTitle(session protocol.SessionID) {
 	if monitor == nil {
 		return
 	}
+	terminal := d.primaryTerminal(session)
 	r := d.terminals()
 	r.mu.RLock()
-	title := r.titles[d.primaryTerminal(session)]
+	title := r.titles[terminal]
 	r.mu.RUnlock()
 	monitor.ReportTerminalTitle(title)
 }
