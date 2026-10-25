@@ -32,6 +32,7 @@ const (
 	SessionInputLaneContended = "session-input-lane-contended"
 	SessionSnoozeCommitted    = "session-snooze-committed"
 	SessionTeardownPrepared   = "session-teardown-prepared"
+	SessionExitObserved       = "session-process-exit-observed"
 	DriverTranscriptCaptured  = "driver-transcript-captured"
 	DriverTranscriptApplied   = "driver-transcript-applied"
 	CopyBatchStaged           = "copy-batch-staged"

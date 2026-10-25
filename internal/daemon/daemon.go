@@ -1697,6 +1697,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	unlockEnds()
 	monitor.RecordProcessExit()
+	pausepoint.At(pausepoint.SessionExitObserved)
 	exit.Held, exit.Stopped = false, stopped
 	if monitor == nil || d.store.Get(sessionID) == nil {
 		d.reactSessionExit(sessionID, exit)
