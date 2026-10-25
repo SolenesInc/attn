@@ -35,6 +35,49 @@ export const MOCK_AGENT_AGENTS = Object.keys(MOCK_AGENT_FLAVORS);
 export const MOCK_AGENT_EXECUTABLE = executablePath;
 export const MOCK_AGENT_MODEL = 'mock-agent-1';
 export const MOCK_CODEX_VERSION = '1.0.0';
+const MOCK_CODEX_STATE_DIR = 'ATTN_MOCK_CODEX_STATE_DIR';
+
+// An installed Codex whose version, newest release and `codex update` a scenario
+// controls: version and latest are files in dir, and the returned wrapper is
+// the executable to pin.
+export function installMockCodex(dir, { version, latest }) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'version'), `${version}\n`);
+  fs.writeFileSync(path.join(dir, 'latest'), `${latest}\n`);
+  const wrapper = path.join(dir, 'codex');
+  fs.writeFileSync(wrapper, `#!/bin/sh\n${MOCK_CODEX_STATE_DIR}='${dir}' exec '${executablePath}' "$@"\n`, { mode: 0o755 });
+  return wrapper;
+}
+
+function mockCodexState(name) {
+  const dir = String(process.env[MOCK_CODEX_STATE_DIR] || '').trim();
+  if (!dir) return '';
+  try {
+    return fs.readFileSync(path.join(dir, name), 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+export function mockCodexVersion() {
+  return mockCodexState('version') || MOCK_CODEX_VERSION;
+}
+
+function mockCodexLatest() {
+  return mockCodexState('latest') || mockCodexVersion();
+}
+
+function mockCodexUpdate() {
+  const dir = String(process.env[MOCK_CODEX_STATE_DIR] || '').trim();
+  if (!dir) {
+    console.error('Could not detect how Codex was installed');
+    process.exitCode = 1;
+    return;
+  }
+  const latest = mockCodexLatest();
+  fs.writeFileSync(path.join(dir, 'version'), `${latest}\n`);
+  console.log(`Codex updated to ${latest}`);
+}
 
 export function mockAgentName(agent) {
   const name = String(agent || '').trim().toLowerCase();
@@ -684,8 +727,8 @@ export function answerStreamJsonLine(line) {
       supportedEffortLevels: ['low', 'medium', 'high'] }] } } };
 }
 function mockCodexDoctorReport() {
-  return { schemaVersion: 1, codexVersion: MOCK_CODEX_VERSION, overallStatus: 'ok',
-    checks: { 'updates.status': { id: 'updates.status', status: 'ok', details: { 'latest version': MOCK_CODEX_VERSION } } } };
+  return { schemaVersion: 1, codexVersion: mockCodexVersion(), overallStatus: 'ok',
+    checks: { 'updates.status': { id: 'updates.status', status: 'ok', details: { 'latest version': mockCodexLatest() } } } };
 }
 function isStreamJsonDiscovery(args) {
   return args.includes('--print') && args.includes('--input-format') && args.includes('stream-json');
@@ -712,7 +755,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === executablePath) {
   if (process.argv[2] === 'app-server' && process.argv.includes('--listen')) import('./mockCodexShared.mjs').then((module) => module.runSharedMockServer());
   else if (process.argv.includes('--remote')) import('./mockCodexShared.mjs').then((module) => module.runSharedMockView()).catch((error) => { console.error(error); process.exitCode = 1; });
   else if (process.argv[2] === 'app-server') runLineServer(answerAppServerLine);
-  else if (process.argv[2] === '--version') console.log(`codex-cli ${MOCK_CODEX_VERSION}`);
+  else if (process.argv[2] === '--version') console.log(`codex-cli ${mockCodexVersion()}`);
+  else if (process.argv[2] === 'update' && process.argv.length === 3) mockCodexUpdate();
   else if (process.argv[2] === 'doctor' && process.argv.includes('--json')) console.log(JSON.stringify(mockCodexDoctorReport()));
   else if (isStreamJsonDiscovery(process.argv.slice(2))) runLineServer(answerStreamJsonLine);
   else runMockAgent().catch((error) => {
