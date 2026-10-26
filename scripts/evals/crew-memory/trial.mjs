@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter, once } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, copyFileSync, existsSync, realpathSync, chmodSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, copyFileSync, existsSync, realpathSync, chmodSync, watch } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -21,7 +21,9 @@ export async function command(binary, args, options = {}) {
   child.stdout.on('data', data => { stdout += data; });
   child.stderr.on('data', data => { stderr += data; });
   child.stdin.end(options.input ?? '');
-  const [code, signal] = await once(child, 'exit');
+  let code, signal;
+  try { [code, signal] = await once(child, 'exit'); }
+  catch (error) { throw options.signal?.aborted ? options.signal.reason : error; }
   if (code !== 0) throw failure('harness', `${binary} exited ${code ?? signal}: ${stderr || stdout}`);
   return stdout;
 }
@@ -47,7 +49,10 @@ export class Trial extends EventEmitter {
   constructor(config, signal) {
     super();
     this.config = config;
-    this.signal = signal;
+    this.handoffAbort = new AbortController();
+    this.signal = AbortSignal.any([signal, this.handoffAbort.signal]);
+    this.handoffs = [];
+    this.on('changed', () => this.observeExchange());
     this.runtimeBase = join(tmpdir(), 'attn-crew-memory-eval');
     mkdirSync(this.runtimeBase, { recursive: true });
     this.runtimeBase = realpathSync(this.runtimeBase);
@@ -63,7 +68,8 @@ export class Trial extends EventEmitter {
     this.frames = [];
     this.env = { ...environment(), ATTN_INSTANCE: this.instance, ATTN_TOOL_HOME: join(this.root, 'tools'),
       ATTN_PTY_BACKEND: 'worker', ATTN_HEADLESS_TASKS: 'off',
-      ATTN_GITHUB_POLLING: 'off', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', CLAUDE_CONFIG_DIR: join(this.root, 'tools', '.claude') };
+      ATTN_GITHUB_POLLING: 'off', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION: 'false',
+      CLAUDE_CONFIG_DIR: join(this.root, 'tools', '.claude') };
     this.env.ATTN_WRAPPER_PATH = this.attnBinary;
     this.env.CODEX_HOME = join(this.env.ATTN_TOOL_HOME, '.codex');
   }
@@ -80,7 +86,7 @@ export class Trial extends EventEmitter {
       hasCompletedOnboarding: true, theme: 'dark',
       projects: { [realpathSync(this.home)]: { hasTrustDialogAccepted: true } },
     });
-    writeFileSync(join(this.home, 'CHARTER.md'), input.charter);
+    writeFileSync(join(this.home, 'CHARTER.md'), input.day_brief ? input.day_brief + '\n\n' + input.charter : input.charter);
     mkdirSync(join(this.home, 'handoffs'));
     for (const letter of input.letters) writeFileSync(join(this.home, 'handoffs', letter.name), letter.text);
     for (const [path, text] of Object.entries(input.files ?? {})) this.writeInput(path, text);
@@ -90,12 +96,18 @@ export class Trial extends EventEmitter {
       join(homedir(), '.claude', 'projects'), join(homedir(), '.codex', 'sessions'),
       join(homedir(), '.codex', 'archived_sessions'), ...(this.config.hidden_roots ?? [])];
     this.policy = join(this.root, 'trial.sb');
-    writeFileSync(this.policy, sandboxPolicy(roots, this.runtimeBase, this.root));
+    let policy = sandboxPolicy(roots, this.runtimeBase, this.root);
+    if (this.config.local_provider_only) policy = policy.replace('(allow default)\n',
+      '(allow default)\n(deny network-outbound)\n(allow network-outbound (remote ip "localhost:*"))\n(allow network-outbound (remote unix-socket))\n');
+    writeFileSync(this.policy, policy);
     const wrapper = join(this.root, 'claude');
-    const exports = Object.entries(this.env).filter(([key]) => /^(ATTN_|CLAUDE_CODE_DISABLE_AUTO_MEMORY|CLAUDE_CONFIG_DIR|CODEX_HOME)/.test(key));
+    const exports = Object.entries(this.env).filter(([key]) => /^(ATTN_|CLAUDE_CODE_DISABLE_AUTO_MEMORY|CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION|CLAUDE_CONFIG_DIR|CODEX_HOME)/.test(key));
     writeFileSync(wrapper, '#!/bin/sh\nunset ATTN_DB_PATH ATTN_SOCKET_PATH ATTN_CONFIG_PATH ATTN_PLUGIN_DIR ATTN_CLIENT_TOKEN ATTN_PROFILE_ID\n' + exports.map(([key, value]) => `export ${key}=${quote(value)}\n`).join('') +
-      `exec ${quote(this.config.claude_binary)} --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources '' "$@"\n`, { mode: 0o700 });
+      `exec ${quote(this.config.claude_binary)} --name 'Member' --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources '' "$@"\n`, { mode: 0o700 });
     this.env.ATTN_CLAUDE_EXECUTABLE = wrapper;
+    this.nativeWatch = watch(this.env.CLAUDE_CONFIG_DIR, { recursive: true, signal: this.signal }, (_, filename) => {
+      if (filename?.endsWith('.jsonl')) this.emit('changed');
+    });
     await this.probeIsolation();
     this.child = spawn('/usr/bin/sandbox-exec', ['-f', this.policy, this.attnBinary, 'daemon'],
       { cwd: this.root, env: { ...this.env, ATTN_DAEMON_READY_FD: '3' }, stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });
@@ -163,10 +175,12 @@ export class Trial extends EventEmitter {
   }
 
   async until(predicate) {
-    while (!predicate()) {
-      if (this.signal.aborted) throw this.signal.reason;
+    while (true) {
+      this.signal.throwIfAborted();
+      if (predicate()) return;
       if (this.child?.exitCode !== null && this.child?.exitCode !== undefined) throw failure('harness', `daemon exited: ${this.daemonOutput}`);
-      await once(this, 'changed', { signal: this.signal });
+      try { await once(this, 'changed', { signal: this.signal }); }
+      catch (error) { throw this.signal.aborted ? this.signal.reason : error; }
     }
   }
 
@@ -175,28 +189,118 @@ export class Trial extends EventEmitter {
   async wake() {
     const launched = JSON.parse(await this.cli(['crew', 'wake', 'member', '--json']));
     const id = launched.session_id;
+    this.beginExchange(id, null);
     await this.waiting(id);
     return id;
   }
 
-  async waiting(id, after) {
+  nativeRecords(id) {
+    const terminal = this.bindings.get(id);
+    const projects = join(this.env.CLAUDE_CONFIG_DIR, 'projects');
+    if (!terminal || !existsSync(projects)) return [];
+    for (const entry of readdirSync(projects, { withFileTypes: true })) {
+      const file = join(projects, entry.name, terminal + '.jsonl');
+      if (!entry.isDirectory() || !existsSync(file)) continue;
+      const text = readFileSync(file, 'utf8');
+      return text.slice(0, text.lastIndexOf('\n') + 1).split('\n').filter(Boolean).map(line => JSON.parse(line));
+    }
+    return [];
+  }
+
+  beginExchange(id, prompt) {
+    const records = prompt === null ? [] : this.nativeRecords(id);
+    this.exchange = { session: id, prompt, cursor: records.length };
+    this.observeExchange();
+  }
+
+  observeExchange() {
+    const exchange = this.exchange;
+    if (!exchange || this.signal.aborted || exchange.simulating || this.handoffPhase?.phase === 'simulator_dispatch') return;
+    try {
+      const session = this.sessions.get(exchange.session);
+      if (session?.state === 'working') { this.endHandoff(); return; }
+      if (!['idle', 'waiting_input'].includes(session?.state)) return;
+      const records = this.nativeRecords(exchange.session);
+      const after = exchange.cursor;
+      const input = records.findIndex((record, index) => index >= after && record.type === 'user' &&
+        (exchange.prompt === null || (typeof record.message?.content === 'string'
+          ? record.message.content.trim() === exchange.prompt.trim()
+          : record.message?.content?.some(part => part.type === 'text' && part.text.trim() === exchange.prompt.trim()))));
+      const completion = input < 0 ? undefined : records.slice(input + 1).find(record => record.type === 'assistant' &&
+        record.message?.id && !record.isApiErrorMessage && ['end_turn', 'stop_sequence'].includes(record.message.stop_reason));
+      if (completion && !exchange.completion) {
+        exchange.completion = { input_cursor: records[input].uuid, id: completion.message.id,
+          stop_reason: completion.message.stop_reason, observed_at: performance.now() };
+      }
+      const phase = exchange.completion ? 'simulator_start'
+        : input < 0 && exchange.prompt !== null ? 'native_input_acceptance' : 'normal_assistant_completion';
+      if (this.handoffPhase?.phase !== phase) this.armHandoff(phase);
+    } catch (error) {
+      this.handoffAbort.abort(error.failure_class ? error : failure('native_transcript', `native transcript for ${exchange.session}: ${error.message}`));
+    }
+  }
+
+  armHandoff(phase) {
+    this.endHandoff();
+    const limit = this.config.controller_handoff_timeout_ms;
+    if (!Number.isFinite(limit) || limit <= 0) throw failure('fixture', `controller_handoff_timeout_ms needs a measured positive limit, got ${limit}`);
+    this.handoffPhase = { phase, started_at: performance.now(), session: this.exchange.session };
+    this.handoffTimer = setTimeout(() => {
+      const elapsed = performance.now() - this.handoffPhase.started_at;
+      const error = failure('controller_handoff', `controller_handoff_timeout_ms=${limit}; elapsed_ms=${elapsed.toFixed(3)}; session=${this.exchange.session}; exchange=${this.exchange.completion?.id ?? 'pending'}; awaiting=${phase}`);
+      this.endHandoff();
+      this.handoffAbort.abort(error);
+      this.emit('changed');
+    }, limit);
+  }
+
+  endHandoff() {
+    clearTimeout(this.handoffTimer);
+    if (this.handoffPhase) this.handoffs.push({ ...this.handoffPhase, elapsed_ms: performance.now() - this.handoffPhase.started_at });
+    this.handoffPhase = null;
+  }
+
+  beginSimulation(id) {
+    this.signal.throwIfAborted();
+    if (this.exchange?.session !== id || !this.exchange.completion) throw failure('harness', `no completed exchange for simulator ${id}`);
+    this.endHandoff();
+    this.exchange.simulating = true;
+  }
+
+  finishSimulation(id) {
+    this.signal.throwIfAborted();
+    if (this.exchange?.session !== id || !this.exchange.simulating) throw failure('harness', `no active simulator for ${id}`);
+    this.exchange.simulating = false;
+    this.armHandoff('simulator_dispatch');
+  }
+
+  async waiting(id) {
     await this.until(() => {
       const session = this.sessions.get(id);
       if (session?.state === 'pending_approval') throw failure('approval', `member ${id} needs approval`);
       if (session?.terminal_exit) throw failure('harness', `member ${id} exited before its answer`);
-      return session?.state === 'waiting_input' && (!after || session.turn_opened_at !== after);
+      if (['program_error', 'stop_failed', 'turn_aborted'].includes(session?.state_reason)) throw failure('member_turn', `member ${id}: ${session.state_reason}`);
+      return ['idle', 'waiting_input'].includes(session?.state) && this.exchange?.session === id && this.exchange.completion;
     });
   }
 
   async send(id, text) {
     const previous = this.sessions.get(id);
-    if (previous?.state !== 'waiting_input') throw failure('harness', `simulator tried to send while ${id} was ${previous?.state}`);
+    this.signal.throwIfAborted();
+    if (!['idle', 'waiting_input'].includes(previous?.state) || this.exchange?.session !== id || !this.exchange.completion)
+      throw failure('harness', `simulator tried to send without a completed settled exchange for ${id}: ${previous?.state}`);
     const terminal = this.bindings.get(id);
     if (!terminal) throw failure('harness', `no terminal binding for ${id}`);
-    this.ws.send(JSON.stringify({ cmd: 'settle_turn', session_id: id }));
-    await this.until(() => !this.sessions.get(id)?.turn_owed);
+    if (previous.turn_owed) {
+      this.ws.send(JSON.stringify({ cmd: 'settle_turn', session_id: id }));
+      await this.until(() => !this.sessions.get(id)?.turn_owed);
+    }
+    if (!['idle', 'waiting_input'].includes(this.sessions.get(id)?.state))
+      throw failure('harness', `member ${id} resumed before simulator dispatch`);
+    this.endHandoff();
+    this.beginExchange(id, text);
     this.ws.send(JSON.stringify({ cmd: 'pty_input', id: terminal, data: `\x1b[200~${text}\x1b[201~\r`, source: 'automation' }));
-    await this.waiting(id, previous.turn_opened_at);
+    await this.waiting(id);
   }
 
   async transcript(id) {
@@ -205,11 +309,16 @@ export class Trial extends EventEmitter {
   }
 
   async sleep(id) {
+    this.endHandoff();
+    this.exchange = null;
     await this.cli(['crew', 'sleep', 'member', '--json']);
     await this.until(() => this.frames.some(frame => frame.event === 'session_unregistered' && frame.session?.id === id));
   }
 
   async stop() {
+    this.endHandoff();
+    this.nativeWatch?.close();
+    this.exchange = null;
     this.ws?.close();
     if (this.child && this.child.exitCode === null) {
       await command(this.attnBinary, ['daemon', 'stop'], { env: this.env });

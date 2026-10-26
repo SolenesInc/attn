@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, existsSync, fstatSync, ftruncateSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setTimeout as wait } from 'node:timers/promises';
 import { loadCases, runCase, gradeCase, perfFrom } from './eval.mjs';
 
 const WIN = process.platform === 'win32';
@@ -144,14 +145,16 @@ function checkHarness(statePath, st, approve, check) {
   process.exit(2);
 }
 
-async function withBackoff(fn, retry, deadline = Infinity, tries = 5) {
+async function withBackoff(fn, retry, deadline = Infinity, signal, tries = 5) {
   for (let attempt = 0; ; attempt++) {
+    signal?.throwIfAborted();
     if (Date.now() >= deadline) {
       const e = new Error('wall-clock ceiling exceeded before attempt');
       e.failure_class = 'timeout';
       throw e;
     }
     try { return await fn(); } catch (e) {
+      signal?.throwIfAborted();
       const status = e?.status ?? e?.response?.status;
       const transient = status === 429 || status === 529 || (status >= 500 && status < 600)
         || /overloaded|rate.?limit/i.test(String(e?.message ?? ''));
@@ -159,7 +162,7 @@ async function withBackoff(fn, retry, deadline = Infinity, tries = 5) {
       const delay = Math.min(60_000, 1000 * 2 ** attempt) * (0.5 + Math.random());
       if (Date.now() + delay >= deadline) throw e;
       retry.count++;
-      await new Promise(r => setTimeout(r, delay));
+      await wait(delay, undefined, { signal });
     }
   }
 }
@@ -243,16 +246,22 @@ async function main() {
   eprint(`[${args.variant}] ${tasks.length} of ${cases.length * args.reps} (id,rep) to run`);
 
   let i = 0, ok = 0, fail = 0;
+  let activeController, interrupted = false;
+  process.once('SIGINT', () => {
+    interrupted = true;
+    activeController?.abort(Object.assign(new Error('evaluation interrupted by SIGINT; stopping after cleanup and saving this attempt'), { failure_class: 'interrupted' }));
+  });
   const errorsPath = join(vdir, 'errors.jsonl');
   for (const p of [resultsPath, errorsPath]) {
     const tail = readIfPresent(p);
     if (tail && !tail.endsWith('\n')) appendFileNoFollow(p, '\n');
   }
   async function worker() {
-    while (i < tasks.length) {
+    while (!interrupted && i < tasks.length) {
       const { c, rep } = tasks[i++];
       const timeoutS = st.case_timeout_s[c.unit];
       const controller = new AbortController();
+      activeController = controller;
       const attemptCtx = { ...ctx, rep, attempt: Date.now(), signal: controller.signal, calls: [] };
       const timer = setTimeout(() => controller.abort(Object.assign(new Error(`case ${c.id} exceeded case_timeout_s[${c.unit}]=${timeoutS}; elapsed_s>=${timeoutS}, requested_days=${c.days.length}`), { failure_class: 'timeout' })), timeoutS * 1000);
       const safeId = pathSafeId(c.id);
@@ -286,7 +295,7 @@ async function main() {
               catch (e) { if (e?.code !== 'ENOENT') throw e; }
             }
           }
-          const g = await withBackoff(() => gradeCase(c, run, ref, attemptCtx), judgeRetry, deadline);
+          const g = await withBackoff(() => gradeCase(c, run, ref, attemptCtx), judgeRetry, deadline, controller.signal);
           return { run, g, latency_s };
         })();
         const row = {
@@ -320,7 +329,8 @@ async function main() {
         ok++;
       } catch (e) {
         fail++;
-        if (e?.failure_class === 'cleanup') i = tasks.length;
+        const problem = e?.failure_class === 'cleanup' ? e : controller.signal.aborted ? controller.signal.reason : e;
+        if (['cleanup', 'controller_handoff'].includes(e?.failure_class)) i = tasks.length;
         if (rowWritten) {
           eprint(`  [${args.variant}] ${c.id} rep${rep} scored, but a post-row write failed: ${e?.message || e}`);
           continue;
@@ -329,9 +339,9 @@ async function main() {
           prompt_id: safeId, rep,
           unit: c.unit,
           ...(safeId !== String(c.id) ? { original_id: String(c.id) } : {}),
-          failure_class: e?.failure_class === 'cleanup' ? 'cleanup' : controller.signal.aborted ? 'timeout' : e?.failure_class ?? 'error',
+          failure_class: problem?.failure_class ?? 'error',
           case_timeout_s: timeoutS,
-          error: String(controller.signal.aborted ? controller.signal.reason.message : e?.message || e),
+          error: String(problem?.message || problem),
           retries: appRetry.count, judge_retries: judgeRetry.count,
           model: lastRun?.model, usage: lastRun?.usage,
           member_cost_usd: lastRun?.member_cost_usd,
@@ -344,7 +354,7 @@ async function main() {
           latency_s: (Date.now() - t0) / 1000,
         }) + '\n');
         eprint(`  [${args.variant}] ${c.id} rep${rep} FAILED: ${e?.message || e}`);
-      } finally { clearTimeout(timer); }
+      } finally { clearTimeout(timer); activeController = null; }
     }
   }
   const t0 = Date.now();
@@ -362,7 +372,7 @@ async function main() {
   await Promise.all(Array.from({ length: Math.max(1, args.concurrency) }, worker));
   clearInterval(tick); progress();
   eprint(`[${args.variant}] done - ${ok} ok, ${fail} failed -> ${resultsPath}`);
-  process.exit(fail ? 1 : 0);
+  process.exit(interrupted ? 130 : fail ? 1 : 0);
 }
 
 let workersStarted = false;
