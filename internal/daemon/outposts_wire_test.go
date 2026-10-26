@@ -42,6 +42,7 @@ type farOutpost struct {
 	link    atomic.Int32
 	port    atomic.Int32
 	keyring agent.Agent
+	key     ed25519.PrivateKey
 	workers sync.WaitGroup
 }
 
@@ -55,7 +56,7 @@ func startFarOutpost(t *testing.T, w *world) *farOutpost {
 	if err != nil {
 		t.Fatal(err)
 	}
-	o := &farOutpost{network: memnet.Listen(), keyring: agent.NewKeyring()}
+	o := &farOutpost{network: memnet.Listen(), keyring: agent.NewKeyring(), key: key}
 	o.port.Store(50000)
 	if err := o.keyring.Add(agent.AddedKey{PrivateKey: key}); err != nil {
 		t.Fatal(err)
@@ -200,6 +201,51 @@ func TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestARefusedOutpostPublishesWhenItsRefusalChanges(t *testing.T) {
+	prepared := prepareWorld(t)
+	t.Setenv("SSH_AUTH_SOCK", "agent")
+	inPreparedBubble(t, prepared, func(t *testing.T, w *world) {
+		far := startFarOutpost(t, w)
+		if err := far.keyring.RemoveAll(); err != nil {
+			t.Fatal(err)
+		}
+		app := w.App()
+		setSetting(t, app, "outposts_enabled", "true")
+		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Address: outpostAddress.String()})
+		testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateRefused && strings.Contains(protocol.Deref(m.Outposts[0].LastError), "agent has no keys")
+		})
+		w.advance(time.Second)
+		mark := len(app.Log())
+		w.advance(time.Minute)
+		if got := outpostUpdates(app, mark); len(got) != 0 {
+			t.Fatalf("refusing the same way for a minute published %d updates, want none:\n%s", len(got), describeOutposts(got))
+		}
+
+		_, stranger, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := far.keyring.Add(agent.AddedKey{PrivateKey: stranger}); err != nil {
+			t.Fatal(err)
+		}
+		mark = len(app.Log())
+		w.advance(time.Minute)
+		got := outpostUpdates(app, mark)
+		if len(got) != 1 || got[0].State != protocol.OutpostStateRefused || !strings.Contains(protocol.Deref(got[0].LastError), "no key accepted") {
+			t.Fatalf("a key the outpost does not accept published %d updates, want one naming it:\n%s", len(got), describeOutposts(got))
+		}
+
+		if err := far.keyring.Add(agent.AddedKey{PrivateKey: far.key}); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(bridge.LostAfter)
+		testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected && m.Outposts[0].LastError == nil
+		})
+	})
 }
 
 func describeOutposts(rows []protocol.OutpostInfo) string {

@@ -16,7 +16,7 @@ func ErrorKind(err error) string {
 	case err == nil:
 		return ""
 	case errors.As(err, &refusal):
-		return "refused " + refusal.Reason
+		return "refused " + refusal.Reason + ": " + refusal.Detail
 	case errors.Is(err, errNoFrames), errors.Is(err, context.DeadlineExceeded), errors.Is(err, os.ErrDeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
 		return "timeout"
 	case errors.Is(err, syscall.ECONNREFUSED):
