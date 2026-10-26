@@ -75,17 +75,17 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	if stalled := outpostState(app, "outpost", protocol.OutpostStateStalled); stalled.Reach != protocol.OutpostReachReachable {
 		t.Fatalf("stalled row: %+v", stalled)
 	}
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\x15", Source: protocol.Ptr("response")})
 	for _, key := range stalledLine {
 		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: string(key)})
 	}
-	awaitInputRefusals(t, app, terminal, len(stalledLine))
+	awaitInputRefusals(t, app, terminal, 1+len(stalledLine))
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark := len(app.Log())
 	remote.Signal(syscall.SIGCONT)
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\x15"})
 	app.TypeLine(id, "echo after-stall-$((4+4))")
 	app.AwaitScreen(id, "after-stall-8")
 	if strings.Contains(string(app.Screen(id)), "stalled-7") {
