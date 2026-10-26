@@ -26,6 +26,9 @@ func ValidateInstanceRouting() error {
 	if err := validateHarnessRouting(); err != nil {
 		return err
 	}
+	if strings.TrimSpace(os.Getenv("ATTN_HARNESS_DATA_DIR")) != "" {
+		return nil
+	}
 	instance := Instance()
 	if instance == "" {
 		return nil
@@ -88,9 +91,6 @@ func validateHarnessRouting() error {
 	if rawRoot == "" {
 		return nil
 	}
-	if Instance() != "" {
-		return fmt.Errorf("refusing ATTN_HARNESS_DATA_DIR with named instance %s", Instance())
-	}
 	if !filepath.IsAbs(rawRoot) {
 		return fmt.Errorf("ATTN_HARNESS_DATA_DIR must be absolute")
 	}
@@ -113,6 +113,15 @@ func validateHarnessRouting() error {
 	if runtimePathWithin(root, production) || runtimePathWithin(production, root) {
 		return fmt.Errorf("refusing harness root %q because it overlaps production %q", root, production)
 	}
+	if instance := Instance(); instance != "" {
+		canonical, err := CanonicalRuntimePath(DataDirForInstance(instance))
+		if err != nil {
+			return fmt.Errorf("resolve instance %s data directory: %w", instance, err)
+		}
+		if runtimePathWithin(root, canonical) || runtimePathWithin(canonical, root) {
+			return fmt.Errorf("refusing harness root %q because it overlaps instance %s data directory %q", root, instance, canonical)
+		}
+	}
 
 	checks := []struct {
 		label string
@@ -128,14 +137,14 @@ func validateHarnessRouting() error {
 	for _, check := range checks {
 		resolved, resolveErr := CanonicalRuntimePath(check.path)
 		if resolveErr != nil {
-			return fmt.Errorf("resolve %s for default-instance harness: %w", check.label, resolveErr)
+			return fmt.Errorf("resolve %s for instance harness: %w", check.label, resolveErr)
 		}
 		if !runtimePathWithin(resolved, root) {
-			return fmt.Errorf("refusing %s=%q outside default-instance harness root %q", check.label, resolved, root)
+			return fmt.Errorf("refusing %s=%q outside instance harness root %q", check.label, resolved, root)
 		}
 	}
-	if port := strings.TrimSpace(WSPort()); port == "9849" || port == "29849" {
-		return fmt.Errorf("refusing default-instance harness websocket port %s", port)
+	if port := strings.TrimSpace(WSPort()); port == "9849" || port == "29849" || Instance() != "" && port == WSPortForInstance(Instance()) {
+		return fmt.Errorf("refusing instance harness websocket port %s", port)
 	}
 	return nil
 }

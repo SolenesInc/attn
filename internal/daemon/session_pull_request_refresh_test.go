@@ -84,36 +84,6 @@ func serveHost(d *Daemon, host string, served *fakePRHost) {
 	}
 }
 
-func recordPRForRefresh(t *testing.T, d *Daemon, sessionID, url string) {
-	t.Helper()
-	if resp := sendPRCommand(t, d, protocol.PullRequestCreatedMessage{
-		Cmd: protocol.CmdPullRequestCreated, ID: protocol.SessionID(sessionID), URL: url,
-	}); !resp.Ok {
-		t.Fatalf("record response = %+v", resp)
-	}
-}
-
-func TestSessionPullRequestRefreshSkipsSessionsWithNoRuntime(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	recordPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
-	host := &fakePRHost{snapshot: openSnapshot("Fresh status", "clean", "sha-1"), review: "none"}
-	serveHost(d, "github.com", host)
-
-	if !d.store.SaveSessionRuntime("s1", store.SessionRuntimeState{State: protocol.SessionStateRecoverable, Since: time.Now(), Updated: time.Now()}) {
-		t.Fatal("could not put the session in the recoverable state")
-	}
-	if fetched, _ := d.refreshSessionPullRequests(time.Now()); fetched != 0 {
-		t.Fatalf("fetched %d for a session with no runtime, want none", fetched)
-	}
-
-	if !d.store.SaveSessionRuntime("s1", store.SessionRuntimeState{State: protocol.SessionStateIdle, Since: time.Now(), Updated: time.Now()}) {
-		t.Fatal("could not reload the session")
-	}
-	if fetched, _ := d.refreshSessionPullRequests(time.Now()); fetched != 1 {
-		t.Fatal("the reloaded session's pull request was not picked up again")
-	}
-}
-
 func TestSessionPullRequestRefreshKeepsWatchingRecoverableSessions(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")

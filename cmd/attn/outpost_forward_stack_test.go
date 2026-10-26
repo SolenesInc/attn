@@ -50,6 +50,9 @@ func TestOutpostSocketCommandsReachHome(t *testing.T) {
 	if err := outpost.Client().RecordPullRequestCreatedFromTerminal(terminal, "https://github.com/example/project/pull/1"); err != nil {
 		t.Fatal(err)
 	}
+	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
+		return len(s.PullRequests) == 1 && s.PullRequests[0].Number == 1
+	})
 	hasCommand := func(app *testworld.Peer, name string) bool {
 		for _, record := range cliRecords(t, app) {
 			if record.Name == name {
@@ -66,7 +69,7 @@ func TestOutpostSocketCommandsReachHome(t *testing.T) {
 			t.Fatalf("%s hook was not dispatched at the outpost", name)
 		}
 	}
-	t.Log("plain shell and outpost shell use the home garden; query preserves caller; hook dispatch stays on the outpost")
+	t.Log("plain shell and outpost shell use the home garden; query preserves caller; hooks stay on the outpost and the monitor's PR report reaches the home through Call")
 }
 
 func TestOutpostForwardsDocumentSubscriptions(t *testing.T) {
