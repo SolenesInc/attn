@@ -1,0 +1,3 @@
+kind: internal
+area: crew
+change: Read crew eval simulator and judge result events, isolate their print calls, and retain baseline evidence across closure.

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { resultEvent } from './eval.mjs';
 
 const flow = resolve(process.argv[2]);
 const rows = path => existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
@@ -65,7 +66,8 @@ for (const variant of variants) {
         incompleteSpend = true;
       }
       for (const call of error.calls ?? []) {
-        if (Number.isFinite(call.response?.total_cost_usd)) failedKnown += call.response.total_cost_usd;
+        const response = resultEvent(call.response);
+        if (Number.isFinite(response?.total_cost_usd)) failedKnown += response.total_cost_usd;
         else incompleteSpend = true;
       }
     }
