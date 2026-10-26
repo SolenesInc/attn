@@ -294,20 +294,22 @@ with tempfile.TemporaryDirectory(prefix="attn-sdcheck-", dir="/tmp") as temporar
         exits = {shell: pidfd_open(pid) for shell, pid in pids.items() if cgroup(pid) != "gone"}
         journal = subprocess.Popen(["journalctl", "--user", "-u", unit, "-f", "-o", "cat", "--since", f"@{time.time():.6f}"], stdout=subprocess.PIPE, text=True)
         children.append(journal)
+        restarts_before_kill = restarts()
         systemctl("kill", unit)
         with Deadline(30, "the shells exiting after systemctl --user kill"):
             for shell, pidfd in exits.items():
                 select.select([pidfd], [], [])
                 os.close(pidfd)
                 say(f"{shell} pid {pids[shell]}", "exited")
-        with Deadline(30, "systemd recording how the unit ended"):
+        with Deadline(30, "systemd recording that the unit ended"):
             for line in journal.stdout:
-                if "Deactivated successfully" in line or "Failed with result" in line or "Scheduled restart job" in line:
+                if "Consumed" in line:
                     say("systemd", line.strip())
-                    if "Deactivated successfully" not in line:
-                        failures.append(f"systemctl --user kill: {line.strip()}")
                     break
-        say("unit after kill", systemctl("is-active", unit, check=False))
+        ended = dict(field.split("=", 1) for field in systemctl("show", "-p", "Result,ActiveState,NRestarts", unit).splitlines())
+        say("unit after kill", ended)
+        if ended != {"Result": "success", "ActiveState": "inactive", "NRestarts": str(restarts_before_kill)}:
+            failures.append(f"systemctl --user kill: the unit ended as {ended}, expected a clean stop with no restart")
     finally:
         cleanup = []
         if unit_written:
