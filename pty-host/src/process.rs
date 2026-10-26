@@ -42,20 +42,22 @@ fn session_processes(sid: i32) -> io::Result<Vec<i32>> {
 
 #[cfg(target_os = "macos")]
 fn session_processes(sid: i32) -> io::Result<Vec<i32>> {
-    let mut count = unsafe { libc::proc_listallpids(std::ptr::null_mut(), 0) };
+    let count = unsafe { libc::proc_listallpids(std::ptr::null_mut(), 0) };
     if count <= 0 {
         return Err(io::Error::last_os_error());
     }
+    let mut count = usize::try_from(count).map_err(io::Error::other)?;
     let pids = loop {
-        let mut pids = vec![0_i32; count as usize * 2];
+        let mut pids = vec![0_i32; count * 2];
         let bytes =
             i32::try_from(std::mem::size_of_val(pids.as_slice())).map_err(io::Error::other)?;
-        count = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast(), bytes) };
-        if count < 0 {
+        let listed = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast(), bytes) };
+        if listed < 0 {
             return Err(io::Error::last_os_error());
         }
-        if (count as usize) < pids.len() {
-            pids.truncate(count as usize);
+        count = usize::try_from(listed).map_err(io::Error::other)?;
+        if count < pids.len() {
+            pids.truncate(count);
             break pids;
         }
     };
