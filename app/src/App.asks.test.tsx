@@ -40,6 +40,15 @@ const releaseDay: Ask = {
   parts: [{ question: { key: 'q1', kind: 'any', prompt: 'Which platforms?', choices: [{ label: 'macOS' }, { label: 'Linux' }] } }],
 };
 
+const cacheStoreReplied: Ask = {
+  ...cacheStore,
+  reply: {
+    answers: [{ key: 'q1', picked: ['Postgres'] }, { key: 'q2', picked: [], text: 'Welcome back' }],
+    note: 'Keep it boring.',
+    answered_at: '2026-01-01T00:30:00Z',
+  },
+};
+
 const migration = daemonSeed('s-cache1', { title: 'Cache store migration', tender_session: 'successor' });
 
 const landingWeek: Ask = {
@@ -341,6 +350,56 @@ describe('App asks', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('dashboard-ask-a-cache1')));
 
     expect(openAsk()).toBe('Cache store');
+  });
+
+  it('keeps the asks you replied to out of the way until you ask for them', async () => {
+    const daemon = await renderAsks([cacheStoreReplied, releaseDay]);
+    expect(screen.queryByTestId('ask-marker-api')).toBeNull();
+    const list = await openDrawer(daemon);
+    expect(rows(list)).toEqual(['asks-row-a-release']);
+    const toggle = screen.getByRole('button', { name: /^Replied/ });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'r' }));
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(rows(screen.getByRole('list', { name: 'Open and replied asks' }))).toEqual(['asks-row-a-release', 'asks-row-a-cache1']);
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'j' }));
+
+    expect(openAsk()).toBe('Cache store');
+    expect(screen.getByRole('radio', { name: /Postgres/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Postgres/ })).toBeDisabled();
+    expect(screen.getByLabelText('What should the banner say?')).toHaveTextContent('Welcome back');
+    expect(screen.getByLabelText('Note')).toHaveTextContent('Keep it boring.');
+    expect(screen.queryByRole('button', { name: /^Send/ })).toBeNull();
+    expect(screen.getByText(/^Replied .* ago$|^Replied just now$/)).toBeInTheDocument();
+
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'k' }));
+    expect(openAsk()).toBe('Release day');
+    await gesture(daemon, () => fireEvent.click(toggle));
+    expect(rows(screen.getByRole('list', { name: 'Open asks' }))).toEqual(['asks-row-a-release']);
+  });
+
+  it('shows the answer you just sent when it was the last open ask and replied asks are shown', async () => {
+    const daemon = await renderAsks([releaseDay]);
+    await openDrawer(daemon);
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'r' }));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Linux' }));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Send/ })));
+    daemon.emit({
+      event: 'asks_updated',
+      profile_id: DEFAULT_PROFILE_ID,
+      asks: [{ ...releaseDay, reply: { answers: [{ key: 'q1', picked: ['Linux'] }], answered_at: '2026-01-01T00:40:00Z' } }],
+    });
+    await daemon.idle();
+
+    expect(openAsk()).toBe('Release day');
+    expect(screen.getByRole('checkbox', { name: 'Linux' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Linux' })).toBeDisabled();
+    expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Asks' }));
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'r' }));
+    expect(screen.getByText('No open asks.')).toBeInTheDocument();
+    expect(screen.getByText(/shows the one you replied to in the last day/)).toBeInTheDocument();
   });
 
   it('follows the selected profile and forgets asks that close', async () => {

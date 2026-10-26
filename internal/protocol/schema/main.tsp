@@ -188,7 +188,7 @@ model Session {
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
   priority?: boolean;
-  turn_by_agent?: boolean;      // True when the agent made the latest change to its turn: it opened the turn with `attn turn open`, settled it with `attn turn settle`, or went back to work on a notification, which settles a turn that opened on its own. A notification run does not settle a turn the agent opened, and the app does not move the user when the turn they are looking at closes this way. Absent once the user or the session's state changes the turn.
+  turn_by_agent?: boolean;      // True when the agent made the latest change to its turn: it opened the turn with `attn turn open`, settled it with `attn turn settle`, or went back to work on a notification, which settles a turn that opened on its own. The user answering the agent's ask also settles its turn this way: the answer hands the turn back to the agent. A notification run does not settle a turn the agent opened, and the app does not move the user when the turn they are looking at closes this way. Absent once the user or the session's state changes the turn.
   turn_snoozed_until?: string;  // ISO timestamp a live snooze runs to. Present only while the deferral holds; its presence is what puts the row in the sidebar's snoozed section, and while it is set no state can open a turn for this session except one that breaks through.
   auto_settle_fires_at?: string; // ISO timestamp the auto-settle countdown will close this session's turn. Present only while the countdown is running, which is the whole contract: it is what the terminal tile animates against, and its absence is what says nothing is pending. Absent during the arm delay, when auto-settle is off, and after a cancel.
   auto_settle_held?: boolean;   // True while the auto-settle countdown is frozen because the user is typing or moving the pointer in this session. Mutually exclusive with auto_settle_fires_at by construction: a frozen countdown has no deadline to animate against, so the tile draws a full paused bar and waits. It clears on its own five quiet seconds after the last interaction, when a fresh deadline replaces it.
@@ -3472,7 +3472,7 @@ model InitialStateMessage {
   // The crew roster, so the sidebar draws every member — awake or asleep — from
   // the first push rather than asking for one.
   crew?: CrewMember[];
-  // The selected profile's open asks.
+  // The selected profile's asks, as asks_updated carries them.
   asks?: Ask[];
   // Every vent the selected profile keeps, newest first.
   vents?: Vent[];
@@ -3592,6 +3592,14 @@ model Ask {
   parts: AskPart[];
   base_dir: string;
   created_at: string;
+  reply?: AskReply;
+}
+
+// What the user sent when they answered an ask; answered_at is an ISO timestamp.
+model AskReply {
+  answers: AskAnswer[];
+  note?: string;
+  answered_at: string;
 }
 
 // seed_id names a seed the session tends; without it the ask is about the
@@ -3610,7 +3618,7 @@ model AskListMessage {
   session_id: SessionID;
 }
 
-// enabled says whether the session launched with asks.
+// enabled says whether the session launched with asks; asks are its open ones.
 model AskListResult {
   enabled: boolean;
   asks: Ask[];
@@ -3647,7 +3655,9 @@ model AskAnswerResultMessage {
   error?: string;
 }
 
-// The profile's open asks, oldest first.
+// The profile's open asks, oldest first, then the asks the user answered in the
+// last day, which carry their reply. A replied ask leaves sooner when its
+// session or seed closes.
 model AsksUpdatedMessage {
   event: "asks_updated";
   profile_id: string;

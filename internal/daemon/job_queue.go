@@ -119,6 +119,14 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 			d.logf("analytics: register resource sample tick: %v", err)
 		}
 		if err := runner.RegisterCron(
+			askRepliesForgetKind,
+			askRepliesForgetInterval,
+			d.askRepliesForgetHandler,
+			jobs.HandlerConfig{Timeout: askRepliesForgetTimeout},
+		); err != nil {
+			d.logf("asks: register reply forget tick: %v", err)
+		}
+		if err := runner.RegisterCron(
 			ventsPruneKind,
 			ventsPruneInterval,
 			d.ventsPruneHandler,

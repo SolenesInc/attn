@@ -67,11 +67,19 @@ export interface AskListItem<S extends AskHolderSession> {
   questionCount: number;
 }
 
+function askListItem<S extends AskHolderSession & { label: string }>(ask: Ask, sessions: readonly S[], seeds: readonly Seed[]): AskListItem<S> {
+  const holder = askHolder(ask, sessions, seeds);
+  return { ask, holder, from: askFrom(ask, holder), questionCount: askQuestions(ask).length };
+}
+
 export function askList<S extends AskHolderSession & { label: string }>(asks: readonly Ask[], sessions: readonly S[], seeds: readonly Seed[]): AskListItem<S>[] {
-  return orderAsks(asks, sessions, seeds).map((ask) => {
-    const holder = askHolder(ask, sessions, seeds);
-    return { ask, holder, from: askFrom(ask, holder), questionCount: askQuestions(ask).length };
-  });
+  return orderAsks(asks, sessions, seeds).map((ask) => askListItem(ask, sessions, seeds));
+}
+
+export function repliedAskList<S extends AskHolderSession & { label: string }>(asks: readonly Ask[], sessions: readonly S[], seeds: readonly Seed[]): AskListItem<S>[] {
+  return [...asks]
+    .sort((a, b) => (b.reply?.answered_at ?? '').localeCompare(a.reply?.answered_at ?? '') || a.id.localeCompare(b.id))
+    .map((ask) => askListItem(ask, sessions, seeds));
 }
 
 export function draftAnswers(ask: Ask, draft: AskDraft): AskAnswer[] {

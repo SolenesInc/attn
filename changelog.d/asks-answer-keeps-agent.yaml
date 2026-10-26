@@ -1,0 +1,4 @@
+kind: changed
+area: queue
+change: Answering an ask still settles the asking agent's turn, but no longer hands you the next agent in the queue; the agent you were looking at stays on screen.
+symptom: Answering the ask of the agent on screen switched the view behind the asks drawer to another agent.

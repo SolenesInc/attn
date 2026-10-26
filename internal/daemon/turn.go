@@ -11,11 +11,18 @@ import (
 )
 
 func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
-	if d == nil || d.store == nil || msg == nil {
+	if msg == nil {
 		return
 	}
-	sessionID := protocol.TrimID(msg.SessionID)
-	if sessionID == "" {
+	d.closeTurn(protocol.TrimID(msg.SessionID), sessionmonitor.Settle, "settle")
+}
+
+func (d *Daemon) handBackTurn(sessionID protocol.SessionID) {
+	d.closeTurn(sessionID, sessionmonitor.HandBack, "ask answer")
+}
+
+func (d *Daemon) closeTurn(sessionID protocol.SessionID, kind sessionmonitor.CommandKind, cause string) {
+	if d == nil || d.store == nil || sessionID == "" {
 		return
 	}
 	monitor := d.sessionMonitor(sessionID)
@@ -23,15 +30,15 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 		return
 	}
 	turn := d.store.TurnStamps(sessionID).OpenedAt
-	view, applied := monitor.Do(sessionmonitor.Command{Key: monitor.Key(), Kind: sessionmonitor.Settle, Turn: turn}, time.Now())
+	view, applied := monitor.Do(sessionmonitor.Command{Key: monitor.Key(), Kind: kind, Turn: turn}, time.Now())
 	if !applied || !monitor.Publish(view) {
 		return
 	}
 	monitor.CancelAutoSettle("settled by user")
-	d.traceSettle(sessionID)
+	d.traceSettle(sessionID, cause)
 }
 
-func (d *Daemon) traceSettle(sessionID protocol.SessionID) {
+func (d *Daemon) traceSettle(sessionID protocol.SessionID, cause string) {
 	session := d.store.Get(sessionID)
 	if session == nil {
 		return
@@ -44,7 +51,7 @@ func (d *Daemon) traceSettle(sessionID protocol.SessionID) {
 		Source:  "user",
 		Claim:   string(session.State),
 		Detail:  reason,
-		Cause:   "settle",
+		Cause:   cause,
 		Outcome: statetrace.OutcomeApplied,
 	})
 }

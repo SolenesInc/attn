@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -25,7 +26,7 @@ Recommended: Postgres
 :::
 `
 
-func TestAnAnsweredAskIsTypedIntoTheAgentsConversationAndSettlesItsTurn(t *testing.T) {
+func TestAnAnsweredAskIsTypedIntoTheAgentsConversationAndHandsItsTurnBack(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
@@ -66,8 +67,17 @@ func TestAnAnsweredAskIsTypedIntoTheAgentsConversationAndSettlesItsTurn(t *testi
 	if !answered.Success {
 		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
 	}
-	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
-	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil })
+	replied := testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 && m.Asks[0].Reply != nil })
+	if reply := replied.Asks[0].Reply; len(reply.Answers) != 1 || !slices.Equal(reply.Answers[0].Picked, []string{"Postgres"}) || protocol.Deref(reply.Note) != "Keep it boring." || reply.AnsweredAt == "" {
+		t.Fatalf("the app shows the reply %+v, want Postgres, the note and when it was sent", reply)
+	}
+	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil && protocol.Deref(s.TurnByAgent) })
+	if listed, err := cli.AskList(protocol.SessionID(asker)); err != nil || len(listed.Asks) != 0 {
+		t.Fatalf("after the answer the agent lists %+v (%v), want no open ask", listed, err)
+	}
+	if err := cli.AskClose(protocol.SessionID(asker), asked.ID); err == nil {
+		t.Fatal("the agent withdrew an ask the user already answered")
+	}
 
 	typed := agent.Prompted()
 	for _, want := range []string{asked.ID, "Which store should keep the cache?", "Answer: Postgres (the recommended choice)", "> Keep it boring."} {
@@ -204,6 +214,52 @@ func answerCacheAsk(t *testing.T, app *testworld.Peer, askID string) {
 	if !answered.Success {
 		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
 	}
+}
+
+func TestARepliedAskStaysForADayUnlessItsSessionClosesFirst(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		registerSessions(t, w, cli, "kept", "closed")
+		replied := map[string]string{}
+		for _, asker := range []string{"kept", "closed"} {
+			asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path(asker))
+			if err != nil {
+				t.Fatalf("%s asks: %v", asker, err)
+			}
+			answerCacheAsk(t, app, asked.ID)
+			replied[asker] = asked.ID
+		}
+		shownReplies := func(m protocol.AsksUpdatedMessage) []string {
+			var ids []string
+			for _, a := range m.Asks {
+				if a.Reply != nil {
+					ids = append(ids, a.ID)
+				}
+			}
+			slices.Sort(ids)
+			return ids
+		}
+		both := []string{replied["kept"], replied["closed"]}
+		slices.Sort(both)
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return slices.Equal(shownReplies(m), both) })
+
+		if err := cli.Unregister("closed"); err != nil {
+			t.Fatalf("close closed: %v", err)
+		}
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
+			return slices.Equal(shownReplies(m), []string{replied["kept"]})
+		})
+
+		w.advance(23 * time.Hour)
+		if shown := w.App().Initial.Asks; len(shown) != 1 || shown[0].ID != replied["kept"] || shown[0].Reply == nil {
+			t.Fatalf("23 hours after the answer the app shows %+v, want the reply to kept", shown)
+		}
+		w.advance(2 * time.Hour)
+		if shown := w.App().Initial.Asks; len(shown) != 0 {
+			t.Fatalf("25 hours after the answer the app still shows %+v", shown)
+		}
+	})
 }
 
 func TestAnAgentKeepsTheAsksSettingItLaunchedWith(t *testing.T) {
@@ -418,8 +474,8 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	if !answered.Success {
 		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
 	}
-	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
-	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil })
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 && m.Asks[0].Reply != nil })
+	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil && protocol.Deref(s.TurnByAgent) })
 	if got := successor.Prompted(); !strings.Contains(got, "Answer: Postgres (the recommended choice)") || strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("the seed's tender was typed %q, want the answer alone", got)
 	}

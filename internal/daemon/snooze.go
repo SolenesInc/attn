@@ -72,7 +72,7 @@ func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {
 		return fmt.Errorf("session %s: snooze is pending; attn will keep retrying until it is saved", sessionID)
 	}
 	monitor.CancelAutoSettle("snoozed")
-	d.traceSettle(sessionID)
+	d.traceSettle(sessionID, "settle")
 	return nil
 }
 
