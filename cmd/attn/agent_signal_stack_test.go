@@ -39,6 +39,7 @@ while :; do read hold; done
 			}
 			id := s.Spawn(app, fakeagent.Claude, s.Path("signals"), func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr(executable) })
 			app.AwaitScreen(id, "signal-ready")
+			terminal := protocol.TerminalID(app.Terminal(id))
 			s.SignalAgentWrapper(id, syscall.SIGTERM)
 			app.AwaitScreen(id, "forwarded-TERM")
 			s.SignalAgentWrapper(id, syscall.SIGHUP)
@@ -46,8 +47,8 @@ while :; do read hold; done
 			testworld.Await(app, protocol.EventSessionExited, func(event protocol.SessionExitedMessage) bool {
 				return string(event.SessionID) == id && event.ExitCode == 7
 			})
-			final := s.Run(testworld.Invocation{Session: id, Args: []string{"terminal", "read", id}})
-			if final.Code != 0 || !strings.Contains(final.Stdout, "forwarded-HUP") {
+			final := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal, AttachPolicy: protocol.Ptr(protocol.AttachPolicySameAppRemount)}, protocol.EventAttachResult, func(result protocol.AttachResultMessage) bool { return result.ID == terminal })
+			if !final.Success || final.Exit == nil || final.Exit.Code != 7 || final.Screen == nil || !strings.Contains(final.Screen.Text, "forwarded-HUP") {
 				t.Fatalf("final output after exit: %+v", final)
 			}
 			t.Log("the wrapper forwarded TERM, then HUP, with both signal identities preserved")
