@@ -78,13 +78,14 @@ saves the whole array next to the normalized result for inspection.
 
 The simulator may assert only the supplied task and disclosures. It must not
 turn a member suggestion into a user decision or invent an approval. After
-each case, one separate Fable check compares all delivered simulator messages
-with those sources. Its verdict and usage are saved with the grading receipts.
+each case, one separate check by the `judge_model` compares all delivered
+simulator messages with the task and disclosures supplied for that turn. The
+check's verdict and usage are saved with the grading receipts.
 Unsent `done=true` messages remain in the call archive and are excluded from
 that check.
 
-A fidelity finding sets `simulator_unfaithful: true` on the result without
-discarding its grade or stopping delivery. If the check cannot complete, the
+A reported violation sets `simulator_unfaithful: true` on the result. The result
+keeps its grade and the run continues. If the check cannot complete, the
 result has a null flag and an `unverified` fidelity status. The case remains
 available for review. This model check can make mistakes, so inspect its
 reasons before attributing a flagged result to the simulator.
@@ -205,7 +206,8 @@ remain the grading evidence.
 
 For a separately approved use-only pilot, record the user's approval under
 `approvals.use_pilot` and set `pilot_stage: "use"` in the reviewed state. A
-different stage, including the default `units`, is then refused. This stage selects every use case
+different stage, including the default `units`, is then refused. This stage
+selects every use case
 in the case pack, including controls, with one repetition. It runs no write or
 twelve-day case:
 
@@ -283,9 +285,10 @@ intervals, headroom, judge disagreement, and costs. Pilot judge scores are
 exploratory until the user has rated the same artifacts.
 The measurements show the all-case pass rate and the pass rate restricted to
 cases checked as simulator-faithful. Flagged cases and cases without a successful
-fidelity check, including older runs, are excluded from the latter rate. Both
-counts are shown. Known spend includes flagged and unverified cases and the
-fidelity calls. The static viewer retains the original all-case grades.
+fidelity check, including older runs, are excluded from the latter rate. The
+table also shows the flagged and unchecked rep counts and the number of
+checked-faithful cases. Known spend includes flagged and unverified cases and the
+fidelity calls. `report.html` keeps the original all-case grades.
 
 Before setting `pilot` to `false`, record user approval of the case list,
 grading, and measured budget under `approvals.cases`, `approvals.grading`, and
