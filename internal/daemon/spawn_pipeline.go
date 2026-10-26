@@ -640,7 +640,7 @@ func (d *Daemon) launchTerminal(req *spawnRequest) harness.TerminalID {
 
 func (d *Daemon) expectTerminal(terminal harness.TerminalID, session protocol.SessionID) {
 	if _, shown := d.shownIn(terminal); !shown {
-		d.terminals().expect(terminal, session)
+		d.terminals().expect(terminal, session, d.copiedSession(session))
 		d.kickMonitorTerminals()
 	}
 }

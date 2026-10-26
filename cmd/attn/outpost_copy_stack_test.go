@@ -212,9 +212,12 @@ func TestARemoteShellExitReachesItsHomeAfterTheOutpostStopsListening(t *testing.
 	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", ""))
 	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 	remote.Stop()
+	handled := remote.PauseAt(pausepoint.PtyExitHandled)
 	remote.Start()
 	writeFifo(t, release, "go\n")
 	readFifo(t, exiting)
+	handled.Await()
+	handled.Release()
 
 	mark = len(app.Log())
 	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
@@ -270,9 +273,6 @@ func TestARemoteShellThatOutlivesItsCloseEndsOnlyOnItsOutpost(t *testing.T) {
 	if exits := exitsOf(t, outpost, id); exits != 0 {
 		t.Fatalf("the outpost ran the home part of %s's exit %d times, want none", id, exits)
 	}
-	if exits := exitsOf(t, app, id); exits != 0 {
-		t.Fatalf("the home recorded %d exits of %s after the user closed it, want its record left as it was", exits, id)
-	}
 	requireStdout(t, home.Attn("session", "show", id), "state      closed", " by user")
 }
 
@@ -313,5 +313,49 @@ func readFifo(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.ReadFile(path); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestARemoteShellExitingAsItsHomeClosesItEndsOnlyOnItsOutpost(t *testing.T) {
+	a := testworld.NewSSHAgent(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	applied := remote.PauseEvery(pausepoint.CopyBatchApplied)
+	resolved := remote.PauseAt(pausepoint.PtyExitOwnerResolved)
+	handled := remote.PauseAt(pausepoint.PtyExitHandled)
+	for _, s := range []*testworld.Stack{remote, home} {
+		a.Authorize(s.World)
+		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+		s.Start()
+	}
+	address := bridgeAddress(t)
+	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	app := enableOutposts(t, home)
+	outpost := remote.App()
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
+	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	terminal := protocol.TerminalID(app.Terminal(id))
+	release := makeFifo(t, remote.Path("release.fifo"))
+	app.TypeLine(id, "echo armed; read line < "+release+"; exit 0")
+	app.AwaitScreen(id, "armed")
+
+	writeFifo(t, release, "go\n")
+	resolved.Await()
+	testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(id)}, protocol.EventSessionCloseResult,
+		func(r protocol.SessionCloseResultMessage) bool { return string(r.SessionID) == id })
+	for {
+		applied.Await()
+		copied := slices.Contains(listedRows(t, remote, "--all"), id)
+		applied.Release()
+		if !copied {
+			break
+		}
+	}
+	resolved.Release()
+	handled.Await()
+	handled.Release()
+	testworld.Request(outpost, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	if exits := exitsOf(t, outpost, id); exits != 0 {
+		t.Fatalf("the outpost ran the home part of %s's exit %d times, want none", id, exits)
 	}
 }

@@ -1638,6 +1638,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	owner, bound, shown := d.terminals().takeExiting(info.ID)
 	sessionID := owner.session
+	pausepoint.At(pausepoint.PtyExitOwnerResolved)
 	if !bound {
 		d.forgetTerminalTitle(info.ID)
 	}

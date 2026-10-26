@@ -18,7 +18,7 @@ type terminalRegistry struct {
 	titles   map[harness.TerminalID]string
 	shown    uint64
 	ending   map[harness.TerminalID]endingTerminal
-	expected map[harness.TerminalID]harness.SessionID
+	expected map[harness.TerminalID]expectedTerminal
 }
 
 type terminal struct {
@@ -30,7 +30,7 @@ type terminal struct {
 
 func (d *Daemon) terminals() *terminalRegistry {
 	d.terminalsOnce.Do(func() {
-		d.terminalState = &terminalRegistry{byID: make(map[harness.TerminalID]*terminal), titles: make(map[harness.TerminalID]string), ending: make(map[harness.TerminalID]endingTerminal), expected: make(map[harness.TerminalID]harness.SessionID)}
+		d.terminalState = &terminalRegistry{byID: make(map[harness.TerminalID]*terminal), titles: make(map[harness.TerminalID]string), ending: make(map[harness.TerminalID]endingTerminal), expected: make(map[harness.TerminalID]expectedTerminal)}
 	})
 	return d.terminalState
 }
@@ -151,16 +151,21 @@ func (r *terminalRegistry) Showing(t harness.TerminalID) (harness.SessionID, boo
 	defer r.mu.RUnlock()
 	entry := r.byID[t]
 	if entry == nil {
-		s, ok := r.expected[t]
-		return s, ok
+		expected, ok := r.expected[t]
+		return expected.session, ok
 	}
 	return entry.shows, true
 }
 
-func (r *terminalRegistry) expect(t harness.TerminalID, s harness.SessionID) {
+type expectedTerminal struct {
+	session harness.SessionID
+	copied  bool
+}
+
+func (r *terminalRegistry) expect(t harness.TerminalID, s harness.SessionID, copied bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.expected[t] = s
+	r.expected[t] = expectedTerminal{session: s, copied: copied}
 }
 
 func (r *terminalRegistry) unexpect(t harness.TerminalID) {
@@ -181,8 +186,8 @@ func (r *terminalRegistry) Of(s harness.SessionID) []harness.TerminalID {
 	slices.SortFunc(ids, func(a, b harness.TerminalID) int {
 		return cmp.Compare(r.byID[b].shownSeq, r.byID[a].shownSeq)
 	})
-	for id, shows := range r.expected {
-		if shows == s {
+	for id, expected := range r.expected {
+		if expected.session == s {
 			ids = append(ids, id)
 		}
 	}
@@ -263,8 +268,8 @@ func (r *terminalRegistry) takeExiting(t harness.TerminalID) (owner endingTermin
 	if entry := r.byID[t]; entry != nil {
 		return endingTerminal{session: entry.shows, copied: entry.copied}, true, true
 	}
-	if session, expected := r.expected[t]; expected {
-		return endingTerminal{session: session}, true, true
+	if expected, ok := r.expected[t]; ok {
+		return endingTerminal{session: expected.session, copied: expected.copied}, true, true
 	}
 	return note, false, ending
 }
