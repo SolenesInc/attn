@@ -13,6 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -196,10 +198,14 @@ func (q *codexEvents) run(d *Daemon, f func()) {
 
 func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
 	session := r.d.store.Get(sessionID)
-	if session == nil || !r.d.hidden(sessionID) {
+	if session == nil {
 		return
 	}
 	now := time.Now()
+	r.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: string(sessionstate.SourceAppServer), ObservedAt: now}, status)
+	if !r.d.hidden(sessionID) {
+		return
+	}
 	if status == pty.ProgramIdle {
 		evidence, _ := r.d.sessionMonitor(sessionID).Evidence()
 		bracketOpen := evidence.TurnOpen || evidence.ToolOpen

@@ -117,6 +117,26 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 	}
 }
 
+func TestStateExplainShowsWhatTheSharedCodexAppServerReportsForAVisibleTileThatFollowsItsTerminal(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+
+	w.CodexServer().Work(codex.ConversationID)
+	typeInto(app, terminal, "/rename Checkout race\r")
+	codex.Prompted()
+	renamed := testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Label == "Checkout race" })
+	if renamed.State != protocol.SessionStateWaitingInput {
+		t.Fatalf("the visible tile is %s after its app-server reported working, want waiting_input from its terminal", renamed.State)
+	}
+	stateExplainShows(t, stateExplainOf(t, cli, checkout).Observations,
+		stateExplainRow{source: "app_server", claim: "working", outcome: "observed"},
+		stateExplainRow{source: "app_server", claim: "idle", outcome: "observed"},
+		stateExplainRow{source: "app_server", claim: "working", outcome: "observed"},
+	)
+}
+
 type stateExplainRow struct {
 	source, claim, outcome, cause, reason, detail string
 	repeats                                       int
