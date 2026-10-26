@@ -39,6 +39,7 @@ func (m *Monitor) RestoreDriverRun(run DriverMetadata) {
 		return
 	}
 	run.Metadata = m.driver.Metadata
+	run.TranscriptPath = m.driver.TranscriptPath
 	m.driver = run
 	view := m.viewLocked()
 	m.mu.Unlock()
@@ -55,7 +56,7 @@ func (m *Monitor) EndDriverRun() DriverMetadata {
 		m.mu.Unlock()
 		return DriverMetadata{}
 	}
-	m.driver = DriverMetadata{Metadata: ended.Metadata}
+	m.driver = DriverMetadata{Metadata: ended.Metadata, TranscriptPath: ended.TranscriptPath}
 	view := m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)
@@ -80,7 +81,7 @@ func (m *Monitor) RetireDriver(run string) {
 		m.mu.Unlock()
 		return
 	}
-	m.driver = DriverMetadata{Metadata: m.driver.Metadata}
+	m.driver = DriverMetadata{Metadata: m.driver.Metadata, TranscriptPath: m.driver.TranscriptPath}
 	view := m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)

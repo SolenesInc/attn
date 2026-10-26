@@ -5045,6 +5045,10 @@ model KeptConversationSeed {
   slug: string;
   title: string;
 }
+model KeptConversationCrewDay {
+  member: string;
+  day_id: string;
+}
 model KeptConversationRow {
   agent: string;
   resume_id: string;
@@ -5055,6 +5059,7 @@ model KeptConversationRow {
   pinned_at?: string;
   pending_reason?: string;
   seeds: KeptConversationSeed[];
+  crew_days?: KeptConversationCrewDay[];
 }
 model KeptConversationListMessage {
   cmd: "kept_conversation_list";

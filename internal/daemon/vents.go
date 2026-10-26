@@ -198,7 +198,7 @@ func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 	if seed, ok := d.gardenDispatchCrown(session.ID); ok && seed != "" {
 		context.SeedID = &seed
 	}
-	if path := d.inspectableTranscriptPath(session); path != "" {
+	if path := d.inspectableTranscriptPath(session.ID, session.Agent); path != "" {
 		if info, err := os.Stat(path); err == nil {
 			context.Transcript = &protocol.VentTranscript{Path: path, Bytes: int(info.Size())}
 		}

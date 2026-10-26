@@ -16,6 +16,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
@@ -175,6 +176,44 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 	}
 }
 
+func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConversationCrewDay, error) {
+	members, _, err := d.readCrewMembers()
+	if err != nil {
+		return nil, err
+	}
+	referenced := make(map[conversationKey][]protocol.KeptConversationCrewDay)
+	for _, member := range members {
+		lock := d.crewMemoryLock(member.ID)
+		lock.Lock()
+		home, err := d.crewMemoryHome(member)
+		var memory crew.Memory
+		if err == nil {
+			memory, err = crew.ReadMemory(home)
+		}
+		lock.Unlock()
+		if err != nil {
+			return nil, fmt.Errorf("crew day references for %s: %w", member.ID, err)
+		}
+		for id, entry := range memory.Entries {
+			if entry.Day == nil || entry.Day.Session == "" {
+				continue
+			}
+			sessionID := protocol.SessionID(entry.Day.Session)
+			session := d.store.SessionLedgerEntry(sessionID)
+			if session == nil {
+				continue
+			}
+			resumeID := d.store.GetResumeSessionID(sessionID)
+			if resumeID == "" {
+				continue
+			}
+			key := conversationKey{session.Agent, resumeID}
+			referenced[key] = append(referenced[key], protocol.KeptConversationCrewDay{Member: member.ID, DayID: strconv.Itoa(id)})
+		}
+	}
+	return referenced, nil
+}
+
 func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	seeds, err := d.conversationSeedReferences()
 	if err != nil {
@@ -182,6 +221,13 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	}
 	referenced := make(map[conversationKey]bool, len(seeds))
 	for key := range seeds {
+		referenced[key] = true
+	}
+	days, err := d.crewDayReferences()
+	if err != nil {
+		return nil, err
+	}
+	for key := range days {
 		referenced[key] = true
 	}
 	pins, err := d.store.ConversationPins()
@@ -202,7 +248,7 @@ func (d *Daemon) keepConversations(now time.Time) {
 	defer d.conversationKeepMu.Unlock()
 	referenced, err := d.referencedConversations()
 	if err != nil {
-		d.logf("conversation keep: read open work: %v", err)
+		d.logf("conversation keep: read references: %v", err)
 		return
 	}
 	live := make(map[conversationKey]bool)

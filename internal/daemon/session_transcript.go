@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/transcript"
@@ -15,13 +16,13 @@ import (
 const sessionTranscriptPageSize = 200
 
 func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTranscriptMessage) {
-	session := d.store.Get(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
+	session := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
 	if session == nil {
 		d.sendError(conn, "session_not_found")
 		return
 	}
 
-	path := d.inspectableTranscriptPath(session)
+	path := d.inspectableTranscriptPath(session.ID, session.Agent)
 	if path == "" {
 		d.sendError(conn, "transcript_unavailable")
 		return
@@ -81,20 +82,28 @@ func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTra
 	})
 }
 
-func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
-	if session == nil {
+func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent string) string {
+	binding := d.store.GetSessionConversation(sessionID)
+	for _, path := range []string{binding.TranscriptPath, d.store.GetAgentDriverTranscriptPath(sessionID)} {
+		if path != "" {
+			if _, err := os.Stat(path); err == nil {
+				return path
+			}
+		}
+	}
+	if path := d.sessionMonitor(sessionID).LiveTranscriptPath(agent); path != "" {
+		return path
+	}
+	driver := agentdriver.Get(agent)
+	if _, keeper := driver.(agentdriver.ConversationKeeper); keeper && !d.conversationReady(driver, binding.NativeID) {
 		return ""
 	}
-	binding := d.store.GetSessionConversation(session.ID)
 	if binding.TranscriptPath != "" {
 		if _, err := os.Stat(binding.TranscriptPath); err == nil {
 			return binding.TranscriptPath
 		}
 	}
-	if path := d.sessionMonitor(session.ID).LiveTranscriptPath(session.Agent); path != "" {
-		return path
-	}
-	path := sessionmonitor.FindTranscriptForResume(session.Agent, binding.NativeID)
+	path := sessionmonitor.FindTranscriptForResume(agent, binding.NativeID)
 	if path == "" {
 		return ""
 	}

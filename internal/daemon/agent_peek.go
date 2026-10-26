@@ -102,7 +102,7 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 	if profile, err := d.store.GetProfile(decorated.ProfileID); err == nil {
 		result.ProfileName = protocol.Ptr(profile.Name)
 	}
-	if path := d.inspectableTranscriptPath(session); path != "" {
+	if path := d.inspectableTranscriptPath(session.ID, session.Agent); path != "" {
 		if message, err := transcript.ExtractLastAssistantMessage(path, agentPeekMessageMaxChars); err == nil && strings.TrimSpace(message) != "" {
 			result.LastAssistantMessage = protocol.Ptr(message)
 		}
