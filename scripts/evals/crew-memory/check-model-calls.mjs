@@ -57,7 +57,10 @@ process.execve(binary, [binary, ...args], process.env);
   return path;
 };
 const arrayBinary = wrapper(true), objectBinary = wrapper(false);
-const input = json(config.cases_path).find(row => row.pilot && row.unit === 'use');
+const missingStale = process.argv.includes('--missing-stale-entry');
+const staleMemory = process.argv.includes('--stale-memory') || missingStale;
+const input = json(config.cases_path).find(row => staleMemory ? row.id === config.stale_probe_ids?.[0] : row.pilot && row.unit === 'use');
+if (missingStale) delete input.frozen_memory;
 input.days[0].task = [
   'Please complete this local provider-mock task in your member home.',
   'Write answer.json with the synthetic directory value supplied by the provider.',
@@ -68,10 +71,10 @@ input.days[0].task = [
 ].join('\n\n');
 const abort = new AbortController();
 process.once('SIGINT', () => abort.abort(new Error('unpaid model-call proof interrupted')));
-const ctx = { flow: root, variant: 'baseline', model: config.member_model, rep: 0, attempt: Date.now(),
+const ctx = { flow: root, variant: staleMemory ? 'v1' : 'baseline', model: config.member_model, rep: 0, attempt: Date.now(),
   signal: AbortSignal.any([abort.signal, AbortSignal.timeout(config.case_timeout_s.use * 1000)]),
   calls: [], state: { ...config, claude_binary: arrayBinary, local_provider_only: true } };
-const artifact = join(root, 'baseline', 'out', `${input.id}_rep0_${ctx.attempt}`);
+const artifact = join(root, ctx.variant, 'out', `${input.id}_rep0_${ctx.attempt}`);
 const requests = [];
 let memberCalls = 0, simulatorCalls = 0;
 const refuseSleep = process.argv.includes('--refuse-sleep') || process.argv.includes('--never-sleep');
@@ -85,6 +88,10 @@ const stub = await startStubModel(request => {
   try {
     if (request.model === config.member_model) {
       memberCalls++;
+      if (staleMemory && memberCalls === 1) {
+        assert.ok(request.systemPrompt.includes('## Your memory'));
+        assert.equal(request.systemPrompt.includes(input.stale_entry), !missingStale);
+      }
       const home = join(json(join(artifact, 'runtime.json')).data_dir, 'crew', 'member');
       if (memberCalls === 1) return { tool: { id: 'read-charter', name: 'Read', args: { file_path: join(home, 'CHARTER.md') } } };
       if (memberCalls === 2) return { say: 'Ready for your local task.' };
@@ -98,7 +105,9 @@ const stub = await startStubModel(request => {
       if (refuseSleep && memberCalls === 5) return { say: 'An inbox note is not direct confirmation. Reply sleep and I will file.' };
       if (process.argv.includes('--never-sleep') && memberCalls === 6) return { say: 'I am still not closing this day.' };
       if (memberCalls === memberCallCount) return { tool: { id: 'file-letter', name: 'Bash', args: {
-        command: '"$ATTN_WRAPPER_PATH" handoff --sleep -m "Unpaid provider mock: local task completed."',
+        command: staleMemory
+          ? `"$ATTN_WRAPPER_PATH" handoff --sleep --day "Mock task completed." -m "Unpaid provider mock: local task completed."; printf '%s\\n' '0-1 Fixture and mock task completed.' | "$ATTN_WRAPPER_PATH" memory summarize -`
+          : '"$ATTN_WRAPPER_PATH" handoff --sleep -m "Unpaid provider mock: local task completed."',
         description: 'File the proof letter and sleep',
       } } };
       throw new Error(`unexpected member request ${memberCalls}`);
@@ -121,6 +130,11 @@ const stub = await startStubModel(request => {
         violations: fidelityMode === 'faithful' ? [] : [{ turn: fidelityMode === 'unfaithful' ? 0 : -1,
           assertion: 'Synthetic unsupported assertion.', reason: 'Synthetic fidelity verdict for protocol verification.' }],
       } } };
+    }
+    if (prompt.A && prompt.B) {
+      assert.deepEqual(Object.keys(prompt.A), ['files']);
+      assert.deepEqual(Object.keys(prompt.B), ['files']);
+      return { tool: { id: `pairwise-${requests.length}`, name: 'StructuredOutput', args: { winner: 'tie', reason: 'Synthetic identical persisted outcomes.' } } };
     }
     assert.equal(prompt.candidate.files['answer.json'], '{"directory":"provider-mock-answer"}\n');
     return { tool: { id: `judge-${requests.length}`, name: 'StructuredOutput', args: {
@@ -157,6 +171,19 @@ try {
     assert.ok(records.some(record => record.type === 'user' && typeof record.message?.content === 'string' &&
       record.message.content.includes('<pasted_content id=') && record.message.content.includes(input.days[0].task)));
   }
+  if (staleMemory) {
+    assert.equal(run.engagement.wake_view, true);
+    const proof = json(join(root, run.artifact_dir, 'wake-view.json'));
+    assert.equal(proof.length, 1);
+    assert.ok(proof[0].shape_hash);
+    const grade = await gradeCase(input, run, JSON.stringify(run.output), ctx);
+    assert.equal(grade.meta.judge_passes.length, 2);
+    assert.equal(grade.meta.pairwise.length, 2);
+    assert.ok(grade.meta.pairwise.every(vote => vote.winner === 'tie' && ['A', 'B'].includes(vote.memory_candidate)));
+    assert.equal(grade.meta.simulator_fidelity.status, 'faithful');
+    save(join(root, 'stale-wake-proof.json'), { paid_calls: 0, run, proof, grade, requests });
+    console.log(`PASS: CLI-written stale entry reached the native wake request and actual localhost provider; ${join(root, 'stale-wake-proof.json')}`);
+  } else {
   const grade = await gradeCase(input, run, null, ctx);
   assert.equal(memberCalls, memberCallCount);
   assert.equal(simulatorCalls, 2);
@@ -294,10 +321,14 @@ try {
     limitation: 'Provider answers, usage and grades are synthetic; no model quality or paid outcome is measured.' };
   save(join(root, 'model-calls-proof.json'), receipt);
   console.log(`PASS: real member, simulator and judge paths, native array/object results, receipts and isolated context; ${join(root, 'model-calls-proof.json')}`);
+  }
 } catch (error) {
   save(join(root, 'model-calls-failure.json'), { error: error.message, failure_class: error.failure_class, calls: ctx.calls, requests,
     launches: existsSync(launchesPath) ? readFileSync(launchesPath, 'utf8') : '' });
-  if (process.argv.includes('--never-sleep') && error.failure_class === 'controller_handoff' && /awaiting=crew_sleep/.test(error.message)) {
+  if (missingStale && error.failure_class === 'harness' && /stale entry missing from native wake/.test(error.message)) {
+    assert.equal(simulatorCalls, 0);
+    console.log(`PASS: missing stale wake evidence fails before task or grading; ${join(root, 'model-calls-failure.json')}`);
+  } else if (process.argv.includes('--never-sleep') && error.failure_class === 'controller_handoff' && /awaiting=crew_sleep/.test(error.message)) {
     assert.equal(memberCalls, memberCallCount);
     assert.equal(error.sleep_confirmation_needed, true);
     console.log(`PASS: refusal after direct sleep confirmation fails with the measured crew_sleep watchdog; ${join(root, 'model-calls-failure.json')}`);
