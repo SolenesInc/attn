@@ -17,13 +17,17 @@ export function environment() {
 
 export async function command(binary, args, options = {}) {
   const child = spawn(binary, args, { env: environment(), ...options, stdio: ['pipe', 'pipe', 'pipe'] });
+  const closed = new Promise(resolve => child.once('close', resolve));
   let stdout = '', stderr = '';
   child.stdout.on('data', data => { stdout += data; });
   child.stderr.on('data', data => { stderr += data; });
   child.stdin.end(options.input ?? '');
   let code, signal;
   try { [code, signal] = await once(child, 'exit'); }
-  catch (error) { throw options.signal?.aborted ? options.signal.reason : error; }
+  catch (error) {
+    await closed;
+    throw options.signal?.aborted ? options.signal.reason : error;
+  }
   if (code !== 0) throw failure('harness', `${binary} exited ${code ?? signal}: ${stderr || stdout}`);
   return stdout;
 }

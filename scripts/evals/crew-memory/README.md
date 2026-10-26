@@ -76,6 +76,19 @@ disabled. The runner reads structured output and receipts from the result
 object. When Claude returns an event array, it uses the last `result` event and
 saves the whole array next to the normalized result for inspection.
 
+The simulator may assert only the supplied task and disclosures. It must not
+turn a member suggestion into a user decision or invent an approval. After
+each case, one separate Fable check compares all delivered simulator messages
+with those sources. Its verdict and usage are saved with the grading receipts.
+Unsent `done=true` messages remain in the call archive and are excluded from
+that check.
+
+A fidelity finding sets `simulator_unfaithful: true` on the result without
+discarding its grade or stopping delivery. If the check cannot complete, the
+result has a null flag and an `unverified` fidelity status. The case remains
+available for review. This model check can make mistakes, so inspect its
+reasons before attributing a flagged result to the simulator.
+
 Check the pinned Claude's interactive startup without credentials or model calls:
 
 ```sh
@@ -116,7 +129,9 @@ node scripts/evals/crew-memory/check-model-calls.mjs "$CREW_EVAL_FLOW/_state.jso
 This drives a complete case through the real member, simulator, and judge
 binaries against a local provider mock. It checks native array and object
 results, both judge passes, receipt validation, fresh controller directories,
-and removal of those directories after completed calls. A synthetic personal
+and removal of those directories after completed calls. It also verifies that
+flagged and unverified fidelity checks retain the outcome, and that the summary
+shows all scores beside scores from cases checked as faithful. A synthetic personal
 configuration supplies canaries, and the check fails if any canary reaches the
 controller requests.
 The script prints its receipt path under `private_root/print-proof-*`.
@@ -188,6 +203,20 @@ before Claude writes that final tool call to the transcript, so the result's
 `trace_limitations` field records this gap. The filed letter and output files
 remain the grading evidence.
 
+For a separately approved use-only pilot, record the user's approval under
+`approvals.use_pilot` in the reviewed state. This stage selects every use case
+in the case pack, including controls, with one repetition. It runs no write or
+twelve-day case:
+
+```sh
+node scripts/evals/crew-memory/run.mjs \
+  --flow "$CREW_EVAL_FLOW" --variant baseline \
+  --model claude-opus-5-5 --reps 1 --pilot-stage use
+```
+
+The ordinary `units` stage still selects the one marked pilot case per unit.
+Approval of one stage does not approve another stage or a changed case pack.
+
 Set `controller_handoff_timeout_ms` from the `handoffs` timings in a reviewed
 `audit-lifecycle/real-lifecycle-proof.json`.
 It bounds the local controller's acceptance and delivery of turns while the
@@ -251,6 +280,11 @@ node /path/to/seed-artifacts/build-report-lite.mjs "$CREW_EVAL_FLOW"
 Open `report.html` for cases and traces. Read `measurements.md` for per-unit
 intervals, headroom, judge disagreement, and costs. Pilot judge scores are
 exploratory until the user has rated the same artifacts.
+The measurements show the all-case pass rate and the pass rate restricted to
+cases checked as simulator-faithful. Flagged cases and cases without a successful
+fidelity check, including older runs, are excluded from the latter rate. Both
+counts are shown. Known spend includes flagged and unverified cases and the
+fidelity calls. The static viewer retains the original all-case grades.
 
 Before setting `pilot` to `false`, record user approval of the case list,
 grading, and measured budget under `approvals.cases`, `approvals.grading`, and

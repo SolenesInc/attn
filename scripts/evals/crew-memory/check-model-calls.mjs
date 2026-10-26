@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { startStubModel } from '../../../app/scripts/real-app-harness/stubModel.mjs';
 import { DEMO_ANTHROPIC_KEY } from '../../../app/scripts/demo-harness/agentHome.mjs';
 import { runCase, gradeCase } from './eval.mjs';
@@ -64,6 +65,8 @@ const ctx = { flow: root, variant: 'baseline', model: config.member_model, rep: 
 const artifact = join(root, 'baseline', 'out', `${input.id}_rep0_${ctx.attempt}`);
 const requests = [];
 let memberCalls = 0, simulatorCalls = 0;
+let fidelityMode = 'faithful', judgeYes = true;
+const fidelityAbort = new AbortController();
 const stub = await startStubModel(request => {
   requests.push({ model: request.model, tools: request.tools, body: request.body });
   save(join(root, `provider-request-${requests.length}.json`), request.body);
@@ -94,9 +97,18 @@ const stub = await startStubModel(request => {
       } } };
     }
     assert.equal(request.model, config.judge_model);
+    if (prompt.turns) {
+      assert.equal(prompt.turns.length, 1);
+      assert.equal(prompt.turns[0].message, input.days[0].task);
+      if (fidelityMode === 'abort') fidelityAbort.abort(Object.assign(new Error('synthetic shared case deadline during post-case fidelity'), { failure_class: 'timeout' }));
+      return { tool: { id: `fidelity-${requests.length}`, name: 'StructuredOutput', args: {
+        violations: fidelityMode === 'faithful' ? [] : [{ turn: fidelityMode === 'unfaithful' ? 0 : -1,
+          assertion: 'Synthetic unsupported assertion.', reason: 'Synthetic fidelity verdict for protocol verification.' }],
+      } } };
+    }
     assert.equal(prompt.candidate.files['answer.json'], '{"directory":"provider-mock-answer"}\n');
     return { tool: { id: `judge-${requests.length}`, name: 'StructuredOutput', args: {
-      verdicts: prompt.claims.map(claim => ({ id: claim.id, yes: true, reason: 'Synthetic provider response for protocol verification.' })),
+      verdicts: prompt.claims.map(claim => ({ id: claim.id, yes: judgeYes, reason: 'Synthetic provider response for protocol verification.' })),
     } } };
   } catch (error) {
     abort.abort(error);
@@ -126,8 +138,10 @@ try {
   assert.equal(memberCalls, 5);
   assert.equal(simulatorCalls, 2);
   assert.equal(grade.meta.judge_passes.length, 2);
+  assert.equal(grade.meta.simulator_fidelity.status, 'faithful');
+  assert.ok(grade.meta.simulator_fidelity_cost_usd > 0);
   const arrayCalls = [...ctx.calls];
-  assert.equal(arrayCalls.length, 4);
+  assert.equal(arrayCalls.length, 5);
   for (const call of arrayCalls) {
     assert.ok(Array.isArray(call.events), 'verbose native print must produce an event array');
     assert.equal(call.response.type, 'result');
@@ -137,16 +151,53 @@ try {
     assert.equal(init.skills?.length ?? 0, 0);
     assert.ok(!(init.slash_commands ?? []).includes('personal-command-canary'));
   }
-  const objectCtx = { ...ctx, calls: [], state: { ...ctx.state, claude_binary: objectBinary } };
+  const simulatorReceipts = arrayCalls.filter(call => call.purpose === 'simulator');
+  const objectCtx = { ...ctx, calls: [...simulatorReceipts], state: { ...ctx.state, claude_binary: objectBinary } };
   await gradeCase(input, run, null, objectCtx);
-  assert.equal(objectCtx.calls.length, 2);
-  for (const call of objectCtx.calls) {
+  const objectCalls = objectCtx.calls.slice(simulatorReceipts.length);
+  assert.equal(objectCalls.length, 3);
+  for (const call of objectCalls) {
     assert.equal(call.events, undefined);
     assert.equal(call.response.type, 'result');
     assert.ok(call.response.total_cost_usd > 0);
   }
+  fidelityMode = 'unfaithful';
+  judgeYes = false;
+  const flaggedCtx = { ...objectCtx, calls: [...simulatorReceipts] };
+  const flaggedGrade = await gradeCase(input, run, null, flaggedCtx);
+  assert.equal(flaggedGrade.grade.pass, 0);
+  assert.equal(flaggedGrade.meta.simulator_fidelity.status, 'unfaithful');
+  fidelityMode = 'unknown-turn';
+  judgeYes = true;
+  const uncheckedCtx = { ...objectCtx, calls: [...simulatorReceipts] };
+  const uncheckedGrade = await gradeCase(input, run, null, uncheckedCtx);
+  assert.equal(uncheckedGrade.grade.pass, 1);
+  assert.equal(uncheckedGrade.meta.simulator_fidelity.status, 'unverified');
+  fidelityMode = 'abort';
+  const abortedCtx = { ...objectCtx, calls: [...simulatorReceipts], signal: AbortSignal.any([ctx.signal, fidelityAbort.signal]) };
+  const abortedGrade = await gradeCase(input, run, null, abortedCtx);
+  assert.equal(abortedGrade.grade.pass, 1);
+  assert.equal(abortedGrade.meta.simulator_fidelity.status, 'unverified');
+  assert.match(abortedGrade.meta.simulator_fidelity.error, /shared case deadline/);
+  assert.equal(json(join(root, run.artifact_dir, 'grading.json')).simulator_fidelity.status, 'unverified');
+  const summaryFlow = join(root, 'summary-proof');
+  mkdirSync(join(summaryFlow, 'baseline'), { recursive: true });
+  writeFileSync(join(summaryFlow, 'baseline', 'results.jsonl'), [grade, flaggedGrade, uncheckedGrade].map((value, index) => JSON.stringify({
+    prompt_id: `synthetic-fidelity-${index}`, tags: ['use'], status: 'ok', grade: value.grade, evaluation: value.meta,
+    member_cost_usd: run.member_cost_usd, wall_clock_s: 1,
+  })).join('\n') + '\n');
+  execFileSync(process.execPath, [resolve('scripts/evals/crew-memory/summarize.mjs'), summaryFlow]);
+  const summary = json(join(summaryFlow, 'measurements.json')).find(item => item.unit === 'use');
+  assert.equal(summary.cases, 3);
+  assert.equal(summary.score, 2 / 3);
+  assert.equal(summary.simulator_unfaithful_reps, 1);
+  assert.equal(summary.simulator_unchecked_reps, 1);
+  assert.equal(summary.simulator_faithful.cases, 1);
+  assert.equal(summary.simulator_faithful.score, 1);
+  assert.equal(summary.spend_incomplete, true);
+  assert.ok(summary.known_spend_usd > 0);
   const controllerLaunches = readFileSync(controllerLaunchesPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-  assert.equal(controllerLaunches.length, arrayCalls.length + objectCtx.calls.length);
+  assert.equal(controllerLaunches.length, requests.filter(request => request.model !== config.member_model).length);
   assert.equal(new Set(controllerLaunches.map(launch => launch.cwd)).size, controllerLaunches.length);
   for (const launch of controllerLaunches) {
     assert.ok(launch.cwd.startsWith(join(config.private_root, 'controller-')));
@@ -159,7 +210,8 @@ try {
   assert.ok(controllerRequests.every(request => !JSON.stringify(request.body).includes('PERSONAL_COMMAND_CANARY')));
   const receipt = { at: new Date().toISOString(), paid_calls: 0, provider_mock: true,
     claude_binary: config.claude_binary, real_member_calls: memberCalls, real_simulator_calls: simulatorCalls, memberLaunches,
-    array_calls: arrayCalls, object_calls: objectCtx.calls, controllerLaunches,
+    array_calls: arrayCalls, object_calls: objectCalls, controllerLaunches,
+    fidelity_flagged: flaggedGrade.meta, fidelity_unverified: uncheckedGrade.meta, fidelity_aborted: abortedGrade.meta, summary,
     personal_context_canary_absent: true, personal_commands_absent: true,
     member_permission_mode: 'bypassPermissions for deterministic mock tools; localhost/filesystem sandbox remains active',
     closure: 'real member Bash tool files a synthetic letter with attn handoff --sleep',
