@@ -2615,6 +2615,9 @@ type CrewHandoffMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Day corresponds to the JSON schema field "day".
+	Day *string `json:"day,omitempty,omitzero"`
+
 	// Note corresponds to the JSON schema field "note".
 	Note string `json:"note"`
 
@@ -2626,6 +2629,9 @@ type CrewHandoffMessage struct {
 }
 
 type CrewHandoffResult struct {
+	// DayID corresponds to the JSON schema field "day_id".
+	DayID *string `json:"day_id,omitempty,omitzero"`
+
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
@@ -2637,6 +2643,9 @@ type CrewHandoffResult struct {
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
+
+	// PendingSummaries corresponds to the JSON schema field "pending_summaries".
+	PendingSummaries *int `json:"pending_summaries,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
@@ -2749,6 +2758,169 @@ type CrewMember struct {
 	Revision int `json:"revision"`
 }
 
+type CrewMemoryAddMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type CrewMemoryAddResult struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+}
+
+type CrewMemoryAnswer struct {
+	// Range corresponds to the JSON schema field "range".
+	Range string `json:"range"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type CrewMemoryChangeResult struct {
+	// Imported corresponds to the JSON schema field "imported".
+	Imported *int `json:"imported,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// PendingSummaries corresponds to the JSON schema field "pending_summaries".
+	PendingSummaries int `json:"pending_summaries"`
+}
+
+type CrewMemoryForgetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
+type CrewMemoryImportLine struct {
+	// Letter corresponds to the JSON schema field "letter".
+	Letter string `json:"letter"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type CrewMemoryImportMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Lines corresponds to the JSON schema field "lines".
+	Lines []CrewMemoryImportLine `json:"lines"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
+type CrewMemoryReadResult struct {
+	// Letter corresponds to the JSON schema field "letter".
+	Letter *string `json:"letter,omitempty,omitzero"`
+
+	// Lines corresponds to the JSON schema field "lines".
+	Lines []string `json:"lines"`
+
+	// Matches corresponds to the JSON schema field "matches".
+	Matches *int `json:"matches,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
+type CrewMemoryRecallMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *string `json:"member,omitempty,omitzero"`
+
+	// Pattern corresponds to the JSON schema field "pattern".
+	Pattern string `json:"pattern"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
+type CrewMemoryRewriteMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Range corresponds to the JSON schema field "range".
+	Range string `json:"range"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
+type CrewMemorySummarizeMessage struct {
+	// Answers corresponds to the JSON schema field "answers".
+	Answers []CrewMemoryAnswer `json:"answers,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+}
+
+type CrewMemorySummarizeResult struct {
+	// Blocks corresponds to the JSON schema field "blocks".
+	Blocks []CrewMemorySummaryBlock `json:"blocks"`
+
+	// Handoff corresponds to the JSON schema field "handoff".
+	Handoff *CrewHandoffResult `json:"handoff,omitempty,omitzero"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// PendingSummaries corresponds to the JSON schema field "pending_summaries".
+	PendingSummaries int `json:"pending_summaries"`
+}
+
+type CrewMemorySummaryBlock struct {
+	// Lines corresponds to the JSON schema field "lines".
+	Lines []string `json:"lines"`
+
+	// Range corresponds to the JSON schema field "range".
+	Range string `json:"range"`
+}
+
+type CrewMemoryZoomMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member *string `json:"member,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+}
+
 type CrewPrimeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -2766,6 +2938,9 @@ type CrewPrimeResult struct {
 
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
+
+	// MemoryEnabled corresponds to the JSON schema field "memory_enabled".
+	MemoryEnabled *bool `json:"memory_enabled,omitempty,omitzero"`
 
 	// PrimingBytes corresponds to the JSON schema field "priming_bytes".
 	PrimingBytes int `json:"priming_bytes"`
@@ -8384,6 +8559,22 @@ type Response struct {
 
 	// CrewListResult corresponds to the JSON schema field "crew_list_result".
 	CrewListResult *CrewListResult `json:"crew_list_result,omitempty,omitzero"`
+
+	// CrewMemoryAddResult corresponds to the JSON schema field
+	// "crew_memory_add_result".
+	CrewMemoryAddResult *CrewMemoryAddResult `json:"crew_memory_add_result,omitempty,omitzero"`
+
+	// CrewMemoryChangeResult corresponds to the JSON schema field
+	// "crew_memory_change_result".
+	CrewMemoryChangeResult *CrewMemoryChangeResult `json:"crew_memory_change_result,omitempty,omitzero"`
+
+	// CrewMemoryReadResult corresponds to the JSON schema field
+	// "crew_memory_read_result".
+	CrewMemoryReadResult *CrewMemoryReadResult `json:"crew_memory_read_result,omitempty,omitzero"`
+
+	// CrewMemorySummarizeResult corresponds to the JSON schema field
+	// "crew_memory_summarize_result".
+	CrewMemorySummarizeResult *CrewMemorySummarizeResult `json:"crew_memory_summarize_result,omitempty,omitzero"`
 
 	// CrewPrimeResult corresponds to the JSON schema field "crew_prime_result".
 	CrewPrimeResult *CrewPrimeResult `json:"crew_prime_result,omitempty,omitzero"`

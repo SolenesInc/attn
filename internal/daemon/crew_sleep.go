@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-var crewRequestedSleepPrompt = prompts.RenderText("crew", "sleep-requested", prompts.Values{})
-
 func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
 	result, err := d.crewSleep(strings.TrimSpace(msg.Member))
 	if err != nil {
@@ -75,7 +73,8 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 		}, nil
 	}
 
-	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: crewRequestedSleepPrompt})
+	prompt := prompts.RenderText("crew", "sleep-requested", prompts.Values{"crew_memory_enabled": fmt.Sprint(d.crewMemoryEnabled())})
+	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), err)
 	}

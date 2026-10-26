@@ -17,7 +17,17 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harne
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
 	if !parseBooleanSetting(d.daemonSetting(SettingDirectAgentLaunchEnabled)) {
+		_, bound := d.crewMemberForSession(sessionID)
+		memoryEnabled := bound && d.crewMemoryEnabled()
+		if memoryEnabled {
+			if _, _, err := d.prepareLaunchContext(sessionID, isChief, false); err != nil {
+				return err
+			}
+		}
 		prepareLauncherLaunch(driver, opts, initialPrompt)
+		if memoryEnabled {
+			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMORY_ENABLED=1")
+		}
 		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", parseBooleanSetting(d.daemonSetting(SettingQuickCaptureEnabled))))
 		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_VENT_ENABLED=%t", d.launchedWithVent(sessionID)))
 		return nil
@@ -43,6 +53,7 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harne
 		WrapperPath:  launchenv.ActiveAttnExecutable(),
 		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks, Vent: launch.Vent,
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
+		CrewMemoryEnabled:      launch.CrewMemoryEnabled,
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		QuickCapture:           launch.QuickCapture,
 		CodexRemote:            opts.CodexRemote,

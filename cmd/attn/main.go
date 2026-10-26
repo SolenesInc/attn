@@ -187,6 +187,9 @@ func main() {
 	case "handoff":
 		maybePrintInstanceBanner()
 		runHandoff(os.Args[2:])
+	case "memory":
+		maybePrintInstanceBanner()
+		runMemory(os.Args[2:])
 	case "doc":
 		maybePrintInstanceBanner()
 		runDoc()
@@ -659,6 +662,7 @@ commands:
   seed <command>                    the garden: plant, tend, harvest, note, ls
   crew <command>                    the crew roster: who exists, who is awake
   handoff -m "<letter>"             file this crew member's letter; the day turns over
+  memory <verb>                    add, search, zoom, summarize or repair crew memory
   doc <command>                     document store: collections, documents, live queries
   vision-check <image> <question>   answer a question about an image (single LLM call)
   daemon [ensure|stop]              run the daemon, ensure it is running, or stop it

@@ -127,6 +127,9 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 
 func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 	var env []string
+	if opts.CrewMemoryEnabled {
+		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
+	}
 	if strings.TrimSpace(opts.NotebookRoot) != "" {
 		env = append(env, "ATTN_CHIEF_GUIDANCE=append_system_prompt")
 	} else {

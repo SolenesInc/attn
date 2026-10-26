@@ -137,7 +137,12 @@ packet                  an epic template
 ```text
 crew member             an agent with a permanent identity and memory
 ├─ charter (1)          who the member is and what they live for
-├─ member home (1)      the folder that holds the charter and the letters
+├─ member home (1)      the folder with the charter, the letters and the memory
+├─ memory (1)           what the member remembers from past days
+│  ├─ entry (0..n)      one line the member remembers
+│  │  └─ day line       the entry that closes a day; it links its letter and
+│  │                    session
+│  └─ summary (0..n)    one line that stands for many entries
 ├─ launch desktop (1)   the desktop where their sessions start
 ├─ letter (0..n)        what one of the member's sessions leaves for their
 │                       next sessions; like a shift handoff

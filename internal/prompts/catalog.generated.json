@@ -1152,6 +1152,32 @@
                             "description": "Home dir"
                           }
                         }
+                      },
+                      {
+                        "name": "home_ownership",
+                        "node": {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "crew_memory_enabled",
+                              "kind": "flag",
+                              "description": "Experimental crew memory is enabled."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "crew.home-memory",
+                              "source": "content/crew/home-memory.md"
+                            },
+                            {
+                              "kind": "text",
+                              "id": "crew.home-files",
+                              "source": "content/crew/home-files.md"
+                            }
+                          ]
+                        }
                       }
                     ]
                   },
@@ -1307,6 +1333,24 @@
                             "kind": "when",
                             "condition": {
                               "field": {
+                                "name": "crew_memory_enabled",
+                                "kind": "flag",
+                                "description": "Experimental crew memory is enabled."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.letter-memory",
+                                "source": "content/crew/letter-memory.md"
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
                                 "name": "older_handoffs",
                                 "kind": "text",
                                 "description": "Older handoffs"
@@ -1403,31 +1447,140 @@
                 ]
               },
               {
-                "kind": "text",
-                "id": "crew.closure",
-                "source": "content/crew/closure.md",
-                "bindings": [
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "crew_memory_enabled",
+                    "kind": "flag",
+                    "description": "Experimental crew memory is enabled."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
                   {
-                    "name": "handoffs_dirname",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "handoffs_dirname",
+                    "kind": "compose",
+                    "children": [
+                      {
                         "kind": "text",
-                        "description": "Handoffs dirname"
+                        "id": "crew.memory",
+                        "source": "content/crew/memory.md",
+                        "bindings": [
+                          {
+                            "name": "memory_view",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "memory_view",
+                                "kind": "text",
+                                "description": "Wake view, recent entries in full and older ones as summaries."
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "import_letters",
+                            "kind": "flag",
+                            "description": "The member has letters and no memory entries yet."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.memory-import",
+                            "source": "content/crew/memory-import.md",
+                            "bindings": [
+                              {
+                                "name": "handoffs_dir",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "handoffs_dir",
+                                    "kind": "text",
+                                    "description": "Handoffs dir"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
                       }
-                    }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "crew_memory_enabled",
+                    "kind": "flag",
+                    "description": "Experimental crew memory is enabled."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "crew.closure-memory",
+                    "source": "content/crew/closure-memory.md",
+                    "bindings": [
+                      {
+                        "name": "handoffs_dirname",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "handoffs_dirname",
+                            "kind": "text",
+                            "description": "Handoffs dirname"
+                          }
+                        }
+                      },
+                      {
+                        "name": "display_name",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "display_name",
+                            "kind": "text",
+                            "description": "Display name"
+                          }
+                        }
+                      }
+                    ]
                   },
                   {
-                    "name": "display_name",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                    "kind": "text",
+                    "id": "crew.closure",
+                    "source": "content/crew/closure.md",
+                    "bindings": [
+                      {
+                        "name": "handoffs_dirname",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "handoffs_dirname",
+                            "kind": "text",
+                            "description": "Handoffs dirname"
+                          }
+                        }
+                      },
+                      {
                         "name": "display_name",
-                        "kind": "text",
-                        "description": "Display name"
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "display_name",
+                            "kind": "text",
+                            "description": "Display name"
+                          }
+                        }
                       }
-                    }
+                    ]
                   }
                 ]
               }
@@ -1459,9 +1612,27 @@
           "delivery": "user_message",
           "description": "crew_sleep.go: user requested closure.",
           "body": {
-            "kind": "text",
-            "id": "crew.sleep-requested",
-            "source": "content/crew/sleep-requested.md"
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "crew_memory_enabled",
+                "kind": "flag",
+                "description": "Experimental crew memory is enabled."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "crew.sleep-requested-memory",
+                "source": "content/crew/sleep-requested-memory.md"
+              },
+              {
+                "kind": "text",
+                "id": "crew.sleep-requested",
+                "source": "content/crew/sleep-requested.md"
+              }
+            ]
           }
         },
         {
@@ -1479,9 +1650,27 @@
           "delivery": "user_message",
           "description": "crew_lifecycle.go: close after the user has been away.",
           "body": {
-            "kind": "text",
-            "id": "crew.sleep-away",
-            "source": "content/crew/sleep-away.md"
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "crew_memory_enabled",
+                "kind": "flag",
+                "description": "Experimental crew memory is enabled."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "crew.sleep-away-memory",
+                "source": "content/crew/sleep-away-memory.md"
+              },
+              {
+                "kind": "text",
+                "id": "crew.sleep-away",
+                "source": "content/crew/sleep-away.md"
+              }
+            ]
           }
         }
       ]
@@ -5157,5 +5346,5 @@
       ]
     }
   ],
-  "definitions_hash": "2e9bc1de70f6079ab717c0c0829a16730a3a45a3463fc25484c6f5d169a8d021"
+  "definitions_hash": "4f5e2ec6f6f97d3f090b96eef8e7874af5bf982d021d8579b527fe64ebb6def7"
 }
