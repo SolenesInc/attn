@@ -50,10 +50,7 @@ func outposts(args []string) error {
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	conn.SetReadLimit(-1)
-	if err := sendClientHello(ctx, conn); err != nil {
-		return err
-	}
-	_, data, err := conn.Read(ctx)
+	data, err := hello(ctx, conn)
 	if err != nil {
 		return err
 	}

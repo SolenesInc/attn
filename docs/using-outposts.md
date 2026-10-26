@@ -22,8 +22,13 @@ make build-linux-amd64 OUTPUT=/tmp/attn-outpost   # or build-linux-arm64
 
 On the outpost:
 
-1. Copy `/tmp/attn-outpost` to `~/.local/bin/attn` and run it as a systemd
-   user service:
+1. Copy `/tmp/attn-outpost` from the Mac to the outpost's `/tmp` (for
+   example `scp /tmp/attn-outpost ai-sandbox:/tmp/`). Then install it as
+   `~/.local/bin/attn` and run it as a systemd user service:
+
+   ```sh
+   install -D /tmp/attn-outpost ~/.local/bin/attn
+   ```
 
    ```ini
    # ~/.config/systemd/user/attn.service
@@ -32,6 +37,8 @@ On the outpost:
 
    [Service]
    ExecStart=%h/.local/bin/attn daemon
+   Restart=on-failure
+   KillMode=process
 
    [Install]
    WantedBy=default.target
@@ -41,6 +48,12 @@ On the outpost:
    systemctl --user enable --now attn.service
    loginctl enable-linger   # keep it running when you log out
    ```
+
+   `KillMode=process` keeps your shells running when the daemon stops or
+   restarts. Without it, systemd ends every shell along with the daemon.
+   `Restart=on-failure` starts the daemon again after a crash, and it picks
+   up the shells that kept running. To stop the daemon and its shells
+   together, run `systemctl --user kill attn.service`.
 
 2. Add the public key your home's ssh-agent holds (`ssh-add -L` on the Mac) to
    `~/.ssh/authorized_keys`. attn skips lines with options such as
@@ -60,8 +73,14 @@ outpost by name and address in Settings → Outposts.
 
 The first connection pairs them, with no prompt. The home remembers the
 outpost's identity, and the outpost accepts only this home from then on.
-Their identities live in each attn's data folder, so keep that folder when
-you update the binary.
+
+To update, install the new home build on the Mac and build the outpost
+binary again from the same checkout. Copy it to the outpost's `/tmp`, rerun
+the `install` command there and run `systemctl --user restart attn.service`.
+Keep each attn's data folder, because their identities live there. Use
+`install`, not `cp`: `cp` fails with "Text file busy" while attn runs from
+the binary, and with `KillMode=process` it keeps running for as long as your
+shells do.
 
 ## Open a shell on an outpost
 
@@ -167,4 +186,9 @@ time.
 
 `scripts/verify-outposts.py` runs two isolated attns on one machine, pairs
 them, freezes the outpost and checks that it goes stalled, lost and back to
-connected. Run it with `--help` for its arguments.
+connected. `scripts/verify-outpost-systemd.py` runs on a Linux box with
+systemd. It starts the outpost under the unit from this page and checks that
+two shells keep their process, screen and state through
+`systemctl --user restart`, `attn daemon stop` followed by
+`systemctl --user start`, a daemon crash, and an update to another build.
+Run either with `--help` for its arguments.
