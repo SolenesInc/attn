@@ -24,6 +24,7 @@ type Placement uint8
 
 const (
 	WhenPromptReady Placement = iota
+	WhenWorkingOrPromptReady
 	AtTurnBoundary
 )
 
@@ -196,8 +197,14 @@ func (m *Monitor) ResetInput() {
 	}
 	m.FenceInput()
 	m.mu.Lock()
-	m.input = &lane{mu: &m.mu, monitor: m, stopped: m.registry.closed.Load()}
+	m.input = m.freshLaneLocked()
 	m.mu.Unlock()
+}
+
+func (m *Monitor) freshLaneLocked() *lane {
+	l := &lane{mu: &m.mu, monitor: m, stopped: m.registry.closed.Load()}
+	l.observePhaseLocked(m.state.State)
+	return l
 }
 
 func (l *lane) armRetryLocked(delivery Delivery, err error) {
@@ -353,8 +360,12 @@ func allowedForPhase(placement Placement, state protocol.SessionState) error {
 	if state == protocol.SessionStatePendingApproval {
 		return ErrBlockedByApproval
 	}
-	if placement == WhenPromptReady && state != protocol.SessionStateIdle && state != protocol.SessionStateWaitingInput {
+	promptReady := state == protocol.SessionStateIdle || state == protocol.SessionStateWaitingInput
+	if placement == WhenPromptReady && !promptReady {
 		return fmt.Errorf("session input requires a prompt-ready session, got %s", state)
+	}
+	if placement == WhenWorkingOrPromptReady && !promptReady && state != protocol.SessionStateWorking {
+		return fmt.Errorf("session input requires a working or prompt-ready session, got %s", state)
 	}
 	return nil
 }

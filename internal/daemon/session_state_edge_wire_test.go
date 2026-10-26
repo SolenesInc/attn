@@ -153,8 +153,8 @@ func TestAnApprovalTheReviewerSettlesInsideTheDwellNeverReachesTheApp(t *testing
 	})
 }
 
-func TestACodexQuestionSurfacesAtOnceDespiteItsReviewer(t *testing.T) {
-	for _, claim := range []string{pty.ProgramBlocked, pty.ProgramBlockedQuestion, pty.ProgramBlockedAuth} {
+func TestWhatCodexShowsTheUserSurfacesAtOnceDespiteItsReviewer(t *testing.T) {
+	for _, claim := range []string{pty.ProgramBlocked, pty.ProgramBlockedQuestion, pty.ProgramBlockedAuth, pty.ProgramBlockedPermission} {
 		t.Run(claim, func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
 				app, cli := w.App(), w.Client()
@@ -170,6 +170,29 @@ func TestACodexQuestionSurfacesAtOnceDespiteItsReviewer(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestAnApprovalTheReviewerHandsToTheUserSurfacesWhenCodexShowsIt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		codex := guardedCodexAtWork(t, w, app, cli)
+
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal(codex)), protocol.StatePendingApproval); err != nil {
+			t.Fatalf("permission request: %v", err)
+		}
+		w.advance(10 * time.Second)
+		if s := queriedSession(t, cli, codex); s.State != protocol.SessionStateWorking {
+			t.Fatalf("while the reviewer decides the approval already shows as %s", s.State)
+		}
+
+		shown := time.Now()
+		w.terminal(codex).ProgramStatus(pty.ProgramBlockedPermission)
+		w.advance(0)
+		surfaced := queriedSession(t, cli, codex)
+		if surfaced.State != protocol.SessionStatePendingApproval || !stateSince(t, surfaced).Equal(shown) {
+			t.Fatalf("once Codex showed the approval the session reads %s since %s, want pending_approval at once, %s", surfaced.State, surfaced.StateSince, shown)
+		}
+	})
 }
 
 func TestHooksThatAgreeWithTheSessionStateBroadcastNothing(t *testing.T) {

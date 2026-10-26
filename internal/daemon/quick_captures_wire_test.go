@@ -375,6 +375,29 @@ func TestQuickCapturesWakeAMemberWithoutSpendingItsWakeLimit(t *testing.T) {
 	})
 }
 
+func TestAWokenMemberIsTypedItsQuickCaptureMidTurnAndRungAtItsFirstPrompt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		app, cli := w.TrustedApp(), w.Client()
+		setSetting(t, app, "crew.heartbeat_enabled", "false")
+		setSetting(t, app, "crew.autosleep_enabled", "false")
+		registerSessions(t, w, cli, "sender")
+		sent := sendAgentMessage(t, cli, "sender", "trellis", "the build is green")
+		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("trellis")}
+		capture := sendQuickCapture(t, app, mailbox, "look at the flaky test")
+
+		day := w.bootBubbleClaude(t, string(sent.TargetSessionID))
+		if got := day.promptsContaining(capture.Content); got != 1 || day.promptsContaining(inboxDoorbell) != 0 {
+			t.Fatalf("the member working on its wake was typed %q, want the quick capture alone", day.prompts())
+		}
+		day.reply("Ready. <!-- attn:state=idle -->")
+		if got := day.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("the woken member's first prompt rang %d times, want the wake's doorbell once: %q", got, day.prompts())
+		}
+	})
+}
+
 func TestAQuickCaptureOutlastsFailedWakesUntilTheMemberIsUp(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")

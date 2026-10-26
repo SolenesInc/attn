@@ -105,9 +105,9 @@ A user message is text the user wrote or picked in attn: an answer to an ask,
 or a Quick Capture. It stands for the user typing into the agent, so a ring
 types it into the agent's conversation as the user's message (see
 [Rings](#rings)), and harness auto-mode reviewers count an approval in it as
-the user's. Neither the 5 minutes between rings nor a crew member's wake
-limit holds it back, and `attn agent inbox` never returns it. Each one is its
-own item.
+the user's. It does not wait for the agent to finish its turn, for the 5
+minutes between rings or for a crew member's wake limit, and `attn agent
+inbox` never returns it. Each one is its own item.
 
 - An answer goes to the ask's address: the asking session or its mailbox, or
   the seed when the ask is about one, so it reaches whoever tends the seed by
@@ -168,15 +168,19 @@ Once attn has placed the ring in the session, its user messages are read by
 that session. attn never checks that the agent acted on them; a ring lost to
 an open menu in the harness stays lost.
 
-- attn rings only when the agent is at a safe prompt. While the agent works or
-  needs approval, or within 30 seconds of the user's last keystroke in its
-  terminal, the ring waits. Waiting costs no attempt.
+- attn types user messages while the agent works or is at a safe prompt, and
+  ends a ring with 📬 only at a safe prompt. A ring placed while the agent
+  works types its user messages alone; the 📬 for the other items waits for
+  the prompt.
+- attn goes by the agent's state and never reads its screen. Nothing is typed
+  while the agent needs approval, launches or is in a state attn cannot tell,
+  or within 30 seconds of the user's last keystroke in its terminal. Waiting
+  costs no attempt.
 - A shell never gets a ring.
 - After a ring that ends with 📬, the address has an outstanding ring. It ends
   when the agent reads, or 5 minutes after the ring. New items do not ring while it lasts.
   They wait for the read or the next ring. A user message does not wait: it
-  is typed at the next safe prompt, without the 📬 until the outstanding ring
-  ends.
+  is typed right away, without the 📬 until the outstanding ring ends.
 - After 5 minutes with unread items, attn rings again.
 - Each ring that ends with 📬 is one attempt for every unread item it covers.
   An item gets at most 3 attempts. Then attn stops ringing for it. The item
@@ -214,7 +218,8 @@ When a crew member's address has unread items and the member is asleep, attn
 wakes the member before it rings.
 
 - The wake is one attempt for every unread item. The new session gets the ring
-  when it first reaches a safe prompt. That ring is part of the same attempt.
+  when it first reaches a safe prompt, and its user messages as soon as it
+  works. That ring is part of the same attempt.
   Items that arrive during the wake share it.
 - A member has at most one inbox wake at a time.
 - An inbox wake counts against the member's wake limit: 8 wakes per 12 hours,
@@ -288,6 +293,11 @@ rings at 10:40, 10:45 and 10:50, and each ring covers both messages.
 rings during the work. When the agent reaches a safe prompt, one ring covers
 all 30, and `attn agent inbox` returns the oldest 20. The other 10 ring again
 at the next safe prompt.
+
+**An answer reaches a busy agent.** An agent asks the user, keeps working, and
+gets two peer messages. The user answers. attn types the answer into the agent
+at once, without the 📬. When the agent reaches a safe prompt, one ring covers
+the two messages.
 
 **The tender changes.** A seed has an unread update for its tender, and then
 another session tends it. attn withdraws the old tender's update, unless the

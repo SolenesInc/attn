@@ -419,14 +419,19 @@ func classifierVerdict(e evidence) (Resolution, bool) {
 
 func DwellFor(state protocol.SessionState, terminal TerminalEvidence, conversation ConversationEvidence, policy Policy) time.Duration {
 	e := evidence{terminal, conversation}
-	if state == protocol.SessionStatePendingApproval && e.ReviewerInLoop && !questionOpen(e) {
+	if state == protocol.SessionStatePendingApproval && e.ReviewerInLoop && !waitsOnUser(e) {
 		return policy.GuardianDwell
 	}
 	return 0
 }
 
-func questionOpen(e evidence) bool {
-	return e.ProgramStatus != nil && e.ProgramStatus.Claim == ClaimNeedsInput
+func waitsOnUser(e evidence) bool {
+	status := e.ProgramStatus
+	if status == nil {
+		return false
+	}
+	terminalShowsApproval := status.Source == SourceProgramStatus && status.Claim == ClaimApprovalPending
+	return status.Claim == ClaimNeedsInput || terminalShowsApproval
 }
 
 func supersededByBusy(o *Observation, e evidence) bool {

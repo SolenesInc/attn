@@ -1,0 +1,4 @@
+kind: fixed
+area: codex
+change: A Codex approval its auto-review hands to the user shows as needing approval as soon as Codex shows it, instead of a minute later.
+symptom: A Codex session with an approval overlay open read as working for up to 60 seconds, so the queue did not bring it to the user and attn could type an ask answer into the overlay.
