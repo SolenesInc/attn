@@ -1,0 +1,3 @@
+kind: internal
+area: notebook
+change: Preserve released Notebook changelog entries and remove obsolete browser checks.
