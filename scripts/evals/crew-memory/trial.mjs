@@ -9,6 +9,11 @@ export const json = path => JSON.parse(readFileSync(path, 'utf8'));
 export const save = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
 export const failure = (kind, message) => Object.assign(new Error(message), { failure_class: kind });
 const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
+const matchesInput = (text, prompt) => {
+  if (text.trim() === prompt.trim()) return true;
+  const paste = text.trim().match(/^<pasted_content id="([0-9a-f]{4})">\n([\s\S]*)\n<\/pasted_content id="\1">$/);
+  return paste?.[2].trim() === prompt.trim();
+};
 
 export function environment() {
   return Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -227,8 +232,8 @@ export class Trial extends EventEmitter {
       const after = exchange.cursor;
       const input = records.findIndex((record, index) => index >= after && record.type === 'user' &&
         (exchange.prompt === null || (typeof record.message?.content === 'string'
-          ? record.message.content.trim() === exchange.prompt.trim()
-          : record.message?.content?.some(part => part.type === 'text' && part.text.trim() === exchange.prompt.trim()))));
+          ? matchesInput(record.message.content, exchange.prompt)
+          : record.message?.content?.some(part => part.type === 'text' && matchesInput(part.text, exchange.prompt)))));
       const completion = input < 0 ? undefined : records.slice(input + 1).find(record => record.type === 'assistant' &&
         record.message?.id && !record.isApiErrorMessage && ['end_turn', 'stop_sequence'].includes(record.message.stop_reason));
       if (completion && !exchange.completion) {

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { closeSync, constants as FS, existsSync, fstatSync, ftruncateSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, constants as FS, existsSync, fstatSync, ftruncateSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as wait } from 'node:timers/promises';
-import { loadCases, runCase, gradeCase, perfFrom } from './eval.mjs';
+import { loadCases, runCase, gradeCase, recheckFidelity, perfFrom } from './eval.mjs';
 
 const WIN = process.platform === 'win32';
 const NOFOLLOW = WIN ? 0 : FS.O_NOFOLLOW;
@@ -83,6 +83,7 @@ function parseArgs(argv) {
     else if (k === '--pilot-stage') a.pilotStage = val(++i);
     else if (k === '--approve-harness') a.approveHarness = true;
     else if (k === '--check-harness') a.checkHarness = true;
+    else if (k === '--recheck-fidelity') a.recheckFidelity = true;
     else if (k === '-h' || k === '--help') { usage(); process.exit(0); }
     else { eprint(`unknown argument: ${k}`); usage(); process.exit(2); }
   }
@@ -97,7 +98,7 @@ function parseArgs(argv) {
   return a;
 }
 function usage() {
-  eprint('usage: node run.mjs --flow DIR --variant ID [--model ID] [--reps N] [--pilot-stage units|use|e2e] [--timeout-s N] [--check-harness|--approve-harness]');
+  eprint('usage: node run.mjs --flow DIR --variant ID [--model ID] [--reps N] [--pilot-stage units|use|e2e] [--timeout-s N] [--recheck-fidelity] [--check-harness|--approve-harness]');
 }
 
 function checkHarness(statePath, st, approve, check) {
@@ -210,9 +211,10 @@ async function main() {
 
   const resultsPath = join(vdir, 'results.jsonl');
   const done = new Set();
+  const completed = [];
   for (const ln of (readIfPresent(resultsPath) ?? '').split('\n')) {
     if (!ln.trim()) continue;
-    try { const r = JSON.parse(ln); done.add(`${r.prompt_id}\0${r.rep}`); } catch {}
+    try { const r = JSON.parse(ln); completed.push(r); done.add(`${r.prompt_id}\0${r.rep}`); } catch {}
   }
 
   const cases = await loadCases(ctx);
@@ -240,7 +242,7 @@ async function main() {
   const refDir = join(args.flow, 'baseline', 'ref');
   const tasks = [];
   for (const c of cases) for (let rep = 0; rep < args.reps; rep++) {
-    if (done.has(`${pathSafeId(c.id)}\0${rep}`)) continue;
+    if (args.recheckFidelity ? !done.has(`${pathSafeId(c.id)}\0${rep}`) : done.has(`${pathSafeId(c.id)}\0${rep}`)) continue;
     tasks.push({ c, rep });
   }
   eprint(`[${args.variant}] ${tasks.length} of ${cases.length * args.reps} (id,rep) to run`);
@@ -271,6 +273,15 @@ async function main() {
       const deadline = t0 + timeoutS * 1000;
       const appRetry = { count: 0 }, judgeRetry = { count: 0 };
       try {
+        if (args.recheckFidelity) {
+          const index = completed.findIndex(row => row.prompt_id === safeId && row.rep === rep);
+          completed[index] = await recheckFidelity(c, completed[index], attemptCtx);
+          const replacement = join(vdir, `results-recheck-${attemptCtx.attempt}.jsonl`);
+          writeFileNoFollow(replacement, completed.map(row => JSON.stringify(row)).join('\n') + '\n');
+          renameSync(replacement, resultsPath);
+          ok++;
+          continue;
+        }
         const { run, g, latency_s } = await (async () => {
           let tAttempt = t0;
           tAttempt = Date.now();
@@ -331,7 +342,7 @@ async function main() {
       } catch (e) {
         fail++;
         const problem = e?.failure_class === 'cleanup' ? e : controller.signal.aborted ? controller.signal.reason : e;
-        if (['cleanup', 'controller_handoff'].includes(e?.failure_class)) i = tasks.length;
+        if (e?.failure_class === 'cleanup') i = tasks.length;
         if (rowWritten) {
           eprint(`  [${args.variant}] ${c.id} rep${rep} scored, but a post-row write failed: ${e?.message || e}`);
           continue;

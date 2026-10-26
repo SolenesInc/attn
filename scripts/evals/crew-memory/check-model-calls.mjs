@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { startStubModel } from '../../../app/scripts/real-app-harness/stubModel.mjs';
 import { DEMO_ANTHROPIC_KEY } from '../../../app/scripts/demo-harness/agentHome.mjs';
-import { runCase, gradeCase } from './eval.mjs';
+import { runCase, gradeCase, recheckFidelity } from './eval.mjs';
 import { json, save } from './trial.mjs';
 
 for (const key of Object.keys(process.env)) {
@@ -41,6 +41,7 @@ const file = process.env.CLAUDE_CONFIG_DIR + '/.claude.json';
 const state = JSON.parse(fs.readFileSync(file));
 state.customApiKeyResponses = { approved: [${JSON.stringify(DEMO_ANTHROPIC_KEY.slice(-20))}], rejected: [] };
 state.bypassPermissionsModeAccepted = true;
+state.cachedGrowthBookFeatures = { tengu_virtual_pancake: true };
 fs.writeFileSync(file, JSON.stringify(state));
 const end = args.includes('--') ? args.indexOf('--') : args.length;
 const index = args.findIndex((arg, i) => i < end && arg === '--permission-mode');
@@ -57,6 +58,14 @@ process.execve(binary, [binary, ...args], process.env);
 };
 const arrayBinary = wrapper(true), objectBinary = wrapper(false);
 const input = json(config.cases_path).find(row => row.pilot && row.unit === 'use');
+input.days[0].task = [
+  'Please complete this local provider-mock task in your member home.',
+  'Write answer.json with the synthetic directory value supplied by the provider.',
+  'Keep the task confined to this disposable instance and leave the historical letters unchanged.',
+  'This multiline message reproduces an interactive paste; every line must reach the member unchanged.',
+  'The provider will supply the response and closure steps, so no external model service is needed.',
+  'When the file is ready, report that it exists and wait for the controller to close the day.',
+].join('\n\n');
 const abort = new AbortController();
 process.once('SIGINT', () => abort.abort(new Error('unpaid model-call proof interrupted')));
 const ctx = { flow: root, variant: 'baseline', model: config.member_model, rep: 0, attempt: Date.now(),
@@ -78,7 +87,9 @@ const stub = await startStubModel(request => {
       if (memberCalls === 1) return { tool: { id: 'read-charter', name: 'Read', args: { file_path: join(home, 'CHARTER.md') } } };
       if (memberCalls === 2) return { say: 'Ready for your local task.' };
       if (memberCalls === 3) {
-        assert.equal(request.prompt, input.days[0].task);
+        const content = request.body.messages.findLast(message => message.role === 'user').content;
+        const text = typeof content === 'string' ? content : content.filter(part => part.type === 'text').map(part => part.text).join('');
+        assert.ok(text.includes(input.days[0].task));
         return { tool: { id: 'write-answer', name: 'Write', args: { file_path: join(home, 'answer.json'), content: '{"directory":"provider-mock-answer"}\n' } } };
       }
       if (memberCalls === 4) return { say: 'The answer is in answer.json.' };
@@ -100,6 +111,7 @@ const stub = await startStubModel(request => {
     if (prompt.turns) {
       assert.equal(prompt.turns.length, 1);
       assert.equal(prompt.turns[0].message, input.days[0].task);
+      assert.equal(prompt.day_brief, input.day_brief);
       if (fidelityMode === 'abort') fidelityAbort.abort(Object.assign(new Error('synthetic shared case deadline during post-case fidelity'), { failure_class: 'timeout' }));
       return { tool: { id: `fidelity-${requests.length}`, name: 'StructuredOutput', args: {
         violations: fidelityMode === 'faithful' ? [] : [{ turn: fidelityMode === 'unfaithful' ? 0 : -1,
@@ -119,6 +131,7 @@ Object.assign(process.env, {
   ANTHROPIC_BASE_URL: stub.origin, ANTHROPIC_API_KEY: DEMO_ANTHROPIC_KEY,
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1',
   DISABLE_TELEMETRY: '1', DISABLE_ERROR_REPORTING: '1',
+  CLAUDE_CODE_GB_DISK_CACHE_WHEN_TELEMETRY_OFF: '1',
 });
 try {
   console.log(`unpaid full model-call proof pid=${process.pid}; provider=${stub.origin}; root=${root}`);
@@ -133,6 +146,8 @@ try {
   for (const file of nativeFiles) {
     const records = json(join(root, run.artifact_dir, file));
     assert.equal(records.find(record => record.type === 'user').permissionMode, 'bypassPermissions');
+    assert.ok(records.some(record => record.type === 'user' && typeof record.message?.content === 'string' &&
+      record.message.content.includes('<pasted_content id=') && record.message.content.includes(input.days[0].task)));
   }
   const grade = await gradeCase(input, run, null, ctx);
   assert.equal(memberCalls, 5);
@@ -180,6 +195,24 @@ try {
   assert.equal(abortedGrade.meta.simulator_fidelity.status, 'unverified');
   assert.match(abortedGrade.meta.simulator_fidelity.error, /shared case deadline/);
   assert.equal(json(join(root, run.artifact_dir, 'grading.json')).simulator_fidelity.status, 'unverified');
+  fidelityMode = 'faithful';
+  save(join(root, run.artifact_dir, 'model-calls.json'), flaggedCtx.calls);
+  const beforeReplay = requests.length;
+  const replayRow = { prompt_id: input.id, rep: 0, artifact_dir: run.artifact_dir,
+    grade: flaggedGrade.grade, evaluation: flaggedGrade.meta, wall_clock_s: 1, simulator_unfaithful: true };
+  const replayCtx = { ...objectCtx, attempt: Date.now() };
+  const replayed = await recheckFidelity(input, replayRow, replayCtx);
+  assert.equal(requests.length, beforeReplay + 1);
+  assert.equal(memberCalls, 5);
+  assert.equal(simulatorCalls, 2);
+  assert.deepEqual(replayed.grade, flaggedGrade.grade);
+  assert.equal(replayed.simulator_unfaithful, false);
+  assert.equal(replayed.evaluation.simulator_fidelity.status, 'faithful');
+  assert.ok(replayed.evaluation.calls_cost_usd > flaggedGrade.meta.calls_cost_usd);
+  const replayReceipt = json(join(root, run.artifact_dir, `fidelity-recheck-${replayCtx.attempt}.json`));
+  assert.deepEqual(replayReceipt.before, JSON.parse(JSON.stringify(replayRow)));
+  assert.equal(replayReceipt.calls.length, 1);
+  assert.equal(replayReceipt.calls[0].purpose, 'simulator_fidelity');
   const summaryFlow = join(root, 'summary-proof');
   mkdirSync(join(summaryFlow, 'baseline'), { recursive: true });
   writeFileSync(join(summaryFlow, 'baseline', 'results.jsonl'), [grade, flaggedGrade, uncheckedGrade].map((value, index) => JSON.stringify({
@@ -211,7 +244,8 @@ try {
   const receipt = { at: new Date().toISOString(), paid_calls: 0, provider_mock: true,
     claude_binary: config.claude_binary, real_member_calls: memberCalls, real_simulator_calls: simulatorCalls, memberLaunches,
     array_calls: arrayCalls, object_calls: objectCalls, controllerLaunches,
-    fidelity_flagged: flaggedGrade.meta, fidelity_unverified: uncheckedGrade.meta, fidelity_aborted: abortedGrade.meta, summary,
+    fidelity_flagged: flaggedGrade.meta, fidelity_unverified: uncheckedGrade.meta, fidelity_aborted: abortedGrade.meta,
+    fidelity_replay: replayReceipt, summary,
     personal_context_canary_absent: true, personal_commands_absent: true,
     member_permission_mode: 'bypassPermissions for deterministic mock tools; localhost/filesystem sandbox remains active',
     closure: 'real member Bash tool files a synthetic letter with attn handoff --sleep',

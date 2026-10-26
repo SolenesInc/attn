@@ -76,13 +76,16 @@ disabled. The runner reads structured output and receipts from the result
 object. When Claude returns an event array, it uses the last `result` event and
 saves the whole array next to the normalized result for inspection.
 
-The simulator may assert only the supplied task and disclosures. It must not
-turn a member suggestion into a user decision or invent an approval. After
-each case, one separate check by the `judge_model` compares all delivered
-simulator messages with the task and disclosures supplied for that turn. The
-check's verdict and usage are saved with the grading receipts.
-Unsent `done=true` messages remain in the call archive and are excluded from
-that check.
+The simulator may assert only the supplied task, disclosures and public day
+brief. It must not turn a member suggestion into a user decision or invent an
+approval. After each case, one separate check by the `judge_model` compares
+all delivered simulator messages with those sources for that turn. Greetings,
+thanks, acknowledgements of orientation or checking, questions, saying I do
+not know, and restating the public day brief are allowed. New product
+decisions, work approvals, access constraints and changes to who performs the
+task still need support in the supplied sources. The check's verdict and usage
+are saved with the grading receipts. Unsent `done=true` messages remain in the
+call archive and are excluded from that check.
 
 A reported violation sets `simulator_unfaithful: true` on the result. The result
 keeps its grade and the run continues. If the check cannot complete, the
@@ -131,11 +134,16 @@ This drives a complete case through the real member, simulator, and judge
 binaries against a local provider mock. It checks native array and object
 results, both judge passes, receipt validation, fresh controller directories,
 and removal of those directories after completed calls. It also verifies that
-flagged and unverified fidelity checks retain the outcome, and that the summary
-shows all scores beside scores from cases checked as faithful. A synthetic personal
-configuration supplies canaries, and the check fails if any canary reaches the
-controller requests.
-The script prints its receipt path under `private_root/print-proof-*`.
+flagged and unverified fidelity checks leave the case grade in place, and that
+the summary reports the all-case pass rate beside the checked-faithful pass
+rate. A synthetic personal configuration supplies canaries, and the check
+fails if any canary reaches the controller requests. The member receives a
+multiline paste with Claude's native paste-tag rollout enabled in its
+disposable configuration. The check verifies the wrapped text reaches the
+member and the controller recognizes its completion. It also rechecks a saved
+fidelity verdict with one additional fidelity call, preserving the grade and
+the previous verdict without starting another member or simulator call. The
+script prints its receipt path under `private_root/print-proof-*`.
 
 The disposable member configuration accepts the dummy key and uses native
 permission bypass for its scripted tool calls. Its filesystem and localhost
@@ -207,9 +215,8 @@ remain the grading evidence.
 For a separately approved use-only pilot, record the user's approval under
 `approvals.use_pilot` and set `pilot_stage: "use"` in the reviewed state. A
 different stage, including the default `units`, is then refused. This stage
-selects every use case
-in the case pack, including controls, with one repetition. It runs no write or
-twelve-day case:
+selects every use case in the case pack, including controls, with one
+repetition. It runs no write or twelve-day case:
 
 ```sh
 node scripts/evals/crew-memory/run.mjs \
@@ -225,8 +232,10 @@ Set `controller_handoff_timeout_ms` from the `handoffs` timings in a reviewed
 It bounds the local controller's acceptance and delivery of turns while the
 member is settled. Member and simulator provider calls stay under `case_timeout_s`.
 The receipt must distinguish these measurements. A stalled handoff fails with
-the limit, elapsed time, session, exchange, and phase, and stops the remaining
-pass so the same runner failure cannot consume more cases.
+the limit, elapsed time, session, exchange, and phase. That case fails and the
+pass continues after cleanup. A cleanup failure stops the remaining pass.
+Input acceptance matches the exact sent text, including when Claude encloses
+the whole paste in its native `pasted_content` container.
 
 The reviewed `case_timeout_s` values come from the seed's runtime receipt.
 They cover the member run and judge calls. After a timeout, the runner still
@@ -240,6 +249,8 @@ Successful rows go to `baseline/results.jsonl`. Every failed attempt goes to
 `baseline/errors.jsonl` with its failure class. Calls, events, outcomes, and native usage receipts stay
 under `baseline/out/`, with transcripts under `baseline/traces/`. Rerunning a
 stage skips completed cases and retries failed cases.
+Failed attempts also retain the complete native transcript records available
+when the failure was caught.
 Press Ctrl-C once to abort the active case, stop its instance, and save partial
 calls, native usage, and the interruption in `errors.jsonl`. The runner exits
 130 after cleanup and starts no further case. A second Ctrl-C forces Node to
@@ -288,7 +299,25 @@ cases checked as simulator-faithful. Flagged cases and cases without a successfu
 fidelity check, including older runs, are excluded from the latter rate. The
 table also shows the flagged and unchecked rep counts and the number of
 checked-faithful cases. Known spend includes flagged and unverified cases and the
-fidelity calls. `report.html` keeps the original all-case grades.
+fidelity calls. A row with an unverified check is marked "+ unknown spend".
+`report.html` keeps the original all-case grades.
+
+After reviewing a checker change, recheck saved simulator turns without rerunning
+the member, simulator or outcome judges. The same digest and stage approval
+gates apply, so pass the stage that produced the rows. This command makes paid
+fidelity calls for completed cases only:
+
+```sh
+node scripts/evals/crew-memory/run.mjs \
+  --flow "$CREW_EVAL_FLOW" --variant baseline \
+  --model claude-opus-5-5 --reps 1 --pilot-stage units --recheck-fidelity
+```
+
+Each recheck saves the previous result, new verdict and new call receipts under
+the case's output directory before updating its result. Grades stay unchanged.
+Usage and known spend include both checks. Save the flow before and after the
+recheck. This updates fidelity only. Changing an answer key requires a separately
+approved regrade.
 
 Before setting `pilot` to `false`, record user approval of the case list,
 grading, and measured budget under `approvals.cases`, `approvals.grading`, and
