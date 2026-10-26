@@ -159,7 +159,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 	}
 
 	if e.ProgramStatus != nil {
-		if r, ok := harnessEdge(e); ok {
+		if r, ok := harnessEdge(e, policy); ok {
 			return r
 		}
 		if r, ok := programStatusEdge(*e.ProgramStatus); ok {
@@ -169,7 +169,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 		return running(e)
 	}
 
-	if r, ok := harnessEdge(e); ok {
+	if r, ok := harnessEdge(e, policy); ok {
 		return r
 	}
 
@@ -352,12 +352,15 @@ func ClassifierVerdictPending(e ConversationEvidence, policy Policy, now time.Ti
 	return now.Sub(e.ClassifyingSince) <= policy.ClassifierTimeout
 }
 
-func harnessEdge(e evidence) (Resolution, bool) {
+func harnessEdge(e evidence, policy Policy) (Resolution, bool) {
 	if e.LastHarnessEvent == nil || supersededByBusy(e.LastHarnessEvent, e) || supersededByProgramStatus(e.LastHarnessEvent, e) {
 		return Resolution{}, false
 	}
 	switch e.LastHarnessEvent.Claim {
 	case ClaimApprovalPending:
+		if reviewedApprovalsShowOnTheTerminal(e, policy) {
+			return Resolution{}, false
+		}
 		return Resolution{
 			State:  protocol.SessionStatePendingApproval,
 			Reason: ReasonApprovalOpen,
@@ -378,6 +381,12 @@ func harnessEdge(e evidence) (Resolution, bool) {
 	default:
 		return Resolution{}, false
 	}
+}
+
+func reviewedApprovalsShowOnTheTerminal(e evidence, policy Policy) bool {
+	reviewerAnswers := e.ReviewerInLoop && policy.GuardianDwell > 0
+	terminalReports := e.ProgramStatus != nil && e.ProgramStatus.Source == SourceProgramStatus
+	return reviewerAnswers && terminalReports
 }
 
 func turnAborted(e evidence) bool {

@@ -506,6 +506,14 @@ Read in the source at openai/codex rust-v0.163.0 and c3bb20602d:
   `kind=permission` for approvals and `kind=question` for questions and
   elicitations.
 
+Seen in attn's production log on 0.164.0, a shared Codex tile with the guardian
+reviewer:
+
+- PermissionRequest fires before the guardian reviews, and no hook reports the
+  guardian's answer. A command it let through that kept running as a
+  background terminal sent no PostToolUse; the next hook came with the agent's
+  next tool call, 214 s later, while the TUI kept reporting `working`.
+
 Read in the source at openai/codex rust-v0.162.1, and the switches probed on
 it with a model on a closed port. A shared Codex tile follows the conversation
 its Codex shows on these:
