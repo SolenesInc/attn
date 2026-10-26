@@ -2,6 +2,7 @@ import type {
   ClearAnalyticsRecordsResultMessage,
   ForgetAnalyticsInstallResultMessage,
   SetVentSendResultMessage,
+  SetVentKindResultMessage,
   GetAnalyticsStatusResultMessage,
   ListAnalyticsRecordsResultMessage,
   PlantVentSeedResultMessage,
@@ -72,6 +73,9 @@ export function handleAnalyticsDaemonEvent(event: { event?: string }, pending: P
       return true;
     case 'set_vent_send_result':
       settlePendingRequest(pending, 'set_vent_send', event as SetVentSendResultMessage, () => true, 'Could not change where the vent goes');
+      return true;
+    case 'set_vent_kind_result':
+      settlePendingRequest(pending, 'set_vent_kind', event as SetVentKindResultMessage, () => true, 'Could not file the vent');
       return true;
     case 'list_analytics_records_result':
       settlePendingRequest(

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Seed, Vent } from '../../types/generated';
+import { VentKind, VentSend, type Seed, type Vent } from '../../types/generated';
 import { harnessLabel } from '../harnessLabel';
 import { buildLabel, longAgo, settingName, when } from './analyticsFormat';
 import { ventDestination, type RecordItem } from './analyticsItems';
@@ -51,6 +51,7 @@ export function VentDetail({ vent, live, sharing, seeds, expanded, onExpand, onA
     <>
       <div className="analytics-vent-head">
         <b>{vent.context.session_label}</b>
+        {vent.kind === VentKind.Tools && <span className="settings-pill">Tools</span>}
         {ventStatus(vent, slug)}
       </div>
       <div className={`analytics-vent-text${long ? ' clamped' : ''}${withdrawn ? ' struck' : ''}`}>{vent.text}</div>
@@ -98,6 +99,7 @@ function VentActions({ vent, live, onAction }: { vent: Vent; live: boolean; onAc
       {vent.context.seed_id && action('g', 'Stake seed')}
       {!vent.planted_seed_id && action('p', 'Plant seed')}
       {action('d', vent.dismissed_at ? 'Restore' : 'Dismiss')}
+      {vent.send !== VentSend.Sent && action('s', vent.kind === VentKind.Tools ? 'File under attn' : 'File under tools')}
     </div>
   );
 }

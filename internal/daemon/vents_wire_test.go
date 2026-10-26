@@ -5,13 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const ventGuidanceLead = "say so with `attn vent`"
+const ventGuidanceLead = "with `attn vent --about attn"
 
 func TestAnAgentIsTaughtToVentOnlyWhenItLaunchedWithAnalyticsOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
@@ -46,7 +47,7 @@ func TestAnAgentIsTaughtToVentOnlyWhenItLaunchedWithAnalyticsOn(t *testing.T) {
 	}
 
 	setSetting(t, app, "analytics.enabled", "false")
-	if _, err := cli.RecordVent(protocol.SessionID(with), "the build is slow"); err == nil || !strings.Contains(err.Error(), "usage analytics is off") {
+	if _, err := cli.RecordVent(protocol.SessionID(with), protocol.VentKindAttn, "the build is slow"); err == nil || !strings.Contains(err.Error(), "usage analytics is off") {
 		t.Fatalf("an agent vented with analytics off: %v", err)
 	}
 }
@@ -57,7 +58,7 @@ func TestTheUserDismissesAndRestoresAVentInTheirProfile(t *testing.T) {
 	setSetting(t, app, "analytics.enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(session)
-	vent, err := cli.RecordVent(protocol.SessionID(session), "attn seed tend refused a seed held by a session that ended.")
+	vent, err := cli.RecordVent(protocol.SessionID(session), protocol.VentKindAttn, "attn seed tend refused a seed held by a session that ended.")
 	if err != nil {
 		t.Fatalf("vent: %v", err)
 	}
@@ -89,7 +90,7 @@ func TestTheUserPlantsOneSeedFromAVent(t *testing.T) {
 	setSetting(t, app, "analytics.enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(session)
-	vent, err := cli.RecordVent(protocol.SessionID(session), "attn seed tend refused a seed held by a session that ended.\nRetried twice, then used --force.")
+	vent, err := cli.RecordVent(protocol.SessionID(session), protocol.VentKindAttn, "attn seed tend refused a seed held by a session that ended.\nRetried twice, then used --force.")
 	if err != nil {
 		t.Fatalf("vent: %v", err)
 	}
@@ -147,7 +148,7 @@ func TestClearingTheLocalRecordDeletesThisProfilesDismissedVents(t *testing.T) {
 		t.Helper()
 		session := w.Spawn(peer, fakeagent.Claude, w.Path(dir))
 		w.Launched(session)
-		recorded, err := cli.RecordVent(protocol.SessionID(session), text)
+		recorded, err := cli.RecordVent(protocol.SessionID(session), protocol.VentKindAttn, text)
 		if err != nil {
 			t.Fatalf("vent: %v", err)
 		}
@@ -187,7 +188,7 @@ func TestOpenAppsDropADismissedVentThirtyDaysOn(t *testing.T) {
 		app := w.App()
 		setAnalyticsEnabled(app, "true")
 		agent := w.bubbleClaude(t, app, "shop")
-		vent, err := agent.cli.RecordVent(protocol.SessionID(agent.id), "a flaky test")
+		vent, err := agent.cli.RecordVent(protocol.SessionID(agent.id), protocol.VentKindAttn, "a flaky test")
 		if err != nil {
 			t.Fatalf("vent: %v", err)
 		}
@@ -208,4 +209,77 @@ func TestOpenAppsDropADismissedVentThirtyDaysOn(t *testing.T) {
 		w.advance(time.Hour + time.Minute)
 		testworld.Await(reopened, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool { return len(m.Vents) == 0 })
 	})
+}
+
+func TestToolVentsNeedTheUsersSettingAndNeverLeaveTheMachine(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "analytics.enabled", "true")
+	launch := func(dir string) (string, string) {
+		t.Helper()
+		session := w.Spawn(app, fakeagent.Claude, w.Path(dir))
+		return session, launchGuidance(t, w.Launched(session))
+	}
+	attnOnly, taught := launch("attn-only")
+	if strings.Contains(taught, "--about tools") || !strings.Contains(taught, "are not vents") {
+		t.Fatalf("with tool vents off the agent was taught:\n%s", taught)
+	}
+	if _, err := cli.RecordVent(protocol.SessionID(attnOnly), protocol.VentKindTools, "the ship-pr skill links a missing skill"); err == nil ||
+		!strings.Contains(err.Error(), "tool vents are off for this session (analytics.tool_vents)") {
+		t.Fatalf("a tool vent with tool vents off: %v", err)
+	}
+
+	setSetting(t, app, "analytics.tool_vents", "true")
+	if _, err := cli.RecordVent(protocol.SessionID(attnOnly), protocol.VentKindTools, "the ship-pr skill links a missing skill"); err == nil {
+		t.Fatal("a session launched with tool vents off sent a tool vent after the user turned them on")
+	}
+	setSetting(t, app, "analytics.sharing_enabled", "true")
+	setSetting(t, app, "analytics.share_vents", "true")
+	withTools, taught := launch("with-tools")
+	if !strings.Contains(taught, "attn vent --about tools") {
+		t.Fatalf("with tool vents on the agent was not taught them:\n%s", taught)
+	}
+	tool, err := cli.RecordVent(protocol.SessionID(withTools), protocol.VentKindTools, "the ship-pr skill links a missing skill")
+	if err != nil {
+		t.Fatalf("tool vent: %v", err)
+	}
+	if got := streamOutbox(t, app, analytics.StreamVent); len(got) != 0 {
+		t.Fatalf("with sharing and Send vents on a tool vent queued %v", got)
+	}
+	if tool.Kind != protocol.VentKindTools {
+		t.Fatalf("the tool vent is filed as %q", tool.Kind)
+	}
+	if sent := setVentSend(app, tool.ID, true); sent.Success || !strings.Contains(protocol.Deref(sent.Error), "about the agent's other tools, so it stays on this machine") {
+		t.Fatalf("sending a tool vent = success %v, error %q; want it kept here", sent.Success, protocol.Deref(sent.Error))
+	}
+
+	attn, err := cli.RecordVent(protocol.SessionID(attnOnly), protocol.VentKindAttn, "attn seed check report refused a 516-character summary.")
+	if err != nil {
+		t.Fatalf("attn vent: %v", err)
+	}
+	if sent := setVentSend(app, attn.ID, true); !sent.Success {
+		t.Fatalf("sending the attn vent: %s", protocol.Deref(sent.Error))
+	}
+	if refiled := setVentKind(app, attn.ID, protocol.VentKindTools); !refiled.Success {
+		t.Fatalf("filing the queued attn vent under tools: %s", protocol.Deref(refiled.Error))
+	}
+	testworld.Await(app, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool {
+		return len(m.Vents) == 2 && m.Vents[0].ID == attn.ID && m.Vents[0].Kind == protocol.VentKindTools && m.Vents[0].Send == nil
+	})
+	if got := streamOutbox(t, app, analytics.StreamVent); len(got) != 0 {
+		t.Fatalf("after filing the vent under tools the outbox holds vent records %v", got)
+	}
+	if refiled := setVentKind(app, attn.ID, protocol.VentKindAttn); !refiled.Success {
+		t.Fatalf("filing the vent back under attn: %s", protocol.Deref(refiled.Error))
+	}
+	testworld.Await(app, protocol.EventVentsUpdated, func(m protocol.VentsUpdatedMessage) bool {
+		return len(m.Vents) == 2 && m.Vents[0].Kind == protocol.VentKindAttn && m.Vents[0].Send == nil
+	})
+}
+
+func setVentKind(app *testworld.Peer, id string, kind protocol.VentKind) protocol.SetVentKindResultMessage {
+	app.T.Helper()
+	request := "kind-" + id + "-" + string(kind)
+	return testworld.Request(app, protocol.SetVentKindMessage{Cmd: protocol.CmdSetVentKind, RequestID: request, VentID: id, Kind: kind},
+		protocol.EventSetVentKindResult, func(r protocol.SetVentKindResultMessage) bool { return r.RequestID == request })
 }

@@ -73,6 +73,9 @@ func TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall(t *tes
 		if kept := setVentSend(app, vent.ID, false); kept.Success || !strings.Contains(protocol.Deref(kept.Error), "already sent") {
 			t.Fatalf("keeping a sent vent = success %v, error %q; want refused as already sent", kept.Success, protocol.Deref(kept.Error))
 		}
+		if refiled := setVentKind(app, vent.ID, protocol.VentKindTools); refiled.Success || !strings.Contains(protocol.Deref(refiled.Error), "already sent to attn's maintainers, so it stays an attn vent") {
+			t.Fatalf("filing a sent vent under tools = success %v, error %q; want refused", refiled.Success, protocol.Deref(refiled.Error))
+		}
 
 		link.DropNextEventsReply()
 		recordAndAdvance(w, app, uploadInterval)
@@ -326,7 +329,7 @@ func TestAQueuedVentsRecordIsListedOnlyInItsProfile(t *testing.T) {
 	side := w.AppOn(createProfile(app, "Side").ID)
 	session := w.Spawn(app, fakeagent.Claude, w.Path("home"))
 	w.Launched(session)
-	if _, err := w.Client().RecordVent(protocol.SessionID(session), "the home profile's private vent"); err != nil {
+	if _, err := w.Client().RecordVent(protocol.SessionID(session), protocol.VentKindAttn, "the home profile's private vent"); err != nil {
 		t.Fatalf("vent: %v", err)
 	}
 	if got := streamOutbox(t, app, analytics.StreamVent); len(got) != 1 {
@@ -375,7 +378,7 @@ func recordInjectedVent(t *testing.T, w *world, text string) protocol.Vent {
 	if err := w.InjectSession("venting", "venting", w.Path("venting"), protocol.SessionAgentClaude); err != nil {
 		t.Fatal(err)
 	}
-	vent, err := w.Client().RecordVent("venting", text)
+	vent, err := w.Client().RecordVent("venting", protocol.VentKindAttn, text)
 	if err != nil {
 		t.Fatalf("vent: %v", err)
 	}

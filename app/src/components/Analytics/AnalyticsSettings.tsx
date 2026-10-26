@@ -18,6 +18,7 @@ import './AnalyticsSettings.css';
 interface AnalyticsSettingsProps {
   sharing: boolean;
   sendVents: boolean;
+  toolVents: boolean;
   onSetSetting: (key: string, value: string) => void;
   onDisableRecording: () => void;
   onOpenSession: (sessionId: string) => void;
@@ -28,7 +29,7 @@ function isTyping(target: EventTarget): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
-export function AnalyticsSettings({ sharing, sendVents, onSetSetting, onDisableRecording, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
+export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting, onDisableRecording, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
   const { sendClearAnalyticsRecords, sendForgetAnalyticsInstall } = useDaemonApi();
   const vents = useVentsStore((state) => state.vents);
   const seeds = useDaemonStore((state) => state.seeds);
@@ -143,6 +144,7 @@ export function AnalyticsSettings({ sharing, sendVents, onSetSetting, onDisableR
           status={status.status}
           sharing={sharing}
           sendVents={sendVents}
+          toolVents={toolVents}
           onSetSetting={setSetting}
           onDisableRecording={onDisableRecording}
           onClear={clear}
@@ -219,7 +221,7 @@ function Stat({ label, value, dim = false, bad = false }: { label: string; value
   );
 }
 
-const VENT_KEYS = [['o', 'open session'], ['t', 'transcript'], ['g', 'stake seed'], ['p', 'plant'], ['d', 'dismiss'], ['u', 'undo']];
+const VENT_KEYS = [['o', 'open session'], ['t', 'transcript'], ['g', 'stake seed'], ['p', 'plant'], ['d', 'dismiss'], ['s', 'attn or tools'], ['u', 'undo']];
 const SHARING_VENT_KEYS = [...VENT_KEYS, ['x', 'send or keep']];
 const RECORD_KEYS = [['↵', 'expand a burst'], ['c', 'copy JSON'], ['r', 'refresh']];
 

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { useDaemonStore } from '../../store/daemonSessions';
-import type { Vent } from '../../types/generated';
+import { VentKind, VentSend, type Vent } from '../../types/generated';
 import { nextNewVent, ventDestination, type ListItem } from './analyticsItems';
 import type { UndoToast } from './useUndoToast';
 
@@ -21,7 +21,7 @@ export function useVentTriage({ items, index, sharing, select, feedback, onOpenS
   onOpenSession: (sessionId: string) => void;
   onOpenSeed: (seedId: string) => void;
 }) {
-  const { sendSetVentDismissed, sendPlantVentSeed, sendUnplantVentSeed, sendSetVentSend } = useDaemonApi();
+  const { sendSetVentDismissed, sendPlantVentSeed, sendUnplantVentSeed, sendSetVentSend, sendSetVentKind } = useDaemonApi();
   const sessions = useDaemonStore((state) => state.daemonSessions);
   const live = useMemo(() => new Set(sessions.map((session) => session.id)), [sessions]);
   const { say, run, fail } = feedback;
@@ -46,6 +46,15 @@ export function useVentTriage({ items, index, sharing, select, feedback, onOpenS
     say(send ? `Sending ${name} with the next batch.` : `Keeping ${name} here.`, () => sendSetVentSend(vent.id, !send));
   });
 
+  const setKind = (vent: Vent, kind: VentKind) => run(async () => {
+    await sendSetVentKind(vent.id, kind);
+    const name = `“${vent.context.session_label}”`;
+    say(kind === VentKind.Tools ? `Filed ${name} under tools; it stays on this machine.` : `Filed ${name} under attn.`, async () => {
+      await sendSetVentKind(vent.id, vent.kind);
+      if (vent.send === VentSend.Queued) await sendSetVentSend(vent.id, true);
+    });
+  });
+
   const actions: Record<string, (vent: Vent) => boolean> = {
     o: (vent) => doIf(live.has(vent.session_id), () => onOpenSession(vent.session_id)),
     t: ({ context: { transcript } }) => doIf(transcript, (found) => void openPath(found.path).catch(fail)),
@@ -53,6 +62,7 @@ export function useVentTriage({ items, index, sharing, select, feedback, onOpenS
     p: (vent) => doIf(!vent.withdrawn_at && !vent.planted_seed_id, () => plant(vent)),
     d: (vent) => doIf(!vent.withdrawn_at, () => setDismissed(vent, !vent.dismissed_at)),
     x: (vent) => doIf(ventDestination(vent, sharing).movable, () => setSend(vent, !vent.send)),
+    s: (vent) => doIf(vent.send !== VentSend.Sent, () => setKind(vent, vent.kind === VentKind.Tools ? VentKind.Attn : VentKind.Tools)),
   };
 
   return {

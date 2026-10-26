@@ -810,8 +810,8 @@ func (c *Client) AgentTurn(sessionID protocol.SessionID, action protocol.AgentTu
 	return resp.AgentTurnResult, nil
 }
 
-func (c *Client) RecordVent(sessionID protocol.SessionID, text string) (*protocol.Vent, error) {
-	resp, err := c.send(protocol.RecordVentMessage{Cmd: protocol.CmdRecordVent, SessionID: sessionID, Text: text})
+func (c *Client) RecordVent(sessionID protocol.SessionID, kind protocol.VentKind, text string) (*protocol.Vent, error) {
+	resp, err := c.send(protocol.RecordVentMessage{Cmd: protocol.CmdRecordVent, SessionID: sessionID, Kind: kind, Text: text})
 	if err != nil {
 		return nil, err
 	}

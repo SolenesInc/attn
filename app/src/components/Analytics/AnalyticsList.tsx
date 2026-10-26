@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import type { Seed } from '../../types/generated';
+import { VentKind, type Seed } from '../../types/generated';
 import { age, clockTime } from './analyticsFormat';
 import type { ListItem, RecordItem, VentItem } from './analyticsItems';
 import type { RecordsState } from './useAnalyticsRecords';
@@ -42,7 +42,7 @@ function VentRow({ item: { vent, done }, seeds, current, onSelect }: { item: Ven
   return (
     <button type="button" className={`analytics-row vent${done ? ' done' : ''}`} aria-current={current} onClick={onSelect}>
       {!done && <span className="analytics-dot" />}
-      <span className="analytics-row-text"><b>{vent.context.session_label}</b>{vent.text}</span>
+      <span className="analytics-row-text"><b>{vent.context.session_label}</b>{vent.kind === VentKind.Tools && <span className="analytics-kind">tools</span>}{vent.text}</span>
       {done && <span className={`analytics-outcome ${outcome}`}>{planted && !vent.withdrawn_at ? seeds.get(planted)?.step_slug ?? planted : outcome}</span>}
       <span className="analytics-age">{age(vent.created_at, Date.now())}</span>
     </button>

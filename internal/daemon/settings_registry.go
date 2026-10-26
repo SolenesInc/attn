@@ -91,6 +91,7 @@ const (
 	SettingAnalyticsEnabled              = settingkeys.SettingAnalyticsEnabled
 	SettingAnalyticsSharingEnabled       = settingkeys.SettingAnalyticsSharingEnabled
 	SettingAnalyticsShareVents           = settingkeys.SettingAnalyticsShareVents
+	SettingAnalyticsToolVents            = settingkeys.SettingAnalyticsToolVents
 	settingWorktreeSweepEnabled          = settingkeys.SettingWorktreeSweepEnabled
 	SettingSessionsFilters               = settingkeys.SettingSessionsFilters
 	SettingPluginPriorities              = settingkeys.SettingPluginPriorities
@@ -149,7 +150,8 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingAsksEnabled), scope: daemonScope, experimental: true, description: "Enable agent asks: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingAnalyticsEnabled), scope: daemonScope, experimental: true, description: "Record usage analytics on this machine: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingAnalyticsSharingEnabled), scope: daemonScope, description: "Upload the recorded usage analytics to attn's maintainers: true or false. Needs analytics.enabled; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingAnalyticsShareVents), scope: daemonScope, description: "Send each new vent, with its text, in the next upload: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: string(SettingAnalyticsShareVents), scope: daemonScope, description: "Send each new attn vent, with its text, in the next upload: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: string(SettingAnalyticsToolVents), scope: daemonScope, description: "Let new sessions also vent about their other tools, such as skills, other CLIs and harness permissions; tool vents never leave the machine: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingCalloutsEnabled), scope: daemonScope, experimental: true, description: "Let agents point at the app interface: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingChiefContextWindowCap), scope: daemonScope, description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
 	{key: "chief_model_<harness>", scope: daemonScope, description: "Model for chief sessions. Empty uses the deep intelligence tier.", validate: func(d *Daemon, key, value string) error { return nil }},

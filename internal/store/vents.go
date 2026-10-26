@@ -26,6 +26,7 @@ type Vent struct {
 	ID            string
 	ProfileID     string
 	SessionID     protocol.SessionID
+	Kind          protocol.VentKind
 	Turn          string
 	Text          string
 	Context       protocol.VentContext
@@ -37,7 +38,7 @@ type Vent struct {
 	SentAt        time.Time
 }
 
-const ventColumns = "id, profile_id, session_id, turn, text, context, created_at, withdrawn_at, dismissed_at, planted_seed_id, sent_at, " +
+const ventColumns = "id, profile_id, session_id, kind, turn, text, context, created_at, withdrawn_at, dismissed_at, planted_seed_id, sent_at, " +
 	"EXISTS (SELECT 1 FROM analytics_outbox WHERE stream = 'vent' AND seq = vents.outbox_seq AND sent_at IS NULL)"
 
 func ventTime(t time.Time) string { return t.UTC().Format(analyticsTimeLayout) }
@@ -53,9 +54,9 @@ func (s *Store) AddVent(v Vent) error {
 		return fmt.Errorf("vents need the SQLite store")
 	}
 	var taken string
-	err = s.db.QueryRow(`INSERT INTO vents (id, profile_id, session_id, turn, text, context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+	err = s.db.QueryRow(`INSERT INTO vents (id, profile_id, session_id, kind, turn, text, context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (session_id, turn) WHERE withdrawn_at IS NULL DO UPDATE SET id = id RETURNING id`,
-		v.ID, v.ProfileID, v.SessionID, v.Turn, v.Text, string(context), ventTime(v.CreatedAt)).Scan(&taken)
+		v.ID, v.ProfileID, v.SessionID, v.Kind, v.Turn, v.Text, string(context), ventTime(v.CreatedAt)).Scan(&taken)
 	if err != nil || taken == v.ID {
 		return err
 	}
@@ -102,6 +103,45 @@ func (s *Store) SetVentDismissed(id string, dismissed bool, at time.Time) (bool,
 	}
 	n, err := result.RowsAffected()
 	return n > 0, err
+}
+
+func (s *Store) SetVentKind(id string, kind protocol.VentKind) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var sent sql.NullString
+	switch err := tx.QueryRow("SELECT sent_at FROM vents WHERE id = ?", id).Scan(&sent); {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, ErrVentNotFound
+	case err != nil:
+		return false, err
+	case sent.Valid && kind != protocol.VentKindAttn:
+		return false, ErrVentSent
+	}
+	if kind != protocol.VentKindAttn {
+		if _, err := tx.Exec("DELETE FROM analytics_outbox WHERE stream = ? AND sent_at IS NULL AND seq = (SELECT outbox_seq FROM vents WHERE id = ?)", analytics.StreamVent, id); err != nil {
+			return false, err
+		}
+		if _, err := tx.Exec("UPDATE vents SET outbox_seq = NULL WHERE id = ?", id); err != nil {
+			return false, err
+		}
+	}
+	result, err := tx.Exec("UPDATE vents SET kind = ? WHERE id = ? AND kind <> ?", kind, id, kind)
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, tx.Commit()
 }
 
 func (s *Store) SetVentPlanted(id, seedID string) (bool, error) {
@@ -205,8 +245,8 @@ func (s *Store) QueueVentRecord(id string, record analytics.Record) (bool, error
 	}
 	defer tx.Rollback()
 	var sent sql.NullString
-	switch err := tx.QueryRow(`SELECT sent_at FROM vents WHERE id = ? AND withdrawn_at IS NULL AND NOT EXISTS (
-		SELECT 1 FROM analytics_outbox WHERE stream = ? AND seq = vents.outbox_seq AND sent_at IS NULL)`, id, analytics.StreamVent).Scan(&sent); {
+	switch err := tx.QueryRow(`SELECT sent_at FROM vents WHERE id = ? AND kind = ? AND withdrawn_at IS NULL AND NOT EXISTS (
+		SELECT 1 FROM analytics_outbox WHERE stream = ? AND seq = vents.outbox_seq AND sent_at IS NULL)`, id, protocol.VentKindAttn, analytics.StreamVent).Scan(&sent); {
 	case errors.Is(err, sql.ErrNoRows):
 		return false, nil
 	case err != nil:
@@ -265,7 +305,7 @@ func scanVent(row interface{ Scan(...any) error }) (Vent, error) {
 		withdrawn, dismissed sql.NullString
 		planted, sent        sql.NullString
 	)
-	if err := row.Scan(&v.ID, &v.ProfileID, &v.SessionID, &v.Turn, &v.Text, &context, &created, &withdrawn, &dismissed, &planted, &sent, &v.Queued); err != nil {
+	if err := row.Scan(&v.ID, &v.ProfileID, &v.SessionID, &v.Kind, &v.Turn, &v.Text, &context, &created, &withdrawn, &dismissed, &planted, &sent, &v.Queued); err != nil {
 		return Vent{}, err
 	}
 	if err := json.Unmarshal([]byte(context), &v.Context); err != nil {

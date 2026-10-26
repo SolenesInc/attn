@@ -3898,6 +3898,15 @@ enum VentSend {
   sent,
 }
 
+// What a vent is about. attn: attn itself, its commands, its instructions, or
+// how it works inside the harness; only these can be sent to attn's
+// maintainers. tools: the agent's other tools, such as skills, other CLIs or the
+// harness's own permissions; these never leave the machine.
+enum VentKind {
+  attn,
+  tools,
+}
+
 // An agent's report of what got in its way. withdrawn_at is set when the agent
 // took it back, dismissed_at while the user has dismissed it, planted_seed_id
 // once the user planted a seed from it. send is absent while the vent stays on
@@ -3905,6 +3914,7 @@ enum VentSend {
 model Vent {
   id: string;
   session_id: SessionID;
+  kind: VentKind;
   text: string;
   context: VentContext;
   created_at: string;
@@ -3918,6 +3928,7 @@ model Vent {
 model RecordVentMessage {
   cmd: "record_vent";
   session_id: SessionID;
+  kind: VentKind;
   text: string;
 }
 
@@ -3968,6 +3979,23 @@ model SetVentDismissedMessage {
 
 model SetVentDismissedResultMessage {
   event: "set_vent_dismissed_result";
+  request_id: string;
+  vent_id: string;
+  success: boolean;
+  error?: string;
+}
+
+// The user files a vent under the other kind. A vent filed under tools leaves
+// the upload queue; a sent vent stays attn.
+model SetVentKindMessage {
+  cmd: "set_vent_kind";
+  request_id: string;
+  vent_id: string;
+  kind: VentKind;
+}
+
+model SetVentKindResultMessage {
+  event: "set_vent_kind_result";
   request_id: string;
   vent_id: string;
   success: boolean;
@@ -8257,6 +8285,7 @@ alias DaemonEvent =
   | ClearAnalyticsRecordsResultMessage
   | ForgetAnalyticsInstallResultMessage
   | SetVentSendResultMessage
+  | SetVentKindResultMessage
   | VentsUpdatedMessage
   | SharedCodexChangedMessage
   | RestartSharedCodexResultMessage

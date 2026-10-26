@@ -8663,6 +8663,9 @@ type RecordVentMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Kind corresponds to the JSON schema field "kind".
+	Kind VentKind `json:"kind"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
 
@@ -11828,6 +11831,37 @@ type SetVentDismissedResultMessage struct {
 	VentID string `json:"vent_id"`
 }
 
+type SetVentKindMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind VentKind `json:"kind"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// VentID corresponds to the JSON schema field "vent_id".
+	VentID string `json:"vent_id"`
+}
+
+type SetVentKindResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// VentID corresponds to the JSON schema field "vent_id".
+	VentID string `json:"vent_id"`
+}
+
 type SetVentSendMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -13024,6 +13058,9 @@ type Vent struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// Kind corresponds to the JSON schema field "kind".
+	Kind VentKind `json:"kind"`
+
 	// PlantedSeedID corresponds to the JSON schema field "planted_seed_id".
 	PlantedSeedID *string `json:"planted_seed_id,omitempty,omitzero"`
 
@@ -13065,6 +13102,11 @@ type VentContext struct {
 	// Transcript corresponds to the JSON schema field "transcript".
 	Transcript *VentTranscript `json:"transcript,omitempty,omitzero"`
 }
+
+type VentKind string
+
+const VentKindAttn VentKind = "attn"
+const VentKindTools VentKind = "tools"
 
 type VentSend string
 

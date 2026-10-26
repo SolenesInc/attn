@@ -185,6 +185,8 @@ type SpawnOpts struct {
 
 	Vent bool
 
+	ToolVents bool
+
 	CrewPriming       string
 	CrewMemoryEnabled bool
 	QuickCapture      bool
@@ -212,6 +214,7 @@ func (o SpawnOpts) launchSpec() hooks.Launch {
 		Garden:                 o.Garden,
 		Asks:                   o.Asks,
 		Vent:                   o.Vent,
+		ToolVents:              o.ToolVents,
 		Crew:                   o.CrewPriming,
 		QuickCapture:           o.QuickCapture,
 		SelfReportPullRequests: o.SelfReportPullRequests,
