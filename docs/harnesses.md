@@ -78,6 +78,19 @@ Probed on 2.1.288 with a mock API.
   macOS and Linux). SessionStart, UserPromptSubmit and Stop use the
   `--session-id` conversation id.
 
+Read in the installed 2.1.310 source and checked with unpaid CLI probes:
+
+- `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` turns auto-memory off. A new working
+  directory alone does not turn it off.
+- A fresh `CLAUDE_CONFIG_DIR` uses a separate configuration and projects
+  directory. On macOS, `auth status` reported `loggedIn: false` there while
+  the default configuration was authenticated. An isolated run needs its own
+  authentication setup.
+- `--mcp-config` takes multiple values. When a wrapper puts it before a
+  subcommand, a following option must end its values or it consumes the
+  subcommand's words. `--mcp-config <json> --setting-sources '' auth status`
+  preserves the subcommand.
+
 Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
 
 - Nothing stops a second process from opening a conversation another process

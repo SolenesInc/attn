@@ -1,0 +1,3 @@
+kind: internal
+area: crew
+change: Add a manual evaluation runner for crew memory with isolated agent sessions and source-backed cases.
