@@ -121,6 +121,14 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   provider probe, the fifth member request closed the session while the file
   retained only the four work requests. Persisted closure records therefore
   do not guarantee a complete trace of that final call.
+- An interactive paste can be stored as `\n\n<pasted_content id="hhhh">\n`,
+  the pasted text, and `\n</pasted_content id="hhhh">\n`, with the same four
+  hexadecimal characters in both tags. A 2.1.310 paid eval trace preserved
+  the inner text exactly while adding this container. Its installed source
+  gates wrapping on `tengu_virtual_pancake`; an offline probe needs that
+  cached flag enabled and `CLAUDE_CODE_GB_DISK_CACHE_WHEN_TELEMETRY_OFF=1`
+  while telemetry is disabled. Plain text remains possible, so matching
+  native user input must account for both forms.
 
 Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
 

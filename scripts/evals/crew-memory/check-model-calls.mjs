@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { startStubModel } from '../../../app/scripts/real-app-harness/stubModel.mjs';
 import { DEMO_ANTHROPIC_KEY } from '../../../app/scripts/demo-harness/agentHome.mjs';
-import { runCase, gradeCase } from './eval.mjs';
+import { runCase, gradeCase, recheckFidelity, regradeSaved } from './eval.mjs';
 import { json, save } from './trial.mjs';
 
 for (const key of Object.keys(process.env)) {
@@ -40,6 +41,7 @@ const file = process.env.CLAUDE_CONFIG_DIR + '/.claude.json';
 const state = JSON.parse(fs.readFileSync(file));
 state.customApiKeyResponses = { approved: [${JSON.stringify(DEMO_ANTHROPIC_KEY.slice(-20))}], rejected: [] };
 state.bypassPermissionsModeAccepted = true;
+state.cachedGrowthBookFeatures = { tengu_virtual_pancake: true };
 fs.writeFileSync(file, JSON.stringify(state));
 const end = args.includes('--') ? args.indexOf('--') : args.length;
 const index = args.findIndex((arg, i) => i < end && arg === '--permission-mode');
@@ -56,6 +58,14 @@ process.execve(binary, [binary, ...args], process.env);
 };
 const arrayBinary = wrapper(true), objectBinary = wrapper(false);
 const input = json(config.cases_path).find(row => row.pilot && row.unit === 'use');
+input.days[0].task = [
+  'Please complete this local provider-mock task in your member home.',
+  'Write answer.json with the synthetic directory value supplied by the provider.',
+  'Keep the task confined to this disposable instance and leave the historical letters unchanged.',
+  'This multiline message reproduces an interactive paste; every line must reach the member unchanged.',
+  'The provider will supply the response and closure steps, so no external model service is needed.',
+  'When the file is ready, report that it exists and wait for the controller to close the day.',
+].join('\n\n');
 const abort = new AbortController();
 process.once('SIGINT', () => abort.abort(new Error('unpaid model-call proof interrupted')));
 const ctx = { flow: root, variant: 'baseline', model: config.member_model, rep: 0, attempt: Date.now(),
@@ -64,6 +74,10 @@ const ctx = { flow: root, variant: 'baseline', model: config.member_model, rep: 
 const artifact = join(root, 'baseline', 'out', `${input.id}_rep0_${ctx.attempt}`);
 const requests = [];
 let memberCalls = 0, simulatorCalls = 0;
+const refuseSleep = process.argv.includes('--refuse-sleep') || process.argv.includes('--never-sleep');
+const memberCallCount = refuseSleep ? 6 : 5;
+let fidelityMode = 'faithful', judgeYes = true;
+const fidelityAbort = new AbortController();
 const stub = await startStubModel(request => {
   requests.push({ model: request.model, tools: request.tools, body: request.body });
   save(join(root, `provider-request-${requests.length}.json`), request.body);
@@ -75,11 +89,15 @@ const stub = await startStubModel(request => {
       if (memberCalls === 1) return { tool: { id: 'read-charter', name: 'Read', args: { file_path: join(home, 'CHARTER.md') } } };
       if (memberCalls === 2) return { say: 'Ready for your local task.' };
       if (memberCalls === 3) {
-        assert.equal(request.prompt, input.days[0].task);
+        const content = request.body.messages.findLast(message => message.role === 'user').content;
+        const text = typeof content === 'string' ? content : content.filter(part => part.type === 'text').map(part => part.text).join('');
+        assert.ok(text.includes(input.days[0].task));
         return { tool: { id: 'write-answer', name: 'Write', args: { file_path: join(home, 'answer.json'), content: '{"directory":"provider-mock-answer"}\n' } } };
       }
       if (memberCalls === 4) return { say: 'The answer is in answer.json.' };
-      if (memberCalls === 5) return { tool: { id: 'file-letter', name: 'Bash', args: {
+      if (refuseSleep && memberCalls === 5) return { say: 'An inbox note is not direct confirmation. Reply sleep and I will file.' };
+      if (process.argv.includes('--never-sleep') && memberCalls === 6) return { say: 'I am still not closing this day.' };
+      if (memberCalls === memberCallCount) return { tool: { id: 'file-letter', name: 'Bash', args: {
         command: '"$ATTN_WRAPPER_PATH" handoff --sleep -m "Unpaid provider mock: local task completed."',
         description: 'File the proof letter and sleep',
       } } };
@@ -94,9 +112,19 @@ const stub = await startStubModel(request => {
       } } };
     }
     assert.equal(request.model, config.judge_model);
+    if (prompt.turns) {
+      assert.equal(prompt.turns.length, 1);
+      assert.equal(prompt.turns[0].message, input.days[0].task);
+      assert.equal(prompt.day_brief, input.day_brief);
+      if (fidelityMode === 'abort') fidelityAbort.abort(Object.assign(new Error('synthetic shared case deadline during post-case fidelity'), { failure_class: 'timeout' }));
+      return { tool: { id: `fidelity-${requests.length}`, name: 'StructuredOutput', args: {
+        violations: fidelityMode === 'faithful' ? [] : [{ turn: fidelityMode === 'unfaithful' ? 0 : -1,
+          assertion: 'Synthetic unsupported assertion.', reason: 'Synthetic fidelity verdict for protocol verification.' }],
+      } } };
+    }
     assert.equal(prompt.candidate.files['answer.json'], '{"directory":"provider-mock-answer"}\n');
     return { tool: { id: `judge-${requests.length}`, name: 'StructuredOutput', args: {
-      verdicts: prompt.claims.map(claim => ({ id: claim.id, yes: true, reason: 'Synthetic provider response for protocol verification.' })),
+      verdicts: prompt.claims.map(claim => ({ id: claim.id, yes: judgeYes, reason: 'Synthetic provider response for protocol verification.' })),
     } } };
   } catch (error) {
     abort.abort(error);
@@ -107,11 +135,16 @@ Object.assign(process.env, {
   ANTHROPIC_BASE_URL: stub.origin, ANTHROPIC_API_KEY: DEMO_ANTHROPIC_KEY,
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1', DISABLE_AUTOUPDATER: '1',
   DISABLE_TELEMETRY: '1', DISABLE_ERROR_REPORTING: '1',
+  CLAUDE_CODE_GB_DISK_CACHE_WHEN_TELEMETRY_OFF: '1',
 });
 try {
   console.log(`unpaid full model-call proof pid=${process.pid}; provider=${stub.origin}; root=${root}`);
   const run = await runCase(input, ctx);
   assert.equal(run.output.letters.length, 1);
+  assert.equal(run.sleep_confirmation_needed, refuseSleep);
+  const sleepConfirmations = json(join(root, run.artifact_dir, 'sleep-confirmations.json'));
+  assert.equal(sleepConfirmations.length, refuseSleep ? 1 : 0);
+  if (refuseSleep) assert.equal(sleepConfirmations[0].message, 'sleep');
   assert.ok(run.transcript.some(turn => turn.role === 'tool_call' && turn.name === 'Write'));
   const memberLaunches = readFileSync(launchesPath, 'utf8').trim().split('\n').map(line => JSON.parse(line)).filter(launch => launch.terminal);
   assert.ok(memberLaunches.length);
@@ -121,13 +154,17 @@ try {
   for (const file of nativeFiles) {
     const records = json(join(root, run.artifact_dir, file));
     assert.equal(records.find(record => record.type === 'user').permissionMode, 'bypassPermissions');
+    assert.ok(records.some(record => record.type === 'user' && typeof record.message?.content === 'string' &&
+      record.message.content.includes('<pasted_content id=') && record.message.content.includes(input.days[0].task)));
   }
   const grade = await gradeCase(input, run, null, ctx);
-  assert.equal(memberCalls, 5);
+  assert.equal(memberCalls, memberCallCount);
   assert.equal(simulatorCalls, 2);
   assert.equal(grade.meta.judge_passes.length, 2);
+  assert.equal(grade.meta.simulator_fidelity.status, 'faithful');
+  assert.ok(grade.meta.simulator_fidelity_cost_usd > 0);
   const arrayCalls = [...ctx.calls];
-  assert.equal(arrayCalls.length, 4);
+  assert.equal(arrayCalls.length, 5);
   for (const call of arrayCalls) {
     assert.ok(Array.isArray(call.events), 'verbose native print must produce an event array');
     assert.equal(call.response.type, 'result');
@@ -137,16 +174,102 @@ try {
     assert.equal(init.skills?.length ?? 0, 0);
     assert.ok(!(init.slash_commands ?? []).includes('personal-command-canary'));
   }
-  const objectCtx = { ...ctx, calls: [], state: { ...ctx.state, claude_binary: objectBinary } };
+  const simulatorReceipts = arrayCalls.filter(call => call.purpose === 'simulator');
+  const objectCtx = { ...ctx, calls: [...simulatorReceipts], state: { ...ctx.state, claude_binary: objectBinary } };
   await gradeCase(input, run, null, objectCtx);
-  assert.equal(objectCtx.calls.length, 2);
-  for (const call of objectCtx.calls) {
+  const objectCalls = objectCtx.calls.slice(simulatorReceipts.length);
+  assert.equal(objectCalls.length, 3);
+  for (const call of objectCalls) {
     assert.equal(call.events, undefined);
     assert.equal(call.response.type, 'result');
     assert.ok(call.response.total_cost_usd > 0);
   }
+  fidelityMode = 'unfaithful';
+  judgeYes = false;
+  const flaggedCtx = { ...objectCtx, calls: [...simulatorReceipts] };
+  const flaggedGrade = await gradeCase(input, run, null, flaggedCtx);
+  assert.equal(flaggedGrade.grade.pass, 0);
+  assert.equal(flaggedGrade.meta.simulator_fidelity.status, 'unfaithful');
+  fidelityMode = 'unknown-turn';
+  judgeYes = true;
+  const uncheckedCtx = { ...objectCtx, calls: [...simulatorReceipts] };
+  const uncheckedGrade = await gradeCase(input, run, null, uncheckedCtx);
+  assert.equal(uncheckedGrade.grade.pass, 1);
+  assert.equal(uncheckedGrade.meta.simulator_fidelity.status, 'unverified');
+  fidelityMode = 'abort';
+  const abortedCtx = { ...objectCtx, calls: [...simulatorReceipts], signal: AbortSignal.any([ctx.signal, fidelityAbort.signal]) };
+  const abortedGrade = await gradeCase(input, run, null, abortedCtx);
+  assert.equal(abortedGrade.grade.pass, 1);
+  assert.equal(abortedGrade.meta.simulator_fidelity.status, 'unverified');
+  assert.match(abortedGrade.meta.simulator_fidelity.error, /shared case deadline/);
+  assert.equal(json(join(root, run.artifact_dir, 'grading.json')).simulator_fidelity.status, 'unverified');
+  fidelityMode = 'faithful';
+  save(join(root, run.artifact_dir, 'model-calls.json'), flaggedCtx.calls);
+  const beforeReplay = requests.length;
+  const replayRow = { prompt_id: input.id, rep: 0, artifact_dir: run.artifact_dir,
+    grade: flaggedGrade.grade, evaluation: flaggedGrade.meta, wall_clock_s: 1, simulator_unfaithful: true };
+  const replayCtx = { ...objectCtx, attempt: Date.now() };
+  const replayed = await recheckFidelity(input, replayRow, replayCtx);
+  assert.equal(requests.length, beforeReplay + 1);
+  assert.equal(memberCalls, memberCallCount);
+  assert.equal(simulatorCalls, 2);
+  assert.deepEqual(replayed.grade, flaggedGrade.grade);
+  assert.equal(replayed.simulator_unfaithful, false);
+  assert.equal(replayed.evaluation.simulator_fidelity.status, 'faithful');
+  assert.ok(replayed.evaluation.calls_cost_usd > flaggedGrade.meta.calls_cost_usd);
+  const replayReceipt = json(join(root, run.artifact_dir, `fidelity-recheck-${replayCtx.attempt}.json`));
+  assert.deepEqual(replayReceipt.before, JSON.parse(JSON.stringify(replayRow)));
+  assert.equal(replayReceipt.calls.length, 1);
+  assert.equal(replayReceipt.calls[0].purpose, 'simulator_fidelity');
+  const beforeRegrade = requests.length;
+  const regradeCtx = { ...objectCtx, attempt: Date.now() };
+  const regraded = await regradeSaved(input, replayed, regradeCtx);
+  assert.equal(requests.length, beforeRegrade + 2);
+  assert.equal(memberCalls, memberCallCount);
+  assert.equal(simulatorCalls, 2);
+  assert.equal(regraded.grade.pass, 1);
+  assert.deepEqual(regraded.evaluation.simulator_fidelity, replayed.evaluation.simulator_fidelity);
+  assert.equal(regradeCtx.calls.length, 2);
+  assert.ok(regradeCtx.calls.every(call => call.purpose === 'judge'));
+  const regradeReceipt = json(join(root, run.artifact_dir, `regrade-${regradeCtx.attempt}.json`));
+  assert.deepEqual(regradeReceipt.before.grade, replayed.grade);
+  assert.equal(regradeReceipt.after.grade.pass, 1);
+  const summaryFlow = join(root, 'summary-proof');
+  mkdirSync(join(summaryFlow, 'baseline'), { recursive: true });
+  writeFileSync(join(summaryFlow, 'baseline', 'results.jsonl'), [grade, flaggedGrade, uncheckedGrade].map((value, index) => JSON.stringify({
+    prompt_id: `synthetic-fidelity-${index}`, tags: ['use'], status: 'ok', grade: value.grade, evaluation: value.meta,
+    member_cost_usd: run.member_cost_usd, wall_clock_s: 1,
+  })).join('\n') + '\n');
+  execFileSync(process.execPath, [resolve('scripts/evals/crew-memory/summarize.mjs'), summaryFlow]);
+  const summary = json(join(summaryFlow, 'measurements.json')).find(item => item.unit === 'use');
+  assert.equal(summary.cases, 3);
+  assert.equal(summary.score, 2 / 3);
+  assert.equal(summary.simulator_unfaithful_reps, 1);
+  assert.equal(summary.simulator_unchecked_reps, 1);
+  assert.equal(summary.simulator_faithful.cases, 1);
+  assert.equal(summary.simulator_faithful.score, 1);
+  assert.equal(summary.spend_incomplete, true);
+  assert.ok(summary.known_spend_usd > 0);
+  const retiredCost = run.member_cost_usd + flaggedGrade.meta.calls_cost_usd;
+  writeFileSync(join(summaryFlow, 'baseline', 'retired.jsonl'), JSON.stringify({
+    prompt_id: 'synthetic-retired', tags: ['use'], status: 'ok', grade: flaggedGrade.grade,
+    member_cost_usd: run.member_cost_usd, evaluation: flaggedGrade.meta, wall_clock_s: 1,
+  }) + '\n');
+  execFileSync(process.execPath, [resolve('scripts/evals/crew-memory/summarize.mjs'), summaryFlow]);
+  const withRetired = json(join(summaryFlow, 'measurements.json')).find(item => item.unit === 'use');
+  assert.equal(withRetired.cases, summary.cases);
+  assert.equal(withRetired.score, summary.score);
+  assert.equal(withRetired.retired_reps, 1);
+  assert.ok(Math.abs(withRetired.known_spend_usd - summary.known_spend_usd - retiredCost) < 1e-9);
+  save(join(summaryFlow, 'spend-ledger.json'), { known_spend_usd: withRetired.known_spend_usd,
+    known_flow_spend_at_checkpoint_usd: withRetired.known_spend_usd, hard_total_cap_usd: 80,
+    billing_basis: 'Synthetic provider usage for report verification; paid calls=0' });
+  execFileSync(process.execPath, [resolve('scripts/evals/crew-memory/summarize.mjs'), summaryFlow]);
+  const ledgerSummary = json(join(summaryFlow, 'spend-summary.json'));
+  assert.equal(ledgerSummary.known_spend_since_checkpoint_usd, 0);
+  assert.ok(Math.abs(ledgerSummary.current_eval_known_usd - withRetired.known_spend_usd) < 1e-8);
   const controllerLaunches = readFileSync(controllerLaunchesPath, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-  assert.equal(controllerLaunches.length, arrayCalls.length + objectCtx.calls.length);
+  assert.equal(controllerLaunches.length, requests.filter(request => request.model !== config.member_model).length);
   assert.equal(new Set(controllerLaunches.map(launch => launch.cwd)).size, controllerLaunches.length);
   for (const launch of controllerLaunches) {
     assert.ok(launch.cwd.startsWith(join(config.private_root, 'controller-')));
@@ -159,7 +282,11 @@ try {
   assert.ok(controllerRequests.every(request => !JSON.stringify(request.body).includes('PERSONAL_COMMAND_CANARY')));
   const receipt = { at: new Date().toISOString(), paid_calls: 0, provider_mock: true,
     claude_binary: config.claude_binary, real_member_calls: memberCalls, real_simulator_calls: simulatorCalls, memberLaunches,
-    array_calls: arrayCalls, object_calls: objectCtx.calls, controllerLaunches,
+    array_calls: arrayCalls, object_calls: objectCalls, controllerLaunches,
+    fidelity_flagged: flaggedGrade.meta, fidelity_unverified: uncheckedGrade.meta, fidelity_aborted: abortedGrade.meta,
+    fidelity_replay: replayReceipt, judge_only_replay: regradeReceipt,
+    sleep_confirmation_needed: run.sleep_confirmation_needed, sleep_confirmations: sleepConfirmations,
+    summary, summary_with_retired: withRetired, cumulative_spend_summary: ledgerSummary,
     personal_context_canary_absent: true, personal_commands_absent: true,
     member_permission_mode: 'bypassPermissions for deterministic mock tools; localhost/filesystem sandbox remains active',
     closure: 'real member Bash tool files a synthetic letter with attn handoff --sleep',
@@ -170,8 +297,14 @@ try {
 } catch (error) {
   save(join(root, 'model-calls-failure.json'), { error: error.message, failure_class: error.failure_class, calls: ctx.calls, requests,
     launches: existsSync(launchesPath) ? readFileSync(launchesPath, 'utf8') : '' });
-  console.error(error.stack);
-  process.exitCode = 1;
+  if (process.argv.includes('--never-sleep') && error.failure_class === 'controller_handoff' && /awaiting=crew_sleep/.test(error.message)) {
+    assert.equal(memberCalls, memberCallCount);
+    assert.equal(error.sleep_confirmation_needed, true);
+    console.log(`PASS: refusal after direct sleep confirmation fails with the measured crew_sleep watchdog; ${join(root, 'model-calls-failure.json')}`);
+  } else {
+    console.error(error.stack);
+    process.exitCode = 1;
+  }
 } finally {
   await stub.close();
   rmSync(toolsRoot, { recursive: true, force: true });

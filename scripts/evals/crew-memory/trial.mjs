@@ -9,6 +9,11 @@ export const json = path => JSON.parse(readFileSync(path, 'utf8'));
 export const save = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
 export const failure = (kind, message) => Object.assign(new Error(message), { failure_class: kind });
 const quote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
+const matchesInput = (text, prompt) => {
+  if (text.trim() === prompt.trim()) return true;
+  const paste = text.trim().match(/^<pasted_content id="([0-9a-f]{4})">\n([\s\S]*)\n<\/pasted_content id="\1">$/);
+  return paste?.[2].trim() === prompt.trim();
+};
 
 export function environment() {
   return Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -17,13 +22,17 @@ export function environment() {
 
 export async function command(binary, args, options = {}) {
   const child = spawn(binary, args, { env: environment(), ...options, stdio: ['pipe', 'pipe', 'pipe'] });
+  const closed = new Promise(resolve => child.once('close', resolve));
   let stdout = '', stderr = '';
   child.stdout.on('data', data => { stdout += data; });
   child.stderr.on('data', data => { stderr += data; });
   child.stdin.end(options.input ?? '');
   let code, signal;
   try { [code, signal] = await once(child, 'exit'); }
-  catch (error) { throw options.signal?.aborted ? options.signal.reason : error; }
+  catch (error) {
+    await closed;
+    throw options.signal?.aborted ? options.signal.reason : error;
+  }
   if (code !== 0) throw failure('harness', `${binary} exited ${code ?? signal}: ${stderr || stdout}`);
   return stdout;
 }
@@ -52,6 +61,7 @@ export class Trial extends EventEmitter {
     this.handoffAbort = new AbortController();
     this.signal = AbortSignal.any([signal, this.handoffAbort.signal]);
     this.handoffs = [];
+    this.sleepConfirmations = [];
     this.on('changed', () => this.observeExchange());
     this.runtimeBase = join(tmpdir(), 'attn-crew-memory-eval');
     mkdirSync(this.runtimeBase, { recursive: true });
@@ -206,9 +216,8 @@ export class Trial extends EventEmitter {
     return [];
   }
 
-  beginExchange(id, prompt) {
-    const records = prompt === null ? [] : this.nativeRecords(id);
-    this.exchange = { session: id, prompt, cursor: records.length };
+  beginExchange(id, prompt, { cursor = prompt === null ? 0 : this.nativeRecords(id).length, closing = false } = {}) {
+    this.exchange = { session: id, prompt, cursor, closing };
     this.observeExchange();
   }
 
@@ -217,21 +226,22 @@ export class Trial extends EventEmitter {
     if (!exchange || this.signal.aborted || exchange.simulating || this.handoffPhase?.phase === 'simulator_dispatch') return;
     try {
       const session = this.sessions.get(exchange.session);
+      if (exchange.closing && this.unregistered(exchange.session)) { this.endHandoff(); return; }
       if (session?.state === 'working') { this.endHandoff(); return; }
       if (!['idle', 'waiting_input'].includes(session?.state)) return;
       const records = this.nativeRecords(exchange.session);
       const after = exchange.cursor;
       const input = records.findIndex((record, index) => index >= after && record.type === 'user' &&
         (exchange.prompt === null || (typeof record.message?.content === 'string'
-          ? record.message.content.trim() === exchange.prompt.trim()
-          : record.message?.content?.some(part => part.type === 'text' && part.text.trim() === exchange.prompt.trim()))));
+          ? matchesInput(record.message.content, exchange.prompt)
+          : record.message?.content?.some(part => part.type === 'text' && matchesInput(part.text, exchange.prompt)))));
       const completion = input < 0 ? undefined : records.slice(input + 1).find(record => record.type === 'assistant' &&
         record.message?.id && !record.isApiErrorMessage && ['end_turn', 'stop_sequence'].includes(record.message.stop_reason));
       if (completion && !exchange.completion) {
         exchange.completion = { input_cursor: records[input].uuid, id: completion.message.id,
           stop_reason: completion.message.stop_reason, observed_at: performance.now() };
       }
-      const phase = exchange.completion ? 'simulator_start'
+      const phase = exchange.closing ? 'crew_sleep' : exchange.completion ? 'simulator_start'
         : input < 0 && exchange.prompt !== null ? 'native_input_acceptance' : 'normal_assistant_completion';
       if (this.handoffPhase?.phase !== phase) this.armHandoff(phase);
     } catch (error) {
@@ -275,6 +285,7 @@ export class Trial extends EventEmitter {
 
   async waiting(id) {
     await this.until(() => {
+      if (this.exchange?.closing && this.unregistered(id)) return true;
       const session = this.sessions.get(id);
       if (session?.state === 'pending_approval') throw failure('approval', `member ${id} needs approval`);
       if (session?.terminal_exit) throw failure('harness', `member ${id} exited before its answer`);
@@ -283,7 +294,7 @@ export class Trial extends EventEmitter {
     });
   }
 
-  async send(id, text) {
+  async send(id, text, { closing = false } = {}) {
     const previous = this.sessions.get(id);
     this.signal.throwIfAborted();
     if (!['idle', 'waiting_input'].includes(previous?.state) || this.exchange?.session !== id || !this.exchange.completion)
@@ -297,7 +308,7 @@ export class Trial extends EventEmitter {
     if (!['idle', 'waiting_input'].includes(this.sessions.get(id)?.state))
       throw failure('harness', `member ${id} resumed before simulator dispatch`);
     this.endHandoff();
-    this.beginExchange(id, text);
+    this.beginExchange(id, text, { closing });
     this.ws.send(JSON.stringify({ cmd: 'pty_input', id: terminal, data: `\x1b[200~${text}\x1b[201~\r`, source: 'automation' }));
     await this.waiting(id);
   }
@@ -309,13 +320,25 @@ export class Trial extends EventEmitter {
 
   async sleep(id) {
     this.endHandoff();
-    this.exchange = null;
     const terminal = this.bindings.get(id);
     const before = this.nativeRecords(id, terminal).length;
+    const confirmationsBefore = this.sleepConfirmations.length;
+    this.beginExchange(id, null, { cursor: before, closing: true });
     await this.cli(['crew', 'sleep', 'member', '--json']);
-    await this.until(() => this.frames.some(frame => frame.event === 'session_unregistered' && frame.session?.id === id));
-    return this.nativeRecords(id, terminal).slice(before);
+    await this.waiting(id);
+    if (!this.unregistered(id)) {
+      const message = 'sleep';
+      this.sleepConfirmations.push({ session: id, message, at: new Date().toISOString(), origin: 'eval-controller' });
+      await this.send(id, message, { closing: true });
+    }
+    await this.until(() => this.unregistered(id));
+    this.endHandoff();
+    this.exchange = null;
+    return { records: this.nativeRecords(id, terminal).slice(before),
+      confirmation_needed: this.sleepConfirmations.length > confirmationsBefore };
   }
+
+  unregistered(id) { return this.frames.some(frame => frame.event === 'session_unregistered' && frame.session?.id === id); }
 
   async stop() {
     this.endHandoff();
