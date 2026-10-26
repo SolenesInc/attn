@@ -359,16 +359,6 @@ func run() error {
 		fmt.Println("two local shells ran, ATTN_HOST unset, exit 1 retained; Outposts off")
 		return nil
 	}
-	if err := p.await(func() bool {
-		for _, f := range p.frames {
-			if f["event"] == protocol.EventOutpostsUpdated {
-				return true
-			}
-		}
-		return false
-	}); err != nil {
-		return err
-	}
 	host := ""
 	p.mu.Lock()
 	for _, f := range p.frames {
