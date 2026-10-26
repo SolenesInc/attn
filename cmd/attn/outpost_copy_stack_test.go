@@ -270,7 +270,10 @@ func TestARemoteShellThatOutlivesItsCloseEndsOnlyOnItsOutpost(t *testing.T) {
 	if exits := exitsOf(t, outpost, id); exits != 0 {
 		t.Fatalf("the outpost ran the home part of %s's exit %d times, want none", id, exits)
 	}
-	t.Logf("home saw %d exits of %s", exitsOf(t, app, id), id)
+	if exits := exitsOf(t, app, id); exits != 0 {
+		t.Fatalf("the home recorded %d exits of %s after the user closed it, want its record left as it was", exits, id)
+	}
+	requireStdout(t, home.Attn("session", "show", id), "state      closed", " by user")
 }
 
 func exitsOf(t *testing.T, p *testworld.Peer, id string) int {

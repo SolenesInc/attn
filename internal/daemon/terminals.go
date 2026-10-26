@@ -249,12 +249,24 @@ func (r *terminalRegistry) endLocked(t harness.TerminalID, note endingTerminal) 
 	r.ending[t] = note
 }
 
-func (r *terminalRegistry) takeEnding(t harness.TerminalID) (endingTerminal, bool) {
+func (r *terminalRegistry) takeEnding(t harness.TerminalID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	note, ok := r.ending[t]
 	delete(r.ending, t)
-	return note, ok
+}
+
+func (r *terminalRegistry) takeExiting(t harness.TerminalID) (owner endingTerminal, bound, shown bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	note, ending := r.ending[t]
+	delete(r.ending, t)
+	if entry := r.byID[t]; entry != nil {
+		return endingTerminal{session: entry.shows, copied: entry.copied}, true, true
+	}
+	if session, expected := r.expected[t]; expected {
+		return endingTerminal{session: session}, true, true
+	}
+	return note, false, ending
 }
 
 func (r *terminalRegistry) Bindings() []protocol.TerminalBinding {

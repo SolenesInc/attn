@@ -1636,13 +1636,10 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.forgetTerminalTitle(info.ID)
 		return false
 	}
-	sessionID, shown := d.shownIn(info.ID)
-	if !shown {
+	owner, bound, shown := d.terminals().takeExiting(info.ID)
+	sessionID := owner.session
+	if !bound {
 		d.forgetTerminalTitle(info.ID)
-	}
-	ended, ending := d.terminals().takeEnding(info.ID)
-	if ending && !shown {
-		sessionID, shown = ended.session, true
 	}
 	if !shown {
 		d.clearTerminalExitIntent(info.ID, terminalExitStop)
@@ -1703,7 +1700,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	unlockEnds()
 	exit.Held, exit.Stopped = false, stopped
 	if monitor == nil || d.store.Get(sessionID) == nil {
-		if ended.copied && ended.session == sessionID || d.copiedSession(sessionID) {
+		if owner.copied || d.copiedSession(sessionID) {
 			return true
 		}
 		d.reactSessionExit(sessionID, exit)
