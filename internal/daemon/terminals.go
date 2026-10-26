@@ -23,6 +23,7 @@ type terminalRegistry struct {
 
 type terminal struct {
 	shows    harness.SessionID
+	copied   bool
 	shownSeq uint64
 	lastKey  time.Time
 }
@@ -134,12 +135,13 @@ func (r *terminalRegistry) sync(bindings []store.TerminalBinding) {
 			r.shown++
 			entry.shows, entry.shownSeq = session, r.shown
 		}
+		entry.copied = binding.Copied
 	}
 	now := time.Now()
 	for id, entry := range r.byID {
 		if _, kept := bound[id]; !kept {
 			delete(r.byID, id)
-			r.endLocked(id, entry.shows, now)
+			r.endLocked(id, endingTerminal{session: entry.shows, copied: entry.copied, at: now})
 		}
 	}
 }
@@ -221,30 +223,38 @@ const endingGrace = time.Minute
 
 type endingTerminal struct {
 	session harness.SessionID
+	copied  bool
 	at      time.Time
 }
 
 func (r *terminalRegistry) noteEnding(t harness.TerminalID, s harness.SessionID, now time.Time) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.endLocked(t, s, now)
+	note := endingTerminal{session: s, at: now}
+	if entry := r.byID[t]; entry != nil && entry.shows == s {
+		note.copied = entry.copied
+	}
+	if old, ok := r.ending[t]; ok && old.session == s {
+		note.copied = note.copied || old.copied
+	}
+	r.endLocked(t, note)
 }
 
-func (r *terminalRegistry) endLocked(t harness.TerminalID, s harness.SessionID, now time.Time) {
-	for id, note := range r.ending {
-		if now.Sub(note.at) > endingGrace {
+func (r *terminalRegistry) endLocked(t harness.TerminalID, note endingTerminal) {
+	for id, old := range r.ending {
+		if note.at.Sub(old.at) > endingGrace {
 			delete(r.ending, id)
 		}
 	}
-	r.ending[t] = endingTerminal{session: s, at: now}
+	r.ending[t] = note
 }
 
-func (r *terminalRegistry) takeEnding(t harness.TerminalID) (harness.SessionID, bool) {
+func (r *terminalRegistry) takeEnding(t harness.TerminalID) (endingTerminal, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	note, ok := r.ending[t]
 	delete(r.ending, t)
-	return note.session, ok
+	return note, ok
 }
 
 func (r *terminalRegistry) Bindings() []protocol.TerminalBinding {

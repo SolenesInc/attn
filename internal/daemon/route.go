@@ -74,14 +74,8 @@ func (d *Daemon) sessionHost(id protocol.SessionID) string {
 	if id == "" {
 		return ""
 	}
-	if session := d.store.Get(id); session != nil {
-		if session.Host == nil || d.copiedSession(id) {
-			return ""
-		}
-		return *session.Host
-	}
-	host, origin := d.store.SessionHost(id)
-	if origin != "" {
+	host, copied := d.store.SessionHost(id)
+	if copied {
 		return ""
 	}
 	return host

@@ -542,6 +542,7 @@ func (s *Store) OnEmptyDesktop(fn func(emptiedAt time.Time)) {
 type TerminalBinding struct {
 	TerminalID protocol.TerminalID
 	SessionID  protocol.SessionID
+	Copied     bool
 }
 
 // OnTerminalBindings hands fn every binding after each commit that can change them, under the store
@@ -557,7 +558,8 @@ func (s *Store) announceTerminalBindingsLocked() {
 	if s.terminalBindings == nil || s.db == nil {
 		return
 	}
-	rows, err := s.db.Query(`SELECT b.terminal_id, b.session_id FROM terminal_bindings b
+	rows, err := s.db.Query(`SELECT b.terminal_id, b.session_id, COALESCE(s.copied_from, '') != '' FROM terminal_bindings b
+ LEFT JOIN sessions s ON s.id = b.session_id
  LEFT JOIN desktop_panes p ON p.runtime_id = b.terminal_id
  ORDER BY COALESCE(p.created_at, ''), COALESCE(p.pane_id, ''), b.terminal_id`)
 	if err != nil {
@@ -568,7 +570,7 @@ func (s *Store) announceTerminalBindingsLocked() {
 	var bindings []TerminalBinding
 	for rows.Next() {
 		var binding TerminalBinding
-		if err := rows.Scan(&binding.TerminalID, &binding.SessionID); err != nil {
+		if err := rows.Scan(&binding.TerminalID, &binding.SessionID, &binding.Copied); err != nil {
 			log.Printf("[store] listing terminal bindings: %v", err)
 			return
 		}

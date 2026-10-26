@@ -34,6 +34,7 @@ const (
 	SessionSnoozeCommitted    = "session-snooze-committed"
 	SessionTeardownPrepared   = "session-teardown-prepared"
 	SessionExitObserved       = "session-process-exit-observed"
+	PtyExitHandled            = "pty-exit-handled"
 	DriverTranscriptCaptured  = "driver-transcript-captured"
 	DriverTranscriptApplied   = "driver-transcript-applied"
 	CopyBatchStaged           = "copy-batch-staged"

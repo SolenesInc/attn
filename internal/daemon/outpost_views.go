@@ -17,11 +17,8 @@ import (
 const bridgeCallView = "monitor_view"
 
 func (d *Daemon) copiedSession(id protocol.SessionID) bool {
-	if d.daemonSetting(settingOutpostListen) == "" {
-		return false
-	}
-	_, origin := d.store.SessionHost(id)
-	return origin != ""
+	_, copied := d.store.SessionHost(id)
+	return copied
 }
 
 func (d *Daemon) homeHandlers(host string) bridge.Handlers {

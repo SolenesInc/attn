@@ -97,10 +97,10 @@ func queryOutbox(db *sql.DB, host string) ([]outboxEntry, error) {
 func currentCopyRows(db *sql.DB, host string, entry outboxEntry, carried map[string]bool) ([]protocol.CopyRow, error) {
 	switch entry.table {
 	case protocol.CopyTableSessions:
-		row, err := copyRow(db, entry.table, entry.key, `SELECT * FROM sessions WHERE id = ? AND host = ?`, entry.key, host)
+		row, err := copyRow(db, entry.table, entry.key, `SELECT * FROM sessions WHERE id = ? AND host = ? AND closed_at = ''`, entry.key, host)
 		return []protocol.CopyRow{row}, err
 	case protocol.CopyTableTerminalBindings:
-		row, err := copyRow(db, entry.table, entry.key, `SELECT b.* FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE b.terminal_id = ? AND s.host = ?`, entry.key, host)
+		row, err := copyRow(db, entry.table, entry.key, `SELECT b.* FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE b.terminal_id = ? AND s.host = ? AND s.closed_at = ''`, entry.key, host)
 		if err != nil || row.Columns == nil {
 			return []protocol.CopyRow{row}, err
 		}
@@ -108,7 +108,7 @@ func currentCopyRows(db *sql.DB, host string, entry outboxEntry, carried map[str
 		if carried[session] {
 			return []protocol.CopyRow{row}, nil
 		}
-		owner, err := copyRow(db, protocol.CopyTableSessions, session, `SELECT * FROM sessions WHERE id = ?`, session)
+		owner, err := copyRow(db, protocol.CopyTableSessions, session, `SELECT * FROM sessions WHERE id = ? AND closed_at = ''`, session)
 		return []protocol.CopyRow{owner, row}, err
 	}
 	return nil, fmt.Errorf("outpost outbox entry %d names unknown table %q", entry.id, entry.table)
@@ -207,8 +207,8 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 	return nil
 }
 
-// DropCopyNotFrom forgets every row copied here from a daemon other than home, so the terminals they bound
-// are pruned. An empty home drops every copy.
+// DropCopyNotFrom forgets every row copied here from a daemon other than home, and every closed copied row,
+// so the terminals they bound are pruned. An empty home drops every copy.
 func (s *Store) DropCopyNotFrom(home string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -217,7 +217,7 @@ func (s *Store) DropCopyNotFrom(home string) error {
 		return err
 	}
 	defer tx.Rollback()
-	if err := deleteCopiedSessions(tx, `copied_from != '' AND copied_from != ?`, home); err != nil {
+	if err := deleteCopiedSessions(tx, `copied_from != '' AND (copied_from != ? OR closed_at != '')`, home); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -313,10 +313,10 @@ func (s *Store) RequeueOutpostCopy(host string) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT host,'sessions',id FROM sessions WHERE host = ? ON CONFLICT(tbl,key) DO NOTHING`, host); err != nil {
+	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT host,'sessions',id FROM sessions WHERE host = ? AND closed_at = '' ON CONFLICT(tbl,key) DO NOTHING`, host); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT s.host,'terminal_bindings',b.terminal_id FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE s.host = ? ON CONFLICT(tbl,key) DO NOTHING`, host); err != nil {
+	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT s.host,'terminal_bindings',b.terminal_id FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE s.host = ? AND s.closed_at = '' ON CONFLICT(tbl,key) DO NOTHING`, host); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -325,15 +325,18 @@ func (s *Store) RequeueOutpostCopy(host string) error {
 	return nil
 }
 
-func (s *Store) SessionHost(id protocol.SessionID) (host, origin string) {
-	if s.db == nil {
-		if session := s.Get(id); session != nil {
-			return protocol.Deref(session.Host), ""
-		}
-		return
-	}
+// SessionHost names the outpost a session runs on, and whether this daemon holds the session as a copy
+// from its home.
+func (s *Store) SessionHost(id protocol.SessionID) (host string, copied bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if session, copied := s.openSessionLocked(id); session != nil {
+		return protocol.Deref(session.Host), copied
+	}
+	if s.db == nil {
+		return "", false
+	}
+	var origin string
 	_ = s.db.QueryRow(`SELECT host,copied_from FROM sessions WHERE id = ?`, id).Scan(&host, &origin)
-	return
+	return host, origin != ""
 }
