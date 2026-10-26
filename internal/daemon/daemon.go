@@ -1304,8 +1304,8 @@ func (d *Daemon) recoverRecords(machine machineReport, sessions []protocol.Sessi
 
 	if rules.allowTombstoneCleanup {
 		for _, sessionID := range d.store.SessionTeardownIntentIDs() {
-			host, origin := d.store.SessionHost(sessionID)
-			if host != rules.host || origin != "" {
+			host, copied := d.store.SessionHost(sessionID)
+			if host != rules.host || copied {
 				continue
 			}
 			if _, live := machine.live[sessionID]; live {
@@ -1626,6 +1626,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		return false
 	}
 	defer release()
+	defer pausepoint.At(pausepoint.PtyExitHandled)
 	if d.exitOfSupersededRuntime(info) {
 		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
 		return false
@@ -1635,12 +1636,11 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.forgetTerminalTitle(info.ID)
 		return false
 	}
-	sessionID, shown := d.shownIn(info.ID)
-	if !shown {
+	owner, bound, shown := d.terminals().takeExiting(info.ID)
+	sessionID := owner.session
+	pausepoint.At(pausepoint.PtyExitOwnerResolved)
+	if !bound {
 		d.forgetTerminalTitle(info.ID)
-	}
-	if ended, ending := d.terminals().takeEnding(info.ID); ending && !shown {
-		sessionID, shown = ended, true
 	}
 	if !shown {
 		d.clearTerminalExitIntent(info.ID, terminalExitStop)
@@ -1701,7 +1701,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	unlockEnds()
 	exit.Held, exit.Stopped = false, stopped
 	if monitor == nil || d.store.Get(sessionID) == nil {
-		if d.copiedSession(sessionID) {
+		if owner.copied || d.copiedSession(sessionID) {
 			return true
 		}
 		d.reactSessionExit(sessionID, exit)

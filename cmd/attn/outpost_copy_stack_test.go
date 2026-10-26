@@ -1,7 +1,12 @@
 package main_test
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
 	"reflect"
+	"slices"
+	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -106,11 +111,29 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 		t.Fatal("the batch the outpost lost was not sent again")
 	}
 
-	testworld.Request(p, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: remoteShell}, protocol.EventSessionCloseResult,
-		func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == remoteShell })
+	closeRemote := func(id protocol.SessionID) {
+		t.Helper()
+		testworld.Request(p, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: id}, protocol.EventSessionCloseResult,
+			func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == id })
+	}
+	closeRemote(remoteShell)
 	awaitCopy()
-	spawnRemote("kept shell", "kept")
+	if closed := listedRows(t, remote, "--closed"); len(closed) != 0 {
+		t.Fatalf("a closed shell stayed in the outpost's copy: %v", closed)
+	}
+	kept := spawnRemote("kept shell", "kept")
+	for i := range 30 {
+		closeRemote(spawnRemote(fmt.Sprintf("closed shell %d", i), "closed"))
+	}
 	awaitCopy()
+	remote.Stop()
+	remote.Start()
+	staged.Await()
+	staged.Release()
+	awaitCopy()
+	if copied := listedRows(t, remote, "--all", "--limit", "100"); !reflect.DeepEqual(copied, []string{string(kept)}) {
+		t.Fatalf("after a reconnect with 31 closed shells the outpost holds %v, want only the open shell %s", copied, kept)
+	}
 
 	remote.Stop()
 	p.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host})
@@ -164,5 +187,175 @@ func TestReconnectRestoresTheCopyAfterAnOutpostLeaves(t *testing.T) {
 	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
 	if copied := sessionsOn(t, remote, ""); len(copied) != 0 {
 		t.Fatalf("leave after Remove kept copied shells: %v", copied)
+	}
+}
+
+func TestARemoteShellExitReachesItsHomeAfterTheOutpostStopsListening(t *testing.T) {
+	a := testworld.NewSSHAgent(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	for _, s := range []*testworld.Stack{remote, home} {
+		a.Authorize(s.World)
+		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+		s.Start()
+	}
+	address := bridgeAddress(t)
+	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
+	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	release, exiting := makeFifo(t, remote.Path("release.fifo")), makeFifo(t, remote.Path("exiting.fifo"))
+	app.TypeLine(id, "echo armed; read line < "+release+"; echo exiting > "+exiting+"; exit 0")
+	app.AwaitScreen(id, "armed")
+
+	mark := len(app.Log())
+	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", ""))
+	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+	remote.Stop()
+	handled := remote.PauseAt(pausepoint.PtyExitHandled)
+	remote.Start()
+	writeFifo(t, release, "go\n")
+	readFifo(t, exiting)
+	handled.Await()
+	handled.Release()
+
+	mark = len(app.Log())
+	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	testworld.AwaitSince(app, mark, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == id && e.ExitCode == 0 })
+	testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return s.TerminalExit != nil && s.TerminalExit.Code == 0 })
+	testworld.AwaitSince(app, mark, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && string(e.Session.ID) == id })
+	requireStdout(t, home.Attn("session", "show", id), "state      closed", "because    Agent exited normally")
+	if rows := listedRows(t, remote, "--closed"); slices.Contains(rows, id) {
+		t.Fatalf("the outpost closed its copy of %s itself: %v", id, rows)
+	}
+}
+
+func TestARemoteShellThatOutlivesItsCloseEndsOnlyOnItsOutpost(t *testing.T) {
+	a := testworld.NewSSHAgent(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	applied := remote.PauseEvery(pausepoint.CopyBatchApplied)
+	handled := remote.PauseAt(pausepoint.PtyExitHandled)
+	for _, s := range []*testworld.Stack{remote, home} {
+		a.Authorize(s.World)
+		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+		s.Start()
+	}
+	address := bridgeAddress(t)
+	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	app := enableOutposts(t, home)
+	outpost := remote.App()
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
+	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	terminal := protocol.TerminalID(app.Terminal(id))
+	app.TypeLine(id, "trap '' TERM; echo armed")
+	app.AwaitScreen(id, "armed")
+
+	testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(id)}, protocol.EventSessionCloseResult,
+		func(r protocol.SessionCloseResultMessage) bool { return string(r.SessionID) == id })
+	for {
+		applied.Await()
+		live := slices.Contains(listedRows(t, remote), id)
+		applied.Release()
+		if !live {
+			break
+		}
+	}
+	if copied := listedRows(t, remote, "--all"); slices.Contains(copied, id) {
+		t.Fatalf("the outpost kept its copy of %s after the home closed it: %v", id, copied)
+	}
+	handled.Await()
+	handled.Release()
+	gone := testworld.Request(outpost, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	if gone.Success && protocol.Deref(gone.Running) {
+		t.Fatalf("the shell's PTY still runs on the outpost after its exit: %+v", gone)
+	}
+	if exits := exitsOf(t, outpost, id); exits != 0 {
+		t.Fatalf("the outpost ran the home part of %s's exit %d times, want none", id, exits)
+	}
+	requireStdout(t, home.Attn("session", "show", id), "state      closed", " by user")
+}
+
+func exitsOf(t *testing.T, p *testworld.Peer, id string) int {
+	t.Helper()
+	exits := 0
+	for _, raw := range p.Log() {
+		var event struct {
+			Event     string `json:"event"`
+			SessionID string `json:"session_id"`
+		}
+		if err := json.Unmarshal(raw, &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.Event == protocol.EventSessionExited && event.SessionID == id {
+			exits++
+		}
+	}
+	return exits
+}
+
+func makeFifo(t *testing.T, path string) string {
+	t.Helper()
+	if err := syscall.Mkfifo(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func writeFifo(t *testing.T, path, text string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readFifo(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.ReadFile(path); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestARemoteShellExitingAsItsHomeClosesItEndsOnlyOnItsOutpost(t *testing.T) {
+	a := testworld.NewSSHAgent(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	applied := remote.PauseEvery(pausepoint.CopyBatchApplied)
+	resolved := remote.PauseAt(pausepoint.PtyExitOwnerResolved)
+	handled := remote.PauseAt(pausepoint.PtyExitHandled)
+	for _, s := range []*testworld.Stack{remote, home} {
+		a.Authorize(s.World)
+		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+		s.Start()
+	}
+	address := bridgeAddress(t)
+	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	app := enableOutposts(t, home)
+	outpost := remote.App()
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
+	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	terminal := protocol.TerminalID(app.Terminal(id))
+	release := makeFifo(t, remote.Path("release.fifo"))
+	app.TypeLine(id, "echo armed; read line < "+release+"; exit 0")
+	app.AwaitScreen(id, "armed")
+
+	writeFifo(t, release, "go\n")
+	resolved.Await()
+	testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(id)}, protocol.EventSessionCloseResult,
+		func(r protocol.SessionCloseResultMessage) bool { return string(r.SessionID) == id })
+	for {
+		applied.Await()
+		copied := slices.Contains(listedRows(t, remote, "--all"), id)
+		applied.Release()
+		if !copied {
+			break
+		}
+	}
+	resolved.Release()
+	handled.Await()
+	handled.Release()
+	testworld.Request(outpost, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	if exits := exitsOf(t, outpost, id); exits != 0 {
+		t.Fatalf("the outpost ran the home part of %s's exit %d times, want none", id, exits)
 	}
 }

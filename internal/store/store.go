@@ -346,32 +346,36 @@ func (s *Store) refuseJoiningDeletedProfileLocked(session *protocol.Session) err
 func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	session, _ := s.openSessionLocked(id)
+	return session
+}
 
+func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, bool) {
 	if s.db == nil {
 		session := cloneSession(s.sessions[id])
 		if session != nil {
 			applyTurnStamps(session, s.turnStamps[id])
 		}
-		return session
+		return session, false
 	}
 
 	gen, cached := s.sessionsGeneration()
 	if cached {
-		if session, ok := s.sessionRows.session(id, gen); ok {
-			return session
+		if session, copied, ok := s.sessionRows.session(id, gen); ok {
+			return session, copied
 		}
 	}
 
 	var session protocol.Session
 	var labels SessionLabels
 	var stateSince, stateUpdatedAt, lastSeen string
-	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host string
+	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host, copiedFrom string
 	var isWorktree, priority int
 	var contextWindowCap int
 	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from
 		FROM sessions_with_runtime WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
@@ -399,9 +403,10 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 		&succeeds,
 		&priority,
 		&host,
+		&copiedFrom,
 	)
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	session.Label = labels.shown(session.ID, session.Directory, session.Agent)
 	applyTurnStamps(&session, TurnStamps{
@@ -447,10 +452,11 @@ func (s *Store) Get(id protocol.SessionID) *protocol.Session {
 	}
 	session.LastSeen = lastSeen
 
+	copied := copiedFrom != ""
 	if cached {
-		s.sessionRows.putSession(id, gen, &session)
+		s.sessionRows.putSession(id, gen, &session, copied)
 	}
-	return &session
+	return &session, copied
 }
 
 var sessionOwnedTables = []string{
