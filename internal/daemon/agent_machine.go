@@ -148,6 +148,7 @@ func (d *Daemon) seedAgentMonitor(session *protocol.Session, opts ptybackend.Spa
 	}
 	monitor := d.startSessionMonitor(session.ID)
 	monitor.Restart(withSeed(seed, session), fresh)
+	monitor.Launched(launch.StartedAt)
 	monitor.RememberInitialPrompt(launch.InitialPrompt)
 }
 
@@ -163,7 +164,6 @@ func (d *Daemon) agentStarted(sessionID protocol.SessionID, launch *AgentLaunch)
 	if launch.FreshCost {
 		monitor.StartCost()
 	}
-	monitor.Launched(launch.StartedAt)
 	monitor.StartTranscriptWatcher("")
 	if pending, ok := d.consumePendingAgentConversation(sessionID); ok {
 		d.observeAgentConversation(pending)
@@ -197,9 +197,11 @@ func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harnes
 	}
 }
 
-func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool) error {
+func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool) {
 	_, err := Call[struct{}](context.Background(), d.router(), protocol.LaunchCommittedMessage{Cmd: protocol.CmdLaunchCommitted, TerminalID: terminal, Committed: committed})
-	return err
+	if err != nil {
+		d.logf("launch_committed: terminal=%s committed=%t: %v", terminal, committed, err)
+	}
 }
 
 func (d *Daemon) readConversationReadiness(_ context.Context, msg protocol.ConversationReadinessMessage) (protocol.ConversationReadinessResult, error) {

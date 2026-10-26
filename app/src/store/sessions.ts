@@ -132,7 +132,6 @@ function samePullRequests(
   });
 }
 
-
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
   ...initialSessionNavigation(),
@@ -259,8 +258,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
     await ptyReload({ id, cols, rows });
   },
-
-
 
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => {
     set((state) => {

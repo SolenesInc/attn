@@ -92,9 +92,7 @@ type spawnOutcome struct {
 
 func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if plan.agent != nil {
-		if err := d.launchCommitted(plan.spawnOpts.ID, false); err != nil {
-			d.logf("abort agent launch: %v", err)
-		}
+		d.launchCommitted(plan.spawnOpts.ID, false)
 	}
 	if d.store.Get(sessionID) == nil {
 		d.forgetMonitor(sessionID)
@@ -577,9 +575,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
 	}
 	if plan.agent != nil {
-		if err := d.launchCommitted(plan.spawnOpts.ID, true); err != nil {
-			return &spawnOutcome{err: err}
-		}
+		d.launchCommitted(plan.spawnOpts.ID, true)
 	}
 	return &spawnOutcome{}
 }
@@ -593,9 +589,7 @@ func (d *Daemon) commitAddedTerminal(req *spawnRequest, plan *spawnPlan, session
 	}
 	plan.commit()
 	d.publishFact(FactSessionReregistered, string(session.ID), nil)
-	if err := d.launchCommitted(plan.spawnOpts.ID, true); err != nil {
-		return &spawnOutcome{err: err}
-	}
+	d.launchCommitted(plan.spawnOpts.ID, true)
 	return &spawnOutcome{}
 }
 

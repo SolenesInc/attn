@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -89,4 +90,42 @@ func TestAgentHooksReachTheLaunchingDaemonAndDefaultExecutableComesFromPath(t *t
 			})
 		}
 	}
+}
+
+func TestAFailedRespawnPlacementKeepsTheStoppedAgentsConversationAndUsage(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	cwd := w.Path("shop")
+	session := w.Spawn(app, fakeagent.Claude, cwd)
+	run := w.Launched(session)
+	app.TypeLine(session, "price the cart")
+	run.Prompted()
+	answer := "Priced. <!-- attn:state=idle -->"
+	run.Reply(answer)
+	awaitUsageTokens(app, session, claudeTokens(answer))
+	run.Exit(143)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == session })
+	desktop, pane := placedPane(t, w, session)
+	mustProfileRequest(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: "unplace", DesktopID: desktop.ID, LeafID: pane}, "unplace")
+	before := queriedSession(t, w.Client(), session)
+	failed := testworld.Request(app, protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(session), Agent: string(fakeagent.Claude), Cwd: cwd,
+		ProfileID: app.SelectedProfile(), Placement: &protocol.SessionPlacement{DesktopID: protocol.Ptr(desktop.ID), AnchorPaneID: protocol.Ptr("missing-pane")}, Cols: 100, Rows: 30,
+	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == session })
+	if failed.Success || !strings.Contains(protocol.Deref(failed.Error), "anchor leaf") {
+		t.Fatalf("respawn = %+v, want the placement refusal", failed)
+	}
+	after := queriedSession(t, w.Client(), session)
+	if after.State != before.State || !reflect.DeepEqual(after.TerminalExit, before.TerminalExit) || !reflect.DeepEqual(after.Usage, before.Usage) {
+		t.Fatalf("refused placement changed state/exit/usage: before=%+v after=%+v", before, after)
+	}
+	launchIntentReload(t, app, session)
+	resumed := w.Launched(session)
+	if !resumed.Resumed || resumed.ConversationID != run.ConversationID {
+		t.Fatalf("retry resumed=%v conversation=%s, want %s", resumed.Resumed, resumed.ConversationID, run.ConversationID)
+	}
+	app.TypeLine(session, "price another cart")
+	resumed.Prompted()
+	resumed.Reply(answer)
+	awaitUsageTokens(app, session, 2*claudeTokens(answer))
 }

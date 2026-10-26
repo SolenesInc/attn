@@ -360,7 +360,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 	d.recordReload(sessionID, opts)
 	d.announceReload(sessionID, opts)
 	if agent != nil {
-		return d.launchCommitted(opts.ID, true)
+		d.launchCommitted(opts.ID, true)
 	}
 	return nil
 }
