@@ -40,8 +40,8 @@ absolute paths. Pin `member_model`, `member_effort`, `simulator_model`,
 reviewed user voice in `voice`, additional hidden directories in `hidden_roots`,
 and every other executed helper in `harness_paths`.
 Each case needs a public `day_brief` that scopes today's work without revealing
-hidden facts. The trial puts it before the copied charter. Historical letters
-remain unchanged.
+hidden facts. The trial puts it before the copied charter. Add the brief without
+editing the case's historical letters.
 
 Pin resolved model ids rather than aliases. The runner rejects model
 substitution and missing usage receipts. It saves and checks the member's
@@ -90,25 +90,26 @@ provider mock, and restrict the real member's network access to localhost and
 Unix sockets. The first check drives the pinned Claude and attn binaries through
 a charter read, two distinct inputs, a tool continuation, and crew sleep. It
 files the letter through the controller CLI. The second deliberately omits the
-simulator and must fail with the named handoff limit. Receipts and synthetic
+simulator and must fail with a `controller_handoff` error that reports
+`controller_handoff_timeout_ms` and `awaiting=simulator_start`. Receipts and synthetic
 provider requests go under the flow's `audit-lifecycle/` directory, outside the
-paid result files. These checks prove turn delivery and cleanup; task quality,
-model-written letters, provider latency, and simulator/judge behavior still need
+paid result files. These checks prove turn delivery and cleanup. Task quality,
+model-written letters, provider latency, and simulator and judge behavior still need
 the reviewed pilot.
 
 To verify Ctrl-C through the runner, prepare a separate, unused pilot flow with
 `local_provider_only: true` and include `check-cancellation.mjs` and its imported
-helpers in `harness_paths`. The reviewer must approve that exact configuration
+helpers in `harness_paths`. The user must approve that exact configuration
 through the normal digest gate first. Then run:
 
 ```sh
 node scripts/evals/crew-memory/check-cancellation.mjs /path/to/cancellation-flow/_state.json
 ```
 
-The check replaces authentication with dummy values and interrupts its captured
-runner PID after the real daemon-ready receipt. It must exit 130, save one
+The check runs `run.mjs` with dummy authentication and sends it SIGINT once the
+first attempt's `runtime.json` appears. It must exit 130, save one
 interrupted attempt, clean the instance, and start no second case. It saves
-`cli-cancellation-proof.json` in that flow. It does not record approval itself.
+`cli-cancellation-proof.json` in that flow.
 
 ## Supply authentication in your terminal
 
@@ -148,13 +149,14 @@ node scripts/evals/crew-memory/summarize.mjs "$CREW_EVAL_FLOW"
 With `pilot: true`, `units` selects only the two one-day cases. It is the default
 stage. The simulator sends a prompt after a fresh native assistant completion
 and a settled attn state (`idle` or `waiting_input`). Each response must follow
-the matching input; an old idle state or an intermediate tool response cannot
+the matching input. An old idle state or an intermediate tool response cannot
 advance the day. The controller calls `attn crew sleep` after the task and grades the filed
 letters and output files. The judge grades each output twice.
 
-Set `controller_handoff_timeout_ms` from a reviewed local lifecycle receipt.
+Set `controller_handoff_timeout_ms` from the `handoffs` timings in a reviewed
+`audit-lifecycle/real-lifecycle-proof.json`.
 It bounds the local controller's acceptance and delivery of turns while the
-member is settled. Member and simulator provider calls use the case ceiling.
+member is settled. Member and simulator provider calls stay under `case_timeout_s`.
 The receipt must distinguish these measurements. A stalled handoff fails with
 the limit, elapsed time, session, exchange, and phase, and stops the remaining
 pass so the same runner failure cannot consume more cases.

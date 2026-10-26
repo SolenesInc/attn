@@ -100,8 +100,8 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   is also a supported setting. Both switches were read in 2.1.310's source;
   the environment switch was used in the real crew lifecycle probe below.
 - `--name <name>` supplies the native session title. Without it, a local mock
-  provider recorded four auxiliary Haiku title requests during a crew wake,
-  two inputs and sleep. With `--name Member` and suggestions disabled, the
+  provider recorded four auxiliary Haiku title requests across a crew wake,
+  two inputs, and a sleep. With `--name Member` and suggestions disabled, the
   same real-binary lifecycle made only its six expected Opus member requests
   (2.1.310). Attn's `ATTN_HEADLESS_TASKS=off` does not disable Claude's native
   title generation.
