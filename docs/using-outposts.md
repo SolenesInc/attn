@@ -2,7 +2,7 @@
 
 Outposts are experimental. An outpost is another computer running attn, such
 as a Linux box or a cloud VM, that your home connects to. Your home is the attn
-on the Mac whose app you use, and it can connect to several outposts.
+on the Mac where you use the app. One home can connect to several outposts.
 
 Shells on an outpost appear in terminal tiles beside your local terminals.
 The tile header shows the outpost's name after the title. Input, screen
@@ -20,10 +20,10 @@ make install-daemon
 make build-linux-amd64 OUTPUT=/tmp/attn-outpost   # or build-linux-arm64
 ```
 
-On the outpost:
+To run attn on the outpost:
 
-1. Copy `/tmp/attn-outpost` from the Mac to the outpost's `/tmp` (for
-   example `scp /tmp/attn-outpost ai-sandbox:/tmp/`). Then install it as
+1. From the Mac, copy `/tmp/attn-outpost` to the outpost's `/tmp` (for
+   example `scp /tmp/attn-outpost ai-sandbox:/tmp/`). Then, on the outpost, install it as
    `~/.local/bin/attn` and run it as a systemd user service:
 
    ```sh
@@ -71,6 +71,10 @@ On the outpost:
 On the home, turn on **Outposts** in Settings → Experimental, then add the
 outpost by name and address in Settings → Outposts.
 
+The home and outpost must use the same [instance](instances.md) name. The
+default install on both sides already matches. A named instance cannot pair
+with production or another named instance.
+
 The first connection pairs them, with no prompt. The home remembers the
 outpost's identity, and the outpost accepts only this home from then on.
 
@@ -106,9 +110,11 @@ reconnect, the home marks the shell recoverable. **Resume** starts a new shell
 in its place.
 
 Only shells run on outposts for now. Spawning an agent with a host fails.
-An `attn` command that needs a daemon also fails inside an outpost shell,
-and the error names the outpost and tells you to run the command from an
-agent at the home.
+An `attn` command in an outpost shell or a plain SSH shell reaches the home
+through the outpost. [Garden](glossary.md) commands and document subscriptions use the home's
+records. Hooks and machine settings run on the outpost. If the home is
+unreachable, the command fails immediately and names the home. If the bridge
+is lost during a command, the error says that it may have run.
 
 Files on an outpost don't open on the Mac yet. **Open in editor** and
 ⌘-clicked paths in an outpost shell fail and name the outpost, and nothing
@@ -139,13 +145,14 @@ red tint. A strip over the terminal says "<name> unreachable · typing is not
 sent" without changing the terminal's size. Typing and resizes are not sent,
 and close, split, kill, and reload refuse immediately, naming the outpost.
 
-While the home is still connecting to an outpost, after the home starts or
-when you turn Outposts on, add an outpost or re-pair it, its terminals don't
-look offline, but typing is not sent yet. A stalled connection still sends
-typing. If it then turns lost, the keys still on their way fail, and the tile
-says how many keys may not have been sent until a key you type goes out again.
-The last of them may already have left the home and reach the outpost when it
-comes back, so look at the shell before you retype.
+While the home is still connecting to an outpost, its terminals don't look
+offline, but typing is not sent yet. This happens after the home starts, when
+you turn Outposts on, and when you add or re-pair an outpost. A stalled
+connection still sends typing. If it then turns lost, the keys still on their
+way fail. The tile says how many keys may not have been sent, and clears that
+message when a key you type goes out again. Some of those keys may already
+have left the home and reach the outpost when it comes back, so look at the
+shell before you retype.
 
 Every key that is not sent flashes its tile red. attn never retries a key it
 could not send.
@@ -173,6 +180,7 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 
 | Refused because | What to do |
 | --- | --- |
+| the two use different instance names | Start an outpost with the same instance name as the home. |
 | the two run different builds | Install the same build on both. |
 | the outpost changed host key or daemon id | It was reinstalled or its data folder replaced. If you expect that, **Re-pair** it. |
 | the outpost is paired to another home | Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
@@ -182,8 +190,8 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 ## Remove an outpost
 
 **Remove** closes the outpost's terminals across all profiles, then forgets
-the outpost and its identity. When it has terminals, the row asks you to
-confirm with **Remove and close N terminals**, or **Cancel**. When it has
+the outpost and its identity. When the outpost has terminals, the row asks you to
+confirm with **Remove and close N terminals**, or **Cancel**. When the outpost has
 none, removal happens immediately. If the outpost is unreachable or still
 connecting, the row asks **Remove and forget N terminals** instead and says
 that its shells keep running on the outpost: Remove closes their tiles at the
@@ -202,3 +210,29 @@ two shells keep their process, screen and state through
 `systemctl --user restart`, `attn daemon stop` followed by
 `systemctl --user start`, a daemon crash, and an update to another build.
 Run either with `--help` for its arguments.
+
+For a real bridge check, `scripts/outpost-instance.py` starts a named outpost
+on ai-sandbox with its own binary, data folder, listener and systemd user unit.
+Copy the script and Linux binary there, then run it through Bash (the login
+shell is fish):
+
+```sh
+scp scripts/outpost-instance.py /tmp/attn-outpost ai-sandbox:/tmp/
+ssh ai-sandbox bash -s <<'EOF'
+python3 /tmp/outpost-instance.py start --instance router-check --binary /tmp/attn-outpost --listen 127.0.0.1:17777
+EOF
+```
+
+Pair it only with the Mac's `router-check` instance. The example listens on
+localhost, so reach it through an SSH tunnel from the Mac, or pass `--listen`
+an address the Mac can reach directly. When finished, run:
+
+```sh
+ssh ai-sandbox bash -s <<'EOF'
+python3 /tmp/outpost-instance.py remove --instance router-check
+EOF
+```
+
+The helper stops the user unit and cleans the instance before removing its
+binary and unit file. If cleanup cannot stop a worker, it preserves the
+instance data and reports what remains. Resolve that failure and rerun removal.

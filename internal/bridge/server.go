@@ -114,7 +114,10 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 		return err
 	}
 	answer := greeting(cfg.Self)
-	if cfg.Admit != nil {
+	if cfg.Self.Instance != home.Instance {
+		answer.Refused = &Refusal{Reason: "instance", Detail: fmt.Sprintf("home instance %q cannot use outpost instance %q", home.Instance, cfg.Self.Instance)}
+	}
+	if answer.Refused == nil && cfg.Admit != nil {
 		answer.Refused = cfg.Admit(home.Identity)
 	}
 	if answer.Refused == nil {

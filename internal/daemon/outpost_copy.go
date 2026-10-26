@@ -63,7 +63,7 @@ func (d *Daemon) sendOutpostCopyBatch(ctx context.Context, host string, conn *br
 
 func (d *Daemon) outpostHandlers() bridge.Handlers {
 	return bridge.Handlers{
-		bridgeCallTerminal: d.terminalBridgeHandler(),
+		bridgeCall: d.callBridgeHandler(""),
 		bridgeCallRecovery: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("reportOutpostMachine", func() {
 				bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) {

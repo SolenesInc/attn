@@ -40,6 +40,7 @@ const (
 	DriverTranscriptApplied   = "driver-transcript-applied"
 	CopyBatchStaged           = "copy-batch-staged"
 	CopyBatchApplied          = "copy-batch-applied"
+	ForwardSocketCreated      = "forward-socket-created"
 )
 
 type armed struct {

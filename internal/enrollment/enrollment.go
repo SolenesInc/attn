@@ -24,12 +24,14 @@ var ErrNoDaemonID = errors.New("no daemon id")
 
 type Record struct {
 	HomeDaemonID string `json:"home_daemon_id"`
+	HomeName     string `json:"home_name,omitempty"`
 	RecordedAt   string `json:"recorded_at,omitempty"`
 }
 
 type Status struct {
 	DaemonID     string `json:"daemon_id"`
 	HomeDaemonID string `json:"home_daemon_id"`
+	HomeName     string `json:"home_name,omitempty"`
 }
 
 func (s Status) IsHome() bool {
@@ -50,6 +52,7 @@ type Result struct {
 	Status       string `json:"status"`
 	DaemonID     string `json:"daemon_id"`
 	HomeDaemonID string `json:"home_daemon_id"`
+	HomeName     string `json:"home_name,omitempty"`
 	PreviousHome string `json:"previous_home_daemon_id,omitempty"`
 	Message      string `json:"message"`
 }
@@ -105,7 +108,7 @@ func Ensure(dataRoot, daemonID string) (Status, error) {
 	record, err := readRecord(recordPath)
 	switch {
 	case err == nil:
-		return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}, nil
+		return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID, HomeName: record.HomeName}, nil
 	case errors.Is(err, ErrNoRecord):
 		if err := writeRecord(recordPath, Record{HomeDaemonID: daemonID, RecordedAt: nowStamp()}); err != nil {
 			return Status{}, err
@@ -125,7 +128,7 @@ func Load(dataRoot string) (Status, error) {
 	if err != nil {
 		return Status{DaemonID: daemonID}, err
 	}
-	return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}, nil
+	return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID, HomeName: record.HomeName}, nil
 }
 
 func Leave(dataRoot string) (Result, error) {
@@ -169,7 +172,7 @@ func Leave(dataRoot string) (Result, error) {
 	}, nil
 }
 
-func RecordHome(dataRoot, homeID string) (Status, error) {
+func RecordHome(dataRoot, homeID, homeName string) (Status, error) {
 	if !ValidDaemonID(homeID) {
 		return Status{}, fmt.Errorf("invalid home daemon id %q", homeID)
 	}
@@ -190,12 +193,12 @@ func RecordHome(dataRoot, homeID string) (Status, error) {
 	if err == nil && record.HomeDaemonID != daemonID && record.HomeDaemonID != homeID {
 		return Status{}, fmt.Errorf("outpost %s is paired to home %s; home %s refused; run attn enrollment leave on the outpost to release it", daemonID, record.HomeDaemonID, homeID)
 	}
-	if err != nil || record.HomeDaemonID != homeID {
-		if err := writeRecord(recordPath, Record{HomeDaemonID: homeID, RecordedAt: nowStamp()}); err != nil {
+	if err != nil || record.HomeDaemonID != homeID || record.HomeName != homeName {
+		if err := writeRecord(recordPath, Record{HomeDaemonID: homeID, HomeName: homeName, RecordedAt: nowStamp()}); err != nil {
 			return Status{}, err
 		}
 	}
-	return Status{DaemonID: daemonID, HomeDaemonID: homeID}, nil
+	return Status{DaemonID: daemonID, HomeDaemonID: homeID, HomeName: homeName}, nil
 }
 
 func ValidDaemonID(id string) bool {

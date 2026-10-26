@@ -22,7 +22,7 @@ func TestHomePairingAndRelease(t *testing.T) {
 			const first = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 			const second = "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 			for range 2 {
-				if _, err := enrollment.RecordHome(root, first); err != nil {
+				if _, err := enrollment.RecordHome(root, first, "first"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -30,14 +30,14 @@ func TestHomePairingAndRelease(t *testing.T) {
 			if err != nil || status.HomeDaemonID != first {
 				t.Fatalf("paired: %+v %v", status, err)
 			}
-			_, err = enrollment.RecordHome(root, second)
+			_, err = enrollment.RecordHome(root, second, "second")
 			if err == nil || !strings.Contains(err.Error(), first) || !strings.Contains(err.Error(), second) || !strings.Contains(err.Error(), "attn enrollment leave") {
 				t.Fatalf("second home: %v", err)
 			}
 			if _, err := enrollment.Leave(root); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := enrollment.RecordHome(root, second); err != nil {
+			if _, err := enrollment.RecordHome(root, second, "second"); err != nil {
 				t.Fatal(err)
 			}
 			status, err = enrollment.Ensure(root, own)

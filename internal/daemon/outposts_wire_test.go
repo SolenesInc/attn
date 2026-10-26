@@ -61,7 +61,7 @@ func startFarOutpost(t *testing.T, w *world) *farOutpost {
 	if err := o.keyring.Add(agent.AddedKey{PrivateKey: key}); err != nil {
 		t.Fatal(err)
 	}
-	self := bridge.Identity{DaemonID: "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	self := bridge.Identity{Instance: "default", DaemonID: "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
 	go func() {

@@ -2,13 +2,17 @@
 
 package protocol
 
+import "encoding/json"
+
 type Locator int
 
 const (
 	LocatorHome Locator = iota + 1
+	LocatorHere
 	LocatorMachine
 	LocatorSession
 	LocatorTerminal
+	LocatorSetting
 )
 
 type Placement struct {
@@ -17,46 +21,1060 @@ type Placement struct {
 }
 
 type Placed interface {
-	Command() string
+	CommandName() string
 	Placement() Placement
 	Locate() string
 }
 
-var Placements = map[string]Placement{
-	"apply_monitor_view":        {LocatorHome, ""},
-	"get_kitty_image":           {LocatorTerminal, "id"},
-	"get_screen_snapshot":       {LocatorTerminal, "id"},
-	"pty_resize":                {LocatorTerminal, "id"},
-	"terminal_kill":             {LocatorTerminal, "terminal_id"},
-	"terminal_launch":           {LocatorTerminal, "terminal_id"},
-	"terminal_pointer_activity": {LocatorTerminal, "id"},
-	"terminal_read_text":        {LocatorTerminal, "terminal_id"},
-	"terminal_remove":           {LocatorTerminal, "terminal_id"},
-	"terminal_restart":          {LocatorTerminal, "terminal_id"},
-	"terminal_shell":            {LocatorMachine, "host"},
-	"terminal_start":            {LocatorMachine, "host"},
-	"terminal_theme":            {LocatorMachine, "host"},
-	"terminal_wait_block":       {LocatorTerminal, "terminal_id"},
-	"terminal_write":            {LocatorTerminal, "terminal_id"},
+var Placements = map[string][]Placement{
+	"activity_status":                  {Placement{LocatorHome, ""}},
+	"agent_close":                      {Placement{LocatorHome, ""}},
+	"agent_inbox":                      {Placement{LocatorHome, ""}},
+	"agent_msg":                        {Placement{LocatorHome, ""}},
+	"agent_msg_status":                 {Placement{LocatorHome, ""}},
+	"agent_peek":                       {Placement{LocatorHome, ""}},
+	"agent_reload":                     {Placement{LocatorHome, ""}},
+	"agent_turn":                       {Placement{LocatorHome, ""}},
+	"apply_monitor_view":               {Placement{LocatorHome, ""}},
+	"ask_close":                        {Placement{LocatorHome, ""}},
+	"ask_list":                         {Placement{LocatorHome, ""}},
+	"ask_open":                         {Placement{LocatorHome, ""}},
+	"automation_apply":                 {Placement{LocatorHome, ""}},
+	"automation_cleanup":               {Placement{LocatorHome, ""}},
+	"automation_definition_get":        {Placement{LocatorHome, ""}},
+	"automation_definitions_get":       {Placement{LocatorHome, ""}},
+	"automation_delete":                {Placement{LocatorHome, ""}},
+	"automation_run":                   {Placement{LocatorHome, ""}},
+	"automation_runs_get":              {Placement{LocatorHome, ""}},
+	"automation_set_enabled":           {Placement{LocatorHome, ""}},
+	"automation_validate":              {Placement{LocatorHome, ""}},
+	"automode_denials":                 {Placement{LocatorHome, ""}},
+	"automode_env_notes":               {Placement{LocatorHome, ""}},
+	"automode_env_slot":                {Placement{LocatorHome, ""}},
+	"automode_propose":                 {Placement{LocatorHome, ""}},
+	"automode_show":                    {Placement{LocatorHome, ""}},
+	"browser_control":                  {Placement{LocatorHome, ""}},
+	"callout_anchors":                  {Placement{LocatorHome, ""}},
+	"callout_show":                     {Placement{LocatorHome, ""}},
+	"clear_session_activity":           {Placement{LocatorHome, ""}},
+	"codex_status":                     {Placement{LocatorHere, ""}},
+	"collapse_repo":                    {Placement{LocatorHome, ""}},
+	"create_worktree":                  {Placement{LocatorHere, ""}},
+	"crew_charter_get":                 {Placement{LocatorHome, ""}},
+	"crew_charter_set":                 {Placement{LocatorHome, ""}},
+	"crew_handoff":                     {Placement{LocatorHome, ""}},
+	"crew_handoff_get":                 {Placement{LocatorHome, ""}},
+	"crew_handoffs_get":                {Placement{LocatorHome, ""}},
+	"crew_list":                        {Placement{LocatorHome, ""}},
+	"crew_memory_add":                  {Placement{LocatorHome, ""}},
+	"crew_memory_forget":               {Placement{LocatorHome, ""}},
+	"crew_memory_import":               {Placement{LocatorHome, ""}},
+	"crew_memory_recall":               {Placement{LocatorHome, ""}},
+	"crew_memory_rewrite":              {Placement{LocatorHome, ""}},
+	"crew_memory_summarize":            {Placement{LocatorHome, ""}},
+	"crew_memory_zoom":                 {Placement{LocatorHome, ""}},
+	"crew_prime":                       {Placement{LocatorHome, ""}},
+	"crew_set":                         {Placement{LocatorHome, ""}},
+	"crew_sleep":                       {Placement{LocatorHome, ""}},
+	"crew_wake":                        {Placement{LocatorHome, ""}},
+	"delegate":                         {Placement{LocatorHome, ""}},
+	"delegate_status":                  {Placement{LocatorHome, ""}},
+	"delegation_preferences_commit":    {Placement{LocatorHome, ""}},
+	"delegation_preferences_history":   {Placement{LocatorHome, ""}},
+	"delegation_preferences_rollback":  {Placement{LocatorHome, ""}},
+	"delegation_preferences_show":      {Placement{LocatorHome, ""}},
+	"delegation_roles":                 {Placement{LocatorHome, ""}},
+	"delete_worktree":                  {Placement{LocatorHere, ""}},
+	"desktop_move_session":             {Placement{LocatorHome, ""}},
+	"doc_collections":                  {Placement{LocatorHome, ""}},
+	"doc_count":                        {Placement{LocatorHome, ""}},
+	"doc_define":                       {Placement{LocatorHome, ""}},
+	"doc_delete":                       {Placement{LocatorHome, ""}},
+	"doc_get":                          {Placement{LocatorHome, ""}},
+	"doc_put":                          {Placement{LocatorHome, ""}},
+	"doc_query":                        {Placement{LocatorHome, ""}},
+	"doc_subscribe":                    {Placement{LocatorHome, ""}},
+	"doc_undefine":                     {Placement{LocatorHome, ""}},
+	"drop_outpost_copy":                {Placement{LocatorHere, ""}},
+	"fetch_pr_details":                 {Placement{LocatorHome, ""}},
+	"files_edited":                     {Placement{LocatorHere, ""}},
+	"get_kitty_image":                  {Placement{LocatorTerminal, "id"}},
+	"get_screen_snapshot":              {Placement{LocatorTerminal, "id"}},
+	"get_settings":                     {Placement{LocatorHere, ""}},
+	"hook_compaction":                  {Placement{LocatorHere, ""}},
+	"hook_notification":                {Placement{LocatorHere, ""}},
+	"hook_stop_failure":                {Placement{LocatorHere, ""}},
+	"inject_test_pr":                   {Placement{LocatorHere, ""}},
+	"inject_test_session":              {Placement{LocatorHere, ""}},
+	"journal_append":                   {Placement{LocatorHome, ""}},
+	"kept_conversation_forget":         {Placement{LocatorHome, ""}},
+	"kept_conversation_keep":           {Placement{LocatorHome, ""}},
+	"kept_conversation_list":           {Placement{LocatorHome, ""}},
+	"launch_desktop_get":               {Placement{LocatorHome, ""}},
+	"launch_desktop_set":               {Placement{LocatorHome, ""}},
+	"list_worktrees":                   {Placement{LocatorHere, ""}},
+	"mute_pr":                          {Placement{LocatorHome, ""}},
+	"mute_repo":                        {Placement{LocatorHome, ""}},
+	"notebook_guide":                   {Placement{LocatorHome, ""}},
+	"open_browser":                     {Placement{LocatorHome, ""}},
+	"open_markdown":                    {Placement{LocatorHome, ""}},
+	"open_seed":                        {Placement{LocatorHome, ""}},
+	"open_sent_files":                  {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
+	"pty_resize":                       {Placement{LocatorTerminal, "id"}},
+	"pull_request_created":             {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
+	"pull_request_forget":              {Placement{LocatorHome, ""}},
+	"pull_request_unwatch":             {Placement{LocatorHome, ""}},
+	"pull_request_watch":               {Placement{LocatorHome, ""}},
+	"query":                            {Placement{LocatorHome, ""}},
+	"query_authors":                    {Placement{LocatorHome, ""}},
+	"query_prs":                        {Placement{LocatorHome, ""}},
+	"query_repos":                      {Placement{LocatorHome, ""}},
+	"quick_capture_attachment_discard": {Placement{LocatorHome, ""}},
+	"quick_capture_attachment_get":     {Placement{LocatorHome, ""}},
+	"quick_capture_attachment_put":     {Placement{LocatorHome, ""}},
+	"quick_capture_get":                {Placement{LocatorHome, ""}},
+	"quick_capture_list":               {Placement{LocatorHome, ""}},
+	"quick_capture_send":               {Placement{LocatorHome, ""}},
+	"record_analytics":                 {Placement{LocatorHere, ""}},
+	"record_vent":                      {Placement{LocatorHome, ""}},
+	"rename_session":                   {Placement{LocatorHome, ""}},
+	"restart_shared_codex":             {Placement{LocatorHere, ""}},
+	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
+	"seed_check":                       {Placement{LocatorHome, ""}},
+	"seed_edit":                        {Placement{LocatorHome, ""}},
+	"seed_link":                        {Placement{LocatorHome, ""}},
+	"seed_list":                        {Placement{LocatorHome, ""}},
+	"seed_note":                        {Placement{LocatorHome, ""}},
+	"seed_notes":                       {Placement{LocatorHome, ""}},
+	"seed_plant":                       {Placement{LocatorHome, ""}},
+	"seed_plot":                        {Placement{LocatorHome, ""}},
+	"seed_ready":                       {Placement{LocatorHome, ""}},
+	"seed_review_cancel":               {Placement{LocatorHome, ""}},
+	"seed_review_keep":                 {Placement{LocatorHome, ""}},
+	"seed_review_retry":                {Placement{LocatorHome, ""}},
+	"seed_review_show":                 {Placement{LocatorHome, ""}},
+	"seed_review_start":                {Placement{LocatorHome, ""}},
+	"seed_search":                      {Placement{LocatorHome, ""}},
+	"seed_send_to_chief":               {Placement{LocatorHome, ""}},
+	"seed_show":                        {Placement{LocatorHome, ""}},
+	"seed_transition":                  {Placement{LocatorHome, ""}},
+	"seed_watch":                       {Placement{LocatorHome, ""}},
+	"session_instructions":             {Placement{LocatorHome, ""}},
+	"session_list":                     {Placement{LocatorHome, ""}},
+	"session_reopen":                   {Placement{LocatorHome, ""}},
+	"session_show":                     {Placement{LocatorHome, ""}},
+	"session_transcript":               {Placement{LocatorHome, ""}},
+	"set_session_context_window_cap":   {Placement{LocatorHome, ""}},
+	"set_session_priority":             {Placement{LocatorHome, ""}},
+	"set_session_resume_id":            {Placement{LocatorHere, ""}},
+	"set_setting":                      {Placement{LocatorHere, ""}},
+	"snooze_turn":                      {Placement{LocatorHome, ""}},
+	"state":                            {Placement{LocatorHere, ""}},
+	"state_explain":                    {Placement{LocatorHome, ""}},
+	"stop":                             {Placement{LocatorHere, ""}},
+	"terminal_close":                   {Placement{LocatorHome, ""}},
+	"terminal_input":                   {Placement{LocatorHome, ""}},
+	"terminal_kill":                    {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_launch":                  {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_list":                    {Placement{LocatorHome, ""}},
+	"terminal_open":                    {Placement{LocatorHome, ""}},
+	"terminal_pointer_activity":        {Placement{LocatorTerminal, "id"}},
+	"terminal_read":                    {Placement{LocatorHome, ""}},
+	"terminal_read_text":               {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_remove":                  {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_restart":                 {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_shell":                   {Placement{LocatorMachine, "host"}},
+	"terminal_start":                   {Placement{LocatorMachine, "host"}},
+	"terminal_theme":                   {Placement{LocatorMachine, "host"}},
+	"terminal_wait":                    {Placement{LocatorHome, ""}},
+	"terminal_wait_block":              {Placement{LocatorTerminal, "terminal_id"}},
+	"terminal_write":                   {Placement{LocatorTerminal, "terminal_id"}},
+	"unregister":                       {Placement{LocatorHome, ""}},
+	"wake_turn":                        {Placement{LocatorHome, ""}},
+	"withdraw_vent":                    {Placement{LocatorHome, ""}},
+	"worktree_keep":                    {Placement{LocatorHere, ""}},
+	"worktree_list":                    {Placement{LocatorHere, ""}},
+	"worktree_refresh":                 {Placement{LocatorHere, ""}},
+	"worktree_sweep_log":               {Placement{LocatorHere, ""}},
 }
 
-func (ApplyMonitorViewMessage) Command() string {
-	return "apply_monitor_view"
+func SocketPlacement(command string, frame []byte) (Placement, bool) {
+	places, declared := Placements[command]
+	if !declared {
+		return Placement{}, false
+	}
+	if len(places) == 1 {
+		return places[0], true
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(frame, &fields) != nil {
+		return Placement{}, false
+	}
+	for _, place := range places[:len(places)-1] {
+		if raw, present := fields[place.Field]; present && string(raw) != "null" {
+			return place, true
+		}
+	}
+	return places[len(places)-1], true
 }
 
-func (ApplyMonitorViewMessage) Placement() Placement {
+func (ActivityStatusMessage) CommandName() string {
+	return "activity_status"
+}
+
+func (m ActivityStatusMessage) Placement() Placement {
 	return Placement{LocatorHome, ""}
 }
 
-func (ApplyMonitorViewMessage) Locate() string {
+func (m ActivityStatusMessage) Locate() string {
 	return ""
 }
 
-func (GetKittyImageMessage) Command() string {
+func (AgentCloseMessage) CommandName() string {
+	return "agent_close"
+}
+
+func (m AgentCloseMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AgentCloseMessage) Locate() string {
+	return ""
+}
+
+func (AgentInboxMessage) CommandName() string {
+	return "agent_inbox"
+}
+
+func (m AgentInboxMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AgentInboxMessage) Locate() string {
+	return ""
+}
+
+func (AgentMsgMessage) CommandName() string {
+	return "agent_msg"
+}
+
+func (m AgentMsgMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AgentMsgMessage) Locate() string {
+	return ""
+}
+
+func (AgentMsgStatusMessage) CommandName() string {
+	return "agent_msg_status"
+}
+
+func (m AgentMsgStatusMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AgentMsgStatusMessage) Locate() string {
+	return ""
+}
+
+func (AgentPeekMessage) CommandName() string {
+	return "agent_peek"
+}
+
+func (m AgentPeekMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AgentPeekMessage) Locate() string {
+	return ""
+}
+
+func (AgentReloadMessage) CommandName() string {
+	return "agent_reload"
+}
+
+func (m AgentReloadMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AgentReloadMessage) Locate() string {
+	return ""
+}
+
+func (AgentTurnMessage) CommandName() string {
+	return "agent_turn"
+}
+
+func (m AgentTurnMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AgentTurnMessage) Locate() string {
+	return ""
+}
+
+func (ApplyMonitorViewMessage) CommandName() string {
+	return "apply_monitor_view"
+}
+
+func (m ApplyMonitorViewMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m ApplyMonitorViewMessage) Locate() string {
+	return ""
+}
+
+func (AskCloseMessage) CommandName() string {
+	return "ask_close"
+}
+
+func (m AskCloseMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AskCloseMessage) Locate() string {
+	return ""
+}
+
+func (AskListMessage) CommandName() string {
+	return "ask_list"
+}
+
+func (m AskListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AskListMessage) Locate() string {
+	return ""
+}
+
+func (AskOpenMessage) CommandName() string {
+	return "ask_open"
+}
+
+func (m AskOpenMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AskOpenMessage) Locate() string {
+	return ""
+}
+
+func (AutomationApplyMessage) CommandName() string {
+	return "automation_apply"
+}
+
+func (m AutomationApplyMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationApplyMessage) Locate() string {
+	return ""
+}
+
+func (AutomationCleanupMessage) CommandName() string {
+	return "automation_cleanup"
+}
+
+func (m AutomationCleanupMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationCleanupMessage) Locate() string {
+	return ""
+}
+
+func (AutomationDefinitionGetMessage) CommandName() string {
+	return "automation_definition_get"
+}
+
+func (m AutomationDefinitionGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationDefinitionGetMessage) Locate() string {
+	return ""
+}
+
+func (AutomationDefinitionsGetMessage) CommandName() string {
+	return "automation_definitions_get"
+}
+
+func (m AutomationDefinitionsGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationDefinitionsGetMessage) Locate() string {
+	return ""
+}
+
+func (AutomationDeleteMessage) CommandName() string {
+	return "automation_delete"
+}
+
+func (m AutomationDeleteMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationDeleteMessage) Locate() string {
+	return ""
+}
+
+func (AutomationRunMessage) CommandName() string {
+	return "automation_run"
+}
+
+func (m AutomationRunMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationRunMessage) Locate() string {
+	return ""
+}
+
+func (AutomationRunsGetMessage) CommandName() string {
+	return "automation_runs_get"
+}
+
+func (m AutomationRunsGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationRunsGetMessage) Locate() string {
+	return ""
+}
+
+func (AutomationSetEnabledMessage) CommandName() string {
+	return "automation_set_enabled"
+}
+
+func (m AutomationSetEnabledMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationSetEnabledMessage) Locate() string {
+	return ""
+}
+
+func (AutomationValidateMessage) CommandName() string {
+	return "automation_validate"
+}
+
+func (m AutomationValidateMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationValidateMessage) Locate() string {
+	return ""
+}
+
+func (AutoModeDenialsMessage) CommandName() string {
+	return "automode_denials"
+}
+
+func (m AutoModeDenialsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutoModeDenialsMessage) Locate() string {
+	return ""
+}
+
+func (AutoModeEnvNotesMessage) CommandName() string {
+	return "automode_env_notes"
+}
+
+func (m AutoModeEnvNotesMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutoModeEnvNotesMessage) Locate() string {
+	return ""
+}
+
+func (AutoModeEnvSlotMessage) CommandName() string {
+	return "automode_env_slot"
+}
+
+func (m AutoModeEnvSlotMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutoModeEnvSlotMessage) Locate() string {
+	return ""
+}
+
+func (AutoModeProposeMessage) CommandName() string {
+	return "automode_propose"
+}
+
+func (m AutoModeProposeMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutoModeProposeMessage) Locate() string {
+	return ""
+}
+
+func (AutoModeShowMessage) CommandName() string {
+	return "automode_show"
+}
+
+func (m AutoModeShowMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutoModeShowMessage) Locate() string {
+	return ""
+}
+
+func (BrowserControlMessage) CommandName() string {
+	return "browser_control"
+}
+
+func (m BrowserControlMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m BrowserControlMessage) Locate() string {
+	return ""
+}
+
+func (CalloutAnchorsMessage) CommandName() string {
+	return "callout_anchors"
+}
+
+func (m CalloutAnchorsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CalloutAnchorsMessage) Locate() string {
+	return ""
+}
+
+func (CalloutShowMessage) CommandName() string {
+	return "callout_show"
+}
+
+func (m CalloutShowMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CalloutShowMessage) Locate() string {
+	return ""
+}
+
+func (ClearSessionActivityMessage) CommandName() string {
+	return "clear_session_activity"
+}
+
+func (m ClearSessionActivityMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m ClearSessionActivityMessage) Locate() string {
+	return ""
+}
+
+func (CodexStatusMessage) CommandName() string {
+	return "codex_status"
+}
+
+func (m CodexStatusMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m CodexStatusMessage) Locate() string {
+	return ""
+}
+
+func (CollapseRepoMessage) CommandName() string {
+	return "collapse_repo"
+}
+
+func (m CollapseRepoMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CollapseRepoMessage) Locate() string {
+	return ""
+}
+
+func (CreateWorktreeMessage) CommandName() string {
+	return "create_worktree"
+}
+
+func (m CreateWorktreeMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m CreateWorktreeMessage) Locate() string {
+	return ""
+}
+
+func (CrewCharterGetMessage) CommandName() string {
+	return "crew_charter_get"
+}
+
+func (m CrewCharterGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewCharterGetMessage) Locate() string {
+	return ""
+}
+
+func (CrewCharterSetMessage) CommandName() string {
+	return "crew_charter_set"
+}
+
+func (m CrewCharterSetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewCharterSetMessage) Locate() string {
+	return ""
+}
+
+func (CrewHandoffMessage) CommandName() string {
+	return "crew_handoff"
+}
+
+func (m CrewHandoffMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewHandoffMessage) Locate() string {
+	return ""
+}
+
+func (CrewHandoffGetMessage) CommandName() string {
+	return "crew_handoff_get"
+}
+
+func (m CrewHandoffGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewHandoffGetMessage) Locate() string {
+	return ""
+}
+
+func (CrewHandoffsGetMessage) CommandName() string {
+	return "crew_handoffs_get"
+}
+
+func (m CrewHandoffsGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewHandoffsGetMessage) Locate() string {
+	return ""
+}
+
+func (CrewListMessage) CommandName() string {
+	return "crew_list"
+}
+
+func (m CrewListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewListMessage) Locate() string {
+	return ""
+}
+
+func (CrewMemoryAddMessage) CommandName() string {
+	return "crew_memory_add"
+}
+
+func (m CrewMemoryAddMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewMemoryAddMessage) Locate() string {
+	return ""
+}
+
+func (CrewMemoryForgetMessage) CommandName() string {
+	return "crew_memory_forget"
+}
+
+func (m CrewMemoryForgetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewMemoryForgetMessage) Locate() string {
+	return ""
+}
+
+func (CrewMemoryImportMessage) CommandName() string {
+	return "crew_memory_import"
+}
+
+func (m CrewMemoryImportMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewMemoryImportMessage) Locate() string {
+	return ""
+}
+
+func (CrewMemoryRecallMessage) CommandName() string {
+	return "crew_memory_recall"
+}
+
+func (m CrewMemoryRecallMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewMemoryRecallMessage) Locate() string {
+	return ""
+}
+
+func (CrewMemoryRewriteMessage) CommandName() string {
+	return "crew_memory_rewrite"
+}
+
+func (m CrewMemoryRewriteMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewMemoryRewriteMessage) Locate() string {
+	return ""
+}
+
+func (CrewMemorySummarizeMessage) CommandName() string {
+	return "crew_memory_summarize"
+}
+
+func (m CrewMemorySummarizeMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewMemorySummarizeMessage) Locate() string {
+	return ""
+}
+
+func (CrewMemoryZoomMessage) CommandName() string {
+	return "crew_memory_zoom"
+}
+
+func (m CrewMemoryZoomMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewMemoryZoomMessage) Locate() string {
+	return ""
+}
+
+func (CrewPrimeMessage) CommandName() string {
+	return "crew_prime"
+}
+
+func (m CrewPrimeMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewPrimeMessage) Locate() string {
+	return ""
+}
+
+func (CrewSetMessage) CommandName() string {
+	return "crew_set"
+}
+
+func (m CrewSetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewSetMessage) Locate() string {
+	return ""
+}
+
+func (CrewSleepMessage) CommandName() string {
+	return "crew_sleep"
+}
+
+func (m CrewSleepMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewSleepMessage) Locate() string {
+	return ""
+}
+
+func (CrewWakeMessage) CommandName() string {
+	return "crew_wake"
+}
+
+func (m CrewWakeMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewWakeMessage) Locate() string {
+	return ""
+}
+
+func (DelegateMessage) CommandName() string {
+	return "delegate"
+}
+
+func (m DelegateMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DelegateMessage) Locate() string {
+	return ""
+}
+
+func (DelegateStatusMessage) CommandName() string {
+	return "delegate_status"
+}
+
+func (m DelegateStatusMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DelegateStatusMessage) Locate() string {
+	return ""
+}
+
+func (DelegationPreferencesCommitMessage) CommandName() string {
+	return "delegation_preferences_commit"
+}
+
+func (m DelegationPreferencesCommitMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DelegationPreferencesCommitMessage) Locate() string {
+	return ""
+}
+
+func (DelegationPreferencesHistoryMessage) CommandName() string {
+	return "delegation_preferences_history"
+}
+
+func (m DelegationPreferencesHistoryMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DelegationPreferencesHistoryMessage) Locate() string {
+	return ""
+}
+
+func (DelegationPreferencesRollbackMessage) CommandName() string {
+	return "delegation_preferences_rollback"
+}
+
+func (m DelegationPreferencesRollbackMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DelegationPreferencesRollbackMessage) Locate() string {
+	return ""
+}
+
+func (DelegationPreferencesShowMessage) CommandName() string {
+	return "delegation_preferences_show"
+}
+
+func (m DelegationPreferencesShowMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DelegationPreferencesShowMessage) Locate() string {
+	return ""
+}
+
+func (DelegationRolesMessage) CommandName() string {
+	return "delegation_roles"
+}
+
+func (m DelegationRolesMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DelegationRolesMessage) Locate() string {
+	return ""
+}
+
+func (DeleteWorktreeMessage) CommandName() string {
+	return "delete_worktree"
+}
+
+func (m DeleteWorktreeMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m DeleteWorktreeMessage) Locate() string {
+	return ""
+}
+
+func (DesktopMoveSessionMessage) CommandName() string {
+	return "desktop_move_session"
+}
+
+func (m DesktopMoveSessionMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DesktopMoveSessionMessage) Locate() string {
+	return ""
+}
+
+func (DocCollectionsMessage) CommandName() string {
+	return "doc_collections"
+}
+
+func (m DocCollectionsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocCollectionsMessage) Locate() string {
+	return ""
+}
+
+func (DocCountMessage) CommandName() string {
+	return "doc_count"
+}
+
+func (m DocCountMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocCountMessage) Locate() string {
+	return ""
+}
+
+func (DocDefineMessage) CommandName() string {
+	return "doc_define"
+}
+
+func (m DocDefineMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocDefineMessage) Locate() string {
+	return ""
+}
+
+func (DocDeleteMessage) CommandName() string {
+	return "doc_delete"
+}
+
+func (m DocDeleteMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocDeleteMessage) Locate() string {
+	return ""
+}
+
+func (DocGetMessage) CommandName() string {
+	return "doc_get"
+}
+
+func (m DocGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocGetMessage) Locate() string {
+	return ""
+}
+
+func (DocPutMessage) CommandName() string {
+	return "doc_put"
+}
+
+func (m DocPutMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocPutMessage) Locate() string {
+	return ""
+}
+
+func (DocQueryMessage) CommandName() string {
+	return "doc_query"
+}
+
+func (m DocQueryMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocQueryMessage) Locate() string {
+	return ""
+}
+
+func (DocSubscribeMessage) CommandName() string {
+	return "doc_subscribe"
+}
+
+func (m DocSubscribeMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocSubscribeMessage) Locate() string {
+	return ""
+}
+
+func (DocUndefineMessage) CommandName() string {
+	return "doc_undefine"
+}
+
+func (m DocUndefineMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m DocUndefineMessage) Locate() string {
+	return ""
+}
+
+func (DropOutpostCopyMessage) CommandName() string {
+	return "drop_outpost_copy"
+}
+
+func (m DropOutpostCopyMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m DropOutpostCopyMessage) Locate() string {
+	return ""
+}
+
+func (FetchPRDetailsMessage) CommandName() string {
+	return "fetch_pr_details"
+}
+
+func (m FetchPRDetailsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m FetchPRDetailsMessage) Locate() string {
+	return ""
+}
+
+func (FilesEditedMessage) CommandName() string {
+	return "files_edited"
+}
+
+func (m FilesEditedMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m FilesEditedMessage) Locate() string {
+	return ""
+}
+
+func (GetKittyImageMessage) CommandName() string {
 	return "get_kitty_image"
 }
 
-func (GetKittyImageMessage) Placement() Placement {
+func (m GetKittyImageMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "id"}
 }
 
@@ -64,11 +1082,11 @@ func (m GetKittyImageMessage) Locate() string {
 	return string(m.ID)
 }
 
-func (GetScreenSnapshotMessage) Command() string {
+func (GetScreenSnapshotMessage) CommandName() string {
 	return "get_screen_snapshot"
 }
 
-func (GetScreenSnapshotMessage) Placement() Placement {
+func (m GetScreenSnapshotMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "id"}
 }
 
@@ -76,11 +1094,257 @@ func (m GetScreenSnapshotMessage) Locate() string {
 	return string(m.ID)
 }
 
-func (PtyResizeMessage) Command() string {
+func (GetSettingsMessage) CommandName() string {
+	return "get_settings"
+}
+
+func (m GetSettingsMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m GetSettingsMessage) Locate() string {
+	return ""
+}
+
+func (HookCompactionMessage) CommandName() string {
+	return "hook_compaction"
+}
+
+func (m HookCompactionMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m HookCompactionMessage) Locate() string {
+	return ""
+}
+
+func (HookNotificationMessage) CommandName() string {
+	return "hook_notification"
+}
+
+func (m HookNotificationMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m HookNotificationMessage) Locate() string {
+	return ""
+}
+
+func (HookStopFailureMessage) CommandName() string {
+	return "hook_stop_failure"
+}
+
+func (m HookStopFailureMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m HookStopFailureMessage) Locate() string {
+	return ""
+}
+
+func (InjectTestPRMessage) CommandName() string {
+	return "inject_test_pr"
+}
+
+func (m InjectTestPRMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m InjectTestPRMessage) Locate() string {
+	return ""
+}
+
+func (InjectTestSessionMessage) CommandName() string {
+	return "inject_test_session"
+}
+
+func (m InjectTestSessionMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m InjectTestSessionMessage) Locate() string {
+	return ""
+}
+
+func (JournalAppendMessage) CommandName() string {
+	return "journal_append"
+}
+
+func (m JournalAppendMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m JournalAppendMessage) Locate() string {
+	return ""
+}
+
+func (KeptConversationForgetMessage) CommandName() string {
+	return "kept_conversation_forget"
+}
+
+func (m KeptConversationForgetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m KeptConversationForgetMessage) Locate() string {
+	return ""
+}
+
+func (KeptConversationKeepMessage) CommandName() string {
+	return "kept_conversation_keep"
+}
+
+func (m KeptConversationKeepMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m KeptConversationKeepMessage) Locate() string {
+	return ""
+}
+
+func (KeptConversationListMessage) CommandName() string {
+	return "kept_conversation_list"
+}
+
+func (m KeptConversationListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m KeptConversationListMessage) Locate() string {
+	return ""
+}
+
+func (LaunchDesktopGetMessage) CommandName() string {
+	return "launch_desktop_get"
+}
+
+func (m LaunchDesktopGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m LaunchDesktopGetMessage) Locate() string {
+	return ""
+}
+
+func (LaunchDesktopSetMessage) CommandName() string {
+	return "launch_desktop_set"
+}
+
+func (m LaunchDesktopSetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m LaunchDesktopSetMessage) Locate() string {
+	return ""
+}
+
+func (ListWorktreesMessage) CommandName() string {
+	return "list_worktrees"
+}
+
+func (m ListWorktreesMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m ListWorktreesMessage) Locate() string {
+	return ""
+}
+
+func (MutePRMessage) CommandName() string {
+	return "mute_pr"
+}
+
+func (m MutePRMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m MutePRMessage) Locate() string {
+	return ""
+}
+
+func (MuteRepoMessage) CommandName() string {
+	return "mute_repo"
+}
+
+func (m MuteRepoMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m MuteRepoMessage) Locate() string {
+	return ""
+}
+
+func (NotebookGuideMessage) CommandName() string {
+	return "notebook_guide"
+}
+
+func (m NotebookGuideMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m NotebookGuideMessage) Locate() string {
+	return ""
+}
+
+func (OpenBrowserMessage) CommandName() string {
+	return "open_browser"
+}
+
+func (m OpenBrowserMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m OpenBrowserMessage) Locate() string {
+	return ""
+}
+
+func (OpenMarkdownMessage) CommandName() string {
+	return "open_markdown"
+}
+
+func (m OpenMarkdownMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m OpenMarkdownMessage) Locate() string {
+	return ""
+}
+
+func (OpenSeedMessage) CommandName() string {
+	return "open_seed"
+}
+
+func (m OpenSeedMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m OpenSeedMessage) Locate() string {
+	return ""
+}
+
+func (OpenSentFilesMessage) CommandName() string {
+	return "open_sent_files"
+}
+
+func (m OpenSentFilesMessage) Placement() Placement {
+	if m.TerminalID != nil {
+		return Placement{LocatorTerminal, "terminal_id"}
+	}
+	return Placement{LocatorHome, ""}
+}
+
+func (m OpenSentFilesMessage) Locate() string {
+	if m.TerminalID != nil {
+		return string(*m.TerminalID)
+	}
+	return ""
+}
+
+func (PtyResizeMessage) CommandName() string {
 	return "pty_resize"
 }
 
-func (PtyResizeMessage) Placement() Placement {
+func (m PtyResizeMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "id"}
 }
 
@@ -88,11 +1352,653 @@ func (m PtyResizeMessage) Locate() string {
 	return string(m.ID)
 }
 
-func (TerminalKillMessage) Command() string {
+func (PullRequestCreatedMessage) CommandName() string {
+	return "pull_request_created"
+}
+
+func (m PullRequestCreatedMessage) Placement() Placement {
+	if m.TerminalID != nil {
+		return Placement{LocatorTerminal, "terminal_id"}
+	}
+	return Placement{LocatorHome, ""}
+}
+
+func (m PullRequestCreatedMessage) Locate() string {
+	if m.TerminalID != nil {
+		return string(*m.TerminalID)
+	}
+	return ""
+}
+
+func (PullRequestForgetMessage) CommandName() string {
+	return "pull_request_forget"
+}
+
+func (m PullRequestForgetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m PullRequestForgetMessage) Locate() string {
+	return ""
+}
+
+func (PullRequestUnwatchMessage) CommandName() string {
+	return "pull_request_unwatch"
+}
+
+func (m PullRequestUnwatchMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m PullRequestUnwatchMessage) Locate() string {
+	return ""
+}
+
+func (PullRequestWatchMessage) CommandName() string {
+	return "pull_request_watch"
+}
+
+func (m PullRequestWatchMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m PullRequestWatchMessage) Locate() string {
+	return ""
+}
+
+func (QueryMessage) CommandName() string {
+	return "query"
+}
+
+func (m QueryMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QueryMessage) Locate() string {
+	return ""
+}
+
+func (QueryAuthorsMessage) CommandName() string {
+	return "query_authors"
+}
+
+func (m QueryAuthorsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QueryAuthorsMessage) Locate() string {
+	return ""
+}
+
+func (QueryPRsMessage) CommandName() string {
+	return "query_prs"
+}
+
+func (m QueryPRsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QueryPRsMessage) Locate() string {
+	return ""
+}
+
+func (QueryReposMessage) CommandName() string {
+	return "query_repos"
+}
+
+func (m QueryReposMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QueryReposMessage) Locate() string {
+	return ""
+}
+
+func (QuickCaptureAttachmentDiscardMessage) CommandName() string {
+	return "quick_capture_attachment_discard"
+}
+
+func (m QuickCaptureAttachmentDiscardMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QuickCaptureAttachmentDiscardMessage) Locate() string {
+	return ""
+}
+
+func (QuickCaptureAttachmentGetMessage) CommandName() string {
+	return "quick_capture_attachment_get"
+}
+
+func (m QuickCaptureAttachmentGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QuickCaptureAttachmentGetMessage) Locate() string {
+	return ""
+}
+
+func (QuickCaptureAttachmentPutMessage) CommandName() string {
+	return "quick_capture_attachment_put"
+}
+
+func (m QuickCaptureAttachmentPutMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QuickCaptureAttachmentPutMessage) Locate() string {
+	return ""
+}
+
+func (QuickCaptureGetMessage) CommandName() string {
+	return "quick_capture_get"
+}
+
+func (m QuickCaptureGetMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QuickCaptureGetMessage) Locate() string {
+	return ""
+}
+
+func (QuickCaptureListMessage) CommandName() string {
+	return "quick_capture_list"
+}
+
+func (m QuickCaptureListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QuickCaptureListMessage) Locate() string {
+	return ""
+}
+
+func (QuickCaptureSendMessage) CommandName() string {
+	return "quick_capture_send"
+}
+
+func (m QuickCaptureSendMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m QuickCaptureSendMessage) Locate() string {
+	return ""
+}
+
+func (RecordAnalyticsMessage) CommandName() string {
+	return "record_analytics"
+}
+
+func (m RecordAnalyticsMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m RecordAnalyticsMessage) Locate() string {
+	return ""
+}
+
+func (RecordVentMessage) CommandName() string {
+	return "record_vent"
+}
+
+func (m RecordVentMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m RecordVentMessage) Locate() string {
+	return ""
+}
+
+func (RenameSessionMessage) CommandName() string {
+	return "rename_session"
+}
+
+func (m RenameSessionMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m RenameSessionMessage) Locate() string {
+	return ""
+}
+
+func (RestartSharedCodexMessage) CommandName() string {
+	return "restart_shared_codex"
+}
+
+func (m RestartSharedCodexMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m RestartSharedCodexMessage) Locate() string {
+	return ""
+}
+
+func (SeedArtifactTransferMessage) CommandName() string {
+	return "seed_artifact_transfer"
+}
+
+func (m SeedArtifactTransferMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedArtifactTransferMessage) Locate() string {
+	return ""
+}
+
+func (SeedCheckMessage) CommandName() string {
+	return "seed_check"
+}
+
+func (m SeedCheckMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedCheckMessage) Locate() string {
+	return ""
+}
+
+func (SeedEditMessage) CommandName() string {
+	return "seed_edit"
+}
+
+func (m SeedEditMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedEditMessage) Locate() string {
+	return ""
+}
+
+func (SeedLinkMessage) CommandName() string {
+	return "seed_link"
+}
+
+func (m SeedLinkMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedLinkMessage) Locate() string {
+	return ""
+}
+
+func (SeedListMessage) CommandName() string {
+	return "seed_list"
+}
+
+func (m SeedListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedListMessage) Locate() string {
+	return ""
+}
+
+func (SeedNoteMessage) CommandName() string {
+	return "seed_note"
+}
+
+func (m SeedNoteMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedNoteMessage) Locate() string {
+	return ""
+}
+
+func (SeedNotesMessage) CommandName() string {
+	return "seed_notes"
+}
+
+func (m SeedNotesMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedNotesMessage) Locate() string {
+	return ""
+}
+
+func (SeedPlantMessage) CommandName() string {
+	return "seed_plant"
+}
+
+func (m SeedPlantMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedPlantMessage) Locate() string {
+	return ""
+}
+
+func (SeedPlotMessage) CommandName() string {
+	return "seed_plot"
+}
+
+func (m SeedPlotMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedPlotMessage) Locate() string {
+	return ""
+}
+
+func (SeedReadyMessage) CommandName() string {
+	return "seed_ready"
+}
+
+func (m SeedReadyMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedReadyMessage) Locate() string {
+	return ""
+}
+
+func (SeedReviewCancelMessage) CommandName() string {
+	return "seed_review_cancel"
+}
+
+func (m SeedReviewCancelMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedReviewCancelMessage) Locate() string {
+	return ""
+}
+
+func (SeedReviewKeepMessage) CommandName() string {
+	return "seed_review_keep"
+}
+
+func (m SeedReviewKeepMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedReviewKeepMessage) Locate() string {
+	return ""
+}
+
+func (SeedReviewRetryMessage) CommandName() string {
+	return "seed_review_retry"
+}
+
+func (m SeedReviewRetryMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedReviewRetryMessage) Locate() string {
+	return ""
+}
+
+func (SeedReviewShowMessage) CommandName() string {
+	return "seed_review_show"
+}
+
+func (m SeedReviewShowMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedReviewShowMessage) Locate() string {
+	return ""
+}
+
+func (SeedReviewStartMessage) CommandName() string {
+	return "seed_review_start"
+}
+
+func (m SeedReviewStartMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedReviewStartMessage) Locate() string {
+	return ""
+}
+
+func (SeedSearchMessage) CommandName() string {
+	return "seed_search"
+}
+
+func (m SeedSearchMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedSearchMessage) Locate() string {
+	return ""
+}
+
+func (SeedSendToChiefMessage) CommandName() string {
+	return "seed_send_to_chief"
+}
+
+func (m SeedSendToChiefMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedSendToChiefMessage) Locate() string {
+	return ""
+}
+
+func (SeedShowMessage) CommandName() string {
+	return "seed_show"
+}
+
+func (m SeedShowMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedShowMessage) Locate() string {
+	return ""
+}
+
+func (SeedTransitionMessage) CommandName() string {
+	return "seed_transition"
+}
+
+func (m SeedTransitionMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedTransitionMessage) Locate() string {
+	return ""
+}
+
+func (SeedWatchMessage) CommandName() string {
+	return "seed_watch"
+}
+
+func (m SeedWatchMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedWatchMessage) Locate() string {
+	return ""
+}
+
+func (SessionInstructionsMessage) CommandName() string {
+	return "session_instructions"
+}
+
+func (m SessionInstructionsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SessionInstructionsMessage) Locate() string {
+	return ""
+}
+
+func (SessionListMessage) CommandName() string {
+	return "session_list"
+}
+
+func (m SessionListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SessionListMessage) Locate() string {
+	return ""
+}
+
+func (SessionReopenMessage) CommandName() string {
+	return "session_reopen"
+}
+
+func (m SessionReopenMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SessionReopenMessage) Locate() string {
+	return ""
+}
+
+func (SessionShowMessage) CommandName() string {
+	return "session_show"
+}
+
+func (m SessionShowMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SessionShowMessage) Locate() string {
+	return ""
+}
+
+func (SessionTranscriptMessage) CommandName() string {
+	return "session_transcript"
+}
+
+func (m SessionTranscriptMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SessionTranscriptMessage) Locate() string {
+	return ""
+}
+
+func (SetSessionContextWindowCapMessage) CommandName() string {
+	return "set_session_context_window_cap"
+}
+
+func (m SetSessionContextWindowCapMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SetSessionContextWindowCapMessage) Locate() string {
+	return ""
+}
+
+func (SetSessionPriorityMessage) CommandName() string {
+	return "set_session_priority"
+}
+
+func (m SetSessionPriorityMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SetSessionPriorityMessage) Locate() string {
+	return ""
+}
+
+func (SetSessionResumeIDMessage) CommandName() string {
+	return "set_session_resume_id"
+}
+
+func (m SetSessionResumeIDMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m SetSessionResumeIDMessage) Locate() string {
+	return ""
+}
+
+func (SetSettingMessage) CommandName() string {
+	return "set_setting"
+}
+
+func (m SetSettingMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m SetSettingMessage) Locate() string {
+	return ""
+}
+
+func (SnoozeTurnMessage) CommandName() string {
+	return "snooze_turn"
+}
+
+func (m SnoozeTurnMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SnoozeTurnMessage) Locate() string {
+	return ""
+}
+
+func (StateMessage) CommandName() string {
+	return "state"
+}
+
+func (m StateMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m StateMessage) Locate() string {
+	return ""
+}
+
+func (StateExplainMessage) CommandName() string {
+	return "state_explain"
+}
+
+func (m StateExplainMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m StateExplainMessage) Locate() string {
+	return ""
+}
+
+func (StopMessage) CommandName() string {
+	return "stop"
+}
+
+func (m StopMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m StopMessage) Locate() string {
+	return ""
+}
+
+func (TerminalCloseMessage) CommandName() string {
+	return "terminal_close"
+}
+
+func (m TerminalCloseMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TerminalCloseMessage) Locate() string {
+	return ""
+}
+
+func (TerminalInputMessage) CommandName() string {
+	return "terminal_input"
+}
+
+func (m TerminalInputMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TerminalInputMessage) Locate() string {
+	return ""
+}
+
+func (TerminalKillMessage) CommandName() string {
 	return "terminal_kill"
 }
 
-func (TerminalKillMessage) Placement() Placement {
+func (m TerminalKillMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "terminal_id"}
 }
 
@@ -100,11 +2006,11 @@ func (m TerminalKillMessage) Locate() string {
 	return string(m.TerminalID)
 }
 
-func (TerminalLaunchMessage) Command() string {
+func (TerminalLaunchMessage) CommandName() string {
 	return "terminal_launch"
 }
 
-func (TerminalLaunchMessage) Placement() Placement {
+func (m TerminalLaunchMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "terminal_id"}
 }
 
@@ -112,11 +2018,35 @@ func (m TerminalLaunchMessage) Locate() string {
 	return string(m.TerminalID)
 }
 
-func (TerminalPointerActivityMessage) Command() string {
+func (TerminalListMessage) CommandName() string {
+	return "terminal_list"
+}
+
+func (m TerminalListMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TerminalListMessage) Locate() string {
+	return ""
+}
+
+func (TerminalOpenMessage) CommandName() string {
+	return "terminal_open"
+}
+
+func (m TerminalOpenMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TerminalOpenMessage) Locate() string {
+	return ""
+}
+
+func (TerminalPointerActivityMessage) CommandName() string {
 	return "terminal_pointer_activity"
 }
 
-func (TerminalPointerActivityMessage) Placement() Placement {
+func (m TerminalPointerActivityMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "id"}
 }
 
@@ -124,11 +2054,23 @@ func (m TerminalPointerActivityMessage) Locate() string {
 	return string(m.ID)
 }
 
-func (TerminalReadTextMessage) Command() string {
+func (TerminalReadMessage) CommandName() string {
+	return "terminal_read"
+}
+
+func (m TerminalReadMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TerminalReadMessage) Locate() string {
+	return ""
+}
+
+func (TerminalReadTextMessage) CommandName() string {
 	return "terminal_read_text"
 }
 
-func (TerminalReadTextMessage) Placement() Placement {
+func (m TerminalReadTextMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "terminal_id"}
 }
 
@@ -136,11 +2078,11 @@ func (m TerminalReadTextMessage) Locate() string {
 	return string(m.TerminalID)
 }
 
-func (TerminalRemoveMessage) Command() string {
+func (TerminalRemoveMessage) CommandName() string {
 	return "terminal_remove"
 }
 
-func (TerminalRemoveMessage) Placement() Placement {
+func (m TerminalRemoveMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "terminal_id"}
 }
 
@@ -148,11 +2090,11 @@ func (m TerminalRemoveMessage) Locate() string {
 	return string(m.TerminalID)
 }
 
-func (TerminalRestartMessage) Command() string {
+func (TerminalRestartMessage) CommandName() string {
 	return "terminal_restart"
 }
 
-func (TerminalRestartMessage) Placement() Placement {
+func (m TerminalRestartMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "terminal_id"}
 }
 
@@ -160,11 +2102,11 @@ func (m TerminalRestartMessage) Locate() string {
 	return string(m.TerminalID)
 }
 
-func (TerminalShellMessage) Command() string {
+func (TerminalShellMessage) CommandName() string {
 	return "terminal_shell"
 }
 
-func (TerminalShellMessage) Placement() Placement {
+func (m TerminalShellMessage) Placement() Placement {
 	return Placement{LocatorMachine, "host"}
 }
 
@@ -172,11 +2114,11 @@ func (m TerminalShellMessage) Locate() string {
 	return string(m.Host)
 }
 
-func (TerminalStartMessage) Command() string {
+func (TerminalStartMessage) CommandName() string {
 	return "terminal_start"
 }
 
-func (TerminalStartMessage) Placement() Placement {
+func (m TerminalStartMessage) Placement() Placement {
 	return Placement{LocatorMachine, "host"}
 }
 
@@ -184,11 +2126,11 @@ func (m TerminalStartMessage) Locate() string {
 	return string(m.Host)
 }
 
-func (TerminalThemeMessage) Command() string {
+func (TerminalThemeMessage) CommandName() string {
 	return "terminal_theme"
 }
 
-func (TerminalThemeMessage) Placement() Placement {
+func (m TerminalThemeMessage) Placement() Placement {
 	return Placement{LocatorMachine, "host"}
 }
 
@@ -196,11 +2138,23 @@ func (m TerminalThemeMessage) Locate() string {
 	return string(m.Host)
 }
 
-func (TerminalWaitBlockMessage) Command() string {
+func (TerminalWaitMessage) CommandName() string {
+	return "terminal_wait"
+}
+
+func (m TerminalWaitMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TerminalWaitMessage) Locate() string {
+	return ""
+}
+
+func (TerminalWaitBlockMessage) CommandName() string {
 	return "terminal_wait_block"
 }
 
-func (TerminalWaitBlockMessage) Placement() Placement {
+func (m TerminalWaitBlockMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "terminal_id"}
 }
 
@@ -208,14 +2162,98 @@ func (m TerminalWaitBlockMessage) Locate() string {
 	return string(m.TerminalID)
 }
 
-func (TerminalWriteMessage) Command() string {
+func (TerminalWriteMessage) CommandName() string {
 	return "terminal_write"
 }
 
-func (TerminalWriteMessage) Placement() Placement {
+func (m TerminalWriteMessage) Placement() Placement {
 	return Placement{LocatorTerminal, "terminal_id"}
 }
 
 func (m TerminalWriteMessage) Locate() string {
 	return string(m.TerminalID)
+}
+
+func (UnregisterMessage) CommandName() string {
+	return "unregister"
+}
+
+func (m UnregisterMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m UnregisterMessage) Locate() string {
+	return ""
+}
+
+func (WakeTurnMessage) CommandName() string {
+	return "wake_turn"
+}
+
+func (m WakeTurnMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m WakeTurnMessage) Locate() string {
+	return ""
+}
+
+func (WithdrawVentMessage) CommandName() string {
+	return "withdraw_vent"
+}
+
+func (m WithdrawVentMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m WithdrawVentMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeKeepMessage) CommandName() string {
+	return "worktree_keep"
+}
+
+func (m WorktreeKeepMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m WorktreeKeepMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeListMessage) CommandName() string {
+	return "worktree_list"
+}
+
+func (m WorktreeListMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m WorktreeListMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeRefreshMessage) CommandName() string {
+	return "worktree_refresh"
+}
+
+func (m WorktreeRefreshMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m WorktreeRefreshMessage) Locate() string {
+	return ""
+}
+
+func (WorktreeSweepLogMessage) CommandName() string {
+	return "worktree_sweep_log"
+}
+
+func (m WorktreeSweepLogMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m WorktreeSweepLogMessage) Locate() string {
+	return ""
 }

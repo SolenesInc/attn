@@ -6,6 +6,8 @@ import (
 
 type Identity struct {
 	DaemonID string `json:"daemon_id"`
+	Name     string `json:"name"`
+	Instance string `json:"instance"`
 	Build    Build  `json:"build"`
 }
 

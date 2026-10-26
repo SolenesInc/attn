@@ -2508,6 +2508,10 @@ func (d *Daemon) releasePIDLock() {
 }
 
 func (d *Daemon) handleConnection(conn net.Conn) {
+	d.handleConnectionContext(d.life.Context(), conn)
+}
+
+func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	// Stop ends reads on a command socket at once and gives writes the 10s a WebSocket client gets (defaultWSWriteTimeout),
 	// so a finished command still sends its reply but a client that stopped reading cannot hold stop.
@@ -2548,8 +2552,31 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 	defer release()
 	cmd, msg, err := protocol.ParseMessage(data)
+	if origin, remote := OriginOf(ctx); remote && !d.isOutpostConn(origin.Host, origin.bridge) {
+		d.sendError(conn, "outpost bridge was replaced")
+		return
+	}
+	if err == nil {
+		place, declared := protocol.SocketPlacement(cmd, data)
+		if !declared {
+			d.sendError(conn, fmt.Sprintf("%s declares no placement", cmd))
+			return
+		}
+		if place.Locator == protocol.LocatorHome {
+			status, statusErr := enrollment.Load(d.dataRoot)
+			if statusErr != nil {
+				d.sendError(conn, statusErr.Error())
+				return
+			}
+			if !status.IsHome() {
+				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, d.callerSession(ctx, data))
+				return
+			}
+		}
+	}
+	caller := d.callerSession(ctx, data)
 	if cmd != protocol.CmdRecordAnalytics && d.analyticsEnabled() {
-		reply, unanswered := d.recordingCLICommand(conn, data, err)
+		reply, unanswered := d.recordingCLICommand(conn, data, err, caller)
 		conn = reply
 		defer unanswered()
 	}
@@ -2558,6 +2585,18 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		return
 	}
 
+	if origin, remote := OriginOf(ctx); remote {
+		switch cmd {
+		case protocol.CmdOpenMarkdown, protocol.CmdOpenBrowser, protocol.CmdBrowserControl:
+			d.sendError(conn, fmt.Sprintf("%s is not supported from %s", cmd, origin.Name))
+			return
+		case protocol.CmdOpenSentFiles:
+			if msg.(*protocol.OpenSentFilesMessage).TerminalID == nil {
+				d.sendError(conn, fmt.Sprintf("open_sent_files is not supported from %s", origin.Name))
+				return
+			}
+		}
+	}
 	if err := d.scopeGardenRequest(cmd, msg, ""); err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -2565,7 +2604,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 
 	switch cmd {
 	case protocol.CmdRecordAnalytics:
-		_, caller := socketFrameCaller(data)
 		d.handleRecordAnalytics(msg.(*protocol.RecordAnalyticsMessage), caller)
 	case protocol.CmdGetSettings:
 		d.handleGetSettings(conn, msg.(*protocol.GetSettingsMessage))
@@ -2795,7 +2833,7 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	case protocol.CmdPullRequestUnwatch:
 		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdQuery:
-		d.handleQuery(conn, msg.(*protocol.QueryMessage))
+		d.handleQuery(conn, msg.(*protocol.QueryMessage), caller)
 	case protocol.CmdQueryPRs:
 		d.handleQueryPRs(conn, msg.(*protocol.QueryPRsMessage))
 	case protocol.CmdMutePR:
@@ -3198,7 +3236,7 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
+func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage, caller protocol.SessionID) {
 	sessions := d.store.List(protocol.Deref(msg.Filter))
 	profiles, err := d.liveProtocolProfiles()
 	if err != nil {
@@ -3211,7 +3249,7 @@ func (d *Daemon) handleQuery(conn net.Conn, msg *protocol.QueryMessage) {
 		Profiles: profiles,
 	}
 	if msg.CallerID != nil {
-		resp.CallerSessionID = protocol.Ptr(d.sessionInTerminal(*msg.CallerID))
+		resp.CallerSessionID = protocol.Ptr(caller)
 	}
 	json.NewEncoder(conn).Encode(resp)
 }

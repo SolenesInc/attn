@@ -32,7 +32,8 @@ type outpostRuntime struct {
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
-	return bridge.Identity{DaemonID: d.daemonInstanceID, Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	name, _ := os.Hostname()
+	return bridge.Identity{Name: name, Instance: config.InstanceLabel(), DaemonID: d.daemonInstanceID, Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 }
 
 func validateOutpostAddress(address string) error {
@@ -82,7 +83,7 @@ func (d *Daemon) configureOutpostListener() {
 		Logf:           d.logf,
 		Handlers:       d.outpostHandlers(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
-			if _, err := enrollment.RecordHome(d.dataRoot, home.DaemonID); err != nil {
+			if _, err := enrollment.RecordHome(d.dataRoot, home.DaemonID, home.Name); err != nil {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}
 			}
 			return nil

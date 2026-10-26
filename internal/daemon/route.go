@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -33,18 +34,17 @@ func (d *Daemon) router() *Router {
 
 func Call[R any](ctx context.Context, r *Router, msg protocol.Placed) (R, error) {
 	var answer R
-	host := r.host(msg)
-	if host != "" {
-		conn, _, err := r.daemon.outpostConn(host)
-		if err != nil {
-			return answer, err
-		}
-		err = conn.Call(ctx, bridgeCallTerminal, msg, &answer)
+	conn, err := r.bridge(msg)
+	if err != nil {
+		return answer, err
+	}
+	if conn != nil {
+		err = conn.Call(ctx, bridgeCall, msg, &answer)
 		return answer, terminalBridgeError(err)
 	}
-	part, ok := r.here[msg.Command()]
+	part, ok := r.here[msg.CommandName()]
 	if !ok {
-		return answer, fmt.Errorf("no machine part runs %s", msg.Command())
+		return answer, fmt.Errorf("no machine part runs %s", msg.CommandName())
 	}
 	result, err := part.run(ctx, msg)
 	if err != nil {
@@ -52,22 +52,70 @@ func Call[R any](ctx context.Context, r *Router, msg protocol.Placed) (R, error)
 	}
 	answer, ok = result.(R)
 	if !ok {
-		return answer, fmt.Errorf("%s answers %T, not %T", msg.Command(), result, answer)
+		return answer, fmt.Errorf("%s answers %T, not %T", msg.CommandName(), result, answer)
 	}
 	return answer, nil
 }
 
-func (r *Router) host(msg protocol.Placed) string {
+type Origin struct {
+	Host, Name string
+	Caller     protocol.SessionID
+	bridge     *bridge.Conn
+}
+
+type originKey struct{}
+
+func OriginOf(ctx context.Context) (Origin, bool) {
+	origin, ok := ctx.Value(originKey{}).(Origin)
+	return origin, ok
+}
+
+func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
+	d := r.daemon
+	var host string
+	var home bool
 	switch msg.Placement().Locator {
+	case protocol.LocatorHome:
+		home = true
 	case protocol.LocatorMachine:
-		return msg.Locate()
+		host = msg.Locate()
 	case protocol.LocatorSession:
-		return r.daemon.sessionHost(protocol.SessionID(msg.Locate()))
+		id := protocol.SessionID(msg.Locate())
+		_, copied := d.store.SessionHost(id)
+		home = !copied
+		host = d.sessionHost(id)
 	case protocol.LocatorTerminal:
-		session := r.daemon.terminals().owner(harness.TerminalID(msg.Locate()))
-		return r.daemon.sessionHost(session)
+		session := d.terminals().owner(harness.TerminalID(msg.Locate()))
+		_, copied := d.store.SessionHost(session)
+		home = !copied
+		host = d.sessionHost(session)
 	}
-	return ""
+	if home {
+		status, err := enrollment.Load(d.dataRoot)
+		if err != nil {
+			return nil, err
+		}
+		if !status.IsHome() {
+			conn, _, err := d.homeConn(status)
+			return conn, err
+		}
+	}
+	if host == "" {
+		return nil, nil
+	}
+	conn, _, err := d.outpostConn(host)
+	return conn, err
+}
+
+func (d *Daemon) homeConn(status enrollment.Status) (*bridge.Conn, string, error) {
+	name := status.HomeName
+	if name == "" {
+		name = status.HomeDaemonID
+	}
+	if conn := d.homeBridge(); conn != nil {
+		return conn, name, nil
+	}
+	return nil, name, fmt.Errorf("%s is unreachable; this needs it now", name)
 }
 
 func (d *Daemon) sessionHost(id protocol.SessionID) string {
@@ -156,12 +204,12 @@ func (r *Router) Attach(ctx context.Context, t harness.TerminalID, subscriber st
 
 func runs[M protocol.Placed, R any](parts map[string]machinePart, readOnly bool, run func(context.Context, M) (R, error)) {
 	var command M
-	parts[command.Command()] = machinePart{
+	parts[command.CommandName()] = machinePart{
 		readOnly: readOnly,
 		run: func(ctx context.Context, msg protocol.Placed) (any, error) {
 			typed, ok := msg.(M)
 			if !ok {
-				return nil, fmt.Errorf("%s carries %T, not %T", msg.Command(), msg, command)
+				return nil, fmt.Errorf("%s carries %T, not %T", msg.CommandName(), msg, command)
 			}
 			return run(ctx, typed)
 		},

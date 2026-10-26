@@ -38,7 +38,7 @@ type World struct {
 
 func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
 	t.Helper()
-	return prepareIn(t, worldDir(t), wrapper, harnesses)
+	return prepareIn(t, worldDir(t), wrapper, harnesses, true)
 }
 
 func PrepareInLongestDataDir(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
@@ -52,7 +52,7 @@ func PrepareInLongestDataDir(t testing.TB, wrapper string, harnesses ...fakeagen
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return prepareIn(t, dir, wrapper, harnesses)
+	return prepareIn(t, dir, wrapper, harnesses, true)
 }
 
 func worldDir(t testing.TB) string {
@@ -69,7 +69,7 @@ func worldDir(t testing.TB) string {
 	return dir
 }
 
-func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness) *World {
+func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness, withAgentKit bool) *World {
 	t.Helper()
 	production, err := config.CanonicalRuntimePath(config.DataDirForInstance(""))
 	if err != nil {
@@ -79,13 +79,22 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness)
 		t.Fatalf("world directory %s resolves under production %s (%v)", dir, production, err)
 	}
 	w := &World{T: t, Dir: dir, Socket: filepath.Join(dir, "attn.sock")}
-	w.kit = fakeagent.Install(t, dir, harnesses, wrapper)
+	if withAgentKit {
+		w.kit = fakeagent.Install(t, dir, harnesses, wrapper)
+	} else {
+		if err := os.MkdirAll(filepath.Join(dir, "bin"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(wrapper, filepath.Join(dir, "bin", "attn")); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// macOS asks dscl for the login shell before $SHELL; this dscl answers $SHELL
 	// so a world runs the shell its test chose, never the developer's own.
 	if err := os.WriteFile(filepath.Join(dir, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: %s\\n' \"$SHELL\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	w.Vars = append([]string{
+	w.Vars = []string{
 		"ATTN_DATA_DIR=" + dir,
 		"ATTN_HARNESS_DATA_DIR=" + dir,
 		"ATTN_HARNESS_NOTEBOOK_ROOT=" + filepath.Join(dir, "notebook"),
@@ -95,7 +104,16 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness)
 		"ATTN_HEADLESS_TASKS=off",
 		config.AnalyticsIngestURLEnv + "=http://127.0.0.1:1",
 		"SHELL=/bin/sh",
-	}, w.kit.Env()...)
+	}
+	if w.kit != nil {
+		w.Vars = append(w.Vars, w.kit.Env()...)
+	} else {
+		w.Vars = append(w.Vars, "PATH="+filepath.Join(dir, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"ATTN_WRAPPER_PATH="+wrapper,
+			"ATTN_TOOL_HOME="+filepath.Join(dir, "toolhome"),
+			"ATTN_CLAUDE_EXECUTABLE="+filepath.Join(dir, "no-claude"),
+			"ATTN_CODEX_EXECUTABLE="+filepath.Join(dir, "no-codex"))
+	}
 	return w
 }
 
