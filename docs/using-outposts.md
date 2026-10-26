@@ -91,6 +91,12 @@ An `attn` command that needs a daemon also fails inside an outpost shell,
 and the error names the outpost and tells you to run the command from an
 agent at the home.
 
+Files on an outpost don't open on the Mac yet. **Open in editor** and
+⌘-clicked paths in an outpost shell fail and name the outpost, and nothing
+opens a Mac file that happens to have the same path. With an outpost shell
+in front, the editor tile and the file opener (⌘P) start at your notebook
+root.
+
 ## Show the host in your prompt
 
 Outpost shells have `ATTN_HOST` set to the outpost's name. Home shells leave

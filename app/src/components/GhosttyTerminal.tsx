@@ -35,6 +35,7 @@ import {
   type LogicalLine,
   type LogicalSpan,
 } from '../utils/terminalLinks';
+import { outpostPathRefusal } from '../utils/outpostPaths';
 import {
   initialFocusedMatch,
   startFindScan,
@@ -173,6 +174,7 @@ export interface GhosttyTerminalProps {
   resolvedTheme?: ResolvedTheme;
   debugName: string;
   cwd?: string;
+  outpostName?: string;
   runtimeLogMeta?: {
     sessionId: string;
     paneId: string;
@@ -185,6 +187,7 @@ export interface GhosttyTerminalProps {
   onInput: (data: string, source?: string, traceId?: string) => void;
   onPointerActivity?: () => void;
   onOpenMarkdown?: (path: string, sessionId: string) => void;
+  onPathRefused?: (message: string) => void;
   gardenSeeds?: readonly Seed[];
   onOpenSeed?: (seedId: string) => void;
   onReady: (terminal: GhosttyTerminalHandle) => void | Promise<void>;
@@ -517,7 +520,7 @@ function cellText(
 }
 
 export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminalProps>(
-  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, runtimeLogMeta, onInput, onPointerActivity, onOpenMarkdown, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
+  function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, outpostName, runtimeLogMeta, onInput, onPointerActivity, onOpenMarkdown, onPathRefused, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const terminalRef = useRef<GhosttyModel | null>(null);
@@ -542,6 +545,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const hoveredCellRef = useRef<{ row: number; col: number } | null>(null);
     const acceleratorHeldRef = useRef(false);
     const cwdRef = useRef(cwd);
+    const outpostNameRef = useRef(outpostName);
     const hoverGenerationRef = useRef(0);
     const hoverLinkRef = useRef<HoverLinkState | null>(null);
     const refreshHoverLinkRef = useRef<(() => void) | null>(null);
@@ -615,6 +619,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const onPointerActivityRef = useRef(onPointerActivity);
     const lastPointerActivityAtRef = useRef(Number.NEGATIVE_INFINITY);
     const onOpenMarkdownRef = useRef(onOpenMarkdown);
+    const onPathRefusedRef = useRef(onPathRefused);
     const onReadyRef = useRef(onReady);
     const onResizeRef = useRef(onResize);
     const annotationsRef = useRef(annotations);
@@ -655,6 +660,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     onInputRef.current = onInput;
     onOpenMarkdownRef.current = onOpenMarkdown;
+    onPathRefusedRef.current = onPathRefused;
     onReadyRef.current = onReady;
     onResizeRef.current = onResize;
     annotationsRef.current = annotations;
@@ -664,6 +670,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     runtimeMetaRef.current = runtimeLogMeta;
     debugNameRef.current = debugName;
     cwdRef.current = cwd;
+    outpostNameRef.current = outpostName;
     fontSizeRef.current = fontSize;
     diagKeyRef.current = runtimeLogMeta?.paneId ?? runtimeLogMeta?.sessionId ?? debugName;
 
@@ -2781,11 +2788,12 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       if (candidates.length === 0) return;
 
       const previousPath = current?.link?.kind === 'path' ? current.link : null;
+      const onOutpost = Boolean(outpostNameRef.current);
       for (const candidate of candidates) {
         const absolutePath = resolveDetectedPath(
           candidate.path,
           cwdRef.current,
-          homeDirRef.current ?? undefined,
+          onOutpost ? undefined : homeDirRef.current ?? undefined,
         );
         if (!absolutePath) continue;
         const reusesPrevious = Boolean(
@@ -2794,7 +2802,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           && previousPath.startCol === candidate.startCol
           && previousPath.endCol === candidate.endCol,
         );
-        if (!reusesPrevious && knownPathExists(absolutePath) !== true) continue;
+        if (!onOutpost && !reusesPrevious && knownPathExists(absolutePath) !== true) continue;
         entry.link = {
           kind: 'path',
           absolutePath,
@@ -2808,6 +2816,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         updateLinkCursor(cell, acceleratorHeldRef.current);
         return;
       }
+      if (onOutpost) return;
 
       void (async () => {
         const home = await ensureHomeDir();
@@ -3025,6 +3034,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const openLink = useCallback((link: DetectedTerminalLink) => {
       const action = terminalLinkOpenAction(link);
       if (!action) return;
+      const linkOutpost = outpostNameRef.current;
+      if (linkOutpost && action.action !== 'open-url') {
+        onPathRefusedRef.current?.(outpostPathRefusal(action.path, linkOutpost));
+        return;
+      }
       switch (action.action) {
         case 'open-url':
           void openUrl(action.uri);

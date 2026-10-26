@@ -742,7 +742,9 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	if pending, ok := d.consumePendingAgentConversation(session.ID); ok {
 		d.observeAgentConversation(pending)
 	}
-	d.store.UpsertRecentLocation(req.cwd)
+	if protocol.Deref(msg.Host) == "" {
+		d.store.UpsertRecentLocation(req.cwd)
+	}
 	d.publishFact(fact, string(session.ID), nil)
 	var launchedExit *ptybackend.ExitInfo
 	if req.hasPluginDriver {

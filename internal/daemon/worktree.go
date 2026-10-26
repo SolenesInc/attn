@@ -333,7 +333,7 @@ func (d *Daemon) finalizeDeletedWorktree(_ worktreeCleanupProtection, path strin
 
 func (d *Daemon) cleanupDeletedWorktreeSessions(path string) {
 	for _, session := range d.store.List("") {
-		if !pathAtOrBelow(session.Directory, path) {
+		if !pathAtOrBelow(d.localDirectory(session), path) {
 			continue
 		}
 		d.terminateSession(session.ID, syscall.SIGTERM)

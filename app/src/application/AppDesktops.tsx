@@ -9,6 +9,7 @@ import type { Desktop } from '../types/generated';
 import { desktopLabel, desktopTerminalState, orderedDesktops } from '../utils/desktops';
 import {
   useAppAppearanceContext,
+  useAppErrorsContext,
   useAppGardenActionsContext,
   useAppInputs,
   useAppPanelsContext,
@@ -26,6 +27,7 @@ import {
 import { EmptyDesktopLauncher } from './EmptyDesktopLauncher';
 import { openThenShow } from './openThenShow';
 import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
+import { localDirectory } from '../utils/outpostPaths';
 
 export function AppDesktops() {
   const { snoozeMenu } = useAttentionQueueContext();
@@ -55,8 +57,9 @@ export function AppDesktops() {
   } = useAppShell();
   const { seedPopoverRequest, usagePopoverRequest, openAsk } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
-  const { delegationSessions } = useAppSessionsContext();
+  const { delegationSessions, enrichedLocalSessions } = useAppSessionsContext();
   const { daemonSessions } = useAppInputs();
+  const { showError } = useAppErrorsContext();
   const allSessions = useSessionStore((state) => state.sessions);
   const seeds = useDaemonStore((state) => state.seeds);
   const { handleOpenSeedTile, handleRevealSeedInGarden } = useAppGardenActionsContext();
@@ -98,7 +101,7 @@ export function AppDesktops() {
     const isCurrent = desktop.id === currentDesktopId;
     const shownSessionId = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id)?.sessionId ?? null;
     const leafSessionId = sessionOfLeaf(leafOn(desktop.profile_id, desktop, desktop.active_pane_id));
-    const desktopDirectory = allSessions.find((session) => session.id === leafSessionId)?.cwd;
+    const desktopDirectory = localDirectory(enrichedLocalSessions.find((session) => session.id === leafSessionId));
     return (
       <div key={desktop.id} className={`terminal-wrapper ${isCurrent ? 'active' : ''}`}>
         <SessionTerminalDesktop
@@ -161,6 +164,7 @@ export function AppDesktops() {
                 });
               });
           }}
+          onTerminalPathRefused={showError}
           terminalState={terminalState}
           desktopSelectionStyle={desktopSelectionStyle}
           activePaneId={desktop.active_pane_id}

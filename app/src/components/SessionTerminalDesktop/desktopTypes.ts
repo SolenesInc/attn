@@ -112,6 +112,7 @@ export interface SessionTerminalDesktopProps {
   onTerminalPointerActivity?: (runtimeId: string) => void;
   // Empty sessionId lets the daemon use the selected session.
   onOpenMarkdown?: (path: string, sessionId: string) => void;
+  onTerminalPathRefused?: (message: string) => void;
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;

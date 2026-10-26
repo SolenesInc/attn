@@ -87,6 +87,21 @@ func (d *Daemon) sessionHost(id protocol.SessionID) string {
 	return host
 }
 
+func (d *Daemon) localDirectory(session *protocol.Session) string {
+	if d.sessionHost(session.ID) != "" {
+		return ""
+	}
+	return session.Directory
+}
+
+func (d *Daemon) outpostPathRefusal(path, host string) string {
+	name := host
+	if row, err := d.resolveOutpost(host); err == nil {
+		name = row.Name
+	}
+	return fmt.Sprintf("%s is on %s; opening files on an outpost isn't supported yet", path, name)
+}
+
 func (d *Daemon) resolveOutpost(host string) (store.Outpost, error) {
 	rows, err := d.store.ListOutposts()
 	if err != nil {

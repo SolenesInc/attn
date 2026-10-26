@@ -239,7 +239,7 @@ export function useAppController({
 
   const desktopTiles = useDesktopTiles({
     settings,
-    sessions,
+    sessions: enrichedLocalSessions,
     contextSessionId,
     showError,
   });
