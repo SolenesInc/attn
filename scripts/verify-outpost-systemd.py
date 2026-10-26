@@ -23,7 +23,7 @@ args.attn = args.attn.resolve()
 args.update_to = args.update_to.resolve()
 args.wsctl = args.wsctl.resolve()
 unit = "attn-verify-" + uuid.uuid4().hex[:8] + ".service"
-unit_path = Path.home() / ".config" / "systemd" / "user" / unit
+unit_path = Path(os.environ["XDG_RUNTIME_DIR"]) / "systemd" / "user" / unit
 children = []
 logs = []
 failures = []
@@ -195,7 +195,8 @@ def update():
     say("installed", build_of(binary))
     systemctl("restart", unit)
     home_daemon = start_plain_daemon("home", home)
-    row = json.loads(wsctl("outposts", "--until", "connected").splitlines()[-1])["outposts"][0]
+    with Deadline(120, "the updated home reconnecting to the outpost"):
+        row = json.loads(wsctl("outposts", "--until", "connected").splitlines()[-1])["outposts"][0]
     say("home reconnected to outpost build", row["build"])
     if build_of(args.update_to).removeprefix("git:") not in row["build"]:
         failures.append(f"update: the outpost runs {row['build']}, expected {build_of(args.update_to)}")
@@ -227,6 +228,13 @@ def check(label, transition):
         if answered != pid:
             failures.append(f"{label}: {shell} answered as pid {answered}, expected {pid}")
 
+
+def interrupted(signum, _frame):
+    raise SystemExit(128 + signum)
+
+
+signal.signal(signal.SIGTERM, interrupted)
+signal.signal(signal.SIGHUP, interrupted)
 
 with tempfile.TemporaryDirectory(prefix="attn-sdcheck-", dir="/tmp") as temporary:
     root = Path(temporary)
@@ -265,12 +273,13 @@ with tempfile.TemporaryDirectory(prefix="attn-sdcheck-", dir="/tmp") as temporar
         say("documented unit", "\n" + body)
         say(f"tested as {unit}", f"the documented unit with ExecStart pointing at {binary} and isolation Environment= lines for ATTN_* only")
         systemctl("daemon-reload")
-        systemctl("enable", "--now", unit)
+        systemctl("start", unit)
 
         home = daemon_env(base, root / "home", free_port())
         home_daemon = start_plain_daemon("home", home)
         say("home settings", run([binary, "settings", "set", "outposts_enabled", "true"], home))
-        say("pair", wsctl("outposts", "--add", "sandbox", "--address", bridge_address, "--until", "connected").splitlines()[-1])
+        with Deadline(120, "the home pairing with the outpost"):
+            say("pair", wsctl("outposts", "--add", "sandbox", "--address", bridge_address, "--until", "connected").splitlines()[-1])
 
         workdir = root / "work"
         workdir.mkdir()
@@ -313,7 +322,7 @@ with tempfile.TemporaryDirectory(prefix="attn-sdcheck-", dir="/tmp") as temporar
     finally:
         cleanup = []
         if unit_written:
-            for verbs in [("kill", "--signal=SIGKILL", unit), ("disable", "--now", unit)]:
+            for verbs in [("stop", unit), ("kill", "--signal=SIGKILL", unit)]:
                 result = subprocess.run(["systemctl", "--user", *verbs], text=True, capture_output=True)
                 if result.returncode and "not loaded" not in result.stderr:
                     cleanup.append(" ".join(verbs) + ": " + result.stderr.strip())
