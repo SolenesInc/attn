@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { LinuxDriver } from './linuxDriver.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
 import { instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
@@ -243,6 +243,58 @@ export function appPlatformFor(platform = process.platform) {
 }
 
 export const appPlatform = appPlatformFor();
+
+export async function observeProcessExits(pids, { env, timeoutMs }) {
+  const script = `
+import ctypes, json, os, select, sys
+pids = json.loads(sys.argv[1])
+if sys.platform == 'linux':
+    libc = ctypes.CDLL(None, use_errno=True)
+    fds = []
+    for pid in pids:
+        fd = libc.pidfd_open(pid, 0)
+        if fd < 0:
+            raise OSError(ctypes.get_errno(), 'pidfd_open(%s)' % pid)
+        fds.append(fd)
+    print('ready', flush=True)
+    for fd in fds:
+        select.select([fd], [], [])
+        os.close(fd)
+else:
+    queue = select.kqueue()
+    for pid in pids:
+        queue.control([select.kevent(pid, filter=select.KQ_FILTER_PROC, flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT, fflags=select.KQ_NOTE_EXIT)], 0)
+    print('ready', flush=True)
+    remaining = set(pids)
+    while remaining:
+        for event in queue.control(None, len(remaining)):
+            remaining.discard(event.ident)
+    queue.close()
+print('exited', flush=True)
+`;
+  let readyResolve;
+  let readyReject;
+  const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+  const completed = new Promise((resolve, reject) => {
+    const child = execFile('python3', ['-c', script, JSON.stringify(pids)], { env, timeout: timeoutMs }, (error, stdout, stderr) => {
+      if (error) {
+        const failure = new Error(`Process exit observation failed for ${pids}: ${error.message}\n${stderr}`);
+        readyReject(failure);
+        reject(failure);
+      } else {
+        resolve(stdout.trim());
+      }
+    });
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += chunk;
+      if (output.includes('ready\n')) readyResolve();
+    });
+  });
+  completed.catch(() => {});
+  await ready;
+  return { completed };
+}
 
 export function createWindowDriver(options = {}) {
   return appPlatform.createWindowDriver(options);

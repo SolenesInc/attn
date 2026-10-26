@@ -462,9 +462,6 @@ func (m *Manager) KillWithEscalation(sessionID string, sig syscall.Signal, onEsc
 	if err != nil {
 		return err
 	}
-	if session.agent == "shell" && sig == syscall.SIGTERM {
-		sig = syscall.SIGHUP
-	}
 	return session.killWithEscalation(sig, defaultKillTimeout, onEscalate)
 }
 

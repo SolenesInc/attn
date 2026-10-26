@@ -940,11 +940,13 @@ const sigtermToHUPGrace = 2 * time.Second
 
 const sighupRepeat = 500 * time.Millisecond
 
+const shellCloseGrace = 500 * time.Millisecond
+
 func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
 	return s.killWithEscalation(sig, waitTimeout, nil)
 }
 
-func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal)) error {
+func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal)) (result error) {
 	s.exitMu.RLock()
 	running := s.running
 	s.exitMu.RUnlock()
@@ -957,13 +959,25 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 		return errors.New("process unavailable")
 	}
 
-	pgid := pid
-	if actualPGID, err := syscall.Getpgid(pid); err == nil && actualPGID > 0 {
-		pgid = actualPGID
-	}
-
-	if err := syscall.Kill(-pgid, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+	if s.agent == "shell" && sig == syscall.SIGTERM {
+		if err := s.signalProcesses(syscall.SIGHUP); err != nil {
+			return err
+		}
+		if err := s.signalProcesses(syscall.SIGTERM); err != nil {
+			return err
+		}
+		sig = syscall.SIGHUP
+		if waitTimeout > shellCloseGrace {
+			waitTimeout = shellCloseGrace
+		}
+	} else if err := s.signalProcesses(sig); err != nil {
 		return err
+	}
+	defer func() { result = errors.Join(result, s.signalProcesses(syscall.SIGKILL)) }()
+	if sig == syscall.SIGKILL {
+		s.closePTMX()
+		<-s.exited
+		return nil
 	}
 
 	deadline := time.Now().Add(waitTimeout)
@@ -980,7 +994,7 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 			if onEscalate != nil {
 				onEscalate(syscall.SIGHUP)
 			}
-			_ = syscall.Kill(-pgid, syscall.SIGHUP)
+			_ = s.signalProcesses(syscall.SIGHUP)
 		}
 	}
 
@@ -999,15 +1013,46 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 		case <-time.After(wait):
 		}
 		if sent == syscall.SIGHUP {
-			_ = syscall.Kill(-pgid, syscall.SIGHUP)
+			_ = s.signalProcesses(syscall.SIGHUP)
 		}
 	}
 	if onEscalate != nil {
 		onEscalate(syscall.SIGKILL)
 	}
-	_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	if err := s.signalProcesses(syscall.SIGKILL); err != nil {
+		return err
+	}
+	s.closePTMX()
 	<-s.exited
 	return nil
+}
+
+func (s *Session) signalProcesses(sig syscall.Signal) error {
+	pid := s.child.processID()
+	if pid <= 0 {
+		return errors.New("process unavailable")
+	}
+	processes, err := sessionProcesses(pid)
+	if err != nil {
+		return fmt.Errorf("read processes for terminal session %d: %w", pid, err)
+	}
+	var signalErr error
+	leader := false
+	for _, member := range processes {
+		if member == pid {
+			leader = true
+			continue
+		}
+		if err := syscall.Kill(member, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+			signalErr = errors.Join(signalErr, fmt.Errorf("signal %s to process %d: %w", sig, member, err))
+		}
+	}
+	if leader {
+		if err := syscall.Kill(pid, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+			signalErr = errors.Join(signalErr, fmt.Errorf("signal %s to process %d: %w", sig, pid, err))
+		}
+	}
+	return signalErr
 }
 
 func (s *Session) closePTY() {

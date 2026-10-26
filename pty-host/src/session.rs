@@ -35,6 +35,7 @@ const READER_STACK_BYTES: usize = 256 * 1024;
 const EXITED_SESSION_TTL: Duration = Duration::from_secs(45);
 const TERMINATE_TIMEOUT: Duration = Duration::from_secs(10);
 const SIGTERM_TO_HUP_GRACE: Duration = Duration::from_secs(2);
+const SHELL_CLOSE_GRACE: Duration = Duration::from_millis(500);
 
 pub type Cleanup = Arc<dyn Fn(String) + Send + Sync>;
 pub type Broadcast = Arc<dyn Fn(Value) + Send + Sync>;
@@ -950,30 +951,37 @@ impl Session {
         if !self.is_running() {
             return Ok(());
         }
-        let signal = if self.is_shell() && signal == libc::SIGTERM {
+        let shell_close = self.is_shell() && signal == libc::SIGTERM;
+        let signal = if shell_close {
+            self.signal_processes(libc::SIGHUP)?;
+            self.signal_processes(libc::SIGTERM)?;
             libc::SIGHUP
         } else {
+            self.signal_processes(signal)?;
             signal
         };
-        if unsafe { libc::kill(-self.child_pid, signal) } != 0 {
-            let error = std::io::Error::last_os_error();
-            if error.raw_os_error() != Some(libc::ESRCH) {
-                return Err(format!("signal process group {}: {error}", self.child_pid));
-            }
-        }
-        let deadline = Instant::now() + TERMINATE_TIMEOUT;
+        let deadline = Instant::now()
+            + if shell_close {
+                SHELL_CLOSE_GRACE
+            } else {
+                TERMINATE_TIMEOUT
+            };
         if signal == libc::SIGTERM && !self.wait_for_exit(SIGTERM_TO_HUP_GRACE) {
             self.publish_escalation(signal, libc::SIGHUP);
-            let _ = unsafe { libc::kill(-self.child_pid, libc::SIGHUP) };
+            self.signal_processes(libc::SIGHUP)?;
         }
         if !self.wait_for_exit(deadline.saturating_duration_since(Instant::now())) {
             self.publish_escalation(signal, libc::SIGKILL);
-            let _ = unsafe { libc::kill(-self.child_pid, libc::SIGKILL) };
+            self.signal_processes(libc::SIGKILL)?;
             if !self.wait_for_exit(TERMINATE_TIMEOUT) {
                 return Err("timed out waiting for terminal process to exit".to_owned());
             }
         }
-        Ok(())
+        self.signal_processes(libc::SIGKILL)
+    }
+
+    fn signal_processes(&self, signal: i32) -> Result<(), String> {
+        crate::process::signal_session(self.child_pid, signal)
     }
 
     pub fn commit(&self) -> Result<Commit, String> {
@@ -1019,9 +1027,9 @@ impl Session {
 
     pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
         self.mark_removing();
-        self.signal(libc::SIGTERM)?;
+        let result = self.signal(libc::SIGTERM);
         self.finish_cleanup();
-        Ok(())
+        result
     }
 
     fn publish_escalation(&self, requested: i32, escalated: i32) {
@@ -1470,7 +1478,7 @@ fn unblock_sigchld() -> std::io::Result<()> {
 }
 
 fn abort_spawn(session: &Session) {
-    let _ = unsafe { libc::kill(-session.child_pid, libc::SIGKILL) };
+    let _ = session.signal_processes(libc::SIGKILL);
     let mut status = 0;
     loop {
         let result = unsafe { libc::waitpid(session.child_pid, &raw mut status, 0) };

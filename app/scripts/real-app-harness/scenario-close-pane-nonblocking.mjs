@@ -15,11 +15,12 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appDaemonInTree, observeProcessExits } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { waitForFirstDesktopPane, waitForPaneVisible } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
+import { registeredTerminalProcesses } from './workerRegistry.mjs';
 
 const CLOSE_BUDGET_MS = 1_000;
 const execFileAsync = promisify(execFile);
@@ -160,6 +161,11 @@ async function main() {
     });
 
     let closeElapsedMs;
+    const processes = registeredTerminalProcesses(dataDir, pane.runtimeId, runner.sessionDir);
+    runner.assert(processes?.workerPid > 1, 'the terminal registry names the worker and child before close', { processes });
+    const exited = await observeProcessExits([processes.workerPid, processes.childPid], {
+      env: instanceCliEnv(instance), timeoutMs: 8_000,
+    });
     await runner.step('close_before_teardown', async () => {
       const startedAt = performance.now();
       await client.request('close_pane', { sessionId, paneId: pane.paneId });
@@ -177,6 +183,11 @@ async function main() {
       const line = await waitForTeardownLog(dataDir, sessionId, pane.runtimeId);
       runner.writeText('teardown-escalation.log', `${line}\n`);
       return line;
+    });
+
+    await runner.step('worker_and_child_exit_after_close', async () => {
+      await exited.completed;
+      runner.writeJson('closed-processes.json', processes);
     });
 
     const summary = await runner.finishSuccess({ sessionId, paneId: pane.paneId, closeElapsedMs, slowGitProbeMs, escalationLog });

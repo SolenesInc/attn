@@ -1,0 +1,3 @@
+kind: fixed
+area: terminals
+change: Close Linux shells promptly, stop terminal jobs across process groups, and wait for the first shell prompt when running a command immediately after reload.

@@ -211,9 +211,8 @@ func runAgentDirectly(requestedAgent string) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
-		<-sigChan
-		if cmd.Process != nil {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
+		for sig := range sigChan {
+			_ = cmd.Process.Signal(sig)
 		}
 	}()
 
