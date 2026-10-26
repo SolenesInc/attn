@@ -179,6 +179,8 @@ export class Trial extends EventEmitter {
     if (previous?.state !== 'waiting_input') throw failure('harness', `simulator tried to send while ${id} was ${previous?.state}`);
     const terminal = this.bindings.get(id);
     if (!terminal) throw failure('harness', `no terminal binding for ${id}`);
+    this.ws.send(JSON.stringify({ cmd: 'settle_turn', session_id: id }));
+    await this.until(() => !this.sessions.get(id)?.turn_owed);
     this.ws.send(JSON.stringify({ cmd: 'pty_input', id: terminal, data: `\x1b[200~${text}\x1b[201~\r`, source: 'automation' }));
     await this.waiting(id, previous.turn_opened_at);
   }
