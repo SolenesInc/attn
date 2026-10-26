@@ -40,7 +40,7 @@ const trial = new Trial({ ...config, member_model: config.member_model }, new Ab
 let isolated;
 try {
   await trial.start({ charter: '# Eval member\nHelp the user with local tasks.\n', letters: [] });
-  isolated = { instance: trial.instance, isolation: trial.isolation, cli_setup: 'crew set succeeded', paid_calls: 0 };
+  isolated = { instance: trial.instance, isolation: trial.isolation, selection: trial.selection, cli_setup: 'crew set and resolved model/effort check succeeded', paid_calls: 0 };
 } finally { await trial.stop(); }
 
 const result = { at: new Date().toISOString(), cases: cases.length, receipts, isolated,

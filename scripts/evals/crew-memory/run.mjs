@@ -69,7 +69,7 @@ const REF_EXTS = ['', '.html', '.txt', '.json'];
 function parseArgs(argv) {
   const a = { flow: '.claude/hillclimb/flow', variant: 'baseline',
               model: undefined, reps: 1, concurrency: 1, timeoutS: undefined,
-              approveHarness: false };
+              approveHarness: false, checkHarness: false, pilotStage: 'units' };
   const val = (i) => { if (argv[i] === undefined) { eprint(`missing value for ${argv[i - 1]}`); usage(); process.exit(2); } return argv[i]; };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -79,7 +79,9 @@ function parseArgs(argv) {
     else if (k === '--reps') a.reps = +val(++i);
     else if (k === '--concurrency') a.concurrency = +val(++i);
     else if (k === '--timeout-s') a.timeoutS = +val(++i);
+    else if (k === '--pilot-stage') a.pilotStage = val(++i);
     else if (k === '--approve-harness') a.approveHarness = true;
+    else if (k === '--check-harness') a.checkHarness = true;
     else if (k === '-h' || k === '--help') { usage(); process.exit(0); }
     else { eprint(`unknown argument: ${k}`); usage(); process.exit(2); }
   }
@@ -87,17 +89,17 @@ function parseArgs(argv) {
     eprint(`--variant must be 'baseline' or 'v<N>', got '${a.variant}'`);
     usage(); process.exit(2);
   }
-  if ((!a.approveHarness && (!Number.isFinite(a.timeoutS) || a.timeoutS <= 0
-      || a.timeoutS * 1000 > 2147483647))
+  if ((a.timeoutS !== undefined && (!Number.isFinite(a.timeoutS) || a.timeoutS <= 0
+      || a.timeoutS * 1000 > 2147483647)) || !['units', 'e2e'].includes(a.pilotStage)
       || !Number.isInteger(a.reps) || a.reps < 1
       || a.concurrency !== 1) { usage(); process.exit(2); }
   return a;
 }
 function usage() {
-  eprint('usage: node run-eval.mjs --flow DIR --variant ID [--model ID] [--reps N] [--concurrency N] [--timeout-s N (0 = no ceiling)] [--approve-harness]');
+  eprint('usage: node run.mjs --flow DIR --variant ID [--model ID] [--reps N] [--pilot-stage units|e2e] [--timeout-s N] [--check-harness|--approve-harness]');
 }
 
-function checkHarness(statePath, st, approve) {
+function checkHarness(statePath, st, approve, check) {
   const self = fileURLToPath(import.meta.url);
   const listed = Array.isArray(st.harness_paths) ? st.harness_paths.map(String) : [];
   const lockfiles = [...new Set([dirname(self), process.cwd()].flatMap(d =>
@@ -119,12 +121,16 @@ function checkHarness(statePath, st, approve) {
     hashed.push(relative(process.cwd(), p));
   }
   const sha = h.digest('hex');
+  if (check) {
+    eprint(`computed sha256 ${sha}; approved ${st.harness_sha ?? 'none'}; model calls=0`);
+    return;
+  }
   if (st.harness_sha === sha) return;
   if (!lockfiles.length) eprint('note: no lockfile beside the runner or in the current directory - dependency changes are outside the harness sha');
   if (approve) {
     st.harness_sha = sha;
     writeFileNoFollow(statePath, JSON.stringify(st, null, 2) + '\n');
-    eprint(`harness approved: sha256 ${sha.slice(0, 12)} over ${hashed.length} file(s) recorded in ${statePath}`);
+    eprint(`harness approved: sha256 ${sha} over ${hashed.length} file(s) recorded in ${statePath}`);
     return;
   }
   if (st.harness_sha == null) {
@@ -195,8 +201,8 @@ async function main() {
     try { st = JSON.parse(stateText) || {}; }
     catch { eprint(`${statePath} exists but is not valid JSON - fix it before spending a pass`); process.exit(2); }
   }
-  checkHarness(statePath, st, args.approveHarness);
-  if (args.approveHarness) return;
+  checkHarness(statePath, st, args.approveHarness, args.checkHarness);
+  if (args.approveHarness || args.checkHarness) return;
   const ctx = { ...args, state: st };
 
   const resultsPath = join(vdir, 'results.jsonl');
@@ -245,14 +251,15 @@ async function main() {
   async function worker() {
     while (i < tasks.length) {
       const { c, rep } = tasks[i++];
+      const timeoutS = st.case_timeout_s[c.unit];
       const controller = new AbortController();
       const attemptCtx = { ...ctx, rep, attempt: Date.now(), signal: controller.signal, calls: [] };
-      const timer = setTimeout(() => controller.abort(Object.assign(new Error('case exceeded timeout_s=' + args.timeoutS), { failure_class: 'timeout' })), args.timeoutS * 1000);
+      const timer = setTimeout(() => controller.abort(Object.assign(new Error(`case ${c.id} exceeded case_timeout_s[${c.unit}]=${timeoutS}; elapsed_s>=${timeoutS}, requested_days=${c.days.length}`), { failure_class: 'timeout' })), timeoutS * 1000);
       const safeId = pathSafeId(c.id);
       const t0 = Date.now();
       let lastRun = null;
       let rowWritten = false;
-      const deadline = args.timeoutS > 0 ? t0 + args.timeoutS * 1000 : Infinity;
+      const deadline = t0 + timeoutS * 1000;
       const appRetry = { count: 0 }, judgeRetry = { count: 0 };
       try {
         const { run, g, latency_s } = await (async () => {
@@ -323,6 +330,7 @@ async function main() {
           unit: c.unit,
           ...(safeId !== String(c.id) ? { original_id: String(c.id) } : {}),
           failure_class: e?.failure_class === 'cleanup' ? 'cleanup' : controller.signal.aborted ? 'timeout' : e?.failure_class ?? 'error',
+          case_timeout_s: timeoutS,
           error: String(controller.signal.aborted ? controller.signal.reason.message : e?.message || e),
           retries: appRetry.count, judge_retries: judgeRetry.count,
           model: lastRun?.model, usage: lastRun?.usage,

@@ -120,7 +120,13 @@ export class Trial extends EventEmitter {
     this.ws.send(JSON.stringify({ cmd: 'client_hello', client_kind: 'crew-memory-eval', version: '1',
       capabilities: [], client_token: readFileSync(join(this.data, 'client-token'), 'utf8').trim() }));
     await this.until(() => this.frames.some(frame => frame.event === 'initial_state'));
-    await this.cli(['crew', 'set', 'member', '--agent', 'claude', '--model', this.config.member_model]);
+    await this.cli(['crew', 'set', 'member', '--agent', 'claude', '--model', this.config.member_model,
+      '--effort', this.config.member_effort]);
+    const roster = JSON.parse(await this.cli(['crew', 'list', '--json']));
+    const member = roster.find(row => row.id === 'member');
+    if (member?.resolved_model !== this.config.member_model || member?.resolved_effort !== this.config.member_effort)
+      throw failure('fixture', `crew settings differ: requested ${this.config.member_model}/${this.config.member_effort}, resolved ${member?.resolved_model}/${member?.resolved_effort}`);
+    this.selection = { model: member.resolved_model, effort: member.resolved_effort };
     if (this.config.memory) {
       await this.cli(['settings', 'set', 'crew_memory_enabled', 'true']);
       if (input.frozen_memory) copyTree(input.frozen_memory, join(this.home, 'memory'));

@@ -39,13 +39,31 @@ export function loadCases(ctx) {
   if (!state.private_root || !state.attn_binary || !state.claude_binary || !state.simulator_model || !state.judge_model) throw failure('fixture', 'state must name private_root, attn_binary, claude_binary, simulator_model, and judge_model');
   if (!ctx.model) throw failure('fixture', '--model must pin the member model');
   if (ctx.model !== state.member_model || ctx.reps !== state.reps) throw failure('approval', '--model and --reps must match the reviewed state member_model and reps');
+  if (!state.member_effort) throw failure('fixture', 'member_effort must pin the crew member effort');
   if (ctx.model === state.judge_model) throw failure('fixture', 'judge_model must differ from the member model');
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) throw failure('approval', 'the user must supply an evaluation CLAUDE_CODE_OAUTH_TOKEN from the supported claude setup-token flow in the runner environment');
   const privateRoot = resolve(state.private_root);
   for (const path of [ctx.flow, state.cases_path]) {
     if (relative(privateRoot, resolve(path)).startsWith('..')) throw failure('fixture', `${path} must live under private_root so the member cannot read it`);
   }
-  return cases.filter(input => !state.pilot || input.pilot);
+  const selected = cases.filter(input => !state.pilot || input.pilot &&
+    (ctx.pilotStage === 'e2e' ? input.unit === 'e2e' : input.unit !== 'e2e'));
+  if (state.pilot && ctx.pilotStage === 'e2e') {
+    const results = join(ctx.flow, 'baseline', 'results.jsonl');
+    const completed = existsSync(results) ? readFileSync(results, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
+    for (const input of cases.filter(row => row.pilot && row.unit !== 'e2e')) {
+      if (!completed.some(row => row.prompt_id === input.id && row.rep === 0))
+        throw failure('approval', `pilot stage e2e needs completed ${input.id}; run units and review its measurements first`);
+    }
+  }
+  for (const input of selected) {
+    const seconds = state.case_timeout_s?.[input.unit];
+    if (!Number.isFinite(seconds) || seconds <= 0 || seconds * 1000 > 2147483647)
+      throw failure('fixture', `case_timeout_s[${input.unit}] must be a positive measured ceiling, got ${seconds}`);
+    if (ctx.timeoutS !== undefined && ctx.timeoutS !== seconds)
+      throw failure('approval', `--timeout-s=${ctx.timeoutS} differs from reviewed case_timeout_s[${input.unit}]=${seconds}`);
+  }
+  return selected;
 }
 
 async function modelCall(ctx, purpose, prompt, schema) {
@@ -136,7 +154,7 @@ export async function runCase(input, ctx) {
       const session = trial.sessions.get(id);
       if (!session?.usage || session.usage.measurement_incomplete || session.usage.has_unpriced_usage || !(session.usage.cost_usd > 0)) throw failure('usage', `session ${id} has incomplete token or dollar receipts`);
       if (!session.usage.models?.length || session.usage.models.some(row => row.model !== ctx.model)) throw failure('serving_substitution', `member ${id}: requested ${ctx.model}, served ${session.usage.models?.map(row => row.model)}`);
-      days.push({ id, usage: session.usage, events });
+      days.push({ id, selection: trial.selection, usage: session.usage, events });
     }
     const initialLetters = new Set(input.letters.map(letter => letter.name));
     const letters = readdirSync(join(trial.home, 'handoffs')).filter(name => !initialLetters.has(name)).sort()
