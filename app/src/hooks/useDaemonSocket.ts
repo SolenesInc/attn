@@ -9,6 +9,7 @@ import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
 import { useVentsStore } from '../store/vents';
 import { useSharedCodexStore } from '../store/sharedCodex';
+import { useTerminalRefusals } from '../store/terminalRefusals';
 import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDATE } from './daemonSharedCodexEvents';
 import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
@@ -1183,7 +1184,7 @@ export function useDaemonSocket({
             callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);
 
             const nextSettings = data.settings || {};
-            if (nextSettings.outposts_enabled !== 'true') setOutposts([]);
+            setOutposts(data.outposts ?? []);
             settingsRef.current = nextSettings;
             callbacksRef.current.onSettingsUpdate?.(nextSettings);
             const nextWarnings = data.warnings || [];
@@ -2292,6 +2293,10 @@ export function useDaemonSocket({
 
           case 'command_error':
             if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
+            if (data.terminal_id && (data.cmd === 'pty_input' || data.cmd === 'pty_resize')) {
+              useTerminalRefusals.getState().refused(data.terminal_id, data.cmd === 'pty_input' ? 1 : 0);
+              break;
+            }
             if (data.error_code === 'unauthorized_client') {
               console.error('[Daemon] Client token refused:', data.error);
               setConnectionError(data.error || 'The daemon refused this client.');

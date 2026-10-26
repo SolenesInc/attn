@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { SuspendedDesktopPane } from './SuspendedDesktopPane';
 import type { CSSProperties } from 'react';
@@ -7,6 +6,7 @@ import { StateIndicator } from '../StateIndicator';
 import { DesktopAgentBody } from './DesktopAgentBody';
 import { DesktopAgentHeader } from './DesktopAgentHeader';
 import { useDesktopContext } from './DesktopContext';
+import { useTerminalRefusals } from '../../store/terminalRefusals';
 
 export function DesktopAgentPane({
   agentPane,
@@ -19,7 +19,6 @@ export function DesktopAgentPane({
   path: string;
   frameStyle: CSSProperties;
 }) {
-  const [refusal, setRefusal] = useState(0);
   const {
     sessionById,
     activeLeafId,
@@ -28,6 +27,7 @@ export function DesktopAgentPane({
     focusLeaf,
     effectiveDraggingLeafId,
   } = useDesktopContext();
+  const refusal = useTerminalRefusals((state) => state.byTerminal.get(agentPane.runtimeId));
 
   const paneSession = sessionById.get(agentPane.sessionId);
   const paneTitle = paneSession ? sessionDisplayName(paneSession) : agentPane.title || 'Session';
@@ -66,8 +66,8 @@ export function DesktopAgentPane({
       style={frameStyle}
     >
       <DesktopAgentHeader agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} />
-      <DesktopAgentBody agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} onInputRefused={() => setRefusal((value) => value + 1)} />
-      {paneSession?.offline && refusal > 0 ? <div key={refusal} className="desktop-pane-refusal" aria-hidden="true" onAnimationEnd={() => setRefusal(0)} /> : null}
+      <DesktopAgentBody agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} keysNotSent={refusal?.keysNotSent ?? 0} />
+      {refusal?.flashing ? <div key={refusal.flash} className="desktop-pane-refusal" aria-hidden="true" onAnimationEnd={() => useTerminalRefusals.getState().flashEnded(agentPane.runtimeId)} /> : null}
     </div>
   );
 }

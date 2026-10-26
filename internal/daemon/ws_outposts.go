@@ -99,14 +99,12 @@ func (d *Daemon) handleOutpostCommand(client *wsClient, action, id, name, addres
 
 func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 	message := &protocol.OutpostsUpdatedMessage{Event: protocol.EventOutpostsUpdated, Outposts: []protocol.OutpostInfo{}}
-	if !d.outpostsEnabled() {
-		return message
-	}
 	rows, err := d.store.ListOutposts()
 	if err != nil {
 		d.logf("outposts snapshot: %v", err)
 		return message
 	}
+	enabled := d.outpostsEnabled()
 	r := &d.outposts
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -116,7 +114,9 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 			info.DaemonID = protocol.Ptr(row.DaemonID)
 			info.HostKeyFingerprint = protocol.Ptr((bridge.Pin{HostKey: row.HostKey}).Fingerprint())
 		}
-		if run := r.dialers[row.ID]; run != nil {
+		run := r.dialers[row.ID]
+		_, info.Reach = outpostReach(enabled, run)
+		if run != nil {
 			info.State = protocol.OutpostState(run.state)
 			info.StateSince = run.since
 			if run.build != "" {
@@ -126,6 +126,9 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 				info.LastError = protocol.Ptr(run.lastError)
 				info.LastErrorAt = protocol.Ptr(run.lastErrorAt)
 			}
+		}
+		if !enabled {
+			info.State = protocol.OutpostStateLost
 		}
 		message.Outposts = append(message.Outposts, info)
 	}

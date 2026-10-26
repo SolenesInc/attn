@@ -61,10 +61,19 @@ func outposts(args []string) error {
 	if initial.Settings["outposts_enabled"] != "true" {
 		return errors.New("outposts_enabled is off")
 	}
-	if actions != 0 {
-		if _, _, err := conn.Read(ctx); err != nil {
+	snapshot := protocol.OutpostsUpdatedMessage{Event: protocol.EventOutpostsUpdated, Outposts: initial.Outposts}
+	if snapshot.Outposts == nil {
+		snapshot.Outposts = []protocol.OutpostInfo{}
+	}
+	if actions == 0 {
+		data, err := json.Marshal(snapshot)
+		if err != nil {
 			return err
 		}
+		if done, err := report(data, snapshot, *watch, *remove, *until, *add, *repair); done || err != nil {
+			return err
+		}
+	} else {
 		var command any
 		switch {
 		case *add != "":
@@ -104,35 +113,37 @@ func outposts(args []string) error {
 		if err := json.Unmarshal(data, &message); err != nil {
 			return err
 		}
-		if _, err := os.Stdout.Write(append(data, '\n')); err != nil {
+		if done, err := report(data, message, *watch, *remove, *until, *add, *repair); done || err != nil {
 			return err
 		}
-		if *watch {
-			continue
-		}
-		if *remove != "" {
-			found := false
-			for _, row := range message.Outposts {
-				if row.ID == *remove {
-					found = true
-				}
-			}
-			if !found {
-				return nil
-			}
-			continue
-		}
-		if *until != "" || *add != "" || *repair != "" {
-			for _, row := range message.Outposts {
-				if *add != "" && row.Name != *add || *repair != "" && row.ID != *repair {
-					continue
-				}
-				if *until == "" || string(row.State) == *until {
-					return nil
-				}
-			}
-			continue
-		}
-		return nil
 	}
+}
+
+func report(data []byte, message protocol.OutpostsUpdatedMessage, watch bool, remove, until, add, repair string) (bool, error) {
+	if _, err := os.Stdout.Write(append(data, '\n')); err != nil {
+		return true, err
+	}
+	if watch {
+		return false, nil
+	}
+	if remove != "" {
+		for _, row := range message.Outposts {
+			if row.ID == remove {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+	if until != "" || add != "" || repair != "" {
+		for _, row := range message.Outposts {
+			if add != "" && row.Name != add || repair != "" && row.ID != repair {
+				continue
+			}
+			if until == "" || string(row.State) == until {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	return true, nil
 }

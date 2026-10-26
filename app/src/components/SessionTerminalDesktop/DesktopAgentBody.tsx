@@ -8,7 +8,7 @@ import { DesktopOfflineNotice } from './DesktopOfflineNotice';
 import type { DesktopAgentProps } from './desktopTypes';
 import { useSessionStore } from '../../store/sessions';
 
-export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRefused }: DesktopAgentProps & { onInputRefused: () => void }) {
+export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSent }: DesktopAgentProps & { keysNotSent: number }) {
   const [resuming, setResuming] = useState(false);
   const [resumeError, setResumeError] = useState('');
   const {
@@ -55,7 +55,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRef
 
   return (
     <div className="desktop-pane-body">
-      <DesktopOfflineNotice paneSession={paneSession} />
+      <DesktopOfflineNotice paneSession={paneSession} keysNotSent={keysNotSent} />
       {stopped ? (
         <div className="desktop-agent-stopped" role="status">
           <div>
@@ -107,10 +107,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRef
             isActiveSession,
             paneCount: paneIds.length,
           }}
-          onInput={(data, source, traceId) => {
-            if (paneSession?.offline && source !== 'response') onInputRefused();
-            runtime.handleTerminalInput(agentPane.id)(data, source, traceId);
-          }}
+          onInput={runtime.handleTerminalInput(agentPane.id)}
           onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
           onOpenMarkdown={onOpenMarkdown}
           onPathRefused={onTerminalPathRefused}

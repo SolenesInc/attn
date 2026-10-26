@@ -38,7 +38,7 @@ func quietRemaining(last time.Time, within time.Duration) time.Duration {
 	return remaining
 }
 
-func isUserKeystrokeSource(source string) bool {
+func IsUserKeystrokeSource(source string) bool {
 	switch source {
 	case "agent", "automation", "attach_replay", "pointer", "response":
 		return false
@@ -48,7 +48,7 @@ func isUserKeystrokeSource(source string) bool {
 }
 
 func IsComposerKeystroke(source string, data []byte) bool {
-	return isUserKeystrokeSource(source) && userInputEditsComposer(data)
+	return IsUserKeystrokeSource(source) && userInputEditsComposer(data)
 }
 
 func userInputEditsComposer(data []byte) bool {

@@ -26,6 +26,16 @@ func outpostState(p *testworld.Peer, name string, state protocol.OutpostState) p
 	return found
 }
 
+func outpostStateOnConnect(p *testworld.Peer, name string, state protocol.OutpostState) protocol.OutpostInfo {
+	p.T.Helper()
+	for _, row := range p.Initial.Outposts {
+		if row.Name == name && row.State == state {
+			return row
+		}
+	}
+	return outpostState(p, name, state)
+}
+
 func enableOutposts(t *testing.T, s *testworld.Stack) *testworld.Peer {
 	t.Helper()
 	p := s.App()
@@ -72,9 +82,7 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	testworld.Await[protocol.OutpostsUpdatedMessage](q, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	second.Stop()
 	second.Start()
-	q = second.App()
-	got := testworld.Await[protocol.OutpostsUpdatedMessage](q, protocol.EventOutpostsUpdated, nil)
-	if len(got.Outposts) != 0 {
+	if got := second.App().Initial.Outposts; len(got) != 0 {
 		t.Fatalf("removed outpost resurrected: %+v", got)
 	}
 }
@@ -97,7 +105,9 @@ func TestOutpostsDisabledCommandsAndRetainedRows(t *testing.T) {
 		t.Fatalf("missing agent: %+v", row)
 	}
 	requireStdout(t, s.Attn("settings", "set", "outposts_enabled", "false"), "false")
-	testworld.Await[protocol.OutpostsUpdatedMessage](p, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	if off := outpostState(p, "unreachable", protocol.OutpostStateLost); off.ID != row.ID || off.Reach != protocol.OutpostReachUnreachable {
+		t.Fatalf("row while Outposts is off: %+v", off)
+	}
 	s.Stop()
 	s.Start()
 	p = s.App()
@@ -240,9 +250,7 @@ func TestOutpostsAddressAliasDoesNotReplaceTheWorkingBridge(t *testing.T) {
 	if !strings.Contains(protocol.Deref(refused.LastError), "same outpost as original ("+address+")") {
 		t.Fatalf("alias refusal: %+v", refused)
 	}
-	observer := home.App()
-	snapshot := testworld.Await[protocol.OutpostsUpdatedMessage](observer, protocol.EventOutpostsUpdated, nil)
-	for _, row := range snapshot.Outposts {
+	for _, row := range home.App().Initial.Outposts {
 		if row.ID == first.ID && (row.State != protocol.OutpostStateConnected || row.StateSince != first.StateSince) {
 			t.Fatalf("alias replaced the working bridge: before=%+v after=%+v", first, row)
 		}
@@ -275,12 +283,11 @@ func TestOutpostsUnchangedRetryKeepsItsStateAndPublishesNoFacts(t *testing.T) {
 	}
 	before := facts()
 	a.AwaitConnections(t, 4)
-	observer := home.App()
-	snapshot := testworld.Await[protocol.OutpostsUpdatedMessage](observer, protocol.EventOutpostsUpdated, nil)
-	if len(snapshot.Outposts) != 1 {
+	snapshot := home.App().Initial.Outposts
+	if len(snapshot) != 1 {
 		t.Fatalf("retry lost its row: %+v", snapshot)
 	}
-	after := snapshot.Outposts[0]
+	after := snapshot[0]
 	if after.State != first.State || after.StateSince != first.StateSince || protocol.Deref(after.LastError) != protocol.Deref(first.LastError) {
 		t.Fatalf("retry changed failure: before=%+v after=%+v", first, after)
 	}

@@ -29,7 +29,7 @@ async function openTerminal(page: Page, query: string, output: string) {
   await expect(terminal.locator('canvas').first()).toBeVisible();
   await expect(terminal).toHaveAttribute('data-terminal-input-ready', '1');
   const runtime = query ? 'remote' : 'local';
-  await page.evaluate(({ id, data }) => window.__TEST_EMIT_PTY_DATA?.(id, data), { id: runtime, data: output });
+  await page.evaluate(({ id, data }) => window.__TEST_EMIT_PTY_DATA?.(id, data), { id: runtime, data: `${output}\r\n` });
   return terminal;
 }
 

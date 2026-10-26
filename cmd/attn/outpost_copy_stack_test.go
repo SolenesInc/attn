@@ -103,7 +103,7 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	}
 	home.Start()
 	p = home.App()
-	outpostState(p, "outpost", protocol.OutpostStateConnected)
+	outpostStateOnConnect(p, "outpost", protocol.OutpostStateConnected)
 	staged.Await()
 	staged.Release()
 	awaitCopy()

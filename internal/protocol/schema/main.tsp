@@ -298,6 +298,14 @@ enum OutpostState {
   refused,
 }
 
+// Whether the home can send an outpost a terminal's input now, by the rule it
+// applies to that input.
+enum OutpostReach {
+  reachable,
+  connecting,
+  unreachable,
+}
+
 // One row of an outpost's copy: the current columns of a sessions or terminal_bindings row the home holds for a terminal that outpost runs, or its deletion when columns is absent.
 enum CopyTable {
   sessions,
@@ -315,6 +323,7 @@ model OutpostInfo {
   name: string;
   address: string;
   state: OutpostState;
+  reach: OutpostReach;
   state_since: string;
   daemon_id?: string;
   host_key_fingerprint?: string;
@@ -3479,6 +3488,9 @@ model InitialStateMessage {
   // The selected profile's shared Codex versions, absent while Shared Codex is
   // off.
   shared_codex?: SharedCodexState;
+  // Every outpost, as outposts_updated carries them, so a tile knows its
+  // host's reach from the first push.
+  outposts?: OutpostInfo[];
 }
 
 model SessionRegisteredMessage {
@@ -4588,6 +4600,8 @@ model CommandErrorMessage {
   success: boolean;
   error: string;
   error_code?: string;
+  // The terminal a refused pty_input or pty_resize was for.
+  terminal_id?: string;
 }
 
 // Sent once to a reconnecting client that the daemon had hung up on for

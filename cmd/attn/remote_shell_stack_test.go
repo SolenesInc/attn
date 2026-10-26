@@ -210,7 +210,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	home.Stop()
 	home.Start()
 	app = home.App()
-	outpostState(app, "outpost", protocol.OutpostStateConnected)
+	outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
 	app.TypeLine(id, "echo home-restart-$((4+4))")
 	app.AwaitScreen(id, "home-restart-8")
 	mark = len(app.Log())

@@ -59,13 +59,15 @@ export function OutpostsSettings() {
       <section className="settings-block">
         <div className="settings-block-intro">
           <h3>Outposts</h3>
-          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, then disconnects and forgets this outpost.</p>
+          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, then disconnects and forgets this outpost. While it isn't connected, its shells keep running there until you run attn enrollment leave on it.</p>
         </div>
         <div className="settings-block-body">
           {outposts.length === 0 ? <p className="settings-empty">No outposts added.</p> : (
             <ul className="settings-outposts" aria-label="Outposts">
               {outposts.map(row => {
                 const count = sessions.filter((session) => session.host === row.id).length;
+                const terminals = `${count} ${count === 1 ? 'terminal' : 'terminals'}`;
+                const confirmRemove = row.reach === 'reachable' ? `Remove and close ${terminals}` : `Remove and forget ${terminals}`;
                 return (
                   <li key={row.id} className="settings-outpost" aria-label={row.name}>
                     <div className="settings-row-card">
@@ -93,12 +95,15 @@ export function OutpostsSettings() {
                           setRemoving(null);
                         }}
                       >
-                        {removing === row.id && count > 0 ? `Remove and close ${count} ${count === 1 ? 'terminal' : 'terminals'}` : 'Remove'}
+                        {removing === row.id && count > 0 ? confirmRemove : 'Remove'}
                       </button>
                       {removing === row.id && count > 0 ? (
                         <button type="button" className="settings-action" onClick={() => { removeButton.current?.focus(); setRemoving(null); }}>Cancel</button>
                       ) : null}
                     </div>
+                    {removing === row.id && count > 0 && row.reach !== 'reachable' ? (
+                      <p className="settings-description" role="status">{row.name} isn't connected, so its shells keep running there until you run attn enrollment leave on it.</p>
+                    ) : null}
                   </li>
                 );
               })}

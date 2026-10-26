@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, createEvent, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { daemonSession, soloDesktop, defaultProfile } from './test/daemonFixtures';
 import { fakeRects } from './test/layout';
@@ -10,26 +10,36 @@ import type { EventMessage } from './test/protocol';
 type OutpostInfo = EventMessage<'outposts_updated'>['outposts'][number];
 
 const outpost: OutpostInfo = {
-  id: 'studio-id', name: 'studio', address: 'studio:2200', state: 'connected',
+  id: 'studio-id', name: 'studio', address: 'studio:2200', state: 'connected', reach: 'reachable',
   state_since: '2026-10-18T18:00:00Z',
 };
+const connecting: OutpostInfo = { ...outpost, state: 'connecting', reach: 'connecting' };
+const lost: OutpostInfo = { ...outpost, state: 'lost', reach: 'unreachable' };
 const remote = () => daemonSession('remote', { agent: 'shell', host: outpost.id, state: 'idle' });
 const tile = () => document.querySelector<HTMLElement>('[data-pane-id="pane-remote"]')!;
+const terminalInput = () => within(tile()).getByRole('textbox', { name: 'Terminal input' });
+const flash = () => tile().querySelector('.desktop-pane-refusal');
+const wheel = () => act(() => {
+  const surface = tile().querySelector('.terminal-container')!;
+  const event = createEvent.wheel(surface, { deltaY: -1, deltaMode: 1 });
+  Object.defineProperties(event, { clientX: { value: 20 }, clientY: { value: 20 } });
+  fireEvent(surface, event);
+});
+const refuse = (cmd: 'pty_input' | 'pty_resize') => ({ event: 'command_error' as const, cmd, success: false, error: 'studio is unreachable; this needs it now', terminal_id: 'remote' });
 
-async function setup(state: OutpostInfo['state'] = 'connected') {
+async function setup(row: OutpostInfo | null = outpost, settings: Record<string, string> = { outposts_enabled: 'true' }) {
   fakeRects((element) => element.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : null);
-  const view = await renderApp({
+  return renderApp({
     script: (daemon) => {
       daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
     },
     initialState: {
       sessions: [remote(), daemonSession('local', { agent: 'shell', state: 'idle' })],
       desktops: [soloDesktop('remote'), soloDesktop('local')],
-      settings: { outposts_enabled: 'true' },
+      settings,
+      outposts: row ? [row] : [],
     },
   });
-  await gesture(view.daemon, () => view.daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state }] }));
-  return view;
 }
 
 describe('Remote shells in the app', () => {
@@ -46,20 +56,21 @@ describe('Remote shells in the app', () => {
     const { daemon } = await setup();
     await openSession(daemon, 'remote');
     await gesture(daemon, () => daemon.emit({ event: 'pty_output', id: 'remote', seq: 1, data: btoa('last remote screen') }));
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state }] }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state, reach: 'unreachable' }] }));
     expect(tile()).toHaveAttribute('data-offline', 'true');
     expect(within(tile()).getByText('studio unreachable · typing is not sent')).toBeInTheDocument();
+    expect(within(tile()).queryByText('The screen is on studio.')).toBeNull();
     expect(window.__TEST_GET_SESSION_PANE_VISIBLE_TEXT?.('remote')).toContain('last remote screen');
     expect(screen.getByTestId('sidebar-session-remote')).toHaveAttribute('data-offline', 'true');
     expect(screen.getByTestId('session-remote')).toHaveAttribute('data-offline', 'true');
     expect(within(tile()).getByLabelText('offline')).toBeInTheDocument();
-    const input = within(tile()).getByRole('textbox', { name: 'Terminal input' });
-    await gesture(daemon, () => fireEvent.keyDown(input, { key: 'x', code: 'KeyX' }));
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
     expect(daemon.sentOf('pty_input')).toEqual([]);
-    const firstFlash = tile().querySelector('.desktop-pane-refusal');
+    const firstFlash = flash();
     expect(firstFlash).not.toBeNull();
-    await gesture(daemon, () => fireEvent.keyDown(input, { key: 'y', code: 'KeyY' }));
-    expect(tile().querySelector('.desktop-pane-refusal')).not.toBe(firstFlash);
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'y', code: 'KeyY' }));
+    expect(flash()).not.toBe(firstFlash);
+    expect(within(tile()).queryByText(/may not have been sent/)).toBeNull();
     await gesture(daemon, () => pressShortcut('terminal.splitVertical'));
     await gesture(daemon, () => pressShortcut('session.close'));
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('session-actions-remote')));
@@ -75,46 +86,161 @@ describe('Remote shells in the app', () => {
     expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'local', data: 'l' })]);
   });
 
-  it.each(['stalled', 'connecting'] as const)('leaves a %s shell online', async (state) => {
-    const { daemon } = await setup(state);
+  it('shows remote tiles offline and named while Outposts is off', async () => {
+    const { daemon } = await setup(lost, { outposts_enabled: 'false' });
     await openSession(daemon, 'remote');
-    expect(tile()).not.toHaveAttribute('data-offline', 'true');
-    expect(within(tile()).queryByText(/unreachable/)).toBeNull();
-    await gesture(daemon, () => fireEvent.keyDown(within(tile()).getByRole('textbox', { name: 'Terminal input' }), { key: 'x', code: 'KeyX' }));
-    expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'remote', data: 'x' })]);
+    expect(tile()).toHaveAttribute('data-offline', 'true');
+    expect(within(tile()).getByText('studio')).toHaveClass('desktop-pane-host');
+    expect(within(tile()).getByText('studio unreachable · typing is not sent')).toBeInTheDocument();
+    expect(within(tile()).getByText('The screen is on studio.')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-session-remote')).toHaveAttribute('data-offline', 'true');
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
+    expect(flash()).not.toBeNull();
+    await gesture(daemon, () => pressShortcut('session.close'));
+    expect(daemon.sentOf('attach_session')).toEqual([]);
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(daemon.sentOf('unregister')).toEqual([]);
+    expect(screen.getAllByText(/studio is unreachable/).length).toBeGreaterThan(0);
   });
 
-  it('mounts offline with an empty screen, attaches on recovery, and never replays refused input', async () => {
-    const { daemon } = await setup('lost');
+  it('reads a tile whose host has no outpost row as unreachable', async () => {
+    const { daemon } = await setup(null);
+    await openSession(daemon, 'remote');
+    expect(tile()).toHaveAttribute('data-offline', 'true');
+    expect(daemon.sentOf('attach_session')).toEqual([]);
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(flash()).not.toBeNull();
+  });
+
+  it('leaves a stalled shell online and sends its typing', async () => {
+    const { daemon } = await setup({ ...outpost, state: 'stalled' });
+    await openSession(daemon, 'remote');
+    expect(tile()).not.toHaveAttribute('data-offline', 'true');
+    expect(within(tile()).queryByRole('status')).toBeNull();
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
+    expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'remote', data: 'x' })]);
+    expect(flash()).toBeNull();
+  });
+
+  it('refuses typing with a flash and no strip while connecting, then attaches once reachable', async () => {
+    const { daemon } = await setup(connecting);
+    await openSession(daemon, 'remote');
+    expect(tile()).not.toHaveAttribute('data-offline', 'true');
+    expect(within(tile()).queryByRole('status')).toBeNull();
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
+    expect(flash()).not.toBeNull();
+    expect(within(tile()).queryByRole('status')).toBeNull();
+    expect(daemon.sentOf('attach_session')).toEqual([]);
+    expect(daemon.sentOf('pty_resize')).toEqual([]);
+    daemon.on('unregister', ({ cmd }) => ({ event: 'command_error', cmd, success: false, error: 'studio is unreachable; this needs it now' }));
+    await gesture(daemon, () => pressShortcut('session.close'));
+    expect(daemon.sentOf('unregister')).toHaveLength(1);
+    expect(screen.getByText('Could not close that session: studio is unreachable; this needs it now')).toBeInTheDocument();
+    expect(tile()).toBeInTheDocument();
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
+    expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['remote']);
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'z', code: 'KeyZ' }));
+    expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);
+  });
+
+  it('says the screen is on the outpost when a tile mounts unreachable, attaches on recovery, and never replays refused input', async () => {
+    const { daemon } = await setup(lost);
     await openSession(daemon, 'remote');
     expect(daemon.sentOf('attach_session')).toEqual([]);
     expect(daemon.sentOf('pty_resize')).toEqual([]);
     expect(window.__TEST_GET_SESSION_PANE_VISIBLE_TEXT?.('remote')?.trim()).toBe('');
     expect(within(tile()).getByText('The screen is on studio.')).toBeInTheDocument();
-    await gesture(daemon, () => fireEvent.keyDown(within(tile()).getByRole('textbox', { name: 'Terminal input' }), { key: 'x', code: 'KeyX' }));
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
     expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['remote']);
     expect(daemon.sentOf('pty_input')).toEqual([]);
     expect(within(tile()).queryByText(/unreachable/)).toBeNull();
   });
 
-  it('waits to attach a tile mounted while connecting, then attaches when connected', async () => {
-    const { daemon } = await setup('connecting');
+  it('says the screen is on the outpost when a tile mounted while connecting turns unreachable', async () => {
+    const { daemon } = await setup(connecting);
     await openSession(daemon, 'remote');
-    expect(daemon.sentOf('attach_session')).toEqual([]);
-    expect(tile()).not.toHaveAttribute('data-offline', 'true');
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [lost] }));
+    expect(within(tile()).getByText('studio unreachable · typing is not sent')).toBeInTheDocument();
+    expect(within(tile()).getByText('The screen is on studio.')).toBeInTheDocument();
+  });
+
+  it('flashes and counts keys the daemon refused when a stalled bridge turns lost, and replays none', async () => {
+    const { daemon } = await setup({ ...outpost, state: 'stalled' });
+    await openSession(daemon, 'remote');
+    for (const key of ['l', 's', 'Enter']) {
+      await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key, code: key === 'Enter' ? 'Enter' : `Key${key.toUpperCase()}` }));
+    }
+    const typed = daemon.sentOf('pty_input');
+    expect(typed).toHaveLength(3);
+    expect(flash()).toBeNull();
+    for (const _ of typed) {
+      await gesture(daemon, () => daemon.emit(refuse('pty_input')));
+    }
+    expect(flash()).not.toBeNull();
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [lost] }));
+    expect(within(tile()).getByText('studio unreachable · typing is not sent')).toBeInTheDocument();
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
+    const beforeResizeRefusal = flash();
+    await gesture(daemon, () => daemon.emit(refuse('pty_resize')));
+    expect(flash()).not.toBe(beforeResizeRefusal);
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
     daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
-    expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['remote']);
-    await gesture(daemon, () => fireEvent.keyDown(within(tile()).getByRole('textbox', { name: 'Terminal input' }), { key: 'z', code: 'KeyZ' }));
-    expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
+    await gesture(daemon, () => daemon.emit({ event: 'pty_output', id: 'remote', seq: 1, data: btoa('\x1b[?1000h\x1b[?1006h') }));
+    await wheel();
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input').slice(typed.length)).toEqual([expect.objectContaining({ source: 'pointer' })]);
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'z', code: 'KeyZ' }));
+    expect(within(tile()).queryByText(/may not have been sent/)).toBeNull();
+    expect(daemon.sentOf('pty_input').slice(typed.length + 1)).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);
+  });
+
+  it('neither flashes nor sends mouse input over an unreachable tile', async () => {
+    const { daemon } = await setup();
+    await openSession(daemon, 'remote');
+    await gesture(daemon, () => daemon.emit({ event: 'pty_output', id: 'remote', seq: 1, data: btoa('\x1b[?1000h\x1b[?1006h') }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [lost] }));
+    await wheel();
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(flash()).toBeNull();
+  });
+
+  it('keeps the count of keys not sent while its tile is away on another desktop', async () => {
+    fakeRects((element) => element.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : null);
+    const { daemon } = await renderApp({
+      script: (daemon) => {
+        daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
+      },
+      initialState: {
+        sessions: [remote(), daemonSession('local', { agent: 'shell', state: 'idle' }), daemonSession('other', { agent: 'shell', state: 'idle' })],
+        desktops: [soloDesktop('remote'), soloDesktop('local'), soloDesktop('other')],
+        settings: { outposts_enabled: 'true' },
+        outposts: [{ ...outpost, state: 'stalled' }],
+      },
+    });
+    await openSession(daemon, 'remote');
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
+    await gesture(daemon, () => daemon.emit(refuse('pty_input')));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [lost] }));
+    await openSession(daemon, 'local');
+    await openSession(daemon, 'other');
+    expect(document.querySelector('[data-pane-id="pane-remote"]')).toBeNull();
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
+    await openSession(daemon, 'remote');
+    expect(within(tile()).getByText('1 key may not have been sent')).toBeInTheDocument();
   });
 
   it('waits through re-pair connecting before attaching an unreachable terminal again', async () => {
     const { daemon } = await setup();
     await openSession(daemon, 'remote');
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state: 'refused' }] }));
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state: 'connecting' }] }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state: 'refused', reach: 'unreachable' }] }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [connecting] }));
     expect(tile()).not.toHaveAttribute('data-offline', 'true');
     expect(daemon.sentOf('attach_session')).toHaveLength(1);
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
@@ -126,14 +252,14 @@ describe('Remote shells in the app', () => {
     daemon.on('attach_session', () => undefined);
     await openSession(daemon, 'remote');
     expect(daemon.sentOf('attach_session')).toHaveLength(1);
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...outpost, state: 'lost' }] }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [lost] }));
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
     expect(daemon.sentOf('attach_session')).toHaveLength(1);
     daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
     await gesture(daemon, () => daemon.emit({ event: 'attach_result', id: 'remote', success: true, cols: 80, rows: 24, running: true }));
     expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['remote', 'remote']);
     expect(window.__TEST_GET_SESSION_PANE_VISIBLE_TEXT?.('remote')).not.toContain('Failed to attach');
-    await gesture(daemon, () => fireEvent.keyDown(within(tile()).getByRole('textbox', { name: 'Terminal input' }), { key: 'z', code: 'KeyZ' }));
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'z', code: 'KeyZ' }));
     expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);
   });
 
@@ -143,8 +269,8 @@ describe('Remote shells in the app', () => {
       profiles: [defaultProfile('desktop-remote'), defaultProfile('', { id: 'other-profile', name: 'Other' })],
       sessions: [remote(), daemonSession('other', { agent: 'shell', host: outpost.id, profile_id: 'other-profile' }), daemonSession('local')],
       desktops: [soloDesktop('remote')],
+      outposts: [outpost],
     } });
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
     await openSettings(daemon);
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-outposts')));
     const row = within(screen.getByRole('listitem', { name: 'studio' }));
@@ -152,12 +278,29 @@ describe('Remote shells in the app', () => {
     await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove' })));
     expect(daemon.sentOf('remove_outpost')).toEqual([]);
     expect(row.getByRole('button', { name: 'Remove and close 2 terminals' })).toHaveFocus();
+    expect(row.queryByText(/keep running/)).toBeNull();
     row.getByRole('button', { name: 'Cancel' }).focus();
     await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Cancel' })));
     expect(row.getByRole('button', { name: 'Remove' })).toHaveFocus();
     expect(daemon.sentOf('remove_outpost')).toEqual([]);
     await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove' })));
     await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove and close 2 terminals' })));
+    expect(daemon.sentOf('remove_outpost')).toEqual([{ cmd: 'remove_outpost', id: outpost.id }]);
+  });
+
+  it('says the shells of an unreachable outpost keep running there before removing it', async () => {
+    const { daemon } = await renderApp({ initialState: {
+      settings: { outposts_enabled: 'true' },
+      sessions: [remote(), daemonSession('local')],
+      desktops: [soloDesktop('remote')],
+      outposts: [lost],
+    } });
+    await openSettings(daemon);
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-outposts')));
+    const row = within(screen.getByRole('listitem', { name: 'studio' }));
+    await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove' })));
+    expect(row.getByText("studio isn't connected, so its shells keep running there until you run attn enrollment leave on it.")).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove and forget 1 terminal' })));
     expect(daemon.sentOf('remove_outpost')).toEqual([{ cmd: 'remove_outpost', id: outpost.id }]);
   });
 });

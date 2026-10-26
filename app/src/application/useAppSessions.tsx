@@ -1,4 +1,5 @@
 import type { OutpostInfo } from '../types/generated';
+import type { TerminalReach } from '../components/SessionTerminalDesktop/useGhosttyPaneRuntime';
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useEffect, useMemo } from 'react';
 import { useProfilesStore } from '../store/profiles';
@@ -24,6 +25,7 @@ export function useAppSessions({
     const daemonSession = daemonSessions.find((ds) => ds.id === s.id);
     const host = daemonSession?.host;
     const outpost = outposts.find((row) => row.id === host);
+    const reach: TerminalReach = host ? outpost?.reach ?? 'unreachable' : 'reachable';
     const rawState = daemonSession?.state ?? s.state;
     const paneStatus = s.desktop.agents.find((pane) => pane.sessionId === s.id)?.status;
     const paneState =
@@ -33,8 +35,8 @@ export function useAppSessions({
       title: daemonSession?.title,
       host,
       hostName: outpost?.name ?? host,
-      offline: Boolean(host && (outpost?.state === 'lost' || outpost?.state === 'refused')),
-      canAttach: !host || outpost?.state === 'connected' || outpost?.state === 'stalled',
+      reach,
+      offline: reach === 'unreachable',
       ...sessionAttentionFields(daemonSession),
       state: paneState || normalizeSessionState(rawState),
       branch: daemonSession?.branch ?? s.branch,

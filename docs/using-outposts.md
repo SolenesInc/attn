@@ -132,19 +132,28 @@ hidden in a local shell. `ssh_only = true` does not detect `ATTN_HOST`.
 
 ## Work while an outpost is offline
 
-When the connection is lost or refused, each terminal stays in place. Its state
-dot becomes hollow and crossed, and its sidebar and home screen rows have a
-faint red tint. A strip over the terminal says "<name> unreachable · typing
-is not sent" without changing the terminal's size. Each refused key flashes
-the tile red. Typing and resizes are not sent, and close, split, kill, and
-reload refuse immediately, naming the outpost. A stalled or connecting
-connection does not mark terminals offline.
+A terminal is offline when its outpost's connection is lost or refused, or
+when Outposts is off. Each offline terminal stays in place. Its state dot
+becomes hollow and crossed, and its sidebar and home screen rows have a faint
+red tint. A strip over the terminal says "<name> unreachable · typing is not
+sent" without changing the terminal's size. Typing and resizes are not sent,
+and close, split, kill, and reload refuse immediately, naming the outpost.
+
+While the home is still connecting to an outpost, after the home starts or
+when you turn Outposts on, add an outpost or re-pair it, its terminals don't
+look offline, but typing is not sent yet. A stalled connection still sends
+typing. If it then turns lost, the keys still on their way fail, and the tile
+says how many keys may not have been sent until a key you type goes out again.
+The last of them may already have left the home and reach the outpost when it
+comes back, so look at the shell before you retype.
+
+Every key that is not sent flashes its tile red. attn never retries a key it
+could not send.
 
 A tile that stays open keeps its last screen. If you switch desktops or
 restart the app while the terminal is offline, its tile shows an empty
 terminal and tells you that the screen is on the outpost. When the connection
-returns, the tile attaches and shows the current screen. Refused typing is
-never replayed.
+returns, the tile attaches and shows the current screen.
 
 ## Connection states
 
@@ -175,12 +184,13 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 **Remove** closes the outpost's terminals across all profiles, then forgets
 the outpost and its identity. When it has terminals, the row asks you to
 confirm with **Remove and close N terminals**, or **Cancel**. When it has
-none, removal happens immediately. If the outpost is unreachable, Remove
-closes its tiles at the home while its shells keep running on the outpost.
-Run `attn enrollment leave` on the outpost to stop those shells.
+none, removal happens immediately. If the outpost is unreachable or still
+connecting, the row asks **Remove and forget N terminals** instead and says
+that its shells keep running on the outpost: Remove closes their tiles at the
+home only. Run `attn enrollment leave` on the outpost to stop those shells.
 
 Turning Outposts off disconnects every outpost and keeps the list for next
-time.
+time. Their terminals show offline until you turn Outposts on again.
 
 ## Checking a change to outposts (for contributors)
 

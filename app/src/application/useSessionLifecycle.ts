@@ -118,9 +118,11 @@ export function useSessionLifecycle({
   const handleRequestCloseSession = useCallback(
     (id: string) => {
       if (!sessions.some((entry) => entry.id === id)) return;
-      void handleCloseSession(id).catch(console.error);
+      void handleCloseSession(id).catch((error) => {
+        showError(`Could not close that session: ${error instanceof Error ? error.message : String(error)}`);
+      });
     },
-    [handleCloseSession, sessions],
+    [handleCloseSession, sessions, showError],
   );
 
   const reloadSession = useCallback(async (id: string, size?: { cols: number; rows: number }) => {

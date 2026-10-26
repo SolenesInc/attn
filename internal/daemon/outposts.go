@@ -50,17 +50,18 @@ func (d *Daemon) configureOutposts() {
 	for _, run := range old {
 		<-run.done
 	}
-	if !d.outpostsEnabled() {
-		return
-	}
 	rows, err := d.store.ListOutposts()
 	if err != nil {
 		d.logf("list outposts: %v", err)
 		return
 	}
+	enabled := d.outpostsEnabled()
 	d.coalesceSnapshots(func() {
 		for _, row := range rows {
-			d.startOutpostDial(row)
+			if enabled {
+				d.startOutpostDial(row)
+			}
+			d.publishFact(FactOutpostChanged, row.ID, nil)
 		}
 	})
 }
