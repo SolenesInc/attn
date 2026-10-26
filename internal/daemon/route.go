@@ -117,16 +117,28 @@ func (d *Daemon) outpostConn(host string) (*bridge.Conn, string, error) {
 	r := &d.outposts
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if d.outpostsEnabled() {
-		if run := r.dialers[row.ID]; run != nil && run.conn != nil && run.state != bridge.StateLost && run.state != bridge.StateRefused {
-			select {
-			case <-run.conn.Done():
-			default:
-				return run.conn, row.Name, nil
-			}
-		}
+	if conn, reach := d.outpostReach(r.dialers[row.ID]); reach == protocol.OutpostReachReachable {
+		return conn, row.Name, nil
 	}
 	return nil, row.Name, fmt.Errorf("%s is unreachable; this needs it now", row.Name)
+}
+
+func (d *Daemon) outpostReach(run *outpostDial) (*bridge.Conn, protocol.OutpostReach) {
+	if !d.outpostsEnabled() || run == nil || run.state == bridge.StateLost || run.state == bridge.StateRefused {
+		return nil, protocol.OutpostReachUnreachable
+	}
+	if run.conn == nil {
+		if run.state == bridge.StateConnecting {
+			return nil, protocol.OutpostReachConnecting
+		}
+		return nil, protocol.OutpostReachUnreachable
+	}
+	select {
+	case <-run.conn.Done():
+		return nil, protocol.OutpostReachUnreachable
+	default:
+		return run.conn, protocol.OutpostReachReachable
+	}
 }
 
 func (r *Router) Attach(ctx context.Context, t harness.TerminalID, subscriber string, opts ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {

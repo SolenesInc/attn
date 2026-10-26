@@ -584,12 +584,10 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Asks:                   asksSnapshot(client.selectedProfile(), d.asks()).Asks,
 		Vents:                  d.ventsSnapshot(client.selectedProfile()).Vents,
 		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
+		Outposts:               d.outpostsUpdatedMessage().Outposts,
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)
-	if d.outpostsEnabled() {
-		d.sendToClient(client, d.outpostsUpdatedMessage())
-	}
 	d.nudgeDesktopTileContent()
 
 	d.life.Go("fetchAllPRDetails", d.fetchAllPRDetails)
@@ -1314,6 +1312,10 @@ func (d *Daemon) sendCommandError(client *wsClient, cmd, errMsg string) {
 		Error:   protocol.Ptr(errMsg),
 	}
 	d.sendToClient(client, event)
+}
+
+func (d *Daemon) sendTerminalRefusal(client *wsClient, cmd string, terminal protocol.TerminalID, err error) {
+	d.sendToClient(client, &protocol.CommandErrorMessage{Event: protocol.EventCommandError, Cmd: protocol.Ptr(cmd), Error: err.Error(), TerminalID: protocol.Ptr(string(terminal))})
 }
 
 func (d *Daemon) sendToClient(client *wsClient, message interface{}) bool {

@@ -2366,6 +2366,9 @@ type CommandErrorMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID *string `json:"terminal_id,omitempty,omitzero"`
 }
 
 type CommandUsage struct {
@@ -5603,6 +5606,9 @@ type InitialStateMessage struct {
 	// MigrationPhase corresponds to the JSON schema field "migration_phase".
 	MigrationPhase *MigrationPhase `json:"migration_phase,omitempty,omitzero"`
 
+	// Outposts corresponds to the JSON schema field "outposts".
+	Outposts []OutpostInfo `json:"outposts,omitempty,omitzero"`
+
 	// Profiles corresponds to the JSON schema field "profiles".
 	Profiles []Profile `json:"profiles,omitempty,omitzero"`
 
@@ -7289,12 +7295,21 @@ type OutpostInfo struct {
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
+	// Reach corresponds to the JSON schema field "reach".
+	Reach OutpostReach `json:"reach"`
+
 	// State corresponds to the JSON schema field "state".
 	State OutpostState `json:"state"`
 
 	// StateSince corresponds to the JSON schema field "state_since".
 	StateSince string `json:"state_since"`
 }
+
+type OutpostReach string
+
+const OutpostReachConnecting OutpostReach = "connecting"
+const OutpostReachReachable OutpostReach = "reachable"
+const OutpostReachUnreachable OutpostReach = "unreachable"
 
 type OutpostState string
 

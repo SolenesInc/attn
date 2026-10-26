@@ -62,6 +62,7 @@ export type PtyEventPayload =
   | { event: 'exit_screen'; id: string; text: string; cols: number; rows: number }
   | { event: 'exit'; id: string; code: number; signal?: string }
   | { event: 'error'; id: string; error: string }
+  | { event: 'refused'; id: string; keys: number }
   | { event: 'transcript'; id: string; matched: boolean }
   | { event: 'reset'; id: string; reason: string };
 

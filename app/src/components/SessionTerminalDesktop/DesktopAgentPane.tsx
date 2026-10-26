@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { SuspendedDesktopPane } from './SuspendedDesktopPane';
 import type { CSSProperties } from 'react';
@@ -19,7 +18,6 @@ export function DesktopAgentPane({
   path: string;
   frameStyle: CSSProperties;
 }) {
-  const [refusal, setRefusal] = useState(0);
   const {
     sessionById,
     activeLeafId,
@@ -27,7 +25,10 @@ export function DesktopAgentPane({
     suspendedLeafIds,
     focusLeaf,
     effectiveDraggingLeafId,
+    inputRefusals,
+    endRefusalFlash,
   } = useDesktopContext();
+  const refusal = inputRefusals.get(agentPane.id);
 
   const paneSession = sessionById.get(agentPane.sessionId);
   const paneTitle = paneSession ? sessionDisplayName(paneSession) : agentPane.title || 'Session';
@@ -66,8 +67,8 @@ export function DesktopAgentPane({
       style={frameStyle}
     >
       <DesktopAgentHeader agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} />
-      <DesktopAgentBody agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} onInputRefused={() => setRefusal((value) => value + 1)} />
-      {paneSession?.offline && refusal > 0 ? <div key={refusal} className="desktop-pane-refusal" aria-hidden="true" onAnimationEnd={() => setRefusal(0)} /> : null}
+      <DesktopAgentBody agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} keysNotSent={refusal?.keysNotSent ?? 0} />
+      {refusal?.flashing ? <div key={refusal.flash} className="desktop-pane-refusal" aria-hidden="true" onAnimationEnd={() => endRefusalFlash(agentPane.id)} /> : null}
     </div>
   );
 }

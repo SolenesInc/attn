@@ -7,7 +7,7 @@ import { initialState } from './test/scriptedDaemon';
 
 type Outpost = EventMessage<'outposts_updated'>['outposts'][number];
 const connected: Outpost = {
-  id: 'outpost-1', name: 'studio', address: 'studio:2200', state: 'connected',
+  id: 'outpost-1', name: 'studio', address: 'studio:2200', state: 'connected', reach: 'reachable',
   state_since: '2026-10-18T18:00:00Z', daemon_id: 'studio-daemon',
   host_key_fingerprint: 'SHA256:studio-key', build: 'v0.12.0 (source abc, protocol def)',
 };
@@ -94,7 +94,7 @@ describe('Outposts settings', () => {
   it('shows the full refusal and keeps the daemon’s last error through reconnecting until connected', async () => {
     const daemon = await openSection('outposts', { settings: enabled });
     const error = 'studio:2200 changed host key: home pinned studio-daemon SHA256:old-key; outpost offered SHA256:new-key. Re-pair this outpost to accept its new identity.\nBoth identities must be checked before reconnecting.';
-    const refused: Outpost = { ...connected, state: 'refused', last_error: error, last_error_at: '2026-10-18T18:01:00Z' };
+    const refused: Outpost = { ...connected, state: 'refused', reach: 'unreachable', last_error: error, last_error_at: '2026-10-18T18:01:00Z' };
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [refused] }));
     const row = within(screen.getByRole('listitem', { name: 'studio' }));
     expect(row.getByText('refused')).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('Outposts settings', () => {
     expect(daemon.sent).toEqual(commands);
   });
 
-  it('clears old rows when reconnecting to a home with outposts disabled, then renders a fresh snapshot', async () => {
+  it('replaces old rows with the initial_state of a home reconnected with outposts disabled, then renders a fresh snapshot', async () => {
     const daemon = await openSection('outposts', { settings: enabled });
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [connected] }));
     daemon.on('client_hello', () => initialState({ settings: { outposts_enabled: 'false' } }));

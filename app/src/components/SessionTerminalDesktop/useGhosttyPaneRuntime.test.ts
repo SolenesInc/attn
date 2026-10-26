@@ -1,6 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
+
+const inputOutcomes = { refused: () => {}, sent: () => {} };
 import {
   createPaneRuntimeEventRouterController,
   type PaneRuntimeEventRouter,
@@ -80,7 +82,7 @@ describe('useGhosttyPaneRuntime', () => {
     });
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-    ], 'pane-session', router, { current: true }));
+    ], 'pane-session', router, { current: true }, inputOutcomes));
 
     act(() => result.current.setTerminalHandle('pane-session', terminal));
     await act(async () => {
@@ -100,7 +102,7 @@ describe('useGhosttyPaneRuntime', () => {
     const terminal = createTerminal();
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-    ], 'pane-session', router, { current: true }));
+    ], 'pane-session', router, { current: true }, inputOutcomes));
 
     act(() => result.current.setTerminalHandle('pane-session', terminal));
     await act(async () => {
@@ -125,7 +127,7 @@ describe('useGhosttyPaneRuntime', () => {
     const isActiveSessionRef = { current: true };
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-    ], 'pane-session', router, isActiveSessionRef));
+    ], 'pane-session', router, isActiveSessionRef, inputOutcomes));
 
     act(() => result.current.setTerminalHandle('pane-session', terminal));
     await act(async () => {
@@ -146,7 +148,7 @@ describe('useGhosttyPaneRuntime', () => {
     const isActiveSessionRef = { current: true };
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-    ], 'pane-session', router, isActiveSessionRef));
+    ], 'pane-session', router, isActiveSessionRef, inputOutcomes));
 
     act(() => {
       result.current.setTerminalHandle('pane-session', terminal);
@@ -168,7 +170,7 @@ describe('useGhosttyPaneRuntime', () => {
         runtimeId: 'runtime-1',
         paneKind: 'agent',
       },
-    ], 'pane-session', router, { current: true }));
+    ], 'pane-session', router, { current: true }, inputOutcomes));
     const terminal = createTerminal();
     await act(async () => {
       await result.current.handleTerminalReady('pane-session')(terminal);
@@ -183,7 +185,7 @@ describe('useGhosttyPaneRuntime', () => {
     mockPtyAttach.mockReturnValueOnce(new Promise<void>((resolve) => { resolveAttach = resolve; }));
     const { result } = renderHook(() => useGhosttyPaneRuntime([
       { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-    ], 'pane-session', router, { current: true }));
+    ], 'pane-session', router, { current: true }, inputOutcomes));
     let ready!: Promise<void>;
     act(() => {
       result.current.handleTerminalResize('pane-session')(120, 40, { xpixel: 2160, ypixel: 1680 });
@@ -201,7 +203,7 @@ describe('useGhosttyPaneRuntime', () => {
     const { result, rerender } = renderHook(
       ({ terminalsLive }) => useGhosttyPaneRuntime([
         { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-      ], 'pane-session', router, { current: true }, terminalsLive),
+      ], 'pane-session', router, { current: true }, inputOutcomes, terminalsLive),
       { initialProps: { terminalsLive: true } },
     );
     const terminal = createTerminal();
@@ -224,7 +226,7 @@ describe('useGhosttyPaneRuntime', () => {
     const { result, rerender } = renderHook(
       ({ terminalsLive }) => useGhosttyPaneRuntime([
         { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-      ], 'pane-session', router, { current: true }, terminalsLive),
+      ], 'pane-session', router, { current: true }, inputOutcomes, terminalsLive),
       { initialProps: { terminalsLive: true } },
     );
     const terminal = createTerminal();
@@ -260,7 +262,7 @@ describe('useGhosttyPaneRuntime', () => {
         runtimeId: 'runtime-2',
         paneKind: 'agent',
       },
-    ], 'pane-session', router, { current: true }));
+    ], 'pane-session', router, { current: true }, inputOutcomes));
     const firstTerminal = createTerminal();
     const secondTerminal = createTerminal();
 
@@ -282,7 +284,7 @@ describe('useGhosttyPaneRuntime', () => {
         runtimeId: 'runtime-1',
         paneKind: 'agent',
       },
-    ], 'pane-session', router, { current: true }));
+    ], 'pane-session', router, { current: true }, inputOutcomes));
     const terminal = createTerminal();
 
     await act(async () => {
@@ -306,7 +308,7 @@ describe('useGhosttyPaneRuntime', () => {
         agent: 'claude',
         state: 'recoverable',
       },
-    ], 'pane-session', router, { current: true }));
+    ], 'pane-session', router, { current: true }, inputOutcomes));
     const terminal = createTerminal();
 
     await act(async () => {
@@ -331,8 +333,8 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
   });
 
   it('keeps the daemon attachment while another desktop still holds the runtime', async () => {
-    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
-    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
+    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
 
     await act(async () => {
       await first.result.current.handleTerminalReady(pane.paneId)(createTerminal());
@@ -352,8 +354,8 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     const controller = createPaneRuntimeEventRouterController();
     const survivingTerminal = createTerminal();
     const transientTerminal = createTerminal();
-    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }));
-    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }));
+    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }, inputOutcomes));
+    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }, inputOutcomes));
 
     await act(async () => {
       await first.result.current.handleTerminalReady(pane.paneId)(survivingTerminal);
@@ -373,13 +375,13 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
 
   it('releases the hold when the attach fails so a later holder detaches cleanly', async () => {
     mockPtyAttach.mockRejectedValueOnce(new Error('daemon refused'));
-    const failed = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const failed = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     await act(async () => {
       await failed.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });
     expect(mockPtyDetach).toHaveBeenCalledTimes(1);
 
-    const later = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const later = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     await act(async () => {
       await later.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });
@@ -393,8 +395,8 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     mockPtyAttach.mockImplementation(() => new Promise<void>((resolve, reject) => {
       settlers.push({ resolve, reject });
     }));
-    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
-    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const first = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
+    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     let firstReady: Promise<void> = Promise.resolve();
     let secondReady: Promise<void> = Promise.resolve();
     await act(async () => {
@@ -422,7 +424,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
   });
 
   it('keeps the hold when a remount attach fails on a view the daemon still streams to', async () => {
-    const view = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const view = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     await act(async () => {
       await view.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });
@@ -432,7 +434,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
       await view.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });
 
-    const transient = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const transient = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     await act(async () => {
       await transient.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });
@@ -448,7 +450,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     const virtualizedTerminal = createTerminal();
     const liveTerminal = createTerminal();
     const virtualized = renderHook(
-      ({ terminalsLive }) => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }, terminalsLive),
+      ({ terminalsLive }) => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }, inputOutcomes, terminalsLive),
       { initialProps: { terminalsLive: true } },
     );
     await act(async () => {
@@ -456,7 +458,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     });
     virtualized.rerender({ terminalsLive: false });
 
-    const live = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }));
+    const live = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, controller, { current: true }, inputOutcomes));
     await act(async () => {
       await live.result.current.handleTerminalReady(pane.paneId)(liveTerminal);
     });
@@ -467,7 +469,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
   });
 
   it('detaches when a failed duplicate attach drops the last hold after the attached view left', async () => {
-    const attached = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const attached = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     await act(async () => {
       await attached.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });
@@ -476,7 +478,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     mockPtyAttach.mockImplementationOnce(() => new Promise<void>((_, reject) => {
       rejectAttach = reject;
     }));
-    const duplicate = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const duplicate = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     let duplicateReady: Promise<void> = Promise.resolve();
     await act(async () => {
       duplicateReady = duplicate.result.current.handleTerminalReady(pane.paneId)(createTerminal());
@@ -498,7 +500,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     mockPtyAttach.mockImplementation(() => new Promise<void>((resolve, reject) => {
       settlers.push({ resolve, reject });
     }));
-    const view = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const view = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     let firstReady: Promise<void> = Promise.resolve();
     let replacementReady: Promise<void> = Promise.resolve();
     await act(async () => {
@@ -525,8 +527,8 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
   });
 
   it('never detaches a runtime it did not attach while another desktop holds it', async () => {
-    const holder = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
-    const bystander = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const holder = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
+    const bystander = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
 
     await act(async () => {
       await holder.result.current.handleTerminalReady(pane.paneId)(createTerminal());
@@ -541,7 +543,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
 
   it('releases the hold when the pane leaves the desktop so a later holder detaches cleanly', async () => {
     const first = renderHook(
-      ({ panes }) => useGhosttyPaneRuntime(panes, pane.paneId, router, { current: true }),
+      ({ panes }) => useGhosttyPaneRuntime(panes, pane.paneId, router, { current: true }, inputOutcomes),
       { initialProps: { panes: [pane] } },
     );
     await act(async () => {
@@ -551,7 +553,7 @@ describe('useGhosttyPaneRuntime shared runtime holds', () => {
     first.rerender({ panes: [] });
     expect(mockPtyDetach).toHaveBeenCalledTimes(1);
 
-    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }));
+    const second = renderHook(() => useGhosttyPaneRuntime([pane], pane.paneId, router, { current: true }, inputOutcomes));
     await act(async () => {
       await second.result.current.handleTerminalReady(pane.paneId)(createTerminal());
     });

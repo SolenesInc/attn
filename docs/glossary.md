@@ -25,7 +25,8 @@ desktop                 one arrangement of tiles; like a macOS Space or a
 terminal                one PTY process in a terminal tile
 ├─ runs 1 harness or 1 shell
 ├─ host (at most 1)    the outpost it runs on; no host means the home's machine
-└─ offline             its host's bridge is lost or refused; typing is not sent
+└─ offline             its host is unreachable (bridge lost or refused, or
+                       Outposts off); typing is not sent
 harness                 the agent CLI: Claude Code, Codex, pi
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep

@@ -37,6 +37,7 @@ import {
 } from './attentionLayout';
 import { useFocusedLeaf } from './useFocusedLeaf';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
+import { usePaneInputRefusals } from './usePaneInputRefusals';
 import { useSessionPopoverRequest } from './useSessionPopoverRequest';
 import { useDesktopLeafDrag } from './useDesktopLeafDrag';
 import { useDesktopPanes } from './useDesktopPanes';
@@ -210,8 +211,7 @@ export function useDesktopController(
         sessionId: pane.sessionId,
         testSessionId: pane.sessionId,
         state: paneSession?.state,
-        offline: paneSession?.offline,
-        canAttach: paneSession?.canAttach,
+        reach: paneSession?.reach,
         state_reason: paneSession?.state_reason,
         terminalExit: paneSession?.terminalExit,
       });
@@ -219,11 +219,13 @@ export function useDesktopController(
     return panes;
   }, [agentPanes, sessionById]);
 
+  const { inputRefusals, inputOutcomes, endRefusalFlash } = usePaneInputRefusals();
   const runtime = useGhosttyPaneRuntime(
     runtimePanes,
     activeAgentPaneId,
     eventRouter,
     isActiveSessionRef,
+    inputOutcomes,
     terminalsLive,
   );
   const setTerminalHandle = runtime.setTerminalHandle;
@@ -1112,6 +1114,8 @@ export function useDesktopController(
   return {
     desktopId,
     desktopSelectionStyle,
+    inputRefusals,
+    endRefusalFlash,
     activeAgentPaneId,
     onRenameSession,
     renamePane,

@@ -7,6 +7,7 @@ import type { PaneRuntimeEventRouter } from './paneRuntimeEventRouter';
 import type { BlockStateSnapshot, GhosttyTerminalHandle, PlacementStateSnapshot } from '../GhosttyTerminal';
 import type { TerminalVisibleContentSnapshot } from '../../utils/terminalVisibleContent';
 import type { TerminalVisibleStyleSnapshot } from '../../utils/terminalStyleSummary';
+import type { OutpostReach } from '../../types/generated';
 
 interface TerminalResizeOptions {
   reason?: string;
@@ -22,11 +23,19 @@ export interface PaneRuntimeSpec {
   sessionId?: string;
   testSessionId?: string;
   state?: string;
-  offline?: boolean;
-  canAttach?: boolean;
+  reach?: TerminalReach;
   state_reason?: string;
   terminalExit?: import('../../types/generated').TerminalExit;
 }
+
+export type TerminalReach = `${OutpostReach}`;
+
+export interface PaneInputOutcomes {
+  refused: (paneId: string, keysNotSent: number) => void;
+  sent: (paneId: string) => void;
+}
+
+const reachable = (pane: PaneRuntimeSpec | undefined) => (pane?.reach ?? 'reachable') === 'reachable';
 
 function decodePtyBytes(payload: string | Uint8Array): Uint8Array {
   if (typeof payload !== 'string') {
@@ -67,6 +76,7 @@ export function useGhosttyPaneRuntime(
   activePaneId: string,
   eventRouter: PaneRuntimeEventRouter,
   isActiveSessionRef: { current: boolean },
+  inputOutcomes: PaneInputOutcomes,
   terminalsLive = true,
 ): GhosttyPaneRuntime {
   const panesRef = useRef(panes);
@@ -97,7 +107,7 @@ export function useGhosttyPaneRuntime(
   const flushPendingResize = useCallback((runtimeId: string) => {
     const resize = pendingResizeRef.current.get(runtimeId);
     pendingResizeRef.current.delete(runtimeId);
-    if (resize && !panesRef.current.some((pane) => pane.runtimeId === runtimeId && pane.offline) && isActiveSessionRef.current) {
+    if (resize && !panesRef.current.some((pane) => pane.runtimeId === runtimeId && !reachable(pane)) && isActiveSessionRef.current) {
       void ptyResize({ id: runtimeId, ...resize });
     }
   }, [isActiveSessionRef]);
@@ -117,10 +127,14 @@ export function useGhosttyPaneRuntime(
   }, []);
 
   const deliverEvent = useCallback((paneId: string, event: PtyEventPayload) => {
+    if (event.event === 'refused') {
+      inputOutcomes.refused(paneId, event.keys);
+      return;
+    }
     const terminal = handlesRef.current.get(paneId);
     if (!terminal) return;
     const pane = paneFor(paneId);
-    if (pane?.canAttach === false) return;
+    if (pane && !reachable(pane)) return;
     if (pane) {
       readyRuntimesRef.current.add(pane.runtimeId);
     }
@@ -198,7 +212,7 @@ export function useGhosttyPaneRuntime(
       default:
         break;
     }
-  }, [cancelRuntimeConnection, flushPendingResize, isActiveSessionRef, paneFor]);
+  }, [cancelRuntimeConnection, flushPendingResize, inputOutcomes, isActiveSessionRef, paneFor]);
 
   useEffect(() => {
     const disposers = panes.map((pane) => eventRouter.registerBinding({
@@ -206,7 +220,7 @@ export function useGhosttyPaneRuntime(
       paneId: pane.paneId,
       runtimeId: pane.runtimeId,
       onEvent: (event) => deliverEvent(pane.paneId, event),
-      isLive: () => terminalsLiveRef.current && paneFor(pane.paneId)?.canAttach !== false && handlesRef.current.has(pane.paneId),
+      isLive: () => terminalsLiveRef.current && reachable(paneFor(pane.paneId)) && handlesRef.current.has(pane.paneId),
     }));
     return () => {
       disposers.forEach((dispose) => dispose());
@@ -268,11 +282,11 @@ export function useGhosttyPaneRuntime(
   const handleTerminalReady = useCallback((paneId: string) => async (terminal: GhosttyTerminalHandle) => {
     handlesRef.current.set(paneId, terminal);
     const pane = paneFor(paneId);
-    if (!pane || pane.canAttach === false || !terminalsLiveRef.current) return;
+    if (!pane || !reachable(pane) || !terminalsLiveRef.current) return;
     const terminalIsCurrent = () => (
       terminalsLiveRef.current
       && panesRef.current.some((entry) => (
-        entry.paneId === paneId && entry.runtimeId === pane.runtimeId && entry.canAttach !== false
+        entry.paneId === paneId && entry.runtimeId === pane.runtimeId && reachable(entry)
       ))
       && handlesRef.current.get(paneId) === terminal
     );
@@ -351,7 +365,7 @@ export function useGhosttyPaneRuntime(
       attachedRuntimesRef.current.add(pane.runtimeId);
       flushPendingResize(pane.runtimeId);
     } catch (error) {
-      if (attachGenerationRef.current.get(pane.runtimeId) === attachGeneration && paneFor(paneId)?.canAttach !== false) {
+      if (attachGenerationRef.current.get(pane.runtimeId) === attachGeneration && reachable(paneFor(paneId))) {
         if (
           !attachedRuntimesRef.current.has(pane.runtimeId)
           && runtimeAttachHolds.release(pane.runtimeId, attachHolderRef.current) === 0
@@ -371,9 +385,9 @@ export function useGhosttyPaneRuntime(
   const unavailableRuntimesRef = useRef(new Set<string>());
   useEffect(() => {
     const previous = unavailableRuntimesRef.current;
-    unavailableRuntimesRef.current = new Set(panes.filter((pane) => pane.canAttach === false).map((pane) => pane.runtimeId));
+    unavailableRuntimesRef.current = new Set(panes.filter((pane) => !reachable(pane)).map((pane) => pane.runtimeId));
     for (const pane of panes) {
-      if (pane.canAttach === false) {
+      if (!reachable(pane)) {
         if (!previous.has(pane.runtimeId)) cancelRuntimeConnection(pane.runtimeId);
       } else if (previous.has(pane.runtimeId) && terminalsLive) {
         const terminal = handlesRef.current.get(pane.paneId);
@@ -386,7 +400,13 @@ export function useGhosttyPaneRuntime(
 
   const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string, traceId?: string) => {
     const pane = paneFor(paneId);
-    if (!pane || pane.offline || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
+    if (!pane || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
+    const typed = source !== 'response';
+    if (!reachable(pane)) {
+      if (typed) inputOutcomes.refused(paneId, 0);
+      return;
+    }
+    if (typed) inputOutcomes.sent(paneId);
     if (import.meta.env.DEV && pane.testSessionId) {
       const testWindow = window as Window & {
         __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string; source?: string }>;
@@ -395,12 +415,12 @@ export function useGhosttyPaneRuntime(
       testWindow.__TEST_SESSION_INPUT_EVENTS.push({ sessionId: pane.testSessionId, event: 'send_to_pty', data, source });
     }
     void ptyWrite({ id: pane.runtimeId, data, ...(source ? { source } : {}), ...(traceId ? { traceId } : {}) });
-  }, [paneFor]);
+  }, [inputOutcomes, paneFor]);
 
   const handleTerminalResize = useCallback((paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => {
     if (!isActiveSessionRef.current) return;
     const pane = paneFor(paneId);
-    if (!pane || pane.offline || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
+    if (!pane || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
     // GhosttyTerminal.fit() is the geometry authority. Re-applying MIN_USABLE here dropped
     // legitimate small fits and stranded the PTY taller than the pane.
     if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) return;

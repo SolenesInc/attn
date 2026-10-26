@@ -5,7 +5,7 @@ import { agentPane, daemonDesktop, daemonSession, defaultProfile, dockTiles, sol
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
-const STUDIO = { id: 'studio', name: 'Studio', address: 'studio:2200', state: 'connected' as const, state_since: '2026-10-18T18:00:00Z' };
+const STUDIO = { id: 'studio', name: 'Studio', address: 'studio:2200', state: 'connected' as const, reach: 'reachable' as const, state_since: '2026-10-18T18:00:00Z' };
 const REFUSAL = "is on Studio; opening files on an outpost isn't supported yet";
 
 function remoteShell(id: string, directory: string): DaemonSession {
