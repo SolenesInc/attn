@@ -113,6 +113,7 @@ func TestATypedAnswerEndsWithTheDoorbellForTheItemsLeftUnread(t *testing.T) {
 		}
 
 		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(asker.self), Data: "half a thought"})
+		synctest.Wait()
 		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")
 		answerCacheAsk(t, app, asked.ID)
 		w.advance(sessionmonitor.QuietWindow)
