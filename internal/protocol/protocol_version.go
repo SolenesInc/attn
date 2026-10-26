@@ -2,4 +2,4 @@
 
 package protocol
 
-const ProtocolVersion = "fb820d7dd990"
+const ProtocolVersion = "ff326303ba6d"

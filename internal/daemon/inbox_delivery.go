@@ -33,6 +33,16 @@ type inboxDeliveryState struct {
 	timer       *time.Timer
 	stopped     bool
 	wakeSession protocol.SessionID
+	pending     *inboxRing
+}
+
+type inboxRing struct {
+	session            protocol.SessionID
+	input              sessionmonitor.Delivery
+	paste              inboxPaste
+	finishingWake      bool
+	bellWaitsForPrompt bool
+	heldUntil          time.Time
 }
 
 func (d *Daemon) inboxState(a inbox.Address) *inboxDeliveryState {
@@ -136,7 +146,7 @@ func (d *Daemon) deliverInbox(a inbox.Address) (inbox.Receipt, error) {
 func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
 	receipt := inbox.Receipt{}
 	defer func() {
-		if state.timer != nil || state.wakeSession != "" {
+		if state.timer != nil || state.wakeSession != "" || state.pending != nil {
 			return
 		}
 		d.inboxMu.Lock()
@@ -165,6 +175,7 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		return receipt, err
 	}
 	if attempt.Unread == 0 {
+		state.pending = nil
 		state.wakeSession = ""
 		return receipt, nil
 	}
@@ -248,23 +259,34 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		receipt.Detail = agentMessageQueuedDetail(errInboxNoPromptReader)
 		return receipt, nil
 	}
-	bellWaitsForPrompt := attempt.FromUser > 0 && !sessionmonitor.PhaseAllows(sessionmonitor.WhenPromptReady, holder.State)
-	paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt)
-	if err != nil {
-		return receipt, err
+	if state.pending != nil && state.pending.session != holder.ID {
+		state.pending = nil
 	}
-	when := sessionmonitor.WhenWorkingOrPromptReady
-	if paste.notified {
-		when = sessionmonitor.WhenPromptReady
+	pending := state.pending
+	if pending == nil {
+		bellWaitsForPrompt := attempt.FromUser > 0 && !sessionmonitor.PhaseAllows(sessionmonitor.WhenPromptReady, holder.State)
+		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt)
+		if err != nil {
+			return receipt, err
+		}
+		when := sessionmonitor.WhenWorkingOrPromptReady
+		if paste.notified {
+			when = sessionmonitor.WhenPromptReady
+		}
+		input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), paste.text, when)
+		input.BypassInitialGate = true
+		pending = &inboxRing{session: holder.ID, input: input, paste: paste, finishingWake: finishingWake, bellWaitsForPrompt: bellWaitsForPrompt, heldUntil: bellHeldUntil}
+		state.pending = pending
 	}
-	input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), paste.text, when)
-	input.BypassInitialGate = true
-	placement := d.sessionMonitor(holder.ID).Place(context.Background(), input)
+	paste := pending.paste
+	finishingWake, bellWaitsForPrompt, bellHeldUntil := pending.finishingWake, pending.bellWaitsForPrompt, pending.heldUntil
+	placement := d.placeDelivery(context.Background(), holder.ID, pending.input)
 	if placement.Stage == sessionmonitor.Placed {
 		readAt, err := d.store.RingInbox(a, finishingWake, paste.typed, holder.ID, paste.notified, time.Now())
 		if err != nil {
 			return receipt, err
 		}
+		state.pending = nil
 		for _, captureID := range paste.captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
@@ -279,9 +301,16 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		} else if !bellHeldUntil.IsZero() {
 			d.armInboxLocked(a, state, time.Until(bellHeldUntil))
 		}
+		if remaining, err := d.store.InboxAttempt(a); err == nil && remaining.FromUser > 0 {
+			d.kickInbox(a)
+		}
 		receipt.Rang = true
 		receipt.Detail = "notified " + sessionDisplayName(holder)
 		return receipt, nil
+	}
+	var callError *placementCallError
+	if !errors.As(placement.Err, &callError) {
+		state.pending = nil
 	}
 	receipt.Detail = agentMessageQueuedDetail(placement.Err)
 	delay, retry := sessionmonitor.RetryDelay(placement.Err)

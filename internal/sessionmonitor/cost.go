@@ -15,6 +15,7 @@ type costOwner struct {
 
 func (m *Monitor) loadCostLocked(state sessioncost.Checkpoint) {
 	m.costInitialized, m.cost = state.Initialized, state.Sources
+	m.updateCostTotalsLocked()
 	m.costOwners = make(map[string]costOwner)
 	for source, state := range m.cost {
 		for id := range state.Observations {
@@ -56,6 +57,7 @@ func (m *Monitor) initializeCostSources(cursors map[string]string, consumeLegacy
 	}
 	if changed {
 		m.costInitialized, m.cost = true, sources
+		m.updateCostTotalsLocked()
 	}
 	m.mu.Unlock()
 	return changed
@@ -122,6 +124,7 @@ func (m *Monitor) applyCostObservations(sourceID, cursor string, observations []
 	}
 	if changed {
 		m.costInitialized, m.cost = true, sources
+		m.updateCostTotalsLocked()
 	}
 	m.mu.Unlock()
 	return changed
@@ -149,6 +152,7 @@ func (m *Monitor) markCostSource(sourceID string, incomplete, unavailable bool, 
 	sources[sourceID] = source
 	m.costInitialized = m.costInitialized || unavailable || cursor != nil
 	m.cost = sources
+	m.updateCostTotalsLocked()
 	m.mu.Unlock()
 	return true
 }
@@ -160,24 +164,29 @@ func (m *Monitor) publishCost() bool {
 	return m.publish(view)
 }
 
+func (m *Monitor) updateCostTotalsLocked() {
+	m.costTotals = (sessioncost.Checkpoint{Sources: m.cost}).SourceTotals()
+}
+
 func CostChange(previous, view View) (changed, durable, usageChanged bool) {
 	if previous.CostInitialized.V != view.CostInitialized.V {
 		changed, durable = true, true
 	}
+	if len(previous.Cost.Entries) != len(view.Cost.Entries) {
+		changed, durable = true, true
+	}
+	for id, prior := range previous.Cost.Entries {
+		if _, exists := view.Cost.Entries[id]; !exists {
+			usageChanged = usageChanged || len(prior.Ledger) > 0 || prior.UsageUnavailable || prior.MeasurementIncomplete
+		}
+	}
 	for id, source := range view.Cost.Entries {
-		prior := previous.Cost.Entries[id]
-		if prior == source {
-			continue
-		}
-		changed = true
-		if prior == nil || prior.Initialized != source.Initialized || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete {
-			durable = true
-		}
-		if prior == nil {
-			usageChanged = usageChanged || len(source.Ledger) > 0 || source.UsageUnavailable || source.MeasurementIncomplete
-		} else {
-			usageChanged = usageChanged || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete || !reflect.DeepEqual(prior.Ledger, source.Ledger)
-		}
+		prior, exists := previous.Cost.Entries[id]
+		flagsChanged := !exists || prior.Initialized != source.Initialized || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete
+		ledgerChanged := !maps.Equal(prior.Ledger, source.Ledger)
+		changed = changed || flagsChanged || ledgerChanged
+		durable = durable || flagsChanged
+		usageChanged = usageChanged || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete || ledgerChanged
 	}
 	return
 }

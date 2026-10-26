@@ -2,9 +2,12 @@ package sessionmonitor
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -112,4 +115,21 @@ func (m *Monitor) enqueueTitle(conversation string, source string) {
 		m.titleInitialPrompt = fingerprint
 	}
 	m.mu.Unlock()
+}
+
+func (m *Monitor) TitleTarget() (*protocol.Session, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return &protocol.Session{ID: m.session, Agent: m.agent, Directory: m.directory}, !m.stopped && m.policy.TitlesAllowed && m.policy.Headless
+}
+
+func (m *Monitor) TitleKey() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key, _ := json.Marshal(struct {
+		Terminal  string
+		Session   protocol.SessionID
+		StartedAt string
+	}{string(m.watch.terminalID), m.session, m.startedAt.UTC().Format(time.RFC3339Nano)})
+	return string(key)
 }

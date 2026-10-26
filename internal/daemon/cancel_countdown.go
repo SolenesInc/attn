@@ -1,21 +1,15 @@
 package daemon
 
-import (
-	"github.com/victorarias/attn/internal/protocol"
-)
+import "github.com/victorarias/attn/internal/protocol"
 
-func (d *Daemon) handleCancelCountdown(msg *protocol.CancelCountdownMessage) {
+func (d *Daemon) handleCancelCountdown(msg *protocol.CancelCountdownMessage) error {
 	if d == nil || msg == nil {
-		return
+		return nil
 	}
-	sessionID := protocol.TrimID(msg.SessionID)
-	if sessionID == "" {
-		return
+	session := protocol.TrimID(msg.SessionID)
+	if session == "" {
+		return nil
 	}
-
-	settleAnswered := d.answerAutoSettleByUser(sessionID)
-
-	if !settleAnswered {
-		return
-	}
+	_, err := d.answerAutoSettleByUser(session)
+	return err
 }

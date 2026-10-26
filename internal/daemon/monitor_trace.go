@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"strings"
@@ -53,14 +54,26 @@ func (d *Daemon) handleStateExplain(conn net.Conn, msg *protocol.StateExplainMes
 		d.sendError(conn, "session_not_found")
 		return
 	}
+	result, err := d.stateExplainResult(session)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
 		Ok:                 true,
-		StateExplainResult: d.stateExplainResult(session),
+		StateExplainResult: result,
 	})
 }
 
-func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateExplainResult {
-	recorded := d.sessionMonitor(session.ID).TraceSnapshot()
+func (d *Daemon) stateExplainResult(session *protocol.Session) (*protocol.StateExplainResult, error) {
+	answer, err := Call[protocol.MonitorStateTraceResult](context.Background(), d.router(), protocol.MonitorStateTraceMessage{Cmd: protocol.CmdMonitorStateTrace, SessionID: session.ID})
+	var recorded []statetrace.Observation
+	if err == nil {
+		err = json.Unmarshal([]byte(answer.Observations), &recorded)
+	}
+	if err != nil {
+		return nil, err
+	}
 	observations := make([]protocol.StateExplainEntry, 0, len(recorded))
 	for _, obs := range recorded {
 		entry := protocol.StateExplainEntry{
@@ -97,7 +110,7 @@ func (d *Daemon) stateExplainResult(session *protocol.Session) *protocol.StateEx
 	if strings.TrimSpace(protocol.Deref(session.LastModelRequestAt)) != "" {
 		result.LastModelRequestAt = protocol.Ptr(protocol.Deref(session.LastModelRequestAt))
 	}
-	return result
+	return result, nil
 }
 
 func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotificationMessage) {

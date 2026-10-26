@@ -563,3 +563,15 @@ const (
 	EventDelegationPreferencesChanged = "delegation_preferences_changed"
 	EventHarnessModelsResult          = "harness_models_result"
 )
+
+const (
+	CmdMonitorCommand         = "monitor_command"
+	CmdSessionPlace           = "session_place"
+	CmdPullRequestLink        = "pull_request_link"
+	CmdLinkRename             = "link_rename"
+	CmdTranscriptActivity     = "transcript_activity"
+	CmdMonitorAssistantWindow = "monitor_assistant_window"
+	CmdMonitorStateTrace      = "monitor_state_trace"
+	CmdMonitorTranscriptPage  = "monitor_transcript_page"
+	CmdMonitorLastAssistant   = "monitor_last_assistant"
+)

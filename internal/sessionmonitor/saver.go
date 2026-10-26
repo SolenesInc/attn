@@ -1,18 +1,26 @@
 package sessionmonitor
 
 import (
+	"maps"
 	"time"
 
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessioncost"
 )
 
+type CostSave struct {
+	Checkpoint sessioncost.Checkpoint
+	Durable    bool
+}
+
 type Saver interface {
-	SaveRuntime(session protocol.SessionID, saved, view View) error
+	SaveRuntime(session protocol.SessionID, saved, view View, cost *CostSave) error
 }
 
 type savedView struct {
 	view       View
+	cost       sessioncost.Checkpoint
 	retry      *time.Timer
 	retryDelay time.Duration
 }
@@ -33,7 +41,12 @@ func (m *Monitor) publish(view View) bool {
 	if stopped || !m.save(view) {
 		return false
 	}
-	return m.home.Applied(view)
+	applied := m.home.Applied(view)
+	m.react(view)
+	if applied {
+		m.SettleSwitch(view.Conversation.V.NativeID)
+	}
+	return applied
 }
 
 func (m *Monitor) save(view View) bool {
@@ -48,6 +61,16 @@ func (m *Monitor) save(view View) bool {
 	defer m.saveMu.Unlock()
 	m.mu.Lock()
 	saved, stopped := m.saved.view, m.stopped
+	checkpoint := sessioncost.Checkpoint{Initialized: m.costInitialized, Sources: m.cost}
+	var cost *CostSave
+	if m.saved.cost.Initialized != checkpoint.Initialized || !maps.Equal(m.saved.cost.Sources, checkpoint.Sources) {
+		durable := m.saved.cost.Initialized != checkpoint.Initialized || len(m.saved.cost.Sources) != len(checkpoint.Sources)
+		for id, source := range checkpoint.Sources {
+			prior := m.saved.cost.Sources[id]
+			durable = durable || prior == nil || prior.Initialized != source.Initialized || prior.UsageUnavailable != source.UsageUnavailable || prior.MeasurementIncomplete != source.MeasurementIncomplete
+		}
+		cost = &CostSave{Checkpoint: checkpoint, Durable: durable}
+	}
 	m.mu.Unlock()
 	if stopped {
 		return false
@@ -55,7 +78,7 @@ func (m *Monitor) save(view View) bool {
 	if saved.Revision.V >= view.Revision.V {
 		return true
 	}
-	err := saver.SaveRuntime(session, saved, view)
+	err := saver.SaveRuntime(session, saved, view, cost)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err != nil {
@@ -64,6 +87,7 @@ func (m *Monitor) save(view View) bool {
 		return false
 	}
 	m.saved.view = view
+	m.saved.cost = checkpoint
 	m.stopSaveRetryLocked()
 	return true
 }

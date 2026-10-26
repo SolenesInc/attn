@@ -251,11 +251,11 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 			return
 		}
 		delivery := sessionmonitor.MaintenanceInput("crew-heartbeat", string(sessionID)+"/"+generation, crewHeartbeatPrompt, sessionmonitor.WhenPromptReady)
-		delivery.Resend = func() {
-			d.actOnCrewMember(member, sessionID, action, cache, time.Now())
-		}
-		attempt := d.sessionMonitor(sessionID).Place(context.Background(), delivery)
+		attempt := d.placeDelivery(context.Background(), sessionID, delivery)
 		if attempt.Stage != sessionmonitor.Placed {
+			if after, retry := sessionmonitor.RetryDelay(attempt.Err); retry {
+				d.life.AfterFunc("crewHeartbeatRetry", after, func() { d.actOnCrewMember(member, sessionID, action, cache, time.Now()) })
+			}
 			d.logf("crew: %s's heartbeat did not reach session %s: %v", crew.DisplayName(member.ID), sessionID, attempt.Err)
 			return
 		}

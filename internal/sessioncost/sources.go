@@ -30,6 +30,29 @@ type Source struct {
 	Finalized             []string               `json:"finalized,omitempty"`
 }
 
+type SourceTotals struct {
+	Initialized           bool   `json:"initialized,omitempty"`
+	UsageUnavailable      bool   `json:"usage_unavailable,omitempty"`
+	MeasurementIncomplete bool   `json:"measurement_incomplete,omitempty"`
+	Ledger                Ledger `json:"ledger,omitempty"`
+}
+
+func (state Checkpoint) SourceTotals() map[string]SourceTotals {
+	totals := make(map[string]SourceTotals, len(state.Sources))
+	for id, source := range state.Sources {
+		totals[id] = SourceTotals{Initialized: source.Initialized, UsageUnavailable: source.UsageUnavailable, MeasurementIncomplete: source.MeasurementIncomplete, Ledger: source.Ledger}
+	}
+	return totals
+}
+
+func FromSourceTotals(initialized bool, totals map[string]SourceTotals) Checkpoint {
+	state := Checkpoint{Initialized: initialized, Sources: make(map[string]*Source, len(totals))}
+	for id, source := range totals {
+		state.Sources[id] = &Source{Initialized: source.Initialized, UsageUnavailable: source.UsageUnavailable, MeasurementIncomplete: source.MeasurementIncomplete, Ledger: source.Ledger}
+	}
+	return state
+}
+
 func (source *Source) Clone() *Source {
 	if source == nil {
 		return &Source{}

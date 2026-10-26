@@ -26,7 +26,15 @@ var Placements = map[string]Placement{
 	"apply_monitor_view":        {LocatorHome, ""},
 	"get_kitty_image":           {LocatorTerminal, "id"},
 	"get_screen_snapshot":       {LocatorTerminal, "id"},
+	"link_rename":               {LocatorSession, "session_id"},
+	"monitor_assistant_window":  {LocatorSession, "session_id"},
+	"monitor_command":           {LocatorSession, "session_id"},
+	"monitor_last_assistant":    {LocatorSession, "session_id"},
+	"monitor_state_trace":       {LocatorSession, "session_id"},
+	"monitor_transcript_page":   {LocatorSession, "session_id"},
 	"pty_resize":                {LocatorTerminal, "id"},
+	"pull_request_link":         {LocatorSession, "session_id"},
+	"session_place":             {LocatorSession, "session_id"},
 	"terminal_kill":             {LocatorTerminal, "terminal_id"},
 	"terminal_launch":           {LocatorTerminal, "terminal_id"},
 	"terminal_pointer_activity": {LocatorTerminal, "id"},
@@ -38,6 +46,7 @@ var Placements = map[string]Placement{
 	"terminal_theme":            {LocatorMachine, "host"},
 	"terminal_wait_block":       {LocatorTerminal, "terminal_id"},
 	"terminal_write":            {LocatorTerminal, "terminal_id"},
+	"transcript_activity":       {LocatorSession, "session_id"},
 	"update_outpost":            {LocatorHome, ""},
 }
 
@@ -77,6 +86,78 @@ func (m GetScreenSnapshotMessage) Locate() string {
 	return string(m.ID)
 }
 
+func (LinkRenameMessage) Command() string {
+	return "link_rename"
+}
+
+func (LinkRenameMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m LinkRenameMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorAssistantWindowMessage) Command() string {
+	return "monitor_assistant_window"
+}
+
+func (MonitorAssistantWindowMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorAssistantWindowMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorCommandMessage) Command() string {
+	return "monitor_command"
+}
+
+func (MonitorCommandMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorCommandMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorLastAssistantMessage) Command() string {
+	return "monitor_last_assistant"
+}
+
+func (MonitorLastAssistantMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorLastAssistantMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorStateTraceMessage) Command() string {
+	return "monitor_state_trace"
+}
+
+func (MonitorStateTraceMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorStateTraceMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorTranscriptPageMessage) Command() string {
+	return "monitor_transcript_page"
+}
+
+func (MonitorTranscriptPageMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorTranscriptPageMessage) Locate() string {
+	return string(m.SessionID)
+}
+
 func (PtyResizeMessage) Command() string {
 	return "pty_resize"
 }
@@ -87,6 +168,30 @@ func (PtyResizeMessage) Placement() Placement {
 
 func (m PtyResizeMessage) Locate() string {
 	return string(m.ID)
+}
+
+func (PullRequestLinkMessage) Command() string {
+	return "pull_request_link"
+}
+
+func (PullRequestLinkMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m PullRequestLinkMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (SessionPlaceMessage) Command() string {
+	return "session_place"
+}
+
+func (SessionPlaceMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m SessionPlaceMessage) Locate() string {
+	return string(m.SessionID)
 }
 
 func (TerminalKillMessage) Command() string {
@@ -219,6 +324,18 @@ func (TerminalWriteMessage) Placement() Placement {
 
 func (m TerminalWriteMessage) Locate() string {
 	return string(m.TerminalID)
+}
+
+func (TranscriptActivityMessage) Command() string {
+	return "transcript_activity"
+}
+
+func (TranscriptActivityMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m TranscriptActivityMessage) Locate() string {
+	return string(m.SessionID)
 }
 
 func (UpdateOutpostMessage) Command() string {
