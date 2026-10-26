@@ -122,13 +122,16 @@ func TestStateExplainShowsWhatTheSharedCodexAppServerReportsForAVisibleTileThatF
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	caughtUpWithServer := func(name string) protocol.Session {
+		typeInto(app, terminal, "/rename "+name+"\r")
+		codex.Prompted()
+		return testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Label == name })
+	}
 
+	caughtUpWithServer("Checkout race")
 	w.CodexServer().Work(codex.ConversationID)
-	typeInto(app, terminal, "/rename Checkout race\r")
-	codex.Prompted()
-	renamed := testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Label == "Checkout race" })
-	if renamed.State != protocol.SessionStateWaitingInput {
-		t.Fatalf("the visible tile is %s after its app-server reported working, want waiting_input from its terminal", renamed.State)
+	if shown := caughtUpWithServer("Tax lock"); shown.State != protocol.SessionStateWaitingInput {
+		t.Fatalf("the visible tile is %s after its app-server reported working, want waiting_input from its terminal", shown.State)
 	}
 	stateExplainShows(t, stateExplainOf(t, cli, checkout).Observations,
 		stateExplainRow{source: "app_server", claim: "working", outcome: "observed"},
