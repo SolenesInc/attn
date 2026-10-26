@@ -95,6 +95,16 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   subcommand, a following option must end its values or it consumes the
   subcommand's words. `--mcp-config <json> --setting-sources '' auth status`
   preserves the subcommand.
+- `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false` disables composer suggestions
+  without replacing inline hook settings. `promptSuggestionEnabled: false`
+  is also a supported setting. Both switches were read in 2.1.310's source;
+  the environment switch was used in the real crew lifecycle probe below.
+- `--name <name>` supplies the native session title. Without it, a local mock
+  provider recorded four auxiliary Haiku title requests during a crew wake,
+  two inputs and sleep. With `--name Member` and suggestions disabled, the
+  same real-binary lifecycle made only its six expected Opus member requests
+  (2.1.310). Attn's `ATTN_HEADLESS_TASKS=off` does not disable Claude's native
+  title generation.
 
 Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
 

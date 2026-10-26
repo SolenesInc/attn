@@ -19,6 +19,7 @@ export function loadCases(ctx) {
       if (digest(source.text) !== source.sha256) throw failure('fixture', `source receipt does not match its frozen text: ${source.path}`);
     }
     if (!input.charter || !Array.isArray(input.letters) || !input.days?.length) throw failure('fixture', `${input.id} is missing public setup or days`);
+    if (!input.day_brief?.trim()) throw failure('fixture', `${input.id} needs a public day_brief for its isolated workspace`);
     if (input.unit === 'e2e' && input.days.length !== 12) throw failure('fixture', `${input.id}: end-to-end cases require 12 days, got ${input.days.length}`);
     if (!input.checks?.length && !input.claims?.length) throw failure('fixture', `${input.id} has no grading claims`);
     if (input.claims?.some(claim => !claim.id || !claim.text.endsWith('?'))) throw failure('fixture', `${input.id} claims must be yes/no questions with ids`);
@@ -40,6 +41,8 @@ export function loadCases(ctx) {
   if (!ctx.model) throw failure('fixture', '--model must pin the member model');
   if (ctx.model !== state.member_model || ctx.reps !== state.reps) throw failure('approval', '--model and --reps must match the reviewed state member_model and reps');
   if (!state.member_effort) throw failure('fixture', 'member_effort must pin the crew member effort');
+  if (!Number.isFinite(state.controller_handoff_timeout_ms) || state.controller_handoff_timeout_ms <= 0 || state.controller_handoff_timeout_ms > 2147483647)
+    throw failure('fixture', `controller_handoff_timeout_ms needs a measured positive timer limit, got ${state.controller_handoff_timeout_ms}`);
   if (ctx.model === state.judge_model) throw failure('fixture', 'judge_model must differ from the member model');
   if (!process.env.CLAUDE_CODE_OAUTH_TOKEN) throw failure('approval', 'the user must supply an evaluation CLAUDE_CODE_OAUTH_TOKEN from the supported claude setup-token flow in the runner environment');
   const privateRoot = resolve(state.private_root);
@@ -138,11 +141,14 @@ export async function runCase(input, ctx) {
   let problem;
   try {
     await trial.start(input);
+    save(join(artifactDir, 'runtime.json'), { instance: trial.instance, runtime_root: trial.root, data_dir: trial.data });
     for (const day of input.days) {
       const id = await trial.wake();
       let events = await trial.transcript(id);
       while (true) {
+        trial.beginSimulation(id);
         const next = await simulator(ctx, day, events);
+        trial.finishSimulation(id);
         if (next.done) break;
         if (!next.message.trim()) throw failure('simulator', 'simulator produced an empty user turn');
         await trial.send(id, next.message);
@@ -182,6 +188,7 @@ export async function runCase(input, ctx) {
       tool_calls: tools.length, engagement, artifact_dir: relative(ctx.flow, artifactDir), runtime_root: trial.root,
       isolation: trial.isolation, calls: ctx.calls };
   } catch (error) {
+    if (ctx.signal.aborted) error = ctx.signal.reason;
     problem = error;
     error.runtime_root = trial.root;
     error.calls = ctx.calls;
@@ -202,6 +209,8 @@ export async function runCase(input, ctx) {
       cleanupError.member_measurement_incomplete = true;
       if (problem) cleanupError.message += '; original failure: ' + problem.message;
       throw cleanupError;
+    } finally {
+      save(join(artifactDir, 'controller-handoffs.json'), trial.handoffs);
     }
   }
 }
