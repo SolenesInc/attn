@@ -71,11 +71,12 @@ outpost by name and address in Settings → Outposts.
 The first connection pairs them, with no prompt. The home remembers the
 outpost's identity, and the outpost accepts only this home from then on.
 Their identities live in each attn's data folder, so keep that folder when
-you update the binary.
+you update.
 
-To update the outpost, build it again, run the same `install` command and
-`systemctl --user restart attn.service`. `install` replaces the binary while
-shells are running from it, where `cp` fails with "Text file busy".
+When you update the home, build the outpost again from the same checkout,
+rerun the `install` command and run `systemctl --user restart attn.service`.
+Use `install`, not `cp`: `cp` fails with "Text file busy" while shells run
+from the binary.
 
 ## Open a shell on an outpost
 
