@@ -457,6 +457,9 @@ type Ask struct {
 	// Parts corresponds to the JSON schema field "parts".
 	Parts []AskPart `json:"parts"`
 
+	// Reply corresponds to the JSON schema field "reply".
+	Reply *AskReply `json:"reply,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
@@ -609,6 +612,17 @@ type AskQuestionKind string
 const AskQuestionKindAny AskQuestionKind = "any"
 const AskQuestionKindOne AskQuestionKind = "one"
 const AskQuestionKindText AskQuestionKind = "text"
+
+type AskReply struct {
+	// AnsweredAt corresponds to the JSON schema field "answered_at".
+	AnsweredAt string `json:"answered_at"`
+
+	// Answers corresponds to the JSON schema field "answers".
+	Answers []AskAnswer `json:"answers"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+}
 
 type AsksUpdatedMessage struct {
 	// Asks corresponds to the JSON schema field "asks".

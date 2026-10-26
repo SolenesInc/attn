@@ -711,7 +711,7 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	profileID := client.selectedProfile()
 	d.sendGardenFull(client)
-	d.sendToClient(client, asksSnapshot(profileID, d.openAsks()))
+	d.sendToClient(client, asksSnapshot(profileID, d.asks()))
 	d.sendToClient(client, d.ventsSnapshot(profileID))
 	if profileID != "" {
 		d.sendToClient(client, d.codexShared().changedMessage(profileID))

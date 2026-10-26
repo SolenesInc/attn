@@ -1,0 +1,3 @@
+kind: added
+area: asks
+change: The asks drawer shows the asks you replied to in the last day when you press r or click Replied, with the answers and note you sent. A replied ask leaves sooner when its agent or seed closes.

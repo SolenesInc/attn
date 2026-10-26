@@ -581,7 +581,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Settings:               d.daemonSettingsSnapshot(),
 		Warnings:               d.getWarnings(),
 		Crew:                   state.Crew,
-		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
+		Asks:                   asksSnapshot(client.selectedProfile(), d.asks()).Asks,
 		Vents:                  d.ventsSnapshot(client.selectedProfile()).Vents,
 		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
 	}

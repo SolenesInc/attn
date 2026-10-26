@@ -6,6 +6,7 @@ type CommandKind uint8
 
 const (
 	Settle CommandKind = iota
+	HandBack
 	Snooze
 	Wake
 	CancelCountdown
@@ -31,6 +32,10 @@ func (m *Monitor) Do(command Command, now time.Time) (View, bool) {
 	switch command.Kind {
 	case Settle:
 		applied = m.settleLocked(command.Turn, now)
+	case HandBack:
+		if applied = m.settleLocked(command.Turn, now); applied {
+			m.turn.AgentAt = m.turn.SettledAt
+		}
 	case Snooze:
 		applied = m.snoozeLocked(command.Turn, command.Until, now)
 	case Wake:
