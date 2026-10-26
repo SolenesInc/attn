@@ -66,14 +66,15 @@ prompt suggestions are disabled in both eval arms. A fixed native session name
 prevents automatic title-generation calls, so those calls cannot escape the
 member's usage accounting. Attn's background model tasks stay off.
 Claude's native auto-mode checks have their own requests. Disabling attn's
-background tasks does not disable those checks. Treat available dollar receipts
-as known usage until auxiliary requests have also been reconciled.
+background tasks does not disable those checks. Treat the dollar receipts as a
+lower bound on spend until you have reconciled those auxiliary requests against
+the provider's usage record.
 
 Each simulator and judge call gets a fresh working directory and Claude
 configuration. Native memory, slash commands, Chrome, and ordinary tools are
 disabled. The runner reads structured output and receipts from the result
-object, including the last result event when Claude returns an event array.
-It preserves the array alongside the normalized result for inspection.
+object. When Claude returns an event array, it uses the last `result` event and
+saves the whole array next to the normalized result for inspection.
 
 Check the pinned Claude's interactive startup without credentials or model calls:
 
@@ -116,7 +117,8 @@ This drives a complete case through the real member, simulator, and judge
 binaries against a local provider mock. It checks native array and object
 results, both judge passes, receipt validation, fresh controller directories,
 and removal of those directories after completed calls. A synthetic personal
-configuration supplies canaries; none may reach the controller requests.
+configuration supplies canaries, and the check fails if any canary reaches the
+controller requests.
 The script prints its receipt path under `private_root/print-proof-*`.
 
 The disposable member configuration accepts the dummy key and uses native
@@ -180,11 +182,11 @@ and a settled attn state (`idle` or `waiting_input`). Each response must follow
 the matching input. An old idle state or an intermediate tool response cannot
 advance the day. The controller calls `attn crew sleep` after the task and grades the filed
 letters and output files. The judge grades each output twice.
-Work transcripts are captured before sleep. The runner also retains closure
-records that the native harness persists. A tool that closes its own harness
-can exit before its final call reaches the transcript, so result metadata states
-that trace limitation. The filed letter and output files remain the grading
-evidence.
+The runner captures the work transcript before sleep and keeps whatever closure
+records Claude persists. A Bash tool that runs `attn handoff --sleep` can exit
+before Claude writes that final tool call to the transcript, so the result's
+`trace_limitations` field records this gap. The filed letter and output files
+remain the grading evidence.
 
 Set `controller_handoff_timeout_ms` from the `handoffs` timings in a reviewed
 `audit-lifecycle/real-lifecycle-proof.json`.
