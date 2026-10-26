@@ -141,12 +141,14 @@ and close, split, kill, and reload refuse immediately, naming the outpost.
 
 While the home is still connecting to an outpost, after the home starts or
 when you turn Outposts on, add an outpost or re-pair it, its terminals don't
-look offline, but typing and resizes are not sent yet. A stalled connection
-still sends typing. If it then turns lost, the keys still on their way fail,
-and the tile says how many keys were not sent until you type in it again.
+look offline, but typing is not sent yet. A stalled connection still sends
+typing. If it then turns lost, the keys still on their way fail, and the tile
+says how many keys may not have been sent until you type in it again. The last
+keys sent before the drop can still reach the outpost when it comes back, so
+look at the shell before you retype.
 
 Every key that is not sent flashes its tile red. attn never sends refused
-keys later, so retype what you need when the connection returns.
+keys later.
 
 A tile that stays open keeps its last screen. If you switch desktops or
 restart the app while the terminal is offline, its tile shows an empty

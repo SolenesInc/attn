@@ -1,4 +1,4 @@
 kind: fixed
 area: outposts
-change: A remote shell's tile now shows what the home will do with its typing, from the first screen after a restart. With Outposts off its tiles show offline and name the outpost, while the home is still connecting each key flashes the tile instead of vanishing, and keys lost when a stalled connection drops flash the tile and say how many were not sent.
+change: A remote shell's tile now shows what the home will do with its typing, from the first screen after a restart. With Outposts off its tiles show offline and name the outpost, while the home is still connecting each key flashes the tile instead of vanishing, and keys lost when a stalled connection drops flash the tile and say how many may not have been sent.
 symptom: Remote tiles looked online with Outposts off or while connecting while the home refused their typing, keys typed during a stall failed with no sign, and a tile opened after an app restart never said its screen was on the outpost.

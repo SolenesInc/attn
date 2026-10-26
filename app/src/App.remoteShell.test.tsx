@@ -63,7 +63,7 @@ describe('Remote shells in the app', () => {
     expect(firstFlash).not.toBeNull();
     await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'y', code: 'KeyY' }));
     expect(flash()).not.toBe(firstFlash);
-    expect(within(tile()).queryByText(/keys? (was|were) not sent/)).toBeNull();
+    expect(within(tile()).queryByText(/may not have been sent/)).toBeNull();
     await gesture(daemon, () => pressShortcut('terminal.splitVertical'));
     await gesture(daemon, () => pressShortcut('session.close'));
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('session-actions-remote')));
@@ -167,19 +167,19 @@ describe('Remote shells in the app', () => {
       await gesture(daemon, () => daemon.emit({ event: 'command_error', cmd: 'pty_input', success: false, error: 'studio is unreachable; this needs it now', terminal_id: 'remote' }));
     }
     expect(flash()).not.toBeNull();
-    expect(within(tile()).getByText('3 keys were not sent')).toBeInTheDocument();
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [lost] }));
     expect(within(tile()).getByText('studio unreachable · typing is not sent')).toBeInTheDocument();
-    expect(within(tile()).getByText('3 keys were not sent')).toBeInTheDocument();
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
     const beforeResizeRefusal = flash();
     await gesture(daemon, () => daemon.emit({ event: 'command_error', cmd: 'pty_resize', success: false, error: 'studio is unreachable; this needs it now', terminal_id: 'remote' }));
     expect(flash()).not.toBe(beforeResizeRefusal);
-    expect(within(tile()).getByText('3 keys were not sent')).toBeInTheDocument();
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
     daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
-    expect(within(tile()).getByText('3 keys were not sent')).toBeInTheDocument();
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'z', code: 'KeyZ' }));
-    expect(within(tile()).queryByText(/keys? (was|were) not sent/)).toBeNull();
+    expect(within(tile()).queryByText(/may not have been sent/)).toBeNull();
     expect(daemon.sentOf('pty_input').slice(typed.length)).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);
   });
 
