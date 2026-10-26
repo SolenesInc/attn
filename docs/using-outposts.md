@@ -22,8 +22,9 @@ make build-linux-amd64 OUTPUT=/tmp/attn-outpost   # or build-linux-arm64
 
 On the outpost:
 
-1. Install `/tmp/attn-outpost` as `~/.local/bin/attn` and run it as a
-   systemd user service:
+1. Copy `/tmp/attn-outpost` from the Mac to the outpost's `/tmp` (for
+   example `scp /tmp/attn-outpost ai-sandbox:/tmp/`). Then install it as
+   `~/.local/bin/attn` and run it as a systemd user service:
 
    ```sh
    install -D /tmp/attn-outpost ~/.local/bin/attn
@@ -72,13 +73,14 @@ outpost by name and address in Settings → Outposts.
 
 The first connection pairs them, with no prompt. The home remembers the
 outpost's identity, and the outpost accepts only this home from then on.
-Their identities live in each attn's data folder, so keep that folder when
-you update.
 
-When you update the home, build the outpost again from the same checkout,
-rerun the `install` command and run `systemctl --user restart attn.service`.
-Use `install`, not `cp`: `cp` fails with "Text file busy" while shells run
-from the binary.
+To update, install the new home build on the Mac and build the outpost
+binary again from the same checkout. Copy it to the outpost's `/tmp`, rerun
+the `install` command there and run `systemctl --user restart attn.service`.
+Keep each attn's data folder, because their identities live there. Use
+`install`, not `cp`: `cp` fails with "Text file busy" while attn runs from
+the binary, and with `KillMode=process` it keeps running for as long as your
+shells do.
 
 ## Open a shell on an outpost
 
