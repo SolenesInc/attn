@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
@@ -29,6 +30,7 @@ import (
 	"github.com/victorarias/attn/internal/probetui"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/store"
 	"golang.org/x/sys/unix"
 )
 
@@ -65,6 +67,13 @@ type sessionCron struct {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--check-schema" {
+		if err := store.CheckSchema(os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if isProtocolVersionCommand(os.Args) {
 		runProtocolVersion()
 		return
@@ -532,9 +541,16 @@ func runDaemon() {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}
-	if err := <-startResult; err != nil {
-		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
-		os.Exit(1)
+	select {
+	case <-d.RestartRequested():
+		d.Stop()
+		<-startResult
+		os.Exit(bridge.UpdateRestartStatus)
+	case err := <-startResult:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 

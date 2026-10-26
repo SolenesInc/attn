@@ -22,6 +22,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdTerminalWait:  commandMetadata(false, true),
 	protocol.CmdTerminalClose: commandMetadata(true, true),
 
+	protocol.CmdUpdateOutpost:                 commandMetadata(false, true),
 	protocol.CmdAddOutpost:                    commandMetadata(false, true),
 	protocol.CmdRemoveOutpost:                 commandMetadata(false, true),
 	protocol.CmdRepairOutpost:                 commandMetadata(false, true),

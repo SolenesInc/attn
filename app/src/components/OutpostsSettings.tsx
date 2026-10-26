@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
+import { outpostIsUpdating, outpostUpdateText } from './OutpostUpdateBanner';
 import type { OutpostInfo } from '../types/generated';
 
 const stateTone: Record<OutpostInfo['state'], string> = {
@@ -12,7 +13,7 @@ function Timestamp({ value }: { value: string }) {
 }
 
 export function OutpostsSettings() {
-  const { outposts, outpostCommandError, sendAddOutpost, sendRepairOutpost, sendRemoveOutpost, isConnected } = useDaemonApi();
+  const { outposts, outpostCommandError, sendAddOutpost, sendRepairOutpost, sendRemoveOutpost, sendUpdateOutpost, homeBuild, isConnected } = useDaemonApi();
   const sessions = useDaemonStore((state) => state.daemonSessions);
   const removeButton = useRef<HTMLButtonElement>(null);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -79,7 +80,9 @@ export function OutpostsSettings() {
                     {row.daemon_id && <div className="settings-meta-row"><span>Daemon</span><code>{row.daemon_id}</code></div>}
                     {row.host_key_fingerprint && <div className="settings-meta-row"><span>Host key</span><code>{row.host_key_fingerprint}</code></div>}
                     {row.last_error && <div className="settings-warning settings-outpost-error"><p>{row.last_error}</p>{row.last_error_at && <Timestamp value={row.last_error_at} />}</div>}
+                    {row.update && <p className="settings-description" role="status">{outpostUpdateText(row)}</p>}
                     <div className="settings-outpost-actions">
+                      {row.build && homeBuild && row.build !== homeBuild && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : 'Update to home build'}</button>}
                       <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
                       <button
                         ref={removing === row.id ? removeButton : undefined}

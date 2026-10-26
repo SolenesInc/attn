@@ -187,6 +187,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdWorktreeRefresh:               decodeInto[WorktreeRefreshMessage],
 	CmdGetSettings:                   decodeInto[GetSettingsMessage],
 	CmdSetSetting:                    decodeInto[SetSettingMessage],
+	CmdUpdateOutpost:                 decodeInto[UpdateOutpostMessage],
 	CmdAddOutpost:                    decodeInto[AddOutpostMessage],
 	CmdRemoveOutpost:                 decodeInto[RemoveOutpostMessage],
 	CmdRepairOutpost:                 decodeInto[RepairOutpostMessage],

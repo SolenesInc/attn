@@ -9,6 +9,8 @@ var (
 	SourceFingerprint = "unknown"
 	GitCommit         = "unknown"
 	SnapshotFormat    = "unknown"
+	ReleaseSource     = "https://github.com/victorarias/attn/releases/download"
+	RepositoryPath    = ""
 	Dirty             bool
 )
 

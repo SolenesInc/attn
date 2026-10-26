@@ -31,6 +31,7 @@ type outpostRuntime struct {
 	lastError string
 	errorKind string
 	listen    func(string, string) (net.Listener, error)
+	updating  bool
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
@@ -87,6 +88,7 @@ func (d *Daemon) configureOutpostListener() {
 		AuthorizedKeys: func() ([]byte, error) { return os.ReadFile(config.AuthorizedKeysPath()) },
 		Logf:           d.logf,
 		Handlers:       d.outpostHandlers(),
+		Update:         d.outpostUpdateServer(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
 			if _, err := enrollment.RecordHome(d.dataRoot, home.DaemonID); err != nil {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}

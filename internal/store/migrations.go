@@ -134,7 +134,7 @@ func LatestSchemaVersion() int {
 	return all[len(all)-1].version
 }
 
-func refuseUnsupportedSchema(dbPath string) error {
+func CheckSchema(dbPath string) error {
 	if dbPath == ":memory:" {
 		return nil
 	}
@@ -177,6 +177,8 @@ func refuseUnsupportedSchema(dbPath string) error {
 	}
 	return nil
 }
+
+func refuseUnsupportedSchema(dbPath string) error { return CheckSchema(dbPath) }
 
 func readRecoveredMigrationHistory(dbPath string) (migrationHistory, error) {
 	var history migrationHistory
