@@ -158,7 +158,7 @@ describe('App asks', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'What should the banner say?' }), { target: { value: 'Welcome back' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'Note' }), { target: { value: 'Keep it boring.' } });
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Send/ })));
-    daemon.emit({ event: 'asks_updated', profile_id: DEFAULT_PROFILE_ID, asks: [releaseDay] });
+    daemon.emit({ event: 'asks_updated', profile_id: DEFAULT_PROFILE_ID, asks: [releaseDay, cacheStoreReplied] });
     await daemon.idle();
 
     expect(daemon.sentOf('ask_answer').map(({ ask_id, answers, note }) => ({ ask_id, answers, note }))).toEqual([{
@@ -400,6 +400,20 @@ describe('App asks', () => {
     await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'r' }));
     expect(screen.getByText('No open asks.')).toBeInTheDocument();
     expect(screen.getByText(/shows the one you replied to in the last day/)).toBeInTheDocument();
+  });
+
+  it('takes the keyboard when it opens with no open asks, so r shows the replies instead of reaching the agent', async () => {
+    const daemon = await renderAsks([cacheStoreReplied], [apiWorking]);
+    await openSession(daemon, 'api');
+    terminalInput()?.focus();
+    expect(document.activeElement).toBe(terminalInput());
+
+    await gesture(daemon, () => pressShortcut('dock.asks'));
+    expect(screen.getByText('No open asks.')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 'r' }));
+
+    expect(openAsk()).toBe('Cache store');
+    expect(daemon.sentOf('pty_input')).toEqual([]);
   });
 
   it('follows the selected profile and forgets asks that close', async () => {

@@ -217,22 +217,22 @@ func answerCacheAsk(t *testing.T, app *testworld.Peer, askID string) {
 }
 
 func TestARepliedAskStaysForADayUnlessItsSessionClosesFirst(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
 		setSetting(t, app, "asks_enabled", "true")
-		registerSessions(t, w, cli, "kept", "closed")
+		kept, closed := w.bubbleClaude(t, app, "kept"), w.bubbleClaude(t, app, "closed")
 		replied := map[string]string{}
-		for _, asker := range []string{"kept", "closed"} {
-			asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path(asker))
+		for _, agent := range []*bubbleClaude{kept, closed} {
+			asked, err := agent.cli.AskOpen(protocol.SessionID(agent.id), "", cacheAsk, "", w.Path("shop"))
 			if err != nil {
-				t.Fatalf("%s asks: %v", asker, err)
+				t.Fatalf("%s asks: %v", agent.id, err)
 			}
 			answerCacheAsk(t, app, asked.ID)
-			replied[asker] = asked.ID
+			replied[agent.id] = asked.ID
 		}
-		shownReplies := func(m protocol.AsksUpdatedMessage) []string {
+		shownReplies := func(asks []protocol.Ask) []string {
 			var ids []string
-			for _, a := range m.Asks {
+			for _, a := range asks {
 				if a.Reply != nil {
 					ids = append(ids, a.ID)
 				}
@@ -240,25 +240,26 @@ func TestARepliedAskStaysForADayUnlessItsSessionClosesFirst(t *testing.T) {
 			slices.Sort(ids)
 			return ids
 		}
-		both := []string{replied["kept"], replied["closed"]}
+		both := []string{replied[kept.id], replied[closed.id]}
 		slices.Sort(both)
-		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return slices.Equal(shownReplies(m), both) })
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return slices.Equal(shownReplies(m.Asks), both) })
 
-		if err := cli.Unregister("closed"); err != nil {
-			t.Fatalf("close closed: %v", err)
+		if result := closeFromApp(app, closed.id); !result.Accepted {
+			t.Fatalf("close %s: %+v", closed.id, result)
 		}
 		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
-			return slices.Equal(shownReplies(m), []string{replied["kept"]})
+			return slices.Equal(shownReplies(m.Asks), []string{replied[kept.id]})
 		})
 
-		w.advance(23 * time.Hour)
-		if shown := w.App().Initial.Asks; len(shown) != 1 || shown[0].ID != replied["kept"] || shown[0].Reply == nil {
-			t.Fatalf("23 hours after the answer the app shows %+v, want the reply to kept", shown)
+		w.stop()
+		w.elapse(23*time.Hour + 30*time.Minute)
+		w.start()
+		reopened := w.App()
+		if shown := shownReplies(reopened.Initial.Asks); !slices.Equal(shown, []string{replied[kept.id]}) {
+			t.Fatalf("23 and a half hours after the answer the app shows replies %v, want the one to %s", shown, kept.id)
 		}
-		w.advance(2 * time.Hour)
-		if shown := w.App().Initial.Asks; len(shown) != 0 {
-			t.Fatalf("25 hours after the answer the app still shows %+v", shown)
-		}
+		w.advance(time.Hour + time.Minute)
+		testworld.Await(reopened, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
 	})
 }
 

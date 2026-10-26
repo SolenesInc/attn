@@ -45,8 +45,8 @@ export const useAsksStore = create<AsksStore>((set) => ({
 }));
 
 export function useAsksAvailable(settings: Record<string, string>): boolean {
-  const open = useAsksStore((state) => state.asks.length > 0);
-  return open || isAsksEnabled(settings);
+  const any = useAsksStore((state) => state.asks.length > 0 || state.replied.length > 0);
+  return any || isAsksEnabled(settings);
 }
 
 export function useAskList<S extends AskHolderSession & { label: string }>(sessions: readonly S[]): AskListItem<S>[] {

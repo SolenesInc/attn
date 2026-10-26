@@ -77,10 +77,10 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     return () => window.cancelAnimationFrame(frame);
   }, [onTop]);
   useEffect(() => {
-    if (!askId) {
-      if (document.activeElement === document.body) drawerRef.current?.focus({ preventScroll: true });
-      return;
-    }
+    if (!askId && onTop && drawerRef.current) takeKeyboardFromTerminal(drawerRef.current);
+  }, [askId, onTop, focusRequest]);
+  useEffect(() => {
+    if (!askId) return;
     selectAsk(askId);
     listRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
     const article = askRef.current;
