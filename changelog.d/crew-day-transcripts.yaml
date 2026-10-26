@@ -1,0 +1,3 @@
+kind: fixed
+area: crew
+change: Crew days with a memory day line keep their transcripts after the harness prunes them, even with crew memory turned off. Closed days open through attn session transcript.

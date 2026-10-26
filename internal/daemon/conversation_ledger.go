@@ -102,6 +102,10 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	if err != nil {
 		return nil, err
 	}
+	days, err := d.crewDayReferences()
+	if err != nil {
+		return nil, err
+	}
 	entries, err := d.store.ConversationSessions("")
 	if err != nil {
 		return nil, err
@@ -132,7 +136,14 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 		row.PinnedAt = protocol.Ptr(pin.PinnedAt.UTC().Format(time.RFC3339Nano))
 		rowsByKey[key] = row
 	}
+	references := make(map[conversationKey]bool)
 	for key := range seeds {
+		references[key] = true
+	}
+	for key := range days {
+		references[key] = true
+	}
+	for key := range references {
 		if _, keeper := agentdriver.Get(key.agent).(agentdriver.ConversationKeeper); !keeper {
 			continue
 		}
@@ -153,19 +164,22 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	}
 	for key, row := range rowsByKey {
 		if row.Kept == nil || row.Kept.DeletedAt != nil {
-			if row.PinnedAt == nil && len(seeds[key]) == 0 {
+			if row.PinnedAt == nil && !references[key] {
 				continue
 			}
 			row.Kept, row.SourceBytes = nil, nil
-			names := make([]string, 0, len(seeds[key]))
+			names := make([]string, 0, len(seeds[key])+len(days[key]))
 			for _, seed := range seeds[key] {
-				names = append(names, seed.Slug)
+				names = append(names, "open seed "+seed.Slug)
+			}
+			for _, day := range days[key] {
+				names = append(names, "crew day "+day.Member+" #"+day.DayID)
 			}
 			sort.Strings(names)
-			reason := "open seed " + strings.Join(names, ", ") + "; copying on the next pass"
 			if row.PinnedAt != nil {
-				reason = "pinned; copying on the next pass"
+				names = append(names, "pinned")
 			}
+			reason := strings.Join(names, "; ") + "; copying on the next pass"
 			if live[key] {
 				reason = strings.TrimSuffix(reason, "copying on the next pass")
 				if conversationKeepQuiet() == 24*time.Hour {
@@ -180,6 +194,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	}
 	for key, row := range rowsByKey {
 		row.Title, row.SessionIds, row.Seeds = key.resumeID, []protocol.SessionID{}, seeds[key]
+		row.CrewDays = days[key]
 		if row.Seeds == nil {
 			row.Seeds = []protocol.KeptConversationSeed{}
 		}
@@ -258,6 +273,18 @@ func (d *Daemon) forgetConversation(id string) error {
 			}
 			sort.Strings(names)
 			return fmt.Errorf("conversation %s is kept by open seeds: %s; harvest or wither them before forgetting", key.resumeID, strings.Join(names, ", "))
+		}
+		days, err := d.crewDayReferences()
+		if err != nil {
+			return err
+		}
+		if len(days[key]) > 0 {
+			names := make([]string, 0, len(days[key]))
+			for _, day := range days[key] {
+				names = append(names, day.Member+" #"+day.DayID)
+			}
+			sort.Strings(names)
+			return fmt.Errorf("conversation %s is kept by crew days: %s", key.resumeID, strings.Join(names, ", "))
 		}
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
 		if !exists || !kept.DeletedAt.IsZero() {

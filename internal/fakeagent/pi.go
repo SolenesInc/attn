@@ -37,6 +37,7 @@ type piTerminal struct {
 	term         *terminal
 	relay        *rpcPeer
 	conversation string
+	transcript   string
 	resumed      bool
 	prompt       string
 	autoMode     json.RawMessage
@@ -44,8 +45,9 @@ type piTerminal struct {
 }
 
 type relayHello struct {
-	Token       string `json:"token"`
-	PiSessionID string `json:"pi_session_id"`
+	Token          string `json:"token"`
+	PiSessionID    string `json:"pi_session_id"`
+	TranscriptPath string `json:"transcript_path"`
 }
 
 type relayState struct {
@@ -92,7 +94,7 @@ func (p *piTerminal) startSuite() error {
 		p.relay.close()
 	}
 	p.relay = newRPCPeer(conn, nil).start()
-	if err := p.relay.call(context.Background(), "hello", relayHello{Token: token, PiSessionID: p.conversation}, nil); err != nil {
+	if err := p.relay.call(context.Background(), "hello", relayHello{Token: token, PiSessionID: p.conversation, TranscriptPath: p.transcript}, nil); err != nil {
 		return fmt.Errorf("pi relay hello: %w", err)
 	}
 	return nil
@@ -109,10 +111,12 @@ func (p *piTerminal) openSession() error {
 	}
 	if file != "" {
 		p.resumed = true
+		p.transcript = file
 		return nil
 	}
 	p.term.print(fmt.Sprintf("Warning: No project session found with id %s; creating a new session with that id.", p.conversation))
 	file = filepath.Join(piSessionDir(p.cfg.ToolHome, cwd), strings.ReplaceAll(now(), ":", "-")+"_"+p.conversation+".jsonl")
+	p.transcript = file
 	return appendLines(file, map[string]any{"type": "session", "version": 3, "id": p.conversation, "timestamp": now(), "cwd": cwd})
 }
 
@@ -171,7 +175,33 @@ func (p *piTerminal) submit(prompt string) error {
 	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
 		return p.switchTo(strings.TrimSpace(conversation))
 	}
+	if err := p.record("user", prompt); err != nil {
+		return err
+	}
 	return p.relay.call(context.Background(), "report_state", relayState{State: "working"}, nil)
+}
+
+func (p *piTerminal) record(role, text string) error {
+	file, err := os.Open(p.transcript)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	var parent any
+	decoder := json.NewDecoder(file)
+	for decoder.More() {
+		var entry struct{ Type, ID string }
+		if err := decoder.Decode(&entry); err != nil {
+			return err
+		}
+		if entry.Type != "session" {
+			parent = entry.ID
+		}
+	}
+	return appendLines(p.transcript, map[string]any{
+		"type": "message", "id": uuid.NewString(), "parentId": parent, "timestamp": now(),
+		"message": map[string]any{"role": role, "content": []map[string]any{{"type": "text", "text": text}}},
+	})
 }
 
 func (p *piTerminal) switchTo(conversation string) error {
@@ -185,6 +215,9 @@ func (p *piTerminal) switchTo(conversation string) error {
 func (p *piTerminal) reply(text string, afterStop bool) error {
 	if afterStop {
 		return errors.New("pi has no Stop hook to reply after")
+	}
+	if err := p.record("assistant", text); err != nil {
+		return err
 	}
 	p.term.print(text)
 	return p.relay.call(context.Background(), "report_stop", relayStop{AssistantText: text}, nil)
@@ -456,7 +489,10 @@ func (p *piPlugin) handleRelay(relay *rpcPeer, method string, params json.RawMes
 		if err != nil {
 			return nil, err
 		}
-		return struct{}{}, p.reportMetadata(run)
+		if err := p.reportMetadata(run); err != nil {
+			return nil, err
+		}
+		return struct{}{}, p.report("session.report_transcript_path", run, map[string]any{"path": hello.TranscriptPath})
 	}
 	run := p.runOn(relay)
 	if run == nil {

@@ -331,6 +331,7 @@ type eventContentBlock struct {
 	ID        string          `json:"id"`
 	Name      string          `json:"name"`
 	Input     json.RawMessage `json:"input"`
+	Arguments json.RawMessage `json:"arguments"`
 	ToolUseID string          `json:"tool_use_id"`
 	Content   json.RawMessage `json:"content"`
 	IsError   bool            `json:"is_error"`
@@ -357,6 +358,8 @@ func parseEventLine(agent string, line []byte) parsedEventLine {
 	case "codex":
 		parsed.events = parseCodexEvent(envelope)
 		parsed.assistantEchoCandidate = envelope.Type == "response_item"
+	case "pi":
+		parsed.events = parsePiEvent(envelope)
 	}
 	parsed.events = withoutStateMarkers(parsed.events)
 	return parsed
@@ -489,7 +492,43 @@ func parseClaudeEvent(envelope eventEnvelope) []Event {
 	if json.Unmarshal(envelope.Message, &message) != nil {
 		return nil
 	}
-	blocks := decodeEventContent(message.Content)
+	kind := envelope.Type
+	if kind == EventKindUser && envelope.Origin != nil && envelope.Origin.Kind != "human" {
+		kind = ""
+	}
+	return parseMessageEvents(envelope.Timestamp, kind, message.Content)
+}
+
+func parsePiEvent(envelope eventEnvelope) []Event {
+	if envelope.Type != "message" {
+		return nil
+	}
+	var message struct {
+		eventMessage
+		ToolCallID   string `json:"toolCallId"`
+		ToolName     string `json:"toolName"`
+		IsError      bool   `json:"isError"`
+		ErrorMessage string `json:"errorMessage"`
+	}
+	if json.Unmarshal(envelope.Message, &message) != nil {
+		return nil
+	}
+	if message.Role == "toolResult" {
+		return []Event{{Timestamp: envelope.Timestamp, Kind: EventKindToolResult, ToolCallID: message.ToolCallID,
+			ToolName: message.ToolName, Text: extractEventContentText(message.Content), IsError: message.IsError}}
+	}
+	if message.Role != EventKindUser && message.Role != EventKindAssistant {
+		return nil
+	}
+	events := parseMessageEvents(envelope.Timestamp, message.Role, message.Content)
+	if message.ErrorMessage != "" {
+		events = append(events, Event{Timestamp: envelope.Timestamp, Kind: EventKindError, Role: message.Role, Text: message.ErrorMessage})
+	}
+	return events
+}
+
+func parseMessageEvents(timestamp, kind string, content json.RawMessage) []Event {
+	blocks := decodeEventContent(content)
 	var events []Event
 	var textParts []string
 	for _, block := range blocks {
@@ -501,7 +540,7 @@ func parseClaudeEvent(envelope eventEnvelope) []Event {
 		case "thinking":
 			if strings.TrimSpace(block.Thinking) != "" {
 				events = append(events, Event{
-					Timestamp: envelope.Timestamp,
+					Timestamp: timestamp,
 					Kind:      EventKindThinking,
 					Role:      "assistant",
 					Text:      block.Thinking,
@@ -509,15 +548,20 @@ func parseClaudeEvent(envelope eventEnvelope) []Event {
 			}
 		case "tool_use":
 			events = append(events, Event{
-				Timestamp:  envelope.Timestamp,
+				Timestamp:  timestamp,
 				Kind:       EventKindToolCall,
 				ToolName:   block.Name,
 				ToolCallID: block.ID,
 				Text:       renderJSONValue(block.Input),
 			})
+		case "toolCall":
+			events = append(events, Event{
+				Timestamp: timestamp, Kind: EventKindToolCall, ToolName: block.Name,
+				ToolCallID: block.ID, Text: renderJSONValue(block.Arguments),
+			})
 		case "tool_result":
 			events = append(events, Event{
-				Timestamp:  envelope.Timestamp,
+				Timestamp:  timestamp,
 				Kind:       EventKindToolResult,
 				ToolCallID: block.ToolUseID,
 				Text:       renderJSONValue(block.Content),
@@ -528,10 +572,8 @@ func parseClaudeEvent(envelope eventEnvelope) []Event {
 
 	text := strings.Join(textParts, "\n")
 	if strings.TrimSpace(text) != "" {
-		if envelope.Type == "assistant" {
-			events = append([]Event{{Timestamp: envelope.Timestamp, Kind: EventKindAssistant, Role: "assistant", Text: text}}, events...)
-		} else if envelope.Origin == nil || envelope.Origin.Kind == "human" {
-			events = append([]Event{{Timestamp: envelope.Timestamp, Kind: EventKindUser, Role: "user", Text: text}}, events...)
+		if kind == EventKindAssistant || kind == EventKindUser {
+			events = append([]Event{{Timestamp: timestamp, Kind: kind, Role: kind, Text: text}}, events...)
 		}
 	}
 	return events

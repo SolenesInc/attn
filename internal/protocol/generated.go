@@ -5785,6 +5785,14 @@ type KeptConversation struct {
 	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
 }
 
+type KeptConversationCrewDay struct {
+	// DayID corresponds to the JSON schema field "day_id".
+	DayID string `json:"day_id"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+}
+
 type KeptConversationDeletedBy string
 
 const KeptConversationDeletedBySweep KeptConversationDeletedBy = "sweep"
@@ -5892,6 +5900,9 @@ type KeptConversationListResultEvent struct {
 type KeptConversationRow struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
+
+	// CrewDays corresponds to the JSON schema field "crew_days".
+	CrewDays []KeptConversationCrewDay `json:"crew_days,omitempty,omitzero"`
 
 	// Kept corresponds to the JSON schema field "kept".
 	Kept *KeptConversation `json:"kept,omitempty,omitzero"`
