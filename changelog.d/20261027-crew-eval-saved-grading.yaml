@@ -1,0 +1,3 @@
+kind: internal
+area: crew
+change: Regrade saved crew eval outputs without repeating member work, confirm sleep requests when needed, and retain retired-result spending.

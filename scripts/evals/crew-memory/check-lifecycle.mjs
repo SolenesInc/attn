@@ -108,10 +108,14 @@ try {
     const sleeping = trial.sleep(id);
     sleeping.catch(() => {});
     const closing = await take();
-    closing.answer({ say: 'Ready to file the day letter.' });
+    closing.answer({ say: 'Please confirm sleep directly before I file the day letter.' });
+    const sleepConfirmation = await take();
+    assert.equal(sleepConfirmation.request.prompt, 'sleep');
+    sleepConfirmation.answer({ say: 'Confirmed. Ready to file the day letter.' });
     await trial.until(() => trial.sessions.get(id)?.state === 'idle');
     await trial.cli(['handoff', '--session', id, '--sleep', '-m', 'Unpaid real-binary proof: two local tasks completed.']);
-    await sleeping;
+    const closure = await sleeping;
+    assert.equal(closure.confirmation_needed, true);
     await trial.stop();
     assert.equal(pending.length, 0, 'no prompt suggestion or other extra provider call may remain');
     assert.ok(requests.every(request => request.model === config.member_model && request.tools.length), 'all provider calls must belong to the member; incidental title/suggestion calls are disabled');
@@ -120,7 +124,8 @@ try {
       claude_binary: config.claude_binary, attn_sha256: createHash('sha256').update(readFileSync(config.attn_binary)).digest('hex'),
       opening_state: 'idle', calls, handoffs: trial.handoffs, isolation: trial.isolation,
       provider_requests: requests.map(request => ({ model: request.model, prompt: request.prompt, tool_results: request.toolResults.length })),
-      closure: 'real crew sleep and controller CLI handoff --sleep; model responses mocked',
+      closure: 'real crew sleep, direct user confirmation, and controller CLI handoff --sleep; model responses mocked',
+      sleep_confirmation_needed: closure.confirmation_needed, sleep_confirmations: trial.sleepConfirmations,
     };
     save(join(proofDir, 'real-lifecycle-proof.json'), receipt);
     console.log('PASS: real Claude wake, two correlated inputs, tool continuation, sleep and cleanup; paid calls=0');

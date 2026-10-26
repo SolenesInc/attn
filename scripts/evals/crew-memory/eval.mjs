@@ -70,6 +70,13 @@ export function loadCases(ctx) {
     if (ctx.timeoutS !== undefined && ctx.timeoutS !== seconds)
       throw failure('approval', `--timeout-s=${ctx.timeoutS} differs from reviewed case_timeout_s[${input.unit}]=${seconds}`);
   }
+  if (ctx.regradeOnly) {
+    if (!state.regrade_ids?.length || !Array.isArray(state.regrade_ids))
+      throw failure('approval', 'judge-only replay needs reviewed regrade_ids in the state');
+    for (const id of state.regrade_ids) if (!selected.some(input => input.id === id))
+      throw failure('approval', `regrade_ids includes ${id}, which is outside the reviewed stage`);
+    return selected.filter(input => state.regrade_ids.includes(input.id));
+  }
   return selected;
 }
 
@@ -209,12 +216,14 @@ export async function runCase(input, ctx) {
         events = await trial.transcript(id);
       }
       events = await trial.transcript(id);
-      const closure = nativeTurns(await trial.sleep(id));
+      const sleep = await trial.sleep(id);
+      const closure = nativeTurns(sleep.records);
       transcript.push(...turns(events), ...closure);
       const session = trial.sessions.get(id);
       if (!session?.usage || session.usage.measurement_incomplete || session.usage.has_unpriced_usage || !(session.usage.cost_usd > 0)) throw failure('usage', `session ${id} has incomplete token or dollar receipts`);
       if (!session.usage.models?.length || session.usage.models.some(row => row.model !== ctx.model)) throw failure('serving_substitution', `member ${id}: requested ${ctx.model}, served ${session.usage.models?.map(row => row.model)}`);
-      days.push({ id, selection: trial.selection, usage: session.usage, events, closure });
+      days.push({ id, selection: trial.selection, usage: session.usage, events, closure,
+        sleep_confirmation_needed: sleep.confirmation_needed });
     }
     const initialLetters = new Set(input.letters.map(letter => letter.name));
     const letters = readdirSync(join(trial.home, 'handoffs')).filter(name => !initialLetters.has(name)).sort()
@@ -241,6 +250,7 @@ export async function runCase(input, ctx) {
     return { output, transcript, trace_limitations: ['Closure events contain only native records persisted before the harness exits.'],
       model: native[0].model, usage, stop_reason: finalStop, member_cost_usd: days.reduce((sum, day) => sum + day.usage.cost_usd, 0),
       tool_calls: tools.length, engagement, artifact_dir: relative(ctx.flow, artifactDir), runtime_root: trial.root,
+      sleep_confirmation_needed: trial.sleepConfirmations.length > 0,
       isolation: trial.isolation, calls: ctx.calls };
   } catch (error) {
     if (ctx.signal.aborted) error = ctx.signal.reason;
@@ -250,6 +260,7 @@ export async function runCase(input, ctx) {
     error.member_receipts = [...trial.sessions.values()].filter(session => session.usage?.total_tokens > 0)
       .map(session => ({ id: session.id, usage: session.usage }));
     error.member_measurement_incomplete = true;
+    error.sleep_confirmation_needed = trial.sleepConfirmations.length > 0;
     save(join(artifactDir, 'partial-member-receipts.json'), error.member_receipts);
     save(join(artifactDir, 'member-requests.json'), nativeRequests(trial.root, artifactDir));
     throw error;
@@ -267,6 +278,7 @@ export async function runCase(input, ctx) {
       throw cleanupError;
     } finally {
       save(join(artifactDir, 'controller-handoffs.json'), trial.handoffs);
+      save(join(artifactDir, 'sleep-confirmations.json'), trial.sleepConfirmations);
     }
   }
 }
@@ -283,7 +295,7 @@ export function programmatic(input, output) {
   }));
 }
 
-export async function gradeCase(input, run, ref, ctx) {
+async function outcomeGrades(input, run, ref, ctx) {
   const grades = programmatic(input, run.output);
   const passes = [];
   for (let pass = 0; pass < 2 && input.claims?.length; pass++) {
@@ -313,6 +325,11 @@ export async function gradeCase(input, run, ref, ctx) {
       pairwise.push({ ...verdict, memory_candidate: reversed ? 'A' : 'B' });
     }
   }
+  return { grades, passes, pairwise };
+}
+
+export async function gradeCase(input, run, ref, ctx) {
+  const { grades, passes, pairwise } = await outcomeGrades(input, run, ref, ctx);
   const fidelity = await simulatorFidelity(input, ctx);
   const fidelityCalls = ctx.calls.filter(call => call.purpose === 'simulator_fidelity');
   const judgeCalls = ctx.calls.filter(call => call.purpose === 'judge');
@@ -336,25 +353,47 @@ export async function recheckFidelity(input, row, ctx) {
   ctx.calls = [];
   const started = performance.now();
   const verdict = await simulatorFidelity(input, ctx, previousCalls);
-  const calls = ctx.calls;
-  const cost = calls.reduce((sum, call) => sum + (call.response?.total_cost_usd ?? 0), 0);
   const evaluation = { ...row.evaluation, simulator_fidelity: verdict,
-    simulator_fidelity_usage: sumUsage([row.evaluation.simulator_fidelity_usage ?? {}, ...calls.map(call => call.response.usage)]),
-    simulator_fidelity_cost_usd: (row.evaluation.simulator_fidelity_cost_usd ?? 0) + cost,
-    calls_cost_usd: row.evaluation.calls_cost_usd + cost,
+    simulator_fidelity_usage: sumUsage([row.evaluation.simulator_fidelity_usage ?? {}, ...ctx.calls.map(call => call.response.usage)]),
+    simulator_fidelity_cost_usd: (row.evaluation.simulator_fidelity_cost_usd ?? 0) + ctx.calls.reduce((sum, call) => sum + (call.response?.total_cost_usd ?? 0), 0),
     calls_spend_incomplete: row.evaluation.calls_spend_incomplete || verdict.status === 'unverified' };
-  const updated = { ...row, evaluation,
-    wall_clock_s: row.wall_clock_s + (performance.now() - started) / 1000,
-    simulator_unfaithful: verdict.status === 'faithful' ? false : verdict.status === 'unfaithful' ? true : null };
-  save(join(directory, `fidelity-recheck-${ctx.attempt}.json`), {
-    harness_sha: ctx.state.harness_sha, before: row, after: updated, calls,
-  });
+  return saveReplay(row, ctx, previousCalls, started, { kind: 'fidelity-recheck',
+    result: { ...row, evaluation,
+    simulator_unfaithful: verdict.status === 'faithful' ? false : verdict.status === 'unfaithful' ? true : null },
+    grading: { simulator_fidelity: verdict } });
+}
+
+export async function regradeSaved(input, row, ctx) {
+  const directory = join(ctx.flow, row.artifact_dir);
+  const previousCalls = json(join(directory, 'model-calls.json'));
+  ctx.calls = [];
+  const started = performance.now();
+  const output = json(join(directory, 'outcome.json'));
+  const { grades, passes, pairwise } = await outcomeGrades(input, { output }, null, ctx);
+  return saveReplay(row, ctx, previousCalls, started, { kind: 'regrade',
+    result: { ...row, grade: { pass: Number(Object.values(grades).every(Boolean)), ...grades },
+      judge_model: ctx.state.judge_model,
+      judge_usage: sumUsage([row.judge_usage ?? {}, ...ctx.calls.map(call => call.response.usage)]),
+      evaluation: { ...row.evaluation, judge_passes: passes, pairwise } },
+    grading: { grades, passes, pairwise, claims: input.claims, exploratory: Boolean(ctx.state.pilot) } });
+}
+
+function saveReplay(row, ctx, previousCalls, started, replay) {
+  const directory = join(ctx.flow, row.artifact_dir);
+  const updated = replay.result;
+  updated.wall_clock_s = row.wall_clock_s + (performance.now() - started) / 1000;
+  updated.evaluation.calls_cost_usd = row.evaluation.calls_cost_usd + ctx.calls.reduce((sum, call) => sum + (call.response?.total_cost_usd ?? 0), 0);
   const grading = json(join(directory, 'grading.json'));
-  save(join(directory, 'grading.json'), { ...grading, simulator_fidelity: verdict });
-  save(join(directory, 'model-calls.json'), [...previousCalls, ...calls]);
+  save(join(directory, `${replay.kind}-${ctx.attempt}.json`), {
+    harness_sha: ctx.state.harness_sha, before: row, after: updated, calls: ctx.calls,
+    previous_grading: grading, grading: replay.grading,
+  });
+  save(join(directory, 'grading.json'), { ...grading, ...replay.grading });
+  save(join(directory, 'model-calls.json'), [...previousCalls, ...ctx.calls]);
   return updated;
 }
 
 export function perfFrom(run) { return { tool_calls: run.tool_calls, engagement: run.engagement,
+  sleep_confirmation_needed: run.sleep_confirmation_needed,
   member_cost_usd: run.member_cost_usd, artifact_dir: run.artifact_dir, runtime_root: run.runtime_root, isolation: run.isolation,
   trace_limitations: run.trace_limitations }; }

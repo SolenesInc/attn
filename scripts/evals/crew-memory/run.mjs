@@ -5,7 +5,7 @@ import { closeSync, constants as FS, existsSync, fstatSync, ftruncateSync, lstat
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as wait } from 'node:timers/promises';
-import { loadCases, runCase, gradeCase, recheckFidelity, perfFrom } from './eval.mjs';
+import { loadCases, runCase, gradeCase, recheckFidelity, regradeSaved, perfFrom } from './eval.mjs';
 
 const WIN = process.platform === 'win32';
 const NOFOLLOW = WIN ? 0 : FS.O_NOFOLLOW;
@@ -84,6 +84,7 @@ function parseArgs(argv) {
     else if (k === '--approve-harness') a.approveHarness = true;
     else if (k === '--check-harness') a.checkHarness = true;
     else if (k === '--recheck-fidelity') a.recheckFidelity = true;
+    else if (k === '--regrade-only') a.regradeOnly = true;
     else if (k === '-h' || k === '--help') { usage(); process.exit(0); }
     else { eprint(`unknown argument: ${k}`); usage(); process.exit(2); }
   }
@@ -94,11 +95,11 @@ function parseArgs(argv) {
   if ((a.timeoutS !== undefined && (!Number.isFinite(a.timeoutS) || a.timeoutS <= 0
       || a.timeoutS * 1000 > 2147483647)) || !['units', 'use', 'e2e'].includes(a.pilotStage)
       || !Number.isInteger(a.reps) || a.reps < 1
-      || a.concurrency !== 1) { usage(); process.exit(2); }
+      || a.concurrency !== 1 || (a.recheckFidelity && a.regradeOnly)) { usage(); process.exit(2); }
   return a;
 }
 function usage() {
-  eprint('usage: node run.mjs --flow DIR --variant ID [--model ID] [--reps N] [--pilot-stage units|use|e2e] [--timeout-s N] [--recheck-fidelity] [--check-harness|--approve-harness]');
+  eprint('usage: node run.mjs --flow DIR --variant ID [--model ID] [--reps N] [--pilot-stage units|use|e2e] [--timeout-s N] [--recheck-fidelity|--regrade-only] [--check-harness|--approve-harness]');
 }
 
 function checkHarness(statePath, st, approve, check) {
@@ -242,7 +243,9 @@ async function main() {
   const refDir = join(args.flow, 'baseline', 'ref');
   const tasks = [];
   for (const c of cases) for (let rep = 0; rep < args.reps; rep++) {
-    if (args.recheckFidelity ? !done.has(`${pathSafeId(c.id)}\0${rep}`) : done.has(`${pathSafeId(c.id)}\0${rep}`)) continue;
+    const saved = done.has(`${pathSafeId(c.id)}\0${rep}`);
+    if (args.regradeOnly && !saved) throw new Error(`judge-only replay has no saved result for ${c.id} rep${rep}`);
+    if ((args.recheckFidelity || args.regradeOnly) ? !saved : saved) continue;
     tasks.push({ c, rep });
   }
   eprint(`[${args.variant}] ${tasks.length} of ${cases.length * args.reps} (id,rep) to run`);
@@ -273,9 +276,10 @@ async function main() {
       const deadline = t0 + timeoutS * 1000;
       const appRetry = { count: 0 }, judgeRetry = { count: 0 };
       try {
-        if (args.recheckFidelity) {
+        if (args.recheckFidelity || args.regradeOnly) {
           const index = completed.findIndex(row => row.prompt_id === safeId && row.rep === rep);
-          completed[index] = await recheckFidelity(c, completed[index], attemptCtx);
+          const replay = args.regradeOnly ? regradeSaved : recheckFidelity;
+          completed[index] = await replay(c, completed[index], attemptCtx);
           const replacement = join(vdir, `results-recheck-${attemptCtx.attempt}.jsonl`);
           writeFileNoFollow(replacement, completed.map(row => JSON.stringify(row)).join('\n') + '\n');
           renameSync(replacement, resultsPath);
@@ -359,6 +363,7 @@ async function main() {
           member_cost_usd: lastRun?.member_cost_usd,
           member_receipts: e?.member_receipts,
           member_measurement_incomplete: e?.member_measurement_incomplete,
+          sleep_confirmation_needed: e?.sleep_confirmation_needed ?? lastRun?.sleep_confirmation_needed,
           runtime_root: e?.runtime_root ?? lastRun?.runtime_root,
           calls: e?.calls ?? attemptCtx.calls,
           judge_model: e?.judge_model ?? lastRun?.judge_model,
