@@ -29,7 +29,7 @@ Every record is one line of JSON:
 |---|---|
 | `bus` | Every fact on attn's event bus, except `vent.*` facts |
 | `app` | Shortcuts and palette commands used, Settings sections opened, queue advances, the kind of a UI error |
-| `cli` | The outcome of each `attn` command, and whether an agent or a person ran it |
+| `cli` | The outcome of each `attn` command, whether an agent or a person ran it, and the agent's harness. An agent's command carries its hashed session as the subject, matching that session's facts. A command from a person's shell has no subject. |
 | `sample` | A resource sample of the daemon every 5 minutes: memory, goroutines, open files, CPU time, database size, bus size, connected clients |
 | `vent` | A vent you chose to send |
 
