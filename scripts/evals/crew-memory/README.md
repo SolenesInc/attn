@@ -15,7 +15,7 @@ clear the flow under `/private/tmp` on reboot. Restore the latest saved archive
 if the flow is missing:
 
 ```sh
-node scripts/evals/crew-memory/restore.mjs /path/to/seed-artifacts/pilot-flow-r3.tar.gz
+node scripts/evals/crew-memory/restore.mjs /path/to/seed-artifacts/pilot-flow-r4.tar.gz
 ```
 
 Restore copies the exact cases, state, binary, and any saved results to
@@ -56,8 +56,21 @@ node scripts/evals/crew-memory/audit.mjs "$CREW_EVAL_FLOW/_state.json"
 Read `audit.md` under `private_root`. It separates measured checks from checks
 that still need real member or judge calls. The sandbox denies the member's
 process tree access to the private facts, source crew homes, production socket,
-and previous trials. Each attempt gets a fresh member home and empty Claude
-configuration. Claude's own memory is disabled in both eval arms.
+and previous trials. Each attempt gets a fresh member home and Claude configuration with only
+onboarding completion, a dark theme, and trust for that member home prefilled.
+It carries no authentication or conversation history. Claude's own memory is
+disabled in both eval arms.
+
+Check the pinned Claude's interactive startup without credentials or model calls:
+
+```sh
+node scripts/evals/crew-memory/check-startup.mjs "$CREW_EVAL_FLOW/_state.json"
+```
+
+This launches a real crew member through the trial wrapper and sandbox. It must
+reach the unauthenticated prompt without onboarding, and every PTY worker must
+use a copy of the pinned attn binary. The check removes authentication variables
+from its own environment and saves `startup-check.json` under `private_root`.
 
 ## Supply authentication in your terminal
 
@@ -116,11 +129,11 @@ Save the entire flow after approval and after each stage, including failed
 attempts. Use a new archive name for each snapshot:
 
 ```sh
-tar -czf /private/tmp/pilot-units-r3.tar.gz -C /private/tmp \
+tar -czf /private/tmp/pilot-units-r4.tar.gz -C /private/tmp \
   crew-memory-eval-private/cases.json \
   crew-memory-eval-private/bin \
   crew-memory-eval-private/flow
-attn seed attach s-wxcdtv --path /private/tmp/pilot-units-r3.tar.gz --copy
+attn seed attach s-wxcdtv --path /private/tmp/pilot-units-r4.tar.gz --copy
 ```
 
 Restore that newer archive after a reboot to retain approval and completed

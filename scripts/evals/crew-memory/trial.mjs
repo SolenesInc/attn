@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter, once } from 'node:events';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, copyFileSync, existsSync, realpathSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, copyFileSync, existsSync, realpathSync, chmodSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -52,6 +52,9 @@ export class Trial extends EventEmitter {
     mkdirSync(this.runtimeBase, { recursive: true });
     this.runtimeBase = realpathSync(this.runtimeBase);
     this.root = mkdtempSync(join(this.runtimeBase, 'trial-'));
+    this.attnBinary = join(this.root, 'attn');
+    copyFileSync(config.attn_binary, this.attnBinary);
+    chmodSync(this.attnBinary, 0o500);
     this.instance = 'cm-' + randomUUID().replaceAll('-', '').slice(0, 12);
     this.data = join(this.root, 'instance');
     this.home = join(this.data, 'crew', 'member');
@@ -61,6 +64,7 @@ export class Trial extends EventEmitter {
     this.env = { ...environment(), ATTN_INSTANCE: this.instance, ATTN_TOOL_HOME: join(this.root, 'tools'),
       ATTN_PTY_BACKEND: 'worker', ATTN_HEADLESS_TASKS: 'off',
       ATTN_GITHUB_POLLING: 'off', CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', CLAUDE_CONFIG_DIR: join(this.root, 'tools', '.claude') };
+    this.env.ATTN_WRAPPER_PATH = this.attnBinary;
     this.env.CODEX_HOME = join(this.env.ATTN_TOOL_HOME, '.codex');
   }
 
@@ -72,6 +76,10 @@ export class Trial extends EventEmitter {
     this.env.ATTN_DATA_DIR = this.data;
     mkdirSync(this.home, { recursive: true });
     mkdirSync(this.env.CLAUDE_CONFIG_DIR, { recursive: true });
+    save(join(this.env.CLAUDE_CONFIG_DIR, '.claude.json'), {
+      hasCompletedOnboarding: true, theme: 'dark',
+      projects: { [realpathSync(this.home)]: { hasTrustDialogAccepted: true } },
+    });
     writeFileSync(join(this.home, 'CHARTER.md'), input.charter);
     mkdirSync(join(this.home, 'handoffs'));
     for (const letter of input.letters) writeFileSync(join(this.home, 'handoffs', letter.name), letter.text);
@@ -89,7 +97,7 @@ export class Trial extends EventEmitter {
       `exec ${quote(this.config.claude_binary)} --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources '' "$@"\n`, { mode: 0o700 });
     this.env.ATTN_CLAUDE_EXECUTABLE = wrapper;
     await this.probeIsolation();
-    this.child = spawn('/usr/bin/sandbox-exec', ['-f', this.policy, this.config.attn_binary, 'daemon'],
+    this.child = spawn('/usr/bin/sandbox-exec', ['-f', this.policy, this.attnBinary, 'daemon'],
       { cwd: this.root, env: { ...this.env, ATTN_DAEMON_READY_FD: '3' }, stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });
     this.daemonOutput = '';
     this.child.stdout.on('data', data => { this.daemonOutput += data; });
@@ -162,7 +170,7 @@ export class Trial extends EventEmitter {
     }
   }
 
-  cli(args) { return command(this.config.attn_binary, args, { env: this.env, signal: this.signal }); }
+  cli(args) { return command(this.attnBinary, args, { env: this.env, signal: this.signal }); }
 
   async wake() {
     const launched = JSON.parse(await this.cli(['crew', 'wake', 'member', '--json']));
@@ -204,10 +212,10 @@ export class Trial extends EventEmitter {
   async stop() {
     this.ws?.close();
     if (this.child && this.child.exitCode === null) {
-      await command(this.config.attn_binary, ['daemon', 'stop'], { env: this.env });
+      await command(this.attnBinary, ['daemon', 'stop'], { env: this.env });
       await this.exited;
     }
     if (existsSync(join(this.data, 'daemon.log'))) copyFileSync(join(this.data, 'daemon.log'), join(this.root, 'daemon.log'));
-    if (existsSync(this.data)) await command(this.config.attn_binary, ['instance', 'clean', this.instance], { env: this.env });
+    if (existsSync(this.data)) await command(this.attnBinary, ['instance', 'clean', this.instance], { env: this.env });
   }
 }

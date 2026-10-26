@@ -85,7 +85,12 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
 - A fresh `CLAUDE_CONFIG_DIR` uses a separate configuration and projects
   directory. On macOS, `auth status` reported `loggedIn: false` there while
   the default configuration was authenticated. An isolated run needs its own
-  authentication setup.
+  authentication setup. A fresh interactive launch opens the theme picker.
+  Prefilling `<config>/.claude.json` with `hasCompletedOnboarding: true`,
+  `theme: "dark"`, and `projects[<absolute cwd>].hasTrustDialogAccepted: true`
+  skips onboarding and the folder-trust dialog. Through a real crew launch
+  with no token, that config reaches the normal prompt with “Not logged in ·
+  Please run /login”, without making a model call (2.1.310).
 - `--mcp-config` takes multiple values. When a wrapper puts it before a
   subcommand, a following option must end its values or it consumes the
   subcommand's words. `--mcp-config <json> --setting-sources '' auth status`
