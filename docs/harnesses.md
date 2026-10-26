@@ -105,6 +105,22 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   same real-binary lifecycle made only its six expected Opus member requests
   (2.1.310). Attn's `ATTN_HEADLESS_TASKS=off` does not disable Claude's native
   title generation.
+- `-p --output-format json --json-schema ...` returns a result object by
+  default and an array of events with `--verbose`. The array's last
+  `type: "result"` event carries `structured_output`, `usage`, `modelUsage`
+  and `total_cost_usd`. Real simulator and judge print calls against a local
+  provider mock exercised both forms on 2.1.310.
+- `--setting-sources ''` can still leave skills and slash commands listed in
+  print-mode init metadata. That catalogue alone does not show whether their
+  contents reached the model. `--disable-slash-commands` produced empty skill
+  and command lists in the probe. Fresh working/config directories plus the
+  memory-off switch kept synthetic personal-context canaries out of the
+  simulator and judge requests (2.1.310).
+- A Bash tool calling `attn handoff --sleep` can file its letter and exit
+  before Claude persists the final tool call to JSONL. In the 2.1.310 local
+  provider probe, the fifth member request closed the session while the file
+  retained only the four work requests. Persisted closure records therefore
+  do not guarantee a complete trace of that final call.
 
 Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
 

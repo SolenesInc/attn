@@ -194,8 +194,7 @@ export class Trial extends EventEmitter {
     return id;
   }
 
-  nativeRecords(id) {
-    const terminal = this.bindings.get(id);
+  nativeRecords(id, terminal = this.bindings.get(id)) {
     const projects = join(this.env.CLAUDE_CONFIG_DIR, 'projects');
     if (!terminal || !existsSync(projects)) return [];
     for (const entry of readdirSync(projects, { withFileTypes: true })) {
@@ -311,8 +310,11 @@ export class Trial extends EventEmitter {
   async sleep(id) {
     this.endHandoff();
     this.exchange = null;
+    const terminal = this.bindings.get(id);
+    const before = this.nativeRecords(id, terminal).length;
     await this.cli(['crew', 'sleep', 'member', '--json']);
     await this.until(() => this.frames.some(frame => frame.event === 'session_unregistered' && frame.session?.id === id));
+    return this.nativeRecords(id, terminal).slice(before);
   }
 
   async stop() {

@@ -65,6 +65,16 @@ It carries no authentication or conversation history. Claude's own memory and
 prompt suggestions are disabled in both eval arms. A fixed native session name
 prevents automatic title-generation calls, so those calls cannot escape the
 member's usage accounting. Attn's background model tasks stay off.
+Claude's native auto-mode checks have their own requests. Disabling attn's
+background tasks does not disable those checks. Treat the dollar receipts as a
+lower bound on spend until you have reconciled those auxiliary requests against
+the provider's usage record.
+
+Each simulator and judge call gets a fresh working directory and Claude
+configuration. Native memory, slash commands, Chrome, and ordinary tools are
+disabled. The runner reads structured output and receipts from the result
+object. When Claude returns an event array, it uses the last `result` event and
+saves the whole array next to the normalized result for inspection.
 
 Check the pinned Claude's interactive startup without credentials or model calls:
 
@@ -96,6 +106,26 @@ provider requests go under the flow's `audit-lifecycle/` directory, outside the
 paid result files. These checks prove turn delivery and cleanup. Task quality,
 model-written letters, provider latency, and simulator and judge behavior still need
 the reviewed pilot.
+
+Check the simulator and judge print-mode calls as well:
+
+```sh
+node scripts/evals/crew-memory/check-model-calls.mjs "$CREW_EVAL_FLOW/_state.json"
+```
+
+This drives a complete case through the real member, simulator, and judge
+binaries against a local provider mock. It checks native array and object
+results, both judge passes, receipt validation, fresh controller directories,
+and removal of those directories after completed calls. A synthetic personal
+configuration supplies canaries, and the check fails if any canary reaches the
+controller requests.
+The script prints its receipt path under `private_root/print-proof-*`.
+
+The disposable member configuration accepts the dummy key and uses native
+permission bypass for its scripted tool calls. Its filesystem and localhost
+sandbox restrictions remain active. This proof does not measure production
+auto-mode checks or their costs. Provider answers, usage, and grades are
+synthetic, so task quality and calibration still need the paid pilot.
 
 To verify Ctrl-C through the runner, prepare a separate, unused pilot flow with
 `local_provider_only: true` and include `check-cancellation.mjs` and its imported
@@ -152,6 +182,11 @@ and a settled attn state (`idle` or `waiting_input`). Each response must follow
 the matching input. An old idle state or an intermediate tool response cannot
 advance the day. The controller calls `attn crew sleep` after the task and grades the filed
 letters and output files. The judge grades each output twice.
+The runner captures the work transcript before sleep and keeps whatever closure
+records Claude persists. A Bash tool that runs `attn handoff --sleep` can exit
+before Claude writes that final tool call to the transcript, so the result's
+`trace_limitations` field records this gap. The filed letter and output files
+remain the grading evidence.
 
 Set `controller_handoff_timeout_ms` from the `handoffs` timings in a reviewed
 `audit-lifecycle/real-lifecycle-proof.json`.
