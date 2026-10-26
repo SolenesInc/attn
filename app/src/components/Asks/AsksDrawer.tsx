@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import type { Ask, AskAnswer } from '../../types/generated';
+import type { Ask, AskAnswer, AskReply } from '../../types/generated';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -110,13 +110,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     return (
       <div ref={drawerRef} className="asks-drawer" role="region" aria-label="Asks" tabIndex={-1} onKeyDown={onEmptyKeyDown}>
         {header}
-        <div className="asks-empty">
-          <p>No open asks.</p>
-          <p className="asks-empty-hint">When an agent needs a decision from you, its ask lands here.</p>
-          {replied.length > 0 && (
-            <p className="asks-empty-hint"><kbd>r</kbd> shows the {replied.length === 1 ? 'one' : replied.length} you replied to in the last day</p>
-          )}
-        </div>
+        <AsksEmpty replied={replied.length} />
       </div>
     );
   }
@@ -126,7 +120,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const reply = ask.reply;
   const questions = askQuestions(ask);
   const draft = drafts[ask.id] ?? EMPTY_ASK_DRAFT;
-  const shownAnswers = reply ? Object.fromEntries(reply.answers.map((answer) => [answer.key, answer])) : draft.answers;
+  const shownAnswers = reply ? answersByKey(reply.answers) : draft.answers;
   const sendable = !reply && draftSendable(ask, draft) && !sending;
   const changeAnswer = (answer: AskAnswer) => setDraft(ask.id, { ...draft, answers: { ...draft.answers, [answer.key]: answer } });
   const send = async () => {
@@ -193,29 +187,17 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
             </div>
           )
         ))}
-        {reply ? (
-          reply.note && <p className="ask-replied-text" aria-label="Note">{reply.note}</p>
-        ) : (
-          <textarea
-            className="asks-note"
-            aria-label="Note"
-            rows={3}
-            value={draft.note}
-            placeholder={holder || !seedId ? `Anything else for ${from}?` : 'Anything else for its next tender?'}
-            onChange={(event) => setDraft(ask.id, { ...draft, note: event.target.value })}
-          />
-        )}
+        <AskNote
+          reply={reply}
+          value={draft.note}
+          placeholder={holder || !seedId ? `Anything else for ${from}?` : 'Anything else for its next tender?'}
+          onChange={(note) => setDraft(ask.id, { ...draft, note })}
+        />
         {error && <div className="asks-error" role="alert">{error}</div>}
       </article>
       <div className="asks-footer">
         <AsksHints several={items.length > 1} hasHolder={Boolean(holder)} hasSeed={Boolean(seedId)} />
-        {reply ? (
-          <RepliedWhen answeredAt={reply.answered_at} />
-        ) : (
-          <button type="button" className="asks-send" disabled={!sendable} aria-busy={sending || undefined} onClick={() => void send()}>
-            {sending ? 'Sending…' : 'Send'} <kbd>{formatShortcut(SEND_SHORTCUT)}</kbd>
-          </button>
-        )}
+        <AskAction reply={reply} sendable={sendable} sending={sending} onSend={() => void send()} />
       </div>
     </div>
   );
@@ -277,6 +259,59 @@ function AsksHints({ several, hasHolder, hasSeed }: { several: boolean; hasHolde
       <span className="asks-hint"><kbd>r</kbd> replied</span>
       <span className="asks-hint"><kbd>esc</kbd> close</span>
     </span>
+  );
+}
+
+function answersByKey(answers: readonly AskAnswer[]): Record<string, AskAnswer> {
+  return Object.fromEntries(answers.map((answer) => [answer.key, answer]));
+}
+
+function AsksEmpty({ replied }: { replied: number }) {
+  return (
+    <div className="asks-empty">
+      <p>No open asks.</p>
+      <p className="asks-empty-hint">When an agent needs a decision from you, its ask lands here.</p>
+      {replied > 0 && (
+        <p className="asks-empty-hint"><kbd>r</kbd> shows the {replied === 1 ? 'one' : replied} you replied to in the last day</p>
+      )}
+    </div>
+  );
+}
+
+interface AskNoteProps {
+  reply: AskReply | undefined;
+  value: string;
+  placeholder: string;
+  onChange: (note: string) => void;
+}
+
+function AskNote({ reply, value, placeholder, onChange }: AskNoteProps) {
+  if (reply) return reply.note ? <p className="ask-replied-text" aria-label="Note">{reply.note}</p> : null;
+  return (
+    <textarea
+      className="asks-note"
+      aria-label="Note"
+      rows={3}
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+}
+
+interface AskActionProps {
+  reply: AskReply | undefined;
+  sendable: boolean;
+  sending: boolean;
+  onSend: () => void;
+}
+
+function AskAction({ reply, sendable, sending, onSend }: AskActionProps) {
+  if (reply) return <RepliedWhen answeredAt={reply.answered_at} />;
+  return (
+    <button type="button" className="asks-send" disabled={!sendable} aria-busy={sending || undefined} onClick={onSend}>
+      {sending ? 'Sending…' : 'Send'} <kbd>{formatShortcut(SEND_SHORTCUT)}</kbd>
+    </button>
   );
 }
 
