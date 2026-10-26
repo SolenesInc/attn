@@ -206,9 +206,9 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	}
 	m.succeeds = Key{}
 	m.watch, m.conversation, m.localConversation = w, start.Conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
-	m.input = &lane{mu: &m.mu, monitor: m, stopped: r.closed.Load()}
 	m.session = start.Session
 	m.initializeLocked(start)
+	m.input = m.freshLaneLocked()
 	m.saved.view = m.snapshotLocked()
 	w.monitors[m] = struct{}{}
 	r.monitors[m] = struct{}{}

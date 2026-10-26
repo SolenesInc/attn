@@ -197,8 +197,14 @@ func (m *Monitor) ResetInput() {
 	}
 	m.FenceInput()
 	m.mu.Lock()
-	m.input = &lane{mu: &m.mu, monitor: m, stopped: m.registry.closed.Load()}
+	m.input = m.freshLaneLocked()
 	m.mu.Unlock()
+}
+
+func (m *Monitor) freshLaneLocked() *lane {
+	l := &lane{mu: &m.mu, monitor: m, stopped: m.registry.closed.Load()}
+	l.observePhaseLocked(m.state.State)
+	return l
 }
 
 func (l *lane) armRetryLocked(delivery Delivery, err error) {

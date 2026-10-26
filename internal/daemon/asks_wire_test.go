@@ -179,6 +179,9 @@ func TestAnAnswerIsTypedIntoAWorkingAgentAndTheDoorbellWaitsForItsPrompt(t *test
 		if last := prompts[len(prompts)-1]; !strings.Contains(last, "Answer: Postgres") || strings.Contains(last, inboxDoorbell) {
 			t.Fatalf("the working agent was typed %q, want the answer alone, at once", last)
 		}
+		if got := asker.promptsContaining(inboxDoorbell); got != 0 {
+			t.Fatalf("the peer message rang %d times while the agent worked, want it to wait for the prompt: %q", got, asker.prompts())
+		}
 
 		asker.reply("Using Postgres. <!-- attn:state=idle -->")
 		if got := asker.promptsContaining(inboxDoorbell); got != 1 {
@@ -196,6 +199,7 @@ func TestAnAnswerWaitsOutAnApprovalAndAnInboxRead(t *testing.T) {
 		setSetting(t, app, "asks_enabled", "true")
 		setSetting(t, app, "auto_approve_enabled", "false")
 		asker := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "peer")
 		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
 		if err != nil {
 			t.Fatalf("ask: %v", err)
@@ -208,8 +212,9 @@ func TestAnAnswerWaitsOutAnApprovalAndAnInboxRead(t *testing.T) {
 		w.advance(0)
 
 		answerCacheAsk(t, app, asked.ID)
-		if read := readInbox(t, cli, asker.id, 0); len(read.Items) != 0 || read.Remaining != 0 {
-			t.Fatalf("the agent read %+v from its inbox, want the answer left to be typed", read)
+		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")
+		if read := readInbox(t, cli, asker.id, 0); inboxContents(read.Items) != "the staging cache is already Postgres" || read.Remaining != 0 {
+			t.Fatalf("the agent read %+v from its inbox, want only the peer message, with the answer left to be typed", read)
 		}
 		w.advance(15 * time.Minute)
 		if got := asker.promptsContaining("Answer: Postgres"); got != 0 {
@@ -222,6 +227,41 @@ func TestAnAnswerWaitsOutAnApprovalAndAnInboxRead(t *testing.T) {
 		w.advance(0)
 		if got := asker.promptsContaining("Answer: Postgres"); got != 1 {
 			t.Fatalf("the answer was typed %d times once the approval cleared, want once: %q", got, asker.prompts())
+		}
+	})
+}
+
+func TestAnAnswerTypedIntoAWorkingAgentAfterARestartLeavesItsResultToTheUser(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		setSetting(t, app, "queue_mode_enabled", "true")
+		setSetting(t, app, "queue_quiet_notifications", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		app.TypeLine(asker.id, "move the cache")
+		w.advance(sessionmonitor.QuietWindow)
+
+		w.restart()
+		app = w.App()
+		asker.cli = w.Client()
+		w.advance(0)
+		if s := queriedSession(t, asker.cli, asker.id); s.State != protocol.SessionStateWorking {
+			t.Fatalf("after the restart the agent is %s, want still working", s.State)
+		}
+		answerCacheAsk(t, app, asked.ID)
+		synctest.Wait()
+		if got := asker.promptsContaining("Answer: Postgres"); got != 1 {
+			t.Fatalf("the answer was typed %d times into the agent working across the restart, want once: %q", got, asker.prompts())
+		}
+
+		w.advance(time.Second)
+		asker.reply("Moved the cache to Postgres. <!-- attn:state=waiting_input -->")
+		if s := queriedSession(t, asker.cli, asker.id); s.State != protocol.SessionStateWaitingInput || !protocol.Deref(s.TurnOwed) {
+			t.Fatalf("the agent stopped %s with turn owed %v, want waiting_input with its turn open for the user", s.State, protocol.Deref(s.TurnOwed))
 		}
 	})
 }
