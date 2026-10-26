@@ -1,0 +1,5 @@
+kind: fixed
+area: outposts
+change: Shells on an outpost keep running when its daemon restarts under the documented systemd unit, which now sets KillMode=process.
+symptom: Restarting or stopping the outpost's attn service ended every shell on it, and the home showed them as recoverable.
+notes: Existing outposts need KillMode=process added to ~/.config/systemd/user/attn.service, then systemctl --user daemon-reload. Update the binary with install instead of cp, since cp fails while shells run from it.

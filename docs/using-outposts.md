@@ -22,8 +22,12 @@ make build-linux-amd64 OUTPUT=/tmp/attn-outpost   # or build-linux-arm64
 
 On the outpost:
 
-1. Copy `/tmp/attn-outpost` to `~/.local/bin/attn` and run it as a systemd
-   user service:
+1. Install `/tmp/attn-outpost` as `~/.local/bin/attn` and run it as a
+   systemd user service:
+
+   ```sh
+   install -D /tmp/attn-outpost ~/.local/bin/attn
+   ```
 
    ```ini
    # ~/.config/systemd/user/attn.service
@@ -32,6 +36,7 @@ On the outpost:
 
    [Service]
    ExecStart=%h/.local/bin/attn daemon
+   KillMode=process
 
    [Install]
    WantedBy=default.target
@@ -41,6 +46,11 @@ On the outpost:
    systemctl --user enable --now attn.service
    loginctl enable-linger   # keep it running when you log out
    ```
+
+   `KillMode=process` keeps your shells running when the daemon stops or
+   restarts. Without it, systemd ends every shell along with the daemon. To
+   stop the daemon and its shells together, run
+   `systemctl --user kill attn.service`.
 
 2. Add the public key your home's ssh-agent holds (`ssh-add -L` on the Mac) to
    `~/.ssh/authorized_keys`. attn skips lines with options such as
@@ -62,6 +72,10 @@ The first connection pairs them, with no prompt. The home remembers the
 outpost's identity, and the outpost accepts only this home from then on.
 Their identities live in each attn's data folder, so keep that folder when
 you update the binary.
+
+To update the outpost, build it again, run the same `install` command and
+`systemctl --user restart attn.service`. `install` replaces the binary while
+shells are running from it, where `cp` fails with "Text file busy".
 
 ## Open a shell on an outpost
 
@@ -167,4 +181,8 @@ time.
 
 `scripts/verify-outposts.py` runs two isolated attns on one machine, pairs
 them, freezes the outpost and checks that it goes stalled, lost and back to
-connected. Run it with `--help` for its arguments.
+connected. `scripts/verify-outpost-systemd.py` runs on a Linux box with
+systemd. It starts the outpost under the unit from this page and checks that
+two shells keep their process, screen and state through
+`systemctl --user restart` and through `attn daemon stop` followed by
+`systemctl --user start`. Run either with `--help` for its arguments.
