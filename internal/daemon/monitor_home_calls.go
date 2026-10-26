@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"os"
 	"strconv"
@@ -277,7 +276,7 @@ func (d *Daemon) markModelRequestStarted(sessionID protocol.SessionID, at time.T
 }
 
 func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, source string) error {
-	_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: d.primaryTerminal(sessionID), Data: base64.StdEncoding.EncodeToString(data), Source: strings.TrimSpace(source)})
+	_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: d.primaryTerminal(sessionID), Data: string(data), Source: strings.TrimSpace(source)})
 	return err
 }
 
