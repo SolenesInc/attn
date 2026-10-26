@@ -48,6 +48,8 @@ export function loadCases(ctx) {
         throw failure('fixture', `stale probe ${id} needs a use case, frozen_memory and stale_entry`);
       if (relative(resolve(ctx.flow), resolve(input.frozen_memory)).startsWith('..'))
         throw failure('fixture', `frozen memory for ${id} must live under the reviewed flow`);
+      if (!['', '.html', '.txt', '.json'].some(extension => existsSync(join(ctx.flow, 'baseline', 'ref', id + extension))))
+        throw failure('fixture', `${id}: stale pilot needs its saved baseline reference before a member run`);
       const entries = readFileSync(join(input.frozen_memory, 'log.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
       if (entries.length !== 1 || entries[0].text !== input.stale_entry || entries[0].day)
         throw failure('fixture', `${id} needs exactly its one frozen stale entry`);
@@ -225,7 +227,8 @@ export async function runCase(input, ctx) {
         const request = records.find(row => row.type === 'api-request' && row.querySource === 'repl_main_thread' && row.params?.model === ctx.model);
         const shape = records.find(row => row.type === 'api-request-shape' && row.shapeHash === request?.shapeHash && row.sessionId === request?.sessionId);
         const system = shape?.shape?.system?.filter(part => part.type === 'text').map(part => part.text).join('\n') ?? '';
-        if (!system.includes('## Your memory') || !system.includes(input.stale_entry))
+        const memory = system.split('## Your memory\n')[1]?.split(/^## /m)[0] ?? '';
+        if (!memory.includes(input.stale_entry))
           throw failure('harness', `${input.id}: stale entry missing from native wake request system prompt`);
         wakeViews.push({ session_id: id, native_session_id: request.sessionId, request_id: request.id,
           shape_hash: request.shapeHash, system_sha256: digest(system), entry_sha256: digest(input.stale_entry) });

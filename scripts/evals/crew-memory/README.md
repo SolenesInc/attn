@@ -141,7 +141,7 @@ and removal of those directories after completed calls. A synthetic personal
 configuration supplies canaries, and the check fails if any canary reaches the
 controller requests.
 
-The fidelity checks verify that flagged and unverified verdicts leave the case
+The script also verifies that flagged and unverified fidelity verdicts leave the case
 grade in place and that the summary reports the all-case pass rate beside the
 checked-faithful pass rate. The member receives a multiline paste with
 Claude's native paste-tag rollout enabled in its disposable configuration. The
@@ -271,7 +271,7 @@ Successful rows go to `baseline/results.jsonl`. Every failed attempt goes to
 `baseline/errors.jsonl` with its failure class. Calls, events, outcomes, and native usage receipts stay
 under `baseline/out/`, with transcripts under `baseline/traces/`. Rerunning a
 stage skips completed cases and retries failed cases. To replace a completed
-case, preserve its row in `retired.jsonl` and its old reference and trace before
+case, preserve its row in `baseline/retired.jsonl` and its old reference and trace before
 removing it from the active result set. Retired rows contribute to known spend
 and do not contribute to scores. Keep the old outcome artifacts.
 Failed attempts also keep, untruncated, whatever native transcript records
@@ -328,10 +328,12 @@ fidelity calls. A row with an unverified check is marked "+ unknown spend".
 `report.html` keeps the original all-case grades.
 
 Keep the cumulative receipt ledger in `spend-ledger.json` at the flow root and
-include it in `harness_paths`. It records the whole-eval ceiling, known spend
-through a checkpoint and the flow spend already included there. The report adds
-only the flow's spending since that checkpoint, writes `spend-summary.json` and
-shows cumulative known spend. Unknown native and auxiliary costs remain outside
+include it in `harness_paths`. It must hold three USD numbers: `hard_total_cap_usd` (the whole-eval ceiling),
+`known_spend_usd` (known spend through a checkpoint), and
+`known_flow_spend_at_checkpoint_usd` (the part of this flow’s spend already
+counted there). `summarize.mjs` adds only the flow’s spending since that
+checkpoint, writes `spend-summary.json`, and prints cumulative known spend in
+`measurements.md`. Unknown native and auxiliary costs remain outside
 that lower bound. Keep those gaps visible when sizing the next run.
 
 After reviewing a checker change, recheck saved simulator turns without rerunning
@@ -348,7 +350,7 @@ node scripts/evals/crew-memory/run.mjs \
 Each recheck saves the previous result, new verdict and new call receipts under
 the case's output directory before updating its result. Grades stay unchanged.
 Usage and known spend include both checks. Save the flow before and after the
-recheck. This updates fidelity only.
+recheck.
 
 After the user approves an answer-key correction, put the saved case IDs to
 regrade in `regrade_ids` in the reviewed state. Then run the judge-only replay:
@@ -374,11 +376,13 @@ grading, and measured budget under `approvals.cases`, `approvals.grading`, and
 change the digest and require human review and approval again.
 
 A separately approved stale-entry diagnostic can run `--variant v1` with
-`--pilot-stage use`. Its reviewed state needs `approvals.stale_pilot` and exactly
+`--pilot-stage use`. Its reviewed state needs `approvals.use_pilot`, `approvals.stale_pilot`, and exactly
 three `stale_probe_ids`. Each selected use case needs `stale_entry` and
 `frozen_memory`, a directory under the flow containing exactly that one entry.
 Include every frozen memory file in `harness_paths`. Public tasks, historical
-letters and grading claims stay identical to the baseline. This diagnostic
+letters and grading claims stay identical to the baseline. Each selected probe
+needs a saved baseline reference under `baseline/ref/`; missing references are
+refused before any member run. This diagnostic
 measures harm from an old decision whose later override is available in the
 letters. It does not measure memory-writing quality or approve a full memory
 comparison. Other memory variants remain disabled pending approved thresholds
