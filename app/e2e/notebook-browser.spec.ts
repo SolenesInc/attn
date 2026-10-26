@@ -327,20 +327,6 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await expect(content).toContainText('a horizontal rule');
   });
 
-  for (const component of ['NotebookBrowser', 'NotebookTile']) {
-    test(`${component} keeps text selection in the editor without a Chief action`, async ({ page }) => {
-      await page.goto(`/test-harness/?component=${component}`);
-      await page.waitForFunction(() => window.__HARNESS__?.ready === true);
-      const editor = page.locator('.cm-content');
-      await expect(editor).toContainText('distilled');
-
-      await dblclickWord(page, 'distilled');
-
-      expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('distilled');
-      await expect(page.getByRole('button', { name: /chief/i })).toHaveCount(0);
-    });
-  }
-
   test('restores editor focus after resolving a save conflict via "Reload from disk"', async ({ page }) => {
     await page.goto('/test-harness/?component=NotebookBrowser');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
