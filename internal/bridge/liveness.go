@@ -17,6 +17,8 @@ const (
 	ReconnectInterval = 2 * time.Second
 )
 
+var errNoFrames = fmt.Errorf("no frame for %s", LostAfter)
+
 type State string
 
 const (
@@ -140,7 +142,7 @@ running:
 			stalled = true
 			c.publish(StateStalled)
 		case <-lost.C:
-			c.err = fmt.Errorf("bridge to %s lost: no frame for %s", c.peer.DaemonID, LostAfter)
+			c.err = fmt.Errorf("bridge to %s lost: %w", c.peer.DaemonID, errNoFrames)
 			break running
 		}
 	}

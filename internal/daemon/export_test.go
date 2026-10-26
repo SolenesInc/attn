@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -53,6 +54,12 @@ func (w *WireDaemon) RefuseDatabaseCommits() func() {
 
 func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
 	w.d.recentFileStat = stat
+}
+
+const BridgeCallRecovery = bridgeCallRecovery
+
+func (w *WireDaemon) UseBridgeDialer(dial func(ctx context.Context, network, address string) (net.Conn, error)) {
+	w.d.outposts.dial = dial
 }
 
 func UseShippedPasteGap(t testing.TB) {

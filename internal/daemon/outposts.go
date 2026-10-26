@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -22,12 +23,14 @@ type outpostDial struct {
 	build       string
 	lastError   string
 	lastErrorAt string
+	errorKind   string
 }
 
 type outpostsRuntime struct {
 	actions sync.Mutex
 	mu      sync.Mutex
 	dialers map[string]*outpostDial
+	dial    func(context.Context, string, string) (net.Conn, error)
 }
 
 func (d *Daemon) outpostsEnabled() bool {
@@ -71,7 +74,7 @@ func (d *Daemon) startOutpostDial(row store.Outpost) {
 		r.dialers = make(map[string]*outpostDial)
 	}
 	if previous := r.dialers[row.ID]; previous != nil {
-		run.build, run.lastError, run.lastErrorAt = previous.build, previous.lastError, previous.lastErrorAt
+		run.build, run.lastError, run.lastErrorAt, run.errorKind = previous.build, previous.lastError, previous.lastErrorAt, previous.errorKind
 	}
 	r.dialers[row.ID] = run
 	r.mu.Unlock()
@@ -93,7 +96,7 @@ func (d *Daemon) stopOutpostDial(id string) {
 	<-run.done
 }
 
-func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, build, detail string) {
+func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, build string, err error) {
 	r := &d.outposts
 	r.mu.Lock()
 	if r.dialers[id] != run {
@@ -109,12 +112,15 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 		changed = true
 	}
 	if state == bridge.StateConnected && run.lastError != "" {
-		run.lastError, run.lastErrorAt = "", ""
+		run.lastError, run.lastErrorAt, run.errorKind = "", "", ""
 		changed = true
 	}
-	if detail != "" && detail != run.lastError {
-		run.lastError, run.lastErrorAt = detail, time.Now().UTC().Format(time.RFC3339Nano)
-		changed = true
+	if err != nil {
+		run.lastError = err.Error()
+		if kind := bridge.ErrorKind(err); kind != run.errorKind {
+			run.errorKind, run.lastErrorAt = kind, time.Now().UTC().Format(time.RFC3339Nano)
+			changed = true
+		}
 	}
 	r.mu.Unlock()
 	if changed {
@@ -141,7 +147,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		if row.HostKey != "" {
 			pin = &bridge.Pin{HostKey: row.HostKey, DaemonID: row.DaemonID}
 		}
-		conn, seen, err := bridge.Dial(ctx, bridge.DialConfig{Address: row.Address, Pin: pin, Self: d.bridgeIdentity(), AgentSocket: os.Getenv("SSH_AUTH_SOCK"), Handlers: d.homeHandlers(row.ID), CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
+		conn, seen, err := bridge.Dial(ctx, bridge.DialConfig{Address: row.Address, Pin: pin, Self: d.bridgeIdentity(), AgentSocket: os.Getenv("SSH_AUTH_SOCK"), DialContext: d.outposts.dial, Handlers: d.homeHandlers(row.ID), CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
 		if ctx.Err() != nil {
 			if conn != nil {
 				_ = conn.Close()
@@ -172,7 +178,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 					build = refusal.Peer.Build.String()
 				}
 			}
-			d.updateOutpost(row.ID, run, state, build, err.Error())
+			d.updateOutpost(row.ID, run, state, build, err)
 			if !waitOutpostRetry(ctx, delay) {
 				return
 			}
@@ -202,11 +208,11 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 		if ctx.Err() != nil {
 			return
 		}
-		detail := ""
+		var err error
 		if state == bridge.StateLost {
-			detail = conn.Err().Error()
+			err = conn.Err()
 		}
-		d.updateOutpost(id, run, state, conn.Peer().Build.String(), detail)
+		d.updateOutpost(id, run, state, conn.Peer().Build.String(), err)
 	}
 }
 
