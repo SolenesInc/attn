@@ -204,7 +204,8 @@ before Claude writes that final tool call to the transcript, so the result's
 remain the grading evidence.
 
 For a separately approved use-only pilot, record the user's approval under
-`approvals.use_pilot` in the reviewed state. This stage selects every use case
+`approvals.use_pilot` and set `pilot_stage: "use"` in the reviewed state. A
+different stage, including the default `units`, is then refused. This stage selects every use case
 in the case pack, including controls, with one repetition. It runs no write or
 twelve-day case:
 

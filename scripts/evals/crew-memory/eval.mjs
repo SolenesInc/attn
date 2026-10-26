@@ -9,6 +9,8 @@ const sumUsage = values => Object.fromEntries(usageKeys.map(key => [key, values.
 
 export function loadCases(ctx) {
   const state = ctx.state;
+  if (state.pilot_stage && (!state.pilot || ctx.pilotStage !== state.pilot_stage))
+    throw failure('approval', `reviewed pilot_stage=${state.pilot_stage}; asked pilot=${state.pilot}, --pilot-stage=${ctx.pilotStage}; use the reviewed pilot stage`);
   const cases = json(state.cases_path);
   if (!Array.isArray(cases) || !cases.length) throw failure('fixture', 'cases_path must contain a nonempty JSON array');
   for (const input of cases) {
