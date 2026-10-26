@@ -10,14 +10,17 @@ import signal
 import socket
 import subprocess
 import tempfile
+import time
 import uuid
 
-parser = argparse.ArgumentParser(description="On a Linux box, run an outpost under the systemd user unit from docs/using-outposts.md and check that its shells survive systemctl --user restart and attn daemon stop followed by systemctl --user start.")
-parser.add_argument("--attn", required=True, type=Path, help="Linux attn binary, used for both daemons")
+parser = argparse.ArgumentParser(description="On a Linux box, run an outpost under the systemd user unit from docs/using-outposts.md and check that its shells survive systemctl --user restart, attn daemon stop followed by systemctl --user start, a daemon crash, and an update to another build.")
+parser.add_argument("--attn", required=True, type=Path, help="Linux attn binary both daemons start on")
+parser.add_argument("--update-to", required=True, type=Path, help="another Linux attn build, installed over the first while the shells run")
 parser.add_argument("--wsctl", required=True, type=Path, help="Linux build of scripts/wsctl")
 parser.add_argument("--doc", default=Path(__file__).resolve().parent.parent / "docs" / "using-outposts.md", type=Path)
 args = parser.parse_args()
 args.attn = args.attn.resolve()
+args.update_to = args.update_to.resolve()
 args.wsctl = args.wsctl.resolve()
 unit = "attn-verify-" + uuid.uuid4().hex[:8] + ".service"
 unit_path = Path.home() / ".config" / "systemd" / "user" / unit
@@ -79,11 +82,15 @@ def daemon_env(base, data, port):
     }
 
 
+def build_of(path):
+    return json.loads(run([path, "--build-info-json"]))["sourceFingerprint"]
+
+
 def start_plain_daemon(name, env):
     ready, signal_fd = os.pipe()
-    log = (root / f"{name}.stderr").open("w")
+    log = (root / f"{name}.stderr").open("a")
     logs.append(log)
-    daemon = subprocess.Popen([str(args.attn), "daemon"], env=env | {"ATTN_DAEMON_READY_FD": str(signal_fd)}, stdout=log, stderr=log, pass_fds=(signal_fd,))
+    daemon = subprocess.Popen([str(binary), "daemon"], env=env | {"ATTN_DAEMON_READY_FD": str(signal_fd)}, stdout=log, stderr=log, pass_fds=(signal_fd,))
     children.append(daemon)
     os.close(signal_fd)
     with os.fdopen(ready) as stream:
@@ -156,10 +163,48 @@ def await_reconnect(restart):
     say("home saw outpost", " → ".join(seen))
 
 
-def check(label, restart):
-    say("restart", label)
+def restarts():
+    return int(systemctl("show", "-p", "NRestarts", "--value", unit))
+
+
+def stop_and_start():
+    say("attn daemon stop", run([binary, "daemon", "stop"], outpost))
+    say("unit after stop", systemctl("is-active", unit, check=False))
+    systemctl("start", unit)
+
+
+def crash():
+    before = restarts()
+    await_reconnect(lambda: systemctl("kill", "--kill-whom=main", "--signal=SIGKILL", unit))
+    after = restarts()
+    say("systemd restarts", f"{before} → {after}")
+    if after != before + 1:
+        failures.append(f"crash: systemd restarted the daemon {after - before} times, expected 1")
+
+
+def update():
+    global home_daemon
+    home_daemon.terminate()
+    home_daemon.wait()
+    say("home", "stopped to update it with the outpost")
+    busy = subprocess.run(["cp", args.update_to, binary], text=True, capture_output=True)
+    say("cp over the running binary", busy.stderr.strip() or "succeeded")
+    if "Text file busy" not in busy.stderr:
+        failures.append(f"update: cp over the running binary did not fail with Text file busy: {busy.stderr.strip() or 'it succeeded'}")
+    run(["install", args.update_to, binary])
+    say("installed", build_of(binary))
+    systemctl("restart", unit)
+    home_daemon = start_plain_daemon("home", home)
+    row = json.loads(wsctl("outposts", "--until", "connected").splitlines()[-1])["outposts"][0]
+    say("home reconnected to outpost build", row["build"])
+    if build_of(args.update_to).removeprefix("git:") not in row["build"]:
+        failures.append(f"update: the outpost runs {row['build']}, expected {build_of(args.update_to)}")
+
+
+def check(label, transition):
+    say("case", label)
     before = {shell: cgroup(pids[shell]) for shell in pids}
-    await_reconnect(restart)
+    transition()
     rows = sessions()
     for shell, pid in pids.items():
         after = cgroup(pid)
@@ -198,8 +243,13 @@ with tempfile.TemporaryDirectory(prefix="attn-sdcheck-", dir="/tmp") as temporar
         run(["ssh-add", key], base)
         outpost = daemon_env(base, root / "outpost", free_port())
         bridge_address = f"127.0.0.1:{free_port()}"
+        binary = root / "bin" / "attn"
+        if build_of(args.attn) == build_of(args.update_to):
+            raise RuntimeError(f"--attn and --update-to are the same build: {build_of(args.attn)}")
+        run(["install", "-D", args.attn, binary])
+        say("installed", build_of(binary))
         configure = start_plain_daemon("outpost-configure", outpost)
-        say("outpost settings", run([args.attn, "settings", "set", "outpost_listen", bridge_address], outpost))
+        say("outpost settings", run([binary, "settings", "set", "outpost_listen", bridge_address], outpost))
         configure.terminate()
         configure.wait()
 
@@ -208,28 +258,18 @@ with tempfile.TemporaryDirectory(prefix="attn-sdcheck-", dir="/tmp") as temporar
         if documented_exec not in body:
             raise RuntimeError(f"documented unit no longer runs {documented_exec.strip()!r}:\n{body}")
         isolation = "".join(f"Environment={k}={v}\n" for k, v in outpost.items() if k.startswith("ATTN_"))
-        tested = body.replace(documented_exec, f"ExecStart={args.attn} daemon\n" + isolation)
+        tested = body.replace(documented_exec, f"ExecStart={binary} daemon\n" + isolation)
         unit_path.parent.mkdir(parents=True, exist_ok=True)
         unit_path.write_text(tested)
         unit_written = True
         say("documented unit", "\n" + body)
-        say(f"tested as {unit}", f"the documented unit with ExecStart pointing at {args.attn} and isolation Environment= lines for ATTN_* only")
+        say(f"tested as {unit}", f"the documented unit with ExecStart pointing at {binary} and isolation Environment= lines for ATTN_* only")
         systemctl("daemon-reload")
         systemctl("enable", "--now", unit)
 
-        home_web = listener()
-        home = daemon_env(base, root / "home", home_web.getsockname()[1]) | {"ATTN_HARNESS_WS_LISTENER_FD": str(home_web.fileno())}
-        ready, signal_fd = os.pipe()
-        log = (root / "home.stderr").open("w")
-        logs.append(log)
-        children.append(subprocess.Popen([str(args.attn), "daemon"], env=home | {"ATTN_DAEMON_READY_FD": str(signal_fd)}, stdout=log, stderr=log, pass_fds=(home_web.fileno(), signal_fd)))
-        os.close(signal_fd)
-        home_web.close()
-        with os.fdopen(ready) as stream:
-            if stream.readline().strip() != "ready":
-                raise RuntimeError("home was not ready: " + (root / "home.stderr").read_text())
-        home = {k: v for k, v in home.items() if k != "ATTN_HARNESS_WS_LISTENER_FD"}
-        say("home settings", run([args.attn, "settings", "set", "outposts_enabled", "true"], home))
+        home = daemon_env(base, root / "home", free_port())
+        home_daemon = start_plain_daemon("home", home)
+        say("home settings", run([binary, "settings", "set", "outposts_enabled", "true"], home))
         say("pair", wsctl("outposts", "--add", "sandbox", "--address", bridge_address, "--until", "connected").splitlines()[-1])
 
         workdir = root / "work"
@@ -245,20 +285,29 @@ with tempfile.TemporaryDirectory(prefix="attn-sdcheck-", dir="/tmp") as temporar
         for shell, pid in pids.items():
             say(f"{shell} terminal {terminals[shell]} pid {pid}", cgroup(pid))
 
-        check("systemctl --user restart", lambda: systemctl("restart", unit))
-        check("attn daemon stop, then systemctl --user start", lambda: (
-            say("attn daemon stop", run([args.attn, "daemon", "stop"], outpost)),
-            say("unit after stop", systemctl("is-active", unit, check=False)),
-            systemctl("start", unit),
-        ))
+        check("systemctl --user restart", lambda: await_reconnect(lambda: systemctl("restart", unit)))
+        check("attn daemon stop, then systemctl --user start", lambda: await_reconnect(stop_and_start))
+        check("daemon crash (SIGKILL to the main process)", crash)
+        check("update to another build with install, then systemctl --user restart", update)
+
         say("stop everything", f"systemctl --user kill {unit}")
         exits = {shell: pidfd_open(pid) for shell, pid in pids.items() if cgroup(pid) != "gone"}
+        journal = subprocess.Popen(["journalctl", "--user", "-u", unit, "-f", "-o", "cat", "--since", f"@{time.time():.6f}"], stdout=subprocess.PIPE, text=True)
+        children.append(journal)
         systemctl("kill", unit)
         with Deadline(30, "the shells exiting after systemctl --user kill"):
             for shell, pidfd in exits.items():
                 select.select([pidfd], [], [])
                 os.close(pidfd)
                 say(f"{shell} pid {pids[shell]}", "exited")
+        with Deadline(30, "systemd recording how the unit ended"):
+            for line in journal.stdout:
+                if "Deactivated successfully" in line or "Failed with result" in line or "Scheduled restart job" in line:
+                    say("systemd", line.strip())
+                    if "Deactivated successfully" not in line:
+                        failures.append(f"systemctl --user kill: {line.strip()}")
+                    break
+        say("unit after kill", systemctl("is-active", unit, check=False))
     finally:
         cleanup = []
         if unit_written:
@@ -279,4 +328,4 @@ with tempfile.TemporaryDirectory(prefix="attn-sdcheck-", dir="/tmp") as temporar
 if failures:
     print("FAIL\n" + "\n".join(failures))
     raise SystemExit(1)
-print("PASS: both shells kept their pids, screens and state through both restarts, and systemctl --user kill ended them")
+print("PASS: both shells kept their pids, screens and state through every case, and systemctl --user kill ended them without a restart")

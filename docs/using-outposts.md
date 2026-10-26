@@ -36,6 +36,7 @@ On the outpost:
 
    [Service]
    ExecStart=%h/.local/bin/attn daemon
+   Restart=on-failure
    KillMode=process
 
    [Install]
@@ -48,9 +49,10 @@ On the outpost:
    ```
 
    `KillMode=process` keeps your shells running when the daemon stops or
-   restarts. Without it, systemd ends every shell along with the daemon. To
-   stop the daemon and its shells together, run
-   `systemctl --user kill attn.service`.
+   restarts. Without it, systemd ends every shell along with the daemon.
+   `Restart=on-failure` starts the daemon again after a crash, and it picks
+   up the shells that kept running. To stop the daemon and its shells
+   together, run `systemctl --user kill attn.service`.
 
 2. Add the public key your home's ssh-agent holds (`ssh-add -L` on the Mac) to
    `~/.ssh/authorized_keys`. attn skips lines with options such as
@@ -185,5 +187,6 @@ them, freezes the outpost and checks that it goes stalled, lost and back to
 connected. `scripts/verify-outpost-systemd.py` runs on a Linux box with
 systemd. It starts the outpost under the unit from this page and checks that
 two shells keep their process, screen and state through
-`systemctl --user restart` and through `attn daemon stop` followed by
-`systemctl --user start`. Run either with `--help` for its arguments.
+`systemctl --user restart`, `attn daemon stop` followed by
+`systemctl --user start`, a daemon crash, and an update to another build.
+Run either with `--help` for its arguments.
