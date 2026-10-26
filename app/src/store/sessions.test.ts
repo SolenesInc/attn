@@ -53,8 +53,7 @@ describe('sessions store', () => {
     useSessionStore.setState({
       sessions: [],
       connected: false,
-      launcherConfig: { executables: {} },
-      desktopSnapshots: {},
+        desktopSnapshots: {},
       desktopIdBySessionId: {},
     });
   });
@@ -409,11 +408,8 @@ describe('sessions store', () => {
     expect(useSessionStore.getState().sessions).toEqual([]);
   });
 
-  it('takeSessionSpawnArgs applies launcher overrides', async () => {
+  it('takeSessionSpawnArgs leaves executable selection to the machine', async () => {
     const sessionId = await useSessionStore.getState().createSession('Spawn Test', '/tmp/project', 'sess-spawn', 'claude', true);
-    useSessionStore.getState().setLauncherConfig({
-      executables: { claude: '/opt/bin/claude-custom' },
-    });
 
     const first = useSessionStore.getState().takeSessionSpawnArgs(sessionId, 120, 40);
 
@@ -424,11 +420,12 @@ describe('sessions store', () => {
       cols: 120,
       rows: 40,
       agent: 'claude',
-      executable: '/opt/bin/claude-custom',
-      claude_executable: '/opt/bin/claude-custom',
       resume_session_id: null,
       yolo_mode: true,
     });
+    expect(first).not.toHaveProperty('executable');
+    expect(first).not.toHaveProperty('claude_executable');
+    expect(first).not.toHaveProperty('codex_executable');
   });
 
   it('syncFromArrangement gives each session the desktop it is placed on and that desktop\'s active pane', async () => {

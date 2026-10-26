@@ -459,6 +459,11 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	if err != nil {
 		return nil, err
 	}
+	if agentdriver.Get(agent) != nil {
+		if err := d.requireCatalogAgent("", agent, ""); err != nil {
+			return nil, err
+		}
+	}
 	model := strings.TrimSpace(protocol.Deref(msg.Model))
 	effort := strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Effort)))
 	if err := d.validateHarnessModelEffort(agent, model, effort); err != nil {

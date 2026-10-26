@@ -388,7 +388,16 @@ func (m *Monitor) finishUsage() (func(), *usageTracker) {
 	if watcher != nil {
 		tracker = watcher.usageTracker
 	}
-	return func() { m.mu.Lock(); m.usageDraining = false; m.mu.Unlock() }, tracker
+	return m.ResumeUsage, tracker
+}
+
+func (m *Monitor) ResumeUsage() {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.usageDraining = false
+	m.mu.Unlock()
 }
 
 func (m *Monitor) AssistantWindow(agent protocol.SessionAgent) (AssistantWindow, bool) {

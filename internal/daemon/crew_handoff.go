@@ -138,7 +138,10 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 		return nil, fmt.Errorf("prepare %s's day to close: %w", crew.DisplayName(member.ID), err)
 	}
 	if d.crewDayEndsHere(close, time.Now()) {
-		d.closeNappedSession(sessionID, teardown)
+		if err := d.closeNappedSession(sessionID, teardown); err != nil {
+			d.cancelSessionTeardown(sessionID, teardown)
+			return nil, err
+		}
 		d.logf("crew: %s went to sleep — session %s ended and nobody was woken behind it", crew.DisplayName(member.ID), sessionID)
 		result.Outcome = protocol.Ptr(protocol.CrewDayCloseSleep)
 		return result, nil
@@ -262,7 +265,9 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID protocol.SessionID, te
 		return "", fmt.Errorf("wake %s's successor: %w", crew.DisplayName(member.ID), rejection.reason())
 	}
 
-	d.closeNappedSession(oldSessionID, teardown)
+	if err := d.closeNappedSession(oldSessionID, teardown); err != nil {
+		return newSessionID, fmt.Errorf("successor %s is running, but session %s could not close: %w", newSessionID, oldSessionID, err)
+	}
 	committed = true
 	d.announceBackgroundLaunch("crew", member.ID, newSessionID, crew.DisplayName(member.ID)+" handoff")
 	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
@@ -339,13 +344,16 @@ func (d *Daemon) crewSessionGeometry(sessionID protocol.SessionID) (int, int) {
 	return cols, rows
 }
 
-func (d *Daemon) closeNappedSession(sessionID protocol.SessionID, teardown *sessionTeardown) {
-	d.commitSessionUnregister(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"})
+func (d *Daemon) closeNappedSession(sessionID protocol.SessionID, teardown *sessionTeardown) error {
+	if err := d.commitSessionUnregister(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"}); err != nil {
+		return err
+	}
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
 		d.publishFact(FactSessionTerminated, string(teardown.session.ID), nil)
 	}
 	d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
+	return nil
 }
 
 func (d *Daemon) handleCrewHandoff(conn net.Conn, msg *protocol.CrewHandoffMessage) {

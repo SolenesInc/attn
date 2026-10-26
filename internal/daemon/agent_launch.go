@@ -5,38 +5,27 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, terminal harness.TerminalID, isChief bool, opts *ptybackend.SpawnOptions, initialPrompt string) error {
+func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *AgentLaunch) error {
+	terminal := opts.ID
 	driver := agentdriver.Get(opts.Agent)
 	if driver == nil {
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
-	if !parseBooleanSetting(d.homeSetting(SettingDirectAgentLaunchEnabled)) {
-		_, bound := d.crewMemberForSession(sessionID)
-		memoryEnabled := bound && d.crewMemoryEnabled()
-		if memoryEnabled {
-			if _, _, err := d.prepareLaunchContext(sessionID, isChief, false); err != nil {
-				return err
-			}
-		}
+	launch, awareness, initialPrompt := intent.Context, intent.AwarenessDirs, intent.InitialPrompt
+	if !intent.Direct {
 		prepareLauncherLaunch(driver, opts, initialPrompt)
-		if memoryEnabled {
+		if launch.CrewMemoryEnabled {
 			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMORY_ENABLED=1")
 		}
-		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", parseBooleanSetting(d.homeSetting(SettingQuickCaptureEnabled))))
-		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_VENT_ENABLED=%t", d.launchedWithVent(sessionID)))
+		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", launch.QuickCapture), fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent))
 		return nil
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
-	launch, awareness, err := d.prepareLaunchContext(sessionID, isChief && caps.HasLaunchInstructions, !caps.HasHooks)
-	if err != nil {
-		return err
-	}
 	executable := configuredLaunchExecutable(driver, opts)
 	explicitExecutable := executable
 	if executable == "" {

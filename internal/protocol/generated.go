@@ -51,6 +51,22 @@ type AddOutpostMessage struct {
 	Name string `json:"name"`
 }
 
+type AgentCatalogMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+}
+
+type AgentCatalogResult struct {
+	// Harnesses corresponds to the JSON schema field "harnesses".
+	Harnesses []Harness `json:"harnesses"`
+
+	// Machine corresponds to the JSON schema field "machine".
+	Machine string `json:"machine"`
+}
+
 type AgentCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -152,6 +168,43 @@ type AgentInboxMessage struct {
 
 	// RecipientSessionID corresponds to the JSON schema field "recipient_session_id".
 	RecipientSessionID SessionID `json:"recipient_session_id"`
+}
+
+type AgentLaunchCloseMessage struct {
+	// Archive corresponds to the JSON schema field "archive".
+	Archive *bool `json:"archive,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Conversation corresponds to the JSON schema field "conversation".
+	Conversation *string `json:"conversation,omitempty,omitzero"`
+
+	// Driver corresponds to the JSON schema field "driver".
+	Driver *string `json:"driver,omitempty,omitzero"`
+
+	// Phase corresponds to the JSON schema field "phase".
+	Phase interface{} `json:"phase"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile *string `json:"profile,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Signal corresponds to the JSON schema field "signal".
+	Signal *string `json:"signal,omitempty,omitzero"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID *TerminalID `json:"terminal_id,omitempty,omitzero"`
+}
+
+type AgentLaunchCloseResult struct {
+	// Driver corresponds to the JSON schema field "driver".
+	Driver *string `json:"driver,omitempty,omitzero"`
+
+	// View corresponds to the JSON schema field "view".
+	View *string `json:"view,omitempty,omitzero"`
 }
 
 type AgentMessageState string
@@ -2380,6 +2433,37 @@ type CommandUsage struct {
 
 	// Score corresponds to the JSON schema field "score".
 	Score float64 `json:"score"`
+}
+
+type ConversationReadinessMessage struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Conversation corresponds to the JSON schema field "conversation".
+	Conversation string `json:"conversation"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+
+	// Link corresponds to the JSON schema field "link".
+	Link string `json:"link"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile string `json:"profile"`
+
+	// Restore corresponds to the JSON schema field "restore".
+	Restore bool `json:"restore"`
+}
+
+type ConversationReadinessResult struct {
+	// Known corresponds to the JSON schema field "known".
+	Known bool `json:"known"`
+
+	// Ready corresponds to the JSON schema field "ready".
+	Ready bool `json:"ready"`
 }
 
 type CopyRow struct {
@@ -6060,6 +6144,17 @@ type KittyPlacementsMessage struct {
 
 	// Seq corresponds to the JSON schema field "seq".
 	Seq int `json:"seq"`
+}
+
+type LaunchCommittedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Committed corresponds to the JSON schema field "committed".
+	Committed bool `json:"committed"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
 }
 
 type LaunchDesktopGetMessage struct {
@@ -12550,6 +12645,9 @@ type TerminalRemoveMessage struct {
 }
 
 type TerminalRestartMessage struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent *string `json:"agent,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -12587,6 +12685,9 @@ type TerminalShellResult struct {
 }
 
 type TerminalStartMessage struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent *string `json:"agent,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 

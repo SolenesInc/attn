@@ -135,3 +135,17 @@ func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecor
 	}
 	return records
 }
+
+func (s *Store) HasSessionRuntime(id protocol.SessionID) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		_, ok := s.runtimeRecords[id]
+		return ok
+	}
+	var exists bool
+	if err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM session_runtime WHERE session_id = ?)`, id).Scan(&exists); err != nil {
+		log.Printf("[store] session %s runtime existence: %v", id, err)
+	}
+	return exists
+}

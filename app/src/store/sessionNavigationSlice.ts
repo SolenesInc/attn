@@ -33,7 +33,6 @@ import {
 import type { LeafRef } from '../navigation/leafHistory';
 import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import { recordAppAction, type AppActionProps } from '../analytics/appActions';
-import { getAgentExecutableSettings } from '../utils/agentAvailability';
 import { usePendingTerminalInput } from './pendingTerminalInput';
 
 export interface SessionNavigationActions {
@@ -171,7 +170,6 @@ export function createSessionNavigationActions(
       set((state) =>
         reconcileSessionNavigation(state, {
           navigationSettings: settings,
-          launcherConfig: { executables: getAgentExecutableSettings(settings) },
         }),
       ),
   };

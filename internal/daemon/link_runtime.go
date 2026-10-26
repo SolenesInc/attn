@@ -27,7 +27,6 @@ type linkRuntime interface {
 	runsLink(t harness.TerminalID) bool
 
 	renamed(sessionID protocol.SessionID, label string)
-	closing(sessionID protocol.SessionID) (afterClose func())
 	profileReleased(profile string)
 	setAsideAtClose(sessionID protocol.SessionID, conversation string) bool
 	restore(profile, conversation string) error
