@@ -3,6 +3,7 @@ package outpostbuild
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/victorarias/attn/internal/bridge"
 )
@@ -36,7 +38,8 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (string, erro
 			return "", err
 		}
 	}
-	key := fmt.Sprintf("%x", sha256.Sum256([]byte(req.Build.SourceFingerprint)))
+	identity, _ := json.Marshal(req.Build)
+	key := fmt.Sprintf("%x", sha256.Sum256(identity))
 	dir := filepath.Join(req.Cache, key, arch)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", err
@@ -132,6 +135,8 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (string, erro
 
 func command(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.Dir = dir
 	output, err := cmd.CombinedOutput()
 	if err != nil {

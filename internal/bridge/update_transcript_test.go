@@ -18,11 +18,13 @@ const frozenUpdateHello = `{"bridge":1,"daemon_id":"d-aaaaaaaaaaaaaaaaaaaaaaaaaa
 const frozenUpdateHeader = `{"update":1,"build":{"version":"next","source_fingerprint":"git:next","protocol_version":"next"},"platform":"linux/amd64","size":5,"sha256":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824","encoding":"zstd"}`
 
 func TestOutpostUpdateFrozenTranscript(t *testing.T) {
-	for _, wrongPlatform := range []bool{false, true} {
-		t.Run(fmt.Sprintf("wrong-platform=%v", wrongPlatform), func(t *testing.T) {
+	for _, mode := range []string{"install", "wrong-platform", "disconnect"} {
+		t.Run(mode, func(t *testing.T) {
+			wrongPlatform := mode == "wrong-platform"
+			cancelled := make(chan struct{}, 1)
 			w := pair(t)
 			restarted := make(chan struct{}, 1)
-			w.cfg.Update = &bridge.UpdateServer{Target: bridge.UpdateTarget{Platform: "linux/amd64", Executable: "/home/user/.local/bin/attn"}, Receive: func(_ context.Context, header bridge.UpdateHeader, compressed io.Reader, verifying func()) error {
+			w.cfg.Update = &bridge.UpdateServer{Target: bridge.UpdateTarget{Platform: "linux/amd64", Executable: "/home/user/.local/bin/attn"}, Receive: func(ctx context.Context, header bridge.UpdateHeader, compressed io.Reader, verifying func()) error {
 				raw, _ := json.Marshal(header)
 				if string(raw) != frozenUpdateHeader {
 					return fmt.Errorf("header changed: %s", raw)
@@ -40,6 +42,11 @@ func TestOutpostUpdateFrozenTranscript(t *testing.T) {
 					return fmt.Errorf("payload changed: %q", data)
 				}
 				verifying()
+				if mode == "disconnect" {
+					<-ctx.Done()
+					cancelled <- struct{}{}
+					return ctx.Err()
+				}
 				return nil
 			}, Restart: func() { restarted <- struct{}{} }}
 			w.start()
@@ -116,6 +123,11 @@ func TestOutpostUpdateFrozenTranscript(t *testing.T) {
 			}
 			if reply.Status != "verifying" {
 				t.Fatalf("verification reply changed: %+v", reply)
+			}
+			if mode == "disconnect" {
+				_ = client.Close()
+				<-cancelled
+				return
 			}
 			if err := decoder.Decode(&reply); err != nil {
 				t.Fatal(err)

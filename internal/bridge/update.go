@@ -127,6 +127,10 @@ func (c *UpdateConn) Send(ctx context.Context, build Build, path string, phase f
 }
 
 func serveUpdate(ctx context.Context, transport ssh.Conn, channels <-chan ssh.NewChannel, home Build, server *UpdateServer, activity *updateActivityConn) error {
+	ctx, cancel := context.WithCancel(ctx)
+	closed := make(chan struct{})
+	go func() { _ = transport.Wait(); cancel(); close(closed) }()
+	defer func() { _ = transport.Close(); <-closed; cancel() }()
 	for incoming := range channels {
 		if incoming.ChannelType() != "attn-update" {
 			_ = incoming.Reject(ssh.UnknownChannelType, "update-mode connection accepts only attn-update")

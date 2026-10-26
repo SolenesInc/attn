@@ -131,12 +131,18 @@ func (d *Daemon) installOutpostBuild(ctx context.Context, header bridge.UpdateHe
 	if _, err := probe("--check-schema", config.DBPath()); err != nil {
 		return err
 	}
-	previous := filepath.Join(filepath.Dir(executable), "attn.previous")
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	previous := executable + ".previous"
 	if err := os.Remove(previous); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	if err := os.Link(executable, previous); err != nil {
 		return fmt.Errorf("keep previous binary: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if err := os.Rename(staged.Name(), executable); err != nil {
 		return fmt.Errorf("replace outpost binary: %w", err)

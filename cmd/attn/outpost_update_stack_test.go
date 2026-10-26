@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -100,17 +101,18 @@ func TestOutpostUpdateReturnsOnHomeBuildAndKeepsShell(t *testing.T) {
 			remote.RunFrom(old)
 			home.RunFrom(old)
 			remote.SuperviseUpdates()
-			asset := ""
+			var asset atomic.Value
+			type releaseAsset struct{ path, binary string }
+			asset.Store(releaseAsset{})
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path != "/vafter-update/attn-linux-"+runtime.GOARCH {
+				selected := asset.Load().(releaseAsset)
+				if r.URL.Path != selected.path {
 					http.NotFound(w, r)
 					return
 				}
-				http.ServeFile(w, r, asset)
+				http.ServeFile(w, r, selected.binary)
 			}))
 			defer server.Close()
-			next := testworld.AttnUpdateBinary(t, "after-update", channel, server.URL)
-			asset = next
 			for _, s := range []*testworld.Stack{remote, home} {
 				a.Authorize(s.World)
 				s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -129,35 +131,61 @@ func TestOutpostUpdateReturnsOnHomeBuildAndKeepsShell(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			home.Stop()
-			home.RunFrom(next)
-			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+next)
-			home.Start()
-			app = home.App()
-			outpostStateOnConnect(app, "outpost", protocol.OutpostStateRefused)
-			app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
-			var done protocol.OutpostInfo
-			testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-				for _, row := range m.Outposts {
-					if row.ID == host && row.Update != nil && (row.Update.Phase == protocol.OutpostUpdatePhaseDone || row.Update.Phase == protocol.OutpostUpdatePhaseFailed) {
-						done = row
-						return true
+			otherRollback := filepath.Join(remote.Dir, "bin", "attn.previous")
+			if err := os.WriteFile(otherRollback, []byte("another install's rollback"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			previousBinary := old
+			versions := []string{"after-update"}
+			if channel == "release" {
+				versions = append(versions, "after-update-next")
+			}
+			for _, version := range versions {
+				next := testworld.AttnUpdateBinary(t, version, channel, server.URL)
+				asset.Store(releaseAsset{path: "/v" + version + "/attn-linux-" + runtime.GOARCH, binary: next})
+				home.Stop()
+				home.RunFrom(next)
+				home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+next)
+				home.Start()
+				app = home.App()
+				outpostStateOnConnect(app, "outpost", protocol.OutpostStateRefused)
+				app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
+				var done protocol.OutpostInfo
+				testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+					for _, row := range m.Outposts {
+						if row.ID == host && row.Update != nil && (row.Update.Phase == protocol.OutpostUpdatePhaseDone || row.Update.Phase == protocol.OutpostUpdatePhaseFailed) {
+							done = row
+							return true
+						}
 					}
+					return false
+				})
+				if done.Update.Phase != protocol.OutpostUpdatePhaseDone || done.State != protocol.OutpostStateConnected || !strings.Contains(protocol.Deref(done.Build), version) {
+					t.Fatalf("update outcome: %+v, update=%+v", done, done.Update)
 				}
-				return false
-			})
-			if done.Update.Phase != protocol.OutpostUpdatePhaseDone || done.State != protocol.OutpostStateConnected || !strings.Contains(protocol.Deref(done.Build), "after-update") {
-				t.Fatalf("update outcome: %+v, update=%+v", done, done.Update)
+				retained, err := os.ReadFile(otherRollback)
+				if err != nil || string(retained) != "another install's rollback" {
+					t.Fatalf("update changed another install's rollback: %q, %v", retained, err)
+				}
+				previous, err := os.ReadFile(filepath.Join(remote.Dir, "bin", "attn-daemon.previous"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantPrevious, err := os.ReadFile(previousBinary)
+				if err != nil || sha256.Sum256(previous) != sha256.Sum256(wantPrevious) {
+					t.Fatalf("previous binary was not retained: %v", err)
+				}
+				previousBinary = next
+				app.AwaitScreen(shell, "survived-2")
+				app.TypeLine(shell, "echo $$ > "+pidPath+"; echo still-$((2+2))")
+				app.AwaitScreen(shell, "still-4")
+				after, err := os.ReadFile(pidPath)
+				if err != nil || string(before) != string(after) {
+					t.Fatalf("shell PID changed: %s -> %s (%v)", before, after, err)
+				}
+				testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+				t.Logf("%s update: connected on %s; shell pid=%s, screen and idle state survived", channel, protocol.Deref(done.Build), strings.TrimSpace(string(after)))
 			}
-			app.AwaitScreen(shell, "survived-2")
-			app.TypeLine(shell, "echo $$ > "+pidPath+"; echo still-$((2+2))")
-			app.AwaitScreen(shell, "still-4")
-			after, err := os.ReadFile(pidPath)
-			if err != nil || string(before) != string(after) {
-				t.Fatalf("shell PID changed: %s -> %s (%v)", before, after, err)
-			}
-			testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-			t.Logf("%s update: connected on %s; shell pid=%s, screen and idle state survived", channel, protocol.Deref(done.Build), strings.TrimSpace(string(after)))
 		})
 	}
 }
