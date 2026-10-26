@@ -62,6 +62,10 @@ func (w *WireDaemon) UseBridgeDialer(dial func(ctx context.Context, network, add
 	w.d.outposts.dial = dial
 }
 
+func (w *WireDaemon) UseBridgeListener(listen func(string, string) (net.Listener, error)) {
+	w.d.outpost.listen = listen
+}
+
 func UseShippedPasteGap(t testing.TB) {
 	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay
 	t.Cleanup(func() { sessionmonitor.SubmitDelay = 0 })
