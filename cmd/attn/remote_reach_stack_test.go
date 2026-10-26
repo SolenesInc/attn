@@ -85,6 +85,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	remote.Signal(syscall.SIGCONT)
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\x15"})
 	app.TypeLine(id, "echo after-stall-$((4+4))")
 	app.AwaitScreen(id, "after-stall-8")
 	if strings.Contains(string(app.Screen(id)), "stalled-7") {
