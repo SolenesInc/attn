@@ -1,0 +1,4 @@
+kind: fixed
+area: codex
+symptom: A Codex tile showed needs approval for minutes while the agent kept working.
+change: A Codex permission request that auto-review handles no longer shows needs approval. When Codex reports its status, the tile shows needs approval once Codex shows the prompt to you.

@@ -153,6 +153,24 @@ func TestAnApprovalTheReviewerSettlesInsideTheDwellNeverReachesTheApp(t *testing
 	})
 }
 
+func TestAnApprovalTheReviewerClearsStaysWorkingWhileCodexReportsWorking(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		codex := guardedCodexAtWork(t, w, app, cli)
+		w.terminal(codex).ProgramStatus(pty.ProgramWorking)
+		w.advance(time.Second)
+
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal(codex)), protocol.StatePendingApproval); err != nil {
+			t.Fatalf("permission request: %v", err)
+		}
+		w.advance(5 * time.Minute)
+		if s := queriedSession(t, cli, codex); s.State != protocol.SessionStateWorking {
+			t.Fatalf("five minutes after a permission request Codex never showed the user, the session is %s (%s), want working",
+				s.State, protocol.Deref(s.StateReason))
+		}
+	})
+}
+
 func TestWhatCodexShowsTheUserSurfacesAtOnceDespiteItsReviewer(t *testing.T) {
 	for _, claim := range []string{pty.ProgramBlocked, pty.ProgramBlockedQuestion, pty.ProgramBlockedAuth, pty.ProgramBlockedPermission} {
 		t.Run(claim, func(t *testing.T) {
