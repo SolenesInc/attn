@@ -102,13 +102,7 @@ impl ChildReaper {
             .lock()
             .expect("child reaper mutex poisoned")
             .insert(session.child_pid, Arc::downgrade(session));
-        let wake_result = unsafe { libc::kill(libc::getpid(), libc::SIGCHLD) };
-        if wake_result != 0 {
-            eprintln!(
-                "PTY host child reaper wake failed: {}",
-                std::io::Error::last_os_error()
-            );
-        }
+        wake_child_reaper();
     }
 }
 
@@ -249,6 +243,7 @@ pub struct Session {
     delivery: DeliveryGate,
     lifecycle: Mutex<Lifecycle>,
     lifecycle_changed: Condvar,
+    reader_finished: AtomicBool,
     signal_order: Mutex<()>,
     subscribers: Mutex<HashMap<String, Subscriber>>,
     watchers: Mutex<HashMap<String, SyncSender<Value>>>,
@@ -417,6 +412,7 @@ impl Session {
             delivery: DeliveryGate::new(),
             lifecycle: Mutex::new(parts.lifecycle),
             lifecycle_changed: Condvar::new(),
+            reader_finished: AtomicBool::new(false),
             signal_order: Mutex::new(()),
             subscribers: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
@@ -1362,13 +1358,25 @@ fn start_reader(session: Arc<Session>, mut reader: File) -> Result<(), String> {
         .stack_size(READER_STACK_BYTES)
         .spawn(move || {
             session.read_until_closed(&mut reader);
+            drop(reader);
+            session.reader_finished.store(true, Ordering::Release);
             session.quiesce.leave();
+            wake_child_reaper();
         })
         .map(|_| ())
         .map_err(|error| {
             quiesce.leave();
             format!("start PTY reader: {error}")
         })
+}
+
+fn wake_child_reaper() {
+    if unsafe { libc::kill(libc::getpid(), libc::SIGCHLD) } != 0 {
+        eprintln!(
+            "PTY host child reaper wake failed: {}",
+            std::io::Error::last_os_error()
+        );
+    }
 }
 
 fn reap_children(shared: &ChildReaperShared) {
@@ -1389,14 +1397,20 @@ fn reap_children(shared: &ChildReaperShared) {
 }
 
 fn reap_registered_children(shared: &ChildReaperShared) {
-    let pids = shared
+    let sessions = shared
         .sessions
         .lock()
         .expect("child reaper mutex poisoned")
-        .keys()
-        .copied()
+        .iter()
+        .map(|(pid, session)| (*pid, session.upgrade()))
         .collect::<Vec<_>>();
-    for pid in pids {
+    for (pid, session) in sessions {
+        if session
+            .as_ref()
+            .is_some_and(|session| !session.reader_finished.load(Ordering::Acquire))
+        {
+            continue;
+        }
         let mut status = 0;
         loop {
             let result = unsafe { libc::waitpid(pid, &raw mut status, libc::WNOHANG) };
