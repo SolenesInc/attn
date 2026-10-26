@@ -16,21 +16,28 @@ const (
 	cliErrorNoReply        = "no_reply"
 )
 
-func (d *Daemon) recordAnalytics(stream analytics.Stream, name string, props map[string]any) {
+func (d *Daemon) recordAnalytics(stream analytics.Stream, name, subject string, props map[string]any) {
 	if !d.analyticsEnabled() {
 		return
 	}
-	if err := d.appendAnalytics(stream, name, props); err != nil {
+	if err := d.appendAnalytics(stream, name, subject, props); err != nil {
 		d.logf("analytics: %v", err)
 	}
 }
 
-func (d *Daemon) appendAnalytics(stream analytics.Stream, name string, props any) error {
+func (d *Daemon) appendAnalytics(stream analytics.Stream, name, subject string, props any) error {
 	encoded, err := json.Marshal(props)
 	if err != nil {
 		return fmt.Errorf("encode %s/%s props: %w", stream, name, err)
 	}
 	record := analytics.Record{Stream: stream, Name: name, At: time.Now().UTC(), Props: analytics.Redact(encoded, analyticsSafeValues(stream, name))}
+	if subject != "" {
+		secret, err := ensureAnalyticsSecret(d.dataRoot)
+		if err != nil {
+			return err
+		}
+		record.Subject = analytics.HashSubject(secret, subject)
+	}
 	if err := d.store.AppendAnalyticsStreamRecord(record); err != nil {
 		return fmt.Errorf("record %s/%s: %w", stream, name, err)
 	}
@@ -55,29 +62,30 @@ func (d *Daemon) handleRecordAnalytics(msg *protocol.RecordAnalyticsMessage, cal
 		return
 	}
 	props := map[string]any(msg.Props)
+	var sessionID protocol.SessionID
 	if stream == analytics.StreamCLI {
-		props = d.withAnalyticsCaller(props, caller)
+		props, sessionID = d.withAnalyticsCaller(props, caller)
 	}
-	d.recordAnalytics(stream, msg.Name, props)
+	d.recordAnalytics(stream, msg.Name, string(sessionID), props)
 }
 
-func (d *Daemon) withAnalyticsCaller(props map[string]any, terminal protocol.TerminalID) map[string]any {
+func (d *Daemon) withAnalyticsCaller(props map[string]any, terminal protocol.TerminalID) (map[string]any, protocol.SessionID) {
 	if props == nil {
 		props = map[string]any{}
 	}
 	props["caller"] = "human"
 	if terminal == "" {
-		return props
+		return props, ""
 	}
 	sessionID := d.sessionInTerminal(terminal)
 	if sessionID == "" {
-		return props
+		return props, ""
 	}
 	props["caller"] = "agent"
 	if session := d.store.Get(sessionID); session != nil {
 		props["harness"] = session.Agent
 	}
-	return props
+	return props, sessionID
 }
 
 type analyticsReplyConn struct {
@@ -112,30 +120,30 @@ func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
 }
 
 func (d *Daemon) recordingCLICommand(conn net.Conn, frame []byte, parseErr error) (*analyticsReplyConn, func()) {
+	cmd, caller := socketFrameCaller(frame)
+	props, sessionID := d.withAnalyticsCaller(nil, caller)
+	record := func(errorKind string) {
+		props["ok"] = errorKind == ""
+		if errorKind != "" {
+			props["error_kind"] = errorKind
+		}
+		d.recordAnalytics(analytics.StreamCLI, cmd, string(sessionID), props)
+	}
 	reply := &analyticsReplyConn{Conn: conn}
 	reply.answered = func(failed bool) {
 		switch {
 		case parseErr != nil:
-			d.recordCLICommand(frame, cliErrorUnknownCommand)
+			record(cliErrorUnknownCommand)
 		case failed:
-			d.recordCLICommand(frame, cliErrorRefused)
+			record(cliErrorRefused)
 		default:
-			d.recordCLICommand(frame, "")
+			record("")
 		}
 	}
 	unanswered := func() {
 		if !reply.replied {
-			d.recordCLICommand(frame, cliErrorNoReply)
+			record(cliErrorNoReply)
 		}
 	}
 	return reply, unanswered
-}
-
-func (d *Daemon) recordCLICommand(frame []byte, errorKind string) {
-	cmd, caller := socketFrameCaller(frame)
-	props := map[string]any{"ok": errorKind == ""}
-	if errorKind != "" {
-		props["error_kind"] = errorKind
-	}
-	d.recordAnalytics(analytics.StreamCLI, cmd, d.withAnalyticsCaller(props, caller))
 }

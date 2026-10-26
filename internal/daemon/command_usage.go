@@ -48,7 +48,7 @@ func (d *Daemon) handleRecordCommandUsage(client *wsClient, msg *protocol.Record
 		err = d.store.RecordCommandUsage(msg.ProfileID, msg.CommandID)
 	}
 	if err == nil {
-		d.recordAnalytics(analytics.StreamApp, "palette_command", map[string]any{"id": msg.CommandID})
+		d.recordAnalytics(analytics.StreamApp, "palette_command", "", map[string]any{"id": msg.CommandID})
 	}
 	result.Success = err == nil
 	if err != nil {

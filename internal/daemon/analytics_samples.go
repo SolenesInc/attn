@@ -39,5 +39,5 @@ func (d *Daemon) analyticsSampleHandler(_ context.Context, _ *jobs.Job) (any, er
 	if head > 0 {
 		sample.BusRetainedFacts = head - earliest + 1
 	}
-	return nil, d.appendAnalytics(analytics.StreamSample, "process", sample)
+	return nil, d.appendAnalytics(analytics.StreamSample, "process", "", sample)
 }

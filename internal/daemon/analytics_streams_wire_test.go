@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,6 +85,52 @@ func TestSocketCommandOutcomesReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("cli records, newest first:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
+}
+
+func TestCLIRecordsCarryTheSameHashedSubjectAsSessionFacts(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setAnalyticsEnabled(app, "true")
+		agent := w.bubbleClaude(t, app, "shop")
+		synctest.Wait()
+
+		var subject string
+		for _, record := range mirroredRecords(t, app, "session.state.changed") {
+			subject = record.Subject
+		}
+		if !strings.HasPrefix(subject, "h:") {
+			t.Fatalf("session facts carry subject %q, want a hashed session", subject)
+		}
+
+		for _, command := range []struct{ name, frame string }{
+			{"query", `{"cmd":"query"`},
+			{"no_such_command", `{"cmd":"no_such_command"`},
+			{"parse_error", `{"cmd":"record_analytics","stream":"cli","name":"parse_error","props":{"ok":false,"error_kind":"parse"}`},
+		} {
+			for _, caller := range []string{agent.self, ""} {
+				socketCommand(t, w, command.frame+`,"caller_id":"`+caller+`"}`)
+				got := streamOutbox(t, app, analytics.StreamCLI)[0]
+				if got.Name != command.name {
+					t.Fatalf("latest CLI record is %s, want %s", got.Name, command.name)
+				}
+				want := ""
+				if caller != "" {
+					want = subject
+				}
+				if got.Subject != want {
+					t.Errorf("%s from caller %q: subject %q, want %q", got.Name, caller, got.Subject, want)
+				}
+				t.Logf("%s caller=%s subject=%q session_fact_subject=%q", got.Name, caller, got.Subject, subject)
+			}
+		}
+
+		socketCommand(t, w, `{"cmd":"agent_close","source_session_id":"`+agent.id+`","target_session_id":"`+agent.id+`","reason":"finished","caller_id":"`+agent.self+`"}`)
+		closed := streamOutbox(t, app, analytics.StreamCLI)[0]
+		if closed.Name != "agent_close" || closed.Subject != subject || !strings.Contains(string(closed.Props), `"ok":true`) {
+			t.Fatalf("self-close record = %+v, want agent_close with subject %q and ok=true", closed, subject)
+		}
+		t.Logf("agent_close subject=%q session_fact_subject=%q", closed.Subject, subject)
+	})
 }
 
 func TestOneResourceSampleEveryFiveMinutesWhileAnalyticsIsOn(t *testing.T) {
