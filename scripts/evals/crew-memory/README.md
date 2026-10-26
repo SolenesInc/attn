@@ -11,7 +11,7 @@ Read the seed and its latest notes before running. Copy its private case pack
 and reviewed `_state.json` into a private directory outside the checkout.
 Set `private_root` to that directory and `cases_path` to the case pack.
 Keep the flow directory beneath `private_root`. The member's process tree
-cannot read that directory, the source crew homes, or the production socket.
+cannot read `private_root`, the source crew homes, or the production socket.
 
 Set these fields in `_state.json`:
 
@@ -24,21 +24,21 @@ Set these fields in `_state.json`:
 | `member_model` | Exact served model id for the member |
 | `simulator_model` | Exact served model id for the user simulator |
 | `judge_model` | Exact served model id, different from the member |
-| `reps` | Reviewed repetition count |
+| `reps` | Reviewed count, matching `--reps`. Must be `1` for the pilot |
 | `voice` | Reviewed user voice excerpt |
 | `pilot` | `true` for one case per unit, one repetition |
 | `hidden_roots` | Additional directories the member cannot read |
 | `harness_paths` | Other files executed by the eval command |
 
-Use the harness's unpaid model discovery to resolve aliases before pinning ids.
+Use Claude Code's unpaid model discovery to resolve aliases before pinning ids.
 The runner rejects substituted models and missing token or dollar receipts.
-The baseline disables the harness's own memory and uses letters for continuity.
+The baseline disables Claude Code's own memory and uses letters for continuity.
 
 Each case uses an empty `CLAUDE_CONFIG_DIR`. The user creates an evaluation
 token through Claude's supported `setup-token` flow and supplies it as
 `CLAUDE_CODE_OAUTH_TOKEN` in their own terminal. The runner inherits that
 variable and does not serialize it into its generated wrapper or config files.
-Agents do not read or copy Keychain credentials.
+Agents must not read or copy Keychain credentials.
 
 In your own terminal, run `claude setup-token`, then enter its token without
 echoing it (zsh):
@@ -60,13 +60,14 @@ node scripts/evals/crew-memory/audit.mjs "$CREW_EVAL_FLOW/_state.json"
 ```
 
 Read `audit.md` under `private_root`. It distinguishes measured checks from
-checks that still need real member or judge calls. An unpaid audit is not a
-passing full eval audit.
+checks that still need real member or judge calls. The pilot must exercise
+those remaining checks before a full run.
 
 ## Approve and run the pilot
 
-The user reviews the runner, case pack, and configuration. The user then runs
-the reviewed command once with `--approve-harness`. That flag records the
+The user reviews the runner, case pack, and configuration, then runs the
+`run.mjs` command below once with `--approve-harness` added. It needs no
+`--timeout-s` for that step. The flag records the
 harness SHA and exits without model calls. Agents must not pass it themselves.
 The digest covers the runner, adapter, cases, binaries, configuration, listed
 harness files, and lockfiles beside the runner or in the current directory.
@@ -84,11 +85,12 @@ node scripts/evals/crew-memory/run.mjs \
 
 Each attempt gets a fresh member home and named instance. Cases run one at a
 time. The simulator sends turns only after attn reports `waiting_input`.
-Closure uses `attn crew sleep` and grades the newly filed artifacts.
+After each day the runner calls `attn crew sleep`. After the last day it
+grades the letters and files the member produced.
 
-Successful cases occupy `(case, rep)` slots in `baseline/results.jsonl` and
-link to `baseline/traces/<case>_rep<rep>.json`. Harness failures append to
-`baseline/errors.jsonl` and remain eligible for resume. Attempts keep available
+Each successful `(case, rep)` writes a row to `baseline/results.jsonl` and
+links to `baseline/traces/<case>_rep<rep>.json`. Harness failures append to
+`baseline/errors.jsonl`. Running the same command again retries them. Attempts keep available
 model calls and events under `baseline/out/`, beside completed outcome artifacts.
 
 ## Review measurements before a full run
@@ -100,7 +102,7 @@ node /path/to/seed-artifacts/build-report-lite.mjs "$CREW_EVAL_FLOW"
 
 Open `report.html` for per-case results and trace links. Read `measurements.md`
 for per-unit intervals, headroom, repeated-judge disagreement, and costs.
-The twelve-day trajectory counts as one case. Pilot judge grades are
+The end-to-end (`e2e`) run lasts twelve days and counts as one case. Pilot judge grades are
 exploratory until the user has rated the same artifacts.
 
 Before setting `pilot` to `false`, record user approval of the case list,
