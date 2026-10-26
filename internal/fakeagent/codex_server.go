@@ -39,6 +39,7 @@ const (
 	methodWork           = "work"
 	methodInstructions   = "instructions"
 	methodCompactLimit   = "compact_limit"
+	methodMemoryConfig   = "memory_config"
 	methodWorkspaceRoots = "workspace_roots"
 	methodPermissions    = "permissions"
 	methodDropControl    = "drop_control"
@@ -91,6 +92,7 @@ type codexServerThread struct {
 	question       bool
 	instructions   string
 	compactLimit   string
+	memoryConfig   map[string]any
 	workspaceRoots []string
 	parent         string
 }
@@ -526,6 +528,7 @@ func (s *codexAppServer) start(conn *codexServerConn, p codexServerParams) (any,
 		return map[string]any{"thread": map[string]any{"id": id.String(), "ephemeral": true}}, nil, nil
 	}
 	t.instructions, t.compactLimit, t.workspaceRoots, t.c.approvals = p.DevInstruction, p.compactLimit(), p.WorkspaceRoots, p.CodexPermissions
+	t.memoryConfig = p.Config
 	s.mu.Lock()
 	s.threads[t.c.conversation] = t
 	s.mu.Unlock()
@@ -567,6 +570,7 @@ func (s *codexAppServer) resume(conn *codexServerConn, p codexServerParams) (any
 		}
 		s.mu.Lock()
 		t.compactLimit, t.c.approvals = p.compactLimit(), approvals
+		t.memoryConfig = p.Config
 		s.threads[p.ThreadID] = t
 		s.mu.Unlock()
 	}
@@ -1091,6 +1095,13 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		defer s.mu.Unlock()
 		if t := s.threads[p.ThreadID]; t != nil {
 			return workspaceRootsResult{Roots: t.workspaceRoots}, nil
+		}
+		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
+	case methodMemoryConfig:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if t := s.threads[p.ThreadID]; t != nil {
+			return t.memoryConfig, nil
 		}
 		return nil, fmt.Errorf("conversation %s is not loaded here", p.ThreadID)
 	case methodCompactLimit:

@@ -357,7 +357,7 @@ func TestQuickCapturesWakeAMemberWithoutSpendingItsWakeLimit(t *testing.T) {
 		if items := readInbox(t, cli, string(dayID), 0).Items; len(items) != 0 {
 			t.Fatalf("typed quick captures stayed in the inbox: %+v", items)
 		}
-		if _, err := cli.CrewHandoff(dayID, "finished the quick captures", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(dayID, "finished the quick captures", false, protocol.CrewDayCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 

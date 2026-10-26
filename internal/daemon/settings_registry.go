@@ -49,6 +49,7 @@ const (
 	SettingAsksEnabled                   = "asks_enabled"
 	SettingCaptureShortcut               = "capture.shortcut"
 	SettingQuickCaptureEnabled           = "quick_capture_enabled"
+	SettingCrewMemoryEnabled             = "crew_memory_enabled"
 	SettingCalloutsEnabled               = "callouts_enabled"
 	SettingAutoSettleArmSeconds          = "auto_settle_arm_seconds"
 	SettingAutoSettleCountdownSeconds    = "auto_settle_countdown_seconds"
@@ -120,6 +121,7 @@ var settingSpecs = []settingSpec{
 	{key: string(settingOutpostLastError), scope: daemonScope, description: "Last outpost bridge error, kept until the next successful connection.", readOnly: true},
 	{key: SettingCaptureShortcut, scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: SettingQuickCaptureEnabled, scope: daemonScope, experimental: true, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: SettingCrewMemoryEnabled, scope: daemonScope, experimental: true, description: "Enable experimental crew memory: true or false. Crew guidance and harness memory settings apply at the next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingNewSessionLauncherEnabled, scope: daemonScope, experimental: true, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingDirectAgentLaunchEnabled, scope: daemonScope, experimental: true, description: "Launch agents directly: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: SettingCodexSharedEnabled, scope: daemonScope, experimental: true, description: "Use the shared Codex app server: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "crew-memory-sleep-away-disabled",
+  "description": "Crew closure request with memory disabled.",
+  "recipient": "crew",
+  "event": "sleep-away",
+  "values": {
+    "crew_memory_enabled": "false"
+  }
+}

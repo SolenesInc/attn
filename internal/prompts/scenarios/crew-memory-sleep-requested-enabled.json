@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "crew-memory-sleep-requested-enabled",
+  "description": "Crew closure request with memory enabled.",
+  "recipient": "crew",
+  "event": "sleep-requested",
+  "values": {
+    "crew_memory_enabled": "true"
+  }
+}

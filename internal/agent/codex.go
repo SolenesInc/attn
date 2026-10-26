@@ -294,8 +294,11 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string
 
 func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	var overrides []string
+	if opts.CrewMemoryEnabled && opts.CodexRemote == "" {
+		overrides = append(overrides, "features.memories=false", "memories.generate_memories=false")
+	}
 	if opts.CodexRemote == "" {
-		overrides = hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())
+		overrides = append(overrides, hooks.GenerateCodexConfigOverrides(string(opts.TerminalID), opts.SocketPath, opts.WrapperPath, opts.launchSpec())...)
 	}
 	if opts.TrustWorkingDirectory {
 		overrides = append(overrides, fmt.Sprintf(`projects.%s.trust_level="trusted"`, strconv.Quote(opts.CWD)))

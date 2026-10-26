@@ -647,6 +647,10 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		config = make(map[string]any)
 	}
 	r.capContext(config, sessionID, chief)
+	if _, bound := r.d.crewMemberForSession(sessionID); bound && r.d.crewMemoryEnabled() {
+		config["features.memories"] = false
+		config["memories.generate_memories"] = false
+	}
 	r.grantApprovals(params, sessionID)
 	if method != "thread/resume" {
 		if instructions := r.instructions(launchAs, v.profile, chief); instructions != "" {

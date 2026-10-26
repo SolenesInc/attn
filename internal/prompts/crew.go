@@ -16,8 +16,12 @@ func crewRecipient() Recipient {
 	heldLimit := TextField("held_limit", "How many held seeds this block lists.")
 	plotReady := TextField("plot_ready", "One line per plot with its ready count.")
 	gardenRead := FlagField("garden_read", "The garden was readable when the member woke.")
+	memoryEnabled := FlagField("crew_memory_enabled", "Experimental crew memory is enabled.")
+	importLetters := FlagField("import_letters", "The member has letters and no memory entries yet.")
+	memoryView := TextField("memory_view", "Wake view, recent entries in full and older ones as summaries.")
 
-	identity := template("crew.identity", "content/crew/identity.md", name, home)
+	identity := Use("crew.identity", "content/crew/identity.md", Bind("display_name", Input(name)), Bind("home_dir", Input(home)),
+		Bind("home_ownership", Choose(Enabled(memoryEnabled), Use("crew.home-memory", "content/crew/home-memory.md"), Use("crew.home-files", "content/crew/home-files.md"))))
 	existingCharter := template("crew.charter", "content/crew/charter.md", TextField("charter_file", "Charter file"))
 	firstDay := template("crew.first-day", "content/crew/first-day.md", TextField("charter_path", "Charter path"))
 	launchDirectory := template("crew.cwd", "content/crew/cwd.md", cwd)
@@ -26,6 +30,8 @@ func crewRecipient() Recipient {
 	olderLetters := template("crew.older-letters", "content/crew/older-letters.md", handoffsDirname, older)
 	noLetter := template("crew.no-letter", "content/crew/no-letter.md", TextField("handoffs_dir", "Handoffs dir"))
 	closure := template("crew.closure", "content/crew/closure.md", handoffsDirname, name)
+	memoryClosure := template("crew.closure-memory", "content/crew/closure-memory.md", handoffsDirname, name)
+	memory := template("crew.memory", "content/crew/memory.md", memoryView)
 
 	heldList := template("crew.garden", "content/crew/garden.md", heldSeeds)
 	heldMore := template("crew.garden-more", "content/crew/garden-more.md", heldTotal, heldLimit)
@@ -47,14 +53,15 @@ func crewRecipient() Recipient {
 					When(Present(cwd), launchDirectory),
 					When(Present(awareness), awarenessDirectories)),
 				Choose(Present(handoff),
-					Compose(Join("", letter, When(Present(older), olderLetters)), Input(handoff)),
+					Compose(Join("", letter, When(Enabled(memoryEnabled), Use("crew.letter-memory", "content/crew/letter-memory.md")), When(Present(older), olderLetters)), Input(handoff)),
 					noLetter),
 				When(Present(holdings), Input(holdings)),
-				closure)),
+				When(Enabled(memoryEnabled), Compose(memory, When(Enabled(importLetters), template("crew.memory-import", "content/crew/memory-import.md", TextField("handoffs_dir", "Handoffs dir"))))),
+				Choose(Enabled(memoryEnabled), memoryClosure, closure))),
 		On("wake", "user_message", "crew_wake.go: today's first message.", Use("crew.wake", "content/crew/wake.md")),
 		On("successor", "user_message", "crew_handoff.go: successor after a nap.", Use("crew.successor", "content/crew/successor.md")),
-		On("sleep-requested", "user_message", "crew_sleep.go: user requested closure.", Use("crew.sleep-requested", "content/crew/sleep-requested.md")),
+		On("sleep-requested", "user_message", "crew_sleep.go: user requested closure.", Choose(Enabled(memoryEnabled), Use("crew.sleep-requested-memory", "content/crew/sleep-requested-memory.md"), Use("crew.sleep-requested", "content/crew/sleep-requested.md"))),
 		On("heartbeat", "user_message", "crew_lifecycle.go: keep the context cache warm.", Use("crew.heartbeat", "content/crew/heartbeat.md")),
-		On("sleep-away", "user_message", "crew_lifecycle.go: close after the user has been away.", Use("crew.sleep-away", "content/crew/sleep-away.md")),
+		On("sleep-away", "user_message", "crew_lifecycle.go: close after the user has been away.", Choose(Enabled(memoryEnabled), Use("crew.sleep-away-memory", "content/crew/sleep-away-memory.md"), Use("crew.sleep-away", "content/crew/sleep-away.md"))),
 	}}
 }

@@ -100,6 +100,13 @@ Probed on 2.1.303 with synthetic prompts and a local mock API:
   new conversation's transcript, preserving their `message.id` and usage.
   A message id therefore identifies the same request across root transcripts.
 
+### Auto memory
+
+The [Claude memory documentation](https://code.claude.com/docs/en/memory)
+defines `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` to disable auto memory for one
+process. The switch is present in the installed 2.1.310 binary. It leaves
+the user's stored memory files in place.
+
 ### Program status (OSC 7501)
 
 Probed on 2.1.295 under a scratch PTY, and read in its bundled source.
@@ -178,6 +185,27 @@ Probed on 0.162.1 with a mock model and an isolated `CODEX_HOME`:
 - Esc on the lock screen exits the whole process with status 0 and prints "To
   continue this session, run: codex resume <id>", even when that process never
   held the conversation.
+
+### Local memories
+
+Read in the source at openai/codex 4aa94dce and checked against the
+[configuration reference](https://developers.openai.com/codex/config-reference/):
+
+- `features.memories=false` disables memory instructions and the startup
+  memory pipeline (`features/src/lib.rs`, `core/src/config/mod.rs`,
+  `memories/write/src/start.rs`).
+- `memories.generate_memories=false` records on each new conversation that
+  memory generation is off (`config/src/types.rs`,
+  `core/src/session/session.rs`). This also keeps a later session's memory
+  pipeline from extracting memories from those conversations.
+- `memories.use_memories=false` skips memory instructions while leaving the
+  feature and its startup pipeline enabled.
+
+With `crew_memory_enabled`, attn sets `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` for
+a crew member's Claude and sets both `features.memories=false` and
+`memories.generate_memories=false` for their Codex. Existing harness memory
+files stay in place. Changing the setting takes effect at the member's next
+launch.
 
 ### Codex app-server and `--remote`
 

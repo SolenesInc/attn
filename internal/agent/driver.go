@@ -185,8 +185,9 @@ type SpawnOpts struct {
 
 	Vent bool
 
-	CrewPriming  string
-	QuickCapture bool
+	CrewPriming       string
+	CrewMemoryEnabled bool
+	QuickCapture      bool
 
 	AwarenessDirs []string
 

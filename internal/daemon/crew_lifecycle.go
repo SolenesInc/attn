@@ -48,8 +48,6 @@ const (
 
 var crewHeartbeatPrompt = prompts.RenderText("crew", "heartbeat", prompts.Values{})
 
-var crewSleepPrompt = prompts.RenderText("crew", "sleep-away", prompts.Values{})
-
 const crewSleepPromptGrace = 10 * time.Minute
 
 type crewLifecycleMemo struct {
@@ -270,7 +268,8 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 			return
 		}
 		generation := protocol.Deref(session.LastModelRequestAt)
-		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: crewSleepPrompt})
+		prompt := prompts.RenderText("crew", "sleep-away", prompts.Values{"crew_memory_enabled": fmt.Sprint(d.crewMemoryEnabled())})
+		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: inbox.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: prompt})
 		if err != nil {
 			d.logf("crew: %s's sleep request could not be recorded: %v", crew.DisplayName(member.ID), err)
 			return

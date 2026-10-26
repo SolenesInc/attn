@@ -110,6 +110,13 @@ func (s *CodexServer) CompactLimit(conversation string) string {
 	return loaded.Text
 }
 
+func (s *CodexServer) MemoryConfig(conversation string) map[string]any {
+	s.t.Helper()
+	var loaded map[string]any
+	s.call(methodMemoryConfig, serverThreadParams{ThreadID: conversation}, &loaded)
+	return loaded
+}
+
 func (s *CodexServer) Permissions(conversation string) CodexPermissions {
 	s.t.Helper()
 	var loaded CodexPermissions
