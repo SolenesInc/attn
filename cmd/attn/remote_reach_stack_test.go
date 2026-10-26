@@ -79,7 +79,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	for _, key := range stalledLine {
 		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: string(key)})
 	}
-	awaitInputRefusals(t, app, terminal, 1+len(stalledLine))
+	awaitInputRefusals(t, app, terminal, len(stalledLine))
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark := len(app.Log())

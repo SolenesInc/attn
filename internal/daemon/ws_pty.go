@@ -20,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -719,7 +720,7 @@ func (d *Daemon) handlePtyInputs(client *wsClient, inputs []*protocol.PtyInputMe
 	for _, msg := range inputs {
 		d.recordSupportInputTrace(msg, receivedAt, elapsed, writeErr)
 		if writeErr != nil {
-			if d.sessionHost(d.terminals().owner(msg.ID)) != "" {
+			if d.sessionHost(d.terminals().owner(msg.ID)) != "" && sessionmonitor.IsUserKeystrokeSource(strings.TrimSpace(protocol.Deref(msg.Source))) {
 				d.sendTerminalRefusal(client, protocol.CmdPtyInput, msg.ID, writeErr)
 			}
 			if shouldLogPtyCommandError(writeErr) {

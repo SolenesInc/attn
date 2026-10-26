@@ -115,7 +115,7 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 			info.HostKeyFingerprint = protocol.Ptr((bridge.Pin{HostKey: row.HostKey}).Fingerprint())
 		}
 		run := r.dialers[row.ID]
-		_, info.Reach = d.outpostReach(run)
+		_, info.Reach = outpostReach(enabled, run)
 		if run != nil {
 			info.State = protocol.OutpostState(run.state)
 			info.StateSince = run.since

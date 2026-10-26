@@ -59,7 +59,7 @@ export function OutpostsSettings() {
       <section className="settings-block">
         <div className="settings-block-intro">
           <h3>Outposts</h3>
-          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, then disconnects and forgets this outpost. While it is unreachable, its shells keep running there until you run attn enrollment leave on it.</p>
+          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, then disconnects and forgets this outpost. While it isn't connected, its shells keep running there until you run attn enrollment leave on it.</p>
         </div>
         <div className="settings-block-body">
           {outposts.length === 0 ? <p className="settings-empty">No outposts added.</p> : (
@@ -102,7 +102,7 @@ export function OutpostsSettings() {
                       ) : null}
                     </div>
                     {removing === row.id && count > 0 && row.reach !== 'reachable' ? (
-                      <p className="settings-description" role="status">{row.name} is unreachable, so its shells keep running there until you run attn enrollment leave on it.</p>
+                      <p className="settings-description" role="status">{row.name} isn't connected, so its shells keep running there until you run attn enrollment leave on it.</p>
                     ) : null}
                   </li>
                 );

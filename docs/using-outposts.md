@@ -143,12 +143,12 @@ While the home is still connecting to an outpost, after the home starts or
 when you turn Outposts on, add an outpost or re-pair it, its terminals don't
 look offline, but typing is not sent yet. A stalled connection still sends
 typing. If it then turns lost, the keys still on their way fail, and the tile
-says how many keys may not have been sent until you type in it again. The last
-keys sent before the drop can still reach the outpost when it comes back, so
-look at the shell before you retype.
+says how many keys may not have been sent until a key you type goes out again.
+The last of them may already have left the home and reach the outpost when it
+comes back, so look at the shell before you retype.
 
-Every key that is not sent flashes its tile red. attn never sends refused
-keys later.
+Every key that is not sent flashes its tile red. attn never retries a key it
+could not send.
 
 A tile that stays open keeps its last screen. If you switch desktops or
 restart the app while the terminal is offline, its tile shows an empty
@@ -184,10 +184,10 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 **Remove** closes the outpost's terminals across all profiles, then forgets
 the outpost and its identity. When it has terminals, the row asks you to
 confirm with **Remove and close N terminals**, or **Cancel**. When it has
-none, removal happens immediately. If the outpost is not connected, the row
-asks **Remove and forget N terminals** instead and says that its shells keep
-running on the outpost: Remove closes their tiles at the home only. Run
-`attn enrollment leave` on the outpost to stop those shells.
+none, removal happens immediately. If the outpost is unreachable or still
+connecting, the row asks **Remove and forget N terminals** instead and says
+that its shells keep running on the outpost: Remove closes their tiles at the
+home only. Run `attn enrollment leave` on the outpost to stop those shells.
 
 Turning Outposts off disconnects every outpost and keeps the list for next
 time. Their terminals show offline until you turn Outposts on again.

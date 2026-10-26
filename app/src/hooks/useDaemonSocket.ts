@@ -9,6 +9,7 @@ import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
 import { useVentsStore } from '../store/vents';
 import { useSharedCodexStore } from '../store/sharedCodex';
+import { useTerminalRefusals } from '../store/terminalRefusals';
 import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDATE } from './daemonSharedCodexEvents';
 import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
@@ -2293,7 +2294,7 @@ export function useDaemonSocket({
           case 'command_error':
             if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
             if (data.terminal_id && (data.cmd === 'pty_input' || data.cmd === 'pty_resize')) {
-              emitPtyEvent({ event: 'refused', id: data.terminal_id, keys: data.cmd === 'pty_input' ? 1 : 0 });
+              useTerminalRefusals.getState().refused(data.terminal_id, data.cmd === 'pty_input' ? 1 : 0);
               break;
             }
             if (data.error_code === 'unauthorized_client') {

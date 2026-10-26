@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, createEvent, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { daemonSession, soloDesktop, defaultProfile } from './test/daemonFixtures';
 import { fakeRects } from './test/layout';
@@ -19,6 +19,13 @@ const remote = () => daemonSession('remote', { agent: 'shell', host: outpost.id,
 const tile = () => document.querySelector<HTMLElement>('[data-pane-id="pane-remote"]')!;
 const terminalInput = () => within(tile()).getByRole('textbox', { name: 'Terminal input' });
 const flash = () => tile().querySelector('.desktop-pane-refusal');
+const wheel = () => act(() => {
+  const surface = tile().querySelector('.terminal-container')!;
+  const event = createEvent.wheel(surface, { deltaY: -1, deltaMode: 1 });
+  Object.defineProperties(event, { clientX: { value: 20 }, clientY: { value: 20 } });
+  fireEvent(surface, event);
+});
+const refuse = (cmd: 'pty_input' | 'pty_resize') => ({ event: 'command_error' as const, cmd, success: false, error: 'studio is unreachable; this needs it now', terminal_id: 'remote' });
 
 async function setup(row: OutpostInfo | null = outpost, settings: Record<string, string> = { outposts_enabled: 'true' }) {
   fakeRects((element) => element.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : null);
@@ -80,7 +87,7 @@ describe('Remote shells in the app', () => {
   });
 
   it('shows remote tiles offline and named while Outposts is off', async () => {
-    const { daemon } = await setup({ ...connecting, reach: 'unreachable' }, { outposts_enabled: 'false' });
+    const { daemon } = await setup(lost, { outposts_enabled: 'false' });
     await openSession(daemon, 'remote');
     expect(tile()).toHaveAttribute('data-offline', 'true');
     expect(within(tile()).getByText('studio')).toHaveClass('desktop-pane-host');
@@ -126,6 +133,11 @@ describe('Remote shells in the app', () => {
     expect(within(tile()).queryByRole('status')).toBeNull();
     expect(daemon.sentOf('attach_session')).toEqual([]);
     expect(daemon.sentOf('pty_resize')).toEqual([]);
+    daemon.on('unregister', ({ cmd }) => ({ event: 'command_error', cmd, success: false, error: 'studio is unreachable; this needs it now' }));
+    await gesture(daemon, () => pressShortcut('session.close'));
+    expect(daemon.sentOf('unregister')).toHaveLength(1);
+    expect(screen.getByText('Could not close that session: studio is unreachable; this needs it now')).toBeInTheDocument();
+    expect(tile()).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
     expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['remote']);
     await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'z', code: 'KeyZ' }));
@@ -164,7 +176,7 @@ describe('Remote shells in the app', () => {
     expect(typed).toHaveLength(3);
     expect(flash()).toBeNull();
     for (const _ of typed) {
-      await gesture(daemon, () => daemon.emit({ event: 'command_error', cmd: 'pty_input', success: false, error: 'studio is unreachable; this needs it now', terminal_id: 'remote' }));
+      await gesture(daemon, () => daemon.emit(refuse('pty_input')));
     }
     expect(flash()).not.toBeNull();
     expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
@@ -172,15 +184,56 @@ describe('Remote shells in the app', () => {
     expect(within(tile()).getByText('studio unreachable · typing is not sent')).toBeInTheDocument();
     expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
     const beforeResizeRefusal = flash();
-    await gesture(daemon, () => daemon.emit({ event: 'command_error', cmd: 'pty_resize', success: false, error: 'studio is unreachable; this needs it now', terminal_id: 'remote' }));
+    await gesture(daemon, () => daemon.emit(refuse('pty_resize')));
     expect(flash()).not.toBe(beforeResizeRefusal);
     expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
     daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
     expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
+    await gesture(daemon, () => daemon.emit({ event: 'pty_output', id: 'remote', seq: 1, data: btoa('\x1b[?1000h\x1b[?1006h') }));
+    await wheel();
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input').slice(typed.length)).toEqual([expect.objectContaining({ source: 'pointer' })]);
+    expect(within(tile()).getByText('3 keys may not have been sent')).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'z', code: 'KeyZ' }));
     expect(within(tile()).queryByText(/may not have been sent/)).toBeNull();
-    expect(daemon.sentOf('pty_input').slice(typed.length)).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);
+    expect(daemon.sentOf('pty_input').slice(typed.length + 1)).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);
+  });
+
+  it('neither flashes nor sends mouse input over an unreachable tile', async () => {
+    const { daemon } = await setup();
+    await openSession(daemon, 'remote');
+    await gesture(daemon, () => daemon.emit({ event: 'pty_output', id: 'remote', seq: 1, data: btoa('\x1b[?1000h\x1b[?1006h') }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [lost] }));
+    await wheel();
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+    expect(flash()).toBeNull();
+  });
+
+  it('keeps the count of keys not sent while its tile is away on another desktop', async () => {
+    fakeRects((element) => element.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : null);
+    const { daemon } = await renderApp({
+      script: (daemon) => {
+        daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
+      },
+      initialState: {
+        sessions: [remote(), daemonSession('local', { agent: 'shell', state: 'idle' }), daemonSession('other', { agent: 'shell', state: 'idle' })],
+        desktops: [soloDesktop('remote'), soloDesktop('local'), soloDesktop('other')],
+        settings: { outposts_enabled: 'true' },
+        outposts: [{ ...outpost, state: 'stalled' }],
+      },
+    });
+    await openSession(daemon, 'remote');
+    await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
+    await gesture(daemon, () => daemon.emit(refuse('pty_input')));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [lost] }));
+    await openSession(daemon, 'local');
+    await openSession(daemon, 'other');
+    expect(document.querySelector('[data-pane-id="pane-remote"]')).toBeNull();
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
+    await openSession(daemon, 'remote');
+    expect(within(tile()).getByText('1 key may not have been sent')).toBeInTheDocument();
   });
 
   it('waits through re-pair connecting before attaching an unreachable terminal again', async () => {
@@ -246,7 +299,7 @@ describe('Remote shells in the app', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-outposts')));
     const row = within(screen.getByRole('listitem', { name: 'studio' }));
     await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove' })));
-    expect(row.getByText('studio is unreachable, so its shells keep running there until you run attn enrollment leave on it.')).toBeInTheDocument();
+    expect(row.getByText("studio isn't connected, so its shells keep running there until you run attn enrollment leave on it.")).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove and forget 1 terminal' })));
     expect(daemon.sentOf('remove_outpost')).toEqual([{ cmd: 'remove_outpost', id: outpost.id }]);
   });

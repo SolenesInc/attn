@@ -8,6 +8,7 @@ import type { BlockStateSnapshot, GhosttyTerminalHandle, PlacementStateSnapshot 
 import type { TerminalVisibleContentSnapshot } from '../../utils/terminalVisibleContent';
 import type { TerminalVisibleStyleSnapshot } from '../../utils/terminalStyleSummary';
 import type { OutpostReach } from '../../types/generated';
+import { isTypedInput, useTerminalRefusals } from '../../store/terminalRefusals';
 
 interface TerminalResizeOptions {
   reason?: string;
@@ -29,11 +30,6 @@ export interface PaneRuntimeSpec {
 }
 
 export type TerminalReach = `${OutpostReach}`;
-
-export interface PaneInputOutcomes {
-  refused: (paneId: string, keysNotSent: number) => void;
-  sent: (paneId: string) => void;
-}
 
 const reachable = (pane: PaneRuntimeSpec | undefined) => (pane?.reach ?? 'reachable') === 'reachable';
 
@@ -76,7 +72,6 @@ export function useGhosttyPaneRuntime(
   activePaneId: string,
   eventRouter: PaneRuntimeEventRouter,
   isActiveSessionRef: { current: boolean },
-  inputOutcomes: PaneInputOutcomes,
   terminalsLive = true,
 ): GhosttyPaneRuntime {
   const panesRef = useRef(panes);
@@ -127,10 +122,6 @@ export function useGhosttyPaneRuntime(
   }, []);
 
   const deliverEvent = useCallback((paneId: string, event: PtyEventPayload) => {
-    if (event.event === 'refused') {
-      inputOutcomes.refused(paneId, event.keys);
-      return;
-    }
     const terminal = handlesRef.current.get(paneId);
     if (!terminal) return;
     const pane = paneFor(paneId);
@@ -212,7 +203,7 @@ export function useGhosttyPaneRuntime(
       default:
         break;
     }
-  }, [cancelRuntimeConnection, flushPendingResize, inputOutcomes, isActiveSessionRef, paneFor]);
+  }, [cancelRuntimeConnection, flushPendingResize, isActiveSessionRef, paneFor]);
 
   useEffect(() => {
     const disposers = panes.map((pane) => eventRouter.registerBinding({
@@ -401,12 +392,12 @@ export function useGhosttyPaneRuntime(
   const handleTerminalInput = useCallback((paneId: string) => (data: string, source?: string, traceId?: string) => {
     const pane = paneFor(paneId);
     if (!pane || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
-    const typed = source !== 'response';
+    const typed = isTypedInput(source);
     if (!reachable(pane)) {
-      if (typed) inputOutcomes.refused(paneId, 0);
+      if (typed) useTerminalRefusals.getState().refused(pane.runtimeId, 0);
       return;
     }
-    if (typed) inputOutcomes.sent(paneId);
+    if (typed) useTerminalRefusals.getState().sent(pane.runtimeId);
     if (import.meta.env.DEV && pane.testSessionId) {
       const testWindow = window as Window & {
         __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: 'connect_terminal' | 'send_to_pty'; data?: string; source?: string }>;
@@ -415,7 +406,7 @@ export function useGhosttyPaneRuntime(
       testWindow.__TEST_SESSION_INPUT_EVENTS.push({ sessionId: pane.testSessionId, event: 'send_to_pty', data, source });
     }
     void ptyWrite({ id: pane.runtimeId, data, ...(source ? { source } : {}), ...(traceId ? { traceId } : {}) });
-  }, [inputOutcomes, paneFor]);
+  }, [paneFor]);
 
   const handleTerminalResize = useCallback((paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => {
     if (!isActiveSessionRef.current) return;

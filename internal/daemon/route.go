@@ -117,14 +117,14 @@ func (d *Daemon) outpostConn(host string) (*bridge.Conn, string, error) {
 	r := &d.outposts
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if conn, reach := d.outpostReach(r.dialers[row.ID]); reach == protocol.OutpostReachReachable {
+	if conn, reach := outpostReach(d.outpostsEnabled(), r.dialers[row.ID]); reach == protocol.OutpostReachReachable {
 		return conn, row.Name, nil
 	}
 	return nil, row.Name, fmt.Errorf("%s is unreachable; this needs it now", row.Name)
 }
 
-func (d *Daemon) outpostReach(run *outpostDial) (*bridge.Conn, protocol.OutpostReach) {
-	if !d.outpostsEnabled() || run == nil || run.state == bridge.StateLost || run.state == bridge.StateRefused {
+func outpostReach(enabled bool, run *outpostDial) (*bridge.Conn, protocol.OutpostReach) {
+	if !enabled || run == nil || run.state == bridge.StateLost || run.state == bridge.StateRefused {
 		return nil, protocol.OutpostReachUnreachable
 	}
 	if run.conn == nil {
