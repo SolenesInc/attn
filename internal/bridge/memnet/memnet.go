@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
@@ -80,7 +81,7 @@ func (g *gate) store(held bool) {
 	g.changed = make(chan struct{})
 }
 
-func (g *gate) wait(closed <-chan struct{}) error {
+func (g *gate) wait(closed, expired <-chan struct{}) error {
 	for {
 		g.mu.Lock()
 		held, changed := g.held, g.changed
@@ -92,6 +93,8 @@ func (g *gate) wait(closed <-chan struct{}) error {
 		case <-changed:
 		case <-closed:
 			return net.ErrClosed
+		case <-expired:
+			return os.ErrDeadlineExceeded
 		}
 	}
 }
@@ -151,11 +154,18 @@ type conn struct {
 	once        sync.Once
 	mu          sync.Mutex
 	deadline    *time.Timer
+	expired     chan struct{}
 }
 
 func (c *conn) Read(data []byte) (int, error) {
 	for {
-		if err := c.gate.wait(c.closed); err != nil {
+		expired := c.deadlineExpired()
+		select {
+		case <-expired:
+			return 0, os.ErrDeadlineExceeded
+		default:
+		}
+		if err := c.gate.wait(c.closed, expired); err != nil {
 			return 0, err
 		}
 		c.read.mu.Lock()
@@ -177,11 +187,18 @@ func (c *conn) Read(data []byte) (int, error) {
 		case <-due:
 		case <-c.closed:
 			return 0, net.ErrClosed
+		case <-expired:
+			return 0, os.ErrDeadlineExceeded
 		}
 	}
 }
 
 func (c *conn) Write(data []byte) (int, error) {
+	select {
+	case <-c.deadlineExpired():
+		return 0, os.ErrDeadlineExceeded
+	default:
+	}
 	c.write.mu.Lock()
 	defer c.write.mu.Unlock()
 	if c.write.closed {
@@ -214,10 +231,24 @@ func (c *conn) SetDeadline(at time.Time) error {
 	if c.deadline != nil {
 		c.deadline.Stop()
 	}
+	expired := make(chan struct{})
+	c.expired = expired
 	if !at.IsZero() {
-		c.deadline = time.AfterFunc(time.Until(at), func() { _ = c.Close() })
+		c.deadline = time.AfterFunc(time.Until(at), func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			if c.expired == expired {
+				close(expired)
+			}
+		})
 	}
 	return nil
+}
+
+func (c *conn) deadlineExpired() <-chan struct{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.expired
 }
 
 func (c *conn) SetReadDeadline(at time.Time) error  { return c.SetDeadline(at) }

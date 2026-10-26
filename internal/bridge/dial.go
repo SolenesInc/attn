@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -38,6 +39,15 @@ type DialConfig struct {
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	handshakeCtx, cancel := context.WithTimeout(ctx, LostAfter)
 	defer cancel()
+	conn, seen, err := handshake(ctx, handshakeCtx, cfg)
+	var refusal *Refusal
+	if err != nil && !errors.As(err, &refusal) && errors.Is(handshakeCtx.Err(), context.DeadlineExceeded) {
+		err = fmt.Errorf("bridge to %s: no answer within %s: %w", cfg.Address, LostAfter, context.DeadlineExceeded)
+	}
+	return conn, seen, err
+}
+
+func handshake(ctx, handshakeCtx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	dial := cfg.DialContext
 	if dial == nil {
 		dial = (&net.Dialer{}).DialContext
