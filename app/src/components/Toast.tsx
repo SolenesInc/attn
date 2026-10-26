@@ -23,8 +23,9 @@ function ToastContent() {
   const toastRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = toastRef.current;
-    element?.showPopover?.();
-    return () => element?.hidePopover?.();
+    if (!element?.isConnected) return;
+    element.showPopover?.();
+    return () => element.hidePopover?.();
   }, []);
   useEffect(() => {
     if (!rows.length || hovered || focused || fading) return;

@@ -23,6 +23,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRef
     terminalsLive,
     onTerminalPointerActivity,
     onOpenMarkdown,
+    onTerminalPathRefused,
     staleBuildDismissed,
     setStaleBuildDismissed,
     paneIds,
@@ -95,6 +96,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRef
           fontSize={fontSize}
           resolvedTheme={resolvedTheme}
           cwd={paneSession?.cwd}
+          outpostName={paneSession?.host ? paneSession.hostName ?? paneSession.host : undefined}
           debugName={`agent:${paneTitle}:${paneSession?.agent ?? 'shell'}:${agentPane.sessionId}`}
           runtimeLogMeta={{
             sessionId: agentPane.sessionId,
@@ -111,6 +113,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, onInputRef
           }}
           onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
           onOpenMarkdown={onOpenMarkdown}
+          onPathRefused={onTerminalPathRefused}
           gardenSeeds={gardenSeeds}
           onOpenSeed={onOpenSeed}
           onReady={handleGhosttyTerminalReady(agentPane.id)}

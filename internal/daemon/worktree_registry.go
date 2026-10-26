@@ -395,8 +395,9 @@ func (d *Daemon) liveSessionsByWorktree(repo string) map[string][]string {
 	}
 	rows := d.store.ListWorktreesByRepo(repo)
 	for _, session := range d.store.List("") {
+		directory := d.localDirectory(session)
 		for _, row := range rows {
-			if pathAtOrBelow(session.Directory, row.Path) {
+			if pathAtOrBelow(directory, row.Path) {
 				byPath[row.Path] = append(byPath[row.Path], string(session.ID))
 			}
 		}

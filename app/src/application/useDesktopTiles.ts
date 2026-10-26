@@ -5,11 +5,12 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { resolveEditorTileRoot, serializeNotebookTileParams } from '../types/desktop';
+import { localDirectory } from '../utils/outpostPaths';
 import { AppContentProps } from './appSupport';
 
 interface Options {
   settings: AppContentProps['settings'];
-  sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
+  sessions: Array<ReturnType<typeof useSessionStore.getState>['sessions'][number] & { host?: string }>;
   contextSessionId: string | null;
   showError: (message: string) => void;
 }
@@ -33,13 +34,14 @@ export function useDesktopTiles({ settings, sessions, contextSessionId, showErro
     setMarkdownOpenerOpen(true);
   }, []);
 
-  const markdownOpenerTarget = useMemo(() => {
-    const session = sessions.find((entry) => entry.id === contextSessionId);
-    return {
-      root: session?.cwd || settings['notebook.root.effective'] || null,
-      sessionId: session?.id ?? '',
-    };
-  }, [contextSessionId, sessions, settings]);
+  const contextSession = sessions.find((entry) => entry.id === contextSessionId);
+  const openerRoot = localDirectory(contextSession) || settings['notebook.root.effective'] || null;
+  const openerSessionId = contextSession?.id ?? '';
+  const editorTileRoot = resolveEditorTileRoot(localDirectory(contextSession), settings['notebook.root.effective'] || '');
+  const markdownOpenerTarget = useMemo(
+    () => ({ root: openerRoot, sessionId: openerSessionId }),
+    [openerRoot, openerSessionId],
+  );
   const loadOpenerRecents = useCallback(
     () =>
       sendRecentFiles(50, markdownOpenerTarget.root || undefined).then((files) =>
@@ -55,22 +57,20 @@ export function useDesktopTiles({ settings, sessions, contextSessionId, showErro
   const handleOpenNotebookTile = useCallback(() => {
     const desktop = currentDesktop();
     if (!desktop) return;
-    const activeSession = sessions.find((session) => session.id === contextSessionId);
-    const root = resolveEditorTileRoot(activeSession?.cwd ?? '', settings['notebook.root.effective'] || '');
     const tileId = `notebook-tile-${crypto.randomUUID()}`;
     const intent = useSessionStore.getState().beginIntent({ kind: 'leaf', desktopId: desktop.id, leafId: tileId });
     void sendDesktopDockTile({
       desktopId: desktop.id,
       tileId,
       tileKind: 'notebook',
-      tileParams: root ? serializeNotebookTileParams({ root }) : undefined,
+      tileParams: editorTileRoot ? serializeNotebookTileParams({ root: editorTileRoot }) : undefined,
       edge: 'right',
       tileShare: 0.4,
     }).catch((error) => {
       useSessionStore.getState().intentFailed(intent);
       showError(`Could not open the notebook: ${failureMessage(error)}`);
     });
-  }, [contextSessionId, sendDesktopDockTile, settings, sessions, showError]);
+  }, [editorTileRoot, sendDesktopDockTile, showError]);
 
   return {
     markdownOpenerOpen,
