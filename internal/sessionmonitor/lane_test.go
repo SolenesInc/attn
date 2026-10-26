@@ -24,6 +24,11 @@ func TestSessionInput_PlacementPhaseContracts(t *testing.T) {
 			if promptReady != wantPromptReady {
 				t.Fatalf("WhenPromptReady(%s)=%v, want %v", state, promptReady, wantPromptReady)
 			}
+			workingOrPromptReady := PhaseAllows(WhenWorkingOrPromptReady, state)
+			wantWorkingOrPromptReady := wantPromptReady || state == protocol.SessionStateWorking
+			if workingOrPromptReady != wantWorkingOrPromptReady {
+				t.Fatalf("WhenWorkingOrPromptReady(%s)=%v, want %v", state, workingOrPromptReady, wantWorkingOrPromptReady)
+			}
 			turnBoundary := PhaseAllows(AtTurnBoundary, state)
 			wantTurnBoundary := state != protocol.SessionStatePendingApproval
 			if turnBoundary != wantTurnBoundary {

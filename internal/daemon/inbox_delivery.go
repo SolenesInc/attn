@@ -248,11 +248,16 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		receipt.Detail = agentMessageQueuedDetail(errInboxNoPromptReader)
 		return receipt, nil
 	}
-	paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero())
+	bellWaitsForPrompt := attempt.FromUser > 0 && !sessionmonitor.PhaseAllows(sessionmonitor.WhenPromptReady, holder.State)
+	paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt)
 	if err != nil {
 		return receipt, err
 	}
-	input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), paste.text, sessionmonitor.WhenPromptReady)
+	when := sessionmonitor.WhenWorkingOrPromptReady
+	if paste.notified {
+		when = sessionmonitor.WhenPromptReady
+	}
+	input := sessionmonitor.MaintenanceInput("inbox-ring", uuid.NewString(), paste.text, when)
 	input.BypassInitialGate = true
 	placement := d.sessionMonitor(holder.ID).Place(context.Background(), input)
 	if placement.Stage == sessionmonitor.Placed {
@@ -263,7 +268,9 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 		for _, captureID := range paste.captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
-		state.wakeSession = ""
+		if !bellWaitsForPrompt {
+			state.wakeSession = ""
+		}
 		if !finishingWake {
 			d.logInboxExhaustion(a)
 		}
@@ -357,7 +364,7 @@ func (d *Daemon) recoverInbox() {
 	}
 }
 func (d *Daemon) kickSessionInbox(sessionID protocol.SessionID, state string) {
-	if sessionmonitor.PhaseAllows(sessionmonitor.WhenPromptReady, protocol.SessionState(state)) {
+	if sessionmonitor.PhaseAllows(sessionmonitor.WhenWorkingOrPromptReady, protocol.SessionState(state)) {
 		d.kickSessionInboxAddresses(sessionID)
 	}
 }

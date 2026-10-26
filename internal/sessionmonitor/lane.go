@@ -24,6 +24,7 @@ type Placement uint8
 
 const (
 	WhenPromptReady Placement = iota
+	WhenWorkingOrPromptReady
 	AtTurnBoundary
 )
 
@@ -353,8 +354,12 @@ func allowedForPhase(placement Placement, state protocol.SessionState) error {
 	if state == protocol.SessionStatePendingApproval {
 		return ErrBlockedByApproval
 	}
-	if placement == WhenPromptReady && state != protocol.SessionStateIdle && state != protocol.SessionStateWaitingInput {
+	promptReady := state == protocol.SessionStateIdle || state == protocol.SessionStateWaitingInput
+	if placement == WhenPromptReady && !promptReady {
 		return fmt.Errorf("session input requires a prompt-ready session, got %s", state)
+	}
+	if placement == WhenWorkingOrPromptReady && !promptReady && state != protocol.SessionStateWorking {
+		return fmt.Errorf("session input requires a working or prompt-ready session, got %s", state)
 	}
 	return nil
 }

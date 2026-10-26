@@ -330,8 +330,9 @@ depend on the answer.
 Press **Cmd+Shift+R** to answer every agent from one drawer, waiting agents first.
 Pick choices, write answers, add a note and send with **Cmd+Enter**; the drawer
 brings the next ask. Your answer settles the agent's turn, and attn types it into
-the agent's conversation as your message at its next prompt, so its auto mode
-accepts the approvals in it. **Open agent** jumps to its terminal.
+the agent's conversation as your message right away, even while it works (an
+approval it waits on goes first), so its auto mode accepts the approvals in it.
+**Open agent** jumps to its terminal.
 
 The queue, the sidebar and the home screen mark the agents that asked, and the
 sidebar's Asks button counts open asks. With the sidebar collapsed, the queue bar
