@@ -3,7 +3,7 @@
 Each diagram has two sources, and both must always change together:
 
 - `<name>.d2` draws the image that GitHub and the website show.
-- `<name>.mmd` draws the text that `attn help` prints and the Chief reads.
+- `<name>.mmd` draws the text that `attn guide` prints and the Chief reads.
 
 After changing a diagram, render both and commit the sources with their
 renders:

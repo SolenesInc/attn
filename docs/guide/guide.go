@@ -54,7 +54,7 @@ func Topic(name string) ([]byte, error) {
 
 func Index() []byte {
 	var out strings.Builder
-	out.WriteString("The Attn guide\n\nRead a page with attn help <topic>.\n")
+	out.WriteString("The Attn guide\n\nRead a page with attn guide <topic>.\n")
 	for _, section := range []string{"tutorials", "reference"} {
 		out.WriteString("\n" + strings.ToUpper(section[:1]) + section[1:] + "\n")
 		entries, _ := content.ReadDir(section)

@@ -30,9 +30,9 @@ The loop:
                                      matched prints under each hit. Run it before you plant
     attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    a new seed; prints the id
 
-`attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who claims the seed. If a live session or crew member claims it, the command refuses and names the tender. `--force` performs the move anyway, and the log records who forced it. A session's claim ends with its session; a crew member's claim lasts across its sessions. `attn seed tend <id> --for <name>` assigns the seed to a crew member in your profile. The user never claims a seed.
+`tend`, `park`, `harvest`, `wither` and `replant` refuse a seed that another agent claims, and name that agent. Add `--force` to do it anyway. The log records that you forced it. A session's claim ends when the session ends. A crew member, a permanent agent, keeps their claim across sessions. `attn seed tend <id> --for <name>` gives a seed to a crew member. The user never claims seeds.
 
-Harvest and wither print the seeds the close set free — the ones it was the last blocker of — and ring the tender of each one.
+`harvest` and `wither` print the seeds they unblock and ring those seeds' tenders and watchers, as `--ring` does for a note.
 
 Plans:
 
@@ -56,7 +56,7 @@ When attn sends an update notification, run the suggested command to read it. Re
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere
     attn seed export <id> [--out <path>]    the seed and its log as one markdown file
 
-A new delegation starts an ordinary watch on its seed for both the delegate and the delegating party, including a handover. Crew watches belong to the member and carry across naps. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not.
+Every delegation, including a handover, makes both the delegate and the agent that delegated watch the seed and its descendants. A crew member's watch lasts across their sessions. `unwatch` removes that watch. Watches on the seed's children or ancestors stay. `show` and `unwatch` list the watches still covering a seed and how to remove each. To watch again, run `watch` or delegate the seed again. Restarting or resuming the delegation does not bring a removed watch back.
 
 Use attn agent msg for attn-managed sessions; keep Claude's SendMessage for follow-ups to the native subagents this session spawned.
 

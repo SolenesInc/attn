@@ -7,8 +7,8 @@ plot example and completion checks. Syntax lives in `attn seed --help`.
 ## Speaking the user's language
 
 Use the Garden word by default. When the user uses a Jira word from the
-vocabulary, mirror it for that concept for the rest of the
-exchange. Do not correct them or switch the other concepts unless they do.
+vocabulary, mirror it for that concept for the rest of the exchange. Do not
+correct them or switch the other concepts unless they do.
 
 ## Planting work
 
@@ -76,26 +76,11 @@ tender.
 
 ## Rings and watches
 
-Lifecycle moves ring the seed's current tender and watching parties. Harvesting
-or withering a blocker also rings the tender and watchers of each seed it set
-free. Notes stay quiet unless you add `--ring`. A successful action never rings
-the party that caused it. Automation acceptance is quiet; its bell waits until
-the work is ready or the attempt needs attention. `attn seed watch <id>`
-subscribes your party to the seed and its descendants, including children
-planted later. Each new delegation, including a handover, starts that watch for
-both the delegate and the delegating party. Crew watches belong to the member
-and carry across naps.
+Tending, parking, harvesting, withering and replanting a seed ring its tender and watchers. Harvesting or withering a blocker also rings the tender and watchers of each seed it unblocks. Notes stay quiet unless you add `--ring`. Nothing rings whoever made the change. When an automation (a job attn starts by itself) tends a seed, nobody is rung. The ring comes when the automation's result is ready or its run needs attention. `attn seed watch <id>` makes you watch the seed and its descendants, including children planted later.
 
-`attn seed unwatch <id>` removes that subscription and drops a queued update only
-when the party is neither the tender nor covered by another watch. Separate
-child watches remain. An ancestor watch can still cover the seed; `attn seed
-show <id>` and `unwatch` name those subscriptions and the commands to remove
-them. `watch` restores a subscription; a new delegation starts it again.
-Restarting or resuming the same delegation does not restore a removed watch.
+`attn seed unwatch <id>` removes that watch. Your unread update for the seed is withdrawn as well, unless you still tend the seed or another watch covers it. Watches on its children stay. A watch on an ancestor can still cover the seed. `attn seed show <id>` and `unwatch` name that watch and the command to remove it. `watch` restores a removed watch, and so does a new delegation. Restarting or resuming the same delegation does not.
 
-A bell carries the seed and what moved. Read it with `attn seed show` or
-`notes` to reset the bell for the next meaningful move. Updates already read
-or handed to an agent cannot be recalled.
+Each update names the seed and what changed. Reading it with `attn seed show` or `attn seed notes` marks it read, so the seed's next change can ring you again.
 
 ## Artifacts
 
