@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 	"time"
@@ -133,6 +134,31 @@ func (d *Daemon) sendNotificationMarkReadWSResult(client *wsClient, requestID st
 }
 
 const notificationKindTaskFailed = "task_failed"
+
+func (d *Daemon) notifyConversationReferencesIncomplete(cause error) {
+	d.logf("conversation keep: incomplete references: %v", cause)
+	impact := "attn keeps copying conversations, but expiry is paused because some crew memories could not be read. Restore the homes or memory files listed below to resume expiry."
+	record, created, err := d.store.EnsureNotification(store.NotificationRecord{
+		ID:         fmt.Sprintf("conversation-references-incomplete:%x", sha256.Sum256([]byte(cause.Error()))),
+		Kind:       "conversation_references_incomplete",
+		Severity:   store.NotificationWarning,
+		Title:      "Conversation expiry is paused",
+		Body:       impact,
+		Detail:     cause.Error(),
+		Trigger:    "attn checked which conversations to keep.",
+		Impact:     impact,
+		Cause:      cause.Error(),
+		SourceKind: "task",
+		SourceID:   conversationKeepKind,
+	}, time.Now())
+	if err != nil {
+		d.logf("notifications: add incomplete conversation references: %v", err)
+		return
+	}
+	if created {
+		d.publishFact(FactNotificationCreated, record.ID, nil)
+	}
+}
 
 func (d *Daemon) notifyChiefSetupFailure(profile profiles.Profile, cause error) {
 	d.logf("furnish Chief for profile %s: %v", profile.ID, cause)

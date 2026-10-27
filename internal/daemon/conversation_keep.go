@@ -183,6 +183,7 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 		return nil, err
 	}
 	referenced := make(map[conversationKey][]protocol.KeptConversationCrewDay)
+	var readErrors error
 	for _, member := range members {
 		if member.Home == "" {
 			continue
@@ -196,7 +197,8 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 		}
 		lock.Unlock()
 		if err != nil {
-			return nil, fmt.Errorf("crew day references for %s: %w", member.Key.String(), err)
+			readErrors = errors.Join(readErrors, fmt.Errorf("crew day references for %s: %w", member.Key.String(), err))
+			continue
 		}
 		for id, entry := range memory.Entries {
 			if entry.Day == nil || entry.Day.Session == "" {
@@ -215,7 +217,7 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 			referenced[key] = append(referenced[key], protocol.KeptConversationCrewDay{Member: member.Key.String(), Name: d.memberName(member.Key), DayID: strconv.Itoa(id)})
 		}
 	}
-	return referenced, nil
+	return referenced, readErrors
 }
 
 func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
@@ -227,9 +229,9 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	for key := range seeds {
 		referenced[key] = true
 	}
-	days, err := d.crewDayReferences()
-	if err != nil {
-		return nil, err
+	days, dayReadErr := d.crewDayReferences()
+	if days == nil && dayReadErr != nil {
+		return nil, dayReadErr
 	}
 	for key := range days {
 		referenced[key] = true
@@ -241,7 +243,7 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	for _, pin := range pins {
 		referenced[conversationKey{pin.Agent, pin.ResumeID}] = true
 	}
-	return referenced, nil
+	return referenced, dayReadErr
 }
 
 func (d *Daemon) keepConversations(now time.Time) {
@@ -250,10 +252,13 @@ func (d *Daemon) keepConversations(now time.Time) {
 	}
 	d.conversationKeepMu.Lock()
 	defer d.conversationKeepMu.Unlock()
-	referenced, err := d.referencedConversations()
-	if err != nil {
-		d.logf("conversation keep: read references: %v", err)
+	referenced, referenceErr := d.referencedConversations()
+	if referenced == nil {
+		d.logf("conversation keep: read references: %v", referenceErr)
 		return
+	}
+	if referenceErr != nil {
+		d.notifyConversationReferencesIncomplete(referenceErr)
 	}
 	live := make(map[conversationKey]bool)
 	for _, session := range d.store.List("") {
@@ -339,7 +344,9 @@ func (d *Daemon) keepConversations(now time.Time) {
 			d.logf("conversation keep: delete %s/%s: %v", kept.Agent, kept.ResumeID, err)
 		}
 	}
-	d.retireConversations(all, changed, now)
+	if referenceErr == nil {
+		d.retireConversations(all, changed, now)
+	}
 	d.coalesceSnapshots(func() {
 		for key := range changed {
 			d.publishFact(factConversationKeptChanged, key.resumeID, nil)
