@@ -972,7 +972,9 @@ func (b *WorkerBackend) Kill(ctx context.Context, id harness.TerminalID, sig sys
 		ctx, cancel = context.WithTimeout(ctx, killRPCTimeout)
 		defer cancel()
 	}
-	return b.callSimple(ctx, session, ptyworker.MethodSignal, ptyworker.SignalParams{Signal: signalName(sig)})
+	session.controlMu.Lock()
+	defer session.controlMu.Unlock()
+	return b.callEndingLocked(ctx, session, ptyworker.MethodSignal, ptyworker.SignalParams{Signal: signalName(sig)})
 }
 
 func (b *WorkerBackend) Remove(ctx context.Context, id harness.TerminalID) error {
@@ -987,24 +989,40 @@ func (b *WorkerBackend) Remove(ctx context.Context, id harness.TerminalID) error
 		defer cancel()
 	}
 	workerPID := b.workerPIDForSession(session)
-	callErr := b.callSimple(ctx, session, ptyworker.MethodRemove, map[string]any{})
-	if callErr != nil {
-		if errors.Is(callErr, pty.ErrSessionNotFound) || errors.Is(callErr, os.ErrNotExist) {
-			b.stopMonitor(session)
-			b.stopPoller(session)
-			b.closePersistentControlConn(session, "remove_missing")
+	callErr := func() error {
+		session.controlMu.Lock()
+		defer session.controlMu.Unlock()
+		err := b.callEndingLocked(ctx, session, ptyworker.MethodRemove, map[string]any{})
+		if err == nil || errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
+			b.closePersistentControlConnLocked(session, "remove")
 			b.forgetSession(session)
-			b.pruneSessionFiles(sessionID, session.RegistryPath, session.SocketPath)
-			b.reapWorkerPID(workerPID, sessionID)
 		}
+		return err
+	}()
+	if callErr != nil && !errors.Is(callErr, pty.ErrSessionNotFound) && !errors.Is(callErr, os.ErrNotExist) {
 		return callErr
 	}
 	b.stopMonitor(session)
 	b.stopPoller(session)
-	b.closePersistentControlConn(session, "remove")
-	b.forgetSession(session)
+	if callErr != nil {
+		b.pruneSessionFiles(sessionID, session.RegistryPath, session.SocketPath)
+	}
 	b.reapWorkerPID(workerPID, sessionID)
-	return nil
+	return callErr
+}
+
+func (b *WorkerBackend) callEndingLocked(ctx context.Context, session *workerSession, method string, params any) error {
+	b.mu.RLock()
+	current := b.sessions[session.SessionID] == session
+	b.mu.RUnlock()
+	if !current {
+		return fmt.Errorf("%w: %s", pty.ErrSessionNotFound, session.SessionID)
+	}
+	if b.kind == workerRuntimeSharedHost {
+		return b.callResultSharedOneShot(ctx, session, method, params, nil)
+	}
+	_, err := b.callResultPersistentLocked(ctx, session, method, params, nil)
+	return err
 }
 
 func (b *WorkerBackend) forgetSession(session *workerSession) {
@@ -1643,11 +1661,14 @@ func (b *WorkerBackend) callResultPersistent(ctx context.Context, session *worke
 		}
 		return b.callResultSharedPersistent(ctx, session, method, params, result)
 	}
-	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
-	defer cancel()
-
 	session.controlMu.Lock()
 	defer session.controlMu.Unlock()
+	return b.callResultPersistentLocked(ctx, session, method, params, result)
+}
+
+func (b *WorkerBackend) callResultPersistentLocked(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
+	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
+	defer cancel()
 
 	err := b.ensurePersistentControlConnLocked(rpcCtx, session)
 	if err != nil {

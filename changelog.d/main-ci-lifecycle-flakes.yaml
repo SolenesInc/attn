@@ -1,0 +1,3 @@
+kind: fixed
+area: daemon
+change: Outpost updates reconnect after the old listener closes. Closing a plugin agent completes even when its terminal exits during cleanup.

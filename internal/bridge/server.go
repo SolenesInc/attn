@@ -36,6 +36,15 @@ func Listen(ctx context.Context, cfg ServerConfig, onConn func(*Conn)) error {
 
 func Serve(ctx context.Context, listener net.Listener, cfg ServerConfig, onConn func(*Conn)) error {
 	defer listener.Close()
+	if cfg.Update != nil {
+		update := *cfg.Update
+		restart := update.Restart
+		update.Restart = func() {
+			_ = listener.Close()
+			restart()
+		}
+		cfg.Update = &update
+	}
 	key, err := hostKey(cfg.HostKeyPath)
 	if err != nil {
 		return err

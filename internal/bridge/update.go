@@ -119,7 +119,8 @@ func (c *UpdateConn) Send(ctx context.Context, build Build, path string, phase f
 			phase("verifying")
 		case "restarting":
 			phase("restarting")
-			return nil
+			_ = c.ready.transport.Wait()
+			return ctx.Err()
 		default:
 			return fmt.Errorf("unknown update reply %q", reply.Status)
 		}

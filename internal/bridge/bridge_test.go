@@ -68,7 +68,11 @@ func pair(t *testing.T) *pairWorld {
 }
 
 func (w *pairWorld) start() {
-	go func() { w.served <- bridge.Serve(w.ctx, w.network, w.cfg, func(c *bridge.Conn) { w.server <- c }) }()
+	w.startOn(w.network)
+}
+
+func (w *pairWorld) startOn(listener net.Listener) {
+	go func() { w.served <- bridge.Serve(w.ctx, listener, w.cfg, func(c *bridge.Conn) { w.server <- c }) }()
 	w.t.Cleanup(func() {
 		w.cancel()
 		if err := <-w.served; err != nil {
