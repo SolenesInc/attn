@@ -35,6 +35,11 @@ type probe struct {
 	latencies           []time.Duration
 	floodBytes, desyncs int
 	stalled             bool
+	measuredTerminal    string
+	measuredBytes       int
+	measuredEvents      int
+	measuredTail        []byte
+	measuredEnd         bool
 	err                 error
 }
 
@@ -66,6 +71,18 @@ func (p *probe) read() {
 				p.err = err
 			} else {
 				id := string(terminal)
+				if id == p.measuredTerminal {
+					p.measuredBytes += len(data)
+					p.measuredEvents++
+					p.measuredTail = append(p.measuredTail, data...)
+					marker := []byte("__cpu_finished")
+					if bytes.Contains(p.measuredTail, marker) {
+						p.measuredEnd = true
+					}
+					if len(p.measuredTail) > len(marker) {
+						p.measuredTail = p.measuredTail[len(p.measuredTail)-len(marker):]
+					}
+				}
 				if output, watched := p.outputs[id]; watched {
 					output = append(output, data...)
 					if id == p.echo {
@@ -94,6 +111,9 @@ func (p *probe) read() {
 				if frame["event"] == "pty_desync" {
 					p.desyncs++
 					reattach, _ = frame["id"].(string)
+					if reattach == p.measuredTerminal {
+						p.err = fmt.Errorf("CPU measurement desynced: %v", frame["reason"])
+					}
 				}
 				if rows, ok := frame["outposts"].([]any); ok {
 					for _, value := range rows {
@@ -297,6 +317,27 @@ func (p *probe) measure(label string, n int) error {
 	}
 	return nil
 }
+func (p *probe) sequence(label, terminal string) error {
+	p.mu.Lock()
+	p.outputs[terminal] = nil
+	p.mu.Unlock()
+	if err := p.input(terminal, "printf '__seq_%s\\n' start; seq 1 5000000; printf '__seq_%s\\n' finished\r"); err != nil {
+		return err
+	}
+	if err := p.screen(terminal, "__seq_start\r\n"); err != nil {
+		return err
+	}
+	began := time.Now()
+	if err := p.screen(terminal, "__seq_finished"); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	total := len(p.outputs[terminal])
+	delete(p.outputs, terminal)
+	p.mu.Unlock()
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"mode": label + "-seq", "bytes": total, "seconds": time.Since(began).Seconds()})
+}
+
 func run() error {
 	url := flag.String("url", "", "isolated home's WebSocket URL")
 	data := flag.String("data", "", "isolated home's data directory")
@@ -329,6 +370,16 @@ func run() error {
 		return err
 	}
 	_ = initial
+	if *mode == "local-seq" {
+		terminal, err := p.spawn("", *cwd, "")
+		if err != nil {
+			return err
+		}
+		if err := p.attach(terminal, false); err != nil {
+			return err
+		}
+		return p.sequence(*mode, terminal)
+	}
 	if *mode == "local" {
 		for range 2 {
 			terminal, err := p.spawn("", *cwd, "")
@@ -454,6 +505,28 @@ func run() error {
 		}
 		return nil
 	}
+	if *mode == "cpu" {
+		p.mu.Lock()
+		p.measuredTerminal = split
+		delete(p.outputs, split)
+		p.mu.Unlock()
+		began := time.Now()
+		if err := p.input(split, "seq 1 12500000; printf '__cpu_%s\\n' finished\r"); err != nil {
+			return err
+		}
+		if err := p.await(func() bool { return p.measuredEnd }); err != nil {
+			return err
+		}
+		p.mu.Lock()
+		total := p.measuredBytes
+		events := p.measuredEvents
+		p.mu.Unlock()
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"mode": "cpu", "bytes": total, "events": events, "seconds": time.Since(began).Seconds()})
+	}
+	if err := p.sequence(*mode, split); err != nil {
+		return err
+	}
+
 	startEcho := func(terminal string) error {
 		p.mu.Lock()
 		p.echo = terminal

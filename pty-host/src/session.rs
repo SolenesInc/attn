@@ -32,6 +32,7 @@ use crate::signals::{self, SignalObserver};
 use crate::wire::{WireFeeder, mint_epoch};
 
 const READER_STACK_BYTES: usize = 256 * 1024;
+const OUTPUT_EVENT_MAX_BYTES: usize = (256 + 16) * 1024;
 const EXITED_SESSION_TTL: Duration = Duration::from_secs(45);
 const TERMINATE_TIMEOUT: Duration = Duration::from_secs(10);
 const SIGTERM_TO_HUP_GRACE: Duration = Duration::from_secs(2);
@@ -1104,7 +1105,7 @@ impl Session {
             .signal_order
             .lock()
             .expect("signal order mutex poisoned");
-        let (seq, wire, placements, resync, responses, observations, titles) = {
+        let (first_seq, seq, wire, placements, resync, responses, observations, titles) = {
             let mut model = self.model.lock().expect("model mutex poisoned");
             let (queries, complete_queries) = model.queries.scan(data);
             track_color_scheme_reports(&complete_queries, &mut model.color_scheme_reports);
@@ -1128,8 +1129,12 @@ impl Session {
                     )
                 })
             }));
-            model.seq = model.seq.wrapping_add(1);
+            let first_seq = model.seq.wrapping_add(1);
+            let events = u32::try_from(feed.wire.len().div_ceil(OUTPUT_EVENT_MAX_BYTES).max(1))
+                .expect("output event count fits u32");
+            model.seq = model.seq.wrapping_add(events);
             (
+                first_seq,
                 model.seq,
                 feed.wire,
                 feed.placements,
@@ -1149,8 +1154,10 @@ impl Session {
         if !responses.is_empty() {
             let _ = self.write_master(&responses);
         }
-        if !wire.is_empty() {
-            self.broadcast_output(seq, &wire);
+        let mut output_seq = first_seq;
+        for chunk in wire.chunks(OUTPUT_EVENT_MAX_BYTES) {
+            self.broadcast_output(output_seq, chunk);
+            output_seq = output_seq.wrapping_add(1);
         }
         if let Some(placements) = placements {
             self.broadcast_placements(seq, &placements);

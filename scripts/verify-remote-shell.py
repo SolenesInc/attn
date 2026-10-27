@@ -16,8 +16,10 @@ parser.add_argument("--remote", default="ai-sandbox")
 parser.add_argument("--address", default="100.65.211.63:19428")
 parser.add_argument("--route-cut", action="store_true")
 parser.add_argument("--bench", action="store_true")
+parser.add_argument("--cpu", action="store_true")
 parser.add_argument("--force-derp", action="store_true")
 parser.add_argument("--samples", default=1000, type=int)
+parser.add_argument("--report-seed", help="record forced-DERP start/end on the coordinating seed")
 parser.add_argument("--receipts", required=True, type=Path)
 args = parser.parse_args()
 for field in ["attn", "linux_attn", "probe", "receipts"]:
@@ -35,6 +37,14 @@ forced_derp = False
 runtime_file = "/run/systemd/system/tailscaled.service.d/attn-remote-shell-" + instance + ".conf"
 restore_unit = "attn-remote-shell-restore-" + instance
 remote_env = "-u ATTN_DATA_DIR -u ATTN_DB_PATH -u ATTN_SOCKET_PATH -u ATTN_CONFIG_PATH -u ATTN_PLUGIN_DIR -u ATTN_WS_PORT -u ATTN_HOST ATTN_INSTANCE=" + shlex.quote(instance) + " ATTN_HEADLESS_TASKS=off ATTN_GITHUB_POLLING=off ATTN_HARNESS_SKILL_SYNC=off"
+
+
+def report(message):
+    print(message, flush=True)
+    if args.report_seed:
+        result = subprocess.run(["attn", "seed", "note", args.report_seed, "-m", message], text=True, capture_output=True)
+        if result.returncode:
+            print("seed note failed: " + result.stderr.strip(), flush=True)
 
 
 def run(command, **kwargs):
@@ -81,15 +91,32 @@ READY"""
     print(ssh(script), flush=True)
 
 
+def cpu_time(pid, remote=False):
+    command = ["ps", "-p", str(pid), "-o", "time="]
+    value = ssh(" ".join(shlex.quote(v) for v in command)) if remote else run(command)
+    fields = value.strip().split(":")
+    return sum(float(field) * 60 ** i for i, field in enumerate(reversed(fields)))
+
+
 def measure(mode):
     command = [str(args.probe), "--url", url, "--data", data, "--address", args.address, "--cwd", remote_dir, "--name", args.remote, "--mode", mode, "--samples", str(args.samples)]
     if mode == "scenario" and args.route_cut:
         command += ["--cut-command", str(cut_script)]
+    if mode == "cpu":
+        remote_data = remote_cli("instance", "resolve", "--field", "dataDir")
+        remote_pid = int(ssh("cat " + shlex.quote(remote_data + "/attn.pid")))
+        before = [cpu_time(home.pid), cpu_time(remote_pid, remote=True)]
     with (args.receipts / (mode + ".log")).open("w") as output:
         result = subprocess.run(command, env=env, text=True, stdout=output, stderr=subprocess.STDOUT)
     print((args.receipts / (mode + ".log")).read_text(), flush=True)
     if result.returncode:
         raise RuntimeError(f"{mode} proof failed with exit {result.returncode}")
+    if mode == "cpu":
+        after = [cpu_time(home.pid), cpu_time(remote_pid, remote=True)]
+        measurement = next(json.loads(line) for line in (args.receipts / "cpu.log").read_text().splitlines() if line.startswith('{"bytes"'))
+        result = {"payload_bytes": measurement["bytes"], "home_cpu_s_per_100MB": (after[0] - before[0]) * 100000000 / measurement["bytes"], "outpost_cpu_s_per_100MB": (after[1] - before[1]) * 100000000 / measurement["bytes"]}
+        (args.receipts / "cpu.json").write_text(json.dumps(result, indent=2) + "\n")
+        print(json.dumps(result), flush=True)
 
 
 try:
@@ -127,6 +154,8 @@ try:
     cut_script.write_text("#!/bin/sh\nexec ssh " + shlex.quote(args.remote) + " bash -s <<'CUT'\nset -eu\nsudo systemd-run --collect --unit=" + restore_unit + " --on-active=30s /usr/bin/systemctl start tailscaled\nsudo systemctl stop tailscaled\nCUT\n")
     cut_script.chmod(0o700)
     measure("scenario")
+    if args.cpu:
+        measure("cpu")
     if args.bench:
         direct = ssh("tailscale ping -c 5 100.127.148.75")
         (args.receipts / "direct-route.txt").write_text(direct + "\n")
@@ -136,6 +165,7 @@ try:
     if args.force_derp:
         ssh("test ! -e " + runtime_file)
         forced_derp = True
+        report("Forced-DERP measurement starting for " + instance + " on " + args.address + "; the runtime override will be restored in finally.")
         ssh("sudo mkdir -p /run/systemd/system/tailscaled.service.d\nprintf '[Service]\\nEnvironment=TS_DEBUG_ALWAYS_USE_DERP=true\\n' | sudo tee " + runtime_file + " >/dev/null\nsudo systemctl daemon-reload\nsudo systemctl restart tailscaled\ntailscale wait")
         wait_for_peer()
         relay = ssh("tailscale ping --until-direct=false -c 5 100.127.148.75")
@@ -148,6 +178,7 @@ finally:
     if forced_derp:
         try:
             ssh("sudo rm " + runtime_file + "\nsudo systemctl daemon-reload\nsudo systemctl restart tailscaled\ntailscale wait")
+            report("Forced-DERP measurement ended for " + instance + "; runtime override removed and tailscaled restored.")
         except Exception as error:
             cleanup_errors.append("DERP restore: " + str(error))
     if home is not None:
