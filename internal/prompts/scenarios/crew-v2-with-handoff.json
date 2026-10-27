@@ -14,7 +14,7 @@
     "older_handoffs": "`older.md`",
     "handoffs_dirname": "handoffs",
     "charter_file": "/workspace/crew/maintainer/charter.md",
-    "charter_path": "",
+    "charter_path": "/workspace/crew/maintainer/charter.md",
     "handoff_name": "previous.md",
     "handoffs_dir": "/workspace/crew/maintainer/handoffs",
     "crew_v2_enabled": "true"

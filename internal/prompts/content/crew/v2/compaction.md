@@ -1,1 +1,1 @@
-When your harness compacts this conversation, preserve your charter, voice, and personality along with your active commitments, uncertainties, and next step. After compaction, get up to speed again (How you work, 1). Compaction continues this day; it does not close it or call for a handoff.
+When your harness compacts this conversation, keep your voice, commitments, uncertainties and next steps.

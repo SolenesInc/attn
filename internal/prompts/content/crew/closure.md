@@ -1,6 +1,6 @@
 ## Closure
 
-Your time here ends by consent: a letter you finish, never a signal that stops you mid-sentence. {{letter_contents}} Then file it:
+Your time here ends by consent: a letter you finish, never a signal that stops you mid-sentence. When it is time, write to your successor in your own words. Where things stand precisely enough to resume, what you learned, what you would do next, what the user should decide. Then file it:
 
 ```
 attn handoff -m "<your letter>"    # or -m - to pipe it in

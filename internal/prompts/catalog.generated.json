@@ -1188,210 +1188,334 @@
             "kind": "compose",
             "children": [
               {
-                "kind": "join",
+                "kind": "compose",
                 "children": [
-                  {
-                    "kind": "text",
-                    "id": "crew.identity",
-                    "source": "content/crew/identity.md",
-                    "bindings": [
-                      {
-                        "name": "display_name",
-                        "node": {
-                          "kind": "input",
-                          "field": {
-                            "name": "display_name",
-                            "kind": "text",
-                            "description": "Display name"
-                          }
-                        }
-                      },
-                      {
-                        "name": "home_dir",
-                        "node": {
-                          "kind": "input",
-                          "field": {
-                            "name": "home_dir",
-                            "kind": "text",
-                            "description": "Home dir"
-                          }
-                        }
-                      },
-                      {
-                        "name": "home_ownership",
-                        "node": {
-                          "kind": "text",
-                          "id": "crew.home-files",
-                          "source": "content/crew/home-files.md"
-                        }
-                      },
-                      {
-                        "name": "compaction",
-                        "node": {
-                          "kind": "choose",
-                          "condition": {
-                            "field": {
-                              "name": "crew_v2_enabled",
-                              "kind": "flag",
-                              "description": "Use the crew v2 operating model."
-                            },
-                            "test": "enabled"
-                          },
-                          "children": [
-                            {
-                              "kind": "text",
-                              "id": "crew.v2.compaction",
-                              "source": "content/crew/v2/compaction.md"
-                            },
-                            {
-                              "kind": "text",
-                              "id": "crew.compaction",
-                              "source": "content/crew/compaction.md"
-                            }
-                          ]
-                        }
-                      }
-                    ]
-                  },
                   {
                     "kind": "choose",
                     "condition": {
                       "field": {
-                        "name": "has_charter",
+                        "name": "crew_v2_enabled",
                         "kind": "flag",
-                        "description": "A charter exists"
+                        "description": "Use the crew v2 operating model."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
+                      {
+                        "kind": "join",
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.v2.identity",
+                            "source": "content/crew/v2/identity.md",
+                            "bindings": [
+                              {
+                                "name": "display_name",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "display_name",
+                                    "kind": "text",
+                                    "description": "Display name"
+                                  }
+                                }
+                              },
+                              {
+                                "name": "home_dir",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "home_dir",
+                                    "kind": "text",
+                                    "description": "Home dir"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "has_charter",
+                                "kind": "flag",
+                                "description": "A charter exists"
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.v2.charter",
+                                "source": "content/crew/v2/charter.md",
+                                "bindings": [
+                                  {
+                                    "name": "charter_path",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "charter_path",
+                                        "kind": "text",
+                                        "description": "Charter path"
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "kind": "text",
+                                "id": "crew.v2.first-day",
+                                "source": "content/crew/v2/first-day.md",
+                                "bindings": [
+                                  {
+                                    "name": "charter_path",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "charter_path",
+                                        "kind": "text",
+                                        "description": "Charter path"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "cwd",
+                                "kind": "text",
+                                "description": "Cwd"
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.cwd",
+                                "source": "content/crew/cwd.md",
+                                "bindings": [
+                                  {
+                                    "name": "cwd",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "cwd",
+                                        "kind": "text",
+                                        "description": "Cwd"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "awareness_dirs",
+                                "kind": "text",
+                                "description": "Awareness dirs"
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.awareness",
+                                "source": "content/crew/awareness.md",
+                                "bindings": [
+                                  {
+                                    "name": "awareness_dirs",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "awareness_dirs",
+                                        "kind": "text",
+                                        "description": "Awareness dirs"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "join",
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "crew.identity",
+                            "source": "content/crew/identity.md",
+                            "bindings": [
+                              {
+                                "name": "display_name",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "display_name",
+                                    "kind": "text",
+                                    "description": "Display name"
+                                  }
+                                }
+                              },
+                              {
+                                "name": "home_dir",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "home_dir",
+                                    "kind": "text",
+                                    "description": "Home dir"
+                                  }
+                                }
+                              },
+                              {
+                                "name": "home_ownership",
+                                "node": {
+                                  "kind": "text",
+                                  "id": "crew.home-files",
+                                  "source": "content/crew/home-files.md"
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "has_charter",
+                                "kind": "flag",
+                                "description": "A charter exists"
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.charter",
+                                "source": "content/crew/charter.md",
+                                "bindings": [
+                                  {
+                                    "name": "charter_file",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "charter_file",
+                                        "kind": "text",
+                                        "description": "Charter file"
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "kind": "text",
+                                "id": "crew.first-day",
+                                "source": "content/crew/first-day.md",
+                                "bindings": [
+                                  {
+                                    "name": "charter_path",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "charter_path",
+                                        "kind": "text",
+                                        "description": "Charter path"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "cwd",
+                                "kind": "text",
+                                "description": "Cwd"
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.cwd",
+                                "source": "content/crew/cwd.md",
+                                "bindings": [
+                                  {
+                                    "name": "cwd",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "cwd",
+                                        "kind": "text",
+                                        "description": "Cwd"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "kind": "when",
+                            "condition": {
+                              "field": {
+                                "name": "awareness_dirs",
+                                "kind": "text",
+                                "description": "Awareness dirs"
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "crew.awareness",
+                                "source": "content/crew/awareness.md",
+                                "bindings": [
+                                  {
+                                    "name": "awareness_dirs",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "awareness_dirs",
+                                        "kind": "text",
+                                        "description": "Awareness dirs"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "when",
+                    "condition": {
+                      "field": {
+                        "name": "crew_v2_enabled",
+                        "kind": "flag",
+                        "description": "Use the crew v2 operating model."
                       },
                       "test": "enabled"
                     },
                     "children": [
                       {
                         "kind": "text",
-                        "id": "crew.charter",
-                        "source": "content/crew/charter.md",
-                        "bindings": [
-                          {
-                            "name": "charter_file",
-                            "node": {
-                              "kind": "input",
-                              "field": {
-                                "name": "charter_file",
-                                "kind": "text",
-                                "description": "Charter file"
-                              }
-                            }
-                          }
-                        ]
-                      },
-                      {
-                        "kind": "choose",
-                        "condition": {
-                          "field": {
-                            "name": "crew_v2_enabled",
-                            "kind": "flag",
-                            "description": "Use the crew v2 operating model."
-                          },
-                          "test": "enabled"
-                        },
-                        "children": [
-                          {
-                            "kind": "text",
-                            "id": "crew.v2.first-day",
-                            "source": "content/crew/v2/first-day.md",
-                            "bindings": [
-                              {
-                                "name": "charter_path",
-                                "node": {
-                                  "kind": "input",
-                                  "field": {
-                                    "name": "charter_path",
-                                    "kind": "text",
-                                    "description": "Charter path"
-                                  }
-                                }
-                              }
-                            ]
-                          },
-                          {
-                            "kind": "text",
-                            "id": "crew.first-day",
-                            "source": "content/crew/first-day.md",
-                            "bindings": [
-                              {
-                                "name": "charter_path",
-                                "node": {
-                                  "kind": "input",
-                                  "field": {
-                                    "name": "charter_path",
-                                    "kind": "text",
-                                    "description": "Charter path"
-                                  }
-                                }
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "kind": "when",
-                    "condition": {
-                      "field": {
-                        "name": "cwd",
-                        "kind": "text",
-                        "description": "Cwd"
-                      },
-                      "test": "present"
-                    },
-                    "children": [
-                      {
-                        "kind": "text",
-                        "id": "crew.cwd",
-                        "source": "content/crew/cwd.md",
-                        "bindings": [
-                          {
-                            "name": "cwd",
-                            "node": {
-                              "kind": "input",
-                              "field": {
-                                "name": "cwd",
-                                "kind": "text",
-                                "description": "Cwd"
-                              }
-                            }
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "kind": "when",
-                    "condition": {
-                      "field": {
-                        "name": "awareness_dirs",
-                        "kind": "text",
-                        "description": "Awareness dirs"
-                      },
-                      "test": "present"
-                    },
-                    "children": [
-                      {
-                        "kind": "text",
-                        "id": "crew.awareness",
-                        "source": "content/crew/awareness.md",
-                        "bindings": [
-                          {
-                            "name": "awareness_dirs",
-                            "node": {
-                              "kind": "input",
-                              "field": {
-                                "name": "awareness_dirs",
-                                "kind": "text",
-                                "description": "Awareness dirs"
-                              }
-                            }
-                          }
-                        ]
+                        "id": "crew.v2.compaction",
+                        "source": "content/crew/v2/compaction.md"
                       }
                     ]
                   }
@@ -1493,31 +1617,62 @@
                             },
                             "children": [
                               {
-                                "kind": "text",
-                                "id": "crew.older-letters",
-                                "source": "content/crew/older-letters.md",
-                                "bindings": [
+                                "kind": "choose",
+                                "condition": {
+                                  "field": {
+                                    "name": "crew_v2_enabled",
+                                    "kind": "flag",
+                                    "description": "Use the crew v2 operating model."
+                                  },
+                                  "test": "enabled"
+                                },
+                                "children": [
                                   {
-                                    "name": "handoffs_dirname",
-                                    "node": {
-                                      "kind": "input",
-                                      "field": {
+                                    "kind": "text",
+                                    "id": "crew.v2.older-letters",
+                                    "source": "content/crew/v2/older-letters.md",
+                                    "bindings": [
+                                      {
                                         "name": "handoffs_dirname",
-                                        "kind": "text",
-                                        "description": "Handoffs dirname"
+                                        "node": {
+                                          "kind": "input",
+                                          "field": {
+                                            "name": "handoffs_dirname",
+                                            "kind": "text",
+                                            "description": "Handoffs dirname"
+                                          }
+                                        }
                                       }
-                                    }
+                                    ]
                                   },
                                   {
-                                    "name": "older_handoffs",
-                                    "node": {
-                                      "kind": "input",
-                                      "field": {
+                                    "kind": "text",
+                                    "id": "crew.older-letters",
+                                    "source": "content/crew/older-letters.md",
+                                    "bindings": [
+                                      {
+                                        "name": "handoffs_dirname",
+                                        "node": {
+                                          "kind": "input",
+                                          "field": {
+                                            "name": "handoffs_dirname",
+                                            "kind": "text",
+                                            "description": "Handoffs dirname"
+                                          }
+                                        }
+                                      },
+                                      {
                                         "name": "older_handoffs",
-                                        "kind": "text",
-                                        "description": "Older handoffs"
+                                        "node": {
+                                          "kind": "input",
+                                          "field": {
+                                            "name": "older_handoffs",
+                                            "kind": "text",
+                                            "description": "Older handoffs"
+                                          }
+                                        }
                                       }
-                                    }
+                                    ]
                                   }
                                 ]
                               }
@@ -1536,20 +1691,51 @@
                     ]
                   },
                   {
-                    "kind": "text",
-                    "id": "crew.no-letter",
-                    "source": "content/crew/no-letter.md",
-                    "bindings": [
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "crew_v2_enabled",
+                        "kind": "flag",
+                        "description": "Use the crew v2 operating model."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
                       {
-                        "name": "handoffs_dir",
-                        "node": {
-                          "kind": "input",
-                          "field": {
+                        "kind": "text",
+                        "id": "crew.v2.no-letter",
+                        "source": "content/crew/v2/no-letter.md",
+                        "bindings": [
+                          {
                             "name": "handoffs_dir",
-                            "kind": "text",
-                            "description": "Handoffs dir"
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "handoffs_dir",
+                                "kind": "text",
+                                "description": "Handoffs dir"
+                              }
+                            }
                           }
-                        }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "crew.no-letter",
+                        "source": "content/crew/no-letter.md",
+                        "bindings": [
+                          {
+                            "name": "handoffs_dir",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "handoffs_dir",
+                                "kind": "text",
+                                "description": "Handoffs dir"
+                              }
+                            }
+                          }
+                        ]
                       }
                     ]
                   }
@@ -1581,57 +1767,62 @@
                 ]
               },
               {
-                "kind": "text",
-                "id": "crew.closure",
-                "source": "content/crew/closure.md",
-                "bindings": [
+                "kind": "choose",
+                "condition": {
+                  "field": {
+                    "name": "crew_v2_enabled",
+                    "kind": "flag",
+                    "description": "Use the crew v2 operating model."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
                   {
-                    "name": "handoffs_dirname",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                    "kind": "text",
+                    "id": "crew.v2.closure",
+                    "source": "content/crew/v2/closure.md",
+                    "bindings": [
+                      {
                         "name": "handoffs_dirname",
-                        "kind": "text",
-                        "description": "Handoffs dirname"
-                      }
-                    }
-                  },
-                  {
-                    "name": "display_name",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "display_name",
-                        "kind": "text",
-                        "description": "Display name"
-                      }
-                    }
-                  },
-                  {
-                    "name": "letter_contents",
-                    "node": {
-                      "kind": "choose",
-                      "condition": {
-                        "field": {
-                          "name": "crew_v2_enabled",
-                          "kind": "flag",
-                          "description": "Use the crew v2 operating model."
-                        },
-                        "test": "enabled"
-                      },
-                      "children": [
-                        {
-                          "kind": "text",
-                          "id": "crew.v2.closure-letter",
-                          "source": "content/crew/v2/closure-letter.md"
-                        },
-                        {
-                          "kind": "text",
-                          "id": "crew.closure-letter",
-                          "source": "content/crew/closure-letter.md"
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "handoffs_dirname",
+                            "kind": "text",
+                            "description": "Handoffs dirname"
+                          }
                         }
-                      ]
-                    }
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "text",
+                    "id": "crew.closure",
+                    "source": "content/crew/closure.md",
+                    "bindings": [
+                      {
+                        "name": "handoffs_dirname",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "handoffs_dirname",
+                            "kind": "text",
+                            "description": "Handoffs dirname"
+                          }
+                        }
+                      },
+                      {
+                        "name": "display_name",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "display_name",
+                            "kind": "text",
+                            "description": "Display name"
+                          }
+                        }
+                      }
+                    ]
                   }
                 ]
               }
@@ -5733,5 +5924,5 @@
       ]
     }
   ],
-  "definitions_hash": "43256e76fc0454917acb784f3ebf2fe09a98b075c33d251ea2feb1ecf77aee71"
+  "definitions_hash": "cc37d9a8a28a250bbd8eccb221c026aaf48c9c580b75cb9c0611bbc220f39bc7"
 }

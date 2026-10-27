@@ -19,24 +19,35 @@ func crewRecipient() Recipient {
 	gardenRead := FlagField("garden_read", "The garden was readable when the member woke.")
 
 	identity := Use("crew.identity", "content/crew/identity.md", Bind("display_name", Input(name)), Bind("home_dir", Input(home)),
-		Bind("home_ownership", Use("crew.home-files", "content/crew/home-files.md")),
-		Bind("compaction", Choose(Enabled(v2), Use("crew.v2.compaction", "content/crew/v2/compaction.md"), Use("crew.compaction", "content/crew/compaction.md"))))
-	existingCharter := template("crew.charter", "content/crew/charter.md", TextField("charter_file", "Charter file"))
+		Bind("home_ownership", Use("crew.home-files", "content/crew/home-files.md")))
+	v2Identity := template("crew.v2.identity", "content/crew/v2/identity.md", name, home)
+	charterFile := TextField("charter_file", "Charter file")
+	existingCharter := template("crew.charter", "content/crew/charter.md", charterFile)
 	charterPath := TextField("charter_path", "Charter path")
-	firstDay := Choose(Enabled(v2),
-		template("crew.v2.first-day", "content/crew/v2/first-day.md", charterPath),
-		template("crew.first-day", "content/crew/first-day.md", charterPath))
+	v2Charter := template("crew.v2.charter", "content/crew/v2/charter.md", charterPath)
+	firstDay := template("crew.first-day", "content/crew/first-day.md", charterPath)
+	v2FirstDay := template("crew.v2.first-day", "content/crew/v2/first-day.md", charterPath)
 	launchDirectory := template("crew.cwd", "content/crew/cwd.md", cwd)
 	awarenessDirectories := template("crew.awareness", "content/crew/awareness.md", awareness)
+	launchContext := Compose(
+		Choose(Enabled(v2),
+			Join("", v2Identity, Choose(Enabled(charter), v2Charter, v2FirstDay), When(Present(cwd), launchDirectory), When(Present(awareness), awarenessDirectories)),
+			Join("", identity, Choose(Enabled(charter), existingCharter, firstDay), When(Present(cwd), launchDirectory), When(Present(awareness), awarenessDirectories))),
+		When(Enabled(v2), Use("crew.v2.compaction", "content/crew/v2/compaction.md")))
 	handoffName := TextField("handoff_name", "Handoff name")
 	letter := Choose(Enabled(v2),
 		template("crew.v2.letter", "content/crew/v2/letter.md", handoffName),
 		template("crew.letter", "content/crew/letter.md", handoffName))
-	olderLetters := template("crew.older-letters", "content/crew/older-letters.md", handoffsDirname, older)
-	noLetter := template("crew.no-letter", "content/crew/no-letter.md", TextField("handoffs_dir", "Handoffs dir"))
-	closure := Use("crew.closure", "content/crew/closure.md",
-		Bind("handoffs_dirname", Input(handoffsDirname)), Bind("display_name", Input(name)),
-		Bind("letter_contents", Choose(Enabled(v2), Use("crew.v2.closure-letter", "content/crew/v2/closure-letter.md"), Use("crew.closure-letter", "content/crew/closure-letter.md"))))
+	olderLetters := Choose(Enabled(v2),
+		template("crew.v2.older-letters", "content/crew/v2/older-letters.md", handoffsDirname),
+		template("crew.older-letters", "content/crew/older-letters.md", handoffsDirname, older))
+	handoffsDir := TextField("handoffs_dir", "Handoffs dir")
+	noLetter := Choose(Enabled(v2),
+		template("crew.v2.no-letter", "content/crew/v2/no-letter.md", handoffsDir),
+		template("crew.no-letter", "content/crew/no-letter.md", handoffsDir))
+	closure := Choose(Enabled(v2),
+		template("crew.v2.closure", "content/crew/v2/closure.md", handoffsDirname),
+		template("crew.closure", "content/crew/closure.md", handoffsDirname, name))
 
 	heldList := Choose(Enabled(v2),
 		template("crew.v2.garden", "content/crew/v2/garden.md", heldSeeds),
@@ -55,10 +66,7 @@ func crewRecipient() Recipient {
 					noHoldings))),
 		On("priming", "launch_instructions", "internal/crew.Priming.Block: appended to launch instructions. The adapter prepares paths, display name and bounded handoff text.",
 			Compose(
-				Join("", identity,
-					Choose(Enabled(charter), existingCharter, firstDay),
-					When(Present(cwd), launchDirectory),
-					When(Present(awareness), awarenessDirectories)),
+				launchContext,
 				When(Enabled(v2), Use("crew.v2.operating-model", "content/crew/v2/operating-model.md")),
 				Choose(Present(handoff),
 					Compose(Join("", letter, When(Present(older), olderLetters)), Input(handoff)),
