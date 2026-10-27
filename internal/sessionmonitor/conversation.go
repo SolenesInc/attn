@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"maps"
 	"time"
 
 	"github.com/victorarias/attn/internal/crashpoint"
@@ -345,6 +344,7 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 		m.pendingDirty, bound.pendingDirty = false, false
 		if head.candidate == bound {
 			bound.conversationInput = head.Conversation
+			bound.conversation = head.NativeID
 		}
 		delete(r.owners, head.terminal)
 		for _, pending := range tail {
@@ -487,17 +487,18 @@ func (m *Monitor) AdoptDropped(candidate *Monitor) {
 		return
 	}
 	candidate.mu.Lock()
-	conversation, state, evidence, lane := candidate.conversationInput, candidate.state, candidate.evidence, *candidate.input
-	lane.placed = maps.Clone(lane.placed)
-	if lane.run != nil {
-		run := *lane.run
-		lane.run = &run
-	}
+	state, evidence, turn, lastModelRequestAt := candidate.state, candidate.evidence, candidate.turn, candidate.lastModelRequestAt
 	candidate.mu.Unlock()
 	m.mu.Lock()
+	if len(m.pendingSwitch) == 0 {
+		m.mu.Unlock()
+		return
+	}
+	conversation := m.pendingSwitch[0].Conversation
 	m.conversation, m.state, m.evidence = conversation.NativeID, state, evidence
-	m.input = &lane
-	lane.mu, lane.monitor = &m.mu, m
+	m.conversationInput, m.turn, m.lastModelRequestAt = conversation, turn, lastModelRequestAt
+	m.input.observePhaseLocked(state.State)
+	m.armWakeLocked()
 	m.mu.Unlock()
 	m.ResumeUsage()
 	m.StartTranscriptWatcher(conversation.TranscriptPath)

@@ -56,16 +56,6 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 	var monitor *sessionmonitor.Monitor
 	for _, candidate := range d.monitors().registry.Monitors() {
 		matches := candidate.TitleKey() == job.UniqueKey
-		if !matches && payload.SessionID != "" && candidate.Session() == payload.SessionID {
-			var legacy struct {
-				Terminal  string
-				Session   protocol.SessionID
-				StartedAt string
-			}
-			if json.Unmarshal([]byte(job.UniqueKey), &legacy) == nil && legacy.Session == payload.SessionID {
-				matches = legacy.Terminal == string(candidate.Key().Terminal) && legacy.StartedAt == d.store.SessionLaunchedAt(payload.SessionID).UTC().Format(time.RFC3339Nano)
-			}
-		}
 		if payload.SessionID == "" && !matches {
 			matches = candidate.Session() == protocol.SessionID(job.UniqueKey)
 		}

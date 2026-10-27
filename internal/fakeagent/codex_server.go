@@ -56,21 +56,22 @@ func (r codexRefusal) Error() string { return string(r) }
 var codexRefusedWhileDraining = map[string]bool{"turn/start": true, "turn/steer": true, "thread/start": true, "thread/resume": true, "thread/fork": true, "thread/archive": true}
 
 type codexAppServer struct {
-	cfg      config
-	version  string
-	control  *rpcPeer
-	listener net.Listener
-	draining bool
-	hooks    hookSet
-	toolEnv  []string
-	mu       sync.Mutex
-	threads  map[string]*codexServerThread
-	conns    map[*codexServerConn]bool
-	nextID   int
-	prompts  map[string]chan string
-	named    chan struct{}
-	archived chan struct{}
-	listed   chan struct{}
+	cfg       config
+	version   string
+	control   *rpcPeer
+	listener  net.Listener
+	draining  bool
+	hooks     hookSet
+	toolEnv   []string
+	mu        sync.Mutex
+	threads   map[string]*codexServerThread
+	conns     map[*codexServerConn]bool
+	nextID    int
+	prompts   map[string]chan string
+	named     chan struct{}
+	archived  chan struct{}
+	listed    chan struct{}
+	turnReply *codexTurnReply
 }
 
 type codexServerConn struct {
@@ -257,6 +258,9 @@ func (s *codexAppServer) serve(w http.ResponseWriter, req *http.Request) {
 			continue
 		}
 		result, after, err := s.handle(conn, m)
+		if !conn.terminal && (m.Method == "turn/start" || m.Method == "turn/steer") {
+			s.awaitTurnReply()
+		}
 		reply := codexshared.Message{ID: m.ID}
 		if err != nil {
 			reply.Error, _ = json.Marshal(map[string]any{"code": -32600, "message": err.Error()})
@@ -976,6 +980,23 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		return nil, err
 	}
 	switch method {
+	case methodHoldTurnReply:
+		s.mu.Lock()
+		s.turnReply = &codexTurnReply{arrived: make(chan struct{}), release: make(chan struct{})}
+		s.mu.Unlock()
+		return struct{}{}, nil
+	case methodAwaitTurnReply:
+		s.mu.Lock()
+		held := s.turnReply
+		s.mu.Unlock()
+		<-held.arrived
+		return struct{}{}, nil
+	case methodReleaseTurnReply:
+		s.mu.Lock()
+		close(s.turnReply.release)
+		s.turnReply = nil
+		s.mu.Unlock()
+		return struct{}{}, nil
 	case methodPrompted:
 		select {
 		case text := <-s.promptsOf(p.ThreadID):

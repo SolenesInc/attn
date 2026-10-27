@@ -40,6 +40,7 @@ const (
 	CodexViewReleaseChecked    = "codex-view-release-checked"
 	ConversationCandidateTurn  = "conversation-candidate-turn"
 	ConversationSwitchDecision = "conversation-switch-decision"
+	ConversationOwnerResolved  = "conversation-owner-resolved"
 	ConversationSwitchObserved = "conversation-switch-observed"
 	ConversationSwitchAnswer   = "conversation-switch-answer"
 	ConversationInputLookup    = "conversation-input-lookup"

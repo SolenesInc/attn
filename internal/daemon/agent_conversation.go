@@ -89,7 +89,11 @@ func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, propo
 	if held != observation.NativeID {
 		owner = d.store.ConversationOwner(cur, observation.NativeID)
 	}
+	if held != "" && held != observation.NativeID {
+		pausepoint.At(pausepoint.ConversationOwnerResolved)
+	}
 	defer d.lockSessionLifecycles(cur, owner)()
+	defer d.lockTerminalEnds(cur)()
 	if source != nil {
 		if pending, _ := source.PendingSwitch(); pending != proposed {
 			return false

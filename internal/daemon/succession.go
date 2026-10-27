@@ -34,7 +34,6 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner proto
 }
 
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation) error {
-	unlockEnds := d.lockTerminalEnds(from.ID)
 	live := d.liveTerminals(context.Background())
 	sc.KeepFrom = d.othersRun(from.ID, t) || d.keepsWhenLeft(from.ID)
 	sc.Live = make(map[string]bool, len(live))
@@ -49,7 +48,6 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	sc.From = from.ID
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
 	_, closedAsks, err := d.store.CommitSuccession(sc, t)
-	unlockEnds()
 	if err != nil {
 		return err
 	}

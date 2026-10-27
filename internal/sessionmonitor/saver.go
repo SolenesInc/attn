@@ -87,8 +87,9 @@ func (m *Monitor) applyHome(view View, switching bool) bool {
 		m.mu.Lock()
 		m.switchApplying = false
 		next := m.pendingHeadLocked()
+		newer := m.revision > view.Revision.V
 		m.mu.Unlock()
-		if applied && next != view.PendingSwitch.V {
+		if applied && (newer || next != view.PendingSwitch.V) {
 			m.Refresh()
 		}
 	}
