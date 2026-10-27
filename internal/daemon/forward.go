@@ -141,7 +141,7 @@ func (d *Daemon) forwardBridgeHandler(host string) func(*bridge.Conn, ssh.NewCha
 			inputEnded := make(chan struct{})
 			goTransport(func() {
 				defer close(inputEnded)
-				if _, err := relay.Write(append(request.Frame, '\n')); err == nil {
+				if _, err := relay.Write(request.Frame); err == nil {
 					_, _ = io.Copy(relay, channel)
 				}
 				_ = relay.CloseWrite()
@@ -149,15 +149,15 @@ func (d *Daemon) forwardBridgeHandler(host string) func(*bridge.Conn, ssh.NewCha
 			outputEnded := make(chan struct{})
 			goTransport(func() {
 				defer close(outputEnded)
-				if _, err := io.Copy(channel, relay); err == nil {
-					_, _ = channel.SendRequest(forwardComplete, true, nil)
-				}
-				_ = channel.CloseWrite()
-				_ = channel.Close()
+				_, _ = io.Copy(channel, relay)
 			})
 			ctx := context.WithValue(d.life.Context(), originKey{}, Origin{Host: host, Name: row.Name, Caller: request.Caller, bridge: conn})
 			d.handleConnectionContext(ctx, server)
 			<-outputEnded
+			if conn.Context().Err() == nil {
+				_, _ = channel.SendRequest(forwardComplete, true, nil)
+			}
+			_ = channel.CloseWrite()
 			_ = channel.Close()
 			_ = relay.Close()
 			<-inputEnded

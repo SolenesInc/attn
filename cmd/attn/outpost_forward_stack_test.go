@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"context"
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/enrollment"
@@ -98,6 +98,9 @@ func TestOutpostForwardPreservesHalfCloseAndReportsBridgeLoss(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
+	if err := conn.SetReadDeadline(time.Now().Add(fakeagent.HangGuard)); err != nil {
+		t.Fatal(err)
+	}
 	if err := json.NewEncoder(conn).Encode(protocol.QueryMessage{Cmd: protocol.CmdQuery}); err != nil {
 		t.Fatal(err)
 	}
@@ -105,8 +108,12 @@ func TestOutpostForwardPreservesHalfCloseAndReportsBridgeLoss(t *testing.T) {
 		t.Fatal(err)
 	}
 	var response protocol.Response
-	if err := json.NewDecoder(conn).Decode(&response); err != nil || !response.Ok {
+	decoder := json.NewDecoder(conn)
+	if err := decoder.Decode(&response); err != nil || !response.Ok {
 		t.Fatalf("response after caller half-close: %+v, %v", response, err)
+	}
+	if err := decoder.Decode(&response); !errors.Is(err, io.EOF) {
+		t.Fatalf("response after half-close did not end: ok=%v error=%q read=%v", response.Ok, protocol.Deref(response.Error), err)
 	}
 	requireStdout(t, home.Attn("doc", "define", "tests/router", "tasks"), "tasks")
 	watch := outpost.Launch(testworld.Invocation{Args: []string{"doc", "watch", "tests/router", "tasks", "--json"}})
@@ -179,7 +186,7 @@ func TestLaunchingLocalShellDoesNotKeepForwardedSocketOpen(t *testing.T) {
 		t.Fatalf("forwarded response: %+v, %v", response, err)
 	}
 	if err := decoder.Decode(&response); !errors.Is(err, io.EOF) {
-		t.Fatalf("forwarded connection stayed open after its response: %v", err)
+		t.Fatalf("forwarded connection stayed open after its response: ok=%v error=%q read=%v", response.Ok, protocol.Deref(response.Error), err)
 	}
 	pair.App.TypeLine(id, "printf '__still_%s\\n' live")
 	pair.App.AwaitScreen(id, "__still_live")
