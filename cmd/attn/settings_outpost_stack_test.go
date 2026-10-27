@@ -101,6 +101,7 @@ func TestOutpostEnrollmentAppliesUnsetHomeDefaultsToRunningServices(t *testing.T
 	if got := outpost.App().Initial.Settings["headless_tasks.enabled"]; got != "true" {
 		t.Fatalf("enrolled service mode = %v, want home's unset/default true", got)
 	}
+	home.Stop()
 	requireStdout(t, outpost.Attn("enrollment", "leave"), "no longer enrolled")
 	if got := outpost.App().Initial.Settings["headless_tasks.enabled"]; got != "false" {
 		t.Fatalf("service mode after leave = %v, want restored standalone false", got)
