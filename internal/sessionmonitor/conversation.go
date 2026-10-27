@@ -1,7 +1,9 @@
 package sessionmonitor
 
 import (
+	"context"
 	"crypto/rand"
+	"errors"
 	"maps"
 	"time"
 
@@ -15,11 +17,32 @@ type pendingSwitch struct {
 	Conversation
 	candidate *Monitor
 	terminal  harness.TerminalID
+	receipt   *ConversationReceipt
 }
 
-func (m *Monitor) ProposeConversation(observation ConversationObservation, proposal ConversationProposal, terminal harness.TerminalID) bool {
+type ConversationReceipt struct {
+	done      chan struct{}
+	err       error
+	switching bool
+}
+
+func (r *ConversationReceipt) Switching() bool { return r != nil && r.switching }
+
+func (r *ConversationReceipt) Wait(ctx context.Context) error {
+	if r == nil {
+		return nil
+	}
+	select {
+	case <-r.done:
+		return r.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (m *Monitor) ProposeConversation(observation ConversationObservation, proposal ConversationProposal, terminal harness.TerminalID) (*ConversationReceipt, bool) {
 	if m == nil {
-		return false
+		return nil, false
 	}
 	m.mu.Lock()
 	same := m.conversationInput.ConversationObservation == observation
@@ -33,10 +56,13 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 		inputTerminal = m.watch.terminalID
 	}
 	m.mu.Unlock()
-	if same {
-		return true
-	}
 	r := m.registry
+	if same {
+		r.mu.Lock()
+		receipt := r.receiptLocked(inputTerminal, observation.NativeID)
+		r.mu.Unlock()
+		return receipt, true
+	}
 	r.mu.Lock()
 	current := r.currentInTerminalLocked(inputTerminal, m)
 	r.mu.Unlock()
@@ -81,7 +107,14 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 		owner = m
 	}
 	owner.mu.Lock()
-	owner.pendingSwitch = append(owner.pendingSwitch, pendingSwitch{Conversation: proposed, candidate: candidate, terminal: inputTerminal})
+	switching := terminal != "" && !inPlace
+	for _, pending := range owner.pendingSwitch {
+		if pending.terminal == inputTerminal && pending.NativeID == observation.NativeID && pending.receipt != nil {
+			switching = pending.receipt.switching
+		}
+	}
+	receipt := &ConversationReceipt{done: make(chan struct{}), switching: switching}
+	owner.pendingSwitch = append(owner.pendingSwitch, pendingSwitch{Conversation: proposed, candidate: candidate, terminal: inputTerminal, receipt: receipt})
 	owner.pendingDirty = true
 	view := owner.viewLocked()
 	owner.mu.Unlock()
@@ -91,10 +124,26 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 	r.mu.Unlock()
 	candidate.Arm()
 	if !owner.save(view) || !owner.savePending() {
-		return false
+		return nil, false
 	}
 	crashpoint.At(CrashSwitchPending)
-	return owner.publish(view)
+	return receipt, owner.publish(view)
+}
+
+func (r *Registry) receiptLocked(terminal harness.TerminalID, native string) *ConversationReceipt {
+	owner := r.owners[terminal]
+	if owner == nil {
+		return nil
+	}
+	owner.mu.Lock()
+	defer owner.mu.Unlock()
+	for i := len(owner.pendingSwitch) - 1; i >= 0; i-- {
+		pending := owner.pendingSwitch[i]
+		if pending.terminal == terminal && pending.NativeID == native {
+			return pending.receipt
+		}
+	}
+	return nil
 }
 
 func (r *Registry) currentInTerminalLocked(terminal harness.TerminalID, fallback *Monitor) *Monitor {
@@ -216,6 +265,9 @@ func (m *Monitor) RebuildCandidates() {
 		}
 		m.mu.Lock()
 		pending.candidate, pending.terminal = candidate, terminal
+		if pending.receipt == nil {
+			pending.receipt = &ConversationReceipt{done: make(chan struct{}), switching: proposed.Terminal != "" && !same}
+		}
 		r.monitors[candidate] = struct{}{}
 		r.owners[terminal] = m
 		r.inputs[terminal] = candidate
@@ -224,7 +276,7 @@ func (m *Monitor) RebuildCandidates() {
 	r.mu.Unlock()
 }
 
-func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor) bool {
+func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) bool {
 	if m == nil || bound == nil {
 		return false
 	}
@@ -301,6 +353,12 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor) bool {
 		if len(tail) == 0 {
 			delete(r.inputs, head.terminal)
 		}
+		if head.receipt != nil {
+			if reason != "" {
+				head.receipt.err = errors.New(reason)
+			}
+			close(head.receipt.done)
+		}
 	}
 	next := bound.viewLocked()
 	if bound != m {
@@ -333,6 +391,10 @@ func (r *Registry) DropSwitches(terminal harness.TerminalID) {
 				continue
 			}
 			dropped = append(dropped, pending.candidate)
+			if pending.receipt != nil {
+				pending.receipt.err = errors.New("terminal runtime ended before its conversation was bound")
+				close(pending.receipt.done)
+			}
 		}
 		owner.pendingSwitch = remaining
 		owner.pendingDirty = true
@@ -395,7 +457,7 @@ func (m *Monitor) TakePendingConversation() (ConversationObservation, bool) {
 	return *observation, true
 }
 
-func (m *Monitor) ObserveResumeID(nativeID string) bool {
+func (m *Monitor) ObserveResumeID(nativeID string) (*ConversationReceipt, bool) {
 	return m.ProposeConversation(ConversationObservation{NativeID: nativeID}, ConversationReported, "")
 }
 

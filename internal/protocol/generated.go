@@ -6161,6 +6161,9 @@ type LaunchCommittedMessage struct {
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
 
+	// RunID corresponds to the JSON schema field "run_id".
+	RunID *string `json:"run_id,omitempty,omitzero"`
+
 	// TerminalID corresponds to the JSON schema field "terminal_id".
 	TerminalID TerminalID `json:"terminal_id"`
 }

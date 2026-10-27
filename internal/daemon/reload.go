@@ -197,6 +197,8 @@ func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
 		return
 	}
 	defer release()
+	var complete launchCompletion
+	defer func() { complete.finish() }()
 	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -221,7 +223,8 @@ func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
 		d.logf("reload: cannot reconstruct launch params for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
 	}
-	if err := d.executePreparedSessionReload(sessionID, opts, nil); err != nil {
+	complete, err = d.executePreparedSessionReload(sessionID, opts, nil)
+	if err != nil {
 		d.logf("reload: %v", err)
 	}
 }
@@ -247,6 +250,8 @@ type storedIntentResume struct {
 }
 
 func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows int) (*storedIntentResume, error) {
+	var complete launchCompletion
+	defer func() { complete.finish() }()
 	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -263,7 +268,8 @@ func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows
 		if err != nil {
 			return nil, err
 		}
-		return nil, d.executePreparedSessionReload(sessionID, opts, nil)
+		complete, err = d.executePreparedSessionReload(sessionID, opts, nil)
+		return nil, err
 	}
 
 	if cols <= 0 || rows <= 0 {
@@ -315,12 +321,12 @@ func (d *Daemon) handleReloadSession(client *wsClient, msg *protocol.ReloadSessi
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload) error {
+func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload) (launchCompletion, error) {
 	var name *string
 	if host := d.sessionHost(sessionID); host != "" {
 		_, hostName, err := d.outpostConn(host)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		name = protocol.Ptr(hostName)
 	}
@@ -333,17 +339,17 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 			var err error
 			agent, err = d.buildAgentReloadLaunch(session, &opts, d.isChiefOfStaffSession(sessionID))
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 	launch, err := encodeLaunch(opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	agentJSON, err := encodeAgentLaunch(agent)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	msg := protocol.TerminalRestartMessage{Cmd: protocol.CmdTerminalRestart, HostName: name, SessionID: sessionID, TerminalID: opts.ID, Launch: launch, Agent: agentJSON}
 	if opts.Agent != protocol.AgentShellValue {
@@ -355,14 +361,14 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		_, err = Call[struct{}](context.Background(), d.router(), msg)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	d.recordReload(sessionID, opts)
 	d.announceReload(sessionID, opts)
 	if agent != nil {
-		d.launchCommitted(opts.ID, true, agent.Profile)
+		return func() { d.launchCommitted(opts.ID, true, agent.Profile, agent.driverRunID()) }, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (d *Daemon) announceReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
@@ -648,8 +654,10 @@ func (p *preparedPluginRoleReload) execute() error {
 		return nil
 	}
 	p.completed = true
-	defer p.lock.Unlock()
-	return p.d.executePreparedSessionReload(p.sessionID, p.opts, p.plugin)
+	complete, err := p.d.executePreparedSessionReload(p.sessionID, p.opts, p.plugin)
+	p.lock.Unlock()
+	complete.finish()
+	return err
 }
 
 func (d *Daemon) preparePluginRoleReload(sessionID protocol.SessionID, desiredChief bool) (*preparedPluginRoleReload, bool, error) {

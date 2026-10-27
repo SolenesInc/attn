@@ -75,7 +75,7 @@ func (h monitorHost) Answered(source *sessionmonitor.Monitor, answer sessionmoni
 	}
 	if answer.Outcome == sessionmonitor.SwitchDropped {
 		source.AdoptDropped(candidate)
-		source.SettleSwitch(answer.Conversation, source)
+		source.SettleSwitch(answer.Conversation, source, answer.Reason)
 		return
 	}
 	d.bindMonitorCandidates()
@@ -116,7 +116,7 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 		monitor.WatchDriverUsage(driver.TranscriptPath)
 	}
 	monitor.EnsureTranscriptWatcher(proposed.TranscriptPath)
-	if !source.SettleSwitch(answer.Conversation, monitor) {
+	if !source.SettleSwitch(answer.Conversation, monitor, "") {
 		return
 	}
 	if source.Session() != monitor.Session() && d.store.Get(source.Session()) == nil {

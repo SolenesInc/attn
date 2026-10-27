@@ -49,16 +49,26 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 	if held := d.store.GetSessionConversation(d.sessionInTerminal(terminal)).NativeID; held != "" && held != observation.NativeID {
 		pausepoint.At(pausepoint.ConversationSwitchObserved)
 	}
-	d.conversationIn(terminal, observation)
+	receipt, accepted := d.conversationIn(terminal, observation)
+	if !accepted {
+		d.sendError(conn, "conversation observation could not be saved")
+		return
+	}
+	if !receipt.Switching() {
+		if err := receipt.Wait(d.life.Context()); err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+	}
 	d.sendOK(conn)
 }
 
 // conversationIn routes a conversation the harness in terminal t reports from SessionStart or
 // UserPromptSubmit, or a shared Codex terminal from the reply that switches it. Those arrive in
 // order, so only they may open or show a session.
-func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversationObservation) {
+func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversationObservation) (*sessionmonitor.ConversationReceipt, bool) {
 	observation.SessionID = d.sessionInTerminal(t)
-	d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, t)
+	return d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, t)
 }
 
 func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, proposed sessionmonitor.Conversation, observation agentConversationObservation) bool {
@@ -152,7 +162,7 @@ func (o agentConversationObservation) monitored() sessionmonitor.ConversationObs
 	return sessionmonitor.ConversationObservation{NativeID: o.NativeID, TranscriptPath: o.TranscriptPath}
 }
 
-func (d *Daemon) proposeMonitorConversation(observation agentConversationObservation, proposal sessionmonitor.ConversationProposal, terminal harness.TerminalID) bool {
+func (d *Daemon) proposeMonitorConversation(observation agentConversationObservation, proposal sessionmonitor.ConversationProposal, terminal harness.TerminalID) (*sessionmonitor.ConversationReceipt, bool) {
 	return d.monitorInTerminal(terminal, observation.SessionID).ProposeConversation(observation.monitored(), proposal, terminal)
 }
 
@@ -160,7 +170,7 @@ func (d *Daemon) observeAgentConversation(observation agentConversationObservati
 	d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, "")
 }
 
-func (d *Daemon) claimAgentConversation(observation agentConversationObservation) bool {
+func (d *Daemon) claimAgentConversation(observation agentConversationObservation) (*sessionmonitor.ConversationReceipt, bool) {
 	return d.proposeMonitorConversation(observation, sessionmonitor.ConversationReported, "")
 }
 

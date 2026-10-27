@@ -31,6 +31,9 @@ func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.Answer, 
 		return sessionmonitor.Answer{}, true
 	}
 	pending := view.PendingSwitch.V
+	if pending.NativeID != "" && pending.Terminal == "" {
+		pausepoint.At(pausepoint.ConversationReportReady)
+	}
 	if pending.NativeID != "" && pending.Terminal != "" {
 		shown, _ := h.daemon.shownIn(pending.Terminal)
 		held := h.daemon.store.GetSessionConversation(shown).NativeID

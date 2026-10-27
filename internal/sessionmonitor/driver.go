@@ -168,18 +168,33 @@ func (m *Monitor) SupersededExitDuringDriverLaunch(info ptybackend.ExitInfo) boo
 	return launch != nil && info.LifecycleID != "" && launch.run != info.LifecycleID
 }
 
-func (m *Monitor) FinishDriverLaunch() (replays []func(), exit *ptybackend.ExitInfo) {
+func (m *Monitor) FinishDriverLaunch(run string) *ptybackend.ExitInfo {
 	if m == nil {
-		return nil, nil
+		return nil
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	launch := m.driverLaunch
-	m.driverLaunch = nil
-	if launch == nil {
-		return nil, nil
+	if launch == nil || launch.run != run {
+		m.mu.Unlock()
+		return nil
 	}
-	return launch.replays, launch.exit
+	for launch != nil && m.driverLaunch == launch {
+		replays := launch.replays
+		launch.replays = nil
+		if len(replays) == 0 {
+			m.driverLaunch = nil
+			exit := launch.exit
+			m.mu.Unlock()
+			return exit
+		}
+		m.mu.Unlock()
+		for _, replay := range replays {
+			replay()
+		}
+		m.mu.Lock()
+	}
+	m.mu.Unlock()
+	return nil
 }
 
 func (m *Monitor) AbortDriverLaunch() (plugin, run string, launching bool) {

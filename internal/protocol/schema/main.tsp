@@ -3143,6 +3143,7 @@ model LaunchCommittedMessage {
   terminal_id: TerminalID;
   committed: boolean;
   profile_id: string;
+  run_id?: string;
 }
 
 @extension("x-on", #{ machine: "host" })

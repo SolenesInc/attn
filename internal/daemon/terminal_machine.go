@@ -177,7 +177,9 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
-		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+		d.life.Go("handleFailedTerminalRestart", func() {
+			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+		})
 		return struct{}{}, fmt.Errorf("respawn failed for %s: %w", sessionID, spawnErr)
 	}
 	if plugin != nil {
@@ -187,7 +189,9 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 			_ = d.ptyBackend.Remove(ctx, terminal)
 			unlockEnds()
 			d.closePluginDriverSession(sessionID, "reload_failed", nil, "")
-			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+			d.life.Go("handleFailedPluginRestart", func() {
+				d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+			})
 			return struct{}{}, fmt.Errorf("activate plugin run failed for %s: %w", sessionID, err)
 		}
 	}

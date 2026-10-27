@@ -1678,20 +1678,25 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
-	unlockEnds := d.lockTerminalEnds(sessionID)
-	if d.exitOfSupersededRuntime(info) {
-		unlockEnds()
-		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
-		return false
-	}
 	if session := d.store.Get(sessionID); session != nil {
 		driver := agentdriver.Get(session.Agent)
 		if driver != nil && !agentdriver.EffectiveCapabilities(driver).HasHooks {
 			if finder, ok := agentdriver.GetTranscriptFinder(driver); ok {
 				path := finder.FindTranscriptForResume(d.store.GetResumeSessionID(sessionID))
-				d.observeStoppedConversation(sessionID, d.resolveStopTranscriptPath(session, path))
+				receipt, accepted := d.observeStoppedConversation(sessionID, d.resolveStopTranscriptPath(session, path))
+				if accepted {
+					if err := receipt.Wait(d.life.Context()); err != nil {
+						d.logf("exit conversation: session=%s: %v", sessionID, err)
+					}
+				}
 			}
 		}
+	}
+	unlockEnds := d.lockTerminalEnds(sessionID)
+	if d.exitOfSupersededRuntime(info) {
+		unlockEnds()
+		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
+		return false
 	}
 	stopped := d.consumeTerminalExitIntent(info.ID, terminalExitStop)
 	if !d.endTerminal(sessionID, info.ID) {
@@ -3040,14 +3045,18 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	d.sendOK(conn)
 }
 
-func (d *Daemon) persistResumeSessionID(sessionID protocol.SessionID, resumeSessionID string) {
+func (d *Daemon) persistResumeSessionID(sessionID protocol.SessionID, resumeSessionID string) (*sessionmonitor.ConversationReceipt, error) {
 	if monitor := d.sessionMonitor(sessionID); monitor != nil {
-		monitor.ObserveResumeID(resumeSessionID)
-		return
+		receipt, accepted := monitor.ObserveResumeID(resumeSessionID)
+		if !accepted {
+			return nil, errors.New("resume conversation could not be saved")
+		}
+		return receipt, nil
 	}
 	if _, err := d.store.TransitionSessionResumeID(sessionID, resumeSessionID); err != nil {
-		d.logf("persistResumeSessionID: update failed for session %s: %v", sessionID, err)
+		return nil, err
 	}
+	return nil, nil
 }
 
 func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
@@ -3122,7 +3131,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.life.Go("maybeGenerateSessionTitle", func() { monitor.TitleFromTranscript(msg.TranscriptPath) })
 }
 
-func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transcriptPath string) {
+func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transcriptPath string) (*sessionmonitor.ConversationReceipt, bool) {
 	if session := d.store.Get(sessionID); session != nil {
 		driver := agentdriver.Get(session.Agent)
 		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, transcriptPath)
@@ -3130,11 +3139,12 @@ func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transc
 		switch {
 		case resumeSessionID == "":
 		case agentdriver.EffectiveCapabilities(driver).HasHooks:
-			d.observeAgentConversation(observation)
+			return d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, "")
 		default:
-			d.claimAgentConversation(observation)
+			return d.claimAgentConversation(observation)
 		}
 	}
+	return nil, false
 }
 
 func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported string) string {
