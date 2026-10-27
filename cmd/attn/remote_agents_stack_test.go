@@ -39,7 +39,26 @@ func TestOutpostAgentsRunOnTheirMachineAndReportToTheHome(t *testing.T) {
 			if protocol.Deref(session.Host) != pair.Host {
 				t.Fatalf("host = %q, want %q", protocol.Deref(session.Host), pair.Host)
 			}
+			pair.App.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(id)})
+			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return !protocol.Deref(s.TurnOwed) })
+			until := time.Now().Add(time.Hour)
+			if err := home.Client().SnoozeSession("", protocol.SessionID(id), until); err != nil {
+				t.Fatal(err)
+			}
+			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
+				return protocol.Deref(s.TurnSnoozedUntil) == until.UTC().Format(time.RFC3339Nano)
+			})
+			pair.App.Send(protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: protocol.SessionID(id)})
+			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool {
+				return protocol.Deref(s.TurnOwed) && protocol.Deref(s.TurnSnoozedUntil) == ""
+			})
+			rename := outpost.Run(testworld.Invocation{Terminal: pair.App.Terminal(id), Args: []string{"session", "rename", "Remote CLI label"}})
+			if rename.Code != 0 {
+				t.Fatalf("outpost agent CLI rename: %+v", rename)
+			}
+			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.Label == "Remote CLI label" })
 			t.Logf("%s terminal=%s host=%s conversation=%s state=%s tokens=%d", harness, pair.App.Terminal(id), pair.Host, agent.ConversationID, session.State, session.Usage.TotalTokens)
+			t.Log("home settle, snooze and wake reached the machine; the agent's CLI rename reached the home")
 		})
 	}
 }
