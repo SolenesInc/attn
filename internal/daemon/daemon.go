@@ -2587,7 +2587,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 
 	if origin, remote := OriginOf(ctx); remote {
 		switch cmd {
-		case protocol.CmdOpenMarkdown, protocol.CmdOpenBrowser, protocol.CmdBrowserControl:
+		case protocol.CmdOpenMarkdown, protocol.CmdOpenBrowser, protocol.CmdBrowserControl, protocol.CmdSeedArtifactTransfer:
 			d.sendError(conn, fmt.Sprintf("%s is not supported from %s", cmd, origin.Name))
 			return
 		case protocol.CmdOpenSentFiles:

@@ -2,13 +2,13 @@ package daemon
 
 import (
 	"context"
-	"github.com/victorarias/attn/internal/store"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type fakePRHost struct {
@@ -66,13 +66,6 @@ func (f *fakePRHost) GetRateLimit(string) *github.RateLimitInfo {
 		return nil
 	}
 	return &github.RateLimitInfo{Resource: "core", ResetAt: f.limitReset}
-}
-
-func openSnapshot(title, mergeableState, headSHA string) *github.PullRequestSnapshot {
-	return &github.PullRequestSnapshot{
-		Number: 71, State: "open", Title: title,
-		MergeableState: mergeableState, HeadSHA: headSHA, HeadRef: "pr-status-refresh",
-	}
 }
 
 func serveHost(d *Daemon, host string, served *fakePRHost) {
