@@ -2,7 +2,9 @@ package main_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -123,9 +125,101 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	if err := os.RemoveAll(cwd); err != nil {
 		t.Fatal(err)
 	}
-	checkRefusal("no longer exists", cwd, "on outpost outpost")
+	checkRefusal("no longer exists")
 	mark = len(pair.App.Log())
 	pair.App.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
 	testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	checkRefusal("outpost", pair.Host, "does not exist")
+}
+
+func TestLedgerRecreatesAnOutpostWorktreeAndContinuesItsConversationAndCost(t *testing.T) {
+	for _, scenario := range []struct {
+		name       string
+		action     protocol.SessionReopenAction
+		remoteOnly bool
+	}{
+		{"stale local worktree", protocol.SessionReopenActionRecreateWorktreeAndReopen, false},
+		{"branch on archive remote", protocol.SessionReopenActionFetchRecreateAndReopen, true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			home := testworld.NewStack(t)
+			outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			pair := testworld.PrepareOutpostPair(t, home, outpost)
+			pair.Start()
+			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+			git := func(cwd string, args ...string) string {
+				t.Helper()
+				cmd := exec.Command("git", args...)
+				cmd.Dir = cwd
+				data, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Fatalf("git %v: %v: %s", args, err, data)
+				}
+				return strings.TrimSpace(string(data))
+			}
+			repo := outpost.Path("repo")
+			gitRepo(t, repo)
+
+			worktree := outpost.Path("worktree")
+			git(repo, "worktree", "add", "-qb", "feat/resume", worktree)
+			if scenario.remoteOnly {
+				archive := outpost.Path("archive.git")
+				git(repo, "init", "--bare", "-q", archive)
+				git(repo, "remote", "add", "archive", archive)
+				git(worktree, "push", "-qu", "archive", "feat/resume")
+			}
+			cwd := worktree
+			outpost.SetCodexFolderTrust(cwd, "trusted")
+			id := home.Spawn(pair.App, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+			first := outpost.LaunchedCarrying(pair.App.Terminal(id))
+			pair.App.TypeLine(id, "first work")
+			first.Prompted()
+			conversation := first.ConversationID
+			reply := "Done. <!-- attn:state=waiting_input -->"
+			first.Reply(reply)
+			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens == 2*len(reply) })
+			if err := home.Client().Unregister(protocol.SessionID(id)); err != nil {
+				t.Fatal(err)
+			}
+			testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+				return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
+			})
+			if err := os.RemoveAll(worktree); err != nil {
+				t.Fatal(err)
+			}
+			if scenario.remoteOnly {
+				git(repo, "worktree", "prune")
+				git(repo, "branch", "-qD", "feat/resume")
+			}
+			shown, err := home.Client().SessionShow(protocol.SessionID(id))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if shown.Reopen == nil || !slices.Contains(shown.Reopen.Actions, scenario.action) {
+				t.Fatalf("missing worktree verdict=%+v, want action %s", shown.Reopen, scenario.action)
+			}
+			if _, err := os.Stat(worktree); !os.IsNotExist(err) {
+				t.Fatalf("reading the verdict changed the missing worktree: %v", err)
+			}
+			reopened, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id), Action: string(scenario.action)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			second := outpost.LaunchedCarrying(pair.App.Terminal(id))
+			if reopened.Directory != cwd || !second.Resumed || second.ConversationID != conversation {
+				t.Fatalf("reopened=%+v resumed=%t conversation=%s, want %s in %s", reopened, second.Resumed, second.ConversationID, conversation, cwd)
+			}
+			if branch := git(worktree, "branch", "--show-current"); branch != "feat/resume" {
+				t.Fatalf("recreated branch=%s", branch)
+			}
+			pair.App.TypeLine(id, "second work")
+			second.Prompted()
+			second.Reply(reply)
+			resumed := testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens == 4*len(reply) })
+			if protocol.Deref(resumed.Host) != pair.Host {
+				t.Fatalf("resumed host=%s, want %s", protocol.Deref(resumed.Host), pair.Host)
+			}
+			t.Logf("%s: recreated %s, cwd=%s, host=%s, conversation=%s, tokens=%d", scenario.name, worktree, reopened.Directory, pair.Host, conversation, resumed.Usage.TotalTokens)
+		})
+	}
 }

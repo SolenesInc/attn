@@ -8713,6 +8713,55 @@ type ReopenInspection struct {
 	Verdict SessionReopen `json:"verdict"`
 }
 
+type ReopenWorktreeMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action SessionReopenAction `json:"action"`
+
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Branch corresponds to the JSON schema field "branch".
+	Branch string `json:"branch"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Conversation corresponds to the JSON schema field "conversation".
+	Conversation string `json:"conversation"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd string `json:"cwd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+
+	// RecreatePath corresponds to the JSON schema field "recreate_path".
+	RecreatePath string `json:"recreate_path"`
+
+	// Remote corresponds to the JSON schema field "remote".
+	Remote string `json:"remote"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+
+	// RepositorySubdir corresponds to the JSON schema field "repository_subdir".
+	RepositorySubdir string `json:"repository_subdir"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// StaleRegistration corresponds to the JSON schema field "stale_registration".
+	StaleRegistration bool `json:"stale_registration"`
+}
+
+type ReopenWorktreeResult struct {
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd string `json:"cwd"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+}
+
 type RepairOutpostMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

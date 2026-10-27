@@ -3213,6 +3213,27 @@ model ReopenInspection {
 }
 
 @extension("x-on", #{ machine: "host" })
+model ReopenWorktreeMessage {
+  cmd: "reopen_worktree";
+  host: string;
+  session_id: SessionID;
+  cwd: string;
+  agent: string;
+  conversation: string;
+  branch: string;
+  repository: string;
+  repository_subdir: string;
+  action: SessionReopenAction;
+  recreate_path: string;
+  remote: string;
+  stale_registration: boolean;
+}
+model ReopenWorktreeResult {
+  path: string;
+  cwd: string;
+}
+
+@extension("x-on", #{ machine: "host" })
 model CheckoutInspectMessage {
   cmd: "checkout_inspect";
   host: string;

@@ -374,23 +374,20 @@ func (d *Daemon) performReopenLocked(
 	case protocol.SessionReopenActionReopen:
 	case protocol.SessionReopenActionRecreateWorktreeAndReopen,
 		protocol.SessionReopenActionFetchRecreateAndReopen:
-		path, err := d.recreateReopenWorktreeProtected(protection, verdict, action)
+		recreated, err := Call[protocol.ReopenWorktreeResult](protection.Context(), d.router(), protocol.ReopenWorktreeMessage{
+			Cmd: protocol.CmdReopenWorktree, Host: protocol.Deref(verdict.Entry.Host), SessionID: verdict.SessionID,
+			Cwd: verdict.Execution.Cwd, Agent: verdict.Execution.Agent, Conversation: verdict.Resume,
+			Branch: verdict.Execution.Branch, Repository: verdict.Execution.RepositoryRoot, RepositorySubdir: verdict.Execution.RepositorySubdir,
+			Action: action, RecreatePath: verdict.RecreatePath, Remote: verdict.Inspection.Remote, StaleRegistration: verdict.Inspection.StaleRegistration,
+		})
 		if err != nil {
 			return nil, err
 		}
-		created = path
-		plan.Directory = reopenDirectoryInsideWorktree(path, verdict.Execution)
+		created, plan.Directory = recreated.Path, recreated.Cwd
 	default:
 		return nil, fmt.Errorf("%q is not a reopen action", action)
 	}
 
-	if created != "" {
-		execution := verdict.Execution
-		execution.Cwd = plan.Directory
-		if available, reason := d.reopenConversation(execution, verdict.Resume, false); !available {
-			return nil, fmt.Errorf("cannot reopen after restoring the worktree: %s", reason)
-		}
-	}
 	outcome, err := d.reopenSessionRuntimeProtected(protection, plan)
 	if err != nil {
 		return nil, err

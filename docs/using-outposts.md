@@ -200,8 +200,9 @@ cost. The agent's `attn` commands reach the home through its outpost daemon.
 
 A closed session's ledger row shows its outpost. **Reopen** in the Sessions
 ledger, or `attn session reopen <id>`, resumes its conversation on that same
-outpost with its cost continuing. An unreachable or removed outpost refuses
-resume and names the host.
+outpost with its cost continuing. If its worktree was deleted, the ledger offers
+to recreate it on that outpost, fetching the branch first when needed. An
+unreachable or removed outpost refuses resume and names the host.
 
 `attn delegate` also defaults to the caller's machine. From a home agent,
 delegate onto an outpost with:
