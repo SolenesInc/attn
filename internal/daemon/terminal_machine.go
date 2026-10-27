@@ -289,6 +289,8 @@ func (d *Daemon) waitTerminalBlock(ctx context.Context, msg protocol.TerminalWai
 func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMessage) (struct{}, error) {
 	terminal, stop := msg.TerminalID, protocol.Deref(msg.Stop)
 	ending := protocol.Deref(msg.EndingSessionID)
+	stoppedSession, _ := d.shownIn(terminal)
+	driver := d.sessionMonitor(stoppedSession).Driver()
 	if stop {
 		d.markTerminalExitIntent(terminal, terminalExitStop)
 	}
@@ -305,10 +307,8 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 	if err != nil && ending != "" {
 		d.terminals().takeEnding(terminal)
 	}
-	if (err == nil || errors.Is(err, pty.ErrSessionNotFound)) && stop {
-		if sessionID, shown := d.shownIn(terminal); shown {
-			d.closePluginDriverSession(sessionID, "killed", nil, msg.Signal)
-		}
+	if errors.Is(err, pty.ErrSessionNotFound) && stop && d.sessionMonitor(stoppedSession).RetireDriver(driver.Run) {
+		d.notifyPluginDriverSessionClosed(driver.Plugin, terminal, driver.Run, "killed", nil, msg.Signal)
 	}
 	return struct{}{}, err
 }

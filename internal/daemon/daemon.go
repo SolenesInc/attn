@@ -1711,7 +1711,11 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	monitor.FenceInput()
 	monitor.StopTranscriptWatchers()
-	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
+	reason := "exited"
+	if stopped {
+		reason = "killed"
+	}
+	d.closePluginDriverSession(sessionID, reason, &info.ExitCode, info.Signal)
 	if err := d.removePTYSession(info.ID); err != nil {
 		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 	}

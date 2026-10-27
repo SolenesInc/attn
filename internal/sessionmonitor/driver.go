@@ -72,19 +72,20 @@ func (m *Monitor) Driver() DriverMetadata {
 	return m.driver
 }
 
-func (m *Monitor) RetireDriver(run string) {
+func (m *Monitor) RetireDriver(run string) bool {
 	if m == nil {
-		return
+		return false
 	}
 	m.mu.Lock()
 	if run == "" || m.driver.Run != run {
 		m.mu.Unlock()
-		return
+		return false
 	}
 	m.driver = DriverMetadata{Metadata: m.driver.Metadata, TranscriptPath: m.driver.TranscriptPath}
 	view := m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)
+	return true
 }
 
 func (m *Monitor) ReportDriverMetadata(run string, sequence uint64, metadata string) bool {
