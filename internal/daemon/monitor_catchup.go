@@ -42,9 +42,8 @@ func (h *monitorHome) catchUp(session protocol.SessionID, binding *monitorBindin
 			return
 		}
 		binding.catchUp = nil
-		view := h.monitor.Snapshot()
 		r.mu.Unlock()
-		h.Applied(view)
+		h.monitor.Refresh()
 	})
 	binding.catchUp = timer
 }

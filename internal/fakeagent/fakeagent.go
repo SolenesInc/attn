@@ -228,6 +228,13 @@ func serve(cfg config, style composer, conv conversation) int {
 		term.print(boot.Screen)
 		return boot.Code
 	}
+	if boot.WaitForEnter {
+		term.print(boot.Screen)
+		if err := term.awaitEnter(); err != nil {
+			return 1
+		}
+		term.write("\x1b[2J\x1b[H" + term.composer())
+	}
 	began := conv.begin(term)
 	report := conv.launch()
 	report.Role = roleAgent

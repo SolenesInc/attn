@@ -1,8 +1,8 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"net"
 	"os"
 	"strings"
@@ -22,25 +22,18 @@ func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTra
 		return
 	}
 
-	path := d.inspectableTranscriptPath(session.ID, session.Agent)
-	if path == "" {
-		d.sendError(conn, "transcript_unavailable")
+	answer, err := Call[protocol.MonitorTranscriptPageResult](context.Background(), d.router(), protocol.MonitorTranscriptPageMessage{Cmd: protocol.CmdMonitorTranscriptPage, SessionID: session.ID, Cursor: protocol.Ptr(strings.TrimSpace(protocol.Deref(msg.AfterCursor)))})
+	if err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
-
-	page, err := transcript.ReadEventPage(path, session.Agent, strings.TrimSpace(protocol.Deref(msg.AfterCursor)), sessionTranscriptPageSize)
-	if err != nil {
-		switch {
-		case errors.Is(err, transcript.ErrInvalidCursor):
-			d.sendError(conn, "invalid_cursor")
-		case errors.Is(err, transcript.ErrCursorMismatch):
-			d.sendError(conn, "cursor_mismatch")
-		case errors.Is(err, transcript.ErrCursorPastEnd):
-			d.sendError(conn, "cursor_past_end")
-		default:
-			d.logf("session transcript read failed: session=%s err=%v", session.ID, err)
-			d.sendError(conn, "transcript_unavailable")
-		}
+	if answer.ErrorKind != nil {
+		d.sendError(conn, string(*answer.ErrorKind))
+		return
+	}
+	var page transcript.EventPage
+	if err := json.Unmarshal([]byte(protocol.Deref(answer.Page)), &page); err != nil {
+		d.sendError(conn, "transcript_unavailable")
 		return
 	}
 

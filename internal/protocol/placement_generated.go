@@ -112,7 +112,13 @@ var Placements = map[string][]Placement{
 	"kept_conversation_list":           {Placement{LocatorHome, ""}},
 	"launch_desktop_get":               {Placement{LocatorHome, ""}},
 	"launch_desktop_set":               {Placement{LocatorHome, ""}},
+	"link_rename":                      {Placement{LocatorSession, "session_id"}},
 	"list_worktrees":                   {Placement{LocatorHere, ""}},
+	"monitor_assistant_window":         {Placement{LocatorSession, "session_id"}},
+	"monitor_command":                  {Placement{LocatorSession, "session_id"}},
+	"monitor_last_assistant":           {Placement{LocatorSession, "session_id"}},
+	"monitor_state_trace":              {Placement{LocatorSession, "session_id"}},
+	"monitor_transcript_page":          {Placement{LocatorSession, "session_id"}},
 	"mute_pr":                          {Placement{LocatorHome, ""}},
 	"mute_repo":                        {Placement{LocatorHome, ""}},
 	"notebook_guide":                   {Placement{LocatorHome, ""}},
@@ -123,6 +129,7 @@ var Placements = map[string][]Placement{
 	"pty_resize":                       {Placement{LocatorTerminal, "id"}},
 	"pull_request_created":             {Placement{LocatorTerminal, "terminal_id"}, Placement{LocatorHome, ""}},
 	"pull_request_forget":              {Placement{LocatorHome, ""}},
+	"pull_request_link":                {Placement{LocatorSession, "session_id"}},
 	"pull_request_unwatch":             {Placement{LocatorHome, ""}},
 	"pull_request_watch":               {Placement{LocatorHome, ""}},
 	"query":                            {Placement{LocatorHome, ""}},
@@ -161,6 +168,7 @@ var Placements = map[string][]Placement{
 	"seed_watch":                       {Placement{LocatorHome, ""}},
 	"session_instructions":             {Placement{LocatorHome, ""}},
 	"session_list":                     {Placement{LocatorHome, ""}},
+	"session_place":                    {Placement{LocatorSession, "session_id"}},
 	"session_reopen":                   {Placement{LocatorHome, ""}},
 	"session_show":                     {Placement{LocatorHome, ""}},
 	"session_transcript":               {Placement{LocatorHome, ""}},
@@ -189,6 +197,7 @@ var Placements = map[string][]Placement{
 	"terminal_wait":                    {Placement{LocatorHome, ""}},
 	"terminal_wait_block":              {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_write":                   {Placement{LocatorTerminal, "terminal_id"}},
+	"transcript_activity":              {Placement{LocatorSession, "session_id"}},
 	"unregister":                       {Placement{LocatorHome, ""}},
 	"update_outpost":                   {Placement{LocatorHome, ""}},
 	"wake_turn":                        {Placement{LocatorHome, ""}},
@@ -1239,6 +1248,18 @@ func (m LaunchDesktopSetMessage) Locate() string {
 	return ""
 }
 
+func (LinkRenameMessage) CommandName() string {
+	return "link_rename"
+}
+
+func (m LinkRenameMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m LinkRenameMessage) Locate() string {
+	return string(m.SessionID)
+}
+
 func (ListWorktreesMessage) CommandName() string {
 	return "list_worktrees"
 }
@@ -1249,6 +1270,66 @@ func (m ListWorktreesMessage) Placement() Placement {
 
 func (m ListWorktreesMessage) Locate() string {
 	return ""
+}
+
+func (MonitorAssistantWindowMessage) CommandName() string {
+	return "monitor_assistant_window"
+}
+
+func (m MonitorAssistantWindowMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorAssistantWindowMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorCommandMessage) CommandName() string {
+	return "monitor_command"
+}
+
+func (m MonitorCommandMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorCommandMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorLastAssistantMessage) CommandName() string {
+	return "monitor_last_assistant"
+}
+
+func (m MonitorLastAssistantMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorLastAssistantMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorStateTraceMessage) CommandName() string {
+	return "monitor_state_trace"
+}
+
+func (m MonitorStateTraceMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorStateTraceMessage) Locate() string {
+	return string(m.SessionID)
+}
+
+func (MonitorTranscriptPageMessage) CommandName() string {
+	return "monitor_transcript_page"
+}
+
+func (m MonitorTranscriptPageMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m MonitorTranscriptPageMessage) Locate() string {
+	return string(m.SessionID)
 }
 
 func (MutePRMessage) CommandName() string {
@@ -1381,6 +1462,18 @@ func (m PullRequestForgetMessage) Placement() Placement {
 
 func (m PullRequestForgetMessage) Locate() string {
 	return ""
+}
+
+func (PullRequestLinkMessage) CommandName() string {
+	return "pull_request_link"
+}
+
+func (m PullRequestLinkMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m PullRequestLinkMessage) Locate() string {
+	return string(m.SessionID)
 }
 
 func (PullRequestUnwatchMessage) CommandName() string {
@@ -1839,6 +1932,18 @@ func (m SessionListMessage) Locate() string {
 	return ""
 }
 
+func (SessionPlaceMessage) CommandName() string {
+	return "session_place"
+}
+
+func (m SessionPlaceMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m SessionPlaceMessage) Locate() string {
+	return string(m.SessionID)
+}
+
 func (SessionReopenMessage) CommandName() string {
 	return "session_reopen"
 }
@@ -2173,6 +2278,18 @@ func (m TerminalWriteMessage) Placement() Placement {
 
 func (m TerminalWriteMessage) Locate() string {
 	return string(m.TerminalID)
+}
+
+func (TranscriptActivityMessage) CommandName() string {
+	return "transcript_activity"
+}
+
+func (m TranscriptActivityMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m TranscriptActivityMessage) Locate() string {
+	return string(m.SessionID)
 }
 
 func (UnregisterMessage) CommandName() string {

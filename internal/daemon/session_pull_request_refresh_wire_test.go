@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/testworld"
@@ -158,6 +159,38 @@ func onlyPullRequest(t *testing.T, cli *client.Client, session string) protocol.
 		t.Fatalf("%s's pull requests = %+v, want exactly one", session, prs)
 	}
 	return prs[0]
+}
+
+func TestAnUnwatchedPullRequestPausesWhileItsAgentIsRecoverableAndResumesWithIt(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "Check the pull request.")
+		testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		recordPullRequest(t, cli, agent.id, shopPull(71))
+		w.advance(protocol.HeatHotInterval)
+		w.stop()
+		agent.term.Exit(0)
+		w.start()
+		app, cli = w.App(), w.Client()
+		if session := queriedSession(t, cli, agent.id); session.State != protocol.SessionStateRecoverable {
+			t.Fatalf("restarted session = %+v, want recoverable", session)
+		}
+		if fetched, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); fetched != 0 {
+			t.Fatalf("GitHub was asked %d times while the agent was recoverable, want none", fetched)
+		}
+		gh.set(func(gh *refreshedPullRequest) { gh.title = "Updated while the agent was away" })
+		w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(msg *protocol.SpawnSessionMessage) {
+			msg.ID = protocol.SessionID(agent.id)
+			msg.ResumeSessionID = protocol.Ptr(agent.id)
+		})
+		w.bootBubbleClaude(t, agent.id)
+		w.advance(protocol.HeatHotInterval)
+		if pr := onlyPullRequest(t, cli, agent.id); protocol.Deref(pr.Title) != "Updated while the agent was away" {
+			t.Fatalf("reloaded session's pull request = %+v, want its updated title", pr)
+		}
+	})
 }
 
 func TestAPullRequestsStatusFollowsGitHubAndOnlyRealChangesReachTheApp(t *testing.T) {

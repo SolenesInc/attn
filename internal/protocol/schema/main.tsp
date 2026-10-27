@@ -8204,3 +8204,104 @@ model ApplyMonitorViewMessage {
   epoch: string;
   view: string;
 }
+
+enum MonitorCommandKind { Settle: "settle", HandBack: "hand_back", Snooze: "snooze", Wake: "wake", CancelCountdown: "cancel_countdown", AgentTurn: "agent_turn" }
+enum SessionPlacePhase { PromptReady: "prompt_ready", WorkingOrPromptReady: "working_or_prompt_ready", TurnBoundary: "turn_boundary" }
+enum SessionPlaceOrigin { Maintenance: "maintenance", UserConversation: "user_conversation" }
+enum SessionPlaceStage { Placed: "placed", Deferred: "deferred", Failed: "failed" }
+enum SessionPlaceErrorKind { LaneClosed: "lane_closed", PlacingAnother: "placing_another", BlockedByApproval: "blocked_by_approval", ComposerDirty: "composer_dirty", InitialPrompt: "initial_prompt" }
+enum PullRequestLinkKind { Record: "record", Forget: "forget" }
+enum TranscriptActivityKind { Modified: "modified", Head: "head", Events: "events" }
+enum MonitorReadErrorKind { TranscriptUnavailable: "transcript_unavailable", InvalidCursor: "invalid_cursor", CursorMismatch: "cursor_mismatch", CursorPastEnd: "cursor_past_end", DeltaTooLarge: "delta_too_large" }
+
+@extension("x-on", #{ session: "session_id" })
+model MonitorCommandMessage {
+  cmd: "monitor_command";
+  session_id: SessionID;
+  kind: MonitorCommandKind;
+  turn?: string;
+  until?: string;
+  action?: AgentTurnAction;
+}
+model MonitorCommandResult {
+  applied: boolean;
+  outcome?: AgentTurnOutcome;
+}
+
+@extension("x-on", #{ session: "session_id" })
+model SessionPlaceMessage {
+  cmd: "session_place";
+  session_id: SessionID;
+  delivery_id: string;
+  text: string;
+  phase: SessionPlacePhase;
+  origin: SessionPlaceOrigin;
+  source?: string;
+  bypass_initial_gate?: boolean;
+  allow_user_composer?: boolean;
+}
+model SessionPlaceResult {
+  stage: SessionPlaceStage;
+  at?: string;
+  error?: string;
+  error_kind?: SessionPlaceErrorKind;
+  retry_after_ms?: int32;
+}
+
+@extension("x-on", #{ session: "session_id" })
+model PullRequestLinkMessage {
+  cmd: "pull_request_link";
+  session_id: SessionID;
+  kind: PullRequestLinkKind;
+  pr_id: string;
+  repository?: string;
+  number?: int32;
+  url?: string;
+}
+model PullRequestLinkResult { applied: boolean; }
+
+@extension("x-on", #{ session: "session_id" })
+model LinkRenameMessage {
+  cmd: "link_rename";
+  session_id: SessionID;
+  label: string;
+}
+
+@extension("x-on", #{ session: "session_id" })
+model TranscriptActivityMessage {
+  cmd: "transcript_activity";
+  session_id: SessionID;
+  kind: TranscriptActivityKind;
+  cursor?: string;
+}
+model TranscriptActivityResult {
+  available: boolean;
+  modified_at?: string;
+  head?: string;
+  window?: string;
+  error_kind?: MonitorReadErrorKind;
+  error?: string;
+}
+
+@extension("x-on", #{ session: "session_id" })
+model MonitorAssistantWindowMessage { cmd: "monitor_assistant_window"; session_id: SessionID; }
+model MonitorAssistantWindowResult { available: boolean; window: string; }
+
+@extension("x-on", #{ session: "session_id" })
+model MonitorStateTraceMessage { cmd: "monitor_state_trace"; session_id: SessionID; }
+model MonitorStateTraceResult { observations: string; }
+
+@extension("x-on", #{ session: "session_id" })
+model MonitorTranscriptPageMessage {
+  cmd: "monitor_transcript_page";
+  session_id: SessionID;
+  cursor?: string;
+}
+model MonitorTranscriptPageResult {
+  page?: string;
+  error_kind?: MonitorReadErrorKind;
+}
+
+@extension("x-on", #{ session: "session_id" })
+model MonitorLastAssistantMessage { cmd: "monitor_last_assistant"; session_id: SessionID; }
+model MonitorLastAssistantResult { text: string; }

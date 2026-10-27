@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"sync"
@@ -50,8 +51,12 @@ func (c *Conn) Attach(ctx context.Context, request AttachRequest) (ptybackend.At
 	}
 	go ssh.DiscardRequests(requests)
 	stop := context.AfterFunc(ctx, func() { _ = channel.Close() })
-	dec := json.NewDecoder(channel)
-	err = dec.Decode(&info)
+	reader := bufio.NewReader(channel)
+	var rawInfo []byte
+	rawInfo, err = reader.ReadBytes('\n')
+	if err == nil {
+		err = json.Unmarshal(rawInfo, &info)
+	}
 	stop()
 	if err != nil {
 		_ = channel.Close()
@@ -63,12 +68,8 @@ func (c *Conn) Attach(ctx context.Context, request AttachRequest) (ptybackend.At
 		defer stream.Close()
 		enc := json.NewEncoder(channel)
 		for {
-			var raw json.RawMessage
-			if err := dec.Decode(&raw); err != nil {
-				return
-			}
-			var event ptybackend.OutputEvent
-			if err := json.Unmarshal(raw, &event); err != nil {
+			event, encodedBytes, err := readOutputEvent(reader)
+			if err != nil {
 				return
 			}
 			select {
@@ -81,7 +82,7 @@ func (c *Conn) Attach(ctx context.Context, request AttachRequest) (ptybackend.At
 			case <-stream.done:
 				return
 			}
-			if err := enc.Encode(len(raw)); err != nil {
+			if err := enc.Encode(encodedBytes); err != nil {
 				return
 			}
 			if event.Kind == ptybackend.OutputEventKindDesync {
@@ -114,8 +115,7 @@ func (c *Conn) ServeAttach(parent context.Context, incoming ssh.NewChannel, open
 	defer cancel()
 	stop := context.AfterFunc(ctx, func() { _ = channel.Close() })
 	defer stop()
-	c.outputOnce.Do(func() { c.output = newOutputCredit(c.done) })
-	credit := c.output
+	credit := c.sender()
 	flow := &outputFlow{}
 	defer func() { cancel(); credit.closeFlow(flow) }()
 	if err := json.NewEncoder(channel).Encode(info); err != nil {
@@ -146,25 +146,20 @@ func (c *Conn) ServeAttach(parent context.Context, incoming ssh.NewChannel, open
 		case <-ctx.Done():
 			return nil
 		}
-		raw, err := json.Marshal(event)
+		raw, err := encodeOutputEvent(event)
 		if err != nil {
 			return err
-		}
-		if event.Kind != ptybackend.OutputEventKindDesync {
-			if err := credit.reserve(ctx, flow, len(raw)); err != nil {
-				return nil
-			}
 		}
 		if event.Kind == ptybackend.OutputEventKindDesync {
 			if err := credit.reserve(ctx, flow, 0); err != nil {
 				return nil
 			}
-			raw, _ = json.Marshal(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindDesync, Reason: event.Reason})
-			if err := credit.reserve(ctx, flow, len(raw)); err != nil {
-				return nil
-			}
+			raw, _ = encodeOutputEvent(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindDesync, Reason: event.Reason})
 		}
-		if _, err := channel.Write(append(raw, '\n')); err != nil {
+		if err := credit.reserve(ctx, flow, len(raw)); err != nil {
+			return err
+		}
+		if err := credit.write(ctx, flow, raw, channel); err != nil {
 			return err
 		}
 		if event.Kind == ptybackend.OutputEventKindDesync {

@@ -67,6 +67,9 @@ func Serve(ctx context.Context, listener net.Listener, cfg ServerConfig, onConn 
 }
 
 func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConfig, onConn func(*Conn)) error {
+	if err := boundUnsentBytes(raw); err != nil {
+		return err
+	}
 	activity := &updateActivityConn{Conn: raw}
 	raw = activity
 	if err := raw.SetDeadline(time.Now().Add(LostAfter)); err != nil {

@@ -48,15 +48,12 @@ func resolveAutoSettleSeconds(stored string, fallbackSeconds int) time.Duration 
 	return time.Duration(fallbackSeconds) * time.Second
 }
 
-func (d *Daemon) answerAutoSettleByUser(sessionID protocol.SessionID) bool {
+func (d *Daemon) answerAutoSettleByUser(sessionID protocol.SessionID) (bool, error) {
 	if !d.autoSettleAppliesTo(d.decoratedSession(sessionID)) {
-		return false
+		return false, nil
 	}
-	answered, hadPending, armed := d.sessionMonitor(sessionID).AnswerCountdown()
-	if answered && d.debugLogging {
-		d.logf("auto-settle answered by user: session=%s had_pending=%v armed=%v", sessionID, hadPending, armed)
-	}
-	return answered
+	result, err := d.monitorCommand(sessionID, "cancel_countdown", time.Time{}, "")
+	return result.Applied, err
 }
 
 func (d *Daemon) decorateSessionWithAutoSettle(clone *protocol.Session) {
@@ -117,11 +114,8 @@ func (d *Daemon) armAutoSettleForRunningSessions() {
 	if d.store == nil {
 		return
 	}
-	for _, session := range d.store.List("") {
-		if session == nil || string(session.State) != protocol.StateWorking {
-			continue
-		}
-		d.sessionMonitor(session.ID).ArmAutoSettle()
+	for _, monitor := range d.monitors().each() {
+		monitor.ArmAutoSettle()
 	}
 }
 
@@ -282,7 +276,8 @@ func (d *Daemon) markModelRequestStarted(sessionID protocol.SessionID, at time.T
 }
 
 func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, source string) error {
-	return d.sessionMonitor(sessionID).WriteInput(context.Background(), d.primaryTerminal(sessionID), data, strings.TrimSpace(source))
+	_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: d.primaryTerminal(sessionID), Data: string(data), Source: strings.TrimSpace(source)})
+	return err
 }
 
 func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.TerminalID, data []byte, source string) error {

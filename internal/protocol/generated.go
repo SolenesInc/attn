@@ -6202,6 +6202,17 @@ type LeafMoved struct {
 	ToLeafID string `json:"to_leaf_id"`
 }
 
+type LinkRenameMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
 type ListAnalyticsRecordsMessage struct {
 	// BeforeID corresponds to the JSON schema field "before_id".
 	BeforeID *int `json:"before_id,omitempty,omitzero"`
@@ -6780,6 +6791,112 @@ const ModelTierSourceNone ModelTierSource = "none"
 const ModelTierSourceOverride ModelTierSource = "override"
 const ModelTierSourceShipped ModelTierSource = "shipped"
 const ModelTierStandard ModelTier = "standard"
+
+type MonitorAssistantWindowMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type MonitorAssistantWindowResult struct {
+	// Available corresponds to the JSON schema field "available".
+	Available bool `json:"available"`
+
+	// Window corresponds to the JSON schema field "window".
+	Window string `json:"window"`
+}
+
+type MonitorCommandKind string
+
+const MonitorCommandKindAgentTurn MonitorCommandKind = "agent_turn"
+const MonitorCommandKindCancelCountdown MonitorCommandKind = "cancel_countdown"
+const MonitorCommandKindHandBack MonitorCommandKind = "hand_back"
+const MonitorCommandKindSettle MonitorCommandKind = "settle"
+const MonitorCommandKindSnooze MonitorCommandKind = "snooze"
+const MonitorCommandKindWake MonitorCommandKind = "wake"
+
+type MonitorCommandMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action *AgentTurnAction `json:"action,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind MonitorCommandKind `json:"kind"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Turn corresponds to the JSON schema field "turn".
+	Turn *string `json:"turn,omitempty,omitzero"`
+
+	// Until corresponds to the JSON schema field "until".
+	Until *string `json:"until,omitempty,omitzero"`
+}
+
+type MonitorCommandResult struct {
+	// Applied corresponds to the JSON schema field "applied".
+	Applied bool `json:"applied"`
+
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome *AgentTurnOutcome `json:"outcome,omitempty,omitzero"`
+}
+
+type MonitorLastAssistantMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type MonitorLastAssistantResult struct {
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type MonitorReadErrorKind string
+
+const MonitorReadErrorKindCursorMismatch MonitorReadErrorKind = "cursor_mismatch"
+const MonitorReadErrorKindCursorPastEnd MonitorReadErrorKind = "cursor_past_end"
+const MonitorReadErrorKindDeltaTooLarge MonitorReadErrorKind = "delta_too_large"
+const MonitorReadErrorKindInvalidCursor MonitorReadErrorKind = "invalid_cursor"
+const MonitorReadErrorKindTranscriptUnavailable MonitorReadErrorKind = "transcript_unavailable"
+
+type MonitorStateTraceMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type MonitorStateTraceResult struct {
+	// Observations corresponds to the JSON schema field "observations".
+	Observations string `json:"observations"`
+}
+
+type MonitorTranscriptPageMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cursor corresponds to the JSON schema field "cursor".
+	Cursor *string `json:"cursor,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type MonitorTranscriptPageResult struct {
+	// ErrorKind corresponds to the JSON schema field "error_kind".
+	ErrorKind *MonitorReadErrorKind `json:"error_kind,omitempty,omitzero"`
+
+	// Page corresponds to the JSON schema field "page".
+	Page *string `json:"page,omitempty,omitzero"`
+}
 
 type MuteAuthorMessage struct {
 	// Author corresponds to the JSON schema field "author".
@@ -7881,6 +7998,39 @@ type PullRequestForgetMessage struct {
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
+}
+
+type PullRequestLinkKind string
+
+const PullRequestLinkKindForget PullRequestLinkKind = "forget"
+const PullRequestLinkKindRecord PullRequestLinkKind = "record"
+
+type PullRequestLinkMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind PullRequestLinkKind `json:"kind"`
+
+	// Number corresponds to the JSON schema field "number".
+	Number *int `json:"number,omitempty,omitzero"`
+
+	// PRID corresponds to the JSON schema field "pr_id".
+	PRID string `json:"pr_id"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository *string `json:"repository,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL *string `json:"url,omitempty,omitzero"`
+}
+
+type PullRequestLinkResult struct {
+	// Applied corresponds to the JSON schema field "applied".
+	Applied bool `json:"applied"`
 }
 
 type PullRequestProvenance struct {
@@ -10960,6 +11110,77 @@ type SessionMessagesGetResultMessage struct {
 	Truncated bool `json:"truncated"`
 }
 
+type SessionPlaceErrorKind string
+
+const SessionPlaceErrorKindBlockedByApproval SessionPlaceErrorKind = "blocked_by_approval"
+const SessionPlaceErrorKindComposerDirty SessionPlaceErrorKind = "composer_dirty"
+const SessionPlaceErrorKindInitialPrompt SessionPlaceErrorKind = "initial_prompt"
+const SessionPlaceErrorKindLaneClosed SessionPlaceErrorKind = "lane_closed"
+const SessionPlaceErrorKindPlacingAnother SessionPlaceErrorKind = "placing_another"
+
+type SessionPlaceMessage struct {
+	// AllowUserComposer corresponds to the JSON schema field "allow_user_composer".
+	AllowUserComposer *bool `json:"allow_user_composer,omitempty,omitzero"`
+
+	// BypassInitialGate corresponds to the JSON schema field "bypass_initial_gate".
+	BypassInitialGate *bool `json:"bypass_initial_gate,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DeliveryID corresponds to the JSON schema field "delivery_id".
+	DeliveryID string `json:"delivery_id"`
+
+	// Origin corresponds to the JSON schema field "origin".
+	Origin SessionPlaceOrigin `json:"origin"`
+
+	// Phase corresponds to the JSON schema field "phase".
+	Phase SessionPlacePhase `json:"phase"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Source corresponds to the JSON schema field "source".
+	Source *string `json:"source,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type SessionPlaceOrigin string
+
+const SessionPlaceOriginMaintenance SessionPlaceOrigin = "maintenance"
+const SessionPlaceOriginUserConversation SessionPlaceOrigin = "user_conversation"
+
+type SessionPlacePhase string
+
+const SessionPlacePhasePromptReady SessionPlacePhase = "prompt_ready"
+const SessionPlacePhaseTurnBoundary SessionPlacePhase = "turn_boundary"
+const SessionPlacePhaseWorkingOrPromptReady SessionPlacePhase = "working_or_prompt_ready"
+
+type SessionPlaceResult struct {
+	// At corresponds to the JSON schema field "at".
+	At *string `json:"at,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// ErrorKind corresponds to the JSON schema field "error_kind".
+	ErrorKind *SessionPlaceErrorKind `json:"error_kind,omitempty,omitzero"`
+
+	// RetryAfterMs corresponds to the JSON schema field "retry_after_ms".
+	RetryAfterMs *int `json:"retry_after_ms,omitempty,omitzero"`
+
+	// Stage corresponds to the JSON schema field "stage".
+	Stage SessionPlaceStage `json:"stage"`
+}
+
+type SessionPlaceStage string
+
+const SessionPlaceStageDeferred SessionPlaceStage = "deferred"
+const SessionPlaceStageFailed SessionPlaceStage = "failed"
+const SessionPlaceStagePlaced SessionPlaceStage = "placed"
+
 type SessionPlacement struct {
 	// AnchorPaneID corresponds to the JSON schema field "anchor_pane_id".
 	AnchorPaneID *string `json:"anchor_pane_id,omitempty,omitzero"`
@@ -12497,6 +12718,46 @@ type TierDefaults struct {
 
 	// Standard corresponds to the JSON schema field "standard".
 	Standard *string `json:"standard,omitempty,omitzero"`
+}
+
+type TranscriptActivityKind string
+
+const TranscriptActivityKindEvents TranscriptActivityKind = "events"
+const TranscriptActivityKindHead TranscriptActivityKind = "head"
+const TranscriptActivityKindModified TranscriptActivityKind = "modified"
+
+type TranscriptActivityMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cursor corresponds to the JSON schema field "cursor".
+	Cursor *string `json:"cursor,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind TranscriptActivityKind `json:"kind"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type TranscriptActivityResult struct {
+	// Available corresponds to the JSON schema field "available".
+	Available bool `json:"available"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// ErrorKind corresponds to the JSON schema field "error_kind".
+	ErrorKind *MonitorReadErrorKind `json:"error_kind,omitempty,omitzero"`
+
+	// Head corresponds to the JSON schema field "head".
+	Head *string `json:"head,omitempty,omitzero"`
+
+	// ModifiedAt corresponds to the JSON schema field "modified_at".
+	ModifiedAt *string `json:"modified_at,omitempty,omitzero"`
+
+	// Window corresponds to the JSON schema field "window".
+	Window *string `json:"window,omitempty,omitzero"`
 }
 
 type UninstallPluginMessage struct {

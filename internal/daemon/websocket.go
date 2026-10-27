@@ -1045,7 +1045,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			d.sendCommandError(client, protocol.CmdSetSessionPriority, err.Error())
 		}
 	case protocol.CmdSettleTurn:
-		d.handleSettleTurn(msg.(*protocol.SettleTurnMessage))
+		if err := d.handleSettleTurn(msg.(*protocol.SettleTurnMessage)); err != nil {
+			d.logf("settle rejected: %v", err)
+		}
 	case protocol.CmdSnoozeTurn:
 		if err := d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage)); err != nil {
 			d.logf("snooze rejected: %v", err)
@@ -1055,7 +1057,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			d.logf("unsnooze rejected: %v", err)
 		}
 	case protocol.CmdCancelCountdown:
-		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
+		if err := d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage)); err != nil {
+			d.logf("cancel countdown rejected: %v", err)
+		}
 
 	case protocol.CmdPRVisited:
 		d.handlePRVisitedWS(msg.(*protocol.PRVisitedMessage))

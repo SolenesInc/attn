@@ -324,7 +324,7 @@ func (h monitorHost) LastKey(terminal harness.TerminalID) time.Time {
 }
 
 func (h monitorHost) EnqueueTitle(monitor *sessionmonitor.Monitor, conversation, source string) error {
-	return h.daemon.enqueueSessionTitle(h.session(monitor), conversation, source)
+	return h.daemon.enqueueSessionTitle(monitor, conversation, source)
 }
 
 func (d *Daemon) kickMonitorTerminals() {

@@ -89,6 +89,10 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := boundUnsentBytes(raw); err != nil {
+		_ = raw.Close()
+		return nil, nil, err
+	}
 	if cfg.update {
 		raw = &updateActivityConn{Conn: raw}
 	}

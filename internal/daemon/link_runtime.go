@@ -133,8 +133,8 @@ func (d *Daemon) linkCaller(t protocol.TerminalID) (session protocol.SessionID, 
 }
 
 func (d *Daemon) linkRenamed(sessionID protocol.SessionID, label string) {
-	if l := d.linkOf(sessionID); l != nil {
-		l.renamed(sessionID, label)
+	if _, err := Call[struct{}](context.Background(), d.router(), protocol.LinkRenameMessage{Cmd: protocol.CmdLinkRename, SessionID: sessionID, Label: label}); err != nil {
+		d.logf("link rename: session=%s: %v", sessionID, err)
 	}
 }
 

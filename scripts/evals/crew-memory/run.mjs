@@ -93,13 +93,13 @@ function parseArgs(argv) {
     usage(); process.exit(2);
   }
   if ((a.timeoutS !== undefined && (!Number.isFinite(a.timeoutS) || a.timeoutS <= 0
-      || a.timeoutS * 1000 > 2147483647)) || !['units', 'use', 'e2e'].includes(a.pilotStage)
+      || a.timeoutS * 1000 > 2147483647)) || !['units', 'use', 'e2e', 'trajectory'].includes(a.pilotStage)
       || !Number.isInteger(a.reps) || a.reps < 1
       || a.concurrency !== 1 || (a.recheckFidelity && a.regradeOnly)) { usage(); process.exit(2); }
   return a;
 }
 function usage() {
-  eprint('usage: node run.mjs --flow DIR --variant ID [--model ID] [--reps N] [--pilot-stage units|use|e2e] [--timeout-s N] [--recheck-fidelity|--regrade-only] [--check-harness|--approve-harness]');
+  eprint('usage: node run.mjs --flow DIR --variant ID [--model ID] [--reps N] [--pilot-stage units|use|e2e|trajectory] [--timeout-s N] [--recheck-fidelity|--regrade-only] [--check-harness|--approve-harness]');
 }
 
 function checkHarness(statePath, st, approve, check) {

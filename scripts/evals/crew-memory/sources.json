@@ -443,5 +443,86 @@
         "sha256": "55515eb2dc07503a925c07c01bc2cf45a9915c31f97bfd9ffe919fadf9dfcd32"
       }
     ]
+  },
+  {
+    "id": "trajectory-guidance-six-days",
+    "unit": "e2e",
+    "tags": [
+      "e2e",
+      "trajectory",
+      "six-day",
+      "trellis"
+    ],
+    "pilot": false,
+    "sources": [
+      {
+        "path": "/Users/victor/.attn/crew/trellis/CHARTER.md",
+        "date": null,
+        "sha256": "a430b0566b3038cd50aac4231adf63eb2acd49705a79f0f223093042f6d1eb55"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-08-21T19-41Z-trellis.md",
+        "date": "2026-08-21",
+        "sha256": "b82e4c22a53917b7a8823011deae2ca6d761377d0d936cbaaeb769bf111ca163"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-08-22T00-49Z-trellis.md",
+        "date": "2026-08-22",
+        "sha256": "4aee671c801b975ea2e4f2bcebed22f3162087814becd737b5fbba6614dde72f"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-08-23T18-53Z-trellis.md",
+        "date": "2026-08-23",
+        "sha256": "aba4cf828a5423a934175c98e31f7f422e06fc495c52483297e32174b1b820fa"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-08-23T19-01Z-trellis.md",
+        "date": "2026-08-23",
+        "sha256": "0f91353daa7aad3e8eb3c00bdd2e3de49eb0aa47421ce45a13f55c273a208d69"
+      }
+    ]
+  },
+  {
+    "id": "trajectory-garden-six-days",
+    "unit": "e2e",
+    "tags": [
+      "e2e",
+      "trajectory",
+      "six-day",
+      "trellis"
+    ],
+    "pilot": false,
+    "sources": [
+      {
+        "path": "/Users/victor/.attn/crew/trellis/CHARTER.md",
+        "date": null,
+        "sha256": "a430b0566b3038cd50aac4231adf63eb2acd49705a79f0f223093042f6d1eb55"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-08-22T18-04Z-trellis.md",
+        "date": "2026-08-22",
+        "sha256": "f03ab15a3ebd7f26e5f5ceded3e1ce397865059f27859c22b4d9fad6ad008165"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-08-22T19-05Z-trellis.md",
+        "date": "2026-08-22",
+        "sha256": "565c6e987ac608f89326f8af9eaa64e3ce4f2b24c9fa3eaa71f2656587f02453"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-08-22T21-11Z-trellis.md",
+        "date": "2026-08-22",
+        "sha256": "f34287762a2b77016a584246ebe0d3c06279a9ac81655db8d75e662380326fa3"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-09-07T02-45Z-trellis.md",
+        "date": "2026-09-07",
+        "sha256": "4418f4b00cc1c36b5b96be1a3eb57e66d51040637cc0397effe136e20112525a"
+      },
+      {
+        "path": "/Users/victor/.attn/crew/trellis/handoffs/2026-09-18T21-17Z-trellis.md",
+        "date": "2026-09-18",
+        "sha256": "55515eb2dc07503a925c07c01bc2cf45a9915c31f97bfd9ffe919fadf9dfcd32"
+      }
+    ]
   }
 ]

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { startStubModel } from '../../../app/scripts/real-app-harness/stubModel.mjs';
 import { DEMO_ANTHROPIC_KEY } from '../../../app/scripts/demo-harness/agentHome.mjs';
-import { runCase, gradeCase, recheckFidelity, regradeSaved } from './eval.mjs';
+import { runCase, gradeCase, recheckFidelity, regradeSaved, programmatic } from './eval.mjs';
 import { json, save } from './trial.mjs';
 
 for (const key of Object.keys(process.env)) {
@@ -57,11 +57,15 @@ process.execve(binary, [binary, ...args], process.env);
   return path;
 };
 const arrayBinary = wrapper(true), objectBinary = wrapper(false);
+const trajectory = process.argv.includes('--trajectory');
+const failDaySix = process.argv.includes('--fail-day-six');
+const abortDiagnostic = process.argv.includes('--abort-trajectory-diagnostic');
+const omitProbeField = process.argv.includes('--omit-probe-field');
 const missingStale = process.argv.includes('--missing-stale-entry');
 const staleMemory = process.argv.includes('--stale-memory') || missingStale;
-const input = json(config.cases_path).find(row => staleMemory ? row.id === config.stale_probe_ids?.[0] : row.pilot && row.unit === 'use');
+const input = json(config.cases_path).find(row => trajectory ? row.id === config.trajectory_ids?.[process.argv.includes('--second-trajectory') ? 1 : 0] : staleMemory ? row.id === config.stale_probe_ids?.[0] : row.pilot && row.unit === 'use');
 if (missingStale) delete input.frozen_memory;
-input.days[0].task = [
+if (!trajectory) input.days[0].task = [
   'Please complete this local provider-mock task in your member home.',
   'Write answer.json with the synthetic directory value supplied by the provider.',
   'Keep the task confined to this disposable instance and leave the historical letters unchanged.',
@@ -78,7 +82,7 @@ const artifact = join(root, ctx.variant, 'out', `${input.id}_rep0_${ctx.attempt}
 const requests = [];
 let memberCalls = 0, simulatorCalls = 0;
 const refuseSleep = process.argv.includes('--refuse-sleep') || process.argv.includes('--never-sleep');
-const memberCallCount = refuseSleep ? 6 : 5;
+const memberCallCount = trajectory ? input.days.length * 5 : refuseSleep ? 6 : 5;
 let fidelityMode = 'faithful', judgeYes = true;
 const fidelityAbort = new AbortController();
 const stub = await startStubModel(request => {
@@ -93,6 +97,30 @@ const stub = await startStubModel(request => {
         assert.equal(request.systemPrompt.includes(input.stale_entry), !missingStale);
       }
       const home = join(json(join(artifact, 'runtime.json')).data_dir, 'crew', 'member');
+      if (trajectory) {
+        const number = Math.floor((memberCalls - 1) / 5) + 1;
+        const phase = (memberCalls - 1) % 5 + 1;
+        const day = input.days[number - 1];
+        if (phase === 1) return { tool: { id: `read-charter-${number}`, name: 'Read', args: { file_path: join(home, 'CHARTER.md') } } };
+        if (phase === 2) return { say: 'Ready for the next local day.' };
+        if (phase === 3) {
+          assert.ok(JSON.stringify(request.body.messages).includes(JSON.stringify(day.scripted_message).slice(1, -1)));
+          if (failDaySix && number === 6) throw new Error('synthetic day-six failure');
+          const value = Object.fromEntries(day.required_fields.map(field => [field, `mock day ${number} ${field}`]));
+          value[day.required_fields.at(-1)] = null;
+          if (omitProbeField && number === 5) delete value[day.required_fields[0]];
+          const content = JSON.stringify(value) + '\n';
+          if (number === 6) return { tool: { id: 'write-final-and-edit-old', name: 'Bash', args: {
+            command: `node --input-type=module <<'NATIVE_PROOF'\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(${JSON.stringify(join(home, day.output))}, ${JSON.stringify(content)});\nwriteFileSync(${JSON.stringify(join(home, 'day-5.json'))}, '{"later_edit":true}');\nNATIVE_PROOF`,
+            description: 'Write final task and deliberately edit an older task file',
+          } } };
+          return { tool: { id: `write-day-${number}`, name: 'Write', args: { file_path: join(home, day.output), content } } };
+        }
+        if (phase === 4) return { say: `Day ${number} file is ready.` };
+        return { tool: { id: `file-day-${number}`, name: 'Bash', args: {
+          command: `"$ATTN_WRAPPER_PATH" handoff --sleep -m "Unpaid trajectory day ${number} completed."`, description: 'File the day and sleep',
+        } } };
+      }
       if (memberCalls === 1) return { tool: { id: 'read-charter', name: 'Read', args: { file_path: join(home, 'CHARTER.md') } } };
       if (memberCalls === 2) return { say: 'Ready for your local task.' };
       if (memberCalls === 3) {
@@ -121,6 +149,12 @@ const stub = await startStubModel(request => {
       } } };
     }
     assert.equal(request.model, config.judge_model);
+    if (prompt.fact_ledger && prompt.days) {
+      if (abortDiagnostic) abort.abort(Object.assign(new Error('synthetic diagnostic deadline'), { failure_class: 'timeout' }));
+      return { tool: { id: `carry-${requests.length}`, name: 'StructuredOutput', args: {
+      days: prompt.days.map(day => ({ day: day.day, retained: prompt.fact_ledger.filter(fact => fact.plant_day <= day.day).map(fact => fact.id), omitted: [], unsupported: [], memory_entries: 'not applicable: letters-only' })),
+    } } };
+    }
     if (prompt.turns) {
       assert.equal(prompt.turns.length, 1);
       assert.equal(prompt.turns[0].message, input.days[0].task);
@@ -136,7 +170,7 @@ const stub = await startStubModel(request => {
       assert.deepEqual(Object.keys(prompt.B), ['files']);
       return { tool: { id: `pairwise-${requests.length}`, name: 'StructuredOutput', args: { winner: 'tie', reason: 'Synthetic identical persisted outcomes.' } } };
     }
-    assert.equal(prompt.candidate.files['answer.json'], '{"directory":"provider-mock-answer"}\n');
+    if (!trajectory) assert.equal(prompt.candidate.files['answer.json'], '{"directory":"provider-mock-answer"}\n');
     return { tool: { id: `judge-${requests.length}`, name: 'StructuredOutput', args: {
       verdicts: prompt.claims.map(claim => ({ id: claim.id, yes: judgeYes, reason: 'Synthetic provider response for protocol verification.' })),
     } } };
@@ -154,7 +188,7 @@ Object.assign(process.env, {
 try {
   console.log(`unpaid full model-call proof pid=${process.pid}; provider=${stub.origin}; root=${root}`);
   const run = await runCase(input, ctx);
-  assert.equal(run.output.letters.length, 1);
+  assert.equal(run.output.letters.length, trajectory ? 6 : 1);
   assert.equal(run.sleep_confirmation_needed, refuseSleep);
   const sleepConfirmations = json(join(root, run.artifact_dir, 'sleep-confirmations.json'));
   assert.equal(sleepConfirmations.length, refuseSleep ? 1 : 0);
@@ -169,9 +203,34 @@ try {
     const records = json(join(root, run.artifact_dir, file));
     assert.equal(records.find(record => record.type === 'user').permissionMode, 'bypassPermissions');
     assert.ok(records.some(record => record.type === 'user' && typeof record.message?.content === 'string' &&
-      record.message.content.includes('<pasted_content id=') && record.message.content.includes(input.days[0].task)));
+      record.message.content.includes('<pasted_content id=') && input.days.some(day => record.message.content.includes(day.task))));
   }
-  if (staleMemory) {
+  if (trajectory) {
+    const delivered = json(join(root, run.artifact_dir, 'scripted-turns.json'));
+    assert.deepEqual(delivered.map(turn => turn.message), input.days.map(day => day.scripted_message));
+    assert.equal(run.output.day_outputs.length, 6);
+    assert.deepEqual(json(join(root, run.artifact_dir, 'day-snapshots.json')), run.output.day_outputs);
+    const five = JSON.parse(run.output.day_outputs[4].files['day-5.json']);
+    assert.equal(five[input.days[4].required_fields.at(-1)], null);
+    assert.equal(run.output.files['day-5.json'], '{"later_edit":true}');
+    assert.notEqual(run.output.day_outputs[4].files['day-5.json'], run.output.files['day-5.json']);
+    const grade = await gradeCase(input, run, null, ctx);
+    assert.equal(grade.grade.required_probe_fields, omitProbeField ? 0 : 1);
+    assert.equal(grade.grade.pass, omitProbeField ? 0 : 1);
+    assert.equal(grade.meta.probe_omissions.length, omitProbeField ? 1 : 0);
+    assert.equal(grade.meta.diagnostics.length, abortDiagnostic ? 0 : 2);
+    assert.equal(grade.meta.diagnostics_status, abortDiagnostic ? 'unverified' : 'verified');
+    if (abortDiagnostic) {
+      assert.match(grade.meta.diagnostics_error, /synthetic diagnostic deadline/);
+      assert.equal(grade.meta.calls_spend_incomplete, true);
+    }
+    assert.ok(grade.meta.diagnostics.every(vote => vote.days.length === 6));
+    assert.equal(grade.meta.simulator_fidelity.mode, 'fixed_messages');
+    assert.equal(simulatorCalls, 0);
+    assert.equal(memberCalls, memberCallCount);
+    save(join(root, 'trajectory-proof.json'), { paid_calls: 0, run, grade, delivered, requests });
+    console.log(`PASS: six native days, exact scripts, stable day-five snapshot and omission grading; ${join(root, 'trajectory-proof.json')}`);
+  } else if (staleMemory) {
     assert.equal(run.engagement.wake_view, true);
     const proof = json(join(root, run.artifact_dir, 'wake-view.json'));
     assert.equal(proof.length, 1);
@@ -325,7 +384,14 @@ try {
 } catch (error) {
   save(join(root, 'model-calls-failure.json'), { error: error.message, failure_class: error.failure_class, calls: ctx.calls, requests,
     launches: existsSync(launchesPath) ? readFileSync(launchesPath, 'utf8') : '' });
-  if (missingStale && error.failure_class === 'harness' && /stale entry missing from native wake/.test(error.message)) {
+  if (failDaySix && /synthetic day-six failure/.test(error.message)) {
+    const snapshots = json(join(artifact, 'day-snapshots.json'));
+    assert.equal(snapshots.length, 5);
+    assert.ok(snapshots[4].files['day-5.json']);
+    assert.equal(json(join(artifact, 'sessions.json')).length, 5);
+    assert.ok(!requests.some(request => request.model === config.judge_model));
+    console.log(`PASS: first five daily snapshots and sessions survive day-six failure; ${join(root, 'model-calls-failure.json')}`);
+  } else if (missingStale && error.failure_class === 'harness' && /stale entry missing from native wake/.test(error.message)) {
     assert.equal(simulatorCalls, 0);
     console.log(`PASS: missing stale wake evidence fails before task or grading; ${join(root, 'model-calls-failure.json')}`);
   } else if (process.argv.includes('--never-sleep') && error.failure_class === 'controller_handoff' && /awaiting=crew_sleep/.test(error.message)) {

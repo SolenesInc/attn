@@ -6,10 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/statetrace"
 )
 
 func (d *Daemon) handleSnoozeTurnConn(conn net.Conn, msg *protocol.SnoozeTurnMessage) {
@@ -58,21 +55,13 @@ func (d *Daemon) handleSnoozeTurn(msg *protocol.SnoozeTurnMessage) error {
 	if !until.After(now) {
 		return fmt.Errorf("session %s: until %s is in the past; choose a future instant", sessionID, msg.Until)
 	}
-	monitor := d.sessionMonitor(sessionID)
-	if monitor == nil {
-		return fmt.Errorf("session %s: no monitor runs it, so its turn can't be snoozed", sessionID)
+	result, err := d.monitorCommand(sessionID, "snooze", until, "")
+	if err != nil {
+		return err
 	}
-	turn := d.store.TurnStamps(sessionID).OpenedAt
-	view, applied := monitor.Do(sessionmonitor.Command{Key: monitor.Key(), Kind: sessionmonitor.Snooze, Turn: turn, Until: until}, now)
-	pausepoint.At(pausepoint.SessionSnoozeCommitted)
-	if !applied {
+	if !result.Applied {
 		return fmt.Errorf("session %s: could not save snooze", sessionID)
 	}
-	if !monitor.Publish(view) {
-		return fmt.Errorf("session %s: snooze is pending; attn will keep retrying until it is saved", sessionID)
-	}
-	monitor.CancelAutoSettle("snoozed")
-	d.traceSettle(sessionID, "settle")
 	return nil
 }
 
@@ -81,47 +70,15 @@ func (d *Daemon) handleWakeTurn(msg *protocol.WakeTurnMessage) error {
 	if d.store.Get(sessionID) == nil {
 		return fmt.Errorf("unknown live session %s", sessionID)
 	}
-	return d.wakeSnooze(sessionID, time.Now(), "user")
-}
 
-func (d *Daemon) wakeSnooze(sessionID protocol.SessionID, at time.Time, cause string) error {
-	monitor := d.sessionMonitor(sessionID)
-	if monitor == nil {
-		return fmt.Errorf("session %s: no monitor runs it, so its turn can't be woken", sessionID)
+	result, err := d.monitorCommand(sessionID, "wake", time.Time{}, "")
+	if err != nil {
+		return err
 	}
-	view, accepted := monitor.Do(sessionmonitor.Command{Key: monitor.Key(), Kind: sessionmonitor.Wake}, at)
-	if !accepted {
+	if !result.Applied {
 		return fmt.Errorf("session %s: could not save unsnooze", sessionID)
 	}
-	if !monitor.Publish(view) {
-		return fmt.Errorf("session %s: unsnooze is pending; attn will keep retrying until it is saved", sessionID)
-	}
-	d.finishSnoozeWake(sessionID, at, cause)
 	return nil
-}
-
-func (d *Daemon) finishSnoozeWake(sessionID protocol.SessionID, at time.Time, cause string) {
-	if d.debugLogging {
-		d.logf("snooze woken: session=%s cause=%s", sessionID, cause)
-	}
-	d.recordStateObservation(sessionID, statetrace.Observation{
-		Source:  "user",
-		Claim:   d.currentStateClaim(sessionID),
-		Detail:  cause,
-		Cause:   "wake",
-		Outcome: statetrace.OutcomeApplied,
-	})
-	if d.sessionMonitor(sessionID) == nil {
-		d.broadcastSessionStateChanged(sessionID)
-	}
-}
-
-func (d *Daemon) currentStateClaim(sessionID protocol.SessionID) string {
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return ""
-	}
-	return string(session.State)
 }
 
 func (d *Daemon) clearSnoozeState(sessionID protocol.SessionID) {

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 	"time"
 
@@ -22,13 +21,11 @@ func (d *Daemon) agentTurn(sessionID protocol.SessionID, action protocol.AgentTu
 	if !d.queueFlowOn() {
 		return protocol.AgentTurnOutcomeQueueOff, nil
 	}
-	monitor := d.sessionMonitor(sessionID)
-	if monitor == nil {
-		return "", fmt.Errorf("session %s is not running in attn", sessionID)
-	}
-	return monitor.AgentTurn(action, time.Now())
+	result, err := d.monitorCommand(sessionID, "agent_turn", time.Time{}, action)
+	return protocol.Deref(result.Outcome), err
 }
 
 func (d *Daemon) inNotificationRun(sessionID protocol.SessionID) bool {
-	return d.sessionMonitor(sessionID).InNotificationRun()
+	view, ok := d.monitorViewFor(sessionID)
+	return ok && view.NotificationRun.V
 }

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -121,15 +119,12 @@ func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time
 	if since.IsZero() {
 		return true
 	}
-	path := d.sessionMonitor(session.ID).ActivityTranscript()
-	if path == "" {
+	result, err := d.transcriptActivity(context.Background(), session.ID, "modified", "")
+	if err != nil || !result.Available {
 		return false
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.ModTime().After(since)
+	modified, err := time.Parse(time.RFC3339Nano, protocol.Deref(result.ModifiedAt))
+	return err == nil && modified.After(since)
 }
 
 type sessionActivityPayload struct {
@@ -152,7 +147,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 		return
 	}
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(sessionID))
-	if d.sessionMonitor(sessionID).ActivityTranscript() == "" {
+	if result, err := d.transcriptActivity(context.Background(), sessionID, "modified", ""); err != nil || !result.Available {
 		return
 	}
 	runner := d.jobQueueRef()
@@ -200,29 +195,35 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		return nil, err
 	}
 	resumeID := strings.TrimSpace(carried.ResumeID)
-	monitor := d.sessionMonitor(sessionID)
-	transcriptPath := monitor.ActivityTranscript()
-	if transcriptPath == "" {
-		return nil, nil
-	}
+
 	d.noteSessionActivityRun(sessionID, func(run *sessionActivityRun) {
 		run.ObservedAt = time.Now()
 	})
 
 	stored := d.store.GetSessionActivity(sessionID)
 	if stored.Cursor == "" {
-		return nil, d.reseedSessionActivity(monitor, sessionID, resumeID)
+		return nil, d.reseedSessionActivity(ctx, sessionID, resumeID)
 	}
-	window, err := monitor.TranscriptEvents(stored.Cursor)
+	read, err := d.transcriptActivity(ctx, sessionID, "events", stored.Cursor)
+	if err == nil && !read.Available {
+		return nil, nil
+	}
+	if err == nil {
+		err = activityReadError(read)
+	}
+	var window activity.Window
+	if err == nil {
+		err = json.Unmarshal([]byte(protocol.Deref(read.Window)), &window)
+	}
 	switch {
 	case err == nil:
 	case errors.Is(err, transcript.ErrCursorMismatch) ||
 		errors.Is(err, transcript.ErrCursorPastEnd) ||
 		errors.Is(err, transcript.ErrInvalidCursor) ||
 		errors.Is(err, activity.ErrDeltaTooLarge):
-		return nil, d.reseedSessionActivity(monitor, sessionID, resumeID)
+		return nil, d.reseedSessionActivity(ctx, sessionID, resumeID)
 	default:
-		return nil, fmt.Errorf("session_activity: read %s: %w", transcriptPath, err)
+		return nil, fmt.Errorf("session_activity: read %s: %w", sessionID, err)
 	}
 
 	if window.Empty() {
@@ -303,12 +304,35 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	return nil, nil
 }
 
-func (d *Daemon) reseedSessionActivity(monitor *sessionmonitor.Monitor, sessionID protocol.SessionID, resumeID string) error {
-	head, err := monitor.TranscriptHead()
+func (d *Daemon) reseedSessionActivity(ctx context.Context, sessionID protocol.SessionID, resumeID string) error {
+	result, err := d.transcriptActivity(ctx, sessionID, "head", "")
 	if err != nil {
 		return fmt.Errorf("session_activity: seed cursor for %s: %w", sessionID, err)
 	}
-	d.store.SetSessionActivityCursorForConversation(sessionID, resumeID, head)
+	if result.Available {
+		d.store.SetSessionActivityCursorForConversation(sessionID, resumeID, protocol.Deref(result.Head))
+	}
+	return nil
+}
+
+func (d *Daemon) transcriptActivity(ctx context.Context, session protocol.SessionID, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+	return Call[protocol.TranscriptActivityResult](ctx, d.router(), protocol.TranscriptActivityMessage{Cmd: protocol.CmdTranscriptActivity, SessionID: session, Kind: protocol.TranscriptActivityKind(kind), Cursor: protocol.Ptr(cursor)})
+}
+
+func activityReadError(result protocol.TranscriptActivityResult) error {
+	switch protocol.Deref(result.ErrorKind) {
+	case protocol.MonitorReadErrorKindInvalidCursor:
+		return transcript.ErrInvalidCursor
+	case protocol.MonitorReadErrorKindCursorMismatch:
+		return transcript.ErrCursorMismatch
+	case protocol.MonitorReadErrorKindCursorPastEnd:
+		return transcript.ErrCursorPastEnd
+	case protocol.MonitorReadErrorKindDeltaTooLarge:
+		return activity.ErrDeltaTooLarge
+	}
+	if result.Error != nil {
+		return errors.New(*result.Error)
+	}
 	return nil
 }
 

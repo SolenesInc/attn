@@ -86,7 +86,7 @@ func (d *Daemon) handleSessionAnnotationsSubmit(client *wsClient, msg *protocol.
 		return
 	}
 	delivery := sessionmonitor.AnnotationInput(msg.RequestID, msg.Text)
-	attempt := d.sessionMonitor(sessionID).Place(context.Background(), delivery)
+	attempt := d.placeDelivery(context.Background(), sessionID, delivery)
 	if attempt.Stage != sessionmonitor.Placed {
 		if sessionmonitor.DeferredError(attempt.Err) {
 			result.Status = annotationSubmitStatusSkipped

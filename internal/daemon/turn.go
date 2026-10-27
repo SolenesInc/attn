@@ -7,53 +7,28 @@ import (
 	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/statetrace"
 )
 
-func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
+func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) error {
 	if msg == nil {
-		return
+		return nil
 	}
-	d.closeTurn(protocol.TrimID(msg.SessionID), sessionmonitor.Settle, "settle")
+	return d.closeTurn(protocol.TrimID(msg.SessionID), sessionmonitor.Settle)
 }
 
 func (d *Daemon) handBackTurn(sessionID protocol.SessionID) {
-	d.closeTurn(sessionID, sessionmonitor.HandBack, "ask answer")
+	if err := d.closeTurn(sessionID, sessionmonitor.HandBack); err != nil {
+		d.logf("hand back turn: %v", err)
+	}
 }
 
-func (d *Daemon) closeTurn(sessionID protocol.SessionID, kind sessionmonitor.CommandKind, cause string) {
+func (d *Daemon) closeTurn(sessionID protocol.SessionID, kind sessionmonitor.CommandKind) error {
 	if d == nil || d.store == nil || sessionID == "" {
-		return
+		return nil
 	}
-	monitor := d.sessionMonitor(sessionID)
-	if monitor == nil {
-		return
-	}
-	turn := d.store.TurnStamps(sessionID).OpenedAt
-	view, applied := monitor.Do(sessionmonitor.Command{Key: monitor.Key(), Kind: kind, Turn: turn}, time.Now())
-	if !applied || !monitor.Publish(view) {
-		return
-	}
-	monitor.CancelAutoSettle("settled by user")
-	d.traceSettle(sessionID, cause)
-}
-
-func (d *Daemon) traceSettle(sessionID protocol.SessionID, cause string) {
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return
-	}
-	reason := ""
-	if session.StateReason != nil {
-		reason = *session.StateReason
-	}
-	d.recordStateObservation(sessionID, statetrace.Observation{
-		Source:  "user",
-		Claim:   string(session.State),
-		Detail:  reason,
-		Cause:   cause,
-		Outcome: statetrace.OutcomeApplied,
-	})
+	names := map[sessionmonitor.CommandKind]string{sessionmonitor.Settle: "settle", sessionmonitor.HandBack: "hand_back"}
+	_, err := d.monitorCommand(sessionID, names[kind], time.Time{}, "")
+	return err
 }
 
 func (d *Daemon) decorateSessionWithTurn(session *protocol.Session) {

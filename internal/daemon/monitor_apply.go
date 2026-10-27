@@ -55,7 +55,12 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 		return true
 	}
 	if save {
-		if err := (storeSaver{daemon: d}).SaveRuntime(session, previous, view); err != nil {
+		var cost *sessionmonitor.CostSave
+		if changed, durable, _ := sessionmonitor.CostChange(previous, view); changed {
+			checkpoint := sessioncost.FromSourceTotals(view.CostInitialized.V, view.Cost.Entries)
+			cost = &sessionmonitor.CostSave{Checkpoint: checkpoint, Durable: durable}
+		}
+		if err := (storeSaver{daemon: d}).SaveRuntime(session, previous, view, cost); err != nil {
 			r.applyMu.Unlock()
 			return false
 		}
@@ -73,9 +78,6 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 	binding.applied = view
 	h.catchUp(session, binding, nil)
 	r.applyMu.Unlock()
-	if recorded != "" {
-		h.monitor.SettleSwitch(recorded)
-	}
 	if moved {
 		d.publishFact(FactSessionConversationChanged, string(session), agentConversationObservation{SessionID: session, NativeID: recorded})
 	}
@@ -103,14 +105,13 @@ func (h *monitorHome) recordConversation(session protocol.SessionID, previous, v
 
 type storeSaver struct{ daemon *Daemon }
 
-func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionmonitor.View) error {
+func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionmonitor.View, cost *sessionmonitor.CostSave) error {
 	d := s.daemon
 	if runtime := runtimeStateOf(view); runtime != runtimeStateOf(saved) && !d.store.SaveSessionRuntime(session, runtime) {
 		return fmt.Errorf("runtime state was not saved")
 	}
-	costChanged, costDurable, _ := sessionmonitor.CostChange(saved, view)
-	if costChanged {
-		if err := d.store.ApplySessionCostSnapshot(session, sessioncost.Checkpoint{Initialized: view.CostInitialized.V, Sources: view.Cost.Entries}, costDurable); err != nil {
+	if cost != nil {
+		if err := d.store.ApplySessionCostSnapshot(session, cost.Checkpoint, cost.Durable); err != nil {
 			return fmt.Errorf("cost: %w", err)
 		}
 	}

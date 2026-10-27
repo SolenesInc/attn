@@ -164,7 +164,7 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 	}
 	vent := storedVent{store.Vent{
 		ID: id, ProfileID: session.ProfileID, SessionID: sessionID, Text: text,
-		Turn:      fmt.Sprintf("%d:%d", d.startedAt.UnixNano(), d.sessionMonitor(sessionID).LatestRun()),
+		Turn:      fmt.Sprintf("%d:%d", d.startedAt.UnixNano(), d.monitorRun(sessionID)),
 		Context:   d.ventContext(session),
 		CreatedAt: time.Now(),
 	}}
@@ -487,4 +487,9 @@ func (v storedVent) wire() protocol.Vent {
 		wire.Send = protocol.Ptr(protocol.VentSendQueued)
 	}
 	return wire
+}
+
+func (d *Daemon) monitorRun(session protocol.SessionID) uint64 {
+	view, _ := d.monitorViewFor(session)
+	return view.Run.V
 }

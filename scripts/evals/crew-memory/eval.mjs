@@ -9,6 +9,11 @@ const sumUsage = values => Object.fromEntries(usageKeys.map(key => [key, values.
 
 export function loadCases(ctx) {
   const state = ctx.state;
+  const trajectoryPilot = ctx.pilotStage === 'trajectory';
+  if (trajectoryPilot && (!state.pilot || ctx.variant !== 'baseline' || !state.approvals?.trajectory_pilot))
+    throw failure('approval', 'trajectory pilot needs baseline, pilot=true and approvals.trajectory_pilot');
+  if (trajectoryPilot && (!Array.isArray(state.trajectory_ids) || state.trajectory_ids.length !== 2 || new Set(state.trajectory_ids).size !== 2))
+    throw failure('fixture', 'trajectory pilot needs exactly two distinct trajectory_ids');
   if (state.pilot_stage && (!state.pilot || ctx.pilotStage !== state.pilot_stage))
     throw failure('approval', `reviewed pilot_stage=${state.pilot_stage}; asked pilot=${state.pilot}, --pilot-stage=${ctx.pilotStage}; use the reviewed pilot stage`);
   const cases = json(state.cases_path);
@@ -22,9 +27,15 @@ export function loadCases(ctx) {
     }
     if (!input.charter || !Array.isArray(input.letters) || !input.days?.length) throw failure('fixture', `${input.id} is missing public setup or days`);
     if (!input.day_brief?.trim()) throw failure('fixture', `${input.id} needs a public day_brief for its isolated workspace`);
-    if (input.unit === 'e2e' && input.days.length !== 12) throw failure('fixture', `${input.id}: end-to-end cases require 12 days, got ${input.days.length}`);
+    if (input.unit === 'e2e' && input.days.length !== 12 && !(trajectoryPilot && state.trajectory_ids.includes(input.id) && input.days.length === 6)) throw failure('fixture', `${input.id}: end-to-end cases require 12 days, got ${input.days.length}`);
     if (!input.checks?.length && !input.claims?.length) throw failure('fixture', `${input.id} has no grading claims`);
     if (input.claims?.some(claim => !claim.id || !claim.text.endsWith('?'))) throw failure('fixture', `${input.id} claims must be yes/no questions with ids`);
+  }
+  if (trajectoryPilot) for (const id of state.trajectory_ids) {
+    const input = cases.find(row => row.id === id);
+    if (input?.unit !== 'e2e' || input.days.length !== 6 || !input.fact_ledger?.length ||
+      input.days.some(day => !day.scripted_message || day.scripted_message !== day.task || !day.output || !day.required_fields?.length))
+      throw failure('fixture', `${id}: trajectory pilot needs six fixed messages, output fields and a fact ledger`);
   }
   if (!state.pilot) {
     if (!state.approvals?.cases || !state.approvals?.budget || !state.approvals?.grading) throw failure('approval', 'full runs need recorded user approvals for cases, budget, and grading');
@@ -69,7 +80,7 @@ export function loadCases(ctx) {
   for (const path of [ctx.flow, state.cases_path]) {
     if (relative(privateRoot, resolve(path)).startsWith('..')) throw failure('fixture', `${path} must live under private_root so the member cannot read it`);
   }
-  const selected = stalePilot ? cases.filter(input => state.stale_probe_ids.includes(input.id)) : cases.filter(input => !state.pilot || (ctx.pilotStage === 'use'
+  const selected = trajectoryPilot ? cases.filter(input => state.trajectory_ids.includes(input.id)) : stalePilot ? cases.filter(input => state.stale_probe_ids.includes(input.id)) : cases.filter(input => !state.pilot || (ctx.pilotStage === 'use'
     ? input.unit === 'use'
     : input.pilot && (ctx.pilotStage === 'e2e' ? input.unit === 'e2e' : input.unit !== 'e2e')));
   if (state.pilot && ctx.pilotStage === 'e2e') {
@@ -136,6 +147,7 @@ async function simulator(ctx, day, conversation, dayBrief) {
 }
 
 async function simulatorFidelity(input, ctx, calls = ctx.calls) {
+  if (input.days.every(day => day.scripted_message)) return { status: 'faithful', mode: 'fixed_messages', violations: [] };
   const turns = calls.filter(call => call.purpose === 'simulator').flatMap((call, index) => {
     const response = call.response.structured_output ?? JSON.parse(call.response.result);
     if (response.done) return [];
@@ -162,6 +174,20 @@ function endFiles(home, paths) {
     if (relative(home, target).startsWith('..')) throw failure('fixture', `output leaves member home: ${path}`);
     return [path, existsSync(target) ? readFileSync(target, 'utf8') : null];
   }));
+}
+
+function carryFiles(home) {
+  const files = {};
+  const visit = (directory, prefix = '') => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(prefix, entry.name);
+      if (!prefix && ['handoffs', 'memory'].includes(entry.name)) continue;
+      if (entry.isDirectory()) visit(join(directory, entry.name), path);
+      else if (entry.isFile()) files[path] = readFileSync(join(directory, entry.name), 'utf8');
+    }
+  };
+  visit(home);
+  return files;
 }
 
 function turns(events) {
@@ -215,11 +241,13 @@ export async function runCase(input, ctx) {
   const trial = new Trial({ ...ctx.state, member_model: ctx.model, memory: ctx.variant !== 'baseline' }, ctx.signal);
   const artifactDir = join(ctx.flow, ctx.variant, 'out', `${input.id}_rep${ctx.rep}_${ctx.attempt}`);
   mkdirSync(artifactDir, { recursive: true });
-  const transcript = [], days = [], wakeViews = [];
+  const transcript = [], days = [], wakeViews = [], dayOutputs = [];
   let problem;
   try {
     await trial.start(input);
     save(join(artifactDir, 'runtime.json'), { instance: trial.instance, runtime_root: trial.root, data_dir: trial.data });
+    const initialFiles = input.fact_ledger ? carryFiles(trial.home) : {};
+    const scriptedTurns = [];
     for (const day of input.days) {
       const id = await trial.wake();
       if (input.stale_entry && ctx.variant !== 'baseline') {
@@ -235,7 +263,14 @@ export async function runCase(input, ctx) {
         save(join(artifactDir, 'wake-view.json'), wakeViews);
       }
       let events = await trial.transcript(id);
-      while (true) {
+      if (day.scripted_message) {
+        trial.beginSimulation(id);
+        trial.finishSimulation(id);
+        await trial.send(id, day.scripted_message);
+        events = await trial.transcript(id);
+        scriptedTurns.push({ day: days.length + 1, session_id: id, message: day.scripted_message });
+        save(join(artifactDir, 'scripted-turns.json'), scriptedTurns);
+      } else while (true) {
         trial.beginSimulation(id);
         const next = await simulator(ctx, day, events, input.day_brief);
         trial.finishSimulation(id);
@@ -245,21 +280,38 @@ export async function runCase(input, ctx) {
         events = await trial.transcript(id);
       }
       events = await trial.transcript(id);
+      const taskFiles = input.fact_ledger ? endFiles(trial.home, [day.output]) : undefined;
+      if (input.fact_ledger) {
+        dayOutputs.push({ day: days.length + 1, files: taskFiles });
+        save(join(artifactDir, 'day-snapshots.json'), dayOutputs);
+      }
       const sleep = await trial.sleep(id);
       const closure = nativeTurns(sleep.records);
       transcript.push(...turns(events), ...closure);
       const session = trial.sessions.get(id);
       if (!session?.usage || session.usage.measurement_incomplete || session.usage.has_unpriced_usage || !(session.usage.cost_usd > 0)) throw failure('usage', `session ${id} has incomplete token or dollar receipts`);
       if (!session.usage.models?.length || session.usage.models.some(row => row.model !== ctx.model)) throw failure('serving_substitution', `member ${id}: requested ${ctx.model}, served ${session.usage.models?.map(row => row.model)}`);
-      days.push({ id, selection: trial.selection, usage: session.usage, events, closure,
+      const carry = input.fact_ledger ? {
+        files: Object.fromEntries(Object.entries(carryFiles(trial.home)).filter(([path, text]) => initialFiles[path] !== text)),
+        letters: readdirSync(join(trial.home, 'handoffs')).filter(name => !input.letters.some(letter => letter.name === name)).sort()
+          .map(name => ({ name, text: readFileSync(join(trial.home, 'handoffs', name), 'utf8') })),
+        entries: existsSync(join(trial.home, 'memory', 'log.jsonl')) ? readFileSync(join(trial.home, 'memory', 'log.jsonl'), 'utf8') : '',
+      } : undefined;
+      days.push({ id, task_files: taskFiles, carry, selection: trial.selection, usage: session.usage, events, closure,
         sleep_confirmation_needed: sleep.confirmation_needed });
+      if (input.fact_ledger) {
+        dayOutputs.at(-1).carry = carry;
+        save(join(artifactDir, 'day-snapshots.json'), dayOutputs);
+        save(join(artifactDir, 'sessions.json'), days);
+      }
     }
     const initialLetters = new Set(input.letters.map(letter => letter.name));
     const letters = readdirSync(join(trial.home, 'handoffs')).filter(name => !initialLetters.has(name)).sort()
       .map(name => ({ name, text: readFileSync(join(trial.home, 'handoffs', name), 'utf8') }));
     if (letters.length !== input.days.length) throw failure('harness', `expected ${input.days.length} filed letters, got ${letters.length}`);
     const entries = existsSync(join(trial.home, 'memory', 'log.jsonl')) ? readFileSync(join(trial.home, 'memory', 'log.jsonl'), 'utf8') : '';
-    const output = { files: endFiles(trial.home, input.outputs ?? []), letters, entries };
+    const output = { files: endFiles(trial.home, input.outputs ?? []), letters, entries,
+      ...(input.fact_ledger ? { day_outputs: dayOutputs } : {}) };
     const native = days.flatMap(day => day.usage.models);
     const requests = nativeRequests(trial.root, artifactDir);
     if (!requests.length) throw failure('usage', 'no native model request receipts were recorded');
@@ -313,7 +365,7 @@ export async function runCase(input, ctx) {
 }
 
 export function programmatic(input, output) {
-  return Object.fromEntries((input.checks ?? []).map(check => {
+  const grades = Object.fromEntries((input.checks ?? []).map(check => {
     const text = output.files[check.path];
     if (text === null || text === undefined) return [check.id, 0];
     if (check.kind !== 'json') throw failure('fixture', `unsupported outcome check ${check.kind}`);
@@ -322,6 +374,20 @@ export function programmatic(input, output) {
     for (const key of check.pointer ?? []) value = value?.[key];
     return [check.id, JSON.stringify(value) === JSON.stringify(check.equals) ? 1 : 0];
   }));
+  if (input.fact_ledger) grades.required_probe_fields = Number(probeOmissions(input, output).length === 0);
+  return grades;
+}
+
+function probeOmissions(input, output) {
+  if (!input.fact_ledger) return [];
+  return [...new Set(input.fact_ledger.map(fact => fact.probe_day))].flatMap(number => {
+    const day = input.days[number - 1];
+    const text = output.day_outputs?.[number - 1]?.files[day.output];
+    let value;
+    try { value = JSON.parse(text); } catch { return [{ day: number, output: day.output, reason: 'missing or invalid JSON' }]; }
+    return day.required_fields.filter(field => value?.[field] === undefined || value[field] === '')
+      .map(field => ({ day: number, output: day.output, field, reason: 'omitted' }));
+  });
 }
 
 async function outcomeGrades(input, run, ref, ctx) {
@@ -360,19 +426,38 @@ async function outcomeGrades(input, run, ref, ctx) {
 
 export async function gradeCase(input, run, ref, ctx) {
   const { grades, passes, pairwise } = await outcomeGrades(input, run, ref, ctx);
+  const diagnostics = [];
+  let diagnosticsError;
+  try {
+    if (input.fact_ledger) for (let pass = 0; pass < 2; pass++) {
+      const verdict = await modelCall(ctx, 'judge', JSON.stringify({
+        instructions: 'Diagnose planted-fact carry for each of six days. Truth comes only from the frozen fact ledger and scripted user messages available by that day, including supersession. Inspect all written files, letters and memory together; absence from a letter alone is not loss. The day-two recommendation is member-authored; no user message adopts it. For newly added memory entries, distinguish supported relevant facts, irrelevant/unscored material and unsupported attribution. Outside the planted list is not automatically false. Baseline memory-entry metrics are not applicable. Return six days, with retained fact ids, omitted fact ids and any unsupported assertion with its source. These diagnostics do not change task outcome grades.',
+        fact_ledger: input.fact_ledger, messages: input.days.map(day => day.scripted_message), days: run.output.day_outputs,
+      }), { type: 'object', properties: { days: { type: 'array', items: { type: 'object', properties: {
+        day: { type: 'integer' }, retained: { type: 'array', items: { type: 'string' } },
+        omitted: { type: 'array', items: { type: 'string' } }, unsupported: { type: 'array', items: { type: 'string' } },
+        memory_entries: { type: 'string' },
+      }, required: ['day', 'retained', 'omitted', 'unsupported', 'memory_entries'], additionalProperties: false } } }, required: ['days'], additionalProperties: false });
+      const expected = input.days.map((_, index) => index + 1);
+      if (JSON.stringify(verdict.days.map(day => day.day).sort((a, b) => a - b)) !== JSON.stringify(expected))
+        throw failure('grader', 'trajectory diagnostics must return exactly one row per day');
+      diagnostics.push(verdict);
+    }
+  } catch (error) { diagnosticsError = String(error.message ?? error); }
+  const diagnosticsStatus = input.fact_ledger ? diagnosticsError ? 'unverified' : 'verified' : undefined;
   const fidelity = await simulatorFidelity(input, ctx);
   const fidelityCalls = ctx.calls.filter(call => call.purpose === 'simulator_fidelity');
   const judgeCalls = ctx.calls.filter(call => call.purpose === 'judge');
   const simulatorCalls = ctx.calls.filter(call => call.purpose === 'simulator');
   const fidelityCost = fidelityCalls.reduce((sum, call) => sum + (Number.isFinite(call.response?.total_cost_usd) ? call.response.total_cost_usd : 0), 0);
-  save(join(ctx.flow, run.artifact_dir, 'grading.json'), { grades, passes, pairwise, simulator_fidelity: fidelity, exploratory: Boolean(ctx.state.pilot) });
+  save(join(ctx.flow, run.artifact_dir, 'grading.json'), { grades, passes, pairwise, diagnostics, diagnostics_status: diagnosticsStatus, diagnostics_error: diagnosticsError, probe_omissions: probeOmissions(input, run.output), simulator_fidelity: fidelity, exploratory: Boolean(ctx.state.pilot) });
   save(join(ctx.flow, run.artifact_dir, 'model-calls.json'), ctx.calls);
   return { grade: { pass: Number(Object.values(grades).every(Boolean)), ...grades }, judge_model: ctx.state.judge_model,
     judge_usage: sumUsage(judgeCalls.map(call => call.response.usage)),
-    meta: { exploratory: Boolean(ctx.state.pilot), judge_passes: passes, pairwise, simulator_fidelity: fidelity,
+    meta: { exploratory: Boolean(ctx.state.pilot), judge_passes: passes, pairwise, diagnostics, diagnostics_status: diagnosticsStatus, diagnostics_error: diagnosticsError, probe_omissions: probeOmissions(input, run.output), simulator_fidelity: fidelity,
       simulator_fidelity_usage: sumUsage(fidelityCalls.filter(call => call.response?.usage).map(call => call.response.usage)),
       simulator_fidelity_cost_usd: fidelityCost,
-      calls_spend_incomplete: fidelity.status === 'unverified',
+      calls_spend_incomplete: fidelity.status === 'unverified' || Boolean(diagnosticsError),
       simulator_usage: sumUsage(simulatorCalls.map(call => call.response.usage)),
       calls_cost_usd: [...judgeCalls, ...simulatorCalls].reduce((sum, call) => sum + call.response.total_cost_usd, 0) + fidelityCost } };
 }

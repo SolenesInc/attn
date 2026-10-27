@@ -18,5 +18,11 @@ func jobSubject(job *jobs.Job) string {
 	if job == nil {
 		return ""
 	}
+	if job.Kind == sessionTitleKind {
+		var payload sessionTitlePayload
+		if job.DecodePayload(&payload) == nil && payload.SessionID != "" {
+			return string(payload.SessionID)
+		}
+	}
 	return job.UniqueKey
 }
