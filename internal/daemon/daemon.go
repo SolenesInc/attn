@@ -993,7 +993,16 @@ func (d *Daemon) sessionConversationSurvives(session *protocol.Session, intent s
 	}
 	driver := agentdriver.Get(session.Agent)
 	resumeID := agentdriver.ResolveSpawnResumeSessionID(driver, session.ID, "", d.store.GetResumeSessionID(session.ID))
-	if d.conversationKnown(driver, resumeID) {
+	if host := d.sessionHost(session.ID); host != "" {
+		readiness, err := d.placedConversationReadiness(session.ID, host, session.Agent, session.ProfileID, resumeID, false)
+		if err != nil {
+			d.logf("recovery: keeping session %s after conversation lookup on %s failed: %v", session.ID, host, err)
+			return true
+		}
+		if readiness.Known {
+			return true
+		}
+	} else if d.conversationKnown(driver, resumeID) {
 		return true
 	}
 	return d.store.GetAgentDriverRun(session.ID).RunID != "" ||
