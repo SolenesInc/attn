@@ -1475,6 +1475,17 @@
                                 "description": "Wake view, recent entries in full and older ones as summaries."
                               }
                             }
+                          },
+                          {
+                            "name": "handoffs_dir",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "handoffs_dir",
+                                "kind": "text",
+                                "description": "Handoffs dir"
+                              }
+                            }
                           }
                         ]
                       },
@@ -5346,5 +5357,5 @@
       ]
     }
   ],
-  "definitions_hash": "4f5e2ec6f6f97d3f090b96eef8e7874af5bf982d021d8579b527fe64ebb6def7"
+  "definitions_hash": "4c0498ed632fea8ff3ba7f9b84beafd4a474e84632c0e185f0286be9b587eddb"
 }
