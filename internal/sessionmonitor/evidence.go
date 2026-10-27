@@ -318,6 +318,7 @@ func (m *Monitor) RecordTurnAborted(detail string, abortedAt, observedAt time.Ti
 		at = observedAt
 	}
 	m.RecordEvidence(observedAt, func(e *Evidence) {
+		m.input.userSubmit = false
 		e.TurnOpen = false
 		e.ToolOpen = false
 		e.LastHarnessEvent = &sessionstate.Observation{
@@ -335,6 +336,7 @@ func (m *Monitor) RecordTurnEnded(classifies bool) {
 	}
 	at := time.Now()
 	m.RecordEvidence(at, func(e *Evidence) {
+		m.input.userSubmit = false
 		e.TurnOpen = false
 		e.ToolOpen = false
 		if classifies {

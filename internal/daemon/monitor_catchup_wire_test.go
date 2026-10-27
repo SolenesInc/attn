@@ -6,10 +6,45 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestAConversationReportRetriesAfterStorageRecovers(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		agent := w.bubbleClaude(t, app, "shop")
+		transcript := fakeagent.WriteClaudeTranscript(t, w.Path("moved"), agent.transcript.ConversationID)
+		transcript.Prompt("continue from the recovered transcript")
+		restore := w.RefuseDatabaseCommits()
+		defer restore()
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(agent.self), transcript.ConversationID, transcript.Path); err == nil {
+			t.Fatal("unsaved conversation report returned success")
+		}
+		if err := cli.RecordPullRequestCreated(protocol.SessionID(agent.id), shopPull(1)); err == nil {
+			t.Fatal("unsaved pull request returned success")
+		}
+		restore()
+		w.advance(jobs.DefaultBackoffBase)
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(agent.self), transcript.ConversationID, transcript.Path); err != nil {
+			t.Fatalf("recovered conversation report: %v", err)
+		}
+		read, err := cli.SessionTranscript(agent.id, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.ContainsFunc(read.Events, func(event protocol.SessionTranscriptEvent) bool {
+			return protocol.Deref(event.Text) == "continue from the recovered transcript"
+		}) {
+			t.Fatalf("recovered transcript = %+v", read.Events)
+		}
+		if got := pullNumbers(queriedSession(t, cli, agent.id)); !slices.Equal(got, []int{1}) {
+			t.Fatalf("recovered pull requests = %v, want [1]", got)
+		}
+	})
+}
 
 func TestASnoozeWakeRetriesAfterStorageRecovers(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {

@@ -260,21 +260,6 @@ func (d *Daemon) notePluginDriverReport(sessionID protocol.SessionID) {
 	}
 }
 
-func (d *Daemon) observePromptSubmitted(sessionID protocol.SessionID, at time.Time) bool {
-	if monitor := d.sessionMonitor(sessionID); monitor != nil {
-		return monitor.ObservePromptSubmitted(at)
-	}
-	d.markModelRequestStarted(sessionID, at)
-	return false
-}
-
-func (d *Daemon) markModelRequestStarted(sessionID protocol.SessionID, at time.Time) bool {
-	if d.store == nil {
-		return false
-	}
-	return d.sessionMonitor(sessionID).MarkModelRequestStarted(at)
-}
-
 func (d *Daemon) writeSessionPTY(sessionID protocol.SessionID, data []byte, source string) error {
 	_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: d.primaryTerminal(sessionID), Data: string(data), Source: strings.TrimSpace(source)})
 	return err
@@ -288,7 +273,7 @@ func (d *Daemon) writeTerminalPTY(ctx context.Context, terminal harness.Terminal
 		}
 		return d.ptyBackend.Input(ctx, terminal, data)
 	}
-	return d.sessionMonitor(sessionID).WriteInput(ctx, terminal, data, strings.TrimSpace(source))
+	return d.monitorInTerminal(terminal, sessionID).WriteInput(ctx, terminal, data, strings.TrimSpace(source))
 }
 
 var errNoPTYBackend = errors.New("session has no PTY backend")

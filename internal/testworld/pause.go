@@ -166,3 +166,17 @@ func release(conn net.Conn) {
 	_, _ = conn.Write([]byte(pausepoint.Release + "\n"))
 	_ = conn.Close()
 }
+
+func (p *Pause) Take() func() {
+	p.t.Helper()
+	var paused pausedAt
+	select {
+	case paused = <-p.held:
+	case <-time.After(fakeagent.HangGuard):
+		p.t.Fatalf("no process reached pause point %q within %s", p.name, fakeagent.HangGuard)
+	}
+	var once sync.Once
+	resume := func() { once.Do(func() { release(paused.conn) }) }
+	p.t.Cleanup(resume)
+	return resume
+}

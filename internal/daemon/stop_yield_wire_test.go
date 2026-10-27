@@ -69,10 +69,10 @@ func hookedClaudeAtWork(t *testing.T, w *world, app *testworld.Peer, cli *client
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	transcript := fakeagent.WriteClaudeTranscript(t, cwd, "")
-	if err := w.InjectSession("s1", "checkout work", cwd, protocol.SessionAgentClaude); err != nil {
-		t.Fatalf("register: %v", err)
-	}
+	w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
+		m.ID, m.Label = "s1", protocol.Ptr("checkout work")
+	})
+	transcript := fakeagent.WriteClaudeTranscript(t, cwd, w.Terminal("s1"))
 	if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
 		t.Fatalf("bind the conversation: %v", err)
 	}

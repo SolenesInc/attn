@@ -11,6 +11,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -37,6 +38,13 @@ type AgentPluginLaunch struct {
 	Plugin string
 	Resume bool
 	Params pluginDriverSpawnParams
+}
+
+func (launch *AgentLaunch) driverRunID() string {
+	if launch == nil || launch.Plugin == nil {
+		return ""
+	}
+	return launch.Plugin.Params.RunID
 }
 
 func encodeAgentLaunch(launch *AgentLaunch) (*string, error) {
@@ -190,10 +198,18 @@ func (d *Daemon) commitAgentLaunch(_ context.Context, msg protocol.LaunchCommitt
 	if !ok {
 		return struct{}{}, nil
 	}
-	if exit := d.finishPluginSessionLaunch(sessionID, true); exit != nil {
+	if exit := d.sessionMonitor(sessionID).FinishDriverLaunch(protocol.Deref(msg.RunID)); exit != nil {
 		d.life.Go("handlePTYExitAfterPluginLaunch", func() { d.handlePTYExit(*exit) })
 	}
 	return struct{}{}, nil
+}
+
+type launchCompletion func()
+
+func (complete launchCompletion) finish() {
+	if complete != nil {
+		complete()
+	}
 }
 
 func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harness.TerminalID) {
@@ -202,8 +218,15 @@ func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harnes
 	d.linkTerminalDropped(terminal)
 }
 
-func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, profileID string) {
-	_, err := Call[struct{}](context.Background(), d.router(), protocol.LaunchCommittedMessage{Cmd: protocol.CmdLaunchCommitted, TerminalID: terminal, Committed: committed, ProfileID: profileID})
+func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, profileID, runID string) {
+	if committed && runID != "" {
+		pausepoint.At(pausepoint.AgentLaunchReady)
+	}
+	msg := protocol.LaunchCommittedMessage{Cmd: protocol.CmdLaunchCommitted, TerminalID: terminal, Committed: committed, ProfileID: profileID}
+	if runID != "" {
+		msg.RunID = protocol.Ptr(runID)
+	}
+	_, err := Call[struct{}](context.Background(), d.router(), msg)
 	if err != nil {
 		d.logf("launch_committed: terminal=%s committed=%t: %v", terminal, committed, err)
 	}

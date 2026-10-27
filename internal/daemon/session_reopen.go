@@ -289,6 +289,7 @@ type sessionReopenOutcome struct {
 	Action          protocol.SessionReopenAction
 	AlreadyRunning  bool
 	WorktreeCreated string
+	launch          launchCompletion
 }
 
 func (d *Daemon) reopenSession(
@@ -300,6 +301,9 @@ func (d *Daemon) reopenSession(
 		outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action)
 		return reopenErr
 	})
+	if outcome != nil {
+		outcome.launch.finish()
+	}
 	return outcome, err
 }
 
@@ -412,6 +416,7 @@ func (d *Daemon) performReopenLocked(
 		Action:          action,
 		AlreadyRunning:  outcome.AlreadyRunning,
 		WorktreeCreated: created,
+		launch:          outcome.launch,
 	}, nil
 }
 
@@ -528,6 +533,7 @@ type sessionRuntimeReopened struct {
 	SessionID      protocol.SessionID
 	ProfileID      string
 	AlreadyRunning bool
+	launch         launchCompletion
 }
 
 func (d *Daemon) reopenSessionRuntime(
@@ -548,8 +554,12 @@ func (d *Daemon) reopenSessionRuntimeWithProtection(
 ) (*sessionRuntimeReopened, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
 	lifecycleLock.Lock()
-	defer lifecycleLock.Unlock()
-	return d.reopenSessionRuntimeProtected(protection, plan)
+	outcome, err := d.reopenSessionRuntimeProtected(protection, plan)
+	lifecycleLock.Unlock()
+	if outcome != nil {
+		outcome.launch.finish()
+	}
+	return outcome, err
 }
 
 func (d *Daemon) reopenSessionRuntimeProtected(
@@ -619,14 +629,15 @@ func (d *Daemon) reopenSessionRuntimeProtected(
 	if resumeID := strings.TrimSpace(d.store.GetResumeSessionID(plan.SessionID)); resumeID != "" {
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
-	if _, rejection := d.runSpawnPipelineProtected(protection, spawn, policy); rejection != nil {
+	placed, rejection := d.runSpawnPipelineProtected(protection, spawn, policy)
+	if rejection != nil {
 		return nil, fmt.Errorf("spawn reopened session: %w", rejection.reason())
 	}
 	if session := d.store.Get(plan.SessionID); session == nil {
 		return nil, fmt.Errorf("reopened session was not persisted")
 	}
 	d.logf("reopen: session %s is back in %s in profile %s", plan.SessionID, directory, profileID)
-	return &sessionRuntimeReopened{SessionID: plan.SessionID, ProfileID: profileID}, nil
+	return &sessionRuntimeReopened{SessionID: plan.SessionID, ProfileID: profileID, launch: placed.launch}, nil
 }
 
 func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenMessage) {

@@ -39,17 +39,6 @@ func (r *codexShared) holder(profile, conversation string) protocol.SessionID {
 	return sessionID
 }
 
-func (r *codexShared) shownThread(sessionID protocol.SessionID) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, t := range r.d.terminals().Of(harness.SessionID(sessionID)) {
-		if v := r.views[t]; v != nil && v.thread != "" {
-			return v.thread
-		}
-	}
-	return ""
-}
-
 func (r *codexShared) control(ctx context.Context, profile string) (*codexServer, *codexshared.Client, error) {
 	s, err := r.ensureServer(ctx, profile, "")
 	if err != nil {
@@ -66,28 +55,36 @@ func (r *codexShared) Voices() []harness.Voice {
 	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
 }
 
-func (r *codexShared) Deliver(_ context.Context, in harness.Input) harness.Custody {
-	session := r.d.store.Get(in.Session)
-	if session == nil {
-		return harness.Custody{Reason: fmt.Sprintf("session %s is gone", in.Session)}
+type codexMonitorLink struct {
+	shared  *codexShared
+	monitor *sessionmonitor.Monitor
+	target  sessionmonitor.LinkTarget
+}
+
+func (l codexMonitorLink) Voices() []harness.Voice { return l.shared.Voices() }
+
+func (r *codexShared) Deliver(ctx context.Context, in harness.Input) harness.Custody {
+	monitor := r.d.sessionMonitor(in.Session)
+	if monitor == nil {
+		return harness.Custody{Reason: fmt.Sprintf("session %s has no monitor", in.Session)}
 	}
-	conversation := r.d.store.GetSessionConversation(session.ID).NativeID
+	return (codexMonitorLink{shared: r, monitor: monitor, target: monitor.LinkTarget()}).Deliver(ctx, in)
+}
+
+func (l codexMonitorLink) Deliver(_ context.Context, in harness.Input) harness.Custody {
+	r, target := l.shared, l.target
+	conversation := target.Conversation.NativeID
 	if conversation == "" {
-		conversation = r.shownThread(session.ID)
-	}
-	if conversation == "" {
-		return harness.Custody{Reason: fmt.Sprintf("shared Codex session %s shows no conversation yet", session.ID)}
+		return harness.Custody{Reason: "shared Codex monitor has no conversation yet"}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
-	s, client, err := r.control(ctx, session.ProfileID)
+	s, client, err := r.control(ctx, target.Profile)
 	if err == nil {
-		err = r.startTurn(ctx, client, session.ID, conversation, in.Text)
+		err = r.startTurn(ctx, client, target.Session, conversation, in.Text)
 	}
-	if err == nil {
-		s.events.run(r.d, func() {
-			r.d.sessionMonitor(session.ID).EnsureTranscriptWatcher(r.d.store.GetSessionConversation(session.ID).TranscriptPath)
-		})
+	if err == nil && target.Session != "" {
+		s.events.run(r.d, func() { l.monitor.EnsureTranscriptWatcher(target.Conversation.TranscriptPath) })
 	}
 	if err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver to shared Codex conversation %s: %v", conversation, err)}

@@ -887,3 +887,26 @@ func nonZeroInt(v, fallback int) int {
 	}
 	return fallback
 }
+
+func (r *Runner) UpdatePayload(kind, key string, update func(json.RawMessage) (any, error)) error {
+	r.ioMu.Lock()
+	job, err := r.store.LoadByKey(kind, key)
+	if err != nil || job == nil {
+		r.ioMu.Unlock()
+		return err
+	}
+	value, err := update(job.Payload)
+	if err != nil || value == nil {
+		r.ioMu.Unlock()
+		return err
+	}
+	job.Payload, err = marshalPayload(value)
+	if err == nil {
+		err = r.store.Save(job)
+	}
+	r.ioMu.Unlock()
+	if err == nil {
+		r.notifyWorkChange(kind, job.ID)
+	}
+	return err
+}

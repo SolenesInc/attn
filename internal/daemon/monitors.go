@@ -124,8 +124,17 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 			old.stopCatchUp()
 		}
 		applied := monitor.Snapshot()
+		if candidate != nil {
+			applied = d.storedMonitorView(sessionID)
+		}
 		applied.PullRequests.Entries = d.recordedLinks(sessionID)
 		r.sessions[sessionID] = &monitorBinding{monitor: monitor, applied: applied, copied: d.copiedSession(sessionID)}
+		if previousID != sessionID {
+			if old := r.sessions[previousID]; old != nil && old.monitor == monitor {
+				old.stopCatchUp()
+				delete(r.sessions, previousID)
+			}
+		}
 		homeOf(monitor).bind(sessionID)
 		r.mu.Unlock()
 		r.policyMu.Unlock()
@@ -134,7 +143,7 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	d.reportTerminalTitle(sessionID)
 	monitor.Arm()
 	d.syncMonitorConversation(sessionID)
-	if previous != nil && previous != monitor {
+	if candidate == nil && previous != nil && previous != monitor {
 		monitor.TakeUserSubmit(previous)
 	}
 	return monitor
@@ -164,6 +173,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 	launch := sessionmonitor.Launch{
 		Known:              true,
 		Agent:              session.Agent,
+		Profile:            session.ProfileID,
 		Link:               d.store.SessionLink(sessionID),
 		StartedAt:          d.store.SessionLaunchedAt(sessionID),
 		Directory:          session.Directory,
@@ -266,12 +276,8 @@ func (h *monitorHome) sessionID() protocol.SessionID {
 	return id
 }
 
-func (h monitorHost) session(monitor *sessionmonitor.Monitor) protocol.SessionID {
-	return homeOf(monitor).sessionID()
-}
-
 func (h monitorHost) LiveTerminals(ctx context.Context) map[harness.TerminalID]struct{} {
-	return h.daemon.liveTerminals(ctx)
+	return h.daemon.localLiveTerminals(ctx)
 }
 
 func (h monitorHost) ViewOwner(terminal harness.TerminalID) string {
@@ -287,25 +293,15 @@ func (h monitorHost) Input(ctx context.Context, terminal harness.TerminalID, dat
 }
 
 func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) harness.Link {
-	session := h.daemon.store.Get(h.session(monitor))
-	if session == nil {
-		return nil
+	target := monitor.LinkTarget()
+	if target.Kind == codexLinkKind {
+		return codexMonitorLink{shared: h.daemon.codexShared(), monitor: monitor, target: target}
 	}
-	link := h.daemon.sessionLink(session, voice)
-	if link == nil {
-		return nil
+	targetSession, _ := monitor.TitleTarget()
+	if driver, ok := h.daemon.ensurePluginRegistry().driver(targetSession.Agent); ok && driver.Capabilities["message_delivery"] && target.Driver.Plugin == driver.PluginName && target.Driver.Run != "" {
+		return pluginLink{daemon: h.daemon, terminal: target.Terminal, plugin: target.Driver.Plugin, run: target.Driver.Run}
 	}
-	return sessionLinkTo{Link: link, session: session.ID}
-}
-
-type sessionLinkTo struct {
-	harness.Link
-	session protocol.SessionID
-}
-
-func (l sessionLinkTo) Deliver(ctx context.Context, in harness.Input) harness.Custody {
-	in.Session = l.session
-	return l.Link.Deliver(ctx, in)
+	return nil
 }
 
 func (h monitorHost) LinkTranscriptPath(link, path string) string {

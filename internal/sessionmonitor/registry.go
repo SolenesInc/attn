@@ -43,6 +43,7 @@ type Host interface {
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time
 	EnqueueTitle(m *Monitor, conversation, source string) error
+	Answered(*Monitor, Answer)
 }
 
 type ClassifyRequest struct {
@@ -73,6 +74,7 @@ type Monitor struct {
 	initialized         bool
 	policy              Policy
 	agent               protocol.SessionAgent
+	profile             string
 	startedAt           time.Time
 	epoch               string
 	revision            uint64
@@ -119,7 +121,10 @@ type Monitor struct {
 	usageIdle           chan struct{}
 	usageDraining       bool
 	pendingConversation *ConversationObservation
-	pendingSwitch       Conversation
+	pendingSwitch       []pendingSwitch
+	pendingSession      protocol.SessionID
+	switchApplying      bool
+	pendingDirty        bool
 	titleAttempted      bool
 	titleInitialPrompt  *[sha256.Size]byte
 	driverLaunch        *driverLaunch
@@ -146,11 +151,13 @@ type Registry struct {
 	monitors  map[*Monitor]struct{}
 	wake      chan struct{}
 	closed    atomic.Bool
+	inputs    map[harness.TerminalID]*Monitor
+	owners    map[harness.TerminalID]*Monitor
 	nextLocal uint64
 }
 
 func NewRegistry(host Host, saver Saver) *Registry {
-	return &Registry{host: host, saver: saver, watches: make(map[harness.TerminalID]*TerminalWatch), monitors: make(map[*Monitor]struct{}), wake: make(chan struct{}, 1)}
+	return &Registry{host: host, saver: saver, watches: make(map[harness.TerminalID]*TerminalWatch), monitors: make(map[*Monitor]struct{}), wake: make(chan struct{}, 1), inputs: make(map[harness.TerminalID]*Monitor), owners: make(map[harness.TerminalID]*Monitor)}
 }
 
 type Start struct {
@@ -164,11 +171,17 @@ type Start struct {
 }
 
 func (r *Registry) Reuse(previous *Monitor, start Start) bool {
-	if previous == nil || previous.watch.terminalID != start.Terminal {
+	if start.Candidate != nil && previous != start.Candidate {
+		return false
+	}
+	if previous == nil {
 		return false
 	}
 	previous.mu.Lock()
 	defer previous.mu.Unlock()
+	if previous.watch.terminalID != start.Terminal {
+		return false
+	}
 	if (start.Conversation == "" && !start.Linked) || previous.conversation == start.Conversation {
 		previous.initializeLocked(start)
 		return true
@@ -206,12 +219,37 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 		m = &Monitor{registry: r, epoch: rand.Text()}
 		m.home = r.host.HomeFor(m)
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.succeeds = Key{}
 	m.watch, m.conversation, m.localConversation = w, start.Conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
 	m.session = start.Session
-	m.initializeLocked(start)
-	m.input = m.freshLaneLocked()
-	m.saved.view = m.snapshotLocked()
+	if m.pendingSession == "" {
+		m.pendingSession = start.Session
+	}
+	if start.Candidate == nil {
+		m.initializeLocked(start)
+		m.input = m.freshLaneLocked()
+	} else {
+		m.policy = start.Policy
+		launch := start.Launch()
+		m.link = launch.Link
+		if m.turn == (TurnStamps{}) || !launch.Turn.SnoozedUntil.IsZero() {
+			m.turn = launch.Turn
+			if m.turn.SnoozedUntil.After(time.Now()) {
+				m.openTurnLocked(time.Now(), false)
+			}
+		}
+		m.loadCostLocked(launch.Cost)
+		if !m.policy.TitlesAllowed {
+			m.harnessTitle = launch.HarnessTitle
+		}
+	}
+	if start.Candidate == nil {
+		m.saved.view = m.snapshotLocked()
+	} else {
+		m.saved.view = View{}
+	}
 	m.saved.cost = sessioncost.Checkpoint{Initialized: m.costInitialized, Sources: m.cost}
 	w.monitors[m] = struct{}{}
 	r.monitors[m] = struct{}{}
@@ -260,6 +298,7 @@ func (m *Monitor) initializeLocked(start Start) {
 	}
 	launch := start.Launch()
 	m.agent = launch.Agent
+	m.profile = launch.Profile
 	m.link = launch.Link
 	m.startedAt = launch.StartedAt
 	m.directory = launch.Directory
@@ -273,7 +312,9 @@ func (m *Monitor) initializeLocked(start Start) {
 	m.exit = launch.Exit
 	m.conversationInput = Conversation{ConversationObservation: launch.Conversation}
 	m.touchedAt = launch.LastSeen
-	m.pendingSwitch = launch.PendingSwitch
+	for _, pending := range launch.PendingSwitch {
+		m.pendingSwitch = append(m.pendingSwitch, pendingSwitch{Conversation: pending})
+	}
 	m.pullRequests = launch.PullRequests
 	m.initialized = launch.Known
 }

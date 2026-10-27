@@ -17,6 +17,7 @@ type placementOutcome struct {
 	desktopID string
 	paneID    string
 	err       error
+	launch    launchCompletion
 }
 
 type launchPlacement struct {

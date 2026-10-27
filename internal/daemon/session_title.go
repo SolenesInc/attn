@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,7 +37,7 @@ type sessionTitlePayload struct {
 func (d *Daemon) enqueueSessionTitle(monitor *sessionmonitor.Monitor, conversation string, source string) error {
 	sessionID := monitor.Session()
 	runner := d.jobQueueRef()
-	if runner == nil || runner.Disabled() || sessionID == "" {
+	if runner == nil || runner.Disabled() {
 		return sessionmonitor.ErrNoTitleRunner
 	}
 	_, err := runner.Enqueue(sessionTitleKind, jobs.EnqueueOptions{
@@ -53,9 +54,9 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 		return nil, err
 	}
 	var monitor *sessionmonitor.Monitor
-	for _, candidate := range d.monitors().each() {
+	for _, candidate := range d.monitors().registry.Monitors() {
 		matches := candidate.TitleKey() == job.UniqueKey
-		if payload.SessionID == "" {
+		if payload.SessionID == "" && !matches {
 			matches = candidate.Session() == protocol.SessionID(job.UniqueKey)
 		}
 		if matches {
@@ -229,5 +230,26 @@ func fallbackSessionTitleModel(agent string) string {
 		return "gpt-5.6-luna"
 	default:
 		return ""
+	}
+}
+
+func (d *Daemon) bindMonitorTitle(monitor *sessionmonitor.Monitor) {
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
+		return
+	}
+	err := runner.UpdatePayload(sessionTitleKind, monitor.TitleKey(), func(raw json.RawMessage) (any, error) {
+		var payload sessionTitlePayload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return nil, err
+		}
+		if payload.SessionID != "" {
+			return nil, nil
+		}
+		payload.SessionID = monitor.Session()
+		return payload, nil
+	})
+	if err != nil {
+		d.logf("session title binding %s: %v", monitor.Session(), err)
 	}
 }

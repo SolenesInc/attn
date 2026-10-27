@@ -122,7 +122,7 @@ func (d *Daemon) handleHookNotification(conn net.Conn, msg *protocol.HookNotific
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.Message))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookNotify, Detail: message}, kind)
-	d.sessionMonitor(sessionID).RecordNotification(kind, message)
+	d.monitorInTerminal(msg.ID, sessionID).RecordNotification(kind, message)
 	d.sendOK(conn)
 }
 
@@ -135,7 +135,7 @@ func (d *Daemon) handleHookStopFailure(conn net.Conn, msg *protocol.HookStopFail
 	}
 	message := strings.TrimSpace(protocol.Deref(msg.ErrorMessage))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookStopFailure, Detail: message}, errorType)
-	d.sessionMonitor(sessionID).RecordStopFailure(errorType, message)
+	d.monitorInTerminal(msg.ID, sessionID).RecordStopFailure(errorType, message)
 	d.sendOK(conn)
 }
 
@@ -146,7 +146,7 @@ func (d *Daemon) handleHookCompaction(conn net.Conn, msg *protocol.HookCompactio
 		phase = "started"
 	}
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHookCompaction, Detail: strings.TrimSpace(protocol.Deref(msg.Trigger))}, phase)
-	d.sessionMonitor(sessionID).RecordCompaction(msg.Active)
+	d.monitorInTerminal(msg.ID, sessionID).RecordCompaction(msg.Active)
 	d.sendOK(conn)
 }
 

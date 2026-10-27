@@ -393,6 +393,7 @@ func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProt
 		spawnMsg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(placement.desktopID), AnchorPaneID: protocol.Ptr(placement.anchorPaneID)}
 	}
 	placed, rejection := d.runSpawnPipelineProtected(protection, spawnMsg, internalSpawnPolicy{})
+	placed.launch.finish()
 	return placed, rejection.reason()
 }
 

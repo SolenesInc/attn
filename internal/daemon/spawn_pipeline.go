@@ -93,7 +93,7 @@ type spawnOutcome struct {
 
 func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if plan.agent != nil {
-		d.launchCommitted(plan.spawnOpts.ID, false, plan.agent.Profile)
+		d.launchCommitted(plan.spawnOpts.ID, false, plan.agent.Profile, plan.agent.driverRunID())
 	}
 	if d.store.Get(sessionID) == nil {
 		d.forgetMonitor(sessionID)
@@ -575,9 +575,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	if req.existingSession != nil {
 		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
 	}
-	if plan.agent != nil {
-		d.launchCommitted(plan.spawnOpts.ID, true, plan.agent.Profile)
-	}
 	return &spawnOutcome{}
 }
 
@@ -590,7 +587,6 @@ func (d *Daemon) commitAddedTerminal(req *spawnRequest, plan *spawnPlan, session
 	}
 	plan.commit()
 	d.publishFact(FactSessionReregistered, string(session.ID), nil)
-	d.launchCommitted(plan.spawnOpts.ID, true, plan.agent.Profile)
 	return &spawnOutcome{}
 }
 
@@ -608,6 +604,7 @@ func (d *Daemon) runSpawnPipelineReporting(msg *protocol.SpawnSessionMessage, po
 		placed, rejection = d.runSpawnPipelineProtected(protection, msg, policy)
 		return nil
 	})
+	placed.launch.finish()
 	return placed, rejection
 }
 
@@ -660,6 +657,9 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	}
 	req.placed.session = msg.ID
+	if plan.agent != nil {
+		req.placed.launch = func() { d.launchCommitted(plan.spawnOpts.ID, true, plan.agent.Profile, plan.agent.driverRunID()) }
+	}
 	return req.placed, nil
 }
 

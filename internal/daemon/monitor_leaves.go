@@ -82,7 +82,7 @@ func (d *Daemon) monitorCommand(session protocol.SessionID, kind string, until t
 }
 
 func (d *Daemon) placeSessionInput(ctx context.Context, msg protocol.SessionPlaceMessage) (protocol.SessionPlaceResult, error) {
-	monitor := d.sessionMonitor(msg.SessionID)
+	monitor := d.monitorInTerminal(d.primaryTerminal(msg.SessionID), msg.SessionID)
 	if monitor == nil {
 		return protocol.SessionPlaceResult{}, fmt.Errorf("session %s: no monitor runs it", msg.SessionID)
 	}

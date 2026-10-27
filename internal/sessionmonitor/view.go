@@ -171,7 +171,7 @@ func (m *Monitor) snapshotLocked() View {
 		HarnessTitle:       Value[string]{m.harnessTitle},
 		TerminalTitle:      Value[string]{m.terminalTitle},
 		LastSeen:           Value[time.Time]{m.touchedAt},
-		PendingSwitch:      Value[Conversation]{m.pendingSwitch},
+		PendingSwitch:      Value[Conversation]{m.pendingHeadLocked()},
 		Exit:               Value[*Exit]{m.exit},
 		Live:               Value[bool]{live},
 		AssistantWindow:    Value[uint64]{m.windowRevision},

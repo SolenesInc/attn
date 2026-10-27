@@ -160,6 +160,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if plugin != nil {
 		defer plugin.abort()
 	}
+	d.monitors().registry.DropSwitches(msg.TerminalID)
 	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
 	d.syncMonitorConversation(sessionID)
@@ -176,7 +177,9 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
-		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+		d.life.Go("handleFailedTerminalRestart", func() {
+			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+		})
 		return struct{}{}, fmt.Errorf("respawn failed for %s: %w", sessionID, spawnErr)
 	}
 	if plugin != nil {
@@ -186,7 +189,9 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 			_ = d.ptyBackend.Remove(ctx, terminal)
 			unlockEnds()
 			d.closePluginDriverSession(sessionID, "reload_failed", nil, "")
-			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+			d.life.Go("handleFailedPluginRestart", func() {
+				d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+			})
 			return struct{}{}, fmt.Errorf("activate plugin run failed for %s: %w", sessionID, err)
 		}
 	}
@@ -284,6 +289,8 @@ func (d *Daemon) waitTerminalBlock(ctx context.Context, msg protocol.TerminalWai
 func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMessage) (struct{}, error) {
 	terminal, stop := msg.TerminalID, protocol.Deref(msg.Stop)
 	ending := protocol.Deref(msg.EndingSessionID)
+	stoppedSession, _ := d.shownIn(terminal)
+	driver := d.sessionMonitor(stoppedSession).Driver()
 	if stop {
 		d.markTerminalExitIntent(terminal, terminalExitStop)
 	}
@@ -300,15 +307,14 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 	if err != nil && ending != "" {
 		d.terminals().takeEnding(terminal)
 	}
-	if (err == nil || errors.Is(err, pty.ErrSessionNotFound)) && stop {
-		if sessionID, shown := d.shownIn(terminal); shown {
-			d.closePluginDriverSession(sessionID, "killed", nil, msg.Signal)
-		}
+	if errors.Is(err, pty.ErrSessionNotFound) && stop && d.sessionMonitor(stoppedSession).RetireDriver(driver.Run) {
+		d.notifyPluginDriverSessionClosed(driver.Plugin, terminal, driver.Run, "killed", nil, msg.Signal)
 	}
 	return struct{}{}, err
 }
 
 func (d *Daemon) removeTerminal(ctx context.Context, msg protocol.TerminalRemoveMessage) (struct{}, error) {
+	d.monitors().registry.DropSwitches(msg.TerminalID)
 	err := d.ptyBackend.Remove(ctx, msg.TerminalID)
 	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		err = nil

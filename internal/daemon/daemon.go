@@ -288,15 +288,14 @@ type Daemon struct {
 	gardenSeedEventConsumerErr     error
 	gardenSeedEventConsumerStarted bool
 
-	docSubsMu              sync.Mutex
-	docSubs                map[string]*docSubscription
-	docSubsSeq             int64
-	docUnsubHooks          func()
-	conversationUnsubHooks func()
-	sessionPRUnsubHooks    func()
-	sessionPRHosts         func(host string) (sessionPRHost, bool)
-	sessionPRRefreshMu     sync.Mutex
-	beforeSeedMoveWrite    func(seedID string)
+	docSubsMu           sync.Mutex
+	docSubs             map[string]*docSubscription
+	docSubsSeq          int64
+	docUnsubHooks       func()
+	sessionPRUnsubHooks func()
+	sessionPRHosts      func(host string) (sessionPRHost, bool)
+	sessionPRRefreshMu  sync.Mutex
+	beforeSeedMoveWrite func(seedID string)
 
 	harvestWhenMu        sync.Mutex
 	harvestWhenUntracked map[string]bool
@@ -1649,6 +1648,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.forgetTerminalTitle(info.ID)
 		return false
 	}
+	d.bindMonitorCandidates()
 	owner, bound, shown := d.terminals().takeExiting(info.ID)
 	sessionID := owner.session
 	pausepoint.At(pausepoint.PtyExitOwnerResolved)
@@ -1679,20 +1679,25 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
-	unlockEnds := d.lockTerminalEnds(sessionID)
-	if d.exitOfSupersededRuntime(info) {
-		unlockEnds()
-		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
-		return false
-	}
 	if session := d.store.Get(sessionID); session != nil {
 		driver := agentdriver.Get(session.Agent)
 		if driver != nil && !agentdriver.EffectiveCapabilities(driver).HasHooks {
 			if finder, ok := agentdriver.GetTranscriptFinder(driver); ok {
 				path := finder.FindTranscriptForResume(d.store.GetResumeSessionID(sessionID))
-				d.observeStoppedConversation(sessionID, d.resolveStopTranscriptPath(session, path))
+				receipt, accepted := d.observeStoppedConversation(sessionID, d.resolveStopTranscriptPath(session, path))
+				if accepted {
+					if err := receipt.Wait(d.life.Context()); err != nil {
+						d.logf("exit conversation: session=%s: %v", sessionID, err)
+					}
+				}
 			}
 		}
+	}
+	unlockEnds := d.lockTerminalEnds(sessionID)
+	if d.exitOfSupersededRuntime(info) {
+		unlockEnds()
+		d.logf("ignoring exit of a replaced runtime in terminal %s", info.ID)
+		return false
 	}
 	stopped := d.consumeTerminalExitIntent(info.ID, terminalExitStop)
 	if !d.endTerminal(sessionID, info.ID) {
@@ -1707,7 +1712,11 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	monitor.FenceInput()
 	monitor.StopTranscriptWatchers()
-	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
+	reason := "exited"
+	if stopped {
+		reason = "killed"
+	}
+	d.closePluginDriverSession(sessionID, reason, &info.ExitCode, info.Signal)
 	if err := d.removePTYSession(info.ID); err != nil {
 		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 	}
@@ -2118,7 +2127,9 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.logf("close session %s: %v", sessionID, err)
 		return err
 	}
-	d.forgetMonitor(sessionID)
+	if _, pending := d.sessionMonitor(sessionID).PendingSwitch(); !pending {
+		d.forgetMonitor(sessionID)
+	}
 	d.announceClosedAsks(closure.Asks)
 	if closure.Recorded {
 		for _, terminal := range terminals {
@@ -2164,7 +2175,8 @@ func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation
 	}
 	state := obs.Claim
 	origin := sessionmonitor.Origin{Source: string(obs.Source), Detail: obs.Detail, ObservedAt: obs.At}
-	evidenceChanged := d.sessionMonitor(sessionID).RecordPTY(obs)
+	monitor := d.monitorInTerminal(terminal, sessionID)
+	evidenceChanged := monitor.RecordPTY(obs)
 	if !obs.Source.ClaimsProtocolState() {
 		if evidenceChanged {
 			d.traceStateEvidence(sessionID, origin, state)
@@ -2760,7 +2772,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdHookCompaction:
 		d.handleHookCompaction(conn, msg.(*protocol.HookCompactionMessage))
 	case protocol.CmdSetSessionResumeID:
-		d.handleObserveAgentConversation(conn, msg.(*protocol.SetSessionResumeIDMessage))
+		d.handleObserveAgentConversation(ctx, conn, msg.(*protocol.SetSessionResumeIDMessage))
 	case protocol.CmdSessionInstructions:
 		d.handleSessionInstructions(conn, msg.(*protocol.SessionInstructionsMessage))
 	case protocol.CmdSessionTranscript:
@@ -3023,45 +3035,54 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	sessionID := d.sessionInTerminal(msg.ID)
+	monitor := d.monitorInTerminal(msg.ID, sessionID)
 	d.logf("hook evidence: id=%s state=%s", sessionID, msg.State)
 	d.tracePermissionMode(sessionID, protocol.Deref(msg.PermissionMode))
 	d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: sessionmonitor.StateSourceHook}, msg.State)
-	d.sessionMonitor(sessionID).RecordBracket(msg.State)
+	monitor.RecordBracket(msg.State)
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
-		typed := d.observePromptSubmitted(sessionID, time.Now())
-		monitor, prompt := d.sessionMonitor(sessionID), protocol.Deref(msg.Prompt)
+		typed := monitor.ObservePromptSubmitted(time.Now())
+		prompt := protocol.Deref(msg.Prompt)
 		d.life.Go("maybeGenerateSessionTitleFromPrompt", func() { monitor.TitleFromPrompt(prompt, typed) })
 	}
 	d.touchSession(sessionID)
 	d.sendOK(conn)
 }
 
-func (d *Daemon) persistResumeSessionID(sessionID protocol.SessionID, resumeSessionID string) {
+func (d *Daemon) persistResumeSessionID(sessionID protocol.SessionID, resumeSessionID string) (*sessionmonitor.ConversationReceipt, error) {
 	if monitor := d.sessionMonitor(sessionID); monitor != nil {
-		monitor.ObserveResumeID(resumeSessionID)
-		return
+		receipt, accepted := monitor.ObserveResumeID(resumeSessionID)
+		if !accepted {
+			return nil, errors.New("resume conversation could not be saved")
+		}
+		return receipt, nil
 	}
 	if _, err := d.store.TransitionSessionResumeID(sessionID, resumeSessionID); err != nil {
-		d.logf("persistResumeSessionID: update failed for session %s: %v", sessionID, err)
+		return nil, err
 	}
+	return nil, nil
 }
 
 func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	sessionID := d.sessionInTerminal(msg.ID)
+	monitor := d.monitorInTerminal(msg.ID, sessionID)
 	reportedTranscriptPath := strings.TrimSpace(msg.TranscriptPath)
 	msg.TranscriptPath = d.resolveStopTranscriptPath(d.store.Get(sessionID), reportedTranscriptPath)
+	if monitor != d.sessionMonitor(sessionID) {
+		msg.TranscriptPath = monitor.Snapshot().Conversation.V.TranscriptPath
+	}
 	if reportedTranscriptPath != "" && msg.TranscriptPath != reportedTranscriptPath {
 		d.logf("handleStop: ignored transcript path for session=%s: reported=%s bound=%s", sessionID, reportedTranscriptPath, msg.TranscriptPath)
 	}
 	d.logf("handleStop: session=%s, transcript_path=%s", sessionID, msg.TranscriptPath)
 
-	relaxBackgroundWork := d.sessionMonitor(sessionID).Policy().ChiefOfStaff
-	classifies := !d.sessionMonitor(sessionID).ConsumeForcedStop()
+	relaxBackgroundWork := monitor.Policy().ChiefOfStaff
+	classifies := !monitor.ConsumeForcedStop()
 	if classifies {
-		d.sessionMonitor(sessionID).CancelAutoSettle("stop judged")
+		monitor.CancelAutoSettle("stop judged")
 	}
-	d.sessionMonitor(sessionID).RecordStopFacts(!relaxBackgroundWork && hasActiveBackgroundTask(msg), hasPendingSessionCron(msg))
+	monitor.RecordStopFacts(!relaxBackgroundWork && hasActiveBackgroundTask(msg), hasPendingSessionCron(msg))
 	if stopIsNonTerminal(msg, relaxBackgroundWork) {
 		tasks := describeBackgroundTasks(msg)
 		d.logf(
@@ -3082,15 +3103,28 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			Yielded:                true,
 			RunningBackgroundTasks: runningBackgroundTaskCount(msg),
 		}
-		monitor := d.sessionMonitor(sessionID)
 		d.life.Go("classifyStop", func() { monitor.ClassifyStop(msg.TranscriptPath, classification) })
 		return
 	}
 
-	d.sessionMonitor(sessionID).RecordTurnEnded(classifies)
+	monitor.RecordTurnEnded(classifies)
+	if monitor.Session() != "" {
+		monitor.EnsureTranscriptWatcher(msg.TranscriptPath)
+	}
 
-	d.observeStoppedConversation(sessionID, msg.TranscriptPath)
-	d.touchSession(sessionID)
+	if monitor != nil {
+		target, _ := monitor.TitleTarget()
+		driver := agentdriver.Get(string(target.Agent))
+		native := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
+		if native != "" {
+			proposal := sessionmonitor.ConversationObserved
+			if !agentdriver.EffectiveCapabilities(driver).HasHooks {
+				proposal = sessionmonitor.ConversationReported
+			}
+			monitor.ProposeConversation(sessionmonitor.ConversationObservation{NativeID: native, TranscriptPath: msg.TranscriptPath}, proposal, "")
+		}
+	}
+	monitor.Touch(time.Now())
 	d.sendOK(conn)
 
 	if !classifies {
@@ -3098,12 +3132,11 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	monitor := d.sessionMonitor(sessionID)
 	d.life.Go("classifySessionState", func() { monitor.ClassifyStop(msg.TranscriptPath, sessionmonitor.StopClassification{}) })
-	d.life.Go("maybeGenerateSessionTitle", func() { d.sessionMonitor(sessionID).TitleFromTranscript(msg.TranscriptPath) })
+	d.life.Go("maybeGenerateSessionTitle", func() { monitor.TitleFromTranscript(msg.TranscriptPath) })
 }
 
-func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transcriptPath string) {
+func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transcriptPath string) (*sessionmonitor.ConversationReceipt, bool) {
 	if session := d.store.Get(sessionID); session != nil {
 		driver := agentdriver.Get(session.Agent)
 		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, transcriptPath)
@@ -3111,11 +3144,12 @@ func (d *Daemon) observeStoppedConversation(sessionID protocol.SessionID, transc
 		switch {
 		case resumeSessionID == "":
 		case agentdriver.EffectiveCapabilities(driver).HasHooks:
-			d.observeAgentConversation(observation)
+			return d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, "")
 		default:
-			d.claimAgentConversation(observation)
+			return d.claimAgentConversation(observation)
 		}
 	}
+	return nil, false
 }
 
 func (d *Daemon) resolveStopTranscriptPath(session *protocol.Session, reported string) string {

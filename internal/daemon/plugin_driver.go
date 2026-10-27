@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -370,7 +371,10 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
 				return nil, true, err
 			}
-			d.applyPluginReportedMetadata(params)
+			receipt, err := d.applyPluginReportedMetadata(params)
+			if receipt != nil || err != nil {
+				return receipt, true, err
+			}
 		}
 		return struct{}{}, true, nil
 	case "session.report_input_taken":
@@ -588,16 +592,16 @@ func (d *Daemon) applyPluginReportedStop(params pluginReportStopParams) {
 	})
 }
 
-func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) bool {
+func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) (*sessionmonitor.ConversationReceipt, error) {
 	d.notePluginDriverReport(params.SessionID)
 	if !d.sessionMonitor(params.SessionID).ReportDriverMetadata(params.RunID, params.Seq, string(params.Metadata)) {
 		d.logf("plugin metadata report discarded: session=%s run=%s seq=%d", params.SessionID, params.RunID, params.Seq)
-		return false
+		return nil, nil
 	}
 	if resumeID := strings.TrimSpace(params.ResumeSessionID); resumeID != "" {
-		d.persistResumeSessionID(params.SessionID, resumeID)
+		return d.persistResumeSessionID(params.SessionID, resumeID)
 	}
-	return true
+	return nil, nil
 }
 
 func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams, path string) {
@@ -636,7 +640,13 @@ func (d *Daemon) replayPluginReport(report pendingPluginReport) {
 	case report.Stop != nil:
 		d.applyPluginReportedStop(*report.Stop)
 	case report.Metadata != nil:
-		d.applyPluginReportedMetadata(*report.Metadata)
+		receipt, err := d.applyPluginReportedMetadata(*report.Metadata)
+		if err == nil {
+			err = receipt.Wait(d.life.Context())
+		}
+		if err != nil {
+			d.logf("plugin metadata replay: session=%s: %v", report.Metadata.SessionID, err)
+		}
 	}
 }
 
@@ -652,17 +662,6 @@ func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info 
 	exit := d.holdExit(sessionID, info)
 	watch.settle(launchOutcome{exit: d.exitScreenOrBare(sessionID, exit)})
 	return true
-}
-
-func (d *Daemon) finishPluginSessionLaunch(sessionID protocol.SessionID, success bool) *ptybackend.ExitInfo {
-	replays, exit := d.sessionMonitor(sessionID).FinishDriverLaunch()
-	if !success {
-		return nil
-	}
-	for _, replay := range replays {
-		replay()
-	}
-	return exit
 }
 
 func (d *Daemon) abortPluginSessionLaunch(sessionID protocol.SessionID, reason string) {
@@ -800,18 +799,6 @@ func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params 
 		return pluginDriverSpawnResult{}, fmt.Errorf("plugin %q returned an empty argv", reg.PluginName)
 	}
 	return result, nil
-}
-
-func (d *Daemon) sessionUsesPluginMessageDelivery(session *protocol.Session) bool {
-	if session == nil {
-		return false
-	}
-	cursor := d.store.GetAgentDriverRun(session.ID)
-	if cursor.PluginName == "" {
-		return false
-	}
-	driver, ok := d.ensurePluginRegistry().driver(session.Agent)
-	return ok && driver.PluginName == cursor.PluginName && driver.Capabilities["message_delivery"]
 }
 
 func pluginCommandEnv(values map[string]string) ([]string, error) {

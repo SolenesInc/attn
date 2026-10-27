@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"time"
 
 	"github.com/victorarias/attn/internal/crashpoint"
@@ -22,8 +23,33 @@ func (r *monitorIndex) bindingOf(h *monitorHome) (protocol.SessionID, *monitorBi
 	return "", nil
 }
 
-func (h *monitorHome) Applied(view sessionmonitor.View) bool {
-	return h.apply(view, false)
+func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.Answer, bool) {
+	if !h.apply(view, false) {
+		return sessionmonitor.Answer{}, false
+	}
+	if h.daemon.copiedSession(h.sessionID()) {
+		return sessionmonitor.Answer{}, true
+	}
+	pending := view.PendingSwitch.V
+	if pending.NativeID != "" && pending.Terminal == "" {
+		pausepoint.At(pausepoint.ConversationReportReady)
+	}
+	if pending.NativeID != "" && pending.Terminal != "" {
+		shown, _ := h.daemon.shownIn(pending.Terminal)
+		held := h.daemon.store.GetSessionConversation(shown).NativeID
+		if held != "" && held != pending.NativeID {
+			pausepoint.At(pausepoint.ConversationSwitchDecision)
+		}
+	}
+	if current, _ := h.monitor.PendingSwitch(); current != pending {
+		return sessionmonitor.Answer{}, true
+	}
+	answer := h.daemon.answerMonitorSwitch(h.sessionID(), pending, h.monitor)
+	if answer.Outcome == sessionmonitor.SwitchOpened || answer.Outcome == sessionmonitor.SwitchShows {
+		crashpoint.At("monitor-switch-applied")
+		pausepoint.At(pausepoint.ConversationSwitchAnswer)
+	}
+	return answer, true
 }
 
 func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
@@ -39,7 +65,7 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 	session, binding := r.bindingOf(h)
 	if session == "" {
 		r.applyMu.Unlock()
-		return d.admitMonitorConversation(h.monitor, view)
+		return true
 	}
 	previous := binding.applied
 	if binding.copied {
@@ -65,11 +91,7 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 			return false
 		}
 	}
-	recorded, moved, err := h.recordConversation(session, previous, view)
-	var linked []string
-	if err == nil {
-		linked, err = h.recordPullRequests(session, previous, view)
-	}
+	linked, err := h.recordPullRequests(session, previous, view)
 	if err != nil {
 		h.catchUp(session, binding, err)
 		r.applyMu.Unlock()
@@ -78,9 +100,6 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 	binding.applied = view
 	h.catchUp(session, binding, nil)
 	r.applyMu.Unlock()
-	if moved {
-		d.publishFact(FactSessionConversationChanged, string(session), agentConversationObservation{SessionID: session, NativeID: recorded})
-	}
 	for _, id := range linked {
 		d.publishFact(FactSessionPullRequestChanged, string(session), sessionPullRequestFact{PRID: id})
 	}
@@ -91,23 +110,15 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 	return true
 }
 
-func (h *monitorHome) recordConversation(session protocol.SessionID, previous, view sessionmonitor.View) (string, bool, error) {
-	conversation := view.Conversation.V.ConversationObservation
-	if conversation == previous.Conversation.V.ConversationObservation || conversation.NativeID == "" {
-		return "", false, nil
-	}
-	moved, err := h.daemon.store.TransitionSessionResumeID(session, conversation.NativeID)
-	if err != nil {
-		return "", false, fmt.Errorf("conversation: %w", err)
-	}
-	return conversation.NativeID, moved, nil
-}
-
 type storeSaver struct{ daemon *Daemon }
 
 func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionmonitor.View, cost *sessionmonitor.CostSave) error {
 	d := s.daemon
-	if runtime := runtimeStateOf(view); runtime != runtimeStateOf(saved) && !d.store.SaveSessionRuntime(session, runtime) {
+	runtime := runtimeStateOf(view)
+	if d.store.Get(session) == nil {
+		return nil
+	}
+	if runtime != runtimeStateOf(saved) && !d.store.SaveSessionRuntime(session, runtime) {
 		return fmt.Errorf("runtime state was not saved")
 	}
 	if cost != nil {
@@ -188,13 +199,12 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 		Branch:             view.Branch.V,
 		HarnessTitle:       view.HarnessTitle.V,
 		LastSeen:           view.LastSeen.V,
-		PendingSwitch:      encodePendingSwitch(view.PendingSwitch.V),
 		PullRequests:       encodePullRequests(view.PullRequests.Entries),
 	}
 }
 
-func encodePendingSwitch(pending sessionmonitor.Conversation) string {
-	if pending.NativeID == "" {
+func encodePendingSwitch(pending []sessionmonitor.Conversation) string {
+	if len(pending) == 0 || pending[0].NativeID == "" {
 		return ""
 	}
 	encoded, err := json.Marshal(pending)
@@ -204,10 +214,23 @@ func encodePendingSwitch(pending sessionmonitor.Conversation) string {
 	return string(encoded)
 }
 
-func decodePendingSwitch(raw string) sessionmonitor.Conversation {
-	var pending sessionmonitor.Conversation
-	if raw != "" {
-		_ = json.Unmarshal([]byte(raw), &pending)
+func decodePendingSwitch(raw string) []sessionmonitor.Conversation {
+	if raw == "" {
+		return nil
 	}
-	return pending
+	var pending []sessionmonitor.Conversation
+	if json.Unmarshal([]byte(raw), &pending) == nil {
+		return pending
+	}
+	var legacy sessionmonitor.Conversation
+	if json.Unmarshal([]byte(raw), &legacy) == nil && legacy.NativeID != "" {
+		return []sessionmonitor.Conversation{legacy}
+	}
+	return nil
+}
+
+func (s storeSaver) MovePending(from, to protocol.SessionID, remaining, moved []sessionmonitor.Conversation) error {
+	pending := map[protocol.SessionID]string{from: encodePendingSwitch(remaining)}
+	pending[to] = encodePendingSwitch(moved)
+	return s.daemon.store.SaveSessionPendingSwitches(pending)
 }
