@@ -2,12 +2,16 @@ package bridge
 
 import (
 	"context"
+	"io"
 )
 
 const TerminalOutputCredit = 1024 << 10
 const BridgeOutputCredit = 1408 << 10
+const outputChunkBytes = 32 << 10
 
 type outputFlow struct {
+	window               int
+	bulk                 bool
 	served               uint64
 	outstanding, pending int
 }
@@ -17,6 +21,7 @@ type outputReservation struct {
 	bytes  int
 	finish uint64
 	ready  chan struct{}
+	charge bool
 }
 type outputReturn struct {
 	flow  *outputFlow
@@ -34,7 +39,25 @@ func newOutputCredit(done <-chan struct{}) *outputCredit {
 }
 
 func (c *outputCredit) reserve(ctx context.Context, flow *outputFlow, n int) error {
-	request := &outputReservation{ctx: ctx, flow: flow, bytes: n, ready: make(chan struct{})}
+	return c.submit(ctx, flow, n, true)
+}
+
+func (c *outputCredit) write(ctx context.Context, flow *outputFlow, data []byte, writer io.Writer) error {
+	for len(data) > 0 {
+		chunk := data[:min(len(data), outputChunkBytes)]
+		if err := c.submit(ctx, flow, len(chunk), false); err != nil {
+			return err
+		}
+		if _, err := writer.Write(chunk); err != nil {
+			return err
+		}
+		data = data[len(chunk):]
+	}
+	return nil
+}
+
+func (c *outputCredit) submit(ctx context.Context, flow *outputFlow, n int, charge bool) error {
+	request := &outputReservation{ctx: ctx, flow: flow, bytes: n, charge: charge, ready: make(chan struct{})}
 	select {
 	case c.changes <- request:
 	case <-ctx.Done():
@@ -115,6 +138,15 @@ func (c *outputCredit) run() {
 		}
 	schedule:
 		for len(waiting) > 0 {
+			for {
+				select {
+				case change := <-c.changes:
+					apply(change)
+				default:
+					goto choose
+				}
+			}
+		choose:
 			selected := -1
 			for i := 0; i < len(waiting); {
 				request := waiting[i]
@@ -126,11 +158,15 @@ func (c *outputCredit) run() {
 					waiting = append(waiting[:i], waiting[i+1:]...)
 					continue
 				}
-				if account.outstanding >= TerminalOutputCredit && request.bytes > 0 {
+				window := account.window
+				if window == 0 {
+					window = TerminalOutputCredit
+				}
+				if request.charge && request.bytes > 0 && (account.outstanding >= window || available <= 0) {
 					i++
 					continue
 				}
-				if (request.bytes > 0 || account.outstanding == 0) && (selected < 0 || request.finish < waiting[selected].finish) {
+				if (!request.charge || request.bytes > 0 || account.outstanding == 0) && (selected < 0 || (waiting[selected].flow.bulk && !account.bulk) || (waiting[selected].flow.bulk == account.bulk && request.finish < waiting[selected].finish)) {
 					selected = i
 				}
 				i++
@@ -140,19 +176,20 @@ func (c *outputCredit) run() {
 			}
 			request := waiting[selected]
 			account := request.flow
-			if request.bytes > 0 && available <= 0 {
-				break
-			}
 			waiting = append(waiting[:selected], waiting[selected+1:]...)
 			account.pending--
-			available -= request.bytes
-			account.outstanding += request.bytes
+			charge := 0
+			if request.charge {
+				charge = request.bytes
+			}
+			available -= charge
+			account.outstanding += charge
 			account.served = request.finish
 			select {
 			case request.ready <- struct{}{}:
 			case <-request.ctx.Done():
-				available += request.bytes
-				account.outstanding -= request.bytes
+				available += charge
+				account.outstanding -= charge
 			case <-c.done:
 				return
 			}

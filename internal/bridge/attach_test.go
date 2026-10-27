@@ -3,7 +3,9 @@ package bridge_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"fmt"
+	"github.com/victorarias/attn/internal/harness"
+	"strconv"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -54,8 +56,8 @@ func TestBridgeAttachWaitsForAppCreditAndEndsOnSubscriberOverflow(t *testing.T) 
 		}
 		defer stream.Close()
 		event := ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Data: bytes.Repeat([]byte("x"), 256<<10), Seq: 1}
-		raw, _ := json.Marshal(event)
-		t.Logf("largest PTY event: terminal_bytes=%d bridge_bytes=%d credit=%d", len(event.Data), len(raw), bridge.TerminalOutputCredit)
+		encodedBytes := len(event.Data) + bridge.MaxOutputFrameBytes - pty.OutputEventMaxBytes
+		t.Logf("largest PTY event: terminal_bytes=%d bridge_bytes=%d credit=%d", len(event.Data), encodedBytes, bridge.TerminalOutputCredit)
 		go func() {
 			defer close(source.events)
 			source.write(event)
@@ -91,15 +93,12 @@ func TestBridgeAttachWaitsForAppCreditAndEndsOnSubscriberOverflow(t *testing.T) 
 }
 func TestHeldAttachLeavesCreditForAnotherTerminal(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		data := bytes.Repeat([]byte("x"), pty.OutputCoalesceTargetBytes+pty.OutputReadBufferBytes)
-		raw, err := json.Marshal(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Seq: ^uint32(0), Data: data})
-		if err != nil {
-			t.Fatal(err)
+		data := bytes.Repeat([]byte("x"), pty.OutputEventMaxBytes)
+		encodedBytes := bridge.MaxOutputFrameBytes
+		if bridge.BridgeOutputCredit <= bridge.TerminalOutputCredit+encodedBytes {
+			t.Fatalf("bridge isolation needs shared_threshold > attach_threshold + encoded_event: shared_threshold=%d attach_threshold=%d encoded_event=%d", bridge.BridgeOutputCredit, bridge.TerminalOutputCredit, encodedBytes)
 		}
-		if bridge.BridgeOutputCredit <= bridge.TerminalOutputCredit+len(raw) {
-			t.Fatalf("bridge isolation needs shared_threshold > attach_threshold + encoded_event: shared_threshold=%d attach_threshold=%d encoded_event=%d", bridge.BridgeOutputCredit, bridge.TerminalOutputCredit, len(raw))
-		}
-		t.Logf("coalescing target plus read overshoot: raw_bytes=%d encoded_bytes=%d attach_threshold=%d shared_threshold=%d", len(data), len(raw), bridge.TerminalOutputCredit, bridge.BridgeOutputCredit)
+		t.Logf("coalescing target plus read overshoot: raw_bytes=%d encoded_bytes=%d attach_threshold=%d shared_threshold=%d", len(data), encodedBytes, bridge.TerminalOutputCredit, bridge.BridgeOutputCredit)
 		w := pair(t)
 		w.network = memnet.Listen(memnet.Rate(2_800_000))
 		held, echo := newTerminalOutput(), newTerminalOutput()
@@ -152,6 +151,69 @@ func TestHeldAttachLeavesCreditForAnotherTerminal(t *testing.T) {
 			t.Logf("held coalesced attach: echo=%s", time.Since(began))
 		case <-ctx.Done():
 			t.Fatal("held coalesced attach consumed the shared budget; typing got no output before the heartbeat stall guard")
+		}
+	})
+}
+
+func TestConcurrentMaximumFramesCanAllFinishBeforeAcknowledgment(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := pair(t)
+		w.network = memnet.Listen(memnet.Rate(2_800_000))
+		count := bridge.BridgeOutputCredit/bridge.MaxOutputFrameBytes + 1
+		sources := make([]*terminalOutput, count)
+		for i := range sources {
+			sources[i] = newTerminalOutput()
+		}
+		w.cfg.Handlers = bridge.Handlers{bridge.AttachChannel: func(c *bridge.Conn, in ssh.NewChannel) {
+			go c.ServeAttach(w.ctx, in, func(r bridge.AttachRequest) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+				index, err := strconv.Atoi(string(r.Terminal))
+				if err != nil {
+					return ptybackend.AttachInfo{}, nil, err
+				}
+				return ptybackend.AttachInfo{}, sources[index], nil
+			})
+		}}
+		w.start()
+		client, _ := bridged(t, w, nil)
+		streams := make([]ptybackend.Stream, count)
+		for i := range streams {
+			_, stream, err := client.Attach(w.ctx, bridge.AttachRequest{Terminal: harness.TerminalID(strconv.Itoa(i))})
+			if err != nil {
+				t.Fatal(err)
+			}
+			streams[i] = stream
+			defer stream.Close()
+		}
+		start := make(chan struct{})
+		data := bytes.Repeat([]byte("x"), pty.OutputEventMaxBytes)
+		for i, source := range sources {
+			go func() {
+				<-start
+				source.write(ptybackend.OutputEvent{Kind: ptybackend.OutputEventKindOutput, Seq: uint32(i + 1), Data: data})
+			}()
+		}
+		close(start)
+		completed := make(chan error, count)
+		for i, stream := range streams {
+			go func() {
+				event, open := <-stream.Events()
+				if !open || event.Seq != uint32(i+1) || !bytes.Equal(event.Data, data) {
+					completed <- fmt.Errorf("frame %d did not arrive intact", i)
+					return
+				}
+				ack(stream)
+				completed <- nil
+			}()
+		}
+		for range streams {
+			select {
+			case err := <-completed:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(bridge.StallAfter):
+				t.Fatal("shared credit filled with partial frames before any whole-frame ACK")
+			}
 		}
 	})
 }

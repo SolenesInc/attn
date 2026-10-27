@@ -17,16 +17,16 @@ const (
 )
 
 const (
-	PtyAttachSnapshot  = "pty-attach-snapshot"
-	PtyOutputSequenced = "pty-output-sequenced"
-	PtyOutputHeld      = "pty-output-held"
-	PtyStreamRead      = "pty-stream-read"
-	PtySubscriberDrop  = "pty-subscriber-drop"
-	PtyWatchReplay     = "pty-watch-replay"
-	PtyWorkerUpgrade   = "pty-worker-upgrade"
-	PtyWaitBlock       = "pty-wait-block"
-	BusAnnounce        = "bus-announce"
-	BusEventHandled    = "bus-event-handled"
+	PtyAttachSnapshot = "pty-attach-snapshot"
+	PtyOutputPending  = "pty-output-pending"
+	PtyOutputHeld     = "pty-output-held"
+	PtyStreamRead     = "pty-stream-read"
+	PtySubscriberDrop = "pty-subscriber-drop"
+	PtyWatchReplay    = "pty-watch-replay"
+	PtyWorkerUpgrade  = "pty-worker-upgrade"
+	PtyWaitBlock      = "pty-wait-block"
+	BusAnnounce       = "bus-announce"
+	BusEventHandled   = "bus-event-handled"
 
 	DaemonStartupRecovery     = "daemon-startup-recovery"
 	SessionInputPasteGap      = "session-input-paste-gap"

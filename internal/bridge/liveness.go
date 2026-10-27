@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -30,16 +31,19 @@ const (
 )
 
 type Conn struct {
-	ctx        context.Context
-	outputOnce sync.Once
-	output     *outputCredit
-	peer       Identity
-	transport  ssh.Conn
-	states     chan State
-	done       chan struct{}
-	cancel     context.CancelFunc
-	err        error
+	ctx          context.Context
+	outputOnce   sync.Once
+	output       *outputCredit
+	heartbeatGap atomic.Int64
+	peer         Identity
+	transport    ssh.Conn
+	states       chan State
+	done         chan struct{}
+	cancel       context.CancelFunc
+	err          error
 }
+
+func (c *Conn) MaxHeartbeatGap() time.Duration { return time.Duration(c.heartbeatGap.Load()) }
 
 func (c *Conn) Context() context.Context { return c.ctx }
 func (c *Conn) Peer() Identity           { return c.peer }
@@ -122,6 +126,7 @@ func (c *Conn) run(ctx context.Context, transport ssh.Conn, channels <-chan ssh.
 	defer lost.Stop()
 	c.publish(StateConnected)
 	stalled := false
+	lastHeartbeat := time.Now()
 running:
 	for {
 		select {
@@ -132,6 +137,11 @@ running:
 			c.err = fmt.Errorf("bridge to %s lost: %w", c.peer.DaemonID, err)
 			break running
 		case <-life:
+			gap := time.Since(lastHeartbeat)
+			lastHeartbeat = time.Now()
+			if gap > time.Duration(c.heartbeatGap.Load()) {
+				c.heartbeatGap.Store(int64(gap))
+			}
 			stall.Reset(StallAfter)
 			lost.Reset(LostAfter)
 			if stalled {

@@ -259,6 +259,43 @@ func (p *Peer) Closed() websocket.CloseError {
 	return status
 }
 
+func (p *Peer) AwaitOutputOrDesync(terminal string, match func(uint32, []byte) bool) bool {
+	p.T.Helper()
+	index := 0
+	for {
+		var outputs []sequencedOutput
+		desync := false
+		p.until(func() string { return "output or desync from terminal " + terminal }, func() (bool, error) {
+			outputs = append(outputs, p.received[terminal][index:]...)
+			index = len(p.received[terminal])
+			for i := range p.frames {
+				f := &p.frames[i]
+				if f.consumed || f.event != protocol.EventPtyDesync {
+					continue
+				}
+				var event protocol.PtyDesyncMessage
+				if err := json.Unmarshal(f.raw, &event); err != nil {
+					return false, err
+				}
+				if string(event.ID) == terminal {
+					f.consumed = true
+					desync = true
+					break
+				}
+			}
+			return len(outputs) > 0 || desync, nil
+		})
+		for _, output := range outputs {
+			if match(output.seq, output.data) {
+				return true
+			}
+		}
+		if desync {
+			return false
+		}
+	}
+}
+
 func (p *Peer) Received() []protocol.WebSocketEvent {
 	p.mu.Lock()
 	defer p.mu.Unlock()

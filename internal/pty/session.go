@@ -146,6 +146,17 @@ func (s *Session) removeSubscriber(subID string) {
 	delete(s.subscribers, subID)
 }
 
+func (s *Session) fanOutOutput(data []byte, lastSeq uint32) {
+	pieces := (len(data) + OutputEventMaxBytes - 1) / OutputEventMaxBytes
+	seq := lastSeq - uint32(pieces) + 1
+	for len(data) > 0 {
+		n := min(len(data), OutputEventMaxBytes)
+		s.fanOut(data[:n], seq)
+		data = data[n:]
+		seq++
+	}
+}
+
 func (s *Session) fanOut(data []byte, seq uint32) {
 	s.subMu.RLock()
 	if len(s.subscribers) == 0 {
@@ -231,6 +242,7 @@ func (s *Session) forceResync(reason string) {
 const (
 	OutputReadBufferBytes     = 16 * 1024
 	OutputCoalesceTargetBytes = 256 * 1024
+	OutputEventMaxBytes       = OutputCoalesceTargetBytes + OutputReadBufferBytes
 	ptyCoalesceWindow         = 5 * time.Millisecond
 )
 
@@ -357,8 +369,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					s.writeColorSchemeResponses(queries.colorScheme, logf)
 				}
 
-				seq := s.seqCounter.Add(1)
-				pausepoint.At(pausepoint.PtyOutputSequenced)
+				pausepoint.At(pausepoint.PtyOutputPending)
 				wire, resync := data, ""
 				var placements []KittyPlacement
 				placementsMoved := false
@@ -367,6 +378,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					wire, resync = s.wireFeed.feed(data)
 					placements, placementsMoved = s.wireFeed.changedPlacements()
 				}
+				seq := s.seqCounter.Add(uint32(max(1, (len(wire)+OutputEventMaxBytes-1)/OutputEventMaxBytes)))
 				s.lastReplaySeq = seq
 				s.textChangedLocked()
 				s.replayMu.Unlock()
@@ -390,7 +402,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					pausepoint.At(pausepoint.PtyOutputHeld)
 				}
 				if len(wire) > 0 {
-					s.fanOut(wire, seq)
+					s.fanOutOutput(wire, seq)
 				}
 				if placementsMoved {
 					s.fanOutPlacements(PlacementUpdate{Seq: seq, Placements: placements})
@@ -425,7 +437,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 
 	if len(carryover) > 0 {
 		s.deliveryMu.Lock()
-		seq := s.seqCounter.Add(1)
 		wire, resync := carryover, ""
 		var placements []KittyPlacement
 		placementsMoved := false
@@ -434,12 +445,13 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			wire, resync = s.wireFeed.feed(carryover)
 			placements, placementsMoved = s.wireFeed.changedPlacements()
 		}
+		seq := s.seqCounter.Add(uint32(max(1, (len(wire)+OutputEventMaxBytes-1)/OutputEventMaxBytes)))
 		s.lastReplaySeq = seq
 		s.textChangedLocked()
 		s.replayMu.Unlock()
 		s.drainGhosttyResponses(logf)
 		if len(wire) > 0 {
-			s.fanOut(wire, seq)
+			s.fanOutOutput(wire, seq)
 		}
 		if placementsMoved {
 			s.fanOutPlacements(PlacementUpdate{Seq: seq, Placements: placements})
