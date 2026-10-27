@@ -57,6 +57,9 @@ type AgentCatalogMessage struct {
 
 	// Host corresponds to the JSON schema field "host".
 	Host string `json:"host"`
+
+	// ModelsFor corresponds to the JSON schema field "models_for".
+	ModelsFor *string `json:"models_for,omitempty,omitzero"`
 }
 
 type AgentCatalogResult struct {
@@ -65,6 +68,9 @@ type AgentCatalogResult struct {
 
 	// Machine corresponds to the JSON schema field "machine".
 	Machine string `json:"machine"`
+
+	// Models corresponds to the JSON schema field "models".
+	Models []HarnessModel `json:"models,omitempty,omitzero"`
 }
 
 type AgentCloseMessage struct {
@@ -2262,6 +2268,77 @@ type CancelCountdownMessage struct {
 	SessionID SessionID `json:"session_id"`
 }
 
+type CheckoutDirectory struct {
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// RepoRoot corresponds to the JSON schema field "repo_root".
+	RepoRoot string `json:"repo_root"`
+}
+
+type CheckoutInspectMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd string `json:"cwd"`
+
+	// Directories corresponds to the JSON schema field "directories".
+	Directories []string `json:"directories,omitempty,omitzero"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+
+	// Refs corresponds to the JSON schema field "refs".
+	Refs []string `json:"refs,omitempty,omitzero"`
+
+	// WorktreeBranch corresponds to the JSON schema field "worktree_branch".
+	WorktreeBranch *string `json:"worktree_branch,omitempty,omitzero"`
+
+	// WorktreePath corresponds to the JSON schema field "worktree_path".
+	WorktreePath *string `json:"worktree_path,omitempty,omitzero"`
+}
+
+type CheckoutInspection struct {
+	// Branch corresponds to the JSON schema field "branch".
+	Branch string `json:"branch"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd string `json:"cwd"`
+
+	// Directories corresponds to the JSON schema field "directories".
+	Directories []CheckoutDirectory `json:"directories"`
+
+	// Exists corresponds to the JSON schema field "exists".
+	Exists bool `json:"exists"`
+
+	// IsDirectory corresponds to the JSON schema field "is_directory".
+	IsDirectory bool `json:"is_directory"`
+
+	// MainRepo corresponds to the JSON schema field "main_repo".
+	MainRepo string `json:"main_repo"`
+
+	// Refs corresponds to the JSON schema field "refs".
+	Refs []CheckoutRef `json:"refs"`
+
+	// RepoRoot corresponds to the JSON schema field "repo_root".
+	RepoRoot string `json:"repo_root"`
+
+	// RepositorySubdir corresponds to the JSON schema field "repository_subdir".
+	RepositorySubdir string `json:"repository_subdir"`
+
+	// WorktreePath corresponds to the JSON schema field "worktree_path".
+	WorktreePath string `json:"worktree_path"`
+}
+
+type CheckoutRef struct {
+	// Commit corresponds to the JSON schema field "commit".
+	Commit string `json:"commit"`
+
+	// Ref corresponds to the JSON schema field "ref".
+	Ref string `json:"ref"`
+}
+
 type ChiefOfStaffResultMessage struct {
 	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
 	ChiefOfStaff bool `json:"chief_of_staff"`
@@ -2495,8 +2572,14 @@ type CreateWorktreeFromBranchMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// MainRepo corresponds to the JSON schema field "main_repo".
 	MainRepo string `json:"main_repo"`
+
+	// Owner corresponds to the JSON schema field "owner".
+	Owner *DelegationWorktreeOwner `json:"owner,omitempty,omitzero"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
@@ -2512,8 +2595,14 @@ type CreateWorktreeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// MainRepo corresponds to the JSON schema field "main_repo".
 	MainRepo string `json:"main_repo"`
+
+	// Owner corresponds to the JSON schema field "owner".
+	Owner *DelegationWorktreeOwner `json:"owner,omitempty,omitzero"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
@@ -3142,6 +3231,9 @@ type DelegateMessage struct {
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd string `json:"cwd"`
 
+	// CwdBase corresponds to the JSON schema field "cwd_base".
+	CwdBase *string `json:"cwd_base,omitempty,omitzero"`
+
 	// Desktop corresponds to the JSON schema field "desktop".
 	Desktop *string `json:"desktop,omitempty,omitzero"`
 
@@ -3150,6 +3242,9 @@ type DelegateMessage struct {
 
 	// Fallback corresponds to the JSON schema field "fallback".
 	Fallback *bool `json:"fallback,omitempty,omitzero"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// Label corresponds to the JSON schema field "label".
 	Label *string `json:"label,omitempty,omitzero"`
@@ -3583,6 +3678,14 @@ type DelegationSelection struct {
 
 	// Provider corresponds to the JSON schema field "provider".
 	Provider string `json:"provider"`
+}
+
+type DelegationWorktreeOwner struct {
+	// Recovering corresponds to the JSON schema field "recovering".
+	Recovering bool `json:"recovering"`
+
+	// Token corresponds to the JSON schema field "token".
+	Token string `json:"token"`
 }
 
 type DeleteWorktreeMessage struct {
@@ -13271,6 +13374,17 @@ type WorktreeCreatedEvent struct {
 
 	// Worktrees corresponds to the JSON schema field "worktrees".
 	Worktrees []Worktree `json:"worktrees"`
+}
+
+type WorktreeCreation struct {
+	// Branch corresponds to the JSON schema field "branch".
+	Branch string `json:"branch"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
 }
 
 type WorktreeDeletedEvent struct {

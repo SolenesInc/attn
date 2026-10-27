@@ -340,12 +340,12 @@
         "note": "Green isolated packaged scenario on 822ed03414a2. Iteration wall time 13867ms; ATTN_VERDICT durationMs=13277 including cleanup. Native keyboard input succeeds before and after CLI reload, with the same tile and desktop."
       },
       "outposts-settings": {
-        "run": "outposts-settings-2026-10-27T15-59-11-612Z",
-        "job": "Local packaged scenario, outpost-agent named instance",
+        "run": "https://github.com/SolenesInc/attn/actions/runs/40568402710",
+        "job": "App acceptance shard 3/4 (122420090779)",
         "recordedAt": "2026-10-27",
-        "seconds": 78.413,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=78413, including cleanup and recording. Adds remote Claude spawn, offline turn retention, waiting count 2 to 1, native Cmd+J skip, and count recovery to 2 to the existing shell, pairing, refusal and Remove checks. Remeasure on Linux CI."
+        "seconds": 78.863,
+        "runnerClass": "github-hosted Ubuntu 24.04 amd64",
+        "note": "Green last-matrix.json durationMs=78863 at 5110528caf418fe065c090779990c01369f696f4, artifact 12765586331. Includes caller-host shell and delegation defaults, explicit home delegation, rendered host labels and replies, then the existing offline queue, recovery and Remove checks. Native screenshots in artifact 12765183442."
       },
       "analytics-settings": {
         "run": "analytics-settings-2026-10-24T18-33-09-799Z",
@@ -439,7 +439,7 @@
     "callouts": 39.5,
     "quick-capture": 206.599,
     "agent-reload": 13.867,
-    "outposts-settings": 78.413,
+    "outposts-settings": 78.863,
     "analytics-settings": 28.012,
     "outpost-update": 39.165,
     "notebook-sync": 34.495

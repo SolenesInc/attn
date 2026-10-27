@@ -216,14 +216,17 @@ func TestADelegationReportsTheProviderWorktreeWhenItsAfterCreateHookFails(t *tes
 
 	var asked pluginWorktreeCreate
 	id := provider.expect("worktree.create", &asked)
+	if asked.RequestedPath != nil {
+		t.Fatalf("delegated provider received requested_path=%q; caller omitted it", *asked.RequestedPath)
+	}
 	runGit(t, repo, "worktree", "add", "-q", "-b", asked.Branch, providerPath, "HEAD")
 	provider.answer(id, pluginWorktreeAnswer{Status: "handled", Path: providerPath, Branch: asked.Branch})
 	hook.fail(hook.expect("worktree.after_create", nil), "dependency bootstrap failed")
 
 	select {
 	case err := <-delegated:
-		if err == nil {
-			t.Fatal("the delegation succeeded, want it failed by the after hook")
+		if err == nil || !strings.Contains(err.Error(), "dependency bootstrap failed") {
+			t.Fatalf("the delegation failed with %v; want the after hook's dependency bootstrap error", err)
 		}
 	case <-time.After(fakeagent.HangGuard):
 		t.Fatalf("the delegation did not settle within %s", fakeagent.HangGuard)

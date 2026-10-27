@@ -74,6 +74,7 @@ To run attn on the outpost:
 
 On the home, turn on **Outposts** in Settings → Experimental, then add the
 outpost by name and address in Settings → Outposts.
+The name `home` is reserved for the home's machine.
 
 The home and outpost must use the same [instance](instances.md) name. The
 default install on both sides already matches. A named instance cannot pair
@@ -149,8 +150,10 @@ attn terminal open --host ai-sandbox
 attn terminal open --host ai-sandbox --cwd /home/user/project
 ```
 
-The first command starts in the outpost's home directory. `--cwd` names a
-directory on the outpost. The shell opens beside your agent and preserves
+The first command starts in the outpost's home directory. An outpost agent's
+`attn terminal open` defaults to its own machine and directory. Use `--host home`
+to open a shell at the home. `--cwd` names a directory on the target machine.
+The shell opens beside your agent and preserves
 focus. Read it and type into it with `attn terminal read`, `run`, and `send`,
 using the terminal id printed by `open`.
 
@@ -194,6 +197,22 @@ settle, snooze and unsnooze the agent's turn, read its assistant messages and
 transcript, and reload its current conversation. Harness commands such as
 `/clear`, `/new` and `/resume` keep the conversation chain and each session's
 cost. The agent's `attn` commands reach the home through its outpost daemon.
+
+`attn delegate` also defaults to the caller's machine. From a home agent,
+delegate onto an outpost with:
+
+```sh
+attn delegate --seed s-example --role builder --host ai-sandbox \
+  --cwd '~/project' --new-worktree --branch feature-x --from main
+```
+
+The target machine expands and checks the directory, refs and worktree path,
+and creates the worktree. An outpost agent uses `--host home` to delegate at
+the home. Unknown or unreachable hosts refuse before acceptance. A home
+restart resumes an accepted delegation on the same machine and path.
+If that outpost is offline, the accepted operation waits for its return;
+`attn delegate status <request-id>` names the host it is waiting for. Removing
+that outpost fails the waiting operation.
 
 The chief and crew run only at the home. Spawning, waking or handing off a
 crew member on an outpost, or making an outpost agent the chief, refuses and

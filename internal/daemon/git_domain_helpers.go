@@ -12,28 +12,6 @@ func (d *Daemon) readBranchInfo(ctx context.Context, task gitTask, dir string) (
 	})
 }
 
-func (d *Daemon) readRepoRoot(ctx context.Context, task gitTask, dir string) (string, error) {
-	return gitValue(ctx, d.gitExecution(), task, func(runCtx context.Context, client *attngit.Client) (string, error) {
-		return client.GetRepoRoot(runCtx, dir)
-	})
-}
-
-func (d *Daemon) readCheckoutRepo(ctx context.Context, task gitTask, dir string) (checkoutRoot, mainRepo string, err error) {
-	err = d.gitExecution().Run(ctx, task, func(runCtx context.Context, client *attngit.Client) error {
-		root, rootErr := client.GetRepoRoot(runCtx, dir)
-		if rootErr != nil {
-			return rootErr
-		}
-		checkoutRoot = root
-		mainRepo = client.ResolveMainRepoPath(runCtx, root)
-		return nil
-	})
-	if err != nil {
-		return "", "", err
-	}
-	return checkoutRoot, mainRepo, nil
-}
-
 func (d *Daemon) resolveMainRepo(ctx context.Context, task gitTask, path string) (string, error) {
 	return gitValue(ctx, d.gitExecution(), task, func(runCtx context.Context, client *attngit.Client) (string, error) {
 		resolved, err := client.ResolveRepoDir(runCtx, path)

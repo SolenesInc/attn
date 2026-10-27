@@ -23,7 +23,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
-	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
@@ -780,7 +779,9 @@ assignment:
   -m TEXT                            optional handover note
 
 folder and Git:
-  --cwd PATH                         required working folder/repository
+  --host NAME                        target outpost name/id; home selects the home
+                                     defaults to the source session's machine
+  --cwd PATH                         required folder/repository on that machine
   --reuse-checkout --branch NAME     use the checkout on this branch
   --new-worktree --branch NAME --from REF
                                      create branch and worktree
@@ -791,6 +792,9 @@ folder and Git:
 
 Inside Git, choose one complete checkout form. Outside Git, cwd is enough.
 Handover leaves the previous agent running. It needs no force/confirm flag.
+Paths are expanded and checked on the target machine. On your own machine,
+relative cwd is based on your shell's directory. An unknown or unreachable
+host refuses before acceptance. Retries keep the accepted machine and path.
 
 session options:
 	--request-id <id>          stable retry key (generated and printed when omitted; op- is reserved)
@@ -962,7 +966,8 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	desktop := fs.String("desktop", "", "desktop of the caller's profile: shortcut digit, name or id")
 	sourceSessionID := fs.String("source-session", "", "source session id (defaults to the current session)")
 	yolo := fs.Bool("yolo", false, "launch the target agent in yolo mode")
-	cwd := fs.String("cwd", "", "working folder or repository")
+	host := fs.String("host", "", "target machine (defaults to the source session host; home selects the home)")
+	cwd := fs.String("cwd", "", "working folder or repository on the target machine")
 	reuseCheckout := fs.Bool("reuse-checkout", false, "use the checkout at cwd on its current branch")
 	newWorktree := fs.Bool("new-worktree", false, "create a worktree")
 	branch := fs.String("branch", "", "branch for reuse or new branch creation")
@@ -1074,9 +1079,9 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	if customCWD == "" {
 		return delegateCLIArgs{}, errors.New("--cwd is required")
 	}
-	customCWD, err := filepath.Abs(git.CanonicalizePath(customCWD))
+	cwdBase, err := os.Getwd()
 	if err != nil {
-		return delegateCLIArgs{}, fmt.Errorf("resolve --cwd %q: %w", *cwd, err)
+		return delegateCLIArgs{}, fmt.Errorf("resolve caller working directory: %w", err)
 	}
 	requestedBranch := strings.TrimSpace(*branch)
 	localBranch := strings.TrimSpace(*existingBranch)
@@ -1144,7 +1149,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 			}
 		}
 	}
-	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(strings.TrimSpace(*profile)), RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, Checkout: checkout}
+	request := protocol.DelegateMessage{Cmd: protocol.CmdDelegate, ProfileID: protocol.Ptr(strings.TrimSpace(*profile)), RequestID: stableRequestID, Assignment: assignment, Cwd: customCWD, CwdBase: &cwdBase, Checkout: checkout, Host: nonEmpty(strings.TrimSpace(*host))}
 	if *priority {
 		request.Priority = protocol.Ptr(true)
 	}

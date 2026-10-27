@@ -249,8 +249,39 @@ try {
     await wait('[data-testid="queue-waiting-card"][data-waiting="2"]');
     await shot('02-agent-online');
   });
+  await runner.step('remote_caller_delegation_and_terminal_defaults', async () => {
+    const remoteCallerEnv = instanceCliEnv(instance, { ...outpostEnv, ATTN_TERMINAL_ID: observer.terminalOf(remoteAgent) });
+    const remoteCli = async (...args) => (await run(binary, args, remoteCallerEnv)).stdout;
+    const host = observer.getSession(remoteAgent).host;
+    const opened = JSON.parse(await remoteCli('terminal', 'open', '--json'));
+    created.push(opened.session_id);
+    await client.request('click_pane', { sessionId: opened.session_id, paneId: opened.pane_id });
+    await waitForPaneAttached(client, opened.session_id, opened.pane_id);
+    await wait(`${tile(opened.pane_id)} .desktop-pane-host`, { textIncludes: 'Studio' });
+    runner.assert(observer.getSession(opened.session_id)?.host === host, 'an outpost agent opens a shell on its own outpost', opened);
+    for (const target of ['outpost', 'home']) {
+      const cwd = path.join(fs.realpathSync(root), `delegated-${target}`);
+      writeMockAgentFixture(cwd, { minimumWorkingMs: 0, turns: [{ includes: 'Your assignment', actions: [{ type: 'reply', text: `DELEGATE_${target.toUpperCase()}_READY`, state: 'waiting_input' }] }] });
+      const args = ['delegate', '--brief', `Show the ${target} delegate`, '--cwd', cwd, '--model', 'default'];
+      if (target === 'home') args.push('--host', 'home');
+      const result = JSON.parse(await remoteCli(...args));
+      created.push(result.session_id);
+      await client.request('click_pane', { sessionId: result.session_id, paneId: result.pane_id });
+      await waitForPaneAttached(client, result.session_id, result.pane_id);
+      await waitForPaneText(client, result.session_id, result.pane_id, value => value.includes(`DELEGATE_${target.toUpperCase()}_READY`), `${target} delegate reply`);
+      const session = observer.getSession(result.session_id);
+      runner.assert((session.host || '') === (target === 'home' ? '' : host), `${target} delegation runs on the selected machine`, { result, session });
+      if (target === 'outpost') await wait(`${tile(result.pane_id)} .desktop-pane-host`, { textIncludes: 'Studio' });
+      await shot(`02-delegate-${target}`);
+      await client.request('close_session', { sessionId: result.session_id });
+      created.splice(created.indexOf(result.session_id), 1);
+    }
+    await remoteCli('terminal', 'close', opened.terminal_id);
+    created.splice(created.indexOf(opened.session_id), 1);
+    await wait('[data-testid="queue-waiting-card"][data-waiting="2"]');
+  });
   await runner.step('frozen_outpost_and_recovery', async () => {
-    await client.request('select_session', { sessionId: split.id });
+    await client.request('click_pane', splitPane);
     await waitForPaneAttached(client, split.id, splitPane.paneId);
     const fifo = path.join(root, 'screen-update');
     await run('mkfifo', [fifo]);

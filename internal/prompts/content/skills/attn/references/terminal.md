@@ -21,8 +21,12 @@ attn terminal close <id>
 Opening preserves the user's focus. Your first terminal goes to your right;
 `--down` puts it below you. Later ones stack below your most recently opened
 live terminal on that desktop. With `--desktop <ref>`, the first split starts
-at that desktop's active tile. `--cwd <dir>` selects the directory; otherwise
-it uses your session's directory. A missing numbered `--desktop` is created.
+at that desktop's active tile. `--cwd <dir>` selects the directory on the
+target machine. A missing numbered `--desktop` is created.
+
+Open defaults to your session's machine and directory. `--host <name|id>`
+selects an outpost; `--host home` selects the home. If you change the machine
+and omit `--cwd`, the shell starts in that machine's home directory.
 
 `open -- command` waits for the shell's first OSC 133 prompt before typing.
 Known unsupported shells are refused before opening. A first-prompt wait

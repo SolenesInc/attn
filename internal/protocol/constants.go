@@ -270,6 +270,7 @@ const (
 	CmdLaunchCommitted       = "launch_committed"
 	CmdConversationReadiness = "conversation_readiness"
 	CmdAgentCatalog          = "agent_catalog"
+	CmdCheckoutInspect       = "checkout_inspect"
 	CmdAgentLaunchClose      = "agent_launch_close"
 )
 

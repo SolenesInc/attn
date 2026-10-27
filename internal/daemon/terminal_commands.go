@@ -233,6 +233,12 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		d.sendError(conn, err.Error())
 		return
 	}
+	host, err := d.resolveCallerHost(caller.ID, msg.Host)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	msg.Host = nonEmptyHost(host)
 	if protocol.Deref(msg.Command) != "" {
 		shell, err := Call[protocol.TerminalShellResult](context.Background(), d.router(), protocol.TerminalShellMessage{Cmd: protocol.CmdTerminalShell, Host: protocol.Deref(msg.Host)})
 		if err != nil {
@@ -302,7 +308,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 	cwd := protocol.Deref(msg.Cwd)
 	if cwd == "" {
 		cwd = caller.Directory
-		if protocol.Deref(msg.Host) != "" {
+		if host != protocol.Deref(caller.Host) {
 			cwd = "~"
 		}
 	}

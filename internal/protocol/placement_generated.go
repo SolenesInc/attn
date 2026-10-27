@@ -58,11 +58,13 @@ var Placements = map[string][]Placement{
 	"browser_control":                  {Placement{LocatorHome, ""}},
 	"callout_anchors":                  {Placement{LocatorHome, ""}},
 	"callout_show":                     {Placement{LocatorHome, ""}},
+	"checkout_inspect":                 {Placement{LocatorMachine, "host"}},
 	"clear_session_activity":           {Placement{LocatorHome, ""}},
 	"codex_status":                     {Placement{LocatorHere, ""}},
 	"collapse_repo":                    {Placement{LocatorHome, ""}},
 	"conversation_readiness":           {Placement{LocatorMachine, "host"}},
-	"create_worktree":                  {Placement{LocatorHere, ""}},
+	"create_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"create_worktree_from_branch":      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"crew_charter_get":                 {Placement{LocatorHome, ""}},
 	"crew_charter_set":                 {Placement{LocatorHome, ""}},
 	"crew_handoff":                     {Placement{LocatorHome, ""}},
@@ -600,6 +602,18 @@ func (m CalloutShowMessage) Locate() string {
 	return ""
 }
 
+func (CheckoutInspectMessage) CommandName() string {
+	return "checkout_inspect"
+}
+
+func (m CheckoutInspectMessage) Placement() Placement {
+	return Placement{LocatorMachine, "host"}
+}
+
+func (m CheckoutInspectMessage) Locate() string {
+	return string(m.Host)
+}
+
 func (ClearSessionActivityMessage) CommandName() string {
 	return "clear_session_activity"
 }
@@ -653,10 +667,34 @@ func (CreateWorktreeMessage) CommandName() string {
 }
 
 func (m CreateWorktreeMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
 	return Placement{LocatorHere, ""}
 }
 
 func (m CreateWorktreeMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
+func (CreateWorktreeFromBranchMessage) CommandName() string {
+	return "create_worktree_from_branch"
+}
+
+func (m CreateWorktreeFromBranchMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m CreateWorktreeFromBranchMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 

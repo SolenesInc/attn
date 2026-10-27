@@ -42,7 +42,11 @@ Attn saves the note and transfers ownership before starting the successor. The p
 
 For a completed design, recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders; otherwise recommend a Builder. Follow the planning process's mandatory checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution.
 
-## Choose the folder and checkout
+## Choose the machine, folder and checkout
+
+Delegation defaults to your session's machine. `--host <name|id>` selects an
+outpost; `--host home` selects the home. An unknown or unreachable host fails
+before acceptance. A retry or home restart keeps the accepted machine and path.
 
 Every delegation, including handover, requires `--cwd`. Attn does not infer it from the source session. Outside Git, the folder is enough. Inside Git, explicitly choose one mode and its branch arguments:
 
@@ -60,14 +64,19 @@ attn delegate --seed s-example --role builder \
   --cwd /repo --new-worktree --existing-branch feature-x
 ```
 
-Reuse includes an existing linked worktree. It verifies the branch without switching it. New-worktree mode generates a destination and reports its path; use `--worktree-path` for a specific destination. A cwd subdirectory is preserved in the resulting worktree.
+`--cwd` and `--worktree-path` name paths on the target machine. attn expands
+and checks them there. On your own machine, a relative cwd starts at your
+shell's directory. For another machine, use an absolute path or quote `~`,
+as in `--host ai-sandbox --cwd '~/project'`, so the target expands it.
+
+Reuse includes an existing linked worktree. It verifies the branch without switching it. New-worktree mode creates the worktree on that machine and reports its path; use `--worktree-path` for a specific destination. A cwd subdirectory is preserved in the resulting worktree.
 
 New branch mode uses the specified committed base, not dirty changes in the source checkout. An unavailable base fails; fetch explicitly if needed. For a remote-tracking branch, use new branch mode with `--from remote/branch`. Existing-branch mode names a local branch.
 
 Two conflicts have different recoveries:
 
 - Git already has the branch checked out elsewhere: use the reported folder with explicit reuse, or choose another branch. Attn will not turn a create request into reuse.
-- An active Attn agent uses the selected checkout: add `--allow-worktree-reuse` only when sharing is intended. Same-checkout handover exempts the predecessor; any other occupants still require the flag. No further sharing approval step follows it.
+- An active Attn agent on that machine uses the selected checkout: add `--allow-worktree-reuse` only when sharing is intended. Same-checkout handover exempts the predecessor; any other occupants still require the flag. No further sharing approval step follows it.
 
 ## Choose the desktop
 
@@ -122,6 +131,9 @@ attn delegate status <request-id>
 ```
 
 Retry identical input with the same `--request-id` to retrieve or continue that operation. A changed request needs a new ID. A terminal failed operation stays failed; an intentional new attempt uses the existing seed and explicit checkout under a new request ID.
+
+After a home restart, an accepted operation waits for its outpost to reconnect.
+Its status names that host. Removing the outpost fails the waiting operation.
 
 Launch failures leave transferred ownership and created worktrees/branches in place. Read the error's resource paths and current state, then explicitly reuse or remove the checkout. Attn does not restore the old owner or clean up the worktree automatically. An unknown outcome is not evidence that nothing started.
 

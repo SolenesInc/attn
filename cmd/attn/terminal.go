@@ -20,7 +20,7 @@ func writeTerminalHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn terminal <command>
 
   ls [--desktop <ref> | --all] [--json]
-  open [--host <outpost>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>]
+  open [--host <outpost|home>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>]
   run <terminal> "<command>" [--wait] [--timeout <seconds>] [--desktop <ref>]
   send <terminal> (--text "<text>" | --keys C-c Escape Enter ...) [--desktop <ref>]
   read <terminal> [--last | --scrollback [--lines <n>]]
@@ -45,8 +45,10 @@ when that desktop is not current. Move yourself and a shell with two calls:
   attn terminal move 8
   attn terminal move <shell> 8
 
-Open --host selects an outpost by name or id. Without --cwd it starts in the
-outpost's home directory; --cwd names a directory on the outpost.
+Open defaults to your session's machine and directory. --host selects an
+outpost by name or id; --host home selects the home. When the machine changes,
+omitting --cwd starts in that machine's home directory. --cwd names a directory
+on the target machine.
 Claude, Codex and shells run on outposts. An agent's attn commands reach the
 home. Spawning chief, crew and plugin agents on outposts is unavailable.
 

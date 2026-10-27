@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -30,6 +31,9 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.commitAgentLaunch)
 	runs(parts, false, d.readConversationReadiness)
 	runs(parts, true, d.readAgentCatalog)
+	runs(parts, true, d.inspectCheckout)
+	runs(parts, false, d.createWorktreeHere)
+	runs(parts, false, d.createWorktreeFromBranchHere)
 	runs(parts, false, d.closeAgentMachine)
 	runs(parts, true, d.readTerminalLaunch)
 	runs(parts, false, d.writeTerminal)
@@ -62,6 +66,7 @@ func (d *Daemon) decodeLaunch(launch string) (ptybackend.SpawnOptions, error) {
 }
 
 func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMessage) (_ struct{}, launchErr error) {
+	pausepoint.At(pausepoint.TerminalStarting)
 	opts, err := d.decodeLaunch(msg.Launch)
 	if err != nil {
 		return struct{}{}, err
@@ -116,6 +121,9 @@ func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMess
 		err = d.spawnSessionRuntime(session.ID, opts)
 	}
 	if err != nil {
+		if _, pathErr := os.Stat(session.Directory); os.IsNotExist(pathErr) {
+			err = fmt.Errorf("launch directory %s is unavailable; the worktree sweep may have removed it before launch: %w", session.Directory, err)
+		}
 		d.sessionMonitor(session.ID).ForgetInitialPrompt()
 		if plugin != nil {
 			d.endAgentDriverRun(session.ID)
