@@ -123,7 +123,7 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	if err := os.RemoveAll(cwd); err != nil {
 		t.Fatal(err)
 	}
-	checkRefusal("no longer exists", cwd, pair.Host)
+	checkRefusal("no longer exists", cwd, "on outpost outpost")
 	mark = len(pair.App.Log())
 	pair.App.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
 	testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })

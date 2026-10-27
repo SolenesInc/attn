@@ -59,7 +59,7 @@ func (d *Daemon) resolveReopen(
 	verdict.Inspection = branchInspection{State: verdict.BranchState, Remote: inspection.Remote, StaleRegistration: inspection.StaleRegistration}
 	if protocol.Deref(entry.Host) != "" && verdict.DirectoryState == directoryMissing {
 		verdict.Actions = nil
-		verdict.Reason = fmt.Sprintf("its directory %s no longer exists on outpost %s", verdict.Execution.Cwd, protocol.Deref(entry.Host))
+		verdict.Reason = fmt.Sprintf("its directory %s no longer exists on outpost %s", verdict.Execution.Cwd, d.outpostName(protocol.Deref(entry.Host)))
 	}
 	return verdict, nil
 }
