@@ -348,10 +348,23 @@ func TestAHiddenSharedCodexTurnThatEndsWhileTheDaemonIsDownSettlesAfterTheRestar
 	app := s.App()
 	shareCodex(t, app)
 	session, conversation := hiddenWaitingSharedCodex(t, s, app)
+	listed, err := s.Client().Query("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var previousModelRequest string
+	for _, current := range listed {
+		if string(current.ID) == session {
+			previousModelRequest = protocol.Deref(current.LastModelRequestAt)
+		}
+	}
+	mark := len(app.Log())
 	submitFeedback(t, app, session, "Lock the tax table before the lookup.")
 	server := s.CodexServer()
 	server.Prompted(conversation)
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWorking && protocol.Deref(x.LastModelRequestAt) != previousModelRequest
+	})
 
 	s.Stop()
 	server.Halt(conversation)
