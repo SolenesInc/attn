@@ -24,7 +24,7 @@ fs.cpSync(source, home, { recursive: true, dereference: true });
 const mock = fileURLToPath(new URL('../app/scripts/real-app-harness/mockAgent.mjs', import.meta.url));
 fs.writeFileSync(path.join(home, '.attn-mock-agent.json'), JSON.stringify({ version: 1, agent: 'claude', turns: [
   { includes: 'You have been woken', actions: [{ type: 'reply', text: 'HANDOFF_READY', state: 'idle' }] },
-  { includes: 'Your predecessor closed', actions: [{ type: 'reply', text: 'NAP_READY', state: 'idle' }] },
+  { includes: 'the letter above', actions: [{ type: 'reply', text: 'NAP_READY', state: 'idle' }] },
 ] }));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('ATTN_') && !key.startsWith('CODEX_') && !key.startsWith('CLAUDE')));
 Object.assign(env, {

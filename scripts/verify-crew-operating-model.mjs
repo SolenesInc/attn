@@ -138,7 +138,7 @@ try {
   output.push('PASS: letter delivered inline; named seed, parent plot and current work read before greeting.');
   console.log(transcript);
 } finally {
-  if (session && daemon?.exitCode === null) cli(['handoff', '--sleep', '--session', session, '-m', 'Verification finished. No further work is requested.'], { quiet: true });
+  if (session && daemon?.exitCode === null) cli(['handoff', '--session', session, '-m', 'Verification finished. No further work is requested.'], { quiet: true });
   if (ws) ws.close();
   if (daemon?.exitCode === null) {
     const stopped = once(daemon, 'exit');
