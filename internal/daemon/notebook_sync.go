@@ -41,18 +41,15 @@ type notebookSyncDisk struct {
 }
 
 type notebookSyncSnapshot struct {
-	Root            string
-	PreviousRoot    string
-	ScanComplete    bool
-	LocalSequence   int64
-	PeerSequence    int64
-	NeedItems       int
-	NeedDeletes     int
-	NeedBytes       int64
-	PeerNeedItems   int
-	PeerNeedDeletes int
-	PeerNeedBytes   int64
-	Error           string
+	Root          string
+	PreviousRoot  string
+	ScanComplete  bool
+	LocalSequence int64
+	PeerSequence  int64
+	NeedItems     int
+	NeedDeletes   int
+	NeedBytes     int64
+	Error         string
 }
 
 type notebookSyncRun struct {
@@ -399,8 +396,7 @@ func (d *Daemon) refreshNotebookSync(run *notebookSyncRun) {
 		current, err := run.engine.Snapshot(run.folder, notebookDevice(peer))
 		snapshot := notebookSyncSnapshot{Root: run.disk.Root, PreviousRoot: run.disk.PreviousRoot,
 			ScanComplete: current.ScanComplete, LocalSequence: current.LocalSequence, PeerSequence: current.PeerSequence,
-			NeedItems: current.NeedItems, NeedDeletes: current.NeedDeletes, NeedBytes: current.NeedBytes,
-			PeerNeedItems: current.PeerNeedItems, PeerNeedDeletes: current.PeerNeedDeletes, PeerNeedBytes: current.PeerNeedBytes}
+			NeedItems: current.NeedItems, NeedDeletes: current.NeedDeletes, NeedBytes: current.NeedBytes}
 		if err != nil {
 			snapshot.Error = err.Error()
 		} else if current.Error != nil {
@@ -538,9 +534,12 @@ func (d *Daemon) notebookPeerStateLocked(peer, name string) (protocol.OutpostNot
 	local := run.snapshots[peer]
 	remote := run.remote[peer]
 	complete := run.disk.Completed[peer]
-	needed := local.NeedItems + local.NeedDeletes + max(local.PeerNeedItems+local.PeerNeedDeletes, remote.NeedItems+remote.NeedDeletes)
-	bytes := local.NeedBytes + max(local.PeerNeedBytes, remote.NeedBytes)
-	info.NeedBytes, info.NeedItems, info.Conflicts = protocol.Ptr(int(bytes)), protocol.Ptr(needed), protocol.Ptr(len(run.conflicts))
+	needed := local.NeedItems + local.NeedDeletes + remote.NeedItems + remote.NeedDeletes
+	indicesExchanged := local.ScanComplete && remote.ScanComplete && remote.PeerSequence >= local.LocalSequence && local.PeerSequence >= remote.LocalSequence
+	info.Conflicts = protocol.Ptr(len(run.conflicts))
+	if indicesExchanged {
+		info.NeedBytes, info.NeedItems = protocol.Ptr(int(local.NeedBytes+remote.NeedBytes)), protocol.Ptr(needed)
+	}
 	if remote.PreviousRoot != "" {
 		info.PreviousRoot = protocol.Ptr(remote.PreviousRoot)
 	}
@@ -551,7 +550,7 @@ func (d *Daemon) notebookPeerStateLocked(peer, name string) (protocol.OutpostNot
 		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr("home: "+local.Error)
 	case remote.Error != "":
 		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr(name+": "+remote.Error)
-	case local.ScanComplete && remote.ScanComplete && remote.PeerSequence >= local.LocalSequence && local.PeerSequence >= remote.LocalSequence && needed == 0:
+	case indicesExchanged && needed == 0:
 		info.State = protocol.OutpostNotebookStateInSync
 
 	case complete:
@@ -837,12 +836,18 @@ func (d *Daemon) NotebookReady(host string) error {
 		return err
 	}
 	info, _ := d.notebookPeerState(row.DaemonID, row.Name)
-	return fmt.Errorf("%s's Notebook first sync has not completed: %d bytes and %d items left%s", row.Name, protocol.Deref(info.NeedBytes), protocol.Deref(info.NeedItems), func() string {
-		if info.Error != nil {
-			return "; " + *info.Error
-		}
-		return ""
-	}())
+	remaining := notebookRemainingWork(info)
+	if info.Error != nil {
+		remaining += "; " + *info.Error
+	}
+	return fmt.Errorf("%s's Notebook first sync has not completed: %s", row.Name, remaining)
+}
+
+func notebookRemainingWork(info protocol.OutpostNotebook) string {
+	if info.NeedBytes == nil || info.NeedItems == nil {
+		return "remaining work has not been reported yet"
+	}
+	return fmt.Sprintf("%d bytes and %d items left", *info.NeedBytes, *info.NeedItems)
 }
 
 func (d *Daemon) refreshNotebookConflicts(run *notebookSyncRun) {
@@ -969,7 +974,7 @@ func (d *Daemon) waitForNotebookArtifact(ctx context.Context, origin Origin, rec
 			return err
 		}
 		state, _ := d.notebookPeerState(row.DaemonID, row.Name)
-		pending := fmt.Sprintf("%s completed on %s; the home has not received %s (%d bytes): %d bytes and %d items left", receipt.Operation, origin.Name, receipt.Filename, receipt.Size, protocol.Deref(state.NeedBytes), protocol.Deref(state.NeedItems))
+		pending := fmt.Sprintf("%s completed on %s; the home has not received %s (%d bytes): %s", receipt.Operation, origin.Name, receipt.Filename, receipt.Size, notebookRemainingWork(state))
 		if state.Error != nil {
 			return fmt.Errorf("%s; %s; retry the same command after sync recovers", pending, *state.Error)
 		}

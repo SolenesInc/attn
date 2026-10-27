@@ -192,7 +192,8 @@ Turn Outposts off at the home, or clear `outpost_listen` on the outpost, before
 changing that machine's root.
 
 Settings → Outposts shows first sync, syncing with the bytes and items left,
-in sync, or the error and its reason. It also shows a count of conflict copies.
+in sync, or the error and its reason. Byte and item counts appear once the
+remaining work is known. The row also shows a count of conflict copies.
 Concurrent edits keep both versions as an original and a
 `*.sync-conflict-*` copy. Each new conflict copy produces one notification at
 the home. Compare the files, merge the content you need, and remove the copy to
