@@ -10,30 +10,30 @@ import (
 )
 
 func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessage) {
-	caller, code := d.resolveSessionByIDOrPrefix(string(msg.SourceSessionID), "")
-	if caller == nil {
-		d.replyAgentMsgError(conn, "sender_"+code, "reload requires a live caller session")
+	b, err := d.bindings()
+	if err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
+	r, err := d.requestFromSession(msg.SourceSessionID, b)
+	if err != nil {
+		d.replyTargetError(conn, err)
+		return
+	}
+	caller, _ := r.AskingSession()
 	if msg.All == (len(msg.Targets) > 0) {
-		d.sendError(conn, "name one or more sessions, or use --all")
+		d.sendError(conn, "name one or more targets, or use --all")
 		return
 	}
 	targets := slices.Clone(msg.Targets)
 	if msg.All {
-		b, err := d.bindings()
-		if err != nil {
-			d.sendError(conn, err.Error())
-			return
-		}
-		r, err := d.requestFromSession(caller.ID, b)
-		if err != nil || !d.requestedByChief(r) {
+		if !d.requestedByChief(r) {
 			d.sendError(conn, "only the profile's chief may reload --all")
 			return
 		}
 		for _, session := range d.store.List("") {
-			if session.ProfileID == caller.ProfileID && session.Agent != "shell" {
-				targets = append(targets, string(session.ID))
+			if session.ProfileID == r.ProfileID() && session.Agent != "shell" {
+				targets = append(targets, "session:"+string(session.ID))
 			}
 		}
 		slices.Sort(targets)
@@ -43,16 +43,8 @@ func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessa
 	sessions := []*protocol.Session{}
 	seen := map[protocol.SessionID]bool{}
 	for _, ref := range targets {
-		target, code := d.resolveSessionByIDOrPrefix(ref, caller.ProfileID)
-		var err error
-		switch {
-		case target == nil:
-			if code == "ambiguous_session" {
-				err = fmt.Errorf("%q matches more than one session; use more of the id", ref)
-			} else {
-				err = fmt.Errorf("no session matches %q in the caller's profile", ref)
-			}
-		case target.Agent == "shell":
+		target, err := d.resolveSession(r, b, ref)
+		if err == nil && target.Agent == "shell" {
 			err = fmt.Errorf("%s is a shell, not an agent", ref)
 		}
 		if err != nil {
@@ -64,12 +56,12 @@ func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessa
 			sessions = append(sessions, target)
 		}
 	}
-	if i := slices.IndexFunc(sessions, func(s *protocol.Session) bool { return s.ID == caller.ID }); i >= 0 {
+	if i := slices.IndexFunc(sessions, func(s *protocol.Session) bool { return s.ID == caller }); i >= 0 {
 		self := sessions[i]
 		sessions = append(slices.Delete(sessions, i, i+1), self)
 	}
 	for _, target := range sessions {
-		err := d.mayActOnSession(caller.ID, target, "reload")
+		err := d.mayActOnSession(caller, target, "reload")
 		if err == nil {
 			err = d.reloadSessionForClient(target.ID, 80, 24)
 		}

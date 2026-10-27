@@ -11,7 +11,8 @@ Run `attn agent --help` for the exact flags; this file is the rules.
 unique prefix works, and `--json` carries the full ids and the machine shape.
 Targets resolve in your profile, in this order: `member:<key>`, `session:<id>`,
 `seed:<id>` or a plain seed id, a crew name, then a session id or unique prefix.
-`msg`, `peek` and `close` share that order. A target in another profile is unknown.
+`msg`, `peek`, `reload` and `close` share that order. A target in another profile
+is unknown.
 
 `attn session list --tree` shows every live session under its dispatcher, with
 short ids, labels, harnesses, states, owed/snoozed turns and seed slugs. Use it
@@ -86,13 +87,15 @@ errors. Run `attn session --help` for syntax.
 
 ## Reloading agents
 
-`attn agent reload <session-id>...` does the same thing as the palette's
+`attn agent reload <session-or-member-or-seed>...` does the same thing as the palette's
 "Reload this agent" action. It interrupts running agents immediately and may
 lose non-persistent state. Save anything needed before reloading. The session
 stays in place and resumes its saved conversation when one is available.
 
-Use full session ids or unique prefixes. A session may reload itself and
-agents below it in its delegation chain, including delegates of delegates.
+Use the target forms listed above. A crew name follows the member's current
+session, including after a rename. Sleeping members stay asleep.
+A session may reload itself and agents below it in its delegation chain,
+including delegates of delegates.
 The profile's chief may reload any agent in that profile. Chief and crew
 sessions can be reloaded under these rules, even though they are protected
 from closing. Shells are excluded.
