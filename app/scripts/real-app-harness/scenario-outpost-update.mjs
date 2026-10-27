@@ -6,6 +6,7 @@ import net from 'node:net';
 import { spawn, execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -134,7 +135,7 @@ try {
   await run('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
   await run('ssh-add', [key]);
   const info = JSON.parse((await run(binary, ['--build-info-json'])).stdout);
-  await run('go', ['build', '-ldflags', `-X github.com/victorarias/attn/internal/buildinfo.Version=before-outpost-update -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=${info.sourceFingerprint}`, '-o', oldBinary, 'github.com/victorarias/attn/cmd/attn']);
+  await run('make', ['-C', fileURLToPath(new URL('../../..', import.meta.url)), 'build', `OUTPUT=${oldBinary}`, 'VERSION=before-outpost-update', `SOURCE_FINGERPRINT=${info.sourceFingerprint}`]);
   fs.copyFileSync(oldBinary, remoteBinary);
   const data = path.join(root, 'outpost');
   fs.mkdirSync(data, { mode: 0o700 });
