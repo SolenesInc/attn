@@ -103,13 +103,11 @@ func (d *Daemon) recoverOutpost(ctx context.Context, host string, conn *bridge.C
 		if protocol.Deref(session.Host) != host {
 			continue
 		}
-		release := d.acquireSpawnLock(session.ID)
 		sessions = append(sessions, session.ID)
 		placements[session.ID] = d.terminalsOf(session.ID)
 		if !d.hidden(session.ID) {
 			previous[session.ID] = struct{}{}
 		}
-		release()
 	}
 	var report outpostMachine
 	if err := conn.Call(ctx, bridgeCallRecovery, struct{}{}, &report); err != nil {

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"syscall"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -98,7 +99,9 @@ func (d *Daemon) reconcileRemoteTerminals(ctx context.Context, session protocol.
 		if slices.Contains(running, terminal) || len(d.terminalsOf(session)) <= 1 {
 			continue
 		}
-		snapshot, err := Call[protocol.GetScreenSnapshotResultMessage](ctx, d.router(), protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal})
+		probeCtx, cancel := context.WithTimeout(ctx, bridge.LostAfter)
+		snapshot, err := Call[protocol.GetScreenSnapshotResultMessage](probeCtx, d.router(), protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal})
+		cancel()
 		if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
 			return err
 		}
