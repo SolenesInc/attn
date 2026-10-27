@@ -17,6 +17,14 @@ Make each option concrete enough to judge the decision, and no more. Build them 
 - **Visual.** Write each option as a self-contained HTML file with inline styles and scripts, realistic content, the states that matter (such as empty, typical, overflowing, and failed), and working versions of the interactions in question. Match the product's existing look unless the look is the question. Show the options with the harness's native artifact or preview feature when it has one. Otherwise give each file's path, and open the files in the default browser (`open` on macOS, `xdg-open` on Linux) only when you share the user's machine and display.
 - **Interface design.** Write each option as the interface's declarations and the same two or three realistic call sites, as [Design](design.md) describes under Start from the caller, using names from the codebase. Put the options side by side in one document and judge them with Design's checks.
 
+## Independent candidates
+
+Options built by one agent share its assumptions. When the decision is costly to reverse and the Prototyper role offers more than one model, the agent that frames the decision can start one Prototyper delegation per model instead, as the `attn` skill's delegation reference describes, each building one candidate. Give every delegation the same brief: the decision, what is fixed, the call sites or states each candidate must show, and the [Design](design.md) checks that will decide between them. Say that other candidates exist, without showing them. When the roles offer one model, one Prototyper builds every option, as above.
+
+When you build one candidate, build the best design you can rather than a safe middle: the differences between candidates are what the comparison learns from. Name the strongest alternative you rejected, with the reason, in place of a second option.
+
+The agent that started the candidates combines them. Read every candidate in full and judge them check by check against the brief's checks, not on overall feel. Candidates that converge are agreement and need no grafts. Candidates that diverge wildly mean the brief left the decision open: sharpen it and run them again instead of averaging. Otherwise pick a base, name what each graft takes from which candidate, and fold each one in so the result reads as one design. Then recommend it as below.
+
 ## Compare and recommend
 
 For each option, state what it does well, what it costs, and where it breaks. Then recommend one option, or a combination, and give the reason, pointing to the call site, screen, or state that shows it. For a combination, name the option it starts from and what it takes from each of the others. The user chooses.

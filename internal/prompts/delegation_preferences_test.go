@@ -71,14 +71,14 @@ func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
 			t.Errorf("composed role catalog is missing %q", expected)
 		}
 	}
-	for _, expected := range []string{"present the pull-request boundaries and ordering", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution"} {
+	for _, expected := range []string{"present the pull-request boundaries and ordering", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution", "dispatch without reviewing"} {
 		if !strings.Contains(pathfinder.Instructions, expected) {
 			t.Errorf("pathfinder checkpoint is missing %q: %s", expected, pathfinder.Instructions)
 		}
 	}
 
 	planning := RenderText("attn-workflow-skill", "planning", nil)
-	for _, expected := range []string{"proposed pull-request boundaries and ordering", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution"} {
+	for _, expected := range []string{"proposed pull-request boundaries and ordering", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution", "dispatch without reviewing"} {
 		if !strings.Contains(planning, expected) {
 			t.Errorf("planning guidance is missing %q", expected)
 		}
@@ -89,7 +89,7 @@ func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
 		}
 	}
 	delegation := RenderText("attn-skill", "delegation", nil)
-	for _, expected := range []string{"mandatory checkpoint", "explicitly requests a separate Reviewer delegation", "remains the Orchestrator's responsibility", "must not add a Reviewer to a plan proactively"} {
+	for _, expected := range []string{"planning process's checkpoint", "dispatch without reviewing", "explicitly requests a separate Reviewer delegation", "remains the Orchestrator's responsibility", "must not add a Reviewer to a plan proactively"} {
 		if !strings.Contains(delegation, expected) {
 			t.Errorf("delegation guidance is missing %q", expected)
 		}
