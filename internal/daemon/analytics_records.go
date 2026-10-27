@@ -91,7 +91,6 @@ type analyticsReplyConn struct {
 }
 
 func (c *analyticsReplyConn) Write(p []byte) (int, error) {
-	n, err := c.Conn.Write(p)
 	if !c.replied {
 		c.replied = true
 		var reply struct {
@@ -103,7 +102,7 @@ func (c *analyticsReplyConn) Write(p []byte) (int, error) {
 			(protocol.Deref(reply.Error) != "" || (reply.Ok != nil && !*reply.Ok) || (reply.Success != nil && !*reply.Success))
 		c.answered(failed)
 	}
-	return n, err
+	return c.Conn.Write(p)
 }
 
 func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {

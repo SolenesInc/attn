@@ -223,6 +223,12 @@ func (c *Client) WithGardenProfile(profileID string, sessionID protocol.SessionI
 	return &scoped
 }
 
+func (c *Client) WithCaller(terminal protocol.TerminalID) *Client {
+	scoped := *c
+	scoped.callerTerminal = protocol.TrimID(terminal)
+	return &scoped
+}
+
 func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	if c.gardenProfile != "" || c.gardenSession != "" {
 		raw, err := json.Marshal(msg)

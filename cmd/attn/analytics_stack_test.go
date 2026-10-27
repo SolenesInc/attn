@@ -50,6 +50,38 @@ func TestCLIUsageErrorsReachTheOutboxOnlyWhileAnalyticsIsOn(t *testing.T) {
 	}
 }
 
+func TestASharedCodexHookIsRecordedAsItsAgentNotAPerson(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	if set := s.Attn("settings", "set", "analytics.enabled", "true"); set.Code != 0 {
+		t.Fatalf("enable analytics: exit %d, stderr %q", set.Code, set.Stderr)
+	}
+	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(session)
+	app.TypeLine(session, "add a discount field")
+	if got := codex.Prompted(); got != "add a discount field" {
+		t.Fatalf("codex received %q", got)
+	}
+	codex.Reply("Added. <!-- attn:state=idle -->")
+
+	hooks := map[string]int{}
+	for _, record := range cliRecords(t, app) {
+		if record.Name != "state" && record.Name != "set_session_resume_id" && record.Name != "stop" {
+			continue
+		}
+		hooks[record.Name]++
+		if string(record.Props) != `{"caller":"agent","harness":"codex","ok":true}` || record.Subject == "" {
+			t.Errorf("hook record %s %s with subject %q, want it from the codex agent's session", record.Name, record.Props, record.Subject)
+		}
+	}
+	if hooks["state"] == 0 || hooks["set_session_resume_id"] == 0 || hooks["stop"] == 0 {
+		t.Fatalf("hook records %v, want state, set_session_resume_id and stop from the turn's hooks", hooks)
+	}
+}
+
 func cliRecords(t *testing.T, app *testworld.Peer) []analytics.Record {
 	t.Helper()
 	id := uuid.NewString()
