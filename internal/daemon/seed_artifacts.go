@@ -136,6 +136,13 @@ func (d *Daemon) seedArtifactDir(seedID string, create bool) (string, string, er
 	if _, _, err := d.readSeed(seedID); err != nil {
 		return "", "", err
 	}
+	return d.localSeedArtifactDir(seedID, create)
+}
+
+func (d *Daemon) localSeedArtifactDir(seedID string, create bool) (string, string, error) {
+	if err := garden.ValidateID(seedID); err != nil {
+		return "", "", err
+	}
 	root, err := d.notebookRoot()
 	if err != nil {
 		return "", "", err
@@ -390,6 +397,20 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if _, _, err := d.readSeed(seedID); err != nil {
 		return nil, err
 	}
+	transferred, err := d.transferSeedArtifact(msg)
+	if err != nil {
+		return nil, err
+	}
+	return d.observeSeedArtifactTransfer(msg, transferred)
+}
+
+type seedArtifactMachineTransfer struct {
+	Result  *protocol.SeedArtifactTransferResult
+	Receipt *seedArtifactTransferReceipt
+}
+
+func (d *Daemon) transferSeedArtifact(msg *protocol.SeedArtifactTransferMessage) (*seedArtifactMachineTransfer, error) {
+	seedID := strings.TrimSpace(msg.SeedID)
 	operation := strings.TrimSpace(strings.ToLower(msg.Operation))
 	if operation != "move" && operation != "copy" && operation != "detach" {
 		return nil, fmt.Errorf("artifact operation %q is not move, copy, or detach", msg.Operation)
@@ -399,7 +420,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	var root, dir string
 	var err error
 	if operation == "detach" {
-		root, dir, err = d.seedArtifactDir(seedID, false)
+		root, dir, err = d.localSeedArtifactDir(seedID, false)
 		if err != nil {
 			return nil, err
 		}
@@ -458,7 +479,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 				}
 			}
 		}
-		root, dir, err = d.seedArtifactDir(seedID, !recovering)
+		root, dir, err = d.localSeedArtifactDir(seedID, !recovering)
 		if err != nil {
 			return nil, err
 		}
@@ -483,12 +504,6 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if err != nil {
 		return nil, err
 	}
-	if legacy != nil {
-		if err := d.detachLegacyArtifactReference(seedID, protocol.Deref(msg.SourceSessionID), *legacy); err != nil {
-			return nil, fmt.Errorf("artifact transferred but linked file is still associated: %w; run the same command again", err)
-		}
-	}
-
 	artifact := protocol.SeedArtifact{
 		Filename: filename, RelativeTarget: seedArtifactRelativeTarget(filename), Size: int(receipt.Size),
 		ModifiedAt: time.Unix(0, receipt.ModTimeNS).UTC().Format(time.RFC3339Nano),
@@ -499,6 +514,21 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	}
 	if operation != "detach" {
 		result.Artifact = &artifact
+	}
+	changed := filepath.ToSlash(filepath.Join("seeds", seedID, filename))
+	d.broadcastFsChanged(root, originAgent, changed)
+	return &seedArtifactMachineTransfer{Result: result, Receipt: receipt}, nil
+}
+
+func (d *Daemon) observeSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMessage, transferred *seedArtifactMachineTransfer) (*protocol.SeedArtifactTransferResult, error) {
+	receipt, result := transferred.Receipt, transferred.Result
+	seedID := receipt.SeedID
+	d.seedArtifactMu.Lock()
+	defer d.seedArtifactMu.Unlock()
+	if receipt.Legacy != nil {
+		if err := d.detachLegacyArtifactReference(seedID, protocol.Deref(msg.SourceSessionID), *receipt.Legacy); err != nil {
+			return nil, fmt.Errorf("artifact transferred but linked file is still associated: %w; run the same command again", err)
+		}
 	}
 	changedEvent, err := seedEvents.Occur(
 		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
@@ -524,8 +554,6 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if inserted {
 		announceGardenSeedEvents(d, []int64{seq})
 	}
-	changed := filepath.ToSlash(filepath.Join("seeds", seedID, filename))
-	d.broadcastFsChanged(root, originAgent, changed)
 	return result, nil
 }
 
