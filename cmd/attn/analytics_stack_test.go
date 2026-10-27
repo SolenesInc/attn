@@ -65,10 +65,11 @@ func TestASharedCodexHookIsRecordedAsItsAgentNotAPerson(t *testing.T) {
 	if got := codex.Prompted(); got != "add a discount field" {
 		t.Fatalf("codex received %q", got)
 	}
+	codex.Reply("Added. <!-- attn:state=idle -->")
 
 	hooks := map[string]int{}
 	for _, record := range cliRecords(t, app) {
-		if record.Name != "state" && record.Name != "set_session_resume_id" {
+		if record.Name != "state" && record.Name != "set_session_resume_id" && record.Name != "stop" {
 			continue
 		}
 		hooks[record.Name]++
@@ -76,8 +77,8 @@ func TestASharedCodexHookIsRecordedAsItsAgentNotAPerson(t *testing.T) {
 			t.Errorf("hook record %s %s with subject %q, want it from the codex agent's session", record.Name, record.Props, record.Subject)
 		}
 	}
-	if hooks["state"] == 0 || hooks["set_session_resume_id"] == 0 {
-		t.Fatalf("hook records %v, want state and set_session_resume_id from the prompt hook", hooks)
+	if hooks["state"] == 0 || hooks["set_session_resume_id"] == 0 || hooks["stop"] == 0 {
+		t.Fatalf("hook records %v, want state, set_session_resume_id and stop from the turn's hooks", hooks)
 	}
 }
 
