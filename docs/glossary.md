@@ -57,8 +57,12 @@ session                 attn's record of one conversation in one profile; like
 │                       sessions can share one
 ├─ stake (at most 1)    the seed assigned to the session by its delegation;
 │                       it tends it and reports there; like an assignment
-├─ vent (0..n)          an agent's report of a tool or an instruction that
-│                       blocked them; like a bug report
+├─ vent (0..n)          an agent's report of a problem they had; like a bug
+│  │                    report
+│  ├─ attn vent         about attn itself; only these can go to attn's
+│  │                    maintainers
+│  └─ tool vent         about the agent's other tools, such as skills, CLIs
+│                       and harness permissions; stays on this machine
 └─ monitor (1 while live)  watches the session's agent on the machine it
                            runs on, and keeps its live state: state, turn,
                            cost, PR links
