@@ -46,6 +46,7 @@ func (p *OutpostPair) Connect() {
 		}
 	}
 	p.App = p.Home.App()
+	outpostApp := p.Outpost.App()
 	p.App.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: p.Address})
 	update := Await(p.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, row := range m.Outposts {
@@ -60,4 +61,7 @@ func (p *OutpostPair) Connect() {
 			p.Host = row.ID
 		}
 	}
+	Await(outpostApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["outpost_state"] == "bridged"
+	})
 }
