@@ -30,6 +30,11 @@ func (r *Run) Prompted() string {
 	return prompted.Text
 }
 
+func (r *Run) Input(text string) {
+	r.t.Helper()
+	r.call(methodInput, textParams{Text: text}, nil)
+}
+
 func (r *Run) Refused() string {
 	r.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)

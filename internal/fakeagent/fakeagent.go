@@ -42,6 +42,7 @@ const (
 	methodExiting    = "exiting"
 	methodPrompted   = "prompted"
 	methodReply      = "reply"
+	methodInput      = "input"
 	methodReplyLate  = "reply_after_stop"
 	methodStream     = "stream"
 	methodSubagent   = "subagent"
@@ -271,6 +272,14 @@ func (a *agent) submit(prompt string) {
 
 func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, error) {
 	switch method {
+	case methodInput:
+		var p textParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		a.term.echo(p.Text)
+		a.submit(p.Text)
+		return struct{}{}, nil
 	case methodPrompted:
 		submitted := <-a.prompts
 		return promptedResult{Text: submitted.text, ConversationID: submitted.conversation}, submitted.err

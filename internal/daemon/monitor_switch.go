@@ -76,6 +76,7 @@ func (h monitorHost) Answered(source *sessionmonitor.Monitor, answer sessionmoni
 	if answer.Outcome == sessionmonitor.SwitchDropped {
 		source.AdoptDropped(candidate)
 		source.SettleSwitch(answer.Conversation, source, answer.Reason)
+		pausepoint.At(pausepoint.ConversationSwitchDropped)
 		return
 	}
 	d.bindMonitorCandidates()

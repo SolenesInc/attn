@@ -64,6 +64,7 @@ function unmoveSessionRuntimeSql() {
     'DROP TABLE session_runtime;',
     'CREATE INDEX idx_sessions_repository ON sessions(repository);',
     'DELETE FROM schema_migrations WHERE version = 1792793838148574;',
+    'DELETE FROM schema_migrations WHERE version = 1793109271851966;',
   ];
 }
 

@@ -45,6 +45,7 @@ const (
 	ConversationSwitchAnswer   = "conversation-switch-answer"
 	ConversationInputLookup    = "conversation-input-lookup"
 	ConversationCandidateBound = "conversation-candidate-bound"
+	ConversationSwitchDropped  = "conversation-switch-dropped"
 	ConversationReportReady    = "conversation-report-ready"
 	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
 	PtyExitHandled             = "pty-exit-handled"
