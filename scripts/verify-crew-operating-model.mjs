@@ -12,6 +12,8 @@ const { values } = parseArgs({ options: {
   attn: { type: 'string' }, 'crew-home': { type: 'string' }, receipts: { type: 'string' },
 } });
 for (const key of ['attn', 'crew-home', 'receipts']) assert(values[key], `--${key} is required`);
+const evalToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+assert(evalToken, 'CLAUDE_CODE_OAUTH_TOKEN is required; inject an approved eval token');
 const binary = path.resolve(values.attn);
 const source = fs.realpathSync(values['crew-home']);
 const receipts = path.resolve(values.receipts);
@@ -23,7 +25,7 @@ const member = path.basename(source);
 const home = path.join(data, 'crew', member);
 const tools = path.join(root, 'tools');
 const config = path.join(tools, '.claude');
-for (const dir of [home, work, config]) fs.mkdirSync(dir, { recursive: true });
+for (const dir of [home, work, config, path.join(root, 'notebook')]) fs.mkdirSync(dir, { recursive: true });
 fs.copyFileSync(path.join(source, 'CHARTER.md'), path.join(home, 'CHARTER.md'));
 fs.copyFileSync(fileURLToPath(new URL('../internal/crew/priming.go', import.meta.url)), path.join(work, 'priming.go'));
 fs.writeFileSync(path.join(work, 'AGENTS.md'), `This is a non-production verification copy. Work stays within ${root}. Read the current sources to discuss the work. No changes to the work are requested. Do not delegate, contact other sessions, or change production data.\n`);
@@ -31,12 +33,11 @@ fs.writeFileSync(path.join(config, '.claude.json'), JSON.stringify({
   hasCompletedOnboarding: true, theme: 'dark',
   projects: { [work]: { hasTrustDialogAccepted: true }, [fs.realpathSync(work)]: { hasTrustDialogAccepted: true } },
 }));
-const credential = JSON.parse(execFileSync('security', ['find-generic-password', '-s', 'Claude Code-credentials', '-w'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
-assert(credential.claudeAiOauth?.accessToken, 'Claude OAuth access token is unavailable');
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('ATTN_') && !key.startsWith('CODEX_') && !key.startsWith('CLAUDE')));
 Object.assign(env, {
   ATTN_DATA_DIR: data, ATTN_TOOL_HOME: tools, CLAUDE_CONFIG_DIR: config,
-  CLAUDE_CODE_OAUTH_TOKEN: credential.claudeAiOauth.accessToken,
+  ATTN_HARNESS_DATA_DIR: root, ATTN_HARNESS_NOTEBOOK_ROOT: path.join(root, 'notebook'),
+  CLAUDE_CODE_OAUTH_TOKEN: evalToken,
   CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION: 'false',
   ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off',
   ATTN_PTY_BACKEND: 'worker', ATTN_WS_PORT: '0',
@@ -115,14 +116,26 @@ try {
   session = cli(['crew', 'wake', member], { json: true }).session_id;
   console.log(`Woke ${member}: ${session}`);
   fs.writeFileSync(path.join(receipts, 'runtime.json'), JSON.stringify({ root, session, member, seed: seedID, plot: parent }, null, 2));
-  fs.writeFileSync(path.join(receipts, 'delivered-priming.txt'), await prime(session));
+  const priming = await prime(session);
+  assert(priming.includes(letter.trim()), 'the named letter was not delivered in priming');
+  fs.writeFileSync(path.join(receipts, 'delivered-priming.txt'), priming);
   await waitEvent((event) => event.event === 'session_state_changed' && event.session?.id === session && ['idle', 'waiting'].includes(event.session?.state));
   const transcript = cli(['session', 'transcript', session], { quiet: true });
   fs.writeFileSync(path.join(receipts, 'transcript.txt'), transcript);
   const raw = cli(['session', 'transcript', session, '--json'], { quiet: true });
   fs.writeFileSync(path.join(receipts, 'transcript.jsonl'), raw);
+  const rows = raw.trim().split('\n').map((line) => JSON.parse(line));
+  const greeting = rows.findIndex((event) => event.kind === 'assistant');
+  assert(greeting >= 0, 'the wake produced no greeting');
+  const before = rows.slice(0, greeting);
+  const calls = before.filter((event) => event.kind === 'tool_call');
+  for (const target of [seedID, parent]) assert(calls.some((event) => event.text.includes(`attn seed show ${target}`)), `${target} was not read before greeting`);
+  assert(calls.some((event) => event.text.includes(path.join(work, 'priming.go'))), 'the work was not read before greeting');
+  assert(before.some((event) => event.kind === 'tool_result' && event.text.includes('V2Enabled')), 'the work read returned no current source');
   fs.copyFileSync(path.join(home, 'CHARTER.md'), path.join(receipts, 'charter-after.md'));
-  output.push('Measured: the real member finished its wake turn. Inspect transcript.jsonl for seed and work reads before the greeting.');
+  const proof = `# Real crew wake\n\nMember: ${member}. Session: ${session}.\n\nMeasured: the letter was delivered inline in priming. The member read the named seed ${seedID}, its parent ${parent}, and the current work before the first greeting (${rows[greeting].timestamp}). See delivered-priming.txt, letter.md, transcript.jsonl and transcript.txt.\n\n${calls.map((event) => `- ${event.timestamp}: ${event.tool_name} ${event.text}`).join('\n')}\n\nThe copied charter after the wake is charter-after.md.\n`;
+  fs.writeFileSync(path.join(receipts, 'proof.md'), proof);
+  output.push('PASS: letter delivered inline; named seed, parent plot and current work read before greeting.');
   console.log(transcript);
 } finally {
   if (session && daemon?.exitCode === null) cli(['handoff', '--sleep', '--session', session, '-m', 'Verification finished. No further work is requested.'], { quiet: true });
