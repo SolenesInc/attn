@@ -39,7 +39,8 @@ skill. The principle files under `principles/` adapt pstack's `principle-*`
 skills, renamed and rewritten in attn's terms; the redesign signals in
 `principles/attack-the-premise.md` also draw on pstack's `architect` skill. The
 structure checks in `references/design.md` and the design-twice, tradeoffs and
-alternatives guidance in `references/planning.md` adapt the `architect` skill. The independent-review, standing-brief and second-review
+alternatives guidance in `references/planning.md` adapt the `architect` skill, and
+the independent candidates in `references/prototype.md` adapt its `arena` skill. The independent-review, standing-brief and second-review
 guidance in `references/orchestration.md` and `references/review.md` adapts
 pstack's orchestrate and autopilot playbooks and its `interrogate` skill:
 

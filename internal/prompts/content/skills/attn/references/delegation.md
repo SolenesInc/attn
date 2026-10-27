@@ -40,7 +40,7 @@ attn delegate --seed s-example --handover --role orchestrator \
 
 Attn saves the note and transfers ownership before starting the successor. The previous agent remains running. Handover is the explicit transfer choice; there is no extra force/confirm flag. It does not grant permission beyond the user's authorized task. An ordinary progress note does not invalidate handover; a holder changing during preparation or the seed closing requires reconsidering the request.
 
-For a completed design, recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders; otherwise recommend a Builder. Follow the planning process's mandatory checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution.
+For a completed design, recommend an Orchestrator when the plan requires coordinated or reviewed Builder work, or benefits from mixing harnesses or models between the coordinating agent and its Builders; otherwise recommend a Builder. Follow the planning process's checkpoint: show the proposed plan and handoff, then wait for the user's choice even when their earlier request included execution. Skip it only when the user explicitly said to dispatch without reviewing the plan, as that process describes.
 
 ## Choose the machine, folder and checkout
 
@@ -102,6 +102,8 @@ attn delegate roles
 ```
 
 `--json` returns the same catalog as structured data. Choose the role matching the outcome and a model alternative whose condition fits; otherwise use its default choice. Keep coherent work together. Roles share their instructions across model alternatives. Use the configured fallback when no role fits. With no configured roles or fallback, direct model selection remains available.
+
+One delegation runs one choice. When the task asks for the same work done independently on different models, such as competing design candidates, start one delegation per distinct model among the role's choices, leaving out each choice whose condition rules the task out. The default stays in: its "when no alternative fits" is the role's fallback, not an exclusion. When the remaining choices share one model, start one delegation and say so where you report the result.
 
 ```sh
 attn delegate --brief-file question.md --cwd /notes --role pathfinder
