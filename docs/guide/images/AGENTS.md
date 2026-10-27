@@ -1,13 +1,13 @@
 # Guide images
 
-Screenshots and clips in the guide come from the demo harness. It runs the
+The guide's screenshots come from the demo harness, which also records clips. It runs the
 real app and the real Claude Code and Codex binaries in a throwaway instance.
 A local stub plays scripted model replies, so the frames show real agent
 terminals with no account, no real repo and no model calls.
 
 ## Record
 
-Build the demo instance once per checkout change. `DEMO=1` hides the instance
+Build the demo instance, and build it again after the code changes. `DEMO=1` hides the instance
 chip and titles the window "attn":
 
     make install INSTANCE=demo DEMO=1
@@ -22,7 +22,7 @@ repos in `~/projects/attn-demo`, and removes them at the end. It refuses to
 start if that folder already exists. When you're done recording,
 `attn instance clean demo` removes the instance.
 
-Scenes:
+The guide's scenes:
 
 - `guide-stills` writes `home-screen.png`, `ledger-button.png` and
   `ledger-worktrees.png`.

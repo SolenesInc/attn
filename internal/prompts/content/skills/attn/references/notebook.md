@@ -1,69 +1,80 @@
 # Notebook
 
-Read this reference when you work on your profile's Notebook, especially as chief
-of staff. Its markdown files outlive agent sessions.
+The Notebook is an LLM Wiki, Andrej Karpathy's pattern: a folder of markdown
+pages that agents build and keep current, so knowledge compounds instead of
+being rediscovered. Edit the files directly with your file tools.
+`attn settings get notebook.root` prints the folder. Paths below are relative to
+it, `<root>`.
 
-The Notebook is plain markdown on disk. Read it and edit knowledge notes with
-native tools (Read/Write/Edit and `ls`/`rg`). Append journal entries through
-`attn journal append`, which serializes writes at the home.
-There is no `attn notebook` CLI. The notebook root is given to you in your
-operating guidance. `attn settings get notebook.root` shows the saved folder.
-Use `attn settings set notebook.root ~/notes/work` to change it for your profile;
-existing notes and crew homes stay in place. New profiles get `~/attn-notebook-<profile name>`.
-Named instances add the instance name; taken folders get a numeric suffix.
-Existing profiles keep their folders. Paths below are relative to `<root>`.
+Its parts map onto the pattern:
 
-The `crew/` folder belongs to attn; leave member folders in place when tidying.
+- `journal/<date>.md` is the record of what happened, one file per day. It is
+  the source that knowledge base pages cite.
+- `knowledge/` is the knowledge base, the pattern's wiki: pages you own and keep
+  current. It starts organized by PARA (`projects/`, `areas/`, `resources/`,
+  `archive/`). The user may reshape it.
+- `index.md` at the root describes the layout. Each folder's `index.md` says
+  what belongs in that folder.
+- Each page's `summary:` is its entry in the pattern's index. List them with
+  `grep -r '^summary:' <root>/knowledge/`.
+- This reference is the schema.
 
-Each profile's Notebook syncs with outposts. On an outpost, its machine root is a parent folder; your profile's files are under the stable subfolder for its home root. Profiles that share a root share that folder. `attn seed show <seed>` prints the artifact folder on the caller's machine. Change roots only while disconnected from sync peers.
+attn owns the names `journal/`, `seeds/`, `crew/` and `.attn/`. Don't move,
+rename or delete them.
 
-## Orient First
+Each profile's Notebook syncs with outposts. On an outpost, use that machine's
+`notebook.root.effective` for `<root>`. Its machine root is a parent folder;
+your profile's files are under the stable subfolder for its home root. Profiles
+that share a root share that folder. `attn seed show <seed>` prints the artifact
+folder on the caller's machine. Change roots only while disconnected from sync
+peers.
 
-Load what is already known before adding anything — read the index files:
+## Read first
 
-    <root>/index.md             # the bundle guide
-    <root>/knowledge/index.md   # the knowledge-base nav
+Before you add anything, read `<root>/index.md`, list the summaries, and read the
+pages that cover your subject.
 
-Then browse the relevant subtree (`ls`/`grep` under `<root>/knowledge/...` or
-`<root>/journal/`).
+## Ingest: fold in what you learn
 
-## Two Layers
+When something worth keeping happens, such as a decision, a finished delegation
+or a fact the user taught you:
 
-- **The journal** — `<root>/journal/<date>.md`, dated entries: the durable,
-  curated log of what was done across attn, kept for the user's
-  recall and reviews, not a raw dump. Entries carry `type: journal`.
-- **The knowledge base** — `<root>/knowledge/`, distilled, timeless notes worth
-  keeping: decisions, gotchas, domain knowledge that outlived a single PR. It is
-  organized **PARA-style**: `projects/` (bounded efforts, roughly one per
-  plot or epic), `areas/` (ongoing responsibilities and subsystems),
-  `resources/` (reference material), `archive/` (inactive items). As a project
-  finishes, promote its durable knowledge up into `areas/`.
+1. Add it to the journal with `attn journal append --entry "…"`. It creates the
+   day's file, and it doesn't lose an entry when another agent writes the
+   journal at the same time. Add `--date YYYY-MM-DD` to backfill a past day.
+   Use the command from outposts too, so appends share the home's writer.
+   Without `--date`, it uses the home's date.
+2. Update the knowledge base pages it touches instead of adding a page beside
+   them. Add a page only for a subject no page covers.
+3. Fix the links between the pages you changed. If the new fact contradicts a
+   page, correct the page and say in the journal what changed.
+4. Keep each changed page's `summary:` true to the page.
 
-When a `projects/<slug>/` folder corresponds to a plot in the garden, stamp its
-`index.md` frontmatter with `resource: attn:seed/<plot-id>`. Move the folder under `archive/`
-yourself when the work ends, and promote anything durable into `areas/` first,
-since archived notes drop out of the active view.
+The knowledge base holds what is known, not what is to do. Tasks belong in the
+Garden.
 
-The knowledge base is not a task tracker. Capture what is *known*, not what is
-*to do*.
+## Query: answer from the knowledge base
 
-## Append A Journal Entry
+To answer a question, list the summaries, read the relevant pages, and cite the
+pages you used. When an answer would help again, file it as a page with a
+`summary:` and the `sources:` of the pages you used.
 
-Append a short prose entry through the home:
+## Lint: keep it healthy
 
-```sh
-attn journal append --entry 'What changed and why it matters.'
-attn journal append --date 2026-06-18 --entry 'An entry for a specific day.'
-```
+When the user asks, or when you notice drift, look for contradictions, stale
+claims, missing links and pages without a `summary:` or `sources:`. Fix what you
+can and report the rest.
 
-The command creates the day's file with journal frontmatter when needed. Without
-`--date`, it uses the home's date. Use the command from outposts too, so concurrent
-appends share the same writer. Read the resulting file through your local copy.
+## Projects and plots
 
-## Write Or Edit A Knowledge Note
+When a `projects/<slug>/` folder tracks a plot in the Garden, add
+`resource: attn:seed/<plot-id>` to its `index.md` frontmatter. When the plot is
+harvested, move anything lasting into `areas/`, then move the folder under
+`archive/`. attn doesn't move it for you.
 
-Create a file under the right PARA directory, e.g.
-`<root>/knowledge/areas/notebook.md`, with OKF frontmatter and a tight body:
+## File format
+
+A knowledge base page starts with:
 
     ---
     type: note
@@ -73,32 +84,15 @@ Create a file under the right PARA directory, e.g.
       - /journal/2026-06-18.md
     ---
 
-    The Notebook's markdown files are canonical; edits are plain file writes.
-
-To edit, just Read then Edit the file — ordinary on-disk edits. The daemon's
-filesystem watcher notices your change and refreshes any open in-app browser.
-
-## Rules That Make The Knowledge Base Trustworthy
-
-- **Grounding is required.** Every durable knowledge note must carry resolvable
-  `sources:` in its frontmatter — journal anchors or URLs. Do not author a note
-  from paraphrase alone.
-- **Frontmatter is OKF.** `type:` is the one required field — an open,
-  author-chosen string (e.g. `note`), not a fixed enum. `title`, `summary`,
-  `tags`, `created`, `updated`, and `sources` are recommended. Unknown keys are
-  preserved untouched. The reserved files `index.md` and `log.md` carry no
-  frontmatter.
-- **Links are root-absolute markdown:** `[label](/knowledge/areas/foo.md)`, not
-  `[[wikilinks]]`. Keep the relationship kind (supersedes, relates-to) in prose.
-- **Be concise.** Notes are read by future agents under a token budget; prefer a
-  tight summary plus a `sources:` pointer over a transcript.
-
-## As Chief
-
-The Notebook holds your profile's journal and knowledge. At wake, read
-`<root>/index.md` and `<root>/knowledge/index.md` to orient,
-record durable decisions in the knowledge base as you make them, and keep the
-day's journal current with your view of your profile. Write at a chief-of-staff
-altitude — what moved across your profile's agents, what you delegated and
-decided — not a per-agent play-by-play. Each profile has its own chief and Notebook;
-agents in that profile share it.
+- `type:`, `summary:` and `sources:` are required, and you choose the `type:`
+  value. `title`, `tags`, `created` and `updated` are
+  recommended. Keep keys you don't recognize. `index.md` files have no
+  frontmatter, except a project folder's `resource:` line.
+- `sources:` lists where the page's facts came from, as journal paths such as
+  `/journal/2026-06-18.md` or as URLs. A fact with nothing to cite belongs in
+  the journal, not the knowledge base.
+- Link with root-absolute markdown, `[label](/knowledge/areas/foo.md)`, not
+  `[[wikilinks]]`. Say the kind of link, such as supersedes or relates to, in
+  the sentence.
+- Keep pages short. Future agents read them under a token budget, so prefer a
+  tight summary and a source over a transcript.

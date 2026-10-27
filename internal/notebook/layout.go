@@ -9,7 +9,6 @@ import (
 
 const (
 	FileIndex = "index.md"
-	FileLog   = "log.md"
 
 	DirJournal   = "journal"
 	DirKnowledge = "knowledge"
@@ -114,7 +113,6 @@ func scaffoldDirs() []string {
 func scaffoldFiles() []scaffoldFile {
 	files := []scaffoldFile{
 		{FileIndex, indexTemplate},
-		{FileLog, logTemplate},
 		{path.Join(DirKnowledge, FileIndex), knowledgeIndexTemplate},
 	}
 	for _, sub := range paraSubdirs {
@@ -137,39 +135,33 @@ func ScaffoldPaths() []string {
 
 const indexTemplate = `# Notebook
 
-A durable markdown bundle for this profile — the journal attn writes on your behalf
-and the knowledge base the chief of staff maintains. It outlives any single
-agent and is yours to read, edit, and sync.
+Your Notebook is an [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f),
+Andrej Karpathy's pattern: a folder of markdown pages that your agents build and
+keep current, so knowledge compounds instead of being rediscovered. You can
+read, edit and sync it like any other folder.
 
-- ` + "`journal/`" + ` — dated narrative of what was done, newest entries appended per day.
-- ` + "`knowledge/`" + ` — the PARA-organized knowledge base (projects, areas, resources, archive).
-- ` + "`log.md`" + ` — global change history, newest first.
-- ` + "`crew/`" + ` — crew homes with charters and letters, managed by attn.
+- ` + "`journal/`" + `: the record of what happened, one file per day. Knowledge base
+  pages cite it as their source.
+- ` + "`knowledge/`" + `: the knowledge base, which is the wiki itself.
+- ` + "`seeds/`" + `: files attached to seeds in the Garden.
+- ` + "`crew/`" + `: one folder per crew member, with their charter and letters.
 
-This is one OKF bundle (Open Knowledge Format): every note carries a ` + "`type`" + `
-frontmatter field, and links are root-absolute markdown, e.g.
-[an area note](/knowledge/areas/example.md) — not wikilinks.
-
-<!-- okf_version: 0.1 -->
-`
-
-const logTemplate = `# Log
-
-Change history, newest first.
+Every note has a ` + "`type`" + ` in its frontmatter. Link notes with root-absolute
+markdown links, such as [an area note](/knowledge/areas/example.md).
 `
 
 const knowledgeIndexTemplate = `# Knowledge base
 
-The chief of staff's durable knowledge, organized by the PARA method (the
-directory axis) with an OKF ` + "`type`" + ` on every note (the frontmatter axis).
+The wiki in your Notebook: pages your agents keep current as they learn. It
+starts organized by PARA, and you can reshape it:
 
-- ` + "`projects/`" + ` — bounded efforts with an end (one folder per project/epic).
-- ` + "`areas/`" + ` — ongoing responsibilities and subsystems, with no end.
-- ` + "`resources/`" + ` — reference material worth keeping.
-- ` + "`archive/`" + ` — finished or inactive items, moved here when a project closes.
+- ` + "`projects/`" + `: efforts with an end, one folder per project.
+- ` + "`areas/`" + `: ongoing responsibilities, with no end.
+- ` + "`resources/`" + `: reference material worth keeping.
+- ` + "`archive/`" + `: finished or inactive material. Move a project's folder here when
+  the project ends.
 
-Every note is grounded — carry resolvable ` + "`sources:`" + ` (journal anchors
-or URLs), never paraphrase alone.
+Each note's ` + "`sources:`" + ` lists where its facts came from: journal paths or URLs.
 `
 
 var paraIndexTemplates = map[string]string{

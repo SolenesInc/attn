@@ -524,6 +524,13 @@ commands:
   status [<url>] [--session <id>] [--json]             show recorded watch/readiness state
   wait-ready <number-or-url> [options]                 wait for the next actionable update
 
+modes, for watch and wait-ready:
+  green          ready when the PR is open, not a draft, and GitHub reports it
+                 mergeable (default)
+  codex          green, plus a current Codex 👍 and no 👀, at least 30 seconds
+                 after attn first sees the head
+  formal-review  green, plus GitHub's approval, or --reviewer's approval
+
 wait-ready options:
   --repo [host/]owner/repository  required when the target is a number
   --mode green|codex|formal-review

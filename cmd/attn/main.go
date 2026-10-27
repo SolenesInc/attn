@@ -233,9 +233,9 @@ func main() {
 	case "browser":
 		maybePrintInstanceBanner()
 		runBrowser()
-	case "help":
+	case "guide":
 		runGuide()
-	case "-h", "--help":
+	case "help", "-h", "--help":
 		runHelp()
 	case "_hook-stop":
 		runHookStop()
@@ -685,14 +685,14 @@ commands:
   instance <status|resolve|list>    show / resolve the active instance's resources
   instance-env <instance|--unset>   print shell commands for selecting an instance
   skill [--reference <name>|--list] print the bundled agent skill and its references
-  help [<topic>]                   read the user guide
+  guide [<topic>]                   read the user guide
   onboarding [done|again]          show or change the Chief's first day
   prompts <command>                inspect prompt sources and scenario composition
   version [--json]                  print version, channel and commit
 
 Are you an AI agent? Use these when your task calls for them:
   attn skill    how to operate Attn
-  attn help     the user guide, to answer questions about Attn
+  attn guide    the user guide, to answer questions about Attn
 `)
 }
 

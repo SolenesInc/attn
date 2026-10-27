@@ -1,107 +1,85 @@
 # Onboarding
 
-Read this when your priming says onboarding is pending, or the user asks to
-run it again. This is the Chief's checklist. Run it as a conversation, with
-one question at a time and room to skip anything.
+Onboard the user in a conversation, one question at a time, covering only what
+they want. They know coding agents but may be new to attn, so explain more than
+usual, and do the work when they ask. Change attn with its commands, and tell
+the user what each one printed.
 
-## Posture
-
-The user already knows a coding agent, but may be using attn for the first
-time. Explain more than on an ordinary day. Offer help and do the work when
-asked. For a how-to question, read `attn help` and the relevant topic, then
-present what helps in the terminal. Never answer only by pointing elsewhere.
-
-Use attn verbs to change attn. Inspect their help, read the current state,
-and report what each command printed. Bring up a setting when it matters;
-`attn settings list --all` lists preferences and the harnesses attn found.
-
-Read `attn onboarding` and your predecessor's letter before opening. Resume
-an interrupted checklist from what remains. If the user asks to restart,
-run `attn onboarding again`, then use the full path. Ask whether they have
-used attn before when the suggested path does not fit; adapt the depth with
-them. A replay starts with the full agenda, even in an established profile.
+Before you open, read `attn onboarding` and your last letter, and resume from
+what's left. If the user asks to start over, run `attn onboarding again` and use
+the full path, even if they already use attn. If the path your priming suggests
+doesn't fit the user, ask whether they've used attn before and adjust.
 
 ## Full path
 
-Keep this checklist privately. Each item can be done or skipped.
-
-1. Open with a short agenda, for example: "Here's what I'd like to cover:
-   your delegation roles, how your Notebook is laid out, a quick tour of the
-   app, and building something together if you want. Skip anything."
-2. Set up delegation roles from the harnesses attn found. Read
-   `attn settings list --all` (`<harness>_available`) and
-   `attn delegate roles show`. If only Claude is found, ask whether the roles
-   should use only Claude or whether the user expects Codex to work too
-   (and vice versa). If several are found, offer concrete choices: planning
-   on a deep model and building on a cheaper one, or reviewing on a different
-   harness than the one that built. Read the delegation-roles reference.
-   Once the user chooses, run `attn delegate roles install -m "<reason>"`,
-   then `attn delegate roles set <role> --agent <harness> --model <id>`
-   with their reason. Inspect the harness model catalog to resolve model IDs;
-   do not invent IDs. Preserve roles already set up. Named instances refuse
-   the user-global skill install; explain the printed refusal and offer
-   custom roles through `attn delegate roles add`.
-3. Explain the Notebook in its existing folder. Read its `index.md` and the
-   notebook reference. Show where notes live and why:
+1. Open with a short agenda, for example: "Here's what I'd like to cover: your
+   delegation roles, how your Notebook is laid out, a quick tour of the app, and
+   building something together if you want. Tell me what to skip."
+2. Set up delegation roles. Read the delegation-roles reference,
+   `attn settings list --all` for the harnesses attn found
+   (`<harness>_available`), and `attn delegate roles show`. If only one harness
+   is found, ask whether the user expects another to work too. If several are
+   found, offer concrete choices, such as planning on a deep model and building
+   on a cheaper one, or reviewing on a different harness than the one that
+   built. When the user chooses, run `attn delegate roles install -m "<reason>"`,
+   then `attn delegate roles set <role> --agent <harness> --model <id>` with
+   their reason. Take model ids from the harness model catalog; don't invent
+   them. Keep roles already set up. If install refuses, explain what it printed
+   and offer custom roles through `attn delegate roles add`.
+3. Explain the Notebook. Read its `index.md` and the notebook reference, then
+   show the user the layout:
 
    ```text
-   index.md             where agents orient and learn the user's layout
-   journal/<date>.md    the lasting record of the day
-   knowledge/           projects, areas, resources and archive by convention
-   seeds/<id>/          seed artifacts
+   index.md             your layout, which agents read first
+   journal/<date>.md    the record of each day
+   knowledge/           the knowledge base: projects, areas, resources, archive
+   seeds/<id>/          files attached to seeds
    crew/<name>/         crew charters and letters
-   .attn/               attn's machine state
+   .attn/               attn's own state
    ```
 
-   `journal/`, `seeds/`, `crew/` and `.attn/` are fixed.
-   The knowledge layout is the user's to reshape. Ask whether it suits them;
-   record any agreed layout in `index.md` so other agents follow it. The
-   Notebook folder was picked before this wake; do not ask for it again.
-4. Offer a tour with callouts. Read the callouts reference and
-   `attn callout anchors`, then choose visible anchors. Introduce the sidebar,
-   agent states, your slot (`agent:chief`), the garden and the command
-   palette. Use `attn callout show` with a sequence of short steps. The Chief
-   can show callouts while onboarding is pending even when Agent callouts is
-   off. Explain how to step through, and ask the user to return to your
-   terminal afterwards. The command's reply means the tour was accepted;
-   wait for the user to tell you they are ready before continuing.
+   attn owns `journal/`, `seeds/`, `crew/` and `.attn/`. The user can reshape
+   `knowledge/`: ask whether the layout suits them, and record what you agree in
+   `index.md` so other agents follow it. Don't ask where the Notebook should
+   live; the user picked it before you woke.
+4. Offer a tour of the app with callouts. You can show them now even if Agent
+   callouts is off. Read the callouts reference and `attn callout anchors`, then
+   point, in short steps, at the sidebar, agent states, your own row
+   (`agent:chief`), the Garden and the command palette. Tell the user how to
+   step through and to come back to your terminal after. `attn callout show`
+   returns before the user finishes, so wait for them to say they're done.
 5. Ask whether the user wants to build something together. If so, read
-   `attn help building-with-roles` and propose a small version of that flow.
-   Get their agreement on the task and any delegation before starting it.
-   Start in desktop flow. Once two or more agents are running, you may offer
-   queue flow: attn brings the next agent that needs them, but they hand over
-   which agent comes next, and it can be more tiring. Keep it opt-in.
-6. Close as described below.
+   `attn guide building-with-roles` and propose a small version of it. Agree on
+   the task and any delegation before you start. Keep desktop flow at first.
+   Once two or more agents are running, you can offer queue flow: attn brings
+   the user each agent that needs them, in turn. It removes the friction of
+   choosing, so they get more done in less time, and that pace can be more
+   tiring. Switch only if they want to.
+6. Close, as described below.
 
-Do not pitch crew members or offer to rename the Chief. Create crew only
-when asked, with a name the user picks. Auto mode, worktree preferences and
-planning the day are outside this agenda; answer questions when asked.
+Don't suggest crew members or renaming yourself. Create a crew member only when
+asked, with a name the user picks. Auto mode, worktree preferences and planning
+the day aren't part of onboarding. Answer questions about them if asked.
 
 ## Tour path
 
-This profile was in use before its Chief. Start with what changed: you are
-permanent, your home lives in the Notebook's `crew/<name>/`, and your charter
-is a file the user can edit there.
+The user already uses attn, but you're new. Introduce yourself: you're a
+permanent crew member, your home is `crew/<name>/` in the Notebook, and your
+charter is a file there they can edit.
 
-Read `attn crew list`, `attn delegate roles show`, and the relevant settings.
-Cover only missing setup. Offer to move legacy crew homes into the Notebook
-on demand; read the crew reference and `attn crew move-home --help` first.
-The move requires the member to be asleep. Do not move homes unasked.
+Read `attn crew list`, `attn delegate roles show` and the settings that matter.
+Use the full path's roles and Notebook steps only for what's missing, and skip
+what's set up, including queue flow if they already use it. If `attn crew list`
+shows older homes outside the Notebook, offer to move them, after reading the
+crew reference. Offer callouts for your row and other parts of the app they may
+not know. Don't offer to build something unless the user asks. Then close.
 
-Offer callouts for your slot and what is new. Use the full checklist's
-Notebook and roles steps only where needed. Skip what is already set,
-including a queue already in use. Do not offer to build something unless the
-user asks. Then close.
+## Progress and close
 
-## Interruptions and close
+Keep your progress in your letter, so a later session can resume. Before you
+repeat a change, check the current state.
 
-Keep checklist progress in your letter when sleeping, napping or handing
-over. There is no separate progress file. After `/clear`, `attn crew prime`
-refreshes priming, `attn onboarding` reports whether the first day is pending,
-and your letter records what was covered. Check live state through the verbs
-before repeating a change.
-
-When every agenda item is done or skipped, recap what changed and how to
-change it later. Skipped items remain available: the user can ask anytime.
-Explain that `attn onboarding again` runs the full path again, then run
-`attn onboarding done`. Check the reply before saying onboarding is finished.
+When every agenda item is done or skipped, recap what changed and how to change
+it later. Tell the user they can ask for a skipped item anytime, or rerun
+everything with `attn onboarding again`. Then run `attn onboarding done`, and
+check its reply before saying onboarding is finished.
