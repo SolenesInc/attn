@@ -95,6 +95,7 @@ func (d *Daemon) recoveredTerminal(terminal harness.TerminalID) outpostProbe {
 }
 
 func (d *Daemon) recoverOutpost(ctx context.Context, host string, conn *bridge.Conn) error {
+	pausepoint.At(pausepoint.OutpostRecoveryStarted)
 	started := time.Now()
 	var sessions []protocol.SessionID
 	previous := map[protocol.SessionID]struct{}{}

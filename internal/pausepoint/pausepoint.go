@@ -55,6 +55,7 @@ const (
 	CopyBatchApplied           = "copy-batch-applied"
 	NotebookStreamOpen         = "notebook-stream-open"
 	OutpostRecoveryReported    = "outpost-recovery-reported"
+	OutpostRecoveryStarted     = "outpost-recovery-started"
 	OutpostRecoveryApplied     = "outpost-recovery-applied"
 	ForwardSocketCreated       = "forward-socket-created"
 )

@@ -767,7 +767,9 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 				testworld.AwaitSession(app, current, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) && s.Usage != nil })
 				command = "/resume " + original
 			}
+			restarting := len(app.Log())
 			outpost.Stop()
+			outpostStateSince(app, "outpost", protocol.OutpostStateLost, restarting)
 			observed := outpost.PauseAt(pausepoint.ConversationSwitchObserved)
 			started := len(app.Log())
 			outpost.Start()
@@ -852,6 +854,71 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 			t.Logf("%s: offline conversation returns in terminal %s, host %s, tokens=%d, turn=%s", scenario, terminal, pair.Host, ready.Usage.TotalTokens, protocol.Deref(ready.TurnOpenedAt))
 		})
 	}
+}
+
+func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *testing.T) {
+	home := testworld.NewStack(t)
+	started := home.PauseEvery(pausepoint.OutpostRecoveryStarted)
+	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
+	decision := home.PauseEvery(pausepoint.ConversationSwitchDecision)
+	answer := home.PauseEvery(pausepoint.ConversationSwitchAnswer)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	started.Await()
+	started.Release()
+	applied.Await()
+	applied.Release()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	app := pair.App
+	first := home.Spawn(app, fakeagent.Claude, outpost.Path("resume-before-copy"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+	terminal := app.Terminal(first)
+	agent := outpost.LaunchedCarrying(terminal)
+	app.TypeLine(first, "original work")
+	agent.Prompted()
+	original := agent.ConversationID
+	reply := "Original ready. <!-- attn:state=waiting_input -->"
+	agent.Reply(reply)
+	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) && s.Usage != nil })
+	app.TypeLine(first, "/clear")
+	agent.Prompted()
+	decision.Await()
+	decision.Release()
+	answer.Await()
+	answer.Release()
+	second := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && protocol.Deref(e.Session.Succeeds) == protocol.SessionID(first)
+	}).Session
+	app.TypeLine(string(second.ID), "second work")
+	agent.Prompted()
+	agent.Reply("Second ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, string(second.ID), func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) && s.Usage != nil })
+	mark := len(app.Log())
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
+	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+	agent.Input("/resume " + original)
+	agent.Prompted()
+	agent.Input("offline resumed work")
+	agent.Prompted()
+	agent.Reply(reply)
+	mark = len(app.Log())
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
+	started.Await()
+	decision.Await()
+	decision.Release()
+	answer.Await()
+	testworld.AwaitSince(app, mark, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && string(e.Session.ID) == first })
+	started.Release()
+	applied.Await()
+	applied.Release()
+	answer.Release()
+	ready := testworld.AwaitSessionSince(app, mark, first, func(s protocol.Session) bool {
+		return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens == 4*len(reply)
+	})
+	if app.Terminal(first) != terminal || protocol.Deref(ready.Host) != pair.Host {
+		t.Fatalf("resumed placement: %+v", ready)
+	}
+	t.Logf("recovery kept resumed session %s in live terminal %s before its copy arrived; tokens=%d", first, terminal, ready.Usage.TotalTokens)
 }
 
 func TestADroppedOutpostSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) {
