@@ -128,7 +128,7 @@ func (d *Daemon) terminalDesktop(caller *protocol.Session, ref string) (profiles
 	return found, nil
 }
 
-func (d *Daemon) terminalAct(caller *protocol.Session, target *selectedTerminal, desktopRef string) error {
+func (d *Daemon) terminalAct(caller *protocol.Session, target *selectedTerminal, desktopRef, action string) error {
 	_, desktops, err := d.store.ProfileArrangement(caller.ProfileID)
 	if err != nil {
 		return err
@@ -151,8 +151,12 @@ func (d *Daemon) terminalAct(caller *protocol.Session, target *selectedTerminal,
 	if desktop.ID != placed {
 		return fmt.Errorf("desktop rule: terminal %s is on another desktop; pass --desktop %s to act there", target.terminal, placed)
 	}
+	return d.mayActOnTerminal(caller, target, action)
+}
+
+func (d *Daemon) mayActOnTerminal(caller *protocol.Session, target *selectedTerminal, action string) error {
 	if target.Agent != protocol.AgentShellValue {
-		return d.mayActOnSession(caller.ID, target.Session, "type into")
+		return d.mayActOnSession(caller.ID, target.Session, action)
 	}
 	return nil
 }
@@ -240,7 +244,23 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 			return
 		}
 	}
-	desktop, err := d.terminalDesktop(caller, protocol.Deref(msg.Desktop))
+	var desktop profiles.Desktop
+	if ref := protocol.Deref(msg.Desktop); ref != "" {
+		var profile profiles.Profile
+		profile, err = d.liveLaunchProfile(caller.ProfileID)
+		if err == nil {
+			desktop.ID, err = d.resolveDesktopTarget(profile, ref)
+		}
+		if err == nil {
+			if existing, loadErr := d.store.GetDesktop(desktop.ID); loadErr == nil {
+				desktop = existing
+			} else if !profiles.IsNotFound(loadErr) {
+				err = loadErr
+			}
+		}
+	} else {
+		desktop, err = d.terminalDesktop(caller, "")
+	}
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -336,7 +356,7 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 	}
 	target, err := d.terminalTarget(caller, msg.Target)
 	if err == nil {
-		err = d.terminalAct(caller, target, protocol.Deref(msg.Desktop))
+		err = d.terminalAct(caller, target, protocol.Deref(msg.Desktop), "type into")
 	}
 	if err != nil {
 		d.sendError(conn, err.Error())
@@ -462,7 +482,7 @@ func (d *Daemon) handleTerminalClose(conn net.Conn, msg *protocol.TerminalCloseM
 		d.sendError(conn, "close rule: terminal close only closes shells; use attn agent close for an agent")
 		return
 	}
-	if err := d.terminalAct(caller, target, protocol.Deref(msg.Desktop)); err != nil {
+	if err := d.terminalAct(caller, target, protocol.Deref(msg.Desktop), "close"); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}

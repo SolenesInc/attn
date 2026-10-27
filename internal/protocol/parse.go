@@ -293,7 +293,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdTerminalRead:                  decodeInto[TerminalReadMessage],
 	CmdTerminalWait:                  decodeInto[TerminalWaitMessage],
 	CmdTerminalClose:                 decodeInto[TerminalCloseMessage],
-	CmdDesktopMoveSession:            decodeInto[DesktopMoveSessionMessage],
+	CmdTerminalMove:                  decodeInto[TerminalMoveMessage],
 	CmdDesktopShowLeaf:               decodeInto[DesktopShowLeafMessage],
 	CmdDesktopMoveLeaf:               decodeInto[DesktopMoveLeafMessage],
 	CmdDesktopRemoveLeaf:             decodeInto[DesktopRemoveLeafMessage],

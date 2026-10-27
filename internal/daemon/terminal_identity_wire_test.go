@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,7 +135,7 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 					t.Fatal(protocol.Deref(result.Error))
 				}
 			case "move":
-				if _, err := s.Client().MoveSessionToDesktop("", successor.ID, desktop.ID); err != nil {
+				if _, err := s.Client().TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: successor.ID, Target: string(terminal), Desktop: desktop.ID}); err != nil {
 					t.Fatal(err)
 				}
 			case "place":

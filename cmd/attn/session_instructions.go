@@ -85,12 +85,6 @@ func runSession() {
 			return
 		}
 		runSessionSnooze(os.Args[3:], os.Args[2] == "snooze")
-	case "move":
-		if hasHelpFlag(os.Args[3:]) {
-			writeSessionHelp(os.Stdout)
-			return
-		}
-		runSessionMove(os.Args[3:])
 	default:
 		recordUsageError("session", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "session: unknown command %q\n", os.Args[2])
@@ -357,15 +351,6 @@ commands:
         a few plain words about the work, up to 48 characters. Defaults to the
         session running this command. Rename when the main work drifts from
         the name it started with.
-  move <desktop> [--session <id>] [--json]
-        move a session's pane to another desktop of its profile, beside that
-        desktop's active pane (its first pane when empty). <desktop> is the
-        shortcut digit (1-9), the name as shown (case-insensitive) or the id.
-        A missing numbered desktop is created on its shortcut slot.
-        Defaults to the session running this command; a session may also move
-        agents below it in its delegation chain, including delegates’
-        delegates, and the chief any session of its profile. What the user sees
-        stays put unless the moved pane was the one shown on its desktop.
   reopen <id> [--action <name>] [--json]
         bring a closed or stopped session back under its own id, on its last or
         current desktop in its profile. Without --action it performs the plain reopen and refuses,
