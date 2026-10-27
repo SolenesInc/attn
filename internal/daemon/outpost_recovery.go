@@ -17,7 +17,6 @@ import (
 const bridgeCallRecovery = "recover"
 
 type outpostLiveTerminal struct {
-	Terminal harness.TerminalID
 	Info     ptybackend.SessionInfo
 	HaveInfo bool
 }
@@ -27,34 +26,24 @@ type outpostProbe struct {
 }
 type outpostMachine struct {
 	NotebookRoot string
-	Live         map[protocol.SessionID]outpostLiveTerminal
-	Probes       map[protocol.SessionID]outpostProbe
-	Running      map[protocol.SessionID][]harness.TerminalID
+	Live         map[harness.TerminalID]outpostLiveTerminal
+	Probes       map[harness.TerminalID]outpostProbe
 }
 
 func (d *Daemon) outpostMachineReport() outpostMachine {
 	machine := d.recoverMachine(d.life.Context())
-	report := outpostMachine{Live: make(map[protocol.SessionID]outpostLiveTerminal), Probes: make(map[protocol.SessionID]outpostProbe)}
-	report.Running = make(map[protocol.SessionID][]harness.TerminalID)
+	report := outpostMachine{Live: make(map[harness.TerminalID]outpostLiveTerminal), Probes: make(map[harness.TerminalID]outpostProbe)}
 	for _, session := range d.store.List("") {
 		if d.copiedSession(session.ID) {
-			report.Running[session.ID] = d.runningSessionTerminals(session.ID)
+			for _, terminal := range d.terminalsOf(session.ID) {
+				report.Probes[terminal] = d.recoveredTerminal(terminal)
+			}
 		}
 	}
 	for id, live := range machine.live {
 		if d.copiedSession(id) {
-			report.Live[id] = outpostLiveTerminal{Terminal: live.terminal, Info: live.info, HaveInfo: live.haveInfo}
+			report.Live[live.terminal] = outpostLiveTerminal{Info: live.info, HaveInfo: live.haveInfo}
 		}
-	}
-	for id, probe := range machine.probes {
-		if !d.copiedSession(id) {
-			continue
-		}
-		result := outpostProbe{Alive: probe.likelyAlive}
-		if probe.err != nil {
-			result.Error = probe.err.Error()
-		}
-		report.Probes[id] = result
 	}
 	report.NotebookRoot, _ = d.notebookRoot()
 	d.monitors().notifyViewsChanged()
@@ -122,23 +111,33 @@ func (d *Daemon) recoverOutpost(ctx context.Context, host string, conn *bridge.C
 	d.outposts.mu.Unlock()
 	machine := machineReport{live: make(map[protocol.SessionID]liveTerminal), probes: make(map[protocol.SessionID]livenessProbe)}
 	for _, id := range sessions {
-		if live, ok := report.Live[id]; ok {
-			machine.live[id] = liveTerminal{terminal: live.Terminal, info: live.Info, haveInfo: live.HaveInfo}
-		}
-		if probe, ok := report.Probes[id]; ok {
-			result := livenessProbe{likelyAlive: probe.Alive}
-			if probe.Error != "" {
-				result.err = fmt.Errorf("%s", probe.Error)
+		for _, terminal := range placements[id] {
+			if live, ok := report.Live[terminal]; ok {
+				machine.live[id] = liveTerminal{terminal: terminal, info: live.Info, haveInfo: live.HaveInfo}
 			}
-			machine.probes[id] = result
+			if probe, ok := report.Probes[terminal]; ok {
+				result := machine.probes[id]
+				result.likelyAlive = result.likelyAlive || probe.Alive
+				if probe.Error != "" {
+					result.err = fmt.Errorf("%s", probe.Error)
+				}
+				machine.probes[id] = result
+			}
 		}
 	}
 	d.recoverRecords(machine, sessions, recoveryRules{host: host, allowIdleDemotion: true, allowTombstoneCleanup: true, previousRunSessions: previous, placements: placements, startedAt: started})
+	running := make([]harness.TerminalID, 0, len(report.Live)+len(report.Probes))
+	for terminal := range report.Live {
+		running = append(running, terminal)
+	}
+	for terminal, probe := range report.Probes {
+		if _, live := report.Live[terminal]; !live && (probe.Alive || probe.Error != "") {
+			running = append(running, terminal)
+		}
+	}
 	for _, session := range sessions {
-		if running, known := report.Running[session]; known {
-			if err := d.reconcileRemoteTerminals(ctx, session, running); err != nil {
-				return err
-			}
+		if err := d.reconcileRemoteTerminals(ctx, session, running); err != nil {
+			return err
 		}
 	}
 	pausepoint.At(pausepoint.OutpostRecoveryApplied)
