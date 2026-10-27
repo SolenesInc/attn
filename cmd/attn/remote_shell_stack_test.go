@@ -135,7 +135,7 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 
 func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	a := testworld.NewSSHAgent(t)
-	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	for _, s := range []*testworld.Stack{remote, home} {
 		a.Authorize(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
@@ -146,6 +146,8 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	app := enableOutposts(t, home)
 	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
 	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
+	caller := home.Spawn(app, fakeagent.Claude, home.Path("caller"))
+	home.Launched(caller)
 	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(host) })
 	terminal := protocol.TerminalID(app.Terminal(id))
 	reattach := func() {
@@ -155,7 +157,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 		}
 	}
 	echo := func(command, output string) {
-		result := home.Attn("terminal", "run", string(terminal), command, "--wait")
+		result := home.Run(testworld.Invocation{Session: caller, Args: []string{"terminal", "run", string(terminal), command, "--wait"}})
 		if result.Code != 0 || !strings.Contains(result.Stdout, output) {
 			t.Fatalf("remote echo: %+v", result)
 		}
