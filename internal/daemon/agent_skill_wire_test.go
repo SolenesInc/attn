@@ -15,9 +15,8 @@ import (
 )
 
 var attnSkillRoots = map[fakeagent.Harness]string{
-	fakeagent.Claude:  ".claude",
-	fakeagent.Codex:   ".agents",
-	fakeagent.Copilot: ".copilot",
+	fakeagent.Claude: ".claude",
+	fakeagent.Codex:  ".agents",
 }
 
 func installedAttnSkill(toolHome string, h fakeagent.Harness) string {
@@ -80,7 +79,7 @@ func shipsUnder(files map[string]bool, dir string) bool {
 
 func TestEveryHarnessAttnRunsFindsTheShippedAttnSkillAndNothingRetired(t *testing.T) {
 	t.Setenv("ATTN_INSTANCE", "")
-	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	toolHome := os.Getenv("ATTN_TOOL_HOME")
 	app := w.App()
 	for h := range attnSkillRoots {
@@ -91,7 +90,6 @@ func TestEveryHarnessAttnRunsFindsTheShippedAttnSkillAndNothingRetired(t *testin
 		w.Launched(w.Spawn(app, h, w.Path(string(h))))
 		assertShippedAttnSkill(t, h, installedAttnSkill(toolHome, h))
 	}
-	assertShippedAttnSkill(t, fakeagent.Copilot, installedAttnSkill(toolHome, fakeagent.Copilot))
 }
 
 func TestAgentsStillLaunchWhenTheirOptionalAttnSkillCannotBeUpdated(t *testing.T) {
@@ -99,8 +97,8 @@ func TestAgentsStillLaunchWhenTheirOptionalAttnSkillCannotBeUpdated(t *testing.T
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
 
 			t.Setenv("ATTN_INSTANCE", "")
-			w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)}
-			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+			w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex)}
+			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 				skill := installedAttnSkill(os.Getenv("ATTN_TOOL_HOME"), h)
 				if err := os.RemoveAll(skill); err != nil {
 					t.Fatal(err)
@@ -117,7 +115,7 @@ func TestAgentsStillLaunchWhenTheirOptionalAttnSkillCannotBeUpdated(t *testing.T
 			if direct {
 				setSetting(t, app, "direct_agent_launch_enabled", "true")
 			}
-			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 				session := w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
 					m.InitialPrompt = protocol.Ptr("continue despite optional skill sync failure")
 				})
@@ -152,7 +150,7 @@ func TestAVerificationInstanceLeavesTheUsersSkillsAloneUnlessItsHarnessOwnsTheTo
 			added := addAttnDelegationRoles(app, roles)
 
 			var skills []string
-			for _, root := range []string{".claude", ".agents", ".copilot"} {
+			for _, root := range []string{".claude", ".agents"} {
 				if entries, err := os.ReadDir(filepath.Join(toolHome, root, "skills")); err == nil {
 					for _, entry := range entries {
 						skills = append(skills, filepath.Join(root, "skills", entry.Name()))

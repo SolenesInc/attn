@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -49,7 +50,7 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 		if err := os.Rename(saved, home); err != nil {
 			t.Fatal(err)
 		}
-		w.advance(bus.DefaultPollInterval)
+		w.advance(inbox.AttemptDelay)
 		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
 		if dayID == "" {
 			t.Fatal("Garden event was lost during the roster failure")

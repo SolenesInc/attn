@@ -100,6 +100,15 @@ func (r *Run) Exit(code int) {
 	}
 }
 
+func (r *Run) AwaitGone() {
+	r.t.Helper()
+	select {
+	case <-r.fake.peer.done:
+	case <-time.After(HangGuard):
+		r.t.Fatalf("%s for session %s (pid %d) still running after %s", r.Harness, r.SessionID, r.fake.Pid, HangGuard)
+	}
+}
+
 func (r *Run) CrashAppServer() {
 	r.t.Helper()
 	r.call(methodCrashSrv, struct{}{}, nil)

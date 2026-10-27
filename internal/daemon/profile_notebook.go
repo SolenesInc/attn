@@ -40,7 +40,7 @@ func (d *Daemon) notebookRootTaken(raw string) (bool, error) {
 		return false, err
 	}
 	for _, p := range profiles {
-		other, err := normalizeNotebookRoot(d.profileSetting(p.ID, settingNotebookRoot))
+		other, err := normalizeNotebookRoot(d.profileSetting(p.ID, SettingNotebookRoot))
 		if err == nil && root == other {
 			return true, nil
 		}
@@ -48,14 +48,67 @@ func (d *Daemon) notebookRootTaken(raw string) (bool, error) {
 	return false, nil
 }
 
+func (d *Daemon) validatePairedNotebookRoots(profileID, name, root string) error {
+	if !d.enrollmentStatus().IsHome() {
+		return nil
+	}
+	rows, err := d.store.ListOutposts()
+	if err != nil || len(rows) == 0 {
+		return err
+	}
+	return d.validateNotebookSyncRoots(profileID, name, root)
+}
+
+func (d *Daemon) validateNotebookSyncRoots(profileID, name, proposed string) error {
+	profiles, err := d.store.ListProfiles(false)
+	if err != nil {
+		return err
+	}
+	type notebookRoot struct{ name, path string }
+	roots := []notebookRoot{}
+	if profileID == "" && name != "" {
+		root, err := normalizeNotebookRoot(proposed)
+		if err != nil {
+			return err
+		}
+		root, err = config.CanonicalRuntimePath(root)
+		if err != nil {
+			return err
+		}
+		roots = append(roots, notebookRoot{name, root})
+	}
+	for _, profile := range profiles {
+		root, err := d.notebookRoot(profile.ID)
+		if profile.ID == profileID {
+			root, err = normalizeNotebookRoot(proposed)
+		}
+		if err != nil {
+			return err
+		}
+		root, err = config.CanonicalRuntimePath(root)
+		if err != nil {
+			return err
+		}
+		roots = append(roots, notebookRoot{profile.Name, root})
+	}
+	for i, root := range roots {
+		for _, other := range roots[i+1:] {
+			if root.path != other.path && (pathWithin(root.path, other.path) || pathWithin(other.path, root.path)) {
+				return fmt.Errorf("notebook sync cannot pair profile %q (%s) with profile %q (%s): their Notebook roots are nested; use separate or identical roots", root.name, root.path, other.name, other.path)
+			}
+		}
+	}
+	return nil
+}
+
 func (d *Daemon) pruneNotebookRoots() {
-	live, err := d.store.ListProfiles(false)
+	live, err := d.notebookProfiles()
 	if err != nil {
 		return
 	}
 	roots := make(map[string]bool)
-	for _, p := range live {
-		root, err := d.notebookRoot(p.ID)
+	for id := range live {
+		root, err := d.notebookRoot(id)
 		if err == nil {
 			roots[root] = true
 		}
@@ -83,13 +136,17 @@ func (d *Daemon) pruneNotebookRoots() {
 }
 
 func (d *Daemon) seedNotebookRoot(seedID string) (string, error) {
-	seed, _, err := d.readSeed(seedID)
-	if err != nil {
-		return "", err
-	}
-	profileID, err := d.seedBirthProfile(seed)
+	profileID, err := d.seedBirthProfileID(seedID)
 	if err != nil {
 		return "", err
 	}
 	return d.notebookRoot(profileID)
+}
+
+func (d *Daemon) seedBirthProfileID(seedID string) (string, error) {
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return "", err
+	}
+	return d.seedBirthProfile(seed)
 }

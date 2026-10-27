@@ -4,10 +4,11 @@ func feedbackEvents() []Event {
 	return []Event{
 		On("quick-capture-file", "cli_output", "Retrieve one Quick Capture attachment.", template("session.quick-capture-file", "content/session/quick-capture-file.md", TextField("name", "Quoted file name"), TextField("media_type", "Media type"), TextField("bytes", "Byte count"), TextField("capture_id", "Capture ID"), TextField("attachment_id", "Attachment ID"))),
 		On("quick-capture-file-saved", "cli_output", "Inspect a downloaded Quick Capture attachment.", template("session.quick-capture-file-saved", "content/session/quick-capture-file-saved.md", TextField("path", "Saved file path"))),
-		On("quick-capture", "cli_output", "User-authored Quick Capture inbox content.", template("session.quick-capture", "content/session/quick-capture-item.md", TextField("message", "User message"), TextField("files", "File retrieval instructions"))),
+		On("quick-capture", "user_message", "A Quick Capture the user sent: typed into the conversation by its ring, or printed by attn agent inbox when read first.", template("session.quick-capture", "content/session/quick-capture-item.md", TextField("message", "User message"), TextField("files", "File retrieval instructions"))),
 		On("inbox-notification", "user_message", "Generic notification directing the recipient to the durable inbox.", Use("session.inbox-notification", "content/session/inbox-notification.md")),
 		On("inbox-empty", "cli_output", "No unread items remain.", Use("session.inbox-empty", "content/session/inbox-empty.md")),
 		On("inbox-more", "cli_output", "Read the next batch of unread items.", template("session.inbox-more", "content/session/inbox-more.md", TextField("remaining", "Unread items remaining."))),
+		On("inbox-quiet", "cli_output", "After the items, when a notification started the reader's run and quiet notifications keep its stop out of the queue.", Use("session.inbox-quiet", "content/session/inbox-quiet.md")),
 		On("inbox-item", "cli_output", "An inbox item other than a peer message or maintenance prompt.", template("session.inbox-item", "content/session/inbox-item.md", TextField("content", "Rendered inbox item."))),
 		On("peer-message", "cli_output", "Attributed peer message, including the trust boundary and reply command.",
 			template("session.peer-message", "content/session/peer-message.md", TextField("origin", "Sender identity."), TextField("message", "Literal peer message."), TextField("reply_to", "Reply target: member name or full session reference."))),

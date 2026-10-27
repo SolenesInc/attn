@@ -1,0 +1,4 @@
+kind: changed
+area: pull requests
+change: The daemon announces a dashboard pull request as updated only when GitHub reports a change, instead of on every 90-second poll.
+notes: The PR protocol model drops last_polled and last_updated, which nothing read. Fetching details while opening a pull request refetches only that pull request and reports a GitHub failure instead of returning stale details. Pull requests an agent opened go back to the hot refresh pace only when the dashboard sees them change.

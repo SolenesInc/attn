@@ -1,11 +1,11 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSection, savedSettings } from './test/settings';
-import { harnesses, serveHarnessCatalogs } from './test/harnessCatalogs';
+import { serveHarnessCatalogs } from './test/harnessCatalogs';
 import { gesture } from './test/renderApp';
 import { openRoute, previewHarness, pickModel, pickEffort, enterModel, routeDialog } from './test/harnessRoute';
 
-const initial = { codex_cap_headless_task: 'true', claude_cap_headless_task: 'true', copilot_cap_headless_task: 'true' };
+const initial = { codex_cap_headless_task: 'true', claude_cap_headless_task: 'true' };
 const openAdvisor = (settings: Record<string,string> = {}) => openSection('backgroundAgents', { settings: { ...initial, ...settings } });
 const advisor = () => within(screen.getByRole('heading', { name: 'Garden advisor' }).closest('section')!);
 
@@ -80,15 +80,5 @@ describe('App Garden advisor settings', () => {
     expect(field).toHaveTextContent('light');
     expect(field).toHaveTextContent('max');
     expect(savedSettings(daemon).slice(-1)[0]).toEqual(['garden.advisor', '{"agent":"codex","model":"gpt-6-luna","effort":"max"}']);
-  });
-  it('keeps Copilot as free text with no discovered model or effort list', async () => {
-    const daemon = await openSection('backgroundAgents', { settings: { ...initial, 'garden.advisor': '{"agent":"copilot","model":"custom-copilot","effort":"future-effort"}' } }, daemon => serveHarnessCatalogs(daemon, harnesses.map(harness => harness.id === 'copilot' ? { ...harness, model_pin: false, effort_pin: false } : harness)));
-    await openRoute(daemon, 'Garden advisor model');
-    expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('future-effort');
-    await enterModel(daemon, 'another-model');
-    const effort = routeDialog().getByRole('textbox', { name: 'Effort' });
-    fireEvent.change(effort, { target: { value: 'new-effort' } });
-    await gesture(daemon, () => fireEvent.blur(effort));
-    expect(savedSettings(daemon).slice(-1)[0]).toEqual(['garden.advisor', '{"agent":"copilot","model":"another-model","effort":"new-effort"}']);
   });
 });

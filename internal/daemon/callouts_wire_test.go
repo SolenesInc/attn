@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/config"
@@ -109,9 +110,21 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	if result == nil || !result.AppShowingProfile || protocol.Deref(result.Anchors[0].OnScreen) || !protocol.Deref(result.Anchors[1].OnScreen) || result.Anchors[8].OnScreen != nil {
 		t.Fatalf("anchor visibility = %+v, want fixed visibility and dynamic anchors without it", result)
 	}
-	target.Close()
-	_, err := cli.CalloutShow(session.ID, []protocol.CalloutShowStep{{Anchor: "home", Text: "Home"}})
-	calloutRefused(t, err, "the attn app is not showing your profile")
+}
+
+func TestCalloutsStopReachingAnAppOnceItCloses(t *testing.T) {
+	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		injectAgent(t, w, "callout-source")
+		setSetting(t, app, "callouts_enabled", "true")
+		target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
+		selectProfile(target, app.SelectedProfile())
+		target.Close()
+		synctest.Wait()
+		_, err := cli.CalloutShow("callout-source", []protocol.CalloutShowStep{{Anchor: "home", Text: "Home"}})
+		calloutRefused(t, err, "the attn app is not showing your profile")
+	})
 }
 
 func TestCalloutsRefuseRepliesAfterTheAppSwitchesProfiles(t *testing.T) {

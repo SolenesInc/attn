@@ -45,6 +45,14 @@ func Link(seeds []Seed, fromID, kind, toID string) (Seed, bool, error) {
 				from.ID, parent, from.ID, parent, to.ID)
 		}
 	}
+	if kind == EdgePartOf {
+		tree := NewPlotTree(seeds)
+		if checkID, owner, repeated := tree.UsedCheckID(to.ID, tree.checksUnder(from.ID)); repeated {
+			return Seed{}, false, fmt.Errorf(
+				"%s and %s would both be in one plot tree with check %s, which %s already uses; one id names one statement in a plot tree, so they cannot share a plot",
+				from.ID, to.ID, checkID, owner)
+		}
+	}
 	if kind == EdgeBlocks || kind == EdgePartOf {
 		if path := reaches(seeds, to.ID, kind, from.ID); len(path) > 0 {
 			return Seed{}, false, cycleRefusal(from.ID, kind, to.ID, path)
@@ -200,29 +208,6 @@ func Blockers(seeds []Seed, id string) []string {
 			if edge.Kind == EdgeBlocks && edge.To == id {
 				out = append(out, seed.ID)
 			}
-		}
-	}
-	return out
-}
-
-func InPlot(seeds []Seed, crownID string) []Seed {
-	inside := map[string]bool{crownID: true}
-	for grew := true; grew; {
-		grew = false
-		for _, seed := range seeds {
-			if inside[seed.ID] {
-				continue
-			}
-			if parent, ok := parentOf(seed); ok && inside[parent] {
-				inside[seed.ID] = true
-				grew = true
-			}
-		}
-	}
-	out := make([]Seed, 0, len(inside))
-	for _, seed := range seeds {
-		if inside[seed.ID] {
-			out = append(out, seed)
 		}
 	}
 	return out

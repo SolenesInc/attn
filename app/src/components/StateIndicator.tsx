@@ -9,6 +9,7 @@ type StateIndicatorKind = 'session' | 'pr';
 
 interface StateIndicatorProps {
   state: StateIndicatorState;
+  offline?: boolean;
   size?: StateIndicatorSize;
   kind?: StateIndicatorKind;
   seed?: string;
@@ -19,6 +20,7 @@ interface StateIndicatorProps {
 
 export function StateIndicator({
   state,
+  offline = false,
   size = 'md',
   kind = 'session',
   seed,
@@ -26,17 +28,17 @@ export function StateIndicator({
   reason,
 }: StateIndicatorProps) {
   const stateClass = state.replace('_', '-');
-  const launchingEmoji = state === 'launching' ? pickSessionEmoji(seed ?? '') : null;
+  const launchingEmoji = !offline && state === 'launching' ? pickSessionEmoji(seed ?? '') : null;
   // Only `unknown` gets a tooltip; every other state says what it means by name.
   const explanation = state === 'unknown' ? describeUnknownReason(reason) : undefined;
 
   return (
     <span
-      className={`state-indicator state-indicator--${size} state-indicator--${stateClass} state-indicator--${kind} ${className}`.trim()}
+      className={`state-indicator state-indicator--${size} state-indicator--${stateClass} state-indicator--${kind} ${offline ? 'state-indicator--offline' : ''} ${className}`.trim()}
       data-testid="state-indicator"
       title={explanation}
       aria-label={
-        state === 'unknown'
+        offline ? 'offline' : state === 'unknown'
           ? (explanation ?? 'state unknown')
           : state === 'scheduled'
             ? 'scheduled'

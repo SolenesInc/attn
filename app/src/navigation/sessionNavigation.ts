@@ -346,6 +346,7 @@ export function sessionAttentionFields(session: DaemonSessionSnapshot | undefine
     turnOwed: session?.turn_owed ?? false,
     turnOpenedAt: session?.turn_opened_at,
     turnSnoozedUntil: session?.turn_snoozed_until,
+    turnByAgent: session?.turn_by_agent ?? false,
     stateSince: session?.state_since,
     crewMember: session?.crew_member,
     parentSessionId: session?.parent_session_id,
@@ -373,24 +374,39 @@ export function navigationQueue(
   });
 }
 
-export function advanceQueue(
+export type NavigationQueueAdvance =
+  | { reason: 'follow' | 'turn_closed'; to: 'session'; session: QueueBandSession }
+  | { reason: 'turn_closed'; to: 'dashboard' };
+
+export function queueAdvance(
   state: SessionNavigationState,
   arrangement: Arrangement,
   previous: QueueBands<QueueBandSession> | null,
   next: QueueBands<QueueBandSession> | null,
-  focusOwner: Element | null,
-): SessionNavigationState {
-  if (!next || state.intent) return state;
+): NavigationQueueAdvance | null {
+  if (!next || state.intent) return null;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
-    return target ? selectAgent(state, arrangement.profileId, target.session.id, focusOwner) : state;
+    return target ? { reason: 'follow', to: 'session', session: target.session } : null;
   }
-  if (state.view !== 'session') return state;
+  if (state.view !== 'session') return null;
   const leaf = activeLeafOf(arrangement);
-  if (leaf?.kind !== 'agent') return state;
+  if (leaf?.kind !== 'agent') return null;
   const advance = advanceAfterTurnClosed(previous?.turns ?? [], next, leaf.sessionId);
+  if (!advance) return null;
+  return advance.to === 'session'
+    ? { reason: 'turn_closed', to: 'session', session: advance.row.session }
+    : { reason: 'turn_closed', to: 'dashboard' };
+}
+
+export function applyQueueAdvance(
+  state: SessionNavigationState,
+  arrangement: Arrangement,
+  advance: NavigationQueueAdvance | null,
+  focusOwner: Element | null,
+): SessionNavigationState {
   if (!advance) return state;
   return advance.to === 'session'
-    ? selectAgent(state, arrangement.profileId, advance.row.session.id, focusOwner)
+    ? selectAgent(state, arrangement.profileId, advance.session.id, focusOwner)
     : enterHome(state, true);
 }

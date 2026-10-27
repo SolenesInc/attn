@@ -1,0 +1,3 @@
+kind: internal
+area: analytics
+change: CLI analytics records carry the caller's hashed session so command usage can be grouped by how the session was launched.

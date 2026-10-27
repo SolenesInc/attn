@@ -1,0 +1,38 @@
+package store
+
+import (
+	"database/sql"
+	"errors"
+	"github.com/victorarias/attn/internal/config"
+	"strings"
+)
+
+func init() {
+	registerMigration(migration{
+		version: 1793111475583214,
+		desc:    "profile notebook roots",
+		apply:   applyMigration1793111475583214,
+	})
+}
+
+func applyMigration1793111475583214(tx *sql.Tx) error {
+	var root string
+	err := tx.QueryRow(`SELECT value FROM settings WHERE key = 'notebook.root' AND copied_from = ''`).Scan(&root)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if strings.TrimSpace(root) == "" {
+		root = config.HarnessNotebookRoot()
+		if root == "" {
+			root = "~/attn-notebook"
+			instance := strings.ToLower(strings.TrimSpace(config.Instance()))
+			if instance != "" && instance != "default" {
+				root += "-" + instance
+			}
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO profile_settings (profile_id, key, value) SELECT id, 'notebook.root', ? FROM profiles`, root); err != nil {
+		return err
+	}
+	return nil
+}

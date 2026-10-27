@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -207,7 +208,7 @@ func TestSessionCloseAndReopenRefreshItsGardenClaim(t *testing.T) {
 	seed := plantSeedAs(t, cli, id, "Refresh the claim with its session")
 	lifeMove(t, cli, id, seed, "tend", "", "")
 	awaitClaim := func(claimed bool) {
-		testworld.Await(app, protocol.EventGardenSeedsUpdated, func(m protocol.GardenSeedsUpdatedMessage) bool {
+		testworld.Await(app, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
 			for _, s := range m.Seeds {
 				if s.ID == seed && s.Claimed == claimed && s.Ready != claimed && s.Tender != nil {
 					return (protocol.Deref(s.Tender.SessionID) == protocol.SessionID(id)) == claimed
@@ -229,42 +230,46 @@ func TestSessionCloseAndReopenRefreshItsGardenClaim(t *testing.T) {
 }
 
 func TestAnExitedTenderKeepsSeedBellsUntilItsAgentResumes(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	id := w.Spawn(app, fakeagent.Claude, w.Path("worker"))
-	run := w.Launched(id)
-	takeTurn(app, run, id)
-	registerSessions(t, w, cli, "sender")
-	tended := plantSeedAs(t, cli, id, "Keep the tender informed")
-	lifeMove(t, cli, id, tended, "tend", "", "")
-	watched := plantSeedAs(t, cli, "sender", "Keep the watcher informed")
-	gardenNudgeWatch(t, cli, id, watched, false)
-	idle := queriedSession(t, cli, id)
-	app.TypeLine(id, "work before the update")
-	run.Prompted()
-	testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	gardenNudgeNote(t, cli, "sender", tended, "Before the agent exits.", true)
-	run.Exit(143)
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == id })
-	if shown := lifeShow(t, cli, tended).Seed; shown.Claimed || !shown.Ready {
-		t.Fatalf("exited tender still holds the claim: %+v", shown)
-	}
-	if peek, err := cli.AgentPeek(tended); err != nil || string(peek.SessionID) != id || peek.Exit == nil {
-		t.Fatalf("seed target lost its exited tender: %+v %v", peek, err)
-	}
-	gardenNudgeNote(t, cli, "sender", watched, "After the agent exits.", true)
-	resumed := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 100, Rows: 30},
-		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == id })
-	if !resumed.Success {
-		t.Fatal(protocol.Deref(resumed.Error))
-	}
-	resumedRun := w.Launched(id)
-	takeTurn(app, resumedRun, id)
-	if got := resumedRun.Prompted(); !strings.Contains(got, inboxDoorbell) {
-		t.Fatalf("resumed agent received %q, want the inbox doorbell", got)
-	}
-	items := readInbox(t, cli, id, 0).Items
-	if len(items) != 2 || !strings.Contains(inboxContents(items), tended+" moved: note.added") || !strings.Contains(inboxContents(items), watched+" moved: note.added") {
-		t.Fatalf("resumed inbox lost the tender or watcher bell: %+v", items)
-	}
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		run := w.bubbleClaude(t, app, "worker")
+		id := run.id
+		run.reply("Ready. <!-- attn:state=idle -->")
+		registerSessions(t, w, cli, "sender")
+		tended := plantSeedAs(t, cli, id, "Keep the tender informed")
+		lifeMove(t, cli, id, tended, "tend", "", "")
+		watched := plantSeedAs(t, cli, "sender", "Keep the watcher informed")
+		gardenNudgeWatch(t, cli, id, watched, false)
+		app.TypeLine(id, "work before the update")
+		w.advance(0)
+		if session := queriedSession(t, cli, id); session.State != protocol.SessionStateWorking {
+			t.Fatalf("before exit: %+v", session)
+		}
+		gardenNudgeNote(t, cli, "sender", tended, "Before the agent exits.", true)
+		run.term.Exit(143)
+		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == id })
+		if shown := lifeShow(t, cli, tended).Seed; shown.Claimed || !shown.Ready {
+			t.Fatalf("exited tender still holds the claim: %+v", shown)
+		}
+		if peek, err := cli.AgentPeek(tended); err != nil || string(peek.SessionID) != id || peek.Exit == nil {
+			t.Fatalf("seed target lost its exited tender: %+v %v", peek, err)
+		}
+		gardenNudgeNote(t, cli, "sender", watched, "After the agent exits.", true)
+		resumed := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 100, Rows: 30},
+			protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == id })
+		if !resumed.Success {
+			t.Fatal(protocol.Deref(resumed.Error))
+		}
+		resumedRun := w.bootBubbleClaude(t, id)
+		app.TypeLine(id, "pick up where we left off")
+		resumedRun.reply("Ready again. <!-- attn:state=idle -->")
+		w.advance(30 * time.Second)
+		if got := resumedRun.prompts(); resumedRun.promptsContaining(inboxDoorbell) != 1 {
+			t.Fatalf("resumed agent received %q, want the inbox doorbell", got)
+		}
+		items := readInbox(t, cli, id, 0).Items
+		if len(items) != 2 || !strings.Contains(inboxContents(items), tended+" moved: note.added") || !strings.Contains(inboxContents(items), watched+" moved: note.added") {
+			t.Fatalf("resumed inbox lost the tender or watcher bell: %+v", items)
+		}
+	}, fakeagent.Claude)
 }

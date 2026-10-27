@@ -1,3 +1,0 @@
-kind: fixed
-area: desktops
-change: "Every empty ⌘ slot from 1 to 9 can become a desktop: `attn session move 5` creates desktop 5 like ⌘⌥5 and `attn delegate --desktop 5` do, and says it is new; crew and automation launch desktops accept empty slots 1–4 as well as 5–9."

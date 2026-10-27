@@ -6,6 +6,7 @@ import { StateIndicator } from '../StateIndicator';
 import { DesktopAgentBody } from './DesktopAgentBody';
 import { DesktopAgentHeader } from './DesktopAgentHeader';
 import { useDesktopContext } from './DesktopContext';
+import { useTerminalRefusals } from '../../store/terminalRefusals';
 
 export function DesktopAgentPane({
   agentPane,
@@ -26,6 +27,7 @@ export function DesktopAgentPane({
     focusLeaf,
     effectiveDraggingLeafId,
   } = useDesktopContext();
+  const refusal = useTerminalRefusals((state) => state.byTerminal.get(agentPane.runtimeId));
 
   const paneSession = sessionById.get(agentPane.sessionId);
   const paneTitle = paneSession ? sessionDisplayName(paneSession) : agentPane.title || 'Session';
@@ -35,13 +37,14 @@ export function DesktopAgentPane({
         leafId={agentPane.id}
         title={paneTitle}
         kind="agent"
+        offline={paneSession?.offline}
         sessionId={agentPane.sessionId}
         bounds={bounds}
         path={path}
         frameStyle={frameStyle}
       >
         {paneSession?.state ? (
-          <StateIndicator state={paneSession.state} size="sm" seed={agentPane.sessionId} />
+          <StateIndicator state={paneSession.state} offline={paneSession.offline} size="sm" seed={agentPane.sessionId} />
         ) : (
           <span className="desktop-suspended-state" />
         )}
@@ -57,12 +60,14 @@ export function DesktopAgentPane({
       onMouseDown={() => focusLeaf(agentPane.id)}
       data-pane-session-id={agentPane.sessionId}
       data-pane-id={agentPane.id}
+      data-offline={paneSession?.offline || undefined}
       data-pane-kind="agent"
       data-pane-path={path}
       style={frameStyle}
     >
       <DesktopAgentHeader agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} />
-      <DesktopAgentBody agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} />
+      <DesktopAgentBody agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} keysNotSent={refusal?.keysNotSent ?? 0} />
+      {refusal?.flashing ? <div key={refusal.flash} className="desktop-pane-refusal" aria-hidden="true" onAnimationEnd={() => useTerminalRefusals.getState().flashEnded(agentPane.runtimeId)} /> : null}
     </div>
   );
 }

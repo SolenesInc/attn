@@ -4,7 +4,7 @@ Attn delegation starts a separate agent session the user can inspect and steer. 
 
 The seed records the work: its outcome, plan, constraints, and verification. Delegation assigns an agent to that work, selecting its role, model, effort, and checkout at launch. The agent reads the seed and keeps its plan and progress current. A later handover can assign a different agent to the same seed, with a note explaining the next step and its authorization. The agent does not receive your conversation automatically.
 
-Use `attn delegate --help` for the installed command syntax. Read the complete brief before dispatching: state the outcome, starting context, constraints, authorization and verification. Name parent sections, sibling results and artifacts the agent needs and why. Use `attn seed guide` for seed authoring.
+Use `attn delegate --help` for the installed command syntax. Write the brief as `attn seed guide` describes under WRITING A BODY, and read it back as that guide says before dispatching.
 
 ## Choose the assignment
 
@@ -23,6 +23,8 @@ attn seed show s-example
 attn delegate --seed s-example --role builder \
   --cwd /repo --reuse-checkout --branch feature-x
 ```
+
+A brief cannot carry checks. When new work has checks, plant its seed first, with the brief as the body and each check as `--check "C1=<statement>"` (add `--part-of <stake>` when you have a stake), then dispatch that seed. Add checks to an existing seed with `attn seed check add` before dispatching it.
 
 An existing seed may be a leaf or a plot. Its relationships remain intact. Closed work must be deliberately replanted before dispatch. Garden unavailable means delegation fails; there is no seedless fallback.
 

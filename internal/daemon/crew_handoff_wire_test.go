@@ -18,7 +18,7 @@ import (
 
 func crewHandoff(t *testing.T, cli *client.Client, session, letter string, retry bool, close protocol.CrewDayClose) *protocol.CrewHandoffResult {
 	t.Helper()
-	result, err := cli.CrewHandoff(protocol.SessionID(session), letter, retry, close)
+	result, err := cli.CrewHandoff(protocol.SessionID(session), letter, retry, close, "")
 	if err != nil {
 		t.Fatalf("handoff from %s: %v", session, err)
 	}
@@ -219,16 +219,16 @@ func TestHandoffRefusalsLeaveTheDayRunning(t *testing.T) {
 	if err := w.InjectSession("errand", "errand", w.Path("errand"), protocol.SessionAgentClaude); err != nil {
 		t.Fatal(err)
 	}
-	_, err := cli.CrewHandoff("errand", "I did some work today.", false, "")
+	_, err := cli.CrewHandoff("errand", "I did some work today.", false, "", "")
 	crewErrorContains(t, err, "attn seed note")
 
 	day := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
-	_, err = cli.CrewHandoff(day.SessionID, "", true, "")
+	_, err = cli.CrewHandoff(day.SessionID, "", true, "", "")
 	crewErrorContains(t, err, "attn handoff -m")
-	_, err = cli.CrewHandoff(day.SessionID, "  \n\t ", false, "")
+	_, err = cli.CrewHandoff(day.SessionID, "  \n\t ", false, "", "")
 	crewErrorContains(t, err, "nothing to file")
-	_, err = cli.CrewHandoff(day.SessionID, strings.Repeat("x", crew.MaxHandoffBytes+1), false, "")
+	_, err = cli.CrewHandoff(day.SessionID, strings.Repeat("x", crew.MaxHandoffBytes+1), false, "", "")
 	crewErrorContains(t, err, "64001", "64000")
 	if letters := crewLetters(t, w, "trellis"); len(letters) != 1 {
 		t.Fatalf("refused letters were filed: %q", letters)
@@ -245,7 +245,7 @@ func TestHandoffRefusalsLeaveTheDayRunning(t *testing.T) {
 	w.Launched(string(keel.SessionID))
 	handed := crewHandoff(t, cli, string(keel.SessionID), "Filed and gone.", false, "")
 	w.Launched(string(protocol.Deref(handed.SessionID)))
-	_, err = cli.CrewHandoff(protocol.Deref(handed.SessionID), "", true, "")
+	_, err = cli.CrewHandoff(protocol.Deref(handed.SessionID), "", true, "", "")
 	crewErrorContains(t, err, "no filed letter to retry")
 }
 
@@ -266,7 +266,7 @@ func TestCrewLettersNeverLeaveTheMemberHome(t *testing.T) {
 	if err := os.Symlink(foreign, handoffs); err != nil {
 		t.Fatal(err)
 	}
-	_, err := cli.CrewHandoff(day.SessionID, "This must stay in my instance.", false, "")
+	_, err := cli.CrewHandoff(day.SessionID, "This must stay in my instance.", false, "", "")
 	crewErrorContains(t, err, handoffs, crewHome(w, "keel"), "symlink")
 	if entries, err := os.ReadDir(foreign); err != nil || len(entries) != 0 {
 		t.Fatalf("the handoff wrote outside the member home: %v, %v", entries, err)
@@ -307,7 +307,7 @@ func TestDeliveryWakesChargeTheLimitAndReportAnAlreadyUsedLimit(t *testing.T) {
 			if day.promptsContaining(inboxDoorbell) != 1 {
 				t.Fatalf("day %d did not ring", attempt)
 			}
-			if _, err := cli.CrewHandoff(id, "sleep unread", false, protocol.CrewDayCloseSleep); err != nil {
+			if _, err := cli.CrewHandoff(id, "sleep unread", false, protocol.CrewDayCloseSleep, ""); err != nil {
 				t.Fatal(err)
 			}
 			if attempt == 1 {

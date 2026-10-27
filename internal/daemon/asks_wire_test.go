@@ -1,13 +1,17 @@
 package daemon_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -23,19 +27,17 @@ Recommended: Postgres
 :::
 `
 
-func TestAnAnsweredAskReachesTheAgentsInboxAndSettlesItsTurn(t *testing.T) {
+func TestAnAnsweredAskIsTypedIntoTheAgentsConversationAndHandsItsTurnBack(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
-	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("pick a cache store") })
 	agent := w.Launched(asker)
 	if guidance := launchGuidance(t, agent); !strings.Contains(guidance, askGuidanceLead) {
 		t.Fatalf("an agent launched with asks on was not taught them:\n%s", guidance)
 	}
-	idle := testworld.AwaitSession(app, asker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	app.TypeLine(asker, "pick a cache store")
 	agent.Prompted()
-	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	working := testworld.AwaitSession(app, asker, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
 	asked, err := cli.AskOpen(protocol.SessionID(asker), "", cacheAsk, "", w.Path("shop"))
 	if err != nil {
@@ -66,17 +68,29 @@ func TestAnAnsweredAskReachesTheAgentsInboxAndSettlesItsTurn(t *testing.T) {
 	if !answered.Success {
 		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
 	}
-	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
-	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil })
-
-	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
-		t.Fatalf("the agent was prompted with %q, want the inbox doorbell", got)
+	replied := testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 && m.Asks[0].Reply != nil })
+	if reply := replied.Asks[0].Reply; len(reply.Answers) != 1 || !slices.Equal(reply.Answers[0].Picked, []string{"Postgres"}) || protocol.Deref(reply.Note) != "Keep it boring." || reply.AnsweredAt == "" {
+		t.Fatalf("the app shows the reply %+v, want Postgres, the note and when it was sent", reply)
 	}
-	read := inboxContents(readInbox(t, cli, asker, 0).Items)
+	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil && protocol.Deref(s.TurnByAgent) })
+	if listed, err := cli.AskList(protocol.SessionID(asker)); err != nil || len(listed.Asks) != 0 {
+		t.Fatalf("after the answer the agent lists %+v (%v), want no open ask", listed, err)
+	}
+	if err := cli.AskClose(protocol.SessionID(asker), asked.ID); err == nil {
+		t.Fatal("the agent withdrew an ask the user already answered")
+	}
+
+	typed := agent.Prompted()
 	for _, want := range []string{asked.ID, "Which store should keep the cache?", "Answer: Postgres (the recommended choice)", "> Keep it boring."} {
-		if !strings.Contains(read, want) {
-			t.Errorf("the agent read %q, missing %q", read, want)
+		if !strings.Contains(typed, want) {
+			t.Errorf("the agent was typed %q, missing %q", typed, want)
 		}
+	}
+	if strings.Contains(typed, inboxDoorbell) {
+		t.Errorf("the agent was typed %q, want the answer alone with nothing else unread", typed)
+	}
+	if left := readInbox(t, cli, asker, 0).Items; len(left) != 0 {
+		t.Errorf("after the answer was typed the inbox still holds %+v", left)
 	}
 
 	again := testworld.Request(app, protocol.AskAnswerMessage{
@@ -85,6 +99,241 @@ func TestAnAnsweredAskReachesTheAgentsInboxAndSettlesItsTurn(t *testing.T) {
 	if again.Success {
 		t.Fatal("an answered ask took a second answer")
 	}
+}
+
+func TestATypedAnswerEndsWithTheDoorbellForTheItemsLeftUnread(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "peer")
+		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(asker.self), Data: "half a thought"})
+		synctest.Wait()
+		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")
+		answerCacheAsk(t, app, asked.ID)
+		w.advance(sessionmonitor.QuietWindow)
+
+		pasted := asker.term.Pasted()
+		if len(pasted) != 1 {
+			t.Fatalf("once the user was quiet attn pasted %q, want one ring", pasted)
+		}
+		answer, doorbell := strings.Index(pasted[0], "Answer: Postgres"), strings.Index(pasted[0], inboxDoorbell)
+		if answer < 0 || doorbell < answer || !strings.HasSuffix(pasted[0], inboxDoorbell) {
+			t.Fatalf("the agent was typed %q, want the answer then the doorbell for the peer message", pasted[0])
+		}
+		left := readInbox(t, cli, asker.id, 0).Items
+		if len(left) != 1 || left[0].Kind != "peer_message" {
+			t.Fatalf("the inbox holds %+v, want only the peer message the doorbell rang for", left)
+		}
+	})
+}
+
+func TestAnAnswerIsTypedWithoutWaitingOutTheDoorbellsQuietWindow(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "peer")
+		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")
+		asker.reply("Later. <!-- attn:state=idle -->")
+		if got := asker.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("the peer message rang %d times, want once: %q", got, asker.prompts())
+		}
+
+		w.advance(time.Minute)
+		answerCacheAsk(t, app, asked.ID)
+		synctest.Wait()
+		prompts := asker.prompts()
+		if last := prompts[len(prompts)-1]; !strings.Contains(last, "Answer: Postgres") || strings.Contains(last, inboxDoorbell) {
+			t.Fatalf("a minute into the doorbell's quiet window the agent was typed %q, want the answer alone", last)
+		}
+
+		asker.reply("Using Postgres. <!-- attn:state=idle -->")
+		w.advance(4*time.Minute - time.Second)
+		if got := asker.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("the answer brought the peer message's reminder forward: %q", asker.prompts())
+		}
+		w.advance(time.Second)
+		if got := asker.promptsContaining(inboxDoorbell); got != 2 {
+			t.Fatalf("the peer message's reminder did not ring 5 minutes after its doorbell: %q", asker.prompts())
+		}
+	})
+}
+
+func TestAnAnswerIsTypedIntoAWorkingAgentAndTheDoorbellWaitsForItsPrompt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "peer")
+		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		app.TypeLine(asker.id, "move the cache")
+		w.advance(sessionmonitor.QuietWindow)
+		testworld.AwaitSession(app, asker.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")
+		answerCacheAsk(t, app, asked.ID)
+		synctest.Wait()
+		prompts := asker.prompts()
+		if last := prompts[len(prompts)-1]; !strings.Contains(last, "Answer: Postgres") || strings.Contains(last, inboxDoorbell) {
+			t.Fatalf("the working agent was typed %q, want the answer alone, at once", last)
+		}
+		if got := asker.promptsContaining(inboxDoorbell); got != 0 {
+			t.Fatalf("the peer message rang %d times while the agent worked, want it to wait for the prompt: %q", got, asker.prompts())
+		}
+
+		asker.reply("Using Postgres. <!-- attn:state=idle -->")
+		if got := asker.promptsContaining(inboxDoorbell); got != 1 {
+			t.Fatalf("the peer message rang %d times at the agent's prompt, want once: %q", got, asker.prompts())
+		}
+		if got := asker.promptsContaining("Answer: Postgres"); got != 1 {
+			t.Fatalf("the answer was typed %d times, want once: %q", got, asker.prompts())
+		}
+	})
+}
+
+func TestAnAnswerWaitsOutAnApprovalAndAnInboxRead(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		setSetting(t, app, "auto_approve_enabled", "false")
+		asker := w.bubbleClaude(t, app, "shop")
+		registerSessions(t, w, cli, "peer")
+		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		app.TypeLine(asker.id, "move the cache")
+		terminal := protocol.TerminalID(w.Terminal(asker.id))
+		if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+
+		answerCacheAsk(t, app, asked.ID)
+		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")
+		if read := readInbox(t, cli, asker.id, 0); inboxContents(read.Items) != "the staging cache is already Postgres" || read.Remaining != 0 {
+			t.Fatalf("the agent read %+v from its inbox, want only the peer message, with the answer left to be typed", read)
+		}
+		w.advance(15 * time.Minute)
+		if got := asker.promptsContaining("Answer: Postgres"); got != 0 {
+			t.Fatalf("the answer was typed over a pending approval: %q", asker.prompts())
+		}
+
+		if err := cli.UpdateStateFromHookEvidence(terminal, protocol.StateWorking, "", "", ""); err != nil {
+			t.Fatal(err)
+		}
+		w.advance(0)
+		if got := asker.promptsContaining("Answer: Postgres"); got != 1 {
+			t.Fatalf("the answer was typed %d times once the approval cleared, want once: %q", got, asker.prompts())
+		}
+	})
+}
+
+func TestAnAnswerTypedIntoAWorkingAgentAfterARestartLeavesItsResultToTheUser(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "asks_enabled", "true")
+		setSetting(t, app, "queue_mode_enabled", "true")
+		setSetting(t, app, "queue_quiet_notifications", "true")
+		asker := w.bubbleClaude(t, app, "shop")
+		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
+		if err != nil {
+			t.Fatalf("ask: %v", err)
+		}
+		app.TypeLine(asker.id, "move the cache")
+		w.advance(sessionmonitor.QuietWindow)
+
+		w.restart()
+		app = w.App()
+		asker.cli = w.Client()
+		w.advance(0)
+		if s := queriedSession(t, asker.cli, asker.id); s.State != protocol.SessionStateWorking {
+			t.Fatalf("after the restart the agent is %s, want still working", s.State)
+		}
+		answerCacheAsk(t, app, asked.ID)
+		synctest.Wait()
+		if got := asker.promptsContaining("Answer: Postgres"); got != 1 {
+			t.Fatalf("the answer was typed %d times into the agent working across the restart, want once: %q", got, asker.prompts())
+		}
+
+		w.advance(time.Second)
+		asker.reply("Moved the cache to Postgres. <!-- attn:state=waiting_input -->")
+		if s := queriedSession(t, asker.cli, asker.id); s.State != protocol.SessionStateWaitingInput || !protocol.Deref(s.TurnOwed) {
+			t.Fatalf("the agent stopped %s with turn owed %v, want waiting_input with its turn open for the user", s.State, protocol.Deref(s.TurnOwed))
+		}
+	})
+}
+
+func answerCacheAsk(t *testing.T, app *testworld.Peer, askID string) {
+	t.Helper()
+	requestID := uuid.NewString()
+	answered := testworld.Request(app, protocol.AskAnswerMessage{
+		Cmd: protocol.CmdAskAnswer, RequestID: requestID, AskID: askID,
+		Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+	}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == requestID })
+	if !answered.Success {
+		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
+	}
+}
+
+func TestARepliedAskStaysForADayUnlessItsSessionClosesFirst(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setSetting(t, app, "asks_enabled", "true")
+		kept, closed := w.bubbleClaude(t, app, "kept"), w.bubbleClaude(t, app, "closed")
+		replied := map[string]string{}
+		for _, agent := range []*bubbleClaude{kept, closed} {
+			asked, err := agent.cli.AskOpen(protocol.SessionID(agent.id), "", cacheAsk, "", w.Path("shop"))
+			if err != nil {
+				t.Fatalf("%s asks: %v", agent.id, err)
+			}
+			answerCacheAsk(t, app, asked.ID)
+			replied[agent.id] = asked.ID
+		}
+		shownReplies := func(asks []protocol.Ask) []string {
+			var ids []string
+			for _, a := range asks {
+				if a.Reply != nil {
+					ids = append(ids, a.ID)
+				}
+			}
+			slices.Sort(ids)
+			return ids
+		}
+		both := []string{replied[kept.id], replied[closed.id]}
+		slices.Sort(both)
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return slices.Equal(shownReplies(m.Asks), both) })
+
+		if result := closeFromApp(app, closed.id); !result.Accepted {
+			t.Fatalf("close %s: %+v", closed.id, result)
+		}
+		testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
+			return slices.Equal(shownReplies(m.Asks), []string{replied[kept.id]})
+		})
+
+		w.stop()
+		w.elapse(23*time.Hour + 30*time.Minute)
+		w.start()
+		reopened := w.App()
+		if shown := shownReplies(reopened.Initial.Asks); !slices.Equal(shown, []string{replied[kept.id]}) {
+			t.Fatalf("23 and a half hours after the answer the app shows replies %v, want the one to %s", shown, kept.id)
+		}
+		w.advance(time.Hour + time.Minute)
+		testworld.Await(reopened, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
+	})
 }
 
 func TestAnAgentKeepsTheAsksSettingItLaunchedWith(t *testing.T) {
@@ -226,17 +475,17 @@ func TestAsksBelongToTheAskingSessionsProfile(t *testing.T) {
 }
 
 func TestEachHarnessLaunchedWithAsksIsTaughtThem(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "asks_enabled", "true")
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		if guidance := launchGuidance(t, w.Launched(w.Spawn(app, h, w.Path(string(h))))); !strings.Contains(guidance, askGuidanceLead) {
 			t.Errorf("%s launched with asks on was not taught them:\n%s", h, guidance)
 		}
 	}
 }
 
-func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsANoteForTheNextTender(t *testing.T) {
+func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
@@ -281,6 +530,14 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsANoteForTheNextTender(t *testi
 
 	successor.Prompted()
 	successor.Reply("Picked up the migration. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if _, err := cli.SeedNote("caller", seed, "the schema froze yesterday", "", true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := successor.Prompted(); !strings.HasSuffix(got, inboxDoorbell) {
+		t.Fatalf("the seed's tender was prompted with %q, want the doorbell for the caller's note", got)
+	}
+	successor.Reply("Noted. <!-- attn:state=waiting_input -->")
 	waiting := testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool {
 		return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed)
 	})
@@ -291,19 +548,28 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsANoteForTheNextTender(t *testi
 	if !answered.Success {
 		t.Fatalf("answering failed: %s", protocol.Deref(answered.Error))
 	}
-	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
-	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil })
-	if got := successor.Prompted(); !strings.Contains(got, inboxDoorbell) {
-		t.Fatalf("the seed's tender was prompted with %q, want the inbox doorbell", got)
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 && m.Asks[0].Reply != nil })
+	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil && protocol.Deref(s.TurnByAgent) })
+	if got := successor.Prompted(); !strings.Contains(got, "Answer: Postgres (the recommended choice)") || strings.Contains(got, inboxDoorbell) {
+		t.Fatalf("the seed's tender was typed %q, want the answer alone", got)
 	}
 	items := readInbox(t, cli, string(second.SessionID), 0).Items
-	if read := inboxContents(items); !strings.Contains(read, seed) || strings.Contains(read, "Answer: Postgres") {
-		t.Errorf("the seed's tender read %q, want a bell about %s and not a copy of the answer", read, seed)
+	if read := inboxContents(items); len(items) != 1 || !strings.Contains(read, seed) || strings.Contains(read, "Answer: Postgres") {
+		t.Errorf("the seed's tender read %q, want the older bell about %s and not the typed answer", read, seed)
 	}
-	notes, err := cli.SeedNotes("", seed, 1)
-	if err != nil || len(notes.Notes) != 1 {
-		t.Fatalf("the seed's notes are %+v, %v; want the answer", notes, err)
+	successor.Reply("Going with Postgres. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, string(second.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if _, err := cli.SeedNote("caller", seed, "the index rebuild is scheduled", "", true, nil); err != nil {
+		t.Fatal(err)
 	}
+	if got := successor.Prompted(); !strings.HasSuffix(got, inboxDoorbell) || strings.Contains(got, "Answer: Postgres") {
+		t.Fatalf("the next ring typed %q, want the doorbell alone and not the answer again", got)
+	}
+	notes, err := cli.SeedNotes("", seed, 2)
+	if err != nil || len(notes.Notes) != 2 {
+		t.Fatalf("the seed's notes are %+v, %v; want the answer before the newest note", notes, err)
+	}
+	notes.Notes = notes.Notes[1:]
 	answer := notes.Notes[0]
 	for _, want := range []string{asked.ID, "Answer: Postgres (the recommended choice)"} {
 		if !strings.Contains(answer.Body, want) {

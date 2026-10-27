@@ -9,15 +9,16 @@ import (
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/settingkeys"
 )
 
-func settingEntry(spec settingSpec, key, value string) protocol.SettingEntry {
+func (d *Daemon) settingEntry(spec settingSpec, key, value string) protocol.SettingEntry {
 	scope := protocol.SettingScopeDaemon
-	if spec.scope == profileScope {
+	if spec.scope == profileScope && d.enrollmentStatus().IsHome() {
 		scope = protocol.SettingScopeProfile
 	}
 	entry := protocol.SettingEntry{Key: key, Scope: scope, Description: spec.description, Value: &value}
-	if spec.readOnly {
+	if spec.readOnly || spec.class == settingkeys.Home && !d.enrollmentStatus().IsHome() {
 		entry.ReadOnly = protocol.Ptr(true)
 	}
 	if strings.Contains(key, "<") {
@@ -32,10 +33,13 @@ func (d *Daemon) settingValue(profileID string, spec settingSpec, key string, co
 		value, _ := computed[key].(string)
 		return value
 	}
-	if spec.scope == profileScope {
-		return d.profileSetting(profileID, profileSettingKey(key))
+	if spec.scope == profileScope && d.enrollmentStatus().IsHome() {
+		return d.profileSetting(profileID, MachineSetting(key))
 	}
-	return d.daemonSetting(daemonSettingKey(key))
+	if spec.class == settingkeys.Machine {
+		return d.machineSetting(MachineSetting(key))
+	}
+	return d.homeSetting(HomeSetting(key))
 }
 
 func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.SettingsListResult, *protocol.SettingEntry, error) {
@@ -47,10 +51,17 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 		}
 	}
 	profile := profiles.Profile{}
-	needProfile := key == "" || protocol.Deref(msg.ProfileID) != ""
+	if !d.enrollmentStatus().IsHome() && protocol.Deref(msg.ProfileID) != "" {
+		id, synced, err := d.syncedNotebookProfile(protocol.Deref(msg.ProfileID))
+		if err != nil {
+			return nil, nil, err
+		}
+		profile = profiles.Profile{ID: id, Name: synced.Name}
+	}
+	needProfile := d.enrollmentStatus().IsHome() && (key == "" || protocol.Deref(msg.ProfileID) != "")
 	if key != "" {
 		spec, _ := lookupSetting(key)
-		needProfile = needProfile || spec.scope == profileScope
+		needProfile = needProfile || spec.scope == profileScope && d.enrollmentStatus().IsHome()
 	}
 	if needProfile {
 		bindings, err := d.bindings()
@@ -73,16 +84,16 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 	if key != "" {
 		spec, _ := lookupSetting(key)
 		value := d.settingValue(profile.ID, spec, key, values)
-		entry := settingEntry(spec, key, value)
+		entry := d.settingEntry(spec, key, value)
 		return nil, &entry, nil
 	}
 	result := &protocol.SettingsListResult{ProfileID: profile.ID, ProfileName: profile.Name, Entries: []protocol.SettingEntry{}}
 	for _, spec := range settingSpecs {
-		if spec.readOnly && !protocol.Deref(msg.All) || spec.scope == profileScope && profile.ID == "" {
+		if spec.readOnly && !protocol.Deref(msg.All) || spec.scope == profileScope && profile.ID == "" && d.enrollmentStatus().IsHome() {
 			continue
 		}
 		value := d.settingValue(profile.ID, spec, spec.key, values)
-		result.Entries = append(result.Entries, settingEntry(spec, spec.key, value))
+		result.Entries = append(result.Entries, d.settingEntry(spec, spec.key, value))
 		if !strings.Contains(spec.key, "<") {
 			continue
 		}
@@ -90,7 +101,7 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 			matched, ok := lookupSetting(concrete)
 			if ok && matched.key == spec.key && concrete != spec.key {
 				value := d.settingValue(profile.ID, spec, concrete, values)
-				result.Entries = append(result.Entries, settingEntry(spec, concrete, value))
+				result.Entries = append(result.Entries, d.settingEntry(spec, concrete, value))
 			}
 		}
 	}
@@ -119,6 +130,8 @@ func (d *Daemon) handleSetSetting(conn net.Conn, msg *protocol.SetSettingMessage
 
 func (d *Daemon) profileSettingsOverlay(profileID string) map[string]interface{} {
 	settings := make(map[string]interface{})
+	state, reason := d.notebookSyncSettings(profileID)
+	settings[string(settingNotebookSyncState)], settings[string(settingNotebookSyncLastError)] = state, reason
 	if profileID == "" {
 		return settings
 	}
@@ -126,12 +139,12 @@ func (d *Daemon) profileSettingsOverlay(profileID string) map[string]interface{}
 		settings[k] = v
 	}
 	if profile, err := d.store.LiveProfile(profileID); err == nil {
-		if root, err := d.defaultNotebookRoot(profile.Name, d.profileSetting(profile.ID, settingNotebookRoot)); err == nil {
-			settings[string(settingNotebookRootDefault)] = root
+		if root, err := d.defaultNotebookRoot(profile.Name, d.profileSetting(profile.ID, SettingNotebookRoot)); err == nil {
+			settings[string(SettingNotebookRootDefault)] = root
 		}
 	}
 	if root, err := d.notebookRoot(profileID); err == nil {
-		settings[string(settingNotebookRootEffective)] = root
+		settings[string(SettingNotebookRootEffective)] = root
 	}
 	return settings
 }

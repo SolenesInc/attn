@@ -22,10 +22,11 @@ const (
 )
 
 type SpawnOptions struct {
-	ID    harness.TerminalID
-	CWD   string
-	Agent string
-	Label string
+	HostName string
+	ID       harness.TerminalID
+	CWD      string
+	Agent    string
+	Label    string
 
 	Cols uint16
 	Rows uint16
@@ -36,18 +37,18 @@ type SpawnOptions struct {
 
 	Theme pty.TerminalTheme
 
-	Executable string
+	Executable       string
+	LaunchExecutable string
 
-	ClaudeExecutable  string
-	CodexExecutable   string
-	CopilotExecutable string
-	CodexRemote       string
-	AgentLoginShell   bool
-	AgentArgv         []string
-	AgentEnv          []string
-	ExternalCWD       string
-	DaemonEnv         []string
-	LifecycleID       string
+	ClaudeExecutable string
+	CodexExecutable  string
+	CodexRemote      string
+	AgentLoginShell  bool
+	AgentArgv        []string
+	AgentEnv         []string
+	ExternalCWD      string
+	DaemonEnv        []string
+	LifecycleID      string
 
 	LoginShellEnv []string
 
@@ -221,16 +222,15 @@ type SessionInfoProvider interface {
 }
 
 type SessionLaunchParams struct {
-	Recorded          bool
-	YoloMode          bool
-	ApprovalRoute     launchcontract.ApprovalRoute
-	Executable        string
-	ClaudeExecutable  string
-	CodexExecutable   string
-	CopilotExecutable string
-	Model             string
-	Effort            string
-	UnattendedLaunch  launchcontract.UnattendedLaunchSpec
+	Recorded         bool
+	YoloMode         bool
+	ApprovalRoute    launchcontract.ApprovalRoute
+	Executable       string
+	ClaudeExecutable string
+	CodexExecutable  string
+	Model            string
+	Effort           string
+	UnattendedLaunch launchcontract.UnattendedLaunchSpec
 }
 
 type SessionLaunchParamsProvider interface {

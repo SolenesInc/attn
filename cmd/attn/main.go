@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
@@ -29,6 +30,7 @@ import (
 	"github.com/victorarias/attn/internal/probetui"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/store"
 	"golang.org/x/sys/unix"
 )
 
@@ -65,6 +67,13 @@ type sessionCron struct {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--check-schema" {
+		if err := store.CheckSchema(os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if isProtocolVersionCommand(os.Args) {
 		runProtocolVersion()
 		return
@@ -76,7 +85,7 @@ func main() {
 	}
 
 	if isVersionCommand(os.Args) {
-		runVersion()
+		runVersion(os.Args[1:])
 		return
 	}
 
@@ -151,6 +160,9 @@ func main() {
 	case "terminal":
 		maybePrintInstanceBanner()
 		runTerminal()
+	case "codex":
+		maybePrintInstanceBanner()
+		runCodex()
 	case "agent":
 		maybePrintInstanceBanner()
 		runAgent()
@@ -182,6 +194,9 @@ func main() {
 	case "handoff":
 		maybePrintInstanceBanner()
 		runHandoff(os.Args[2:])
+	case "memory":
+		maybePrintInstanceBanner()
+		runMemory(os.Args[2:])
 	case "doc":
 		maybePrintInstanceBanner()
 		runDoc()
@@ -196,6 +211,12 @@ func main() {
 	case "ask":
 		maybePrintInstanceBanner()
 		runAsk()
+	case "vent":
+		maybePrintInstanceBanner()
+		runVent()
+	case "turn":
+		maybePrintInstanceBanner()
+		runTurn()
 	case "conversation":
 		maybePrintInstanceBanner()
 		runConversation()
@@ -240,6 +261,7 @@ func main() {
 			maybePrintInstanceBanner()
 			runWrapper()
 		} else {
+			recordUsageError("attn", usageErrorUnknownCommand)
 			fmt.Fprintf(os.Stderr, "attn %s: unknown command %q\n\n", buildinfo.Version, os.Args[1])
 			writeHelp(os.Stderr)
 			os.Exit(1)
@@ -293,8 +315,20 @@ func isBuildInfoJSONCommand(args []string) bool {
 	return args[1] == "--build-info-json"
 }
 
-func runVersion() {
-	fmt.Println(buildinfo.Version)
+func runVersion(args []string) {
+	if args[0] == "--version" {
+		fmt.Println(buildinfo.Version)
+		return
+	}
+	if len(args) > 1 && args[1] == "--json" {
+		runBuildInfoJSON()
+		return
+	}
+	dirty := ""
+	if buildinfo.Dirty {
+		dirty = ", dirty"
+	}
+	fmt.Printf("%s (%s, %s%s)\n", buildinfo.Version, buildinfo.Channel, shortSHA(buildinfo.GitCommit), dirty)
 }
 
 func runProtocolVersion() {
@@ -302,11 +336,13 @@ func runProtocolVersion() {
 }
 
 func runBuildInfoJSON() {
-	printJSON(map[string]string{
+	printJSON(map[string]any{
 		"version":           buildinfo.Version,
+		"channel":           buildinfo.Channel,
 		"buildTime":         buildinfo.BuildTime,
 		"sourceFingerprint": buildinfo.SourceFingerprint,
 		"gitCommit":         buildinfo.GitCommit,
+		"dirty":             buildinfo.Dirty,
 	})
 }
 
@@ -337,7 +373,6 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.Executable, "executable", "", "selected agent executable override")
 	fs.StringVar(&cfg.ClaudeExecutable, "claude-executable", "", "claude executable override")
 	fs.StringVar(&cfg.CodexExecutable, "codex-executable", "", "codex executable override")
-	fs.StringVar(&cfg.CopilotExecutable, "copilot-executable", "", "copilot executable override")
 	var unattendedLaunchJSON string
 	fs.BoolVar(&cfg.AgentLoginShell, "agent-login-shell", false, "run the prepared agent through a login shell")
 	fs.Func("agent-arg", "prepared agent argument (repeat for each argument)", func(value string) error { cfg.AgentArgv = append(cfg.AgentArgv, value); return nil })
@@ -354,7 +389,7 @@ func runPTYWorker() {
 	fs.StringVar(&cfg.OwnerStartedAt, "owner-started-at", "", "daemon owner started-at timestamp")
 	fs.StringVar(&cfg.OwnerNonce, "owner-nonce", "", "daemon owner nonce")
 
-	_ = fs.Parse(os.Args[2:])
+	_ = parseFlags(fs, os.Args[2:])
 	if approvalRoute != "" {
 		cfg.ApprovalRoute = launchcontract.ApprovalRoute(approvalRoute)
 		if !cfg.ApprovalRoute.Valid() {
@@ -380,6 +415,7 @@ func runPTYWorker() {
 		}
 	}
 
+	cfg.HostName = os.Getenv("ATTN_PTY_HOST_NAME")
 	if daemonEnvJSON := os.Getenv("ATTN_PTY_DAEMON_ENV"); daemonEnvJSON != "" {
 		if err := json.Unmarshal([]byte(daemonEnvJSON), &cfg.DaemonEnv); err != nil {
 			fmt.Fprintf(os.Stderr, "pty-worker error: invalid ATTN_PTY_DAEMON_ENV: %v\n", err)
@@ -422,18 +458,58 @@ func runDaemonCommand() {
 	}
 	switch os.Args[2] {
 	case "ensure":
+		refuseDaemonCommandArgs("ensure", os.Args[3:])
 		runDaemonEnsure()
 	case "stop":
+		refuseDaemonCommandArgs("stop", os.Args[3:])
 		runDaemonStop()
+	case "help", "-h", "--help":
+		writeDaemonHelp(os.Stdout)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown daemon subcommand %q (expected: ensure, stop)\n", os.Args[2])
+		recordUsageError("daemon", usageErrorUnknownCommand)
+		fmt.Fprintf(os.Stderr, "unknown daemon subcommand %q (expected: ensure, stop)\n\n", os.Args[2])
+		writeDaemonHelp(os.Stderr)
 		os.Exit(1)
 	}
+}
+
+func refuseDaemonCommandArgs(command string, args []string) {
+	if len(args) == 0 {
+		return
+	}
+	if hasHelpFlag(args) {
+		writeDaemonHelp(os.Stdout)
+		os.Exit(0)
+	}
+	recordUsageError("daemon "+command, usageErrorUnknownFlag)
+	fmt.Fprintf(os.Stderr, "daemon %s: unknown argument %q; it takes no arguments\n\n", command, args[0])
+	writeDaemonHelp(os.Stderr)
+	os.Exit(2)
+}
+
+func writeDaemonHelp(w io.Writer) {
+	fmt.Fprint(w, `usage: attn daemon [ensure|stop]
+
+With no command, runs the daemon in the foreground.
+
+commands:
+  ensure    start the daemon in the background, or restart one that does not
+            match this binary, and print the outcome as JSON: status is
+            started, already_running or restarted (with a reason)
+  stop      stop the running daemon
+
+Both act on the active instance's daemon; attn instance status names it.
+`)
 }
 
 func runDaemon() {
 	startupSignal, err := daemonctl.TakeStartupSignal()
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := daemonctl.ExitWhenHarnessGoes(); err != nil {
+		startupSignal.Failed(err)
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -465,9 +541,16 @@ func runDaemon() {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}
-	if err := <-startResult; err != nil {
-		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
-		os.Exit(1)
+	select {
+	case <-d.RestartRequested():
+		d.Stop()
+		<-startResult
+		os.Exit(bridge.UpdateRestartStatus)
+	case err := <-startResult:
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -580,11 +663,14 @@ commands:
   settings list|get|set             read and change daemon or profile settings
   preflight                         diagnose tools, paths, routing, and launch settings
   pr <command>                      watch or inspect pull request readiness
+  codex status|update|restart       shared Codex versions, its update and restart
   list                              list sessions and profiles
   activity [clear <id>]             what each agent is doing right now
   conversation <command>            list, keep forever or forget attn's conversation copies
   worktree <command>                every tracked worktree, the sweep and the keep pin
   ask [list|close]                  ask the user something they answer from attn
+  vent [withdraw]                   report what got in your way
+  turn open|settle                  put yourself in the user's queue, or take yourself out
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
   bus <command>                     event bus: consumer cursors, lag, kill switch
@@ -592,17 +678,17 @@ commands:
   seed <command>                    the garden: plant, tend, harvest, note, ls
   crew <command>                    the crew roster: who exists, who is awake
   handoff -m "<letter>"             file this crew member's letter; the day turns over
+  memory <verb>                    add, search, zoom, summarize or repair crew memory
   doc <command>                     document store: collections, documents, live queries
   vision-check <image> <question>   answer a question about an image (single LLM call)
-  daemon <command>                  manage the daemon
-	  daemon ensure|stop                ensure the daemon is running, or stop it
+  daemon [ensure|stop]              run the daemon, ensure it is running, or stop it
   instance <status|resolve|list>    show / resolve the active instance's resources
   instance-env <instance|--unset>   print shell commands for selecting an instance
   skill [--reference <name>|--list] print the bundled agent skill and its references
   help [<topic>]                   read the user guide
   onboarding [done|again]          show or change the Chief's first day
   prompts <command>                inspect prompt sources and scenario composition
-  version                           print version information
+  version [--json]                  print version, channel and commit
 
 Are you an AI agent? Use these when your task calls for them:
   attn skill    how to operate Attn
@@ -775,6 +861,7 @@ func runJournal() {
 		}
 		runJournalAppend(os.Args[3:])
 	default:
+		recordUsageError("journal", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "journal: unknown command %q\n", os.Args[2])
 		writeJournalHelp(os.Stderr)
 		os.Exit(2)
@@ -796,7 +883,7 @@ func parseJournalAppendArgs(args []string) (journalAppendArgs, error) {
 	date := fs.String("date", "", "journal date as YYYY-MM-DD (defaults to today)")
 	sessionID := fs.String("session", "", "session id (optional; defaults to the current session)")
 	jsonOutput := fs.Bool("json", false, "print the result as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return journalAppendArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -905,7 +992,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	preferencesRevision := fs.String("preferences-revision", "", "retired: preferences resolve when accepted")
 	requestID := fs.String("request-id", "", "stable delegation request id")
 	allowWorktreeReuse := fs.Bool("allow-worktree-reuse", false, "allow active sessions to share a worktree")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return delegateCLIArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -1121,7 +1208,7 @@ func parseOpenArgs(args []string) (rawPath string, sessionFlag string, profileFl
 	var positionals []string
 	rest := args
 	for {
-		if perr := fs.Parse(rest); perr != nil {
+		if perr := parseFlags(fs, rest); perr != nil {
 			return "", "", "", perr
 		}
 		rest = fs.Args()
@@ -1183,7 +1270,7 @@ func parseInterspersedFlagArgs(fs *flag.FlagSet, args []string) ([]string, error
 	var positionals []string
 	rest := args
 	for {
-		if err := fs.Parse(rest); err != nil {
+		if err := parseFlags(fs, rest); err != nil {
 			return nil, err
 		}
 		rest = fs.Args()
@@ -1256,7 +1343,7 @@ func runBrowser() {
 	}
 
 	subcommand := os.Args[2]
-	fs := flag.NewFlagSet("browser "+subcommand, flag.ContinueOnError)
+	fs := flag.NewFlagSet("browser", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	sessionFlag := fs.String("session", "", "session id (defaults to the current session, then the selected session)")
 	selector := fs.String("selector", "", "CSS selector")
@@ -1499,6 +1586,7 @@ func runBrowser() {
 		}
 		fmt.Println(absPath)
 	default:
+		recordUsageError("browser", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown browser command: %s\n", subcommand)
 		printBrowserUsage(os.Stderr)
 		os.Exit(1)
@@ -1722,7 +1810,7 @@ func runProbeTUI() {
 	fs := flag.NewFlagSet("_probe-tui", flag.ExitOnError)
 	styleFlag := fs.String("style", "", "agent vocabulary to mirror: codex or claude")
 	interval := fs.Duration("interval", 500*time.Millisecond, "frame repaint interval")
-	if err := fs.Parse(os.Args[2:]); err != nil {
+	if err := parseFlags(fs, os.Args[2:]); err != nil {
 		os.Exit(2)
 	}
 

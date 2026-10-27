@@ -455,7 +455,7 @@ func parsePRWaitArgs(args []string) (prWaitOptions, error) {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		target, args = args[0], args[1:]
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return prWaitOptions{}, err
 	}
 	if target == "" && fs.NArg() == 1 {

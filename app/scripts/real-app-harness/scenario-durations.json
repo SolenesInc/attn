@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "codex-update": {
+        "run": "scenario-codex-update-2026-10-25T01-05-28-467Z",
+        "job": "Local packaged scenario, cxu isolated instance",
+        "recordedAt": "2026-10-25",
+        "seconds": 23.919,
+        "runnerClass": "local macOS",
+        "note": "Green serial-matrix ATTN_VERDICT durationMs=23919 with a cold app launch (18.1 s), including cleanup. Covers the Codex update banner: the offer, Install in a shell tile, the restart onto the new Codex, and Reload tiles. Remeasure on Linux CI."
+      },
       "terminal-input": {
         "run": "terminal-input-2026-10-08T22-27-28-485Z",
         "job": "Local packaged scenario, ctrlreturn isolated instance",
@@ -158,6 +166,20 @@
         "seconds": 15.0,
         "note": "Estimated from session-close-ledger (9.9s) plus two mock turns and a /clear. Remeasure from the first green matrix-digest.txt."
       },
+      "claude-shared-conversation": {
+        "run": "not yet measured",
+        "job": "estimate",
+        "recordedAt": "2026-10-24",
+        "seconds": 47.2,
+        "note": "Measured from a local macOS run against a named instance. Remeasure from the first green matrix-digest.txt."
+      },
+      "pi-shared-conversation": {
+        "run": "not yet measured",
+        "job": "estimate",
+        "recordedAt": "2026-10-24",
+        "seconds": 20.6,
+        "note": "Measured from a local macOS run against a named instance. Remeasure from the first green matrix-digest.txt."
+      },
       "desktop-migration": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/36256347056",
         "job": "App acceptance shard 4/4",
@@ -309,6 +331,46 @@
         "runnerClass": "hosted macOS",
         "note": "Green quick-capture durationMs=206599 in last-matrix.json, revision221afcbcb, including the enable-first recording, native shortcut, focus, file delivery, history, disable/re-enable draft retention and cleanup. Artifact12154318251."
       },
+      "agent-reload": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/39231395121",
+        "job": "Soak agent-reload",
+        "recordedAt": "2026-10-19",
+        "seconds": 13.867,
+        "runnerClass": "github-hosted Ubuntu24.04 amd64, 4vcpu/16GB",
+        "note": "Green isolated packaged scenario on 822ed03414a2. Iteration wall time 13867ms; ATTN_VERDICT durationMs=13277 including cleanup. Native keyboard input succeeds before and after CLI reload, with the same tile and desktop."
+      },
+      "outposts-settings": {
+        "run": "outposts-settings-2026-10-25T19-41-56-583Z",
+        "job": "Local packaged scenario, remote-shell-app named instance",
+        "recordedAt": "2026-10-25",
+        "seconds": 71.931,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=71931, including cleanup and recording. Covers pairing, CLI remote shell, native Cmd+D host/start-directory proof, SIGSTOP stalled/lost screen preservation, refused typing/finite flash, current-screen recovery, Remove confirmation and three CPU observation windows. Remeasure on Linux CI."
+      },
+      "analytics-settings": {
+        "run": "analytics-settings-2026-10-24T18-33-09-799Z",
+        "job": "Local packaged scenario, analytics-page named instance",
+        "recordedAt": "2026-10-24",
+        "seconds": 28.012,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=28012, including cleanup. Covers vents new/done, dismiss and undo, plant and undo, records by stream, clear, and a 5 s idle check. Remeasure on Linux CI."
+      },
+      "outpost-update": {
+        "run": "outpost-update-2026-10-27T00-13-40-017Z",
+        "job": "Local packaged scenario, upwcd4g4 named instance",
+        "recordedAt": "2026-10-27",
+        "seconds": 39.165,
+        "runnerClass": "local macOS",
+        "note": "Green serial matrix durationMs=39165; scenario ATTN_VERDICT durationMs=38664 including cleanup and recording. Native banner and Settings row each push to a real supervised daemon, show restart and outcome; dismissal stays hidden during the row push. Remeasure on Linux CI."
+      },
+      "notebook-sync": {
+        "run": "notebook-sync-2026-10-27T05-14-58-737Z",
+        "job": "Local packaged scenario, nb-sync-app named instance",
+        "recordedAt": "2026-10-27",
+        "seconds": 34.495,
+        "runnerClass": "local macOS",
+        "note": "Green serial matrix scenario, including recording and cleanup. Shows first sync with remaining bytes/items and saved previous folder, convergence, conflict, conflict removal and missing-marker error. Remeasure on Linux CI."
+      },
       "notebook-profile-scope": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/38011475678",
         "job": "Soak notebook-profile-scope",
@@ -356,6 +418,7 @@
     "notebook-editor-undo": 32.8,
     "prompt-composition": 29.596,
     "codex-shared": 25,
+    "codex-update": 23.919,
     "pty-host-setting": 8.3,
     "session-close-ledger": 9.9,
     "session-reopen": 6.2,
@@ -376,6 +439,8 @@
     "worktree-surface": 25.748,
     "crew-management": 55.269,
     "clear-opens-session": 15.0,
+    "claude-shared-conversation": 47.2,
+    "pi-shared-conversation": 20.6,
     "desktop-migration": 20.7,
     "profile-lifecycle": 18.5,
     "garden-profile-scope": 29.9,
@@ -389,6 +454,11 @@
     "shell-titles": 14.058,
     "callouts": 39.5,
     "quick-capture": 206.599,
+    "agent-reload": 13.867,
+    "outposts-settings": 71.931,
+    "analytics-settings": 28.012,
+    "outpost-update": 39.165,
+    "notebook-sync": 34.495,
     "notebook-profile-scope": 39.473,
     "chief-slot": 94.161
   }

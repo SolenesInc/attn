@@ -33,9 +33,10 @@ var ErrSessionNotFound = errors.New("session not found")
 type LogFunc func(format string, args ...interface{})
 
 type SpawnOptions struct {
-	ID    string
-	CWD   string
-	Agent string
+	HostName string
+	ID       string
+	CWD      string
+	Agent    string
 
 	Cols uint16
 	Rows uint16
@@ -461,10 +462,7 @@ func (m *Manager) KillWithEscalation(sessionID string, sig syscall.Signal, onEsc
 	if err != nil {
 		return err
 	}
-	if session.agent == "shell" && sig == syscall.SIGTERM {
-		sig = syscall.SIGHUP
-	}
-	return session.killWithEscalation(sig, defaultKillTimeout, onEscalate)
+	return session.killWithEscalation(sig, defaultKillTimeout, onEscalate, m.logf)
 }
 
 func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {
@@ -514,7 +512,7 @@ func (m *Manager) Shutdown() {
 	m.mu.RUnlock()
 
 	for _, session := range sessions {
-		_ = session.kill(syscall.SIGTERM, defaultKillTimeout)
+		_ = session.kill(syscall.SIGTERM, defaultKillTimeout, m.logf)
 	}
 }
 
@@ -565,7 +563,7 @@ func buildSpawnCommand(opts SpawnOptions, agent, shellPath string, env []string)
 		return loginShellCommand(shellPath, opts.AgentArgv, overlay)
 	}
 	command := opts.AgentArgv[0]
-	if resolved, ok := resolveAgentArgvPath(command, env); ok {
+	if resolved, ok := ResolveCommandPath(command, env); ok {
 		command = resolved
 	}
 	return exec.Command(command, opts.AgentArgv[1:]...)
@@ -594,7 +592,7 @@ func loginShellCommand(shellPath string, argv, overlay []string) *exec.Cmd {
 	return exec.Command(shellPath, args...)
 }
 
-func resolveAgentArgvPath(command string, env []string) (string, bool) {
+func ResolveCommandPath(command string, env []string) (string, bool) {
 	command = strings.TrimSpace(command)
 	if command == "" || strings.ContainsRune(command, filepath.Separator) {
 		return "", false
@@ -631,9 +629,18 @@ func readCachedShellEnvFromProcess() []string {
 func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath string, logf LogFunc) []string {
 	env := os.Environ()
 
-	shellEnv := LoginShellEnvironment(loginShell, opts.LoginShellEnv, logf)
+	shellEnv := opts.LoginShellEnv
+	if len(shellEnv) == 0 {
+		shellEnv = readCachedShellEnvFromProcess()
+	}
 	if len(shellEnv) > 0 {
 		env = MergeEnvironment(env, shellEnv)
+	} else if loginShell != "" {
+		if captured, err := ReadLoginShellEnv(loginShell); err == nil {
+			env = MergeEnvironment(env, captured)
+		} else if logf != nil {
+			logf("pty spawn: failed to capture login shell env from %s: %v", loginShell, err)
+		}
 	}
 	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_TRUST_WORKING_DIRECTORY", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
@@ -662,22 +669,9 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_TRUST_WORKING_DIRECTORY", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 	env = MergeEnvironment(env, opts.DaemonEnv)
-	return env
-}
-
-func LoginShellEnvironment(shell string, cached []string, logf LogFunc) []string {
-	if len(cached) != 0 {
-		return cached
-	}
-	if cached := readCachedShellEnvFromProcess(); len(cached) != 0 {
-		return cached
-	}
-	if shell == "" {
-		return nil
-	}
-	env, err := ReadLoginShellEnv(shell)
-	if err != nil && logf != nil {
-		logf("pty spawn: failed to capture login shell env from %s: %v", shell, err)
+	env = filterEnvKeys(env, "ATTN_HOST", "ATTN_PTY_HOST_NAME")
+	if agent == "shell" && opts.HostName != "" {
+		env = MergeEnvironment(env, []string{"ATTN_HOST=" + opts.HostName})
 	}
 	return env
 }

@@ -1,3 +1,0 @@
-kind: fixed
-area: shortcuts
-change: Starting a shortcut recording ends the previous one, including Quick Capture. Leaving the Quick Capture recorder cancels it.

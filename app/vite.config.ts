@@ -14,6 +14,8 @@ const snapshotFormat = execFileSync(
   { encoding: "utf8" },
 ).trim();
 
+const appVersion: string = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf8")).version;
+
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
@@ -40,6 +42,7 @@ export default defineConfig(async ({ command }) => ({
   plugins: [react()],
   define: {
     __ATTN_SNAPSHOT_FORMAT__: JSON.stringify(snapshotFormat),
+    __ATTN_APP_VERSION__: JSON.stringify(appVersion),
     ...(command === "serve"
       ? { "import.meta.env.VITE_CLIENT_TOKEN": JSON.stringify(clientTokenFromInstance()) }
       : {}),

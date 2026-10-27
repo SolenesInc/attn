@@ -1,3 +1,0 @@
-kind: internal
-area: docs
-change: A demo harness records guide screenshots and clips from a demo build, with real Claude Code and Codex terminals answered by a local stub model.

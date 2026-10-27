@@ -5,6 +5,13 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { WHATS_NEW_BANNER_STORAGE_KEY, WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../hooks/useWhatsNew';
 import { forgetAppMemory } from './appMemory';
 
+if (typeof HTMLElement !== 'undefined') {
+  HTMLElement.prototype.showPopover = function showPopover(this: HTMLElement) {
+    if (!this.isConnected) throw new DOMException('Element is not connected', 'InvalidStateError');
+  };
+  HTMLElement.prototype.hidePopover = function hidePopover() {};
+}
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
   isTauri: vi.fn(() => false),

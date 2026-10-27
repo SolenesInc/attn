@@ -24,7 +24,6 @@ func (d *Daemon) opened(t harness.TerminalID, from *protocol.Session, observatio
 	}
 	return d.succeed(t, from, store.Succession{
 		To:     to,
-		Label:  defaultSessionLabel(from.Directory, to),
 		Launch: launch,
 		Close:  store.SessionClose{Reason: string("cleared; its terminal moved on to " + to)},
 	}, observation, memberKey)
@@ -41,7 +40,6 @@ func (d *Daemon) shows(t harness.TerminalID, from *protocol.Session, owner proto
 }
 
 func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.Succession, observation agentConversationObservation, memberKey who.MemberKey) error {
-	unlockEnds := d.lockTerminalEnds(from.ID)
 	live := d.liveTerminals(context.Background())
 	sc.KeepFrom = d.othersRun(from.ID, t) || d.keepsWhenLeft(from.ID)
 	sc.Live = make(map[string]bool, len(live))
@@ -51,23 +49,15 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	if !sc.KeepFrom && !memberKey.IsZero() {
 		sc.Label = d.memberName(memberKey)
 	}
-	release := func() {}
 	if !sc.KeepFrom {
-		release = d.finishMonitorUsage(from.ID)
 		if _, err := d.captureGardenSessionSnapshot(from); err != nil {
-			d.logf("garden: preserving execution %s before its terminal moved on: %v", from.ID, err)
+			d.logf("garden: preserving execution %s: %v", from.ID, err)
 		}
 	}
 	sc.From = from.ID
 	sc.Conversation = store.SessionConversation{NativeID: observation.NativeID, TranscriptPath: observation.TranscriptPath}
 	_, closedAsks, err := d.store.CommitSuccession(sc, t)
-	unlockEnds()
-	defer release()
 	if err != nil {
-		release()
-		if !sc.KeepFrom {
-			d.ensureTranscriptWatcherAtPath(from.ID, d.store.GetSessionConversation(from.ID).TranscriptPath)
-		}
 		return err
 	}
 
@@ -95,15 +85,9 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		}
 	}
 
-	d.startSessionMonitorFrom(sc.To, from.ID)
-	if !sc.KeepTo {
-		d.resolveSoon(sc.To)
-		d.startTranscriptWatcherAtPath(sc.To, from.Agent, from.Directory, d.sessionStartedAt(sc.To), observation.TranscriptPath)
-	} else {
-		d.ensureTranscriptWatcherAtPath(sc.To, observation.TranscriptPath)
-	}
 	d.publishFact(FactSessionRegistered, string(sc.To), nil)
 	d.publishArrangementChanged(from.ProfileID)
+	d.codexShared().terminalMoved(t, from.ProfileID)
 	d.mirrorLabel(sc.To)
 
 	if !sc.KeepFrom {
@@ -113,10 +97,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		d.publishSessionUnregistered(from)
 	} else {
 		if d.hidden(from.ID) {
-			d.updateEvidence(from.ID, nil, func(e *monitorEvidence) {
-				e.Heartbeat = nil
-				e.ClearProgramStatus()
-			})
+			d.forgetProgramStatus(from.ID)
 		}
 		d.publishFact(FactSessionReregistered, string(from.ID), nil)
 	}

@@ -76,14 +76,20 @@ async function main() {
       await runner.step(`launch_${name}`, async () => {
         const cwd = path.join(runner.sessionDir, name);
         fs.mkdirSync(cwd, { recursive: true });
-        writeMockAgentFixture(cwd, { version: 1, agent, turns: [{
+        writeMockAgentFixture(cwd, { version: 1, agent, turns: [chief ? {
+          includes: 'sent through Quick Capture',
+          submitHook: false,
+          actions: [
+            { type: 'attn', args: ['agent', 'attachment', captureId, attachmentId, '--out', imageOut] },
+            { type: 'attn', args: ['agent', 'attachment', captureId, pdfId, '--out', pdfOut] },
+            { type: 'reply', text: 'QUICK_CAPTURE_READ', state: 'idle' },
+          ],
+        } : {
           includes: '📬 You have unread items',
           submitHook: false,
           actions: [
             { type: 'attn', args: ['agent', 'inbox'] },
-            ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', captureId, attachmentId, '--out', imageOut] }] : []),
-            ...(chief ? [{ type: 'attn', args: ['agent', 'attachment', captureId, pdfId, '--out', pdfOut] }] : []),
-            { type: 'reply', text: chief ? 'QUICK_CAPTURE_READ' : 'PEER_READ', state: 'idle' },
+            { type: 'reply', text: 'PEER_READ', state: 'idle' },
           ],
         }] });
         if (chief) {
@@ -141,18 +147,19 @@ async function main() {
       runner.assert(uploadedPDF.result.upload.attachment.media_type === 'application/pdf', 'PDF finalizes without image validation');
       const agent = launches[2];
       const completed = observer.waitForMessage(data => data.event === 'session_state_changed' &&
-        data.session?.id === agent.id && data.session?.state === 'idle' ? data : null, 'quick capture agent finishes inbox read');
+        data.session?.id === agent.id && data.session?.state === 'idle' ? data : null, 'quick capture agent finishes reading the capture');
       const saved = await observer.requestResult({ cmd: 'quick_capture_send', capture_id: captureId,
         mailbox: { kind: 'chief' }, content: 'PROMPT_QUICK_CAPTURE', attachment_ids: [attachmentId, pdfId] }, 'quick_capture_result');
       runner.assert(saved.result.record.id === captureId, 'save returns the requested durable identity');
       await completed;
       const receipt = await observer.requestResult({ cmd: 'quick_capture_get', capture_id: captureId }, 'quick_capture_result');
-      runner.assert(Boolean(receipt.result.record.read_at), 'agent inbox fetch commits a read receipt');
+      runner.assert(Boolean(receipt.result.record.read_at), 'typing the quick capture commits a read receipt');
       const text = transcripts(agent.cwd)[0]?.text || '';
       const spoken = transcriptTurns(text).map(turn => turn.text).join('\n');
       runner.writeText('quick-capture.txt', spoken);
-      runner.assert(text.includes('Message from the user, sent through Quick Capture:') && text.includes('PROMPT_QUICK_CAPTURE'),
-        'inbox output attributes quick capture content to the user');
+      const typed = transcriptTurns(text).filter(turn => turn.role === 'user' && turn.text.includes('PROMPT_QUICK_CAPTURE'));
+      runner.assert(typed.length === 1 && typed[0].text.includes('Message from the user, sent through Quick Capture.') && !typed[0].text.includes('📬'),
+        'the quick capture reaches the agent once, as the user\'s own message', { typed });
       runner.assert(!text.includes('This message is from another agent'), 'quick capture omits the peer disclaimer');
       runner.assert(spoken.includes('File "notes.pdf" (application/pdf') && spoken.includes('Inspect the saved file with your tools.'),
         'non-image attachment carries file inspection instructions');

@@ -31,7 +31,7 @@ func TestModelIDRulesAssignTheSameTierOnEveryHarness(t *testing.T) {
 		{"qwen3-coder:32b", "", "none"},
 		{"opus-extra", "", "none"},
 	} {
-		for _, harness := range []string{"claude", "codex", "copilot", "pi"} {
+		for _, harness := range []string{"claude", "codex", "pi"} {
 			t.Run(harness+"/"+row.model, func(t *testing.T) {
 				got := modeltiers.Assign(nil, modeltiers.Key{Harness: harness, Provider: "provider", Model: row.model})
 				want := modeltiers.Assignment{Tier: row.tier, Source: row.source, Shipped: row.tier}

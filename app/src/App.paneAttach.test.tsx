@@ -45,13 +45,27 @@ describe('App pane attach', () => {
     expect(daemon.sentOf('attach_session').map((command) => command.id)).toEqual(['s1', 's1']);
   });
 
+  it('does not attach a closed tile after a transient failure enters its retry delay', async () => {
+    const view = await renderSessions();
+    const { daemon } = view;
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: false, error: WORKER_NOT_LISTENING }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
+    await daemon.idle();
+    expect(daemon.sentOf('attach_session')).toHaveLength(1);
+    daemon.arrange((desktops) => desktops.filter((desktop) => desktop.id !== 'desktop-s1'));
+    await daemon.idle();
+    await act(() => vi.runOnlyPendingTimersAsync());
+    expect(daemon.sentOf('detach_session')).toEqual([{ cmd: 'detach_session', id: 's1' }]);
+    expect(daemon.sentOf('attach_session')).toHaveLength(1);
+  });
+
   it('tells the user why a pane has no terminal yet: failed, starting, or waiting for its session', async () => {
     const panes = [
       agentPane('s1', 'ws'),
       { ...agentPane('refused', 'ws'), title: 'claude', status: 'failed' as const, error: 'spawn refused' },
       { ...agentPane('bare-failure', 'ws'), title: 'claude', status: 'failed' as const },
       { ...agentPane('booting', 'ws'), title: 'codex', status: 'spawning' as const },
-      { ...agentPane('late', 'ws'), title: 'copilot' },
+      { ...agentPane('late', 'ws'), title: 'pi' },
     ];
     const root = panes.slice(1).reduce<unknown>(
       (left, { pane_id }, index) => ({ type: 'split', split_id: `split-${index}`, direction: 'vertical', ratio: 0.5, children: [left, { type: 'pane', pane_id }] }),
@@ -70,7 +84,7 @@ describe('App pane attach', () => {
     expect(notice('refused')).toBe('spawn refused');
     expect(notice('bare-failure')).toBe('Session failed to start');
     expect(notice('booting')).toBe('Starting codex...');
-    expect(notice('late')).toBe('Waiting for copilot...');
+    expect(notice('late')).toBe('Waiting for pi...');
     expect(document.querySelector('[data-pane-id="pane-refused"] [aria-label^="Rename session"]')).toBeNull();
 
     daemon.emit({ event: 'session_registered', session: daemonSession('late') });

@@ -137,6 +137,56 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	}
 }
 
+func TestEveryResultCarriesThePlotProgressShowDoes(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	planter := protocol.SessionID(spawnPanes(w, app, w.Path("planter"))[0].session)
+	planted, err := cli.SeedPlot(planter, protocol.SeedPlotMessage{
+		Title: "wandering crown", Children: []protocol.SeedPlotChild{{Title: "a"}, {Title: "b", Blocks: []string{"a"}}},
+	})
+	if err != nil {
+		t.Fatalf("plot: %v", err)
+	}
+	crown := planted.Crown.ID
+	other := plantSeedAs(t, cli, string(planter), "elsewhere")
+	edited, err := cli.SeedEdit(crown, "# the plan, revised")
+	if err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	linked, err := cli.SeedLink(crown, garden.EdgeBlocks, other, false)
+	if err != nil {
+		t.Fatalf("link: %v", err)
+	}
+	relinked, err := cli.SeedLink(crown, garden.EdgeBlocks, other, false)
+	if err != nil {
+		t.Fatalf("link again: %v", err)
+	}
+	found, err := cli.SeedSearch(planter, "wandering", 0)
+	if err != nil || len(found.Hits) != 1 {
+		t.Fatalf("search = %+v, %v; want the crown", found, err)
+	}
+	shown, err := cli.SeedShow(planter, crown)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := protocol.SeedPlotProgress{Total: 2, Ready: 1, Blocked: 1}
+	if got := shown.Seed.PlotProgress; got == nil || *got != want {
+		t.Fatalf("show progress = %+v, want %+v", got, want)
+	}
+	for name, seed := range map[string]protocol.Seed{
+		"plot":           planted.Crown,
+		"edit":           edited.Seed,
+		"link":           linked.Seed,
+		"unchanged link": relinked.Seed,
+		"search":         found.Hits[0].Seed,
+	} {
+		if got := seed.PlotProgress; got == nil || *got != want {
+			t.Errorf("%s returned the crown with progress %+v, want %+v as show has", name, got, want)
+		}
+	}
+}
+
 func TestStaleListsOnlyTheQuietOpenSeeds(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
@@ -232,7 +282,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 func gardenPlotPushes(app *testworld.Peer) int {
 	pushes := 0
 	for _, event := range app.Received() {
-		if event.Event == protocol.EventGardenSeedsUpdated {
+		if event.Event == protocol.EventGardenSeedsChanged {
 			pushes++
 		}
 	}

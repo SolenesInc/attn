@@ -47,18 +47,18 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 		t.Fatalf("unrecord migration 95: %v", err)
 	}
 
-	if s.WakeTurnAt("s1", until) {
-		t.Fatalf("the planted stamp already matches; this test would pass without the migration")
+	if got := plantedSnoozeStamp(t, s); got == turnStamp(until) {
+		t.Fatalf("the planted stamp %q already matches; this test would pass without the migration", got)
 	}
 
 	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
 		t.Fatalf("migrateDB: %v", err)
 	}
-	if got := s.SnoozedSessions()["s1"]; !got.Equal(until) {
+	if got := parseTurnStamp(plantedSnoozeStamp(t, s)); !got.Equal(until) {
 		t.Fatalf("stored deadline reads back as %s, want %s", got, until)
 	}
-	if !s.WakeTurnAt("s1", until) {
-		t.Fatalf("after migration 95 the fired timer still could not cash its deadline")
+	if got := plantedSnoozeStamp(t, s); got != turnStamp(until) {
+		t.Fatalf("after migration 95 the stored deadline is %q, want %q so the fired timer can cash it", got, turnStamp(until))
 	}
 }
 
@@ -102,8 +102,8 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		t.Fatalf("unrecord migration 95: %v", err)
 	}
 
-	if s.OpenTurnIfClosed("s1", turnBase().Add(time.Second)) {
-		t.Fatalf("the planted turn stamps already reopen correctly; this test would pass without the migration")
+	if opened, settled := plantedTurnStamps(t, s); opened == turnStamp(turnBase()) || settled == turnStamp(turnBase().Add(500*time.Millisecond)) {
+		t.Fatalf("the planted turn stamps %q and %q already sort; this test would pass without the migration", opened, settled)
 	}
 
 	if err := migrateDBThrough(s.db, dbPath, 167); err != nil {
@@ -127,8 +127,8 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 func assertMigration95Applied(t *testing.T, s *Store) {
 	t.Helper()
 
-	if !s.OpenTurnIfClosed("s1", turnBase().Add(time.Second)) {
-		t.Fatalf("after migration 95 a settled turn still did not reopen")
+	if opened, settled := plantedTurnStamps(t, s); opened != turnStamp(turnBase()) || settled != turnStamp(turnBase().Add(500*time.Millisecond)) {
+		t.Fatalf("after migration 95 the turn stamps are %q and %q, want the sortable %q and %q", opened, settled, turnStamp(turnBase()), turnStamp(turnBase().Add(500*time.Millisecond)))
 	}
 
 	rows, err := s.db.Query(`SELECT request_id FROM delegation_operations WHERE state IN ('accepted','preparing') ORDER BY created_at,request_id`)
@@ -182,4 +182,21 @@ func stampDigest(t *testing.T, s *Store) string {
 		t.Fatalf("stamp digest: %v", err)
 	}
 	return digest
+}
+
+func plantedSnoozeStamp(t *testing.T, s *Store) string {
+	t.Helper()
+	var stamp string
+	if err := s.db.QueryRow(`SELECT turn_snoozed_until FROM sessions WHERE id = 's1'`).Scan(&stamp); err != nil {
+		t.Fatal(err)
+	}
+	return stamp
+}
+
+func plantedTurnStamps(t *testing.T, s *Store) (opened, settled string) {
+	t.Helper()
+	if err := s.db.QueryRow(`SELECT turn_opened_at, turn_settled_at FROM sessions WHERE id = 's1'`).Scan(&opened, &settled); err != nil {
+		t.Fatal(err)
+	}
+	return opened, settled
 }

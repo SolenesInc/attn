@@ -1,0 +1,4 @@
+kind: changed
+area: asks
+change: Ask answers and Quick Captures are typed into the agent's conversation as the user's message, so auto-mode reviewers in Claude Code, Codex and Pi accept the approvals in them. They are typed right away, even while the agent works, never waiting out the 5 minutes between inbox rings; a pending approval, or the user typing in that terminal in the last 30 seconds, holds them back. `attn agent inbox` no longer returns them, and a crew member woken for one does not spend its wake limit.
+symptom: An agent in auto mode was blocked from an action the user had approved in an ask answer, because the answer reached it as tool output.

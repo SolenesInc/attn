@@ -26,8 +26,11 @@ desktop                 one arrangement of tiles; like a macOS Space or a
 
 ```text
 terminal                one PTY process in a terminal tile
-└─ runs 1 harness or 1 shell
-harness                 the agent CLI: Claude Code, Codex, pi, Copilot
+├─ runs 1 harness or 1 shell
+├─ host (at most 1)    the outpost it runs on; no host means the home's machine
+└─ offline             its host is unreachable (bridge lost or refused, or
+                       Outposts off); typing is not sent
+harness                 the agent CLI: Claude Code, Codex, pi
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
 └─ effort (at most 1)    how much reasoning the model uses
@@ -41,18 +44,25 @@ agent                   a harness that runs in a terminal; the user talks to
    ├─ launching         starting up
    ├─ working           busy
    ├─ waiting           done; waits for the user's input
-   ├─ needs approval    asks the user to allow a tool call
+   ├─ needs approval    blocked on a prompt the user must answer
    ├─ scheduled         will continue by itself at a set time
    ├─ idle              nothing to do
    ├─ recoverable       stopped; attn can bring it back
    └─ unknown           attn cannot tell; may be an error
-session                 attn's record of one conversation; like one chat in a
-                        chat app's history
+session                 attn's record of one conversation in one profile; like
+                        one chat in a chat app's history
 ├─ conversation (1)     the harness's chat history
+├─ terminal (0..n)      the terminals showing it; a terminal shows 1 session
+│                       at a time
 ├─ worktree (at most 1) the git worktree the agent works in; several
 │                       sessions can share one
-└─ stake (at most 1)    the seed assigned to the session by its delegation;
-                        it tends it and reports there; like an assignment
+├─ stake (at most 1)    the seed assigned to the session by its delegation;
+│                       it tends it and reports there; like an assignment
+├─ vent (0..n)          an agent's report of a tool or an instruction that
+│                       blocked them; like a bug report
+└─ monitor (1 while live)  watches the session's agent on the machine it
+                           runs on, and keeps its live state: state, turn,
+                           cost, PR links
 ```
 
 ```text
@@ -85,10 +95,12 @@ address                 who an item is for: a session or a mailbox
    ├─ seed (at most 1)  the work the ask is about; the ask is addressed to
    │                    the seed's tender
    ├─ question (0..n)   pick one, pick any, or write an answer
-   └─ answer (at most 1) the user's reply: a note on the seed, or an
-                        inbox item when there is no seed
-ring                    one prompt that tells an agent that they have unread
-                        items; like a push notification
+   └─ answer (at most 1) the user's reply, typed into the conversation of
+                        the ask's addressee as the user's message; a seed
+                        also keeps it as a note
+ring                    one prompt for an agent with unread items: it types
+                        answers and quick captures as the user's message and
+                        tells of the rest; like a push notification
 quick capture           a quick message (with optional attachments) the user
                         can send to chief or crew, from outside attn, using a
                         global shortcut; like macOS Quick Note
@@ -102,7 +114,10 @@ flow (1 per profile)      how the user works with attn and their agents:
 └─ desktop flow           the user goes to their agents on their desktops;
                           like spatial work across macOS Spaces
 queue                     agents in order of the attention they are owed
-└─ turn (at most 1 per agent)  attention that an agent is owed
+└─ turn (at most 1 per agent)  attention that an agent is owed; opens when the
+                               agent stops, or when it asks (attn turn open)
+notification run          a run that attn's own input started, such as a ring;
+                          with quiet notifications its stop opens no turn
 snooze                    puts off a turn until a set time
 unsnooze                  ends a snooze early
 ```
@@ -116,10 +131,15 @@ garden                  a profile's issue tracker
    ├─ watcher (0..n)    a party that follows the seed and
    │                    its subtasks; like a watcher on a ticket
    ├─ note (0..n)       a comment in the ticket's log
+   ├─ check (0..n)      something the seed must prove, numbered like C1; like
+   │  │                 an acceptance criterion
+   │  ├─ report (at most 1)   the proof someone recorded for it
+   │  └─ verdict (at most 1)  confirmed or rejected
    └─ edge (0..n)       blocks or discovered-from
 tender                  the party that claims a seed; like an assignee
 tend                    claim a seed; like assigning a ticket to yourself
 plot                    an epic: a seed with child seeds
+shared check            a check on a plot that every seed under it proves
 packet                  an epic template
 ```
 
@@ -127,8 +147,13 @@ packet                  an epic template
 crew member             an agent with a permanent identity and memory
 ├─ name (1)             the member’s name; unique in their profile
 ├─ charter (1)          who the member is and what they live for
-├─ member home (at most 1)  the folder for the charter and letters; new homes
+├─ member home (at most 1)  the folder for the charter, letters and memory; new homes
 │                       live in the Notebook
+├─ memory (1)           what the member remembers from past days
+│  ├─ entry (0..n)      one line the member remembers
+│  │  └─ day line       the entry that closes a day; it links its letter and
+│  │                    session
+│  └─ summary (0..n)    one line that stands for many entries
 ├─ launch desktop (1)   the desktop where their sessions start
 ├─ letter (0..n)        what one of the member's sessions leaves for their
 │                       next sessions; like a shift handoff
@@ -171,6 +196,21 @@ handover                a new session takes over a seed and its claim
 instance                a daemon, an app and a data folder under one name;
                         like a separate install. Production has no instance
                         name.
+└─ outbox (1)           the telemetry attn keeps for upload; like a mail
+                        outbox
+```
+
+```text
+home                    the main daemon the user's app connects to
+└─ bridge (0..n)       an SSH connection to one outpost
+   ├─ state (1)
+   │  ├─ connecting    the home is dialing the outpost
+   │  ├─ connected     heartbeats arrive (every 0.5 s)
+   │  ├─ stalled       no heartbeat for 3 s on an open connection; usually clears
+   │  ├─ lost          no heartbeat for 10 s, or no connection; the home redials
+   │  └─ refused       the outpost was reached, but no key was accepted, its
+   │                   identity changed, or it runs a different build
+   └─ outpost (1)     a remote daemon paired to that home
 ```
 
 ```text

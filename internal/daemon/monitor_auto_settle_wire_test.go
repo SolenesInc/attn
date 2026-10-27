@@ -61,3 +61,30 @@ func TestEnablingAutoSettleWhileTheSessionWorksArmsItsCreditedRun(t *testing.T) 
 		}
 	})
 }
+
+func TestANewCountdownLengthReachesASessionAlreadyArmed(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		setSetting(t, app, "auto_settle_enabled", "true")
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "pick a colour")
+		agent.reply("Which colour? <!-- attn:state=waiting_input -->")
+		armedAt := time.Now()
+		app.TypeLine(agent.id, "blue")
+		countdown := 40 * time.Second
+		setSetting(t, app, "auto_settle_countdown_seconds", "40")
+		w.advance(autoSettleDefaultArm)
+		s := listedState(t, w, agent.id)
+		if want := armedAt.Add(autoSettleDefaultArm + countdown); !autoSettleFiresAt(t, s).Equal(want) {
+			t.Fatalf("the countdown armed before the change fires at %q, want %s", protocol.Deref(s.AutoSettleFiresAt), want.UTC().Format(time.RFC3339Nano))
+		}
+		w.advance(autoSettleDefaultCountdown)
+		if s := listedState(t, w, agent.id); !protocol.Deref(s.TurnOwed) {
+			t.Fatalf("the old countdown length settled the turn: %+v", s)
+		}
+		w.advance(countdown - autoSettleDefaultCountdown)
+		if s := listedState(t, w, agent.id); protocol.Deref(s.TurnOwed) {
+			t.Fatalf("the new countdown did not settle the turn: %+v", s)
+		}
+	})
+}

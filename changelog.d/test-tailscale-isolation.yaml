@@ -1,3 +1,0 @@
-kind: internal
-area: testing
-change: Isolate wire and CLI stack tests from the host's Tailscale installation.

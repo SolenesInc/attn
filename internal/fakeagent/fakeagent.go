@@ -24,10 +24,9 @@ import (
 type Harness string
 
 const (
-	Claude  Harness = "claude"
-	Codex   Harness = "codex"
-	Copilot Harness = "copilot"
-	Pi      Harness = "pi"
+	Claude Harness = "claude"
+	Codex  Harness = "codex"
+	Pi     Harness = "pi"
 )
 
 const (
@@ -102,12 +101,12 @@ type exitParams struct {
 }
 
 var programs = map[string]func(config) int{
-	string(Claude):  runClaude,
-	string(Codex):   runCodex,
-	string(Copilot): runCopilot,
-	string(Pi):      runPiTerminal,
-	piPluginName:    runPiPlugin,
-	wrapperName:     runWrapperTripwire,
+	string(Claude): runClaude,
+	string(Codex):  runCodex,
+	string(Pi):     runPiTerminal,
+	piPluginName:   runPiPlugin,
+	wrapperName:    runWrapperTripwire,
+	miseName:       runMise,
 }
 
 func Main() {
@@ -125,7 +124,7 @@ func Main() {
 	if name == piPluginName {
 		harness = Pi
 	}
-	if name != wrapperName && !slices.Contains(cfg.Harnesses, harness) {
+	if name != wrapperName && name != miseName && !slices.Contains(cfg.Harnesses, harness) {
 		os.Exit(tripwire(cfg, name, fmt.Sprintf("%s spawned in a world that did not install it", name)))
 	}
 	os.Exit(program(cfg))
@@ -229,6 +228,13 @@ func serve(cfg config, style composer, conv conversation) int {
 		term.print(boot.Screen)
 		return boot.Code
 	}
+	if boot.WaitForEnter {
+		term.print(boot.Screen)
+		if err := term.awaitEnter(); err != nil {
+			return 1
+		}
+		term.write("\x1b[2J\x1b[H" + term.composer())
+	}
 	began := conv.begin(term)
 	report := conv.launch()
 	report.Role = roleAgent
@@ -250,7 +256,7 @@ func serve(cfg config, style composer, conv conversation) int {
 		a.term.echo(prompt)
 		a.submit(prompt)
 	}
-	if boot.Screen != "" {
+	if boot.Screen != "" && !boot.WaitForEnter {
 		term.print(boot.Screen)
 	}
 	go term.readLines(a.submit)
@@ -324,7 +330,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, guard.deny(denial)
-	case methodShowSelector, methodAskApproval, methodDismiss, methodAnswered:
+	case methodAskApproval, methodDismiss, methodAnswered:
 		return a.handleModal(method)
 	case methodStopRead:
 		return struct{}{}, a.term.stopReading()
@@ -386,13 +392,14 @@ type rpcError struct {
 type rpcHandler func(p *rpcPeer, method string, params json.RawMessage) (any, error)
 
 type rpcPeer struct {
-	conn    net.Conn
-	handle  rpcHandler
-	writeMu sync.Mutex
-	mu      sync.Mutex
-	nextID  uint64
-	pending map[string]chan rpcMessage
-	done    chan struct{}
+	conn      net.Conn
+	handle    rpcHandler
+	writeMu   sync.Mutex
+	mu        sync.Mutex
+	nextID    uint64
+	pending   map[string]chan rpcMessage
+	done      chan struct{}
+	answering sync.WaitGroup
 }
 
 func newRPCPeer(conn net.Conn, handle rpcHandler) *rpcPeer {
@@ -423,7 +430,7 @@ func (p *rpcPeer) read() {
 
 func (p *rpcPeer) dispatch(msg rpcMessage) {
 	if msg.Method != "" {
-		go p.answer(msg)
+		p.answering.Go(func() { p.answer(msg) })
 		return
 	}
 	p.mu.Lock()

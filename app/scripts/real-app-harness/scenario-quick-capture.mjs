@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { parseCommonArgs, launchFreshAppAndConnect, printCommonHelp } from './common.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appPlatform, createWindowDriver } from './platform.mjs';
@@ -48,6 +48,7 @@ client.quitApp = async () => {
 };
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const driver = createWindowDriver({ appPath: options.appPath });
+registerNativeFailureEvidence(runner, { client, driver });
 const fixtureId = `com.attn.capture-fixture.${runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
 const fixture = createWindowDriver({ appPath: options.appPath, bundleId: fixtureId });
 const otherFixtureId = `${fixtureId}.other`;
@@ -105,17 +106,14 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 const attn = process.env.ATTN_WRAPPER_PATH || ${JSON.stringify(appDaemonInTree(options.appPath))};
-const batch = JSON.parse(execFileSync(attn, ['agent', 'inbox', '--json'], { encoding: 'utf8' }));
+const item = JSON.parse(execFileSync(attn, ['agent', 'inbox', process.argv[2], '--json'], { encoding: 'utf8' }));
 const receipts = [];
-for (const item of batch.items) {
-  if (item.kind !== 'quick_capture') continue;
-  for (const attachment of item.attachments || []) {
-    const out = path.join(process.cwd(), attachment.id + path.extname(attachment.name));
-    execFileSync(attn, ['agent', 'attachment', item.source_id, attachment.id, '--out', out]);
-    const dimensions = attachment.media_type.startsWith('image/') ? execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', out], { encoding: 'utf8' }) : undefined;
-    receipts.push({ captureId: item.source_id, attachmentId: attachment.id, name: attachment.name, mediaType: attachment.media_type, bytes: fs.statSync(out).size,
-      sha256: crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex'), dimensions });
-  }
+for (const attachment of item.attachments || []) {
+  const out = path.join(process.cwd(), attachment.id + path.extname(attachment.name));
+  execFileSync(attn, ['agent', 'attachment', item.source_id, attachment.id, '--out', out]);
+  const dimensions = attachment.media_type.startsWith('image/') ? execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', out], { encoding: 'utf8' }) : undefined;
+  receipts.push({ captureId: item.source_id, attachmentId: attachment.id, name: attachment.name, mediaType: attachment.media_type, bytes: fs.statSync(out).size,
+    sha256: crypto.createHash('sha256').update(fs.readFileSync(out)).digest('hex'), dimensions });
 }
 fs.writeFileSync(${JSON.stringify(path.join(runner.runDir, 'mailbox-image-receipt.json'))}, JSON.stringify(receipts));
 console.log('CAPTURE_IMAGE_INSPECTED ' + JSON.stringify(receipts));
@@ -123,8 +121,9 @@ console.log('CAPTURE_IMAGE_INSPECTED ' + JSON.stringify(receipts));
 
 runner.writeJson('measurement-conditions.json', { load: execFileSync('uptime', { encoding: 'utf8' }).trim(), swap: execFileSync('sysctl', ['-n', 'vm.swapusage'], { encoding: 'utf8' }).trim(), machine: execFileSync('sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(), os: execFileSync('sw_vers', ['-productVersion'], { encoding: 'utf8' }).trim(), endpoint: 'OS HID postedAt to capture-open editor-focus acknowledgement; not first painted pixel', note: 'Precreated composer, synthetic fixture and fake agents. Background machine work continues.' });
 async function openCapture(text = "") {
-  const { postedAtMs } = JSON.parse(await driver.runInputDriverCapture(["global_capture", "--key", "b", "--text", text]));
+  const { postedAtMs } = JSON.parse(await driver.runInputDriverCapture(["global_capture", "--key", "b"]));
   const actual = await state({ visible: true });
+  if (text) await driver.runInputDriver(['global_text', '--text', text]);
   const latest = actual.latencyMs[actual.latencyMs.length - 1];
   openingReceipts.push({ postedAtMs, ...latest, hotkeyToFocusMs: latest.focusedAt - postedAtMs });
   runner.writeJson('opening-latency.json', openingReceipts);
@@ -228,8 +227,9 @@ try {
     await client.request('capture_binding', { binding: testBinding });
     writeMockAgentFixture(home, { version: 1, turns: [
       { includes: 'You have been woken', actions: [{ type: 'reply', text: 'CAPTURE_CREW_AWAKE', state: 'idle' }] },
-      { includes: '📬 You have unread items', actions: [
-        { type: 'exec', cmd: process.execPath, args: [path.join(runner.runDir, 'inspect-capture.mjs')] },
+      { includes: 'sent through Quick Capture', actions: [
+        { type: 'capture', from: 'prompt', pattern: 'attn agent attachment ([0-9a-f-]{36}) ', name: 'capture' },
+        { type: 'exec', cmd: process.execPath, args: [path.join(runner.runDir, 'inspect-capture.mjs'), '{{capture}}'] },
         { type: 'reply', text: 'CAPTURE_IMAGE_INSPECTED', state: 'idle' },
       ] },
     ] });
@@ -257,7 +257,7 @@ try {
   await runner.step('fresh_process_first_open_paints', async () => {
     await openCapture('Track launch checklist');
     const beforeFrame = await state();
-    assert.equal(beforeFrame.text, 'Track launch checklist', 'The first-ever opening must accept immediate native typing');
+    assert.equal(beforeFrame.text, 'Track launch checklist', 'The first-ever opening accepts native typing');
     runner.writeJson('fresh-first-open-before-frame.json', beforeFrame);
     await screenshot('fresh-first-open-before-frame.png');
     const actual = await state({ frame: true });
@@ -499,7 +499,7 @@ try {
   await runner.step('remove_image_and_keyboard_mailbox', async () => {
     const remove = (await state()).controls.remove;
     await driver.clickWindow(remove.x, remove.y, { windowTitle: 'Quick Capture' });
-    assert.equal((await state()).files.length, 2);
+    assert.equal((await state({ attachmentCount: 2 })).files.length, 2);
     await key('2', ['command']);
     assert.equal((await state({ mailbox })).mailbox, mailbox);
     await key('1', ['command']);

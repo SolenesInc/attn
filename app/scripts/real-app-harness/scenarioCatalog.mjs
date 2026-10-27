@@ -1,5 +1,11 @@
 export const scenarioCatalog = [
   {
+    id: 'agent-reload',
+    runnerId: 'AGENT-RELOAD',
+    label: 'CLI reload keeps the agent tile and native keyboard input working',
+    command: ['node', 'scripts/real-app-harness/scenario-agent-reload.mjs'],
+  },
+  {
     id: 'callouts',
     runnerId: 'CALLOUTS',
     label: 'Agent callouts across sidebar shapes, native stepping, navigation and browser tiles',
@@ -154,6 +160,20 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-clear-opens-session'],
   },
   {
+    id: 'claude-shared-conversation',
+    runnerId: 'CLAUDE-SHARED-CONVERSATION',
+    label: 'Two Claude tiles on one conversation both warn above their terminals until one of them closes',
+    command: ['pnpm', 'run', 'real-app:scenario-claude-shared-conversation'],
+  },
+  {
+    id: 'pi-shared-conversation',
+    runnerId: 'PI-SHARED-CONVERSATION',
+    label: 'Two Pi tiles on one conversation both warn until one of them closes',
+    command: ['pnpm', 'run', 'real-app:scenario-pi-shared-conversation'],
+    timeoutMs: 300_000,
+    allowRealAgents: ['pi'],
+  },
+  {
     id: 'session-reopen',
     runnerId: 'SESSION-REOPEN',
     label: 'A closed worktree session reopens under its own id, recreating a deleted worktree only when asked',
@@ -248,6 +268,30 @@ export const scenarioCatalog = [
     label: 'Crew header: member claim, latest note and a fresh wake session',
     command: ['node', 'scripts/real-app-harness/scenario-crew-seed-header.mjs'],
     timeoutMs: 180_000,
+  },
+  {
+    id: 'outpost-update',
+    runnerId: 'OutpostUpdate',
+    label: 'Outpost updates: banner and row actions, phases, supervised restart, outcome, and dismissal',
+    command: ['node', 'scripts/real-app-harness/scenario-outpost-update.mjs'],
+  },
+  {
+    id: 'notebook-sync',
+    runnerId: 'NotebookSync',
+    label: 'Notebook: first sync, previous folder rescue and conflict copies on the outpost row',
+    command: ['node', 'scripts/real-app-harness/scenario-notebook-sync.mjs'],
+  },
+  {
+    id: 'outposts-settings',
+    runnerId: 'OutpostsSettings',
+    label: 'Outposts: pairing, remote CLI shells, native splits, offline typing and screen recovery, re-pair and Remove confirmation',
+    command: ['node', 'scripts/real-app-harness/scenario-outposts-settings.mjs'],
+  },
+  {
+    id: 'analytics-settings',
+    runnerId: 'AnalyticsSettings',
+    label: 'Analytics settings: vents new then done, dismiss and undo by key, plant a seed, records by stream, still while idle',
+    command: ['node', 'scripts/real-app-harness/scenario-analytics-settings.mjs'],
   },
   {
     id: 'agent-settings',
@@ -360,8 +404,15 @@ export const scenarioCatalog = [
   {
     id: 'codex-shared',
     runnerId: 'CODEX-SHARED',
-    label: 'Shared Codex: Settings switch, hidden sessions in the queue, focus after a conversation switch, hidden approval answered in a tile, last tile closes into the ledger',
+    label: 'Shared Codex: Settings switch, hidden sessions in the queue, focus after a conversation switch, hidden approval answered in a tile from the queue and after /resume, last tile closes into the ledger',
     command: ['node', 'scripts/real-app-harness/scenario-codex-shared.mjs'],
+    freshWorldAfter: true,
+  },
+  {
+    id: 'codex-update',
+    runnerId: 'CODEX-UPDATE',
+    label: 'Shared Codex update: the banner offers a newer Codex, Install runs it in a tile, shared Codex restarts on it, Reload tiles moves the old tile',
+    command: ['node', 'scripts/real-app-harness/scenario-codex-update.mjs'],
     freshWorldAfter: true,
   },
   {

@@ -1,0 +1,3 @@
+kind: internal
+area: usage
+change: A session whose transcript and subagent transcripts grow together sends the app one cost update per read instead of one per transcript.

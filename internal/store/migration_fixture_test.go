@@ -63,7 +63,7 @@ func migrateDBThrough(db *sql.DB, path string, version int) error {
 }
 
 func legacySchemaStore(db *sql.DB, writes *tableWrites, path string) (*Store, error) {
-	settings, err := readSettings(db)
+	settings, _, err := readSettings(db)
 	if err != nil {
 		db.Close()
 		return nil, err

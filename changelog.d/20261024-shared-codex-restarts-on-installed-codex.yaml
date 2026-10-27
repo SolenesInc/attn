@@ -1,0 +1,4 @@
+kind: added
+area: codex
+change: Shared Codex moves its app-server to the Codex you install. Once no conversation runs a turn and every shared terminal has started, attn restarts the app-server on the installed Codex, and the terminals reconnect with what you typed still in place. If the new Codex refuses to start, the app-server keeps running the old one and nothing is interrupted.
+symptom: After a Codex update, the shared Codex app-server kept running the old Codex until every shared session closed, and new terminals ran the new Codex against it.

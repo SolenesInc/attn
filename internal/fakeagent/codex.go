@@ -54,6 +54,18 @@ var codexExecFlags = flagSpec{
 }
 
 func runCodex(cfg config) int {
+	if native := readVersionFile(filepath.Join(programDir(), codexNpmNativeFile), ""); native != "" {
+		return runNpmShim(native)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		return codexPrintVersion()
+	}
+	if len(os.Args) > 2 && os.Args[1] == "doctor" && os.Args[2] == "--json" {
+		return codexDoctor(cfg)
+	}
+	if len(os.Args) == 2 && os.Args[1] == "update" {
+		return codexUpdate(cfg)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "app-server" {
 		if codexServerFlags.parse(os.Args[2:]).value("--listen") != "" {
 			return runCodexAppServer(cfg)
@@ -69,7 +81,7 @@ func runCodex(cfg config) int {
 			fmt.Fprintln(os.Stderr, "Error: "+codexRemoteResumeRefusal)
 			return 1
 		}
-		return serve(cfg, codexComposer, &codexRemote{cfg: cfg})
+		return serve(cfg, codexComposer, &codexRemote{cfg: cfg, version: installedCodexVersion()})
 	}
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		return codexExec(codexExecFlags.parse(os.Args[2:])).serve(cfg)
@@ -147,6 +159,9 @@ func (c *codex) begin(term *terminal) error {
 	if c.hooks, err = codexHooks(args.values["-c"], c.cwd); err != nil {
 		return err
 	}
+	if err := offerCodexUpdate(c.cfg, term, args.values["-c"]); err != nil {
+		return err
+	}
 	source := "startup"
 	if len(args.positionals) > 0 && args.positionals[0] == "resume" {
 		if len(args.positionals) < 2 {
@@ -160,7 +175,7 @@ func (c *codex) begin(term *terminal) error {
 				return fmt.Errorf("codex resume %s: no rollout under %s", c.conversation, c.sessionsDir())
 			}
 		}
-	} else if err := c.startRollout(); err != nil {
+	} else if err := c.newConversation(); err != nil {
 		return err
 	} else {
 		c.unstarted = true
@@ -177,14 +192,24 @@ func (c *codex) sessionsDir() string {
 }
 
 func (c *codex) startRollout() error {
+	if err := c.newConversation(); err != nil {
+		return err
+	}
+	return c.writeSessionMeta()
+}
+
+func (c *codex) newConversation() error {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return err
 	}
 	c.conversation = id.String()
-	started := time.Now().UTC()
-	c.transcript = codexRolloutPath(c.sessionsDir(), c.conversation, started)
-	return appendLines(c.transcript, codexSessionMeta(c.conversation, c.cwd, "codex_cli_rs", started))
+	c.transcript = codexRolloutPath(c.sessionsDir(), c.conversation, time.Now().UTC())
+	return nil
+}
+
+func (c *codex) writeSessionMeta() error {
+	return appendLines(c.transcript, codexSessionMeta(c.conversation, c.cwd, "codex_cli_rs", time.Now().UTC()))
 }
 
 func codexRolloutPath(sessions, conversation string, started time.Time) string {
@@ -271,6 +296,9 @@ func (c *codex) submit(prompt string) error {
 			return err
 		}
 	} else if c.unstarted {
+		if err := c.writeSessionMeta(); err != nil {
+			return err
+		}
 		next.source = "startup"
 	}
 	if c.unstarted = false; next.source != "" {

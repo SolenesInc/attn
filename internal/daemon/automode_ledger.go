@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-const settingAutoModeDenialCursor = "automode_denial_ledger_cursor"
-
 func autoModeDenialLedgerPath() string {
 	if override := strings.TrimSpace(os.Getenv(automode.DenialLedgerEnvVar)); override != "" {
 		return override
@@ -47,7 +45,7 @@ func (d *Daemon) reconcileAutoModeDenialLedger() autoModeLedgerReconcile {
 		return autoModeLedgerReconcile{}
 	}
 
-	cursor := parseAutoModeDenialCursor(d.store.GetSetting(settingAutoModeDenialCursor))
+	cursor := parseAutoModeDenialCursor(d.homeSetting(SettingAutoModeDenialCursor))
 	stored, err := d.store.ListAutoModeDenials(store.AutoModeDenialRows)
 	if err != nil {
 		d.logf("automode: listing denials to reconcile the ledger: %v", err)
@@ -85,7 +83,7 @@ func (d *Daemon) reconcileAutoModeDenialLedger() autoModeLedgerReconcile {
 			record.SessionID, record.Rule, record.Action, record.At.Format(time.RFC3339))
 	}
 	if newest.After(cursor) {
-		d.store.SetSetting(settingAutoModeDenialCursor, newest.UTC().Format(time.RFC3339Nano))
+		d.store.SetSetting(string(SettingAutoModeDenialCursor), newest.UTC().Format(time.RFC3339Nano))
 	}
 	if out.Dropped > 0 {
 		d.logf("automode: the denial ledger has dropped %d records to rotation", out.Dropped)

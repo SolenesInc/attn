@@ -3,6 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseCommonArgs, printCommonHelp, queryDaemonDb } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
@@ -42,8 +43,33 @@ function migrationCheckSpec(directory) {
   };
 }
 
+// The columns 1792793838148574 moved from sessions to session_runtime, as a pre-move schema had them.
+const RUNTIME_COLUMNS = [
+  ['state', "TEXT NOT NULL DEFAULT 'idle'"], ['state_since', "TEXT NOT NULL DEFAULT ''"], ['state_updated_at', "TEXT NOT NULL DEFAULT ''"],
+  ['last_seen', "TEXT NOT NULL DEFAULT ''"], ['branch', 'TEXT'], ['is_worktree', 'INTEGER NOT NULL DEFAULT 0'], ['main_repo', 'TEXT'],
+  ['repository', "TEXT NOT NULL DEFAULT ''"], ['agent_metadata', "TEXT NOT NULL DEFAULT ''"], ['agent_driver_plugin_name', "TEXT NOT NULL DEFAULT ''"],
+  ['agent_driver_run_id', "TEXT NOT NULL DEFAULT ''"], ['agent_driver_report_seq', 'INTEGER NOT NULL DEFAULT 0'],
+  ['agent_driver_transcript_path', "TEXT NOT NULL DEFAULT ''"], ['turn_settled_at', "TEXT NOT NULL DEFAULT ''"],
+  ['turn_opened_at', "TEXT NOT NULL DEFAULT ''"], ['turn_snoozed_until', "TEXT NOT NULL DEFAULT ''"], ['turn_agent_at', "TEXT NOT NULL DEFAULT ''"],
+  ['turn_requested_at', "TEXT NOT NULL DEFAULT ''"], ['last_model_request_at', 'TEXT'], ['harness_title', "TEXT NOT NULL DEFAULT ''"],
+  ['session_cost_json', "TEXT NOT NULL DEFAULT ''"],
+];
+
+function unmoveSessionRuntimeSql() {
+  return [
+    'DROP VIEW sessions_with_runtime;',
+    ...RUNTIME_COLUMNS.map(([column, type]) => `ALTER TABLE sessions ADD COLUMN ${column} ${type};`),
+    `UPDATE sessions SET ${RUNTIME_COLUMNS.map(([column]) => `${column} = (SELECT r.${column} FROM session_runtime r WHERE r.session_id = sessions.id)`).join(', ')}
+      WHERE id IN (SELECT session_id FROM session_runtime);`,
+    'DROP TABLE session_runtime;',
+    'CREATE INDEX idx_sessions_repository ON sessions(repository);',
+    'DELETE FROM schema_migrations WHERE version = 1792793838148574;',
+  ];
+}
+
 function legacyWorkspacesSql(fixtureDir) {
   const statements = [
+    ...unmoveSessionRuntimeSql(),
     'DELETE FROM desktop_panes;',
     'DELETE FROM desktops;',
     'DELETE FROM profiles;',
@@ -66,6 +92,9 @@ function legacyWorkspacesSql(fixtureDir) {
     `INSERT OR REPLACE INTO automation_definitions (id, name, enabled, revision, spec_json, profile_id, created_at, updated_at, deleted_at)
       VALUES (1, 'Migration check', 0, 1, ${sql(JSON.stringify(migrationCheckSpec(fixtureDir)))}, '', 'now', 'now', '');`,
     'ALTER TABLE sessions ADD COLUMN workspace_id TEXT;',
+    'ALTER TABLE sessions RENAME COLUMN user_label TO label;',
+    'ALTER TABLE sessions DROP COLUMN harness_title;',
+    'DELETE FROM schema_migrations WHERE version = 1792371295625260;',
     "CREATE TABLE workspaces (id TEXT PRIMARY KEY, title TEXT NOT NULL, directory TEXT NOT NULL, created_at TEXT NOT NULL, muted INTEGER NOT NULL DEFAULT 0, rank TEXT NOT NULL DEFAULT '', pinned INTEGER NOT NULL DEFAULT 0);",
     'CREATE TABLE workspace_layouts (workspace_id TEXT PRIMARY KEY, active_pane_id TEXT NOT NULL, layout_json TEXT NOT NULL, updated_at TEXT NOT NULL);',
     "CREATE TABLE workspace_layout_panes (workspace_id TEXT NOT NULL, pane_id TEXT NOT NULL, runtime_id TEXT NOT NULL DEFAULT '', session_id TEXT, kind TEXT NOT NULL, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'ready', error TEXT NOT NULL DEFAULT '', PRIMARY KEY (workspace_id, pane_id));",
@@ -80,9 +109,7 @@ function legacyWorkspacesSql(fixtureDir) {
     'DROP TABLE addressed_pull_request_watches;',
     "ALTER TABLE prs ADD COLUMN last_updated TEXT NOT NULL DEFAULT '';",
     "ALTER TABLE prs ADD COLUMN last_polled TEXT NOT NULL DEFAULT '';",
-    'UPDATE prs SET last_updated = (SELECT last_updated FROM pr_poll_times WHERE pr_id = prs.id), last_polled = (SELECT last_polled FROM pr_poll_times WHERE pr_id = prs.id);',
-    'DROP TABLE pr_poll_times;',
-    'DELETE FROM schema_migrations WHERE version = 1791738052340741;',
+    'DELETE FROM schema_migrations WHERE version IN (1791738052340741, 1792452850741951);',
     // It still has the Present tables, without the address column 168 adds.
     "CREATE TABLE presentations (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, ticket_id TEXT, title TEXT NOT NULL, kind TEXT NOT NULL, repo_path TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL);",
     'CREATE TABLE presentation_rounds (id TEXT PRIMARY KEY, presentation_id TEXT NOT NULL REFERENCES presentations(id) ON DELETE CASCADE, seq INTEGER NOT NULL, manifest_yaml TEXT NOT NULL, base_sha TEXT NOT NULL, head_sha TEXT NOT NULL, created_at TEXT NOT NULL, submitted_at TEXT, verdict TEXT, UNIQUE(presentation_id, seq));',
@@ -128,12 +155,12 @@ function legacyWorkspacesSql(fixtureDir) {
   statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_session TEXT NOT NULL DEFAULT '';`);
   statements.push(`ALTER TABLE delegation_operations ADD COLUMN handover_tender_member TEXT NOT NULL DEFAULT '';`);
   statements.push(`DELETE FROM schema_migrations WHERE version > ${LAST_SCHEMA_BEFORE_CONVERSION} AND version <= ${LAST_SCHEMA_REBUILT_BY_FIXTURE};`);
-  statements.push('DELETE FROM schema_migrations WHERE version IN (1792359946019014, 1792359946020014, 1792359946021014, 1792359946022014, 1792359946023014, 1792359946024014, 1792359946025014, 1792359946026014, 1792359946027014, 1792359946028014, 1792359946029014, 1792359946030014, 1792359946031014, 1792359946032014);');
+  statements.push('DELETE FROM schema_migrations WHERE version IN (1793111475126440, 1793111475404723, 1793111475500692, 1793111475583214, 1793111475670935, 1793111475755305, 1793111475839445, 1793111475923199, 1793111476009795, 1793111476093878, 1793111476175147, 1793111476257370, 1793111476342423, 1793111476425448);');
   return statements.join('\n');
 }
 
-function sqlite(dbPath, script) {
-  execFileSync('sqlite3', [dbPath], { input: script, stdio: ['pipe', 'pipe', 'pipe'] });
+function sqlite(dbPath, script, env) {
+  execFileSync('go', ['run', './scripts/migration-fixture', dbPath], { cwd: fileURLToPath(new URL('../../..', import.meta.url)), input: script, env, stdio: ['pipe', 'pipe', 'pipe'] });
 }
 
 async function poll(read, predicate, description, timeoutMs = 20_000) {
@@ -233,7 +260,7 @@ async function main() {
       seeded = true;
       const legacyDir = path.join(runner.sessionDir, 'legacy');
       fs.mkdirSync(legacyDir, { recursive: true });
-      sqlite(dbPath, legacyWorkspacesSql(fs.realpathSync(legacyDir)));
+      sqlite(dbPath, legacyWorkspacesSql(fs.realpathSync(legacyDir)), instanceCliEnv(instance));
     });
 
     await runner.step('startup_converts_and_the_app_opens_on_the_intro', async () => {

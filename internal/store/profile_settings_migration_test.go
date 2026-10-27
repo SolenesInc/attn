@@ -50,9 +50,13 @@ func TestUpgradeKeepsEveryProfilesNotebookFolder(t *testing.T) {
 					t.Errorf("%s root=%q, want %q", p.Name, root, tc.want)
 				}
 			}
+			wantCount := 0
+			if tc.stored != "" {
+				wantCount = 1
+			}
 			var count int
-			if err := current.db.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = 'notebook.root'`).Scan(&count); err != nil || count != 0 {
-				t.Fatalf("stale daemon root count %d: %v", count, err)
+			if err := current.db.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = 'notebook.root'`).Scan(&count); err != nil || count != wantCount {
+				t.Fatalf("preserved machine root count %d: %v", count, err)
 			}
 		})
 	}

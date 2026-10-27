@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/pty"
 )
 
@@ -127,6 +128,7 @@ func adoptListener(fd int) (net.Listener, error) {
 }
 
 func (r *Runtime) handleUpgrade(c *connCtx, reqID string, params UpgradeParams) {
+	pausepoint.At(pausepoint.PtyWorkerUpgrade)
 	executable := strings.TrimSpace(params.Executable)
 	if executable == "" {
 		c.sendError(reqID, ErrBadRequest, "upgrade requires an executable")

@@ -1,3 +1,0 @@
-kind: internal
-area: ci
-change: Re-running only a failed App acceptance shard now reuses the run's app tree, and the App acceptance check reads the re-run shard's result instead of failing to find the tree.

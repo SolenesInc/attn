@@ -1,0 +1,1 @@
+attn woke you to read these, and the user is not watching this run. When you stop, you stay out of the user's queue and they will likely not read what you write. If you cannot continue without the user, run `attn turn open` before you stop. If you were waiting for the user before this, you are out of their queue now; open your turn again if you still need them.

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 type WireDaemon struct {
@@ -17,13 +19,16 @@ type WireDaemon struct {
 	stopped chan error
 }
 
-func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, gardenClock ...func() time.Time) (*WireDaemon, error) {
+func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, nativeWatch bool, gardenClock ...func() time.Time) (*WireDaemon, error) {
 	d := New(socketPath)
+	d.notebookSyncWatch = nativeWatch
 	if len(gardenClock) > 0 {
 		d.gardenNow = gardenClock[0]
 	}
 	if terminals != nil {
 		d.ptyBackend = terminals
+	}
+	if terminals != nil || !nativeWatch {
 		d.notebookWatch = func(string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
 	}
 	d.listener = unix
@@ -54,9 +59,19 @@ func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
 	w.d.recentFileStat = stat
 }
 
+const BridgeCallRecovery = bridgeCallRecovery
+
+func (w *WireDaemon) UseBridgeDialer(dial func(ctx context.Context, network, address string) (net.Conn, error)) {
+	w.d.outposts.dial = dial
+}
+
+func (w *WireDaemon) UseBridgeListener(listen func(string, string) (net.Listener, error)) {
+	w.d.outpost.listen = listen
+}
+
 func UseShippedPasteGap(t testing.TB) {
-	sessionInputSubmitDelay = shippedSessionInputSubmitDelay
-	t.Cleanup(func() { sessionInputSubmitDelay = 0 })
+	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay
+	t.Cleanup(func() { sessionmonitor.SubmitDelay = 0 })
 }
 
 // PauseNextHeldAction blocks the next profile action after it ran, while its client's broadcasts are held.

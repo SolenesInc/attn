@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-const settingSessionsFilters = "sessions.filters"
-
 const sessionsFilterDayLayout = "2006-01-02"
 
 var (
@@ -35,16 +33,16 @@ func validateSessionsFilters(value string) error {
 	decoder := json.NewDecoder(strings.NewReader(trimmed))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&filters); err != nil {
-		return fmt.Errorf("%s must be a session filter object: %v", string(settingSessionsFilters), err)
+		return fmt.Errorf("%s must be a session filter object: %v", string(SettingSessionsFilters), err)
 	}
 	if err := ensureJSONEOF(decoder); err != nil {
-		return fmt.Errorf("%s must be a single session filter object: %v", string(settingSessionsFilters), err)
+		return fmt.Errorf("%s must be a single session filter object: %v", string(SettingSessionsFilters), err)
 	}
 	if !slices.Contains(sessionsFilterScopes, filters.Scope) {
-		return fmt.Errorf("%s: scope must be one of %s, got %q", string(settingSessionsFilters), strings.Join(sessionsFilterScopes, ", "), filters.Scope)
+		return fmt.Errorf("%s: scope must be one of %s, got %q", string(SettingSessionsFilters), strings.Join(sessionsFilterScopes, ", "), filters.Scope)
 	}
 	if !slices.Contains(sessionsFilterRanges, filters.Range) {
-		return fmt.Errorf("%s: range must be one of %s, got %q", string(settingSessionsFilters), strings.Join(sessionsFilterRanges, ", "), filters.Range)
+		return fmt.Errorf("%s: range must be one of %s, got %q", string(SettingSessionsFilters), strings.Join(sessionsFilterRanges, ", "), filters.Range)
 	}
 	for _, day := range []struct{ field, value string }{
 		{"customFrom", filters.CustomFrom},
@@ -54,7 +52,7 @@ func validateSessionsFilters(value string) error {
 			continue
 		}
 		if _, err := time.Parse(sessionsFilterDayLayout, day.value); err != nil {
-			return fmt.Errorf("%s: %s must be a date like 2026-09-05, got %q", string(settingSessionsFilters), day.field, day.value)
+			return fmt.Errorf("%s: %s must be a date like 2026-09-05, got %q", string(SettingSessionsFilters), day.field, day.value)
 		}
 	}
 	return nil

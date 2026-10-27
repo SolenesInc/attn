@@ -29,9 +29,15 @@ func (d *Daemon) resolveReopen(
 		SessionID: entry.ID,
 		Entry:     &entry,
 		Execution: d.reopenExecutionFromLedger(&entry),
+		Resume:    strings.TrimSpace(d.store.GetResumeSessionID(entry.ID)),
 		Live:      protocol.Deref(entry.ClosedAt) == "" && d.sessionActive(entry.ID),
 	}
-	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
+	host := d.sessionHost(entry.ID)
+	if host != "" {
+		verdict.DirectoryState = directoryUnavailable
+	} else {
+		verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
+	}
 	d.planReopenProfile(&verdict)
 
 	if verdict.Live {
@@ -40,6 +46,10 @@ func (d *Daemon) resolveReopen(
 	}
 	if verdict.ProfileDeleted {
 		verdict.Reason = fmt.Sprintf("profile %s was deleted; this session cannot reopen in another profile", verdict.ProfileID)
+		return verdict, nil
+	}
+	if host != "" {
+		verdict.Reason = d.outpostPathRefusal(verdict.Execution.Cwd, host)
 		return verdict, nil
 	}
 	_, hasLaunchIntent := d.store.LaunchIntent(entry.ID)

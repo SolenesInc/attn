@@ -27,7 +27,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			if resume {
 				opts.ResumeSessionID = "resume-id"
 			}
-			for _, driver := range []Driver{&Claude{}, &Codex{}, &Copilot{}} {
+			for _, driver := range []Driver{&Claude{}, &Codex{}} {
 				opts.Executable = driver.Name()
 				opts.ConfigOverrides = nil
 				if driver.Name() == "codex" {
@@ -43,7 +43,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	}
 	for _, system := range []string{"", " System λ {{literal}} "} {
 		request := HeadlessTaskRequest{Prompt: "User message {{literal}}", SystemPrompt: system, WorkDir: "/tmp/run", Model: "model", DisableTools: true}
-		for name, args := range map[string][]string{"claude": claudeHeadlessArgs(request), "codex": codexToolFreeHeadlessArgs(request, 0), "copilot": copilotToolFreeHeadlessArgs(request)} {
+		for name, args := range map[string][]string{"claude": claudeHeadlessArgs(request), "codex": codexToolFreeHeadlessArgs(request, 0)} {
 			raw, err := json.Marshal(args)
 			if err != nil {
 				t.Fatal(err)

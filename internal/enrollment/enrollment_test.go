@@ -1,83 +1,49 @@
-package enrollment
+package enrollment_test
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
+	"github.com/victorarias/attn/internal/enrollment"
 	"strings"
 	"testing"
 )
 
-const (
-	homeID    = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	otherHome = "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-)
-
-func seedDaemonID(t *testing.T, root, id string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(root, DaemonIDFileName), []byte(id+"\n"), 0600); err != nil {
-		t.Fatalf("seed daemon id: %v", err)
-	}
-}
-
-func TestRefuseOutpost_AllowsAFreshDataRootAndItsOwnHome(t *testing.T) {
-	root := t.TempDir()
-	if err := RefuseOutpost(root); err != nil {
-		t.Fatalf("fresh data root refused: %v", err)
-	}
-	seedDaemonID(t, root, homeID)
-	if _, err := Ensure(root, homeID); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
-	if err := RefuseOutpost(root); err != nil {
-		t.Fatalf("home refused: %v", err)
-	}
-}
-
-func TestRefuseOutpost_RefusesAnEnrolledOutpostNamingItsHome(t *testing.T) {
-	root := t.TempDir()
-	seedDaemonID(t, root, homeID)
-	if err := writeRecord(filepath.Join(root, RecordFileName), Record{HomeDaemonID: otherHome}); err != nil {
-		t.Fatal(err)
-	}
-	err := RefuseOutpost(root)
-	var outpost *OutpostError
-	if !errors.As(err, &outpost) {
-		t.Fatalf("RefuseOutpost = %v, want *OutpostError", err)
-	}
-	if outpost.HomeDaemonID != otherHome || outpost.DaemonID != homeID {
-		t.Fatalf("outpost error = %+v", outpost)
-	}
-	if !strings.Contains(err.Error(), "attn enrollment leave") {
-		t.Fatalf("refusal does not say how to leave: %v", err)
-	}
-}
-
-func TestRefuseOutpost_RefusesARecordWithoutItsDaemonID(t *testing.T) {
-	root := t.TempDir()
-	seedDaemonID(t, root, homeID)
-	if _, err := Ensure(root, homeID); err != nil {
-		t.Fatalf("ensure: %v", err)
-	}
-	if err := os.Remove(filepath.Join(root, DaemonIDFileName)); err != nil {
-		t.Fatal(err)
-	}
-	err := RefuseOutpost(root)
-	var outpost *OutpostError
-	if !errors.As(err, &outpost) {
-		t.Fatalf("RefuseOutpost = %v, want *OutpostError", err)
-	}
-	if !strings.Contains(err.Error(), "restore "+DaemonIDFileName+" with "+homeID) {
-		t.Fatalf("refusal %q does not say how to recover without a daemon id", err)
-	}
-}
-
-func TestRefuseOutpost_FailsClosedOnAnUnreadableRecord(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, RecordFileName), []byte("{"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := RefuseOutpost(root); err == nil || !strings.Contains(err.Error(), "cannot tell") {
-		t.Fatalf("RefuseOutpost = %v, want an unreadable-record refusal", err)
+func TestHomePairingAndRelease(t *testing.T) {
+	for _, ensured := range []bool{false, true} {
+		t.Run(map[bool]string{false: "fresh", true: "standalone"}[ensured], func(t *testing.T) {
+			root := t.TempDir()
+			own, err := enrollment.EnsureDaemonID(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ensured {
+				if _, err := enrollment.Ensure(root, own); err != nil {
+					t.Fatal(err)
+				}
+			}
+			const first = "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+			const second = "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+			for range 2 {
+				if _, err := enrollment.RecordHome(root, first, "first"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			status, err := enrollment.Load(root)
+			if err != nil || status.HomeDaemonID != first {
+				t.Fatalf("paired: %+v %v", status, err)
+			}
+			_, err = enrollment.RecordHome(root, second, "second")
+			if err == nil || !strings.Contains(err.Error(), first) || !strings.Contains(err.Error(), second) || !strings.Contains(err.Error(), "attn enrollment leave") {
+				t.Fatalf("second home: %v", err)
+			}
+			if _, err := enrollment.Leave(root); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := enrollment.RecordHome(root, second, "second"); err != nil {
+				t.Fatal(err)
+			}
+			status, err = enrollment.Ensure(root, own)
+			if err != nil || status.HomeDaemonID != second {
+				t.Fatalf("restart: %+v %v", status, err)
+			}
+		})
 	}
 }

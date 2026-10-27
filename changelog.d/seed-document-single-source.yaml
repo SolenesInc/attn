@@ -1,3 +1,0 @@
-kind: changed
-area: garden
-change: Seed tiles keep the last complete document visible during refresh and offer Reload if updating fails.

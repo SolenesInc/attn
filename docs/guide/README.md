@@ -23,6 +23,9 @@ the new one and the app catches up.
 | [queue](reference/queue.md) | Queue flow: turns, settling, snoozing and priority |
 | [sessions](reference/sessions.md) | Opening agents and shells, worktrees, the terminal, restarts, the ledger and resume |
 | [delegation](reference/delegation.md) | Agents starting agents you can steer, delegation roles, and the garden |
+| [using-outposts](reference/using-outposts.md) | Connect computers, run remote terminals, and sync profile Notebooks |
+| [using-shared-codex](reference/using-shared-codex.md) | Experimental shared Codex terminals |
+| [telemetry](reference/telemetry.md) | What analytics records and shares |
 
 Coming soon: [crew](reference/crew.md), permanent agents with a charter like
 the Chief; [annotations](reference/annotations.md), comments on what an agent
@@ -33,5 +36,4 @@ Keyboard shortcuts live in the app: Cmd+/ (Ctrl+Shift+/ on Linux) shows the
 always-current list and lets you remap any of them. Each page names the keys it
 needs.
 
-Not covered yet: remote hosts over SSH, pull request watching and the PR
-dashboard, the Notebook.
+Not covered yet: pull request watching and the PR dashboard, the Notebook.

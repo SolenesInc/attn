@@ -1,0 +1,3 @@
+kind: changed
+area: garden
+change: Adding a note to a seed answers in about 2 ms instead of about 100 ms on a large garden, because the daemon no longer rereads the whole garden for a write that changes no seed.

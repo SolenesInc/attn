@@ -255,7 +255,7 @@ describe('specToFormValues', () => {
       name: 'Legacy',
       trigger: { type: 'manual' },
       prompt: 'Do the thing.',
-      launch: { driver: 'copilot' },
+      launch: { driver: 'gemini' },
       location: { type: 'directory', path: '/repo' },
     });
     expect(() => specToFormValues(specJson)).toThrow(/use the cli/i);

@@ -6,7 +6,7 @@ import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance } from './harnessInstance.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { sleep } from './scenarioAssertions.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -16,6 +16,7 @@ const runner = createScenarioRunner(options, { scenarioId: 'HOME-DOCK', tier: 'l
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
+registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ garden: '.garden-frame', drawer: '.side-panel-shell.is-open' }) });
 
 // Native input in the existing harness takes 250ms per action; this is its
 // standard 15s hung-UI guard, not a delay for panel transitions.

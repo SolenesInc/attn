@@ -4,9 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAHeartbeatArmsNoAutoSettleButTheUsersAnswerInTheSameRunDoes(t *testing.T) {
@@ -43,7 +41,7 @@ func TestAHeartbeatArmsNoAutoSettleButTheUsersAnswerInTheSameRunDoes(t *testing.
 	})
 }
 
-func TestAnApprovalKeypressEarnsNoCreditAndDoesNotHoldAttnsDoorbell(t *testing.T) {
+func TestAnApprovalKeypressEarnsNoCreditAndHoldsAttnsDoorbellForTheQuietWindow(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "auto_approve_enabled", "false")
@@ -63,6 +61,7 @@ func TestAnApprovalKeypressEarnsNoCreditAndDoesNotHoldAttnsDoorbell(t *testing.T
 
 		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "y"})
 		w.advance(0)
+		answered := time.Now()
 		if err := cli.UpdateStateFromHookEvidence(protocol.TerminalID(w.Terminal(agent.id)), protocol.StateWorking, "", "", ""); err != nil {
 			t.Fatal(err)
 		}
@@ -71,55 +70,39 @@ func TestAnApprovalKeypressEarnsNoCreditAndDoesNotHoldAttnsDoorbell(t *testing.T
 		if s := queriedSession(t, cli, agent.id); s.AutoSettleFiresAt != nil {
 			t.Fatalf("an approval keypress armed a countdown to %s", protocol.Deref(s.AutoSettleFiresAt))
 		}
-		if sent := sendAgentMessage(t, cli, "sender", agent.id, "the build is green"); sent.Status != protocol.AgentMsgStatusNotified {
-			t.Fatalf("mail right after an approval keypress = %+v, want the doorbell to ring", sent)
+		agent.term.OnSubmit(agent.take)
+		if sent := sendAgentMessage(t, cli, "sender", agent.id, "the build is green"); sent.Status != protocol.AgentMsgStatusQueued {
+			t.Fatalf("mail right after an approval keypress = %+v, want it queued behind the quiet window", sent)
+		}
+		w.advance(time.Until(answered.Add(30*time.Second)) - time.Nanosecond)
+		if got := pastedContaining(agent.term, inboxDoorbell); got != 0 {
+			t.Fatalf("attn rang %v after the user's answer, inside the quiet window: %q", time.Since(answered), agent.term.Pasted())
+		}
+		w.advance(time.Nanosecond)
+		if got := pastedContaining(agent.term, inboxDoorbell); got != 1 {
+			t.Fatalf("30 s after the user's answer attn pasted %q, want the doorbell once", agent.term.Pasted())
 		}
 	})
 }
 
-func TestAnAnnotationArmsAutoSettleOnTheTurnThatTakesItButNotOnAttnsTurnAfterTheUserTypedOverIt(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		after     func(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, agent *bubbleClaude)
-		wantArmed bool
-	}{
-		{"the agent takes the annotation", func(*testing.T, *world, *testworld.Peer, *client.Client, *bubbleClaude) {}, true},
-		{"the user types over it and the doorbell's turn follows", func(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, agent *bubbleClaude) {
-			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "x"})
-			w.advance(0)
-			agent.term.OnSubmit(agent.take)
-			registerSessions(t, w, cli, "sender")
-			sendAgentMessage(t, cli, "sender", agent.id, "the build is green")
-			w.advance(30 * time.Second)
-			if got := pastedContaining(agent.term, inboxDoorbell); got != 1 {
-				t.Fatalf("after the user's keystroke went quiet attn pasted %q, want the doorbell once", agent.term.Pasted())
-			}
-		}, false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			inBubbleWithAgents(t, func(t *testing.T, w *world) {
-				app, cli := w.App(), w.Client()
-				setSetting(t, app, "auto_settle_enabled", "true")
-				agent := w.bubbleClaude(t, app, "shop")
-				app.TypeLine(agent.id, "pick a colour for the banner")
-				agent.reply("Red or blue? <!-- attn:state=waiting_input -->")
-				if !tc.wantArmed {
-					agent.term.OnSubmit(nil)
-				}
-				if got := submitSessionAnnotationFeedback(app, agent.id, sessionAnnotationFeedback); got.status != "delivered" {
-					t.Fatalf("submit = %+v, want delivered", got)
-				}
-				tc.after(t, w, app, cli, agent)
+func TestAnAnnotationArmsAutoSettleOnTheTurnThatTakesIt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		setSetting(t, app, "auto_settle_enabled", "true")
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "pick a colour for the banner")
+		agent.reply("Red or blue? <!-- attn:state=waiting_input -->")
+		if got := submitSessionAnnotationFeedback(app, agent.id, sessionAnnotationFeedback); got.status != "delivered" {
+			t.Fatalf("submit = %+v, want delivered", got)
+		}
 
-				w.advance(autoSettleDefaultArm)
-				s := queriedSession(t, cli, agent.id)
-				if s.State != protocol.SessionStateWorking || !protocol.Deref(s.TurnOwed) {
-					t.Fatalf("the agent is %s owed %v, want working on a still owed turn", s.State, protocol.Deref(s.TurnOwed))
-				}
-				if armed := s.AutoSettleFiresAt != nil; armed != tc.wantArmed {
-					t.Fatalf("once %s the countdown is %q, want armed %v", tc.name, protocol.Deref(s.AutoSettleFiresAt), tc.wantArmed)
-				}
-			})
-		})
-	}
+		w.advance(autoSettleDefaultArm)
+		s := queriedSession(t, cli, agent.id)
+		if s.State != protocol.SessionStateWorking || !protocol.Deref(s.TurnOwed) {
+			t.Fatalf("the agent is %s owed %v, want working on a still owed turn", s.State, protocol.Deref(s.TurnOwed))
+		}
+		if s.AutoSettleFiresAt == nil {
+			t.Fatal("the turn that took the annotation armed no countdown")
+		}
+	})
 }

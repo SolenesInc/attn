@@ -16,6 +16,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
@@ -28,7 +29,7 @@ import (
 const conversationKeepKind = "conversation_keep"
 const factConversationKeptChanged = "conversation.kept.changed"
 
-// Gate holds outside a sweep are single operations; retry after about one runner tick.
+// Only automatic removals hold the gate unannounced, and each is a single removal; retry after about one runner tick.
 const conversationKeepRetry = time.Second
 
 func conversationKeepGrace() time.Duration {
@@ -78,6 +79,19 @@ func (d *Daemon) queueConversationKeepAfter(delay time.Duration) {
 	if _, err := queue.Enqueue(conversationKeepKind, jobs.EnqueueOptions{UniqueKey: "all", Delay: delay}); err != nil {
 		d.logf("conversation keep: enqueue: %v", err)
 	}
+}
+
+func (d *Daemon) queueConversationKeepIfReferenceMoved(before, after garden.Seed) {
+	if conversationReference(before) != conversationReference(after) {
+		d.queueConversationKeep()
+	}
+}
+
+func conversationReference(seed garden.Seed) protocol.SessionID {
+	if garden.Closed(seed.Status) {
+		return ""
+	}
+	return seed.LastExecutionID
 }
 
 type conversationKey struct{ agent, resumeID string }
@@ -138,10 +152,11 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 			if err != nil {
 				return nil, err
 			}
-			if garden.Closed(seed.Status) || seed.LastExecutionID == "" {
+			executionID := conversationReference(seed)
+			if executionID == "" {
 				continue
 			}
-			entry := d.store.SessionLedgerEntry(seed.LastExecutionID)
+			entry := d.store.SessionLedgerEntry(executionID)
 			if entry == nil {
 				continue
 			}
@@ -162,6 +177,47 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 	}
 }
 
+func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConversationCrewDay, error) {
+	members, _, err := d.readCrewMembers()
+	if err != nil {
+		return nil, err
+	}
+	referenced := make(map[conversationKey][]protocol.KeptConversationCrewDay)
+	for _, member := range members {
+		if member.Home == "" {
+			continue
+		}
+		lock := d.crewMemoryLock(member.Key)
+		lock.Lock()
+		home, err := d.crewMemoryHome(member)
+		var memory crew.Memory
+		if err == nil {
+			memory, err = crew.ReadMemory(home)
+		}
+		lock.Unlock()
+		if err != nil {
+			return nil, fmt.Errorf("crew day references for %s: %w", member.Key.String(), err)
+		}
+		for id, entry := range memory.Entries {
+			if entry.Day == nil || entry.Day.Session == "" {
+				continue
+			}
+			sessionID := protocol.SessionID(entry.Day.Session)
+			session := d.store.SessionLedgerEntry(sessionID)
+			if session == nil {
+				continue
+			}
+			resumeID := d.store.GetResumeSessionID(sessionID)
+			if resumeID == "" {
+				continue
+			}
+			key := conversationKey{session.Agent, resumeID}
+			referenced[key] = append(referenced[key], protocol.KeptConversationCrewDay{Member: member.Key.String(), Name: d.memberName(member.Key), DayID: strconv.Itoa(id)})
+		}
+	}
+	return referenced, nil
+}
+
 func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	seeds, err := d.conversationSeedReferences()
 	if err != nil {
@@ -169,6 +225,13 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	}
 	referenced := make(map[conversationKey]bool, len(seeds))
 	for key := range seeds {
+		referenced[key] = true
+	}
+	days, err := d.crewDayReferences()
+	if err != nil {
+		return nil, err
+	}
+	for key := range days {
 		referenced[key] = true
 	}
 	pins, err := d.store.ConversationPins()
@@ -189,7 +252,7 @@ func (d *Daemon) keepConversations(now time.Time) {
 	defer d.conversationKeepMu.Unlock()
 	referenced, err := d.referencedConversations()
 	if err != nil {
-		d.logf("conversation keep: read open work: %v", err)
+		d.logf("conversation keep: read references: %v", err)
 		return
 	}
 	live := make(map[conversationKey]bool)
@@ -331,8 +394,8 @@ func (d *Daemon) retireConversations(all []store.KeptConversation, changed map[c
 		return nil
 	})
 	if errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
-		if d.worktreeMaintenance.RunAfterSweep(d.queueConversationKeep) {
-			d.logf("conversation keep: retiring copies waits for the worktree sweep")
+		if d.worktreeMaintenance.RunWhenIdle(d.queueConversationKeep) {
+			d.logf("conversation keep: retiring copies waits for the worktree sweep and protected worktree work to finish")
 		} else {
 			d.logf("conversation keep: retiring copies yielded to a worktree hold; retrying in %s", conversationKeepRetry)
 			d.queueConversationKeepAfter(conversationKeepRetry)

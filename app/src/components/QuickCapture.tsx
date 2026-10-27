@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { hideBootSplash } from '../utils/bootSplash';
-import { readImage } from '@tauri-apps/plugin-clipboard-manager';
 import { QuickCaptureAttachmentPreview, type QuickCaptureAttachment, type AttachmentOrigin, type AttachmentMotion } from './QuickCaptureAttachmentPreview';
 import './QuickCapture.css';
 import { QuickCaptureHistory } from './QuickCaptureHistory';
-import { createQuickCaptureBridge, EMPTY_HOST_STATE, QUICK_CAPTURE_READ, type QuickCaptureReadReceipt, type QuickCaptureClient, type QuickCaptureHostState, type QuickCaptureItem, type QuickCaptureDraft } from '../quickCapture/client';
+import { createQuickCaptureBridge, EMPTY_HOST_STATE, QUICK_CAPTURE_READ, type QuickCaptureReadReceipt, type QuickCaptureClient, type QuickCaptureHostState, type QuickCaptureItem, type QuickCaptureDraft, type StoredDraftFile } from '../quickCapture/client';
 import { QuickCaptureWorkQueue } from '../quickCapture/workQueue';
 import { useQuickCaptureHistory } from '../quickCapture/useQuickCaptureHistory';
 import { quickCaptureDraftCache, newQuickCaptureDraft } from '../quickCapture/draft';
@@ -94,23 +93,23 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   const state = useRef({ text, mailbox, files, saved, binding, uncertain, restored });
   useLayoutEffect(() => { state.current = { text, mailbox, files, saved, binding, uncertain, restored }; }, [text, mailbox, files, saved, binding, uncertain, restored]);
 
-  function addAttachments(items: { name: string; load: () => Promise<string> }[], origin: AttachmentOrigin, silent = false) {
+  function addAttachments(items: { name: string; load: (id: string) => Promise<StoredDraftFile> }[], origin: AttachmentOrigin, silent = false) {
     if (!state.current.restored) { setError('Draft is still loading. Try adding the file again when it is ready.'); return; }
     setSaved([]);
     const generation = draftGeneration.current;
-    const arrivals = items.map(item => ({ id: crypto.randomUUID(), name: item.name, url: '', origin, ready: false,
+    const arrivals = items.map(item => ({ id: crypto.randomUUID(), name: item.name, origin, ready: false,
       arriving: visible.current && !viewRecent.current && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches }));
     arrivals.forEach(file => ownedFiles.current.add(file.id));
     setFiles(previous => [...previous, ...arrivals]);
     arrivals.forEach((file, index) => {
       void workQueue.run(async () => {
         if (draftGeneration.current !== generation || !ownedFiles.current.has(file.id)) return;
-        const url = await items[index].load();
+        const stored = await items[index].load(file.id);
         if (draftGeneration.current !== generation || !ownedFiles.current.has(file.id)) return;
-        setFiles(previous => previous.map(item => item.id === file.id ? { ...item, url } : item));
-        const imagePreview = url.startsWith('data:image/') && await ImagePromise(url).then(() => true, () => false);
+        setFiles(previous => previous.map(item => item.id === file.id ? { ...item, stored } : item));
+        const imagePreview = stored.mediaType.startsWith('image/') && await ImagePromise(convertFileSrc(stored.path)).then(() => true, () => false);
         if (draftGeneration.current !== generation || !ownedFiles.current.has(file.id)) return;
-        setFiles(previous => previous.map(item => item.id === file.id ? { ...item, url, ready: true, imagePreview,
+        setFiles(previous => previous.map(item => item.id === file.id ? { ...item, stored, ready: true, imagePreview,
           arriving: item.arriving && visible.current && !viewRecent.current } : item));
       }).catch(error => {
         if (draftGeneration.current !== generation || !ownedFiles.current.delete(file.id)) return;
@@ -120,7 +119,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     });
   }
   function addFiles(files: File[]) {
-    const items = files.map(file => ({ name: file.name, load: () => fileDataUrl(file) }));
+    const items = files.map(file => ({ name: file.name, load: (id: string) => cache.current.write(id, file) }));
     addAttachments(items, { kind: 'paste' });
   }
   const removeFile = useCallback((id: string) => {
@@ -131,9 +130,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       .then(() => {
         if (mounted.current && identity.current.id === retained.id) {
           ownedFiles.current.delete(id); stagedFiles.current.delete(id);
-          const file = state.current.files.find(item => item.id === id);
           setFiles(previous => previous.filter(item => item.id !== id));
-          if (file?.url.startsWith('blob:')) URL.revokeObjectURL(file.url);
         }
         return client.current!.discard(retained.id, [id]);
       })
@@ -142,20 +139,11 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     editor.current?.focus();
   }, []);
   function pasteNativeImage() {
-    addAttachments([{ name: 'Pasted screenshot', load: async () => {
-      const image = await readImage();
-      try {
-        const { width, height } = await image.size();
-        const rgba = await image.rgba();
-        const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
-        canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
-        return canvas.toDataURL('image/png');
-      } finally { await image.close(); }
-    } }], { kind: 'paste' }, true);
+    addAttachments([{ name: 'Pasted screenshot', load: id => cache.current.pasteImage(id) }], { kind: 'paste' }, true);
   }
   function draft(isUncertain = uncertain): QuickCaptureDraft {
     return { id: identity.current.id, text: state.current.text, mailbox: state.current.mailbox,
-      files: state.current.files.filter(file => file.url).map(({ id, name, url }) => ({ id, name, url })), uncertain: isUncertain };
+      files: state.current.files.flatMap(({ id, name, stored }) => stored ? [{ id, name, ...stored }] : []), uncertain: isUncertain };
   }
   function stageDraft(staged: QuickCaptureDraft): Promise<void> {
     const fresh = staged.files.filter(file => !stagedFiles.current.has(file.id));
@@ -247,7 +235,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       if (disposed) return;
       if (stored) {
         identity.current = stored; setText(stored.text); setMailbox(stored.mailbox); setUncertain(stored.uncertain);
-        setFiles(stored.files.map(file => ({ ...file, ready: true, arriving: false, origin: { kind: 'paste' } })));
+        setFiles(stored.files.map(({ id, name, ...file }) => ({ id, name, stored: file, ready: true, arriving: false, origin: { kind: 'paste' } })));
         stored.files.forEach(file => ownedFiles.current.add(file.id));
       }
       setRestored(true);
@@ -294,10 +282,9 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       if (event.payload.type !== 'drop') return;
       if (sending.current || state.current.uncertain) return;
       const origin: AttachmentOrigin = { kind: 'drop', x: event.payload.position.x, y: event.payload.position.y };
-      addAttachments(event.payload.paths.map(path => ({ name: path.split('/').pop() || 'Dropped file', load: () => invoke<string>('quick_capture_file_read', { path })
-      })), origin);
+      addAttachments(event.payload.paths.map(path => ({ name: path.split('/').pop() || 'Dropped file', load: (id: string) => cache.current.copy(id, path) })), origin);
     });
-    return () => { void cache.current.flush().catch(error => setError(`Draft could not be saved: ${error}`)); mounted.current = false; draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear(); state.current.files.forEach(file => { if (file.url.startsWith('blob:')) URL.revokeObjectURL(file.url); }); void open.then(f => f()); void hidden.then(f => f()); void drop.then(f => f()); };
+    return () => { void cache.current.flush().catch(error => setError(`Draft could not be saved: ${error}`)); mounted.current = false; draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear(); void open.then(f => f()); void hidden.then(f => f()); void drop.then(f => f()); };
   }, []);
 
   useEffect(() => {
@@ -381,10 +368,3 @@ function ImagePromise(url: string): Promise<void> {
   return new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(); image.onerror = reject; image.src = url; });
 }
 
-
-function fileDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader(); reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error); reader.readAsDataURL(blob);
-  });
-}

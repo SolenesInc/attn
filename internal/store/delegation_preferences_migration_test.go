@@ -15,7 +15,7 @@ func TestDelegationPreferencesMigrationCarriesTheSavedTableIntoHistory(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved := delegationprefs.Config{Enabled: true, Revision: 3, Roles: []delegationprefs.Role{{ID: "build", Name: "Build", Enabled: true, Description: "Implement changes", Instructions: "Keep {{literal}} intact", DefaultChoiceID: "default", Choices: []delegationprefs.Choice{{ID: "default", Name: "Everyday", Selection: delegationprefs.Selection{Harness: "codex", Model: "test-model", Effort: "medium"}}}}}, Fallback: delegationprefs.Fallback{Selection: delegationprefs.Selection{Harness: "copilot"}}}
+	saved := delegationprefs.Config{Enabled: true, Revision: 3, Roles: []delegationprefs.Role{{ID: "build", Name: "Build", Enabled: true, Description: "Implement changes", Instructions: "Keep {{literal}} intact", DefaultChoiceID: "default", Choices: []delegationprefs.Choice{{ID: "default", Name: "Everyday", Selection: delegationprefs.Selection{Harness: "codex", Model: "test-model", Effort: "medium"}}}}}, Fallback: delegationprefs.Fallback{Selection: delegationprefs.Selection{Harness: "claude"}}}
 	raw, _ := json.Marshal(saved)
 
 	if _, err := s.db.Exec(`

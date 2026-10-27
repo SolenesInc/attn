@@ -9,6 +9,7 @@ import {
   waitForNativePointerWitness,
 } from './nativePointerWitness';
 import { settleBeforeBridgeRequest, settleUi } from './uiAutomationSettle';
+import { supportUiDiagnosticsSnapshot } from '../utils/uiDiagnosticsLog';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -295,6 +296,29 @@ export async function runDomAutomationAction(
         valueLength: field ? field.value.length : null,
       };
     }
+    case 'dom_focus_state': {
+      const selectors = (payload.selectors ?? {}) as Record<string, string>;
+      const active = document.activeElement;
+      return {
+        documentHasFocus: document.hasFocus(),
+        visibilityState: document.visibilityState,
+        viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+        activeElement: active instanceof HTMLElement ? {
+          tag: active.tagName,
+          className: active.className,
+          testId: active.getAttribute('data-testid'),
+          ariaLabel: active.getAttribute('aria-label'),
+          dataset: { ...active.dataset },
+          bounds: rectSnapshot(active),
+        } : null,
+        targets: Object.fromEntries(Object.entries(selectors).map(([name, selector]) => {
+          const element = document.querySelector(selector);
+          return [name, { selector, present: Boolean(element), focused: element !== null && element === active, bounds: rectSnapshot(element) }];
+        })),
+      };
+    }
+    case 'ui_diagnostics':
+      return supportUiDiagnosticsSnapshot();
     case 'dom_wait':
       return waitForAutomationDom({
         selector: typeof payload.selector === 'string' ? payload.selector : '',

@@ -1,0 +1,3 @@
+kind: changed
+area: shared codex
+change: "`attn state explain` shows each thread status the shared Codex app-server reports for a session as an `app_server` row, for visible tiles too, so a tile stuck on its terminal's status can be compared with what the server says."

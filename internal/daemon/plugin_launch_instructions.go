@@ -35,7 +35,8 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 }
 
 func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, profileID string, isChief, selfReportPullRequests bool) (hooks.Launch, []string, error) {
-	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), SelfReportPullRequests: selfReportPullRequests, QuickCapture: parseBooleanSetting(d.daemonSetting(settingQuickCaptureEnabled))}
+	vents := d.launchVentIntent(sessionID)
+	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), Vent: vents.Vent, ToolVents: vents.ToolVents, SelfReportPullRequests: selfReportPullRequests, QuickCapture: parseBooleanSetting(d.homeSetting(SettingQuickCaptureEnabled))}
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold(profileID)
 		if err != nil {
@@ -49,8 +50,12 @@ func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, profileID st
 	member, block, _, err := d.crewPrimeForSession(sessionID)
 	if err != nil {
 		d.logf("crew: refusing launch priming for session %s: %v", sessionID, err)
+		if d.crewMemoryEnabled() {
+			return launch, nil, err
+		}
 		return launch, nil, nil
 	}
 	launch.Crew = block
+	launch.CrewMemoryEnabled = block != "" && d.crewMemoryEnabled()
 	return launch, member.AwarenessDirs, nil
 }

@@ -102,11 +102,7 @@ func (s *Store) CommitSuccession(sc Succession, terminal protocol.TerminalID) ([
 		if sc.KeepFrom {
 			return nil
 		}
-		if _, _, closedAsks, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err == nil {
-			_, err = tx.Exec(`UPDATE sessions SET agent_driver_plugin_name = '', agent_driver_run_id = '', agent_driver_report_seq = 0,
-				agent_driver_transcript_path = '' WHERE id = ?`, sc.From)
-		}
-		if err != nil {
+		if _, _, closedAsks, err = s.closeSessionTx(tx, sc.From, sc.Close, at); err != nil {
 			return fmt.Errorf("succeed session %s: %w", sc.From, err)
 		}
 		return nil
@@ -129,23 +125,14 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 	if err != nil {
 		return err
 	}
-	cost, err := json.Marshal(SessionCostState{Initialized: true})
-	if err != nil {
-		return err
-	}
 	_, err = tx.Exec(`
-		INSERT INTO sessions (id, label, agent, directory, profile_id, branch, is_worktree, main_repo, repository,
-			state, state_since, state_updated_at, last_model_request_at, last_seen, launched_at, context_window_cap,
-			resume_session_id, transcript_path, launch_intent, session_cost_json, succeeds, priority,
-			agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path)
-		SELECT ?, ?, agent, directory, profile_id, branch, is_worktree, main_repo, repository,
-			'idle', ?, ?, ?, ?, launched_at, context_window_cap,
-			?, ?, ?, ?, id, priority,
-			agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path
+		INSERT INTO sessions (id, user_label, agent, directory, profile_id, launched_at, context_window_cap,
+			resume_session_id, transcript_path, launch_intent, succeeds, priority, created_at, host)
+		SELECT ?, ?, agent, directory, profile_id, launched_at, context_window_cap,
+			?, ?, ?, id, priority, ?, host
 		FROM sessions WHERE id = ?`,
 		sc.To, sc.Label,
-		at, at, at, at,
-		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, string(launch), string(cost),
+		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, string(launch), at,
 		sc.From,
 	)
 	return err
@@ -155,16 +142,10 @@ func openSuccessorTx(tx *sql.Tx, sc Succession, at string) error {
 // from now, so the lines its transcript already holds predate it.
 func takeOverTx(tx *sql.Tx, sc Succession, at string) error {
 	if _, err := tx.Exec(`
-		UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '',
-			state = 'idle', state_since = ?, state_updated_at = ?, last_seen = ?, launched_at = ?,
-			resume_session_id = ?, transcript_path = ?, succeeds = ?,
-			(agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path) =
-				(SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_transcript_path
-				FROM sessions WHERE id = ?)
+		UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '', launched_at = ?,
+			resume_session_id = ?, transcript_path = ?, succeeds = ?
 		WHERE id = ?`,
-		at, at, at, at,
-		sc.Conversation.NativeID, sc.Conversation.TranscriptPath, sc.From,
-		sc.From, sc.To,
+		at, sc.Conversation.NativeID, sc.Conversation.TranscriptPath, sc.From, sc.To,
 	); err != nil {
 		return err
 	}

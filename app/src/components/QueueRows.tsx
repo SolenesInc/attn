@@ -25,6 +25,7 @@ export interface QueueBandSessionView {
   agent?: string;
   label: string;
   state: UISessionState;
+  offline?: boolean;
   state_reason?: string;
   chief?: boolean;
   priority?: boolean;
@@ -164,6 +165,7 @@ export function QueueRowView({
       data-testid={`${testIdPrefix}-${session.id}`}
       data-session-id={session.id}
       data-state={session.state}
+      data-offline={session.offline || undefined}
       data-desktop-id={row.desktopId}
     >
       <QueueSessionSelection
@@ -175,6 +177,7 @@ export function QueueRowView({
       <SessionLead
         agent={session.agent}
         state={session.state}
+        offline={session.offline}
         reason={session.state_reason}
         seed={session.id}
         badge={where && <span className="queue-lead-badge" title={where.title}>{where.slot}</span>}
@@ -345,6 +348,7 @@ function AwakeCrewRow({
       data-crew-state={sleeping ? 'sleeping' : 'awake'}
       data-session-id={session.id}
       data-state={session.state}
+      data-offline={session.offline || undefined}
       data-desktop-id={row.desktopId}
     >
       <QueueSessionSelection
@@ -356,6 +360,7 @@ function AwakeCrewRow({
       <SessionLead
         agent={session.agent}
         state={session.state}
+        offline={session.offline}
         reason={session.state_reason}
         seed={session.id}
         badge={where && <span className="queue-lead-badge" title={where.title}>{where.slot}</span>}

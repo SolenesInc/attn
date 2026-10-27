@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/hooks"
@@ -50,7 +49,18 @@ func openNotebookWatch(root string, changed func([]string)) (*notebook.Watcher, 
 }
 
 func (d *Daemon) notebookRoot(profileID string) (string, error) {
-	configured := strings.TrimSpace(d.profileSetting(profileID, settingNotebookRoot))
+	if !d.enrollmentStatus().IsHome() {
+		root, err := d.notebookParentRoot()
+		if err != nil || profileID == "" {
+			return root, err
+		}
+		_, profile, err := d.syncedNotebookProfile(profileID)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(root, profile.Root), nil
+	}
+	configured := strings.TrimSpace(d.profileSetting(profileID, SettingNotebookRoot))
 	if configured == "" {
 		return "", fmt.Errorf("profile %q has no notebook.root", profileID)
 	}
@@ -80,46 +90,6 @@ func (d *Daemon) notebookRoot(profileID string) (string, error) {
 	return root, nil
 }
 
-func (d *Daemon) broadcastNotebookChanged(origin string, paths ...string) {
-	d.coalesceSnapshots(func() {
-		for _, path := range paths {
-			d.publishFact(FactNotebookFileChanged, path, notebookChangeOrigin{Origin: origin})
-		}
-	})
-}
-
-type notebookChangeOrigin struct {
-	Origin string `json:"origin"`
-}
-
-func (d *Daemon) projectNotebookChanged(ev bus.Event) {
-	change, ok := decodeFact[notebookChangeOrigin](d, ev)
-	if !ok {
-		return
-	}
-	d.notebookPendingMu.Lock()
-	if d.notebookPendingPaths == nil {
-		d.notebookPendingPaths = map[string][]string{}
-	}
-	d.notebookPendingPaths[change.Origin] = append(d.notebookPendingPaths[change.Origin], ev.Subject)
-	d.notebookPendingMu.Unlock()
-
-	d.projectSnapshot("notebook_changed:"+change.Origin, func() {
-		d.notebookPendingMu.Lock()
-		paths := d.notebookPendingPaths[change.Origin]
-		delete(d.notebookPendingPaths, change.Origin)
-		d.notebookPendingMu.Unlock()
-		if len(paths) == 0 {
-			return
-		}
-		d.broadcastMessage(protocol.NotebookChangedMessage{
-			Event:  protocol.EventNotebookChanged,
-			Paths:  paths,
-			Origin: change.Origin,
-		})
-	})
-}
-
 func (d *Daemon) ensureNotebookScaffold(profileID string) (root string, created bool, err error) {
 	store, err := d.notebookStoreFor(profileID)
 	if err != nil {
@@ -132,7 +102,7 @@ func (d *Daemon) ensureNotebookScaffold(profileID string) (root string, created 
 			writes[i] = notebook.SelfWrite{Rel: p}
 		}
 		d.noteSelfWrite(store.Root(), writes...)
-		d.broadcastNotebookChanged(originAgent, createdPaths...)
+		d.broadcastFsChanged(store.Root(), originAgent, createdPaths...)
 		d.broadcastFsChanged(store.Root(), originAgent, createdPaths...)
 		d.ensureNotebookWatcher(store.Root())
 	}
@@ -254,7 +224,7 @@ func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, co
 			} else {
 				result.Hash = protocol.Ptr(hash)
 				d.noteSelfWrite(store.Root(), notebook.SelfWrite{Rel: changed, Hash: hash})
-				d.broadcastNotebookChanged(originUI, changed)
+				d.broadcastFsChanged(store.Root(), originUI, changed)
 				d.broadcastFsChanged(store.Root(), originUI, changed)
 			}
 		}
@@ -290,4 +260,25 @@ func notebookEntriesToProtocol(entries []notebook.Entry) []protocol.NotebookEntr
 		out = append(out, pe)
 	}
 	return out
+}
+
+func (d *Daemon) notebookParentRoot() (string, error) {
+	if root := config.HarnessNotebookRoot(); root != "" {
+		return root, nil
+	}
+	if configured := strings.TrimSpace(d.machineSetting(SettingNotebookRoot)); configured != "" {
+		if strings.HasPrefix(configured, "~/") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("resolve home directory: %w", err)
+			}
+			return filepath.Join(home, configured[2:]), nil
+		}
+		return filepath.Clean(configured), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return notebook.DefaultRoot(home, config.Instance()), nil
 }

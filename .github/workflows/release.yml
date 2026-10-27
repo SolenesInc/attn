@@ -103,7 +103,7 @@ jobs:
 
       - name: Build bundled daemon binary
         run: |
-          GOOS=darwin GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" OUTPUT=/tmp/attn
+          GOOS=darwin GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn
           make build-pty-host
           mkdir -p app/src-tauri/binaries
           cp /tmp/attn "app/src-tauri/binaries/attn-aarch64-apple-darwin"
@@ -129,12 +129,11 @@ jobs:
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
-          for var in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD KEYCHAIN_PASSWORD APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_P8; do
+          for var in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_P8; do
             if [ -z "${!var:-}" ]; then
               echo "Missing required secret: $var"
               exit 1
@@ -148,6 +147,8 @@ jobs:
           printf '%s' "$APPLE_CERTIFICATE" | tr -d '\n\r' | openssl base64 -d -A -out "$CERT_PATH"
           printf '%s' "$APPLE_API_KEY_P8" | tr -d '\n\r' | openssl base64 -d -A -out "$KEY_PATH"
 
+          # The keychain lives for this run only, so its password needs no storing.
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security default-keychain -s "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -367,7 +368,7 @@ jobs:
 
       - name: Build Linux amd64 daemon
         run: |
-          GOOS=linux GOARCH=amd64 make build VERSION="${RELEASE_VERSION}" OUTPUT=/tmp/attn-linux-amd64
+          GOOS=linux GOARCH=amd64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn-linux-amd64
 
       - name: Validate Linux amd64 daemon
         run: |
@@ -438,7 +439,7 @@ jobs:
 
       - name: Build Linux arm64 daemon
         run: |
-          GOOS=linux GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" OUTPUT=/tmp/attn-linux-arm64
+          GOOS=linux GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn-linux-arm64
 
       - name: Validate Linux arm64 daemon
         run: |

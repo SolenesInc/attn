@@ -74,6 +74,7 @@ const (
 	FactPluginHealthChanged    = "plugin.health.changed"
 	FactPluginDriverRegistered = "plugin.driver.registered"
 
+	FactOutpostChanged        = "outpost.changed"
 	FactSettingChanged        = "setting.changed"
 	FactBackupWritten         = "backup.written"
 	FactTailscaleServeChanged = "tailscale.serve.changed"
@@ -89,10 +90,12 @@ const (
 	FactAutomationChanged = "automation.changed"
 	FactTaskChanged       = "task.changed"
 
-	FactNotebookFileChanged = "notebook.file.changed"
-
 	FactAskOpened = "ask.opened"
 	FactAskClosed = "ask.closed"
+
+	FactVentChanged = "vent.changed"
+
+	FactSharedCodexChanged = "shared_codex.changed"
 
 	FactDocumentChanged              = "document.changed"
 	FactDocumentCollectionRemoved    = "document.collection.removed"
@@ -127,6 +130,7 @@ func wireProjections() []projection {
 
 func buildWireProjections() []projection {
 	return []projection{
+		{filter: bus.Filter{FactOutpostChanged}, apply: func(d *Daemon, _ bus.Event) { d.projectOutpostsUpdated() }},
 		{filter: bus.Filter{FactQuickCaptureRead}, apply: func(d *Daemon, ev bus.Event) {
 			var scope struct {
 				ProfileID string `json:"profile_id"`
@@ -177,6 +181,17 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactSessionConversationChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(protocol.SessionID(ev.Subject)) },
+		},
+		{
+			filter: bus.Filter{
+				FactSessionRegistered,
+				FactSessionReregistered,
+				FactSessionRespawned,
+				FactSessionPTYExited,
+				FactSessionConversationChanged,
+				FactSessionClosed,
+			},
+			apply: func(d *Daemon, ev bus.Event) { d.projectSharedConversations(protocol.SessionID(ev.Subject)) },
 		},
 		{
 			filter: bus.Filter{FactSessionPullRequestChanged},
@@ -256,8 +271,20 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
-			filter: bus.Filter{"garden.seed.*", factConversationKeptChanged},
+			filter: bus.Filter{factConversationKeptChanged},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
+		},
+		{
+			filter: bus.Filter{FactDocumentChanged, FactDocumentCollectionRemoved, FactDocumentCollectionRedeclared},
+			apply: func(d *Daemon, ev bus.Event) {
+				if isGardenSeedsFact(ev.Subject) {
+					d.projectGardenSeeds()
+				}
+			},
+		},
+		{
+			filter: bus.Filter{"garden.seed.*"},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenUnchanged() },
 		},
 		{
 			filter: bus.Filter{FactGardenReviewChanged},
@@ -336,6 +363,9 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSettingChanged},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSettingsUpdated(ev.Subject)
+				if ev.Subject == string(SettingOutpostsEnabled) {
+					d.projectOutpostsUpdated()
+				}
 				if settingShapesCrewLaunch(ev.Subject) {
 					d.projectCrewRoster()
 				}
@@ -374,12 +404,16 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
-			filter: bus.Filter{FactNotebookFileChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectNotebookChanged(ev) },
-		},
-		{
 			filter: bus.Filter{FactAskOpened, FactAskClosed},
 			apply:  func(d *Daemon, _ bus.Event) { d.projectAsks() },
+		},
+		{
+			filter: bus.Filter{FactVentChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectVents() },
+		},
+		{
+			filter: bus.Filter{FactSharedCodexChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectSharedCodex() },
 		},
 	}
 }
@@ -401,8 +435,9 @@ func (d *Daemon) ensureEventBus() {
 	})
 	d.busUnsubscribe = d.eventBus.Subscribe(bus.All, d.projectToClients)
 	d.subscribeInboxFacts()
+	d.eventBus.Subscribe(bus.Filter{FactProfileCreated, FactProfileDeleted, FactProfileRenamed}, func(bus.Event) { d.life.Go("configureNotebookSync", d.configureNotebookSync) })
+	d.subscribeMonitorPolicyFacts()
 	d.subscribeDocumentFacts()
-	d.subscribeAgentConversationFacts()
 	d.subscribeSessionPullRequestFacts()
 	d.gardenSeedEventConsumerErr = d.registerGardenSeedEventConsumer()
 }
@@ -427,8 +462,8 @@ func (d *Daemon) stopEventBus() {
 		d.inboxUnsubscribe()
 		d.inboxUnsubscribe = nil
 	}
+	d.unsubscribeMonitorPolicyFacts()
 	d.unsubscribeDocumentFacts()
-	d.unsubscribeAgentConversationFacts()
 	d.unsubscribeSessionPullRequestFacts()
 	if d.busUnsubscribe != nil {
 		d.busUnsubscribe()
@@ -506,6 +541,14 @@ func (d *Daemon) coalesceSnapshots(fn func()) {
 }
 
 func (d *Daemon) projectSnapshot(key string, push func()) {
+	d.queueSnapshot(key, push, true)
+}
+
+func (d *Daemon) projectSnapshotUnlessPending(key string, push func()) {
+	d.queueSnapshot(key, push, false)
+}
+
+func (d *Daemon) queueSnapshot(key string, push func(), replacePending bool) {
 	d.snapshotMu.Lock()
 	if d.snapshotDepth == 0 {
 		d.snapshotMu.Unlock()
@@ -517,6 +560,9 @@ func (d *Daemon) projectSnapshot(key string, push func()) {
 	}
 	if _, seen := d.pendingSnapshots[key]; !seen {
 		d.pendingSnapshotOrder = append(d.pendingSnapshotOrder, key)
+	} else if !replacePending {
+		d.snapshotMu.Unlock()
+		return
 	}
 	d.pendingSnapshots[key] = push
 	d.snapshotMu.Unlock()
@@ -526,6 +572,8 @@ const (
 	snapshotSessions    = "sessions_updated"
 	snapshotGarden      = "garden_seeds_updated"
 	snapshotAsks        = "asks_updated"
+	snapshotVents       = "vents_updated"
+	snapshotSharedCodex = "shared_codex_changed"
 	snapshotCrew        = "crew_updated"
 	snapshotPRs         = "prs_updated"
 	snapshotRepos       = "repos_updated"

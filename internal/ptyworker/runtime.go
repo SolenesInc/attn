@@ -100,15 +100,15 @@ type Config struct {
 
 	Executable string
 
-	ClaudeExecutable  string
-	CodexExecutable   string
-	CopilotExecutable string
-	AgentLoginShell   bool
-	AgentArgv         []string
-	AgentEnv          []string
-	ExternalCWD       string
-	DaemonEnv         []string
-	UnattendedLaunch  launchcontract.UnattendedLaunchSpec
+	ClaudeExecutable string
+	CodexExecutable  string
+	AgentLoginShell  bool
+	AgentArgv        []string
+	AgentEnv         []string
+	ExternalCWD      string
+	DaemonEnv        []string
+	HostName         string
+	UnattendedLaunch launchcontract.UnattendedLaunchSpec
 
 	RegistryPath   string
 	SocketPath     string
@@ -327,6 +327,7 @@ func (r *Runtime) run(ctx context.Context) error {
 		AgentEnv:        r.cfg.AgentEnv,
 		ExternalCWD:     r.cfg.ExternalCWD,
 		DaemonEnv:       r.cfg.DaemonEnv,
+		HostName:        r.cfg.HostName,
 	}); err != nil {
 		return fmt.Errorf("spawn PTY session: %w", err)
 	}
@@ -381,7 +382,6 @@ func (r *Runtime) run(ctx context.Context) error {
 	entry.Executable = r.cfg.Executable
 	entry.ClaudeExecutable = r.cfg.ClaudeExecutable
 	entry.CodexExecutable = r.cfg.CodexExecutable
-	entry.CopilotExecutable = r.cfg.CopilotExecutable
 	if r.cfg.UnattendedLaunch.IsZero() {
 		entry.Model = strings.TrimSpace(r.cfg.Model)
 		entry.Effort = strings.TrimSpace(r.cfg.Effort)
@@ -917,6 +917,7 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		}
 		c.waiting = true
 		go func() {
+			pausepoint.At(pausepoint.PtyWaitBlock)
 			result, err := c.runtime.manager.WaitBlock(c.waitCtx, c.runtime.cfg.SessionID, params)
 			if err != nil {
 				c.sendError(req.ID, ErrBadRequest, err.Error())
@@ -1235,14 +1236,15 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		}
 		c.sendResult(req.ID, map[string]any{"ok": true})
 	case MethodRemove:
-		if err := c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+		c.shutdown = true
+		c.stopsRuntime = true
+		err := c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM)
+		c.runtime.manager.Remove(c.runtime.cfg.SessionID)
+		if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
 			c.sendError(req.ID, ErrIO, err.Error())
 			return
 		}
-		c.runtime.manager.Remove(c.runtime.cfg.SessionID)
 		c.sendResult(req.ID, map[string]any{"ok": true})
-		c.shutdown = true
-		c.stopsRuntime = true
 	case MethodWatch:
 		c.runtime.deliverMu.Lock()
 		defer c.runtime.deliverMu.Unlock()

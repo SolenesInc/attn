@@ -8,8 +8,9 @@ import (
 )
 
 type CodexServer struct {
-	t    testing.TB
-	fake *fake
+	t         testing.TB
+	fake      *fake
+	codexHome string
 }
 
 func (s *CodexServer) AwaitStopped() {
@@ -41,6 +42,13 @@ func (s *CodexServer) Reply(conversation, text string) {
 	s.call(methodReply, serverThreadParams{ThreadID: conversation, Text: text}, nil)
 }
 
+func (s *CodexServer) Subagent(conversation, text string) string {
+	s.t.Helper()
+	var spawned promptedResult
+	s.call(methodSubagent, serverThreadParams{ThreadID: conversation, Text: text}, &spawned)
+	return spawned.ConversationID
+}
+
 func (s *CodexServer) Halt(conversation string) {
 	s.t.Helper()
 	s.call(methodHalt, serverThreadParams{ThreadID: conversation}, nil)
@@ -51,9 +59,24 @@ func (s *CodexServer) AwaitName(conversation, name string) {
 	s.call(methodThreadName, serverThreadParams{ThreadID: conversation, Text: name}, nil)
 }
 
+func (s *CodexServer) AwaitArchived(conversation string) {
+	s.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
+	defer cancel()
+	err := s.fake.peer.call(ctx, methodAwaitArchived, serverThreadParams{ThreadID: conversation}, nil)
+	if err != nil && codexArchivedRollout(s.codexHome, conversation) == "" {
+		s.t.Fatalf("Codex app-server %s: %v", methodAwaitArchived, err)
+	}
+}
+
 func (s *CodexServer) AskApproval(conversation string) {
 	s.t.Helper()
 	s.call(methodAskApproval, serverThreadParams{ThreadID: conversation}, nil)
+}
+
+func (s *CodexServer) Work(conversation string) {
+	s.t.Helper()
+	s.call(methodWork, serverThreadParams{ThreadID: conversation}, nil)
 }
 
 func (s *CodexServer) AskQuestion(conversation string) {
@@ -87,6 +110,13 @@ func (s *CodexServer) CompactLimit(conversation string) string {
 	return loaded.Text
 }
 
+func (s *CodexServer) MemoryConfig(conversation string) map[string]any {
+	s.t.Helper()
+	var loaded map[string]any
+	s.call(methodMemoryConfig, serverThreadParams{ThreadID: conversation}, &loaded)
+	return loaded
+}
+
 func (s *CodexServer) Permissions(conversation string) CodexPermissions {
 	s.t.Helper()
 	var loaded CodexPermissions
@@ -103,6 +133,13 @@ func (s *CodexServer) WorkspaceRoots(conversation string) []string {
 	var loaded workspaceRootsResult
 	s.call(methodWorkspaceRoots, serverThreadParams{ThreadID: conversation}, &loaded)
 	return loaded.Roots
+}
+
+func (s *CodexServer) SpawnSubagent(conversation string) string {
+	s.t.Helper()
+	var spawned promptedResult
+	s.call(methodSpawnSubagent, serverThreadParams{ThreadID: conversation}, &spawned)
+	return spawned.ConversationID
 }
 
 func (s *CodexServer) call(method string, params, result any) {

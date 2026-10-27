@@ -83,9 +83,8 @@ func TestACodexReviewerKeepsAnsweringBriefApprovalsUnseenAfterADaemonRestart(t *
 
 func claudeAtWork(t *testing.T, s *testworld.Stack, app *testworld.Peer, repo string) (string, *fakeagent.Run) {
 	t.Helper()
-	id := s.Spawn(app, fakeagent.Claude, s.Path(repo))
+	id := s.Spawn(app, fakeagent.Claude, s.Path(repo), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("add a discount field") })
 	run := s.Launched(id)
-	app.TypeLine(id, "add a discount field")
 	run.Prompted()
 	testworld.AwaitSession(app, id, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 	return id, run

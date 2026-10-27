@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -156,6 +155,11 @@ func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.Initia
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
 	shown, seq := d.fillInitialProfileState(client, event)
+	client.gardenMu.Lock()
+	defer client.gardenMu.Unlock()
+	garden := d.gardenWindow(client.selectedProfile())
+	event.Seeds = garden.seeds
+	event.SeedsTotal = protocol.Ptr(garden.held.total)
 	data, err := json.Marshal(event)
 	if err != nil {
 		d.logf("initial state: encoding: %v", err)
@@ -164,6 +168,7 @@ func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.Initia
 	if d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data}) {
 		client.shownTiles = shown
 		client.arrangementSeq = seq
+		client.gardenHeld = &garden.held
 	}
 }
 
@@ -361,6 +366,9 @@ func (d *Daemon) handleProfileCreate(client *wsClient, msg *protocol.ProfileCrea
 			if err != nil {
 				return profileActionOutcome{}, err
 			}
+			if err := d.validatePairedNotebookRoots("", name, root); err != nil {
+				return profileActionOutcome{}, err
+			}
 			profile, desktop, err := d.store.CreateProfile(name, root)
 			if err != nil {
 				return profileActionOutcome{}, err
@@ -506,7 +514,7 @@ func (d *Daemon) sessionsEndedWith(desktop profiles.Desktop) []protocol.SessionI
 	closing := map[protocol.SessionID][]harness.TerminalID{}
 	for _, pane := range desktop.Panes {
 		t := harness.TerminalID(pane.RuntimeID)
-		if pane.SessionID == "" || d.movedOn(pane.SessionID, t) {
+		if pane.SessionID == "" {
 			continue
 		}
 		if _, seen := closing[pane.SessionID]; !seen {
@@ -690,13 +698,6 @@ func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopC
 
 func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
 	t := harness.TerminalID(tile.RuntimeID)
-	if d.movedOn(tile.SessionID, t) {
-		d.detachSession(client, tile.RuntimeID)
-		if err := d.killSessionRuntime(t); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-			return err
-		}
-		return nil
-	}
 	if !d.closeTerminal(tile.SessionID, t) {
 		d.detachSession(client, tile.RuntimeID)
 		return nil
@@ -748,7 +749,12 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 
 func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	profileID := client.selectedProfile()
-	d.sendToClient(client, d.gardenProfileSnapshot(profileID))
+	d.sendGardenFull(client)
 	d.sendToClient(client, d.crewProfileSnapshot(profileID))
-	d.sendToClient(client, asksSnapshot(profileID, d.openAsks()))
+	d.sendToClient(client, d.outpostsUpdatedMessage(profileID))
+	d.sendToClient(client, asksSnapshot(profileID, d.asks()))
+	d.sendToClient(client, d.ventsSnapshot(profileID))
+	if profileID != "" {
+		d.sendToClient(client, d.codexShared().changedMessage(profileID))
+	}
 }

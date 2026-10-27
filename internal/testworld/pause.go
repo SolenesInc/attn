@@ -37,6 +37,17 @@ type pauses struct {
 
 func (s *Stack) PauseAt(name string) *Pause {
 	s.T.Helper()
+	return s.arm(name, name)
+}
+
+// PauseEvery holds a process each time it reaches name, not only the first time.
+func (s *Stack) PauseEvery(name string) *Pause {
+	s.T.Helper()
+	return s.arm(name, name+pausepoint.Every)
+}
+
+func (s *Stack) arm(name, armed string) *Pause {
+	s.T.Helper()
 	if s.daemon != nil {
 		s.T.Fatalf("PauseAt(%q): arm pause points before Start; the daemon and its workers read them once", name)
 	}
@@ -46,7 +57,7 @@ func (s *Stack) PauseAt(name string) *Pause {
 	p := &Pause{t: s.T, name: name, held: make(chan pausedAt, 8)}
 	s.pauses.mu.Lock()
 	s.pauses.points[name] = p
-	s.pauses.order = append(s.pauses.order, name)
+	s.pauses.order = append(s.pauses.order, armed)
 	s.pauses.mu.Unlock()
 	return p
 }
@@ -154,4 +165,18 @@ func (p *Pause) releaseAll() {
 func release(conn net.Conn) {
 	_, _ = conn.Write([]byte(pausepoint.Release + "\n"))
 	_ = conn.Close()
+}
+
+func (p *Pause) Take() func() {
+	p.t.Helper()
+	var paused pausedAt
+	select {
+	case paused = <-p.held:
+	case <-time.After(fakeagent.HangGuard):
+		p.t.Fatalf("no process reached pause point %q within %s", p.name, fakeagent.HangGuard)
+	}
+	var once sync.Once
+	resume := func() { once.Do(func() { release(paused.conn) }) }
+	p.t.Cleanup(resume)
+	return resume
 }

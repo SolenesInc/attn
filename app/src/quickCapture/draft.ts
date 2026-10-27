@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { QuickCaptureDraft } from './client';
+import { QUICK_CAPTURE_CHUNK_BYTES, type QuickCaptureDraft, type StoredDraftFile } from './client';
 
 export type CachedQuickCaptureDraft = QuickCaptureDraft;
 
@@ -10,33 +10,21 @@ export function newQuickCaptureDraft(): QuickCaptureDraft {
 const writesByProfile = new Map<string, Promise<void>>();
 
 export function quickCaptureDraftCache(profileId: string) {
-  const savedFiles = new Map<string, string>();
   let pending: QuickCaptureDraft | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let firstEditAt = 0;
   const cache = {
     async read(): Promise<QuickCaptureDraft | null> {
       await writesByProfile.get(profileId);
-      const stored = await invoke<CachedQuickCaptureDraft | null>('quick_capture_draft_read', { profileId });
-      if (!stored) return null;
-      const { files, ...draft } = stored;
-      for (const file of files) savedFiles.set(file.id, file.url);
-      return { ...draft, files };
+      return invoke<CachedQuickCaptureDraft | null>('quick_capture_draft_read', { profileId });
     },
     save(draft: QuickCaptureDraft): Promise<void> {
       clearTimeout(timer);
       timer = undefined;
       pending = undefined;
-      const next = (writesByProfile.get(profileId) ?? Promise.resolve()).catch(() => {}).then(async () => {
-        for (const file of draft.files) {
-          if (savedFiles.get(file.id) === file.url) continue;
-          await invoke('quick_capture_draft_file_write', { profileId, id: file.id, url: file.url });
-          savedFiles.set(file.id, file.url);
-        }
-        const { files, ...metadata } = draft;
-        await invoke('quick_capture_draft_write', { profileId, draft: { ...metadata, files: files.map(({ id, name }) => ({ id, name })) } });
-        for (const id of savedFiles.keys()) if (!files.some(file => file.id === id)) savedFiles.delete(id);
-      });
+      const { files, ...metadata } = draft;
+      const next = (writesByProfile.get(profileId) ?? Promise.resolve()).catch(() => {}).then(() =>
+        invoke<void>('quick_capture_draft_write', { profileId, draft: { ...metadata, files: files.map(({ id, name }) => ({ id, name })) } }));
       writesByProfile.set(profileId, next);
       const finished = () => { if (writesByProfile.get(profileId) === next) writesByProfile.delete(profileId); };
       void next.then(finished, finished);
@@ -50,6 +38,21 @@ export function quickCaptureDraftCache(profileId: string) {
     },
     flush(): Promise<void> {
       return pending ? cache.save(pending) : writesByProfile.get(profileId) ?? Promise.resolve();
+    },
+    copy(id: string, path: string): Promise<StoredDraftFile> {
+      return invoke('quick_capture_draft_file_copy', { profileId, id, path });
+    },
+    async write(id: string, file: File): Promise<StoredDraftFile> {
+      let offset = 0;
+      do {
+        const chunk = new Uint8Array(await file.slice(offset, offset + QUICK_CAPTURE_CHUNK_BYTES).arrayBuffer());
+        await invoke('quick_capture_draft_file_append', chunk, { headers: { 'profile-id': profileId, 'file-id': id, offset: String(offset) } });
+        offset += chunk.length;
+      } while (offset < file.size);
+      return invoke('quick_capture_draft_file_finish', { profileId, id, name: file.name });
+    },
+    pasteImage(id: string): Promise<StoredDraftFile> {
+      return invoke('quick_capture_draft_clipboard_image', { profileId, id });
     },
   };
   return cache;

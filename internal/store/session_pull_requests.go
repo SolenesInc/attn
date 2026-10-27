@@ -191,7 +191,7 @@ func openSessionPullRequestsReferencedByQuery(table, column string) string {
 		WHERE state NOT IN ('merged', 'closed')
 		AND (
 			EXISTS (
-				SELECT 1 FROM sessions
+				SELECT 1 FROM sessions_with_runtime AS sessions
 				WHERE sessions.id = session_pull_requests.session_id
 				AND sessions.closed_at = ''
 				AND sessions.state != ?
@@ -294,45 +294,53 @@ func (s *Store) TouchSessionPullRequestActivity(prID string, at time.Time) error
 	return err
 }
 
-func (s *Store) ForgetSessionPullRequest(sessionID protocol.SessionID, to who.Address, prID string) (bool, error) {
+func (s *Store) ForgetSessionPullRequest(sessionID protocol.SessionID, to who.Address, prID string) (bool, []protocol.SessionID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
-		return false, errors.New("store has no database")
+		return false, nil, errors.New("store has no database")
 	}
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	defer tx.Rollback()
 	if err := clearUnreadPullRequestItems(tx, to, prID); err != nil {
-		return false, err
+		return false, nil, err
 	}
 	owner := sessionID
 	if err := tx.QueryRow(`SELECT session_id FROM pull_request_watches WHERE watcher=? AND pr_id=?`, to.String(), prID).Scan(&owner); err != nil && err != sql.ErrNoRows {
-		return false, err
+		return false, nil, err
 	}
 	watchResult, err := tx.Exec(`DELETE FROM pull_request_watches WHERE watcher=? AND pr_id=?`, to.String(), prID)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	watchCount, err := watchResult.RowsAffected()
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
-	result, err := tx.Exec(`DELETE FROM session_pull_requests WHERE session_id IN (?,?) AND pr_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches WHERE session_id=session_pull_requests.session_id AND pr_id=session_pull_requests.pr_id)`, owner, sessionID, prID)
+	rows, err := tx.Query(`DELETE FROM session_pull_requests WHERE session_id IN (?,?) AND pr_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches WHERE session_id=session_pull_requests.session_id AND pr_id=session_pull_requests.pr_id) RETURNING session_id`, owner, sessionID, prID)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
+	var forgotten []protocol.SessionID
+	for rows.Next() {
+		var id protocol.SessionID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return false, nil, err
+		}
+		forgotten = append(forgotten, id)
 	}
-	if affected == 0 && watchCount == 0 {
-		return false, nil
+	if err := rows.Close(); err != nil {
+		return false, nil, err
 	}
-	return true, tx.Commit()
+	if len(forgotten) == 0 && watchCount == 0 {
+		return false, nil, nil
+	}
+	return true, forgotten, tx.Commit()
 }
 
 func scanSessionPullRequests(rows *sql.Rows) ([]SessionPullRequestRecord, error) {

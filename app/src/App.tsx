@@ -25,6 +25,7 @@ import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
 import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
+import { setAppActionSink } from './analytics/appActions';
 
 function App() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -58,6 +59,7 @@ function App() {
     daemonSessions,
     setDaemonSessions,
     setSeeds,
+    applySeedChanges,
     setCrew,
     prs,
     setPRs,
@@ -111,6 +113,7 @@ function App() {
       setNotificationsChangeSignal((n) => n + 1);
     },
     onSeedsUpdate: setSeeds,
+    onSeedsChange: applySeedChanges,
     onCrewUpdate: setCrew,
     onPRsUpdate: setPRs,
     onPluginsUpdate: handlePluginsUpdate,
@@ -126,6 +129,12 @@ function App() {
   });
 
   const captureHost = useQuickCaptureHost(daemon, settings);
+  const analyticsEnabled = settings['analytics.enabled'] === 'true';
+  const { sendRecordAnalytics } = daemon;
+  useEffect(() => {
+    setAppActionSink(analyticsEnabled ? sendRecordAnalytics : null);
+    return () => setAppActionSink(null);
+  }, [analyticsEnabled, sendRecordAnalytics]);
 
   const {
     getMarkdownAnnotations,

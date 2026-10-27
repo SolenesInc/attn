@@ -26,10 +26,9 @@ const CapabilityKittyImages = "kitty_images"
 type SessionAgent = string
 
 const (
-	SessionAgentClaude  SessionAgent = "claude"
-	SessionAgentCodex   SessionAgent = "codex"
-	SessionAgentCopilot SessionAgent = "copilot"
-	SessionAgentShell   SessionAgent = "shell"
+	SessionAgentClaude SessionAgent = "claude"
+	SessionAgentCodex  SessionAgent = "codex"
+	SessionAgentShell  SessionAgent = "shell"
 )
 
 const (
@@ -64,6 +63,15 @@ const (
 	CmdAskList                       = "ask_list"
 	CmdAskClose                      = "ask_close"
 	CmdAskAnswer                     = "ask_answer"
+	CmdRecordVent                    = "record_vent"
+	CmdWithdrawVent                  = "withdraw_vent"
+	CmdSetVentDismissed              = "set_vent_dismissed"
+	CmdSetVentSend                   = "set_vent_send"
+	CmdSetVentKind                   = "set_vent_kind"
+	CmdPlantVentSeed                 = "plant_vent_seed"
+	CmdUnplantVentSeed               = "unplant_vent_seed"
+	CmdNotebookSyncReport            = "notebook_sync_report"
+	CmdSeedArtifactTransferHere      = "seed_artifact_transfer_here"
 	CmdNotebookList                  = "notebook_list"
 	CmdNotebookRead                  = "notebook_read"
 	CmdNotebookWrite                 = "notebook_write"
@@ -73,6 +81,11 @@ const (
 	CmdTaskList                      = "task_list"
 	CmdTaskRetry                     = "task_retry"
 	CmdNotificationList              = "notification_list"
+	CmdListAnalyticsRecords          = "list_analytics_records"
+	CmdGetAnalyticsStatus            = "get_analytics_status"
+	CmdClearAnalyticsRecords         = "clear_analytics_records"
+	CmdForgetAnalyticsInstall        = "forget_analytics_install"
+	CmdRecordAnalytics               = "record_analytics"
 	CmdNotificationMarkRead          = "notification_mark_read"
 	CmdFsList                        = "fs_list"
 	CmdFsRead                        = "fs_read"
@@ -99,6 +112,7 @@ const (
 	CmdAgentPeek                     = "agent_peek"
 	CmdAgentMsg                      = "agent_msg"
 	CmdAgentClose                    = "agent_close"
+	CmdAgentReload                   = "agent_reload"
 	CmdAgentInbox                    = "agent_inbox"
 	CmdAgentMsgStatus                = "agent_msg_status"
 	CmdSeedPlant                     = "seed_plant"
@@ -112,6 +126,7 @@ const (
 	CmdSeedEdit                      = "seed_edit"
 	CmdSeedTransition                = "seed_transition"
 	CmdSeedNote                      = "seed_note"
+	CmdSeedCheck                     = "seed_check"
 	CmdSeedNotes                     = "seed_notes"
 	CmdSeedWatch                     = "seed_watch"
 	CmdSeedLink                      = "seed_link"
@@ -140,6 +155,13 @@ const (
 	CmdCrewPrime                     = "crew_prime"
 	CmdOnboarding                    = "onboarding"
 	CmdCrewHandoff                   = "crew_handoff"
+	CmdCrewMemoryAdd                 = "crew_memory_add"
+	CmdCrewMemoryRecall              = "crew_memory_recall"
+	CmdCrewMemoryZoom                = "crew_memory_zoom"
+	CmdCrewMemorySummarize           = "crew_memory_summarize"
+	CmdCrewMemoryForget              = "crew_memory_forget"
+	CmdCrewMemoryRewrite             = "crew_memory_rewrite"
+	CmdCrewMemoryImport              = "crew_memory_import"
 	CmdStop                          = "stop"
 	CmdFilesEdited                   = "files_edited"
 	CmdPullRequestCreated            = "pull_request_created"
@@ -149,6 +171,7 @@ const (
 	CmdQuery                         = "query"
 	CmdSetSessionPriority            = "set_session_priority"
 	CmdSettleTurn                    = "settle_turn"
+	CmdAgentTurn                     = "agent_turn"
 	CmdSnoozeTurn                    = "snooze_turn"
 	CmdWakeTurn                      = "wake_turn"
 	CmdCancelCountdown               = "cancel_countdown"
@@ -175,6 +198,11 @@ const (
 	CmdWorktreeRefresh               = "worktree_refresh"
 	CmdGetSettings                   = "get_settings"
 	CmdSetSetting                    = "set_setting"
+	CmdUpdateOutpost                 = "update_outpost"
+	CmdAddOutpost                    = "add_outpost"
+	CmdRemoveOutpost                 = "remove_outpost"
+	CmdRepairOutpost                 = "repair_outpost"
+	CmdDropOutpostCopy               = "drop_outpost_copy"
 	CmdListPlugins                   = "list_plugins"
 	CmdInstallPlugin                 = "install_plugin"
 	CmdInstallBundledPlugin          = "install_bundled_plugin"
@@ -220,6 +248,9 @@ const (
 	CmdPtyResize                     = "pty_resize"
 	CmdKillSession                   = "kill_session"
 	CmdReloadSession                 = "reload_session"
+	CmdRestartSharedCodex            = "restart_shared_codex"
+	CmdInstallCodexUpdate            = "install_codex_update"
+	CmdCodexStatus                   = "codex_status"
 	CmdSetClientPresence             = "set_client_presence"
 	CmdActivityStatus                = "activity_status"
 	CmdClearSessionActivity          = "clear_session_activity"
@@ -247,6 +278,13 @@ const (
 )
 
 const (
+	CmdLaunchCommitted       = "launch_committed"
+	CmdConversationReadiness = "conversation_readiness"
+	CmdAgentCatalog          = "agent_catalog"
+	CmdAgentLaunchClose      = "agent_launch_close"
+)
+
+const (
 	CmdProfileCreate        = "profile_create"
 	CmdProfileRename        = "profile_rename"
 	CmdProfileDelete        = "profile_delete"
@@ -266,6 +304,16 @@ const (
 	CmdTerminalRead         = "terminal_read"
 	CmdTerminalWait         = "terminal_wait"
 	CmdTerminalClose        = "terminal_close"
+	CmdTerminalStart        = "terminal_start"
+	CmdTerminalRestart      = "terminal_restart"
+	CmdTerminalLaunch       = "terminal_launch"
+	CmdTerminalWrite        = "terminal_write"
+	CmdTerminalReadText     = "terminal_read_text"
+	CmdTerminalWaitBlock    = "terminal_wait_block"
+	CmdTerminalKill         = "terminal_kill"
+	CmdTerminalRemove       = "terminal_remove"
+	CmdTerminalTheme        = "terminal_theme"
+	CmdTerminalShell        = "terminal_shell"
 	CmdDesktopMoveSession   = "desktop_move_session"
 	CmdDesktopShowLeaf      = "desktop_show_leaf"
 	CmdDesktopMoveLeaf      = "desktop_move_leaf"
@@ -341,12 +389,12 @@ const (
 	EventSessionUnregistered             = "session_unregistered"
 	EventSessionCloseResult              = "session_close_result"
 	EventSessionStateChanged             = "session_state_changed"
-	EventNotebookChanged                 = "notebook_changed"
 	EventTerminalBindingsUpdated         = "terminal_bindings_updated"
 	EventSessionsUpdated                 = "sessions_updated"
 	EventRenameResult                    = "rename_result"
 	EventSessionContextWindowCapResult   = "session_context_window_cap_result"
 	EventGardenSeedsUpdated              = "garden_seeds_updated"
+	EventGardenSeedsChanged              = "garden_seeds_changed"
 	EventGardenReviewUpdated             = "garden_review_updated"
 	EventDocSubscriptionDelivery         = "doc_subscription_delivery"
 	EventDocSubscriptionEnded            = "doc_subscription_ended"
@@ -360,6 +408,15 @@ const (
 	EventCrewSetResult                   = "crew_set_result"
 	EventAskAnswerResult                 = "ask_answer_result"
 	EventAsksUpdated                     = "asks_updated"
+	EventSetVentDismissedResult          = "set_vent_dismissed_result"
+	EventSetVentSendResult               = "set_vent_send_result"
+	EventSetVentKindResult               = "set_vent_kind_result"
+	EventPlantVentSeedResult             = "plant_vent_seed_result"
+	EventUnplantVentSeedResult           = "unplant_vent_seed_result"
+	EventVentsUpdated                    = "vents_updated"
+	EventSharedCodexChanged              = "shared_codex_changed"
+	EventRestartSharedCodexResult        = "restart_shared_codex_result"
+	EventInstallCodexUpdateResult        = "install_codex_update_result"
 	EventDelegateResult                  = "delegate_result"
 	EventDelegationOperation             = "delegation_operation"
 	EventNotebookListResult              = "notebook_list_result"
@@ -374,6 +431,10 @@ const (
 	EventSessionReopenResult             = "session_reopen_result"
 	EventSessionClosed                   = "session_closed"
 	EventNotificationListResult          = "notification_list_result"
+	EventListAnalyticsRecordsResult      = "list_analytics_records_result"
+	EventGetAnalyticsStatusResult        = "get_analytics_status_result"
+	EventClearAnalyticsRecordsResult     = "clear_analytics_records_result"
+	EventForgetAnalyticsInstallResult    = "forget_analytics_install_result"
 	EventNotificationMarkReadResult      = "notification_mark_read_result"
 	EventNotificationsUpdated            = "notifications_updated"
 	EventFsListResult                    = "fs_list_result"
@@ -413,6 +474,7 @@ const (
 	EventGitOperationFinished            = "git_operation_finished"
 	EventSettingsUpdated                 = "settings_updated"
 	EventGitHubHostsUpdated              = "github_hosts_updated"
+	EventOutpostsUpdated                 = "outposts_updated"
 	EventPluginsUpdated                  = "plugins_updated"
 	EventPluginActionResult              = "plugin_action_result"
 	EventRateLimited                     = "rate_limited"
@@ -452,6 +514,7 @@ const (
 	EventSeedReviewDraftResult           = "seed_review_draft_result"
 	EventSeedTransitionResult            = "seed_transition_result"
 	EventSeedNoteResult                  = "seed_note_result"
+	EventSeedCheckResult                 = "seed_check_result"
 	EventSessionMessagesGetResult        = "session_messages_get_result"
 	EventSessionMessagesChanged          = "session_messages_changed"
 	EventBusStatusResult                 = "bus_status_result"
@@ -508,24 +571,20 @@ const (
 	HeatColdInterval = 10 * time.Minute
 )
 
-func (pr *PR) NeedsDetailRefresh() bool {
-	if !pr.DetailsFetched {
-		return true
-	}
-	lastUpdated := Timestamp(pr.LastUpdated).Time()
-	detailsFetchedAt := Timestamp(Deref(pr.DetailsFetchedAt)).Time()
-
-	if lastUpdated.After(detailsFetchedAt) {
-		return true
-	}
-	if time.Since(detailsFetchedAt) > 5*time.Minute {
-		return true
-	}
-	return false
-}
-
 const (
 	EventDelegationPreferencesResult  = "delegation_preferences_result"
 	EventDelegationPreferencesChanged = "delegation_preferences_changed"
 	EventHarnessModelsResult          = "harness_models_result"
+)
+
+const (
+	CmdMonitorCommand         = "monitor_command"
+	CmdSessionPlace           = "session_place"
+	CmdPullRequestLink        = "pull_request_link"
+	CmdLinkRename             = "link_rename"
+	CmdTranscriptActivity     = "transcript_activity"
+	CmdMonitorAssistantWindow = "monitor_assistant_window"
+	CmdMonitorStateTrace      = "monitor_state_trace"
+	CmdMonitorTranscriptPage  = "monitor_transcript_page"
+	CmdMonitorLastAssistant   = "monitor_last_assistant"
 )

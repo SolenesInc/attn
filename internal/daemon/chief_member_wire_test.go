@@ -114,7 +114,6 @@ func TestAnUnconfiguredChiefWaitsForItsHarnessAndModel(t *testing.T) {
 		want  string
 	}{
 		{"", nil, "needs a harness"},
-		{"copilot", protocol.Ptr("test-model"), "takes launch instructions"},
 		{"claude", nil, "needs a model"},
 	} {
 		_, err := cli.CrewSet("chief", nil, &change.agent, change.model, nil, nil)
@@ -140,7 +139,7 @@ func TestAnUnconfiguredChiefWaitsForItsHarnessAndModel(t *testing.T) {
 	if err != nil || len(batch.Items) != 1 || !strings.Contains(batch.Items[0].Content, "keep this until configured") {
 		t.Fatalf("Chief mail: %+v %v", batch, err)
 	}
-	for key, want := range map[string]string{"claude_cap_launch_instructions": "true", "codex_cap_launch_instructions": "true", "copilot_cap_launch_instructions": "false"} {
+	for key, want := range map[string]string{"claude_cap_launch_instructions": "true", "codex_cap_launch_instructions": "true"} {
 		if got := w.App().Initial.Settings[key]; got != want {
 			t.Errorf("%s=%q, want %q", key, got, want)
 		}
@@ -155,7 +154,7 @@ func TestChiefMailWakesAfterSleepAndRename(t *testing.T) {
 	run := w.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	slept, err := cli.CrewHandoff(protocol.SessionID(id), "Return when mail arrives.", false, protocol.CrewDayCloseSleep)
+	slept, err := cli.CrewHandoff(protocol.SessionID(id), "Return when mail arrives.", false, protocol.CrewDayCloseSleep, "")
 	if err != nil || protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep {
 		t.Fatalf("sleep: %+v %v", slept, err)
 	}
@@ -239,7 +238,7 @@ func TestChiefNeverHeartbeatsOrAutoSleepsAndPlainHandoffNaps(t *testing.T) {
 		if got := chief.term.Pasted(); len(got) != 0 {
 			t.Fatalf("Chief received auto-sleep mail: %q", got)
 		}
-		handoff, err := w.Client().CrewHandoff(protocol.SessionID(id), "A fresh Chief session should continue.", false, "")
+		handoff, err := w.Client().CrewHandoff(protocol.SessionID(id), "A fresh Chief session should continue.", false, "", "")
 		if err != nil || protocol.Deref(handoff.Outcome) != protocol.CrewDayCloseNap || handoff.SessionID == nil {
 			t.Fatalf("plain Chief handoff: %+v %v", handoff, err)
 		}
@@ -259,7 +258,7 @@ func prepareChiefUpgradeAs(t *testing.T, missingCWD, emptyModel bool, harness fa
 			t.Fatal(err)
 		}
 	}
-	db, err := store.OpenDBAtSchemaVersion(filepath.Join(w.Dir, "attn.db"), 1792359946029014-1)
+	db, err := store.OpenDBAtSchemaVersion(filepath.Join(w.Dir, "attn.db"), 1793111476175147-1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +275,8 @@ func prepareChiefUpgradeAs(t *testing.T, missingCWD, emptyModel bool, harness fa
 		sql  string
 		args []any
 	}{
-		{"INSERT INTO sessions(id,label,directory,state,state_since,state_updated_at,last_seen,agent,agent_metadata,launch_intent,profile_id,launched_at) VALUES('previous-chief','Chief',?,'idle',?,?,?,?,'recorded-conversation',?, ?,?)", []any{cwd, stamp, stamp, stamp, string(harness), intent, profile, stamp}},
+		{"INSERT INTO sessions(id,user_label,directory,created_at,agent,launch_intent,profile_id,launched_at) VALUES('previous-chief','Chief',?,?,?,?,?,?)", []any{cwd, stamp, string(harness), intent, profile, stamp}},
+		{"INSERT INTO session_runtime(session_id,state,state_since,state_updated_at,last_seen,agent_metadata) VALUES('previous-chief','idle',?,?,?,'recorded-conversation')", []any{stamp, stamp, stamp}},
 		{"UPDATE profiles SET chief_session_id='previous-chief' WHERE id=?", []any{profile}},
 		{"INSERT INTO inbox_items(id,address,kind,text,created_at) VALUES('before-upgrade',?,'notice','Saved before the upgrade',?)", []any{"chief:" + profile, stamp}},
 	} {
@@ -316,7 +316,7 @@ func prepareChiefUpgradeAs(t *testing.T, missingCWD, emptyModel bool, harness fa
 		if _, err := db.Exec("INSERT INTO crew_members(member_key,profile_id,name) VALUES('keel',?,'Keel')", profile); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec("UPDATE sessions SET member_key='keel',label='Keel' WHERE id='previous-chief'"); err != nil {
+		if _, err := db.Exec("UPDATE sessions SET member_key='keel',user_label='Keel' WHERE id='previous-chief'"); err != nil {
 			t.Fatal(err)
 		}
 		historicDocument(crew.Namespace, crew.CollectionMembers, "keel", map[string]any{"home_dir": home, "charter_path": filepath.Join(home, "CHARTER.md"), "cwd": cwd, "agent": "codex", "binding_session": "previous-chief"})
@@ -445,7 +445,7 @@ func TestChiefOneDayHarnessOverrideKeepsTheMembersPinsOnTheirHarness(t *testing.
 	run := w.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	if _, err := cli.CrewHandoff(protocol.SessionID(id), "Rest until the next request.", false, protocol.CrewDayCloseSleep); err != nil {
+	if _, err := cli.CrewHandoff(protocol.SessionID(id), "Rest until the next request.", false, protocol.CrewDayCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	setSetting(t, app, "default_model_codex", "gpt-6.1-sol")
@@ -479,7 +479,7 @@ func TestDeletingAProfileRetiresItsChiefAndAnAwakeChiefRefusesDeletion(t *testin
 	if refused := remove(); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "put the chief to sleep first: attn crew sleep chief") {
 		t.Fatalf("delete with awake Chief: %+v", refused)
 	}
-	if _, err := w.Client().CrewHandoff(protocol.SessionID(id), "The profile is being removed.", false, protocol.CrewDayCloseSleep); err != nil {
+	if _, err := w.Client().CrewHandoff(protocol.SessionID(id), "The profile is being removed.", false, protocol.CrewDayCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	if deleted := remove(); !deleted.Success {
@@ -551,37 +551,6 @@ func TestUnconfiguredChiefCreationDoesNotNeedAWritableCrewFolder(t *testing.T) {
 	side := w.AppOn(work.ID)
 	if len(side.Initial.Crew) != 1 || !side.Initial.Crew[0].Chief || side.Initial.Crew[0].HomeDir != "" {
 		t.Fatalf("unconfigured chief: %+v", side.Initial.Crew)
-	}
-}
-
-func TestUpgradeWithAnUnsupportedChiefHarnessWaitsForConfiguration(t *testing.T) {
-	w := prepareChiefUpgradeAs(t, false, false, fakeagent.Copilot, nil)
-	app, cli := w.App(), w.Client()
-	for _, member := range app.Initial.Crew {
-		if member.Chief && (member.Agent != nil || member.Model != nil || member.Effort != nil || member.BindingSession != nil) {
-			t.Fatalf("unsupported inherited harness configured Chief: %+v", member)
-		}
-	}
-	app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, IdleSeconds: protocol.Ptr(0.0)})
-	_, err := cli.CrewWake("chief", "", "")
-	crewErrorContains(t, err, "attn crew set chief", "--agent", "--model")
-	id := configureChiefOn(t, w, app, fakeagent.Codex, "gpt-6.1-sol")
-	run := w.Launched(id)
-	if model, _ := flagValue(run.Argv, "--model"); model != "gpt-6.1-sol" {
-		t.Fatalf("configured Chief model: %q", run.Argv)
-	}
-	run.Prompted()
-	run.Reply("Ready. <!-- attn:state=idle -->")
-	run.Prompted()
-	items := readInbox(t, cli, id, 0)
-	var notices int
-	for _, item := range items.Items {
-		if strings.Contains(item.Content, "You are this profile's Chief now") {
-			notices++
-		}
-	}
-	if notices != 1 {
-		t.Fatalf("unsupported harness lost handover: %+v", items)
 	}
 }
 

@@ -208,7 +208,7 @@ func (d *Daemon) openSentFilesEnabled() bool {
 	if d.store == nil {
 		return true
 	}
-	raw := strings.TrimSpace(d.daemonSetting(settingOpenSentFilesEnabled))
+	raw := strings.TrimSpace(d.homeSetting(SettingOpenSentFilesEnabled))
 	if raw == "" {
 		return true
 	}
@@ -216,29 +216,52 @@ func (d *Daemon) openSentFilesEnabled() bool {
 }
 
 func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesMessage) {
-	if !d.openSentFilesEnabled() {
-		d.sendOK(conn)
-		return
-	}
 	sessionID := protocol.Deref(msg.SessionID)
 	if msg.TerminalID != nil {
 		sessionID = d.sessionInTerminal(*msg.TerminalID)
 	}
+	var paths []string
 	for _, path := range msg.Paths {
 		path = strings.TrimSpace(path)
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".md", ".markdown":
-			desktopID, tileID, err := d.openMarkdownTile(path, sessionID)
-			if err != nil {
-				d.logf("open_sent_files: %s: %v", path, err)
-				continue
+			if filepath.IsAbs(path) {
+				paths = append(paths, filepath.Clean(path))
+			} else {
+				d.logf("open_sent_files: path must be absolute: %s", path)
 			}
-			d.logf("open_sent_files: %s as %s on desktop %s", path, tileID, desktopID)
 		default:
 			d.logf("open_sent_files: dropped %s (no tile can show it)", path)
 		}
 	}
+	if len(paths) > 0 {
+		if monitor := d.sessionMonitor(sessionID); monitor != nil {
+			if !monitor.ReportSentFiles(paths) {
+				d.sendError(conn, "sent file monitor view was not applied")
+				return
+			}
+		} else {
+			for _, path := range paths {
+				d.receiveSentFile(sessionID, path)
+			}
+		}
+	}
 	d.sendOK(conn)
+}
+
+func (d *Daemon) receiveSentFile(sessionID protocol.SessionID, path string) {
+	if d.openSentFilesEnabled() {
+		desktopID, tileID, err := d.openMarkdownTile(path, sessionID)
+		if err == nil {
+			d.logf("open_sent_files: %s as %s on desktop %s", path, tileID, desktopID)
+			return
+		}
+		d.logf("open_sent_files: %s: %v", path, err)
+	}
+	if location, err := d.currentAgent(sessionID); err == nil {
+		sessionID = location.sessionID
+	}
+	d.store.RecordFileActivity(path, store.FileActivitySourceOpened, sessionID)
 }
 
 func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdownMessage) {

@@ -726,6 +726,7 @@ func (b *Bus) drainEnabled(d *durable) error {
 				}
 				return fmt.Errorf("handling %s (seq %d): %w", ev.Name, ev.Seq, err)
 			}
+			pausepoint.At(pausepoint.BusEventHandled)
 			if err := b.advance(d, ev.Seq); err != nil {
 				return err
 			}

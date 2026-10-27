@@ -3,8 +3,9 @@
 Read this reference when you work on your profile's Notebook, especially as chief
 of staff. Its markdown files outlive agent sessions.
 
-The Notebook is plain markdown on disk, and you maintain it by **editing the files
-directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
+The Notebook is plain markdown on disk. Read it and edit knowledge notes with
+native tools (Read/Write/Edit and `ls`/`rg`). Append journal entries through
+`attn journal append`, which serializes writes at the home.
 There is no `attn notebook` CLI. The notebook root is given to you in your
 operating guidance. `attn settings get notebook.root` shows the saved folder.
 Use `attn settings set notebook.root ~/notes/work` to change it for your profile;
@@ -13,6 +14,8 @@ Named instances add the instance name; taken folders get a numeric suffix.
 Existing profiles keep their folders. Paths below are relative to `<root>`.
 
 The `crew/` folder belongs to attn; leave member folders in place when tidying.
+
+Each profile's Notebook syncs with outposts. On an outpost, its machine root is a parent folder; your profile's files are under the stable subfolder for its home root. Profiles that share a root share that folder. `attn seed show <seed>` prints the artifact folder on the caller's machine. Change roots only while disconnected from sync peers.
 
 ## Orient First
 
@@ -46,16 +49,16 @@ The knowledge base is not a task tracker. Capture what is *known*, not what is
 
 ## Append A Journal Entry
 
-Open today's file (`<root>/journal/<YYYY-MM-DD>.md`), creating it if absent, and
-append your entry. A new file carries OKF frontmatter:
+Append a short prose entry through the home:
 
-    ---
-    type: journal
-    title: 2026-06-18
-    ---
+```sh
+attn journal append --entry 'What changed and why it matters.'
+attn journal append --date 2026-06-18 --entry 'An entry for a specific day.'
+```
 
-Then add a short, dated, prose entry. Backfill a specific day by editing that
-day's file directly.
+The command creates the day's file with journal frontmatter when needed. Without
+`--date`, it uses the home's date. Use the command from outposts too, so concurrent
+appends share the same writer. Read the resulting file through your local copy.
 
 ## Write Or Edit A Knowledge Note
 

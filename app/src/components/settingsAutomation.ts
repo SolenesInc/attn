@@ -11,10 +11,11 @@ const SETTINGS_SECTION_IDS = [
   'autoMode',
   'delegation',
   'connectivity',
+  'outposts',
   'plugins',
   'backgroundTasks',
   'eventBus',
-  'data',
+  'analytics',
 ] as const;
 
 export type SettingsAutomationSectionID = (typeof SETTINGS_SECTION_IDS)[number];

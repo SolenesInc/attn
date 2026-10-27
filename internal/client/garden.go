@@ -20,6 +20,11 @@ func (c *Client) SeedPlant(sessionID protocol.SessionID, title string, body stri
 	if discoveredFrom != "" {
 		msg.DiscoveredFrom = protocol.Ptr(discoveredFrom)
 	}
+	return c.SeedPlantMessage(msg)
+}
+
+func (c *Client) SeedPlantMessage(msg protocol.SeedPlantMessage) (*protocol.SeedPlantResult, error) {
+	msg.Cmd = protocol.CmdSeedPlant
 	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
@@ -276,6 +281,18 @@ func (c *Client) SeedNote(sessionID protocol.SessionID, seedID string, body stri
 		return nil, fmt.Errorf("the daemon accepted the note but returned nothing")
 	}
 	return resp.SeedNoteResult, nil
+}
+
+func (c *Client) SeedCheck(msg protocol.SeedCheckMessage) (*protocol.SeedCheckResult, error) {
+	msg.Cmd = protocol.CmdSeedCheck
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedCheckResult == nil {
+		return nil, fmt.Errorf("the daemon accepted the check move but returned nothing")
+	}
+	return resp.SeedCheckResult, nil
 }
 
 func (c *Client) SeedLink(seedID, kind, toSeedID string, unlink bool) (*protocol.SeedLinkResult, error) {

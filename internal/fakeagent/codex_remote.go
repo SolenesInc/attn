@@ -15,6 +15,7 @@ import (
 
 type codexRemote struct {
 	cfg          config
+	version      string
 	term         *terminal
 	path         string
 	cwd          string
@@ -30,6 +31,7 @@ type codexRemote struct {
 	answering    map[string]bool
 	displayed    string
 	overrides    bool
+	blank        map[string]bool
 }
 
 type codexRemoteThread struct {
@@ -39,12 +41,15 @@ type codexRemoteThread struct {
 	} `json:"thread"`
 }
 
+const codexTrustQuestion = "Trust this folder? Codex can read, edit, and run files here."
+
 var codexReconnectBackoff = []time.Duration{20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond, 160 * time.Millisecond}
 
 func (c *codexRemote) begin(term *terminal) error {
 	c.term = term
 	c.approvals = map[string]json.RawMessage{}
 	c.answering = map[string]bool{}
+	c.blank = map[string]bool{}
 	c.connected = make(chan struct{})
 	args := codexFlags.parse(os.Args[1:])
 	c.path = strings.TrimPrefix(args.value("--remote"), "unix://")
@@ -53,6 +58,9 @@ func (c *codexRemote) begin(term *terminal) error {
 		if c.cwd, err = os.Getwd(); err != nil {
 			return err
 		}
+	}
+	if err := offerCodexUpdate(c.cfg, term, args.values["-c"]); err != nil {
+		return err
 	}
 	c.model = args.value("--model", "-m")
 	c.overrides = codexPermissionOverride(args)
@@ -69,9 +77,20 @@ func (c *codexRemote) begin(term *terminal) error {
 		return err
 	}
 	if codexFolderTrust(read.Config, c.cwd) == "" {
-		client.Close()
-		term.print("Trust this folder? Codex can read, edit, and run files here.")
-		return fmt.Errorf("codex --remote waits on the trust question for %s, which its app-server does not trust", c.cwd)
+		term.print(codexTrustQuestion)
+		if err := term.awaitEnter(); err != nil {
+			client.Close()
+			return err
+		}
+		if !client.Connected() {
+			term.print("config/batchWrite failed: remote app-server worker channel is closed")
+			select {}
+		}
+		trust := map[string]any{"edits": []any{map[string]any{"keyPath": fmt.Sprintf("projects.%q.trust_level", c.cwd), "value": "trusted"}}}
+		if err := call(client, "config/batchWrite", trust, nil); err != nil {
+			client.Close()
+			return err
+		}
 	}
 	var shown codexRemoteThread
 	if len(args.positionals) > 1 && args.positionals[0] == "resume" {
@@ -86,6 +105,9 @@ func (c *codexRemote) begin(term *terminal) error {
 	}
 	c.mu.Lock()
 	c.conversation = shown.Thread.ID
+	if !c.resumed {
+		c.blank[shown.Thread.ID] = true
+	}
 	c.mu.Unlock()
 	c.attach(client)
 	term.title(c.restingTitle())
@@ -112,7 +134,7 @@ func (c *codexRemote) showPending() {
 }
 
 func (c *codexRemote) connect() (*codexshared.Client, error) {
-	client, err := codexshared.Connect(context.Background(), c.path, "codex-tui", c.observe)
+	client, err := codexshared.Connect(context.Background(), c.path, codexshared.ClientInfo{Name: "codex-tui", Version: c.version}, c.observe)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +344,31 @@ func (c *codexRemote) submit(prompt string) error {
 		if err := c.request("thread/start", c.threadStart(), &started); err != nil {
 			return err
 		}
+		c.mu.Lock()
+		c.blank[started.Thread.ID] = true
+		c.mu.Unlock()
 		return c.switchTo(started.Thread.ID)
+	case strings.HasPrefix(command, "/agents "):
+		target := strings.TrimSpace(strings.TrimPrefix(command, "/agents "))
+		c.mu.Lock()
+		blank := c.blank[target]
+		c.mu.Unlock()
+		if !blank {
+			if err := c.request("thread/resume", map[string]any{"threadId": target, "excludeTurns": true}, nil); err != nil {
+				return err
+			}
+		}
+		return c.switchTo(target)
+	case strings.HasPrefix(command, "/multi-agents "):
+		target := strings.TrimSpace(strings.TrimPrefix(command, "/multi-agents "))
+		if err := c.request("thread/resume", map[string]any{"threadId": target, "excludeTurns": true}, nil); err != nil {
+			return err
+		}
+		c.mu.Lock()
+		c.conversation = target
+		c.mu.Unlock()
+		c.showPending()
+		return nil
 	case strings.HasPrefix(command, "/resume "):
 		target := strings.TrimSpace(strings.TrimPrefix(command, "/resume "))
 		if c.overrides {
@@ -337,15 +383,26 @@ func (c *codexRemote) submit(prompt string) error {
 		return c.request("thread/name/set", map[string]any{"threadId": c.current(), "name": strings.TrimSpace(strings.TrimPrefix(command, "/rename "))}, nil)
 	}
 	c.term.title(codexBusyGlyph + c.restingTitle())
-	return c.request("turn/start", map[string]any{"threadId": c.current(), "input": []any{map[string]any{"type": "text", "text": prompt, "text_elements": []any{}}}}, nil)
+	conversation := c.current()
+	if err := c.request("turn/start", map[string]any{"threadId": conversation, "input": []any{map[string]any{"type": "text", "text": prompt, "text_elements": []any{}}}}, nil); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	delete(c.blank, conversation)
+	c.mu.Unlock()
+	return nil
 }
 
 func (c *codexRemote) switchTo(conversation string) error {
 	c.mu.Lock()
 	previous := c.conversation
 	c.conversation = conversation
+	keep := c.blank[previous]
 	c.mu.Unlock()
 	c.showPending()
+	if keep {
+		return nil
+	}
 	return c.request("thread/unsubscribe", map[string]any{"threadId": previous}, nil)
 }
 

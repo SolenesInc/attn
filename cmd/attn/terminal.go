@@ -20,7 +20,7 @@ func writeTerminalHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn terminal <command>
 
   ls [--desktop <ref> | --all] [--json]
-  open [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>]
+  open [--host <outpost>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>]
   run <terminal> "<command>" [--wait] [--timeout <seconds>] [--desktop <ref>]
   send <terminal> (--text "<text>" | --keys C-c Escape Enter ...) [--desktop <ref>]
   read <terminal> [--last | --scrollback [--lines <n>]]
@@ -35,6 +35,11 @@ Reads reach every desktop; actions on another desktop require --desktop.
 Shells accept input from any agent. Typing into agents requires self, a
 transitive delegation chain, or the profile's Chief. Close agents with
 attn agent close instead.
+
+Open --host selects an outpost by name or id. Without --cwd it starts in the
+outpost's home directory; --cwd names a directory on the outpost.
+Only shells run on outposts. Commands that need attn's daemon are unavailable
+in those shells; run them from an agent at the home.
 
 Open preserves focus: first terminal right (or --down), later terminals below
 the last live terminal you opened there. --desktop starts at its active tile.
@@ -57,7 +62,7 @@ F1 through F12. send writes bytes directly, as a keyboard does.
 type terminalArgs struct {
 	action                                                    string
 	positional                                                []string
-	desktop, cwd, text, until                                 string
+	desktop, cwd, text, until, host                           string
 	keys                                                      []string
 	command                                                   string
 	down, all, json, wait, last, scrollback, hasText, hasKeys bool
@@ -115,12 +120,14 @@ func parseTerminalArgs(args []string) (terminalArgs, error) {
 			parsed.last = true
 		case "--scrollback":
 			parsed.scrollback = true
-		case "--desktop", "--cwd", "--text", "--until", "--timeout", "--lines":
+		case "--host", "--desktop", "--cwd", "--text", "--until", "--timeout", "--lines":
 			v, err := value()
 			if err != nil {
 				return parsed, err
 			}
 			switch arg {
+			case "--host":
+				parsed.host = v
 			case "--desktop":
 				parsed.desktop = v
 			case "--cwd":
@@ -151,14 +158,16 @@ func parseTerminalArgs(args []string) (terminalArgs, error) {
 				return parsed, errors.New("--keys needs at least one key")
 			}
 		default:
+			recordUsageError("terminal", usageErrorUnknownFlag)
 			return parsed, fmt.Errorf("unknown flag %s", arg)
 		}
 	}
 	allowed := map[string]string{
-		"ls": "--desktop --all --json", "open": "--down --desktop --cwd --json", "run": "--wait --timeout --desktop --json", "send": "--text --keys --desktop", "read": "--last --scrollback --lines --json", "wait": "--until --timeout --json", "close": "--desktop",
+		"ls": "--desktop --all --json", "open": "--host --down --desktop --cwd --json", "run": "--wait --timeout --desktop --json", "send": "--text --keys --desktop", "read": "--last --scrollback --lines --json", "wait": "--until --timeout --json", "close": "--desktop",
 	}
 	valid, ok := allowed[parsed.action]
 	if !ok {
+		recordUsageError("terminal", usageErrorUnknownCommand)
 		return parsed, fmt.Errorf("unknown terminal command %q", parsed.action)
 	}
 	for f := range flags {
@@ -267,7 +276,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 	if len(args.positional) > 0 {
 		target = args.positional[0]
 	}
-	desktop := terminalOptional(args.desktop)
+	desktop := nonEmpty(args.desktop)
 	switch args.action {
 	case "ls":
 		message = protocol.TerminalListMessage{Cmd: protocol.CmdTerminalList, CallerSessionID: caller, Desktop: desktop, All: protocol.Ptr(args.all)}
@@ -276,7 +285,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 		if args.down {
 			direction = protocol.TerminalDirectionDown
 		}
-		message = protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: caller, Desktop: desktop, Direction: &direction, Cwd: terminalOptional(args.cwd), Command: terminalOptional(args.command)}
+		message = protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: caller, Host: nonEmpty(args.host), Desktop: desktop, Direction: &direction, Cwd: nonEmpty(args.cwd), Command: nonEmpty(args.command)}
 	case "send", "run":
 		data := args.text
 		if args.hasKeys {
@@ -377,7 +386,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 	return 0, nil
 }
 
-func terminalOptional(value string) *string {
+func nonEmpty(value string) *string {
 	if value == "" {
 		return nil
 	}

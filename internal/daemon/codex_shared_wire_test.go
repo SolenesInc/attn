@@ -15,6 +15,7 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -257,6 +258,21 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 	w.CodexServer().AwaitStopped()
 }
 
+func TestASharedCodexLaunchWhoseTerminalCannotStartLetsItsAppServerStop(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	id := protocol.SessionID(uuid.NewString())
+	refused := testworld.Request(app, protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: id, Agent: string(fakeagent.Codex), Cwd: w.Path("missing"),
+		ProfileID: app.SelectedProfile(), Placement: &protocol.SessionPlacement{}, Cols: 100, Rows: 30,
+	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == id })
+	if refused.Success {
+		t.Fatal("shared Codex started in a missing directory")
+	}
+	w.CodexServer().AwaitStopped()
+}
+
 func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Codex)
 	app := w.App()
@@ -281,6 +297,56 @@ func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *test
 	if roots := w.CodexServer().WorkspaceRoots(codex.ConversationID); !slices.Equal(roots, []string{workDir, notes}) {
 		t.Errorf("keel's conversation has workspace roots %q, want its cwd and awareness dir", roots)
 	}
+}
+
+func newWorktree(t *testing.T, name, branch string) (repo, worktree string) {
+	t.Helper()
+	repo = newRepo(t, name)
+	worktree = filepath.Join(filepath.Dir(repo), name+"--"+branch)
+	runGit(t, repo, "worktree", "add", "-b", branch, worktree)
+	return repo, worktree
+}
+
+func TestSharedCodexSkipsTheTrustQuestionOnlyInARepositoryWhereAnAgentSessionStarted(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	worked, workedWorktree := newWorktree(t, "shop", "discount")
+	browsed, browsedWorktree := newWorktree(t, "warehouse", "audit")
+	w.LeaveCodexFolderTrustUnanswered(workedWorktree)
+	w.LeaveCodexFolderTrustUnanswered(browsedWorktree)
+
+	w.Launched(w.Spawn(app, fakeagent.Claude, worked))
+	workIn(t, w, app, browsed)
+
+	w.Launched(w.Spawn(app, fakeagent.Codex, workedWorktree))
+	if got := w.CodexFolderTrust(workedWorktree); got != "" {
+		t.Errorf("Codex saves %s as %q, want attn to write nothing to the Codex config", workedWorktree, got)
+	}
+	app.AwaitScreen(w.Spawn(app, fakeagent.Codex, browsedWorktree), "Trust this folder?")
+}
+
+func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionAttnAnsweredAtLaunch(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "worker")
+	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	repo, worktree := newWorktree(t, "shop", "discount")
+	w.LeaveCodexFolderTrustUnanswered(worktree)
+	w.Launched(w.Spawn(app, fakeagent.Claude, repo))
+	session := w.Spawn(app, fakeagent.Codex, worktree)
+	w.Launched(session)
+
+	w.restart()
+	app = w.App()
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+	if !reloaded.Success {
+		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
+	}
+	w.Launched(session)
 }
 
 func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {

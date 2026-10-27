@@ -105,7 +105,7 @@ impl Segmenter {
                         || (buffer[index + 1] == KITTY_INTRO[1] && index + 2 >= buffer.len())
                     {
                         emit_plain(&mut segments, &buffer, plain_start, index);
-                        self.hold(&buffer, index, index);
+                        self.hold(buffer, index, index);
                         return segments;
                     }
                     if buffer[index + 1] == b']' {
@@ -286,7 +286,7 @@ impl Segmenter {
                 return segments;
             }
             emit_plain(&mut segments, &buffer, plain_start, start);
-            self.hold(&buffer, start, index);
+            self.hold(buffer, start, index);
             return segments;
         }
         emit_plain(&mut segments, &buffer, plain_start, buffer.len());
@@ -294,12 +294,16 @@ impl Segmenter {
         segments
     }
 
-    fn hold(&mut self, buffer: &[u8], from: usize, resume_at: usize) {
+    fn hold(&mut self, buffer: Vec<u8>, from: usize, resume_at: usize) {
         if from >= buffer.len() {
             self.release();
             return;
         }
-        self.pending = buffer[from..].to_vec();
+        self.pending = if from == 0 {
+            buffer
+        } else {
+            buffer[from..].to_vec()
+        };
         self.resume = resume_at - from;
     }
 

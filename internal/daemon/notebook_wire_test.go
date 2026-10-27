@@ -93,12 +93,13 @@ func TestNotebookReadsListsAndBacklinks(t *testing.T) {
 func TestNotebookWritesAreCompareAndSwapWithNormalizedPaths(t *testing.T) {
 	w := newWorld(t)
 	writer, other := w.App(), w.App()
+	root := fsNotebookRoot(t, w)
 
 	created := notebookAskWrite(writer, "/knowledge/areas/foo.md", notebookNote("v1"), "")
 	if !created.Success || created.Result == nil || created.Result.Conflict || created.Result.Hash == nil || created.Result.Path != "knowledge/areas/foo.md" {
 		t.Fatalf("creating /knowledge/areas/foo.md = %+v (%s), want it saved at the normalized path", created.Result, protocol.Deref(created.Error))
 	}
-	if changed := testworld.Await[protocol.NotebookChangedMessage](other, protocol.EventNotebookChanged, nil); !slices.Equal(changed.Paths, []string{"knowledge/areas/foo.md"}) || changed.Origin != "ui" {
+	if changed := fsAwaitChanged(other, func(m protocol.FsChangedMessage) bool { return m.Root == root }); !slices.Equal(changed.Paths, []string{"knowledge/areas/foo.md"}) || changed.Origin != "ui" {
 		t.Fatalf("the other app heard %+v, want the normalized path from the ui", changed)
 	}
 	hash := *created.Result.Hash
@@ -131,10 +132,6 @@ func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 	notebookAskWrite(app, "race.md", notebookNote("attn wrote this"), "")
 	fsWriteFile(t, filepath.Join(root, "race.md"), []byte(notebookNote("external overwrote it")))
 
-	ignored := []string{".attn/locks.md", "notes.txt", ".hidden.md", "knowledge/foo.md.tmp.123.456"}
-	for _, rel := range ignored {
-		fsWriteFile(t, filepath.Join(root, rel), []byte("x"))
-	}
 	fsWriteFile(t, filepath.Join(root, "knowledge", "areas", "new.md"), []byte(notebookNote("in a new folder")))
 	if err := os.Remove(filepath.Join(root, "gone.md")); err != nil {
 		t.Fatal(err)
@@ -142,19 +139,36 @@ func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 
 	heard := map[string]bool{}
 	for !heard["ext.md"] || !heard["doc.md"] || !heard["race.md"] || !heard["knowledge/areas/new.md"] || !heard["gone.md"] {
-		external := testworld.Await(app, protocol.EventNotebookChanged, func(m protocol.NotebookChangedMessage) bool { return m.Origin == "external" })
+		external := fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool { return m.Root == root && m.Origin == "external" })
 		for _, path := range external.Paths {
 			heard[path] = true
 		}
 		if heard["own.md"] {
 			t.Fatalf("attn's own write was reported as external: %v", external.Paths)
 		}
-		for _, rel := range ignored {
-			if heard[rel] {
-				t.Fatalf("%s is not a note but was reported as one: %v", rel, external.Paths)
-			}
-		}
 	}
+}
+
+func TestAttnsOwnNotebookWritesReachEveryOpenView(t *testing.T) {
+	w := newWorld(t)
+	writer, viewer, cli := w.App(), w.App(), w.Client()
+	root := fsNotebookRoot(t, w)
+	heard := func(origin, rel string) {
+		t.Helper()
+		fsAwaitChanged(viewer, func(m protocol.FsChangedMessage) bool {
+			return m.Root == root && m.Origin == origin && slices.Contains(m.Paths, rel)
+		})
+	}
+
+	if _, err := cli.AppendJournal("", "2026-07-05", "shipped the parser"); err != nil {
+		t.Fatal(err)
+	}
+	heard("agent", "journal/2026-07-05.md")
+
+	if written := notebookAskWrite(writer, "note.md", notebookNote("remember this"), ""); !written.Success {
+		t.Fatalf("writing the Notebook: %s", protocol.Deref(written.Error))
+	}
+	heard("ui", "note.md")
 }
 
 func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
@@ -192,6 +206,9 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 			if c.retired != "" && strings.Contains(guide.Guidance, c.retired) {
 				t.Errorf("the chief's guide sends it to the retired %q", c.retired)
 			}
+			fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
+				return m.Root == root && m.Origin == "agent" && slices.Contains(m.Paths, "index.md")
+			})
 			if listed := notebookEntryPaths(notebookAskList(app, "").Entries); !slices.Contains(listed, "index.md") || !slices.Contains(listed, "log.md") || !slices.Contains(listed, "knowledge/index.md") {
 				t.Fatalf("the chief's guide scaffolded %v, want index.md, log.md and knowledge/index.md", listed)
 			}

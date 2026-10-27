@@ -112,7 +112,7 @@ func TestACrewDelegatorsWatchStaysWithTheMemberAfterANap(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "waiting for the worker", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "waiting for the worker", false, protocol.CrewDayCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		gardenNudgeNote(t, cli, worker.id, delegated.SeedID, "ready for review", true)

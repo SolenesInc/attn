@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -78,21 +79,21 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 			fail(string("session not found: " + targetSession))
 			return
 		}
-		if !sessionInputPhaseAllows(sessionInputAtTurnBoundary, session.State) {
+		if !sessionmonitor.PhaseAllows(sessionmonitor.AtTurnBoundary, session.State) {
 			result.Status = annotationSubmitStatusSkipped
 			d.sendToClient(client, result)
 			return
 		}
-		delivery := annotationSessionInput(msg.RequestID, targetSession, payload)
-		attempt := d.sessionInputs().try(context.Background(), delivery)
-		if attempt.stage != sessionInputPlaced {
-			if sessionInputDeferredError(attempt.err) {
+		delivery := sessionmonitor.AnnotationInput(msg.RequestID, payload)
+		attempt := d.placeDelivery(context.Background(), targetSession, delivery)
+		if attempt.Stage != sessionmonitor.Placed {
+			if sessionmonitor.DeferredError(attempt.Err) {
 				result.Status = annotationSubmitStatusSkipped
 				d.sendToClient(client, result)
 				return
 			}
-			d.logf("markdown_annotations_submit: %s -> %s: delivery failed: %v", source.draftKey, targetSession, attempt.err)
-			fail(attempt.err.Error())
+			d.logf("markdown_annotations_submit: %s -> %s: delivery failed: %v", source.draftKey, targetSession, attempt.Err)
+			fail(attempt.Err.Error())
 			return
 		}
 		result.Status = annotationSubmitStatusDelivered

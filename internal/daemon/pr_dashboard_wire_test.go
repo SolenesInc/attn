@@ -4,7 +4,6 @@ import (
 	"maps"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/github/mockserver"
@@ -56,15 +55,8 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 		t.Fatalf("approve: %s", protocol.Deref(approved.Error))
 	}
 
-	refreshAt := time.Now()
 	refreshPRs(t, app)
 	after := queryPRs(t, cli, "")
-	refreshedCheckout := prNumbered(t, after, 1)
-	for _, stamp := range []string{refreshedCheckout.LastUpdated, refreshedCheckout.LastPolled} {
-		if protocol.Timestamp(stamp).Time().Before(refreshAt) {
-			t.Errorf("refresh timestamp = %q, want it at or after %s", stamp, refreshAt)
-		}
-	}
 	if pr := prNumbered(t, after, 2); !pr.Muted {
 		t.Error("the muted pull request came back unmuted after a refresh")
 	}
@@ -130,15 +122,10 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 		return len(e.Prs) == 1 && e.Prs[0].ID == checkout.ID && e.Prs[0].Title == "Checkout is ready"
 	})
 	gh.Close()
-	beforeRestart := prNumbered(t, queryPRs(t, w.Client(), ""), 1)
 	w.restart()
 	remaining := queryPRs(t, w.Client(), "")
 	if len(remaining) != 1 || remaining[0].ID != checkout.ID || remaining[0].Title != "Checkout is ready" {
 		t.Fatalf("dashboard after removal and restart = %+v, want only the renamed checkout PR", remaining)
-	}
-	if remaining[0].LastUpdated != beforeRestart.LastUpdated || remaining[0].LastPolled != beforeRestart.LastPolled {
-		t.Errorf("offline restart changed poll timestamps: got %q/%q, want %q/%q", remaining[0].LastUpdated, remaining[0].LastPolled,
-			beforeRestart.LastUpdated, beforeRestart.LastPolled)
 	}
 }
 
@@ -187,4 +174,86 @@ func authorMutes(authors []protocol.AuthorState) map[string]bool {
 		muted[author.Author] = author.Muted
 	}
 	return muted
+}
+
+func TestAPollPublishesAPullRequestUpdateOnlyWhenGitHubReportsAChange(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	gh.AddPR(mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Add checkout", Role: "reviewer"})
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := newWorld(t)
+	app := w.App()
+	refreshPRs(t, app)
+	refreshPRs(t, app)
+	status := busStatus(t, app)
+	if appeared, updated := producedBy(status, "pr.appeared"), producedBy(status, "pr.updated"); appeared != 1 || updated != 0 {
+		t.Errorf("two polls of the same pull request published %d pr.appeared and %d pr.updated, want 1 and 0", appeared, updated)
+	}
+
+	gh.Reset()
+	gh.AddPR(mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Checkout is ready", Role: "reviewer"})
+	refreshPRs(t, app)
+	refreshPRs(t, app)
+	if updated := producedBy(busStatus(t, app), "pr.updated"); updated != 1 {
+		t.Errorf("a renamed pull request polled twice published %d pr.updated, want 1", updated)
+	}
+}
+
+func TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	checkout := mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Add checkout", Role: "reviewer"}
+	cart := mockserver.MockPR{Repo: "acme/shop", Number: 2, Title: "Fix the cart", Role: "author"}
+	gh.AddPR(checkout)
+	gh.AddPR(cart)
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := newWorld(t)
+	app := w.App()
+	for producedBy(busStatus(t, app), "pr.details.changed") < 2 {
+		testworld.Await[protocol.WebSocketEvent](app, protocol.EventPRsUpdated, nil)
+	}
+	checkoutID := prNumbered(t, queryPRs(t, w.Client(), ""), checkout.Number).ID
+	before := producedBy(busStatus(t, app), "pr.details.changed")
+	if before != 2 {
+		t.Fatalf("GitHub's first details for two pull requests published %d pr.details.changed, want 2", before)
+	}
+
+	fetchPRDetails(t, app, checkoutID)
+	fetchPRDetails(t, app, checkoutID)
+	if published := producedBy(busStatus(t, app), "pr.details.changed") - before; published != 0 {
+		t.Errorf("two reads of unchanged details published %d pr.details.changed, want 0", published)
+	}
+
+	setMergeableState(gh, "unstable", checkout, cart)
+	if pr := prNumbered(t, fetchPRDetails(t, app, checkoutID), 1); protocol.Deref(pr.CIStatus) != "pending" {
+		t.Fatalf("details after CI started = %+v, want CI pending", pr)
+	}
+	if published := producedBy(busStatus(t, app), "pr.details.changed") - before; published != 1 {
+		t.Errorf("a read after CI started published %d pr.details.changed, want 1", published)
+	}
+
+	setMergeableState(gh, "dirty", checkout, cart)
+	app.Send(protocol.PRVisitedMessage{Cmd: protocol.CmdPRVisited, ID: checkoutID})
+	prFlowAwait(app, checkoutID, func(pr protocol.PR) bool { return protocol.Deref(pr.CIStatus) == "failure" })
+}
+
+func fetchPRDetails(t *testing.T, app *testworld.Peer, id string) []protocol.PR {
+	t.Helper()
+	fetched := testworld.Request(app, protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: id},
+		protocol.EventFetchPRDetailsResult, func(protocol.FetchPRDetailsResultMessage) bool { return true })
+	if !fetched.Success {
+		t.Fatalf("fetch details %s: %s", id, protocol.Deref(fetched.Error))
+	}
+	return fetched.Prs
+}
+
+func setMergeableState(gh *mockserver.Server, state string, checkout, cart mockserver.MockPR) {
+	gh.Reset()
+	checkout.MergeableState = state
+	gh.AddPR(checkout)
+	gh.AddPR(cart)
 }

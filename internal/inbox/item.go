@@ -11,6 +11,7 @@ const (
 	SeedUpdate   Kind = "garden_seed"
 	PeerMessage  Kind = "peer_message"
 	QuickCapture Kind = "quick_capture"
+	AskAnswer    Kind = "ask_answer"
 	Notice       Kind = "maintenance_prompt"
 )
 

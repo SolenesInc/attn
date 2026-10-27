@@ -2,6 +2,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { isAsksEnabled } from '../utils/asks';
 import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type ForwardedRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { recordAppAction } from '../analytics/appActions';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
 import { DaemonSettings } from '../hooks/useDaemonSocket';
@@ -37,7 +38,6 @@ import {
   SettingsModalProps,
   SettingsNavGroup,
   SettingsSectionID,
-  formatByteCount,
 } from './settingsModalShared';
 import { usePluginPanel } from './usePluginPanel';
 import { useSavedFlash } from './useSavedFlash';
@@ -74,12 +74,13 @@ export function useSettingsModalState({
   listTasks,
   retryTask,
   taskChangeSignal,
+  onOpenSession,
+  onOpenSeed,
 }: SettingsModalProps & { closeRef: ForwardedRef<SettingsModalHandle> }) {
   const {
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
     sendHarnessModels,
-    sendGetSettings,
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
     sendAutoModeGet,
@@ -137,6 +138,13 @@ export function useSettingsModalState({
     [autosave],
   );
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
+  const outpostsEnabled = settings.outposts_enabled === 'true';
+  useEffect(() => {
+    if (selectedSection === 'outposts' && !outpostsEnabled) setSelectedSection('connectivity');
+  }, [selectedSection, outpostsEnabled]);
+  useEffect(() => {
+    if (isOpen) recordAppAction('settings_section', { section: selectedSection });
+  }, [isOpen, selectedSection]);
   useImperativeHandle(closeRef, () => ({ close: closeSettings, selectSection }), [closeSettings, selectSection]);
   const delegationPolicy = useDelegationPreferences(
     isOpen,
@@ -155,17 +163,12 @@ export function useSettingsModalState({
   const notebookSettingsLoaded = 'notebook.root' in settings || !!effectiveNotebookRoot;
   const {
     tailscaleEnabled,
-    modelCaptureEnabled,
-    modelCaptureInterval,
-    modelCaptureMaxGB,
-    modelCapturePath,
-    modelCaptureBytes,
     tailscaleStatus,
     tailscaleURL,
     tailscaleDomain,
     tailscaleAuthURL,
     tailscaleError,
-  } = settingsConnectionAndCapture(settings);
+  } = settingsConnection(settings);
   const autoApproveEnabled = (settings.auto_approve_enabled || 'true') === 'true';
 
   const actualAgentExecutables = useMemo(() => getAgentExecutableSettings(settings), [settings]);
@@ -175,6 +178,7 @@ export function useSettingsModalState({
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
   const calloutsEnabled = settings.callouts_enabled === 'true';
+  const analyticsEnabled = settings['analytics.enabled'] === 'true';
   const asksEnabled = isAsksEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
   const actualAutoSettleCountdown = String(autoSettleSeconds(settings, AUTO_SETTLE_COUNTDOWN_SETTING));
@@ -186,7 +190,7 @@ export function useSettingsModalState({
     [agentAvailability, resolvedDefaultAgent],
   );
   const executableAgentList = useMemo(
-    () => orderedAgentList.filter((agent) => ['codex', 'claude', 'copilot'].includes(agent)),
+    () => orderedAgentList.filter((agent) => ['codex', 'claude'].includes(agent)),
     [orderedAgentList],
   );
   const defaultOverrideAgentList = useMemo(() => {
@@ -240,7 +244,7 @@ export function useSettingsModalState({
   const gardenAdvisorAgents = useMemo(() => {
     const eligible = orderedAgentList.filter(
       (agent) =>
-        ['codex', 'claude', 'copilot'].includes(agent) &&
+        ['codex', 'claude'].includes(agent) &&
         isAgentAvailable(agentAvailability, agent) &&
         actualAgentCapabilities[agent]?.headless_task === true,
     );
@@ -253,6 +257,7 @@ export function useSettingsModalState({
   const newSessionLauncherEnabled = settings.new_session_launcher_enabled === 'true';
   const codexSharedEnabled = settings.codex_shared_enabled === 'true';
   const queueShowHiddenSessions = settings.queue_show_hidden_sessions !== 'false';
+  const queueQuietNotifications = settings.queue_quiet_notifications === 'true';
   const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
   const quickCaptureEnabled = settings.quick_capture_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
@@ -325,19 +330,6 @@ export function useSettingsModalState({
 
   useEscapeStack(closeSettings, isOpen);
 
-  useEffect(() => {
-    if (!isOpen || selectedSection !== 'data') return;
-
-    sendGetSettings();
-    if (!modelCaptureEnabled) return;
-
-    const intervalSeconds = Number(modelCaptureInterval);
-    if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) return;
-
-    const intervalID = window.setInterval(sendGetSettings, intervalSeconds * 1000);
-    return () => window.clearInterval(intervalID);
-  }, [isOpen, selectedSection, modelCaptureEnabled, modelCaptureInterval, sendGetSettings]);
-
   // UI automation bridge handle (testing only). Registered for the whole
   // lifetime so the bridge can read `open: false` through it.
   useEffect(() => {
@@ -380,10 +372,6 @@ export function useSettingsModalState({
   const handleToggleOpenSentFiles = useCallback(() => {
     onSetSetting(OPEN_SENT_FILES_ENABLED_SETTING, openSentFilesEnabled ? 'false' : 'true');
   }, [onSetSetting, openSentFilesEnabled]);
-
-  const handleToggleModelCapture = useCallback(() => {
-    onSetSetting('model_capture.enabled', modelCaptureEnabled ? 'false' : 'true');
-  }, [modelCaptureEnabled, onSetSetting]);
 
   const { set: setNotebookRoot } = notebookRootDraft;
   const handleBrowseNotebookRoot = useCallback(async () => {
@@ -533,7 +521,7 @@ export function useSettingsModalState({
             label: 'Agents and models',
             description: 'Defaults for new sessions, with configuration for each agent.',
             keywords:
-              'agents executables claude codex copilot pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
+              'agents executables claude codex pi default capabilities model effort pricing context window cap tokens compaction auto-approve unattended',
           },
           {
             id: 'models', label: 'Models', description: 'Tiers describe how much intelligence a task needs. Your changes apply across profiles on this daemon; Reset restores attn’s mapping.', keywords: 'harness model tier light standard deep overrides defaults',
@@ -569,6 +557,14 @@ export function useSettingsModalState({
             description: 'Controls for mobile browser access and GitHub host detection.',
             keywords: 'tailscale mobile web github hosts',
           },
+          ...(outpostsEnabled ? [{
+            id: 'outposts' as const,
+            label: 'Outposts',
+            title: 'Outposts',
+            description: 'Connect this home to attn on other computers.',
+            count: 1,
+            keywords: 'outposts bridge host machine address pair re-pair remove connection build fingerprint',
+          }] : []),
         ],
       },
       {
@@ -589,7 +585,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude copilot one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps',
+            keywords: 'experimental launcher 2.0 shared terminal host shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps usage analytics telemetry',
           },
           {
             id: 'backgroundTasks',
@@ -605,17 +601,16 @@ export function useSettingsModalState({
             keywords:
               'event bus log durable facts producers consumers cursor lag retention compaction trim stalled disabled kill switch seq',
           },
-          {
-            id: 'data',
-            label: 'Model data capture',
-            description:
-              'Collect visible Codex and Claude terminal screens for local model evaluation and training. Off by default.',
-            keywords: 'local model training dataset capture privacy terminal viewport local retention sampling',
-          },
+          ...(analyticsEnabled ? [{
+            id: 'analytics' as const,
+            label: 'Analytics',
+            description: '',
+            keywords: 'analytics usage telemetry vents vent agents outbox records recorded bus app cli sample retention',
+          }] : []),
         ],
       },
     ],
-    [],
+    [outpostsEnabled, analyticsEnabled],
   );
 
   const filteredNavGroups = useMemo(() => {
@@ -636,18 +631,18 @@ export function useSettingsModalState({
   const selectedNavItem = flatNavItems.find((item) => item.id === selectedSection) || flatNavItems[0];
   return {
     selectedSection,
+    outpostsEnabled,
     delegationPolicy,
     tailscaleEnabled,
     tailscaleStatus,
     pluginProblemCount,
     activePluginCount,
     plugins,
-    modelCaptureEnabled,
-    modelCaptureBytes,
     autoModePolicy,
     autoSettleEnabled,
     asksEnabled,
     calloutsEnabled,
+    analyticsEnabled,
     mutedRepos,
     mutedAuthors,
     hasProjectsDirChange,
@@ -696,6 +691,7 @@ export function useSettingsModalState({
     newSessionLauncherEnabled,
     codexSharedEnabled,
     queueShowHiddenSessions,
+    queueQuietNotifications,
     directAgentLaunchEnabled,
     quickCaptureEnabled,
     onSetSetting,
@@ -719,10 +715,6 @@ export function useSettingsModalState({
     executableAgentList,
     executableDrafts,
     defaultContextCapDrafts,
-    handleToggleModelCapture,
-    modelCaptureInterval,
-    modelCaptureMaxGB,
-    modelCapturePath,
     handleToggleAutoSettle,
     autoSettleArmDraft,
     autoSettleCountdownDraft,
@@ -734,6 +726,8 @@ export function useSettingsModalState({
     sendBusStatusGet,
     sendBusSetConsumerEnabled,
     sendHarnessModels,
+    onOpenSession,
+    onOpenSeed,
     closeSettings,
     settingsSearch,
     setSettingsSearch,
@@ -746,13 +740,8 @@ export function useSettingsModalState({
 
 export type SettingsModalState = ReturnType<typeof useSettingsModalState>;
 
-export function settingsConnectionAndCapture(settings: DaemonSettings) {
+export function settingsConnection(settings: DaemonSettings) {
   const tailscaleEnabled = (settings.tailscale_enabled || 'false') === 'true';
-  const modelCaptureEnabled = (settings['model_capture.enabled'] || 'false') === 'true';
-  const modelCaptureInterval = settings['model_capture.interval_seconds'] || '10';
-  const modelCaptureMaxGB = settings['model_capture.max_gb'] || '5';
-  const modelCapturePath = settings['model_capture.path'] || '';
-  const modelCaptureBytes = formatByteCount(settings['model_capture.bytes']);
   const tailscaleStatus = settings.tailscale_status || 'disabled';
   const tailscaleURL = settings.tailscale_url || '';
   const tailscaleDomain = settings.tailscale_domain || '';
@@ -760,11 +749,6 @@ export function settingsConnectionAndCapture(settings: DaemonSettings) {
   const tailscaleError = settings.tailscale_error || '';
   return {
     tailscaleEnabled,
-    modelCaptureEnabled,
-    modelCaptureInterval,
-    modelCaptureMaxGB,
-    modelCapturePath,
-    modelCaptureBytes,
     tailscaleStatus,
     tailscaleURL,
     tailscaleDomain,

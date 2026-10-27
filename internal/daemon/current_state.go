@@ -8,18 +8,16 @@ type currentStateProjection struct {
 	Repos       []protocol.RepoState
 	Authors     []protocol.AuthorState
 	GithubHosts []string
-	Seeds       []protocol.Seed
 	Crew        []protocol.CrewMember
 }
 
-func (d *Daemon) currentStateProjection(profileID ...string) currentStateProjection {
+func (d *Daemon) currentStateProjection() currentStateProjection {
 	return currentStateProjection{
 		Sessions:    d.sessionsForBroadcast(d.store.List("")),
 		Prs:         protocol.PRsToValues(d.store.ListPRs("")),
 		Repos:       protocol.RepoStatesToValues(d.store.ListRepoStates()),
 		Authors:     protocol.AuthorStatesToValues(d.store.ListAuthorStates()),
 		GithubHosts: d.gitHubHosts(),
-		Seeds:       d.seedsForBroadcast(profileID...),
 		Crew:        nil,
 	}
 }

@@ -34,7 +34,7 @@ func runSettings() {
 		return
 	}
 	verb := args[0]
-	fs := flag.NewFlagSet("settings "+verb, flag.ContinueOnError)
+	fs := flag.NewFlagSet("settings", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	profile := fs.String("profile", "", "profile name or id outside an attn session")
 	jsonOut := fs.Bool("json", false, "print JSON")
@@ -47,7 +47,7 @@ func runSettings() {
 		os.Exit(2)
 	}
 	for {
-		if err := fs.Parse(rest); err != nil {
+		if err := parseFlags(fs, rest); err != nil {
 			usage(err.Error())
 		}
 		rest = fs.Args()
@@ -71,6 +71,7 @@ func runSettings() {
 			usage("set needs a key and value")
 		}
 	default:
+		recordUsageError("settings", usageErrorUnknownCommand)
 		usage(fmt.Sprintf("unknown command %q", verb))
 	}
 	session := currentSessionOrExit()
@@ -121,6 +122,9 @@ func runSettings() {
 		value := protocol.Deref(entry.Value)
 		if value == "" {
 			value = "-"
+		}
+		if protocol.Deref(entry.ReadOnly) {
+			scope += ", read-only"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", entry.Key, scope, value, entry.Description)
 	}

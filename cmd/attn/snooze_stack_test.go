@@ -7,9 +7,62 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestASnoozeStillWakesWhenANewerStateArrivesBeforeItsReply(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	committed := s.PauseAt(pausepoint.SessionSnoozeCommitted)
+	s.Start()
+	app, cli := s.App(), s.Client()
+	register(t, s, "waiting", "waiting")
+	terminal := protocol.TerminalID(app.Terminal("waiting"))
+	if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitSession(app, "waiting", func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
+	deadline := time.Now().UTC().Add(time.Second)
+	until := deadline.Format(time.RFC3339Nano)
+	answered := make(chan error, 1)
+	go func() { answered <- s.Client().SnoozeSession("", "waiting", deadline) }()
+	committed.Await()
+	if err := cli.UpdateState(terminal, protocol.StateWorking); err != nil {
+		t.Fatal(err)
+	}
+	working := testworld.AwaitSession(app, "waiting", func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWorking && protocol.Deref(x.TurnSnoozedUntil) == until
+	})
+	workedAt, err := time.Parse(time.RFC3339Nano, working.StateUpdatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatal(err)
+	}
+	newest := testworld.AwaitSession(app, "waiting", func(x protocol.Session) bool {
+		updated, err := time.Parse(time.RFC3339Nano, x.StateUpdatedAt)
+		return err == nil && updated.After(workedAt) && x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnSnoozedUntil) == until
+	})
+	committed.Release()
+	if err := <-answered; err != nil {
+		t.Fatalf("the accepted snooze failed: %v", err)
+	}
+	listed, err := cli.Query("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, session := range listed {
+		if session.ID == "waiting" && session.StateUpdatedAt != newest.StateUpdatedAt {
+			t.Fatalf("the delayed snooze replaced the newer state: updated_at=%s, want %s", session.StateUpdatedAt, newest.StateUpdatedAt)
+		}
+	}
+	testworld.AwaitSession(app, "waiting", func(x protocol.Session) bool {
+		return protocol.Deref(x.TurnOwed) && protocol.Deref(x.TurnSnoozedUntil) == "" && protocol.Deref(x.TurnOpenedAt) == until
+	})
+}
 
 func TestAgentsThatDieAfterADaemonRestartBreakThroughTheirSnooze(t *testing.T) {
 	t.Parallel()

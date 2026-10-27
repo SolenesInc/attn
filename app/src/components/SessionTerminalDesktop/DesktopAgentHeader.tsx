@@ -26,7 +26,7 @@ export function DesktopAgentHeader({ agentPane, paneSession, paneTitle }: Deskto
     >
       {/* The same dot the sidebar puts beside this session. */}
       {paneSession?.state ? (
-        <StateIndicator state={paneSession.state} size="sm" seed={agentPane.sessionId} />
+        <StateIndicator state={paneSession.state} offline={paneSession.offline} size="sm" seed={agentPane.sessionId} />
       ) : null}
       <DesktopAgentIdentity
         agentPane={agentPane}

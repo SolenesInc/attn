@@ -2,12 +2,10 @@ package daemon
 
 import (
 	"context"
-	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -17,200 +15,85 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/transcript"
+	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/store"
 )
 
 const (
-	maxSessionNameRunes      = 48
-	sessionTitleTimeout      = 90 * time.Second
-	sessionTitleBriefCharCap = 1500
-	sessionTitleKind         = "session_title"
-	sessionTitleAttempts     = 3
+	maxSessionNameRunes  = store.SessionNameRunes
+	sessionTitleTimeout  = 90 * time.Second
+	sessionTitleKind     = "session_title"
+	sessionTitleAttempts = 3
 )
 
 var sessionTitleInstructions = prompts.RenderText("session-title", "instructions", nil)
 
 type sessionTitlePayload struct {
-	Conversation string `json:"conversation"`
-	Source       string `json:"source"`
+	Conversation string             `json:"conversation"`
+	SessionID    protocol.SessionID `json:"session_id"`
+	Source       string             `json:"source"`
 }
 
-func (d *Daemon) maybeGenerateSessionTitle(sessionID protocol.SessionID, transcriptPath string) {
-	if !d.sessionWantsAutoTitle(sessionID) {
-		return
+func (d *Daemon) enqueueSessionTitle(monitor *sessionmonitor.Monitor, conversation string, source string) error {
+	sessionID := monitor.Session()
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
+		return sessionmonitor.ErrNoTitleRunner
 	}
-	session := d.store.Get(sessionID)
-	path := d.resolveTranscriptPathForSession(session, transcriptPath)
-	if strings.TrimSpace(path) == "" {
-		return
-	}
-	slice, err := transcript.ExtractConversationSlice(path, transcript.SliceOptions{
-		MaxRescopingTurns: 2,
-		MaxAgentTurns:     1,
-		TurnCharCap:       sessionTitleBriefCharCap,
-		SummaryCharCap:    2000,
-	})
-	if err != nil || slice.Empty() || slice.Brief == "" {
-		return
-	}
-	d.enqueueSessionTitle(sessionID, slice.Render(), "transcript")
-}
-
-func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID protocol.SessionID, prompt string, origin sessionInputOrigin) {
-	prompt = strings.TrimSpace(prompt)
-	if prompt == "" || !d.sessionWantsAutoTitle(sessionID) {
-		return
-	}
-	if origin.kind != sessionInputOriginUserConversation && !d.matchSessionTitleInitialPrompt(sessionID, prompt) {
-		return
-	}
-	if runes := []rune(prompt); len(runes) > sessionTitleBriefCharCap {
-		prompt = string(runes[:sessionTitleBriefCharCap])
-	}
-	d.enqueueSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}.Render(), "prompt")
-}
-
-func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID protocol.SessionID, prompt string) {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	prompt = strings.TrimSpace(prompt)
-	e.titleInitialPrompt = nil
-	if prompt != "" {
-		fingerprint := sha256.Sum256([]byte(prompt))
-		e.titleInitialPrompt = &fingerprint
-	}
-}
-
-func (d *Daemon) forgetSessionTitleInitialPrompt(sessionID protocol.SessionID) {
-	if e := d.monitorEntry(sessionID); e != nil {
-		e.mu.Lock()
-		e.titleInitialPrompt = nil
-		e.mu.Unlock()
-	}
-}
-
-func (d *Daemon) matchSessionTitleInitialPrompt(sessionID protocol.SessionID, prompt string) bool {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return false
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.titleInitialPrompt != nil && *e.titleInitialPrompt == sha256.Sum256([]byte(prompt))
-}
-
-func (d *Daemon) sessionWantsAutoTitle(sessionID protocol.SessionID) bool {
-	if !sessionAutoTitleEnabled() || d.sessionTitleExec == nil {
-		return false
-	}
-	session := d.store.Get(sessionID)
-	if session == nil || !d.sessionMayBeAutoTitled(session) {
-		return false
-	}
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return false
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return !e.titleAttempted
-}
-
-func (d *Daemon) enqueueSessionTitle(sessionID protocol.SessionID, conversation string, source string) {
-	runner := d.headlessJobQueue("session_title")
-	if runner == nil {
-		return
-	}
-
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	if e.titleAttempted {
-		e.mu.Unlock()
-		return
-	}
-	e.titleAttempted = true
-	fingerprint := e.titleInitialPrompt
-	e.titleInitialPrompt = nil
-	e.mu.Unlock()
-
 	_, err := runner.Enqueue(sessionTitleKind, jobs.EnqueueOptions{
-		UniqueKey:   string(sessionID),
-		Payload:     sessionTitlePayload{Conversation: conversation, Source: source},
+		UniqueKey:   monitor.TitleKey(),
+		Payload:     sessionTitlePayload{Conversation: conversation, Source: source, SessionID: sessionID},
 		MaxAttempts: sessionTitleAttempts,
 	})
-	if err == nil {
-		return
-	}
-	d.logf("session title %s: enqueue: %v", sessionID, err)
-	e.mu.Lock()
-	e.titleAttempted = false
-	if fingerprint != nil && e.titleInitialPrompt == nil {
-		e.titleInitialPrompt = fingerprint
-	}
-	e.mu.Unlock()
+	return err
 }
 
 func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, error) {
-	sessionID := protocol.SessionID(jobSubject(job))
 	var payload sessionTitlePayload
 	if err := job.DecodePayload(&payload); err != nil {
 		return nil, err
 	}
-	session := d.store.Get(sessionID)
-	if session == nil || !d.sessionMayBeAutoTitled(session) {
+	var monitor *sessionmonitor.Monitor
+	for _, candidate := range d.monitors().registry.Monitors() {
+		matches := candidate.TitleKey() == job.UniqueKey
+		if payload.SessionID == "" && !matches {
+			matches = candidate.Session() == protocol.SessionID(job.UniqueKey)
+		}
+		if matches {
+			monitor = candidate
+			break
+		}
+	}
+	if monitor == nil {
+		return nil, nil
+	}
+	session, allowed := monitor.TitleTarget()
+	if !allowed {
 		return nil, nil
 	}
 	result, err := d.sessionTitleExec(ctx, session, payload.Conversation)
 	if err != nil {
-		return nil, fmt.Errorf("session %s: %w", sessionID, err)
+		return nil, fmt.Errorf("session %s: %w", session.ID, err)
 	}
 	title := sanitizeSessionTitle(result)
 	if title == "" {
 		return nil, nil
 	}
 
-	session = d.store.Get(sessionID)
-	if session == nil || !d.sessionMayBeAutoTitled(session) {
+	session, allowed = monitor.TitleTarget()
+	if !allowed {
 		return nil, nil
 	}
 	if !job.CommitGuard.Enter() {
 		return nil, context.Canceled
 	}
 	defer job.CommitGuard.Leave()
-	d.store.UpdateSessionLabel(sessionID, title)
-	session.Label = title
-	d.logf("session title %s: %q from %s", sessionID, title, payload.Source)
-	d.publishFact(FactSessionRenamed, string(sessionID), nil)
-	d.linkRenamed(sessionID, title)
+	if !monitor.ReportHarnessTitle(title) {
+		return nil, fmt.Errorf("session %s: harness title view was not applied", session.ID)
+	}
+	d.logf("session title %s: %q from %s", session.ID, title, payload.Source)
+	d.mirrorLabel(session.ID)
 	return title, nil
-}
-
-func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
-	if !sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
-		return false
-	}
-	return d.crewMemberBoundTo(session.ID) == ""
-}
-
-var (
-	idShapedLabel = regexp.MustCompile(`^(?:s-)?[a-z0-9]{6}$|^[0-9a-f]{6,}$|^[A-Z][A-Z0-9]*-[0-9]+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f-]{4,}$`)
-	sixLetterWord = regexp.MustCompile(`^(?:s-)?[a-z]{6}$`)
-)
-
-func sessionLabelIsPlaceholder(label string, cwd string, sessionID protocol.SessionID) bool {
-	label = strings.TrimSpace(label)
-	def := defaultSessionLabel(cwd, sessionID)
-	if label == def || label == truncateDelegationName(def) {
-		return true
-	}
-	return idShapedLabel.MatchString(label) && !sixLetterWord.MatchString(label)
 }
 
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
@@ -222,7 +105,7 @@ func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session
 }
 
 func titleProviderAgent(sessionAgent string) string {
-	candidates := []string{sessionAgent, "claude", "codex", "copilot"}
+	candidates := []string{sessionAgent, "claude", "codex"}
 	seen := make(map[string]struct{}, len(candidates))
 	for _, name := range candidates {
 		if name == "" {
@@ -253,7 +136,7 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, con
 	if !ok {
 		return "", fmt.Errorf("%s driver does not support headless tasks", agent)
 	}
-	executable, err := exec.LookPath(driver.ResolveExecutable(d.daemonSetting(daemonSettingKey(canonicalExecutableSettingKey(agent)))))
+	executable, err := exec.LookPath(driver.ResolveExecutable(d.machineSetting(MachineSetting(canonicalExecutableSettingKey(agent)))))
 	if err != nil {
 		return "", fmt.Errorf("resolve %s executable: %w", agent, err)
 	}
@@ -325,14 +208,6 @@ func sanitizeSessionTitle(raw string) string {
 	return line
 }
 
-func defaultSessionLabel(cwd string, sessionID protocol.SessionID) string {
-	label := filepath.Base(cwd)
-	if label == "" || label == "." || label == string(filepath.Separator) {
-		return string(sessionID)
-	}
-	return label
-}
-
 func sessionAutoTitleEnabled() bool {
 	switch strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_SESSION_AUTO_TITLE"))) {
 	case "0", "false", "off":
@@ -353,9 +228,28 @@ func fallbackSessionTitleModel(agent string) string {
 		return "haiku"
 	case "codex":
 		return "gpt-5.6-luna"
-	case "copilot":
-		return "claude-haiku-4.5"
 	default:
 		return ""
+	}
+}
+
+func (d *Daemon) bindMonitorTitle(monitor *sessionmonitor.Monitor) {
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
+		return
+	}
+	err := runner.UpdatePayload(sessionTitleKind, monitor.TitleKey(), func(raw json.RawMessage) (any, error) {
+		var payload sessionTitlePayload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			return nil, err
+		}
+		if payload.SessionID != "" {
+			return nil, nil
+		}
+		payload.SessionID = monitor.Session()
+		return payload, nil
+	})
+	if err != nil {
+		d.logf("session title binding %s: %v", monitor.Session(), err)
 	}
 }

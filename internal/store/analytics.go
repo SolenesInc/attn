@@ -1,0 +1,226 @@
+package store
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/victorarias/attn/internal/analytics"
+)
+
+const analyticsTimeLayout = "2006-01-02T15:04:05.000000000Z"
+
+type AnalyticsRow struct {
+	ID     int64
+	Record string
+}
+
+type AnalyticsPage struct {
+	Rows    []AnalyticsRow
+	Waiting int
+}
+
+func (s *Store) AppendAnalyticsRecord(record analytics.Record) error {
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return fmt.Errorf("the analytics outbox needs the SQLite store")
+	}
+	_, err = s.db.Exec("INSERT INTO analytics_outbox (stream, seq, at, record) VALUES (?, ?, ?, ?) ON CONFLICT(stream, seq) DO NOTHING",
+		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded))
+	return err
+}
+
+func (s *Store) AppendAnalyticsStreamRecord(record analytics.Record) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return fmt.Errorf("the analytics outbox needs the SQLite store")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := appendStreamRecord(tx, record); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func appendStreamRecord(tx *sql.Tx, record analytics.Record) (int64, error) {
+	if err := tx.QueryRow("INSERT INTO analytics_sequences (stream, seq) VALUES (?, 1) ON CONFLICT(stream) DO UPDATE SET seq = seq + 1 RETURNING seq",
+		record.Stream).Scan(&record.Seq); err != nil {
+		return 0, err
+	}
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec("INSERT INTO analytics_outbox (stream, seq, at, record) VALUES (?, ?, ?, ?)",
+		record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), string(encoded)); err != nil {
+		return 0, err
+	}
+	return record.Seq, nil
+}
+
+func (s *Store) UnsentAnalyticsRecords(limit int) ([]AnalyticsRow, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, nil
+	}
+	rows, err := s.db.Query("SELECT id, record FROM analytics_outbox WHERE sent_at IS NULL ORDER BY id LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var unsent []AnalyticsRow
+	for rows.Next() {
+		var row AnalyticsRow
+		if err := rows.Scan(&row.ID, &row.Record); err != nil {
+			return nil, err
+		}
+		unsent = append(unsent, row)
+	}
+	return unsent, rows.Err()
+}
+
+func (s *Store) MarkAnalyticsSent(records []analytics.Record, at time.Time) ([]Vent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return nil, nil
+	}
+	sentAt := at.UTC().Format(analyticsTimeLayout)
+	keys := make([][2]any, len(records))
+	for i, record := range records {
+		keys[i] = [2]any{record.Stream, record.Seq}
+	}
+	keyList, err := json.Marshal(keys)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`UPDATE vents SET sent_at = ? WHERE sent_at IS NULL AND outbox_seq IN (
+		SELECT json_extract(value, '$[1]') FROM json_each(?) WHERE json_extract(value, '$[0]') = ?) RETURNING `+ventColumns,
+		sentAt, string(keyList), analytics.StreamVent)
+	if err != nil {
+		return nil, err
+	}
+	sent, err := scanVents(rows)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(`UPDATE analytics_outbox SET sent_at = ? WHERE sent_at IS NULL AND (stream, seq) IN (
+		SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]') FROM json_each(?))`, sentAt, string(keyList)); err != nil {
+		return nil, err
+	}
+	return sent, tx.Commit()
+}
+
+func (s *Store) AnalyticsRecords(profileID string, stream analytics.Stream, beforeID int64, limit int) (AnalyticsPage, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return AnalyticsPage{}, nil
+	}
+	query := "SELECT id, record FROM analytics_outbox WHERE (stream != ? OR seq IN (SELECT outbox_seq FROM vents WHERE profile_id = ?))"
+	args := []any{analytics.StreamVent, profileID}
+	if stream != "" {
+		query += " AND stream = ?"
+		args = append(args, stream)
+	}
+	if beforeID > 0 {
+		query += " AND id < ?"
+		args = append(args, beforeID)
+	}
+	query += " ORDER BY id DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return AnalyticsPage{}, err
+	}
+	defer rows.Close()
+	page := AnalyticsPage{Rows: []AnalyticsRow{}}
+	for rows.Next() {
+		var row AnalyticsRow
+		if err := rows.Scan(&row.ID, &row.Record); err != nil {
+			return AnalyticsPage{}, err
+		}
+		page.Rows = append(page.Rows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return AnalyticsPage{}, err
+	}
+	if err := s.db.QueryRow("SELECT count(*) FROM analytics_outbox WHERE sent_at IS NULL").Scan(&page.Waiting); err != nil {
+		return AnalyticsPage{}, err
+	}
+	return page, nil
+}
+
+func (s *Store) PruneAnalyticsOutbox(before, unsentBefore time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, nil
+	}
+	result, err := s.db.Exec("DELETE FROM analytics_outbox WHERE at < ? AND (sent_at IS NOT NULL OR at < ?)",
+		before.UTC().Format(analyticsTimeLayout), unsentBefore.UTC().Format(analyticsTimeLayout))
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+type AnalyticsStatus struct {
+	Records, Bytes, Waiting int64
+	LastSentAt              time.Time
+}
+
+func (s *Store) AnalyticsStatus() (AnalyticsStatus, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var status AnalyticsStatus
+	if s.db == nil {
+		return status, nil
+	}
+	var lastSent sql.NullString
+	err := s.db.QueryRow("SELECT count(*), coalesce(sum(length(record)), 0), count(*) - count(sent_at), max(sent_at) FROM analytics_outbox").
+		Scan(&status.Records, &status.Bytes, &status.Waiting, &lastSent)
+	status.LastSentAt = parseStoreTime(lastSent.String)
+	return status, err
+}
+
+func (s *Store) ClearAnalyticsOutbox() (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, nil
+	}
+	result, err := s.db.Exec("DELETE FROM analytics_outbox")
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+func (s *Store) DatabaseBytes() (int64, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return 0, nil
+	}
+	var size int64
+	err := s.db.QueryRow("SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()").Scan(&size)
+	return size, err
+}

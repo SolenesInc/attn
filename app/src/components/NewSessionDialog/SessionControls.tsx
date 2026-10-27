@@ -17,7 +17,6 @@ const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
   shell: true,
   codex: true,
   claude: true,
-  copilot: true,
 };
 
 const SESSION_AGENT_KEY = 'new_session_agent';

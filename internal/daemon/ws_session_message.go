@@ -1,7 +1,10 @@
 package daemon
 
 import (
+	"context"
+	"encoding/json"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 const (
@@ -32,7 +35,19 @@ func (d *Daemon) handleSessionMessagesGet(client *wsClient, msg *protocol.Sessio
 		return
 	}
 
-	snapshot, ok := d.assistantWindow(sessionID, session.Agent)
+	answer, err := Call[protocol.MonitorAssistantWindowResult](context.Background(), d.router(), protocol.MonitorAssistantWindowMessage{Cmd: protocol.CmdMonitorAssistantWindow, SessionID: sessionID})
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+		d.sendToClient(client, result)
+		return
+	}
+	var snapshot sessionmonitor.AssistantWindow
+	if err := json.Unmarshal([]byte(answer.Window), &snapshot); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+		d.sendToClient(client, result)
+		return
+	}
+	ok := answer.Available
 	if !ok {
 		detail := "live transcript watching is unavailable for this session"
 		result.Success = true

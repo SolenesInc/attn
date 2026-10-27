@@ -34,7 +34,7 @@ func (d *Daemon) loadHarnessModels(ctx context.Context, harness, executable stri
 		return harnessModelCatalog{}, err
 	}
 	if executable == "" {
-		executable = d.daemonSetting(daemonSettingKey(executableSettingKey(harness)))
+		executable = d.machineSetting(MachineSetting(executableSettingKey(harness)))
 	}
 	key := harness + "\x00" + executable
 	if refresh {
@@ -145,7 +145,7 @@ func (d *Daemon) harnessModels(ctx context.Context, harness, executable string, 
 	if err != nil {
 		return harnessModelCatalog{}, err
 	}
-	overrides, err := modeltiers.ParseOverrides(d.daemonSetting(settingModelTierOverrides))
+	overrides, err := modeltiers.ParseOverrides(d.homeSetting(SettingModelTierOverrides))
 	if err != nil {
 		return harnessModelCatalog{}, err
 	}

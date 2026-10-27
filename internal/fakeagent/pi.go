@@ -37,6 +37,7 @@ type piTerminal struct {
 	term         *terminal
 	relay        *rpcPeer
 	conversation string
+	transcript   string
 	resumed      bool
 	prompt       string
 	autoMode     json.RawMessage
@@ -44,8 +45,9 @@ type piTerminal struct {
 }
 
 type relayHello struct {
-	Token       string `json:"token"`
-	PiSessionID string `json:"pi_session_id"`
+	Token          string `json:"token"`
+	PiSessionID    string `json:"pi_session_id"`
+	TranscriptPath string `json:"transcript_path"`
 }
 
 type relayState struct {
@@ -74,6 +76,12 @@ func (p *piTerminal) begin(term *terminal) error {
 		p.autoMode = json.RawMessage(config)
 	}
 	p.yolo = os.Getenv(piYoloEnv) == "true"
+	return p.startSuite()
+}
+
+// startSuite dials the relay and says hello as each instance of the attn suite does: pi loads one at
+// startup and a fresh one after every switch to another session.
+func (p *piTerminal) startSuite() error {
 	socket, token := os.Getenv(piRelaySocketEnv), os.Getenv(piRelayTokenEnv)
 	if socket == "" || token == "" {
 		return fmt.Errorf("pi launched without %s and %s from driver.spawn", piRelaySocketEnv, piRelayTokenEnv)
@@ -82,8 +90,11 @@ func (p *piTerminal) begin(term *terminal) error {
 	if err != nil {
 		return fmt.Errorf("dial pi relay: %w", err)
 	}
+	if p.relay != nil {
+		p.relay.close()
+	}
 	p.relay = newRPCPeer(conn, nil).start()
-	if err := p.relay.call(context.Background(), "hello", relayHello{Token: token, PiSessionID: p.conversation}, nil); err != nil {
+	if err := p.relay.call(context.Background(), "hello", relayHello{Token: token, PiSessionID: p.conversation, TranscriptPath: p.transcript}, nil); err != nil {
 		return fmt.Errorf("pi relay hello: %w", err)
 	}
 	return nil
@@ -100,10 +111,12 @@ func (p *piTerminal) openSession() error {
 	}
 	if file != "" {
 		p.resumed = true
+		p.transcript = file
 		return nil
 	}
 	p.term.print(fmt.Sprintf("Warning: No project session found with id %s; creating a new session with that id.", p.conversation))
 	file = filepath.Join(piSessionDir(p.cfg.ToolHome, cwd), strings.ReplaceAll(now(), ":", "-")+"_"+p.conversation+".jsonl")
+	p.transcript = file
 	return appendLines(file, map[string]any{"type": "session", "version": 3, "id": p.conversation, "timestamp": now(), "cwd": cwd})
 }
 
@@ -155,13 +168,56 @@ func (p *piTerminal) launch() launch {
 
 func (p *piTerminal) initialPrompt() string { return p.prompt }
 
-func (p *piTerminal) submit(string) error {
+func (p *piTerminal) submit(prompt string) error {
+	if strings.TrimSpace(prompt) == "/new" {
+		return p.switchTo(uuid.NewString())
+	}
+	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
+		return p.switchTo(strings.TrimSpace(conversation))
+	}
+	if err := p.record("user", prompt); err != nil {
+		return err
+	}
 	return p.relay.call(context.Background(), "report_state", relayState{State: "working"}, nil)
+}
+
+func (p *piTerminal) record(role, text string) error {
+	file, err := os.Open(p.transcript)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	var parent any
+	decoder := json.NewDecoder(file)
+	for decoder.More() {
+		var entry struct{ Type, ID string }
+		if err := decoder.Decode(&entry); err != nil {
+			return err
+		}
+		if entry.Type != "session" {
+			parent = entry.ID
+		}
+	}
+	return appendLines(p.transcript, map[string]any{
+		"type": "message", "id": uuid.NewString(), "parentId": parent, "timestamp": now(),
+		"message": map[string]any{"role": role, "content": []map[string]any{{"type": "text", "text": text}}},
+	})
+}
+
+func (p *piTerminal) switchTo(conversation string) error {
+	p.conversation = conversation
+	if err := p.openSession(); err != nil {
+		return err
+	}
+	return p.startSuite()
 }
 
 func (p *piTerminal) reply(text string, afterStop bool) error {
 	if afterStop {
 		return errors.New("pi has no Stop hook to reply after")
+	}
+	if err := p.record("assistant", text); err != nil {
+		return err
 	}
 	p.term.print(text)
 	return p.relay.call(context.Background(), "report_stop", relayStop{AssistantText: text}, nil)
@@ -382,14 +438,7 @@ func (p *piPlugin) launchRun(raw json.RawMessage, resume bool) (any, error) {
 	p.mu.Lock()
 	p.runs[run.sessionID] = run
 	p.mu.Unlock()
-	err := p.daemon.call(context.Background(), "session.report_metadata", map[string]any{
-		"session_id":        run.sessionID,
-		"run_id":            run.runID,
-		"seq":               p.nextSeq(run),
-		"metadata":          piMetadata{Schema: 1, PiSessionID: run.piSessionID, PiVersion: piVersion},
-		"resume_session_id": run.piSessionID,
-	}, nil)
-	if err != nil {
+	if err := p.reportMetadata(run); err != nil {
 		return nil, err
 	}
 	env := map[string]string{piRelaySocketEnv: p.relayPath, piRelayTokenEnv: run.runID}
@@ -436,7 +485,14 @@ func (p *piPlugin) handleRelay(relay *rpcPeer, method string, params json.RawMes
 		if err := json.Unmarshal(params, &hello); err != nil {
 			return nil, err
 		}
-		return struct{}{}, p.adopt(relay, hello.Token)
+		run, err := p.adopt(relay, hello)
+		if err != nil {
+			return nil, err
+		}
+		if err := p.reportMetadata(run); err != nil {
+			return nil, err
+		}
+		return struct{}{}, p.report("session.report_transcript_path", run, map[string]any{"path": hello.TranscriptPath})
 	}
 	run := p.runOn(relay)
 	if run == nil {
@@ -468,16 +524,27 @@ func (p *piPlugin) handleRelay(relay *rpcPeer, method string, params json.RawMes
 	}
 }
 
-func (p *piPlugin) adopt(relay *rpcPeer, token string) error {
+func (p *piPlugin) adopt(relay *rpcPeer, hello relayHello) (*piRun, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, run := range p.runs {
-		if run.runID == token {
+		if run.runID == hello.Token {
 			run.relay = relay
-			return nil
+			run.piSessionID = hello.PiSessionID
+			return run, nil
 		}
 	}
-	return errors.New("unknown pi relay token")
+	return nil, errors.New("unknown pi relay token")
+}
+
+func (p *piPlugin) reportMetadata(run *piRun) error {
+	p.mu.Lock()
+	piSessionID := run.piSessionID
+	p.mu.Unlock()
+	return p.report("session.report_metadata", run, map[string]any{
+		"metadata":          piMetadata{Schema: 1, PiSessionID: piSessionID, PiVersion: piVersion},
+		"resume_session_id": piSessionID,
+	})
 }
 
 func (p *piPlugin) runOn(relay *rpcPeer) *piRun {

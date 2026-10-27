@@ -17,7 +17,7 @@ import (
 func TestAgentsUseTheChosenLaunchModeOnBothPTYBackends(t *testing.T) {
 	for _, backend := range []string{"worker", "shared host"} {
 		t.Run(backend, func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot))
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
 			if backend == "shared host" {
 				host := os.Getenv("ATTN_TEST_PTY_HOST")
 				if host == "" {
@@ -37,7 +37,7 @@ func TestAgentsUseTheChosenLaunchModeOnBothPTYBackends(t *testing.T) {
 				if direct {
 					setSetting(t, app, "direct_agent_launch_enabled", "true")
 				}
-				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 					session := s.Spawn(app, h, s.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
 						m.InitialPrompt = protocol.Ptr("literal 'quote' \\\\path\n$HOME and λ")
 					})

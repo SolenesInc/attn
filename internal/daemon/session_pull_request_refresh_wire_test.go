@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/testworld"
@@ -36,6 +37,8 @@ type refreshedPullRequest struct {
 	inboxTitle                 string
 	snapshots, readinessReads  int
 }
+
+const dashboardPollInterval = 90 * time.Second
 
 func serveRefreshedPullRequest(t *testing.T) *refreshedPullRequest {
 	t.Helper()
@@ -57,8 +60,10 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 	}
 	body, _ := io.ReadAll(r.Body)
 	var answer any
+	pullPath, isPull := strings.CutPrefix(r.URL.Path, "/repos/acme/shop/pulls/")
+	number, reviewsPath := strings.CutSuffix(pullPath, "/reviews")
 	switch {
-	case r.URL.Path == "/repos/acme/shop/pulls/71":
+	case isPull && !reviewsPath:
 		gh.snapshots++
 		if !gh.limitedUntil.IsZero() {
 			rw.Header().Set("X-RateLimit-Remaining", "0")
@@ -75,11 +80,12 @@ func (gh *refreshedPullRequest) serve(rw http.ResponseWriter, r *http.Request) {
 		if gh.merged {
 			state = "closed"
 		}
+		pull, _ := strconv.Atoi(number)
 		answer = map[string]any{
-			"number": 71, "html_url": shopPull(71), "title": gh.title, "state": state, "merged": gh.merged,
+			"number": pull, "html_url": shopPull(pull), "title": gh.title, "state": state, "merged": gh.merged,
 			"mergeable_state": gh.mergeable, "head": map[string]any{"sha": "sha-1", "ref": "status-refresh"},
 		}
-	case r.URL.Path == "/repos/acme/shop/pulls/71/reviews":
+	case isPull:
 		if gh.reviewsFail {
 			rw.WriteHeader(http.StatusInternalServerError)
 			return
@@ -155,6 +161,38 @@ func onlyPullRequest(t *testing.T, cli *client.Client, session string) protocol.
 	return prs[0]
 }
 
+func TestAnUnwatchedPullRequestPausesWhileItsAgentIsRecoverableAndResumesWithIt(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "Check the pull request.")
+		testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		recordPullRequest(t, cli, agent.id, shopPull(71))
+		w.advance(protocol.HeatHotInterval)
+		w.stop()
+		agent.term.Exit(0)
+		w.start()
+		app, cli = w.App(), w.Client()
+		if session := queriedSession(t, cli, agent.id); session.State != protocol.SessionStateRecoverable {
+			t.Fatalf("restarted session = %+v, want recoverable", session)
+		}
+		if fetched, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); fetched != 0 {
+			t.Fatalf("GitHub was asked %d times while the agent was recoverable, want none", fetched)
+		}
+		gh.set(func(gh *refreshedPullRequest) { gh.title = "Updated while the agent was away" })
+		w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(msg *protocol.SpawnSessionMessage) {
+			msg.ID = protocol.SessionID(agent.id)
+			msg.ResumeSessionID = protocol.Ptr(agent.id)
+		})
+		w.bootBubbleClaude(t, agent.id)
+		w.advance(protocol.HeatHotInterval)
+		if pr := onlyPullRequest(t, cli, agent.id); protocol.Deref(pr.Title) != "Updated while the agent was away" {
+			t.Fatalf("reloaded session's pull request = %+v, want its updated title", pr)
+		}
+	})
+}
+
 func TestAPullRequestsStatusFollowsGitHubAndOnlyRealChangesReachTheApp(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gh.set(func(gh *refreshedPullRequest) { gh.mergeable, gh.reviews = "blocked", []string{"APPROVED"} })
@@ -220,6 +258,39 @@ func TestAPullRequestIsAskedAboutLessAsItCoolsAndNotAtAllOnceMerged(t *testing.T
 		}
 		if after, _ := gh.fetchesDuring(w, 2*protocol.HeatColdInterval); after != 0 {
 			t.Errorf("GitHub was asked %d times about a merged pull request, want none", after)
+		}
+	})
+}
+
+func TestUnwatchedPullRequestPollingPausesUntilItsSessionIsRevived(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "Check the change")
+		agent.reply("Checked. <!-- attn:state=idle -->")
+		recordPullRequest(t, w.Client(), agent.id, shopPull(71))
+		if fetched, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); fetched != 1 {
+			t.Fatalf("live session fetched %d times, want once", fetched)
+		}
+		w.stop()
+		agent.term.Exit(1)
+		w.start()
+		app = w.App()
+		if session := queriedSession(t, w.Client(), agent.id); session.State != protocol.SessionStateRecoverable {
+			t.Fatalf("session after restart is %s, want recoverable", session.State)
+		}
+		if fetched, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); fetched != 0 {
+			t.Fatalf("recoverable session fetched %d times, want none", fetched)
+		}
+		reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(agent.id), Cols: 80, Rows: 24}, protocol.EventReloadSessionResult,
+			func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == agent.id })
+		if !reloaded.Success {
+			t.Fatalf("reload: %+v", reloaded)
+		}
+		w.bootBubbleClaude(t, agent.id)
+		if fetched, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); fetched != 1 {
+			t.Fatalf("revived session fetched %d times, want once", fetched)
 		}
 	})
 }
@@ -308,9 +379,9 @@ func TestAColdPullRequestTheInboxSeesChangeIsAskedAboutAtTheHotPaceAgain(t *test
 		gh.set(func(gh *refreshedPullRequest) { gh.inboxTitle = "Keep session PR status fresh" })
 		w.advance(2 * time.Minute)
 		gh.set(func(gh *refreshedPullRequest) { gh.inboxTitle = "Keep session PR status fresher" })
-		w.advance(2 * time.Minute)
-		if reheated, _ := gh.fetchesDuring(w, 2*time.Minute); reheated < 3 {
-			t.Errorf("after the inbox saw it change GitHub was asked %d times in 2m, want every %s", reheated, protocol.HeatHotInterval)
+		w.advance(dashboardPollInterval)
+		if reheated, _ := gh.fetchesDuring(w, protocol.HeatHotDuration-dashboardPollInterval); reheated < 3 {
+			t.Errorf("after the inbox saw it change GitHub was asked %d times in %s, want every %s", reheated, protocol.HeatHotDuration-dashboardPollInterval, protocol.HeatHotInterval)
 		}
 	})
 }
@@ -382,6 +453,49 @@ func TestAnUnchangedWatchedPullRequestSendsTheAppNothing(t *testing.T) {
 		}
 		if again := len(sessionUpdatesOf(app, "s1")); again != shown {
 			t.Errorf("three unchanged polls of a watched pull request sent the app %d session updates", again-shown)
+		}
+	})
+}
+
+func TestARepeatedWatchOutageTellsTheAppOnce(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		session := w.bubbleClaude(t, app, "shop").id
+		watchPullRequestOn(t, cli, session, protocol.PullRequestWatchModeGreen)
+		w.advance(protocol.HeatHotInterval)
+		if pr := onlyPullRequest(t, cli, session); protocol.Deref(pr.WatchHealth) != "delayed" {
+			t.Fatalf("after a failed poll the watch = %+v, want it delayed", pr)
+		}
+
+		facts := producedBy(busStatus(t, app), "session.pull_request.changed")
+		w.advance(3 * protocol.HeatHotInterval)
+		if again := producedBy(busStatus(t, app), "session.pull_request.changed"); again != facts {
+			t.Errorf("three more failed polls of the same outage published %d session.pull_request.changed facts, want none", again-facts)
+		}
+	})
+}
+
+func TestTwoPullRequestsChangingInOnePassTellTheAppOnce(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		session := w.bubbleClaude(t, app, "shop").id
+		recordPullRequest(t, cli, session, shopPull(71))
+		recordPullRequest(t, cli, session, shopPull(72))
+		w.advance(protocol.HeatHotInterval)
+
+		facts := producedBy(busStatus(t, app), "session.pull_request.changed")
+		gh.set(func(gh *refreshedPullRequest) { gh.mergeable = "dirty" })
+		w.advance(protocol.HeatHotInterval)
+		for _, pr := range queriedSession(t, cli, session).PullRequests {
+			if protocol.Deref(pr.CIStatus) != "failure" {
+				t.Fatalf("pull request #%d shows ci %q, want failure", pr.Number, protocol.Deref(pr.CIStatus))
+			}
+		}
+		if again := producedBy(busStatus(t, app), "session.pull_request.changed"); again != facts+1 {
+			t.Errorf("two pull requests turning red in one pass published %d session.pull_request.changed facts, want one", again-facts)
 		}
 	})
 }
@@ -522,7 +636,7 @@ func TestAMembersPullRequestWatchSurvivesItsCreatingDayAndCanBeStoppedFromTheNex
 		watchPullRequestOn(t, cli, first.id, protocol.PullRequestWatchModeGreen)
 		w.advance(time.Second)
 		readInbox(t, cli, first.id, 0)
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day please", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day please", false, protocol.CrewDayCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := cli.Unregister(protocol.SessionID(first.id)); err != nil {
@@ -588,7 +702,7 @@ func TestAMemberCanForgetItsWatchFromTheNextDay(t *testing.T) {
 		watchPullRequestOn(t, cli, first.id, protocol.PullRequestWatchModeGreen)
 		w.advance(time.Second)
 		readInbox(t, cli, first.id, 0)
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day", false, protocol.CrewDayCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := cli.Unregister(protocol.SessionID(first.id)); err != nil {
@@ -625,7 +739,7 @@ func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
 			t.Fatalf("initial readiness=%+v", pr)
 		}
 		readInbox(t, cli, first.id, 0)
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day", false, protocol.CrewDayCloseSleep); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day", false, protocol.CrewDayCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		next := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))

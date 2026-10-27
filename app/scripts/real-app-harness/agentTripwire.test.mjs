@@ -58,12 +58,12 @@ describe('the shim a real agent exec lands in', () => {
     const tripwire = armAgentTripwire({ scenarioId: 'TR-201', runDir, env, log: () => {} });
     fs.rmSync(path.join(tripwire.dir, 'current-run'));
 
-    const result = spawnSync(path.join(tripwire.dir, 'copilot'), ['--version'], { encoding: 'utf8' });
+    const result = spawnSync(path.join(tripwire.dir, 'codex'), ['--version'], { encoding: 'utf8' });
 
     expect(result.status).toBe(TRIPWIRE_EXIT_CODE);
     expect(tripwire.read()).toEqual([]);
     expect(readTripwireLedger(path.join(tripwire.dir, 'unattributed.ledger'))).toEqual([
-      'unattributed\tcopilot --version',
+      'unattributed\tcodex --version',
     ]);
   });
 
@@ -122,7 +122,7 @@ describe('what a scenario arms', () => {
   });
 
   it('arms the binaries a scenario did not name', () => {
-    expect(armedBinaries(['pi'])).toEqual(['claude', 'codex', 'copilot']);
+    expect(armedBinaries(['pi'])).toEqual(['claude', 'codex']);
   });
 
   it('refuses a binary name it does not shim', () => {
@@ -135,16 +135,15 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
     const env = freshEnv();
     const dir = tripwireDir();
 
-    applyTripwireEnv(env, { dir, binaries: ['claude', 'codex', 'copilot'] });
+    applyTripwireEnv(env, { dir, binaries: ['claude', 'codex', 'pi'] });
 
     expect(env.PATH.split(path.delimiter)[0]).toBe(dir);
     // claude and codex run the mock instead of the shim, so an armed scenario
     // gets a deterministic agent; the shim still catches a name-resolved exec.
     expect(env.ATTN_CLAUDE_EXECUTABLE).toBe(MOCK_AGENT_EXECUTABLE);
     expect(env.ATTN_CODEX_EXECUTABLE).toBe(MOCK_AGENT_EXECUTABLE);
-    expect(env.ATTN_COPILOT_EXECUTABLE).toBe(path.join(dir, 'copilot'));
-    expect(env.ATTN_PI_EXECUTABLE).toBeUndefined();
-    expect(env[TRIPWIRE_MARKER_VAR]).toBe(tripwireMarker({ dir, binaries: ['claude', 'codex', 'copilot'] }));
+    expect(env.ATTN_PI_EXECUTABLE).toBe(path.join(dir, 'pi'));
+    expect(env[TRIPWIRE_MARKER_VAR]).toBe(tripwireMarker({ dir, binaries: ['claude', 'codex', 'pi'] }));
   });
 
   it('hands the app launch the PATH and pins the daemon must inherit', () => {
@@ -157,7 +156,6 @@ describe('how the tripwire reaches the app, the daemon and the CLI', () => {
       [HEADLESS_TASKS_VAR]: 'off',
       ATTN_CLAUDE_EXECUTABLE: MOCK_AGENT_EXECUTABLE,
       ATTN_CODEX_EXECUTABLE: MOCK_AGENT_EXECUTABLE,
-      ATTN_COPILOT_EXECUTABLE: path.join(tripwire.dir, 'copilot'),
       ATTN_PI_EXECUTABLE: path.join(tripwire.dir, 'pi'),
     });
   });

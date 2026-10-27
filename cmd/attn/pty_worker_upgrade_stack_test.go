@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -261,4 +262,41 @@ func initialSession(t *testing.T, app *testworld.Peer, id string) protocol.Sessi
 	}
 	t.Fatalf("session %s is missing from the initial state", id)
 	return protocol.Session{}
+}
+
+func TestAnAppReconnectingAfterAnUpdateAttachesToTheUpgradedWorker(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	next := testworld.AttnBinaryWithSnapshotFormat(t, "next-format")
+	upgrade := s.PauseAt(pausepoint.PtyWorkerUpgrade)
+	s.Start()
+	app := s.App()
+	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
+	terminal := app.Terminal(shell)
+	app.TypeLine(shell, "echo before-$((1+1))")
+	app.AwaitScreen(shell, "before-2")
+	s.Stop()
+
+	s.StartBinaryHeldAt(next, upgrade)
+	app = s.ConnectApp()
+	app.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)})
+	refused := testworld.Refused(app)
+	if protocol.Deref(refused.Cmd) != protocol.CmdAttachSession || protocol.Deref(refused.Error) != "daemon_recovering" {
+		t.Fatalf("attaching while the terminal's worker was mid-upgrade answered %s %q, want attach_session refused as daemon_recovering", protocol.Deref(refused.Cmd), protocol.Deref(refused.Error))
+	}
+	for _, event := range app.Received() {
+		if event.Event == protocol.EventInitialState {
+			t.Fatalf("the app got its initial state before the terminal's worker finished upgrading")
+		}
+	}
+
+	upgrade.Release()
+	testworld.Await[protocol.InitialStateMessage](app, protocol.EventInitialState, nil)
+	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: protocol.TerminalID(terminal)},
+		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return string(r.ID) == terminal })
+	if !attached.Success || attached.Snapshot == nil || protocol.Deref(attached.Snapshot.Format) != "next-format" {
+		t.Fatalf("the first attach after the update answered %+v, want the upgraded next-format worker", attached)
+	}
+	app.TypeLine(shell, "echo after-$((2+2))")
+	app.AwaitScreen(shell, "after-4")
 }

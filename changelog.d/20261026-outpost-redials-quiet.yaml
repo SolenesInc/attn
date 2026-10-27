@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: While an outpost stays unreachable, the app no longer refreshes every session each time the home redials it; an outpost update goes out only when its state, build or kind of failure changes.

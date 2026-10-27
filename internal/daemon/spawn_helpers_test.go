@@ -6,17 +6,9 @@ import (
 	"syscall"
 
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
-
-func spawnTestClient() *wsClient {
-	return &wsClient{
-		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
-	}
-}
 
 type fakeOutputStream struct {
 	mu         sync.Mutex
@@ -48,30 +40,26 @@ func (s *fakeOutputStream) ClosedCount() int {
 }
 
 type fakeSpawnBackend struct {
-	mu                sync.Mutex
-	spawnOpts         []ptybackend.SpawnOptions
-	killed            []string
-	removed           []string
-	onSpawn           func(ptybackend.SpawnOptions)
-	onInput           func(string, []byte)
-	onInputResult     func(string, []byte) error
-	onKill            func()
-	spawnErr          error
-	sessionIDs        []string
-	themeCalls        []pty.TerminalTheme
-	themeCallIDs      []string
-	setThemeErr       error
-	screen            string
-	screenUnavailable bool
-	onRecover         func()
+	mu            sync.Mutex
+	spawnOpts     []ptybackend.SpawnOptions
+	killed        []string
+	removed       []string
+	onSpawn       func(ptybackend.SpawnOptions)
+	onInput       func(string, []byte)
+	onInputResult func(string, []byte) error
+	onKill        func()
+	spawnErr      error
+	sessionIDs    []string
+	themeCalls    []pty.TerminalTheme
+	themeCallIDs  []string
+	setThemeErr   error
+	screen        string
+	onRecover     func()
 }
 
 func (b *fakeSpawnBackend) ScreenSnapshot(_ context.Context, _ harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.screenUnavailable {
-		return pty.ScreenSnapshotInfo{}, nil
-	}
 	text := b.screen
 	if text == "" {
 		text = "❯"

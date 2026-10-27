@@ -1,7 +1,10 @@
 package main_test
 
 import (
+	"os"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -167,8 +170,9 @@ func TestASharedCodexSessionShownInAnotherSessionsTerminalKeepsItsApprovalMode(t
 			yolo.Reply("It races the tax lookup. <!-- attn:state=idle -->")
 			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 			conversation := yolo.ConversationID
+			first := app.Terminal(unguarded)
 			for _, line := range []string{"/new", "add a discount field"} {
-				typeLineInto(app, app.Terminal(unguarded), line)
+				typeLineInto(app, first, line)
 				yolo.Prompted()
 			}
 			testworld.AwaitSession(app, unguarded, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
@@ -208,6 +212,52 @@ func TestASharedCodexSessionShownInAnotherSessionsTerminalKeepsItsApprovalMode(t
 			if got := server.Permissions(conversation); got != want {
 				t.Errorf("after the %s attn reloaded YOLO conversation %s with %+v, want %+v", disturbance, conversation, got, want)
 			}
+		})
+	}
+}
+
+func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhileItIsStillInstalled(t *testing.T) {
+	for _, backend := range []string{"worker", "shared host"} {
+		t.Run(backend, func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			if backend == "shared host" {
+				host := os.Getenv("ATTN_TEST_PTY_HOST")
+				if host == "" {
+					t.Skip("set ATTN_TEST_PTY_HOST to run the app-server on the shared host")
+				}
+				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
+			}
+			s.Start()
+			app := s.App()
+			if backend == "shared host" {
+				enableSharedHost(t, app)
+			}
+			codex := s.InstallStandaloneCodex("standalone", "0.162.1")
+			setSetting(t, app, "codex_executable", codex)
+			shareCodex(t, app)
+			spawn := func(project string) (string, *fakeagent.Run) {
+				session := s.Spawn(app, fakeagent.Codex, s.Path(project), func(m *protocol.SpawnSessionMessage) {
+					m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
+				})
+				return session, s.Launched(session)
+			}
+			shop, shopCodex := spawn("shop")
+			app.TypeLine(shop, "write the release notes")
+			shopCodex.Prompted()
+			s.InstallStandaloneCodex("standalone", "0.163.0")
+
+			s.Stop()
+			s.Start()
+			app = s.App()
+			running := s.Path("standalone", "releases", "0.162.1", "bin", "codex")
+			if _, cart := spawn("cart"); cart.Argv[0] != running {
+				t.Errorf("a terminal opened after the restart, while a turn held the app-server on its Codex, ran %s, want the app-server's %s", cart.Argv[0], running)
+			}
+			s.CodexServer().Reply(shopCodex.ConversationID, "Wrote the release notes.")
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.RunningVersion) == "0.163.0" && m.SharedCodex.Restart == protocol.SharedCodexRestartNone
+			})
 		})
 	}
 }
@@ -298,10 +348,23 @@ func TestAHiddenSharedCodexTurnThatEndsWhileTheDaemonIsDownSettlesAfterTheRestar
 	app := s.App()
 	shareCodex(t, app)
 	session, conversation := hiddenWaitingSharedCodex(t, s, app)
+	listed, err := s.Client().Query("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var previousModelRequest string
+	for _, current := range listed {
+		if string(current.ID) == session {
+			previousModelRequest = protocol.Deref(current.LastModelRequestAt)
+		}
+	}
+	mark := len(app.Log())
 	submitFeedback(t, app, session, "Lock the tax table before the lookup.")
 	server := s.CodexServer()
 	server.Prompted(conversation)
-	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWorking && protocol.Deref(x.LastModelRequestAt) != previousModelRequest
+	})
 
 	s.Stop()
 	server.Halt(conversation)
@@ -357,4 +420,153 @@ func hiddenWaitingSharedCodex(t *testing.T, s *testworld.Stack, app *testworld.P
 	}
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.Hidden) })
 	return session, conversation
+}
+
+func TestRestartNowLetsARunningTurnFinishWhenCodexIsInstalledWithNpm(t *testing.T) {
+	for _, backend := range []string{"worker", "shared host"} {
+		t.Run(backend, func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+			if backend == "shared host" {
+				host := os.Getenv("ATTN_TEST_PTY_HOST")
+				if host == "" {
+					t.Skip("set ATTN_TEST_PTY_HOST to run the app-server on the shared host")
+				}
+				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
+			}
+			s.Start()
+			app := s.App()
+			if backend == "shared host" {
+				enableSharedHost(t, app)
+			}
+			setSetting(t, app, "codex_executable", s.InstallNpmCodex("npm", "0.162.1"))
+			shareCodex(t, app)
+			session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+			codex := s.Launched(session)
+			app.TypeLine(session, "write the release notes")
+			codex.Prompted()
+			server := s.CodexServer()
+
+			s.InstallNpmCodex("npm", "0.163.0")
+			requestID := uuid.NewString()
+			restarted := testworld.Request(app, protocol.RestartSharedCodexMessage{Cmd: protocol.CmdRestartSharedCodex, ProfileID: app.SelectedProfile(), Now: true, RequestID: protocol.Ptr(requestID)},
+				protocol.EventRestartSharedCodexResult, func(m protocol.RestartSharedCodexResultMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+			if !restarted.Success {
+				t.Fatalf("restart now: %s", protocol.Deref(restarted.Error))
+			}
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return m.SharedCodex != nil && m.SharedCodex.Restart == protocol.SharedCodexRestartRestarting && m.SharedCodex.ForceAt != nil
+			})
+			server.Reply(codex.ConversationID, "Wrote the release notes.")
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.RunningVersion) == "0.163.0" && m.SharedCodex.Restart == protocol.SharedCodexRestartNone
+			})
+		})
+	}
+}
+
+func TestACodexUpdateInstalledFromTheAppRunsInATileAndSharedCodexMovesToIt(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Vars = append(s.Vars, "SHELL=/bin/bash")
+	s.SetCodexVersion("0.162.1")
+	s.SetCodexLatest("0.163.0")
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	s.Launched(s.Spawn(app, fakeagent.Codex, s.Path("shop")))
+	sharedCodexOn := func(running, installed string) {
+		t.Helper()
+		testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+			return m.SharedCodex != nil && protocol.Deref(m.SharedCodex.RunningVersion) == running &&
+				protocol.Deref(m.SharedCodex.InstalledVersion) == installed && m.SharedCodex.Restart == protocol.SharedCodexRestartNone
+		})
+	}
+	sharedCodexOn("0.162.1", "0.162.1")
+	desktop := ""
+	for _, profile := range app.Initial.Profiles {
+		if profile.ID == app.SelectedProfile() {
+			desktop = profile.CurrentDesktopID
+		}
+	}
+	install := func() protocol.InstallCodexUpdateResultMessage {
+		t.Helper()
+		requestID := uuid.NewString()
+		return testworld.Request(app, protocol.InstallCodexUpdateMessage{Cmd: protocol.CmdInstallCodexUpdate, DesktopID: desktop, RequestID: protocol.Ptr(requestID)},
+			protocol.EventInstallCodexUpdateResult, func(m protocol.InstallCodexUpdateResultMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+	}
+
+	s.FailCodexUpdate("Could not detect how Codex was installed")
+	if failed := install(); failed.Success || !strings.Contains(protocol.Deref(failed.Error), "exited 1") {
+		t.Fatalf("an update that exits 1 answered %+v, want a failure naming its exit code", failed)
+	}
+	tile := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
+		return e.Session != nil && e.Session.Agent == protocol.SessionAgentShell && e.Session.Label == "Codex update"
+	})
+	app.AwaitScreen(string(tile.Session.ID), "Could not detect how Codex was installed")
+	s.FailCodexUpdate("")
+	if installed := install(); !installed.Success || installed.SharedCodex == nil || protocol.Deref(installed.SharedCodex.InstalledVersion) != "0.163.0" {
+		t.Fatalf("install the update answered %+v, want success carrying the installed 0.163.0", installed)
+	}
+	sharedCodexOn("0.163.0", "0.163.0")
+
+	s.SetCodexLatest("0.164.0")
+	updated := s.Run(testworld.Invocation{Args: []string{"codex", "update"}})
+	if updated.Code != 0 || !strings.Contains(updated.Stdout, "Codex updated to 0.164.0") || !regexp.MustCompile(`(?m)^installed\s+0\.164\.0$`).MatchString(updated.Stdout) {
+		t.Fatalf("attn codex update = %+v, want Codex's update output and 0.164.0 installed", updated)
+	}
+	sharedCodexOn("0.164.0", "0.164.0")
+	status := s.Run(testworld.Invocation{Args: []string{"codex", "status"}})
+	if status.Code != 0 || !regexp.MustCompile(`(?m)^server\s+0\.164\.0$`).MatchString(status.Stdout) || !regexp.MustCompile(`(?m)^restart\s+none$`).MatchString(status.Stdout) {
+		t.Fatalf("attn codex status = %+v, want the server on 0.164.0 and no restart", status)
+	}
+	if restart := s.Run(testworld.Invocation{Args: []string{"codex", "restart"}}); restart.Code != 0 {
+		t.Fatalf("attn codex restart = %+v", restart)
+	}
+	testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+		return m.SharedCodex != nil && m.SharedCodex.Restart == protocol.SharedCodexRestartRestarting
+	})
+	sharedCodexOn("0.164.0", "0.164.0")
+}
+
+func TestACodexUpdateOfferKeepsItsInstallActionAcrossADaemonRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.SetCodexVersion("0.162.1")
+	s.SetCodexLatest("0.163.0")
+	s.Start()
+	offers := func(app *testworld.Peer) []protocol.Notification {
+		t.Helper()
+		versionsReady := func(state *protocol.SharedCodexState) bool {
+			return state != nil && protocol.Deref(state.LatestVersion) == "0.163.0" && protocol.Deref(state.InstalledVersion) == "0.162.1"
+		}
+		if !versionsReady(app.Initial.SharedCodex) {
+			testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
+				return versionsReady(m.SharedCodex)
+			})
+		}
+		requestID := uuid.NewString()
+		listed := testworld.Request(app, protocol.NotificationListMessage{Cmd: protocol.CmdNotificationList, RequestID: protocol.Ptr(requestID)},
+			protocol.EventNotificationListResult, func(r protocol.NotificationListResultMessage) bool { return r.RequestID == requestID })
+		var found []protocol.Notification
+		for _, n := range listed.Notifications {
+			if n.Kind == "codex_update_available" {
+				found = append(found, n)
+			}
+		}
+		return found
+	}
+	app := s.App()
+	shareCodex(t, app)
+	if before := offers(app); len(before) != 1 || len(before[0].Actions) == 0 {
+		t.Fatalf("with Codex 0.162.1 installed and 0.163.0 out, the offers are %+v, want one with Install", before)
+	}
+
+	s.Stop()
+	s.Start()
+	for _, connection := range []string{"on restart", "after the version check"} {
+		if after := offers(s.App()); len(after) != 1 || len(after[0].Actions) == 0 || after[0].ReadAt != "" {
+			t.Errorf("connecting %s, with 0.162.1 still installed, the 0.163.0 offer is %+v, want it unread with Install", connection, after)
+		}
+	}
 }

@@ -132,7 +132,7 @@ func (c *Client) DocSubscribe(query protocol.DocumentQuery, held []protocol.Stor
 	defer conn.Close()
 
 	msg := protocol.DocSubscribeMessage{Cmd: protocol.CmdDocSubscribe, Query: query, Have: revisions(held)}
-	if err := json.NewEncoder(conn).Encode(msg); err != nil {
+	if err := c.writeFrame(conn, msg); err != nil {
 		return fmt.Errorf("send subscribe: %w", err)
 	}
 

@@ -122,7 +122,7 @@ It reads your table with `attn delegate roles`, which lists only the roles that 
 <details>
 <summary>What does "Add Attn roles" install, and what happens to the roles I already have?</summary>
 
-It adds the Attn roles your table doesn't have yet, each without a model, so agents can't pick one until you set its model. It also installs the attn-workflow skill for each harness you have, in `~/.claude/skills/attn-workflow` (Claude Code), `~/.agents/skills/attn-workflow` (Codex and Pi) and `~/.copilot/skills/attn-workflow` (Copilot). From then on Attn keeps those folders matching its own copy, so anything you change or add inside them gets replaced or removed. Your own roles stay, and when one's name starts with an Attn role's name, Attn asks whether to add the Attn role beside it or replace yours (replacing keeps your row's models and on/off state).
+It adds the Attn roles your table doesn't have yet, each without a model, so agents can't pick one until you set its model. It also installs the attn-workflow skill for each harness you have, in `~/.claude/skills/attn-workflow` (Claude Code), `~/.agents/skills/attn-workflow` (Codex and Pi). From then on Attn keeps those folders matching its own copy, so anything you change or add inside them gets replaced or removed. Your own roles stay, and when one's name starts with an Attn role's name, Attn asks whether to add the Attn role beside it or replace yours (replacing keeps your row's models and on/off state).
 </details>
 
 <details>
@@ -152,5 +152,5 @@ Planted is open with nobody on it, tended (its state reads growing) means an age
 <details>
 <summary>Can a delegate run on a different harness, or in another profile?</summary>
 
-Any harness can delegate to any other, so a Claude Code agent can hand work to Codex, Copilot or Pi (through its plugin), and back. Without a role or a named harness, the delegate runs on the same harness as the agent that started it, or Codex when that was a shell. A delegation stays in the profile of the agent that started it, so the delegate opens on one of that profile's desktops and a seed from another profile is refused. Your delegation roles are one table shared by every profile.
+Any harness can delegate to any other, so a Claude Code agent can hand work to Codex or Pi (through its plugin), and back. Without a role or a named harness, the delegate runs on the same harness as the agent that started it, or Codex when that was a shell. A delegation stays in the profile of the agent that started it, so the delegate opens on one of that profile's desktops and a seed from another profile is refused. Your delegation roles are one table shared by every profile.
 </details>

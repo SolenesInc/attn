@@ -5,7 +5,6 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
@@ -16,8 +15,8 @@ func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
 	if err != nil {
 		return
 	}
-	cost := store.SessionCostUsage{UsageUnavailable: state.UsageUnavailable, MeasurementIncomplete: state.MeasurementIncomplete, Ledger: state.Ledger}
-	if usage := sessionUsage(cost, d.store.GetAllSettings()); usage != nil {
+	cost := sessioncost.Totals{UsageUnavailable: state.UsageUnavailable, MeasurementIncomplete: state.MeasurementIncomplete, Ledger: state.Ledger}
+	if usage := sessionUsage(cost, d.settingValues()); usage != nil {
 		session.Usage = usage
 	}
 }
@@ -33,7 +32,7 @@ func (d *Daemon) decorateLedgerEntriesWithUsage(entries []protocol.SessionLedger
 		d.logf("session ledger: read usage: %v", err)
 		return
 	}
-	settings := d.store.GetAllSettings()
+	settings := d.settingValues()
 	for i := range entries {
 		entries[i].Usage = sessionUsage(costs[entries[i].ID], settings)
 	}
@@ -49,10 +48,10 @@ func (d *Daemon) decorateLedgerEntryWithUsage(entry *protocol.SessionLedgerEntry
 		d.logf("session ledger: read usage for %s: %v", entry.ID, err)
 		return
 	}
-	entry.Usage = sessionUsage(costs[entry.ID], d.store.GetAllSettings())
+	entry.Usage = sessionUsage(costs[entry.ID], d.settingValues())
 }
 
-func sessionUsage(state store.SessionCostUsage, settings map[string]string) *protocol.SessionUsage {
+func sessionUsage(state sessioncost.Totals, settings map[string]string) *protocol.SessionUsage {
 	if state.UsageUnavailable {
 		return nil
 	}

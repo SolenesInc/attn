@@ -142,7 +142,7 @@ func TestSupportsUsage(t *testing.T) {
 			t.Fatalf("SupportsUsage(%q) = false", agent)
 		}
 	}
-	for _, agent := range []string{"copilot", "shell", "plugin-driver", ""} {
+	for _, agent := range []string{"shell", "plugin-driver", ""} {
 		if SupportsUsage(agent) {
 			t.Fatalf("SupportsUsage(%q) = true", agent)
 		}

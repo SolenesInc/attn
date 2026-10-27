@@ -34,9 +34,8 @@ func TestPresentRetirementPreservesSharedStateAcrossUpgradeAndRestart(t *testing
 				t.Errorf("retired table %s survived restart %d", table, restart)
 			}
 		}
-		var kept int
-		if err := upgraded.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE id='preserved' AND label='Kept session'`).Scan(&kept); err != nil || kept != 1 {
-			t.Errorf("restart %d: kept sessions = %d, %v; want 1", restart, kept, err)
+		if session := upgraded.Get("preserved"); session == nil || session.Label != "Kept session" {
+			t.Errorf("restart %d: kept session = %+v, want Kept session", restart, session)
 		}
 		if err := upgraded.Close(); err != nil {
 			t.Fatal(err)

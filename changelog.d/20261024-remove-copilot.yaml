@@ -1,0 +1,3 @@
+kind: removed
+area: harnesses
+change: attn no longer supports GitHub Copilot CLI. Claude Code, Codex, Pi and plugin harnesses remain; past Copilot sessions stay in the ledger as history.

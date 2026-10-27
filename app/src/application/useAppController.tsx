@@ -16,6 +16,7 @@ import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { getAgentAvailability } from '../utils/agentAvailability';
 import { appOverlayPolicy } from './appOverlayPolicy';
+import { useSharedCodexConfirm } from './useSharedCodex';
 import { AppContentProps, diagnosticFocusKind } from './appSupport';
 import { useAppAppearance } from './useAppAppearance';
 import { useAppDeepLinks } from './useAppDeepLinks';
@@ -63,6 +64,7 @@ export function useAppController({
 
   const {
     connectionError,
+    outposts,
     connectionGeneration,
     hasReceivedInitialState,
     sendSetSetting,
@@ -97,7 +99,7 @@ export function useAppController({
     sendSupportSnapshot,
   } = useDaemonApi();
 
-  const { connect, sessions, reloadSession, selectLeaf } = useSessionStore();
+  const { connect, sessions, selectLeaf } = useSessionStore();
   const shownAgentId = useAgentOnScreen();
   const contextSessionId = useSessionBehindScreen();
 
@@ -129,6 +131,7 @@ export function useAppController({
     sessions,
     daemonSessions,
     connect,
+    outposts,
   });
   const { enrichedLocalSessions, desktopViews, profileSessions, hiddenSessions } = appSessions;
 
@@ -176,7 +179,7 @@ export function useAppController({
 
   const sessionLaunch = useSessionLaunch({
     settings,
-    sessions,
+    sessions: enrichedLocalSessions,
     shownAgentId,
     selectCreatedSession,
     showError,
@@ -233,7 +236,7 @@ export function useAppController({
 
   const desktopTiles = useDesktopTiles({
     settings,
-    sessions,
+    sessions: enrichedLocalSessions,
     contextSessionId,
     showError,
   });
@@ -325,6 +328,7 @@ export function useAppController({
     setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen]);
 
   const calloutOpen = useCalloutStore((state) => state.callout !== null);
+  const sharedCodexConfirmOpen = useSharedCodexConfirm() !== null;
   const { otherOverlayOpen, blockingOverlayOpen, windowCovered, paletteBlocked, appShortcutsEnabled } = appOverlayPolicy({
     calloutOpen,
     desktopOverviewOpen,
@@ -341,6 +345,7 @@ export function useAppController({
     crewPanelOpen: crewPanel.open,
     gardenHoldsWindow,
     desktopCloseOpen: sessionLifecycle.desktopClosePrompt !== null,
+    sharedCodexConfirmOpen,
     contextCapOpen: Boolean(contextCapPromptSession),
     sessionCreationOpen: Boolean(sessionCreationJob),
     prLauncherOpen: Boolean(openPRLauncherJob),
@@ -465,7 +470,7 @@ export function useAppController({
     selectDesktop: handleSelectDesktop,
     moveDesktopLeaf: sendDesktopMoveLeaf,
     closeSession: handleCloseSession,
-    reloadSession,
+    reloadSession: sessionLifecycle.reloadSession,
     setSetting: sendSetSetting,
     openDockPanel: (panelId: string) => openDockPanel(panelId as DockPanelId),
     openShortcutEditor: () => setShortcutEditorOpen(true),

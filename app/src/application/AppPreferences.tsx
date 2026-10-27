@@ -5,7 +5,13 @@ import { ShortcutEditorModal } from '../components/ShortcutEditorModal';
 import { ShortcutsModal } from '../components/ShortcutsModal';
 import { WhatsNewModal } from '../components/WhatsNewModal';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useAppAppearanceContext, useAppInputs, useAppPanelsContext } from './AppContexts';
+import {
+  useAppAppearanceContext,
+  useAppGardenActionsContext,
+  useAppInputs,
+  useAppPanelsContext,
+  useNavigationContext,
+} from './AppContexts';
 
 export function AppPreferences() {
   const {
@@ -49,6 +55,8 @@ export function AppPreferences() {
     sendTaskList,
     sendTaskRetry,
   } = useDaemonApi();
+  const { handleSelectSession } = useNavigationContext();
+  const { handleRevealSeedInGarden } = useAppGardenActionsContext();
   const profileId = useProfilesStore((state) => state.selectedProfileId);
   const saveSetting = useCallback((key: string, value: string) => sendSaveSetting(key, value, profileId), [sendSaveSetting, profileId]);
 
@@ -107,6 +115,8 @@ export function AppPreferences() {
         listTasks={sendTaskList}
         retryTask={sendTaskRetry}
         taskChangeSignal={notebookTaskChangeSignal}
+        onOpenSession={handleSelectSession}
+        onOpenSeed={handleRevealSeedInGarden}
       />
     </>
   );

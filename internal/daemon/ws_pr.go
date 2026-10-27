@@ -120,11 +120,6 @@ func (d *Daemon) handleFetchPRDetailsWS(client *wsClient, msg *protocol.FetchPRD
 			d.logf("Fetch PR details failed: %v", err)
 		} else {
 			result.Prs = protocol.PRsToValues(updatedPRs)
-			d.coalesceSnapshots(func() {
-				for _, pr := range updatedPRs {
-					d.publishFact(FactPRDetailsChanged, pr.ID, nil)
-				}
-			})
 			d.logf("Fetch PR details succeeded")
 		}
 		d.sendToClient(client, result)

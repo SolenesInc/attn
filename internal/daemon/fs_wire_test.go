@@ -202,7 +202,7 @@ func TestNotebookFileCommandsRoundTripThroughTheApp(t *testing.T) {
 	}
 }
 
-func TestFsChangedTellsTheAppsWhoChangedAFileAndOnlyNotesReachTheNotebook(t *testing.T) {
+func TestFsChangedTellsTheAppsWhoChangedAFileUnderWhichRoot(t *testing.T) {
 	w := newFsWorld(t)
 	app := pickerApp(w)
 	watcher := w.App()
@@ -243,13 +243,9 @@ func TestFsChangedTellsTheAppsWhoChangedAFileAndOnlyNotesReachTheNotebook(t *tes
 
 	fsAskWrite(app, "", "c.md", "x", "")
 	fsAskRename(app, "", "c.md", "d.md")
-	note := testworld.Await(watcher, protocol.EventNotebookChanged, func(m protocol.NotebookChangedMessage) bool {
-		return slices.ContainsFunc(m.Paths, func(p string) bool { return slices.Contains([]string{"a.md", "b.md", "d.md"}, p) })
-	})
-	if !slices.Contains(note.Paths, "d.md") || slices.Contains(note.Paths, "a.md") || slices.Contains(note.Paths, "b.md") || note.Origin != "ui" {
-		t.Fatalf("the first notebook_changed naming a renamed file was %+v; want only the notebook's rename to d.md", note)
+	if renamed := fsAwaitChanged(watcher, func(m protocol.FsChangedMessage) bool { return m.Root == root && slices.Contains(m.Paths, "d.md") }); renamed.Origin != "ui" || !slices.Contains(renamed.Paths, "c.md") {
+		t.Fatalf("the notebook's rename arrived as %+v, want both names from the ui", renamed)
 	}
-	fsAwaitChanged(watcher, func(m protocol.FsChangedMessage) bool { return m.Root == root && slices.Contains(m.Paths, "d.md") })
 }
 
 func TestNotebookImageAssetsAreServedWithinTheMessageCap(t *testing.T) {
@@ -359,7 +355,7 @@ func TestExplicitFsRootsAreOnlyForTheAuthenticatedAppAndNeverTheDataDir(t *testi
 		want string
 	}{
 		{"a relative root", "relative/path", ""},
-		{"a root inside the data dir", filepath.Join(w.Dir, "notebook"), ""},
+		{"a root inside the data dir", filepath.Join(w.Dir, "workers"), ""},
 		{"a symlink to the data dir", intoDataDir, "outside the attn data dir"},
 		{"a symlink into the data dir", intoWorkers, "outside the attn data dir"},
 	} {

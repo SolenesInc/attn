@@ -55,7 +55,7 @@ func shellNames(shellPath string) []string {
 }
 
 func prepareFishShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch, error) {
-	path, ok := lookupEnv(env, "PATH")
+	path, ok := LookupEnv(env, "PATH")
 	if !ok {
 		return shellPaneLaunch{}, fmt.Errorf("launch environment is missing PATH")
 	}
@@ -71,14 +71,14 @@ func prepareZshShellPaneLaunch(shellPath string, env []string) (shellPaneLaunch,
 		return shellPaneLaunch{}, fmt.Errorf("create zsh startup overlay: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(overlay) }
-	path, ok := lookupEnv(env, "PATH")
+	path, ok := LookupEnv(env, "PATH")
 	if !ok {
 		cleanup()
 		return shellPaneLaunch{}, errors.New("launch environment is missing PATH")
 	}
-	userZdotdir, zdotdirSet := lookupEnv(env, "ZDOTDIR")
+	userZdotdir, zdotdirSet := LookupEnv(env, "ZDOTDIR")
 	if !zdotdirSet {
-		userZdotdir, _ = lookupEnv(env, "HOME")
+		userZdotdir, _ = LookupEnv(env, "HOME")
 	}
 	if userZdotdir == "" {
 		cleanup()
@@ -311,12 +311,12 @@ func preparePOSIXShellPaneLaunch(shellPath string, env []string) (shellPaneLaunc
 		return shellPaneLaunch{}, fmt.Errorf("create shell startup overlay: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(overlay) }
-	path, ok := lookupEnv(env, "PATH")
+	path, ok := LookupEnv(env, "PATH")
 	if !ok {
 		cleanup()
 		return shellPaneLaunch{}, errors.New("launch environment is missing PATH")
 	}
-	userHome, ok := lookupEnv(env, "HOME")
+	userHome, ok := LookupEnv(env, "HOME")
 	if !ok || userHome == "" {
 		cleanup()
 		return shellPaneLaunch{}, errors.New("launch environment is missing HOME")
@@ -390,7 +390,7 @@ unset ATTN_SHELL_USER_HOME ATTN_SHELL_LAUNCH_PATH ATTN_SHELL_INIT_DIR
 `
 }
 
-func lookupEnv(env []string, key string) (string, bool) {
+func LookupEnv(env []string, key string) (string, bool) {
 	prefix := key + "="
 	for _, entry := range env {
 		if strings.HasPrefix(entry, prefix) {
@@ -408,7 +408,7 @@ func boolEnvValue(value bool) string {
 }
 
 func ShellIntegrationExpected(path string, env []string) bool {
-	if disabled, _ := lookupEnv(env, "ATTN_NO_SHELL_INTEGRATION"); disabled != "" {
+	if disabled, _ := LookupEnv(env, "ATTN_NO_SHELL_INTEGRATION"); disabled != "" {
 		return false
 	}
 	for _, name := range shellNames(path) {

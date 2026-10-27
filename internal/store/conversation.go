@@ -31,7 +31,7 @@ func (s *Store) TransitionSessionResumeID(sessionID protocol.SessionID, nativeID
 	return s.transitionSessionConversation(sessionID, nativeID, "", false, false)
 }
 
-func (s *Store) transitionSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string, pathRequired, exclusive bool) (bool, error) {
+func (s *Store) transitionSessionConversation(sessionID protocol.SessionID, nativeID string, transcriptPath string, pathRequired bool, exclusiveInProfile bool) (bool, error) {
 	sessionID = protocol.TrimID(sessionID)
 	nativeID = strings.TrimSpace(nativeID)
 	transcriptPath = strings.TrimSpace(transcriptPath)
@@ -68,14 +68,11 @@ func (s *Store) transitionSessionConversation(sessionID protocol.SessionID, nati
 	}
 	current.NativeID = strings.TrimSpace(current.NativeID)
 	current.TranscriptPath = strings.TrimSpace(current.TranscriptPath)
-	if exclusive {
+	if exclusiveInProfile {
 		var claimed bool
 		if err := tx.QueryRow(
-			`SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ? AND closed_at = ''
-				AND profile_id = (SELECT profile_id FROM sessions WHERE id = ?))`,
-			nativeID,
-			sessionID,
-			sessionID,
+			`SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ? AND closed_at = '' AND profile_id = (SELECT profile_id FROM sessions WHERE id = ?))`,
+			nativeID, sessionID, sessionID,
 		).Scan(&claimed); err != nil {
 			return false, fmt.Errorf("check conversation claim for session %s: %w", sessionID, err)
 		}
@@ -159,8 +156,9 @@ func (s *Store) ConversationOwner(sessionID protocol.SessionID, nativeID string)
 	var owner protocol.SessionID
 	if err := s.db.QueryRow(`SELECT id FROM sessions WHERE resume_session_id = ? AND id != ?
 		AND profile_id = (SELECT profile_id FROM sessions WHERE id = ?)
+ AND host = (SELECT host FROM sessions WHERE id = ?)
 		ORDER BY closed_at = '' DESC, closed_at DESC LIMIT 1`,
-		strings.TrimSpace(nativeID), protocol.TrimID(sessionID), protocol.TrimID(sessionID)).Scan(&owner); err != nil {
+		strings.TrimSpace(nativeID), protocol.TrimID(sessionID), protocol.TrimID(sessionID), protocol.TrimID(sessionID)).Scan(&owner); err != nil {
 		return ""
 	}
 	return owner
@@ -219,4 +217,41 @@ func (s *Store) SessionLaunchedAt(sessionID protocol.SessionID) time.Time {
 		return time.Time{}
 	}
 	return parsed
+}
+
+// ConversationsOpenInManySessions groups the open sessions of one profile and agent that hold the
+// same conversation. Conversations held by a single open session are left out.
+func (s *Store) ConversationsOpenInManySessions() [][]protocol.SessionID {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+	rows, err := s.db.Query(`SELECT id, profile_id, agent, resume_session_id FROM sessions
+		WHERE closed_at = '' AND resume_session_id != ''
+		AND (profile_id, agent, resume_session_id) IN (
+			SELECT profile_id, agent, resume_session_id FROM sessions
+			WHERE closed_at = '' AND resume_session_id != ''
+			GROUP BY profile_id, agent, resume_session_id HAVING COUNT(*) > 1)
+		ORDER BY profile_id, agent, resume_session_id, id`)
+	if err != nil {
+		log.Printf("[store] ConversationsOpenInManySessions: %v", err)
+		return nil
+	}
+	defer rows.Close()
+	var groups [][]protocol.SessionID
+	var last string
+	for rows.Next() {
+		var id, profile, agent, native string
+		if err := rows.Scan(&id, &profile, &agent, &native); err != nil {
+			log.Printf("[store] ConversationsOpenInManySessions: %v", err)
+			return nil
+		}
+		if key := profile + "\x00" + agent + "\x00" + native; key != last || len(groups) == 0 {
+			groups = append(groups, nil)
+			last = key
+		}
+		groups[len(groups)-1] = append(groups[len(groups)-1], protocol.SessionID(id))
+	}
+	return groups
 }

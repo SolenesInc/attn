@@ -1,3 +1,5 @@
+import { recordUiDiag } from '../utils/uiDiagnosticsLog';
+
 type ChainDismissal = 'dismiss' | 'hover-leave' | 'outside-scroll' | 'outside-pointer' | 'handoff' | 'selection' | 'context' | 'anchor-removed' | 'sidebar-collapse';
 
 interface FocusReturn {
@@ -63,14 +65,14 @@ export class DelegationChainController {
     window.addEventListener('pointerover', this.pointerMoved, true);
     window.addEventListener('pointerout', this.pointerMoved, true);
     document.addEventListener('pointerdown', this.outsidePointer, true);
-    window.addEventListener('scroll', this.outsideScroll, true);
+    window.addEventListener('wheel', this.outsideScroll, { capture: true, passive: true });
     return () => {
       this.cancelClose();
       window.removeEventListener('pointermove', this.pointerMoved, true);
       window.removeEventListener('pointerover', this.pointerMoved, true);
       window.removeEventListener('pointerout', this.pointerMoved, true);
       document.removeEventListener('pointerdown', this.outsidePointer, true);
-      window.removeEventListener('scroll', this.outsideScroll, true);
+      window.removeEventListener('wheel', this.outsideScroll, true);
     };
   }
 
@@ -85,7 +87,7 @@ export class DelegationChainController {
     this.dismiss('outside-pointer');
   };
 
-  private outsideScroll = (event: Event) => {
+  private outsideScroll = (event: WheelEvent) => {
     if (this.current && !this.popover?.contains(event.target as Node)) this.dismiss('outside-scroll');
   };
 
@@ -111,6 +113,7 @@ export class DelegationChainController {
     const focus = samePopup ? previous.focus : { target, navigationKey, restore: true };
     if (previous && !samePopup) previous.focus.restore = false;
     focus.target = target;
+    recordUiDiag({ kind: 'delegation_chain_opened', sessionId, mode });
     this.publish({ sessionId, navigationKey, anchor, mode, focus });
   }
 
@@ -149,6 +152,7 @@ export class DelegationChainController {
     this.hoverSuppressed = reason !== 'hover-leave';
     this.current.focus.restore = !['outside-pointer', 'handoff', 'selection', 'context'].includes(reason);
     if (reason === 'sidebar-collapse') this.current.focus.target = null;
+    recordUiDiag({ kind: 'delegation_chain_dismissed', sessionId: this.current.sessionId, mode: this.current.mode, reason });
     this.publish(null);
   };
 

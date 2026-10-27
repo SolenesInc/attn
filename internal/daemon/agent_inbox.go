@@ -21,7 +21,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		return
 	}
 	if strings.TrimSpace(protocol.Deref(msg.MessageID)) == "" {
-		d.handleAgentInboxBatch(conn, recipient.ID, recipient.ProfileID, protocol.Deref(msg.Limit))
+		d.handleAgentInboxBatch(conn, recipient.ID, protocol.Deref(msg.Limit))
 		return
 	}
 	b, err := d.bindings()
@@ -92,7 +92,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 	}
 }
 
-func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protocol.SessionID, profileID string, limit int) {
+func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protocol.SessionID, limit int) {
 	b, err := d.bindings()
 	if err != nil {
 		d.replyPeerMessageError(conn, err)
@@ -129,16 +129,6 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 		if delivery.Item.Hint != "" {
 			item.Hint = protocol.Ptr(delivery.Item.Hint)
 		}
-		if delivery.Item.Kind == inbox.QuickCapture {
-			item.ItemID = delivery.Item.Source
-			record, err := d.store.QuickCapture(profileID, delivery.Item.Source)
-			if err != nil {
-				d.logf("inbox quick capture assets: %v", err)
-			} else {
-				item.Attachments = record.Attachments
-			}
-			d.publishQuickCaptureRead(profileID, delivery.Item.Source, delivery.Item.ReadAt)
-		}
 		if delivery.Peer != nil {
 			item.Sender = protocol.Ptr(d.partyView(delivery.Peer.Sender, b))
 			item.ReplyTo = protocol.Ptr(d.replyTo(delivery.Peer.Sender))
@@ -146,18 +136,21 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID protoco
 		items = append(items, item)
 	}
 	d.kickInboxAfterCommit(addresses...)
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: true,
-		AgentInboxBatchResult: &protocol.AgentInboxBatchResult{
-			Items: items, Remaining: remaining,
-		},
-	})
+	result := &protocol.AgentInboxBatchResult{Items: items, Remaining: remaining}
+	if len(items) > 0 && d.quietNotifications() && d.inNotificationRun(recipientSessionID) {
+		result.QuietNotifications = protocol.Ptr(true)
+	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentInboxBatchResult: result})
 }
 
 func mailboxItemContent(delivery store.InboxDelivery) string {
 	switch delivery.Item.Kind {
 	case inbox.SeedUpdate:
-		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "event_kind": delivery.Item.Hint})
+		change := delivery.Item.Text
+		if change == "" {
+			change = delivery.Item.Hint
+		}
+		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "change": change})
 	case inbox.PeerMessage:
 		if delivery.Peer != nil {
 			return delivery.Peer.Body

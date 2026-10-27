@@ -147,7 +147,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 		written, _, err = d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
 			Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
 			Author: cause,
-		}})
+		}}, false)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
@@ -169,14 +169,8 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 	}
 	status, detail := d.deliverChiefSeedAssignment(chief, seed.ID)
 
-	wire := d.seedWire(next, written, false, b)
+	wire := d.seedWire(next, written)
 	d.decorateSeedContinuation(&wire, next)
-	if read, readErr := d.readGarden(seed.ProfileID); readErr == nil {
-		wire.Ready = read.ready[next.ID]
-		if progress, ok := read.progress(next.ID); ok {
-			wire.PlotProgress = progress
-		}
-	}
 	return &protocol.SeedSendToChiefResult{
 		Seed: wire, Chief: d.partyView(chief, b), DeliveryStatus: status, Detail: detail,
 	}, nil

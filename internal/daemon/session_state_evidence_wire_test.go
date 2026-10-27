@@ -156,6 +156,33 @@ func TestAStopWithBackgroundWorkHoldsTheSessionUntilItClears(t *testing.T) {
 	})
 }
 
+func TestChiefStopsWithoutWaitingOnItsBackgroundWork(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		for _, member := range app.Initial.Crew {
+			if member.Chief {
+				if err := w.InjectCrewSession("s1", "Chief", w.Path("chief"), member.Key); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
+			{Type: "background_session", Status: "running", Name: protocol.Ptr("gh run watch 1234")},
+		}}); err != nil {
+			t.Fatalf("stop with background work: %v", err)
+		}
+		w.advance(time.Minute)
+		if got := queriedSession(t, cli, "s1"); protocol.Deref(got.StateReason) == "background_work" {
+			t.Fatalf("a minute after its stop the chief is still held %s on its background work", got.State)
+		}
+	})
+}
+
 func TestEachNotificationTypeMovesTheSessionOnlyAsItsKindSays(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
@@ -184,22 +211,23 @@ func TestEachNotificationTypeMovesTheSessionOnlyAsItsKindSays(t *testing.T) {
 	})
 }
 
-func TestClaudeLeavingAutoModeSurfacesApprovalsWithoutTheDwell(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+func TestClaudeInAutoModeSurfacesApprovalsWithoutADelay(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		guardedClaudeAtWork(t, app, cli, w)
-		if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "default"); err != nil {
-			t.Fatalf("report working in default mode: %v", err)
+		claude := w.bubbleClaude(t, app, "shop")
+		terminal := protocol.TerminalID(claude.self)
+		if err := cli.UpdateStateFromHook(terminal, protocol.StateWorking, "auto"); err != nil {
+			t.Fatalf("report working in auto mode: %v", err)
 		}
 		w.advance(time.Second)
 
 		asked := time.Now()
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
-			t.Fatalf("notify: %v", err)
+		if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
+			t.Fatalf("permission request: %v", err)
 		}
-		surfaced := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
-		if since := stateSince(t, surfaced); !since.Equal(asked) {
-			t.Fatalf("the approval surfaced at %s, want at once, %s", since, asked)
+		w.advance(0)
+		if surfaced := queriedSession(t, cli, claude.id); surfaced.State != protocol.SessionStatePendingApproval || !stateSince(t, surfaced).Equal(asked) {
+			t.Fatalf("an auto-mode approval reads %s since %s, want pending_approval at once, %s", surfaced.State, surfaced.StateSince, asked)
 		}
 	})
 }

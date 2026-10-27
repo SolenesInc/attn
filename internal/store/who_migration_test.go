@@ -1,11 +1,13 @@
 package store
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -14,7 +16,7 @@ func TestWhoMigrationPreservesPartiesActorsAndCollisionWinners(t *testing.T) {
 	for _, declared := range []bool{false, true} {
 		t.Run(map[bool]string{false: "empty undeclared crew", true: "attributed history"}[declared], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "who.db")
-			old, err := newStoreAtVersion(path, 1792359946024014-1)
+			old, err := newStoreAtVersion(path, 1793111475755305-1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -27,11 +29,11 @@ func TestWhoMigrationPreservesPartiesActorsAndCollisionWinners(t *testing.T) {
 					t.Fatal(err)
 				}
 				if _, err := old.db.Exec(`
-INSERT INTO sessions(id,label,directory,state_since,state_updated_at,last_seen,member_key,closed_at,closed_by) VALUES
- ('bound','Keel','/tmp/who','','','','','',''),
- ('old-day','Keel','/tmp/who','','','','keel','2026-10-01T00:00:00Z','bound'),
- ('plain','Plain','/tmp/who','','','','','2026-10-01T00:00:00Z','user'),
- ('unknown-close','Unknown','/tmp/who','','','','','2026-10-01T00:00:00Z','');
+INSERT INTO sessions(id,user_label,directory,created_at,member_key,closed_at,closed_by) VALUES
+ ('bound','Keel','/tmp/who','','','',''),
+ ('old-day','Keel','/tmp/who','','keel','2026-10-01T00:00:00Z','bound'),
+ ('plain','Plain','/tmp/who','','','2026-10-01T00:00:00Z','user'),
+ ('unknown-close','Unknown','/tmp/who','','','2026-10-01T00:00:00Z','');
 INSERT INTO peer_messages(id,sender_session_id,body,created_at) VALUES
  ('bound-peer','bound','body','2026-10-01T00:00:00Z'),('old-peer','old-day','body','2026-10-01T00:00:00Z'),('plain-peer','plain','body','2026-10-01T00:00:00Z');
 INSERT INTO inbox_items(id,address,kind,source_id,created_at) VALUES
@@ -57,7 +59,7 @@ INSERT INTO kept_conversations(resume_id,agent,source_path,bytes,stored_bytes,co
 			if err := old.Close(); err != nil {
 				t.Fatal(err)
 			}
-			upgraded, err := newStoreAtVersion(path, 1792359946025014)
+			upgraded, err := newStoreAtVersion(path, 1793111475839445)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -122,13 +124,13 @@ func TestChiefEpicUpgradesTheLatestMainDatabase(t *testing.T) {
 	all := timestampedMigrations
 	defer func() { timestampedMigrations = all }()
 	epic := map[int]bool{
-		1792359946019014: true, 1792359946020014: true,
-		1792359946021014: true, 1792359946022014: true,
-		1792359946023014: true, 1792359946024014: true,
-		1792359946025014: true, 1792359946026014: true,
-		1792359946027014: true, 1792359946028014: true,
-		1792359946029014: true, 1792359946030014: true,
-		1792359946031014: true, 1792359946032014: true,
+		1793111475126440: true, 1793111475404723: true,
+		1793111475500692: true, 1793111475583214: true,
+		1793111475670935: true, 1793111475755305: true,
+		1793111475839445: true, 1793111475923199: true,
+		1793111476009795: true, 1793111476093878: true,
+		1793111476175147: true, 1793111476257370: true,
+		1793111476342423: true, 1793111476425448: true,
 	}
 	timestampedMigrations = nil
 	for _, m := range all {
@@ -145,7 +147,7 @@ func TestChiefEpicUpgradesTheLatestMainDatabase(t *testing.T) {
 	if _, err := old.db.Exec("INSERT INTO crew_profiles(member_id,profile_id) VALUES('keel',?)", profile.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := old.db.Exec(`INSERT INTO sessions(id,label,directory,profile_id,state_since,state_updated_at,last_seen) VALUES ('day','Keel','/tmp/who',?,'','','')`, profile.ID); err != nil {
+	if _, err := old.db.Exec(`INSERT INTO sessions(id,user_label,directory,profile_id,created_at) VALUES ('day','Keel','/tmp/who',?,'')`, profile.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := old.db.Exec(`INSERT INTO pull_request_watches(address,session_id,pr_id,mode,created_at,cursor_json) VALUES
@@ -163,6 +165,25 @@ func TestChiefEpicUpgradesTheLatestMainDatabase(t *testing.T) {
 	if _, err := old.PutDocument(*schema, "keel", []byte(`{"id":"keel","binding_session":"day"}`), time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
+	stamp := time.Date(2026, 10, 25, 1, 2, 3, 0, time.UTC)
+	if _, err := old.DefineDocumentCollection(garden.SeedsSchema(), stamp); err != nil {
+		t.Fatal(err)
+	}
+	seeds, _, err := old.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(map[string]any{
+		"id": "s-upgrade", "profile_id": profile.ID, "status": "planted", "planter_session": "day",
+		"check_results": map[string]any{
+			"s-plot/C1": map[string]any{"report": map[string]any{"summary": "Saved proof", "commit": "original-head", "by_session": "day", "at": "report-time"}},
+			"C2":        map[string]any{"verdict": map[string]any{"confirmed": true, "at": "verdict-time"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrationFixtureDocument(t, old, *seeds, "s-upgrade", body, stamp)
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -182,6 +203,22 @@ func TestChiefEpicUpgradesTheLatestMainDatabase(t *testing.T) {
 	entry := upgraded.SessionLedgerEntry("day")
 	if entry == nil || protocol.Deref(entry.MemberKey) != "keel" || protocol.Deref(entry.MemberName) != "Keel" {
 		t.Fatalf("crew day after main upgrade: %+v", entry)
+	}
+	seeds, _, err = upgraded.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, found, err := upgraded.GetDocument(*seeds, "s-upgrade")
+	if err != nil || !found {
+		t.Fatalf("check history after main upgrade: found=%v, %v", found, err)
+	}
+	seed, err := garden.Decode(doc.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, verdict := seed.CheckResults["s-plot/C1"].Report, seed.CheckResults["C2"].Verdict
+	if report == nil || report.By.String() != "member:keel" || report.Summary != "Saved proof" || report.Commit != "original-head" || report.At != "report-time" || verdict == nil || verdict.By.String() != "user" || !verdict.Confirmed || verdict.At != "verdict-time" || doc.Rev != 1 || !doc.UpdatedAt.Equal(stamp) {
+		t.Fatalf("check history after main upgrade: report=%+v verdict=%+v doc=%+v", report, verdict, doc)
 	}
 	if chief, err := upgraded.ProfileChief(profile.ID); err != nil || chief.IsZero() {
 		t.Fatalf("profile chief after main upgrade: %v, %v", chief, err)

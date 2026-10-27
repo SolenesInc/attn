@@ -23,6 +23,8 @@ import {
   type ColumnKey,
   type Verb,
 } from './gardenBoardModel';
+import { GardenCompose } from './GardenCompose';
+import { CheckTally } from './SeedChecks';
 import './GardenBoard.css';
 
 export interface GardenBoardProps {
@@ -648,6 +650,7 @@ function Card({
         <span className="garden-card__title">{seed.title}</span>
         <span className="garden-card__meta">
           <CardMeta seed={seed} column={column} blockers={blockers} tenderLive={tenderLive} plot={plot} armed={armed} />
+          <CheckTally seed={seed} />
           <span className="garden-card__id">{seed.id}</span>
           <span className="garden-card__age">{ageOf(seed.updated_at || seed.created_at)}</span>
         </span>
@@ -747,39 +750,21 @@ function Composer({
 }) {
   const spec = VERBS[compose.verb];
   return (
-    <div className="garden-compose">
-      <span className="garden-compose__verb">{spec.label.toLowerCase()}</span>
-      <span className="garden-compose__id">{compose.seed.id}</span>
-      <input
-        ref={inputRef}
-        className="garden-compose__input"
-        type="text"
-        autoComplete="off"
-        spellCheck={false}
-        disabled={busy}
-        placeholder={spec.required ? spec.prompt : `${spec.prompt} — optional`}
-        aria-label={`${spec.label} ${compose.seed.id}: ${spec.prompt}`}
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            onCommit();
-          }
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            onCancel();
-          }
-        }}
-      />
-      <span className="garden-compose__keys">
-        <kbd>⏎</kbd>
-        <kbd>esc</kbd>
-      </span>
+    <GardenCompose
+      verb={spec.label}
+      target={compose.seed.id}
+      prompt={spec.prompt}
+      required={spec.required}
+      busy={busy}
+      inputRef={inputRef}
+      onCommit={onCommit}
+      onCancel={onCancel}
+    >
       {/* Park commits this with the move; replant writes it as an ordinary log note. */}
       {!spec.reasonOnSeed && <span className="garden-compose__where">goes on the log</span>}
       {takenFrom !== '' && (
         <span className="garden-compose__taking">takes it from {takenFrom}</span>
       )}
-    </div>
+    </GardenCompose>
   );
 }

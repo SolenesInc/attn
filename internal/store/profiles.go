@@ -50,6 +50,14 @@ type SessionPlacementRequest struct {
 	Title        string
 	Status       profiles.PaneStatus
 	Focus        bool
+	AddsTerminal bool
+}
+
+func (r SessionPlacementRequest) anotherTile(paneID, now string) map[string]string {
+	if !r.AddsTerminal {
+		return nil
+	}
+	return map[string]string{paneID: now}
 }
 
 func firstChildRatio(leafShare float64, leafIsFirst bool) float64 {
@@ -969,8 +977,8 @@ func (s *Store) ShowSession(sessionID protocol.SessionID) (profiles.Profile, pro
 }
 
 func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, sessionID protocol.SessionID) (profiles.Desktop, string, error) {
-	var title string
-	if err := tx.QueryRow(`SELECT label FROM sessions WHERE id = ?`, sessionID).Scan(&title); err != nil {
+	title, err := sessionLabelTx(tx, sessionID)
+	if err != nil {
 		return profiles.Desktop{}, "", err
 	}
 	current, err := loadLaunchDesktop(tx, profile, "")
@@ -1250,7 +1258,7 @@ func (s *Store) PlaceSession(request SessionPlacementRequest) (profiles.Desktop,
 		if err != nil {
 			return err
 		}
-		return writeCurrentDesktopArrangement(tx, now, &desktop)
+		return writeCurrentArrivingArrangement(tx, now, &desktop, request.anotherTile(paneID, now))
 	})
 	return desktop, paneID, err
 }
@@ -1309,7 +1317,7 @@ func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.
 		if err != nil {
 			return err
 		}
-		return writeCurrentDesktopArrangement(tx, now, &desktop)
+		return writeCurrentArrivingArrangement(tx, now, &desktop, request.anotherTile(paneID, now))
 	})
 	return desktop, paneID, err
 }

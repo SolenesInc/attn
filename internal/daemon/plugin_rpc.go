@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 const pluginAPIVersion = 7
@@ -472,8 +474,9 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 		}
 		defer release()
 		d.ensurePluginSupervisor().NoteDisconnected(plugin.name, plugin.generation)
+		d.pushMonitorPolicies()
 		for _, run := range d.store.ListAgentDriverRuns(plugin.name) {
-			d.resolveSoon(run.SessionID)
+			d.sessionMonitor(run.SessionID).ResolveSoon()
 		}
 		d.armPluginDriverSilenceWatch(plugin.name)
 		plugin.closePending(io.EOF)
@@ -548,18 +551,30 @@ func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage
 
 	result, handled, err := d.handlePluginDriverMethod(plugin, msg)
 	if handled {
-		if err != nil {
-			d.logf("plugin request %s from plugin %s failed: %v", msg.Method, plugin.name, err)
-			_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCInvalidRequest, err.Error()))
+		if receipt, pending := result.(*sessionmonitor.ConversationReceipt); pending && err == nil {
+			if !d.life.Go("acknowledgePluginConversation", func() {
+				d.replyPluginMethod(plugin, msg, struct{}{}, receipt.Wait(d.life.Context()))
+			}) {
+				d.replyPluginMethod(plugin, msg, nil, errDaemonStopping)
+			}
 			return
 		}
-		_ = plugin.send(jsonRPCResult(msg.ID, result))
+		d.replyPluginMethod(plugin, msg, result, err)
 		return
 	}
 
 	unknown := fmt.Errorf("unknown method %q", msg.Method)
 	d.logf("plugin request %s from plugin %s failed: %v", msg.Method, plugin.name, unknown)
 	_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCMethodNotFound, unknown.Error()))
+}
+
+func (d *Daemon) replyPluginMethod(plugin *pluginConnection, msg jsonRPCMessage, result any, err error) {
+	if err != nil {
+		d.logf("plugin request %s from plugin %s failed: %v", msg.Method, plugin.name, err)
+		_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCInvalidRequest, err.Error()))
+		return
+	}
+	_ = plugin.send(jsonRPCResult(msg.ID, result))
 }
 
 func (d *Daemon) callPlugin(ctx context.Context, name, method string, params interface{}, result interface{}) error {

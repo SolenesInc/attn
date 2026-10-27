@@ -9,7 +9,7 @@ back.
 Cmd+N (Ctrl+Shift+N on Linux) opens the picker. Pick a harness or a plain shell,
 a directory, and whether to work in a new worktree or the main checkout.
 
-Attn runs Claude Code, Codex and Copilot CLI, and Pi through its plugin. You get
+Attn runs Claude Code and Codex, and Pi through its plugin. You get
 each harness as its makers built it, and you can still use its bare CLI whenever
 you want.
 

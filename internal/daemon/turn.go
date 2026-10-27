@@ -6,49 +6,29 @@ import (
 
 	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/statetrace"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
-func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
-	if d == nil || d.store == nil || msg == nil {
-		return
+func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) error {
+	if msg == nil {
+		return nil
 	}
-	sessionID := protocol.TrimID(msg.SessionID)
-	if sessionID == "" {
-		return
-	}
-	entry := d.monitorEntry(sessionID)
-	if entry != nil {
-		entry.mu.Lock()
-	}
-	settled := d.store.SettleTurn(sessionID, time.Now())
-	if entry != nil {
-		entry.mu.Unlock()
-	}
-	if !settled {
-		return
-	}
-	d.cancelAutoSettle(sessionID, "settled by user")
-	d.traceSettle(sessionID)
-	d.broadcastSessionStateChanged(sessionID)
+	return d.closeTurn(protocol.TrimID(msg.SessionID), sessionmonitor.Settle)
 }
 
-func (d *Daemon) traceSettle(sessionID protocol.SessionID) {
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return
+func (d *Daemon) handBackTurn(sessionID protocol.SessionID) {
+	if err := d.closeTurn(sessionID, sessionmonitor.HandBack); err != nil {
+		d.logf("hand back turn: %v", err)
 	}
-	reason := ""
-	if session.StateReason != nil {
-		reason = *session.StateReason
+}
+
+func (d *Daemon) closeTurn(sessionID protocol.SessionID, kind sessionmonitor.CommandKind) error {
+	if d == nil || d.store == nil || sessionID == "" {
+		return nil
 	}
-	d.recordStateObservation(sessionID, statetrace.Observation{
-		Source:  "user",
-		Claim:   string(session.State),
-		Detail:  reason,
-		Cause:   "settle",
-		Outcome: statetrace.OutcomeApplied,
-	})
+	names := map[sessionmonitor.CommandKind]string{sessionmonitor.Settle: "settle", sessionmonitor.HandBack: "hand_back"}
+	_, err := d.monitorCommand(sessionID, names[kind], time.Time{}, "")
+	return err
 }
 
 func (d *Daemon) decorateSessionWithTurn(session *protocol.Session) {

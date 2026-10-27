@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { recordReactError } from '../utils/uiDiagnosticsLog';
+import { recordAppAction } from '../analytics/appActions';
 
 export class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
@@ -10,6 +11,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, { error
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     recordReactError(error, info.componentStack ?? undefined);
+    recordAppAction('react_error', { kind: error.name });
   }
 
   render() {

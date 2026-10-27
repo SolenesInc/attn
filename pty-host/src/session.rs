@@ -32,9 +32,11 @@ use crate::signals::{self, SignalObserver};
 use crate::wire::{WireFeeder, mint_epoch};
 
 const READER_STACK_BYTES: usize = 256 * 1024;
+const OUTPUT_EVENT_MAX_BYTES: usize = (256 + 16) * 1024;
 const EXITED_SESSION_TTL: Duration = Duration::from_secs(45);
 const TERMINATE_TIMEOUT: Duration = Duration::from_secs(10);
 const SIGTERM_TO_HUP_GRACE: Duration = Duration::from_secs(2);
+const SHELL_CLOSE_GRACE: Duration = Duration::from_millis(500);
 
 pub type Cleanup = Arc<dyn Fn(String) + Send + Sync>;
 pub type Broadcast = Arc<dyn Fn(Value) + Send + Sync>;
@@ -101,13 +103,7 @@ impl ChildReaper {
             .lock()
             .expect("child reaper mutex poisoned")
             .insert(session.child_pid, Arc::downgrade(session));
-        let wake_result = unsafe { libc::kill(libc::getpid(), libc::SIGCHLD) };
-        if wake_result != 0 {
-            eprintln!(
-                "PTY host child reaper wake failed: {}",
-                std::io::Error::last_os_error()
-            );
-        }
+        wake_child_reaper();
     }
 }
 
@@ -134,8 +130,6 @@ pub struct RegistryEntry {
     pub claude_executable: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub codex_executable: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub copilot_executable: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub model: String,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -250,6 +244,7 @@ pub struct Session {
     delivery: DeliveryGate,
     lifecycle: Mutex<Lifecycle>,
     lifecycle_changed: Condvar,
+    reader_finished: AtomicBool,
     signal_order: Mutex<()>,
     subscribers: Mutex<HashMap<String, Subscriber>>,
     watchers: Mutex<HashMap<String, SyncSender<Value>>>,
@@ -383,7 +378,6 @@ impl Session {
             executable: params.executable,
             claude_executable: params.claude_executable,
             codex_executable: params.codex_executable,
-            copilot_executable: params.copilot_executable,
             model: params.model,
             effort: params.effort,
             unattended_launch: params.unattended_launch,
@@ -419,6 +413,7 @@ impl Session {
             delivery: DeliveryGate::new(),
             lifecycle: Mutex::new(parts.lifecycle),
             lifecycle_changed: Condvar::new(),
+            reader_finished: AtomicBool::new(false),
             signal_order: Mutex::new(()),
             subscribers: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
@@ -953,30 +948,44 @@ impl Session {
         if !self.is_running() {
             return Ok(());
         }
-        let signal = if self.is_shell() && signal == libc::SIGTERM {
+        let shell_close = self.is_shell() && signal == libc::SIGTERM;
+        let signal = if shell_close {
+            self.signal_processes(libc::SIGHUP)?;
+            self.signal_processes(libc::SIGTERM)?;
             libc::SIGHUP
         } else {
+            self.signal_processes(signal)?;
             signal
         };
-        if unsafe { libc::kill(-self.child_pid, signal) } != 0 {
-            let error = std::io::Error::last_os_error();
-            if error.raw_os_error() != Some(libc::ESRCH) {
-                return Err(format!("signal process group {}: {error}", self.child_pid));
-            }
-        }
-        let deadline = Instant::now() + TERMINATE_TIMEOUT;
+        let deadline = Instant::now()
+            + if shell_close {
+                SHELL_CLOSE_GRACE
+            } else {
+                TERMINATE_TIMEOUT
+            };
         if signal == libc::SIGTERM && !self.wait_for_exit(SIGTERM_TO_HUP_GRACE) {
             self.publish_escalation(signal, libc::SIGHUP);
-            let _ = unsafe { libc::kill(-self.child_pid, libc::SIGHUP) };
+            self.signal_processes(libc::SIGHUP)?;
         }
         if !self.wait_for_exit(deadline.saturating_duration_since(Instant::now())) {
             self.publish_escalation(signal, libc::SIGKILL);
-            let _ = unsafe { libc::kill(-self.child_pid, libc::SIGKILL) };
+            if shell_close {
+                eprintln!(
+                    "shell close escalated for {}: grace={}ms escalation=SIGKILL",
+                    self.id,
+                    SHELL_CLOSE_GRACE.as_millis()
+                );
+            }
+            self.signal_processes(libc::SIGKILL)?;
             if !self.wait_for_exit(TERMINATE_TIMEOUT) {
                 return Err("timed out waiting for terminal process to exit".to_owned());
             }
         }
-        Ok(())
+        self.signal_processes(libc::SIGKILL)
+    }
+
+    fn signal_processes(&self, signal: i32) -> Result<(), String> {
+        crate::process::signal_session(self.child_pid, signal)
     }
 
     pub fn commit(&self) -> Result<Commit, String> {
@@ -1022,9 +1031,9 @@ impl Session {
 
     pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
         self.mark_removing();
-        self.signal(libc::SIGTERM)?;
+        let result = self.signal(libc::SIGTERM);
         self.finish_cleanup();
-        Ok(())
+        result
     }
 
     fn publish_escalation(&self, requested: i32, escalated: i32) {
@@ -1096,7 +1105,7 @@ impl Session {
             .signal_order
             .lock()
             .expect("signal order mutex poisoned");
-        let (seq, wire, placements, resync, responses, observations, titles) = {
+        let (first_seq, seq, wire, placements, resync, responses, observations, titles) = {
             let mut model = self.model.lock().expect("model mutex poisoned");
             let (queries, complete_queries) = model.queries.scan(data);
             track_color_scheme_reports(&complete_queries, &mut model.color_scheme_reports);
@@ -1120,8 +1129,12 @@ impl Session {
                     )
                 })
             }));
-            model.seq = model.seq.wrapping_add(1);
+            let first_seq = model.seq.wrapping_add(1);
+            let events = u32::try_from(feed.wire.len().div_ceil(OUTPUT_EVENT_MAX_BYTES).max(1))
+                .expect("output event count fits u32");
+            model.seq = model.seq.wrapping_add(events);
             (
+                first_seq,
                 model.seq,
                 feed.wire,
                 feed.placements,
@@ -1141,8 +1154,10 @@ impl Session {
         if !responses.is_empty() {
             let _ = self.write_master(&responses);
         }
-        if !wire.is_empty() {
-            self.broadcast_output(seq, &wire);
+        let mut output_seq = first_seq;
+        for chunk in wire.chunks(OUTPUT_EVENT_MAX_BYTES) {
+            self.broadcast_output(output_seq, chunk);
+            output_seq = output_seq.wrapping_add(1);
         }
         if let Some(placements) = placements {
             self.broadcast_placements(seq, &placements);
@@ -1357,13 +1372,25 @@ fn start_reader(session: Arc<Session>, mut reader: File) -> Result<(), String> {
         .stack_size(READER_STACK_BYTES)
         .spawn(move || {
             session.read_until_closed(&mut reader);
+            drop(reader);
+            session.reader_finished.store(true, Ordering::Release);
             session.quiesce.leave();
+            wake_child_reaper();
         })
         .map(|_| ())
         .map_err(|error| {
             quiesce.leave();
             format!("start PTY reader: {error}")
         })
+}
+
+fn wake_child_reaper() {
+    if unsafe { libc::kill(libc::getpid(), libc::SIGCHLD) } != 0 {
+        eprintln!(
+            "PTY host child reaper wake failed: {}",
+            std::io::Error::last_os_error()
+        );
+    }
 }
 
 fn reap_children(shared: &ChildReaperShared) {
@@ -1384,14 +1411,20 @@ fn reap_children(shared: &ChildReaperShared) {
 }
 
 fn reap_registered_children(shared: &ChildReaperShared) {
-    let pids = shared
+    let sessions = shared
         .sessions
         .lock()
         .expect("child reaper mutex poisoned")
-        .keys()
-        .copied()
+        .iter()
+        .map(|(pid, session)| (*pid, session.upgrade()))
         .collect::<Vec<_>>();
-    for pid in pids {
+    for (pid, session) in sessions {
+        if session
+            .as_ref()
+            .is_some_and(|session| !session.reader_finished.load(Ordering::Acquire))
+        {
+            continue;
+        }
         let mut status = 0;
         loop {
             let result = unsafe { libc::waitpid(pid, &raw mut status, libc::WNOHANG) };
@@ -1473,7 +1506,7 @@ fn unblock_sigchld() -> std::io::Result<()> {
 }
 
 fn abort_spawn(session: &Session) {
-    let _ = unsafe { libc::kill(-session.child_pid, libc::SIGKILL) };
+    let _ = session.signal_processes(libc::SIGKILL);
     let mut status = 0;
     loop {
         let result = unsafe { libc::waitpid(session.child_pid, &raw mut status, 0) };

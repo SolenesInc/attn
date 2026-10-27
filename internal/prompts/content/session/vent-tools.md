@@ -1,0 +1,1 @@
+You can also vent about problems with your local environment's tooling with `attn vent --about tools "<text>"`. Your tools are things besides attn: for example, a skill, another CLI or MCP server, or your harness's permissions. The task and the repository you work on are not tools.

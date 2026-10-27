@@ -58,6 +58,10 @@ export interface SessionTerminalDesktopProps {
     priority?: boolean;
     agent: SessionAgent;
     cwd: string;
+    host?: string;
+    hostName?: string;
+    offline?: boolean;
+    reach?: import('./useGhosttyPaneRuntime').TerminalReach;
     state?: UISessionState;
     state_reason?: string;
     usage?: SessionUsage;
@@ -65,6 +69,7 @@ export interface SessionTerminalDesktopProps {
     autoSettleHeld?: boolean;
     autoSettleDismissArmed?: boolean;
     terminalBuildStale?: boolean;
+    conversationAlsoOpenIn?: string[];
     terminalExit?: import('../../types/generated').TerminalExit;
     isActive?: boolean;
     seedId?: string;
@@ -106,6 +111,7 @@ export interface SessionTerminalDesktopProps {
   onTerminalPointerActivity?: (runtimeId: string) => void;
   // Empty sessionId lets the daemon use the selected session.
   onOpenMarkdown?: (path: string, sessionId: string) => void;
+  onTerminalPathRefused?: (message: string) => void;
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;

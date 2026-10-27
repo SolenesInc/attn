@@ -12,9 +12,12 @@ Do this even when you plan to do the work yourself.
 - Lead with the task and outcome: what to do and what done looks like.
 - Give starting context: the problem, relevant paths or evidence, and constraints.
   Point to shared context and say what the reader needs from it.
-- Define scope: what this seed owns and which decisions need the user.
-- Specify completion: how to verify the result and where to leave the deliverable
-  and evidence.
+- Define scope: what this seed owns, what it may change and what it must leave
+  alone, which decisions need the user, and which actions wait for them, such
+  as merging or pushing to a shared branch.
+- Specify completion: the checks that verify the result, defined on the seed as
+  CHECKS below describes and cited in the body by id, where to leave the
+  deliverable, and what the report back contains.
 
 Include an agreed design when there is one. Leave implementation choices open
 where they are still for the tender to make. Scale the detail to the task; a few
@@ -23,7 +26,8 @@ sentences can be a complete prompt.
 Keep the agreed task current in the body. What a spike or investigation
 established goes in the body too, as findings below the task, because later
 work builds on it. Progress, other evidence and handoffs go in the log. When the
-task changes, update the body and note what changed.
+task changes, rewrite the body so it reads as the current task, and note what
+changed.
 
 WRITING A PLOT
 
@@ -51,22 +55,27 @@ The endpoint child records a contract that the app child needs before starting.
 ```json
 {
   "title": "Search moves to the daemon",
-  "body": "Move session search from the app to the daemon.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Decisions\nRanking moves to the daemon with matching, so the app renders results in the order it receives them. Keep the client index until the app uses daemon results. Open: whether search also covers ended sessions; the endpoint tender may decide, and nothing waits on it.\n\n## Findings\nF1. The app breaks match ties by recency (app/src/search/rank.ts); a quick check ranking by match score alone reordered equal matches. The endpoint keeps recency as the tie-breaker; dropping it looks harmless and changes results.\n\n## Design\nOwnership:\n\n    internal/daemon/search.go          matches and orders sessions\n    internal/protocol/schema/main.tsp  SearchSessions message; generated types follow\n    app/src/search/                    sends queries and renders results\n\nInterfaces:\n\n    SearchSessions{query_id, query} -> {query_id, sessions: [{id, title, rank}]}\n\nA new wire message: edit main.tsp and run make generate-types; commit the generated types and protocol schema hash.\n\nBehavior:\n\n    app    -> daemon: SearchSessions{query_id, query}\n    daemon -> app:    ranked sessions for that query_id\n\nState:\n\n    latest query_id and keyboard selection (app, search store)\n      set by:      each query; selection moves with the keyboard\n      on reply:    a reply for an older query_id is dropped\n      on failure:  the query and selection stay; the results show the error until the next query\n      on restart:  starts empty; nothing persisted\n    daemon: none added; each query reads the live session set\n\n## Execution\nThe endpoint child lands first and records the contract; the app child follows in its own pull request.\n\n## Completion\nBoth children are complete, with endpoint tests and running-app evidence on their logs.",
+  "body": "Move session search from the app to the daemon, so every client gets the same results from one ranking. Out of scope: changing what matches or how results rank.\n\n## Search behavior\nPreserve the current matching, ordering and keyboard behavior in app/src.\n\n## Decisions\nD1. Ranking moves to the daemon with matching, so the app renders results in the order it receives them. Open: whether search also covers ended sessions. The endpoint tender may decide, and nothing waits on it.\n\n## Tradeoffs accepted\nWe accept two search implementations between the two pull requests, in exchange for each child landing on its own. The client index stays until the app uses daemon results.\n\n## Findings\nRead at a1b2c3d.\nF1. The app breaks match ties by recency (app/src/search/rank.ts). A quick check ranking by match score alone reordered equal matches. The endpoint keeps recency as the tie-breaker. Dropping it looks harmless and changes results.\n\n## Design\nOwnership:\n\n    internal/daemon/search.go          matches and orders sessions\n    internal/protocol/schema/main.tsp  SearchSessions message; generated types follow\n    app/src/search/                    sends queries and renders results\n\nInterfaces:\n\n    SearchSessions{query_id, query} -> {query_id, sessions: [{id, title, rank}]}\n\nA new wire message: edit main.tsp and run make generate-types; commit the generated types and protocol schema hash.\n\nBehavior:\n\n    app    -> daemon: SearchSessions{query_id, query}\n    daemon -> app:    ranked sessions for that query_id\n\nState:\n\n    latest query_id and keyboard selection (app, search store)\n      set by:      each query; selection moves with the keyboard\n      on reply:    a reply for an older query_id is dropped\n      on failure:  the query and selection stay; the results show the error until the next query\n      on restart:  starts empty; nothing persisted\n    daemon: none added; each query reads the live session set\n\n## Execution\nThe endpoint child lands first and records the contract. The app child follows in its own pull request.\n\n## Completion\nThe checks are on the seeds. C2's recording is attached to the app child, and its report cites it.\n\n## Alternatives rejected\nD1. The daemon matches and the app keeps ranking: each client would rank on its own, and that is what this plot removes.",
+  "checks": [
+    {"id": "C3", "shared": true, "text": "The child's pull request is green on CI and carries a changelog fragment. PR link in the report."}
+  ],
   "children": [
     {
       "title": "Daemon search endpoint",
-      "body": "Add session search in internal/daemon. Read the parent plot's Search behavior, Decisions, Findings (F1) and Design sections for the SearchSessions contract, the ranking decision and its tie-break, and the protocol files, and trace the existing search in app/src to preserve its behavior. Follow repository protocol guidance. Test empty queries, matching, ordering and session changes. Record the query and response contract and test results on this seed for the app child. App integration belongs to that child.",
+      "body": "Add session search in internal/daemon. Read the parent plot's Search behavior, Decisions, Findings (F1) and Design sections for the SearchSessions contract, the ranking decision and its tie-break, and the protocol files, and trace the existing search in app/src to preserve its behavior. Follow repository protocol guidance. Test empty queries, matching, ordering and session changes (C1). Record the query and response contract on this seed for the app child. App integration belongs to that child.",
+      "checks": [{"id": "C1", "text": "The endpoint's tests pass for empty queries, matching, ordering and session changes. Test run on this seed."}],
       "blocks": ["app-calls-endpoint"]
     },
     {
       "title": "App calls the endpoint",
-      "body": "Route session search in app/src through the daemon, then remove the obsolete client index. Read the parent plot's Search behavior and Design sections and the Daemon search endpoint seed's recorded API contract. Preserve keyboard selection and prevent stale results when queries overlap. Verify search, rapid query changes and keyboard navigation in the running app; record the results and a recording on this seed."
+      "body": "Route session search in app/src through the daemon, then remove the obsolete client index. Read the parent plot's Search behavior and Design sections and the Daemon search endpoint seed's recorded API contract. Preserve keyboard selection and prevent stale results when queries overlap. Verify search, rapid query changes and keyboard navigation in the running app (C2).",
+      "checks": [{"id": "C2", "text": "In the running app, search, rapid query changes and keyboard navigation behave as before. Recording on this seed."}]
     }
   ]
 }
 ```
 
-Each child's `blocks` array names the siblings that wait for it. Use the sibling's
+The plot's C3 is shared, so each child proves it with its own report. Each child's `blocks` array names the siblings that wait for it. Use the sibling's
 slug or full title. Pass `-` instead of a file to read the payload from stdin.
 
     attn seed plant "..." --part-of <plot>   add another child
@@ -75,11 +84,40 @@ slug or full title. Pass `-` instead of a file to read the payload from stdin.
 
 Before planting or delegating, read each body with its named references as a
 fresh agent. Can you tell what to do, where to start, which constraints apply,
-and how to establish completion? Fill any gaps before handing it off. Read
+and how to establish completion? Fill any gaps before handing it off; a part you
+cannot fill means the work is not scoped yet. Read
 referenced seed bodies with `attn seed show <id>`.
 
-Update the shared plan when an agreed decision changes, and note why. Plant
-deferred work under the plot or beside it so it remains tracked.
+When an agreed decision changes, rewrite every part of the shared plan that
+depends on it, and note why. Plant deferred work under the plot or beside it so
+it remains tracked.
+
+CHECKS
+
+A check is a numbered statement (C1) that a seed must prove, naming the
+evidence that proves it. attn keeps each check on the seed with its latest
+report and verdict, so define checks as data, not as bullets in the body:
+`checks` in plot JSON, `--check "C1=<statement>"` on plant, or `attn seed check
+add` later. The body cites checks by id and keeps what a check cannot hold,
+such as an exemption or where long evidence goes. Ids are unique across a plot
+tree and never reused: a removed check keeps its id, and restore brings it back.
+
+On a plot, `"shared": true` puts a check on every seed below it that has no
+children; each proves it with its own report, and the plot rolls up how many
+are confirmed. A check only one child needs goes on that child. A plot check
+without `shared` is the plot's own.
+
+    attn seed check report <id> <C#> -m "<summary>" --evidence <artifact|url> --commit <rev>
+    attn seed check confirm <id> <C#> [-m "<how you verified it>"]
+    attn seed check reject <id> <C#> -m "<what would prove it>"
+
+Whoever does the work reports each check as they prove it, with evidence
+attached to the seed or an http(s) URL. A later run is a new report: it
+replaces the last one and clears its verdict, and earlier artifacts stay
+attached. A check that does not apply gets a report saying why and citing what
+shows it. Whoever judges the work confirms or rejects each report, and may
+confirm a check with no report that they verified themselves. Checks never
+block a move; harvest names the ones still open or rejected.
 
 WHAT DONE IS, BY DELIVERABLE
 

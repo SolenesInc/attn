@@ -101,7 +101,7 @@ async function main() {
     runner.writeText('preflight.txt', run(['preflight', '--agent', 'claude', '--model', 'claude-haiku-4-5']));
     run(['crew', 'set', member, '--cwd', runner.sessionDir, '--agent', 'claude', '--model', 'claude-haiku-4-5']);
     const sessionId = await wake();
-    await client.request('dom_click', { selector: '.warning-dismiss' }).catch((error) => {
+    await client.request('dom_click', { selector: '.warning-banner .banner-dismiss' }).catch((error) => {
       if (!String(error).includes('dom_click selector not found in DOM')) throw error;
     });
     const first = json(['seed', 'plant', 'Review release notes', '--json']).id;

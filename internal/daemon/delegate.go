@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -317,7 +318,7 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 			"preparing worktree "+expectedPath, "", "", expectedPath, nil, nil, time.Now()); err != nil {
 			return "", false, fmt.Errorf("record delegated worktree preparation: %w", err)
 		}
-		crashAt(crashAfterWorktreeJournaled)
+		crashpoint.At(crashAfterWorktreeJournaled)
 	}
 	startingFrom := request.StartingFrom
 	if protocol.Deref(request.ExistingBranch) && strings.TrimSpace(protocol.Deref(startingFrom)) != "" {
@@ -354,7 +355,7 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 		if err := d.store.MarkDelegationWorktreeOwned(operationID, worktreePath, ownerToken, time.Now()); err != nil {
 			return worktreePath, true, fmt.Errorf("record delegated worktree ownership: %w", err)
 		}
-		crashAt(crashAfterWorktreeOwned)
+		crashpoint.At(crashAfterWorktreeOwned)
 	}
 	return worktreePath, true, nil
 }
@@ -392,6 +393,7 @@ func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProt
 		spawnMsg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(placement.desktopID), AnchorPaneID: protocol.Ptr(placement.anchorPaneID)}
 	}
 	placed, rejection := d.runSpawnPipelineProtected(protection, spawnMsg, internalSpawnPolicy{})
+	placed.launch.finish()
 	return placed, rejection.reason()
 }
 
@@ -457,6 +459,11 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	agent, err := d.resolveDelegationAgent(sourceAgent, msg.Agent)
 	if err != nil {
 		return nil, err
+	}
+	if agentdriver.Get(agent) != nil {
+		if err := d.requireCatalogAgent("", agent, ""); err != nil {
+			return nil, err
+		}
 	}
 	model := strings.TrimSpace(protocol.Deref(msg.Model))
 	effort := strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Effort)))

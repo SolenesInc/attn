@@ -91,7 +91,7 @@ func parseSessionListArgs(args []string) (sessionListArgs, error) {
 	reopen := fs.Bool("reopen", false, "judge every closed row and print what would bring it back")
 	jsonOut := fs.Bool("json", false, "print the page as JSON")
 	tree := fs.Bool("tree", false, "show every live session nested under its dispatcher")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return sessionListArgs{}, err
 	}
 	if fs.NArg() != 0 {
@@ -309,6 +309,7 @@ func parseSessionRenameArgs(args []string, ownSessionID func() protocol.SessionI
 		case strings.HasPrefix(arg, "--session="):
 			parsed.sessionID = protocol.SessionID(strings.TrimSpace(strings.TrimPrefix(arg, "--session=")))
 		case strings.HasPrefix(arg, "-") && arg != "-":
+			recordUsageError("session rename", usageErrorUnknownFlag)
 			return sessionRenameArgs{}, fmt.Errorf("unknown flag %s", arg)
 		default:
 			positional = append(positional, arg)
@@ -354,7 +355,7 @@ func parseSessionMoveArgs(args []string, ownSessionID protocol.SessionID) (sessi
 	jsonOut := fs.Bool("json", false, "print the result as JSON")
 	var positional []string
 	for rest := args; ; {
-		if err := fs.Parse(rest); err != nil {
+		if err := parseFlags(fs, rest); err != nil {
 			return sessionMoveArgs{}, err
 		}
 		if fs.NArg() == 0 {

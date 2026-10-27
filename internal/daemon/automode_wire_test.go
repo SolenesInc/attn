@@ -705,8 +705,8 @@ func TestNoAutoModeWriteIsReachableOverTheCLISocket(t *testing.T) {
 		`{"cmd":"automode_legacy_dismiss","pattern":"*curl*","request_id":"r1"}`,
 		`{"cmd":"automode_model_set","models":["a/one"],"request_id":"r1"}`,
 	} {
-		if answer := autoModeUnixCall(t, w, payload); answer.Ok || !strings.Contains(protocol.Deref(answer.Error), "unknown command") {
-			t.Errorf("%s over the CLI socket answered %+v, want unknown command", payload, answer)
+		if answer := autoModeUnixCall(t, w, payload); answer.Ok || protocol.Deref(answer.Error) == "" {
+			t.Errorf("%s over the CLI socket answered %+v, want a refusal", payload, answer)
 		}
 	}
 

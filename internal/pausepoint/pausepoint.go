@@ -13,23 +13,49 @@ const (
 	EnvPoints = "ATTN_PAUSE_AT"
 	EnvSocket = "ATTN_PAUSE_SOCK"
 	Release   = "go"
+	Every     = "*"
 )
 
 const (
-	PtyAttachSnapshot  = "pty-attach-snapshot"
-	PtyOutputSequenced = "pty-output-sequenced"
-	PtyOutputHeld      = "pty-output-held"
-	PtyStreamRead      = "pty-stream-read"
-	PtySubscriberDrop  = "pty-subscriber-drop"
-	PtyWatchReplay     = "pty-watch-replay"
-	BusAnnounce        = "bus-announce"
+	PtyAttachSnapshot = "pty-attach-snapshot"
+	PtyOutputPending  = "pty-output-pending"
+	PtyOutputHeld     = "pty-output-held"
+	PtyStreamRead     = "pty-stream-read"
+	PtySubscriberDrop = "pty-subscriber-drop"
+	PtyWatchReplay    = "pty-watch-replay"
+	PtyWorkerUpgrade  = "pty-worker-upgrade"
+	PtyWaitBlock      = "pty-wait-block"
+	BusAnnounce       = "bus-announce"
+	BusEventHandled   = "bus-event-handled"
 
-	MemberClearCommit         = "member-clear-commit"
-	MemberWakeRequested       = "member-wake-requested"
-	MemberLaunchCommit        = "member-launch-commit"
-	DaemonStartupRecovery     = "daemon-startup-recovery"
-	SessionInputPasteGap      = "session-input-paste-gap"
-	SessionInputLaneContended = "session-input-lane-contended"
+	DaemonEnrollmentLoaded     = "daemon-enrollment-loaded"
+	MemberClearCommit          = "member-clear-commit"
+	MemberWakeRequested        = "member-wake-requested"
+	MemberLaunchCommit         = "member-launch-commit"
+	DaemonStartupRecovery      = "daemon-startup-recovery"
+	SessionInputPasteGap       = "session-input-paste-gap"
+	SessionInputLaneContended  = "session-input-lane-contended"
+	SessionSnoozeCommitted     = "session-snooze-committed"
+	SessionTeardownPrepared    = "session-teardown-prepared"
+	SessionExitObserved        = "session-process-exit-observed"
+	AgentTerminalStarted       = "agent-terminal-started"
+	AgentLaunchReady           = "agent-launch-ready"
+	CodexViewReleaseChecked    = "codex-view-release-checked"
+	ConversationCandidateTurn  = "conversation-candidate-turn"
+	ConversationSwitchDecision = "conversation-switch-decision"
+	ConversationOwnerResolved  = "conversation-owner-resolved"
+	ConversationSwitchObserved = "conversation-switch-observed"
+	ConversationSwitchAnswer   = "conversation-switch-answer"
+	ConversationInputLookup    = "conversation-input-lookup"
+	ConversationCandidateBound = "conversation-candidate-bound"
+	ConversationReportReady    = "conversation-report-ready"
+	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
+	PtyExitHandled             = "pty-exit-handled"
+	DriverTranscriptCaptured   = "driver-transcript-captured"
+	DriverTranscriptApplied    = "driver-transcript-applied"
+	CopyBatchStaged            = "copy-batch-staged"
+	CopyBatchApplied           = "copy-batch-applied"
+	ForwardSocketCreated       = "forward-socket-created"
 )
 
 type armed struct {
@@ -46,7 +72,8 @@ var load = sync.OnceValue(func() *armed {
 	a := &armed{socket: socket, points: map[string]bool{}}
 	for _, name := range strings.Split(names, ",") {
 		if name = strings.TrimSpace(name); name != "" {
-			a.points[name] = true
+			trimmed := strings.TrimSuffix(name, Every)
+			a.points[trimmed] = trimmed != name
 		}
 	}
 	return a
@@ -60,9 +87,11 @@ func At(name string) {
 
 func (a *armed) pause(name string) {
 	a.mu.Lock()
-	armed := a.points[name]
-	// Once per process: a worker that re-execs itself for an upgrade arms again.
-	delete(a.points, name)
+	every, armed := a.points[name]
+	// Once per process unless armed for every hit: a worker that re-execs itself for an upgrade arms again.
+	if !every {
+		delete(a.points, name)
+	}
 	a.mu.Unlock()
 	if !armed {
 		return

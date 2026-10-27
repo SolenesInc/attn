@@ -24,12 +24,14 @@ var ErrNoDaemonID = errors.New("no daemon id")
 
 type Record struct {
 	HomeDaemonID string `json:"home_daemon_id"`
+	HomeName     string `json:"home_name,omitempty"`
 	RecordedAt   string `json:"recorded_at,omitempty"`
 }
 
 type Status struct {
 	DaemonID     string `json:"daemon_id"`
 	HomeDaemonID string `json:"home_daemon_id"`
+	HomeName     string `json:"home_name,omitempty"`
 }
 
 func (s Status) IsHome() bool {
@@ -46,17 +48,11 @@ func (s Status) Describe() string {
 	return "enrolled to " + s.HomeDaemonID
 }
 
-func displayID(id string) string {
-	if strings.TrimSpace(id) == "" {
-		return "unknown"
-	}
-	return id
-}
-
 type Result struct {
 	Status       string `json:"status"`
 	DaemonID     string `json:"daemon_id"`
 	HomeDaemonID string `json:"home_daemon_id"`
+	HomeName     string `json:"home_name,omitempty"`
 	PreviousHome string `json:"previous_home_daemon_id,omitempty"`
 	Message      string `json:"message"`
 }
@@ -112,7 +108,7 @@ func Ensure(dataRoot, daemonID string) (Status, error) {
 	record, err := readRecord(recordPath)
 	switch {
 	case err == nil:
-		return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}, nil
+		return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID, HomeName: record.HomeName}, nil
 	case errors.Is(err, ErrNoRecord):
 		if err := writeRecord(recordPath, Record{HomeDaemonID: daemonID, RecordedAt: nowStamp()}); err != nil {
 			return Status{}, err
@@ -132,7 +128,7 @@ func Load(dataRoot string) (Status, error) {
 	if err != nil {
 		return Status{DaemonID: daemonID}, err
 	}
-	return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}, nil
+	return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID, HomeName: record.HomeName}, nil
 }
 
 func Leave(dataRoot string) (Result, error) {
@@ -176,45 +172,33 @@ func Leave(dataRoot string) (Result, error) {
 	}, nil
 }
 
-type OutpostError struct {
-	DataRoot     string
-	DaemonID     string
-	HomeDaemonID string
-}
-
-func (e *OutpostError) Error() string {
-	if e.DaemonID == "" {
-		return fmt.Sprintf(
-			"refused to run a daemon here: %s has an enrollment record naming home %s but no %s file, so attn cannot tell whether this daemon is that home.\n"+
-				"Nothing was opened or changed. If this data directory is that home, restore %s with %s; otherwise move %s aside and start again to make it a new home.",
-			e.DataRoot, e.HomeDaemonID, DaemonIDFileName, DaemonIDFileName, e.HomeDaemonID, RecordFileName,
-		)
-	}
-	return fmt.Sprintf(
-		"refused to run a daemon here: %s was enrolled to another daemon by an older attn.\n"+
-			"  this daemon: %s\n"+
-			"  enrolled to: %s\n"+
-			"Nothing was opened or changed. Run `attn enrollment leave` to make this data directory its own again.",
-		e.DataRoot, displayID(e.DaemonID), e.HomeDaemonID,
-	)
-}
-
-func RefuseOutpost(dataRoot string) error {
-	record, err := readRecord(filepath.Join(dataRoot, RecordFileName))
-	if errors.Is(err, ErrNoRecord) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("refused to run a daemon here: attn cannot tell whether %s was enrolled to another daemon by an older attn: %w\nNothing was opened or changed. Repair %s, or move it aside and start again", dataRoot, err, RecordFileName)
+func RecordHome(dataRoot, homeID, homeName string) (Status, error) {
+	if !ValidDaemonID(homeID) {
+		return Status{}, fmt.Errorf("invalid home daemon id %q", homeID)
 	}
 	daemonID, err := ReadDaemonID(dataRoot)
-	if err != nil && !errors.Is(err, ErrNoDaemonID) {
-		return fmt.Errorf("refused to run a daemon here: %w", err)
+	if err != nil {
+		return Status{}, err
 	}
-	if daemonID != "" && daemonID == record.HomeDaemonID {
-		return nil
+	recordPath := filepath.Join(dataRoot, RecordFileName)
+	unlock, err := lockPath(recordPath)
+	if err != nil {
+		return Status{}, err
 	}
-	return &OutpostError{DataRoot: dataRoot, DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID}
+	defer unlock()
+	record, err := readRecord(recordPath)
+	if err != nil && !errors.Is(err, ErrNoRecord) {
+		return Status{}, err
+	}
+	if err == nil && record.HomeDaemonID != daemonID && record.HomeDaemonID != homeID {
+		return Status{}, fmt.Errorf("outpost %s is paired to home %s; home %s refused; run attn enrollment leave on the outpost to release it", daemonID, record.HomeDaemonID, homeID)
+	}
+	if err != nil || record.HomeDaemonID != homeID || record.HomeName != homeName {
+		if err := writeRecord(recordPath, Record{HomeDaemonID: homeID, HomeName: homeName, RecordedAt: nowStamp()}); err != nil {
+			return Status{}, err
+		}
+	}
+	return Status{DaemonID: daemonID, HomeDaemonID: homeID, HomeName: homeName}, nil
 }
 
 func ValidDaemonID(id string) bool {

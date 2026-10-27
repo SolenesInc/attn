@@ -3,7 +3,7 @@ import type { ActiveLeaf, Arrangement } from '../navigation/activeLeaf';
 import type { LeafHistoryDirection } from '../navigation/leafHistory';
 import type { LeafMoved } from '../types/generated';
 import {
-  advanceQueue,
+  applyQueueAdvance,
   beginIntent,
   commandSent,
   commandSettled,
@@ -25,11 +25,14 @@ import {
   type AppView,
   type Arrival,
   type IntentTarget,
+  type NavigationQueueAdvance,
+  queueAdvance,
   type SessionNavigationState,
   type StateUpdate,
 } from '../navigation/sessionNavigation';
 import type { LeafRef } from '../navigation/leafHistory';
-import { getAgentExecutableSettings } from '../utils/agentAvailability';
+import type { QueueBands, QueueBandSession } from '../utils/queueBands';
+import { recordAppAction, type AppActionProps } from '../analytics/appActions';
 import { usePendingTerminalInput } from './pendingTerminalInput';
 
 export interface SessionNavigationActions {
@@ -61,6 +64,25 @@ function focusOwner(): Element | null {
   return typeof document === 'undefined' ? null : document.activeElement;
 }
 
+function advanceQueue(
+  state: SessionNavigationState,
+  arrangement: Arrangement,
+  previous: QueueBands<QueueBandSession> | null,
+  next: QueueBands<QueueBandSession> | null,
+): SessionNavigationState {
+  const advance = queueAdvance(state, arrangement, previous, next);
+  if (advance) recordAppAction('queue_advance', queueAdvanceProps(advance));
+  return applyQueueAdvance(state, arrangement, advance, focusOwner());
+}
+
+function queueAdvanceProps(advance: NavigationQueueAdvance): AppActionProps {
+  if (advance.to === 'dashboard') return { reason: advance.reason, to: 'dashboard' };
+  const openedAt = Date.parse(advance.session.turnOpenedAt ?? '');
+  return Number.isNaN(openedAt)
+    ? { reason: advance.reason, to: 'session' }
+    : { reason: advance.reason, to: 'session', wait_ms: Math.max(0, Date.now() - openedAt) };
+}
+
 export function arrangementOf(state: Pick<SessionStore, 'navigationProfileId' | 'navigationCurrentDesktopId' | 'navigationDesktops'>): Arrangement {
   return {
     profileId: state.navigationProfileId,
@@ -87,7 +109,7 @@ export function reconcileSessionNavigation(
   );
   const arrangement = arrangementOf(next);
   const reconciled = arrival ? reconcileArrangement(next, arrangement, arrangementOf(state), arrival) : next;
-  const advanced = advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue, focusOwner());
+  const advanced = advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue);
   return { ...next, ...focusIntent(advanced, arrangement) };
 }
 
@@ -136,7 +158,7 @@ export function createSessionNavigationActions(
       set((state) => {
         const followNextTurn = typeof update === 'function' ? update(state.followNextTurn) : update;
         const next = { ...endIntent(state), followNextTurn };
-        return advanceQueue(next, arrangementOf(state), state.navigationQueue, state.navigationQueue, focusOwner());
+        return advanceQueue(next, arrangementOf(state), state.navigationQueue, state.navigationQueue);
       }),
     goToDashboard: () => set((state) => enterHome(state, false)),
     goHomeAwaitingNextTurn: () => set((state) => enterHome(state, true)),
@@ -148,7 +170,6 @@ export function createSessionNavigationActions(
       set((state) =>
         reconcileSessionNavigation(state, {
           navigationSettings: settings,
-          launcherConfig: { executables: getAgentExecutableSettings(settings) },
         }),
       ),
   };

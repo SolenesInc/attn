@@ -74,6 +74,35 @@ func TestChiefSetupPicksItsFinalNotebookHomeAndTrustsItsWorkingDirectory(t *test
 	}
 }
 
+func TestChiefSetupWhilePairedAcceptsOnlyTheCurrentNotebook(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	t.Setenv("SSH_AUTH_SOCK", "agent")
+	app := w.App()
+	startFarOutpost(t, w, nil)
+	setSetting(t, app, "outposts_enabled", "true")
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Address: outpostAddress.String()})
+	testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected
+	})
+	root := filepath.Join(w.Dir, "notebook")
+	different := filepath.Join(w.Dir, "different-notebook")
+	setup := func(request, folder string) protocol.CrewSetResultMessage {
+		return testworld.Request(app, protocol.CrewSetMessage{Cmd: protocol.CmdCrewSet, RequestID: &request, Member: "chief", Agent: protocol.Ptr("claude"), Model: protocol.Ptr("sonnet"), NotebookRoot: &folder}, protocol.EventCrewSetResult, func(m protocol.CrewSetResultMessage) bool { return m.RequestID == request })
+	}
+	if result := setup("different-root", different); result.Success || !strings.Contains(protocol.Deref(result.Error), "cannot change while syncing") {
+		t.Fatalf("changed root should fail: %+v", result)
+	}
+	result := setup("same-root", root+"/./")
+	if !result.Success || result.WokeSessionID == nil || result.Member.HomeDir != filepath.Join(root, "crew", "chief") {
+		t.Fatalf("current root should configure and wake the Chief: %+v", result)
+	}
+	w.Launched(string(*result.WokeSessionID))
+	settings, err := w.Client().Settings("", app.SelectedProfile(), "notebook.root", false)
+	if err != nil || len(settings.Entries) != 1 || protocol.Deref(settings.Entries[0].Value) != root {
+		t.Fatalf("same-root setup changed the saved root: %+v (%v)", settings, err)
+	}
+}
+
 func TestProfilesSharingANotebookGetSeparateChiefHomes(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
@@ -132,7 +161,7 @@ func TestChiefFollowsTheCurrentNotebookWithoutMovingItsHome(t *testing.T) {
 	run := w.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	if _, err := cli.CrewHandoff(protocol.SessionID(id), "Use the current Notebook next time.", false, protocol.CrewDayCloseSleep); err != nil {
+	if _, err := cli.CrewHandoff(protocol.SessionID(id), "Use the current Notebook next time.", false, protocol.CrewDayCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	before := crewRoster(t, cli)[0]
@@ -165,7 +194,7 @@ func TestACopiedDatabaseCannotUseAnotherHarnessNotebookHome(t *testing.T) {
 	run := source.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	if _, err := source.Client().CrewHandoff(protocol.SessionID(id), "Rest.", false, protocol.CrewDayCloseSleep); err != nil {
+	if _, err := source.Client().CrewHandoff(protocol.SessionID(id), "Rest.", false, protocol.CrewDayCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	home := crewRoster(t, source.Client())[0].HomeDir
@@ -239,7 +268,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	if _, err := cli.CrewMoveHome("keel"); err == nil || !strings.Contains(err.Error(), "Keel is awake; put it to sleep first: attn crew sleep Keel") {
 		t.Fatalf("awake move: %v", err)
 	}
-	if _, err := cli.CrewHandoff(awake.SessionID, "A letter that moves with me.", false, protocol.CrewDayCloseSleep); err != nil {
+	if _, err := cli.CrewHandoff(awake.SessionID, "A letter that moves with me.", false, protocol.CrewDayCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	moved, err := cli.CrewMoveHome("keel")

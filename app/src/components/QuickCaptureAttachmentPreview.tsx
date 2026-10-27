@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import type { StoredDraftFile } from '../quickCapture/client';
 
 export type AttachmentOrigin = { kind: 'drop'; x: number; y: number } | { kind: 'paste' };
-export type QuickCaptureAttachment = { id: string; name: string; url: string; ready: boolean; imagePreview?: boolean; arriving: boolean; origin: AttachmentOrigin };
+export type QuickCaptureAttachment = { id: string; name: string; stored?: StoredDraftFile; ready: boolean; imagePreview?: boolean; arriving: boolean; origin: AttachmentOrigin };
 export type AttachmentMotion = {
   kind: 'file'; phase: 'start' | 'end'; at: number; id: string;
   source?: { kind: 'drop' | 'paste'; x: number; y: number };
@@ -20,7 +22,8 @@ type Props = {
 export function QuickCaptureAttachmentPreview({ file, onSettled, onMotion, onRemove, disabled }: Props) {
   const slot = useRef<HTMLElement>(null);
   const [failed, setFailed] = useState(false);
-  const isImage = !failed && (file.imagePreview ?? file.url.startsWith('data:image/'));
+  const isImage = !failed && (file.imagePreview ?? file.stored?.mediaType.startsWith('image/') ?? false);
+  const src = file.stored ? convertFileSrc(file.stored.path) : '';
   useLayoutEffect(() => {
     if (!file.ready || !file.arriving) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -45,7 +48,7 @@ export function QuickCaptureAttachmentPreview({ file, onSettled, onMotion, onRem
       left: `${target.x}px`, top: `${target.y}px`, width: `${target.width}px`, height: `${target.height}px`,
     });
     const preview = document.createElement(isImage ? 'img' : 'span');
-    if (preview instanceof HTMLImageElement) { preview.src = file.url; preview.alt = ''; }
+    if (preview instanceof HTMLImageElement) { preview.src = src; preview.alt = ''; }
     else { preview.textContent = file.name; Object.assign(preview.style, { display: 'grid', placeItems: 'center', height: '100%', padding: '8px', fontSize: '12px', color: '#fff', overflowWrap: 'anywhere' }); }
     ghost.append(preview);
     document.body.append(ghost);
@@ -72,10 +75,10 @@ export function QuickCaptureAttachmentPreview({ file, onSettled, onMotion, onRem
     const reduceMotion = () => { if (reduce.matches) finish(true); };
     reduce.addEventListener('change', reduceMotion);
     return () => { reduce.removeEventListener('change', reduceMotion); finish(true); };
-  }, [file.id, file.url, file.ready, file.arriving, file.origin, isImage, onSettled, onMotion]);
+  }, [file.id, src, file.ready, file.arriving, file.origin, isImage, onSettled, onMotion]);
 
   return <figure ref={slot} data-file-ready={file.ready} title={file.name} className={!file.ready || file.arriving ? 'arriving' : undefined}>
-    {file.ready && (isImage ? <img src={file.url} alt={file.name} onError={() => setFailed(true)} /> : <figcaption style={{ padding: '8px', fontSize: '12px', overflowWrap: 'anywhere', opacity: file.arriving ? 0 : 1 }}>{file.name}</figcaption>)}
+    {file.ready && (isImage ? <img src={src} alt={file.name} onError={() => setFailed(true)} /> : <figcaption style={{ padding: '8px', fontSize: '12px', overflowWrap: 'anywhere', opacity: file.arriving ? 0 : 1 }}>{file.name}</figcaption>)}
     <button disabled={disabled} aria-label={`Remove ${file.name}`} onClick={() => onRemove(file.id)}><svg width="9" height="9" viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6" /></svg></button>
   </figure>;
 }

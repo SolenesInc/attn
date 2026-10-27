@@ -19,12 +19,9 @@ import (
 func TestMailForAnAgentMidTurnStaysSealedUntilItsTurnEndsThenRings(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	recipient, agent := mailIdleAgent(w, app, "shop")
+	recipient, agent, _ := mailAgentAtWork(w, app, "shop", "rebase onto main")
 	panes := spawnPanes(w, app, w.Path("sender"), w.Path("bystander"))
 	sender, bystander := panes[0].session, panes[1].session
-	app.TypeLine(recipient, "rebase onto main")
-	agent.Prompted()
-	testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
 	sent := sendAgentMessage(t, cli, sender, recipient, "when you surface, rebase again")
 	if sent.Status != protocol.AgentMsgStatusQueued {
@@ -285,15 +282,19 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 
 func mailIdleAgent(w *world, app *testworld.Peer, dir string) (string, *fakeagent.Run) {
 	w.T.Helper()
-	session := w.Spawn(app, fakeagent.Claude, w.Path(dir))
-	agent := w.Launched(session)
-	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	app.TypeLine(session, "wait for the others")
-	agent.Prompted()
-	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	session, agent, working := mailAgentAtWork(w, app, dir, "wait for the others")
 	agent.Reply("Waiting. <!-- attn:state=idle -->")
 	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	return session, agent
+}
+
+func mailAgentAtWork(w *world, app *testworld.Peer, dir, prompt string) (string, *fakeagent.Run, protocol.Session) {
+	w.T.Helper()
+	session := w.Spawn(app, fakeagent.Claude, w.Path(dir), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr(prompt) })
+	agent := w.Launched(session)
+	agent.Prompted()
+	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	return session, agent, working
 }
 
 func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {

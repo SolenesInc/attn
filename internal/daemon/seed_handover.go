@@ -196,6 +196,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 		return nil, err
 	}
 	announceGardenSeedEvents(d, eventSeqs)
+	d.queueConversationKeepIfReferenceMoved(seed, next)
 	for i, commit := range commits {
 		d.announceCommittedWrite(commit.Fact, written[i].Seq)
 	}

@@ -13,7 +13,7 @@ alt-tab, scroll, squint, repeat.
 
 attn stands for Attention. It brings your coding agents into one app, keeps
 their sessions and terminals through restarts, and shows who needs you. Use
-Claude Code, Codex, Copilot or Pi as you know them. Ask the Chief to help you
+Claude Code, Codex or Pi as you know them. Ask the Chief to help you
 coordinate work, or go straight to your agents.
 
 ## Install
@@ -45,6 +45,8 @@ The app nudges you when a new release exists.
 [Get started](docs/guide/tutorials/getting-started.md), then explore the
 [user guide](docs/guide/README.md). The same pages are built into attn:
 `attn help` lists them, and `attn help <topic>` reads one in your terminal.
+
+[Outposts](docs/guide/reference/using-outposts.md) connects attn on other computers.
 
 For development, see [AGENTS.md](AGENTS.md) and
 [instances](docs/internal/instances.md). Licensed under [GPL-3.0](LICENSE).

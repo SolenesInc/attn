@@ -1,3 +1,0 @@
-kind: internal
-area: desktops
-change: The delegation-chain and agent-queue scenarios close empty numbered desktops left by earlier scenarios, so a long serial matrix no longer fails them once all nine slots are held.

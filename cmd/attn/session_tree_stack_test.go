@@ -289,7 +289,7 @@ func TestSessionTreeFollowsMemberDispatcherAcrossClearSleepAndWake(t *testing.T)
 		return false
 	})
 	assertTree(next.ID, false)
-	if _, err := s.Client().CrewHandoff(next.ID, "The work is delegated.", false, protocol.CrewDayCloseSleep); err != nil {
+	if _, err := s.Client().CrewHandoff(next.ID, "The work is delegated.", false, protocol.CrewDayCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	assertTree("", true)

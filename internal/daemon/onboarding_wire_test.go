@@ -43,7 +43,7 @@ func TestChiefOnboardingFullDoneAndAgainReachBothHarnesses(t *testing.T) {
 			if got := crewPriming(t, cli, id); strings.Contains(got, "attn skill --reference onboarding") {
 				t.Fatalf("done remains in priming: %s", got)
 			}
-			if _, err := cli.CrewHandoff(protocol.SessionID(id), "Onboarding is done.", false, protocol.CrewDayCloseSleep); err != nil {
+			if _, err := cli.CrewHandoff(protocol.SessionID(id), "Onboarding is done.", false, protocol.CrewDayCloseSleep, ""); err != nil {
 				t.Fatal(err)
 			}
 			next, err := cli.CrewWake("chief", "", "")
@@ -69,7 +69,7 @@ func TestChiefOnboardingFullDoneAndAgainReachBothHarnesses(t *testing.T) {
 
 func TestAnEstablishedProfileKeepsItsTourAsOldSessionsChange(t *testing.T) {
 	w := &world{World: prepareWorld(t, fakeagent.Claude)}
-	db, err := store.OpenDBAtSchemaVersion(filepath.Join(w.Dir, "attn.db"), 1792359946029014-1)
+	db, err := store.OpenDBAtSchemaVersion(filepath.Join(w.Dir, "attn.db"), 1793111476175147-1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestAnEstablishedProfileKeepsItsTourAsOldSessionsChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	stamp := "2026-10-10T10:00:00Z"
-	_, err = db.Exec("INSERT INTO sessions(id,label,directory,state,state_since,state_updated_at,last_seen,agent,profile_id) VALUES('legacy','Existing work',?,'idle',?,?,?,'claude',?)", w.Dir, stamp, stamp, stamp, profile)
+	_, err = db.Exec("INSERT INTO sessions(id,user_label,directory,created_at,agent,profile_id) VALUES('legacy','Existing work',?,?,'claude',?)", w.Dir, stamp, profile)
 	if err != nil {
 		t.Fatal(err)
 	}

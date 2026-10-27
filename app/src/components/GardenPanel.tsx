@@ -23,6 +23,8 @@ import { Markdown } from './Markdown';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import { SeedArtifactRows } from './SeedArtifactRows';
+import { CheckTally, CheckTallyLink, SeedChecks } from './SeedChecks';
+import { checkTally, hasChecks } from './seedCheckPresentation';
 import { SeedContinuationNotes } from './SeedContinuationNotes';
 import { DelegationCheckoutFields } from './DelegationCheckoutFields';
 import type { SeedDocument } from './SeedDocumentView';
@@ -394,6 +396,7 @@ function SeedRow({
               </span>
             )}
             {home && <span className="garden-row__home">in {home.title}</span>}
+            <CheckTally seed={seed} />
           </span>
         </span>
         {progress && (
@@ -592,6 +595,9 @@ export function GardenPanel({
   const [panelWidth, setPanelWidth] = useState(0);
   const columnsRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const checksRef = useRef<HTMLElement | null>(null);
+  const [checkFocus, setCheckFocus] = useState<{ seedId: string; checkId: string } | null>(null);
+  const clearCheckFocus = useCallback(() => setCheckFocus(null), []);
 
   const index = useMemo(() => indexGarden(seeds), [seeds]);
 
@@ -714,6 +720,11 @@ export function GardenPanel({
     setQuery('');
     setWideIn(null);
   }, [rememberScroll, seeds, setTrail]);
+
+  const openSeedCheck = useCallback((seedId: string, checkId: string) => {
+    openResult(seedId);
+    setCheckFocus({ seedId, checkId });
+  }, [openResult]);
 
   const climbOne = useCallback(() => {
     climbTo(Math.max(0, livingTrail.length - 1));
@@ -940,6 +951,7 @@ export function GardenPanel({
   const spoken = notes.filter(isSpoken);
   const bookkeeping = notes.length - spoken.length;
   const relations = here ? relationsOf(index, here.id) : [];
+  const hereTally = here ? checkTally(here) : undefined;
   const levels: { key: string; seeds: Seed[]; selectedId: string }[] = [
     { key: 'root', seeds: lens(index.roots), selectedId: livingTrail[0] ?? '' },
   ];
@@ -1214,6 +1226,7 @@ export function GardenPanel({
             </span>
           )}
           {here.planter.name && <span>by {here.planter.name}</span>}
+          {!isPlot(here) && hereTally && <CheckTallyLink tally={hereTally} target={checksRef} />}
           <span>{formatPlantedAt(here.created_at)}</span>
           <span className="garden-head__id">{here.id}</span>
         </div>
@@ -1225,6 +1238,9 @@ export function GardenPanel({
           <div className="garden-head__progress">
             <ProgressBar seed={here} />
             <span>{progressWords(here)}</span>
+            {hereTally && (hasChecks(here)
+              ? <CheckTallyLink tally={hereTally} target={checksRef} />
+              : <CheckTally seed={here} />)}
           </div>
         )}
         {composingContinuation && continuationDraft && (
@@ -1244,6 +1260,19 @@ export function GardenPanel({
       ) : (
         <p className="garden-note-empty">No body — the title is the whole seed.</p>
       )}
+
+      <SeedChecks
+        className="garden-section"
+        seed={here}
+        artifacts={artifacts}
+        references={references}
+        seedById={(id) => index.byID.get(id)}
+        onOpenMarkdownArtifact={onOpenMarkdownArtifact}
+        onOpenSeedCheck={openSeedCheck}
+        focusCheckId={checkFocus?.seedId === here.id ? checkFocus.checkId : undefined}
+        onCheckFocused={clearCheckFocus}
+        sectionRef={checksRef}
+      />
 
       {layout === 'stack' && isPlot(here) && (
         <section className="garden-section">

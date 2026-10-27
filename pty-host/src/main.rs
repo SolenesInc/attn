@@ -5,6 +5,7 @@ mod handover;
 mod host;
 mod png_decoder;
 mod probe_child;
+mod process;
 mod protocol;
 mod queries;
 mod quiesce;

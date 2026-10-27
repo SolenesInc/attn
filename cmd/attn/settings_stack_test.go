@@ -114,7 +114,7 @@ func TestSettingsCLIEnforcesScopesAndExplainsItsKeys(t *testing.T) {
 		t.Fatalf("unknown profile: %+v", r)
 	}
 	plain := s.Attn("settings", "list", "--profile", "Work")
-	requireStdout(t, plain, "this profile", "all profiles", "Folder for this profile")
+	requireStdout(t, plain, "this profile", "all profiles", "Folder for the Notebook")
 	if strings.Contains(plain.Stdout, "notebook.root.effective") {
 		t.Fatal("list includes read-only values")
 	}
@@ -136,7 +136,7 @@ func TestSettingsCLIEnforcesScopesAndExplainsItsKeys(t *testing.T) {
 		if !protocol.Deref(entry.Family) && strings.Contains(entry.Key, "_cap_") {
 			continue
 		}
-		if entry.Key == "claude_available" || entry.Key == "codex_available" || entry.Key == "copilot_available" || entry.Key == "claude_executable" || entry.Key == "codex_executable" || entry.Key == "copilot_executable" {
+		if entry.Key == "claude_available" || entry.Key == "codex_available" || entry.Key == "claude_executable" || entry.Key == "codex_executable" {
 			continue
 		}
 		fmt.Fprintf(&registry, "%s\t%s\t%t\t%s\n", entry.Key, entry.Scope, protocol.Deref(entry.ReadOnly), entry.Description)

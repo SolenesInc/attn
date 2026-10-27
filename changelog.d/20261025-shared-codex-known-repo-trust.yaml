@@ -1,0 +1,4 @@
+kind: fixed
+area: codex
+change: Shared Codex no longer asks whether to trust a folder when an agent session already started a conversation in it or in another worktree of its repository, so delegations to Codex start their work instead of waiting at that question.
+symptom: Delegations to shared Codex stopped at "Trust this folder?" in every new worktree.

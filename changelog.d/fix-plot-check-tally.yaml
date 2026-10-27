@@ -1,0 +1,3 @@
+kind: fixed
+area: garden
+change: Long check tallies in Garden plot columns show an ellipsis when they do not fit.

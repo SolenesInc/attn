@@ -1,0 +1,3 @@
+kind: added
+area: outposts
+change: The Notebook syncs in both directions between the home and paired outposts. Outpost rows show sync health and conflicts, and seed file transfers use the caller's machine.

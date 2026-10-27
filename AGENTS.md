@@ -9,8 +9,8 @@ as a maintainer:
 
 - Durability. App, daemon, and machine restarts bring every session and terminal
   back.
-- Bring your own harness. attn wraps Claude Code, Codex, Copilot, and Pi as they
-  are; the user gets each harness's native experience and can use the bare CLI
+- Bring your own harness. attn wraps Claude Code, Codex, and Pi as they are;
+  the user gets each harness's native experience and can use the bare CLI
   at any time. Users can add new harnesses with plugins.
 - The queue mode sorts agents into "waiting for you" or "busy" and moves the
   user to the next one after every prompt. State classification and turn
@@ -147,6 +147,12 @@ count.
 `make test` skips the Go suite when only `docs/internal/`, root Markdown and `app/src`
 changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares
 against another branch.
+
+Run the whole `internal/daemon` package through `make test`, which shards it;
+a plain `go test ./internal/daemon` takes about 11 minutes on a busy Mac, past
+`go test`'s default 10-minute `-timeout`. Targeted `go test -run` runs need no
+sharding. Never filter `go test` output with `grep` or `tail`: a timeout's
+panic names the running test, and a filter hides it.
 
 Before reporting a change done, run it on the surface it touches and show the
 output: the CLI, the daemon over `wsctl`, a non-production instance, the app.
@@ -306,6 +312,8 @@ working on:
 - CPU, memory, or benchmarks => docs/internal/perf-testing.md
 - Terminal input that stops working => docs/internal/diagnosing-terminal-input.md
 - Shared Rust PTY host => docs/internal/pty-host-verification.md
+- The analytics ingest service (`cmd/attn-ingest`) => docs/internal/attn-ingest.md
+- What analytics records and sends, or the upload => docs/guide/reference/telemetry.md
 
 ## Diagnostics
 

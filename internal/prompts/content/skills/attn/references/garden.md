@@ -31,6 +31,24 @@ The example in `attn seed guide` shows complete bodies and dependencies. Each
 child's `blocks` array names siblings that must wait for it, by slug or full
 title. Leave independent children parallel. Pass `-` to read from stdin.
 
+## Checks
+
+A check is a numbered statement (C1) a seed must prove, kept on the seed as
+data with its latest report and verdict. The body cites it by id. Define checks
+with `checks` in plot JSON, `--check "C1=<statement>"` on plant, or `attn seed
+check add` later. A plot check marked shared is proven by every seed below the
+plot that has no children, each with its own report. `attn seed show` lists a
+seed's checks, inherited ones included, as open, reported, confirmed or rejected.
+
+    attn seed check report <id> <C#> -m "<summary>" --evidence <artifact|url> --commit <rev>
+    attn seed check confirm <id> <C#> [-m "<how you verified it>"]
+    attn seed check reject <id> <C#> -m "<what would prove it>"
+
+Whoever does the work reports each check, attaching local evidence to the seed
+first. A new report replaces the last one and clears its verdict. Whoever judges
+the work confirms or rejects. Checks never block a move; harvest names the
+ones still open or rejected. Add `--ring` when the other side must act now.
+
 ## Speaking of seeds
 
 Every verb prints a seed as `id  slug  title`. The id is for commands and for

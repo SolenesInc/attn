@@ -1,0 +1,3 @@
+kind: added
+area: outposts
+change: Open shells on outposts from an agent, with typing and screen updates through the home. Shells survive bridge loss and daemon restarts.

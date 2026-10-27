@@ -32,11 +32,13 @@ type World struct {
 	DialUnix func() (net.Conn, error)
 	WSAddr   string
 	peers    []*Peer
+
+	unansweredTrust map[string]bool
 }
 
 func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
 	t.Helper()
-	return prepareIn(t, worldDir(t), wrapper, harnesses)
+	return prepareIn(t, worldDir(t), wrapper, harnesses, true)
 }
 
 func PrepareInLongestDataDir(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
@@ -50,7 +52,7 @@ func PrepareInLongestDataDir(t testing.TB, wrapper string, harnesses ...fakeagen
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return prepareIn(t, dir, wrapper, harnesses)
+	return prepareIn(t, dir, wrapper, harnesses, true)
 }
 
 func worldDir(t testing.TB) string {
@@ -67,7 +69,7 @@ func worldDir(t testing.TB) string {
 	return dir
 }
 
-func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness) *World {
+func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness, withAgentKit bool) *World {
 	t.Helper()
 	production, err := config.CanonicalRuntimePath(config.DataDirForInstance(""))
 	if err != nil {
@@ -77,20 +79,41 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness)
 		t.Fatalf("world directory %s resolves under production %s (%v)", dir, production, err)
 	}
 	w := &World{T: t, Dir: dir, Socket: filepath.Join(dir, "attn.sock")}
-	w.kit = fakeagent.Install(t, dir, harnesses, wrapper)
+	if withAgentKit {
+		w.kit = fakeagent.Install(t, dir, harnesses, wrapper)
+	} else {
+		if err := os.MkdirAll(filepath.Join(dir, "bin"), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(wrapper, filepath.Join(dir, "bin", "attn")); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// macOS asks dscl for the login shell before $SHELL; this dscl answers $SHELL
 	// so a world runs the shell its test chose, never the developer's own.
 	if err := os.WriteFile(filepath.Join(dir, "bin", "dscl"), []byte("#!/bin/sh\nprintf 'UserShell: %s\\n' \"$SHELL\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	w.Vars = append([]string{
+	w.Vars = []string{
 		"ATTN_DATA_DIR=" + dir,
 		"ATTN_HARNESS_DATA_DIR=" + dir,
 		"ATTN_HARNESS_NOTEBOOK_ROOT=" + filepath.Join(dir, "notebook"),
 		"ATTN_CLIENT_TOKEN=",
+		"ATTN_AUTHORIZED_KEYS_PATH=" + filepath.Join(dir, "authorized_keys"),
+		"SSH_AUTH_SOCK=",
 		"ATTN_HEADLESS_TASKS=off",
+		config.AnalyticsIngestURLEnv + "=http://127.0.0.1:1",
 		"SHELL=/bin/sh",
-	}, w.kit.Env()...)
+	}
+	if w.kit != nil {
+		w.Vars = append(w.Vars, w.kit.Env()...)
+	} else {
+		w.Vars = append(w.Vars, "PATH="+filepath.Join(dir, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"ATTN_WRAPPER_PATH="+wrapper,
+			"ATTN_TOOL_HOME="+filepath.Join(dir, "toolhome"),
+			"ATTN_CLAUDE_EXECUTABLE="+filepath.Join(dir, "no-claude"),
+			"ATTN_CODEX_EXECUTABLE="+filepath.Join(dir, "no-codex"))
+	}
 	return w
 }
 
@@ -138,8 +161,15 @@ func (w *World) appHello() protocol.ClientHelloMessage {
 		Version:      "protocol-" + protocol.ProtocolVersion,
 		Capabilities: []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityKittyImages},
 		ClientToken:  protocol.Ptr(strings.TrimSpace(string(token))),
+		AppVersion:   protocol.Ptr(AppVersion),
+		AppChannel:   protocol.Ptr(AppChannel),
 	}
 }
+
+const (
+	AppVersion = "0.0.0-testworld"
+	AppChannel = "source"
+)
 
 func (w *World) Connect(hello protocol.ClientHelloMessage, header http.Header) *Peer {
 	w.T.Helper()
@@ -207,7 +237,7 @@ func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...f
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		w.T.Fatal(err)
 	}
-	if h == fakeagent.Codex {
+	if h == fakeagent.Codex && !w.unansweredTrust[cwd] {
 		w.SetCodexFolderTrust(cwd, "trusted")
 	}
 	msg := protocol.SpawnSessionMessage{
@@ -245,9 +275,20 @@ func (w *World) LaunchedCarrying(id string) *fakeagent.Run {
 	return w.kit.Launched(id)
 }
 
+func (w *World) NextLaunch() func() *fakeagent.Run {
+	return w.kit.NextLaunch()
+}
+
 func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
 	w.T.Helper()
 	return w.kit.HeadlessTask()
+}
+
+func (w *World) LeaveCodexFolderTrustUnanswered(dir string) {
+	if w.unansweredTrust == nil {
+		w.unansweredTrust = map[string]bool{}
+	}
+	w.unansweredTrust[dir] = true
 }
 
 func (w *World) SetCodexFolderTrust(dir, level string) {
@@ -260,6 +301,46 @@ func (w *World) CodexFolderTrust(dir string) string {
 	return w.kit.CodexFolderTrust(dir)
 }
 
+func (w *World) SetCodexVersion(version string) {
+	w.T.Helper()
+	w.kit.SetCodexVersion(version)
+}
+
+func (w *World) InstallNpmCodex(name, version string) string {
+	w.T.Helper()
+	return w.kit.InstallNpmCodex(w.Path(name), version)
+}
+
+func (w *World) RefuseCodexStart(line string) {
+	w.T.Helper()
+	w.kit.RefuseCodexStart(line)
+}
+
+func (w *World) SetCodexLatest(version string) {
+	w.T.Helper()
+	w.kit.SetCodexLatest(version)
+}
+
+func (w *World) FailCodexUpdate(line string) {
+	w.T.Helper()
+	w.kit.FailCodexUpdate(line)
+}
+
+func (w *World) InstallCodexAt(name, version string) string {
+	w.T.Helper()
+	return w.kit.InstallCodexAt(w.Path(name), version)
+}
+
+func (w *World) InstallStandaloneCodex(name, version string) string {
+	w.T.Helper()
+	return w.kit.InstallStandaloneCodex(w.Path(name), version)
+}
+
+func (w *World) InstallMiseCodex(name, version string) string {
+	w.T.Helper()
+	return w.kit.InstallMiseCodex(w.Path(name), version)
+}
+
 func (w *World) CodexServers() []int {
 	return w.kit.CodexServers()
 }
@@ -267,6 +348,11 @@ func (w *World) CodexServers() []int {
 func (w *World) CodexServer() *fakeagent.CodexServer {
 	w.T.Helper()
 	return w.kit.CodexServer()
+}
+
+func (w *World) CodexServerOf(profile string) *fakeagent.CodexServer {
+	w.T.Helper()
+	return w.kit.CodexServerOf(profile)
 }
 
 func (w *World) HoldNextBoot() (boot func()) {
@@ -289,6 +375,11 @@ func (w *World) InjectSession(id, label, dir string, agent protocol.SessionAgent
 		session.ProfileID = profileID[0]
 	}
 	return w.inject(session)
+}
+
+// InjectSessionOn registers a placed session whose terminal runs on the outpost host.
+func (w *World) InjectSessionOn(host, id, label, dir string, agent protocol.SessionAgent) error {
+	return w.inject(protocol.Session{ID: protocol.SessionID(id), Label: label, Directory: dir, Agent: agent, State: protocol.SessionStateLaunching, Host: protocol.Ptr(host)})
 }
 
 func (w *World) InjectCrewSession(id, label, dir, member string, profileID ...string) error {

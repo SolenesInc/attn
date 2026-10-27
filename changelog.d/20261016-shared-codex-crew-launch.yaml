@@ -1,3 +1,0 @@
-kind: internal
-area: codex
-change: Codex crew members with awareness dirs launch under Shared Codex instead of exiting with "--add-dir is not supported with --remote".

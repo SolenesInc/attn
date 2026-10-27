@@ -14,7 +14,8 @@ type worktreeMaintenanceCoordinator struct {
 	mu          sync.Mutex
 	sweepCancel context.CancelCauseFunc
 	sweepID     uint64
-	afterSweep  []func()
+	protections int
+	whenIdle    []func()
 }
 
 type worktreeSweepLease struct {
@@ -46,10 +47,35 @@ func (c *worktreeMaintenanceCoordinator) ProtectFromAutomaticCleanup(
 	ctx context.Context,
 	run func(foregroundCleanupProtection) error,
 ) error {
-	c.preemptSweep()
+	c.mu.Lock()
+	if c.sweepCancel != nil {
+		c.sweepCancel(errAutomaticWorktreeCleanupPreempted)
+	}
+	c.protections++
+	c.mu.Unlock()
+	defer c.releaseProtection()
 	c.gate.RLock()
 	defer c.gate.RUnlock()
 	return run(foregroundCleanupProtection{ctx: ctx})
+}
+
+func (c *worktreeMaintenanceCoordinator) releaseProtection() {
+	c.mu.Lock()
+	c.protections--
+	idle := c.takeWhenIdleLocked()
+	c.mu.Unlock()
+	for _, fn := range idle {
+		fn()
+	}
+}
+
+func (c *worktreeMaintenanceCoordinator) takeWhenIdleLocked() []func() {
+	if c.protections > 0 || c.sweepCancel != nil {
+		return nil
+	}
+	idle := c.whenIdle
+	c.whenIdle = nil
+	return idle
 }
 
 func (c *worktreeMaintenanceCoordinator) preemptSweep() {
@@ -81,14 +107,14 @@ func (c *worktreeMaintenanceCoordinator) TryBackgroundRemoval(
 	return c.tryRemoval(ctx, run)
 }
 
-// RunAfterSweep reports whether a sweep is active; if so, fn runs once it ends.
-func (c *worktreeMaintenanceCoordinator) RunAfterSweep(fn func()) bool {
+// RunWhenIdle reports whether a sweep or a foreground protection is active; if so, fn runs once none is.
+func (c *worktreeMaintenanceCoordinator) RunWhenIdle(fn func()) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.sweepCancel == nil {
+	if c.protections == 0 && c.sweepCancel == nil {
 		return false
 	}
-	c.afterSweep = append(c.afterSweep, fn)
+	c.whenIdle = append(c.whenIdle, fn)
 	return true
 }
 
@@ -133,13 +159,13 @@ func (c *worktreeMaintenanceCoordinator) RunSweep(
 	defer func() {
 		cancel(nil)
 		c.mu.Lock()
-		var after []func()
+		var idle []func()
 		if c.sweepID == sweepID {
 			c.sweepCancel = nil
-			after, c.afterSweep = c.afterSweep, nil
+			idle = c.takeWhenIdleLocked()
 		}
 		c.mu.Unlock()
-		for _, fn := range after {
+		for _, fn := range idle {
 			fn()
 		}
 	}()

@@ -9,6 +9,7 @@ import { MarkdownAnnotationTilesHarness } from './MarkdownAnnotationTilesHarness
 import { MermaidDiagramHarness } from './MermaidDiagramHarness';
 import { NotebookBrowserHarness } from './NotebookBrowserHarness';
 import { NotebookTileHarness } from './NotebookTileHarness';
+import { OutpostTerminalLinksHarness } from './OutpostTerminalLinksHarness';
 import { PaneFocusRingHarness } from './PaneFocusRingHarness';
 import { QueueBarHarness } from './QueueBarHarness';
 import { QueueSidebarFitHarness } from './QueueSidebarFitHarness';
@@ -30,6 +31,7 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   MermaidDiagram: MermaidDiagramHarness,
   NotebookBrowser: NotebookBrowserHarness,
   NotebookTile: NotebookTileHarness,
+  OutpostTerminalLinks: OutpostTerminalLinksHarness,
   PaneFocusRing: PaneFocusRingHarness,
   TileHeader: TileHeaderHarness,
   SeedHeader: SeedHeaderHarness,

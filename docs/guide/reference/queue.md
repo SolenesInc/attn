@@ -146,3 +146,21 @@ Yes. Attn keeps owed turns and snoozes in its database, so restarting the app, t
 
 Each profile has its own queue, and it holds only that profile's agents. Turning the queue on or off applies to every profile at once, and so do auto-settle and "Put the crew in the queue".
 </details>
+
+## Quiet notifications (experimental)
+
+attn wakes agents all day: a delegate's message, a seed update, a pull request
+update. Turn on **Settings → Experimental → Quiet notifications in the queue** so
+those wake-ups stop sending you to agents that do not need you. In queue flow:
+
+- An agent a notification woke stays out of your queue when it stops, unless it
+  needs an approval.
+- An agent waiting for you leaves the queue when a notification sets it working
+  again. If it is on screen you stay there; settle moves you on as usual.
+- An agent that needs you runs `attn turn open`, which puts it in your queue
+  when it stops. Notifications do not take it out: you settle it, or the agent
+  runs `attn turn settle`.
+
+If you type into an agent while it works on a notification, the run is yours,
+and its stop puts it in your queue as usual.
+

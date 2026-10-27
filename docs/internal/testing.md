@@ -131,14 +131,15 @@ Playing the model, on a `fakeagent.Run`:
 - `Prompted` returns the prompt the agent received and moves `ConversationID`
   to the agent's current conversation. Claude's `/clear` starts a new one and
   `/resume <id>` switches to that one; Codex switches on the first prompt after
-  `/new`, `/clear` or `/resume <id>`.
+  `/new`, `/clear` or `/resume <id>`; Pi's `/new` and `/resume <id>` switch
+  and say hello to the driver again, as a reloaded suite does.
 - `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
   marker. `ReplyAfterStop` writes that reply only after the Stop hook.
 - `Exit` quits with an exit code.
 - `StopReadingTerminal` stops reading input, so what the daemon types backs
   up in the terminal the way it does for a frozen agent.
 - `Halt` writes the harness's own record of the user interrupting the turn
-  (Claude, Codex and Copilot).
+  (Claude and Codex).
 - Claude only: `Stream` writes part of a reply that the next `Reply` revises
   under the same message. `Subagent` writes a subagent's transcript, and
   `DeleteSubagentTranscripts` removes those transcripts.

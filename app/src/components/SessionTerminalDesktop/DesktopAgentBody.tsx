@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { AnnotatedTerminal } from '../TerminalAnnotations/AnnotatedTerminal';
 import { TerminalStaleBuildNotice } from '../TerminalStaleBuildNotice';
+import { SharedConversationNotice } from '../SharedConversationNotice';
 import { useDesktopContext } from './DesktopContext';
 import { paneNotice } from './paneNotice';
+import { DesktopOfflineNotice } from './DesktopOfflineNotice';
 import type { DesktopAgentProps } from './desktopTypes';
 import { useSessionStore } from '../../store/sessions';
 
-export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopAgentProps) {
+export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSent }: DesktopAgentProps & { keysNotSent: number }) {
   const [resuming, setResuming] = useState(false);
   const [resumeError, setResumeError] = useState('');
   const {
@@ -21,6 +23,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
     terminalsLive,
     onTerminalPointerActivity,
     onOpenMarkdown,
+    onTerminalPathRefused,
     staleBuildDismissed,
     setStaleBuildDismissed,
     paneIds,
@@ -35,6 +38,10 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
   const notice = paneNotice(agentPane, paneSession, paneTitle);
   const stopped = Boolean(paneSession?.terminalExit) || paneSession?.state_reason === 'process_exited';
   const resume = async () => {
+    if (paneSession?.offline) {
+      setResumeError(`${paneSession.hostName} is unreachable; this needs it now`);
+      return;
+    }
     setResumeError('');
     setResuming(true);
     try {
@@ -48,6 +55,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
 
   return (
     <div className="desktop-pane-body">
+      <DesktopOfflineNotice paneSession={paneSession} keysNotSent={keysNotSent} />
       {stopped ? (
         <div className="desktop-agent-stopped" role="status">
           <div>
@@ -62,6 +70,9 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
         <TerminalStaleBuildNotice
           onDismiss={() => setStaleBuildDismissed((prev) => new Set(prev).add(agentPane.sessionId))}
         />
+      ) : null}
+      {paneSession?.conversationAlsoOpenIn?.length ? (
+        <SharedConversationNotice openIn={paneSession.conversationAlsoOpenIn} />
       ) : null}
       {notice ? (
         <div className={`desktop-pane-status desktop-pane-status--${notice.tone}`}>
@@ -85,6 +96,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
           fontSize={fontSize}
           resolvedTheme={resolvedTheme}
           cwd={paneSession?.cwd}
+          outpostName={paneSession?.host ? paneSession.hostName ?? paneSession.host : undefined}
           debugName={`agent:${paneTitle}:${paneSession?.agent ?? 'shell'}:${agentPane.sessionId}`}
           runtimeLogMeta={{
             sessionId: agentPane.sessionId,
@@ -98,6 +110,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle }: DesktopA
           onInput={runtime.handleTerminalInput(agentPane.id)}
           onPointerActivity={() => onTerminalPointerActivity?.(agentPane.runtimeId)}
           onOpenMarkdown={onOpenMarkdown}
+          onPathRefused={onTerminalPathRefused}
           gardenSeeds={gardenSeeds}
           onOpenSeed={onOpenSeed}
           onReady={handleGhosttyTerminalReady(agentPane.id)}

@@ -24,6 +24,7 @@ type DashboardSession = {
   id: string;
   label: string;
   state: UISessionState;
+  offline?: boolean;
   cwd: string;
   chief?: boolean;
   // Read, never derived from state: an agent can sit in waiting_input with its
@@ -209,9 +210,10 @@ export function Dashboard({
       className="session-row clickable"
       data-testid={`session-${s.id}`}
       data-state={s.state}
+      data-offline={s.offline || undefined}
       onClick={() => onSelectSession(s.id)}
     >
-      <StateIndicator state={s.state} size="sm" seed={s.id} />
+      <StateIndicator state={s.state} offline={s.offline} size="sm" seed={s.id} />
       <div className="session-row-main">
         <span className="session-name"><SessionPriority priority={s.priority} />{sessionDisplayName(s)}</span>
         <SessionProvenance automation={s.automation} interactive />

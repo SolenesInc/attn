@@ -1,0 +1,172 @@
+package daemon
+
+import (
+	"fmt"
+	"strings"
+	"syscall"
+
+	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
+)
+
+func (d *Daemon) changeOutpost(action, id, name, address string) error {
+	r := &d.outposts
+	r.actions.Lock()
+	defer r.actions.Unlock()
+	if !d.outpostsEnabled() {
+		return fmt.Errorf("outposts_enabled is off; run attn settings set outposts_enabled true before you %s an outpost", action)
+	}
+	if action != "remove" {
+		if err := d.validateNotebookSyncRoots("", "", ""); err != nil {
+			return err
+		}
+	}
+	if action == "add" {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("outpost name is required")
+		}
+		if err := validateOutpostAddress(address); err != nil {
+			return err
+		}
+		row, err := d.store.AddOutpost(name, address)
+		if err != nil {
+			return fmt.Errorf("add outpost %s (%s): %w", name, address, err)
+		}
+		d.startOutpostDial(row)
+		d.publishFact(FactOutpostChanged, row.ID, nil)
+		return nil
+	}
+	rows, err := d.store.ListOutposts()
+	if err != nil {
+		return err
+	}
+	var row *store.Outpost
+	for i := range rows {
+		if rows[i].ID == id {
+			row = &rows[i]
+			break
+		}
+	}
+	if row == nil {
+		return fmt.Errorf("outpost %q does not exist", id)
+	}
+	if action == "remove" {
+		_, _, reachable := d.outpostConn(id)
+		for _, session := range d.store.List("") {
+			if protocol.Deref(session.Host) != id {
+				continue
+			}
+			closed := store.SessionClose{By: who.User(), Reason: "outpost removed"}
+			if reachable == nil {
+				closing, err := d.beginSessionClose(session.ID, closed, nil)
+				if err != nil {
+					return err
+				}
+				if closing.teardown != nil {
+					<-d.terminateSessionAsync(session.ID, syscall.SIGTERM, closing.teardown)
+				}
+			} else {
+				if err := d.closeSessionRecord(session.ID, closed); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	d.cancelOutpostUpdate(id)
+	d.stopOutpostDial(id)
+	if action == "remove" {
+		err = d.store.DeleteOutpost(id)
+	} else {
+		err = d.store.ClearOutpostPins(id)
+	}
+	if err != nil {
+		d.startOutpostDial(*row)
+		return err
+	}
+	if action == "repair" {
+		row.HostKey, row.DaemonID = "", ""
+		d.startOutpostDial(*row)
+	} else {
+		r.mu.Lock()
+		delete(r.dialers, id)
+		r.mu.Unlock()
+	}
+	d.configureNotebookSync()
+	if action == "remove" {
+		d.forgetNotebookSyncPeer(row.DaemonID)
+	}
+	d.publishFact(FactOutpostChanged, id, nil)
+	return nil
+}
+
+func (d *Daemon) handleOutpostCommand(client *wsClient, action, id, name, address string) {
+	d.life.Go("outpostCommand", func() {
+		if err := d.changeOutpost(action, id, name, address); err != nil {
+			d.sendCommandError(client, action+"_outpost", err.Error())
+		}
+	})
+}
+
+func (d *Daemon) outpostsUpdatedMessage(profileID string) *protocol.OutpostsUpdatedMessage {
+	rootID := ""
+	if profileID != "" {
+		if _, synced, err := d.syncedNotebookProfile(profileID); err == nil {
+			rootID = synced.Root
+		}
+	}
+	message := &protocol.OutpostsUpdatedMessage{Event: protocol.EventOutpostsUpdated, Outposts: []protocol.OutpostInfo{}}
+	d.notebookSync.mu.Lock()
+	configurationError := d.notebookSync.error
+	d.notebookSync.mu.Unlock()
+	rows, err := d.store.ListOutposts()
+	if err != nil {
+		d.logf("outposts snapshot: %v", err)
+		return message
+	}
+	enabled := d.outpostsEnabled()
+	r := &d.outposts
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, row := range rows {
+		info := protocol.OutpostInfo{ID: row.ID, Name: row.Name, Address: row.Address, State: protocol.OutpostStateConnecting, StateSince: row.AddedAt}
+		if row.DaemonID != "" {
+			info.DaemonID = protocol.Ptr(row.DaemonID)
+			info.HostKeyFingerprint = protocol.Ptr((bridge.Pin{HostKey: row.HostKey}).Fingerprint())
+		}
+		if push := r.pushes[row.ID]; push != nil && push.state.Phase != "" {
+			state := push.state
+			info.Update = &state
+		}
+		run := r.dialers[row.ID]
+		_, info.Reach = outpostReach(enabled, run)
+		if run != nil {
+			info.Notebook = run.notebooks[rootID]
+			if configurationError != "" {
+				info.Notebook = &protocol.OutpostNotebook{State: protocol.OutpostNotebookStateError, Error: protocol.Ptr(configurationError)}
+			}
+			info.State = protocol.OutpostState(run.state)
+			info.StateSince = run.since
+			if run.build != "" {
+				info.Build = protocol.Ptr(run.build)
+			}
+			if run.lastError != "" {
+				info.LastError = protocol.Ptr(run.lastError)
+				info.LastErrorAt = protocol.Ptr(run.lastErrorAt)
+			}
+		}
+		if !enabled {
+			info.State = protocol.OutpostStateLost
+		}
+		message.Outposts = append(message.Outposts, info)
+	}
+	return message
+}
+
+func (d *Daemon) projectOutpostsUpdated() {
+	d.projectSnapshot(protocol.EventOutpostsUpdated, func() {
+		d.wsHub.ForEachClient(func(client *wsClient) { d.sendToClient(client, d.outpostsUpdatedMessage(client.selectedProfile())) })
+	})
+}

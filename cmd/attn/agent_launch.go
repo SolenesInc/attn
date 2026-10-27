@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 )
 
 type directLaunchArgs struct {
@@ -70,6 +69,7 @@ func parseDirectLaunchArgs(args []string) (directLaunchArgs, error) {
 			parsed.initialPromptFile = args[i+1]
 			i++
 		default:
+			recordUsageError("attn", usageErrorUnknownFlag)
 			return directLaunchArgs{}, fmt.Errorf("unknown flag %q", arg)
 		}
 	}
@@ -130,18 +130,21 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	opts := agentdriver.SpawnOpts{
-		TerminalID:      terminalID,
-		CWD:             cwd,
-		Label:           parsed.label,
-		InitialPrompt:   initialPrompt,
-		ResumeSessionID: parsed.resumeID,
-		ResumePicker:    parsed.resumePicker,
-		YoloMode:        parsed.yoloMode,
-		Executable:      driver.ResolveExecutable(""),
-		SocketPath:      config.SocketPath(),
-		WrapperPath:     resolveWrapperPath(),
-		CodexRemote:     consumeOneShotEnv("ATTN_CODEX_REMOTE"),
-		QuickCapture:    consumeOneShotEnv("ATTN_QUICK_CAPTURE_ENABLED") == "true",
+		TerminalID:        terminalID,
+		CWD:               cwd,
+		Label:             parsed.label,
+		InitialPrompt:     initialPrompt,
+		ResumeSessionID:   parsed.resumeID,
+		ResumePicker:      parsed.resumePicker,
+		YoloMode:          parsed.yoloMode,
+		Executable:        driver.ResolveExecutable(""),
+		SocketPath:        config.SocketPath(),
+		WrapperPath:       resolveWrapperPath(),
+		CodexRemote:       consumeOneShotEnv("ATTN_CODEX_REMOTE"),
+		QuickCapture:      consumeOneShotEnv("ATTN_QUICK_CAPTURE_ENABLED") == "true",
+		Vent:              consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
+		ToolVents:         consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
+		CrewMemoryEnabled: consumeOneShotBoolEnv("ATTN_CREW_MEMORY_ENABLED"),
 	}
 
 	if _, err := agentdriver.EnsureAttnSkillInstalled(driver.Name()); err != nil {
@@ -150,13 +153,6 @@ func runAgentDirectly(requestedAgent string) {
 	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
 		if err := preparer.PrepareLaunch(opts); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: launch preparation failed for %s: %v\n", driver.Name(), err)
-		}
-	}
-
-	cleanupFns := []func(){}
-	cleanup := func() {
-		for i := len(cleanupFns) - 1; i >= 0; i-- {
-			cleanupFns[i]()
 		}
 	}
 
@@ -175,7 +171,11 @@ func runAgentDirectly(requestedAgent string) {
 	opts.SelfReportPullRequests = !caps.HasHooks
 	if prime, err := c.CrewPrime(sessionID); err == nil {
 		opts.CrewPriming = protocol.Deref(prime.Guidance)
+		opts.CrewMemoryEnabled = protocol.Deref(prime.MemoryEnabled)
 		opts.AwarenessDirs = prime.AwarenessDirs
+	} else if opts.CrewMemoryEnabled {
+		fmt.Fprintf(os.Stderr, "attn: crew memory priming: %v\n", err)
+		os.Exit(1)
 	}
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
 	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
@@ -197,21 +197,6 @@ func runAgentDirectly(requestedAgent string) {
 		opts.HookSettings = hp.GenerateHooksConfig(opts)
 		hasHooks = true
 	}
-	if ip, ok := agentdriver.GetInstructionsFileProvider(driver); ok {
-		name, content := ip.GenerateInstructionsFile(opts)
-		if strings.TrimSpace(content) != "" {
-			dir, err := writeLauncherInstructions(string(terminalID), name, content)
-			if err != nil {
-				cleanup()
-				fmt.Fprintf(os.Stderr, "error writing launch instructions: %v\n", err)
-				os.Exit(1)
-			}
-			opts.InstructionsDir = dir
-			cleanupFns = append(cleanupFns, func() { _ = os.RemoveAll(dir) })
-		}
-	}
-
-	opts.InheritedInstructionsDirs = os.Getenv("COPILOT_CUSTOM_INSTRUCTIONS_DIRS")
 	cmd := driver.BuildCommand(opts)
 	cmd.Dir = cwd
 	cmd.Stdin = os.Stdin
@@ -219,9 +204,7 @@ func runAgentDirectly(requestedAgent string) {
 	cmd.Stderr = os.Stderr
 	cmd.Env = pty.MergeEnvironment(config.WithoutAgentSessionIdentityEnv(os.Environ()), driver.BuildEnv(opts))
 
-	startedAt := time.Now()
 	if err := cmd.Start(); err != nil {
-		cleanup()
 		fmt.Fprintf(os.Stderr, "error starting %s: %v\n", driver.Name(), err)
 		os.Exit(1)
 	}
@@ -229,9 +212,8 @@ func runAgentDirectly(requestedAgent string) {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {
-		<-sigChan
-		if cmd.Process != nil {
-			_ = cmd.Process.Signal(syscall.SIGTERM)
+		for sig := range sigChan {
+			_ = cmd.Process.Signal(sig)
 		}
 	}()
 
@@ -239,20 +221,13 @@ func runAgentDirectly(requestedAgent string) {
 
 	if !hasHooks {
 		transcriptPath := ""
-		if tf, ok := agentdriver.GetTranscriptFinder(driver); ok {
-			if opts.ResumeSessionID != "" {
-				transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)
-			}
-			if transcriptPath == "" {
-				transcriptPath = tf.FindTranscript(string(terminalID), cwd, startedAt)
-			}
+		if tf, ok := agentdriver.GetTranscriptFinder(driver); ok && opts.ResumeSessionID != "" {
+			transcriptPath = tf.FindTranscriptForResume(opts.ResumeSessionID)
 		}
 		if sendErr := c.SendStop(terminalID, transcriptPath, client.StopFacts{}); sendErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not send stop: %v\n", sendErr)
 		}
 	}
-
-	cleanup()
 
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -280,15 +255,4 @@ func resolveWrapperPath() string {
 		return exePath
 	}
 	return "attn"
-}
-
-func writeLauncherInstructions(terminalID, name, content string) (string, error) {
-	dir := filepath.Join(os.TempDir(), "attn-instructions-"+terminalID)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
-		return "", err
-	}
-	return dir, nil
 }

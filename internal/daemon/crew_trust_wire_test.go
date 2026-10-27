@@ -113,7 +113,7 @@ func TestACodexCrewWakeReceivesTheHomeTrustOverride(t *testing.T) {
 }
 
 func TestCreatingMembersDoesNotWriteHarnessTrustConfig(t *testing.T) {
-	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		t.Run(string(harness), func(t *testing.T) {
 			w := newWorld(t, harness)
 			path := filepath.Join(w.Dir, "toolhome", ".claude", ".claude.json")

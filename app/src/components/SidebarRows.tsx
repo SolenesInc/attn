@@ -215,6 +215,7 @@ export function SidebarSessionRow({
       data-testid={`sidebar-session-${session.id}`}
       data-session-id={session.id}
       data-state={session.state}
+      data-offline={session.offline || undefined}
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >
       <button
@@ -230,6 +231,7 @@ export function SidebarSessionRow({
       <SessionLead
         agent={session.agent}
         state={session.state}
+        offline={session.offline}
         seed={session.id}
         reason={session.state_reason}
       />

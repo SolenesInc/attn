@@ -34,6 +34,7 @@ func runAutoMode() {
 	case "denials":
 		runAutoModeDenials(args)
 	default:
+		recordUsageError("automode", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "automode: unknown command %q\n", os.Args[2])
 		writeAutoModeHelp(os.Stderr)
 		os.Exit(2)
@@ -214,6 +215,7 @@ func runAutoModeEnv(args []string) {
 	case "notes":
 		runAutoModeEnvNotes(args[1:])
 	default:
+		recordUsageError("automode env", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr,
 			"automode env: unknown command %q (want set, clear or notes)\n", args[0])
 		os.Exit(2)
@@ -350,6 +352,7 @@ func runAutoModeRule(args []string) {
 	case "remove":
 		runAutoModeRuleRemove(rest, args)
 	default:
+		recordUsageError("automode rule", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "automode rule: unknown command %q (want add or remove)\n", args[0])
 		os.Exit(2)
 	}
@@ -426,6 +429,7 @@ func runAutoModeHost(args []string) {
 		}
 		proposeAutoModeValue("host remove", automode.KindHostRemove, "", value, hasFlag(args, "--json"))
 	default:
+		recordUsageError("automode host", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "automode host: unknown command %q (want add or remove)\n", args[0])
 		os.Exit(2)
 	}

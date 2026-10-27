@@ -178,73 +178,6 @@ func TestExtractLastAssistantMessage_CodexResponseItemOutputText(t *testing.T) {
 	}
 }
 
-func TestExtractLastAssistantMessage_CopilotEvents(t *testing.T) {
-	content := `{"type":"session.start","data":{"sessionId":"abc"}}
-{"type":"assistant.message","data":{"content":"Copilot reply one."}}
-{"type":"assistant.message","data":{"content":"Copilot final reply with question?"}}
-`
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "events.jsonl")
-	os.WriteFile(path, []byte(content), 0644)
-
-	result, err := ExtractLastAssistantMessage(path, 500)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	expected := "Copilot final reply with question?"
-	if result != expected {
-		t.Errorf("got %q, want %q", result, expected)
-	}
-}
-
-func TestExtractCopilotToolLifecycle_Start(t *testing.T) {
-	line := []byte(`{"type":"tool.execution_start","data":{"toolCallId":"tool-123","toolName":"bash"}}`)
-	got, ok := ExtractCopilotToolLifecycle(line)
-	if !ok {
-		t.Fatal("expected lifecycle event")
-	}
-	if got.Kind != "start" {
-		t.Fatalf("kind = %q, want %q", got.Kind, "start")
-	}
-	if got.ToolCallID != "tool-123" {
-		t.Fatalf("toolCallId = %q, want %q", got.ToolCallID, "tool-123")
-	}
-	if got.ToolName != "bash" {
-		t.Fatalf("toolName = %q, want %q", got.ToolName, "bash")
-	}
-}
-
-func TestExtractCopilotToolLifecycle_Complete(t *testing.T) {
-	line := []byte(`{"type":"tool.execution_complete","data":{"toolCallId":"tool-123","success":true}}`)
-	got, ok := ExtractCopilotToolLifecycle(line)
-	if !ok {
-		t.Fatal("expected lifecycle event")
-	}
-	if got.Kind != "complete" {
-		t.Fatalf("kind = %q, want %q", got.Kind, "complete")
-	}
-	if got.ToolCallID != "tool-123" {
-		t.Fatalf("toolCallId = %q, want %q", got.ToolCallID, "tool-123")
-	}
-	if got.ToolName != "" {
-		t.Fatalf("toolName = %q, want empty", got.ToolName)
-	}
-}
-
-func TestExtractCopilotToolLifecycle_IgnoresNonLifecycle(t *testing.T) {
-	cases := [][]byte{
-		[]byte(`{"type":"assistant.message","data":{"content":"hello"}}`),
-		[]byte(`{"type":"tool.execution_start","data":{"toolName":"bash"}}`),
-		[]byte(`not-json`),
-	}
-	for _, line := range cases {
-		if _, ok := ExtractCopilotToolLifecycle(line); ok {
-			t.Fatalf("expected no lifecycle for line: %s", string(line))
-		}
-	}
-}
-
 func TestExtractLastAssistantMessageAfterLastUser_Claude_StaleAssistantIgnored(t *testing.T) {
 	content := `{"type":"user","message":{"content":"hello"}}
 {"type":"assistant","message":{"content":"Hi! How can I help?"}}
@@ -297,24 +230,6 @@ func TestExtractLastAssistantMessageAfterLastUser_Claude_NoUserStillReturnsLastA
 	expected := "Hello! What can I help you with today?"
 	if result != expected {
 		t.Fatalf("got %q, want %q", result, expected)
-	}
-}
-
-func TestExtractLastAssistantMessageAfterLastUser_Copilot_StaleAssistantIgnored(t *testing.T) {
-	content := `{"type":"user.message","data":{"content":"hello"}}
-{"type":"assistant.message","data":{"content":"Hi there!"}}
-{"type":"user.message","data":{"content":"run this command"}}
-`
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "events.jsonl")
-	os.WriteFile(path, []byte(content), 0644)
-
-	result, err := ExtractLastAssistantMessageAfterLastUser(path, 500)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "" {
-		t.Fatalf("expected empty result, got %q", result)
 	}
 }
 
@@ -496,39 +411,6 @@ func TestCodexTurnAborted(t *testing.T) {
 		},
 		{
 			name: "a claude line is not a codex abort",
-			line: `{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"},"interruptedMessageId":"msg_01"}`,
-		},
-	})
-}
-
-func TestCopilotTurnAborted(t *testing.T) {
-	runTurnAbortCases(t, CopilotTurnAborted, []turnAbortCase{
-		{
-			name:         "captured abort event",
-			line:         `{"type":"abort","timestamp":"2026-08-02T08:52:00.344Z","data":{"reason":"user_initiated"}}`,
-			wantReason:   "user_initiated",
-			wantUserHalt: true,
-			wantAt:       "2026-08-02T08:52:00.344Z",
-			wantOK:       true,
-		},
-		{
-			name:       "an abort copilot caused is still reported",
-			line:       `{"type":"abort","data":{"reason":"tool_failure"}}`,
-			wantReason: "tool_failure",
-			wantOK:     true,
-		},
-		{
-			name:       "a reasonless abort is not a user halt",
-			line:       `{"type":"abort","data":{}}`,
-			wantReason: "aborted",
-			wantOK:     true,
-		},
-		{
-			name: "a turn end is not an abort",
-			line: `{"type":"assistant.turn_end","data":{"turnId":"0"}}`,
-		},
-		{
-			name: "a claude line is not a copilot abort",
 			line: `{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"},"interruptedMessageId":"msg_01"}`,
 		},
 	})

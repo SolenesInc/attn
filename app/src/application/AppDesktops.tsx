@@ -9,6 +9,7 @@ import type { Desktop } from '../types/generated';
 import { desktopLabel, desktopTerminalState, orderedDesktops } from '../utils/desktops';
 import {
   useAppAppearanceContext,
+  useAppErrorsContext,
   useAppGardenActionsContext,
   useAppInputs,
   useAppPanelsContext,
@@ -26,6 +27,7 @@ import {
 import { EmptyDesktopLauncher } from './EmptyDesktopLauncher';
 import { openThenShow } from './openThenShow';
 import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
+import { localDirectory } from '../utils/outpostPaths';
 
 export function AppDesktops() {
   const { snoozeMenu } = useAttentionQueueContext();
@@ -55,8 +57,9 @@ export function AppDesktops() {
   } = useAppShell();
   const { seedPopoverRequest, usagePopoverRequest, openAsk } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
-  const { delegationSessions } = useAppSessionsContext();
+  const { delegationSessions, enrichedLocalSessions } = useAppSessionsContext();
   const { daemonSessions } = useAppInputs();
+  const { showError } = useAppErrorsContext();
   const allSessions = useSessionStore((state) => state.sessions);
   const seeds = useDaemonStore((state) => state.seeds);
   const { handleOpenSeedTile, handleRevealSeedInGarden } = useAppGardenActionsContext();
@@ -81,6 +84,14 @@ export function AppDesktops() {
     leafDragPreview,
   } = useLeafDragContext();
 
+  const whereOpen = (sessionId: string, viewing: Desktop) => {
+    const label = allSessions.find((session) => session.id === sessionId)?.label;
+    const named = label ? `“${label}”` : 'another terminal';
+    const home = desktops.find((desktop) => desktop.panes.some((pane) => pane.kind === 'agent' && pane.session_id === sessionId));
+    if (!home) return named;
+    return home.id === viewing.id ? `${named} on this desktop` : `${named} on ${desktopLabel(home, desktops)}`;
+  };
+
   const mounted = orderedDesktops(desktops).filter((desktop) => mountedDesktopIds.has(desktop.id));
 
   const renderDesktop = (desktop: Desktop) => {
@@ -90,7 +101,7 @@ export function AppDesktops() {
     const isCurrent = desktop.id === currentDesktopId;
     const shownSessionId = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id)?.sessionId ?? null;
     const leafSessionId = sessionOfLeaf(leafOn(desktop.profile_id, desktop, desktop.active_pane_id));
-    const desktopDirectory = allSessions.find((session) => session.id === leafSessionId)?.cwd;
+    const desktopDirectory = localDirectory(enrichedLocalSessions.find((session) => session.id === leafSessionId));
     return (
       <div key={desktop.id} className={`terminal-wrapper ${isCurrent ? 'active' : ''}`}>
         <SessionTerminalDesktop
@@ -105,6 +116,10 @@ export function AppDesktops() {
             priority: entry.priority,
             agent: entry.agent,
             cwd: entry.cwd,
+            host: entry.host,
+            hostName: entry.hostName,
+            offline: entry.offline,
+            reach: entry.reach,
             state: entry.state,
             autoSettleFiresAt: entry.autoSettleFiresAt,
             autoSettleHeld: entry.autoSettleHeld,
@@ -112,6 +127,7 @@ export function AppDesktops() {
             terminalExit: entry.terminalExit,
             state_reason: entry.state_reason,
             terminalBuildStale: entry.terminalBuildStale,
+            conversationAlsoOpenIn: entry.conversationSharedWith.map((peer) => whereOpen(peer, desktop)),
             usage: entry.usage,
             isActive: isCurrent && entry.id === shownSessionId,
             seedId: entry.seedId,
@@ -147,6 +163,7 @@ export function AppDesktops() {
                 });
               });
           }}
+          onTerminalPathRefused={showError}
           terminalState={terminalState}
           desktopSelectionStyle={desktopSelectionStyle}
           activePaneId={desktop.active_pane_id}

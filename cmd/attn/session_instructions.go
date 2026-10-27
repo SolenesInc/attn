@@ -92,6 +92,7 @@ func runSession() {
 		}
 		runSessionMove(os.Args[3:])
 	default:
+		recordUsageError("session", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "session: unknown command %q\n", os.Args[2])
 		writeSessionHelp(os.Stderr)
 		os.Exit(2)
@@ -109,7 +110,7 @@ func parseSessionTranscriptArgs(args []string) (sessionTranscriptArgs, error) {
 	after := fs.String("after", "", "resume strictly after an opaque transcript cursor")
 	follow := fs.Bool("follow", false, "keep polling for new transcript events until interrupted")
 	jsonOut := fs.Bool("json", false, "print one transcript event as JSON per line")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return sessionTranscriptArgs{}, err
 	}
 	if target == "" || fs.NArg() != 0 {
@@ -236,7 +237,7 @@ func parseSessionInstructionsArgs(args []string) (sessionInstructionsArgs, error
 	fs.SetOutput(io.Discard)
 	question := fs.String("question", "", "question to answer from the target conversation")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return sessionInstructionsArgs{}, err
 	}
 	if target == "" || fs.NArg() != 0 {

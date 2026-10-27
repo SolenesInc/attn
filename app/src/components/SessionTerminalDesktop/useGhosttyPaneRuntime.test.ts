@@ -73,43 +73,6 @@ describe('useGhosttyPaneRuntime', () => {
     vi.useRealTimers();
   });
 
-  it('attaches with measured geometry and forwards input directly', async () => {
-    const { result } = renderHook(() => useGhosttyPaneRuntime([
-      {
-        paneId: 'pane-session',
-        runtimeId: 'runtime-1',
-        paneKind: 'agent',
-        testSessionId: 'session-1',
-      },
-    ], 'pane-session', router, { current: true }));
-    const terminal = createTerminal();
-
-    await act(async () => {
-      result.current.setTerminalHandle('pane-session', terminal);
-      await result.current.handleTerminalReady('pane-session')(terminal);
-      result.current.handleTerminalInput('pane-session')('hello', 'user');
-    });
-
-    expect(mockPtyAttach).toHaveBeenCalledWith({
-      args: {
-        id: 'runtime-1',
-        cols: 120,
-        rows: 40,
-        shell: false,
-        agent: undefined,
-        policy: 'fresh_spawn',
-      },
-      forceResizeBeforeAttach: true,
-    });
-    expect(mockPtyWrite).toHaveBeenCalledWith({ id: 'runtime-1', data: 'hello', source: 'user' });
-    expect((window as Window & {
-      __TEST_SESSION_INPUT_EVENTS?: Array<{ sessionId: string; event: string; data?: string; source?: string }>;
-    }).__TEST_SESSION_INPUT_EVENTS).toEqual([
-      { sessionId: 'session-1', event: 'connect_terminal' },
-      { sessionId: 'session-1', event: 'send_to_pty', data: 'hello', source: 'user' },
-    ]);
-  });
-
   it('returns terminal responses to the live PTY when the daemon does not suppress them', async () => {
     const terminal = createTerminal();
     vi.mocked(terminal.write).mockImplementation(async () => {
@@ -215,51 +178,6 @@ describe('useGhosttyPaneRuntime', () => {
     expect(mockPtyResize).toHaveBeenCalledWith({ id: 'runtime-1', cols: 130, rows: 45, reason: 'test' });
   });
 
-  it('uses pending measured geometry before attach while the model waits for its resize boundary', async () => {
-    let resolveAttach: (() => void) | undefined;
-    mockPtyAttach.mockReturnValueOnce(new Promise<void>((resolve) => {
-      resolveAttach = resolve;
-    }));
-    const { result } = renderHook(() => useGhosttyPaneRuntime([
-      {
-        paneId: 'pane-session',
-        runtimeId: 'runtime-1',
-        paneKind: 'agent',
-        agent: 'codex',
-      },
-    ], 'pane-session', router, { current: true }));
-    const terminal = createTerminal();
-    vi.mocked(terminal.getSize).mockReturnValue({ cols: 80, rows: 24 });
-
-    let readyPromise: Promise<void>;
-    act(() => {
-      result.current.handleTerminalResize('pane-session')(106, 64, { reason: 'ghostty_fit', xpixel: 1908, ypixel: 2688 });
-      readyPromise = result.current.handleTerminalReady('pane-session')(terminal);
-    });
-
-    expect(mockPtyResize).not.toHaveBeenCalled();
-
-    await act(async () => {
-      resolveAttach?.();
-      await readyPromise!;
-    });
-
-    expect(mockPtyAttach).toHaveBeenCalledWith({
-      args: {
-        id: 'runtime-1',
-        cols: 106,
-        rows: 64,
-        shell: false,
-        agent: 'codex',
-        policy: 'fresh_spawn',
-        xpixel: 1908,
-        ypixel: 2688,
-      },
-      forceResizeBeforeAttach: true,
-    });
-    expect(mockPtyResize).not.toHaveBeenCalled();
-  });
-
   it('sends a newer fit that arrives while the measured attach is pending', async () => {
     let resolveAttach!: () => void;
     mockPtyAttach.mockReturnValueOnce(new Promise<void>((resolve) => { resolveAttach = resolve; }));
@@ -277,68 +195,6 @@ describe('useGhosttyPaneRuntime', () => {
     expect(mockPtyResize).toHaveBeenCalledExactlyOnceWith({
       id: 'runtime-1', cols: 125, rows: 42, reason: 'ghostty_fit', xpixel: 2250, ypixel: 1764,
     });
-  });
-
-  it('uses geometry queued during snapshot delivery for the attach', async () => {
-    const { result } = renderHook(() => useGhosttyPaneRuntime([
-      { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-    ], 'pane-session', router, { current: true }));
-    const terminal = createTerminal();
-
-    act(() => result.current.setTerminalHandle('pane-session', terminal));
-    await act(async () => {
-      binding?.onEvent({
-        event: 'data',
-        id: 'runtime-1',
-        data: btoa('ready'),
-      });
-      result.current.handleTerminalResize('pane-session')(130, 45, { reason: 'attached' });
-    });
-
-    expect(mockPtyResize).not.toHaveBeenCalled();
-    await act(async () => {
-      await result.current.handleTerminalReady('pane-session')(terminal);
-    });
-    expect(mockPtyAttach).toHaveBeenCalledWith({
-      args: {
-        id: 'runtime-1',
-        cols: 130,
-        rows: 45,
-        shell: false,
-        agent: undefined,
-        policy: 'same_app_remount',
-      },
-      forceResizeBeforeAttach: true,
-    });
-    expect(mockPtyResize).not.toHaveBeenCalled();
-  });
-
-  it('reattaches a ready runtime when its terminal model remounts', async () => {
-    const { result } = renderHook(() => useGhosttyPaneRuntime([
-      { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent', agent: 'claude' },
-    ], 'pane-session', router, { current: true }));
-    const firstTerminal = createTerminal();
-    const remountedTerminal = createTerminal();
-
-    act(() => result.current.setTerminalHandle('pane-session', firstTerminal));
-    await act(async () => {
-      binding?.onEvent({ event: 'data', id: 'runtime-1', data: btoa('ready') });
-      result.current.setTerminalHandle('pane-session', null);
-      await result.current.handleTerminalReady('pane-session')(remountedTerminal);
-    });
-
-    expect(mockPtyAttach).toHaveBeenCalledWith({
-      args: {
-        id: 'runtime-1',
-        cols: 120,
-        rows: 40,
-        shell: false,
-        agent: 'claude',
-        policy: 'same_app_remount',
-      },
-      forceResizeBeforeAttach: true,
-    });
-    expect(mockPtyDetach).not.toHaveBeenCalled();
   });
 
   it('detaches an attached runtime when its terminal is virtualized', async () => {
@@ -390,82 +246,6 @@ describe('useGhosttyPaneRuntime', () => {
     expect(terminal.write).not.toHaveBeenCalledWith(expect.stringContaining('Failed to attach PTY'));
   });
 
-  it('waits for a canceled attach result before attaching a remounted terminal', async () => {
-    let resolveFirstAttach: (() => void) | undefined;
-    mockPtyAttach.mockReturnValueOnce(new Promise<void>((resolve) => {
-      resolveFirstAttach = resolve;
-    }));
-    const { result, rerender } = renderHook(
-      ({ terminalsLive }) => useGhosttyPaneRuntime([
-        { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent' },
-      ], 'pane-session', router, { current: true }, terminalsLive),
-      { initialProps: { terminalsLive: true } },
-    );
-    const firstTerminal = createTerminal();
-    const remountedTerminal = createTerminal();
-
-    let firstReadyPromise: Promise<void>;
-    act(() => {
-      firstReadyPromise = result.current.handleTerminalReady('pane-session')(firstTerminal);
-    });
-    rerender({ terminalsLive: false });
-    rerender({ terminalsLive: true });
-
-    let remountedReadyPromise: Promise<void>;
-    act(() => {
-      remountedReadyPromise = result.current.handleTerminalReady('pane-session')(remountedTerminal);
-    });
-    expect(mockPtyAttach).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      resolveFirstAttach?.();
-      await firstReadyPromise!;
-      await remountedReadyPromise!;
-    });
-
-    expect(mockPtyAttach).toHaveBeenCalledTimes(2);
-    expect(mockPtyAttach).toHaveBeenLastCalledWith({
-      args: {
-        id: 'runtime-1',
-        cols: 120,
-        rows: 40,
-        shell: false,
-        agent: undefined,
-        policy: 'fresh_spawn',
-      },
-      forceResizeBeforeAttach: true,
-    });
-    expect(mockPtyResize).not.toHaveBeenCalled();
-  });
-
-  it('marks attach geometry provisional and skips the pre-attach resize for unmeasured terminals', async () => {
-    const { result } = renderHook(() => useGhosttyPaneRuntime([
-      { paneId: 'pane-session', runtimeId: 'runtime-1', paneKind: 'agent', agent: 'claude' },
-    ], 'pane-session', router, { current: true }));
-    const firstTerminal = createTerminal();
-    const remountedTerminal = createTerminal();
-    vi.mocked(remountedTerminal.hasMeasuredSize).mockReturnValue(false);
-
-    act(() => result.current.setTerminalHandle('pane-session', firstTerminal));
-    await act(async () => {
-      binding?.onEvent({ event: 'data', id: 'runtime-1', data: btoa('ready') });
-      result.current.setTerminalHandle('pane-session', null);
-      await result.current.handleTerminalReady('pane-session')(remountedTerminal);
-    });
-
-    expect(mockPtyAttach).toHaveBeenCalledWith({
-      args: {
-        id: 'runtime-1',
-        cols: 120,
-        rows: 40,
-        shell: false,
-        agent: 'claude',
-        policy: 'same_app_remount',
-      },
-      forceResizeBeforeAttach: false,
-    });
-  });
-
   it('forwards a genuinely small fit so the PTY matches a deep split (no bottom clip)', async () => {
     // fit() is the geometry authority and deliberately emits a small grid for a short pane:
     // re-applying MIN_USABLE here would strand the PTY taller than the pane and clip it.
@@ -514,35 +294,6 @@ describe('useGhosttyPaneRuntime', () => {
     });
 
     expect(mockPtyResize).not.toHaveBeenCalled();
-  });
-
-  it('requests daemon-owned revive for a recoverable pane', async () => {
-    const { result } = renderHook(() => useGhosttyPaneRuntime([
-      {
-        paneId: 'pane-session',
-        runtimeId: 'runtime-1',
-        paneKind: 'agent',
-        agent: 'claude',
-        state: 'recoverable',
-      },
-    ], 'pane-session', router, { current: true }));
-    const terminal = createTerminal();
-
-    await act(async () => {
-      await result.current.handleTerminalReady('pane-session')(terminal);
-    });
-
-    expect(mockPtyAttach).toHaveBeenCalledWith({
-      args: {
-        id: 'runtime-1',
-        cols: 120,
-        rows: 40,
-        shell: false,
-        agent: 'claude',
-        policy: 'revive',
-      },
-      forceResizeBeforeAttach: false,
-    });
   });
 
   it('surfaces a revive attach failure without a client-side retry loop', async () => {

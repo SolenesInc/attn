@@ -82,14 +82,14 @@ func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 			t.Errorf("app collection after restart %d: found=%t err=%v", restart, found, err)
 		}
 		for query, want := range map[string]int{
-			`SELECT COUNT(*) FROM bus_consumers WHERE name='garden-seed-bells' AND cursor=11`:           1,
-			`SELECT COUNT(*) FROM bus_consumers WHERE name LIKE 'app:%'`:                                0,
-			`SELECT COUNT(*) FROM supervised_parks WHERE child='plugin:pi'`:                             1,
-			`SELECT COUNT(*) FROM supervised_parks WHERE child='runtime'`:                               0,
-			`SELECT COUNT(*) FROM sessions WHERE id='session-1' AND agent_driver_plugin_name='attn-pi'`: 1,
-			`SELECT COUNT(*) FROM notifications WHERE id='core-notice'`:                                 1,
-			`SELECT COUNT(*) FROM notifications WHERE id='app-notice'`:                                  0,
-			`SELECT COUNT(*) FROM notifications WHERE id='app-runtime-notice'`:                          0,
+			`SELECT COUNT(*) FROM bus_consumers WHERE name='garden-seed-bells' AND cursor=11`:                        1,
+			`SELECT COUNT(*) FROM bus_consumers WHERE name LIKE 'app:%'`:                                             0,
+			`SELECT COUNT(*) FROM supervised_parks WHERE child='plugin:pi'`:                                          1,
+			`SELECT COUNT(*) FROM supervised_parks WHERE child='runtime'`:                                            0,
+			`SELECT COUNT(*) FROM sessions_with_runtime WHERE id='session-1' AND agent_driver_plugin_name='attn-pi'`: 1,
+			`SELECT COUNT(*) FROM notifications WHERE id='core-notice'`:                                              1,
+			`SELECT COUNT(*) FROM notifications WHERE id='app-notice'`:                                               0,
+			`SELECT COUNT(*) FROM notifications WHERE id='app-runtime-notice'`:                                       0,
 		} {
 			var got int
 			if err := upgraded.db.QueryRow(query).Scan(&got); err != nil || got != want {

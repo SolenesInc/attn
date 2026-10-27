@@ -15,15 +15,64 @@ type Progress struct {
 	Dormant  int
 	Ready    int
 	Blocked  int
+	Checks   CheckTally
 }
 
-func PlotProgress(seeds []Seed, crownID string, ready map[string]bool) Progress {
-	blocked := blockedIDs(seeds)
-	var p Progress
-	for _, seed := range InPlot(seeds, crownID) {
-		if seed.ID == crownID {
-			continue
+type PlotTree struct {
+	seeds    []Seed
+	byID     map[string]Seed
+	children map[string][]Seed
+	blocked  map[string]bool
+}
+
+func NewPlotTree(seeds []Seed) PlotTree {
+	children := map[string][]Seed{}
+	for _, seed := range seeds {
+		if parent, ok := parentOf(seed); ok {
+			children[parent] = append(children[parent], seed)
 		}
+	}
+	return PlotTree{seeds: seeds, byID: byID(seeds), children: children, blocked: blockedIDs(seeds)}
+}
+
+func (t PlotTree) descendants(crownID string) []Seed {
+	if len(t.children[crownID]) == 0 {
+		return nil
+	}
+	seen := map[string]bool{crownID: true}
+	out := []Seed{}
+	for next := []string{crownID}; len(next) > 0; {
+		id := next[len(next)-1]
+		next = next[:len(next)-1]
+		for _, child := range t.children[id] {
+			if seen[child.ID] {
+				continue
+			}
+			seen[child.ID] = true
+			out = append(out, child)
+			next = append(next, child.ID)
+		}
+	}
+	return out
+}
+
+func (t PlotTree) InPlot(crownID string) []Seed {
+	inside := map[string]bool{crownID: true}
+	for _, seed := range t.descendants(crownID) {
+		inside[seed.ID] = true
+	}
+	out := make([]Seed, 0, len(inside))
+	for _, seed := range t.seeds {
+		if inside[seed.ID] {
+			out = append(out, seed)
+		}
+	}
+	return out
+}
+
+func (t PlotTree) Progress(crownID string, ready map[string]bool) Progress {
+	var p Progress
+	for _, seed := range t.descendants(crownID) {
 		p.Total++
 		switch {
 		case seed.Status == StatusHarvested:
@@ -38,9 +87,12 @@ func PlotProgress(seeds []Seed, crownID string, ready map[string]bool) Progress 
 		if ready[seed.ID] {
 			p.Ready++
 		}
-		if !Closed(seed.Status) && blocked[seed.ID] {
+		if !Closed(seed.Status) && t.blocked[seed.ID] {
 			p.Blocked++
 		}
+	}
+	if p.Total > 0 {
+		p.Checks = t.CheckTally(crownID)
 	}
 	return p
 }
@@ -67,12 +119,14 @@ func Stale(seeds []Seed, lastMoved map[string]time.Time, window time.Duration, n
 type PlotChildSpec struct {
 	Title  string   `json:"title"`
 	Body   string   `json:"body,omitempty"`
+	Checks []Check  `json:"checks,omitempty"`
 	Blocks []string `json:"blocks,omitempty"`
 }
 
 type PlotSpec struct {
 	Title    string          `json:"title"`
 	Body     string          `json:"body,omitempty"`
+	Checks   []Check         `json:"checks,omitempty"`
 	Children []PlotChildSpec `json:"children"`
 }
 
@@ -92,6 +146,9 @@ func ParsePlotSpec(raw []byte) (PlotSpec, error) {
 func ValidatePlotSpec(spec PlotSpec) error {
 	if err := ValidatePlant(spec.Title, spec.Body); err != nil {
 		return fmt.Errorf("crown: %w", err)
+	}
+	if err := validatePlotChecks(spec); err != nil {
+		return err
 	}
 	if len(spec.Children) == 0 {
 		return fmt.Errorf("a plot is a crown with children and this payload has none; to plant one seed use `attn seed plant`")
@@ -116,6 +173,28 @@ func ValidatePlotSpec(spec PlotSpec) error {
 	}
 	if from, to, cyclic := blocksCycle(spec.Children, slugs); cyclic {
 		return fmt.Errorf("the blocks edges cycle through %q and %q, so neither child would ever be ready; sequence one way only", from, to)
+	}
+	return nil
+}
+
+func validatePlotChecks(spec PlotSpec) error {
+	if err := ValidateCheckDefinitions(spec.Checks); err != nil {
+		return fmt.Errorf("crown: %w", err)
+	}
+	usedBy := map[string]string{}
+	for _, check := range spec.Checks {
+		usedBy[check.ID] = "the crown"
+	}
+	for i, child := range spec.Children {
+		if err := ValidateCheckDefinitions(child.Checks); err != nil {
+			return fmt.Errorf("child %d: %w", i+1, err)
+		}
+		for _, check := range child.Checks {
+			if owner, taken := usedBy[check.ID]; taken {
+				return fmt.Errorf("child %d and %s both define %s; one id names one statement in a plot tree", i+1, owner, check.ID)
+			}
+			usedBy[check.ID] = fmt.Sprintf("child %d", i+1)
+		}
 	}
 	return nil
 }

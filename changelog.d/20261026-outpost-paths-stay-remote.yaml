@@ -1,0 +1,4 @@
+kind: fixed
+area: outposts
+change: Open in editor and clicked paths in an outpost shell say the file is on that outpost instead of opening a Mac file with the same path. The editor tile and the file opener start at your notebook root, and an outpost shell's folder no longer lands in recent locations, the sessions list's folder check or a Mac worktree's sessions.
+symptom: Open in editor on an outpost shell in /tmp opened the Mac's /tmp, and in the outpost's home it said the directory does not exist; deleting a Mac worktree could close an outpost shell whose folder had the same path.

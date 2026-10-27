@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -126,7 +127,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	if err != nil || !again.AlreadyRetired || len(again.ReleasedSeeds) != 0 {
 		t.Fatalf("repeat retire = %+v %v", again, err)
 	}
-	if _, err := cli.CrewHandoff(wake.SessionID, "Retired for now.", false, protocol.CrewDayCloseSleep); err != nil {
+	if _, err := cli.CrewHandoff(wake.SessionID, "Retired for now.", false, protocol.CrewDayCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	w.restart()
@@ -219,7 +220,7 @@ func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
 			if _, err := cli.CrewRetire("Keel"); err != nil {
 				t.Fatal(err)
 			}
-			filed, err := cli.CrewHandoff(wake.SessionID, "Keep my letter for a later return.", false, how.close)
+			filed, err := cli.CrewHandoff(wake.SessionID, "Keep my letter for a later return.", false, how.close, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -243,49 +244,56 @@ func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
 }
 
 func TestARetiredMemberThatClearsStillReceivesItsSleepRequest(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	created, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	wake := wakeCrew(t, cli, "Keel", "")
-	day := w.Launched(string(wake.SessionID))
-	day.Prompted()
-	retired, err := cli.CrewRetire("Keel")
-	if err != nil || retired.Sleep == nil || protocol.Deref(retired.Sleep.DeliveryStatus) != protocol.AgentMsgStatusQueued {
-		t.Fatalf("queued retirement = %+v %v", retired, err)
-	}
-	next := clearClaude(app, day, string(wake.SessionID))
-	awaitClosed(app, string(wake.SessionID))
-	day.Reply("Ready in this conversation. <!-- attn:state=idle -->")
-	if got := day.Prompted(); !strings.Contains(got, inboxDoorbell) {
-		t.Fatalf("cleared retired day received %q", got)
-	}
-	mail := readInbox(t, cli, string(next.ID), 0)
-	found := false
-	for _, item := range mail.Items {
-		if strings.Contains(item.Content, "user is asking you to close") {
-			found = true
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		created, err := cli.CrewCreate(protocol.CrewCreateMessage{Name: "Keel"})
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-	if !found {
-		t.Fatalf("cleared retired member's mail = %+v", mail)
-	}
-	all, err := cli.CrewList(true)
-	if all != nil {
-		all.Members = regularCrewMembers(all.Members)
-	}
-	if err != nil || len(all.Members) != 1 || all.Members[0].Key != created.Member.Key || !all.Members[0].Retired || protocol.Deref(all.Members[0].BindingSession) != next.ID {
-		t.Fatalf("cleared retired member = %+v %v", all, err)
-	}
-	filed, err := cli.CrewHandoff(next.ID, "Retired, with the cleared day finished.", false, protocol.CrewDayCloseNap)
-	if err != nil || protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil {
-		t.Fatalf("retired clear closure = %+v %v", filed, err)
-	}
-	letter, err := os.ReadFile(filed.Path)
-	if err != nil || !strings.Contains(string(letter), "Retired, with the cleared day finished.") {
-		t.Fatalf("retired clear letter = %q %v", letter, err)
-	}
-	awaitClosed(app, string(next.ID))
+		wake := wakeCrew(t, cli, "Keel", "")
+		day := w.bootBubbleClaude(t, string(wake.SessionID))
+		retired, err := cli.CrewRetire("Keel")
+		if err != nil || retired.Sleep == nil || protocol.Deref(retired.Sleep.DeliveryStatus) != protocol.AgentMsgStatusQueued {
+			t.Fatalf("queued retirement = %+v %v", retired, err)
+		}
+		app.TypeLine(string(wake.SessionID), "/clear")
+		day.transcript = fakeagent.WriteClaudeTranscript(t, day.term.Options.CWD, "cleared")
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(day.self), day.transcript.ConversationID, day.transcript.Path); err != nil {
+			t.Fatal(err)
+		}
+		next := awaitSuccessor(app, string(wake.SessionID))
+		awaitClosed(app, string(wake.SessionID))
+		day.id = string(next.ID)
+		day.reply("Ready in this conversation. <!-- attn:state=idle -->")
+		w.advance(30 * time.Second)
+		if got := day.prompts(); day.promptsContaining(inboxDoorbell) != 1 {
+			t.Fatalf("cleared retired day received %q", got)
+		}
+		mail := readInbox(t, cli, string(next.ID), 0)
+		found := false
+		for _, item := range mail.Items {
+			if strings.Contains(item.Content, "user is asking you to close") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("cleared retired member's mail = %+v", mail)
+		}
+		all, err := cli.CrewList(true)
+		if all != nil {
+			all.Members = regularCrewMembers(all.Members)
+		}
+		if err != nil || len(all.Members) != 1 || all.Members[0].Key != created.Member.Key || !all.Members[0].Retired || protocol.Deref(all.Members[0].BindingSession) != next.ID {
+			t.Fatalf("cleared retired member = %+v %v", all, err)
+		}
+		filed, err := cli.CrewHandoff(next.ID, "Retired, with the cleared day finished.", false, protocol.CrewDayCloseNap, "")
+		if err != nil || protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil {
+			t.Fatalf("retired clear closure = %+v %v", filed, err)
+		}
+		letter, err := os.ReadFile(filed.Path)
+		if err != nil || !strings.Contains(string(letter), "Retired, with the cleared day finished.") {
+			t.Fatalf("retired clear letter = %q %v", letter, err)
+		}
+		awaitClosed(app, string(next.ID))
+	}, fakeagent.Claude)
 }

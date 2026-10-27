@@ -330,4 +330,19 @@ describe('App pane header', () => {
     await openPane({ terminal_build_stale: false });
     expect(screen.queryByTestId('terminal-stale-build-notice')).toBeNull();
   });
+
+  it('warns while another terminal has the conversation open, naming where, until it closes', async () => {
+    const peer = daemonSession('s2', { label: 'ledger sweep, again', state: 'idle', conversation_shared_with: ['s1'] });
+    const { daemon } = await openPane(
+      { conversation_shared_with: ['s2'] },
+      { sessions: [peer], desktops: [soloDesktop('s1', { shortcut_slot: 1 }), soloDesktop('s2', { shortcut_slot: 2, name: 'Reviews' })] },
+    );
+    const notice = () => screen.queryByTestId('shared-conversation-notice');
+    expect(notice()).toHaveTextContent('This conversation is also open in “ledger sweep, again” on Reviews.');
+    expect(notice()).toHaveTextContent('Two agent processes on one conversation split its history. Close one of them.');
+
+    await update(daemon, daemonSession('s1', { label: 'ledger sweep', state: 'idle' }));
+
+    expect(notice()).toBeNull();
+  });
 });

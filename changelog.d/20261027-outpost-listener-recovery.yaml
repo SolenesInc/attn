@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: Repeated inbound bridge failures publish only when the failure changes, and completed remote closes leave no teardown work for reconnect.

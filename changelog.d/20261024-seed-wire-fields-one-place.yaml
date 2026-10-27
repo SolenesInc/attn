@@ -1,0 +1,7 @@
+kind: internal
+area: garden
+change: >
+  The daemon builds every wire seed, with its readiness and plot progress, in
+  one place. The plant, plot, edit, link and search results now carry
+  `plot_progress` like `show` and the garden push do; the CLI prints none of
+  them.

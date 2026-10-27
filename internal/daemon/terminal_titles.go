@@ -3,25 +3,40 @@ package daemon
 import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) handlePTYTitle(terminal harness.TerminalID, title string) {
-	d.terminalTitlesMu.Lock()
-	if d.terminalTitles == nil {
-		d.terminalTitles = make(map[harness.TerminalID]string)
+	r := d.terminals()
+	r.mu.Lock()
+	if r.titles == nil {
+		r.titles = make(map[harness.TerminalID]string)
 	}
-	changed := d.terminalTitles[terminal] != title
-	d.terminalTitles[terminal] = title
-	d.terminalTitlesMu.Unlock()
-	if session, shown := d.shownIn(terminal); changed && shown {
-		d.publishFact(FactSessionTitleChanged, string(session), nil)
+	r.titles[terminal] = title
+	r.mu.Unlock()
+	if session, shown := d.shownIn(terminal); shown {
+		d.reportTerminalTitle(session)
 	}
 }
 
+func (d *Daemon) reportTerminalTitle(session protocol.SessionID) {
+	monitor := d.sessionMonitor(session)
+	if monitor == nil {
+		return
+	}
+	terminal := d.primaryTerminal(session)
+	r := d.terminals()
+	r.mu.RLock()
+	title := r.titles[terminal]
+	r.mu.RUnlock()
+	monitor.ReportTerminalTitle(title)
+}
+
 func (d *Daemon) forgetTerminalTitle(terminal harness.TerminalID) {
-	d.terminalTitlesMu.Lock()
-	delete(d.terminalTitles, terminal)
-	d.terminalTitlesMu.Unlock()
+	r := d.terminals()
+	r.mu.Lock()
+	delete(r.titles, terminal)
+	r.mu.Unlock()
 }
 
 func (d *Daemon) decorateSessionWithTitle(session *protocol.Session) {
@@ -34,10 +49,8 @@ func (d *Daemon) decorateSessionWithTitle(session *protocol.Session) {
 }
 
 func (d *Daemon) sessionTerminalTitle(sessionID protocol.SessionID) string {
-	terminal := d.primaryTerminal(sessionID)
-	d.terminalTitlesMu.RLock()
-	defer d.terminalTitlesMu.RUnlock()
-	return d.terminalTitles[terminal]
+	view, _ := d.monitorViewFor(sessionID)
+	return view.TerminalTitle.V
 }
 
 func (d *Daemon) decorateLedgerEntryWithTitle(entry *protocol.SessionLedgerEntry) {
@@ -46,6 +59,6 @@ func (d *Daemon) decorateLedgerEntryWithTitle(entry *protocol.SessionLedgerEntry
 	}
 	entry.Label = d.sessionTerminalTitle(entry.ID)
 	if entry.Label == "" {
-		entry.Label = defaultSessionLabel(entry.Directory, entry.ID)
+		entry.Label = store.DefaultSessionLabel(entry.Directory, entry.ID)
 	}
 }

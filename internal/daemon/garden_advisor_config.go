@@ -19,7 +19,6 @@ const (
 	gardenAdvisorCodexDefaultEffort  = "xhigh"
 	gardenAdvisorClaudeDefaultModel  = "sonnet"
 	gardenAdvisorClaudeDefaultEffort = "medium"
-	gardenAdvisorCopilotDefaultModel = "claude-sonnet-4.6"
 )
 
 type gardenAdvisorConfig struct {
@@ -37,10 +36,6 @@ func defaultGardenAdvisorConfig(agent string) (gardenAdvisorConfig, error) {
 	case "claude":
 		return gardenAdvisorConfig{
 			Agent: "claude",
-		}, nil
-	case "copilot":
-		return gardenAdvisorConfig{
-			Agent: "copilot",
 		}, nil
 	default:
 		return gardenAdvisorConfig{}, fmt.Errorf("garden advisor agent is not supported: %s", agent)
@@ -95,7 +90,7 @@ func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
 	driver := agentdriver.Get(config.Agent)
 	configured := ""
 	if d.store != nil {
-		configured = d.daemonSetting(daemonSettingKey(canonicalExecutableSettingKey(config.Agent)))
+		configured = d.machineSetting(MachineSetting(canonicalExecutableSettingKey(config.Agent)))
 	}
 	if _, err := exec.LookPath(driver.ResolveExecutable(configured)); err != nil {
 		return fmt.Errorf("garden advisor executable for %s was not found: %w", config.Agent, err)
@@ -107,7 +102,7 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 	if d.store == nil {
 		return gardenAdvisorConfig{}, errors.New("garden advisor settings unavailable")
 	}
-	config, err := parseGardenAdvisorConfig(d.daemonSetting(settingGardenAdvisor))
+	config, err := parseGardenAdvisorConfig(d.homeSetting(SettingGardenAdvisor))
 	if err != nil {
 		return gardenAdvisorConfig{}, err
 	}
@@ -117,9 +112,6 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 	case "claude":
 		fallback = gardenAdvisorClaudeDefaultModel
 		defaultEffort = gardenAdvisorClaudeDefaultEffort
-	case "copilot":
-		fallback = gardenAdvisorCopilotDefaultModel
-		defaultEffort = ""
 	}
 	if config.Effort == "" {
 		config.Effort = defaultEffort
@@ -145,7 +137,7 @@ func (d *Daemon) resolveGardenAdvisor(
 	if !ok {
 		return nil, "", fmt.Errorf("agent %s does not support headless tasks", config.Agent)
 	}
-	configured := d.daemonSetting(daemonSettingKey(canonicalExecutableSettingKey(config.Agent)))
+	configured := d.machineSetting(MachineSetting(canonicalExecutableSettingKey(config.Agent)))
 	executable, err := exec.LookPath(driver.ResolveExecutable(configured))
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve %s executable: %w", config.Agent, err)

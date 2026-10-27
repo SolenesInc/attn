@@ -105,7 +105,10 @@ func (d *Daemon) crewMember(key who.MemberKey) (crew.Member, docstore.Document, 
 }
 
 func (d *Daemon) trustClaudeCrewHome(home string, loginEnv []string) error {
-	env := pty.MergeEnvironment(os.Environ(), pty.LoginShellEnvironment(pty.GetUserLoginShell(), loginEnv, d.logf))
+	if len(loginEnv) == 0 {
+		loginEnv = d.loginShellEnvironment()
+	}
+	env := pty.MergeEnvironment(os.Environ(), loginEnv)
 	configDir := ""
 	for _, entry := range env {
 		if value, found := strings.CutPrefix(entry, "CLAUDE_CONFIG_DIR="); found {
@@ -169,6 +172,21 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		priming.FirstDay = member.FirstDay
 	}
 	d.primeCrewGarden(&priming, member.Key)
+	var memory crew.Memory
+	if d.crewMemoryEnabled() {
+		lock := d.crewMemoryLock(member.Key)
+		lock.Lock()
+		home, pathErr := d.crewMemoryHome(member)
+		if pathErr == nil {
+			memory, pathErr = crew.ReadMemory(home)
+		}
+		lock.Unlock()
+		if pathErr != nil {
+			return crew.Priming{}, pathErr
+		}
+		priming.MemoryEnabled = true
+		priming.MemoryView = memory.WakeView()
+	}
 	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {
 		priming.Charter = string(charter)
 	} else if !os.IsNotExist(err) {
@@ -203,7 +221,11 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		}
 	}
 	priming.HandoffName = names[0]
-	priming.OlderHandoffs = names[1:]
+	if priming.MemoryEnabled {
+		priming.ImportLetters = len(memory.Entries) == 0
+	} else {
+		priming.OlderHandoffs = names[1:]
+	}
 	letterPath := filepath.Join(handoffsDir, names[0])
 	if letter, err := os.ReadFile(letterPath); err == nil {
 		priming.Handoff = string(letter)
@@ -237,7 +259,7 @@ func (d *Daemon) primeCrewGarden(priming *crew.Priming, key who.MemberKey) {
 			ID:    plot.ID,
 			Slug:  plot.StepSlug,
 			Title: plot.Title,
-			Ready: garden.PlotProgress(read.seeds, plot.ID, read.ready).Ready,
+			Ready: read.plots.Progress(plot.ID, read.ready).Ready,
 		})
 	}
 }
@@ -447,6 +469,9 @@ func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) 
 		result.Guidance = protocol.Ptr(block)
 		result.AwarenessDirs = append(result.AwarenessDirs, member.AwarenessDirs...)
 		result.PrimingBytes = len(block)
+		if d.crewMemoryEnabled() {
+			result.MemoryEnabled = protocol.Ptr(true)
+		}
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewPrimeResult: result})
 }
@@ -553,7 +578,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (resul
 	var previousRoot *string
 	defer func() {
 		if previousRoot != nil {
-			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(settingNotebookRoot), Value: *previousRoot, ProfileID: &profile}); err != nil {
+			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(SettingNotebookRoot), Value: *previousRoot, ProfileID: &profile}); err != nil {
 				resultErr = errors.Join(resultErr, fmt.Errorf("restore Notebook folder %q after failed Chief setup: %w", *previousRoot, err))
 			}
 		}
@@ -608,8 +633,8 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (resul
 			if !chief || before.Home != "" {
 				return nil, false, fmt.Errorf("the Notebook folder can only be picked before the Chief is configured; use attn settings set notebook.root <folder> to change it later")
 			}
-			oldRoot := d.profileSetting(profile, settingNotebookRoot)
-			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(settingNotebookRoot), Value: *msg.NotebookRoot, ProfileID: &profile}); err != nil {
+			oldRoot := d.profileSetting(profile, SettingNotebookRoot)
+			if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(SettingNotebookRoot), Value: *msg.NotebookRoot, ProfileID: &profile}); err != nil {
 				return nil, false, err
 			}
 			if previousRoot == nil {

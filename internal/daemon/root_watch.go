@@ -201,18 +201,15 @@ func (d *Daemon) rootChanged(root string, paths []string) {
 	if !d.isNotebookRoot(root) {
 		return
 	}
-	var mdPaths []string
+	d.notebookFilesChanged()
+	if !d.enrollmentStatus().IsHome() {
+		return
+	}
 	artifactSeeds := map[string]struct{}{}
 	for _, p := range paths {
-		if _, err := notebook.CleanPath(p); err == nil {
-			mdPaths = append(mdPaths, p)
-		}
 		if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {
 			artifactSeeds[seedID] = struct{}{}
 		}
-	}
-	if len(mdPaths) > 0 {
-		d.broadcastNotebookChanged(originExternal, mdPaths...)
 	}
 	if len(artifactSeeds) > 0 {
 		d.coalesceSnapshots(func() {

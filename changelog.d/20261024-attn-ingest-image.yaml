@@ -1,0 +1,6 @@
+kind: internal
+area: analytics
+change: >
+  `attn-ingest` is published as the container image
+  `ghcr.io/solenesinc/attn-ingest`, and `/metrics` counts the bytes of
+  accepted batches.

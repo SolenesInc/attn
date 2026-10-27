@@ -1,6 +1,8 @@
+import { OutpostsSettings } from './OutpostsSettings';
 import { useProfilesStore } from '../store/profiles';
 import { ModelTierSettings } from './ModelTierSettings';
 import { forwardRef, type ForwardedRef } from 'react';
+import { AnalyticsSettings } from './Analytics/AnalyticsSettings';
 import { AutoModeSettings } from './AutoModeSettings';
 import { DelegationSettings } from './DelegationSettings';
 import { SettingsAutosaveProvider, SettingsAutosaveStatus } from './SettingsAutosave';
@@ -11,7 +13,6 @@ import {
   BackgroundAgentSettings,
   BackgroundTasksSection,
   ConnectivitySettings,
-  DataSettings,
   EventBusSection,
   HygieneSettings,
   PluginSettings,
@@ -120,8 +121,6 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                     pluginProblemCount={state.pluginProblemCount}
                     activePluginCount={state.activePluginCount}
                     plugins={state.plugins}
-                    modelCaptureEnabled={state.modelCaptureEnabled}
-                    modelCaptureBytes={state.modelCaptureBytes}
                     autoModePolicy={state.autoModePolicy}
                     autoSettleEnabled={state.autoSettleEnabled}
                     mutedRepos={state.mutedRepos}
@@ -233,31 +232,24 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           headlessContextCapDraft={state.headlessContextCapDraft}
         />
       );
+    case 'outposts':
+      return state.outpostsEnabled ? <OutpostsSettings /> : null;
     case 'experimental':
       return (
         <ExperimentalSettings
+          outpostsEnabled={state.outpostsEnabled}
           newSessionLauncherEnabled={state.newSessionLauncherEnabled}
           codexSharedEnabled={state.codexSharedEnabled}
           queueShowHiddenSessions={state.queueShowHiddenSessions}
+          queueQuietNotifications={state.queueQuietNotifications}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
           quickCaptureEnabled={state.quickCaptureEnabled}
           asksEnabled={state.asksEnabled}
           calloutsEnabled={state.calloutsEnabled}
+          analyticsEnabled={state.analyticsEnabled}
           ptyBackendMode={state.ptyBackendMode}
           sharedPtyHostEnabled={state.sharedPtyHostEnabled}
           onSetSetting={state.onSetSetting}
-        />
-      );
-    case 'data':
-      return (
-        <DataSettings
-          handleToggleModelCapture={state.handleToggleModelCapture}
-          modelCaptureEnabled={state.modelCaptureEnabled}
-          modelCaptureInterval={state.modelCaptureInterval}
-          onSetSetting={state.onSetSetting}
-          modelCaptureMaxGB={state.modelCaptureMaxGB}
-          modelCaptureBytes={state.modelCaptureBytes}
-          modelCapturePath={state.modelCapturePath}
         />
       );
     case 'hygiene':
@@ -289,6 +281,21 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           sendBusSetConsumerEnabled={state.sendBusSetConsumerEnabled}
         />
       );
+    case 'analytics':
+      return state.analyticsEnabled ? (
+        <AnalyticsSettings
+          sharing={state.settings['analytics.sharing_enabled'] === 'true'}
+          sendVents={state.settings['analytics.share_vents'] === 'true'}
+          toolVents={state.settings['analytics.tool_vents'] === 'true'}
+          onSetSetting={state.onSetSetting}
+          onDisableRecording={() => {
+            state.onSetSetting('analytics.enabled', 'false');
+            void state.selectSection('experimental');
+          }}
+          onOpenSession={(sessionId) => void state.closeSettings().then(() => state.onOpenSession?.(sessionId))}
+          onOpenSeed={(seedId) => void state.closeSettings().then(() => state.onOpenSeed?.(seedId))}
+        />
+      ) : null;
     case 'delegation':
       return <DelegationSettings policy={delegationPolicy} loadModels={sendHarnessModels} />;
     case 'autoMode':

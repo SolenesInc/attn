@@ -41,6 +41,8 @@ func main() {
 		err = screen(args)
 	case "input":
 		err = input(args)
+	case "outposts":
+		err = outposts(args)
 	case "list":
 		err = list(args)
 	case "refresh-prs":
@@ -65,13 +67,14 @@ func usage() {
 URL: %s (ATTN_WS_URL > ATTN_INSTANCE-derived port > dev; prod needs an explicit ATTN_WS_URL)
 
 Commands:
-  add-session --cwd D [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
+  add-session --cwd D [--host OUTPOST] [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
   screen --id I
   input --id I --text T [--enter]
   list
   refresh-prs
+  outposts [--add NAME --address HOST:PORT | --remove ID | --repair ID | --update ID] [--until STATE | --watch]
 `, wsURL())
 }
 
@@ -95,7 +98,8 @@ func addSession(args []string) error {
 	profile := fs.String("profile", "", "owning profile id (defaults to the daemon's selected profile)")
 	place := fs.Bool("place", false, "place the session on the profile's current desktop beside its active pane")
 	cwd := fs.String("cwd", "", "session working directory (required)")
-	agent := fs.String("agent", "claude", "agent: claude | codex | copilot | shell")
+	host := fs.String("host", "", "outpost name or id to run the shell on (defaults to the home's machine)")
+	agent := fs.String("agent", "claude", "agent: claude | codex | shell")
 	label := fs.String("label", "", "session label (defaults to dir basename)")
 	initialPromptFile := fs.String("initial-prompt-file", "", "file containing the initial agent prompt")
 	yolo := fs.Bool("yolo", false, "launch with agent approval prompts bypassed")
@@ -124,6 +128,9 @@ func addSession(args []string) error {
 		"agent":      *agent,
 		"cols":       *cols,
 		"rows":       *rows,
+	}
+	if *host != "" {
+		msg["host"] = *host
 	}
 	if *place {
 		msg["placement"] = map[string]any{}
@@ -261,19 +268,13 @@ func list(_ []string) error {
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	if err := sendClientHello(ctx, conn); err != nil {
-		return err
-	}
-	_, data, err := conn.Read(ctx)
+	data, err := hello(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("read initial_state: %w", err)
+		return err
 	}
 	var event map[string]any
 	if err := json.Unmarshal(data, &event); err != nil {
 		return fmt.Errorf("decode: %w", err)
-	}
-	if ev, _ := event["event"].(string); ev != "initial_state" {
-		return fmt.Errorf("expected initial_state, got %q", ev)
 	}
 	pretty, _ := json.MarshalIndent(map[string]any{
 		"sessions": event["sessions"],
@@ -309,11 +310,8 @@ func send(payload map[string]any) error {
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	if err := sendClientHello(ctx, conn); err != nil {
+	if _, err := hello(ctx, conn); err != nil {
 		return err
-	}
-	if _, _, err := conn.Read(ctx); err != nil {
-		return fmt.Errorf("drain initial_state: %w", err)
 	}
 
 	body, err := json.Marshal(payload)
@@ -347,12 +345,9 @@ func sendAndWaitMatch(payload map[string]any, expectedEvent string, match func(m
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	if err := sendClientHello(ctx, conn); err != nil {
-		return nil, err
-	}
-	_, initial, err := conn.Read(ctx)
+	initial, err := hello(ctx, conn)
 	if err != nil {
-		return nil, fmt.Errorf("drain initial_state: %w", err)
+		return nil, err
 	}
 	if profileID, ok := payload["profile_id"].(string); ok && profileID == "" {
 		var state struct {
@@ -401,7 +396,7 @@ func sendAndWaitMatch(payload map[string]any, expectedEvent string, match func(m
 	}
 }
 
-func sendClientHello(ctx context.Context, conn *websocket.Conn) error {
+func hello(ctx context.Context, conn *websocket.Conn) ([]byte, error) {
 	body, err := json.Marshal(map[string]any{
 		"cmd":          "client_hello",
 		"client_kind":  "wsctl",
@@ -410,12 +405,26 @@ func sendClientHello(ctx context.Context, conn *websocket.Conn) error {
 		"client_token": config.ClientToken(),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := conn.Write(ctx, websocket.MessageText, body); err != nil {
-		return fmt.Errorf("write client_hello: %w", err)
+		return nil, fmt.Errorf("write client_hello: %w", err)
 	}
-	return nil
+	for {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("read initial_state: %w", err)
+		}
+		var event struct {
+			Event string `json:"event"`
+		}
+		if err := json.Unmarshal(data, &event); err != nil {
+			return nil, fmt.Errorf("decode: %w", err)
+		}
+		if event.Event == protocol.EventInitialState {
+			return data, nil
+		}
+	}
 }
 
 func newID(prefix string) string {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -69,28 +69,19 @@ func (w *launchWatch) settle(outcome launchOutcome) {
 	}
 }
 
-func harnessReportedState(source string) bool {
-	switch source {
-	case stateSourceHook, stateSourceStopHook, stateSourceHookNotify, stateSourceHookStopFailure,
-		stateSourceHookCompaction, stateSourceTranscript, stateSourcePluginDriver, stateSourceLink:
-		return true
-	}
-	return false
-}
-
 func (d *Daemon) noteLaunchStarted(sessionID protocol.SessionID) {
 	d.resolveLaunchWatch(sessionID, launchOutcome{startedAt: time.Now()})
 }
 
-func (d *Daemon) noteLaunchExited(sessionID protocol.SessionID, info ptybackend.ExitInfo) {
-	d.resolveLaunchWatch(sessionID, launchOutcome{exit: d.exitScreenOrBare(sessionID, info)})
+func (d *Daemon) noteLaunchExited(sessionID protocol.SessionID, exit sessionmonitor.Exit) {
+	d.resolveLaunchWatch(sessionID, launchOutcome{exit: d.exitScreenOrBare(sessionID, exit)})
 }
 
-func (d *Daemon) exitScreenOrBare(sessionID protocol.SessionID, info ptybackend.ExitInfo) *store.SessionExitScreen {
-	if exit := d.store.GetSessionExitScreen(sessionID); exit != nil {
-		return exit
+func (d *Daemon) exitScreenOrBare(sessionID protocol.SessionID, exit sessionmonitor.Exit) *store.SessionExitScreen {
+	if saved := d.store.GetSessionExitScreen(sessionID); saved != nil {
+		return saved
 	}
-	return &store.SessionExitScreen{SessionID: sessionID, ExitCode: info.ExitCode, ExitSignal: info.Signal}
+	return &store.SessionExitScreen{SessionID: sessionID, ExitCode: exit.Code, ExitSignal: exit.Signal}
 }
 
 func (d *Daemon) awaitDelegatedLaunch(sessionID protocol.SessionID, watch *launchWatch) launchOutcome {

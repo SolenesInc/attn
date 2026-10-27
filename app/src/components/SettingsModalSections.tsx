@@ -16,8 +16,6 @@ import { SessionActivitySettings } from './SessionActivitySettings';
 import { SessionCostPriceSettings } from './SessionCostPriceSettings';
 import {
   DEFAULT_CONTEXT_WINDOW_CAP,
-  MODEL_CAPTURE_INTERVAL_OPTIONS,
-  MODEL_CAPTURE_MAX_GB_OPTIONS,
 } from './settingsModalShared';
 import { SavedMark } from './useSavedFlash';
 import type { SettingsModalState } from './useSettingsModalState';
@@ -30,8 +28,6 @@ export function SectionStatusPills({
   pluginProblemCount,
   activePluginCount,
   plugins,
-  modelCaptureEnabled,
-  modelCaptureBytes,
   autoModePolicy,
   autoSettleEnabled,
   mutedRepos,
@@ -47,8 +43,6 @@ export function SectionStatusPills({
   | 'pluginProblemCount'
   | 'activePluginCount'
   | 'plugins'
-  | 'modelCaptureEnabled'
-  | 'modelCaptureBytes'
   | 'autoModePolicy'
   | 'autoSettleEnabled'
   | 'mutedRepos'
@@ -74,8 +68,6 @@ export function SectionStatusPills({
           plugins={plugins}
         />
       );
-    case 'data':
-      return <DataStatusPills modelCaptureEnabled={modelCaptureEnabled} modelCaptureBytes={modelCaptureBytes} />;
     case 'autoMode':
       return <AutoModeStatusPills autoModePolicy={autoModePolicy} />;
     case 'hygiene':
@@ -85,6 +77,13 @@ export function SectionStatusPills({
     case 'desktop':
       return (
         <DesktopStatusPills hasProjectsDirChange={hasProjectsDirChange} openSentFilesEnabled={openSentFilesEnabled} />
+      );
+    case 'analytics':
+      return (
+        <>
+          <span className="settings-pill good">Recording</span>
+          <span className="settings-pill">Local only</span>
+        </>
       );
     case 'general':
     default:
@@ -649,24 +648,30 @@ export function PluginSettings({
 
 export function ExperimentalSettings({
   quickCaptureEnabled,
+  outpostsEnabled,
   newSessionLauncherEnabled,
   codexSharedEnabled,
   queueShowHiddenSessions,
+  queueQuietNotifications,
   directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
+  analyticsEnabled,
   ptyBackendMode,
   sharedPtyHostEnabled,
   onSetSetting,
 }: Pick<
   SettingsModalState,
   | 'quickCaptureEnabled'
+  | 'outpostsEnabled'
   | 'newSessionLauncherEnabled'
   | 'codexSharedEnabled'
   | 'queueShowHiddenSessions'
+  | 'queueQuietNotifications'
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
+  | 'analyticsEnabled'
   | 'ptyBackendMode'
   | 'sharedPtyHostEnabled'
   | 'onSetSetting'
@@ -718,6 +723,17 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
           >
             {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Outposts</p>
+            <p className="settings-row-copy" id="settings-outposts-description">Connect this home to attn on other computers. Add them in Settings → Outposts.</p>
+          </div>
+          <button type="button" role="switch" aria-label="Outposts" aria-checked={outpostsEnabled}
+            aria-describedby="settings-outposts-description" className="settings-action"
+            onClick={() => onSetSetting('outposts_enabled', outpostsEnabled ? 'false' : 'true')}>
+            {outpostsEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">
@@ -784,6 +800,28 @@ export function ExperimentalSettings({
         </div>
         <div className="settings-row-card">
           <div>
+            <p className="settings-row-title">Quiet notifications in the queue</p>
+            <p className="settings-row-copy" id="queue-quiet-notifications-description">
+              When attn wakes an agent with a notification (a message, a seed update, a pull request update), the agent
+              stays out of your queue when it stops, unless it needs an approval or opens its turn to ask for you. An
+              agent that was waiting for you leaves the queue when a notification sets it working, without moving you.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Quiet notifications in the queue"
+            aria-checked={queueQuietNotifications}
+            aria-describedby="queue-quiet-notifications-description"
+            className="settings-action"
+            data-testid="settings-queue-quiet-notifications-toggle"
+            onClick={() => onSetSetting('queue_quiet_notifications', queueQuietNotifications ? 'false' : 'true')}
+          >
+            {queueQuietNotifications ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
             <p className="settings-row-title">Asks</p>
             <p className="settings-row-copy" id="settings-asks-description">
               Answer agents' questions from one drawer without opening their terminals. Open it with{' '}
@@ -815,6 +853,20 @@ export function ExperimentalSettings({
             className="settings-action" data-testid="settings-callouts-toggle"
             onClick={() => onSetSetting('callouts_enabled', calloutsEnabled ? 'false' : 'true')}>
             {calloutsEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Usage analytics</p>
+            <p className="settings-row-copy" id="settings-analytics-description">
+              Keep a redacted record of how attn is used on this machine. Nothing is sent.
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Usage analytics"
+            aria-checked={analyticsEnabled} aria-describedby="settings-analytics-description"
+            className="settings-action" data-testid="settings-analytics-toggle"
+            onClick={() => onSetSetting('analytics.enabled', analyticsEnabled ? 'false' : 'true')}>
+            {analyticsEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </div>
@@ -1074,111 +1126,6 @@ export function AgentSettings({
         <summary>Model pricing overrides</summary>
         <SessionCostPriceSettings settings={settings} onSetSetting={onSetSetting} />
       </details>
-    </>
-  );
-}
-
-export function DataSettings({
-  handleToggleModelCapture,
-  modelCaptureEnabled,
-  modelCaptureInterval,
-  onSetSetting,
-  modelCaptureMaxGB,
-  modelCaptureBytes,
-  modelCapturePath,
-}: Pick<
-  SettingsModalState,
-  | 'handleToggleModelCapture'
-  | 'modelCaptureEnabled'
-  | 'modelCaptureInterval'
-  | 'onSetSetting'
-  | 'modelCaptureMaxGB'
-  | 'modelCaptureBytes'
-  | 'modelCapturePath'
->) {
-  return (
-    <>
-      <section className="settings-block">
-        <div className="settings-block-body">
-          <div className="settings-warning">
-            Captures exact visible terminal text. Records may contain source code, conversations, command output, and
-            secrets. Files stay in this attn instance and are never uploaded automatically.
-          </div>
-          <div className="settings-row-card">
-            <div>
-              <p className="settings-row-title">Capture local Codex and Claude sessions</p>
-              <p className="settings-row-copy">
-                Applies to sessions already running and sessions launched later. Disabling collection stops new records
-                but keeps the corpus already on disk.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="settings-action"
-              data-testid="settings-model-capture-toggle"
-              onClick={handleToggleModelCapture}
-            >
-              {modelCaptureEnabled ? 'Stop capture' : 'Enable capture'}
-            </button>
-          </div>
-          <div className="settings-field-grid">
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="settings-model-capture-interval">
-                Changed-frame interval
-              </label>
-              <select
-                id="settings-model-capture-interval"
-                data-testid="settings-model-capture-interval"
-                className="settings-input"
-                value={modelCaptureInterval}
-                onChange={(event) => onSetSetting('model_capture.interval_seconds', event.target.value)}
-              >
-                {!MODEL_CAPTURE_INTERVAL_OPTIONS.includes(Number(modelCaptureInterval)) && (
-                  <option value={modelCaptureInterval}>{modelCaptureInterval} seconds</option>
-                )}
-                {MODEL_CAPTURE_INTERVAL_OPTIONS.map((seconds) => (
-                  <option key={seconds} value={seconds}>
-                    {seconds} seconds
-                  </option>
-                ))}
-              </select>
-              <span className="settings-hint">
-                State changes are captured immediately; unchanged viewports are deduplicated.
-              </span>
-            </div>
-            <div className="settings-field">
-              <label className="settings-label" htmlFor="settings-model-capture-max-gb">
-                Storage cap
-              </label>
-              <select
-                id="settings-model-capture-max-gb"
-                data-testid="settings-model-capture-max-gb"
-                className="settings-input"
-                value={modelCaptureMaxGB}
-                onChange={(event) => onSetSetting('model_capture.max_gb', event.target.value)}
-              >
-                {!MODEL_CAPTURE_MAX_GB_OPTIONS.includes(Number(modelCaptureMaxGB)) && (
-                  <option value={modelCaptureMaxGB}>{modelCaptureMaxGB} GB</option>
-                )}
-                {MODEL_CAPTURE_MAX_GB_OPTIONS.map((gb) => (
-                  <option key={gb} value={gb}>
-                    {gb} GB
-                  </option>
-                ))}
-              </select>
-              <span className="settings-hint">Oldest hourly files are removed first.</span>
-            </div>
-          </div>
-          <div className="settings-meta-row">
-            <span className="settings-meta-label">Captured</span>
-            <code data-testid="settings-model-capture-size">{modelCaptureBytes}</code>
-          </div>
-          <div className="settings-meta-row">
-            <span className="settings-meta-label">Folder</span>
-            <code data-testid="settings-model-capture-path">{modelCapturePath || 'Waiting for daemon settings…'}</code>
-          </div>
-        </div>
-      </section>
     </>
   );
 }
@@ -1520,20 +1467,6 @@ export function PluginsStatusPills({
       <span className="settings-pill">
         {activePluginCount}/{plugins.length} running
       </span>
-    </>
-  );
-}
-
-export function DataStatusPills({
-  modelCaptureEnabled,
-  modelCaptureBytes,
-}: Pick<SettingsModalState, 'modelCaptureEnabled' | 'modelCaptureBytes'>) {
-  return (
-    <>
-      <span className={`settings-pill ${modelCaptureEnabled ? 'warn' : 'good'}`}>
-        {modelCaptureEnabled ? 'capture on' : 'capture off'}
-      </span>
-      <span className="settings-pill">{modelCaptureBytes}</span>
     </>
   );
 }

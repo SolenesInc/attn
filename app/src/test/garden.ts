@@ -55,8 +55,10 @@ export async function renderGarden(
     seeds,
     documents: {},
     push(next, pushedTotal = next.length) {
+      const held = new Map(garden.seeds.map((seed) => [seed.id, JSON.stringify(seed)]));
+      const changed = next.filter((seed) => held.get(seed.id) !== JSON.stringify(seed));
       garden.seeds = next;
-      daemon.emit({ event: 'garden_seeds_updated', profile_id: 'profile-default', seeds: next, total: pushedTotal });
+      daemon.emit({ event: 'garden_seeds_changed', profile_id: 'profile-default', order: next.map((seed) => seed.id), seeds: changed, total: pushedTotal });
     },
     answer({ seed_id, request_id }) {
       const seed = garden.seeds.find((candidate) => candidate.id === seed_id);

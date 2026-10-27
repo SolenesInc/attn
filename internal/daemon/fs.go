@@ -38,6 +38,9 @@ func (d *Daemon) resolveFsRoot(client *wsClient, raw string) (string, error) {
 	if !client.isTrustedAppClient() {
 		return "", fmt.Errorf("fs root requires the authenticated attn app client")
 	}
+	if d.isNotebookRoot(raw) {
+		return normalizeNotebookRoot(raw)
+	}
 	resolved, err := normalizeExternalRoot(raw)
 	if err != nil {
 		return "", fmt.Errorf("fs root %w", err)
@@ -225,14 +228,10 @@ func (d *Daemon) sendFsRenameWSResult(client *wsClient, requestID, oldPath, newP
 		if readErr != nil {
 			err = readErr
 		} else {
-			inNotebook := d.isNotebookRoot(root)
 			d.noteSelfWrite(root, notebook.SelfWrite{Rel: oldRel}, notebook.SelfWrite{Rel: newRel, Hash: hash})
 			err = store.Rename(oldRel, newRel)
 			if err == nil {
 				result = &protocol.FsRenameResult{Path: oldRel, NewPath: newRel}
-				if inNotebook {
-					d.broadcastNotebookChanged(originUI, oldRel, newRel)
-				}
 				d.broadcastFsChanged(root, originUI, oldRel, newRel)
 			}
 		}
@@ -252,14 +251,10 @@ func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path string, 
 		err = storeErr
 	}
 	if err == nil {
-		inNotebook := d.isNotebookRoot(root)
 		d.noteSelfWrite(root, notebook.SelfWrite{Rel: rel})
 		err = store.Delete(rel)
 		if err == nil {
 			result = &protocol.FsDeleteResult{Path: rel}
-			if inNotebook {
-				d.broadcastNotebookChanged(originUI, rel)
-			}
 			d.broadcastFsChanged(root, originUI, rel)
 		}
 	}
@@ -292,12 +287,12 @@ func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path string, 
 }
 
 func (d *Daemon) isNotebookRoot(root string) bool {
-	live, err := d.store.ListProfiles(false)
+	live, err := d.notebookProfiles()
 	if err != nil {
 		return false
 	}
-	for _, p := range live {
-		candidate, err := d.notebookRoot(p.ID)
+	for id := range live {
+		candidate, err := d.notebookRoot(id)
 		if err == nil && root == candidate {
 			return true
 		}

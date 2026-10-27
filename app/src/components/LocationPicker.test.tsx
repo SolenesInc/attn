@@ -676,7 +676,6 @@ describe('LocationPicker', () => {
       agentAvailability: {
         claude: true,
         codex: true,
-        copilot: false,
         pi: false,
       },
     });
@@ -706,7 +705,7 @@ describe('LocationPicker', () => {
           isOpen
           onClose={vi.fn()}
           onSelect={vi.fn()}
-          agentAvailability={{ claude: true, codex: true, copilot: false }}
+          agentAvailability={{ claude: true, codex: true }}
         />
       </SettingsProvider>,
     );
@@ -730,7 +729,7 @@ describe('LocationPicker', () => {
           isOpen
           onClose={vi.fn()}
           onSelect={vi.fn()}
-          agentAvailability={{ claude: true, codex: true, copilot: false }}
+          agentAvailability={{ claude: true, codex: true }}
         />
       </SettingsProvider>,
     );
@@ -1151,8 +1150,7 @@ describe('LocationPicker', () => {
       agentAvailability: {
         claude: true,
         codex: false,
-        copilot: true,
-        pi: false,
+        pi: true,
       },
     });
 
@@ -1164,7 +1162,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('radio', { name: /claude/i })).toHaveAttribute('aria-checked', 'true');
-      expect(screen.getByRole('radio', { name: /copilot/i })).toHaveAttribute('aria-checked', 'false');
+      expect(screen.getByRole('radio', { name: /pi/i })).toHaveAttribute('aria-checked', 'false');
     });
   });
 

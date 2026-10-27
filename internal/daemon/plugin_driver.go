@@ -15,6 +15,8 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 const pluginDriverCallTimeout = 30 * time.Second
@@ -200,11 +202,6 @@ type pendingPluginReport struct {
 	Metadata *pluginReportMetadataParams
 }
 
-type pluginSessionLaunch struct {
-	PluginName string
-	RunID      string
-}
-
 func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginDriverRegisterParams) error {
 	agent := normalizePluginAgent(params.Agent)
 	if agent == "" {
@@ -305,6 +302,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			return nil, true, err
 		}
 		d.logf("plugin driver registered plugin=%s agent=%s", plugin.name, normalizePluginAgent(params.Agent))
+		d.pushMonitorPolicies()
 		d.publishSettingsFact(FactPluginDriverRegistered, plugin.name)
 		active := d.store.ListAgentDriverRuns(plugin.name)
 		runs := make([]activePluginRun, 0, len(active))
@@ -373,7 +371,10 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
 				return nil, true, err
 			}
-			d.applyPluginReportedMetadata(params)
+			receipt, err := d.applyPluginReportedMetadata(params)
+			if receipt != nil || err != nil {
+				return receipt, true, err
+			}
 		}
 		return struct{}{}, true, nil
 	case "session.report_input_taken":
@@ -537,7 +538,7 @@ func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCM
 	session := d.store.Get(params.SessionID)
 	id := msg.ID
 	d.life.Go("classifyPluginStop", func() {
-		verdict, err := d.runClassifier(session, text, 30*time.Second)
+		verdict, err := d.classifyPluginStop(session, text)
 		if err != nil {
 			verdict = protocol.StateUnknown
 		}
@@ -599,131 +600,84 @@ func (d *Daemon) applyPluginReportedStop(params pluginReportStopParams) {
 	})
 }
 
-func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) bool {
+func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) (*sessionmonitor.ConversationReceipt, error) {
 	d.notePluginDriverReport(params.SessionID)
-	if !d.store.ApplyAgentDriverMetadata(params.SessionID, params.RunID, params.Seq, string(params.Metadata)) {
+	if !d.sessionMonitor(params.SessionID).ReportDriverMetadata(params.RunID, params.Seq, string(params.Metadata)) {
 		d.logf("plugin metadata report discarded: session=%s run=%s seq=%d", params.SessionID, params.RunID, params.Seq)
-		return false
+		return nil, nil
 	}
 	if resumeID := strings.TrimSpace(params.ResumeSessionID); resumeID != "" {
-		d.persistResumeSessionID(params.SessionID, resumeID)
+		return d.persistResumeSessionID(params.SessionID, resumeID)
 	}
-	return true
+	return nil, nil
 }
 
 func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams, path string) {
-	if !d.store.SetAgentDriverTranscriptPath(params.SessionID, params.RunID, path) {
-		d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
+	if monitor := d.sessionMonitor(params.SessionID); monitor != nil {
+		if session := d.store.Get(params.SessionID); session != nil && transcript.SupportsUsage(session.Agent) {
+			if !d.life.Do("seedPluginUsageBaseline", func() { d.sessionMonitor(params.SessionID).SeedDriverUsageBaseline(path) }) {
+				return
+			}
+		}
+		if !monitor.ReportDriverTranscript(params.RunID, path) {
+			d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
+		}
 		return
 	}
-	session := d.store.Get(params.SessionID)
-	if session == nil {
-		return
-	}
-	d.ensurePluginUsageWatcher(params.SessionID, session.Agent, path)
-}
-
-func (d *Daemon) beginPluginSessionLaunch(sessionID protocol.SessionID, pluginName, runID string) {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.pluginLaunching = &pluginSessionLaunch{PluginName: pluginName, RunID: runID}
-	e.pluginReports, e.pluginExit = nil, nil
+	d.logf("plugin transcript path report discarded: session=%s run=%s: no monitor runs it", params.SessionID, params.RunID)
 }
 
 func (d *Daemon) queueReportDuringPluginLaunch(plugin *pluginConnection, sessionID protocol.SessionID, report pendingPluginReport) bool {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return false
-	}
-	e.mu.Lock()
-	launch := e.pluginLaunching
-	if launch == nil || launch.PluginName != plugin.name || launch.RunID != report.runID() {
-		e.mu.Unlock()
-		return false
-	}
-	e.pluginReports = append(e.pluginReports, report)
 	var watch *launchWatch
-	if report.State != nil || report.Stop != nil {
-		watch = d.claimLaunchWatch(sessionID)
+	queued := d.sessionMonitor(sessionID).QueueDuringDriverLaunch(plugin.name, report.runID(), func() { d.replayPluginReport(report) }, func() {
+		if report.State != nil || report.Stop != nil {
+			watch = d.claimLaunchWatch(sessionID)
+		}
+	})
+	if !queued {
+		return false
 	}
-	e.mu.Unlock()
 	watch.settle(launchOutcome{startedAt: time.Now()})
 	return true
 }
 
+func (d *Daemon) replayPluginReport(report pendingPluginReport) {
+	switch {
+	case report.State != nil:
+		d.applyPluginReportedState(*report.State)
+	case report.Stop != nil:
+		d.applyPluginReportedStop(*report.Stop)
+	case report.Metadata != nil:
+		receipt, err := d.applyPluginReportedMetadata(*report.Metadata)
+		if err == nil {
+			err = receipt.Wait(d.life.Context())
+		}
+		if err != nil {
+			d.logf("plugin metadata replay: session=%s: %v", report.Metadata.SessionID, err)
+		}
+	}
+}
+
 func (d *Daemon) queueExitDuringPluginLaunch(sessionID protocol.SessionID, info ptybackend.ExitInfo) bool {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
+	var watch *launchWatch
+	queued := d.sessionMonitor(sessionID).QueueExitDuringDriverLaunch(info, func() {
+		d.logf("deferring plugin PTY exit until launch completes: session=%s run=%s", sessionID, info.LifecycleID)
+		watch = d.claimLaunchWatch(sessionID)
+	})
+	if !queued {
 		return false
 	}
-	e.mu.Lock()
-	launch := e.pluginLaunching
-	if launch == nil || info.LifecycleID == "" || launch.RunID != info.LifecycleID {
-		e.mu.Unlock()
-		return false
-	}
-	d.logf("deferring plugin PTY exit until launch completes: session=%s run=%s", sessionID, info.LifecycleID)
-	e.pluginExit = &info
-	watch := d.claimLaunchWatch(sessionID)
-	e.mu.Unlock()
-	d.captureExitScreen(sessionID, info)
-	watch.settle(launchOutcome{exit: d.exitScreenOrBare(sessionID, info)})
+	exit := d.holdExit(sessionID, info)
+	watch.settle(launchOutcome{exit: d.exitScreenOrBare(sessionID, exit)})
 	return true
 }
 
-func (d *Daemon) supersededExitDuringPluginLaunch(sessionID protocol.SessionID, info ptybackend.ExitInfo) bool {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return false
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	launch := e.pluginLaunching
-	return launch != nil && info.LifecycleID != "" && launch.RunID != info.LifecycleID
-}
-
-func (d *Daemon) finishPluginSessionLaunch(sessionID protocol.SessionID, success bool) *ptybackend.ExitInfo {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
-		return nil
-	}
-	e.mu.Lock()
-	reports, exit := e.pluginReports, e.pluginExit
-	e.pluginLaunching, e.pluginReports, e.pluginExit = nil, nil, nil
-	e.mu.Unlock()
-	if !success {
-		return nil
-	}
-	for _, report := range reports {
-		switch {
-		case report.State != nil:
-			d.applyPluginReportedState(*report.State)
-		case report.Stop != nil:
-			d.applyPluginReportedStop(*report.Stop)
-		case report.Metadata != nil:
-			d.applyPluginReportedMetadata(*report.Metadata)
-		}
-	}
-	return exit
-}
-
 func (d *Daemon) abortPluginSessionLaunch(sessionID protocol.SessionID, reason string) {
-	e := d.monitorEntry(sessionID)
-	if e == nil {
+	plugin, run, launching := d.sessionMonitor(sessionID).AbortDriverLaunch()
+	if !launching {
 		return
 	}
-	e.mu.Lock()
-	launch := e.pluginLaunching
-	e.pluginLaunching, e.pluginReports, e.pluginExit = nil, nil, nil
-	e.mu.Unlock()
-	if launch == nil {
-		return
-	}
-	d.notifyPluginDriverSessionClosed(launch.PluginName, d.primaryTerminal(sessionID), launch.RunID, reason, nil, "")
+	d.notifyPluginDriverSessionClosed(plugin, d.primaryTerminal(sessionID), run, reason, nil, "")
 }
 
 func (r pendingPluginReport) runID() string {
@@ -745,12 +699,12 @@ func (d *Daemon) closePluginDriverSession(sessionID protocol.SessionID, reason s
 		d.logf("plugin session close skipped: session=%s reason=%s no longer in store", sessionID, reason)
 		return
 	}
-	run := d.store.EndAgentDriverRun(sessionID)
+	run := d.endAgentDriverRun(sessionID)
 	if run.RunID == "" {
 		d.logf("plugin session close skipped: session=%s reason=%s has no active driver run", sessionID, reason)
 		return
 	}
-	d.resolveSoon(sessionID)
+	d.sessionMonitor(sessionID).ResolveSoon()
 	d.notifyPluginDriverSessionClosed(run.PluginName, d.primaryTerminal(sessionID), run.RunID, reason, exitCode, signal)
 }
 
@@ -853,18 +807,6 @@ func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params 
 		return pluginDriverSpawnResult{}, fmt.Errorf("plugin %q returned an empty argv", reg.PluginName)
 	}
 	return result, nil
-}
-
-func (d *Daemon) sessionUsesPluginMessageDelivery(session *protocol.Session) bool {
-	if session == nil {
-		return false
-	}
-	cursor := d.store.GetAgentDriverRun(session.ID)
-	if cursor.PluginName == "" {
-		return false
-	}
-	driver, ok := d.ensurePluginRegistry().driver(session.Agent)
-	return ok && driver.PluginName == cursor.PluginName && driver.Capabilities["message_delivery"]
 }
 
 func pluginCommandEnv(values map[string]string) ([]string, error) {

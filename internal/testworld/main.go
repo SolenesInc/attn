@@ -15,6 +15,7 @@ import (
 var processDir string
 
 func Main(m *testing.M, env ...string) int {
+	runSupervisor()
 	fakeagent.Main()
 	dir, err := os.MkdirTemp("", "attn-test-process-*")
 	if err != nil {

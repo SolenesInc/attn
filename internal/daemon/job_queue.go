@@ -45,9 +45,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 	opts := jobs.Options{Log: d.logf, Store: queueStore}
 	runner := jobs.New(opts)
 	if !runner.Disabled() {
-		if err := d.registerTaskWithFailureRenderer(runner, snoozeWakeKind, d.snoozeWakeHandler, jobs.HandlerConfig{}, d.renderSnoozeWakeFailure); err != nil {
-			d.logf("snooze wake: register session_snooze_wake: %v", err)
-		}
+
 		if err := d.registerTaskWithFailureRenderer(
 			runner,
 			sessionActivityKind,
@@ -96,10 +94,51 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 				d.logf("bus: register retention-pin alarm tick: %v", err)
 			}
 		}
+		if err := runner.RegisterCron(
+			analyticsPruneKind,
+			analyticsPruneInterval,
+			d.analyticsPruneHandler,
+			jobs.HandlerConfig{Timeout: analyticsPruneTimeout},
+		); err != nil {
+			d.logf("analytics: register outbox prune tick: %v", err)
+		}
+		if err := runner.RegisterCron(
+			analyticsShipKind,
+			analyticsShipInterval,
+			d.analyticsShipHandler,
+			jobs.HandlerConfig{Timeout: analyticsShipTimeout},
+		); err != nil {
+			d.logf("analytics: register upload tick: %v", err)
+		}
+		if err := runner.RegisterCron(
+			analyticsSampleKind,
+			analyticsSampleInterval,
+			d.analyticsSampleHandler,
+			jobs.HandlerConfig{Timeout: analyticsSampleTimeout},
+		); err != nil {
+			d.logf("analytics: register resource sample tick: %v", err)
+		}
+		if err := runner.RegisterCron(
+			askRepliesForgetKind,
+			askRepliesForgetInterval,
+			d.askRepliesForgetHandler,
+			jobs.HandlerConfig{Timeout: askRepliesForgetTimeout},
+		); err != nil {
+			d.logf("asks: register reply forget tick: %v", err)
+		}
+		if err := runner.RegisterCron(
+			ventsPruneKind,
+			ventsPruneInterval,
+			d.ventsPruneHandler,
+			jobs.HandlerConfig{Timeout: ventsPruneTimeout},
+		); err != nil {
+			d.logf("vents: register prune tick: %v", err)
+		}
 		d.registerCrewLifecycleCron(runner)
 		d.registerSessionPullRequestRefreshCron(runner)
 		d.registerWorktreeSweepCron(runner)
 		d.registerConversationKeepCron(runner)
+		d.registerCodexUpdateCheckCron(runner)
 		if err := runner.RegisterCron(
 			automationScheduleKind,
 			automationScheduleInterval(),
@@ -124,7 +163,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 	if _, err := runner.Enqueue(conversationKeepKind+"_tick", jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
 		d.logf("conversation keep: enqueue startup: %v", err)
 	}
-	d.reconcileSnoozeWakeJobs()
+	d.queueCodexUpdateCheck()
 	d.resumeGardenReviews()
 	d.settleHarvestConditions()
 	return nil

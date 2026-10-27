@@ -1,13 +1,13 @@
 package garden
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/shortid"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -63,6 +63,9 @@ type Seed struct {
 
 	HarvestWhen            *HarvestCondition `json:"harvest_when,omitempty"`
 	HarvestWhenPullRequest string            `json:"harvest_when_pull_request"`
+
+	Checks       []Check                `json:"checks,omitempty"`
+	CheckResults map[string]CheckResult `json:"check_results,omitempty"`
 }
 
 type HarvestCondition struct {
@@ -111,12 +114,11 @@ func NotesSchema() docstore.CollectionSchema {
 }
 
 type Execution struct {
-	SessionID  protocol.SessionID `json:"session_id"`
-	Crown      string             `json:"crown"`
-	Dispatcher who.Actor          `json:"dispatcher,omitzero"`
-	Cwd        string             `json:"cwd,omitempty"`
-	Agent      string             `json:"agent,omitempty"`
-
+	SessionID        protocol.SessionID `json:"session_id"`
+	Crown            string             `json:"crown"`
+	Dispatcher       who.Actor          `json:"dispatcher,omitzero"`
+	Cwd              string             `json:"cwd,omitempty"`
+	Agent            string             `json:"agent,omitempty"`
 	RepositoryRoot   string             `json:"repository_root,omitempty"`
 	RepositorySubdir string             `json:"repository_subdir,omitempty"`
 	Branch           string             `json:"branch,omitempty"`
@@ -124,7 +126,6 @@ type Execution struct {
 	SupersededBy     protocol.SessionID `json:"superseded_by,omitempty"`
 	OperationID      string             `json:"operation_id,omitempty"`
 	FromChief        bool               `json:"from_chief,omitempty"`
-	Resume           string             `json:"resume,omitempty"`
 }
 
 func DispatchesSchema() docstore.CollectionSchema {
@@ -150,25 +151,11 @@ func DecodeExecution(body []byte) (Execution, error) {
 const (
 	idPrefix     = "s-"
 	noteIDPrefix = "n-"
-	idBodyLen    = 6
-	idAlphabet   = "0123456789abcdefghjkmnpqrstvwxyz"
-	idAlphabetN  = 32
+	idBodyLen    = shortid.BodyLen
+	idAlphabet   = shortid.Alphabet
 )
 
-func NewID() (string, error) { return mintID(idPrefix) }
-
-func mintID(prefix string) (string, error) {
-	buf := make([]byte, idBodyLen)
-	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("mint %sid: %w", prefix, err)
-	}
-	out := make([]byte, 0, len(prefix)+idBodyLen)
-	out = append(out, prefix...)
-	for _, b := range buf {
-		out = append(out, idAlphabet[int(b)%idAlphabetN])
-	}
-	return string(out), nil
-}
+func NewID() (string, error) { return shortid.New(idPrefix) }
 
 func ValidateID(id string) error {
 	body, ok := strings.CutPrefix(id, idPrefix)

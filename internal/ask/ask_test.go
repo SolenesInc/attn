@@ -148,32 +148,42 @@ func TestReplyRendersEachAnswerForTheAgent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := strings.Split(text, "\n\n## ")[tc.index]; got != tc.want {
+			answers, _, _ := strings.Cut(text, "\n\n---\n\n")
+			if got := strings.Split(answers, "\n\n## ")[tc.index]; got != tc.want {
 				t.Fatalf("entry %d:\n%s\nwant:\n%s", tc.index, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestReplyOpensWithTheAskAndEndsWithTheNote(t *testing.T) {
+func TestReplyOpensWithTheAskAndEndsWithTheReminder(t *testing.T) {
 	for name, tc := range map[string]struct {
 		parts   []protocol.AskPart
 		answers []protocol.AskAnswer
+		note    string
 		want    string
 	}{
 		"answers and a note": {
 			[]protocol.AskPart{{Question: &protocol.AskQuestion{Key: "q1", Kind: protocol.AskQuestionKindText, Prompt: "Why?", Choices: []protocol.AskChoice{}}}},
 			[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("Because.")}},
-			"🙋 The user answered the ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\nThey added:\n\n> Ship it.\n> Today.",
+			"Ship it.\nToday.",
+			"🙋 The user answered the ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\nThey added:\n\n> Ship it.\n> Today.\n\n---\n\nThey have likely moved on and will not read what you write back; if you still need them, ask again.",
+		},
+		"answers without a note": {
+			[]protocol.AskPart{{Question: &protocol.AskQuestion{Key: "q1", Kind: protocol.AskQuestionKindText, Prompt: "Why?", Choices: []protocol.AskChoice{}}}},
+			[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("Because.")}},
+			"",
+			"🙋 The user answered the ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\n---\n\nThey have likely moved on and will not read what you write back; if you still need them, ask again.",
 		},
 		"only a note": {
 			[]protocol.AskPart{{Markdown: protocol.Ptr("FYI")}},
 			nil,
-			"🙋 The user answered the ask \"Heads up\" (a-2).\n\nThey added:\n\n> Ship it.\n> Today.",
+			"Ship it.\nToday.",
+			"🙋 The user answered the ask \"Heads up\" (a-2).\n\nThey added:\n\n> Ship it.\n> Today.\n\n---\n\nThey have likely moved on and will not read what you write back; if you still need them, ask again.",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			text, err := ask.Reply(protocol.Ask{ID: "a-2", Subject: "Heads up", Parts: tc.parts}, tc.answers, "Ship it.\nToday.")
+			text, err := ask.Reply(protocol.Ask{ID: "a-2", Subject: "Heads up", Parts: tc.parts}, tc.answers, tc.note)
 			if err != nil {
 				t.Fatal(err)
 			}

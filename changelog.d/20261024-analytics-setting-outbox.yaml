@@ -1,0 +1,7 @@
+kind: added
+area: settings
+change: >
+  Settings › Experimental has a Usage analytics switch, off by default. Turning
+  it on keeps a local record of how attn is used on this machine; nothing is
+  sent. This release adds the switch and the local record's storage; what gets
+  recorded arrives in later releases.

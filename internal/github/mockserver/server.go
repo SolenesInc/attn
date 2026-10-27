@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"sync"
 )
 
@@ -28,6 +29,8 @@ type MockPR struct {
 	Title  string
 	Draft  bool
 	Role   string
+
+	MergeableState string
 }
 
 func New() *Server {
@@ -75,11 +78,11 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	prPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)$`)
-	if prPattern.MatchString(r.URL.Path) && r.Method == "GET" {
+	if m := prPattern.FindStringSubmatch(r.URL.Path); m != nil && r.Method == "GET" {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"mergeable":       true,
-			"mergeable_state": "clean",
-			"head":            map[string]string{"sha": "abc123"},
+			"mergeable_state": s.mergeableState(m[1], m[2]),
+			"head":            map[string]string{"sha": "abc123", "ref": "feature"},
 		})
 		return
 	}
@@ -127,6 +130,17 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		"total_count": len(items),
 		"items":       items,
 	})
+}
+
+func (s *Server) mergeableState(repo, number string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, pr := range s.PRs {
+		if pr.Repo == repo && strconv.Itoa(pr.Number) == number && pr.MergeableState != "" {
+			return pr.MergeableState
+		}
+	}
+	return "clean"
 }
 
 func (s *Server) AddPR(pr MockPR) {

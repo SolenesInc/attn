@@ -97,6 +97,7 @@ func (s *Store) HandleGardenSeedEvent(
 	eventSeq int64,
 	seedID string,
 	eventName string,
+	text string,
 	bellName string,
 	deliveries []GardenSeedBellDelivery,
 	now time.Time,
@@ -156,7 +157,7 @@ func (s *Store) HandleGardenSeedEvent(
 		var existingID string
 		err := tx.QueryRow(`SELECT id FROM inbox_items WHERE address=? AND kind=? AND coalesce_key=? AND read_at=''`, delivery.To.String(), inbox.SeedUpdate, seedID).Scan(&existingID)
 		if err == sql.ErrNoRows {
-			if err := putInbox(tx, inbox.Item{ID: delivery.ItemID, To: delivery.To, Kind: inbox.SeedUpdate, Source: seedID, Key: seedID, Hint: eventName}, now); err != nil {
+			if err := putInbox(tx, inbox.Item{ID: delivery.ItemID, To: delivery.To, Kind: inbox.SeedUpdate, Source: seedID, Key: seedID, Hint: eventName, Text: text}, now); err != nil {
 				return nil, false, err
 			}
 			if _, err := tx.Exec("UPDATE inbox_items SET bell_name=? WHERE id=?", bellName, delivery.ItemID); err != nil {
@@ -170,7 +171,7 @@ func (s *Store) HandleGardenSeedEvent(
 		}
 
 		if eventName == gardenSeedUnblockedHint {
-			if _, err := tx.Exec(`UPDATE inbox_items SET hint = ? WHERE id = ?`, eventName, existingID); err != nil {
+			if _, err := tx.Exec(`UPDATE inbox_items SET hint = ?, text = '' WHERE id = ?`, eventName, existingID); err != nil {
 				return nil, false, fmt.Errorf("handle Garden seed event %d: promote coalesced delivery %s: %w", eventSeq, existingID, err)
 			}
 		}

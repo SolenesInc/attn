@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -27,9 +28,15 @@ type Ask struct {
 	Markdown  string
 	BaseDir   string
 	CreatedAt string
+	Reply     *protocol.AskReply
 }
 
-const askColumns = "id, session_id, address, subject, markdown, base_dir, created_at"
+const (
+	askedColumns = "id, session_id, address, subject, markdown, base_dir, created_at"
+	askColumns   = askedColumns + ", answered_at, answers, note"
+)
+
+const openAsk = "answered_at = ''"
 
 func (s *Store) AddAsk(a Ask) error {
 	s.mu.Lock()
@@ -37,7 +44,7 @@ func (s *Store) AddAsk(a Ask) error {
 	if s.db == nil {
 		return fmt.Errorf("asks need the SQLite store")
 	}
-	query := "INSERT INTO asks (" + askColumns + ") SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
+	query := "INSERT INTO asks (" + askedColumns + ") SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
 	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, a.SessionID}
 	if seedID := askSeedID(a.To); seedID != "" {
 		_, seeds, found, err := readCollection(s.db, garden.Namespace, garden.CollectionSeeds)
@@ -78,13 +85,13 @@ func (s *Store) AddAsk(a Ask) error {
 	return ErrAskerRetired
 }
 
-func (s *Store) OpenAsks() ([]Ask, error) {
+func (s *Store) Asks() ([]Ask, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
 		return nil, nil
 	}
-	rows, err := s.db.Query("SELECT " + askColumns + " FROM asks ORDER BY created_at, id")
+	rows, err := s.db.Query("SELECT " + askColumns + " FROM asks ORDER BY answered_at != '', created_at, id")
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +113,7 @@ func (s *Store) GetOpenAsk(id string) (Ask, error) {
 	if s.db == nil {
 		return Ask{}, ErrAskNotOpen
 	}
-	a, err := scanAsk(s.db.QueryRow("SELECT "+askColumns+" FROM asks WHERE id = ?", id))
+	a, err := scanAsk(s.db.QueryRow("SELECT "+askColumns+" FROM asks WHERE id = ? AND "+openAsk, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Ask{}, ErrAskNotOpen
 	}
@@ -119,10 +126,10 @@ func (s *Store) CloseAsk(id string) error {
 	if s.db == nil {
 		return ErrAskNotOpen
 	}
-	return closeAsk(s.db, id)
+	return expectOpenAsk(s.db.Exec("DELETE FROM asks WHERE id = ? AND "+openAsk, id))
 }
 
-func (s *Store) AnswerAsk(id string, answer inbox.Item, at time.Time) error {
+func (s *Store) AnswerAsk(id string, reply protocol.AskReply, answer inbox.Item, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -133,7 +140,7 @@ func (s *Store) AnswerAsk(id string, answer inbox.Item, at time.Time) error {
 		return err
 	}
 	defer tx.Rollback()
-	if err := closeAsk(tx, id); err != nil {
+	if err := replyToAsk(tx, id, reply, at); err != nil {
 		return err
 	}
 	if err := putInbox(tx, answer, at); err != nil {
@@ -142,9 +149,12 @@ func (s *Store) AnswerAsk(id string, answer inbox.Item, at time.Time) error {
 	return tx.Commit()
 }
 
-func (s *Store) AnswerAskWithNote(id string, note DocumentWrite, fact BusEvent, events []BusEvent, now time.Time) (DocumentWriteResult, []int64, error) {
+func (s *Store) AnswerAskWithNote(id string, reply protocol.AskReply, answer inbox.Item, note DocumentWrite, fact BusEvent, events []BusEvent, now time.Time) (DocumentWriteResult, []int64, error) {
 	results, eventSeqs, err := s.commitDocumentWrites([]DocumentCommit{{Write: note, Fact: fact}}, events, now, true, func(tx *sql.Tx) (bool, error) {
-		return true, closeAsk(tx, id)
+		if err := replyToAsk(tx, id, reply, now); err != nil {
+			return true, err
+		}
+		return true, putInbox(tx, answer, now)
 	})
 	if err != nil {
 		return DocumentWriteResult{}, nil, err
@@ -152,8 +162,16 @@ func (s *Store) AnswerAskWithNote(id string, note DocumentWrite, fact BusEvent, 
 	return results[0], eventSeqs, nil
 }
 
-func closeAsk(db execer, id string) error {
-	result, err := db.Exec("DELETE FROM asks WHERE id = ?", id)
+func replyToAsk(db execer, id string, reply protocol.AskReply, at time.Time) error {
+	answers, err := json.Marshal(reply.Answers)
+	if err != nil {
+		return err
+	}
+	return expectOpenAsk(db.Exec("UPDATE asks SET answered_at = ?, answers = ?, note = ? WHERE id = ? AND "+openAsk,
+		at.UTC().Format(sortableTimeFormat), string(answers), protocol.Deref(reply.Note), id))
+}
+
+func expectOpenAsk(result sql.Result, err error) error {
 	if err != nil {
 		return err
 	}
@@ -161,6 +179,15 @@ func closeAsk(db execer, id string) error {
 		return ErrAskNotOpen
 	}
 	return nil
+}
+
+func (s *Store) ForgetRepliesBefore(cutoff time.Time) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return nil, nil
+	}
+	return deleteAsks(s.db, "DELETE FROM asks WHERE answered_at != '' AND answered_at < ? RETURNING id", cutoff.UTC().Format(sortableTimeFormat))
 }
 
 func (s *Store) CloseAsksTo(to who.Address) ([]string, error) {
@@ -200,8 +227,8 @@ func deleteAsks(db rowsQuerier, query string, args ...any) ([]string, error) {
 
 func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 	var a Ask
-	var address string
-	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.CreatedAt); err != nil {
+	var address, answeredAt, answers, note string
+	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.CreatedAt, &answeredAt, &answers, &note); err != nil {
 		return Ask{}, err
 	}
 	to, err := who.ParseAddress(address)
@@ -209,6 +236,16 @@ func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 		return Ask{}, err
 	}
 	a.To = to
+	if answeredAt == "" {
+		return a, nil
+	}
+	a.Reply = &protocol.AskReply{AnsweredAt: answeredAt}
+	if err := json.Unmarshal([]byte(answers), &a.Reply.Answers); err != nil {
+		return Ask{}, fmt.Errorf("ask %s reply: %w", a.ID, err)
+	}
+	if note != "" {
+		a.Reply.Note = &note
+	}
 	return a, nil
 }
 

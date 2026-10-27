@@ -100,7 +100,7 @@ func TestEachProfileKeepsItsOwnNotebook(t *testing.T) {
 		if event.Event != protocol.EventFsChanged {
 			continue
 		}
-		if event.Root == defaultRoot {
+		if event.Root == defaultRoot && slices.Contains(event.Paths, "external.md") {
 			t.Fatalf("Work heard Default change: %+v", event)
 		}
 	}

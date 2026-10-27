@@ -6,8 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/testworld"
-
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -97,14 +95,7 @@ func TestAgentMessageRefusesARecentDuplicateFromTheSameSender(t *testing.T) {
 func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	recipient := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	agent := w.Launched(recipient)
-	idle := testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	app.TypeLine(recipient, "wait for the reviewer")
-	agent.Prompted()
-	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	agent.Reply("Waiting. <!-- attn:state=idle -->")
-	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	recipient, agent := mailIdleAgent(w, app, "shop")
 	registerSessions(t, w, cli, "reviewer", "bystander")
 
 	sent := sendAgentMessage(t, cli, "reviewer", recipient, "the discount is applied after tax")

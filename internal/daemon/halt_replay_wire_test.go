@@ -11,7 +11,7 @@ import (
 )
 
 func TestAHaltRecordedBeforeTheSessionStartedDoesNotEndItsTurn(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		cwd := w.Path("s1")
 		if err := os.MkdirAll(cwd, 0o755); err != nil {
@@ -22,9 +22,9 @@ func TestAHaltRecordedBeforeTheSessionStartedDoesNotEndItsTurn(t *testing.T) {
 		transcript.Halt()
 		w.advance(time.Hour)
 
-		if err := w.InjectSession("s1", "checkout essay", cwd, protocol.SessionAgentClaude); err != nil {
-			t.Fatalf("register: %v", err)
-		}
+		w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) {
+			m.ID, m.Label, m.ResumeSessionID = "s1", protocol.Ptr("checkout essay"), protocol.Ptr(transcript.ConversationID)
+		})
 		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal("s1")), transcript.ConversationID, transcript.Path); err != nil {
 			t.Fatalf("bind the conversation: %v", err)
 		}

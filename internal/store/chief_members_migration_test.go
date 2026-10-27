@@ -19,7 +19,7 @@ func TestChiefMembersMigration(t *testing.T) {
 		{name: "absent profile with mail", orphan: true, mail: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			s := migrationFixtureStore(t, 1792359946029014-1)
+			s := migrationFixtureStore(t, 1793111476175147-1)
 			var profile string
 			if err := s.db.QueryRow("SELECT id FROM profiles WHERE deleted_at = ''").Scan(&profile); err != nil {
 				t.Fatal(err)
@@ -38,11 +38,11 @@ func TestChiefMembersMigration(t *testing.T) {
 			}
 			if c.session {
 				intent, _ := json.Marshal(map[string]string{"model": "intent-model", "effort": "high"})
-				exec("INSERT INTO sessions(id,label,directory,state_since,state_updated_at,last_seen,agent,launch_intent,profile_id) VALUES('old-chief','old','/tmp/chief','','','','codex',?,?)", string(intent), profile)
+				exec("INSERT INTO sessions(id,user_label,directory,created_at,agent,launch_intent,profile_id) VALUES('old-chief','old','/tmp/chief','','codex',?,?)", string(intent), profile)
 			}
 			if c.bound {
 				exec("INSERT INTO crew_members(member_key,profile_id,name) VALUES('keel',?,'Keel')", profile)
-				exec("UPDATE sessions SET member_key='keel',label='Keel' WHERE id='old-chief'")
+				exec("UPDATE sessions SET member_key='keel',user_label='Keel' WHERE id='old-chief'")
 			}
 			if c.settings {
 				exec("INSERT INTO settings(key,value) VALUES('chief_model_codex','saved-model'),('chief_effort_codex','medium'),('chief_context_window_cap','160000')")
@@ -99,7 +99,7 @@ func TestChiefMembersMigration(t *testing.T) {
 				if err := s.db.QueryRow("SELECT chief_member,previous_session,agent,model,effort,cwd FROM chief_upgrades").Scan(&key, &previous, &agent, &model, &effort, &cwd); err != nil {
 					t.Fatal(err)
 				}
-				if err := s.db.QueryRow("SELECT label FROM sessions WHERE id='old-chief'").Scan(&label); err != nil {
+				if err := s.db.QueryRow("SELECT user_label FROM sessions WHERE id='old-chief'").Scan(&label); err != nil {
 					t.Fatal(err)
 				}
 				wantModel, wantEffort := "intent-model", "high"

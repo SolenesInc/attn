@@ -912,47 +912,6 @@ func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, def
 
 const codexDirectoryTrustPrompt = "Do you trust the contents of this directory?"
 
-func stripANSIForPromptMatch(data []byte) string {
-	out := make([]byte, 0, len(data))
-	for i := 0; i < len(data); {
-		if data[i] != 0x1b {
-			out = append(out, data[i])
-			i++
-			continue
-		}
-		if i+1 >= len(data) {
-			break
-		}
-		switch data[i+1] {
-		case '[':
-			i += 2
-			for i < len(data) {
-				if data[i] >= 0x40 && data[i] <= 0x7e {
-					i++
-					break
-				}
-				i++
-			}
-		case ']':
-			i += 2
-			for i < len(data) {
-				if data[i] == 0x07 {
-					i++
-					break
-				}
-				if data[i] == 0x1b && i+1 < len(data) && data[i+1] == '\\' {
-					i += 2
-					break
-				}
-				i++
-			}
-		default:
-			i += 2
-		}
-	}
-	return string(out)
-}
-
 func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
 		return nil
@@ -966,11 +925,10 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	for time.Now().Before(deadline) && !d.stopping() {
 		info, err := snapshots.ScreenSnapshot(context.Background(), d.primaryTerminal(req.IDs.SessionID))
 		if err == nil {
-			var payload []byte
+			var screen string
 			if info.Screen != nil {
-				payload = info.Screen.Payload
+				screen = info.Screen.Text
 			}
-			screen := stripANSIForPromptMatch(payload)
 			if strings.Contains(screen, codexDirectoryTrustPrompt) {
 				if !acknowledged {
 					if err := d.writeSessionPTY(req.IDs.SessionID, []byte("\r"), "automation"); err != nil {
@@ -980,7 +938,7 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 				}
 			} else if acknowledged {
 				return nil
-			} else if time.Until(deadline) < 5*time.Second && len(payload) > 0 {
+			} else if time.Until(deadline) < 5*time.Second && screen != "" {
 				return nil
 			}
 		}

@@ -192,7 +192,6 @@ function seedSessions(ids: string[]) {
     view: 'session',
     connect: vi.fn(async () => {}),
     connected: true,
-    launcherConfig: { executables: {} },
     createSession: vi.fn(async () => ids[0]),
     closeSession: vi.fn(),
     takeSessionSpawnArgs: vi.fn(() => null),

@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: Remote shells stay responsive while another shell floods, and transfer terminal output more efficiently.

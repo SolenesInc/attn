@@ -1,0 +1,5 @@
+kind: changed
+area: codex
+change: After a Codex update, new and reloaded shared Codex terminals run the same Codex as the app-server already running, while that version is still installed.
+symptom: After a standalone Codex update, new shared Codex terminals ran the new Codex against the app-server still running the old one, and Codex warned about the mismatch in its footer.
+notes: Codex's standalone installer keeps every release, so this holds there. npm and Homebrew replace or remove the old version, and new terminals then run the new one.

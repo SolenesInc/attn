@@ -31,6 +31,7 @@ const (
 
 type seedContinuation struct {
 	Execution         garden.Execution
+	Resume            string
 	Source            string
 	LedgerAvailable   bool
 	SessionLive       bool
@@ -60,7 +61,7 @@ func (d *Daemon) initializeSeedLifecycle(seed garden.Seed) garden.Seed {
 	return seed
 }
 
-func snapshotGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Execution {
+func snapshotGardenExecution(session *protocol.Session, now time.Time) garden.Execution {
 	if session == nil {
 		return garden.Execution{}
 	}
@@ -68,7 +69,6 @@ func snapshotGardenExecution(session *protocol.Session, resumeID string, now tim
 		SessionID:      protocol.TrimID(session.ID),
 		Cwd:            strings.TrimSpace(session.Directory),
 		Agent:          strings.TrimSpace(session.Agent),
-		Resume:         strings.TrimSpace(resumeID),
 		CapturedAt:     formatGardenTime(now),
 		Branch:         strings.TrimSpace(protocol.Deref(session.Branch)),
 		RepositoryRoot: strings.TrimSpace(protocol.Deref(session.MainRepo)),
@@ -76,8 +76,8 @@ func snapshotGardenExecution(session *protocol.Session, resumeID string, now tim
 	return execution
 }
 
-func (d *Daemon) observedGardenExecution(session *protocol.Session, resumeID string, now time.Time) garden.Execution {
-	execution := snapshotGardenExecution(session, resumeID, now)
+func (d *Daemon) observedGardenExecution(session *protocol.Session, now time.Time) garden.Execution {
+	execution := snapshotGardenExecution(session, now)
 	if execution.Cwd == "" {
 		return execution
 	}
@@ -123,9 +123,6 @@ func mergeGardenExecution(current, observed garden.Execution) garden.Execution {
 	}
 	if observed.Agent != "" {
 		next.Agent = observed.Agent
-	}
-	if observed.Resume != "" {
-		next.Resume = observed.Resume
 	}
 	if observed.RepositoryRoot != "" {
 		next.RepositoryRoot = observed.RepositoryRoot
@@ -226,12 +223,8 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 	if session == nil || protocol.TrimID(session.ID) == "" {
 		return garden.Execution{}, errors.New("garden execution needs a tracked session")
 	}
-	resumeID := ""
-	if d.store.Get(session.ID) != nil {
-		resumeID = d.store.GetResumeSessionID(session.ID)
-	}
 	startedAt := d.gardenTime()
-	observed := d.observedGardenExecution(session, resumeID, startedAt)
+	observed := d.observedGardenExecution(session, startedAt)
 	return d.updateGardenDispatch(session.ID, func(current garden.Execution) (garden.Execution, bool, error) {
 		if crown := activeDispatchCrown(current); crown != "" {
 			_, _, err := d.readSeed(crown)
@@ -242,7 +235,6 @@ func (d *Daemon) captureGardenSessionExecution(session *protocol.Session) (garde
 		if capturedAt, err := time.Parse(time.RFC3339Nano, current.CapturedAt); err == nil && capturedAt.After(startedAt) {
 			return current, false, nil
 		}
-		observed.Resume = d.store.GetResumeSessionID(session.ID)
 		return mergeGardenExecution(current, observed), true, nil
 	})
 }
@@ -255,7 +247,7 @@ func (d *Daemon) captureGardenSessionSnapshot(session *protocol.Session) (garden
 				return current, false, err
 			}
 		}
-		observed := snapshotGardenExecution(session, d.store.GetResumeSessionID(session.ID), d.gardenTime())
+		observed := snapshotGardenExecution(session, d.gardenTime())
 		return mergeGardenExecution(current, observed), true, nil
 	})
 }
@@ -335,9 +327,6 @@ func (d *Daemon) normalizedSeedContinuation(seed garden.Seed) (garden.Execution,
 				execution.SessionID = entry.ID
 				execution.Cwd = entry.Directory
 				execution.Agent = entry.Agent
-				execution.Resume = d.store.GetResumeSessionID(entry.ID)
-			} else {
-				execution.Resume = ""
 			}
 			return execution, continuationSourceExecution, true
 		}
@@ -451,6 +440,9 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 		DirectoryState:    inspectContinuationDirectory(execution),
 		HandoverPlacement: handoverNeedsPlacement,
 	}
+	if entry != nil && entry.ProfileID == seed.ProfileID {
+		continuation.Resume = strings.TrimSpace(d.store.GetResumeSessionID(entry.ID))
+	}
 	if live := d.store.Get(protocol.TrimID(execution.SessionID)); live != nil && d.sessionHasLiveWorker(live.ID) {
 		continuation.SessionLive = true
 		continuation.ResumeAvailable = true
@@ -482,7 +474,7 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 		}
 		return continuation
 	}
-	resumeID := strings.TrimSpace(execution.Resume)
+	resumeID := continuation.Resume
 	agentName := strings.TrimSpace(execution.Agent)
 	if resumeID == "" || agentName == "" {
 		continuation.ResumeReason = "the original conversation identity is unavailable"
@@ -532,7 +524,7 @@ func continuationToProtocol(continuation *seedContinuation) *protocol.SeedContin
 		ResumeAvailable:   continuation.ResumeAvailable,
 		HandoverPlacement: continuation.HandoverPlacement,
 	}
-	if value := strings.TrimSpace(execution.Resume); value != "" {
+	if value := continuation.Resume; value != "" {
 		out.NativeConversationID = protocol.Ptr(value)
 	}
 	if value := strings.TrimSpace(execution.RepositoryRoot); value != "" {

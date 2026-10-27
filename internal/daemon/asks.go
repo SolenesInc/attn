@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,13 +14,21 @@ import (
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
 
+const (
+	askRepliesForgetKind     = "ask_replies_forget"
+	askRepliesForgetInterval = time.Hour
+	askRepliesForgetTimeout  = time.Minute
+	askReplyShownFor         = 24 * time.Hour
+)
+
 func (d *Daemon) asksSettingOn() bool {
-	return parseBooleanSetting(d.daemonSetting(settingAsksEnabled))
+	return parseBooleanSetting(d.homeSetting(SettingAsksEnabled))
 }
 
 func (d *Daemon) launchedWithAsks(sessionID protocol.SessionID) bool {
@@ -170,9 +179,9 @@ func (d *Daemon) handleAskList(conn net.Conn, msg *protocol.AskListMessage) {
 	}
 	result := &protocol.AskListResult{Enabled: d.launchedWithAsks(sessionID), Asks: []protocol.Ask{}}
 	held := d.askAddressHeldBy(sessionID)
-	for _, open := range d.openAsks() {
-		if held(open.stored.To) {
-			result.Asks = append(result.Asks, open.wire)
+	for _, a := range d.asks() {
+		if a.stored.Reply == nil && held(a.stored.To) {
+			result.Asks = append(result.Asks, a.wire)
 		}
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AskListResult: result})
@@ -213,21 +222,23 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if err != nil {
 		return err
 	}
-	open, err := d.readAsk(stored)
+	shown, err := d.readAsk(stored)
 	if err != nil {
 		return err
 	}
-	if !askShownIn(profileID, open.profileID) {
+	if !askShownIn(profileID, shown.profileID) {
 		return errAskGone
 	}
-	text, err := ask.Reply(open.wire, msg.Answers, protocol.Deref(msg.Note))
+	text, err := ask.Reply(shown.wire, msg.Answers, protocol.Deref(msg.Note))
 	if err != nil {
 		return err
 	}
+	reply := protocol.AskReply{Answers: msg.Answers, Note: msg.Note}
+	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
 	if seedID := seedAddressID(stored.To); seedID != "" {
-		err = d.noteAnswer(stored.ID, seedID, text)
+		err = d.noteAnswer(stored.ID, seedID, reply, answer)
 	} else {
-		err = d.inboxAnswer(stored, text)
+		err = d.store.AnswerAsk(stored.ID, reply, answer, time.Now())
 	}
 	if errors.Is(err, store.ErrAskNotOpen) {
 		return errAskGone
@@ -235,32 +246,33 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	if err != nil {
 		return fmt.Errorf("save the answer: %w", err)
 	}
+	d.kickInboxAfterCommit(stored.To)
 	d.publishFact(FactAskClosed, stored.ID, nil)
 	if holder := d.inboxHolder(stored.To); holder != nil && holder.State != protocol.SessionStatePendingApproval {
-		d.handleSettleTurn(&protocol.SettleTurnMessage{SessionID: holder.ID})
+		d.handBackTurn(holder.ID)
 	}
 	return nil
 }
 
-func (d *Daemon) noteAnswer(askID, seedID, text string) error {
+func (d *Daemon) noteAnswer(askID, seedID string, reply protocol.AskReply, answer inbox.Item) error {
 	schema, err := d.notesCollection()
 	if err != nil {
 		return err
 	}
-	note := garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: text, Author: who.User()}
-	_, _, err = d.mintAndWriteNote(*schema, note, true, func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
-		return d.store.AnswerAskWithNote(askID, write, fact, events, now)
+	note := garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: answer.Text, Author: who.User()}
+	_, _, err = d.mintAndWriteNote(*schema, note, false, func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
+		return d.store.AnswerAskWithNote(askID, reply, answer, write, fact, events, now)
 	})
 	return err
 }
 
-func (d *Daemon) inboxAnswer(stored store.Ask, text string) error {
-	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.Notice, Source: stored.ID, Text: text}
-	if err := d.store.AnswerAsk(stored.ID, answer, time.Now()); err != nil {
-		return err
+func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, error) {
+	ids, err := d.store.ForgetRepliesBefore(time.Now().Add(-askReplyShownFor))
+	if err != nil {
+		return nil, fmt.Errorf("forgetting ask replies: %w", err)
 	}
-	d.kickInboxAfterCommit(stored.To)
-	return nil
+	d.announceClosedAsks(ids)
+	return map[string]any{"forgotten": len(ids)}, nil
 }
 
 func (d *Daemon) closeAsksTo(to who.Address) {
@@ -282,72 +294,73 @@ func (d *Daemon) announceClosedAsks(ids []string) {
 	})
 }
 
-type openAsk struct {
+type shownAsk struct {
 	stored    store.Ask
 	wire      protocol.Ask
 	profileID string
 }
 
-func (d *Daemon) openAsks() []openAsk {
-	stored, err := d.store.OpenAsks()
+func (d *Daemon) asks() []shownAsk {
+	stored, err := d.store.Asks()
 	if err != nil {
-		d.logf("asks: reading open asks: %v", err)
+		d.logf("asks: reading asks: %v", err)
 		return nil
 	}
-	asks := make([]openAsk, 0, len(stored))
+	asks := make([]shownAsk, 0, len(stored))
 	for _, a := range stored {
-		open, err := d.readAsk(a)
+		shown, err := d.readAsk(a)
 		if err != nil {
 			d.logf("asks: ask %s cannot be shown: %v", a.ID, err)
 			continue
 		}
-		asks = append(asks, open)
+		asks = append(asks, shown)
 	}
 	return asks
 }
 
-func (d *Daemon) readAsk(a store.Ask) (openAsk, error) {
+func (d *Daemon) readAsk(a store.Ask) (shownAsk, error) {
 	parts, err := ask.Parse(a.Markdown)
 	if err != nil {
-		return openAsk{}, err
+		return shownAsk{}, err
 	}
 	return d.describeAsk(a, parts)
 }
 
-func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (openAsk, error) {
-	open := openAsk{stored: a, wire: protocol.Ask{
+func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, error) {
+	shown := shownAsk{stored: a, wire: protocol.Ask{
 		ID:        a.ID,
 		SessionID: a.SessionID,
 		Subject:   a.Subject,
 		Parts:     parts,
 		BaseDir:   a.BaseDir,
 		CreatedAt: a.CreatedAt,
+		Reply:     a.Reply,
 	}}
 	_, err := who.SwitchAddress(a.To, func(protocol.SessionID) (struct{}, error) {
 		if session := d.store.Get(a.SessionID); session != nil {
-			open.profileID = session.ProfileID
+			shown.profileID = session.ProfileID
 		}
 		return struct{}{}, nil
 	}, func(key who.MemberKey) (struct{}, error) {
-		open.wire.CrewMember = protocol.Ptr(key.String())
-		open.profileID = d.crewProfileID(key.String())
+		shown.wire.CrewMember = protocol.Ptr(key.String())
+		shown.profileID = d.crewProfileID(key.String())
 		return struct{}{}, nil
 	}, func(seedID string) (struct{}, error) {
 		seed, _, err := d.readSeed(seedID)
 		if err != nil {
 			return struct{}{}, err
 		}
-		open.wire.SeedID, open.wire.SeedTitle = protocol.Ptr(seed.ID), protocol.Ptr(seed.Title)
+		shown.wire.SeedID, shown.wire.SeedTitle = protocol.Ptr(seed.ID), protocol.Ptr(seed.Title)
 		if seed.StepSlug != "" {
-			open.wire.SeedSlug = protocol.Ptr(seed.StepSlug)
+			shown.wire.SeedSlug = protocol.Ptr(seed.StepSlug)
 		}
-		open.profileID = seed.ProfileID
+		shown.profileID = seed.ProfileID
 		return struct{}{}, nil
 	})
 	if err != nil {
-		return openAsk{}, err
+		return shownAsk{}, err
 	}
-	return open, nil
+	return shown, nil
 }
 
 func (d *Daemon) projectAsks() {
@@ -355,14 +368,14 @@ func (d *Daemon) projectAsks() {
 		return
 	}
 	d.projectSnapshot(snapshotAsks, func() {
-		open := d.openAsks()
+		asks := d.asks()
 		snapshots := map[string][]byte{}
 		d.wsHub.ForEachClient(func(client *wsClient) {
 			profileID := client.selectedProfile()
 			data, ok := snapshots[profileID]
 			if !ok {
 				var err error
-				data, err = json.Marshal(asksSnapshot(profileID, open))
+				data, err = json.Marshal(asksSnapshot(profileID, asks))
 				if err != nil {
 					d.logf("asks snapshot: %v", err)
 					return
@@ -374,9 +387,9 @@ func (d *Daemon) projectAsks() {
 	})
 }
 
-func asksSnapshot(profileID string, open []openAsk) *protocol.AsksUpdatedMessage {
+func asksSnapshot(profileID string, asks []shownAsk) *protocol.AsksUpdatedMessage {
 	message := &protocol.AsksUpdatedMessage{Event: protocol.EventAsksUpdated, ProfileID: profileID, Asks: []protocol.Ask{}}
-	for _, a := range open {
+	for _, a := range asks {
 		if askShownIn(profileID, a.profileID) {
 			message.Asks = append(message.Asks, a.wire)
 		}

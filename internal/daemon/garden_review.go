@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
@@ -292,6 +293,9 @@ func (capture gardenReviewCapture) reviewEvidence(candidate garden.ReviewCandida
 		{Label: "Lifecycle", Text: reviewLifecycleEvidence(candidate)},
 		{Label: "Working directory", Text: reviewDirectoryEvidence(observation)},
 	}
+	if unsettled := reviewUnsettledChecks(capture.read.plots.EffectiveChecks(candidate.SeedID)); unsettled != "" {
+		evidence = append(evidence, garden.ReviewEvidence{Label: "Checks", Text: unsettled})
+	}
 	if candidate.Plot {
 		evidence = append(evidence, garden.ReviewEvidence{
 			Label: "Plot activity",
@@ -352,6 +356,17 @@ func reviewCandidateReason(candidate garden.ReviewCandidate) string {
 	default:
 		return "No active agent holds the seed and its lifecycle has not changed within seven days."
 	}
+}
+
+func reviewUnsettledChecks(checks []garden.EffectiveCheck) string {
+	var parts []string
+	for _, check := range checks {
+		state := check.Result.State()
+		if !check.Removed && (state == garden.CheckOpen || state == garden.CheckRejected) {
+			parts = append(parts, fmt.Sprintf("%s is %s.", check.ID, state))
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func reviewLifecycleEvidence(candidate garden.ReviewCandidate) string {
@@ -582,7 +597,7 @@ func (d *Daemon) gardenReviewClassifyHandler(ctx context.Context, job *jobs.Job)
 		return nil, err
 	}
 
-	crashAt(crashAfterGardenAdvice)
+	crashpoint.At(crashAfterGardenAdvice)
 	capture, err := d.captureGardenReview(run.ProfileID)
 	if err != nil {
 		return nil, err

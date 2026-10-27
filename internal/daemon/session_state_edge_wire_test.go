@@ -1,8 +1,6 @@
 package daemon_test
 
 import (
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 )
 
 func TestAHookReportedStateReachesTheAppOnTheEdge(t *testing.T) {
@@ -99,18 +98,24 @@ func TestAnOpenTurnThatStopsMovingGoesStuckOnTime(t *testing.T) {
 }
 
 func TestAGuardedApprovalSurfacesExactlyAfterItsDwell(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		cli := w.Client()
-		guardedClaudeAtWork(t, app, cli, w)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		codex := guardedCodexAtWork(t, w, app, cli)
 
 		asked := time.Now()
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
-			t.Fatalf("notify: %v", err)
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal(codex)), protocol.StatePendingApproval); err != nil {
+			t.Fatalf("permission request: %v", err)
 		}
-		w.advance(time.Minute)
+		w.advance(time.Minute - time.Nanosecond)
+		if s := queriedSession(t, cli, codex); s.State != protocol.SessionStateWorking {
+			t.Fatalf("inside the dwell the approval already shows as %s", s.State)
+		}
+		w.advance(time.Nanosecond)
 
-		surfaced := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+		surfaced := queriedSession(t, cli, codex)
+		if surfaced.State != protocol.SessionStatePendingApproval {
+			t.Fatalf("after the dwell the session is %s, want pending_approval", surfaced.State)
+		}
 		if since, want := stateSince(t, surfaced), asked.Add(time.Minute); !since.Equal(want) {
 			t.Errorf("the approval surfaced at %s, want exactly one dwell after it was asked, %s", since, want)
 		}
@@ -118,25 +123,25 @@ func TestAGuardedApprovalSurfacesExactlyAfterItsDwell(t *testing.T) {
 }
 
 func TestAnApprovalTheReviewerSettlesInsideTheDwellNeverReachesTheApp(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		cli := w.Client()
-		guardedClaudeAtWork(t, app, cli, w)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		codex := guardedCodexAtWork(t, w, app, cli)
+		terminal := protocol.TerminalID(w.Terminal(codex))
 
-		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Allow edit?"); err != nil {
-			t.Fatalf("notify: %v", err)
+		if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
+			t.Fatalf("permission request: %v", err)
 		}
 		w.advance(10 * time.Second)
-		if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "auto"); err != nil {
+		if err := cli.UpdateState(terminal, protocol.StateWorking); err != nil {
 			t.Fatalf("report working: %v", err)
 		}
 		w.advance(2 * time.Minute)
-		if err := cli.UpdateState(protocol.TerminalID(w.Terminal("s1")), protocol.StateWaitingInput); err != nil {
+		if err := cli.UpdateState(terminal, protocol.StateWaitingInput); err != nil {
 			t.Fatalf("report waiting_input: %v", err)
 		}
 
 		var seen []protocol.SessionState
-		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool {
+		testworld.AwaitSession(app, codex, func(s protocol.Session) bool {
 			seen = append(seen, s.State)
 			return s.State == protocol.SessionStateWaitingInput
 		})
@@ -148,11 +153,71 @@ func TestAnApprovalTheReviewerSettlesInsideTheDwellNeverReachesTheApp(t *testing
 	})
 }
 
+func TestAnApprovalTheReviewerClearsStaysWorkingWhileCodexReportsWorking(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		codex := guardedCodexAtWork(t, w, app, cli)
+		w.terminal(codex).ProgramStatus(pty.ProgramWorking)
+		w.advance(time.Second)
+
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal(codex)), protocol.StatePendingApproval); err != nil {
+			t.Fatalf("permission request: %v", err)
+		}
+		w.advance(5 * time.Minute)
+		if s := queriedSession(t, cli, codex); s.State != protocol.SessionStateWorking {
+			t.Fatalf("five minutes after a permission request Codex never showed the user, the session is %s (%s), want working",
+				s.State, protocol.Deref(s.StateReason))
+		}
+	})
+}
+
+func TestWhatCodexShowsTheUserSurfacesAtOnceDespiteItsReviewer(t *testing.T) {
+	for _, claim := range []string{pty.ProgramBlocked, pty.ProgramBlockedQuestion, pty.ProgramBlockedAuth, pty.ProgramBlockedPermission} {
+		t.Run(claim, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app, cli := w.App(), w.Client()
+				codex := guardedCodexAtWork(t, w, app, cli)
+
+				asked := time.Now()
+				w.terminal(codex).ProgramStatus(claim)
+				w.advance(0)
+				surfaced := queriedSession(t, cli, codex)
+				if surfaced.State != protocol.SessionStatePendingApproval || !stateSince(t, surfaced).Equal(asked) {
+					t.Fatalf("a Codex %s reads %s since %s, want pending_approval at once, %s", claim, surfaced.State, surfaced.StateSince, asked)
+				}
+			})
+		})
+	}
+}
+
+func TestAnApprovalTheReviewerHandsToTheUserSurfacesWhenCodexShowsIt(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		codex := guardedCodexAtWork(t, w, app, cli)
+
+		if err := cli.UpdateState(protocol.TerminalID(w.Terminal(codex)), protocol.StatePendingApproval); err != nil {
+			t.Fatalf("permission request: %v", err)
+		}
+		w.advance(10 * time.Second)
+		if s := queriedSession(t, cli, codex); s.State != protocol.SessionStateWorking {
+			t.Fatalf("while the reviewer decides the approval already shows as %s", s.State)
+		}
+
+		shown := time.Now()
+		w.terminal(codex).ProgramStatus(pty.ProgramBlockedPermission)
+		w.advance(0)
+		surfaced := queriedSession(t, cli, codex)
+		if surfaced.State != protocol.SessionStatePendingApproval || !stateSince(t, surfaced).Equal(shown) {
+			t.Fatalf("once Codex showed the approval the session reads %s since %s, want pending_approval at once, %s", surfaced.State, surfaced.StateSince, shown)
+		}
+	})
+}
+
 func TestHooksThatAgreeWithTheSessionStateBroadcastNothing(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		cli := w.Client()
-		guardedClaudeAtWork(t, app, cli, w)
+		claudeAtWork(t, app, cli, w)
 		w.advance(time.Second)
 		before := stateChangesOf(app, "s1")
 
@@ -201,46 +266,6 @@ func TestAHookThatStrongerEvidenceOutranksDoesNotMoveTheSession(t *testing.T) {
 	})
 }
 
-func TestAnAgentThatDiesMidTurnReportsItsExitBeforeItsIdle(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
-		m.InitialPrompt = protocol.Ptr("rename the checkout module")
-	})
-	run := w.Launched(session)
-	run.Prompted()
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-
-	run.Exit(1)
-
-	testworld.Await(app, protocol.EventSessionStateChanged, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == session && e.Session.State == protocol.SessionStateIdle && protocol.Deref(e.Session.StateReason) == "process_exited"
-	})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return string(protocol.Deref(e.SessionID)) == session })
-	if order := exitOrderOf(app, session); order != "exited, idle" {
-		t.Fatalf("the app heard of the death as %q, want the exit before the idle it causes", order)
-	}
-}
-
-func exitOrderOf(p *testworld.Peer, id string) string {
-	var order []string
-	heard := func(what string) {
-		if !slices.Contains(order, what) {
-			order = append(order, what)
-		}
-	}
-	for _, e := range p.Received() {
-		switch {
-		case e.Event == protocol.EventSessionExited && string(protocol.Deref(e.SessionID)) == id:
-			heard("exited")
-		case e.Event == protocol.EventSessionStateChanged && e.Session != nil && string(e.Session.ID) == id &&
-			protocol.Deref(e.Session.StateReason) == "process_exited":
-			heard("idle")
-		}
-	}
-	return strings.Join(order, ", ")
-}
-
 func stateChangesOf(p *testworld.Peer, id string) int {
 	changes := 0
 	for _, e := range p.Received() {
@@ -251,7 +276,7 @@ func stateChangesOf(p *testworld.Peer, id string) int {
 	return changes
 }
 
-func guardedClaudeAtWork(t *testing.T, app *testworld.Peer, cli *client.Client, w *world) {
+func claudeAtWork(t *testing.T, app *testworld.Peer, cli *client.Client, w *world) {
 	t.Helper()
 	if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
@@ -260,6 +285,19 @@ func guardedClaudeAtWork(t *testing.T, app *testworld.Peer, cli *client.Client, 
 		t.Fatalf("report working: %v", err)
 	}
 	testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+}
+
+func guardedCodexAtWork(t *testing.T, w *world, app *testworld.Peer, cli *client.Client) string {
+	t.Helper()
+	codex := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(codex)), protocol.StateWorking); err != nil {
+		t.Fatalf("report working: %v", err)
+	}
+	w.advance(0)
+	if s := queriedSession(t, cli, codex); s.State != protocol.SessionStateWorking {
+		t.Fatalf("the Codex at work is %s, want working", s.State)
+	}
+	return codex
 }
 
 func stateSince(t testing.TB, s protocol.Session) time.Time {

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 	"time"
 
@@ -37,8 +36,6 @@ type sessionActivityRun struct {
 	ObservedAt time.Time
 	SpentAt    time.Time
 	Err        string
-	Transcript string
-	ResumeID   string
 }
 
 func (d *Daemon) sessionActivityRunRecord(sessionID protocol.SessionID) sessionActivityRun {
@@ -122,38 +119,16 @@ func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time
 	if since.IsZero() {
 		return true
 	}
-	path := d.sessionActivityTranscript(session)
-	if path == "" {
+	result, err := d.transcriptActivity(context.Background(), session.ID, "modified", "")
+	if err != nil || !result.Available {
 		return false
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.ModTime().After(since)
-}
-
-func (d *Daemon) sessionActivityTranscript(session *protocol.Session) string {
-	if session == nil {
-		return ""
-	}
-	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(session.ID))
-	if cached := d.sessionActivityRunRecord(session.ID); cached.Transcript != "" && cached.ResumeID == resumeID {
-		if _, err := os.Stat(cached.Transcript); err == nil {
-			return cached.Transcript
-		}
-	}
-	path := strings.TrimSpace(d.resolveTranscriptPathForSession(session, ""))
-	d.noteSessionActivityRun(session.ID, func(run *sessionActivityRun) {
-		run.Transcript = path
-		run.ResumeID = resumeID
-	})
-	return path
+	modified, err := time.Parse(time.RFC3339Nano, protocol.Deref(result.ModifiedAt))
+	return err == nil && modified.After(since)
 }
 
 type sessionActivityPayload struct {
-	Transcript string `json:"transcript,omitempty"`
-	ResumeID   string `json:"resume_id,omitempty"`
+	ResumeID string `json:"resume_id,omitempty"`
 }
 
 func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
@@ -172,8 +147,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 		return
 	}
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(sessionID))
-	transcriptPath := d.sessionActivityTranscript(session)
-	if transcriptPath == "" {
+	if result, err := d.transcriptActivity(context.Background(), sessionID, "modified", ""); err != nil || !result.Available {
 		return
 	}
 	runner := d.jobQueueRef()
@@ -182,10 +156,7 @@ func (d *Daemon) enqueueSessionActivity(sessionID protocol.SessionID) {
 	}
 	if _, err := runner.Enqueue(sessionActivityKind, jobs.EnqueueOptions{
 		UniqueKey: string(sessionID),
-		Payload: sessionActivityPayload{
-			Transcript: transcriptPath,
-			ResumeID:   resumeID,
-		},
+		Payload:   sessionActivityPayload{ResumeID: resumeID},
 	}); err != nil {
 		d.logf("session_activity: enqueue %s: %v", sessionID, err)
 	}
@@ -224,31 +195,35 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		return nil, err
 	}
 	resumeID := strings.TrimSpace(carried.ResumeID)
-	transcriptPath := strings.TrimSpace(carried.Transcript)
-	if transcriptPath == "" {
-		transcriptPath = d.sessionActivityTranscript(session)
-	}
-	if transcriptPath == "" {
-		return nil, nil
-	}
+
 	d.noteSessionActivityRun(sessionID, func(run *sessionActivityRun) {
 		run.ObservedAt = time.Now()
 	})
 
 	stored := d.store.GetSessionActivity(sessionID)
 	if stored.Cursor == "" {
-		return nil, d.reseedSessionActivity(sessionID, resumeID, transcriptPath)
+		return nil, d.reseedSessionActivity(ctx, sessionID, resumeID)
 	}
-	window, err := activity.Read(transcriptPath, session.Agent, stored.Cursor)
+	read, err := d.transcriptActivity(ctx, sessionID, "events", stored.Cursor)
+	if err == nil && !read.Available {
+		return nil, nil
+	}
+	if err == nil {
+		err = activityReadError(read)
+	}
+	var window activity.Window
+	if err == nil {
+		err = json.Unmarshal([]byte(protocol.Deref(read.Window)), &window)
+	}
 	switch {
 	case err == nil:
 	case errors.Is(err, transcript.ErrCursorMismatch) ||
 		errors.Is(err, transcript.ErrCursorPastEnd) ||
 		errors.Is(err, transcript.ErrInvalidCursor) ||
 		errors.Is(err, activity.ErrDeltaTooLarge):
-		return nil, d.reseedSessionActivity(sessionID, resumeID, transcriptPath)
+		return nil, d.reseedSessionActivity(ctx, sessionID, resumeID)
 	default:
-		return nil, fmt.Errorf("session_activity: read %s: %w", transcriptPath, err)
+		return nil, fmt.Errorf("session_activity: read %s: %w", sessionID, err)
 	}
 
 	if window.Empty() {
@@ -329,12 +304,35 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	return nil, nil
 }
 
-func (d *Daemon) reseedSessionActivity(sessionID protocol.SessionID, resumeID string, transcriptPath string) error {
-	head, err := activity.SeedCursor(transcriptPath)
+func (d *Daemon) reseedSessionActivity(ctx context.Context, sessionID protocol.SessionID, resumeID string) error {
+	result, err := d.transcriptActivity(ctx, sessionID, "head", "")
 	if err != nil {
-		return fmt.Errorf("session_activity: seed cursor for %s: %w", transcriptPath, err)
+		return fmt.Errorf("session_activity: seed cursor for %s: %w", sessionID, err)
 	}
-	d.store.SetSessionActivityCursorForConversation(sessionID, resumeID, head)
+	if result.Available {
+		d.store.SetSessionActivityCursorForConversation(sessionID, resumeID, protocol.Deref(result.Head))
+	}
+	return nil
+}
+
+func (d *Daemon) transcriptActivity(ctx context.Context, session protocol.SessionID, kind, cursor string) (protocol.TranscriptActivityResult, error) {
+	return Call[protocol.TranscriptActivityResult](ctx, d.router(), protocol.TranscriptActivityMessage{Cmd: protocol.CmdTranscriptActivity, SessionID: session, Kind: protocol.TranscriptActivityKind(kind), Cursor: protocol.Ptr(cursor)})
+}
+
+func activityReadError(result protocol.TranscriptActivityResult) error {
+	switch protocol.Deref(result.ErrorKind) {
+	case protocol.MonitorReadErrorKindInvalidCursor:
+		return transcript.ErrInvalidCursor
+	case protocol.MonitorReadErrorKindCursorMismatch:
+		return transcript.ErrCursorMismatch
+	case protocol.MonitorReadErrorKindCursorPastEnd:
+		return transcript.ErrCursorPastEnd
+	case protocol.MonitorReadErrorKindDeltaTooLarge:
+		return activity.ErrDeltaTooLarge
+	}
+	if result.Error != nil {
+		return errors.New(*result.Error)
+	}
 	return nil
 }
 

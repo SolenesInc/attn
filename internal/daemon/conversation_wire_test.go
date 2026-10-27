@@ -332,13 +332,8 @@ func TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession(t *testing.
 	}
 	back := w.Launched(string(delegate))
 	app.TypeLine(string(delegate), "where were we?")
-	first := back.Prompted()
-	back.Reply("On the tracked task. <!-- attn:state=idle -->")
-	prompts := []string{first, back.Prompted()}
-	if !slices.Contains(prompts, "where were we?") || !slices.ContainsFunc(prompts, func(prompt string) bool {
-		return strings.Contains(prompt, inboxDoorbell)
-	}) {
-		t.Fatalf("the reopened tender was prompted with %q, want the user input and inbox doorbell in either order", prompts)
+	if prompt := back.Prompted(); prompt != "where were we?" {
+		t.Fatalf("the reopened tender was prompted with %q, want the user's words", prompt)
 	}
 	if mail := readInbox(t, cli, string(delegate), 0).Items; len(mail) != 1 || mail[0].Content != "the deployment is ready" {
 		t.Errorf("the reopened tender's inbox = %+v, want the mail that queued while it was closed", mail)
@@ -488,7 +483,11 @@ func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
 	app := w.App()
 	cwd := w.Path("api")
 	earlier := w.Spawn(app, fakeagent.Codex, cwd)
-	conversation := w.Launched(earlier).ConversationID
+	codex := w.Launched(earlier)
+	app.TypeLine(earlier, "list the endpoints")
+	codex.Prompted()
+	codex.Reply("Three endpoints. <!-- attn:state=idle -->")
+	conversation := codex.ConversationID
 	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(earlier)})
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == earlier })
 

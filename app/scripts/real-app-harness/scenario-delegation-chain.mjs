@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, shownAgentId } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
+import { closeScenarioSessions, createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint, readGraphicsRegions, appPids } from './perfMeasure.mjs';
@@ -40,7 +40,10 @@ const preferencesRequest = (cmd, preferences) => {
     observer.ws.send(JSON.stringify({ cmd, request_id, preferences }));
   });
 };
+let waitingFor = null;
+registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ waitingFor, popup, currentRow: `${popup} [aria-current="true"]` }) });
 const waitForSelector = async (selector, description, expectation = {}) => {
+  waitingFor = selector;
   const result = await client.request('dom_wait', { selector, timeoutMs: 10_000, ...expectation });
   runner.assert(result.matched, description);
 };

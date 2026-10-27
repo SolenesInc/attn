@@ -1,0 +1,3 @@
+kind: internal
+area: daemon
+change: The session monitor code uses the glossary names, Monitor per session and TerminalWatch per terminal.

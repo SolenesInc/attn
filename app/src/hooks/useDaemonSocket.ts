@@ -2,10 +2,17 @@ import { handleCalloutDaemonEvent } from './daemonCalloutEvents';
 import { clearHarnesses, invalidateHarnesses } from './useHarnesses';
 import { clearHarnessModelCatalogs, invalidateHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
+import { normalizeInstallChannel } from '../utils/installChannel';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
 import { useAsksStore } from '../store/asks';
+import { useVentsStore } from '../store/vents';
+import { useSharedCodexStore } from '../store/sharedCodex';
+import { useTerminalRefusals } from '../store/terminalRefusals';
+import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDATE } from './daemonSharedCodexEvents';
+import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
+import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
 import { handleQuickCaptureDaemonEvent } from './daemonQuickCaptureEvents';
@@ -19,7 +26,7 @@ import {
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
-import type { DelegationPreferences, NotebookScope } from '../types/generated';
+import type { DelegationPreferences, OutpostInfo, NotebookScope } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { NotebookSurfaceHandle } from '../components/NotebookSurface';
@@ -70,6 +77,7 @@ import {
   emitPtyEvent,
   setPtyBackend,
   type PtyAttachArgs,
+  type PtyAttachOptions,
   type PtyAttachPolicy,
   type PtyPixelGeometry,
   type PtySpawnArgs,
@@ -103,7 +111,7 @@ import { handleProfileDaemonEvent, syncNavigationFromProfiles, type MigrationRes
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { usePendingTerminalInput } from '../store/pendingTerminalInput';
-import type { Desktop } from '../types/generated';
+import type { Desktop, VentKind } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
@@ -186,6 +194,7 @@ export interface SeedSendToChiefOptions {
   review?: SeedReviewActionContext;
 }
 export type SeedSendToChiefResult = GeneratedSeedSendToChiefResult;
+export type SeedCheckVerb = 'confirm' | 'reject' | 'uncheck' | 'reopen';
 export interface SeedReviewActionContext {
   reviewId: string;
   evidenceVersion: string;
@@ -493,11 +502,11 @@ export interface RecentFile {
 
 interface UseDaemonSocketOptions {
   onSessionsUpdate: (sessions: DaemonSession[]) => void;
-  onNotebookChanged?: (origin: string, paths: string[]) => void;
   onTasksChanged?: () => void;
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
   onSeedsUpdate?: (seeds: Seed[], total: number) => void;
+  onSeedsChange?: (order: string[], changed: Seed[], total: number) => void;
   onCrewUpdate?: (members: CrewMember[]) => void;
   onPRsUpdate: (prs: DaemonPR[]) => void;
   onPluginsUpdate?: (plugins: DaemonPlugin[], issues: DaemonPluginIssue[]) => void;
@@ -592,41 +601,55 @@ function isTransientAttachError(error: unknown): boolean {
   );
 }
 
-function waitForAttachRetry(delayMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, delayMs);
+function waitForAttachRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const cancel = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', cancel);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener('abort', cancel, { once: true });
   });
 }
 
 async function retryTransientAttachRequest<T>(
   request: () => Promise<T>,
   onRetry: (attempt: number, error: unknown, elapsedMs: number) => void,
+  signal?: AbortSignal,
 ): Promise<T> {
   const startedAt = Date.now();
   let attempt = 0;
 
   for (;;) {
+    signal?.throwIfAborted();
     attempt += 1;
     try {
-      return await request();
+      const result = await request();
+      signal?.throwIfAborted();
+      return result;
     } catch (error) {
+      signal?.throwIfAborted();
       const elapsedMs = Date.now() - startedAt;
       if (!isTransientAttachError(error) || elapsedMs >= ATTACH_RETRY_TIMEOUT_MS) {
         throw error;
       }
       onRetry(attempt, error, elapsedMs);
-      await waitForAttachRetry(ATTACH_RETRY_DELAY_MS);
+      await waitForAttachRetry(ATTACH_RETRY_DELAY_MS, signal);
     }
   }
 }
 
 export function useDaemonSocket({
   onSessionsUpdate,
-  onNotebookChanged,
   onTasksChanged,
   onNotificationsUpdated,
   onFsChanged,
   onSeedsUpdate,
+  onSeedsChange,
   onCrewUpdate,
   onPRsUpdate,
   onPluginsUpdate,
@@ -650,11 +673,11 @@ export function useDaemonSocket({
   const harnessPluginSignatureRef = useRef('[]');
   const callbacksRef = useRef({
     onSessionsUpdate,
-    onNotebookChanged,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
     onSeedsUpdate,
+    onSeedsChange,
     onCrewUpdate,
     onPRsUpdate,
     onPluginsUpdate,
@@ -668,11 +691,11 @@ export function useDaemonSocket({
   });
   callbacksRef.current = {
     onSessionsUpdate,
-    onNotebookChanged,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
     onSeedsUpdate,
+    onSeedsChange,
     onCrewUpdate,
     onPRsUpdate,
     onPluginsUpdate,
@@ -724,6 +747,7 @@ export function useDaemonSocket({
   const instanceMismatchRef = useRef<boolean>(false);
   const instanceCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const [migrationFailure, setMigrationFailure] = useState<MigrationFailure | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
   const connectionGenerationRef = useRef(0);
@@ -735,6 +759,9 @@ export function useDaemonSocket({
   const [isReady, setIsReady] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
+  const [outposts, setOutposts] = useState<OutpostInfo[]>([]);
+  const [outpostCommandError, setOutpostCommandError] = useState('');
+  const [homeBuild, setHomeBuild] = useState('');
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
   const [keptConversationsChangeSignal, setKeptConversationsChangeSignal] = useState(0);
@@ -940,7 +967,7 @@ export function useDaemonSocket({
     cmd: string,
     body: Record<string, unknown>,
     timeoutMessage: string,
-    timeoutMs?: number,
+    timeoutMs?: number | null,
   ): Promise<T> => {
     const requestId = nextRequestID(cmd);
     return sendKeyedRequest<T>(
@@ -1025,6 +1052,7 @@ export function useDaemonSocket({
     };
 
     ws.onopen = () => {
+      setIsConnected(true);
       console.log('[Daemon] WebSocket connected');
       setConnectionError(null);
       useProfilesStore.getState().connectionOpened();
@@ -1049,6 +1077,8 @@ export function useDaemonSocket({
           client_token: clientToken || undefined,
           browser_host_token: browserHostToken || undefined,
           profile_id: readSelectedProfileId(),
+          app_version: __ATTN_APP_VERSION__,
+          app_channel: normalizeInstallChannel(import.meta.env.VITE_INSTALL_CHANNEL),
         }),
       );
 
@@ -1111,6 +1141,7 @@ export function useDaemonSocket({
 
         switch (data.event) {
           case 'initial_state':
+            setHomeBuild(data.home_build ?? '');
             clearHarnessModelCatalogs();
             clearHarnesses();
             useDelegationPreferencesPush.getState().push();
@@ -1142,6 +1173,8 @@ export function useDaemonSocket({
             );
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useAsksStore.getState().setAsks(data.asks || []);
+            useVentsStore.getState().setVents(data.vents || []);
+            useSharedCodexStore.getState().received(data.selected_profile_id ?? '', data.shared_codex ?? null);
             useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             pruneAttachedPtySessions(nextSessions);
             const nextPRs = data.prs || [];
@@ -1159,6 +1192,7 @@ export function useDaemonSocket({
             callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);
 
             const nextSettings = data.settings || {};
+            setOutposts(data.outposts ?? []);
             settingsRef.current = nextSettings;
             callbacksRef.current.onSettingsUpdate?.(nextSettings);
             const nextWarnings = data.warnings || [];
@@ -1237,6 +1271,11 @@ export function useDaemonSocket({
               data.seeds || [],
               data.total ?? (data.seeds || []).length,
             );
+            break;
+
+          case 'garden_seeds_changed':
+            if (data.profile_id !== useProfilesStore.getState().selectedProfileId) break;
+            callbacksRef.current.onSeedsChange?.(data.order || [], data.seeds || [], data.total ?? (data.order || []).length);
             break;
 
           case 'garden_review_updated': {
@@ -1439,6 +1478,10 @@ export function useDaemonSocket({
             else pending.reject(new Error(data.error || 'The move was refused'));
             break;
           }
+
+          case 'seed_check_result':
+            settlePendingRequest(pendingActionsRef.current, 'seed_check', data, (event) => event.seed, 'The check move was refused');
+            break;
 
           case 'seed_note_result': {
             const requestId = data.request_id;
@@ -2244,6 +2287,11 @@ export function useDaemonSocket({
           }
 
           case 'command_error':
+            if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
+            if (data.terminal_id && (data.cmd === 'pty_input' || data.cmd === 'pty_resize')) {
+              useTerminalRefusals.getState().refused(data.terminal_id, data.cmd === 'pty_input' ? 1 : 0);
+              break;
+            }
             if (data.error_code === 'unauthorized_client') {
               console.error('[Daemon] Client token refused:', data.error);
               setConnectionError(data.error || 'The daemon refused this client.');
@@ -2264,10 +2312,11 @@ export function useDaemonSocket({
             const pending = pendingActionsRef.current;
             if (handleCalloutDaemonEvent(data, (result) => ws.send(JSON.stringify(result)))) break;
             if (handleQuickCaptureDaemonEvent(data, pending, receipt => { if (data.profile_id === useProfilesStore.getState().selectedProfileId) callbacksRef.current.onQuickCaptureRead?.(receipt); })) break;
+            if (handleOutpostDaemonEvent(data, setOutposts, setOutpostCommandError)) break;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
             if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
-            if (handleNotebookDaemonEvent(data, { pending, onNotebookChanged: callbacksRef.current.onNotebookChanged })) break;
+            if (handleNotebookDaemonEvent(data, pending)) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
             if (handleSessionAnnotationDaemonEvent(data, pending, (sessionId) => {
               for (const listener of sessionMessageListenersRef.current.get(sessionId) ?? []) {
@@ -2292,6 +2341,8 @@ export function useDaemonSocket({
             if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAskDaemonEvent(data, pending)) break;
+            if (handleSharedCodexDaemonEvent(data, pending)) break;
+            if (handleAnalyticsDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleConversationDaemonEvent(data, pending, () => setKeptConversationsChangeSignal((signal) => signal + 1))) break;
             if (handleWorktreeDaemonEvent(data, pending, {
@@ -2308,12 +2359,14 @@ export function useDaemonSocket({
 
     ws.onclose = (event) => {
       wsRef.current = null;
+      setIsConnected(false);
       rejectPendingByPredicate((key) => SELECTION_COMMANDS.some((command) => key.startsWith(`${command}:`)), new Error('The daemon disconnected before confirming the selection'));
       emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       setIsReady(false);
       const quickCaptureFailure = event.reason || 'Disconnected. Quick capture acceptance is unconfirmed.';
       rejectPendingByPredicate(key => key.startsWith('quick_capture_'), new Error(quickCaptureFailure));
+      rejectPendingByPredicate(key => key.startsWith(`${INSTALL_CODEX_UPDATE}:`), new CodexInstallUntracked());
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
@@ -2390,6 +2443,7 @@ export function useDaemonSocket({
       cmd: 'spawn_session',
       id: args.id,
       cwd: args.cwd,
+      ...(args.host && { host: args.host }),
       placement: args.placement ?? {},
       agent: args.shell ? 'shell' : (args.agent || 'codex'),
       cols: args.cols,
@@ -2403,7 +2457,6 @@ export function useDaemonSocket({
       ...(args.executable && { executable: args.executable }),
       ...(args.claude_executable && { claude_executable: args.claude_executable }),
       ...(args.codex_executable && { codex_executable: args.codex_executable }),
-      ...(args.copilot_executable && { copilot_executable: args.copilot_executable }),
     }, 'Spawn session timed out', 30000);
   }, [sendKeyedRequest]);
 
@@ -2460,13 +2513,16 @@ export function useDaemonSocket({
 
   // Attaches to the same session must not overlap (see attachQueue.ts): a second in-flight attach
   // overwrites the first's pending entry, resolves with the FIRST attach's result, and misclassifies its replay.
-  const sendAttachSession = useCallback((id: string, context?: AttachRequestContext): Promise<AttachResult> => {
-    return enqueuePerKey(attachQueueRef.current, id, () => sendAttachSessionNow(id, context));
+  const sendAttachSession = useCallback((id: string, context?: AttachRequestContext, signal?: AbortSignal): Promise<AttachResult> => {
+    return enqueuePerKey(attachQueueRef.current, id, () => {
+      signal?.throwIfAborted();
+      return sendAttachSessionNow(id, context);
+    });
   }, [sendAttachSessionNow]);
 
-  const sendAttachSessionWithRetry = useCallback(async (id: string, context?: AttachRequestContext): Promise<AttachResult> => {
+  const sendAttachSessionWithRetry = useCallback(async (id: string, context?: AttachRequestContext, signal?: AbortSignal): Promise<AttachResult> => {
     return retryTransientAttachRequest(
-      () => sendAttachSession(id, context),
+      () => sendAttachSession(id, context, signal),
       (attempt, error, elapsedMs) => {
         console.warn('[DaemonSocket] Retrying transient attach failure', {
           id,
@@ -2475,6 +2531,7 @@ export function useDaemonSocket({
           error: error instanceof Error ? error.message : String(error),
         });
       },
+      signal,
     );
   }, [sendAttachSession]);
 
@@ -2800,8 +2857,10 @@ export function useDaemonSocket({
     options: {
       policy: Extract<PtyAttachPolicy, 'relaunch_restore' | 'same_app_remount' | 'revive'>;
       forceResizeBeforeAttach?: boolean;
+      signal?: AbortSignal;
     },
   ): Promise<void> => {
+    options.signal?.throwIfAborted();
     const attachContext = createAttachRequestContext({
       ...args,
       agent: args.agent ?? null,
@@ -2814,7 +2873,9 @@ export function useDaemonSocket({
     const attachResult = await sendAttachSessionWithRetry(
       args.id,
       attachContext,
+      options.signal,
     );
+    options.signal?.throwIfAborted();
     reconcileAttachedRuntimeGeometry(args, attachResult, {
       attachPolicy: options.policy,
       attachContext,
@@ -2853,6 +2914,18 @@ export function useDaemonSocket({
         ...(force ? { force: true } : {}),
         ...(review ? { review: { review_id: review.reviewId, evidence_version: review.evidenceVersion } } : {}),
       }, 'The move timed out');
+    },
+    [sendRequest],
+  );
+
+  const sendSeedCheck = useCallback(
+    (seedId: string, checkId: string, verb: SeedCheckVerb, summary?: string): Promise<Seed> => {
+      return sendRequest('seed_check', {
+        seed_id: seedId,
+        check_id: checkId,
+        verb,
+        ...(summary ? { summary } : {}),
+      }, 'The check move timed out');
     },
     [sendRequest],
   );
@@ -2916,12 +2989,13 @@ export function useDaemonSocket({
           if (!isAlreadyExistsError(error)) throw error;
         }
       },
-      attach: async (args: PtyAttachArgs, options?: { forceResizeBeforeAttach?: boolean }) => {
+      attach: async (args: PtyAttachArgs, options?: PtyAttachOptions) => {
         await attachExistingRuntime({
           ...args,
         }, {
           policy: normalizeAttachPolicy(args.policy),
           forceResizeBeforeAttach: options?.forceResizeBeforeAttach,
+          signal: options?.signal,
         });
       },
       write: async (id: string, data: string, source?: string, traceId?: string) => {
@@ -3194,6 +3268,21 @@ export function useDaemonSocket({
     const key = 'list_plugins';
     return sendKeyedRequest<PluginListResult>(key, { cmd: 'list_plugins' }, 'List plugins timed out');
   }, [sendKeyedRequest]);
+
+  const sendOutpostCommand = useCallback((message: OutpostCommandMessage): boolean => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setOutpostCommandError('Connect to the home daemon to change outposts.');
+      return false;
+    }
+    setOutpostCommandError('');
+    ws.send(JSON.stringify(message));
+    return true;
+  }, []);
+  const sendUpdateOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'update_outpost', id }), [sendOutpostCommand]);
+  const sendAddOutpost = useCallback((name: string, address: string) => sendOutpostCommand({ cmd: 'add_outpost', name, address }), [sendOutpostCommand]);
+  const sendRepairOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'repair_outpost', id }), [sendOutpostCommand]);
+  const sendRemoveOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'remove_outpost', id }), [sendOutpostCommand]);
 
   const sendInstallPlugin = useCallback((source: string): Promise<PluginActionResult> => {
     const key = 'plugin_action:install:pending';
@@ -3530,8 +3619,48 @@ export function useDaemonSocket({
   const sendRecordCommandUsage = useCallback((profileId: string, commandId: string): Promise<boolean> =>
     sendRequest('record_command_usage', { profile_id: profileId, command_id: commandId }, 'Saving command history timed out'), [sendRequest]);
 
+  const sendRecordAnalytics = useCallback((name: string, props: Record<string, string | number>) =>
+    sendOrQueueCommand({ cmd: 'record_analytics', stream: 'app', name, props }), [sendOrQueueCommand]);
+
+  const sendListAnalyticsRecords = useCallback((stream: string | null, beforeId: number | null, limit: number): Promise<AnalyticsRecordPage> =>
+    sendRequest('list_analytics_records', {
+      limit,
+      ...(stream ? { stream } : {}),
+      ...(beforeId !== null ? { before_id: beforeId } : {}),
+    }, 'Reading the analytics records timed out'), [sendRequest]);
+
+  const sendSetVentDismissed = useCallback((ventId: string, dismissed: boolean): Promise<true> =>
+    sendRequest('set_vent_dismissed', { vent_id: ventId, dismissed }, 'Changing the vent timed out'), [sendRequest]);
+
+  const sendPlantVentSeed = useCallback((ventId: string): Promise<Seed> =>
+    sendRequest('plant_vent_seed', { vent_id: ventId }, 'Planting the seed timed out'), [sendRequest]);
+
+  const sendUnplantVentSeed = useCallback((ventId: string): Promise<true> =>
+    sendRequest('unplant_vent_seed', { vent_id: ventId }, 'Undoing the plant timed out'), [sendRequest]);
+
+  const sendGetAnalyticsStatus = useCallback((): Promise<AnalyticsStatus> =>
+    sendRequest('get_analytics_status', {}, 'Reading the analytics status timed out'), [sendRequest]);
+
+  const sendClearAnalyticsRecords = useCallback((): Promise<AnalyticsCleared> =>
+    sendRequest('clear_analytics_records', {}, 'Clearing the analytics records timed out'), [sendRequest]);
+
+  const sendForgetAnalyticsInstall = useCallback((): Promise<true> =>
+    sendRequest('forget_analytics_install', {}, 'Forgetting this install timed out'), [sendRequest]);
+
+  const sendSetVentSend = useCallback((ventId: string, send: boolean): Promise<true> =>
+    sendRequest('set_vent_send', { vent_id: ventId, send }, 'Changing where the vent goes timed out'), [sendRequest]);
+
+  const sendSetVentKind = useCallback((ventId: string, kind: VentKind): Promise<true> =>
+    sendRequest('set_vent_kind', { vent_id: ventId, kind }, 'Filing the vent timed out'), [sendRequest]);
+
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
+
+  const sendRestartSharedCodex = useCallback((profileId: string, now: boolean): Promise<true> =>
+    sendRequest('restart_shared_codex', { profile_id: profileId, now }, 'Restarting shared Codex timed out'), [sendRequest]);
+
+  const sendInstallCodexUpdate = useCallback((desktopId: string): Promise<true> =>
+    sendRequest(INSTALL_CODEX_UPDATE, { desktop_id: desktopId }, 'Installing the Codex update never finished', null), [sendRequest]);
 
   const sendRecentFiles = useCallback((limit?: number, root?: string): Promise<RecentFile[]> => {
     const requestId = nextRequestID('recent_files');
@@ -4128,7 +4257,7 @@ export function useDaemonSocket({
 
 
   return {
-    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    isConnected,
     isReady,
     connectionError,
     migrationFailure,
@@ -4190,6 +4319,13 @@ export function useDaemonSocket({
     sendQuickCaptureRequest,
     sendSaveSetting,
     sendGetSettings,
+    outposts,
+    outpostCommandError,
+    homeBuild,
+    sendUpdateOutpost,
+    sendAddOutpost,
+    sendRepairOutpost,
+    sendRemoveOutpost,
     sendListPlugins,
     sendInstallPlugin,
     sendInstallBundledPlugin,
@@ -4233,7 +4369,19 @@ export function useDaemonSocket({
     sendFsIndex,
     sendGetCommandUsage,
     sendRecordCommandUsage,
+    sendRecordAnalytics,
+    sendListAnalyticsRecords,
+    sendSetVentDismissed,
+    sendPlantVentSeed,
+    sendUnplantVentSeed,
+    sendGetAnalyticsStatus,
+    sendClearAnalyticsRecords,
+    sendForgetAnalyticsInstall,
+    sendSetVentSend,
+    sendSetVentKind,
     sendAskAnswer,
+    sendRestartSharedCodex,
+    sendInstallCodexUpdate,
     sendRecentFiles,
     sendGetRecentLocations,
     sendBrowseDirectory,
@@ -4275,6 +4423,7 @@ export function useDaemonSocket({
     sendSeedArtifactTransfer,
     sendSeedArtifactReferenceDetach,
     sendSeedTransition,
+    sendSeedCheck,
     sendSeedNote,
     sendRuntimeInput: sendPtyInput,
     sendTerminalPointerActivity,

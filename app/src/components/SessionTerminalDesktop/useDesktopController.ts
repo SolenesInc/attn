@@ -113,6 +113,7 @@ export function useDesktopController(
     onCancelCountdown,
     onTerminalPointerActivity,
     onOpenMarkdown,
+    onTerminalPathRefused,
     zoomActive = false,
     onSetZoomActive,
     onNavigateOutOfSession,
@@ -209,6 +210,7 @@ export function useDesktopController(
         sessionId: pane.sessionId,
         testSessionId: pane.sessionId,
         state: paneSession?.state,
+        reach: paneSession?.reach,
         state_reason: paneSession?.state_reason,
         terminalExit: paneSession?.terminalExit,
       });
@@ -1154,6 +1156,7 @@ export function useDesktopController(
     onCancelCountdown,
     onTerminalPointerActivity,
     onOpenMarkdown,
+    onTerminalPathRefused,
     onSetZoomActive,
     onUndockTile,
     onUpdateTile,

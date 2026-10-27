@@ -1,6 +1,6 @@
 # Design
 
-Use this reference to shape, compare, or review an interface: any boundary through which people, agents, or other code use what you build, such as a function, type, module, package, command line, file format, protocol, or web API. The checks are the same inside a codebase and across organizations; what changes is the cost of a mistake, which grows with the number of callers and how hard they are to change.
+Use this reference to shape, compare, or review an interface, and the structure behind it: any boundary through which people, agents, or other code use what you build, such as a function, type, module, package, command line, file format, protocol, or web API. The checks are the same inside a codebase and across organizations; what changes is the cost of a mistake, which grows with the number of callers and how hard they are to change.
 
 ## Start from the caller
 
@@ -25,6 +25,16 @@ Apply each check to the call sites. Skip a check that does not fit the interface
 - **A small vocabulary with a validator, where uses are many.** When people or agents will write many uses in a bounded domain, a small, constrained vocabulary (typed builders, an internal DSL, a schema) backed by a deterministic checker whose errors point to the fix lets an author write a candidate, check it, and repair it unaided. It costs a language to design and maintain, and pays only while the domain is truly bounded and the vocabulary stays small. (Joshi, "DSLs Enable Reliable Use of LLMs", martinfowler.com, 2026)
 - **Evolves without breaking callers.** Name the likeliest next requirement and show what changes at the call sites. Do not build for it; check only that it would be additive. If existing callers would have to change, reconsider the boundary. With enough callers, every observable behavior is depended on, whatever the contract says, so changing it is a break. (Hyrum's law, *Software Engineering at Google*; Torvalds: "we don't break userspace")
 
+## Check the structure behind it
+
+The call sites judge a boundary from outside. The structure behind it is judged by the next person to change it, often an agent that sees only the files it opened, copies the nearest example, and takes the shortest path that compiles. Prefer the structure in which a change that looks right from one file is right for the whole system.
+
+- **Data structures first.** Trace each common access pattern through the proposed types. If one needs a map, index, or cache added later to be fast or correct, the structure is wrong now.
+- **One writer per piece of state.** When two modules write the same state, or each keeps its own copy, an edit to one writer cannot see the others, and their rules drift apart. Give the state one owner; other modules read it or ask the owner to change it. When two actors genuinely write at the same time, give each its own state and combine them where they are read.
+- **Organized by knowledge, not by order of execution.** Separate load, validate, transform, and save modules repeat one representation and its rules across every boundary between them. Group code by the decision it protects; code that runs at different times can share a module. (Ousterhout: temporal decomposition)
+- **One list.** When adding an item means editing several lists, an agent that finds one list updates only that one. Keep one list and derive the others. When a list cannot be derived, make the build fail when the lists disagree.
+- **Internals out of reach.** Code that can import a module's internals will, and they become part of its interface. Make them unreachable, so an import from outside fails the build: an unexported name, an `internal` directory, or an import test.
+
 ## Weigh the result
 
-The checks pull against each other: a deep module against small composable ones, a constrained vocabulary against a general one. Match the effort to the interface's reach, as the skill's engineering judgment matches rigor to consequences. A private helper with one caller needs a good name and little else; a boundary that many callers or other teams depend on deserves the full pass. Prefer the design whose call sites read clearly with the fewest concepts, and say which checks decided it.
+The checks pull against each other: a deep module against small composable ones, a constrained vocabulary against a general one. Match the effort to the interface's reach, as the skill's engineering judgment matches rigor to consequences. A private helper with one caller needs a good name and little else; a boundary that many callers or other teams depend on deserves the full pass. Prefer the design whose call sites read clearly with the fewest concepts and whose structure leaves the next change one obvious place to go, and say which checks decided it.

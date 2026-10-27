@@ -74,6 +74,45 @@ func TestValidateInstanceRouting_DefaultInstanceHarnessRefusesAnInheritedProduct
 	}
 }
 
+func TestValidateInstanceRouting_NamedHarnessUsesOnlyItsSandbox(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, value string
+	}{
+		{name: "isolated routes"},
+		{name: "named socket", key: "ATTN_SOCKET_PATH", value: SocketPathForInstance("agent7")},
+		{name: "production database", key: "ATTN_DB_PATH", value: filepath.Join(DataDirForInstance(""), "attn.db")},
+		{name: "named notebook", key: "ATTN_HARNESS_NOTEBOOK_ROOT", value: DataDirForInstance("agent7")},
+		{name: "production port", key: "ATTN_WS_PORT", value: WSPortForInstance("")},
+		{name: "development port", key: "ATTN_WS_PORT", value: "29849"},
+		{name: "named port", key: "ATTN_WS_PORT", value: WSPortForInstance("agent7")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.Chmod(root, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			overrides := map[string]string{
+				"ATTN_DATA_DIR":              root,
+				"ATTN_HARNESS_DATA_DIR":      root,
+				"ATTN_HARNESS_NOTEBOOK_ROOT": filepath.Join(root, "notebook"),
+				"ATTN_WS_PORT":               "29150",
+			}
+			if tc.key != "" {
+				overrides[tc.key] = tc.value
+			}
+			scopeRouting(t, "agent7", overrides)
+			err := ValidateInstanceRouting()
+			if tc.key == "" {
+				if err != nil {
+					t.Fatalf("named sandbox refused: %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.value) {
+				t.Fatalf("escaped route %s=%s was not named in a refusal: %v", tc.key, tc.value, err)
+			}
+		})
+	}
+}
+
 func TestValidateInstanceRouting_LeakedDataDirIsRefused(t *testing.T) {
 	prod := DataDirForInstance("")
 	scopeRouting(t, "fb2lists", map[string]string{

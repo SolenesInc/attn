@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/github"
@@ -108,10 +109,6 @@ type sessionPullRequestGroup struct {
 	due      bool
 }
 
-func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int) {
-	return d.refreshSessionPullRequestsContext(context.Background(), now, "")
-}
-
 func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time.Time, forcePRID string) (fetched, changed int) {
 	d.sessionPRRefreshMu.Lock()
 	defer d.sessionPRRefreshMu.Unlock()
@@ -207,7 +204,7 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 			continue
 		}
 		if status.State == sessionPullRequestMerged {
-			crashAt(crashAfterMergePersisted)
+			crashpoint.At(crashAfterMergePersisted)
 		}
 		changed++
 		if err := d.store.TouchSessionPullRequestActivity(group.prID, now); err != nil {
@@ -219,7 +216,12 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 	d.broadcastSessionPullRequestLimits(limitedResources)
 	if len(changedSessions) > 0 {
 		d.coalesceSnapshots(func() {
+			published := make(map[string]bool, len(changedSessions))
 			for _, sessionID := range changedSessions {
+				if published[sessionID] {
+					continue
+				}
+				published[sessionID] = true
 				d.publishFact(FactSessionPullRequestChanged, sessionID, nil)
 			}
 		})
@@ -497,7 +499,7 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			watch, "outage:"+now.UTC().Format(time.RFC3339Nano), store.PullRequestWatchOutageCoalesceKey(watch.PRID),
 			"monitoring is delayed", []string{fetchErr.Error()},
 		)
-		delivery, err := d.store.RecordPullRequestWatchFailure(
+		delivery, projectionChanged, err := d.store.RecordPullRequestWatchFailure(
 			watch.Watcher.Address(), watch.SessionID, watch.PRID, watch.CreatedAt, watch.Mode, watch.Reviewer,
 			fetchErr.Error(), item, now,
 		)
@@ -510,6 +512,9 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 		}
 		if delivery != nil {
 			d.deliverPullRequestMailbox(*delivery)
+		}
+		if !projectionChanged {
+			continue
 		}
 		changed = append(changed, string(watch.SessionID))
 		if holder := d.inboxHolder(watch.Watcher.Address()); holder != nil && holder.ID != watch.SessionID {

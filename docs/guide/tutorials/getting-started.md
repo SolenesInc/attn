@@ -6,7 +6,7 @@ From a fresh install to your first agent, with the Chief at your side.
 
 You need:
 
-- At least one agent CLI installed: Claude Code, Codex, Copilot CLI or Pi. Attn
+- At least one agent CLI installed: Claude Code, Codex or Pi. Attn
   runs them as they are, so install and log into the one you use.
 - The [GitHub CLI](https://cli.github.com/) (`gh`) 2.81 or newer, if you want
   the PR features.

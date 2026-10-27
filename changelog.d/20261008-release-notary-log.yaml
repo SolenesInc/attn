@@ -1,3 +1,0 @@
-kind: internal
-area: release
-change: A release whose notarization Apple rejects now fails with Apple's notary log and submission id instead of a bare stapler error.

@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-var crewRequestedSleepPrompt = prompts.RenderText("crew", "sleep-requested", prompts.Values{})
-
 func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
 	b, bindingsErr := d.bindings()
 	if bindingsErr != nil {
@@ -95,7 +93,8 @@ func (d *Daemon) crewSleep(r who.Requester, name string) (*protocol.CrewSleepRes
 		}, nil
 	}
 
-	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: who.ToSession(sessionID), Kind: inbox.Notice, Text: crewRequestedSleepPrompt})
+	prompt := prompts.RenderText("crew", "sleep-requested", prompts.Values{"crew_memory_enabled": fmt.Sprint(d.crewMemoryEnabled())})
+	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: who.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", d.storedMemberName(member.Key.String()), err)
 	}

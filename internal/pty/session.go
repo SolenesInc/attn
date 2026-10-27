@@ -146,6 +146,17 @@ func (s *Session) removeSubscriber(subID string) {
 	delete(s.subscribers, subID)
 }
 
+func (s *Session) fanOutOutput(data []byte, lastSeq uint32) {
+	pieces := (len(data) + OutputEventMaxBytes - 1) / OutputEventMaxBytes
+	seq := lastSeq - uint32(pieces) + 1
+	for len(data) > 0 {
+		n := min(len(data), OutputEventMaxBytes)
+		s.fanOut(data[:n], seq)
+		data = data[n:]
+		seq++
+	}
+}
+
 func (s *Session) fanOut(data []byte, seq uint32) {
 	s.subMu.RLock()
 	if len(s.subscribers) == 0 {
@@ -229,9 +240,10 @@ func (s *Session) forceResync(reason string) {
 }
 
 const (
-	ptyReadBufBytes     = 16 * 1024
-	ptyCoalesceMaxBytes = 256 * 1024
-	ptyCoalesceWindow   = 5 * time.Millisecond
+	OutputReadBufferBytes     = 16 * 1024
+	OutputCoalesceTargetBytes = 256 * 1024
+	OutputEventMaxBytes       = OutputCoalesceTargetBytes + OutputReadBufferBytes
+	ptyCoalesceWindow         = 5 * time.Millisecond
 )
 
 type ptyRead struct {
@@ -265,7 +277,7 @@ func nextCoalescedReadAdmitted(
 	select {
 	case r := <-reads:
 		r.acknowledgeAdmission()
-		batch = append(make([]byte, 0, maxBytes+ptyReadBufBytes), first.data...)
+		batch = append(make([]byte, 0, maxBytes+OutputReadBufferBytes), first.data...)
 		batch = append(batch, r.data...)
 		if r.err != nil {
 			return batch, r.err
@@ -304,7 +316,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	reads := make(chan ptyRead, 4)
 	go func() {
 		for {
-			buf := make([]byte, ptyReadBufBytes)
+			buf := make([]byte, OutputReadBufferBytes)
 			n, err := s.ptmx.Read(buf)
 			admitted := make(chan struct{})
 			s.deliveryAdmissionMu.Lock()
@@ -329,7 +341,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	for {
 		batch, err := nextCoalescedReadAdmitted(
 			reads,
-			ptyCoalesceMaxBytes,
+			OutputCoalesceTargetBytes,
 			ptyCoalesceWindow,
 			s.deliveryMu.Lock,
 		)
@@ -357,8 +369,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					s.writeColorSchemeResponses(queries.colorScheme, logf)
 				}
 
-				seq := s.seqCounter.Add(1)
-				pausepoint.At(pausepoint.PtyOutputSequenced)
+				pausepoint.At(pausepoint.PtyOutputPending)
 				wire, resync := data, ""
 				var placements []KittyPlacement
 				placementsMoved := false
@@ -367,6 +378,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					wire, resync = s.wireFeed.feed(data)
 					placements, placementsMoved = s.wireFeed.changedPlacements()
 				}
+				seq := s.seqCounter.Add(uint32(max(1, (len(wire)+OutputEventMaxBytes-1)/OutputEventMaxBytes)))
 				s.lastReplaySeq = seq
 				s.textChangedLocked()
 				s.replayMu.Unlock()
@@ -390,7 +402,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					pausepoint.At(pausepoint.PtyOutputHeld)
 				}
 				if len(wire) > 0 {
-					s.fanOut(wire, seq)
+					s.fanOutOutput(wire, seq)
 				}
 				if placementsMoved {
 					s.fanOutPlacements(PlacementUpdate{Seq: seq, Placements: placements})
@@ -425,7 +437,6 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 
 	if len(carryover) > 0 {
 		s.deliveryMu.Lock()
-		seq := s.seqCounter.Add(1)
 		wire, resync := carryover, ""
 		var placements []KittyPlacement
 		placementsMoved := false
@@ -434,12 +445,13 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			wire, resync = s.wireFeed.feed(carryover)
 			placements, placementsMoved = s.wireFeed.changedPlacements()
 		}
+		seq := s.seqCounter.Add(uint32(max(1, (len(wire)+OutputEventMaxBytes-1)/OutputEventMaxBytes)))
 		s.lastReplaySeq = seq
 		s.textChangedLocked()
 		s.replayMu.Unlock()
 		s.drainGhosttyResponses(logf)
 		if len(wire) > 0 {
-			s.fanOut(wire, seq)
+			s.fanOutOutput(wire, seq)
 		}
 		if placementsMoved {
 			s.fanOutPlacements(PlacementUpdate{Seq: seq, Placements: placements})
@@ -940,11 +952,13 @@ const sigtermToHUPGrace = 2 * time.Second
 
 const sighupRepeat = 500 * time.Millisecond
 
-func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
-	return s.killWithEscalation(sig, waitTimeout, nil)
+const shellCloseGrace = 500 * time.Millisecond
+
+func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration, logf LogFunc) error {
+	return s.killWithEscalation(sig, waitTimeout, nil, logf)
 }
 
-func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal)) error {
+func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal), logf LogFunc) (result error) {
 	s.exitMu.RLock()
 	running := s.running
 	s.exitMu.RUnlock()
@@ -957,13 +971,25 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 		return errors.New("process unavailable")
 	}
 
-	pgid := pid
-	if actualPGID, err := syscall.Getpgid(pid); err == nil && actualPGID > 0 {
-		pgid = actualPGID
-	}
-
-	if err := syscall.Kill(-pgid, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+	if s.agent == "shell" && sig == syscall.SIGTERM {
+		if err := s.signalProcesses(syscall.SIGHUP); err != nil {
+			return err
+		}
+		if err := s.signalProcesses(syscall.SIGTERM); err != nil {
+			return err
+		}
+		sig = syscall.SIGHUP
+		if waitTimeout > shellCloseGrace {
+			waitTimeout = shellCloseGrace
+		}
+	} else if err := s.signalProcesses(sig); err != nil {
 		return err
+	}
+	defer func() { result = errors.Join(result, s.signalProcesses(syscall.SIGKILL)) }()
+	if sig == syscall.SIGKILL {
+		s.closePTMX()
+		<-s.exited
+		return nil
 	}
 
 	deadline := time.Now().Add(waitTimeout)
@@ -980,7 +1006,7 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 			if onEscalate != nil {
 				onEscalate(syscall.SIGHUP)
 			}
-			_ = syscall.Kill(-pgid, syscall.SIGHUP)
+			_ = s.signalProcesses(syscall.SIGHUP)
 		}
 	}
 
@@ -999,15 +1025,49 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 		case <-time.After(wait):
 		}
 		if sent == syscall.SIGHUP {
-			_ = syscall.Kill(-pgid, syscall.SIGHUP)
+			_ = s.signalProcesses(syscall.SIGHUP)
 		}
 	}
 	if onEscalate != nil {
 		onEscalate(syscall.SIGKILL)
 	}
-	_ = syscall.Kill(-pgid, syscall.SIGKILL)
+	if s.agent == "shell" && logf != nil {
+		logf("shell close escalated for %s: grace=%s escalation=SIGKILL", s.id, waitTimeout)
+	}
+	if err := s.signalProcesses(syscall.SIGKILL); err != nil {
+		return err
+	}
+	s.closePTMX()
 	<-s.exited
 	return nil
+}
+
+func (s *Session) signalProcesses(sig syscall.Signal) error {
+	pid := s.child.processID()
+	if pid <= 0 {
+		return errors.New("process unavailable")
+	}
+	processes, err := sessionProcesses(pid)
+	if err != nil {
+		return fmt.Errorf("read processes for terminal session %d: %w", pid, err)
+	}
+	var signalErr error
+	leader := false
+	for _, member := range processes {
+		if member == pid {
+			leader = true
+			continue
+		}
+		if err := syscall.Kill(member, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+			signalErr = errors.Join(signalErr, fmt.Errorf("signal %s to process %d: %w", sig, member, err))
+		}
+	}
+	if leader {
+		if err := syscall.Kill(pid, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+			signalErr = errors.Join(signalErr, fmt.Errorf("signal %s to process %d: %w", sig, pid, err))
+		}
+	}
+	return signalErr
 }
 
 func (s *Session) closePTY() {

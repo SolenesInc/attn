@@ -12,6 +12,7 @@ type Source string
 const (
 	SourceHeartbeat     Source = "heartbeat"
 	SourceProgramStatus Source = "program_status"
+	SourceAppServer     Source = "app_server"
 	SourceBracket       Source = "hook_bracket"
 	SourceHarnessEvent  Source = "harness_event"
 	SourceClassifier    Source = "classifier"
@@ -58,7 +59,6 @@ type ConversationEvidence struct {
 	PendingCron       bool
 	Compacting        bool
 	InitialPromptOwed bool
-	PlacedInputOwed   bool
 	PromptIdleAt      time.Time
 	ClassifyingSince  time.Time
 }
@@ -106,6 +106,7 @@ func PolicyFor(agent string) Policy {
 	}
 	if agent == string(protocol.SessionAgentClaude) {
 		policy.HeartbeatTTL = claudeHeartbeatTTL
+		policy.GuardianDwell = 0
 	}
 	if agent == string(protocol.SessionAgentShell) {
 		policy.HeartbeatTTL = shellHeartbeatTTL
@@ -158,7 +159,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 	}
 
 	if e.ProgramStatus != nil {
-		if r, ok := harnessEdge(e); ok {
+		if r, ok := harnessEdge(e, policy); ok {
 			return r
 		}
 		if r, ok := programStatusEdge(*e.ProgramStatus); ok {
@@ -168,7 +169,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 		return running(e)
 	}
 
-	if r, ok := harnessEdge(e); ok {
+	if r, ok := harnessEdge(e, policy); ok {
 		return r
 	}
 
@@ -236,7 +237,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 		if signal.Claim == ClaimBusy && !heartbeatSilentFor(e, now, policy.HeartbeatSettleAfter) {
 			return running(e)
 		}
-		if signal.Source == SourceProgramStatus {
+		if e.ProgramStatus != nil {
 			return settled(e, ReasonProgramSettled, policy, now)
 		}
 		return settled(e, ReasonHeartbeatSettled, policy, now)
@@ -247,7 +248,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 	}
 
 	if signal != nil && signal.Claim == ClaimSettled && !TookATurn(e.ConversationEvidence) {
-		if e.InitialPromptOwed || e.PlacedInputOwed {
+		if e.InitialPromptOwed {
 			return Resolution{Hold: true, Reason: ReasonPromptOwed}
 		}
 		return Resolution{State: protocol.SessionStateIdle, Reason: ReasonAtPrompt}
@@ -326,7 +327,7 @@ func programStatusEdge(o Observation) (Resolution, bool) {
 	case ClaimApprovalPending:
 		return Resolution{State: protocol.SessionStatePendingApproval, Reason: ReasonProgramBlocked, Detail: o.Detail}, true
 	case ClaimNeedsInput:
-		return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonProgramBlocked, Detail: o.Detail}, true
+		return Resolution{State: protocol.SessionStatePendingApproval, Reason: ReasonProgramBlocked, Detail: o.Detail}, true
 	case ClaimStopFailed:
 		return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonProgramError, Detail: o.Detail}, true
 	default:
@@ -351,12 +352,15 @@ func ClassifierVerdictPending(e ConversationEvidence, policy Policy, now time.Ti
 	return now.Sub(e.ClassifyingSince) <= policy.ClassifierTimeout
 }
 
-func harnessEdge(e evidence) (Resolution, bool) {
+func harnessEdge(e evidence, policy Policy) (Resolution, bool) {
 	if e.LastHarnessEvent == nil || supersededByBusy(e.LastHarnessEvent, e) || supersededByProgramStatus(e.LastHarnessEvent, e) {
 		return Resolution{}, false
 	}
 	switch e.LastHarnessEvent.Claim {
 	case ClaimApprovalPending:
+		if reviewedApprovalsShowOnTheTerminal(e, policy) {
+			return Resolution{}, false
+		}
 		return Resolution{
 			State:  protocol.SessionStatePendingApproval,
 			Reason: ReasonApprovalOpen,
@@ -377,6 +381,12 @@ func harnessEdge(e evidence) (Resolution, bool) {
 	default:
 		return Resolution{}, false
 	}
+}
+
+func reviewedApprovalsShowOnTheTerminal(e evidence, policy Policy) bool {
+	reviewerAnswers := e.ReviewerInLoop && policy.GuardianDwell > 0
+	terminalReports := e.ProgramStatus != nil && e.ProgramStatus.Source == SourceProgramStatus
+	return reviewerAnswers && terminalReports
 }
 
 func turnAborted(e evidence) bool {
@@ -418,10 +428,19 @@ func classifierVerdict(e evidence) (Resolution, bool) {
 
 func DwellFor(state protocol.SessionState, terminal TerminalEvidence, conversation ConversationEvidence, policy Policy) time.Duration {
 	e := evidence{terminal, conversation}
-	if state == protocol.SessionStatePendingApproval && e.ReviewerInLoop {
+	if state == protocol.SessionStatePendingApproval && e.ReviewerInLoop && !waitsOnUser(e) {
 		return policy.GuardianDwell
 	}
 	return 0
+}
+
+func waitsOnUser(e evidence) bool {
+	status := e.ProgramStatus
+	if status == nil {
+		return false
+	}
+	terminalShowsApproval := status.Source == SourceProgramStatus && status.Claim == ClaimApprovalPending
+	return status.Claim == ClaimNeedsInput || terminalShowsApproval
 }
 
 func supersededByBusy(o *Observation, e evidence) bool {

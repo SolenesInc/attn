@@ -94,7 +94,7 @@ func (d *Daemon) releaseRetiredClaimsProtected(protection foregroundCleanupProte
 		if err != nil {
 			return released, err
 		}
-		_, _, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, []seedEvents.Occurrence{occurrence}, []garden.Note{{Seed: seed.ID, Kind: garden.NoteKindNote, Author: who.Attn(), Body: fmt.Sprintf("%s was retired; attn released its claim.", m.Name)}})
+		_, _, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, []seedEvents.Occurrence{occurrence}, []garden.Note{{Seed: seed.ID, Kind: garden.NoteKindNote, Author: who.Attn(), Body: fmt.Sprintf("%s was retired; attn released its claim.", m.Name)}}, false)
 		if err != nil {
 			return released, err
 		}

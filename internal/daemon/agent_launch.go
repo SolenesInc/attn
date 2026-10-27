@@ -2,32 +2,30 @@ package daemon
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, profileID string, terminal harness.TerminalID, isChief bool, opts *ptybackend.SpawnOptions, initialPrompt string) error {
+func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *AgentLaunch) error {
+	terminal := opts.ID
 	driver := agentdriver.Get(opts.Agent)
 	if driver == nil {
 		return fmt.Errorf("unknown agent %q", opts.Agent)
 	}
-	if !parseBooleanSetting(d.daemonSetting(settingDirectAgentLaunchEnabled)) {
+	launch, awareness, initialPrompt := intent.Context, intent.AwarenessDirs, intent.InitialPrompt
+	if !intent.Direct {
 		prepareLauncherLaunch(driver, opts, initialPrompt)
-		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", parseBooleanSetting(d.daemonSetting(settingQuickCaptureEnabled))))
+		if launch.CrewMemoryEnabled {
+			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMORY_ENABLED=1")
+		}
+		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", launch.QuickCapture), fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents))
 		return nil
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
-	launch, awareness, err := d.prepareLaunchContext(sessionID, profileID, isChief && caps.HasLaunchInstructions, !caps.HasHooks)
-	if err != nil {
-		return err
-	}
 	executable := configuredLaunchExecutable(driver, opts)
 	explicitExecutable := executable
 	if executable == "" {
@@ -42,8 +40,9 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, profileID stri
 		Model:                 opts.Model, Effort: opts.Effort, AutoCompactWindow: opts.ContextWindowCap,
 		Executable: executable, SocketPath: d.socketPath,
 		WrapperPath:  launchenv.ActiveAttnExecutable(),
-		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks,
+		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks, Vent: launch.Vent, ToolVents: launch.ToolVents,
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
+		CrewMemoryEnabled:      launch.CrewMemoryEnabled,
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		QuickCapture:           launch.QuickCapture,
 		CodexRemote:            opts.CodexRemote,
@@ -69,22 +68,10 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, profileID stri
 	if provider, ok := agentdriver.GetConfigOverrideProvider(driver); ok {
 		spawn.ConfigOverrides = provider.GenerateConfigOverrides(spawn)
 	}
-	if provider, ok := agentdriver.GetInstructionsFileProvider(driver); ok {
-		name, content := provider.GenerateInstructionsFile(spawn)
-		if strings.TrimSpace(content) != "" {
-			spawn.InstructionsDir = d.agentLaunchDir(terminal)
-			if err := os.MkdirAll(spawn.InstructionsDir, 0o700); err != nil {
-				return fmt.Errorf("create launch instructions directory: %w", err)
-			}
-			if err := os.WriteFile(filepath.Join(spawn.InstructionsDir, name), []byte(content), 0o600); err != nil {
-				return fmt.Errorf("write launch instructions: %w", err)
-			}
-		}
-	}
-	opts.AgentArgv = append([]string{"/bin/sh", "-c", directAgentLaunchScript, "attn-agent", driver.ExecutableEnvVar(), explicitExecutable, spawn.InstructionsDir}, driver.BuildCommand(spawn).Args...)
+	opts.AgentArgv = append([]string{"/bin/sh", "-c", directAgentLaunchScript, "attn-agent", driver.ExecutableEnvVar(), explicitExecutable}, driver.BuildCommand(spawn).Args...)
 	for _, entry := range driver.BuildEnv(spawn) {
 		key, _, _ := strings.Cut(entry, "=")
-		if key != driver.ExecutableEnvVar() && key != "COPILOT_CUSTOM_INSTRUCTIONS_DIRS" {
+		if key != driver.ExecutableEnvVar() {
 			opts.AgentEnv = append(opts.AgentEnv, entry)
 		}
 	}
@@ -92,21 +79,10 @@ func (d *Daemon) prepareAgentLaunch(sessionID protocol.SessionID, profileID stri
 	return nil
 }
 
-func (d *Daemon) agentLaunchDir(terminal harness.TerminalID) string {
-	root := d.dataRoot
-	if root == "" {
-		root = filepath.Dir(d.socketPath)
-	}
-	return filepath.Join(root, "runtime", "launch", string(terminal))
-}
-
-func (d *Daemon) removeAgentLaunchDir(terminal harness.TerminalID) {
-	if err := os.RemoveAll(d.agentLaunchDir(terminal)); err != nil {
-		d.logf("remove launch instructions for terminal %s: %v", terminal, err)
-	}
-}
-
 func configuredLaunchExecutable(driver agentdriver.Driver, opts *ptybackend.SpawnOptions) string {
+	if opts.LaunchExecutable != "" {
+		return opts.LaunchExecutable
+	}
 	if !opts.UnattendedLaunch.IsZero() {
 		return opts.UnattendedLaunch.Executable
 	}
@@ -118,8 +94,6 @@ func configuredLaunchExecutable(driver agentdriver.Driver, opts *ptybackend.Spaw
 		return opts.ClaudeExecutable
 	case "codex":
 		return opts.CodexExecutable
-	case "copilot":
-		return opts.CopilotExecutable
 	}
 	return ""
 }
@@ -165,32 +139,14 @@ trim_space() {
 }
 executable_var=$1
 explicit_executable=$2
-instructions_dir=$3
-shift 3
+shift 2
 case "$executable_var" in
  ATTN_CLAUDE_EXECUTABLE) inherited_executable=${ATTN_CLAUDE_EXECUTABLE-} ;;
  ATTN_CODEX_EXECUTABLE) inherited_executable=${ATTN_CODEX_EXECUTABLE-} ;;
- ATTN_COPILOT_EXECUTABLE) inherited_executable=${ATTN_COPILOT_EXECUTABLE-} ;;
 esac
 trim_space "$inherited_executable"
 executable=${explicit_executable:-${trimmed:-$1}}
 shift
 export "$executable_var=$executable"
-if [ -n "$instructions_dir" ]; then
- remaining_dirs=${COPILOT_CUSTOM_INSTRUCTIONS_DIRS-}
- instructions=
- while :; do
-  entry=${remaining_dirs%%,*}
-  trim_space "$entry"
-  if [ -n "$trimmed" ] && [ "$trimmed" != "$instructions_dir" ]; then
-   instructions=${instructions:+$instructions,}$trimmed
-  fi
-  case "$remaining_dirs" in
-   *,*) remaining_dirs=${remaining_dirs#*,} ;;
-   *) break ;;
-  esac
- done
- export COPILOT_CUSTOM_INSTRUCTIONS_DIRS=${instructions:+$instructions,}$instructions_dir
-fi
 exec "$executable" "$@"
 `

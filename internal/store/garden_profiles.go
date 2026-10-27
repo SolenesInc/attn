@@ -18,7 +18,7 @@ func (s *Store) GardenSessionProfileID(sessionID protocol.SessionID) (string, er
 		return "", fmt.Errorf("garden recipient profiles need the SQLite store")
 	}
 	var profileID string
-	err := s.db.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?
+	err := s.db.QueryRow(`SELECT profile_id FROM sessions_with_runtime WHERE id = ?
 		UNION ALL SELECT coalesce(json_extract(request_json, '$.profile_id'), '') FROM delegation_operations
 		WHERE session_id = ? AND state IN (?, ?) LIMIT 1`, sessionID, sessionID,
 		string(protocol.DelegationOperationStateAccepted), string(protocol.DelegationOperationStatePreparing)).Scan(&profileID)

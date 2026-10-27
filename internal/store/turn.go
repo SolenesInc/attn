@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -12,6 +13,8 @@ type TurnStamps struct {
 	OpenedAt     time.Time
 	SettledAt    time.Time
 	SnoozedUntil time.Time
+	AgentAt      time.Time
+	RequestedAt  time.Time
 }
 
 type TurnOpening struct {
@@ -22,193 +25,6 @@ type TurnOpening struct {
 type TurnOpeningOutcome struct {
 	HeldBySnooze bool
 	EndedSnooze  time.Time
-}
-
-func (s *Store) UpdateStateOpeningTurn(id protocol.SessionID, state string, opening TurnOpening) (bool, TurnOpeningOutcome) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	if !s.updateStateLocked(id, state, now) {
-		return false, TurnOpeningOutcome{}
-	}
-	return true, s.openTurnLocked(id, opening, now)
-}
-
-func (s *Store) ApplyAgentDriverStateOpeningTurn(id protocol.SessionID, runID string, seq uint64, state string, requestStartedAt time.Time, opening TurnOpening) (bool, TurnOpeningOutcome) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now()
-	if !s.applyAgentDriverStateLocked(id, runID, seq, state, requestStartedAt, now) {
-		return false, TurnOpeningOutcome{}
-	}
-	return true, s.openTurnLocked(id, opening, now)
-}
-
-func (s *Store) openTurnLocked(id protocol.SessionID, opening TurnOpening, now time.Time) TurnOpeningOutcome {
-	if !opening.Opens {
-		return TurnOpeningOutcome{}
-	}
-	var outcome TurnOpeningOutcome
-	if snoozed := s.turnStampsLocked(id).SnoozedUntil; !snoozed.IsZero() {
-		stillSnoozed := snoozed.After(now) && !opening.BreaksSnooze
-		if stillSnoozed || !s.wakeTurnAtLocked(id, snoozed) {
-			return TurnOpeningOutcome{HeldBySnooze: true}
-		}
-		outcome.EndedSnooze = snoozed
-	}
-	s.openTurnIfClosedLocked(id, now)
-	return outcome
-}
-
-func (s *Store) OpenTurnIfClosed(id protocol.SessionID, now time.Time) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.openTurnIfClosedLocked(id, now)
-}
-
-func (s *Store) openTurnIfClosedLocked(id protocol.SessionID, now time.Time) bool {
-	stamp := now.UTC().Format(sortableTimeFormat)
-
-	if s.db == nil {
-		if _, ok := s.sessions[id]; !ok {
-			return false
-		}
-		current := s.turnStamps[id]
-		if current.OpenedAt.After(current.SettledAt) {
-			return false
-		}
-		s.setTurnStampsLocked(id, TurnStamps{OpenedAt: now.UTC(), SettledAt: current.SettledAt})
-		return true
-	}
-
-	result, err := s.db.Exec(`
-		UPDATE sessions SET turn_opened_at = ?
-		 WHERE id = ? AND closed_at = '' AND (turn_opened_at = '' OR turn_opened_at <= turn_settled_at)`,
-		stamp, id)
-	if err != nil {
-		log.Printf("[store] OpenTurnIfClosed: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, err := result.RowsAffected()
-	return err == nil && updated == 1
-}
-
-func (s *Store) SettleTurn(id protocol.SessionID, now time.Time) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		if _, ok := s.sessions[id]; !ok {
-			return false
-		}
-		current := s.turnStamps[id]
-		current.SettledAt = now.UTC()
-		s.setTurnStampsLocked(id, current)
-		return true
-	}
-
-	result, err := s.db.Exec(`UPDATE sessions SET turn_settled_at = ? WHERE id = ? AND closed_at = ''`,
-		now.UTC().Format(sortableTimeFormat), id)
-	if err != nil {
-		log.Printf("[store] SettleTurn: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, err := result.RowsAffected()
-	return err == nil && updated == 1
-}
-
-func (s *Store) SnoozeTurn(id protocol.SessionID, until, now time.Time) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		if _, ok := s.sessions[id]; !ok {
-			return false
-		}
-		current := s.turnStamps[id]
-		current.SettledAt = now.UTC()
-		current.SnoozedUntil = until.UTC()
-		s.setTurnStampsLocked(id, current)
-		return true
-	}
-
-	result, err := s.db.Exec(
-		`UPDATE sessions SET turn_settled_at = ?, turn_snoozed_until = ? WHERE id = ? AND closed_at = ''`,
-		now.UTC().Format(sortableTimeFormat), until.UTC().Format(sortableTimeFormat), id)
-	if err != nil {
-		log.Printf("[store] SnoozeTurn: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, err := result.RowsAffected()
-	return err == nil && updated == 1
-}
-
-func (s *Store) WakeTurnAtAndOpenIfClosed(id protocol.SessionID, deadline, openedAt time.Time) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		current, ok := s.turnStamps[id]
-		if !ok || current.SnoozedUntil.IsZero() || !s.sessionIsLiveLocked(id) {
-			return false
-		}
-		if !sameTurnStamp(current.SnoozedUntil, deadline) {
-			return false
-		}
-		current.SnoozedUntil = time.Time{}
-		if !current.OpenedAt.After(current.SettledAt) {
-			current.OpenedAt = openedAt.UTC()
-		}
-		s.setTurnStampsLocked(id, current)
-		return true
-	}
-
-	result, err := s.db.Exec(
-		`UPDATE sessions SET turn_snoozed_until = '', turn_opened_at = CASE
-			WHEN turn_opened_at = '' OR turn_opened_at <= turn_settled_at THEN ?
-			ELSE turn_opened_at END
-		WHERE id = ? AND closed_at = '' AND turn_snoozed_until = ?`,
-		openedAt.UTC().Format(sortableTimeFormat), id, deadline.UTC().Format(sortableTimeFormat))
-	if err != nil {
-		log.Printf("[store] WakeTurnAtAndOpenIfClosed: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, err := result.RowsAffected()
-	return err == nil && updated == 1
-}
-
-func (s *Store) WakeTurnAt(id protocol.SessionID, deadline time.Time) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.wakeTurnAtLocked(id, deadline)
-}
-
-func (s *Store) wakeTurnAtLocked(id protocol.SessionID, deadline time.Time) bool {
-	if s.db == nil {
-		current, ok := s.turnStamps[id]
-		if !ok || current.SnoozedUntil.IsZero() || !s.sessionIsLiveLocked(id) {
-			return false
-		}
-		if !sameTurnStamp(current.SnoozedUntil, deadline) {
-			return false
-		}
-		current.SnoozedUntil = time.Time{}
-		s.setTurnStampsLocked(id, current)
-		return true
-	}
-
-	result, err := s.db.Exec(`UPDATE sessions SET turn_snoozed_until = '' WHERE id = ? AND closed_at = '' AND turn_snoozed_until = ?`,
-		id, deadline.UTC().Format(sortableTimeFormat))
-	if err != nil {
-		log.Printf("[store] clear snooze: failed for session %s: %v", id, err)
-		return false
-	}
-	updated, err := result.RowsAffected()
-	return err == nil && updated == 1
-}
-
-func sameTurnStamp(a, b time.Time) bool {
-	return a.UTC().Format(sortableTimeFormat) == b.UTC().Format(sortableTimeFormat)
 }
 
 func (s *Store) SnoozedSessions() map[protocol.SessionID]time.Time {
@@ -226,7 +42,7 @@ func (s *Store) SnoozedSessions() map[protocol.SessionID]time.Time {
 		return snoozed
 	}
 
-	rows, err := s.db.Query(`SELECT id, turn_snoozed_until FROM sessions WHERE turn_snoozed_until != '' AND closed_at = ''`)
+	rows, err := s.db.Query(`SELECT id, turn_snoozed_until FROM sessions_with_runtime WHERE turn_snoozed_until != '' AND closed_at = ''`)
 	if err != nil {
 		log.Printf("[store] SnoozedSessions: failed: %v", err)
 		return snoozed
@@ -260,13 +76,15 @@ func (s *Store) turnStampsLocked(id protocol.SessionID) TurnStamps {
 	}
 
 	var (
-		opened  string
-		settled string
-		snoozed string
+		opened    string
+		settled   string
+		snoozed   string
+		agent     string
+		requested string
 	)
 	err := s.db.QueryRow(
-		`SELECT turn_opened_at, turn_settled_at, turn_snoozed_until FROM sessions WHERE id = ?`, id).
-		Scan(&opened, &settled, &snoozed)
+		`SELECT turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, turn_requested_at FROM sessions_with_runtime WHERE id = ?`, id).
+		Scan(&opened, &settled, &snoozed, &agent, &requested)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			log.Printf("[store] TurnStamps: failed for session %s: %v", id, err)
@@ -277,6 +95,8 @@ func (s *Store) turnStampsLocked(id protocol.SessionID) TurnStamps {
 		OpenedAt:     parseTurnStamp(opened),
 		SettledAt:    parseTurnStamp(settled),
 		SnoozedUntil: parseTurnStamp(snoozed),
+		AgentAt:      parseTurnStamp(agent),
+		RequestedAt:  parseTurnStamp(requested),
 	}
 }
 
@@ -297,6 +117,10 @@ func applyTurnStamps(session *protocol.Session, stamps TurnStamps) {
 	session.TurnSnoozedUntil = nil
 	if !stamps.SnoozedUntil.IsZero() {
 		session.TurnSnoozedUntil = protocol.Ptr(stamps.SnoozedUntil.UTC().Format(time.RFC3339Nano))
+	}
+	session.TurnByAgent = nil
+	if attention.TurnByAgent(stamps.OpenedAt, stamps.SettledAt, stamps.AgentAt) {
+		session.TurnByAgent = protocol.Ptr(true)
 	}
 }
 

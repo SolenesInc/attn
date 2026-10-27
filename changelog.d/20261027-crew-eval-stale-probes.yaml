@@ -1,0 +1,3 @@
+kind: internal
+area: crew
+change: Run three approved stale-entry memory probes and confirm their wake-view contents before grading.

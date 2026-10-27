@@ -100,10 +100,10 @@ func openAsk(c *client.Client, sessionID protocol.SessionID, seedID, subject, fi
 		return json.NewEncoder(stdout).Encode(opened)
 	}
 	if opened.SeedID == nil {
-		fmt.Fprintf(stdout, "Asked %s: %q. The answer arrives in your attn inbox.\n", opened.ID, opened.Subject)
+		fmt.Fprintf(stdout, "Asked %s: %q. attn types the answer into this conversation as the user's message.\n", opened.ID, opened.Subject)
 		return nil
 	}
-	fmt.Fprintf(stdout, "Asked %s about %s: %q. The answer arrives as a note on the seed: attn seed notes %s\n",
+	fmt.Fprintf(stdout, "Asked %s about %s: %q. The answer goes to whoever tends the seed by then, and the seed keeps it as a note: attn seed notes %s\n",
 		opened.ID, askSeedName(*opened), opened.Subject, *opened.SeedID)
 	return nil
 }
@@ -173,9 +173,13 @@ Ask the user what you cannot settle alone. They answer from attn, without
 opening your terminal.
 
 When a delegation assigned you a seed, the ask is about that seed; --seed makes
-it about another seed you tend. The user sees which seed it concerns, and the
-answer arrives as a note on the seed (attn seed notes <id>) for whoever tends
-it by then. An ask about no seed is answered in your attn inbox.
+it about another seed you tend. The user sees which seed it concerns. The
+answer goes to whoever tends the seed by then, and the seed keeps it as a note
+(attn seed notes <id>).
+
+To ask permission for a risky action, name the exact action and its target in
+the question, such as the command, branch or environment. The answer approves
+only what the question names.
 
 The ask is markdown with question blocks in it:
 
@@ -198,7 +202,10 @@ A block's first line is the question; the rest is context. Choices are
   ASK
 
 attn ask prints the ask's id and returns at once. Carry on with work that does
-not depend on the answer; attn tells you when it arrives.
+not depend on the answer. When the user answers, attn types the answer into
+the conversation as their message, approvals included. By then they have
+likely moved on and will not read what you write back, so if you still need
+them, ask again.
 
 commands:
   (none)                 open an ask from stdin or --file

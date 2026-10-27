@@ -9,7 +9,7 @@ export interface GardenAdvisorConfig {
 }
 
 export function defaultGardenAdvisorConfig(agent: SessionAgent = 'codex'): GardenAdvisorConfig {
-  return { agent: ['codex', 'claude', 'copilot'].includes(agent) ? agent : 'codex', model: '', effort: '' };
+  return { agent: ['codex', 'claude'].includes(agent) ? agent : 'codex', model: '', effort: '' };
 }
 
 export function parseGardenAdvisorSetting(raw: string | undefined): GardenAdvisorConfig {

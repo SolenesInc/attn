@@ -1,44 +1,39 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"net"
 	"os"
 	"strings"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
 const sessionTranscriptPageSize = 200
 
 func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTranscriptMessage) {
-	session := d.store.Get(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
+	session := d.store.SessionLedgerEntry(protocol.SessionID(strings.TrimSpace(msg.TargetSessionID)))
 	if session == nil {
 		d.sendError(conn, "session_not_found")
 		return
 	}
 
-	path := d.inspectableTranscriptPath(session)
-	if path == "" {
-		d.sendError(conn, "transcript_unavailable")
+	answer, err := Call[protocol.MonitorTranscriptPageResult](context.Background(), d.router(), protocol.MonitorTranscriptPageMessage{Cmd: protocol.CmdMonitorTranscriptPage, SessionID: session.ID, Cursor: protocol.Ptr(strings.TrimSpace(protocol.Deref(msg.AfterCursor)))})
+	if err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
-
-	page, err := transcript.ReadEventPage(path, session.Agent, strings.TrimSpace(protocol.Deref(msg.AfterCursor)), sessionTranscriptPageSize)
-	if err != nil {
-		switch {
-		case errors.Is(err, transcript.ErrInvalidCursor):
-			d.sendError(conn, "invalid_cursor")
-		case errors.Is(err, transcript.ErrCursorMismatch):
-			d.sendError(conn, "cursor_mismatch")
-		case errors.Is(err, transcript.ErrCursorPastEnd):
-			d.sendError(conn, "cursor_past_end")
-		default:
-			d.logf("session transcript read failed: session=%s err=%v", session.ID, err)
-			d.sendError(conn, "transcript_unavailable")
-		}
+	if answer.ErrorKind != nil {
+		d.sendError(conn, string(*answer.ErrorKind))
+		return
+	}
+	var page transcript.EventPage
+	if err := json.Unmarshal([]byte(protocol.Deref(answer.Page)), &page); err != nil {
+		d.sendError(conn, "transcript_unavailable")
 		return
 	}
 
@@ -80,31 +75,34 @@ func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTra
 	})
 }
 
-func (d *Daemon) inspectableTranscriptPath(session *protocol.Session) string {
-	if session == nil {
+func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent string) string {
+	binding := d.store.GetSessionConversation(sessionID)
+	for _, path := range []string{binding.TranscriptPath, d.store.GetAgentDriverTranscriptPath(sessionID)} {
+		if path != "" {
+			if _, err := os.Stat(path); err == nil {
+				return path
+			}
+		}
+	}
+	if path := d.sessionMonitor(sessionID).LiveTranscriptPath(agent); path != "" {
+		return path
+	}
+	driver := agentdriver.Get(agent)
+	if _, keeper := driver.(agentdriver.ConversationKeeper); keeper && !d.conversationReady(driver, binding.NativeID) {
 		return ""
 	}
-	binding := d.store.GetSessionConversation(session.ID)
 	if binding.TranscriptPath != "" {
 		if _, err := os.Stat(binding.TranscriptPath); err == nil {
 			return binding.TranscriptPath
 		}
 	}
-	if path := d.liveTranscriptPath(session.ID, session.Agent); path != "" {
-		return path
-	}
-	path := d.findTranscriptForResume(session.Agent, binding.NativeID)
+	path := sessionmonitor.FindTranscriptForResume(agent, binding.NativeID)
 	if path == "" {
 		return ""
 	}
 	if _, err := os.Stat(path); err != nil {
 		return ""
 	}
-	d.observeAgentConversation(agentConversationObservation{
-		SessionID:      session.ID,
-		NativeID:       binding.NativeID,
-		TranscriptPath: path,
-	})
 	return path
 }
 

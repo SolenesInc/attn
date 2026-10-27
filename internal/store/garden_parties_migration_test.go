@@ -16,14 +16,14 @@ import (
 func TestGardenPartiesMigration(t *testing.T) {
 	for _, declared := range []bool{false, true} {
 		t.Run(fmt.Sprintf("declared=%v", declared), func(t *testing.T) {
-			s := migrationFixtureStore(t, 1792359946026014-1)
+			s := migrationFixtureStore(t, 1793111475923199-1)
 			now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 			if declared {
 				profile := migrationFixtureProfile(t, s, "")
 				if _, err := s.db.Exec(`INSERT INTO crew_members(member_key,profile_id,name) VALUES('keel',?,'Keel')`, profile.ID); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := s.db.Exec(`INSERT INTO sessions(id,label,directory,state_since,state_updated_at,last_seen,profile_id,member_key,closed_at) VALUES ('bound','Keel','/tmp/crew','','','',?,'',''),('old-day','Keel','/tmp/crew','','','',?,'keel','closed'),('plain','Plain','/tmp/crew','','','',?,'','')`, profile.ID, profile.ID, profile.ID); err != nil {
+				if _, err := s.db.Exec(`INSERT INTO sessions(id,user_label,directory,created_at,profile_id,member_key,closed_at) VALUES ('bound','Keel','/tmp/crew','',?,'',''),('old-day','Keel','/tmp/crew','',?,'keel','closed'),('plain','Plain','/tmp/crew','',?,'','')`, profile.ID, profile.ID, profile.ID); err != nil {
 					t.Fatal(err)
 				}
 				for _, schema := range []docstore.CollectionSchema{crew.MembersSchema(), {Namespace: garden.Namespace, Collection: garden.CollectionSeeds, Fields: []docstore.FieldSpec{{Name: "tender_session", Type: docstore.FieldString}}}, {Namespace: garden.Namespace, Collection: garden.CollectionNotes, Fields: []docstore.FieldSpec{{Name: "author_session", Type: docstore.FieldString}}}, garden.DispatchesSchema()} {
@@ -45,7 +45,10 @@ func TestGardenPartiesMigration(t *testing.T) {
 				}
 				put(crew.CollectionMembers, "keel", map[string]any{"id": "keel", "binding_session": "bound"})
 				for _, row := range []struct{ id, member, session string }{{"s-named1", "Bob", ""}, {"s-named2", "Bob", "plain"}, {"s-member", "KeEl", "bound"}, {"s-7k3f9m", "", "bound"}, {"s-closed", "", "old-day"}, {"s-plain1", "", "plain"}} {
-					put(garden.CollectionSeeds, row.id, map[string]any{"id": row.id, "profile_id": profile.ID, "status": "growing", "tender_member": row.member, "tender_session": row.session, "planter_session": "bound", "harvest_when": map[string]any{"pull_request": "github.com:a/b#1", "url": "https://github.com/a/b/pull/1", "set_at": "now", "set_by_member": "attn"}})
+					put(garden.CollectionSeeds, row.id, map[string]any{"id": row.id, "profile_id": profile.ID, "status": "growing", "tender_member": row.member, "tender_session": row.session, "planter_session": "bound", "harvest_when": map[string]any{"pull_request": "github.com:a/b#1", "url": "https://github.com/a/b/pull/1", "set_at": "now", "set_by_member": "attn"}, "checks": []any{map[string]any{"id": "C1", "text": "Retained proof", "removed": true}}, "check_results": map[string]any{
+						"C1":          map[string]any{"report": map[string]any{"summary": "Verified before upgrade", "evidence": []any{map[string]any{"url": "https://example.com/proof"}}, "commit": "proof-commit", "by_member": row.member, "by_session": row.session, "at": "report-time"}},
+						"s-shared/C2": map[string]any{"verdict": map[string]any{"confirmed": false, "reason": "Needs another receipt", "by_member": row.member, "by_session": row.session, "at": "verdict-time"}},
+					}})
 				}
 				if _, err := s.db.Exec(`INSERT INTO profiles(id,name,created_at) VALUES('side','Side','now')`); err != nil {
 					t.Fatal(err)
@@ -58,7 +61,11 @@ func TestGardenPartiesMigration(t *testing.T) {
 				if _, err := s.db.Exec(`INSERT INTO delegation_operations(request_id,operation_id,request_json,state,progress,session_id,created_at,updated_at,handover_tender_session,handover_tender_member) VALUES('named-req','named-op','{"source_session_id":"plain"}','accepted','','named-delegate','','','plain','Bob')`); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := s.db.Exec(`INSERT INTO inbox_items(id,address,kind,source_id,coalesce_key,hint,created_at,attempts,read_at,notified_at) VALUES('old-bell','member:keel','seed_update','s-7k3f9m','s-7k3f9m','note.added','2026-10-01',?,'',''),('next-bell','session:bound','seed_update','s-7k3f9m','s-7k3f9m','unblocked','2026-10-02',0,'',''),('other-seed','session:old-day','seed_update','s-member','s-member','tended','2026-10-03',0,'',''),('plain-bell','session:plain','seed_update','s-plain1','s-plain1','tended','2026-10-04',0,'',''),('notice','session:bound','notice','','','notice','2026-10-05',0,'',''),('read-bell','session:bound','seed_update','s-closed','s-closed','tended','2026-10-06',1,'read','notified')`, inbox.MaxAttempts); err != nil {
+				if _, err := s.db.Exec(`INSERT INTO inbox_items(id,address,kind,source_id,coalesce_key,hint,created_at,attempts,read_at,notified_at) VALUES('old-bell','member:keel','garden_seed','s-7k3f9m','s-7k3f9m','note.added','2026-10-01',?,'',''),('next-bell','session:bound','garden_seed','s-7k3f9m','s-7k3f9m','unblocked','2026-10-02',0,'',''),('other-seed','session:old-day','garden_seed','s-member','s-member','tended','2026-10-03',0,'',''),('plain-bell','session:plain','garden_seed','s-plain1','s-plain1','tended','2026-10-04',0,'',''),('notice','session:bound','notice','','','notice','2026-10-05',0,'',''),('read-bell','session:bound','garden_seed','s-closed','s-closed','tended','2026-10-06',1,'read','notified')`, inbox.MaxAttempts); err != nil {
+					t.Fatal(err)
+				}
+
+				if _, err := s.db.Exec(`UPDATE inbox_items SET text='old notification' WHERE id='old-bell'`); err != nil {
 					t.Fatal(err)
 				}
 
@@ -99,6 +106,17 @@ func TestGardenPartiesMigration(t *testing.T) {
 				seed, err := garden.Decode(doc.Body)
 				if err != nil {
 					t.Fatal(err)
+				}
+				checkAuthor := row.ref
+				if row.id == "s-named1" {
+					checkAuthor = "user"
+				} else if row.id == "s-named2" {
+					checkAuthor = "session:plain"
+				}
+				report := seed.CheckResults["C1"].Report
+				verdict := seed.CheckResults["s-shared/C2"].Verdict
+				if report == nil || verdict == nil || report.By.String() != checkAuthor || verdict.By.String() != checkAuthor || report.Summary != "Verified before upgrade" || report.Commit != "proof-commit" || report.At != "report-time" || len(report.Evidence) != 1 || report.Evidence[0].URL != "https://example.com/proof" || verdict.Confirmed || verdict.Reason != "Needs another receipt" || verdict.At != "verdict-time" || len(seed.Checks) != 1 || !seed.Checks[0].Removed || seed.CheckResults["s-shared/C2"].Report != nil {
+					t.Fatalf("check history for %s: report=%+v verdict=%+v", row.id, report, verdict)
 				}
 				tender, _ := seed.Claim.Tender()
 				if tender.String() != row.ref || seed.Status != "growing" || seed.Planter.String() != "member:keel" || seed.HarvestWhen.SetBy.String() != "attn" || doc.Rev != 1 || !doc.UpdatedAt.Equal(now) {
@@ -173,11 +191,11 @@ func TestGardenPartiesMigration(t *testing.T) {
 				t.Fatalf("execution-only dispatch: %+v %v", execution, err)
 			}
 			var count, attempts int
-			var address, hint string
-			if err := s.db.QueryRow(`SELECT count(*) FROM inbox_items WHERE kind='seed_update' AND read_at=''`).Scan(&count); err != nil || count != 3 {
+			var address, hint, text string
+			if err := s.db.QueryRow(`SELECT count(*) FROM inbox_items WHERE kind='garden_seed' AND read_at=''`).Scan(&count); err != nil || count != 3 {
 				t.Fatalf("pending bells: %d %v", count, err)
 			}
-			if err := s.db.QueryRow(`SELECT address,hint,attempts FROM inbox_items WHERE id='old-bell'`).Scan(&address, &hint, &attempts); err != nil || address != "member:keel" || hint != "unblocked" || attempts != 0 {
+			if err := s.db.QueryRow(`SELECT address,hint,attempts,text FROM inbox_items WHERE id='old-bell'`).Scan(&address, &hint, &attempts, &text); err != nil || address != "member:keel" || hint != "unblocked" || attempts != 0 || text != "" {
 				t.Fatalf("coalesced bell: %s %s %d %v", address, hint, attempts, err)
 			}
 			for id, want := range map[string]string{"other-seed": "member:keel", "plain-bell": "session:plain", "notice": "session:bound", "read-bell": "session:bound"} {

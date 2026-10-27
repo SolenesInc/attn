@@ -1,0 +1,8 @@
+kind: changed
+area: cli
+change: >
+  `attn version` now says how the binary was built: its channel (`source` for
+  `make` builds, `release` for published ones), the commit, and whether the
+  tree was dirty. `attn version --json` prints the same as JSON. A plain
+  `go build` reports its commit and dirty state from Go's build stamp instead
+  of `unknown`.

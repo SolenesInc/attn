@@ -45,6 +45,9 @@ type Priming struct {
 	Handoff       string
 	HandoffName   string
 	OlderHandoffs []string
+	MemoryEnabled bool
+	MemoryView    string
+	ImportLetters bool
 
 	GardenRead   bool
 	Claims       []ClaimedSeed
@@ -62,21 +65,24 @@ func (p Priming) Block() string {
 	}
 	handoffsDir := filepath.Join(p.HomeDir, HandoffsDirName)
 	return prompts.RenderText("crew", "priming", prompts.Values{
-		"display_name":     p.Name,
-		"onboarding":       fmt.Sprint(p.FirstDay == protocol.FirstDayFull || p.FirstDay == protocol.FirstDayTour),
-		"established":      fmt.Sprint(p.FirstDay == protocol.FirstDayTour),
-		"home_dir":         p.HomeDir,
-		"has_charter":      fmt.Sprint(strings.TrimSpace(p.Charter) != ""),
-		"charter_file":     CharterFileName,
-		"charter_path":     filepath.Join(p.HomeDir, CharterFileName),
-		"cwd":              strings.TrimSpace(p.CWD),
-		"awareness_dirs":   quotedList(trimmed(p.AwarenessDirs)),
-		"handoff_name":     p.HandoffName,
-		"handoffs_dirname": HandoffsDirName,
-		"handoffs_dir":     handoffsDir,
-		"older_handoffs":   strings.Join(backticked(trimmed(p.OlderHandoffs)), ", "),
-		"handoff":          inlineHandoff(strings.TrimSpace(p.Handoff), filepath.Join(handoffsDir, p.HandoffName)),
-		"garden_holdings":  p.GardenSection(),
+		"display_name":        p.Name,
+		"onboarding":          fmt.Sprint(p.FirstDay == protocol.FirstDayFull || p.FirstDay == protocol.FirstDayTour),
+		"established":         fmt.Sprint(p.FirstDay == protocol.FirstDayTour),
+		"home_dir":            p.HomeDir,
+		"has_charter":         fmt.Sprint(strings.TrimSpace(p.Charter) != ""),
+		"charter_file":        CharterFileName,
+		"charter_path":        filepath.Join(p.HomeDir, CharterFileName),
+		"cwd":                 strings.TrimSpace(p.CWD),
+		"awareness_dirs":      quotedList(trimmed(p.AwarenessDirs)),
+		"handoff_name":        p.HandoffName,
+		"handoffs_dirname":    HandoffsDirName,
+		"handoffs_dir":        handoffsDir,
+		"older_handoffs":      strings.Join(backticked(trimmed(p.OlderHandoffs)), ", "),
+		"handoff":             inlineHandoff(strings.TrimSpace(p.Handoff), filepath.Join(handoffsDir, p.HandoffName)),
+		"garden_holdings":     p.GardenSection(),
+		"crew_memory_enabled": fmt.Sprint(p.MemoryEnabled),
+		"memory_view":         p.MemoryView,
+		"import_letters":      fmt.Sprint(p.ImportLetters),
 	})
 }
 

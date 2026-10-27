@@ -31,6 +31,7 @@ func runDB() {
 		}
 		runDBRestore(os.Args[3:])
 	default:
+		recordUsageError("db", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "db: unknown command %q\n", os.Args[2])
 		writeDBHelp(os.Stderr)
 		os.Exit(2)

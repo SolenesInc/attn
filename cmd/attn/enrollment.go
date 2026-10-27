@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/enrollment"
 )
@@ -26,6 +27,7 @@ func runEnrollment() {
 	case "--json":
 		runEnrollmentStatus(os.Args[2:])
 	default:
+		recordUsageError("enrollment", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "enrollment: unknown command %q\n", os.Args[2])
 		writeEnrollmentHelp(os.Stderr)
 		os.Exit(2)
@@ -35,8 +37,8 @@ func runEnrollment() {
 func writeEnrollmentHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn enrollment <command>
 
-Older attn versions could enroll a data folder to another daemon. This attn
-never does, and refuses to start in a folder that is still enrolled.
+An outpost's data folder is enrolled to the home it first accepts a bridge
+from, and the outpost refuses bridges from any other home.
 
 commands:
   status [--json]
@@ -44,7 +46,11 @@ commands:
         another daemon.
 
   leave [--json]
-        release the enrollment so the data folder is its own again.
+        release the enrollment so the data folder is its own again. The
+        daemon closes the bridge from the old home and stops the terminals it
+        ran for it: right away when it is running, otherwise when it next
+        starts. Remove the outpost from the old home first; a home that still
+        has it pairs again on its next connection.
 `)
 }
 
@@ -55,7 +61,7 @@ func enrollmentDataRoot() string {
 func runEnrollmentStatus(args []string) {
 	fs := flag.NewFlagSet("enrollment status", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "print the status as JSON")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 
 	root := enrollmentDataRoot()
 	status, err := enrollment.Load(root)
@@ -90,14 +96,14 @@ func writeEnrollmentStatus(w io.Writer, status enrollment.Status) {
 	fmt.Fprintf(w, "daemon:     %s\n", status.DaemonID)
 	fmt.Fprintf(w, "enrollment: %s\n", status.Describe())
 	if !status.IsHome() {
-		fmt.Fprintln(w, "\nThis data folder was enrolled to another daemon by an older attn; run `attn enrollment leave`.")
+		fmt.Fprintln(w, "\nThis data folder is enrolled to another daemon; run `attn enrollment leave` to release it.")
 	}
 }
 
 func runEnrollmentLeave(args []string) {
 	fs := flag.NewFlagSet("enrollment leave", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "print the result as JSON")
-	_ = fs.Parse(args)
+	_ = parseFlags(fs, args)
 
 	result, err := enrollment.Leave(enrollmentDataRoot())
 	if err != nil {
@@ -106,6 +112,12 @@ func runEnrollmentLeave(args []string) {
 			fmt.Fprintf(os.Stderr, "No daemon has started in %s yet, so there is nothing to release.\n", enrollmentDataRoot())
 		}
 		os.Exit(1)
+	}
+	if c := client.New(""); c.IsRunning() {
+		if err := c.DropOutpostCopy(); err != nil {
+			fmt.Fprintf(os.Stderr, "enrollment leave: released the enrollment, but the daemon could not stop the terminals it ran for its home: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	if *asJSON {
 		if err := fprintJSON(os.Stdout, result); err != nil {

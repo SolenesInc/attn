@@ -15,7 +15,7 @@ import (
 func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *testing.T) {
 	for _, failedCapture := range []bool{false, true} {
 		t.Run(strconv.FormatBool(failedCapture), func(t *testing.T) {
-			w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot)}
+			w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex)}
 			profile := filepath.Join(w.Dir, "profile")
 			shell := filepath.Join(w.Dir, "login-shell")
 			script := "#!/bin/sh\n. \"$ATTN_TEST_PROFILE\"\n"
@@ -36,7 +36,7 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 			setSetting(t, app, "direct_agent_launch_enabled", "true")
 			for _, phase := range []string{"first", "edited", "removed"} {
 				var content strings.Builder
-				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 					key := "ATTN_" + strings.ToUpper(string(h)) + "_EXECUTABLE"
 					if phase == "removed" {
 						fmt.Fprintf(&content, "unset %s\n", key)
@@ -50,11 +50,10 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 					}
 					fmt.Fprintf(&content, "export %s='%s'\n", key, executable)
 				}
-				fmt.Fprintf(&content, "export COPILOT_CUSTOM_INSTRUCTIONS_DIRS=' /user/%s, , /shared/instructions '\n", phase)
 				if err := os.WriteFile(profile, []byte(content.String()), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex, fakeagent.Copilot} {
+				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 					run := w.Launched(w.Spawn(app, h, w.Path(string(h), phase), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr(literalInitialPrompt) }))
 					if got := run.Prompted(); got != literalInitialPrompt {
 						t.Fatalf("%s prompt %q", h, got)
@@ -66,15 +65,6 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 					}
 					if marker != want {
 						t.Fatalf("%s ran executable %q after profile %s; want %q", h, marker, phase, want)
-					}
-					if h == fakeagent.Copilot {
-						dirs, _ := envEntry(run.Env, "COPILOT_CUSTOM_INSTRUCTIONS_DIRS")
-						if !strings.HasPrefix(dirs, "/user/"+phase+",/shared/instructions,") {
-							t.Fatalf("Copilot inherited instructions %q", dirs)
-						}
-						if !strings.Contains(launchGuidance(t, run), agentGuidanceLead) {
-							t.Fatal("Copilot lost attn guidance")
-						}
 					}
 				}
 			}

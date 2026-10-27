@@ -7,9 +7,10 @@ import { harnessLabel } from './harnessLabel';
 import { describeUnknownReason } from './stateReason';
 import './SessionLead.css';
 
-export function SessionLead({ agent, state, reason, seed, badge }: {
+export function SessionLead({ agent, state, reason, seed, badge, offline }: {
   agent?: string;
   state: UISessionState;
+  offline?: boolean;
   reason?: string;
   seed: string;
   badge?: ReactNode;
@@ -18,7 +19,7 @@ export function SessionLead({ agent, state, reason, seed, badge }: {
   const name = harnessLabel(agent);
   return (
     <span className="session-lead" data-state={state} title={explanation}>
-      {state === 'launching' ? (
+      {!offline && state === 'launching' ? (
         <span className="session-lead-emoji" aria-label="launching">{pickSessionEmoji(seed)}</span>
       ) : (
         <HarnessIcon
@@ -27,7 +28,7 @@ export function SessionLead({ agent, state, reason, seed, badge }: {
           title={explanation ? `${name} · ${explanation}` : undefined}
         />
       )}
-      <StateIndicator state={state} seed={seed} reason={reason} />
+      <StateIndicator state={state} offline={offline} seed={seed} reason={reason} />
       {badge && <span className="session-lead-badge">{badge}</span>}
     </span>
   );

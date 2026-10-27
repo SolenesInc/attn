@@ -290,16 +290,6 @@ func (d *Daemon) renderSessionTitleFailure(t *jobs.Job) store.NotificationRecord
 		[]store.NotificationAction{openSessionAction(sessionID), retryTaskAction(t)})
 }
 
-func (d *Daemon) renderSnoozeWakeFailure(t *jobs.Job) store.NotificationRecord {
-	sessionID := protocol.SessionID(jobSubject(t))
-	name := d.sessionFailureName(sessionID)
-	return taskFailureNotification(t,
-		"Couldn’t wake "+name,
-		"The snooze deadline passed and attn tried to wake the session.",
-		"The session may remain snoozed until you wake it manually.",
-		[]store.NotificationAction{openSessionAction(sessionID), retryTaskAction(t)})
-}
-
 func (d *Daemon) renderGardenReviewFailure(t *jobs.Job) store.NotificationRecord {
 	name := "a Garden review item"
 	var payload gardenReviewJobPayload

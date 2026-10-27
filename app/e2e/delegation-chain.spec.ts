@@ -167,7 +167,7 @@ test('hovering away closes the card and gives focus back without pinning it', as
 });
 
 for (const entry of ['hover', 'click', 'command'] as const) {
-  test(`outside scrolling dismisses the ${entry} chain and restores keyboard focus`, async ({ page }) => {
+  test(`the ${entry} chain survives a scroll the user did not make, and a wheel outside dismisses it and restores keyboard focus`, async ({ page }) => {
     const terminal = page.getByRole('textbox', { name: 'Terminal keyboard target' });
     await terminal.fill(Array.from({ length: 100 }, (_, index) => `Terminal line ${index}`).join('\n'));
     await scrollToTop(terminal);
@@ -179,12 +179,16 @@ for (const entry of ['hover', 'click', 'command'] as const) {
     } else await header[entry]();
     const popup = page.getByRole('dialog', { name: 'Delegation chain' });
     await expect(popup.getByRole('button', { name: /Build chain navigator/ })).toBeFocused();
-    const moved = await terminal.evaluate((element) => {
+    const moved = await terminal.evaluate(async (element) => {
       const before = element.scrollTop;
+      const scrolled = new Promise((resolve) => element.addEventListener('scroll', resolve, { once: true }));
       element.scrollTop = before > 0 ? 0 : element.scrollHeight;
+      await scrolled;
       return element.scrollTop !== before;
     });
     expect(moved).toBe(true);
+    await expect(popup.getByRole('button', { name: /Build chain navigator/ })).toBeFocused();
+    await terminal.dispatchEvent('wheel', { deltaY: 120 });
     await expect(popup).toHaveCount(0);
     await expect(entry === 'click' ? header : terminal).toBeFocused();
   });

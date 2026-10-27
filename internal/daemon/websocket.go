@@ -41,6 +41,7 @@ type wsClient struct {
 
 	attachedStreams map[protocol.TerminalID]ptybackend.Stream
 	attachMu        sync.Mutex
+	terminalOrder   terminalOrder
 
 	docSubscriptions clientDocSubscriptions
 
@@ -59,6 +60,9 @@ type wsClient struct {
 	arrangementsMissed bool
 	arrangementPrint   [sha256.Size]byte
 	arrangementSeq     int64
+
+	gardenMu   sync.Mutex
+	gardenHeld *gardenHeld
 
 	presence   clientPresence
 	presenceMu sync.RWMutex
@@ -561,12 +565,13 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {
-	state := d.currentStateProjection(client.selectedProfile())
+	state := d.currentStateProjection()
 	event := &protocol.InitialStateMessage{
 		TerminalBindings:       d.terminals().Bindings(),
 		Event:                  protocol.EventInitialState,
 		ProtocolVersion:        protocol.Ptr(protocol.ProtocolVersion),
 		SourceFingerprint:      protocol.Ptr(buildinfo.SourceFingerprint),
+		HomeBuild:              protocol.Ptr(d.bridgeIdentity().Build.String()),
 		DaemonInstanceID:       protocol.Ptr(d.daemonInstanceID),
 		Sessions:               state.Sessions,
 		Prs:                    state.Prs,
@@ -576,10 +581,11 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		GithubPollingOffReason: gitHubPollingOffReasonField(),
 		Settings:               d.settingsSnapshot(client.selectedProfile()),
 		Warnings:               d.getWarnings(),
-		Seeds:                  state.Seeds,
-		SeedsTotal:             protocol.Ptr(d.countSeedsForBroadcast(client.selectedProfile())),
 		Crew:                   state.Crew,
-		Asks:                   asksSnapshot(client.selectedProfile(), d.openAsks()).Asks,
+		Asks:                   asksSnapshot(client.selectedProfile(), d.asks()).Asks,
+		Vents:                  d.ventsSnapshot(client.selectedProfile()).Vents,
+		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
+		Outposts:               d.outpostsUpdatedMessage(client.selectedProfile()).Outposts,
 	}
 	d.fillInitialMigrationPhase(event)
 	d.sendInitialArrangement(client, event)
@@ -792,6 +798,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		return
 	}
 
+	if cmd != protocol.CmdPtyInput {
+		client.terminalOrder.breakInputBatch()
+	}
 	notebookScope, err := d.resolveNotebookRequest(client, cmd, data)
 	if err != nil {
 		d.sendNotebookScopeError(client, cmd, notebookScope, err)
@@ -917,6 +926,18 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdNotificationList:
 		notifList := msg.(*protocol.NotificationListMessage)
 		d.life.Go("sendNotificationListWSResult", func() { d.sendNotificationListWSResult(client, protocol.Deref(notifList.RequestID)) })
+	case protocol.CmdListAnalyticsRecords:
+		d.life.Go("sendAnalyticsRecordsWSResult", func() { d.sendAnalyticsRecordsWSResult(client, msg.(*protocol.ListAnalyticsRecordsMessage)) })
+	case protocol.CmdGetAnalyticsStatus:
+		d.life.Go("sendAnalyticsStatusWSResult", func() { d.sendAnalyticsStatusWSResult(client, msg.(*protocol.GetAnalyticsStatusMessage)) })
+	case protocol.CmdClearAnalyticsRecords:
+		d.life.Go("sendClearAnalyticsRecordsWSResult", func() { d.sendClearAnalyticsRecordsWSResult(client, msg.(*protocol.ClearAnalyticsRecordsMessage)) })
+	case protocol.CmdForgetAnalyticsInstall:
+		d.life.Go("handleForgetAnalyticsInstall", func() { d.handleForgetAnalyticsInstall(client, msg.(*protocol.ForgetAnalyticsInstallMessage)) })
+	case protocol.CmdSetVentSend:
+		d.life.Go("handleSetVentSend", func() { d.handleSetVentSend(client, msg.(*protocol.SetVentSendMessage)) })
+	case protocol.CmdSetVentKind:
+		d.life.Go("handleSetVentKind", func() { d.handleSetVentKind(client, msg.(*protocol.SetVentKindMessage)) })
 	case protocol.CmdNotificationMarkRead:
 		notifMark := msg.(*protocol.NotificationMarkReadMessage)
 		d.life.Go("sendNotificationMarkReadWSResult", func() {
@@ -1031,7 +1052,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			d.sendCommandError(client, protocol.CmdSetSessionPriority, err.Error())
 		}
 	case protocol.CmdSettleTurn:
-		d.handleSettleTurn(msg.(*protocol.SettleTurnMessage))
+		if err := d.handleSettleTurn(msg.(*protocol.SettleTurnMessage)); err != nil {
+			d.logf("settle rejected: %v", err)
+		}
 	case protocol.CmdSnoozeTurn:
 		if err := d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage)); err != nil {
 			d.logf("snooze rejected: %v", err)
@@ -1041,7 +1064,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			d.logf("unsnooze rejected: %v", err)
 		}
 	case protocol.CmdCancelCountdown:
-		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
+		if err := d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage)); err != nil {
+			d.logf("cancel countdown rejected: %v", err)
+		}
 
 	case protocol.CmdPRVisited:
 		d.handlePRVisitedWS(msg.(*protocol.PRVisitedMessage))
@@ -1069,11 +1094,22 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetSettingsWS(client)
 	case protocol.CmdSetSetting:
 		setting := msg.(*protocol.SetSettingMessage)
-		if setting.Key == string(settingSharedPTYHostEnabled) {
+		if setting.Key == string(SettingSharedPTYHostEnabled) {
 			d.life.Go("handleSetSettingWS", func() { d.handleSetSettingWS(client, setting) })
 		} else {
 			d.handleSetSettingWS(client, setting)
 		}
+	case protocol.CmdUpdateOutpost:
+		d.handleUpdateOutpost(client, msg.(*protocol.UpdateOutpostMessage).ID)
+	case protocol.CmdAddOutpost:
+		m := msg.(*protocol.AddOutpostMessage)
+		d.handleOutpostCommand(client, "add", "", m.Name, m.Address)
+	case protocol.CmdRemoveOutpost:
+		m := msg.(*protocol.RemoveOutpostMessage)
+		d.handleOutpostCommand(client, "remove", m.ID, "", "")
+	case protocol.CmdRepairOutpost:
+		m := msg.(*protocol.RepairOutpostMessage)
+		d.handleOutpostCommand(client, "repair", m.ID, "", "")
 	case protocol.CmdListPlugins:
 		d.handleListPluginsWS(client)
 	case protocol.CmdInstallPlugin:
@@ -1087,13 +1123,20 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSetPluginPriority:
 		d.handleSetPluginPriorityWS(client, msg.(*protocol.SetPluginPriorityMessage))
 	case protocol.CmdUnregister:
-		d.handleUnregisterWS(client, msg.(*protocol.UnregisterMessage))
+		close := msg.(*protocol.UnregisterMessage)
+		if d.sessionHost(close.ID) != "" {
+			d.offPumpInTerminalOrder(client, d.primaryTerminal(close.ID), func() { d.handleUnregisterWS(client, close) })
+		} else {
+			d.handleUnregisterWS(client, close)
+		}
 	case protocol.CmdGetRecentLocations:
 		d.handleGetRecentLocationsWS(client, msg.(*protocol.GetRecentLocationsMessage))
 	case protocol.CmdGetCommandUsage:
 		d.handleGetCommandUsage(client, msg.(*protocol.GetCommandUsageMessage))
 	case protocol.CmdRecordCommandUsage:
 		d.handleRecordCommandUsage(client, msg.(*protocol.RecordCommandUsageMessage))
+	case protocol.CmdRecordAnalytics:
+		d.handleRecordAnalytics(msg.(*protocol.RecordAnalyticsMessage), "")
 	case protocol.CmdRecentFiles:
 		d.life.Go("handleRecentFiles", func() {
 			d.handleRecentFilesWS(client, msg.(*protocol.RecentFilesMessage))
@@ -1118,6 +1161,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
 	case protocol.CmdAskAnswer:
 		d.handleAskAnswer(client, msg.(*protocol.AskAnswerMessage))
+	case protocol.CmdSetVentDismissed:
+		d.handleSetVentDismissed(client, msg.(*protocol.SetVentDismissedMessage))
+	case protocol.CmdPlantVentSeed:
+		d.handlePlantVentSeed(client, msg.(*protocol.PlantVentSeedMessage))
+	case protocol.CmdUnplantVentSeed:
+		d.handleUnplantVentSeed(client, msg.(*protocol.UnplantVentSeedMessage))
 	case protocol.CmdAutomationDefinitionsGet:
 		d.handleAutomationDefinitionsGetWS(client, msg.(*protocol.AutomationDefinitionsGetMessage))
 	case protocol.CmdAutomationDefinitionGet:
@@ -1141,21 +1190,36 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSpawnSession:
 		spawn := msg.(*protocol.SpawnSessionMessage)
 		spawn.ProfileID = protocol.Deref(client.profileOr(protocol.Ptr(spawn.ProfileID)))
-		d.handleSpawnSession(client, spawn)
+		d.life.Go("handleSpawnSession", func() { d.handleSpawnSession(client, spawn) })
 	case protocol.CmdAttachSession:
-		d.handleAttachSession(client, msg.(*protocol.AttachSessionMessage))
+		attach := msg.(*protocol.AttachSessionMessage)
+		attachNow := func() { d.handleAttachSession(client, attach) }
+		if protocol.Deref(attach.AttachPolicy) == protocol.AttachPolicyRevive {
+			d.offPumpInTerminalOrder(client, attach.ID, attachNow)
+		} else {
+			d.inTerminalOrder(client, attach.ID, attachNow)
+		}
 	case protocol.CmdDetachSession:
-		d.handleDetachSessionWS(client, msg.(*protocol.DetachSessionMessage))
+		detach := msg.(*protocol.DetachSessionMessage)
+		d.inTerminalOrder(client, detach.ID, func() { d.handleDetachSessionWS(client, detach) })
 	case protocol.CmdGetScreenSnapshot:
-		d.handleGetScreenSnapshot(client, msg.(*protocol.GetScreenSnapshotMessage))
+		snapshot := msg.(*protocol.GetScreenSnapshotMessage)
+		d.inTerminalOrder(client, snapshot.ID, func() { d.handleGetScreenSnapshot(client, snapshot) })
 	case protocol.CmdGetKittyImage:
-		d.handleGetKittyImage(client, msg.(*protocol.GetKittyImageMessage))
+		image := msg.(*protocol.GetKittyImageMessage)
+		d.inTerminalOrder(client, image.ID, func() { d.handleGetKittyImage(client, image) })
 	case protocol.CmdPtyInput:
-		d.handlePtyInput(client, msg.(*protocol.PtyInputMessage))
+		input := msg.(*protocol.PtyInputMessage)
+		if d.sessionHost(d.terminals().owner(input.ID)) != "" {
+			d.queueRemoteInput(client, input)
+		} else {
+			d.inTerminalOrder(client, input.ID, func() { d.handlePtyInput(client, input) })
+		}
 	case protocol.CmdSupportSnapshot:
 		d.handleSupportSnapshot(client, msg.(*protocol.SupportSnapshotMessage))
 	case protocol.CmdTerminalPointerActivity:
-		d.handleTerminalPointerActivity(msg.(*protocol.TerminalPointerActivityMessage))
+		pointer := msg.(*protocol.TerminalPointerActivityMessage)
+		d.inTerminalOrder(client, pointer.ID, func() { d.handleTerminalPointerActivity(pointer) })
 	case protocol.CmdBusStatusGet:
 		d.handleBusStatusGet(client, msg.(*protocol.BusStatusGetMessage))
 	case protocol.CmdBusSetConsumerEnabled:
@@ -1183,11 +1247,26 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdAutoModeLegacyDismiss:
 		d.handleAutoModeLegacyDismissWS(client, msg.(*protocol.AutoModeLegacyDismissMessage))
 	case protocol.CmdPtyResize:
-		d.handlePtyResize(client, msg.(*protocol.PtyResizeMessage))
+		resize := msg.(*protocol.PtyResizeMessage)
+		d.inTerminalOrder(client, resize.ID, func() { d.handlePtyResize(client, resize) })
 	case protocol.CmdKillSession:
-		d.handleKillSession(client, msg.(*protocol.KillSessionMessage))
+		kill := msg.(*protocol.KillSessionMessage)
+		if d.sessionHost(kill.ID) != "" {
+			d.offPumpInTerminalOrder(client, d.primaryTerminal(kill.ID), func() { d.handleKillSession(client, kill) })
+		} else {
+			d.handleKillSession(client, kill)
+		}
 	case protocol.CmdReloadSession:
-		d.handleReloadSession(client, msg.(*protocol.ReloadSessionMessage))
+		reload := msg.(*protocol.ReloadSessionMessage)
+		if d.sessionHost(reload.ID) != "" {
+			d.offPumpInTerminalOrder(client, d.primaryTerminal(reload.ID), func() { d.handleReloadSession(client, reload) })
+		} else {
+			d.life.Go("handleReloadSession", func() { d.handleReloadSession(client, reload) })
+		}
+	case protocol.CmdRestartSharedCodex:
+		d.life.Go("handleRestartSharedCodex", func() { d.handleRestartSharedCodex(client, msg.(*protocol.RestartSharedCodexMessage)) })
+	case protocol.CmdInstallCodexUpdate:
+		d.life.Go("handleInstallCodexUpdate", func() { d.handleInstallCodexUpdate(client, msg.(*protocol.InstallCodexUpdateMessage)) })
 	case protocol.CmdSetTerminalTheme:
 		d.handleSetTerminalTheme(client, msg.(*protocol.SetTerminalThemeMessage))
 	case protocol.CmdSetClientPresence:
@@ -1206,6 +1285,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSeedTransitionWS(client, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote:
 		d.handleSeedNoteWS(client, msg.(*protocol.SeedNoteMessage))
+	case protocol.CmdSeedCheck:
+		d.handleSeedCheckWS(client, msg.(*protocol.SeedCheckMessage))
 	case protocol.CmdSessionMessagesGet:
 		d.handleSessionMessagesGet(client, msg.(*protocol.SessionMessagesGetMessage))
 	case protocol.CmdSessionAnnotationsGet:
@@ -1243,6 +1324,10 @@ func (d *Daemon) sendCommandError(client *wsClient, cmd, errMsg string) {
 		Error:   protocol.Ptr(errMsg),
 	}
 	d.sendToClient(client, event)
+}
+
+func (d *Daemon) sendTerminalRefusal(client *wsClient, cmd string, terminal protocol.TerminalID, err error) {
+	d.sendToClient(client, &protocol.CommandErrorMessage{Event: protocol.EventCommandError, Cmd: protocol.Ptr(cmd), Error: err.Error(), TerminalID: protocol.Ptr(string(terminal))})
 }
 
 func (d *Daemon) sendToClient(client *wsClient, message interface{}) bool {

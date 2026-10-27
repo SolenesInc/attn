@@ -44,6 +44,7 @@ import {
 } from './AppIcons';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
+import { useSharedCodexCommands } from './useSharedCodex';
 
 export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
   const chief = useChiefContext();
@@ -108,6 +109,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     whatsNew,
   } = useAppPanelsContext();
   const { openActiveSessionInEditor, editorUnavailableReason } = useOpenInEditor();
+  const sharedCodexCommands = useSharedCodexCommands();
   const navigationCommands = useMemo<PaletteCommand[]>(() => {
     const keys = (id: ShortcutId) => [shortcutTokens(id)];
     const commands: PaletteCommand[] = [
@@ -446,7 +448,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
         title: areSidebarHarnessLogosEnabled(settings)
           ? 'Hide harness logos in the sidebar'
           : 'Show harness logos in the sidebar',
-        description: 'The Claude, Codex, Copilot or Pi mark beside each agent',
+        description: 'The Claude, Codex or Pi mark beside each agent',
         keywords: ['harness', 'logo', 'icon', 'sidebar', 'claude', 'codex'],
         icon: <ContextActionIcon />,
         run: handleToggleSidebarHarnessLogos,
@@ -685,5 +687,5 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     if (chief.view.phase === 'awake') chiefCommands.push({ id: 'chief-sleep', title: 'Put the chief to sleep', keywords: ['chief', 'sleep'], icon: '☾', run: chief.actions.sleep });
     if (chief.view.agent) chiefCommands.push({ id: 'chief-route', title: "Change the chief's harness and model", keywords: ['chief', 'harness', 'model', 'effort'], icon: '⌁', run: openSetup });
   }
-  return [...chiefCommands, ...navigationCommands, ...actionMenuItemsWithQueueActions];
+  return [...chiefCommands, ...navigationCommands, ...sharedCodexCommands, ...actionMenuItemsWithQueueActions];
 }

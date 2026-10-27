@@ -204,7 +204,7 @@ func (s *Store) ConversationSessions(identifier string) ([]ConversationSession, 
 	if s.db == nil {
 		return nil, sql.ErrConnDone
 	}
-	query := `SELECT id, label, agent, resume_session_id FROM sessions WHERE `
+	query := `SELECT id, user_label, harness_title, agent, directory, resume_session_id FROM sessions_with_runtime AS sessions WHERE `
 	var args []any
 	if identifier != "" {
 		query += `(id=? OR resume_session_id=?)`
@@ -220,9 +220,12 @@ func (s *Store) ConversationSessions(identifier string) ([]ConversationSession, 
 	var sessions []ConversationSession
 	for rows.Next() {
 		var entry ConversationSession
-		if err := rows.Scan(&entry.ID, &entry.Label, &entry.Agent, &entry.ResumeID); err != nil {
+		var labels SessionLabels
+		var directory string
+		if err := rows.Scan(&entry.ID, &labels.UserLabel, &labels.HarnessTitle, &entry.Agent, &directory, &entry.ResumeID); err != nil {
 			return nil, err
 		}
+		entry.Label = labels.shown(protocol.SessionID(entry.ID), directory, protocol.SessionAgent(entry.Agent))
 		sessions = append(sessions, entry)
 	}
 	return sessions, rows.Err()

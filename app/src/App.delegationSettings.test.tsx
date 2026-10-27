@@ -10,7 +10,7 @@ type Selection = Role['choices'][number]['selection'];
 type Model = EventMessage<'harness_models_result'>['models'][number];
 const harnesses = [
   { id: 'claude', name: 'Claude', available: true, model_pin: true, effort_pin: true, discovery: true },
-  { id: 'copilot', name: 'Copilot', available: true, model_pin: false, effort_pin: false, discovery: false },
+  { id: 'house', name: 'House', available: true, model_pin: false, effort_pin: false, discovery: false },
   { id: 'pi', name: 'Pi', available: true, model_pin: true, effort_pin: true, discovery: false },
 ];
 const model = (id: string, name: string, tier: Model['tier'], efforts: string[] = ['medium', 'high']): Model => ({ harness: 'claude', provider: '', id, name, tier, shipped_tier: tier, tier_source: id === 'default' ? 'alias' : tier ? 'shipped' : 'none', description: '', detail: '', effort_support: efforts.length ? 'supported' : 'unsupported', effort_levels: efforts, access: 'unknown' });
@@ -125,10 +125,10 @@ describe('App delegation settings', () => {
   });
   it('commits a harness that chooses its model only when its default row is chosen', async () => {
     const { daemon, saves, selection } = await picker();
-    await previewHarness(daemon, 'Copilot');
+    await previewHarness(daemon, 'House');
     expect(saves()).toEqual([]);
-    await pickModel(daemon, 'Copilot default');
-    expect(selection()).toEqual({ harness: 'copilot', provider: '', model: '', effort: '' });
+    await pickModel(daemon, 'House default');
+    expect(selection()).toEqual({ harness: 'house', provider: '', model: '', effort: '' });
     expect(daemon.sentOf('harness_models')).toEqual([]);
   });
   it.each(['locked', ''])('offers only the harness default when a plugin discovers models but cannot pin them (stored model %s)', async storedModel => {

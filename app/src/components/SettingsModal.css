@@ -486,6 +486,34 @@
   min-height: 48px;
 }
 
+.settings-outposts {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 24px;
+}
+
+.settings-outpost {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-outpost-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-outpost-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-outpost-error p {
+  margin: 0;
+}
+
 .settings-row-title {
   margin: 0 0 4px;
   color: var(--color-text-primary);

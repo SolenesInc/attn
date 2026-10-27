@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -41,6 +41,9 @@ INSTANCE_DAEMON_UNSET = $(foreach var,$(INSTANCE_ROUTING_VARS),-u $(var)) -u ATT
 WARN_LEAKED_ROUTING = leaked=""; for var in $(INSTANCE_ROUTING_VARS); do if printenv "$$var" >/dev/null; then leaked="$$leaked $$var"; fi; done; if [ -n "$$leaked" ]; then echo ">>> ignoring inherited routing env for this install:$$leaked"; echo ">>> this shell still routes elsewhere — select the instance with attn instance-env"; fi
 BUILD_DIR=./cmd/attn
 VERSION ?= $(shell bash ./scripts/version.sh)
+CHANNEL ?= source
+RELEASE_SOURCE ?= https://github.com/victorarias/attn/releases/download
+REPOSITORY_PATH ?= $(CURDIR)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 SOURCE_FINGERPRINT ?= $(shell bash ./scripts/source-fingerprint.sh --field fingerprint)
 SOURCE_DIRTY_PATHS_BASE64 ?= $(shell bash ./scripts/source-fingerprint.sh --field dirty_paths_base64)
@@ -55,7 +58,7 @@ OUTPUT ?= $(BINARY_NAME)
 # ad-hoc linker signature inside a properly signed bundle, and macOS answered
 # `daemon ensure` with Killed: 9.
 UNAME_S := $(shell uname -s)
-GO_LDFLAGS = -X github.com/victorarias/attn/internal/buildinfo.Version=$(VERSION) -X github.com/victorarias/attn/internal/buildinfo.BuildTime=$(BUILD_TIME) -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=$(SOURCE_FINGERPRINT) -X github.com/victorarias/attn/internal/buildinfo.GitCommit=$(GIT_COMMIT) -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(SNAPSHOT_FORMAT)
+GO_LDFLAGS = -X 'github.com/victorarias/attn/internal/buildinfo.ReleaseSource=$(RELEASE_SOURCE)' -X 'github.com/victorarias/attn/internal/buildinfo.RepositoryPath=$(REPOSITORY_PATH)' -X github.com/victorarias/attn/internal/buildinfo.Version=$(VERSION) -X github.com/victorarias/attn/internal/buildinfo.Channel=$(CHANNEL) -X github.com/victorarias/attn/internal/buildinfo.BuildTime=$(BUILD_TIME) -X github.com/victorarias/attn/internal/buildinfo.SourceFingerprint=$(SOURCE_FINGERPRINT) -X github.com/victorarias/attn/internal/buildinfo.GitCommit=$(GIT_COMMIT) -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(SNAPSHOT_FORMAT)
 # Honor the repository's .tool-versions even when an older standalone Zig is
 # earlier on PATH (the app's WASM builder follows the same order).
 ZIG ?= $(shell if command -v asdf >/dev/null 2>&1; then asdf which zig 2>/dev/null || command -v zig; else command -v zig; fi)
@@ -131,7 +134,7 @@ git-hooks:
 	git config core.hooksPath .githooks || [ "$$(git config --get core.hooksPath)" = .githooks ]
 
 build: git-hooks generate-prompts $(NATIVE_VT_DEP)
-	go build -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) $(BUILD_DIR)
+	go build -ldflags "$(GO_LDFLAGS)" -o "$(OUTPUT)" $(BUILD_DIR)
 
 PTY_HOST_BINARY := pty-host/target/release/attn-pty-host
 
@@ -191,6 +194,12 @@ test: git-hooks $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 		echo "make test: skipped the Go suite, only docs/internal, root Markdown and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
 	else ./scripts/test-go.sh; fi
 
+ingest-clickhouse:
+	@./scripts/ingest-clickhouse.sh start
+
+ingest-clickhouse-stop:
+	@./scripts/ingest-clickhouse.sh stop
+
 test-scripts:
 	@set -e; for script_test in $(sort $(wildcard scripts/*_test.sh)); do bash "$$script_test"; done
 
@@ -220,6 +229,10 @@ lint-go: $(NATIVE_VT_DEP)
 	@deps=$$(go list -deps ./cmd/...) || exit 1; \
 	if printf '%s\n' "$$deps" | grep -E '/internal/(testworld|fakeagent)$$'; then \
 		echo "the shipped binaries must not import the test worlds listed above" >&2; exit 1; \
+	fi
+	@deps=$$(go list -deps ./internal/sessionmonitor) || exit 1; \
+	if printf '%s\n' "$$deps" | grep -E '/internal/(daemon|store|garden)(/|$$)'; then \
+		echo "internal/sessionmonitor must not import the home's packages listed above: it reads only its Policy, View and Host" >&2; exit 1; \
 	fi
 
 lint-frontend: $(APP_NODE_MODULES)
@@ -426,7 +439,7 @@ generate-types: ensure-go-jsonschema
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts
 
 MIGRATION_BASE ?= origin/main
 

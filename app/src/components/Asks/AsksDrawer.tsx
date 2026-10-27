@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import type { Ask, AskAnswer } from '../../types/generated';
+import type { Ask, AskAnswer, AskReply } from '../../types/generated';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
-import { EMPTY_ASK_DRAFT, useAskList, useAsksStore } from '../../store/asks';
+import { EMPTY_ASK_DRAFT, useAskList, useAsksStore, useRepliedAskList } from '../../store/asks';
 import type { UISessionState } from '../../types/sessionState';
 import { askQuestions, draftAnswers, draftSendable, type AskHolderSession, type AskListItem } from '../../utils/asks';
+import { formatTurnAge } from '../../utils/queueBands';
 import { fileMarkdownSource } from '../MarkdownReader/documentSource';
 import { MarkdownReader } from '../MarkdownReader';
 import { SessionLead } from '../SessionLead';
@@ -40,18 +41,26 @@ function isTyping(target: EventTarget): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
+function drawerKey(event: KeyboardEvent): string | null {
+  return isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey ? null : event.key;
+}
+
 export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }: AsksDrawerProps) {
-  const items = useAskList(sessions);
+  const open = useAskList(sessions);
+  const replied = useRepliedAskList(sessions);
+  const showReplied = useAsksStore((state) => state.showReplied);
+  const items = useMemo(() => (showReplied ? [...open, ...replied] : open), [showReplied, open, replied]);
   const drafts = useAsksStore((state) => state.drafts);
   const selectedAskId = useAsksStore((state) => state.selectedAskId);
   const focusRequest = useAsksStore((state) => state.focusRequest);
-  const { selectAsk, setDraft } = useAsksStore.getState();
+  const { selectAsk, setDraft, toggleReplied } = useAsksStore.getState();
   const { sendAskAnswer } = useDaemonApi();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const index = Math.max(0, items.findIndex((item) => item.ask.id === selectedAskId));
   const ask = items[index]?.ask;
   const askId = ask?.id;
+  const askReplied = Boolean(ask?.reply);
   const drawerRef = useRef<HTMLDivElement>(null);
   const askRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
@@ -68,15 +77,18 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     return () => window.cancelAnimationFrame(frame);
   }, [onTop]);
   useEffect(() => {
+    if (!askId && onTop && drawerRef.current) takeKeyboardFromTerminal(drawerRef.current);
+  }, [askId, onTop, focusRequest]);
+  useEffect(() => {
     if (!askId) return;
     selectAsk(askId);
     listRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
     const article = askRef.current;
     if (!article) return;
     article.scrollTop = 0;
-    const input = article.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)');
+    const input = article.querySelector<HTMLElement>('input:not(:disabled), textarea:not(:disabled)') ?? drawerRef.current;
     if (input) takeKeyboardFromTerminal(input);
-  }, [askId, focusRequest, selectAsk]);
+  }, [askId, askReplied, focusRequest, selectAsk]);
 
   const show = (id: string) => {
     selectAsk(id);
@@ -87,32 +99,39 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     if (next) show(next.ask.id);
   };
 
+  const header = <AsksHeader count={open.length} replied={replied.length} showReplied={showReplied} onToggleReplied={toggleReplied} onClose={onClose} />;
+  const onEmptyKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (drawerKey(event) !== 'r') return;
+    event.preventDefault();
+    toggleReplied();
+  };
+
   if (!ask) {
     return (
-      <div className="asks-drawer">
-        <AsksHeader count={0} onClose={onClose} />
-        <div className="asks-empty">
-          <p>No open asks.</p>
-          <p className="asks-empty-hint">When an agent needs a decision from you, its ask lands here.</p>
-        </div>
+      <div ref={drawerRef} className="asks-drawer" role="region" aria-label="Asks" tabIndex={-1} onKeyDown={onEmptyKeyDown}>
+        {header}
+        <AsksEmpty replied={replied.length} />
       </div>
     );
   }
 
   const { holder, from } = items[index];
   const seedId = ask.seed_id;
+  const reply = ask.reply;
   const questions = askQuestions(ask);
   const draft = drafts[ask.id] ?? EMPTY_ASK_DRAFT;
-  const sendable = draftSendable(ask, draft) && !sending;
+  const shownAnswers = reply ? answersByKey(reply.answers) : draft.answers;
+  const sendable = !reply && draftSendable(ask, draft) && !sending;
   const changeAnswer = (answer: AskAnswer) => setDraft(ask.id, { ...draft, answers: { ...draft.answers, [answer.key]: answer } });
   const send = async () => {
     if (!sendable) return;
-    const after = items[index + 1] ?? items[index - 1];
+    const openIndex = open.findIndex((item) => item.ask.id === ask.id);
+    const after = open[openIndex + 1] ?? open[openIndex - 1];
     setSending(true);
     setError(null);
     try {
       await sendAskAnswer(ask.id, draftAnswers(ask, draft), draft.note);
-      selectAsk(after?.ask.id ?? null);
+      selectAsk(after?.ask.id ?? ask.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -125,18 +144,19 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
       void send();
       return;
     }
-    if (isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
-    if (event.key === 'j') step(1);
-    else if (event.key === 'k') step(-1);
-    else if (event.key === 'o' && holder) onOpenAgent(holder.id);
-    else if (event.key === 'g' && seedId) onOpenSeed(seedId);
+    const key = drawerKey(event);
+    if (key === 'j') step(1);
+    else if (key === 'k') step(-1);
+    else if (key === 'r') toggleReplied();
+    else if (key === 'o' && holder) onOpenAgent(holder.id);
+    else if (key === 'g' && seedId) onOpenSeed(seedId);
     else return;
     event.preventDefault();
   };
 
   return (
     <div ref={drawerRef} className="asks-drawer" role="region" aria-label="Asks" tabIndex={-1} onKeyDown={onKeyDown}>
-      <AsksHeader count={items.length} onClose={onClose} />
+      {header}
       <AsksList items={items} selectedId={ask.id} listRef={listRef} onShow={show} />
       <article ref={askRef} className="asks-ask" aria-label={ask.subject} data-testid={`ask-${ask.id}`}>
         <div className="asks-ask-from">
@@ -157,9 +177,9 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
               askId={ask.id}
               index={questions.indexOf(part.question) + 1}
               question={part.question}
-              answer={draft.answers[part.question.key]}
+              answer={shownAnswers[part.question.key]}
               source={source}
-              onChange={changeAnswer}
+              onChange={reply ? undefined : changeAnswer}
             />
           ) : (
             <div key={`markdown-${partIndex}`} className="asks-markdown">
@@ -167,21 +187,17 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
             </div>
           )
         ))}
-        <textarea
-          className="asks-note"
-          aria-label="Note"
-          rows={3}
+        <AskNote
+          reply={reply}
           value={draft.note}
           placeholder={holder || !seedId ? `Anything else for ${from}?` : 'Anything else for its next tender?'}
-          onChange={(event) => setDraft(ask.id, { ...draft, note: event.target.value })}
+          onChange={(note) => setDraft(ask.id, { ...draft, note })}
         />
         {error && <div className="asks-error" role="alert">{error}</div>}
       </article>
       <div className="asks-footer">
         <AsksHints several={items.length > 1} hasHolder={Boolean(holder)} hasSeed={Boolean(seedId)} />
-        <button type="button" className="asks-send" disabled={!sendable} aria-busy={sending || undefined} onClick={() => void send()}>
-          {sending ? 'Sending…' : 'Send'} <kbd>{formatShortcut(SEND_SHORTCUT)}</kbd>
-        </button>
+        <AskAction reply={reply} sendable={sendable} sending={sending} onSend={() => void send()} />
       </div>
     </div>
   );
@@ -197,14 +213,16 @@ interface AsksListProps {
 function AsksList({ items, selectedId, listRef, onShow }: AsksListProps) {
   const now = useNow(TURN_AGE_TICK_MS);
   return (
-    <ol ref={listRef} className="asks-list" aria-label="Open asks">
-      {items.map((item) => {
+    <ol ref={listRef} className="asks-list" aria-label={items.some((item) => item.ask.reply) ? 'Open and replied asks' : 'Open asks'}>
+      {items.map((item, position) => {
         const selected = item.ask.id === selectedId;
+        const firstReply = item.ask.reply && !items[position - 1]?.ask.reply;
         return (
           <li key={item.ask.id}>
+            {firstReply && <div className="asks-list-divider">Replied in the last day</div>}
             <button
               type="button"
-              className={`asks-row ${selected ? 'asks-row--selected' : ''}`.trim()}
+              className={`asks-row ${selected ? 'asks-row--selected' : ''} ${item.ask.reply ? 'asks-row--replied' : ''}`.trim()}
               data-testid={`asks-row-${item.ask.id}`}
               aria-current={selected ? 'true' : undefined}
               onClick={() => onShow(item.ask.id)}
@@ -238,16 +256,93 @@ function AsksHints({ several, hasHolder, hasSeed }: { several: boolean; hasHolde
       {several && <span className="asks-hint"><kbd>j</kbd><kbd>k</kbd> next · previous</span>}
       {hasHolder && <span className="asks-hint"><kbd>o</kbd> open agent</span>}
       {hasSeed && <span className="asks-hint"><kbd>g</kbd> open in Garden</span>}
+      <span className="asks-hint"><kbd>r</kbd> replied</span>
       <span className="asks-hint"><kbd>esc</kbd> close</span>
     </span>
   );
 }
 
-function AsksHeader({ count, onClose }: { count: number; onClose: () => void }) {
+function answersByKey(answers: readonly AskAnswer[]): Record<string, AskAnswer> {
+  return Object.fromEntries(answers.map((answer) => [answer.key, answer]));
+}
+
+function AsksEmpty({ replied }: { replied: number }) {
+  return (
+    <div className="asks-empty">
+      <p>No open asks.</p>
+      <p className="asks-empty-hint">When an agent needs a decision from you, its ask lands here.</p>
+      {replied > 0 && (
+        <p className="asks-empty-hint"><kbd>r</kbd> shows the {replied === 1 ? 'one' : replied} you replied to in the last day</p>
+      )}
+    </div>
+  );
+}
+
+interface AskNoteProps {
+  reply: AskReply | undefined;
+  value: string;
+  placeholder: string;
+  onChange: (note: string) => void;
+}
+
+function AskNote({ reply, value, placeholder, onChange }: AskNoteProps) {
+  if (reply) return reply.note ? <p className="ask-replied-text" aria-label="Note">{reply.note}</p> : null;
+  return (
+    <textarea
+      className="asks-note"
+      aria-label="Note"
+      rows={3}
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+}
+
+interface AskActionProps {
+  reply: AskReply | undefined;
+  sendable: boolean;
+  sending: boolean;
+  onSend: () => void;
+}
+
+function AskAction({ reply, sendable, sending, onSend }: AskActionProps) {
+  if (reply) return <RepliedWhen answeredAt={reply.answered_at} />;
+  return (
+    <button type="button" className="asks-send" disabled={!sendable} aria-busy={sending || undefined} onClick={onSend}>
+      {sending ? 'Sending…' : 'Send'} <kbd>{formatShortcut(SEND_SHORTCUT)}</kbd>
+    </button>
+  );
+}
+
+function RepliedWhen({ answeredAt }: { answeredAt: string }) {
+  const now = useNow(TURN_AGE_TICK_MS);
+  const age = formatTurnAge(answeredAt, now);
+  return <span className="asks-replied-when">{age === 'now' ? 'Replied just now' : `Replied ${age} ago`}</span>;
+}
+
+interface AsksHeaderProps {
+  count: number;
+  replied: number;
+  showReplied: boolean;
+  onToggleReplied: () => void;
+  onClose: () => void;
+}
+
+function AsksHeader({ count, replied, showReplied, onToggleReplied, onClose }: AsksHeaderProps) {
   return (
     <div className="asks-header">
       <span className="asks-title">Asks</span>
       {count > 0 && <span className="asks-count">{count}</span>}
+      <button
+        type="button"
+        className="asks-replied-toggle"
+        aria-pressed={showReplied}
+        title={`${showReplied ? 'Hide' : 'Show'} the asks you replied to in the last day (r)`}
+        onClick={onToggleReplied}
+      >
+        Replied{replied > 0 && <span className="asks-replied-count">{replied}</span>}
+      </button>
       <button type="button" className="asks-close" aria-label="Close asks" title="Close (esc)" onClick={onClose}>×</button>
     </div>
   );

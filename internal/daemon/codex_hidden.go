@@ -13,6 +13,8 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/transcript"
 )
 
@@ -37,17 +39,6 @@ func (r *codexShared) holder(profile, conversation string) protocol.SessionID {
 	return sessionID
 }
 
-func (r *codexShared) shownThread(sessionID protocol.SessionID) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, t := range r.d.terminals().Of(harness.SessionID(sessionID)) {
-		if v := r.views[t]; v != nil && v.thread != "" {
-			return v.thread
-		}
-	}
-	return ""
-}
-
 func (r *codexShared) control(ctx context.Context, profile string) (*codexServer, *codexshared.Client, error) {
 	s, err := r.ensureServer(ctx, profile, "")
 	if err != nil {
@@ -64,28 +55,36 @@ func (r *codexShared) Voices() []harness.Voice {
 	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
 }
 
-func (r *codexShared) Deliver(_ context.Context, in harness.Input) harness.Custody {
-	session := r.d.store.Get(in.Session)
-	if session == nil {
-		return harness.Custody{Reason: fmt.Sprintf("session %s is gone", in.Session)}
+type codexMonitorLink struct {
+	shared  *codexShared
+	monitor *sessionmonitor.Monitor
+	target  sessionmonitor.LinkTarget
+}
+
+func (l codexMonitorLink) Voices() []harness.Voice { return l.shared.Voices() }
+
+func (r *codexShared) Deliver(ctx context.Context, in harness.Input) harness.Custody {
+	monitor := r.d.sessionMonitor(in.Session)
+	if monitor == nil {
+		return harness.Custody{Reason: fmt.Sprintf("session %s has no monitor", in.Session)}
 	}
-	conversation := r.d.store.GetSessionConversation(session.ID).NativeID
+	return (codexMonitorLink{shared: r, monitor: monitor, target: monitor.LinkTarget()}).Deliver(ctx, in)
+}
+
+func (l codexMonitorLink) Deliver(_ context.Context, in harness.Input) harness.Custody {
+	r, target := l.shared, l.target
+	conversation := target.Conversation.NativeID
 	if conversation == "" {
-		conversation = r.shownThread(session.ID)
-	}
-	if conversation == "" {
-		return harness.Custody{Reason: fmt.Sprintf("shared Codex session %s shows no conversation yet", session.ID)}
+		return harness.Custody{Reason: "shared Codex monitor has no conversation yet"}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
-	s, client, err := r.control(ctx, session.ProfileID)
+	s, client, err := r.control(ctx, target.Profile)
 	if err == nil {
-		err = r.startTurn(ctx, client, session.ID, conversation, in.Text)
+		err = r.startTurn(ctx, client, target.Session, conversation, in.Text)
 	}
-	if err == nil {
-		s.events.run(r.d, func() {
-			r.d.ensureTranscriptWatcherAtPath(session.ID, r.d.store.GetSessionConversation(session.ID).TranscriptPath)
-		})
+	if err == nil && target.Session != "" {
+		s.events.run(r.d, func() { l.monitor.EnsureTranscriptWatcher(target.Conversation.TranscriptPath) })
 	}
 	if err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver to shared Codex conversation %s: %v", conversation, err)}
@@ -196,21 +195,25 @@ func (q *codexEvents) run(d *Daemon, f func()) {
 
 func (r *codexShared) observe(sessionID protocol.SessionID, status string) {
 	session := r.d.store.Get(sessionID)
-	if session == nil || !r.d.hidden(sessionID) {
+	if session == nil {
 		return
 	}
 	now := time.Now()
+	r.d.traceStateEvidence(sessionID, sessionmonitor.Origin{Source: string(sessionstate.SourceAppServer), ObservedAt: now}, status)
+	if !r.d.hidden(sessionID) {
+		return
+	}
 	if status == pty.ProgramIdle {
-		evidence, _ := r.d.evidenceSnapshot(sessionID)
+		evidence, _ := r.d.sessionMonitor(sessionID).Evidence()
 		bracketOpen := evidence.TurnOpen || evidence.ToolOpen
 		if !bracketOpen && !inTurn(session.State) {
 			return
 		}
 		if bracketOpen {
-			r.d.monitorEntry(sessionID).recordTurnAbortedEvidence(r.d.monitors(), "the shared Codex app-server ended the turn", now, now)
+			r.d.sessionMonitor(sessionID).RecordTurnAborted("the shared Codex app-server ended the turn", now, now)
 		}
 	}
-	r.d.recordPTYEvidence(sessionID, pty.Observation{Source: pty.SourceProgramStatus, Claim: status, At: now})
+	r.d.sessionMonitor(sessionID).RecordServerStatus(status, now)
 }
 
 func inTurn(state protocol.SessionState) bool {
@@ -279,39 +282,17 @@ func (r *codexShared) serverGone(profile string) {
 	})
 }
 
-func (r *codexShared) closed(sessionID protocol.SessionID) {
-	conversation := r.conversation(sessionID)
-	session := r.d.store.Get(sessionID)
-	if conversation == "" || session == nil {
-		return
-	}
-	defer r.d.finishMonitorUsage(sessionID)()
-	defer r.settleUsage(sessionID)
-	if other := r.d.store.OtherOpenSessionHolding(conversation, sessionID); other != "" {
-		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: session %s still holds it", conversation, sessionID, other)
-		return
-	}
+func (r *codexShared) archiveConversation(profile string, closed protocol.SessionID, conversation string) {
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerStartLimit)
 	defer cancel()
-	_, client, err := r.control(ctx, session.ProfileID)
+	_, client, err := r.control(ctx, profile)
 	if err == nil {
-		callCtx, cancelCall := context.WithTimeout(ctx, codexServerCallLimit)
+		callCtx, cancelCall := context.WithTimeout(context.Background(), codexServerCallLimit)
 		_, err = client.Call(callCtx, "thread/archive", map[string]any{"threadId": conversation})
 		cancelCall()
 	}
 	if err != nil {
-		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, sessionID, err)
-	}
-}
-
-func (r *codexShared) settleUsage(sessionID protocol.SessionID) {
-	path := r.d.store.GetSessionConversation(sessionID).TranscriptPath
-	if path == "" {
-		return
-	}
-	w := &transcriptWatcher{sessionID: sessionID, agent: protocol.SessionAgentCodex}
-	if tracker := r.d.newSessionUsageTracker(w, path); tracker != nil {
-		tracker.Reconcile()
+		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, closed, err)
 	}
 }
 
@@ -329,21 +310,12 @@ func (r *codexShared) restore(profile, conversation string) error {
 	if err != nil {
 		return err
 	}
-	callCtx, cancelCall := context.WithTimeout(ctx, codexServerCallLimit)
+	callCtx, cancelCall := context.WithTimeout(context.Background(), codexServerCallLimit)
 	defer cancelCall()
 	if _, err := client.Call(callCtx, "thread/unarchive", map[string]any{"threadId": conversation}); err != nil {
 		return fmt.Errorf("unarchive Codex conversation %s: %w", conversation, err)
 	}
 	return nil
-}
-
-func (r *codexShared) shownConversation(t harness.TerminalID) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if v := r.views[t]; v != nil {
-		return v.thread
-	}
-	return ""
 }
 
 func (r *codexShared) transcriptPath(path string) string {
@@ -362,11 +334,12 @@ func (r *codexShared) observeName(s *codexServer, m codexshared.Message) {
 	s.events.run(r.d, func() {
 		sessionID := r.holder(s.profile, p.ThreadID)
 		session := r.d.store.Get(sessionID)
-		if session == nil || name == "" || session.Label == name {
+		if session == nil || name == "" {
 			return
 		}
-		r.d.store.UpdateSessionLabel(sessionID, name)
-		r.d.publishFact(FactSessionRenamed, string(sessionID), nil)
+		if monitor := r.d.sessionMonitor(sessionID); monitor != nil {
+			monitor.ReportHarnessTitle(name)
+		}
 	})
 }
 
@@ -407,15 +380,16 @@ func (r *codexShared) profileReleased(profile string) {
 	if r.needed(profile) || !r.serverRunning(context.Background(), s.terminal) {
 		return
 	}
-	if err := r.stopServer(s); err != nil {
-		r.d.logf("shared Codex: stopping the idle app-server of profile %s: %v", profile, err)
-		return
-	}
+	r.stop(s, codexServerReleaseGrace)
 	r.d.logf("shared Codex: stopped the app-server of profile %s; nothing uses it", profile)
 }
 
 func (r *codexShared) needed(profile string) bool {
 	r.mu.Lock()
+	if r.archivingAfterClose[profile] > 0 {
+		r.mu.Unlock()
+		return true
+	}
 	for _, v := range r.views {
 		if v.profile == profile {
 			r.mu.Unlock()
@@ -440,7 +414,8 @@ func (r *codexShared) loadedElsewhere(profile, conversation string) string {
 	r.mu.Unlock()
 	for p, s := range servers {
 		s.mu.Lock()
-		held := p != profile && s.held[conversation]
+		_, held := s.held[conversation]
+		held = held && p != profile
 		s.mu.Unlock()
 		if held {
 			return p

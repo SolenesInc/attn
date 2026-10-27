@@ -25,7 +25,7 @@ func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *te
 		if err := cli.UpdateStateFromHook(protocol.TerminalID(w.Terminal("s1")), protocol.StateWorking, "auto"); err != nil {
 			t.Fatalf("report s1 working: %v", err)
 		}
-		working := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 		w.advance(time.Second)
 		notified := time.Now()
 		if err := cli.RecordNotification(protocol.TerminalID(w.Terminal("s1")), "permission_prompt", "Claude needs your permission"); err != nil {
@@ -34,13 +34,14 @@ func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *te
 		w.advance(time.Second)
 
 		explained := stateExplainOf(t, cli, "s1")
-		if explained.SessionID != "s1" || explained.Agent != "claude" || explained.State != string(protocol.SessionStateWorking) ||
-			protocol.Deref(explained.StateSince) != working.StateSince || explained.Capacity == 0 {
-			t.Fatalf("explain names %s (%s) %s since %s with capacity %d, want s1 (claude) working since %s with a capacity",
-				explained.SessionID, explained.Agent, explained.State, protocol.Deref(explained.StateSince), explained.Capacity, working.StateSince)
+		since, _ := time.Parse(time.RFC3339Nano, protocol.Deref(explained.StateSince))
+		if explained.SessionID != "s1" || explained.Agent != "claude" || explained.State != string(protocol.SessionStatePendingApproval) ||
+			!since.Equal(notified) || explained.Capacity == 0 {
+			t.Fatalf("explain names %s (%s) %s since %s with capacity %d, want s1 (claude) pending_approval since %s with a capacity",
+				explained.SessionID, explained.Agent, explained.State, protocol.Deref(explained.StateSince), explained.Capacity, notified.Format(time.RFC3339Nano))
 		}
 		stateExplainShows(t, explained.Observations,
-			stateExplainRow{source: "reviewer", claim: "auto", outcome: "observed", at: reported},
+			stateExplainRow{source: "permission_mode", claim: "auto", outcome: "observed", at: reported},
 			stateExplainRow{source: "hook_state", claim: "working", outcome: "observed", at: reported},
 			stateExplainRow{source: "resolver", claim: "working", outcome: "applied", cause: "resolver_observation", detail: "bracket_open", at: reported},
 			stateExplainRow{source: "hook_notify", claim: "permission_prompt", outcome: "observed", detail: "Claude needs your permission", at: notified},
@@ -60,8 +61,8 @@ func TestStateExplainAttributesEachHookClaimToItsSourceAndCollapsesRepeats(t *te
 			stateExplainRow{source: "hook_state", claim: "working", outcome: "observed", repeats: 1, at: first.Add(2 * time.Second)},
 		)
 		for _, obs := range codex {
-			if obs.Source == "reviewer" {
-				t.Fatalf("a hook without a permission mode was explained with a reviewer claim %q", obs.Claim)
+			if obs.Source == "permission_mode" {
+				t.Fatalf("a hook without a permission mode was explained with permission mode %q", obs.Claim)
 			}
 		}
 	})
@@ -114,6 +115,29 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 	if _, err := cli.StateExplain(string(session)); err == nil || !strings.Contains(err.Error(), "session_not_found") {
 		t.Fatalf("explain of a closed session answered %v, want session_not_found", err)
 	}
+}
+
+func TestStateExplainShowsWhatTheSharedCodexAppServerReportsForAVisibleTileThatFollowsItsTerminal(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
+	caughtUpWithServer := func(name string) protocol.Session {
+		typeInto(app, terminal, "/rename "+name+"\r")
+		codex.Prompted()
+		return testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return s.Label == name })
+	}
+
+	caughtUpWithServer("Checkout race")
+	w.CodexServer().Work(codex.ConversationID)
+	if shown := caughtUpWithServer("Tax lock"); shown.State != protocol.SessionStateWaitingInput {
+		t.Fatalf("the visible tile is %s after its app-server reported working, want waiting_input from its terminal", shown.State)
+	}
+	stateExplainShows(t, stateExplainOf(t, cli, checkout).Observations,
+		stateExplainRow{source: "app_server", claim: "working", outcome: "observed"},
+		stateExplainRow{source: "app_server", claim: "idle", outcome: "observed"},
+		stateExplainRow{source: "app_server", claim: "working", outcome: "observed"},
+	)
 }
 
 type stateExplainRow struct {

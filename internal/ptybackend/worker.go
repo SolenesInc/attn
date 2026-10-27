@@ -567,9 +567,6 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 	if opts.CodexExecutable != "" {
 		args = append(args, "--codex-executable", opts.CodexExecutable)
 	}
-	if opts.CopilotExecutable != "" {
-		args = append(args, "--copilot-executable", opts.CopilotExecutable)
-	}
 	if opts.AgentLoginShell {
 		args = append(args, "--agent-login-shell")
 	}
@@ -645,7 +642,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	}
 
 	binaryPath := b.resolveBinaryPath()
-	cmd := exec.CommandContext(ctx, binaryPath, args...)
+	cmd := exec.Command(binaryPath, args...)
 	b.cfg.Logf("worker backend spawn: session=%s binary=%s socket=%s", sessionID, binaryPath, session.SocketPath)
 	workerLogPath := filepath.Join(b.logDir(), sessionID+".log")
 	workerLogFile, logErr := os.OpenFile(workerLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
@@ -678,7 +675,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		"ATTN_CACHED_SHELL_ENV",
 		"ATTN_PTY_DAEMON_ENV",
 	)
-	workerEnv = append(workerEnv, "ATTN_PTY_WORKER=1")
+	workerEnv = append(workerEnv, "ATTN_PTY_WORKER=1", "ATTN_PTY_HOST_NAME="+opts.HostName)
 	if len(opts.LoginShellEnv) > 0 {
 		if envJSON, err := json.Marshal(opts.LoginShellEnv); err == nil {
 			workerEnv = append(workerEnv, "ATTN_CACHED_SHELL_ENV="+string(envJSON))
@@ -1263,16 +1260,15 @@ func (b *WorkerBackend) SessionLaunchParams(ctx context.Context, id harness.Term
 		return SessionLaunchParams{}, err
 	}
 	return SessionLaunchParams{
-		Recorded:          entry.LaunchParamsRecorded,
-		YoloMode:          entry.YoloMode,
-		ApprovalRoute:     entry.ApprovalRoute,
-		Executable:        entry.Executable,
-		ClaudeExecutable:  entry.ClaudeExecutable,
-		CodexExecutable:   entry.CodexExecutable,
-		CopilotExecutable: entry.CopilotExecutable,
-		Model:             entry.Model,
-		Effort:            entry.Effort,
-		UnattendedLaunch:  entry.UnattendedLaunch,
+		Recorded:         entry.LaunchParamsRecorded,
+		YoloMode:         entry.YoloMode,
+		ApprovalRoute:    entry.ApprovalRoute,
+		Executable:       entry.Executable,
+		ClaudeExecutable: entry.ClaudeExecutable,
+		CodexExecutable:  entry.CodexExecutable,
+		Model:            entry.Model,
+		Effort:           entry.Effort,
+		UnattendedLaunch: entry.UnattendedLaunch,
 	}, nil
 }
 

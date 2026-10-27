@@ -238,7 +238,7 @@ func TestEditsMadeDirectlyInASeedFolderReachTheGarden(t *testing.T) {
 		testworld.Await(watcher, protocol.EventFsChanged, func(m protocol.FsChangedMessage) bool {
 			return slices.ContainsFunc(m.Paths, func(p string) bool { return strings.HasSuffix(p, edit.changed) })
 		})
-		testworld.Await(watcher, protocol.EventGardenSeedsUpdated, func(protocol.WebSocketEvent) bool { return true })
+		testworld.Await(watcher, protocol.EventGardenSeedsChanged, func(protocol.WebSocketEvent) bool { return true })
 		seedArtifactsListed(t, cli, seed, "after "+edit.name, edit.want...)
 	}
 	if info, err := os.Stat(folder); err != nil || !info.IsDir() {

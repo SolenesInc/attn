@@ -1,6 +1,6 @@
 ---
 name: attn-workflow
-description: Use when an assigned role refers to this skill, the user asks you to work as a Pathfinder, Prototyper, or Orchestrator in the current conversation, or the user requests its processes for investigation, discussion, alignment, debugging, prototyping, interface design, planning, implementation, refactoring, performance work, review, or orchestration.
+description: Use when an assigned role refers to this skill, the user asks you to work as a Pathfinder, Prototyper, or Orchestrator in the current conversation, or the user requests its processes for investigation, discussion, alignment, debugging, prototyping, interface design, planning, implementation, refactoring, performance work, review, orchestration, or correcting a kind of mistake that keeps coming back.
 ---
 
 # Attn workflow
@@ -21,6 +21,7 @@ Match the task to one process in the table, read its reference, and load further
 | Change structure or shape while preserving behavior | [Refactoring](references/refactoring.md) |
 | Find what makes something slow, large or busy when it should be idle, and make it measurably better, once or against a target | [Perf](references/perf.md) |
 | Review a PR or changes against a plan, including behavioral verification | [Review](references/review.md) |
+| Make a kind of mistake that keeps coming back impossible to repeat in the repository | [Correction](references/correction.md) |
 | Delegate agreed work, advise implementers, and judge completion | [Orchestration](references/orchestration.md) |
 
 When the user asks you to work as one of these roles in the current conversation, take the role yourself, with the user present:
@@ -28,6 +29,8 @@ When the user asks you to work as one of these roles in the current conversation
 - **Pathfinder**: use [Discuss](references/discuss.md) to investigate or develop the idea with the user, [Planning](references/planning.md) when the outcome is a plan, and [Align](references/align.md) before a consequential step, such as dispatching a Builder or Orchestrator, to check that you and the user understand the work the same way. When a decision is easier to make by comparing options, such as a UI or the shape of an interface, suggest prototypes; when the user agrees, delegate them to the Prototyper role if `attn delegate roles` lists it, and otherwise build them yourself.
 - **Prototyper**: follow [Prototype](references/prototype.md), and show the options, comparison, and recommendation to the user here.
 - **Orchestrator**: follow [Orchestration](references/orchestration.md) for the agreed plan, delegating Builders and reviewing their work, and bring decisions beyond the agreed scope to the user here.
+
+Independent judgment, such as an Orchestrator reviewing a Builder's change, options compared side by side, or a second review, is worth more when the two sides run on different models, because each model misses different things. That difference comes from the user's delegation roles: choose the role and an alternative whose condition fits, as the `attn` skill's delegation reference describes, and do not override a model the user did not ask to change. When the roles put both sides on one model, say so where you report the judgment. A second review by a separate Reviewer delegation runs only when the user asks for one, as that reference says. When a change is contested or costly to reverse, you may suggest one as its own question; a plan or handoff the user approves is not that request, even when it mentions a Reviewer.
 
 ## Engineering judgment
 
@@ -43,6 +46,14 @@ Prove it works: before reporting a change complete, check the real thing on the 
 
 Build the lever: for work that is not trivial, write the tool that does it, a script, a codemod, a generator, instead of working by hand. The tool is the artifact a reviewer can read and rerun; hand-done work can only be checked by redoing it. Do the first unit by hand to learn the recipe, then build the tool and prove it on that unit. Keep it the smallest script that does the job, never a framework, and keep it where the reviewer can rerun it: linked from the change or attached to the seed, committed when the work outlives the session.
 
-Sequence verifiable units: order multi-step work as small units that each end in a check, and verify each before starting the next, so a break is caught at the unit that caused it. Order the change's commits so a reviewer replays the proof: the failing test before the fix, the subtraction before the reshape, the baseline before the treatment.
+Sequence verifiable units: order multi-step work as small units that each end in a check, and verify each before starting the next, so a break is caught at the unit that caused it. Put the proof before the change, so you watch your own assumption fail and then hold instead of trusting it: the failing test before the fix, the subtraction before the reshape, the baseline before the treatment.
 
-Attack the premise: when two fixes that share one assumption have failed the same check, write the assumption down and test it directly before writing a third. Each failed fix is evidence against the belief it rested on.
+Attack the premise: when two fixes that share one assumption have failed the same check, write the assumption down and test it directly before writing a third. Each failed fix is evidence against the belief it rested on. The design is the assumption when fixes pass but keep arriving in the same shape: special cases for unrelated edge cases, casts or optional fields that are always set, a lock where the design said nothing was shared, callers that must know the callee's internal rules. Stop patching. Redesign as if the new constraint had been known from the start, aiming smaller than the patched design, and bring the redesign to the coordinating agent named in the brief, or to the user when none is named, before more patches land.
+
+Update what a decision overturns: when the user's decision contradicts the repository's docs, code, or agent guidance, change them as part of the task. When the change falls outside the task, plant a seed for it that names the decision. Until those statements change, they teach what the decision overturned to every agent that reads them, including you once your context is summarized.
+
+Encode lessons in structure: when the user or a reviewer corrects the same kind of mistake a second time, the instruction that failed is the symptom. Fix the class at the highest level that works, as [Correction](references/correction.md) describes, or plant it as a seed when it falls outside the task.
+
+## Writing
+
+Text another reader acts on, such as a plan, a brief, a question for the user, a review, or a report, follows [Technical writing](references/technical-writing.md). Read it before writing one.

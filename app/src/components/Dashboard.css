@@ -1007,3 +1007,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.session-row[data-offline='true'] {
+  background: color-mix(in srgb, var(--color-error) 7%, transparent);
+}
+
+.session-row.clickable[data-offline='true']:hover {
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-bg-elevated));
+}

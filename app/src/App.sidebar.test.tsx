@@ -73,7 +73,6 @@ const HARNESSES: Array<[string, string, string]> = [
   ['claude-row', 'claude', 'Claude'],
   ['codex-row', 'codex', 'Codex'],
   ['pi-row', 'pi', 'Pi'],
-  ['copilot-row', 'copilot', 'Copilot'],
   ['shell-row', 'shell', 'Shell'],
   ['plugin-row', 'custom-driver', 'Custom Driver'],
 ];

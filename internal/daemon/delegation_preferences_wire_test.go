@@ -19,7 +19,7 @@ func buildRole() protocol.DelegationPreferences {
 			DefaultChoiceID: "default",
 			Choices:         []protocol.DelegationChoice{{ID: "default", Name: "Everyday", Selection: protocol.DelegationSelection{Harness: "codex", Model: "test-model", Effort: "medium"}}},
 		}},
-		Fallback: protocol.DelegationFallback{Selection: protocol.DelegationSelection{Harness: "copilot"}},
+		Fallback: protocol.DelegationFallback{Selection: protocol.DelegationSelection{Harness: "claude"}},
 	}
 }
 

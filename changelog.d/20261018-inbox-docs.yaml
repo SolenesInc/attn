@@ -1,6 +1,0 @@
-kind: internal
-area: docs
-change: >
-  docs/inbox.md describes the inbox: who an item is for, what puts items in,
-  coalescing, rings, wakes, reading, limits and restarts. The glossary defines
-  a seed's watcher.

@@ -54,6 +54,10 @@ and run commands from the repository root.
 
 - The verdict is the last `ATTN_VERDICT ` stdout line (hand-run scripts may not
   print one); `summary.json` has the rest.
+- A scenario that calls `registerNativeFailureEvidence` saves what the open app
+  showed when a step failed, before cleanup closes it: `failure-native.png` and
+  `failure-evidence.json` (window and target geometry, the focused element,
+  native focus and pointer, the UI diagnostics ring).
 - Check pane text and native screenshots before diagnosing. WebGL terminals need
   native window captures.
 - Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`, `nvim`,

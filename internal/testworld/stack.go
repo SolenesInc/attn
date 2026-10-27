@@ -25,6 +25,7 @@ import (
 type Stack struct {
 	*World
 	binary        string
+	supervised    bool
 	daemon        *os.Process
 	exited        chan error
 	allowFallback bool
@@ -33,13 +34,18 @@ type Stack struct {
 }
 
 type stackSetup struct {
-	harnesses []fakeagent.Harness
+	harnesses       []fakeagent.Harness
+	withoutAgentKit bool
 }
 
 type StackOption func(*stackSetup)
 
 func WithAgents(h ...fakeagent.Harness) StackOption {
 	return func(s *stackSetup) { s.harnesses = append(s.harnesses, h...) }
+}
+
+func WithoutAgentKit() StackOption {
+	return func(s *stackSetup) { s.withoutAgentKit = true }
 }
 
 func NewStack(t *testing.T, opts ...StackOption) *Stack {
@@ -52,7 +58,8 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 		opt(&setup)
 	}
 	binary := AttnBinary(t)
-	s := &Stack{World: Prepare(t, binary, setup.harnesses...), binary: binary}
+	world := prepareIn(t, worldDir(t), binary, setup.harnesses, !setup.withoutAgentKit)
+	s := &Stack{World: world, binary: binary}
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1")})
 	if err != nil {
 		t.Fatal(err)
@@ -120,6 +127,21 @@ func (s *Stack) StartHeldAt(p *Pause) {
 	p.Await()
 }
 
+func (s *Stack) StartHeldBeforeReady(p *Pause) func() {
+	s.T.Helper()
+	started := make(chan struct{})
+	go func() {
+		defer close(started)
+		s.launch()
+	}()
+	s.T.Cleanup(func() {
+		p.releaseAll()
+		<-started
+	})
+	p.Await()
+	return func() { <-started }
+}
+
 func (s *Stack) start(vars ...string) {
 	s.T.Helper()
 	s.launch(vars...)
@@ -148,8 +170,15 @@ func (s *Stack) launch(vars ...string) {
 	}
 	defer stderr.Close()
 	cmd := exec.Command(s.binary, "daemon")
+	if s.supervised {
+		testBinary, err := os.Executable()
+		if err != nil {
+			s.T.Fatal(err)
+		}
+		cmd = exec.Command(testBinary)
+		vars = append(vars, "ATTN_TESTWORLD_SUPERVISE="+s.binary)
+	}
 	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3", "GOTRACEBACK=all")
-	dieWithTestProcess(cmd)
 	cmd.ExtraFiles = []*os.File{signal}
 	file, err := s.wsListener.File()
 	if err != nil {
@@ -158,14 +187,26 @@ func (s *Stack) launch(vars ...string) {
 	defer file.Close()
 	cmd.ExtraFiles = append(cmd.ExtraFiles, file)
 	cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=4")
+	lifeline, holder, err := os.Pipe()
+	if err != nil {
+		s.T.Fatal(err)
+	}
+	cmd.ExtraFiles = append(cmd.ExtraFiles, lifeline)
+	cmd.Env = append(cmd.Env, "ATTN_HARNESS_LIFELINE_FD=5")
 	cmd.Stdout, cmd.Stderr = stderr, stderr
 	err = cmd.Start()
 	signal.Close()
+	lifeline.Close()
 	if err != nil {
+		holder.Close()
 		s.T.Fatalf("start attn daemon: %v", err)
 	}
 	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	go func() {
+		err := cmd.Wait()
+		holder.Close()
+		exited <- err
+	}()
 	s.daemon, s.exited = cmd.Process, exited
 
 	line := make(chan string, 1)

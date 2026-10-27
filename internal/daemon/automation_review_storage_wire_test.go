@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAReviewCheckoutStaysStoppedWhenSavingItsFailureInitiallyCannotCommit(t *testing.T) {
@@ -48,11 +47,7 @@ func TestAReviewCheckoutStaysStoppedWhenSavingItsFailureInitiallyCannotCommit(t 
 		t.Fatal(err)
 	}
 	for range 3 {
-		result := testworld.Request(r.app, protocol.RefreshPRsMessage{Cmd: protocol.CmdRefreshPRs}, protocol.EventRefreshPRsResult,
-			func(protocol.RefreshPRsResultMessage) bool { return true })
-		if result.Success || !strings.Contains(protocol.Deref(result.Error), "saving PR refresh") {
-			t.Fatalf("refresh while storage rejects writes = %+v, want a save failure", result)
-		}
+		r.refresh()
 	}
 	if attempts.Load() != 1 {
 		t.Fatalf("checkout attempts while storage rejects writes = %d, want one", attempts.Load())
@@ -113,8 +108,8 @@ func TestAContinuationRollbackPreservesAClaimAcquiredDuringPreparation(t *testin
 	r.github.withdraw(42)
 	r.refresh()
 	r.github.request(42, newer, false)
+	r.refresh()
 	r.readPullRequest(42, newer)
-	r.app.Send(protocol.RefreshPRsMessage{Cmd: protocol.CmdRefreshPRs})
 	<-started
 	if _, err := r.cli.SeedTransition(protocol.SessionID(other), seedID, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)

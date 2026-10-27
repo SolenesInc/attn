@@ -171,12 +171,10 @@ func (d *Daemon) ensureChief(profile string, u *store.ChiefUpgrade) error {
 		}
 	}
 
-	if u != nil {
-		if u.Agent != string(protocol.SessionAgentCopilot) {
-			b.Agent = u.Agent
-			b.Model = u.Model
-			b.Effort = u.Effort
-		}
+	if u != nil && u.Agent != "copilot" {
+		b.Agent = u.Agent
+		b.Model = u.Model
+		b.Effort = u.Effort
 	}
 	return d.furnishCrewMember(identity, b)
 }

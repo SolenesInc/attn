@@ -13,9 +13,11 @@ import (
 )
 
 type placementOutcome struct {
+	session   protocol.SessionID
 	desktopID string
 	paneID    string
 	err       error
+	launch    launchCompletion
 }
 
 type launchPlacement struct {
@@ -26,6 +28,7 @@ type launchPlacement struct {
 	kind         string
 	itemID       string
 	reopen       bool
+	addsTerminal bool
 	// terminal is the one the launch runs in, recorded on the pane it gets.
 	terminal harness.TerminalID
 }
@@ -112,6 +115,7 @@ func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *laun
 			Title:        session.Label,
 			Status:       profiles.PaneStatusReady,
 			Focus:        placement.focus,
+			AddsTerminal: placement.addsTerminal,
 		})
 	}
 	if err != nil {

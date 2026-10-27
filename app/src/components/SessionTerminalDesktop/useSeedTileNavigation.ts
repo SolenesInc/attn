@@ -107,7 +107,7 @@ function useLiveSeedDocument(seedId: string, gardenSeeds: Seed[], enabled: boole
   const [error, setError] = useState<string | null>(null);
   const [reloadRequest, setReloadRequest] = useState(0);
   const reload = useCallback(() => setReloadRequest((request) => request + 1), []);
-  // Every garden fact re-pushes the seeds snapshot, and notes or child changes need not
+  // Every garden fact replaces the seeds array, and notes or child changes need not
   // touch this seed's own revision, so the array identity is the live invalidation signal.
   useEffect(() => {
     if (!enabled) return;

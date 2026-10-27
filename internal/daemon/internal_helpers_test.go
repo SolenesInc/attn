@@ -1,77 +1,15 @@
 package daemon
 
 import (
-	"encoding/json"
-	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
-
-func startPluginPipe(t *testing.T, d *Daemon, name string, surfaces []string) (net.Conn, <-chan struct{}) {
-	return startPluginPipeGeneration(t, d, name, surfaces, 1)
-}
-
-func startPluginPipeGeneration(t *testing.T, d *Daemon, name string, surfaces []string, generation uint64) (net.Conn, <-chan struct{}) {
-	t.Helper()
-	serverConn, clientConn := net.Pipe()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		d.handleConnection(serverConn)
-	}()
-
-	sendPluginHelloWithGeneration(t, clientConn, name, surfaces, generation)
-	helloResp := decodeJSONRPCMessage(t, clientConn)
-	if helloResp.Error != nil {
-		t.Fatalf("hello error = %#v, want nil", helloResp.Error)
-	}
-	return clientConn, done
-}
-
-func sendPluginHelloWithGeneration(t *testing.T, conn net.Conn, name string, surfaces []string, generation uint64) {
-	t.Helper()
-	params, err := json.Marshal(pluginHelloParams{
-		Name:           name,
-		Version:        "0.1.0",
-		AttnAPIVersion: pluginAPIVersion,
-		Generation:     generation,
-		Surfaces:       surfaces,
-	})
-	if err != nil {
-		t.Fatalf("marshal hello params: %v", err)
-	}
-	if err := json.NewEncoder(conn).Encode(jsonRPCMessage{
-		JSONRPC: "2.0",
-		ID:      json.RawMessage("1"),
-		Method:  "hello",
-		Params:  params,
-	}); err != nil {
-		t.Fatalf("encode hello: %v", err)
-	}
-}
-
-func decodeJSONRPCMessage(t *testing.T, conn net.Conn) jsonRPCMessage {
-	t.Helper()
-	var frame []byte
-	var b [1]byte
-	for b[0] != '\n' {
-		if _, err := io.ReadFull(conn, b[:]); err != nil {
-			t.Fatalf("read JSON-RPC frame: %v", err)
-		}
-		frame = append(frame, b[0])
-	}
-	var msg jsonRPCMessage
-	if err := json.Unmarshal(frame, &msg); err != nil {
-		t.Fatalf("decode JSON-RPC message: %v", err)
-	}
-	return msg
-}
 
 func newDaemonForTest(t *testing.T) *Daemon {
 	t.Helper()
@@ -93,14 +31,14 @@ func fileAnnotationSource(path string) annotationDocumentSource {
 	return annotationDocumentSource{kind: annotationSourceFile, path: path}
 }
 
-var shippedSessionInputSubmitDelay = sessionInputSubmitDelay
+var shippedSessionInputSubmitDelay = sessionmonitor.SubmitDelay
 
 func TestMain(m *testing.M) {
 	fakeagent.Main()
 	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" {
 		os.Exit(m.Run())
 	}
-	sessionInputSubmitDelay = 0
+	sessionmonitor.SubmitDelay = 0
 	os.Exit(testworld.Main(m,
 		"ATTN_PTY_BACKEND=embedded",
 		"ATTN_PTY_SKIP_STARTUP_PROBE=1",

@@ -124,6 +124,15 @@ func (p *Peer) recordEvent(data []byte) {
 	}
 	p.frames = append(p.frames, frame{event: envelope.Event, raw: data})
 	switch envelope.Event {
+	case protocol.EventRuntimeRespawned:
+		var event protocol.RuntimeRespawnedMessage
+		if json.Unmarshal(data, &event) == nil {
+			id := string(event.ID)
+			delete(p.attached, id)
+			delete(p.received, id)
+			delete(p.watermark, id)
+			delete(p.screens, id)
+		}
 	case protocol.EventAttachResult:
 		p.recordSnapshot(data)
 	case protocol.EventGetScreenSnapshotResult:
@@ -184,6 +193,9 @@ func (p *Peer) recordSnapshot(data []byte) {
 		return
 	}
 	p.attached[string(result.ID)] = true
+	if protocol.Deref(result.Revived) {
+		delete(p.received, string(result.ID))
+	}
 	if result.Snapshot == nil {
 		p.seed(string(result.ID), nil, nil)
 		return
@@ -247,6 +259,43 @@ func (p *Peer) Closed() websocket.CloseError {
 	return status
 }
 
+func (p *Peer) AwaitOutputOrDesync(terminal string, match func(uint32, []byte) bool) bool {
+	p.T.Helper()
+	index := 0
+	for {
+		var outputs []sequencedOutput
+		desync := false
+		p.until(func() string { return "output or desync from terminal " + terminal }, func() (bool, error) {
+			outputs = append(outputs, p.received[terminal][index:]...)
+			index = len(p.received[terminal])
+			for i := range p.frames {
+				f := &p.frames[i]
+				if f.consumed || f.event != protocol.EventPtyDesync {
+					continue
+				}
+				var event protocol.PtyDesyncMessage
+				if err := json.Unmarshal(f.raw, &event); err != nil {
+					return false, err
+				}
+				if string(event.ID) == terminal {
+					f.consumed = true
+					desync = true
+					break
+				}
+			}
+			return len(outputs) > 0 || desync, nil
+		})
+		for _, output := range outputs {
+			if match(output.seq, output.data) {
+				return true
+			}
+		}
+		if desync {
+			return false
+		}
+	}
+}
+
 func (p *Peer) Received() []protocol.WebSocketEvent {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -273,6 +322,12 @@ func (p *Peer) Log() []json.RawMessage {
 	return log
 }
 
+func (p *Peer) EventCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.frames)
+}
+
 func (p *Peer) Close() {
 	p.mu.Lock()
 	p.closing = true
@@ -285,6 +340,11 @@ func (p *Peer) TypeLine(sessionID, text string) {
 	terminal := p.Terminal(sessionID)
 	p.attach(terminal)
 	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: text + "\r"})
+}
+
+func (p *Peer) Watch(sessionID string) {
+	p.T.Helper()
+	p.attach(p.Terminal(sessionID))
 }
 
 func (p *Peer) AwaitScreen(sessionID, text string) {
@@ -373,8 +433,14 @@ func (p *Peer) until(awaiting func() string, check func() (bool, error)) {
 
 func Await[T any](p *Peer, event string, match func(T) bool) T {
 	p.T.Helper()
+	return AwaitSince(p, 0, event, match)
+}
+
+// AwaitSince is Await over the frames from mark on, a len(p.Log()) taken earlier.
+func AwaitSince[T any](p *Peer, mark int, event string, match func(T) bool) T {
+	p.T.Helper()
 	var found T
-	p.take(event, func(f frame) (bool, error) {
+	p.takeSince(mark, event, func(f frame) (bool, error) {
 		if f.event != event {
 			return false, nil
 		}
@@ -421,8 +487,14 @@ func Refused(p *Peer) protocol.WebSocketEvent {
 
 func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protocol.Session {
 	p.T.Helper()
+	return AwaitSessionSince(p, 0, id, match)
+}
+
+// AwaitSessionSince is AwaitSession over the frames from mark on, a len(p.Log()) taken earlier.
+func AwaitSessionSince(p *Peer, mark int, id string, match func(protocol.Session) bool) protocol.Session {
+	p.T.Helper()
 	var found protocol.Session
-	scanned := 0
+	scanned := mark
 	p.until(func() string { return "an update of session " + id }, func() (bool, error) {
 		for ; scanned < len(p.frames); scanned++ {
 			f := &p.frames[scanned]
@@ -481,7 +553,12 @@ func stateSince(t testing.TB, s protocol.Session) time.Time {
 
 func (p *Peer) take(awaiting string, accept func(frame) (bool, error)) {
 	p.T.Helper()
-	scanned := 0
+	p.takeSince(0, awaiting, accept)
+}
+
+func (p *Peer) takeSince(mark int, awaiting string, accept func(frame) (bool, error)) {
+	p.T.Helper()
+	scanned := mark
 	p.until(func() string { return awaiting }, func() (bool, error) {
 		for ; scanned < len(p.frames); scanned++ {
 			f := &p.frames[scanned]

@@ -14,7 +14,7 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 	for _, declared := range []bool{false, true} {
 		t.Run(map[bool]string{false: "undeclared", true: "bound"}[declared], func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "crew.db")
-			old, err := newStoreAtVersion(path, 1792359946019014-1)
+			old, err := newStoreAtVersion(path, 1793111475126440-1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -44,7 +44,7 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 					t.Fatal(err)
 				}
 				for _, b := range []struct{ key, session, closed string }{{"keel", "open", ""}, {"chief", "closed", "2026-10-01T00:00:00Z"}} {
-					if _, err := old.db.Exec(`INSERT INTO sessions(id,label,directory,state,state_since,state_updated_at,last_seen,closed_at) VALUES(?,?,'/tmp/crew','idle','','','',?)`, b.session, b.session, b.closed); err != nil {
+					if _, err := old.db.Exec(`INSERT INTO sessions(id,user_label,directory,created_at,closed_at) VALUES(?,?,'/tmp/crew','',?)`, b.session, b.session, b.closed); err != nil {
 						t.Fatal(err)
 					}
 					if _, err := old.PutDocument(*schema, b.key, []byte(`{"id":"`+b.key+`","binding_session":"`+b.session+`"}`), time.Now(), nil); err != nil {
@@ -55,7 +55,7 @@ func TestCrewIdentityMigrationPreservesKeysAndOpenBindings(t *testing.T) {
 			if err := old.Close(); err != nil {
 				t.Fatal(err)
 			}
-			upgraded, err := newStoreAtVersion(path, 1792359946029014-1)
+			upgraded, err := newStoreAtVersion(path, 1793111476175147-1)
 			if err != nil {
 				t.Fatal(err)
 			}

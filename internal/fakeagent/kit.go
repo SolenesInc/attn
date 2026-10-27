@@ -42,6 +42,7 @@ type Kit struct {
 	failures       []string
 	headless       chan *HeadlessTask
 	nextBootResult *bootingResult
+	nextLaunch     chan *Run
 	answerer       func(*HeadlessTask)
 }
 
@@ -74,7 +75,7 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if wrapper != "" {
 		links[wrapperName] = wrapper
 	}
-	for _, h := range []Harness{Claude, Codex, Copilot, Pi} {
+	for _, h := range []Harness{Claude, Codex, Pi} {
 		links[string(h)] = self
 	}
 	mustInstall(t, cfg.Bin, links, map[string]string{configName: string(encoded)})
@@ -109,7 +110,6 @@ func (k *Kit) Env() []string {
 		"PATH=" + k.cfg.Bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"ATTN_CLAUDE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Claude)),
 		"ATTN_CODEX_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Codex)),
-		"ATTN_COPILOT_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Copilot)),
 		"ATTN_WRAPPER_PATH=" + filepath.Join(k.cfg.Bin, wrapperName),
 	}...)
 }
@@ -142,6 +142,24 @@ func (k *Kit) Launched(sessionID string) *Run {
 	case <-time.After(HangGuard):
 		k.t.Fatalf("no fake agent launched for session %s within %s%s", sessionID, HangGuard, k.failureSummary())
 		return nil
+	}
+}
+
+func (k *Kit) NextLaunch() func() *Run {
+	k.t.Helper()
+	k.mu.Lock()
+	launch := make(chan *Run, 1)
+	k.nextLaunch = launch
+	k.mu.Unlock()
+	return func() *Run {
+		k.t.Helper()
+		select {
+		case run := <-launch:
+			return run
+		case <-time.After(HangGuard):
+			k.t.Fatalf("no fake agent launched within %s%s", HangGuard, k.failureSummary())
+			return nil
+		}
 	}
 }
 
@@ -178,7 +196,20 @@ func (k *Kit) CodexServer() *CodexServer {
 	if len(k.servers) == 0 {
 		k.t.Fatal("no Codex app-server was launched")
 	}
-	return &CodexServer{t: k.t, fake: k.servers[len(k.servers)-1]}
+	return &CodexServer{t: k.t, fake: k.servers[len(k.servers)-1], codexHome: k.cfg.CodexHome}
+}
+
+func (k *Kit) CodexServerOf(profile string) *CodexServer {
+	k.t.Helper()
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for _, f := range slices.Backward(k.servers) {
+		if codexServerProfile(f.Argv) == profile {
+			return &CodexServer{t: k.t, fake: f, codexHome: k.cfg.CodexHome}
+		}
+	}
+	k.t.Fatalf("no Codex app-server was launched for profile %s", profile)
+	return nil
 }
 
 func (k *Kit) HoldNextBoot() (boot func()) {
@@ -255,7 +286,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 			k.mu.Unlock()
 		}
 		if f.Role == roleAgent {
-			k.launchesFor(f.AttnSessionID) <- &Run{
+			run := &Run{
 				PID:            f.Pid,
 				Harness:        f.Harness,
 				SessionID:      f.AttnSessionID,
@@ -268,6 +299,14 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				Yolo:           f.Yolo,
 				t:              k.t,
 				fake:           f,
+			}
+			k.launchesFor(f.AttnSessionID) <- run
+			k.mu.Lock()
+			launch := k.nextLaunch
+			k.nextLaunch = nil
+			k.mu.Unlock()
+			if launch != nil {
+				launch <- run
 			}
 		}
 	case methodUnexpected:

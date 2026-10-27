@@ -17,30 +17,32 @@ func writeHandoffHelp(w io.Writer) {
 
 File the letter closing this crew member's day. You write it; attn files it into
 the active instance's crew directory under <member>/handoffs/, with a UTC-stamped
-name, and never edits the prose. The line is append-only: a filed letter is never
-overwritten, so a correction is a new letter.
+name, and never edits the prose. A correction is a new letter.
 
-Filing ends the day. The moment the letter lands, attn closes this session and
-wakes the member's successor, primed by what you just wrote — one motion.
+By default, attn decides the turnover from presence: a successor wakes while the
+user is around, and the member sleeps while the user is away. --sleep and --nap
+decide it explicitly.
 
-Writing the letter and turning the day over are one motion but two acts, and
-only the second one can fail. When it does, the letter stays filed and this day
-keeps running: --retry runs the turnover again against the letter already on
-disk, without writing a second one.
+With crew_memory_enabled off, filing immediately runs the turnover.
 
-Whether filing starts the next day or ends this one is attn's call by default,
-made from whether the user is around: a day that closes while nobody is there
-does not start another one. --sleep and --nap decide it yourself.
+With crew_memory_enabled on, --day is required: one line of at most 280 bytes
+saying what this day was. After filing the letter and the day line, attn keeps
+this day running while summaries are pending. Run attn memory summarize and
+pipe the answers to attn memory summarize -. Repeat until none remain. The last
+answer runs the requested turnover, including --sleep.
 
-A retry is retrying a turnover, so it always starts the next day, whether or not
-the user is around — that is what it was asked to do. To end the day instead,
-say so: --retry --sleep.
+If turnover fails, the letter stays filed and this day keeps running. --retry
+uses that letter and repairs a missing day line without adding another one.
+With memory enabled it preserves the requested close. With memory disabled a
+retry starts the next day regardless of presence. --retry --sleep explicitly
+ends the day with no successor in either case.
 
 Only the session living a member's day can file one. The note for whoever tends
 a piece of work next is the other axis: attn seed note <id> -m "…" --handoff.
 
 flags:
   -m <text>          the letter; - reads it from stdin
+  --day <line>       the day line, required with crew_memory_enabled
   --retry            turn the day over with the letter already filed; no -m
   --sleep            end the day; do not start the next one
   --nap              start the next day even if the user is away
@@ -51,6 +53,7 @@ flags:
 
 type handoffArgs struct {
 	note    string
+	day     string
 	retry   bool
 	close   protocol.CrewDayClose
 	session protocol.SessionID
@@ -61,12 +64,13 @@ func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (hand
 	fs := flag.NewFlagSet("handoff", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	message := fs.String("m", "", "the letter; - reads it from stdin")
+	day := fs.String("day", "", "one line for the memory, required with crew_memory_enabled")
 	retry := fs.Bool("retry", false, "turn the day over with the letter already filed")
 	sleep := fs.Bool("sleep", false, "end the day rather than starting the next one")
 	nap := fs.Bool("nap", false, "start the next day even if the user is away")
 	session := fs.String("session", "", "the session closing its day (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return handoffArgs{}, err
 	}
 	if *sleep && *nap {
@@ -81,7 +85,7 @@ func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (hand
 	if !*retry && strings.TrimSpace(*message) == "" {
 		return handoffArgs{}, errors.New(`the letter is the handoff — pass it with -m "<your letter>", or -m - to pipe it in`)
 	}
-	parsed := handoffArgs{note: *message, retry: *retry, session: protocol.SessionID(strings.TrimSpace(*session)), json: *jsonOut}
+	parsed := handoffArgs{note: *message, day: *day, retry: *retry, session: protocol.SessionID(strings.TrimSpace(*session)), json: *jsonOut}
 	switch {
 	case *sleep:
 		parsed.close = protocol.CrewDayCloseSleep
@@ -110,7 +114,7 @@ func runHandoff(args []string) {
 		}
 		note = string(raw)
 	}
-	result, err := client.New("").CrewHandoff(parsed.session, note, parsed.retry, parsed.close)
+	result, err := client.New("").CrewHandoff(parsed.session, note, parsed.retry, parsed.close, parsed.day)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "handoff: %v\n", err)
 		os.Exit(1)
@@ -119,10 +123,18 @@ func runHandoff(args []string) {
 		printJSON(result)
 		return
 	}
-	if parsed.retry {
+	printHandoffResult(result, parsed.retry)
+}
+
+func printHandoffResult(result *protocol.CrewHandoffResult, retry bool) {
+	if retry {
 		fmt.Printf("%s's letter was already filed at %s.\n", result.Name, result.Path)
 	} else {
 		fmt.Printf("%s's letter is filed at %s.\n", result.Name, result.Path)
+	}
+	if pending := protocol.Deref(result.PendingSummaries); pending != 0 {
+		fmt.Printf("Day line #%s filed; %d summaries pending. This day keeps running. Run attn memory summarize, then pipe the answers to attn memory summarize -. The last answer completes the requested turnover.\n", protocol.Deref(result.DayID), pending)
+		return
 	}
 	if napErr := strings.TrimSpace(protocol.Deref(result.NapError)); napErr != "" {
 		fmt.Fprintf(os.Stderr, "handoff: could not wake a successor: %s\n%s still has this session. Run `attn handoff --retry` to use the filed letter; do not write another.\n", napErr, result.Name)

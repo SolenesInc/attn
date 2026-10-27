@@ -1,6 +1,7 @@
 package fakeagent
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -136,6 +137,20 @@ func (t *terminal) composer() string {
 
 func (t *terminal) write(s string) {
 	_, _ = os.Stdout.WriteString(s)
+}
+
+func (t *terminal) awaitEnter() error {
+	chunk := make([]byte, 256)
+	for {
+		n, err := t.in.Read(chunk)
+		if i := bytes.IndexAny(chunk[:n], "\r\n"); i >= 0 {
+			t.early = append(t.early, chunk[i+1:n]...)
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (t *terminal) stopReading() error {

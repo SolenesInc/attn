@@ -42,6 +42,8 @@ export interface SettingsModalProps {
   listTasks?: () => Promise<Task[]>;
   retryTask?: (taskId: string) => Promise<Task | null>;
   taskChangeSignal?: number;
+  onOpenSession?: (sessionId: string) => void;
+  onOpenSeed?: (seedId: string) => void;
 }
 
 export type SettingsSectionID =
@@ -55,27 +57,13 @@ export type SettingsSectionID =
   | 'autoMode'
   | 'delegation'
   | 'connectivity'
+  | 'outposts'
   | 'plugins'
   | 'backgroundTasks'
   | 'eventBus'
-  | 'data';
+  | 'analytics';
 
 export const DEFAULT_CONTEXT_WINDOW_CAP = 128000;
-
-export const MODEL_CAPTURE_INTERVAL_OPTIONS = [5, 10, 30, 60];
-
-export const MODEL_CAPTURE_MAX_GB_OPTIONS = [1, 2, 5, 10, 25];
-
-export function formatByteCount(raw: string | undefined): string {
-  const bytes = Number(raw || '0');
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** unit;
-  return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
-}
-
-
 
 export interface SettingsNavItem {
   id: SettingsSectionID;

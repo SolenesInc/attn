@@ -121,15 +121,6 @@ func isUserEntry(line []byte) bool {
 			}
 		}
 	}
-
-	var copilot struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(line, &copilot); err == nil {
-		if copilot.Type == "user.message" {
-			return true
-		}
-	}
 	return false
 }
 
@@ -230,19 +221,6 @@ type codexResponseMessage struct {
 	Content json.RawMessage `json:"content"`
 }
 
-type copilotEventEntry struct {
-	Type string `json:"type"`
-	Data struct {
-		Content string `json:"content"`
-	} `json:"data"`
-}
-
-type CopilotToolLifecycle struct {
-	Kind       string
-	ToolCallID string
-	ToolName   string
-}
-
 func ExtractAssistantContent(line []byte) string {
 	var entry transcriptEntry
 	if err := json.Unmarshal(line, &entry); err == nil {
@@ -282,52 +260,12 @@ func ExtractAssistantContent(line []byte) string {
 		}
 	}
 
-	var copilot copilotEventEntry
-	if err := json.Unmarshal(line, &copilot); err == nil {
-		if copilot.Type == "assistant.message" && copilot.Data.Content != "" {
-			return copilot.Data.Content
-		}
-	}
-
 	return ""
-}
-
-func ExtractCopilotToolLifecycle(line []byte) (CopilotToolLifecycle, bool) {
-	var evt struct {
-		Type string `json:"type"`
-		Data struct {
-			ToolCallID string `json:"toolCallId"`
-			ToolName   string `json:"toolName"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(line, &evt); err != nil {
-		return CopilotToolLifecycle{}, false
-	}
-	if evt.Data.ToolCallID == "" {
-		return CopilotToolLifecycle{}, false
-	}
-
-	switch evt.Type {
-	case "tool.execution_start":
-		return CopilotToolLifecycle{
-			Kind:       "start",
-			ToolCallID: evt.Data.ToolCallID,
-			ToolName:   evt.Data.ToolName,
-		}, true
-	case "tool.execution_complete":
-		return CopilotToolLifecycle{
-			Kind:       "complete",
-			ToolCallID: evt.Data.ToolCallID,
-		}, true
-	default:
-		return CopilotToolLifecycle{}, false
-	}
 }
 
 const (
 	claudeInterruptMarker           = "[Request interrupted by user]"
 	claudeInterruptMarkerForToolUse = "[Request interrupted by user for tool use]"
-	copilotUserAbortReason          = "user_initiated"
 	codexUserAbortReason            = "interrupted"
 )
 
@@ -423,28 +361,6 @@ func CodexTurnAborted(line []byte) (TurnAbort, bool) {
 		Reason:   reason,
 		UserHalt: reason == codexUserAbortReason,
 		At:       parseTranscriptTime(envelope.Timestamp),
-	}, true
-}
-
-func CopilotTurnAborted(line []byte) (TurnAbort, bool) {
-	var entry struct {
-		Type      string `json:"type"`
-		Timestamp string `json:"timestamp"`
-		Data      struct {
-			Reason string `json:"reason"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(line, &entry); err != nil || entry.Type != "abort" {
-		return TurnAbort{}, false
-	}
-	reason := strings.TrimSpace(entry.Data.Reason)
-	if reason == "" {
-		reason = "aborted"
-	}
-	return TurnAbort{
-		Reason:   reason,
-		UserHalt: reason == copilotUserAbortReason,
-		At:       parseTranscriptTime(entry.Timestamp),
 	}, true
 }
 

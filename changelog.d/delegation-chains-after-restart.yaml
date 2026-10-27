@@ -1,4 +1,0 @@
-kind: fixed
-area: delegation
-change: Delegates keep their dispatcher, seed and delegation chain after a daemon restart, however many sessions have come and gone.
-symptom: After a daemon restart, older delegates lost their delegation chain, seed and "delegated from Chief" badge in the app.

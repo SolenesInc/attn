@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -20,10 +22,11 @@ func DefaultSocketPath() string {
 }
 
 type Client struct {
-	gardenProfile string
-	gardenSession protocol.SessionID
-	socketPath    string
-	dial          func() (net.Conn, error)
+	gardenProfile  string
+	gardenSession  protocol.SessionID
+	callerTerminal protocol.TerminalID
+	socketPath     string
+	dial           func() (net.Conn, error)
 }
 
 type automationResult struct {
@@ -54,7 +57,7 @@ func (c *Client) sendAutomation(msg any, out any) error {
 		return err
 	}
 	defer conn.Close()
-	if err := json.NewEncoder(conn).Encode(msg); err != nil {
+	if err := c.writeFrame(conn, msg); err != nil {
 		return err
 	}
 	var raw json.RawMessage
@@ -163,7 +166,46 @@ func New(socketPath string) *Client {
 }
 
 func NewWithDial(socketPath string, dial func() (net.Conn, error)) *Client {
-	return &Client{socketPath: socketPath, dial: dial}
+	return &Client{socketPath: socketPath, dial: dial, callerTerminal: protocol.TrimID(harness.TerminalFromEnv())}
+}
+
+func (c *Client) writeFrame(conn net.Conn, msg any) error {
+	if c.callerTerminal == "" {
+		return json.NewEncoder(conn).Encode(msg)
+	}
+	frame, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	var named protocol.SocketCaller
+	if err := json.Unmarshal(frame, &named); err != nil {
+		return err
+	}
+	if named.CallerID != nil {
+		_, err = conn.Write(append(frame, '\n'))
+		return err
+	}
+	caller, err := json.Marshal(protocol.SocketCaller{CallerID: &c.callerTerminal})
+	if err != nil {
+		return err
+	}
+	caller[0] = ','
+	frame = append(append(frame[:len(frame)-1], caller...), '\n')
+	_, err = conn.Write(frame)
+	return err
+}
+
+func (c *Client) RecordAnalytics(stream, name string, props map[string]any) error {
+	conn, err := c.connect()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := c.writeFrame(conn, protocol.RecordAnalyticsMessage{Cmd: protocol.CmdRecordAnalytics, Stream: stream, Name: name, Props: props}); err != nil {
+		return err
+	}
+	_, err = io.Copy(io.Discard, conn)
+	return err
 }
 
 func (c *Client) connect() (net.Conn, error) {
@@ -208,7 +250,7 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	}
 	defer conn.Close()
 
-	if err := json.NewEncoder(conn).Encode(msg); err != nil {
+	if err := c.writeFrame(conn, msg); err != nil {
 		return nil, fmt.Errorf("send message: %w", err)
 	}
 
@@ -522,6 +564,19 @@ func (c *Client) AgentMsg(target string, sourceSessionID protocol.SessionID, con
 	return resp.AgentMsgResult, nil
 }
 
+func (c *Client) AgentReload(targets []string, sourceSessionID protocol.SessionID, all bool) (*protocol.AgentReloadResult, error) {
+	resp, err := c.send(protocol.AgentReloadMessage{
+		Cmd: protocol.CmdAgentReload, Targets: targets, SourceSessionID: sourceSessionID, All: all,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AgentReloadResult == nil {
+		return nil, fmt.Errorf("daemon did not return an agent reload result")
+	}
+	return resp.AgentReloadResult, nil
+}
+
 func (c *Client) AgentClose(target string, sourceSessionID protocol.SessionID, reason string) (*protocol.AgentCloseResult, error) {
 	msg := protocol.AgentCloseMessage{
 		Cmd:             protocol.CmdAgentClose,
@@ -733,6 +788,56 @@ func (c *Client) AskList(sessionID protocol.SessionID) (*protocol.AskListResult,
 		return nil, errors.New("daemon returned no ask list")
 	}
 	return resp.AskListResult, nil
+}
+
+func (c *Client) AgentTurn(sessionID protocol.SessionID, action protocol.AgentTurnAction) (*protocol.AgentTurnResult, error) {
+	resp, err := c.send(protocol.AgentTurnMessage{Cmd: protocol.CmdAgentTurn, SessionID: sessionID, Action: action})
+	if err != nil {
+		return nil, err
+	}
+	if resp.AgentTurnResult == nil {
+		return nil, errors.New("daemon returned no agent turn result")
+	}
+	return resp.AgentTurnResult, nil
+}
+
+func (c *Client) RecordVent(sessionID protocol.SessionID, kind protocol.VentKind, text string) (*protocol.Vent, error) {
+	resp, err := c.send(protocol.RecordVentMessage{Cmd: protocol.CmdRecordVent, SessionID: sessionID, Kind: kind, Text: text})
+	if err != nil {
+		return nil, err
+	}
+	if resp.RecordVentResult == nil {
+		return nil, errors.New("daemon returned no vent")
+	}
+	return resp.RecordVentResult, nil
+}
+
+func (c *Client) CodexStatus(caller protocol.SessionID, profile string, refresh bool) (*protocol.CodexStatusResult, error) {
+	msg := protocol.CodexStatusMessage{Cmd: protocol.CmdCodexStatus, Refresh: protocol.Ptr(refresh)}
+	if caller != "" {
+		msg.CallerSessionID = protocol.Ptr(caller)
+	}
+	if profile = strings.TrimSpace(profile); profile != "" {
+		msg.Profile = protocol.Ptr(profile)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.CodexStatusResult == nil {
+		return nil, errors.New("daemon returned no shared Codex status")
+	}
+	return resp.CodexStatusResult, nil
+}
+
+func (c *Client) RestartSharedCodex(profileID string, now bool) error {
+	_, err := c.send(protocol.RestartSharedCodexMessage{Cmd: protocol.CmdRestartSharedCodex, ProfileID: profileID, Now: now})
+	return err
+}
+
+func (c *Client) WithdrawVent(sessionID protocol.SessionID, ventID string) error {
+	_, err := c.send(protocol.WithdrawVentMessage{Cmd: protocol.CmdWithdrawVent, SessionID: sessionID, VentID: strings.TrimSpace(ventID)})
+	return err
 }
 
 func (c *Client) AskClose(sessionID protocol.SessionID, askID string) error {
