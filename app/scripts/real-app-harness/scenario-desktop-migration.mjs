@@ -3,6 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseCommonArgs, printCommonHelp, queryDaemonDb } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
@@ -138,7 +139,7 @@ function legacyWorkspacesSql(fixtureDir) {
 }
 
 function sqlite(dbPath, script, env) {
-  execFileSync('go', ['run', './scripts/migration-fixture', dbPath], { input: script, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  execFileSync('go', ['run', './scripts/migration-fixture', dbPath], { cwd: fileURLToPath(new URL('../../..', import.meta.url)), input: script, env, stdio: ['pipe', 'pipe', 'pipe'] });
 }
 
 async function poll(read, predicate, description, timeoutMs = 20_000) {

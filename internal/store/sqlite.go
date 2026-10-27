@@ -1564,7 +1564,12 @@ func (c *sqliteConnector) Connect(context.Context) (driver.Conn, error) {
 		return nil, err
 	}
 	connection := &sqliteConnection{SQLiteConn: conn.(*sqlite3.SQLiteConn), owner: c}
-	if err := connection.RegisterFunc("attn_copy_applier", func() bool { return connection.copyApplying }, false); err != nil {
+	if err := connection.RegisterFunc("attn_require_copy_applier", func(table, key string) (bool, error) {
+		if !connection.copyApplying {
+			return false, fmt.Errorf("cannot write copied %s row %s", table, key)
+		}
+		return true, nil
+	}, false); err != nil {
 		_ = connection.Close()
 		return nil, err
 	}

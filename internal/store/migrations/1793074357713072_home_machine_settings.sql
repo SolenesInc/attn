@@ -91,56 +91,56 @@ BEGIN
 END;
 
 CREATE TRIGGER refuse_copied_sessions_insert BEFORE INSERT ON sessions
-WHEN NOT attn_copy_applier() AND (NEW.copied_from != '' OR EXISTS (SELECT 1 FROM sessions WHERE id = NEW.id AND copied_from != ''))
+WHEN (NEW.copied_from != '' OR EXISTS (SELECT 1 FROM sessions WHERE id = NEW.id AND copied_from != ''))
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied sessions row ' || NEW.id);
+  SELECT attn_require_copy_applier('sessions', NEW.id);
 END;
 
 CREATE TRIGGER refuse_copied_sessions_update BEFORE UPDATE ON sessions
-WHEN NOT attn_copy_applier() AND (OLD.copied_from != '' OR NEW.copied_from != '')
+WHEN (OLD.copied_from != '' OR NEW.copied_from != '')
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied sessions row ' || OLD.id);
+  SELECT attn_require_copy_applier('sessions', OLD.id);
 END;
 
 CREATE TRIGGER refuse_copied_sessions_delete BEFORE DELETE ON sessions
-WHEN NOT attn_copy_applier() AND (OLD.copied_from != '')
+WHEN (OLD.copied_from != '')
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied sessions row ' || OLD.id);
+  SELECT attn_require_copy_applier('sessions', OLD.id);
 END;
 
 CREATE TRIGGER refuse_copied_terminal_bindings_insert BEFORE INSERT ON terminal_bindings
-WHEN NOT attn_copy_applier() AND (EXISTS (SELECT 1 FROM sessions WHERE id = NEW.session_id AND copied_from != '') OR EXISTS (SELECT 1 FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE b.terminal_id = NEW.terminal_id AND s.copied_from != ''))
+WHEN (EXISTS (SELECT 1 FROM sessions WHERE id = NEW.session_id AND copied_from != '') OR EXISTS (SELECT 1 FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE b.terminal_id = NEW.terminal_id AND s.copied_from != ''))
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied terminal_bindings row ' || NEW.terminal_id);
+  SELECT attn_require_copy_applier('terminal_bindings', NEW.terminal_id);
 END;
 
 CREATE TRIGGER refuse_copied_terminal_bindings_update BEFORE UPDATE ON terminal_bindings
-WHEN NOT attn_copy_applier() AND (EXISTS (SELECT 1 FROM sessions WHERE id = OLD.session_id AND copied_from != '') OR EXISTS (SELECT 1 FROM sessions WHERE id = NEW.session_id AND copied_from != ''))
+WHEN (EXISTS (SELECT 1 FROM sessions WHERE id = OLD.session_id AND copied_from != '') OR EXISTS (SELECT 1 FROM sessions WHERE id = NEW.session_id AND copied_from != ''))
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied terminal_bindings row ' || OLD.terminal_id);
+  SELECT attn_require_copy_applier('terminal_bindings', OLD.terminal_id);
 END;
 
 CREATE TRIGGER refuse_copied_terminal_bindings_delete BEFORE DELETE ON terminal_bindings
-WHEN NOT attn_copy_applier() AND (EXISTS (SELECT 1 FROM sessions WHERE id = OLD.session_id AND copied_from != ''))
+WHEN (EXISTS (SELECT 1 FROM sessions WHERE id = OLD.session_id AND copied_from != ''))
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied terminal_bindings row ' || OLD.terminal_id);
+  SELECT attn_require_copy_applier('terminal_bindings', OLD.terminal_id);
 END;
 
 CREATE TRIGGER refuse_copied_settings_insert BEFORE INSERT ON settings
-WHEN NOT attn_copy_applier() AND (NEW.copied_from != '' OR EXISTS (SELECT 1 FROM settings WHERE key = NEW.key AND copied_from != ''))
+WHEN (NEW.copied_from != '' OR EXISTS (SELECT 1 FROM settings WHERE key = NEW.key AND copied_from != ''))
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied settings row ' || NEW.key);
+  SELECT attn_require_copy_applier('settings', NEW.key);
 END;
 
 CREATE TRIGGER refuse_copied_settings_update BEFORE UPDATE ON settings
-WHEN NOT attn_copy_applier() AND (OLD.copied_from != '' OR NEW.copied_from != '')
+WHEN (OLD.copied_from != '' OR NEW.copied_from != '')
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied settings row ' || OLD.key);
+  SELECT attn_require_copy_applier('settings', OLD.key);
 END;
 
 CREATE TRIGGER refuse_copied_settings_delete BEFORE DELETE ON settings
-WHEN NOT attn_copy_applier() AND (OLD.copied_from != '')
+WHEN (OLD.copied_from != '')
 BEGIN
-  SELECT RAISE(ABORT, 'cannot write copied settings row ' || OLD.key);
+  SELECT attn_require_copy_applier('settings', OLD.key);
 END;
 
