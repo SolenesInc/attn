@@ -42,6 +42,7 @@ Shape the change:
 - [Match rigor to consequences](principles/match-rigor-to-consequences.md): before adding validation, guards, or recovery paths. Guard only credible failures that no existing boundary already handles.
 - [Smallest change](principles/smallest-change.md): sizing a diff, or tempted to add a layer, option, or abstraction. The smallest change that delivers the full requirement, with each choice made once.
 - [Subtract before you add](principles/subtract-before-you-add.md): sequencing an addition, refactor, or rewrite. Remove dead weight first, then build on the simpler base.
+- [Derived things must earn their place](principles/derived-things-must-earn-their-place.md): before adding a doc, comment, summary, generated file, or copy of state. Prefer a better option; otherwise add it with a way to keep it current.
 - [Refactor first](principles/refactor-first.md): building a capability something may already do. Give the shared path what it lacks instead of growing a parallel mechanism.
 - [Redesign around the new requirement](principles/redesign-around-the-new-requirement.md): integrating a requirement the design did not anticipate. Build what you would have built had it been known from the start.
 - [Model the domain first](principles/model-the-domain-first.md): before writing logic, or when code branches a lot. Name the data shape and encode the domain in a structure, not scattered conditionals.

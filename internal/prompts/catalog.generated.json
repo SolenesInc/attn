@@ -4020,6 +4020,18 @@
           }
         },
         {
+          "id": "principle-derived-things-must-earn-their-place",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-derived-things-must-earn-their-place",
+            "source": "content/skills/attn-workflow/principles/derived-things-must-earn-their-place.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "principle-encode-lessons-in-structure",
           "delivery": "principle",
           "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
