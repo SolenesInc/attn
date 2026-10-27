@@ -25,7 +25,7 @@ and run commands from the repository root.
 - `runShellCommandInPane` requires a shell. For a mock agent, submit a prompt
   matched by its fixture and wait for the resulting reply.
 - `profileCommand` awaits `profile_action_result`; CLI commands such as
-  `desktop_move_session` use their CLI response contract instead.
+  `terminal_move` use their CLI response contract instead.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
   On macOS it sends input without taking focus or moving the pointer, except
   `menu` and scrolling; on Linux, `xdotool` focuses the window and moves the
