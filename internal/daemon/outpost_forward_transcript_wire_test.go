@@ -16,10 +16,12 @@ import (
 const frozenForwardHeader = `{"frame":{"cmd":"query"},"caller":""}`
 
 func TestOutpostForwardFrozenTranscript(t *testing.T) {
-	w := newWorld(t)
+	w := &world{World: prepareWorld(t)}
 	t.Setenv("SSH_AUTH_SOCK", "agent")
+	w.start()
 	connected := make(chan *bridge.Conn, 1)
 	startFarOutpost(t, w, func(conn *bridge.Conn) { connected <- conn })
+	t.Cleanup(w.stop)
 	app := w.App()
 	setSetting(t, app, "outposts_enabled", "true")
 	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Address: outpostAddress.String()})
