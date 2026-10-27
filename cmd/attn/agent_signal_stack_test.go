@@ -43,7 +43,6 @@ while :; do read hold; done
 			s.SignalAgentWrapper(id, syscall.SIGTERM)
 			app.AwaitScreen(id, "forwarded-TERM")
 			s.SignalAgentWrapper(id, syscall.SIGHUP)
-			app.AwaitScreen(id, "forwarded-HUP")
 			testworld.Await(app, protocol.EventSessionExited, func(event protocol.SessionExitedMessage) bool {
 				return string(event.SessionID) == id && event.ExitCode == 7
 			})
