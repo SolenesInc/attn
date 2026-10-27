@@ -176,7 +176,7 @@ func TestConversationForgetRefusesOpenSeedsThenDeletesOnlyAttnsCopy(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cli.KeptConversationForget(string(delegated.SessionID)); err == nil || !strings.Contains(err.Error(), delegated.SeedID) || !strings.Contains(err.Error(), "harvest or wither") {
+	if _, err := cli.KeptConversationForget(string(delegated.SessionID), false); err == nil || !strings.Contains(err.Error(), delegated.SeedID) || !strings.Contains(err.Error(), "harvest or wither") {
 		t.Fatalf("open reference refusal: %v", err)
 	}
 	if err := cli.KeptConversationKeep(string(delegated.SessionID), true); err != nil {
@@ -265,7 +265,7 @@ func TestConversationKeepAndForgetExplainNonKeeperHarness(t *testing.T) {
 	app.TypeLine(id, "hello")
 	run.Prompted()
 	run.Reply("hello <!-- attn:state=waiting_input -->")
-	for _, operation := range []func() error{func() error { return cli.KeptConversationKeep(id, true) }, func() error { return cli.KeptConversationKeep(id, false) }, func() error { return cli.KeptConversationForget(id) }} {
+	for _, operation := range []func() error{func() error { return cli.KeptConversationKeep(id, true) }, func() error { return cli.KeptConversationKeep(id, false) }, func() error { _, err := cli.KeptConversationForget(id, false); return err }} {
 		if err := operation(); err == nil || !strings.Contains(err.Error(), "codex keeps its own conversations; attn has nothing to keep") {
 			t.Fatalf("non-keeper refusal: %v", err)
 		}
@@ -307,7 +307,7 @@ func TestConversationIdentifiersRefuseAmbiguityAndListTotalsCountOnlyLiveCopies(
 	if err := cli.KeptConversationKeep(originals[0], true); err == nil || !strings.Contains(err.Error(), "ambiguous identifier") || !strings.Contains(err.Error(), "claude conversation "+originals[0]) || !strings.Contains(err.Error(), "codex conversation "+run.ConversationID) {
 		t.Fatalf("ambiguous identifier: %v", err)
 	}
-	if err := cli.KeptConversationForget(originals[1]); err != nil {
+	if _, err := cli.KeptConversationForget(originals[1], false); err != nil {
 		t.Fatal(err)
 	}
 	live, all := conversationRows(t, cli, false), conversationRows(t, cli, true)

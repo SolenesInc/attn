@@ -13,7 +13,7 @@ import (
 const conversationUsage = `usage: attn conversation list [--all] [--json]
        attn conversation keep <session-or-conversation-id>
        attn conversation unkeep <session-or-conversation-id>
-       attn conversation forget <session-or-conversation-id>
+       attn conversation forget <session-or-conversation-id> [--unlink-crew-letters]
 
   list      every conversation attn keeps or will keep; --all includes deleted copies
   keep      keep a Claude conversation forever
@@ -21,6 +21,10 @@ const conversationUsage = `usage: attn conversation list [--all] [--json]
   forget    delete attn's copy now, leaving Claude's own files untouched
 
 Use session:<id> or conversation:<id> when an identifier is ambiguous.
+Open seeds block forget; harvest or wither them first. If crew letters keep
+the copy, forget refuses and names them. --unlink-crew-letters consents to
+removing their session records, leaving the letters unchanged, then deleting
+attn's copy. The output names the letters that lost their transcript.
 `
 
 func runConversation() {
@@ -36,19 +40,16 @@ func runConversation() {
 	switch args[0] {
 	case "list":
 		conversationList(args[1:])
-	case "keep", "unkeep", "forget":
+	case "forget":
+		conversationForget(args[1:])
+	case "keep", "unkeep":
 		if len(args) != 2 || strings.TrimSpace(args[1]) == "" {
 			fmt.Fprint(os.Stderr, conversationUsage)
 			os.Exit(1)
 		}
 		warnIfDaemonVersionMismatch()
 		cli := client.New("")
-		var err error
-		if args[0] == "forget" {
-			err = cli.KeptConversationForget(args[1])
-		} else {
-			err = cli.KeptConversationKeep(args[1], args[0] == "keep")
-		}
+		err := cli.KeptConversationKeep(args[1], args[0] == "keep")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -58,13 +59,40 @@ func runConversation() {
 			fmt.Printf("pinned conversation %s; attn keeps it forever\n", args[1])
 		case "unkeep":
 			fmt.Printf("unpinned conversation %s; the next keep pass decides again\n", args[1])
-		case "forget":
-			fmt.Printf("deleted attn's copy of conversation %s; Claude's own files are untouched\n", args[1])
 		}
 	default:
 		recordUsageError("conversation", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "unknown conversation command: %s\n\n%s", args[0], conversationUsage)
 		os.Exit(1)
+	}
+}
+
+func conversationForget(args []string) {
+	fs := flag.NewFlagSet("conversation forget", flag.ExitOnError)
+	unlink := fs.Bool("unlink-crew-letters", false, "remove crew letters' session records and delete attn's copy; leave the letters unchanged")
+	_ = parseFlags(fs, args)
+	if fs.NArg() == 0 || strings.TrimSpace(fs.Arg(0)) == "" {
+		fmt.Fprint(os.Stderr, conversationUsage)
+		os.Exit(1)
+	}
+	id, rest := fs.Arg(0), fs.Args()[1:]
+	_ = parseFlags(fs, rest)
+	if fs.NArg() != 0 {
+		fmt.Fprint(os.Stderr, conversationUsage)
+		os.Exit(1)
+	}
+	warnIfDaemonVersionMismatch()
+	result, err := client.New("").KeptConversationForget(id, *unlink)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("deleted attn's copy of conversation %s; Claude's own files are untouched\n", id)
+	if len(result.UnlinkedCrewLetters) > 0 {
+		fmt.Println("letters that lost their transcript (letters are unchanged):")
+		for _, letter := range result.UnlinkedCrewLetters {
+			fmt.Printf("  %s %s\n", letter.Member, letter.Filename)
+		}
 	}
 }
 

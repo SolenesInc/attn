@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
-import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
@@ -45,16 +45,35 @@ async function main() {
   const sessions = [];
   const openSessions = new Set();
   const seeds = [];
+  const member = `trellis-${Date.now().toString(36)}`;
+  const memberHome = path.join(dataDirForInstance(instance), 'crew', member);
+  let crewCopy;
+  let letterPath;
+  let letterText;
+  let memberRegistered = false;
   const cli = (...argv) => execFileSync(binary, argv, { env: instanceCliEnv(instance), encoding: 'utf8' });
   const text = async (selector) => (await client.request('dom_text', { selector })).text;
   const key = (selector, value) => client.request('dom_key', { selector, key: value });
   const selector = (id) => `.ledger-row[data-row-key="claude:${id}"]`;
+  runner.registerCleanup('delete_member', () => {
+    if (memberRegistered) cli('doc', 'delete', 'core/crew', 'members', member);
+    fs.rmSync(memberHome, { recursive: true, force: true });
+  });
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('close_seeds', () => { for (const seed of seeds) cli('seed', 'wither', seed, '-m', 'scenario complete'); });
   runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, [...openSessions]));
   try {
-    await runner.step('launch_isolated_app', () => launchFreshAppAndConnect(client, observer));
+    fs.mkdirSync(memberHome, { recursive: true });
+    fs.writeFileSync(path.join(memberHome, 'CHARTER.md'), '# Trellis\n\nKeep the reasons in your letter.\n');
+    writeMockAgentFixture(memberHome, { name: 'Crew transcript', resumable: true, minimumWorkingMs: 0,
+      defaultActions: [{ type: 'reply', text: 'CREW_TRANSCRIPT_READY', state: 'idle' }] });
+    await runner.step('launch_isolated_app', async () => {
+      await client.quitApp();
+      cli('daemon', 'stop');
+      await launchFreshAppAndConnect(client, observer);
+      memberRegistered = true;
+    });
     await runner.step('prepare_pinned_seed_kept_and_releasing_copies', async () => {
       const createCopy = async (label) => {
         const cwd = path.join(runner.sessionDir, label.replaceAll(' ', '-'));
@@ -85,6 +104,24 @@ async function main() {
       await observer.requestResult({ cmd: 'kept_conversation_keep', session_id: `session:${sessions[2]}`, keep: false }, 'kept_conversation_keep_result');
       const result = await release;
       runner.writeJson('daemon-copies.json', result);
+    });
+    await runner.step('prepare_a_copy_kept_by_a_crew_letter', async () => {
+      queueDaemonSettingRestore(observer, 'crew_v2_enabled');
+      cli('settings', 'set', 'crew_v2_enabled', 'true');
+      cli('crew', 'set', member, '--cwd', memberHome, '--agent', 'claude');
+      const replied = observer.waitForMessage((event) => event.event === 'session_state_changed'
+        && event.session?.directory === memberHome && event.session?.state === 'idle', 'crew mock turn ends');
+      const day = JSON.parse(cli('crew', 'wake', member, '--json'));
+      openSessions.add(day.session_id);
+      await replied;
+      const copied = awaitRows(observer, (result) => result.rows.some((row) => row.session_ids.includes(day.session_id)
+        && row.kept && !row.kept.deleted_at && row.crew_letters?.length), 'crew letter keeps its transcript');
+      const handoff = JSON.parse(cli('handoff', '--session', day.session_id, '-m', 'Dear successor, keep the reasons.', '--json'));
+      openSessions.delete(day.session_id);
+      letterPath = handoff.path;
+      letterText = fs.readFileSync(letterPath, 'utf8');
+      crewCopy = (await copied).rows.find((row) => row.session_ids.includes(day.session_id));
+      runner.writeJson('crew-copy.json', crewCopy);
     });
     const all = await observer.requestResult({ cmd: 'kept_conversation_list', include_deleted: false }, 'kept_conversation_list_result');
     const copies = all.kept_conversation_list_result.rows;
@@ -129,7 +166,24 @@ async function main() {
       runner.assert((await text('.ledger-list')).includes('You deleted attn’s copy on '), 'Show deleted reveals the tombstone');
       await captureScreenshotData(path.join(runner.runDir, 'deleted.png'), { client, selector: '.ledger-panel' });
     });
-    await runner.finishSuccess({ instance, screenshots: ['conversations.png', 'confirmation.png', 'deleted.png'] });
+    await runner.step('forget_a_crew_copy_after_confirming_the_letter_stays', async () => {
+      await key(selector(crewCopy.resume_id), '2');
+      const shown = await text('.ledger-inspector');
+      const letter = crewCopy.crew_letters[0];
+      const date = new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(letter.occurred_at));
+      const label = `${member[0].toUpperCase()}${member.slice(1)} · ${date}`;
+      runner.assert(shown.includes(`These letters stay, but will no longer point to this transcript: ${label}.`), 'confirmation names the member and date and preserves the letter', { shown });
+      await captureScreenshotData(path.join(runner.runDir, 'crew-confirmation.png'), { client, selector: '.ledger-panel' });
+      await key(selector(crewCopy.resume_id), 'Enter');
+      runner.assert(fs.existsSync(`${letterPath}.json`), 'Cancel preserves the letter session record');
+      await key(selector(crewCopy.resume_id), '2');
+      const deleted = awaitRows(observer, (result) => result.rows.some((row) => row.resume_id === crewCopy.resume_id
+        && row.kept?.deleted_by === 'user' && !row.crew_letters?.length), 'confirmed crew Forget deletes the copy and its reference');
+      await key(selector(crewCopy.resume_id), '2');
+      await deleted;
+      runner.assert(!fs.existsSync(`${letterPath}.json`) && fs.readFileSync(letterPath, 'utf8') === letterText, 'Forget removes only the letter session record');
+    });
+    await runner.finishSuccess({ instance, screenshots: ['conversations.png', 'confirmation.png', 'deleted.png', 'crew-confirmation.png'] });
   } catch (error) {
     await runner.finishFailure(error);
     throw error;

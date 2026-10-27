@@ -20,7 +20,13 @@ func (c *Client) KeptConversationKeep(id string, keep bool) error {
 	_, err := c.send(protocol.KeptConversationKeepMessage{Cmd: protocol.CmdKeptConversationKeep, SessionID: id, Keep: keep})
 	return err
 }
-func (c *Client) KeptConversationForget(id string) error {
-	_, err := c.send(protocol.KeptConversationForgetMessage{Cmd: protocol.CmdKeptConversationForget, SessionID: id})
-	return err
+func (c *Client) KeptConversationForget(id string, unlinkCrewLetters bool) (*protocol.KeptConversationForgetResult, error) {
+	resp, err := c.send(protocol.KeptConversationForgetMessage{Cmd: protocol.CmdKeptConversationForget, SessionID: id, UnlinkCrewLetters: protocol.Ptr(unlinkCrewLetters)})
+	if err != nil {
+		return nil, err
+	}
+	if resp.KeptConversationForgetResult == nil {
+		return nil, errors.New("daemon returned no conversation forget result")
+	}
+	return resp.KeptConversationForgetResult, nil
 }

@@ -1,0 +1,3 @@
+kind: added
+area: conversations
+change: Forget a transcript kept by crew letters after confirmation, keeping the letters unchanged. Agents can consent with attn conversation forget --unlink-crew-letters.

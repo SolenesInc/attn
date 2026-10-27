@@ -5407,7 +5407,11 @@ model KeptConversationKeepMessage {
 model KeptConversationForgetMessage {
   cmd: "kept_conversation_forget";
   session_id: string;
+  unlink_crew_letters?: boolean;
   request_id?: string;
+}
+model KeptConversationForgetResult {
+  unlinked_crew_letters: KeptConversationCrewLetter[];
 }
 model KeptConversationListResultEvent {
   event: "kept_conversation_list_result";
@@ -5427,6 +5431,7 @@ model KeptConversationForgetResultEvent {
   request_id?: string;
   success: boolean;
   error?: string;
+  kept_conversation_forget_result?: KeptConversationForgetResult;
 }
 model KeptConversationsChangedEvent {
   event: "kept_conversations_changed";
@@ -6812,6 +6817,7 @@ model Response {
   journal_append_result?: JournalAppendResult;
   activity_status_result?: ActivityStatusResult;
   kept_conversation_list_result?: KeptConversationListResult;
+  kept_conversation_forget_result?: KeptConversationForgetResult;
   worktree_list_result?: WorktreeListResult;
   worktree_keep_result?: WorktreeKeepResult;
   worktree_sweep_log_result?: WorktreeSweepLogResult;
@@ -8055,6 +8061,7 @@ model WebSocketEvent {
   worktrees?: Worktree[];
   sweep_entry?: WorktreeSweepEntry;
   kept_conversation_list_result?: KeptConversationListResult;
+  kept_conversation_forget_result?: KeptConversationForgetResult;
   worktree_list_result?: WorktreeListResult;
   worktree_sweep_log_result?: WorktreeSweepLogResult;
   request_id?: string;

@@ -33,15 +33,26 @@ async function open(result = fixture) {
 }
 
 describe('App kept conversations ledger', () => {
-  it('names the letter that keeps a copy and offers no Forget action', async () => {
+  it('confirms the letters that lose their transcript before forgetting a crew copy', async () => {
     const { daemon } = await open({ count: 1, stored_bytes: copy.bytes, pending_count: 0, rows: [
       { agent: 'claude', resume_id: 'crew', title: 'Trellis yesterday', session_ids: ['s-crew'], seeds: [],
         crew_letters: [{ member: 'trellis', filename: '2026-10-27T23-58Z-trellis_01.000000000-12345.md', occurred_at: '2026-10-27T23:58:00Z' }], kept: copy },
     ] });
     expect(within(row('Trellis yesterday')).getByText('Crew letter: Trellis · 27 Oct 2026')).toBeInTheDocument();
     expect(inspector().getByText('Trellis · 27 Oct 2026')).toHaveAttribute('title', '2026-10-27T23-58Z-trellis_01.000000000-12345.md');
-    expect(inspector().queryByRole('button', { name: 'Forget…' })).toBeNull();
-    expect(row('Trellis yesterday')).not.toHaveAttribute('data-verbs', expect.stringContaining('Forget'));
+    expect(row('Trellis yesterday')).toHaveAttribute('data-verbs', expect.stringContaining('Forget…'));
+    daemon.on('kept_conversation_forget', () => ({ event: 'kept_conversation_forget_result', success: true }));
+    await gesture(daemon, () => fireEvent.click(inspector().getByRole('button', { name: 'Forget…' })));
+    expect(inspector().getByText('These letters stay, but will no longer point to this transcript: Trellis · 27 Oct 2026.')).toBeInTheDocument();
+    expect(inspector().getByText('Delete attn’s copy of Trellis yesterday (4.2 KB)? Claude’s own files are not touched.')).toBeInTheDocument();
+    expect(daemon.sentOf('kept_conversation_forget')).toEqual([]);
+    await gesture(daemon, () => fireEvent.click(inspector().getByRole('button', { name: 'Cancel' })));
+    expect(daemon.sentOf('kept_conversation_forget')).toEqual([]);
+    await gesture(daemon, () => fireEvent.click(inspector().getByRole('button', { name: 'Forget…' })));
+    await gesture(daemon, () => fireEvent.click(inspector().getByRole('button', { name: 'Forget now' })));
+    expect(daemon.sentOf('kept_conversation_forget')).toEqual([
+      { cmd: 'kept_conversation_forget', session_id: 'conversation:crew', unlink_crew_letters: true, request_id: expect.any(String) },
+    ]);
     expect(daemon.sentOf('kept_conversation_list')).toEqual([request()]);
   });
 
@@ -106,7 +117,7 @@ describe('App kept conversations ledger', () => {
     await gesture(daemon, () => fireEvent.keyDown(row('Old spike'), { key: '2' }));
     await gesture(daemon, () => fireEvent.click(inspector().getByRole('button', { name: 'Forget now' })));
     expect(daemon.sentOf('kept_conversation_forget')).toEqual([
-      { cmd: 'kept_conversation_forget', session_id: 'conversation:release', request_id: expect.any(String) },
+      { cmd: 'kept_conversation_forget', session_id: 'conversation:release', unlink_crew_letters: false, request_id: expect.any(String) },
     ]);
     expect(inspector().getByText('Open seed parser-work keeps this conversation')).toBeInTheDocument();
   });
@@ -124,7 +135,7 @@ describe('App kept conversations ledger', () => {
     await gesture(daemon, () => fireEvent.keyDown(document.activeElement!, { key: 'ArrowDown' }));
     expect(row('Old spike')).toHaveFocus();
     expect(daemon.sentOf('kept_conversation_forget')).toEqual([
-      { cmd: 'kept_conversation_forget', session_id: 'conversation:pin', request_id: expect.any(String) },
+      { cmd: 'kept_conversation_forget', session_id: 'conversation:pin', unlink_crew_letters: false, request_id: expect.any(String) },
     ]);
   });
 

@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -255,13 +257,21 @@ func (d *Daemon) keepConversation(id string, keep bool) error {
 	return nil
 }
 
-func (d *Daemon) forgetConversation(id string) error {
+func (d *Daemon) forgetConversation(id string, unlinkCrewLetters bool) (*protocol.KeptConversationForgetResult, error) {
 	d.conversationKeepMu.Lock()
 	defer d.conversationKeepMu.Unlock()
 	key, _, err := d.resolveKeptConversation(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	result := &protocol.KeptConversationForgetResult{UnlinkedCrewLetters: []protocol.KeptConversationCrewLetter{}}
+	forgotten, unlinking := false, false
+	defer func() {
+		if forgotten || len(result.UnlinkedCrewLetters) > 0 {
+			d.publishFact(factConversationKeptChanged, key.resumeID, nil)
+			d.queueConversationKeep()
+		}
+	}()
 	d.gardenWatchMu.Lock()
 	defer d.gardenWatchMu.Unlock()
 	err = d.worktreeMaintenance.TryAutomaticRemoval(context.Background(), func(automaticWorktreeCleanupProtection) error {
@@ -281,33 +291,62 @@ func (d *Daemon) forgetConversation(id string) error {
 		if err != nil {
 			return err
 		}
-		if len(letters[key]) > 0 {
+		if len(letters[key]) > 0 && !unlinkCrewLetters {
 			names := make([]string, 0, len(letters[key]))
 			for _, letter := range letters[key] {
 				names = append(names, letter.Member+" "+letter.Filename)
 			}
 			sort.Strings(names)
-			return fmt.Errorf("conversation %s is kept by crew letters: %s", key.resumeID, strings.Join(names, ", "))
+			return fmt.Errorf("conversation %s is kept by crew letters: %s; to leave the letters and delete their transcript, rerun with --unlink-crew-letters", key.resumeID, strings.Join(names, ", "))
 		}
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
 		if !exists || !kept.DeletedAt.IsZero() {
 			return fmt.Errorf("attn has no live copy of conversation %s to forget", key.resumeID)
 		}
+		sort.Slice(letters[key], func(i, j int) bool {
+			a, b := letters[key][i], letters[key][j]
+			if a.Member != b.Member {
+				return a.Member < b.Member
+			}
+			return a.Filename < b.Filename
+		})
+		unlinking = len(letters[key]) > 0
+		for _, letter := range letters[key] {
+			path := filepath.Join(d.dataRoot, crew.HomesDirName, letter.Member, crew.HandoffsDirName, letter.Filename+".json")
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("removing crew letter session record %s: %w", path, err)
+			}
+			result.UnlinkedCrewLetters = append(result.UnlinkedCrewLetters, letter)
+		}
 		// Commit the deletion before unlinking; the keep job removes leftovers after a crash.
 		if err := d.store.ForgetKeptConversation(key.agent, key.resumeID, time.Now()); err != nil {
 			return err
 		}
-		d.publishFact(factConversationKeptChanged, key.resumeID, nil)
-		d.queueConversationKeep()
+		forgotten = true
 		if err := os.Remove(conversationArchive(key.agent, key.resumeID)); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("conversation %s is forgotten; removing its archive failed (the keep job will retry): %w", key.resumeID, err)
 		}
 		return nil
 	})
 	if errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
-		return fmt.Errorf("garden reference changes are in progress; retry forgetting conversation %s", key.resumeID)
+		return nil, fmt.Errorf("garden reference changes are in progress; retry forgetting conversation %s", key.resumeID)
 	}
-	return err
+	if err != nil && unlinking {
+		names := []string{}
+		for _, letter := range result.UnlinkedCrewLetters {
+			names = append(names, letter.Member+" "+letter.Filename)
+		}
+		removed := "none"
+		if len(names) > 0 {
+			removed = strings.Join(names, ", ")
+		}
+		if forgotten {
+			err = fmt.Errorf("%w; unlinked crew letters: %s; letters are unchanged", err, removed)
+		} else {
+			err = fmt.Errorf("%w; unlinked crew letters: %s; letters are unchanged and attn's copy remains; fix the error and retry `attn conversation forget conversation:%s --unlink-crew-letters`", err, removed, key.resumeID)
+		}
+	}
+	return result, err
 }
 
 func (d *Daemon) handleKeptConversationList(conn net.Conn, msg *protocol.KeptConversationListMessage) {
@@ -326,11 +365,12 @@ func (d *Daemon) handleKeptConversationKeep(conn net.Conn, msg *protocol.KeptCon
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
 }
 func (d *Daemon) handleKeptConversationForget(conn net.Conn, msg *protocol.KeptConversationForgetMessage) {
-	if err := d.forgetConversation(msg.SessionID); err != nil {
+	result, err := d.forgetConversation(msg.SessionID, protocol.Deref(msg.UnlinkCrewLetters))
+	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true})
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, KeptConversationForgetResult: result})
 }
 func (d *Daemon) handleKeptConversationListWS(client *wsClient, msg *protocol.KeptConversationListMessage) {
 	result, err := d.keptConversationList(protocol.Deref(msg.IncludeDeleted))
@@ -349,8 +389,8 @@ func (d *Daemon) handleKeptConversationKeepWS(client *wsClient, msg *protocol.Ke
 	d.sendToClient(client, event)
 }
 func (d *Daemon) handleKeptConversationForgetWS(client *wsClient, msg *protocol.KeptConversationForgetMessage) {
-	err := d.forgetConversation(msg.SessionID)
-	event := &protocol.WebSocketEvent{Event: protocol.EventKeptConversationForgetResult, RequestID: msg.RequestID, Success: protocol.Ptr(err == nil)}
+	result, err := d.forgetConversation(msg.SessionID, protocol.Deref(msg.UnlinkCrewLetters))
+	event := &protocol.WebSocketEvent{Event: protocol.EventKeptConversationForgetResult, RequestID: msg.RequestID, Success: protocol.Ptr(err == nil), KeptConversationForgetResult: result}
 	if err != nil {
 		event.Error = protocol.Ptr(err.Error())
 	}
