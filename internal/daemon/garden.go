@@ -704,7 +704,7 @@ func (d *Daemon) newestNoteAt(seedID string) (time.Time, error) {
 	return readNotes.Documents[0].CreatedAt, nil
 }
 
-func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
+func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protocol.SeedShowMessage) {
 	seed, doc, err := d.readSeed(msg.SeedID)
 	if err != nil {
 		d.sendGardenError(conn, "show", err)
@@ -727,6 +727,11 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 		d.sendGardenError(conn, "show", fmt.Errorf("read seed artifacts: %w", err))
 		return
 	}
+	artifactDir, err := d.callerSeedArtifactDir(ctx, seed.ID)
+	if err != nil {
+		d.sendGardenError(conn, "show", err)
+		return
+	}
 	d.consumeSeedBell(sessionID, seed.ID)
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true,
@@ -738,6 +743,7 @@ func (d *Daemon) handleSeedShow(conn net.Conn, msg *protocol.SeedShowMessage) {
 			NotesTotal:  total,
 			Relations:   gardenRelations(read, seed.ID),
 			Handoff:     d.gardenHandoff(seed.ID),
+			ArtifactDir: protocol.Ptr(artifactDir),
 			Artifacts:   artifacts,
 			References:  d.seedArtifactReferences(seed.ID),
 		},

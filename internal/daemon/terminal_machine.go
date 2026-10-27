@@ -22,6 +22,8 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.applySetting)
 	runs(parts, false, d.applyMonitorView)
 	d.registerMonitorParts(parts)
+	runs(parts, false, d.receiveNotebookSyncReport)
+	runs(parts, false, d.transferSeedArtifactHere)
 	runs(parts, false, d.startTerminal)
 	runs(parts, false, d.restartTerminal)
 	runs(parts, false, d.commitAgentLaunch)

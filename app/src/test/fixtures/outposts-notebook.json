@@ -1,0 +1,576 @@
+{
+  "source": "Packaged notebook-sync scenario; actual outposts_updated messages, 2026-10-27. Fixture files and identities only.",
+  "events": [
+    {
+      "event": "outposts_updated",
+      "outposts": []
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "reach": "connecting",
+          "state": "connecting",
+          "state_since": "2026-10-27T05:15:19.278526Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 0,
+            "state": "first_sync"
+          },
+          "reach": "connecting",
+          "state": "connecting",
+          "state_since": "2026-10-27T05:15:19.278526Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 0,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "first_sync"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 268435464,
+            "need_items": 17,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "first_sync"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 0,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "in_sync"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "error": "home: getfolderdb: sql: statement is closed",
+            "need_bytes": 0,
+            "need_items": 0,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "error"
+          },
+          "reach": "unreachable",
+          "state": "lost",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "state": "first_sync"
+          },
+          "reach": "unreachable",
+          "state": "lost",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "state": "first_sync"
+          },
+          "reach": "unreachable",
+          "state": "lost",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "state": "first_sync"
+          },
+          "reach": "unreachable",
+          "state": "lost",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 0,
+            "state": "syncing"
+          },
+          "reach": "unreachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 9,
+            "need_items": 1,
+            "state": "syncing"
+          },
+          "reach": "unreachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:19.339794Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "reach": "connecting",
+          "state": "connecting",
+          "state_since": "2026-10-27T05:15:22.703419Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 9,
+            "need_items": 1,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "syncing"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 9,
+            "need_items": 1,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "syncing"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 12,
+            "need_items": 1,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "syncing"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 0,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "syncing"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 9,
+            "need_items": 1,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "syncing"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 1,
+            "need_bytes": 9,
+            "need_items": 1,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "syncing"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 1,
+            "need_bytes": 0,
+            "need_items": 0,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "in_sync"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 0,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "in_sync"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:22.706519Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "last_error": "bridge to d-48f6763e16ab0d92172404fae953bcaf lost: EOF",
+          "last_error_at": "2026-10-27T05:15:26.715404Z",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 0,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "in_sync"
+          },
+          "reach": "unreachable",
+          "state": "lost",
+          "state_since": "2026-10-27T05:15:26.715387Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "last_error": "dial tcp 127.0.0.1:55783: connect: connection refused",
+          "last_error_at": "2026-10-27T05:15:26.715889Z",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 0,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "in_sync"
+          },
+          "reach": "unreachable",
+          "state": "lost",
+          "state_since": "2026-10-27T05:15:26.715387Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "last_error": "dial tcp 127.0.0.1:55783: connect: connection refused",
+          "last_error_at": "2026-10-27T05:15:26.715889Z",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "need_bytes": 0,
+            "need_items": 1,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "syncing"
+          },
+          "reach": "unreachable",
+          "state": "lost",
+          "state_since": "2026-10-27T05:15:26.715387Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "error": "Studio: folder marker missing (this indicates potential data loss, search docs/forum to get information about how to proceed)",
+            "need_bytes": 0,
+            "need_items": 1,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "error"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:28.7227Z"
+        }
+      ]
+    },
+    {
+      "event": "outposts_updated",
+      "outposts": [
+        {
+          "address": "127.0.0.1:55783",
+          "build": "0.13.0 (source tree:2c78a55556fdb86a5e69871df15f6e5807f6f950e30a02d35d531810ccfa5aa4, protocol cd18486efbdc)",
+          "daemon_id": "d-48f6763e16ab0d92172404fae953bcaf",
+          "host_key_fingerprint": "SHA256:KeYfKIFIdj87b6KvWkqxhFjObKMJgHd1EjUX8Q4E70I",
+          "id": "5364ad93-9dde-4abf-82c4-7758f96be69b",
+          "name": "Studio",
+          "notebook": {
+            "conflicts": 0,
+            "error": "Studio: folder marker missing (this indicates potential data loss, search docs/forum to get information about how to proceed)",
+            "need_bytes": 0,
+            "need_items": 1,
+            "previous_root": "/private/tmp/attn-nb-z22jCb/outpost-data/notebook.before-sync-20261027T051519.289394000Z",
+            "state": "error"
+          },
+          "reach": "reachable",
+          "state": "connected",
+          "state_since": "2026-10-27T05:15:28.7227Z"
+        }
+      ]
+    }
+  ]
+}

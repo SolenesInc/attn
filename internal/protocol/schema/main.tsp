@@ -326,6 +326,23 @@ model OutpostUpdate {
   outcome?: string;
 }
 
+enum OutpostNotebookState { first_sync, syncing, in_sync, error }
+
+model OutpostNotebook {
+  state: OutpostNotebookState;
+  need_bytes?: safeint;
+  need_items?: int32;
+  conflicts?: int32;
+  error?: string;
+  previous_root?: string;
+}
+
+@extension("x-on", #{ home: true })
+model NotebookSyncReportMessage {
+  cmd: "notebook_sync_report";
+  report: string;
+}
+
 model OutpostInfo {
   id: string;
   name: string;
@@ -337,6 +354,7 @@ model OutpostInfo {
   host_key_fingerprint?: string;
   build?: string;
   update?: OutpostUpdate;
+  notebook?: OutpostNotebook;
   last_error?: string;
   last_error_at?: string;
 }
@@ -5635,6 +5653,7 @@ model SeedShowResult {
   // Direct visible regular files in the seed-owned artifact directory. The
   // filesystem is canonical; this is enumerated at read time.
   "artifacts": SeedArtifact[];
+  "artifact_dir"?: string;
   // Explicit external associations projected as attach-minus-detach over the
   // whole log. These remain references until a user brings one into the seed.
   "references": SeedArtifactReference[];
@@ -5705,7 +5724,7 @@ model SeedArtifact {
 // Move or copy a local file into seed ownership, or detach one to an explicit
 // destination. Source and destination paths are absolute so the daemon,
 // never a caller's cwd, decides which file is mutated.
-@extension("x-on", #{ here: true })
+@extension("x-on", #{ home: true })
 model SeedArtifactTransferMessage {
   "profile_id"?: string;
 
@@ -5725,6 +5744,13 @@ model SeedArtifactTransferMessage {
   // Bring into seed: remove this current association only after transfer
   // completion. Other references remain untouched.
   "legacy_reference"?: SeedArtifactReference;
+}
+
+@extension("x-on", #{ machine: "host" })
+model SeedArtifactTransferHereMessage {
+  cmd: "seed_artifact_transfer_here";
+  host: string;
+  transfer: SeedArtifactTransferMessage;
 }
 
 model SeedArtifactTransferResult {

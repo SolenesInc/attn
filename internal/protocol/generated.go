@@ -7194,6 +7194,14 @@ type NotebookSendToChiefResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type NotebookSyncReportMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Report corresponds to the JSON schema field "report".
+	Report string `json:"report"`
+}
+
 type NotebookWriteMessage struct {
 	// BaseHash corresponds to the JSON schema field "base_hash".
 	BaseHash *string `json:"base_hash,omitempty,omitzero"`
@@ -7514,6 +7522,9 @@ type OutpostInfo struct {
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
+	// Notebook corresponds to the JSON schema field "notebook".
+	Notebook *OutpostNotebook `json:"notebook,omitempty,omitzero"`
+
 	// Reach corresponds to the JSON schema field "reach".
 	Reach OutpostReach `json:"reach"`
 
@@ -7526,6 +7537,33 @@ type OutpostInfo struct {
 	// Update corresponds to the JSON schema field "update".
 	Update *OutpostUpdate `json:"update,omitempty,omitzero"`
 }
+
+type OutpostNotebook struct {
+	// Conflicts corresponds to the JSON schema field "conflicts".
+	Conflicts *int `json:"conflicts,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// NeedBytes corresponds to the JSON schema field "need_bytes".
+	NeedBytes *int `json:"need_bytes,omitempty,omitzero"`
+
+	// NeedItems corresponds to the JSON schema field "need_items".
+	NeedItems *int `json:"need_items,omitempty,omitzero"`
+
+	// PreviousRoot corresponds to the JSON schema field "previous_root".
+	PreviousRoot *string `json:"previous_root,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State OutpostNotebookState `json:"state"`
+}
+
+type OutpostNotebookState string
+
+const OutpostNotebookStateError OutpostNotebookState = "error"
+const OutpostNotebookStateFirstSync OutpostNotebookState = "first_sync"
+const OutpostNotebookStateInSync OutpostNotebookState = "in_sync"
+const OutpostNotebookStateSyncing OutpostNotebookState = "syncing"
 
 type OutpostReach string
 
@@ -9307,6 +9345,17 @@ type SeedArtifactTargetResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type SeedArtifactTransferHereMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+
+	// Transfer corresponds to the JSON schema field "transfer".
+	Transfer SeedArtifactTransferMessage `json:"transfer"`
+}
+
 type SeedArtifactTransferMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10418,6 +10467,9 @@ type SeedShowMessage struct {
 }
 
 type SeedShowResult struct {
+	// ArtifactDir corresponds to the JSON schema field "artifact_dir".
+	ArtifactDir *string `json:"artifact_dir,omitempty,omitzero"`
+
 	// Artifacts corresponds to the JSON schema field "artifacts".
 	Artifacts []SeedArtifact `json:"artifacts"`
 

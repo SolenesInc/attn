@@ -62,6 +62,10 @@ func (d *Daemon) ensureNotebookWatcher(root string) {
 	}
 	w, err := d.notebookWatch(root, func(paths []string) {
 		d.broadcastFsChanged(root, originExternal, paths...)
+		d.notebookFilesChanged()
+		if !d.enrollmentStatus().IsHome() {
+			return
+		}
 		artifactSeeds := map[string]struct{}{}
 		for _, p := range paths {
 			if seedID, ok := seedArtifactSeedFromNotebookPath(p); ok {

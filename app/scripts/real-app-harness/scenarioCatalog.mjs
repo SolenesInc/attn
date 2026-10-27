@@ -264,6 +264,12 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-outpost-update.mjs'],
   },
   {
+    id: 'notebook-sync',
+    runnerId: 'NotebookSync',
+    label: 'Notebook: first sync, previous folder rescue and conflict copies on the outpost row',
+    command: ['node', 'scripts/real-app-harness/scenario-notebook-sync.mjs'],
+  },
+  {
     id: 'outposts-settings',
     runnerId: 'OutpostsSettings',
     label: 'Outposts: pairing, remote CLI shells, native splits, offline typing and screen recovery, re-pair and Remove confirmation',

@@ -136,6 +136,13 @@ func (d *Daemon) seedArtifactDir(seedID string, create bool) (string, string, er
 	if _, _, err := d.readSeed(seedID); err != nil {
 		return "", "", err
 	}
+	return d.localSeedArtifactDir(seedID, create)
+}
+
+func (d *Daemon) localSeedArtifactDir(seedID string, create bool) (string, string, error) {
+	if err := garden.ValidateID(seedID); err != nil {
+		return "", "", err
+	}
 	root, err := d.notebookRoot()
 	if err != nil {
 		return "", "", err
@@ -363,8 +370,10 @@ func (d *Daemon) seedArtifactReferences(seedID string) []protocol.SeedArtifactRe
 	return out
 }
 
-func (d *Daemon) handleSeedArtifactTransfer(conn net.Conn, msg *protocol.SeedArtifactTransferMessage) {
-	result, err := d.submitSeedArtifactTransfer(msg)
+func (d *Daemon) handleSeedArtifactTransfer(ctx context.Context, conn net.Conn, msg *protocol.SeedArtifactTransferMessage) {
+	ctx, cancel := d.connectionContext(ctx, conn)
+	defer cancel()
+	result, err := d.submitSeedArtifactTransfer(ctx, msg)
 	if err != nil {
 		d.sendGardenError(conn, "artifact", err)
 		return
@@ -374,7 +383,7 @@ func (d *Daemon) handleSeedArtifactTransfer(conn net.Conn, msg *protocol.SeedArt
 
 func (d *Daemon) handleSeedArtifactTransferWS(client *wsClient, msg *protocol.SeedArtifactTransferMessage) {
 	requestID := protocol.Deref(msg.RequestID)
-	result, err := d.submitSeedArtifactTransfer(msg)
+	result, err := d.submitSeedArtifactTransfer(d.life.Context(), msg)
 	reply := protocol.SeedArtifactTransferResultMessage{
 		Event: protocol.EventSeedArtifactTransferResult, RequestID: requestID,
 		Success: err == nil, Result: result,
@@ -385,11 +394,42 @@ func (d *Daemon) handleSeedArtifactTransferWS(client *wsClient, msg *protocol.Se
 	d.sendToClient(client, reply)
 }
 
-func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMessage) (*protocol.SeedArtifactTransferResult, error) {
+func (d *Daemon) submitSeedArtifactTransfer(ctx context.Context, msg *protocol.SeedArtifactTransferMessage) (*protocol.SeedArtifactTransferResult, error) {
 	seedID := strings.TrimSpace(msg.SeedID)
 	if _, _, err := d.readSeed(seedID); err != nil {
 		return nil, err
 	}
+	origin, remote := OriginOf(ctx)
+	if remote && msg.SourceSessionID != nil && d.sessionHost(*msg.SourceSessionID) != origin.Host {
+		return nil, fmt.Errorf("session %s does not run on %s", *msg.SourceSessionID, origin.Name)
+	}
+	host := ""
+	if remote {
+		host = origin.Host
+	}
+	transferred, err := Call[*seedArtifactMachineTransfer](ctx, d.router(), protocol.SeedArtifactTransferHereMessage{Cmd: protocol.CmdSeedArtifactTransferHere, Host: host, Transfer: *msg})
+	if err != nil {
+		return nil, err
+	}
+	if remote {
+		if err := d.waitForNotebookArtifact(ctx, origin, transferred.Receipt); err != nil {
+			return nil, err
+		}
+	}
+	return d.observeSeedArtifactTransfer(msg, transferred)
+}
+
+func (d *Daemon) transferSeedArtifactHere(_ context.Context, msg protocol.SeedArtifactTransferHereMessage) (*seedArtifactMachineTransfer, error) {
+	return d.transferSeedArtifact(&msg.Transfer)
+}
+
+type seedArtifactMachineTransfer struct {
+	Result  *protocol.SeedArtifactTransferResult
+	Receipt *seedArtifactTransferReceipt
+}
+
+func (d *Daemon) transferSeedArtifact(msg *protocol.SeedArtifactTransferMessage) (*seedArtifactMachineTransfer, error) {
+	seedID := strings.TrimSpace(msg.SeedID)
 	operation := strings.TrimSpace(strings.ToLower(msg.Operation))
 	if operation != "move" && operation != "copy" && operation != "detach" {
 		return nil, fmt.Errorf("artifact operation %q is not move, copy, or detach", msg.Operation)
@@ -399,7 +439,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	var root, dir string
 	var err error
 	if operation == "detach" {
-		root, dir, err = d.seedArtifactDir(seedID, false)
+		root, dir, err = d.localSeedArtifactDir(seedID, false)
 		if err != nil {
 			return nil, err
 		}
@@ -458,7 +498,7 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 				}
 			}
 		}
-		root, dir, err = d.seedArtifactDir(seedID, !recovering)
+		root, dir, err = d.localSeedArtifactDir(seedID, !recovering)
 		if err != nil {
 			return nil, err
 		}
@@ -483,12 +523,6 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if err != nil {
 		return nil, err
 	}
-	if legacy != nil {
-		if err := d.detachLegacyArtifactReference(seedID, protocol.Deref(msg.SourceSessionID), *legacy); err != nil {
-			return nil, fmt.Errorf("artifact transferred but linked file is still associated: %w; run the same command again", err)
-		}
-	}
-
 	artifact := protocol.SeedArtifact{
 		Filename: filename, RelativeTarget: seedArtifactRelativeTarget(filename), Size: int(receipt.Size),
 		ModifiedAt: time.Unix(0, receipt.ModTimeNS).UTC().Format(time.RFC3339Nano),
@@ -499,6 +533,21 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	}
 	if operation != "detach" {
 		result.Artifact = &artifact
+	}
+	changed := filepath.ToSlash(filepath.Join("seeds", seedID, filename))
+	d.broadcastFsChanged(root, originAgent, changed)
+	return &seedArtifactMachineTransfer{Result: result, Receipt: receipt}, nil
+}
+
+func (d *Daemon) observeSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMessage, transferred *seedArtifactMachineTransfer) (*protocol.SeedArtifactTransferResult, error) {
+	receipt, result := transferred.Receipt, transferred.Result
+	seedID := receipt.SeedID
+	d.seedArtifactMu.Lock()
+	defer d.seedArtifactMu.Unlock()
+	if receipt.Legacy != nil {
+		if err := d.detachLegacyArtifactReference(seedID, protocol.Deref(msg.SourceSessionID), *receipt.Legacy); err != nil {
+			return nil, fmt.Errorf("artifact transferred but linked file is still associated: %w; run the same command again", err)
+		}
 	}
 	changedEvent, err := seedEvents.Occur(
 		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
@@ -524,8 +573,6 @@ func (d *Daemon) submitSeedArtifactTransfer(msg *protocol.SeedArtifactTransferMe
 	if inserted {
 		announceGardenSeedEvents(d, []int64{seq})
 	}
-	changed := filepath.ToSlash(filepath.Join("seeds", seedID, filename))
-	d.broadcastFsChanged(root, originAgent, changed)
 	return result, nil
 }
 
@@ -713,8 +760,8 @@ func installSeedArtifactStage(receipt *seedArtifactTransferReceipt) error {
 	if receipt.Stage == "" {
 		return errors.New("staged transfer has no staging file")
 	}
-	if err := os.Link(receipt.Stage, receipt.Destination); err != nil {
-		if !errors.Is(err, os.ErrExist) {
+	if err := renameSeedArtifactStage(receipt.Stage, receipt.Destination); err != nil {
+		if !errors.Is(err, os.ErrExist) && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("install artifact without replacement: %w", err)
 		}
 		hash, hashErr := hashRegularFile(receipt.Destination)

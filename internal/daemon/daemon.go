@@ -212,6 +212,8 @@ type Daemon struct {
 	recoveryMu          sync.RWMutex
 	recovering          bool
 	recoverySettled     chan struct{}
+	notebookSync        notebookSyncRuntime
+	notebookSyncWatch   bool
 	notebookMu          sync.Mutex
 	notebookStore       *notebook.Store
 	notebookWatcherMu   sync.Mutex
@@ -503,6 +505,7 @@ func New(socketPath string) *Daemon {
 
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		notebookSyncWatch:   true,
 		notebookWatch:       openNotebookWatch,
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
@@ -539,6 +542,7 @@ func NewForTesting(socketPath string) *Daemon {
 	manager := pty.NewManager(nil)
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		notebookSyncWatch:   true,
 		notebookWatch:       openNotebookWatch,
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
@@ -2634,13 +2638,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 			}
 			homeSetting = spec.class == settingkeys.Home
 		}
-		if place.Locator == protocol.LocatorHome || homeSetting || cmd == protocol.CmdSeedArtifactTransfer {
+		if place.Locator == protocol.LocatorHome || homeSetting {
 			status := d.enrollmentStatus()
 			if !status.IsHome() {
-				if cmd == protocol.CmdSeedArtifactTransfer {
-					d.sendError(conn, fmt.Sprintf("%s is not supported on outpost %s until Notebook sync is available", cmd, d.bridgeIdentity().Name))
-					return
-				}
 				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, d.callerSession(ctx, data))
 				return
 			}
@@ -2838,9 +2838,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdSeedSearch:
 		d.handleSeedSearch(conn, msg.(*protocol.SeedSearchMessage))
 	case protocol.CmdSeedShow:
-		d.handleSeedShow(conn, msg.(*protocol.SeedShowMessage))
+		d.handleSeedShow(ctx, conn, msg.(*protocol.SeedShowMessage))
 	case protocol.CmdSeedArtifactTransfer:
-		d.handleSeedArtifactTransfer(conn, msg.(*protocol.SeedArtifactTransferMessage))
+		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage))
 	case protocol.CmdSeedEdit:
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
 	case protocol.CmdSeedTransition:

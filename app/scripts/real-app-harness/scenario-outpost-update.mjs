@@ -101,7 +101,7 @@ async function update(selector, name, visibleBanner) {
   await press(selector);
   await restarting;
   if (visibleBanner) await wait(banner, { textIncludes: 'Restarting' });
-  else await wait(`${row} [role="status"]`, { textIncludes: 'Restarting' });
+  else await wait(`${row} .settings-description[role="status"]`, { textIncludes: 'Restarting' });
   await shot(`${name}-restarting`);
   releaseRestart();
   await restarted;
@@ -109,7 +109,7 @@ async function update(selector, name, visibleBanner) {
   const outcome = rows.find(item => item.id === outpostId);
   runner.assert(outcome.update.phase === 'done' && outcome.state === 'connected', 'outpost returns on the home build', outcome);
   if (visibleBanner) await wait(banner, { textIncludes: "Updated to the home's build." });
-  else await wait(`${row} [role="status"]`, { textIncludes: "Updated to the home's build." });
+  else await wait(`${row} .settings-description[role="status"]`, { textIncludes: "Updated to the home's build." });
   await shot(`${name}-done`);
 }
 

@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -276,62 +275,5 @@ func TestOutpostRefusesAnotherInstanceBeforeEnrollment(t *testing.T) {
 		if err != nil || !status.IsHome() {
 			t.Fatalf("refused instance enrolled the outpost: %+v %v", status, err)
 		}
-	}
-}
-
-func TestOutpostArtifactTransfersNeverInterpretPathsOnTheHome(t *testing.T) {
-	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
-	pair := testworld.PrepareOutpostPair(t, home, outpost)
-	pair.Start()
-	seed, err := home.Client().SeedPlant("", "Home artifacts", "Keep home files on the home", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	guide, err := home.Client().NotebookGuide("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(guide.Root, 0700); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.MkdirAll(home.Path("reports"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	for _, operation := range []string{"move", "copy"} {
-		source := home.Path("reports", operation+".md")
-		if err := os.WriteFile(source, []byte("a file on the home"), 0600); err != nil {
-			t.Fatal(err)
-		}
-		result := outpost.Attn("seed", "attach", seed.Seed.ID, "--path", source, "--"+operation)
-		if result.Code == 0 || !strings.Contains(result.Stderr, "outpost") {
-			t.Errorf("%s must refuse outpost paths: %+v", operation, result)
-		}
-		if data, err := os.ReadFile(source); err != nil || string(data) != "a file on the home" {
-			t.Errorf("%s changed the home's source: %q, %v", operation, data, err)
-		}
-	}
-	shown, err := home.Client().SeedShow("", seed.Seed.ID)
-	if err != nil || len(shown.Artifacts) != 0 {
-		t.Fatalf("refused attaches changed home artifacts: %+v, %v", shown, err)
-	}
-	source := home.Path("reports", "keep.md")
-	if err := os.WriteFile(source, []byte("keep the home artifact"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := home.Client().SeedArtifactTransfer("", seed.Seed.ID, "copy", source, "", "", nil); err != nil {
-		t.Fatal(err)
-	}
-	destination := home.Path("reports", "detached.md")
-	result := outpost.Attn("seed", "detach", seed.Seed.ID, "--path", filepath.Base(source), "--to", destination)
-	if result.Code == 0 || !strings.Contains(result.Stderr, "outpost") {
-		t.Errorf("detach must refuse outpost paths: %+v", result)
-	}
-	if _, err := os.Stat(destination); !os.IsNotExist(err) {
-		t.Errorf("refused detach wrote the home destination: %v", err)
-	}
-	shown, err = home.Client().SeedShow("", seed.Seed.ID)
-	if err != nil || len(shown.Artifacts) != 1 || shown.Artifacts[0].Filename != "keep.md" {
-		t.Fatalf("refused detach changed home artifacts: %+v, %v", shown, err)
 	}
 }

@@ -250,6 +250,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	if cfg, err := d.store.GetAutoModeConfig(); err == nil {
 		settings[string(SettingAutoModeEnabledDefault)] = strconv.FormatBool(cfg.EnabledDefault)
 	}
+	settings[string(settingNotebookSyncState)], settings[string(settingNotebookSyncLastError)] = d.notebookSyncSettings()
 	if root, err := d.notebookRoot(); err == nil {
 		settings[string(SettingNotebookRootEffective)] = root
 	}

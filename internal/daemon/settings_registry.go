@@ -14,6 +14,11 @@ type HomeSetting = settingkeys.HomeSetting
 type MachineSetting = settingkeys.MachineSetting
 
 const (
+	settingNotebookSyncState     MachineSetting = "notebook_sync_state"
+	settingNotebookSyncLastError MachineSetting = "notebook_sync_last_error"
+)
+
+const (
 	settingOutpostsEnabled               = settingkeys.SettingOutpostsEnabled
 	settingOutpostListen                 = settingkeys.SettingOutpostListen
 	settingOutpostState                  = settingkeys.SettingOutpostState
@@ -121,6 +126,8 @@ func (d *Daemon) homeSetting(key HomeSetting) string {
 func (d *Daemon) machineSetting(key MachineSetting) string { return d.store.GetSetting(string(key)) }
 
 var settingSpecs = classifiedSettings([]settingSpec{
+	{key: string(settingNotebookSyncState), scope: daemonScope, description: "Current Notebook sync state on this machine.", readOnly: true},
+	{key: string(settingNotebookSyncLastError), scope: daemonScope, description: "Current Notebook sync error and its reason.", readOnly: true},
 	{key: string(settingOutpostsEnabled), scope: daemonScope, experimental: true, description: "Connect to outposts from this home: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(settingOutpostListen), scope: daemonScope, description: "Listen for a home bridge on this address:port. Empty disables the outpost listener.", validate: func(d *Daemon, key, value string) error {
 		if value == "" {
@@ -256,7 +263,10 @@ var settingSpecs = classifiedSettings([]settingSpec{
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
 	}},
 	{key: string(SettingNotebookRoot), scope: daemonScope, description: "Folder for the Notebook, journal and seed artifacts. Absolute or ~/ path outside attn's data folder. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
-		return validateNotebookRoot(value)
+		if err := validateNotebookRoot(value); err != nil {
+			return err
+		}
+		return d.notebookRootChangeAllowed()
 	}},
 	{key: string(SettingKeybindingsConfig), scope: daemonScope, description: "Keyboard shortcut overrides as JSON. Empty restores default shortcuts.", validate: func(d *Daemon, key, value string) error {
 		return validateKeybindingsConfig(value)
