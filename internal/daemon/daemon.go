@@ -1937,13 +1937,13 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, te
 	for _, terminal := range terminals {
 		_, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalKillMessage{Cmd: protocol.CmdTerminalKill, TerminalID: terminal, Signal: signalName(sig), EndingSessionID: protocol.Ptr(sessionID)})
 		if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
-			return err
+			return fmt.Errorf("kill terminal %s: %w", terminal, err)
 		}
 	}
 	d.sessionMonitor(sessionID).StopTranscriptWatchers()
 	for _, terminal := range terminals {
 		if err := d.removeTerminalRuntime(context.Background(), terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
-			return err
+			return fmt.Errorf("remove terminal %s: %w", terminal, err)
 		}
 	}
 	return nil
