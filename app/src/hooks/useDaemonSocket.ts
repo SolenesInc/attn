@@ -755,6 +755,7 @@ export function useDaemonSocket({
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [outposts, setOutposts] = useState<OutpostInfo[]>([]);
   const [outpostCommandError, setOutpostCommandError] = useState('');
+  const [homeBuild, setHomeBuild] = useState('');
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
   const [keptConversationsChangeSignal, setKeptConversationsChangeSignal] = useState(0);
@@ -1134,6 +1135,7 @@ export function useDaemonSocket({
 
         switch (data.event) {
           case 'initial_state':
+            setHomeBuild(data.home_build ?? '');
             clearHarnessModelCatalogs();
             clearHarnesses();
             useDelegationPreferencesPush.getState().push();
@@ -3289,6 +3291,7 @@ export function useDaemonSocket({
     ws.send(JSON.stringify(message));
     return true;
   }, []);
+  const sendUpdateOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'update_outpost', id }), [sendOutpostCommand]);
   const sendAddOutpost = useCallback((name: string, address: string) => sendOutpostCommand({ cmd: 'add_outpost', name, address }), [sendOutpostCommand]);
   const sendRepairOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'repair_outpost', id }), [sendOutpostCommand]);
   const sendRemoveOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'remove_outpost', id }), [sendOutpostCommand]);
@@ -4328,6 +4331,8 @@ export function useDaemonSocket({
     sendGetSettings,
     outposts,
     outpostCommandError,
+    homeBuild,
+    sendUpdateOutpost,
     sendAddOutpost,
     sendRepairOutpost,
     sendRemoveOutpost,

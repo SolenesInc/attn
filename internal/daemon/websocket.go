@@ -571,6 +571,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Event:                  protocol.EventInitialState,
 		ProtocolVersion:        protocol.Ptr(protocol.ProtocolVersion),
 		SourceFingerprint:      protocol.Ptr(buildinfo.SourceFingerprint),
+		HomeBuild:              protocol.Ptr(d.bridgeIdentity().Build.String()),
 		DaemonInstanceID:       protocol.Ptr(d.daemonInstanceID),
 		Sessions:               state.Sessions,
 		Prs:                    state.Prs,
@@ -1087,6 +1088,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		} else {
 			d.handleSetSettingWS(client, setting)
 		}
+	case protocol.CmdUpdateOutpost:
+		d.handleUpdateOutpost(client, msg.(*protocol.UpdateOutpostMessage).ID)
 	case protocol.CmdAddOutpost:
 		m := msg.(*protocol.AddOutpostMessage)
 		d.handleOutpostCommand(client, "add", "", m.Name, m.Address)

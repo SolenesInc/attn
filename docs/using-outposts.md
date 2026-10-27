@@ -38,6 +38,8 @@ On the outpost:
    [Service]
    ExecStart=%h/.local/bin/attn daemon
    Restart=on-failure
+   RestartForceExitStatus=75
+   SuccessExitStatus=75
    KillMode=process
 
    [Install]
@@ -52,7 +54,8 @@ On the outpost:
    `KillMode=process` keeps your shells running when the daemon stops or
    restarts. Without it, systemd ends every shell along with the daemon.
    `Restart=on-failure` starts the daemon again after a crash, and it picks
-   up the shells that kept running. To stop the daemon and its shells
+   up the shells that kept running. Exit status 75 requests a restart after
+   a build update and counts as a successful stop. To stop the daemon and its shells
    together, run `systemctl --user kill attn.service`.
 
 2. Add the public key your home's ssh-agent holds (`ssh-add -L` on the Mac) to
@@ -74,13 +77,42 @@ outpost by name and address in Settings → Outposts.
 The first connection pairs them, with no prompt. The home remembers the
 outpost's identity, and the outpost accepts only this home from then on.
 
-To update, install the new home build on the Mac and build the outpost
-binary again from the same checkout. Copy it to the outpost's `/tmp`, rerun
-the `install` command there and run `systemctl --user restart attn.service`.
-Keep each attn's data folder, because their identities live there. Use
-`install`, not `cp`: `cp` fails with "Text file busy" while attn runs from
-the binary, and with `KillMode=process` it keeps running for as long as your
-shells do.
+## Update outposts
+
+After installing a new home build, click **Update outposts** in the banner
+or **Update to home build** on an outpost's row in Settings → Outposts.
+The banner updates every outpost on a different build. Each row shows
+building or downloading, sending, verifying, and restarting, then the outcome.
+Dismissing the banner hides it until the home's build changes. The row button
+stays available.
+
+A source install builds the Linux daemon when you click Update. Keep the
+checkout the home was built from available, with Zig installed. A home built
+from a clean commit uses that commit. For an uncommitted build, the worktree
+must still contain the same changes. A release install downloads its own
+version's Linux asset. Both cache the result for later pushes. The Mac bundle carries no Linux binary.
+
+The outpost verifies the transfer, the staged build, and database compatibility
+before replacing its binary. Its systemd service restarts it, and existing
+shells keep running. The home waits up to 60 seconds for it to reconnect on the
+new build. An outpost with **Shared terminal host** enabled refuses an update,
+because the push carries only `attn`.
+
+Outposts installed before build updates were added need one more manual install.
+Build and copy the binary as in **Set up an outpost**, update the service unit
+above, rerun `install`, and run `systemctl --user daemon-reload` followed by
+`systemctl --user restart attn.service`. Use `install` when replacing a running
+binary. `cp` fails with "Text file busy", including while an old shell's worker
+still uses it. Keep the home's and outpost's data folders, because their
+pairing identities live there. Install a named instance in its own binary path. An outpost running
+as a named instance refuses to replace the default `~/.local/bin/attn`.
+
+If the new build does not come back, check its row's outcome and the outpost's
+journal with `journalctl --user -u attn.service`. Fix forward, or stop the service
+and install `~/.local/bin/attn.previous` over `~/.local/bin/attn` before starting
+it again. If the new build migrated the database, the previous build may also
+need a backup restored with `attn db restore`. attn keeps the previous binary
+and never rolls back automatically.
 
 ## Open a shell on an outpost
 
@@ -173,7 +205,7 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 
 | Refused because | What to do |
 | --- | --- |
-| the two run different builds | Install the same build on both. |
+| the two run different builds | Click **Update to home build**. Older outposts need the manual install described above. |
 | the outpost changed host key or daemon id | It was reinstalled or its data folder replaced. If you expect that, **Re-pair** it. |
 | the outpost is paired to another home | Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
 | no ssh-agent, no keys in it, or no key accepted | Load your key with `ssh-add`, and check it is in the outpost's `authorized_keys`. |

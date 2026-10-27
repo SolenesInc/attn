@@ -1,13 +1,13 @@
 import type { OutpostInfo } from '../types/generated';
 
-type OutpostCommand = 'add_outpost' | 'repair_outpost' | 'remove_outpost';
+type OutpostCommand = 'add_outpost' | 'repair_outpost' | 'remove_outpost' | 'update_outpost';
 
 export type OutpostCommandMessage =
   | { cmd: 'add_outpost'; name: string; address: string }
-  | { cmd: 'repair_outpost' | 'remove_outpost'; id: string };
+  | { cmd: 'repair_outpost' | 'remove_outpost' | 'update_outpost'; id: string };
 
 export function isOutpostCommand(command: unknown): command is OutpostCommand {
-  return command === 'add_outpost' || command === 'repair_outpost' || command === 'remove_outpost';
+  return command === 'update_outpost' || command === 'add_outpost' || command === 'repair_outpost' || command === 'remove_outpost';
 }
 
 export function handleOutpostDaemonEvent(

@@ -23,6 +23,7 @@ type ServerConfig struct {
 	Logf           func(string, ...any)
 	OnError        func(error)
 	Handlers       Handlers
+	Update         *UpdateServer
 }
 
 func Listen(ctx context.Context, cfg ServerConfig, onConn func(*Conn)) error {
@@ -66,6 +67,8 @@ func Serve(ctx context.Context, listener net.Listener, cfg ServerConfig, onConn 
 }
 
 func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConfig, onConn func(*Conn)) error {
+	activity := &updateActivityConn{Conn: raw}
+	raw = activity
 	if err := raw.SetDeadline(time.Now().Add(LostAfter)); err != nil {
 		return err
 	}
@@ -117,7 +120,10 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	if cfg.Admit != nil {
 		answer.Refused = cfg.Admit(home.Identity)
 	}
-	if answer.Refused == nil {
+	if home.Update == 1 && cfg.Update != nil {
+		answer.Update, answer.Target = 1, &cfg.Update.Target
+	}
+	if answer.Refused == nil && answer.Update != 1 {
 		answer.Refused = buildRefusal(cfg.Self, home.Identity)
 	}
 	if err := json.NewEncoder(control).Encode(answer); err != nil {
@@ -128,6 +134,9 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	}
 	if err := raw.SetDeadline(time.Time{}); err != nil {
 		return err
+	}
+	if answer.Update == 1 {
+		return serveUpdate(ctx, transport, channels, home.Build, cfg.Update, activity)
 	}
 	conn := newConn(ctx, transport, channels, cfg.Handlers, control, decoder, home.Identity)
 	onConn(conn)

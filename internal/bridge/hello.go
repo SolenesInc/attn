@@ -30,7 +30,9 @@ func (r *Refusal) Error() string { return r.Detail }
 type hello struct {
 	Bridge int `json:"bridge"`
 	Identity
-	Refused *Refusal `json:"refused,omitempty"`
+	Update  int           `json:"update,omitempty"`
+	Target  *UpdateTarget `json:"target,omitempty"`
+	Refused *Refusal      `json:"refused,omitempty"`
 }
 
 func greeting(self Identity) hello { return hello{Bridge: 1, Identity: self} }

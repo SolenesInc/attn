@@ -38,6 +38,7 @@ var Placements = map[string]Placement{
 	"terminal_theme":            {LocatorMachine, "host"},
 	"terminal_wait_block":       {LocatorTerminal, "terminal_id"},
 	"terminal_write":            {LocatorTerminal, "terminal_id"},
+	"update_outpost":            {LocatorHome, ""},
 }
 
 func (ApplyMonitorViewMessage) Command() string {
@@ -218,4 +219,16 @@ func (TerminalWriteMessage) Placement() Placement {
 
 func (m TerminalWriteMessage) Locate() string {
 	return string(m.TerminalID)
+}
+
+func (UpdateOutpostMessage) Command() string {
+	return "update_outpost"
+}
+
+func (UpdateOutpostMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (UpdateOutpostMessage) Locate() string {
+	return ""
 }

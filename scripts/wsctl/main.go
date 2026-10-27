@@ -74,7 +74,7 @@ Commands:
   input --id I --text T [--enter]
   list
   refresh-prs
-  outposts [--add NAME --address HOST:PORT | --remove ID | --repair ID] [--until STATE | --watch]
+  outposts [--add NAME --address HOST:PORT | --remove ID | --repair ID | --update ID] [--until STATE | --watch]
 `, wsURL())
 }
 

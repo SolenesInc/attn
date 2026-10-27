@@ -190,6 +190,7 @@ const (
 	CmdWorktreeRefresh               = "worktree_refresh"
 	CmdGetSettings                   = "get_settings"
 	CmdSetSetting                    = "set_setting"
+	CmdUpdateOutpost                 = "update_outpost"
 	CmdAddOutpost                    = "add_outpost"
 	CmdRemoveOutpost                 = "remove_outpost"
 	CmdRepairOutpost                 = "repair_outpost"

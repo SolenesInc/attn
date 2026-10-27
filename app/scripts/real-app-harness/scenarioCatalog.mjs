@@ -258,6 +258,12 @@ export const scenarioCatalog = [
     timeoutMs: 180_000,
   },
   {
+    id: 'outpost-update',
+    runnerId: 'OutpostUpdate',
+    label: 'Outpost updates: banner and row actions, phases, supervised restart, outcome, and dismissal',
+    command: ['node', 'scripts/real-app-harness/scenario-outpost-update.mjs'],
+  },
+  {
     id: 'outposts-settings',
     runnerId: 'OutpostsSettings',
     label: 'Outposts: pairing, remote CLI shells, native splits, offline typing and screen recovery, re-pair and Remove confirmation',

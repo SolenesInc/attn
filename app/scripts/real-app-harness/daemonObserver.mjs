@@ -29,6 +29,7 @@ export class DaemonObserver {
     this.connectTimeoutMs = connectTimeoutMs;
     this.ws = null;
     this.sessionsById = new Map();
+    this.outposts = [];
     this.terminalBindings = new Map();
     this.settings = new Map();
     this.connected = false;
@@ -413,6 +414,7 @@ export class DaemonObserver {
   #handleMessage(data) {
     switch (data.event) {
       case 'initial_state':
+        this.outposts = data.outposts || [];
         this.initialStateReceived = true;
         this.sessionsById.clear();
         for (const session of data.sessions || []) {
@@ -423,6 +425,9 @@ export class DaemonObserver {
         this.profile = (data.profiles || []).find((profile) => profile.id === this.profileId) ?? null;
         this.desktops = data.desktops || [];
         this.terminalBindings = new Map((data.terminal_bindings || []).map(({ terminal_id, session_id }) => [terminal_id, session_id]));
+        break;
+      case 'outposts_updated':
+        this.outposts = data.outposts || [];
         break;
       case 'terminal_bindings_updated':
         this.terminalBindings = new Map((data.terminal_bindings || []).map(({ terminal_id, session_id }) => [terminal_id, session_id]));
