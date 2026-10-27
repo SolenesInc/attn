@@ -228,7 +228,7 @@ func (d *Daemon) replayPendingSwitches() {
 			launch.Cost = cost
 		}
 		r := d.monitors()
-		monitor := r.registry.Start(nil, sessionmonitor.Start{Session: id, Terminal: pending[0].Terminal, Conversation: conversation.NativeID, Launch: func() sessionmonitor.Launch { return launch }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), shown)})
+		monitor := r.registry.Start(nil, sessionmonitor.Start{Session: id, Terminal: pending[0].Terminal, Conversation: conversation.NativeID, Linked: launch.Link == codexLinkKind, Launch: func() sessionmonitor.Launch { return launch }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), shown)})
 		r.mu.Lock()
 		r.sessions[id] = &monitorBinding{monitor: monitor, applied: monitor.Snapshot(), copied: d.copiedSession(id)}
 		homeOf(monitor).bind(id)

@@ -93,7 +93,7 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 		r.mu.Unlock()
 		return current.ProposeConversation(observation, proposal, terminal)
 	}
-	if !inPlace && linked {
+	if linked {
 		if existing := r.conversationLocked(profile, observation.NativeID); existing != nil {
 			candidate = existing
 		}
@@ -299,6 +299,9 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 	if !bound.save(final) {
 		return false
 	}
+	if !bound.savePending() {
+		return false
+	}
 	r := m.registry
 	r.mu.Lock()
 	m.mu.Lock()
@@ -333,7 +336,7 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 	}
 	var err error
 	if r.saver != nil {
-		err = r.saver.MovePending(m.session, bound.session, conversations(remaining), conversations(target))
+		err = r.saver.MovePending(m.pendingSession, bound.session, conversations(remaining), conversations(target))
 	}
 	if err != nil {
 		m.logf("monitor pending handoff: %v", err)
@@ -342,6 +345,7 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 		m.pendingSwitch = remaining
 		bound.pendingSwitch = target
 		m.pendingDirty, bound.pendingDirty = false, false
+		m.pendingSession, bound.pendingSession = m.session, bound.session
 		if head.candidate == bound {
 			bound.conversationInput = head.Conversation
 			bound.conversation = head.NativeID
@@ -398,14 +402,7 @@ func (r *Registry) DropSwitches(terminal harness.TerminalID) {
 		}
 		owner.pendingSwitch = remaining
 		owner.pendingDirty = true
-		if r.saver != nil {
-			if err := r.saver.MovePending(owner.session, owner.session, nil, owner.pendingChainLocked()); err != nil {
-				owner.logf("monitor drop pending: %v", err)
-				owner.retrySaveLocked()
-			} else {
-				owner.pendingDirty = false
-			}
-		}
+		owner.savePendingLocked()
 		owner.mu.Unlock()
 	}
 	r.mu.Unlock()
@@ -513,14 +510,19 @@ func (m *Monitor) savePending() bool {
 	defer r.mu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if !m.pendingDirty {
+	return m.savePendingLocked()
+}
+
+func (m *Monitor) savePendingLocked() bool {
+	if m.registry.saver == nil || !m.pendingDirty && m.pendingSession == m.session {
 		return true
 	}
-	if err := r.saver.MovePending(m.session, m.session, nil, m.pendingChainLocked()); err != nil {
+	if err := m.registry.saver.MovePending(m.pendingSession, m.session, nil, m.pendingChainLocked()); err != nil {
 		m.logf("monitor save pending: %v", err)
 		m.retrySaveLocked()
 		return false
 	}
+	m.pendingSession = m.session
 	m.pendingDirty = false
 	return true
 }

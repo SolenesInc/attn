@@ -106,25 +106,28 @@ func TestASharedCodexTerminalThatAgentsTakesBackToAnUnpromptedNewConversationSho
 	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
+	mark := len(app.Log())
 	typeInto(app, terminal, "/new\r")
 	codex.Prompted()
-	discount, blank := sessionShownIn(t, w, app, terminal), codex.ConversationID
+	discount, blank := awaitTerminalSessionChange(app, mark, terminal, checkout), codex.ConversationID
 	if discount == checkout {
 		t.Fatalf("after /new, terminal %s still shows session %s", terminal, checkout)
 	}
+	mark = len(app.Log())
 	typeInto(app, terminal, "/agents "+conversation+"\r")
 	codex.Prompted()
-	if got := sessionShownIn(t, w, app, terminal); got != checkout {
+	if got := awaitTerminalSessionChange(app, mark, terminal, discount); got != checkout {
 		t.Fatalf("after /agents to the conversation of %s, terminal %s shows session %s", checkout, terminal, got)
 	}
 
 	typeInto(app, terminal, "/agents "+blank+"\r")
 	codex.Prompted()
+	mark = len(app.Log())
 	typeInto(app, terminal, "add a discount field\r")
 	if got := codex.Prompted(); got != "add a discount field" || codex.ConversationID != blank {
 		t.Fatalf("codex took %q in %s, want the prompt in %s", got, codex.ConversationID, blank)
 	}
-	if got := sessionShownIn(t, w, app, terminal); got != discount {
+	if got := awaitTerminalSessionChange(app, mark, terminal, checkout); got != discount {
 		t.Fatalf("after a prompt in the conversation of %s, terminal %s shows session %s", discount, terminal, got)
 	}
 	if left := queriedSession(t, w.Client(), checkout); !protocol.Deref(left.Hidden) {
@@ -179,9 +182,10 @@ func TestANewSharedCodexTileThatResumesBeforeItsFirstPromptLeavesNoEmptySessionA
 	terminal := app.Terminal(fresh)
 	blank := freshCodex.ConversationID
 
+	mark := len(app.Log())
 	typeInto(app, terminal, "/resume "+codex.ConversationID+"\r")
 	freshCodex.Prompted()
-	if got := sessionShownIn(t, w, app, terminal); got != checkout {
+	if got := awaitTerminalSessionChange(app, mark, terminal, fresh); got != checkout {
 		t.Fatalf("after /resume of the conversation of %s, the new tile shows session %s", checkout, got)
 	}
 	if entry := ledgerShowOverTheWebSocket(app, fresh).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
@@ -190,11 +194,12 @@ func TestANewSharedCodexTileThatResumesBeforeItsFirstPromptLeavesNoEmptySessionA
 
 	typeInto(app, terminal, "/agents "+blank+"\r")
 	freshCodex.Prompted()
+	mark = len(app.Log())
 	typeInto(app, terminal, "sketch the coupon form\r")
 	if got := freshCodex.Prompted(); got != "sketch the coupon form" || freshCodex.ConversationID != blank {
 		t.Fatalf("codex took %q in %s, want the prompt in %s", got, freshCodex.ConversationID, blank)
 	}
-	if coupon := sessionShownIn(t, w, app, terminal); coupon == checkout || coupon == fresh {
+	if coupon := awaitTerminalSessionChange(app, mark, terminal, checkout); coupon == checkout || coupon == fresh {
 		t.Fatalf("after a prompt in the tile's own unprompted conversation, it shows session %s, want a new one", coupon)
 	}
 	if shown := queriedSession(t, w.Client(), checkout); protocol.Deref(shown.Hidden) {
@@ -973,6 +978,23 @@ func tileOf(t *testing.T, w *world, app *testworld.Peer, terminal string) (strin
 	}
 	t.Fatalf("no tile holds terminal %s", terminal)
 	return "", ""
+}
+
+func awaitTerminalSessionChange(app *testworld.Peer, mark int, terminal, previous string) string {
+	app.T.Helper()
+	var shown string
+	testworld.AwaitSince(app, mark, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
+		for _, desktop := range e.Desktops {
+			for _, pane := range desktop.Panes {
+				if string(pane.RuntimeID) == terminal && string(pane.SessionID) != previous {
+					shown = string(pane.SessionID)
+					return true
+				}
+			}
+		}
+		return false
+	})
+	return shown
 }
 
 func sessionShownIn(t *testing.T, w *world, app *testworld.Peer, terminal string) string {

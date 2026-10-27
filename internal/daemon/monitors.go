@@ -129,6 +129,12 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 		}
 		applied.PullRequests.Entries = d.recordedLinks(sessionID)
 		r.sessions[sessionID] = &monitorBinding{monitor: monitor, applied: applied, copied: d.copiedSession(sessionID)}
+		if previousID != sessionID {
+			if old := r.sessions[previousID]; old != nil && old.monitor == monitor {
+				old.stopCatchUp()
+				delete(r.sessions, previousID)
+			}
+		}
 		homeOf(monitor).bind(sessionID)
 		r.mu.Unlock()
 		r.policyMu.Unlock()

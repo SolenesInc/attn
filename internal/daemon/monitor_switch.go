@@ -103,7 +103,7 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 	if shown == "" || d.store.GetSessionConversation(shown).NativeID != answer.Conversation {
 		return
 	}
-	monitor := d.startSessionMonitorFrom(shown, "", candidate)
+	monitor := d.startSessionMonitorFrom(shown, source.Session(), candidate)
 	if monitor == nil {
 		return
 	}

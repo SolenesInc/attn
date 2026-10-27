@@ -122,6 +122,7 @@ type Monitor struct {
 	usageDraining       bool
 	pendingConversation *ConversationObservation
 	pendingSwitch       []pendingSwitch
+	pendingSession      protocol.SessionID
 	switchApplying      bool
 	pendingDirty        bool
 	titleAttempted      bool
@@ -223,6 +224,9 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	m.succeeds = Key{}
 	m.watch, m.conversation, m.localConversation = w, start.Conversation, "local:"+strconv.FormatUint(r.nextLocal, 10)
 	m.session = start.Session
+	if m.pendingSession == "" {
+		m.pendingSession = start.Session
+	}
 	if start.Candidate == nil {
 		m.initializeLocked(start)
 		m.input = m.freshLaneLocked()
