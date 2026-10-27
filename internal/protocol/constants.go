@@ -310,7 +310,7 @@ const (
 	CmdTerminalRemove       = "terminal_remove"
 	CmdTerminalTheme        = "terminal_theme"
 	CmdTerminalShell        = "terminal_shell"
-	CmdDesktopMoveSession   = "desktop_move_session"
+	CmdTerminalMove         = "terminal_move"
 	CmdDesktopShowLeaf      = "desktop_show_leaf"
 	CmdDesktopMoveLeaf      = "desktop_move_leaf"
 	CmdDesktopRemoveLeaf    = "desktop_remove_leaf"

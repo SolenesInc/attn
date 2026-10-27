@@ -1587,8 +1587,6 @@ func arrangeLeafBetweenDesktops(source, target profiles.Desktop, request LeafMov
 	return LeafMove{Source: source, Target: target, FinalLeafID: moved.FinalLeafID}, nil
 }
 
-// SessionDesktopMove is what MoveSessionToDesktop did: Placed for an unplaced
-// session, Move.Source empty when the session's newest tile already was on the desktop.
 type SessionDesktopMove struct {
 	Move       LeafMove
 	FromLeafID string
@@ -1596,9 +1594,7 @@ type SessionDesktopMove struct {
 	Created    bool
 }
 
-// MoveSessionToDesktop puts a session's newest tile beside another desktop's active leaf;
-// only a moved active tile, onto a desktop not on screen, takes that leaf.
-func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
+func (s *Store) MoveTerminalToDesktop(terminal protocol.TerminalID, sessionID protocol.SessionID, targetDesktopID, title string) (SessionDesktopMove, error) {
 	var result SessionDesktopMove
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		profileID, err := openSessionProfileID(tx, sessionID)
@@ -1616,13 +1612,14 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 		if err != nil {
 			return err
 		}
-		tiles, err := sessionTiles(tx, sessionID)
+		var tile sessionTile
+		found, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE runtime_id = ?`, terminal), &tile.desktopID, &tile.tileID)
 		if err != nil {
 			return err
 		}
-		if len(tiles) == 0 {
+		if !found {
 			paneID := newProfileEntityID("pane")
-			desktop, err := placeSessionInTree(tx, target, SessionPlacementRequest{SessionID: sessionID, Direction: layouttree.DirectionVertical, Title: title, Status: profiles.PaneStatusReady}, paneID)
+			desktop, err := placeSessionInTree(tx, target, SessionPlacementRequest{SessionID: sessionID, RuntimeID: terminal, Direction: layouttree.DirectionVertical, Title: title, Status: profiles.PaneStatusReady}, paneID)
 			if err != nil {
 				return err
 			}
@@ -1632,7 +1629,6 @@ func (s *Store) MoveSessionToDesktop(sessionID protocol.SessionID, targetDesktop
 			result = SessionDesktopMove{Move: LeafMove{Target: desktop, FinalLeafID: paneID}, Placed: true, Created: created}
 			return nil
 		}
-		tile := tiles[0]
 		if tile.desktopID == target.ID {
 			result = SessionDesktopMove{Move: LeafMove{Target: target, FinalLeafID: tile.tileID}}
 			return nil

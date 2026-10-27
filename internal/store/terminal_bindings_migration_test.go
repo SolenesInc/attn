@@ -139,7 +139,7 @@ func TestSeveralLegacyTerminalTilesSurviveBindingMigration(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if _, err := current.MoveSessionToDesktop("shared", target.ID, "shared"); err != nil {
+					if _, err := current.MoveTerminalToDesktop("first-terminal", "shared", target.ID, "shared"); err != nil {
 						t.Fatal(err)
 					}
 					if len(bindings) != 2 || bindings["first-terminal"] != "shared" || bindings["second-terminal"] != "shared" {

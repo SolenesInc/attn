@@ -243,7 +243,7 @@ func TestTerminalCLIUsesTransitiveAuthority(t *testing.T) {
 	if snoozed.Code != 0 {
 		t.Fatalf("transitive snooze: %+v", snoozed)
 	}
-	moved := s.Run(testworld.Invocation{Session: root, Args: []string{"session", "move", "2", "--session", grandchild}})
+	moved := s.Run(testworld.Invocation{Session: root, Args: []string{"terminal", "move", grandchild, "2"}})
 	if moved.Code != 0 {
 		t.Fatalf("transitive move: %+v", moved)
 	}

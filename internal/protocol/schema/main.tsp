@@ -3276,28 +3276,22 @@ model TerminalShellResult {
   home: string; // Empty when the machine cannot tell
 }
 
-// Moves a session's pane to another desktop of its profile, beside that
-// desktop's active leaf. `desktop` is a desktop ref: shortcut digit, label as shown (case-insensitive) or id. A
-// session may move itself and the sessions it dispatched; its profile's chief
-// may move any of its sessions; a request without a caller comes from the user.
-// The moved pane becomes its new desktop's active leaf only when it was its old
-// desktop's and the new one is not the current desktop; the current desktop
-// never changes.
 @extension("x-on", #{ home: true })
-model DesktopMoveSessionMessage {
-  cmd: "desktop_move_session";
-  session_id: SessionID;
-  caller_session_id?: SessionID;
+model TerminalMoveMessage {
+  cmd: "terminal_move";
+  caller_session_id: SessionID;
+  target: string;
   desktop: string;
 }
 
-model DesktopMoveSessionResult {
+model TerminalMoveResult {
+  terminal_id: TerminalID;
   session_id: SessionID;
   desktop_id: string;
   pane_id: string;
-  from_desktop_id?: string; // absent when unchanged
-  unchanged?: boolean; // the session already was on that desktop
-  desktop_created?: boolean; // the move created the numbered desktop
+  from_desktop_id?: string;
+  unchanged?: boolean;
+  desktop_created?: boolean;
 }
 
 // Shows an existing leaf, an agent pane or a tile, like desktop_show_session.
@@ -6742,7 +6736,7 @@ model Response {
   terminal_input_result?: TerminalInputResult;
   terminal_read_result?: TerminalReadResult;
   terminal_wait_result?: TerminalWaitResult;
-  desktop_move_session_result?: DesktopMoveSessionResult;
+  terminal_move_result?: TerminalMoveResult;
   state_explain_result?: StateExplainResult;
   agent_peek_result?: AgentPeekResult;
   agent_msg_result?: AgentMsgResult;

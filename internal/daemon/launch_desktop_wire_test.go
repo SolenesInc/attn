@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -296,7 +297,7 @@ func TestReopenReturnsToItsNumberedDesktopEvenAfterItWasRemoved(t *testing.T) {
 	targetAnchor := w.Spawn(app, fakeagent.Codex, w.Path("target-anchor"))
 	w.Launched(targetAnchor)
 	switchDesktop(app, profile, current.ID)
-	if _, err := cli.MoveSessionToDesktop(protocol.SessionID(session), protocol.SessionID(session), target.ID); err != nil {
+	if _, err := cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(session), Target: session, Desktop: target.ID}); err != nil {
 		t.Fatal(err)
 	}
 	closeSession(t, cli, session, "done")
