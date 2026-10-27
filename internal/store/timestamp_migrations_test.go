@@ -154,10 +154,8 @@ func TestFailedTimestampedUpgradeRollsBackAllPendingWork(t *testing.T) {
 func databaseWithHotJournal(t *testing.T, path string) string {
 	t.Helper()
 	u := &url.URL{Scheme: "file", Path: path}
-	db, err := sql.Open("sqlite3", u.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := sql.OpenDB(&sqliteConnector{driver: &sqlite3.SQLiteDriver{}, dsn: u.String()})
+	var err error
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	for _, statement := range []string{
@@ -260,10 +258,7 @@ func TestAnOlderBuildRefusesNewerDatabasesWithoutChangingThem(t *testing.T) {
 						t.Fatal(err)
 					}
 					u := &url.URL{Scheme: "file", Path: path}
-					db, err = sql.Open("sqlite3", u.String())
-					if err != nil {
-						t.Fatal(err)
-					}
+					db = sql.OpenDB(&sqliteConnector{driver: &sqlite3.SQLiteDriver{}, dsn: u.String()})
 					db.SetMaxOpenConns(1)
 					t.Cleanup(func() { db.Close() })
 					mode := "DELETE"

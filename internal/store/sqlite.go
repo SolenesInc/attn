@@ -1649,7 +1649,11 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, nil, err
 	}
+	db, writes := connectSQLite(dbPath)
+	return db, writes, nil
+}
 
+func connectSQLite(dbPath string) (*sql.DB, *tableWrites) {
 	writes := &tableWrites{}
 	db := sql.OpenDB(&sqliteConnector{
 		driver: &sqlite3.SQLiteDriver{ConnectHook: func(conn *sqlite3.SQLiteConn) error {
@@ -1684,7 +1688,7 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 		db.SetMaxOpenConns(sqliteFileConnectionPoolSize)
 		db.SetMaxIdleConns(sqliteFileConnectionPoolSize)
 	}
-	return db, writes, nil
+	return db, writes
 }
 
 func (s *Store) RefuseCommits() func() {
@@ -1733,10 +1737,7 @@ func migratedSchemaImage() ([]byte, error) {
 }
 
 func buildMigratedSchemaImage() ([]byte, error) {
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		return nil, err
-	}
+	db, _ := connectSQLite(":memory:")
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	if _, err := upgradeSchema(db, ":memory:"); err != nil {
@@ -1750,7 +1751,7 @@ func buildMigratedSchemaImage() ([]byte, error) {
 	var image []byte
 	err = conn.Raw(func(driverConn any) error {
 		var err error
-		image, err = driverConn.(*sqlite3.SQLiteConn).Serialize("main")
+		image, err = driverConn.(*sqliteConnection).Serialize("main")
 		return err
 	})
 	return image, err
