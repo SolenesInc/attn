@@ -318,6 +318,13 @@ model CopyRow {
   columns?: Record<unknown>;
 }
 
+enum OutpostUpdatePhase { building, downloading, sending, verifying, restarting, done, failed }
+
+model OutpostUpdate {
+  phase: OutpostUpdatePhase;
+  outcome?: string;
+}
+
 model OutpostInfo {
   id: string;
   name: string;
@@ -328,6 +335,7 @@ model OutpostInfo {
   daemon_id?: string;
   host_key_fingerprint?: string;
   build?: string;
+  update?: OutpostUpdate;
   last_error?: string;
   last_error_at?: string;
 }
@@ -1774,6 +1782,8 @@ model SettingsListResult {
 model AddOutpostMessage { cmd: "add_outpost"; name: string; address: string; }
 model RemoveOutpostMessage { cmd: "remove_outpost"; id: string; }
 model RepairOutpostMessage { cmd: "repair_outpost"; id: string; }
+@extension("x-on", #{ home: true })
+model UpdateOutpostMessage { cmd: "update_outpost"; id: string; }
 
 // Sent by `attn enrollment leave`: the daemon keeps only the copy from the home it is still enrolled to, stopping the terminals it ran for any other home and closing that home's bridge.
 @extension("x-on", #{ here: true })
@@ -3550,6 +3560,7 @@ model InitialStateMessage {
   event: "initial_state";
   protocol_version?: string;
   source_fingerprint?: string;
+  home_build?: string;
   daemon_instance_id?: string;
   sessions?: Session[];
   terminal_bindings?: TerminalBinding[];

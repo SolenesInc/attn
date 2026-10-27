@@ -30,6 +30,8 @@ type outpostsRuntime struct {
 	actions sync.Mutex
 	mu      sync.Mutex
 	dialers map[string]*outpostDial
+	pushes  map[string]*outpostPush
+	changed chan struct{}
 	dial    func(context.Context, string, string) (net.Conn, error)
 }
 
@@ -43,6 +45,10 @@ func (d *Daemon) configureOutposts() {
 	defer r.actions.Unlock()
 	r.mu.Lock()
 	old := r.dialers
+	for _, push := range r.pushes {
+		push.cancel()
+	}
+	r.pushes = nil
 	r.mu.Unlock()
 	for _, run := range old {
 		run.cancel()
@@ -123,6 +129,10 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 			changed = true
 		}
 	}
+	if changed && r.changed != nil {
+		close(r.changed)
+		r.changed = nil
+	}
 	r.mu.Unlock()
 	if changed {
 		d.publishFact(FactOutpostChanged, id, nil)
@@ -155,10 +165,17 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			}
 			return
 		}
-		if err == nil && pin == nil {
-			err = d.store.PinOutpost(row.ID, seen.HostKey, seen.DaemonID)
-			if err != nil {
-				_ = conn.Close()
+		var buildRefusal *bridge.Refusal
+		canPin := err == nil || errors.As(err, &buildRefusal) && buildRefusal.Reason == "build"
+		if canPin && pin == nil {
+			pinError := d.store.PinOutpost(row.ID, seen.HostKey, seen.DaemonID)
+			if pinError != nil {
+				err = pinError
+			}
+			if pinError != nil {
+				if conn != nil {
+					_ = conn.Close()
+				}
 				if conflict := d.outpostConflict(row.ID, seen.HostKey, seen.DaemonID); conflict != nil {
 					err = conflict
 				} else {

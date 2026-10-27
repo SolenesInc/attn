@@ -298,10 +298,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		defer cancelConnection()
 		ctx, cancel := context.WithTimeout(connectionCtx, terminalFirstPromptTripwire)
 		defer cancel()
-		result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, FirstPrompt: protocol.Ptr(true)})
-		if err == nil && protocol.Deref(result.Exited) {
-			err = fmt.Errorf("terminal %s exited before its first prompt (exit code %v)", id, protocol.Deref(result.ExitCode))
-		}
+		err := d.waitForTerminalFirstPrompt(ctx, terminal)
 		if err == nil && ctx.Err() == nil {
 			_, err = Call[struct{}](ctx, d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: terminal, Data: command + "\r", Source: "agent"})
 		}
@@ -318,6 +315,17 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		}
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TerminalOpenResult: &protocol.TerminalOpenResult{TerminalID: terminal, SessionID: id, DesktopID: placed.desktopID, PaneID: placed.paneID}})
+}
+
+func (d *Daemon) waitForTerminalFirstPrompt(ctx context.Context, terminal protocol.TerminalID) error {
+	result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, FirstPrompt: protocol.Ptr(true)})
+	if err == nil && protocol.Deref(result.Exited) {
+		return fmt.Errorf("terminal %s exited before its first prompt (exit code %v)", terminal, protocol.Deref(result.ExitCode))
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("first prompt wait exceeded limit=%s; %s; terminal %s: nothing was typed", terminalFirstPromptTripwire, terminalFirstPromptReceipt, terminal)
+	}
+	return err
 }
 
 func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputMessage) {
@@ -346,8 +354,19 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 			return
 		}
 		if !state.IntegrationSeen && protocol.Deref(msg.Wait) {
-			d.sendError(conn, pty.ErrNoShellIntegration.Error())
-			return
+			connectionCtx, cancelConnection := d.terminalContext(conn)
+			defer cancelConnection()
+			ctx, cancel := context.WithTimeout(connectionCtx, terminalFirstPromptTripwire)
+			defer cancel()
+			if err := d.waitForTerminalFirstPrompt(ctx, target.terminal); err != nil {
+				d.sendError(conn, err.Error())
+				return
+			}
+			state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
+			if err != nil {
+				d.sendError(conn, err.Error())
+				return
+			}
 		}
 		if !state.AtPrompt {
 			d.sendError(conn, "prompt rule: shell is busy; use send to type into its running program")

@@ -5,7 +5,7 @@ import { processCwd } from './processCwd.mjs';
 
 // Signal only a pid the registry recorded that is still running in the cwd this
 // session was started in; kill(pid, 0) alone would let a recycled pid take it.
-export function registeredAgentPid(dataDir, terminalId, expectedCwd) {
+export function registeredTerminalProcesses(dataDir, terminalId, expectedCwd) {
   const workersRoot = path.join(dataDir, 'workers');
   if (!expectedCwd) return null;
   for (const instance of fs.readdirSync(workersRoot)) {
@@ -15,8 +15,12 @@ export function registeredAgentPid(dataDir, terminalId, expectedCwd) {
       const record = JSON.parse(fs.readFileSync(path.join(registryDir, name), 'utf8'));
       const pid = Number(record.child_pid);
       if (record.session_id !== terminalId || !Number.isInteger(pid) || pid <= 1) continue;
-      if (processCwd(pid) === expectedCwd) return pid;
+      if (processCwd(pid) === expectedCwd) return { childPid: pid, workerPid: Number(record.worker_pid) };
     }
   }
   return null;
+}
+
+export function registeredAgentPid(dataDir, terminalId, expectedCwd) {
+  return registeredTerminalProcesses(dataDir, terminalId, expectedCwd)?.childPid ?? null;
 }

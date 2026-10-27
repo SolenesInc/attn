@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -34,20 +35,35 @@ type DialConfig struct {
 	DialContext  func(context.Context, string, string) (net.Conn, error)
 	CheckHostKey func(string) *Refusal
 	Handlers     Handlers
+	update       bool
 }
 
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	handshakeCtx, cancel := context.WithTimeout(ctx, LostAfter)
 	defer cancel()
-	conn, seen, err := handshake(ctx, handshakeCtx, cfg)
+	ready, seen, err := handshake(handshakeCtx, cfg)
 	var refusal *Refusal
 	if err != nil && !errors.As(err, &refusal) && errors.Is(handshakeCtx.Err(), context.DeadlineExceeded) {
 		err = fmt.Errorf("bridge to %s: no answer within %s: %w", cfg.Address, LostAfter, context.DeadlineExceeded)
 	}
-	return conn, seen, err
+	if err != nil {
+		return nil, seen, err
+	}
+	return newConn(ctx, ready.transport, ready.channels, cfg.Handlers, ready.control, ready.decoder, ready.peer, ready.drained), seen, nil
 }
 
-func handshake(ctx, handshakeCtx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
+type authenticatedPeer struct {
+	transport ssh.Conn
+	channels  <-chan ssh.NewChannel
+	control   ssh.Channel
+	decoder   *json.Decoder
+	peer      Identity
+	target    *UpdateTarget
+	drained   <-chan struct{}
+	raw       net.Conn
+}
+
+func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer, *Pin, error) {
 	dial := cfg.DialContext
 	if dial == nil {
 		dial = (&net.Dialer{}).DialContext
@@ -72,6 +88,9 @@ func handshake(ctx, handshakeCtx context.Context, cfg DialConfig) (*Conn, *Pin, 
 	raw, err := dial(handshakeCtx, "tcp", cfg.Address)
 	if err != nil {
 		return nil, nil, err
+	}
+	if cfg.update {
+		raw = &updateActivityConn{Conn: raw}
 	}
 	success := false
 	defer func() {
@@ -126,12 +145,19 @@ func handshake(ctx, handshakeCtx context.Context, cfg DialConfig) (*Conn, *Pin, 
 		return nil, seen, err
 	}
 	go ssh.DiscardRequests(channelRequests)
-	if err := json.NewEncoder(control).Encode(greeting(cfg.Self)); err != nil {
+	greeting := greeting(cfg.Self)
+	if cfg.update {
+		greeting.Update = 1
+	}
+	if err := json.NewEncoder(control).Encode(greeting); err != nil {
 		return nil, seen, err
 	}
 	decoder := json.NewDecoder(control)
 	var answer hello
 	err = decoder.Decode(&answer)
+	if errors.Is(err, io.EOF) {
+		err = fmt.Errorf("outpost at %s closed before its bridge hello; if it runs an older build, install this build by hand once: %w", cfg.Address, err)
+	}
 	if err == nil {
 		err = answer.check()
 	}
@@ -142,7 +168,14 @@ func handshake(ctx, handshakeCtx context.Context, cfg DialConfig) (*Conn, *Pin, 
 		} else if answer.Refused != nil {
 			answer.Refused.Peer = &answer.Identity
 			err = answer.Refused
-		} else if refusal := buildRefusal(cfg.Self, answer.Identity); refusal != nil {
+			if cfg.update && answer.Refused.Reason == "build" {
+				err = fmt.Errorf("outpost build %s predates updates from the home; install this build by hand once: %w", answer.Build, err)
+			}
+		} else if refusal := instanceRefusal(cfg.Self, answer.Identity); refusal != nil {
+			err = refusal
+		} else if cfg.update && (answer.Update != 1 || answer.Target == nil) {
+			err = fmt.Errorf("outpost build %s predates updates from the home; install this build by hand once", answer.Build)
+		} else if refusal := buildRefusal(cfg.Self, answer.Identity); !cfg.update && refusal != nil {
 			err = refusal
 		}
 	}
@@ -158,7 +191,6 @@ func handshake(ctx, handshakeCtx context.Context, cfg DialConfig) (*Conn, *Pin, 
 	if err := raw.SetDeadline(time.Time{}); err != nil {
 		return nil, seen, err
 	}
-	conn := newConn(ctx, transport, channels, cfg.Handlers, control, decoder, answer.Identity, requestDrain)
 	success = true
-	return conn, seen, nil
+	return &authenticatedPeer{transport: transport, channels: channels, control: control, decoder: decoder, peer: answer.Identity, target: answer.Target, drained: requestDrain, raw: raw}, seen, nil
 }

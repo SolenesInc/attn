@@ -21,8 +21,8 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
-var home = bridge.Identity{DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Build: bridge.Build{Version: "test", SourceFingerprint: "unknown", ProtocolVersion: "test"}}
-var outpost = bridge.Identity{DaemonID: "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Build: home.Build}
+var home = bridge.Identity{DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "home", Instance: "default", Build: bridge.Build{Version: "test", SourceFingerprint: "unknown", ProtocolVersion: "test"}}
+var outpost = bridge.Identity{DaemonID: "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Name: "outpost", Instance: "default", Build: home.Build}
 
 func testKey(t *testing.T) ed25519.PrivateKey {
 	t.Helper()
@@ -88,15 +88,17 @@ func (w *pairWorld) dialWith(handlers bridge.Handlers) (*bridge.Conn, *bridge.Pi
 
 func (w *pairWorld) dialConfig(cfg bridge.DialConfig) (*bridge.Conn, *bridge.Pin, error) {
 	cfg.Address, cfg.AgentSocket = "outpost", "agent"
-	cfg.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
-		if network == "tcp" {
-			return w.network.Dial(ctx)
-		}
-		a, b := net.Pipe()
-		w.workers.Go(func() { defer b.Close(); _ = agent.ServeAgent(w.keyring, b) })
-		return a, nil
-	}
+	cfg.DialContext = w.dialContext
 	return bridge.Dial(w.ctx, cfg)
+}
+
+func (w *pairWorld) dialContext(ctx context.Context, network, _ string) (net.Conn, error) {
+	if network == "tcp" {
+		return w.network.Dial(ctx)
+	}
+	a, b := net.Pipe()
+	w.workers.Go(func() { defer b.Close(); _ = agent.ServeAgent(w.keyring, b) })
+	return a, nil
 }
 
 func state(t *testing.T, c *bridge.Conn, want bridge.State) {

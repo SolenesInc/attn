@@ -5603,6 +5603,9 @@ type InitialStateMessage struct {
 	// "github_polling_off_reason".
 	GithubPollingOffReason *string `json:"github_polling_off_reason,omitempty,omitzero"`
 
+	// HomeBuild corresponds to the JSON schema field "home_build".
+	HomeBuild *string `json:"home_build,omitempty,omitzero"`
+
 	// MigrationPhase corresponds to the JSON schema field "migration_phase".
 	MigrationPhase *MigrationPhase `json:"migration_phase,omitempty,omitzero"`
 
@@ -7303,6 +7306,9 @@ type OutpostInfo struct {
 
 	// StateSince corresponds to the JSON schema field "state_since".
 	StateSince string `json:"state_since"`
+
+	// Update corresponds to the JSON schema field "update".
+	Update *OutpostUpdate `json:"update,omitempty,omitzero"`
 }
 
 type OutpostReach string
@@ -7318,6 +7324,24 @@ const OutpostStateConnecting OutpostState = "connecting"
 const OutpostStateLost OutpostState = "lost"
 const OutpostStateRefused OutpostState = "refused"
 const OutpostStateStalled OutpostState = "stalled"
+
+type OutpostUpdate struct {
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome *string `json:"outcome,omitempty,omitzero"`
+
+	// Phase corresponds to the JSON schema field "phase".
+	Phase OutpostUpdatePhase `json:"phase"`
+}
+
+type OutpostUpdatePhase string
+
+const OutpostUpdatePhaseBuilding OutpostUpdatePhase = "building"
+const OutpostUpdatePhaseDone OutpostUpdatePhase = "done"
+const OutpostUpdatePhaseDownloading OutpostUpdatePhase = "downloading"
+const OutpostUpdatePhaseFailed OutpostUpdatePhase = "failed"
+const OutpostUpdatePhaseRestarting OutpostUpdatePhase = "restarting"
+const OutpostUpdatePhaseSending OutpostUpdatePhase = "sending"
+const OutpostUpdatePhaseVerifying OutpostUpdatePhase = "verifying"
 
 type OutpostsUpdatedMessage struct {
 	// Event corresponds to the JSON schema field "event".
@@ -12523,6 +12547,14 @@ type UnregisterMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID SessionID `json:"id"`
+}
+
+type UpdateOutpostMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
 }
 
 type Vent struct {

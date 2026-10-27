@@ -190,6 +190,7 @@ var Placements = map[string][]Placement{
 	"terminal_wait_block":              {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_write":                   {Placement{LocatorTerminal, "terminal_id"}},
 	"unregister":                       {Placement{LocatorHome, ""}},
+	"update_outpost":                   {Placement{LocatorHome, ""}},
 	"wake_turn":                        {Placement{LocatorHome, ""}},
 	"withdraw_vent":                    {Placement{LocatorHome, ""}},
 	"worktree_keep":                    {Placement{LocatorHere, ""}},
@@ -2183,6 +2184,18 @@ func (m UnregisterMessage) Placement() Placement {
 }
 
 func (m UnregisterMessage) Locate() string {
+	return ""
+}
+
+func (UpdateOutpostMessage) CommandName() string {
+	return "update_outpost"
+}
+
+func (m UpdateOutpostMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m UpdateOutpostMessage) Locate() string {
 	return ""
 }
 

@@ -67,6 +67,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 			}
 		}
 	}
+	d.cancelOutpostUpdate(id)
 	d.stopOutpostDial(id)
 	if action == "remove" {
 		err = d.store.DeleteOutpost(id)
@@ -113,6 +114,10 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 		if row.DaemonID != "" {
 			info.DaemonID = protocol.Ptr(row.DaemonID)
 			info.HostKeyFingerprint = protocol.Ptr((bridge.Pin{HostKey: row.HostKey}).Fingerprint())
+		}
+		if push := r.pushes[row.ID]; push != nil && push.state.Phase != "" {
+			state := push.state
+			info.Update = &state
 		}
 		run := r.dialers[row.ID]
 		_, info.Reach = outpostReach(enabled, run)

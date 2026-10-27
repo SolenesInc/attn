@@ -141,6 +141,8 @@ type Daemon struct {
 	crewCharterMu              sync.Mutex
 	life                       lifetime
 	stopOnce                   sync.Once
+	restartRequested           chan struct{}
+	restartOnce                sync.Once
 	logger                     *logging.Logger
 	debugLogging               bool
 	ghRegistry                 *github.ClientRegistry
@@ -515,6 +517,7 @@ func New(socketPath string) *Daemon {
 
 		pendingInitialWS: make(map[*wsClient]struct{}),
 		startedCh:        make(chan struct{}),
+		restartRequested: make(chan struct{}),
 
 		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
@@ -550,6 +553,7 @@ func NewForTesting(socketPath string) *Daemon {
 
 		pendingInitialWS: make(map[*wsClient]struct{}),
 		startedCh:        make(chan struct{}),
+		restartRequested: make(chan struct{}),
 
 		tailscale:        newTailscaleRuntime(),
 		plugins:          newPluginRegistry(),

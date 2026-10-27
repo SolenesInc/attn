@@ -19,6 +19,7 @@ func outposts(args []string) error {
 	add := fs.String("add", "", "add an outpost with this name")
 	address := fs.String("address", "", "address:port for --add")
 	remove := fs.String("remove", "", "remove this outpost id")
+	update := fs.String("update", "", "update this outpost to the home build and wait for its outcome")
 	repair := fs.String("repair", "", "clear this outpost's pins and redial")
 	until := fs.String("until", "", "wait for connecting, connected, stalled, lost or refused")
 	watch := fs.Bool("watch", false, "print every outposts_updated event until interrupted")
@@ -26,13 +27,13 @@ func outposts(args []string) error {
 		return err
 	}
 	actions := 0
-	for _, v := range []string{*add, *remove, *repair} {
+	for _, v := range []string{*add, *remove, *repair, *update} {
 		if v != "" {
 			actions++
 		}
 	}
 	if actions > 1 {
-		return errors.New("choose only one of --add, --remove or --repair")
+		return errors.New("choose only one of --add, --remove, --repair or --update")
 	}
 	if *add != "" && *address == "" {
 		return errors.New("--add requires --address")
@@ -78,6 +79,8 @@ func outposts(args []string) error {
 		switch {
 		case *add != "":
 			command = protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: *add, Address: *address}
+		case *update != "":
+			command = protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: *update}
 		case *remove != "":
 			command = protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: *remove}
 		default:
@@ -112,6 +115,21 @@ func outposts(args []string) error {
 		var message protocol.OutpostsUpdatedMessage
 		if err := json.Unmarshal(data, &message); err != nil {
 			return err
+		}
+		if *update != "" {
+			fmt.Println(string(data))
+			for _, row := range message.Outposts {
+				if row.ID != *update || row.Update == nil {
+					continue
+				}
+				if row.Update.Phase == protocol.OutpostUpdatePhaseDone {
+					return nil
+				}
+				if row.Update.Phase == protocol.OutpostUpdatePhaseFailed {
+					return errors.New(protocol.Deref(row.Update.Outcome))
+				}
+			}
+			continue
 		}
 		if done, err := report(data, message, *watch, *remove, *until, *add, *repair); done || err != nil {
 			return err

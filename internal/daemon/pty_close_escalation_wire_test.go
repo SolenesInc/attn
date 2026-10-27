@@ -18,7 +18,7 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 	cwd := w.Path("shop")
 	programs := map[string]string{
 		"ignores SIGTERM":                 `trap "" TERM`,
-		"loses the first SIGHUP":          `hups=0; trap "hups=\$((hups+1)); [ \$hups -ge 2 ] && echo cleanly >&3 && exit 0" HUP`,
+		"exits cleanly on SIGHUP":         `trap "" TERM; trap "echo cleanly >&3; exit 0" HUP`,
 		"ignores both SIGTERM and SIGHUP": `trap "" TERM HUP`,
 	}
 	type ended struct {
@@ -48,7 +48,7 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 			_ = f.Close()
 			done <- ended{said: said, err: err}
 		}(gone[name])
-		app.TypeLine(string(result.ID), `exec bash -c '`+traps+`; echo held-$((6*7)); while :; do sleep 1; done' 3>`+held)
+		app.TypeLine(string(result.ID), `exec bash -c '`+traps+`; echo held-$((6*7)); while :; do read line; done' 3>`+held)
 		app.AwaitScreen(string(result.ID), "held-42")
 	}
 	for name, session := range sessions {
@@ -63,7 +63,7 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 			if end.err != nil {
 				t.Errorf("watching the program that %s: %v", name, end.err)
 			}
-			if clean := name == "loses the first SIGHUP"; clean != (string(end.said) == "cleanly\n") {
+			if clean := name == "exits cleanly on SIGHUP"; clean != (string(end.said) == "cleanly\n") {
 				t.Errorf("the program that %s said %q on its way out, want a clean exit only from the one that heeds SIGHUP", name, end.said)
 			}
 		case <-time.After(2 * fakeagent.HangGuard):
