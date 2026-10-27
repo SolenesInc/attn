@@ -485,7 +485,7 @@ type ApplyMonitorViewMessage struct {
 
 type ApplyMonitorViewResult struct {
 	// Switch corresponds to the JSON schema field "switch".
-	Switch *SwitchAnswer `json:"switch,omitempty,omitzero"`
+	Switch *SwitchOutcome `json:"switch,omitempty,omitzero"`
 }
 
 type ApprovePRMessage struct {
@@ -12334,15 +12334,15 @@ type SupportSnapshotResultMessage struct {
 	WarningCodes []string `json:"warning_codes"`
 }
 
-type SwitchAnswer struct {
+type SwitchOutcome struct {
 	// Conversation corresponds to the JSON schema field "conversation".
 	Conversation string `json:"conversation"`
 
 	// Cost corresponds to the JSON schema field "cost".
 	Cost *string `json:"cost,omitempty,omitzero"`
 
-	// Outcome corresponds to the JSON schema field "outcome".
-	Outcome SwitchOutcome `json:"outcome"`
+	// Kind corresponds to the JSON schema field "kind".
+	Kind SwitchOutcomeKind `json:"kind"`
 
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
@@ -12351,13 +12351,13 @@ type SwitchAnswer struct {
 	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
-type SwitchOutcome string
+type SwitchOutcomeKind string
 
-const SwitchOutcomeBound SwitchOutcome = "bound"
-const SwitchOutcomeDropped SwitchOutcome = "dropped"
-const SwitchOutcomeInPlace SwitchOutcome = "in_place"
-const SwitchOutcomeOpened SwitchOutcome = "opened"
-const SwitchOutcomeShows SwitchOutcome = "shows"
+const SwitchOutcomeKindBound SwitchOutcomeKind = "bound"
+const SwitchOutcomeKindDropped SwitchOutcomeKind = "dropped"
+const SwitchOutcomeKindInPlace SwitchOutcomeKind = "in_place"
+const SwitchOutcomeKindOpened SwitchOutcomeKind = "opened"
+const SwitchOutcomeKindShows SwitchOutcomeKind = "shows"
 
 type Task struct {
 	// Attempts corresponds to the JSON schema field "attempts".

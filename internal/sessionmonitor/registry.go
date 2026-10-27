@@ -43,7 +43,7 @@ type Host interface {
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time
 	EnqueueTitle(m *Monitor, conversation, source string) error
-	Answered(*Monitor, Answer)
+	SwitchApplied(*Monitor, SwitchOutcome)
 }
 
 type ClassifyRequest struct {

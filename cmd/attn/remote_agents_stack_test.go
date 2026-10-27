@@ -152,11 +152,11 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 	}
 }
 
-func TestOutpostSwitchesKeepTheirHistoryWhileTheHomeAnswerWaits(t *testing.T) {
-	for _, point := range []string{pausepoint.ConversationSwitchDecision, pausepoint.ConversationSwitchAnswer} {
+func TestOutpostSwitchesKeepTheirHistoryWhileTheHomeOutcomeWaits(t *testing.T) {
+	for _, point := range []string{pausepoint.ConversationSwitchDecision, pausepoint.ConversationSwitchOutcome} {
 		t.Run(point, func(t *testing.T) {
 			home := testworld.NewStack(t)
-			answer := home.PauseAt(point)
+			outcome := home.PauseAt(point)
 			outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 			pair := testworld.PrepareOutpostPair(t, home, outpost)
 			pair.Start()
@@ -171,7 +171,7 @@ func TestOutpostSwitchesKeepTheirHistoryWhileTheHomeAnswerWaits(t *testing.T) {
 			testworld.AwaitSession(app, first, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) && s.Usage != nil })
 			app.TypeLine(first, "/clear")
 			agent.Prompted()
-			answer.Await()
+			outcome.Await()
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "middle\r"})
 			agent.Prompted()
 			agent.Reply("Middle ready. <!-- attn:state=waiting_input -->")
@@ -180,7 +180,7 @@ func TestOutpostSwitchesKeepTheirHistoryWhileTheHomeAnswerWaits(t *testing.T) {
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "last\r"})
 			agent.Prompted()
 			agent.Reply("Last ready. <!-- attn:state=waiting_input -->")
-			answer.Release()
+			outcome.Release()
 			middle := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
 				return e.Session != nil && protocol.Deref(e.Session.Succeeds) == protocol.SessionID(first)
 			}).Session
@@ -440,7 +440,7 @@ func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 
 func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T) {
 	home := testworld.NewStack(t)
-	answer := home.PauseAt(pausepoint.ConversationSwitchAnswer)
+	outcome := home.PauseAt(pausepoint.ConversationSwitchOutcome)
 	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	bound := outpost.PauseAt(pausepoint.ConversationCandidateBound)
@@ -458,7 +458,7 @@ func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T)
 	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
 	app.TypeLine(first, "/clear")
 	agent.Prompted()
-	answer.Await()
+	outcome.Await()
 	bound.Await()
 	bound.Release()
 	next := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
@@ -470,7 +470,7 @@ func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T)
 	testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
 		return e.SessionLedgerEntry != nil && e.SessionLedgerEntry.ID == next.ID
 	})
-	answer.Release()
+	outcome.Release()
 	outpost.Stop()
 	outpost.Start()
 	applied.Await()
@@ -862,7 +862,7 @@ func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *test
 	started := home.PauseEvery(pausepoint.OutpostRecoveryStarted)
 	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
 	decision := home.PauseEvery(pausepoint.ConversationSwitchDecision)
-	answer := home.PauseEvery(pausepoint.ConversationSwitchAnswer)
+	outcome := home.PauseEvery(pausepoint.ConversationSwitchOutcome)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()
@@ -885,8 +885,8 @@ func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *test
 	agent.Prompted()
 	decision.Await()
 	decision.Release()
-	answer.Await()
-	answer.Release()
+	outcome.Await()
+	outcome.Release()
 	second := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && protocol.Deref(e.Session.Succeeds) == protocol.SessionID(first)
 	}).Session
@@ -907,12 +907,12 @@ func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *test
 	started.Await()
 	decision.Await()
 	decision.Release()
-	answer.Await()
+	outcome.Await()
 	testworld.AwaitSince(app, mark, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && string(e.Session.ID) == first })
 	started.Release()
 	applied.Await()
 	applied.Release()
-	answer.Release()
+	outcome.Release()
 	ready := testworld.AwaitSessionSince(app, mark, first, func(s protocol.Session) bool {
 		return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens == 4*len(reply)
 	})

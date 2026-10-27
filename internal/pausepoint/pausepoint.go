@@ -42,7 +42,7 @@ const (
 	ConversationSwitchDecision = "conversation-switch-decision"
 	ConversationOwnerResolved  = "conversation-owner-resolved"
 	ConversationSwitchObserved = "conversation-switch-observed"
-	ConversationSwitchAnswer   = "conversation-switch-answer"
+	ConversationSwitchOutcome  = "conversation-switch-outcome"
 	ConversationInputLookup    = "conversation-input-lookup"
 	ConversationCandidateBound = "conversation-candidate-bound"
 	ConversationSwitchDropped  = "conversation-switch-dropped"

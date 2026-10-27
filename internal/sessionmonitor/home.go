@@ -11,22 +11,22 @@ import (
 )
 
 type Home interface {
-	Applied(View) (Answer, bool)
+	Applied(View) (SwitchOutcome, bool)
 }
 
-type SwitchOutcome string
+type SwitchOutcomeKind string
 
 const (
-	SwitchBound   SwitchOutcome = "bound"
-	SwitchOpened  SwitchOutcome = "opened"
-	SwitchShows   SwitchOutcome = "shows"
-	SwitchInPlace SwitchOutcome = "in_place"
-	SwitchDropped SwitchOutcome = "dropped"
+	SwitchBound   SwitchOutcomeKind = "bound"
+	SwitchOpened  SwitchOutcomeKind = "opened"
+	SwitchShows   SwitchOutcomeKind = "shows"
+	SwitchInPlace SwitchOutcomeKind = "in_place"
+	SwitchDropped SwitchOutcomeKind = "dropped"
 )
 
-type Answer struct {
+type SwitchOutcome struct {
 	Conversation string
-	Outcome      SwitchOutcome
+	Kind         SwitchOutcomeKind
 	Session      protocol.SessionID
 	Reason       string
 	Cost         *sessioncost.Checkpoint

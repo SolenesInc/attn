@@ -23,12 +23,12 @@ func (r *monitorIndex) bindingOf(h *monitorHome) (protocol.SessionID, *monitorBi
 	return "", nil
 }
 
-func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.Answer, bool) {
+func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.SwitchOutcome, bool) {
 	if !h.apply(view, false) {
-		return sessionmonitor.Answer{}, false
+		return sessionmonitor.SwitchOutcome{}, false
 	}
 	if h.daemon.monitors().copied(h.sessionID()) {
-		return sessionmonitor.Answer{}, true
+		return sessionmonitor.SwitchOutcome{}, true
 	}
 	pending := view.PendingSwitch.V
 	if pending.NativeID != "" && pending.Terminal == "" {
@@ -42,14 +42,14 @@ func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.Answer, 
 		}
 	}
 	if current, _ := h.monitor.PendingSwitch(); current != pending {
-		return sessionmonitor.Answer{}, true
+		return sessionmonitor.SwitchOutcome{}, true
 	}
-	answer := h.daemon.answerMonitorSwitch(h.sessionID(), pending, h.monitor)
-	if answer.Outcome == sessionmonitor.SwitchOpened || answer.Outcome == sessionmonitor.SwitchShows {
+	outcome := h.daemon.resolveMonitorSwitch(h.sessionID(), pending, h.monitor)
+	if outcome.Kind == sessionmonitor.SwitchOpened || outcome.Kind == sessionmonitor.SwitchShows {
 		crashpoint.At("monitor-switch-applied")
-		pausepoint.At(pausepoint.ConversationSwitchAnswer)
+		pausepoint.At(pausepoint.ConversationSwitchOutcome)
 	}
-	return answer, true
+	return outcome, true
 }
 
 func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {

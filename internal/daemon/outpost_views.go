@@ -47,19 +47,19 @@ func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitor
 			pausepoint.At(pausepoint.ConversationSwitchDecision)
 		}
 	}
-	answer := d.answerMonitorSwitch(msg.SessionID, proposed, nil)
-	if answer.Outcome == sessionmonitor.SwitchOpened || answer.Outcome == sessionmonitor.SwitchShows {
+	outcome := d.resolveMonitorSwitch(msg.SessionID, proposed, nil)
+	if outcome.Kind == sessionmonitor.SwitchOpened || outcome.Kind == sessionmonitor.SwitchShows {
 		crashpoint.At("monitor-switch-applied")
-		pausepoint.At(pausepoint.ConversationSwitchAnswer)
+		pausepoint.At(pausepoint.ConversationSwitchOutcome)
 	}
 	result := protocol.ApplyMonitorViewResult{}
-	if answer.Conversation != "" {
-		result.Switch = &protocol.SwitchAnswer{Conversation: answer.Conversation, Outcome: protocol.SwitchOutcome(answer.Outcome), SessionID: protocol.Ptr(answer.Session)}
-		if answer.Reason != "" {
-			result.Switch.Reason = &answer.Reason
+	if outcome.Conversation != "" {
+		result.Switch = &protocol.SwitchOutcome{Conversation: outcome.Conversation, Kind: protocol.SwitchOutcomeKind(outcome.Kind), SessionID: protocol.Ptr(outcome.Session)}
+		if outcome.Reason != "" {
+			result.Switch.Reason = &outcome.Reason
 		}
-		if answer.Cost != nil {
-			raw, err := json.Marshal(answer.Cost)
+		if outcome.Cost != nil {
+			raw, err := json.Marshal(outcome.Cost)
 			if err != nil {
 				return result, err
 			}
@@ -129,16 +129,16 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 	}
 }
 
-func (d *Daemon) applyOutpostSwitch(monitor *sessionmonitor.Monitor, reply protocol.SwitchAnswer) error {
-	answer := sessionmonitor.Answer{Conversation: reply.Conversation, Outcome: sessionmonitor.SwitchOutcome(reply.Outcome), Session: protocol.Deref(reply.SessionID), Reason: protocol.Deref(reply.Reason)}
+func (d *Daemon) applyOutpostSwitch(monitor *sessionmonitor.Monitor, reply protocol.SwitchOutcome) error {
+	outcome := sessionmonitor.SwitchOutcome{Conversation: reply.Conversation, Kind: sessionmonitor.SwitchOutcomeKind(reply.Kind), Session: protocol.Deref(reply.SessionID), Reason: protocol.Deref(reply.Reason)}
 	if reply.Cost != nil {
-		answer.Cost = &sessioncost.Checkpoint{}
-		if err := json.Unmarshal([]byte(*reply.Cost), answer.Cost); err != nil {
+		outcome.Cost = &sessioncost.Checkpoint{}
+		if err := json.Unmarshal([]byte(*reply.Cost), outcome.Cost); err != nil {
 			return err
 		}
 	}
 
-	(monitorHost{daemon: d}).Answered(monitor, answer)
+	(monitorHost{daemon: d}).SwitchApplied(monitor, outcome)
 	return nil
 }
 

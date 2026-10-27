@@ -78,10 +78,10 @@ func (m *Monitor) publish(view View) bool {
 }
 
 func (m *Monitor) applyHome(view View, switching bool) bool {
-	answer, applied := m.home.Applied(view)
+	outcome, applied := m.home.Applied(view)
 	m.react(view)
-	if applied && answer.Conversation != "" {
-		m.registry.host.Answered(m, answer)
+	if applied && outcome.Conversation != "" {
+		m.registry.host.SwitchApplied(m, outcome)
 	}
 	if switching {
 		m.mu.Lock()

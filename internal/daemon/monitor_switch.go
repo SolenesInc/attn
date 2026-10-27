@@ -8,11 +8,11 @@ import (
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
-func (d *Daemon) answerMonitorSwitch(session protocol.SessionID, proposed sessionmonitor.Conversation, source *sessionmonitor.Monitor) sessionmonitor.Answer {
+func (d *Daemon) resolveMonitorSwitch(session protocol.SessionID, proposed sessionmonitor.Conversation, source *sessionmonitor.Monitor) sessionmonitor.SwitchOutcome {
 	if proposed.NativeID == "" {
-		return sessionmonitor.Answer{}
+		return sessionmonitor.SwitchOutcome{}
 	}
-	answer := sessionmonitor.Answer{Conversation: proposed.NativeID, Outcome: sessionmonitor.SwitchDropped, Reason: "conversation switch was refused"}
+	outcome := sessionmonitor.SwitchOutcome{Conversation: proposed.NativeID, Kind: sessionmonitor.SwitchDropped, Reason: "conversation switch was refused"}
 	observation := agentConversationObservation{SessionID: session, NativeID: proposed.NativeID, TranscriptPath: proposed.TranscriptPath}
 	before := session
 	if proposed.Terminal != "" {
@@ -26,11 +26,11 @@ func (d *Daemon) answerMonitorSwitch(session protocol.SessionID, proposed sessio
 		defer d.lockSessionLifecycles(session)()
 		if source != nil {
 			if pending, _ := source.PendingSwitch(); pending != proposed {
-				return answer
+				return outcome
 			}
 		}
 		if d.store.Get(session) == nil {
-			return answer
+			return outcome
 		}
 		transition := d.store.TransitionSessionConversation
 		if proposed.Proposal == sessionmonitor.ConversationReported {
@@ -47,54 +47,54 @@ func (d *Daemon) answerMonitorSwitch(session protocol.SessionID, proposed sessio
 	if proposed.Terminal != "" {
 		shown, _ = d.terminals().Showing(proposed.Terminal)
 	}
-	answer.Session = shown
+	outcome.Session = shown
 	if !accepted && d.store.GetSessionConversation(shown).NativeID != proposed.NativeID {
-		return answer
+		return outcome
 	}
-	answer.Reason = ""
-	answer.Outcome = sessionmonitor.SwitchInPlace
+	outcome.Reason = ""
+	outcome.Kind = sessionmonitor.SwitchInPlace
 	if held == "" || held == proposed.NativeID {
-		answer.Outcome = sessionmonitor.SwitchBound
+		outcome.Kind = sessionmonitor.SwitchBound
 	}
 	if shown != before {
-		answer.Outcome = sessionmonitor.SwitchShows
+		outcome.Kind = sessionmonitor.SwitchShows
 		if current := d.store.Get(shown); current != nil && protocol.Deref(current.Succeeds) == session {
-			answer.Outcome = sessionmonitor.SwitchOpened
+			outcome.Kind = sessionmonitor.SwitchOpened
 		}
 	}
 	if cost, err := d.store.SessionCostCheckpoint(shown); err == nil {
-		answer.Cost = &cost
+		outcome.Cost = &cost
 	}
-	return answer
+	return outcome
 }
 
-func (h monitorHost) Answered(source *sessionmonitor.Monitor, answer sessionmonitor.Answer) {
+func (h monitorHost) SwitchApplied(source *sessionmonitor.Monitor, outcome sessionmonitor.SwitchOutcome) {
 	d := h.daemon
-	candidate := source.Candidate(answer.Conversation)
+	candidate := source.Candidate(outcome.Conversation)
 	if candidate == nil {
 		return
 	}
-	if answer.Outcome == sessionmonitor.SwitchDropped {
+	if outcome.Kind == sessionmonitor.SwitchDropped {
 		source.AdoptDropped(candidate)
-		source.SettleSwitch(answer.Conversation, source, answer.Reason)
+		source.SettleSwitch(outcome.Conversation, source, outcome.Reason)
 		pausepoint.At(pausepoint.ConversationSwitchDropped)
 		return
 	}
 	d.bindMonitorTerminals()
 }
 
-func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor, answer sessionmonitor.Answer) {
+func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor, outcome sessionmonitor.SwitchOutcome) {
 	proposed, ok := source.PendingSwitch()
 	if !ok {
 		return
 	}
-	shown := answer.Session
+	shown := outcome.Session
 	if proposed.Terminal != "" {
 		shown, _ = d.terminals().Showing(proposed.Terminal)
 	}
 	defer d.lockSessionLifecycles(source.Session(), shown)()
 	defer d.lockTerminalEnds(shown)()
-	if current, _ := source.PendingSwitch(); current != proposed || source.Candidate(answer.Conversation) != candidate {
+	if current, _ := source.PendingSwitch(); current != proposed || source.Candidate(outcome.Conversation) != candidate {
 		return
 	}
 	if proposed.Terminal != "" {
@@ -102,7 +102,7 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 			return
 		}
 	}
-	if shown == "" || d.store.GetSessionConversation(shown).NativeID != answer.Conversation {
+	if shown == "" || d.store.GetSessionConversation(shown).NativeID != outcome.Conversation {
 		return
 	}
 	monitor := d.startSessionMonitorFrom(shown, source.Session(), candidate)
@@ -118,7 +118,7 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 		monitor.WatchDriverUsage(driver.TranscriptPath)
 	}
 	monitor.EnsureTranscriptWatcher(proposed.TranscriptPath)
-	if !source.SettleSwitch(answer.Conversation, monitor, "") {
+	if !source.SettleSwitch(outcome.Conversation, monitor, "") {
 		return
 	}
 	if source.Session() != monitor.Session() && d.store.Get(source.Session()) == nil {
@@ -159,7 +159,7 @@ func (d *Daemon) bindMonitorTerminals() {
 		if shown == "" || d.store.GetSessionConversation(shown).NativeID != proposed.NativeID {
 			continue
 		}
-		d.bindMonitorCandidate(source, candidate, sessionmonitor.Answer{Conversation: proposed.NativeID, Session: shown})
+		d.bindMonitorCandidate(source, candidate, sessionmonitor.SwitchOutcome{Conversation: proposed.NativeID, Session: shown})
 	}
 	for terminal := range d.localLiveTerminals(d.life.Context()) {
 		shown, ok := d.shownIn(terminal)
