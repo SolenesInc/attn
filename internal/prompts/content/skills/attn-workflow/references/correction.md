@@ -2,7 +2,7 @@
 
 Principles this process relies on: [Encode lessons in structure](../principles/encode-lessons-in-structure.md), [Parse, don't validate](../principles/parse-dont-validate.md), [Test behavior, not implementation](../principles/test-behavior-not-implementation.md), [Update what a decision overturns](../principles/update-what-a-decision-overturns.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
 
-Use this process when a kind of mistake keeps coming back: the user or a reviewer corrects agents for it a second time, a review finding repeats an earlier one, or a bug's cause has happened before. Fix the class, not only the instance, so the next agent cannot make it.
+Use this process when a kind of mistake keeps coming back: the user or a reviewer corrects agents for it a second time, a review finding repeats an earlier one, or a bug's cause has happened before. It also applies when you find yourself writing the same instruction a second time, such as one rule repeated across briefs. Fix the class, not only the instance, so the next agent cannot make it.
 
 Assume the next contributor is an agent that sees only the files it opened, copies the nearest example, and takes the shortest path that compiles, as [Design](design.md) describes under Check the structure behind it. An instruction that agent never opens does not reach it.
 

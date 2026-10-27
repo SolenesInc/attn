@@ -1,6 +1,6 @@
 # Discuss
 
-Principles this process relies on: [Experience first](../principles/experience-first.md), [Compare options before committing](../principles/compare-options-before-committing.md), [Refactor first](../principles/refactor-first.md), [Subtract before you add](../principles/subtract-before-you-add.md), [Never block on the user](../principles/never-block-on-the-user.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+Principles this process relies on: [Experience first](../principles/experience-first.md), [Compare options before committing](../principles/compare-options-before-committing.md), [Refactor first](../principles/refactor-first.md), [Subtract before you add](../principles/subtract-before-you-add.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
 
 For an informational question, use the investigation guidance below and return the explanation or evidence requested. Use the interview rounds when the user is developing an idea or plan.
 

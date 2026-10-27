@@ -54,7 +54,7 @@ Structure:
 - [Minimize reader load](principles/minimize-reader-load.md): code that is hard to trace. Cut layers to trace and state to hold in mind.
 - [Make operations idempotent](principles/make-operations-idempotent.md): a step that changes state and can be interrupted or retried. Converge on the same end state from any partial run.
 - [Separate before serializing shared state](principles/separate-before-serializing-shared-state.md): concurrent actors, processes or agents, that might write the same thing. Remove the sharing before adding a lock.
-- [Migrate callers, then delete the old way](principles/migrate-callers-then-delete-the-old-way.md): a new interface replacing an old one. Move every caller and delete the old one in the same change.
+- [Migrate callers, then delete the old way](principles/migrate-callers-then-delete-the-old-way.md): a new interface replacing an old one. Move every caller you own and delete the old one in the same piece of work; name the callers you cannot change.
 - [Converge on the outcome](principles/converge-on-the-outcome.md): a planned rewrite or migration. Aim at the verified end state, not smooth midpoints held up by throwaway compatibility code.
 
 Verification:
@@ -69,10 +69,10 @@ Verification:
 
 Working with the user and other agents:
 
-- [Never block on the user](principles/never-block-on-the-user.md): tempted to ask the user something during execution. Decide reversible calls, settle facts by running them, and ask with `attn ask` only what is theirs.
+- [Never block on the user](principles/never-block-on-the-user.md): tempted to stop and ask during execution. Decide reversible calls, settle facts by running them, and bring the rest to your coordinator or the user.
 - [Guard the context window](principles/guard-the-context-window.md): large outputs, files or searches, or work that may outlast your context. Delegate the bulk and keep what must survive in the seed.
 - [Update what a decision overturns](principles/update-what-a-decision-overturns.md): the user's decision contradicts docs, code, or agent guidance. Change them in the task, or plant a seed.
-- [Encode lessons in structure](principles/encode-lessons-in-structure.md): the same kind of mistake corrected a second time. Fix the class with structure, not another instruction.
+- [Encode lessons in structure](principles/encode-lessons-in-structure.md): the same kind of mistake corrected, or the same instruction written, a second time. Fix the class with structure, not another instruction.
 
 ## Writing
 
