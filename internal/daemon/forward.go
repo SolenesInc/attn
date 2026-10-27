@@ -65,7 +65,7 @@ func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionI
 	}
 	defer channel.Close()
 	completed := make(chan bool, 1)
-	go func() {
+	goTransport(func() {
 		done := false
 		for request := range requests {
 			if request.Type == forwardComplete {
@@ -76,13 +76,13 @@ func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionI
 			}
 		}
 		completed <- done
-	}()
+	})
 	inputEnded := make(chan struct{})
-	go func() {
+	goTransport(func() {
 		defer close(inputEnded)
 		_, _ = io.Copy(channel, socket)
 		_ = channel.CloseWrite()
-	}()
+	})
 	defer func() {
 		_ = channel.Close()
 		_ = socket.SetReadDeadline(time.Now())
@@ -135,26 +135,26 @@ func (d *Daemon) forwardBridgeHandler(host string) func(*bridge.Conn, ssh.NewCha
 				return
 			}
 			defer channel.Close()
-			go ssh.DiscardRequests(requests)
+			goTransport(func() { ssh.DiscardRequests(requests) })
 			stop := context.AfterFunc(conn.Context(), func() { _ = relay.Close() })
 			defer stop()
 			inputEnded := make(chan struct{})
-			go func() {
+			goTransport(func() {
 				defer close(inputEnded)
 				if _, err := relay.Write(append(request.Frame, '\n')); err == nil {
 					_, _ = io.Copy(relay, channel)
 				}
 				_ = relay.CloseWrite()
-			}()
+			})
 			outputEnded := make(chan struct{})
-			go func() {
+			goTransport(func() {
 				defer close(outputEnded)
 				if _, err := io.Copy(channel, relay); err == nil {
 					_, _ = channel.SendRequest(forwardComplete, true, nil)
 				}
 				_ = channel.CloseWrite()
 				_ = channel.Close()
-			}()
+			})
 			ctx := context.WithValue(d.life.Context(), originKey{}, Origin{Host: host, Name: row.Name, Caller: request.Caller, bridge: conn})
 			d.handleConnectionContext(ctx, server)
 			<-outputEnded

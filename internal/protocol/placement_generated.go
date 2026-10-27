@@ -139,7 +139,7 @@ var Placements = map[string][]Placement{
 	"record_vent":                      {Placement{LocatorHome, ""}},
 	"rename_session":                   {Placement{LocatorHome, ""}},
 	"restart_shared_codex":             {Placement{LocatorHere, ""}},
-	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
+	"seed_artifact_transfer":           {Placement{LocatorHere, ""}},
 	"seed_check":                       {Placement{LocatorHome, ""}},
 	"seed_edit":                        {Placement{LocatorHome, ""}},
 	"seed_link":                        {Placement{LocatorHome, ""}},
@@ -1579,7 +1579,7 @@ func (SeedArtifactTransferMessage) CommandName() string {
 }
 
 func (m SeedArtifactTransferMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
+	return Placement{LocatorHere, ""}
 }
 
 func (m SeedArtifactTransferMessage) Locate() string {

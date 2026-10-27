@@ -2562,13 +2562,17 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 			d.sendError(conn, fmt.Sprintf("%s declares no placement", cmd))
 			return
 		}
-		if place.Locator == protocol.LocatorHome {
+		if place.Locator == protocol.LocatorHome || cmd == protocol.CmdSeedArtifactTransfer {
 			status, statusErr := enrollment.Load(d.dataRoot)
 			if statusErr != nil {
 				d.sendError(conn, statusErr.Error())
 				return
 			}
 			if !status.IsHome() {
+				if cmd == protocol.CmdSeedArtifactTransfer {
+					d.sendError(conn, fmt.Sprintf("%s is not supported on outpost %s until Notebook sync is available", cmd, d.bridgeIdentity().Name))
+					return
+				}
 				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, d.callerSession(ctx, data))
 				return
 			}
@@ -2587,7 +2591,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 
 	if origin, remote := OriginOf(ctx); remote {
 		switch cmd {
-		case protocol.CmdOpenMarkdown, protocol.CmdOpenBrowser, protocol.CmdBrowserControl, protocol.CmdSeedArtifactTransfer:
+		case protocol.CmdOpenMarkdown, protocol.CmdOpenBrowser, protocol.CmdBrowserControl:
 			d.sendError(conn, fmt.Sprintf("%s is not supported from %s", cmd, origin.Name))
 			return
 		case protocol.CmdOpenSentFiles:

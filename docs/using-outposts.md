@@ -118,7 +118,8 @@ is lost during a command, the error says that it may have run.
 
 Files on an outpost don't open on the Mac yet. **Open in editor** and
 ⌘-clicked paths in an outpost shell fail and name the outpost, and nothing
-opens a Mac file that happens to have the same path. With an outpost shell
+opens a Mac file that happens to have the same path. Attaching or detaching a
+seed file from an outpost also fails before any file changes. With an outpost shell
 in front, the editor tile and the file opener (⌘P) start at your notebook
 root.
 

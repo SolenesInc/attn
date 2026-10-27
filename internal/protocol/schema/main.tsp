@@ -5641,7 +5641,7 @@ model SeedArtifact {
 // Move or copy a local file into seed ownership, or detach one to an explicit
 // destination. Source and destination paths are absolute so the daemon,
 // never a caller's cwd, decides which file is mutated.
-@extension("x-on", #{ home: true })
+@extension("x-on", #{ here: true })
 model SeedArtifactTransferMessage {
   "profile_id"?: string;
 
