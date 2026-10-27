@@ -266,3 +266,35 @@ func TestNotebookConflictsAndMissingMarkerAreVisibleAfterReconnect(t *testing.T)
 	requireStdout(t, outpost.Attn("settings", "get", "notebook_sync_last_error"), "folder marker missing")
 	t.Logf("restart preserved sync index; missing marker stayed missing, row error=%s", protocol.Deref(state.Error))
 }
+
+func TestNotebookConflictsUnderDotDirectoriesFollowTheFiles(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	writeNotebookFile(t, home, filepath.Join(".private", "café.sync-conflict-20261027-120000-device.md"), "startup copy")
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	initial := awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	if count := protocol.Deref(initial.Conflicts); count != 1 {
+		t.Fatalf("startup conflict count=%d, want 1", count)
+	}
+	pair.App = home.App()
+	name := filepath.Join(".private", "note.sync-conflict-20261027-120000-device.md")
+	writeNotebookFile(t, home, name, "conflict copy")
+	state := testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		_, err := os.Stat(notebookPath(outpost, name))
+		return err == nil && len(m.Outposts) == 1 && m.Outposts[0].Notebook != nil && m.Outposts[0].Notebook.State == protocol.OutpostNotebookStateInSync && protocol.Deref(m.Outposts[0].Notebook.Conflicts) == 2
+	})
+	if count := protocol.Deref(state.Outposts[0].Notebook.Conflicts); count != 2 {
+		t.Fatalf("dot-directory conflict count=%d, want 2", count)
+	}
+	pair.App = home.App()
+	if err := os.RemoveAll(notebookPath(home, ".private")); err != nil {
+		t.Fatal(err)
+	}
+	state = testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		_, err := os.Stat(notebookPath(outpost, name))
+		return os.IsNotExist(err) && len(m.Outposts) == 1 && m.Outposts[0].Notebook != nil && m.Outposts[0].Notebook.State == protocol.OutpostNotebookStateInSync && protocol.Deref(m.Outposts[0].Notebook.Conflicts) == 0
+	})
+	if count := protocol.Deref(state.Outposts[0].Notebook.Conflicts); count != 0 {
+		t.Fatalf("deleted directory conflict count=%d, want 0", count)
+	}
+}

@@ -110,6 +110,8 @@ github.com/victorarias/syncthing v0.1.4 h1:fAT+FDDY6SKERjqFcMz2u7FAL/NeE8qAZYilW
 github.com/victorarias/syncthing v0.1.4/go.mod h1:CYYySMvJ5j3SdL9qK1LG/vEebkppJ3okB1K/SumCTXE=
 github.com/victorarias/syncthing v0.1.5 h1:PQi3JmuXfWlaSPSIS5jMV9wEN4IV6xUSMmS4JasXLQA=
 github.com/victorarias/syncthing v0.1.5/go.mod h1:CYYySMvJ5j3SdL9qK1LG/vEebkppJ3okB1K/SumCTXE=
+github.com/victorarias/syncthing v0.1.6 h1:W89ccbzGXmum74fDrndXaNPF51EE4ypvzXgwNzmpwVU=
+github.com/victorarias/syncthing v0.1.6/go.mod h1:CYYySMvJ5j3SdL9qK1LG/vEebkppJ3okB1K/SumCTXE=
 github.com/wlynxg/anet v0.0.5 h1:J3VJGi1gvo0JwZ/P1/Yc/8p63SoW98B5dHkYDmpgvvU=
 github.com/wlynxg/anet v0.0.5/go.mod h1:eay5PRQr7fIVAMbTbchTnO9gG65Hg/uYGdc7mguHxoA=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=

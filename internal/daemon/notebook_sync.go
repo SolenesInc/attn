@@ -25,6 +25,7 @@ import (
 	"github.com/victorarias/syncthing/lib/events"
 	syncprotocol "github.com/victorarias/syncthing/lib/protocol"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/text/unicode/norm"
 )
 
 const notebookChannel = "notebook"
@@ -64,7 +65,7 @@ type notebookSyncRun struct {
 	ctx          context.Context
 	snapshots    map[string]notebookSyncSnapshot
 	remote       map[string]notebookSyncSnapshot
-	conflicts    int
+	conflicts    map[string]struct{}
 	homeState    protocol.OutpostNotebook
 }
 
@@ -266,7 +267,7 @@ func (d *Daemon) startNotebookSync(home, root string, peers []string) error {
 		return err
 	}
 	ctx, cancel := context.WithCancel(d.life.Context())
-	run := &notebookSyncRun{engine: engine, folder: "notebook-" + home, disk: disk, peers: slices.Clone(peers), cancel: cancel, ctx: ctx, done: make(chan struct{}), snapshots: map[string]notebookSyncSnapshot{}, remote: map[string]notebookSyncSnapshot{}, streamErrors: map[string]string{}}
+	run := &notebookSyncRun{engine: engine, folder: "notebook-" + home, disk: disk, peers: slices.Clone(peers), cancel: cancel, ctx: ctx, done: make(chan struct{}), snapshots: map[string]notebookSyncSnapshot{}, remote: map[string]notebookSyncSnapshot{}, conflicts: map[string]struct{}{}, streamErrors: map[string]string{}}
 	d.notebookSync.mu.Lock()
 	d.notebookSync.run = run
 	d.notebookSync.mu.Unlock()
@@ -298,10 +299,21 @@ func (d *Daemon) startNotebookSync(home, root string, peers []string) error {
 			d.refreshNotebookSync(run)
 			for {
 				select {
-				case _, ok := <-sub.C():
+				case event, ok := <-sub.C():
 					if !ok {
 						return
 					}
+					if event.Type == events.LocalIndexUpdated {
+						data, _ := event.Data.(map[string]any)
+						if data["folder"] == run.folder {
+							paths, _ := data["filenames"].([]string)
+							d.updateNotebookConflicts(run, paths)
+						}
+					}
+					d.refreshNotebookSync(run)
+				case <-sub.Overflow():
+					d.logf("Notebook sync event overflow; refreshing conflicts and health")
+					d.refreshNotebookConflicts(run)
 					d.refreshNotebookSync(run)
 				case <-ctx.Done():
 					return
@@ -397,9 +409,12 @@ func (d *Daemon) refreshNotebookSync(run *notebookSyncRun) {
 	d.publishNotebookSyncSettings()
 }
 
-func (d *Daemon) notebookConflictCopies(root string) int {
-	count := 0
+func (d *Daemon) notebookConflictCopies(root string) (map[string]struct{}, error) {
+	copies := map[string]struct{}{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -416,25 +431,65 @@ func (d *Daemon) notebookConflictCopies(root string) int {
 		if !entry.Type().IsRegular() || !attnsync.IsConflict(path) {
 			return nil
 		}
-		count++
-		sum := sha256.Sum256([]byte(root + "\x00" + filepath.ToSlash(rel)))
-		notification, inserted, err := d.store.EnsureNotification(store.NotificationRecord{
-			ID: "notebook-conflict-" + hex.EncodeToString(sum[:]), Kind: "notebook_sync_conflict", Severity: store.NotificationWarning,
-			Title: "Notebook conflict copy", Body: fmt.Sprintf("Both versions were kept. Compare %s and %s, merge what you need, then remove the conflict copy.", notebookConflictOriginal(path), path),
-			SourceKind: "notebook", SourceID: filepath.ToSlash(rel),
-		}, time.Now())
-		if err != nil {
-			return err
-		}
-		if inserted {
-			d.publishFact(FactNotificationCreated, notification.ID, nil)
-		}
-		return nil
+		rel = norm.NFC.String(filepath.ToSlash(rel))
+		copies[rel] = struct{}{}
+		return d.notifyNotebookConflict(root, rel)
 	})
-	if err != nil {
-		d.logf("Notebook conflicts: %v", err)
+	return copies, err
+}
+
+func (d *Daemon) notifyNotebookConflict(root, rel string) error {
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	sum := sha256.Sum256([]byte(root + "\x00" + rel))
+	notification, inserted, err := d.store.EnsureNotification(store.NotificationRecord{
+		ID: "notebook-conflict-" + hex.EncodeToString(sum[:]), Kind: "notebook_sync_conflict", Severity: store.NotificationWarning,
+		Title: "Notebook conflict copy", Body: fmt.Sprintf("Both versions were kept. Compare %s and %s, merge what you need, then remove the conflict copy.", notebookConflictOriginal(path), path),
+		SourceKind: "notebook", SourceID: rel,
+	}, time.Now())
+	if err == nil && inserted {
+		d.publishFact(FactNotificationCreated, notification.ID, nil)
 	}
-	return count
+	return err
+}
+
+func (d *Daemon) updateNotebookConflicts(run *notebookSyncRun, paths []string) {
+	if run.disk.Home != d.daemonInstanceID {
+		return
+	}
+	for _, rel := range paths {
+		if !attnsync.IsConflict(rel) {
+			continue
+		}
+		rel = norm.NFC.String(filepath.ToSlash(rel))
+		info, err := os.Lstat(filepath.Join(run.disk.Root, filepath.FromSlash(rel)))
+		if err != nil && !os.IsNotExist(err) {
+			d.logf("Notebook conflict %s: %v", rel, err)
+			continue
+		}
+		present := err == nil && info.Mode().IsRegular()
+		d.notebookSync.mu.Lock()
+		_, known := run.conflicts[rel]
+		d.notebookSync.mu.Unlock()
+		if present == known {
+			continue
+		}
+		if present {
+			if err := d.notifyNotebookConflict(run.disk.Root, rel); err != nil {
+				d.logf("Notebook conflict %s: %v", rel, err)
+				continue
+			}
+		}
+		d.notebookSync.mu.Lock()
+		if d.notebookSync.run == run {
+			if present {
+				run.conflicts[rel] = struct{}{}
+			} else {
+				delete(run.conflicts, rel)
+			}
+			d.notebookSyncChangedLocked()
+		}
+		d.notebookSync.mu.Unlock()
+	}
 }
 
 func (d *Daemon) notebookPeerState(peer, name string) (protocol.OutpostNotebook, bool) {
@@ -460,7 +515,7 @@ func (d *Daemon) notebookPeerStateLocked(peer, name string) (protocol.OutpostNot
 	complete := run.disk.Completed[peer]
 	needed := local.NeedItems + local.NeedDeletes + max(local.PeerNeedItems+local.PeerNeedDeletes, remote.NeedItems+remote.NeedDeletes)
 	bytes := local.NeedBytes + max(local.PeerNeedBytes, remote.NeedBytes)
-	info.NeedBytes, info.NeedItems, info.Conflicts = protocol.Ptr(int(bytes)), protocol.Ptr(needed), protocol.Ptr(run.conflicts)
+	info.NeedBytes, info.NeedItems, info.Conflicts = protocol.Ptr(int(bytes)), protocol.Ptr(needed), protocol.Ptr(len(run.conflicts))
 	if remote.PreviousRoot != "" {
 		info.PreviousRoot = protocol.Ptr(remote.PreviousRoot)
 	}
@@ -735,21 +790,24 @@ func (d *Daemon) refreshNotebookConflicts(run *notebookSyncRun) {
 	if run.disk.Home != d.daemonInstanceID {
 		return
 	}
-	count := d.notebookConflictCopies(run.disk.Root)
+	copies, err := d.notebookConflictCopies(run.disk.Root)
+	if err != nil {
+		d.logf("Notebook conflicts: %v", err)
+		return
+	}
 	d.notebookSync.mu.Lock()
-	if d.notebookSync.run == run && run.conflicts != count {
-		run.conflicts = count
-		d.notebookSyncChangedLocked()
+	if d.notebookSync.run == run {
+		changed := len(run.conflicts) != len(copies)
+		run.conflicts = copies
+		if changed {
+			d.notebookSyncChangedLocked()
+		}
 	}
 	d.notebookSync.mu.Unlock()
 }
 
 func (d *Daemon) notebookFilesChanged() {
 	d.life.Do("notebookFilesChanged", func() {
-		if run := d.notebookSyncEngine(); run != nil {
-			d.refreshNotebookConflicts(run)
-			d.refreshNotebookRows()
-		}
 		d.notebookSync.mu.Lock()
 		d.notebookSyncChangedLocked()
 		d.notebookSync.mu.Unlock()
