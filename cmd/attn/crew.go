@@ -50,29 +50,28 @@ func runCrew() {
 func writeCrewHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn crew <command>
 
-Manage the Crew. Members' charters and letters persist across sessions.
-New homes live in the profile's Notebook under crew/<lowercase-name>/,
-with a numeric suffix when needed. Legacy homes stay in place until move-home.
-Every member belongs to a profile
-and wakes only there. Names work within your profile, ignoring case.
-Outside attn, use --profile <name|id> when several profiles exist.
-Use member:<key> to address a member by permanent key.
+Manage crew members: permanent agents with a charter, a home folder and
+letters, the note each session leaves for the next. A new member's home is
+crew/<lowercase-name>/ in the Notebook, with a numeric suffix if that folder
+is taken. list shows each member's home. Names ignore case. member:<key>
+addresses a member by their permanent key.
 
 commands:
   create <name> [--agent <name>] [--model <name>] [--effort <level>]
                 [--cwd <dir>] [--launch-desktop <own|desktop>]
                 [--desktop-name <name>] [--profile <name|id>] [--json]
-        Create a member with their own home and launch desktop. Wake them
-        with attn crew wake <name> to begin their first day.
+        Create a member with their own home and a launch desktop. Run
+        attn crew wake <name> to start their first session.
 
   retire <member> [--profile <name|id>] [--json]
-        Take a member out of service, release claims, remove watches and
-        close their asks that aren't about a seed; asks about a seed wait for
-        its next tender. Keep their name, home and unread mail; ask an awake
-        member to sleep. Restore doesn't reopen closed asks.
+        Take a member out of service. attn releases their claims, removes
+        their watches and closes their asks that aren't about a seed. An ask
+        about a seed waits for the seed's next tender. attn asks an awake
+        member to sleep. Their name, home and unread mail stay.
 
   restore <member> [--profile <name|id>] [--json]
-        Return a retired member to service. Unread mail can wake them.
+        Return a retired member to service. Unread mail can wake them. Asks
+        that retire closed stay closed.
 
   prime
         Print your member identity, charter, letters and claimed seeds.
@@ -90,15 +89,16 @@ commands:
         If already awake, return the existing session.
 
   rename <member> <name> [--json]
-        Rename a member. Notebook homes move within their current parent folder;
-        put the member to sleep first and wait for their session to close.
-        Legacy members can be renamed while awake; their homes stay in place.
-        Their key and mail stay the same.
+        Rename a member. Their key and mail don't change. If their home is in
+        the Notebook, attn renames the folder to match, so the member must be
+        asleep: run attn crew sleep <member> and wait for their session to
+        close. A home outside the Notebook stays where it is, and its member
+        can be renamed while awake.
 
   move-home <member> [--profile <name|id>] [--json]
-        Move a legacy home, including every file, into the profile's Notebook.
-        Put the member to sleep first: attn crew sleep <member>.
-        The home and Notebook must be on the same volume.
+        Move a member's home from attn's data folder into the Notebook, with
+        every file in it. The member must be asleep: run
+        attn crew sleep <member> first.
 
   sleep <member> [--json]
         Ask the member to write a handoff and close with attn handoff --sleep.
@@ -436,7 +436,7 @@ func runCrewRename(args []string) {
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	names, err := parseInterspersedFlagArgs(fs, args)
 	if err != nil || len(names) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: attn crew rename <member> <name> [--profile <name|id>] [--json]")
+		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
 	result, err := crewClient(*profile).CrewRename(names[0], names[1])
@@ -565,7 +565,7 @@ func runCrewMoveHome(args []string) {
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	names, err := parseInterspersedFlagArgs(fs, args)
 	if err != nil || len(names) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: attn crew move-home <member> [--profile <name|id>] [--json]")
+		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
 	result, err := crewClient(*profile).CrewMoveHome(names[0])

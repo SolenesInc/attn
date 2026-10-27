@@ -49,5 +49,5 @@ export function adoptMaintainedRoles(config: DelegationPreferences, templates: D
     occupied.add(roleID);
     additions.push({ ...structuredClone(template), id: roleID });
   }
-  return { ...config, workflow_skill_enabled: true, roles: [...config.roles.filter(role => !replaced.has(role.id)), ...additions] };
+  return { ...config, enabled: true, workflow_skill_enabled: true, roles: [...config.roles.filter(role => !replaced.has(role.id)), ...additions] };
 }

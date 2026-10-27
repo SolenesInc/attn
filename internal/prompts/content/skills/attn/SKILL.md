@@ -28,19 +28,11 @@ If a command reports an unknown subcommand or version, check `attn --version`
 and `which -a attn`; recover with `"$ATTN_WRAPPER_PATH"` when it is set.
 `attn skill` prints the bundled copy of this skill and its references.
 
-Read and change settings with `attn settings list`, `get` and `set`. `list`
-describes each key, whether it applies to this profile or all profiles, and its
-accepted values; `--all` includes computed read-only values. Use
-`attn settings --help` for syntax.
+Read and change settings with `attn settings list`, `get` and `set`. `list` shows each setting, its accepted values and its scope. `--all` also shows read-only values attn computes, such as the agent CLIs it found.
 
 ## Chief
 
-Every profile has one Chief, a crew member. `attn agent msg chief "…"` reaches
-that member, even after a rename, and wakes them after a manual sleep. Until
-a harness is chosen, their mail waits. Configure them with
-`attn crew set chief --agent <harness> --model <model>`; this wakes them at once.
-Change their charter or launch settings through `attn crew`. The Chief cannot
-be retired; use `attn crew sleep chief` to ask them to sleep.
+attn has one Chief, a permanent crew member whose charter is to coordinate the user's agents and work. To message them, run `attn agent msg chief "…"`.
 
 ## Delegation and reporting
 
@@ -52,15 +44,12 @@ For delegation mechanics and configured role selection, read [references/delegat
 
 ## Capability Index
 
-- **Onboard the user as Chief, or run onboarding again:** read
-  [references/onboarding.md](references/onboarding.md).
-- **Explain how attn works:** read `attn help` and `attn help <topic>`, then
-  present the relevant guidance to the user.
+- **As Chief, onboard the user or run onboarding again:** read [references/onboarding.md](references/onboarding.md).
+- **Answer how attn works:** read `attn guide` and `attn guide <topic>`, then answer with what the user needs.
 
 - **Open shell splits, read terminals, type into them, wait, or close them:** read
   [references/terminal.md](references/terminal.md).
-- **Create, rename, move or configure a crew member:** read
-  [references/crew.md](references/crew.md).
+- **Create, rename or configure a crew member, or move their home:** read [references/crew.md](references/crew.md).
 
 - **Create an authorized Attn delegation:** read [references/delegation.md](references/delegation.md).
 - **Change the user's delegation roles, their models, alternatives or the

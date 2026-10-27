@@ -294,6 +294,7 @@ one text.
 Read the relevant entry when the task touches its subject. When changing or
 working on:
 
+- Any file in docs/internal/, before editing it => the writing-internal-docs skill
 - Database schema or migrations => docs/internal/db-migrations.md
 - Tests, before writing, changing, or deleting them => docs/internal/testing.md
 - How a harness behaves, before relying on it => docs/internal/harnesses.md; check new

@@ -1,1 +1,1 @@
-This profile was in use before you; open with the short tour.
+The user already uses attn, but you're new. Open with the tour path.
