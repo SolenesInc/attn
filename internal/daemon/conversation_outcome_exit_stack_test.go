@@ -9,9 +9,9 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAnExitBeforeASwitchAnswerEndsTheCommittedConversation(t *testing.T) {
+func TestAnExitBeforeASwitchOutcomeEndsTheCommittedConversation(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	answering := s.PauseAt(pausepoint.ConversationSwitchAnswer)
+	outcome := s.PauseAt(pausepoint.ConversationSwitchOutcome)
 	exiting := s.PauseAt(pausepoint.PtyExitHandled)
 	s.Start()
 	app := s.App()
@@ -25,7 +25,7 @@ func TestAnExitBeforeASwitchAnswerEndsTheCommittedConversation(t *testing.T) {
 	terminal := app.Terminal(first)
 	app.TypeLine(first, "/clear")
 	agent.Prompted()
-	answering.Await()
+	outcome.Await()
 	next := awaitSuccessor(app, first)
 	conversation := agent.ConversationID
 	if conversation == original {
@@ -35,7 +35,7 @@ func TestAnExitBeforeASwitchAnswerEndsTheCommittedConversation(t *testing.T) {
 	agent.Exit(1)
 	exiting.Await()
 	exiting.Release()
-	answering.Release()
+	outcome.Release()
 	exit := testworld.Await(app, protocol.EventSessionExited, func(x protocol.SessionExitedMessage) bool {
 		return string(x.ID) == terminal
 	})

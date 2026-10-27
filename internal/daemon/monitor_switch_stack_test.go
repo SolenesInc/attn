@@ -10,11 +10,11 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestSwitchesBeforeAnAnswerEachGetASessionAndTheirOwnCost(t *testing.T) {
-	for _, point := range []string{pausepoint.ConversationSwitchDecision, pausepoint.ConversationSwitchAnswer} {
+func TestSwitchesBeforeAnOutcomeEachGetASessionAndTheirOwnCost(t *testing.T) {
+	for _, point := range []string{pausepoint.ConversationSwitchDecision, pausepoint.ConversationSwitchOutcome} {
 		t.Run(point, func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-			answer := s.PauseAt(point)
+			outcome := s.PauseAt(point)
 			s.Start()
 			app := s.App()
 			first := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
@@ -27,9 +27,9 @@ func TestSwitchesBeforeAnAnswerEachGetASessionAndTheirOwnCost(t *testing.T) {
 			awaitUsageTokens(app, first, claudeTokens(firstReply))
 			app.TypeLine(first, "/clear")
 			agent.Prompted()
-			answer.Await()
+			outcome.Await()
 			var middle protocol.Session
-			if point == pausepoint.ConversationSwitchAnswer {
+			if point == pausepoint.ConversationSwitchOutcome {
 				middle = awaitSuccessor(app, first)
 			}
 			typeInto(app, terminal, "middle prompt\r")
@@ -42,7 +42,7 @@ func TestSwitchesBeforeAnAnswerEachGetASessionAndTheirOwnCost(t *testing.T) {
 			agent.Prompted()
 			lastReply := "Last done. <!-- attn:state=waiting_input -->"
 			agent.Reply(lastReply)
-			answer.Release()
+			outcome.Release()
 			if middle.ID == "" {
 				middle = awaitSuccessor(app, first)
 			}
@@ -60,7 +60,7 @@ func TestSwitchesBeforeAnAnswerEachGetASessionAndTheirOwnCost(t *testing.T) {
 	}
 }
 
-func TestASwitchCommittedBeforeACrashIsAnsweredAfterRestart(t *testing.T) {
+func TestASwitchCommittedBeforeACrashReceivesItsOutcomeAfterRestart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	initial := s.App()
@@ -194,12 +194,12 @@ func TestAnAppliedObservationIsNotReplayedOverALaterHomeBinding(t *testing.T) {
 	}
 }
 
-func TestACandidatesTitleAndTurnSurviveItsAnswer(t *testing.T) {
+func TestACandidatesTitleAndTurnSurviveItsOutcome(t *testing.T) {
 	for _, agentKind := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		t.Run(string(agentKind), func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(agentKind))
 			s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-			answer := s.PauseAt(pausepoint.ConversationSwitchAnswer)
+			outcome := s.PauseAt(pausepoint.ConversationSwitchOutcome)
 			owed := s.PauseAt(pausepoint.ConversationCandidateTurn)
 			s.Start()
 			app := s.App()
@@ -219,7 +219,7 @@ func TestACandidatesTitleAndTurnSurviveItsAnswer(t *testing.T) {
 			}
 			app.TypeLine(first, command)
 			agent.Prompted()
-			answer.Await()
+			outcome.Await()
 			next := awaitSuccessor(app, first)
 			app.TypeLine(string(next.ID), "fix the cart total")
 			agent.Prompted()
@@ -238,17 +238,17 @@ func TestACandidatesTitleAndTurnSurviveItsAnswer(t *testing.T) {
 			agent.Reply("Which discount? <!-- attn:state=waiting_input -->")
 			s.HeadlessTask().Answer(`{"verdict":"WAITING"}`)
 			owed.Await()
-			beforeAnswer := time.Now()
+			beforeOutcome := time.Now()
 			owed.Release()
-			answer.Release()
+			outcome.Release()
 			shown := testworld.AwaitSession(app, string(next.ID), func(x protocol.Session) bool { return x.Label == "Fix cart total" && protocol.Deref(x.TurnOwed) })
 			opened := protocol.Timestamp(protocol.Deref(shown.TurnOpenedAt)).Time()
-			if !opened.Before(beforeAnswer) {
-				t.Fatalf("turn opened at %s, want before the answer at %s", opened, beforeAnswer)
+			if !opened.Before(beforeOutcome) {
+				t.Fatalf("turn opened at %s, want before the outcome at %s", opened, beforeOutcome)
 			}
-			t.Logf("daemon candidate=%s label=%q state=%s turn_opened=%s answer_after=%s", shown.ID, shown.Label, shown.State, opened, beforeAnswer)
+			t.Logf("daemon candidate=%s label=%q state=%s turn_opened=%s outcome_after=%s", shown.ID, shown.Label, shown.State, opened, beforeOutcome)
 			if shown.State != protocol.SessionStateWaitingInput {
-				t.Fatalf("answered candidate is %s, want waiting", shown.State)
+				t.Fatalf("candidate after the outcome is %s, want waiting", shown.State)
 			}
 		})
 	}
@@ -257,7 +257,7 @@ func TestACandidatesTitleAndTurnSurviveItsAnswer(t *testing.T) {
 func TestACandidatesFailedTitleCanBeRetriedAfterRestart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-	answer := s.PauseAt(pausepoint.ConversationSwitchAnswer)
+	outcome := s.PauseAt(pausepoint.ConversationSwitchOutcome)
 	s.Start()
 	app := s.App()
 	first := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("Original name") })
@@ -266,7 +266,7 @@ func TestACandidatesFailedTitleCanBeRetriedAfterRestart(t *testing.T) {
 	agent.Prompted()
 	app.TypeLine(first, "/clear")
 	agent.Prompted()
-	answer.Await()
+	outcome.Await()
 	next := awaitSuccessor(app, first)
 	app.TypeLine(string(next.ID), "fix cart discounts")
 	agent.Prompted()
@@ -282,7 +282,7 @@ func TestACandidatesFailedTitleCanBeRetriedAfterRestart(t *testing.T) {
 	}
 	title.Fail("provider unavailable")
 	failed := awaitTitleTask(app, subject, func(x protocol.Task) bool { return x.State == "failed" })
-	answer.Release()
+	outcome.Release()
 	bound := awaitTitleTask(app, string(next.ID), func(x protocol.Task) bool { return x.ID == failed.ID && x.State == "failed" })
 	s.Stop()
 	s.Start()
@@ -296,9 +296,9 @@ func TestACandidatesFailedTitleCanBeRetriedAfterRestart(t *testing.T) {
 	awaitLabel(recovered, string(next.ID), "Fix cart discounts")
 }
 
-func TestAResumedSharedConversationsRunSurvivesItsAnswer(t *testing.T) {
+func TestAResumedSharedConversationsRunSurvivesItsOutcome(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-	answering := s.PauseEvery(pausepoint.ConversationSwitchAnswer)
+	outcome := s.PauseEvery(pausepoint.ConversationSwitchOutcome)
 	s.Start()
 	app := s.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
@@ -311,13 +311,13 @@ func TestAResumedSharedConversationsRunSurvivesItsAnswer(t *testing.T) {
 	initial := testworld.AwaitSession(app, first, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
 	app.TypeLine(first, "/new")
 	agent.Prompted()
-	answering.Await()
+	outcome.Await()
 	next := awaitSuccessor(app, first)
-	answering.Release()
+	outcome.Release()
 	resuming := len(app.Log())
 	app.TypeLine(string(next.ID), "/resume "+original)
 	agent.Prompted()
-	answering.Await()
+	outcome.Await()
 	back := *testworld.AwaitSince(app, resuming, protocol.EventSessionRegistered, func(x protocol.WebSocketEvent) bool { return x.Session != nil && string(x.Session.ID) == first }).Session
 	if string(back.ID) != first {
 		t.Fatalf("resume shows %s, want %s", back.ID, first)
@@ -330,15 +330,15 @@ func TestAResumedSharedConversationsRunSurvivesItsAnswer(t *testing.T) {
 		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.LastModelRequestAt) != protocol.Deref(initial.LastModelRequestAt)
 	})
 	if !protocol.Deref(current.TurnOwed) {
-		t.Fatal("the resumed conversation lost its turn before the answer")
+		t.Fatal("the resumed conversation lost its turn before the outcome")
 	}
-	answering.Release()
+	outcome.Release()
 	s.Stop()
 	s.Start()
 	app = s.App()
 	retained := queriedSession(t, s.Client(), first)
 	if retained.State != protocol.SessionStateWaitingInput || !protocol.Deref(retained.TurnOwed) || protocol.Deref(retained.TurnOpenedAt) != protocol.Deref(current.TurnOpenedAt) {
-		t.Fatalf("answer changed the resumed turn: before=%+v after=%+v", current, retained)
+		t.Fatalf("outcome changed the resumed turn: before=%+v after=%+v", current, retained)
 	}
 	if sent := submitSessionAnnotationFeedback(app, first, "answer the second question"); sent.status != "delivered" {
 		t.Fatalf("input after resume: %+v", sent)
@@ -390,7 +390,7 @@ func TestReloadingOneSharedTerminalKeepsTheOthersPendingConversation(t *testing.
 	t.Logf("daemon second_terminal_session=%s bound=%s conversation=%s", second, successor.ID, pending)
 }
 
-func TestAnEndedRuntimeCannotReplayItsUnansweredSwitchOverItsReplacement(t *testing.T) {
+func TestAnEndedRuntimeCannotReplayItsPendingSwitchOverItsReplacement(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app := s.App()
@@ -425,7 +425,7 @@ func TestAnEndedRuntimeCannotReplayItsUnansweredSwitchOverItsReplacement(t *test
 func TestInputFindsItsConversationWhenBindingFinishesDuringLookup(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-	answer := s.PauseAt(pausepoint.ConversationSwitchAnswer)
+	outcome := s.PauseAt(pausepoint.ConversationSwitchOutcome)
 	lookup := s.PauseAt(pausepoint.ConversationInputLookup)
 	bound := s.PauseAt(pausepoint.ConversationCandidateBound)
 	s.Start()
@@ -436,11 +436,11 @@ func TestInputFindsItsConversationWhenBindingFinishesDuringLookup(t *testing.T) 
 	agent := s.Launched(first)
 	app.TypeLine(first, "/clear")
 	agent.Prompted()
-	answer.Await()
+	outcome.Await()
 	next := awaitSuccessor(app, first)
 	app.TypeLine(string(next.ID), "fix cart discounts")
 	lookup.Await()
-	answer.Release()
+	outcome.Release()
 	bound.Await()
 	bound.Release()
 	lookup.Release()
