@@ -285,7 +285,7 @@ func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted boo
 	request := crewWakeRequest{UserStarted: userStarted, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew wake")}
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
-	return d.crewWakeDayWithChargeLocked(key, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
+	return d.crewWakeSessionWithChargeLocked(key, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
 }
 
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
@@ -329,7 +329,7 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 	d.sendToClient(client, response)
 }
 
-func (d *Daemon) crewWakeDayWithChargeLocked(key who.MemberKey, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
+func (d *Daemon) crewWakeSessionWithChargeLocked(key who.MemberKey, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
 	if err := d.mailRefusal(who.Member(key).Address()); err != nil {
 		return nil, fmt.Errorf("%w; `attn crew restore %s` brings it back", err, d.memberName(key))
 	}
@@ -663,7 +663,7 @@ func (d *Daemon) crewSet(key who.MemberKey, msg *protocol.CrewSetMessage) (resul
 			wire := d.crewMemberWire(member, revision)
 			result := &protocol.CrewSetResult{Member: wire}
 			if chief && before.Agent == "" && member.Agent != "" {
-				woke, err := d.crewWakeDayWithChargeLocked(key, "", false, nil, crewWakeRequest{UserStarted: msg.SourceSessionID == nil, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew set")})
+				woke, err := d.crewWakeSessionWithChargeLocked(key, "", false, nil, crewWakeRequest{UserStarted: msg.SourceSessionID == nil, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew set")})
 				if err != nil {
 					result.WakeError = protocol.Ptr(err.Error())
 				} else {

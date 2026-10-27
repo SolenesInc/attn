@@ -82,8 +82,8 @@ func (c *Client) CrewPrime(sessionID protocol.SessionID) (*protocol.CrewPrimeRes
 	return resp.CrewPrimeResult, nil
 }
 
-func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose, day string) (*protocol.CrewHandoffResult, error) {
-	msg := protocol.CrewHandoffMessage{Cmd: protocol.CmdCrewHandoff, SessionID: sessionID, Note: note, Day: protocol.Ptr(day)}
+func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewSessionClose, summary string) (*protocol.CrewHandoffResult, error) {
+	msg := protocol.CrewHandoffMessage{Cmd: protocol.CmdCrewHandoff, SessionID: sessionID, Note: note, Summary: protocol.Ptr(summary)}
 	if retry {
 		msg.Retry = protocol.Ptr(true)
 	}

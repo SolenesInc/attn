@@ -244,8 +244,8 @@ describe('what the chip shows', () => {
   claimed: true });
 
   it.each<[string, DaemonSeed[], Partial<DaemonSession>, string, string]>([
-    ['a crew day, its own claims and its member’s', [memberClaim, sessionClaim, otherMember], { crew_member: 'fern' }, 'multi', 'tending 2'],
-    ['a new crew day, its member’s claims but not the last day’s', [memberClaim, oldDayClaim], { crew_member: 'fern' }, 'seed', 'Member work'],
+    ['a crew session, its own claims and its member’s', [memberClaim, sessionClaim, otherMember], { crew_member: 'fern' }, 'multi', 'tending 2'],
+    ['a new crew session, its member’s claims but not the last day’s', [memberClaim, oldDayClaim], { crew_member: 'fern' }, 'seed', 'Member work'],
     ['an ordinary session, never a member’s claims', [{...memberClaim,tender:{...memberClaim.tender!,session_id:undefined}},sessionClaim],{}, 'seed', 'Session work'],
     ['a tended seed as the plot when the rest sit under it', [
       daemonSeed('s-plot11', { title: 'the arc',

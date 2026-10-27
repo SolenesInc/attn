@@ -20,7 +20,7 @@ func TestACrewClaimOutlivesItsSessionThroughNapAndClear(t *testing.T) {
 	if _, err := cli.SeedTransition(first, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	handed := crewHandoff(t, cli, string(first), "Continue the same work.", false, protocol.CrewDayCloseNap)
+	handed := crewHandoff(t, cli, string(first), "Continue the same work.", false, protocol.CrewSessionCloseNap)
 	next := protocol.Deref(handed.SessionID)
 	run := w.Launched(string(next))
 	run.Prompted()
@@ -54,7 +54,7 @@ func TestAMembersWatchRingsItsNextSessionAfterANap(t *testing.T) {
 	}
 	gardenNudgeWatch(t, cli, string(first), plot, false)
 	gardenNudgeWatch(t, cli, sender, plot, false)
-	handed := crewHandoff(t, cli, string(first), "The watched tree continues.", false, protocol.CrewDayCloseNap)
+	handed := crewHandoff(t, cli, string(first), "The watched tree continues.", false, protocol.CrewSessionCloseNap)
 	next := protocol.Deref(handed.SessionID)
 	w.Launched(string(next))
 	gardenNudgeNote(t, cli, sender, child.Seed.ID, "The child changed.", true)
@@ -110,7 +110,7 @@ func TestResumingAMemberClaimedSeedWakesTheMember(t *testing.T) {
 		t.Fatal(err)
 	}
 	rev := lifeShow(t, cli, seed).Seed.Rev
-	crewHandoff(t, cli, string(first), "Ready to wake later.", false, protocol.CrewDayCloseSleep)
+	crewHandoff(t, cli, string(first), "Ready to wake later.", false, protocol.CrewSessionCloseSleep)
 	resumed := seedResumeRequest(app, seed)
 	if !resumed.Success || resumed.SessionID == nil || *resumed.SessionID == first || protocol.Deref(resumed.AlreadyRunning) {
 		t.Fatalf("resume asleep member: %+v", resumed)
@@ -144,7 +144,7 @@ func TestAHandoverByACrewSessionRecordsTheMember(t *testing.T) {
 	if shown.Dispatcher == nil || shown.Dispatcher.Ref != "member:keel" {
 		t.Fatalf("dispatcher: %+v", shown.Dispatcher)
 	}
-	handed := crewHandoff(t, cli, string(first), "My delegate is still working.", false, protocol.CrewDayCloseNap)
+	handed := crewHandoff(t, cli, string(first), "My delegate is still working.", false, protocol.CrewSessionCloseNap)
 	next := protocol.Deref(handed.SessionID)
 	w.Launched(string(next))
 	if _, err := cli.AgentClose(string(delegated.SessionID), next, "The assigned work is complete."); err != nil {

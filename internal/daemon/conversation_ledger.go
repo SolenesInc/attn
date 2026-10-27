@@ -102,8 +102,8 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	if err != nil {
 		return nil, err
 	}
-	days, err := d.crewDayReferences()
-	if days == nil && err != nil {
+	crewSessions, err := d.crewSessionReferences()
+	if crewSessions == nil && err != nil {
 		return nil, err
 	}
 	entries, err := d.store.ConversationSessions("")
@@ -140,7 +140,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	for key := range seeds {
 		references[key] = true
 	}
-	for key := range days {
+	for key := range crewSessions {
 		references[key] = true
 	}
 	for key := range references {
@@ -168,12 +168,12 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 				continue
 			}
 			row.Kept, row.SourceBytes = nil, nil
-			names := make([]string, 0, len(seeds[key])+len(days[key]))
+			names := make([]string, 0, len(seeds[key])+len(crewSessions[key]))
 			for _, seed := range seeds[key] {
 				names = append(names, "open seed "+seed.Slug)
 			}
-			for _, day := range days[key] {
-				names = append(names, "crew day "+day.Member+" #"+day.DayID)
+			for _, reference := range crewSessions[key] {
+				names = append(names, "crew session "+reference.Member+" #"+reference.EntryID)
 			}
 			sort.Strings(names)
 			if row.PinnedAt != nil {
@@ -194,7 +194,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	}
 	for key, row := range rowsByKey {
 		row.Title, row.SessionIds, row.Seeds = key.resumeID, []protocol.SessionID{}, seeds[key]
-		row.CrewDays = days[key]
+		row.CrewSessions = crewSessions[key]
 		if row.Seeds == nil {
 			row.Seeds = []protocol.KeptConversationSeed{}
 		}
@@ -274,17 +274,17 @@ func (d *Daemon) forgetConversation(id string) error {
 			sort.Strings(names)
 			return fmt.Errorf("conversation %s is kept by open seeds: %s; harvest or wither them before forgetting", key.resumeID, strings.Join(names, ", "))
 		}
-		days, err := d.crewDayReferences()
+		crewSessions, err := d.crewSessionReferences()
 		if err != nil {
 			return err
 		}
-		if len(days[key]) > 0 {
-			names := make([]string, 0, len(days[key]))
-			for _, day := range days[key] {
-				names = append(names, day.Member+" #"+day.DayID)
+		if len(crewSessions[key]) > 0 {
+			names := make([]string, 0, len(crewSessions[key]))
+			for _, reference := range crewSessions[key] {
+				names = append(names, reference.Member+" #"+reference.EntryID)
 			}
 			sort.Strings(names)
-			return fmt.Errorf("conversation %s is kept by crew days: %s", key.resumeID, strings.Join(names, ", "))
+			return fmt.Errorf("conversation %s is kept by crew sessions: %s", key.resumeID, strings.Join(names, ", "))
 		}
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
 		if !exists || !kept.DeletedAt.IsZero() {

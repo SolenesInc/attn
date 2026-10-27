@@ -154,8 +154,8 @@ func TestChiefMailWakesAfterSleepAndRename(t *testing.T) {
 	run := w.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	slept, err := cli.CrewHandoff(protocol.SessionID(id), "Return when mail arrives.", false, protocol.CrewDayCloseSleep, "")
-	if err != nil || protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep {
+	slept, err := cli.CrewHandoff(protocol.SessionID(id), "Return when mail arrives.", false, protocol.CrewSessionCloseSleep, "")
+	if err != nil || protocol.Deref(slept.Outcome) != protocol.CrewSessionCloseSleep {
 		t.Fatalf("sleep: %+v %v", slept, err)
 	}
 	if _, err := cli.CrewRename("chief", "Alfred"); err != nil {
@@ -215,7 +215,7 @@ func TestChiefClearKeepsItsRoleAndAuthority(t *testing.T) {
 
 func TestChiefNeverHeartbeatsOrAutoSleepsAndPlainHandoffNaps(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, regular := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
+		app, regular := crewSessionInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
 		id := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
 		chief := w.bootBubbleClaude(t, id)
 		chief.reply("Ready. <!-- attn:state=idle -->")
@@ -239,7 +239,7 @@ func TestChiefNeverHeartbeatsOrAutoSleepsAndPlainHandoffNaps(t *testing.T) {
 			t.Fatalf("Chief received auto-sleep mail: %q", got)
 		}
 		handoff, err := w.Client().CrewHandoff(protocol.SessionID(id), "A fresh Chief session should continue.", false, "", "")
-		if err != nil || protocol.Deref(handoff.Outcome) != protocol.CrewDayCloseNap || handoff.SessionID == nil {
+		if err != nil || protocol.Deref(handoff.Outcome) != protocol.CrewSessionCloseNap || handoff.SessionID == nil {
 			t.Fatalf("plain Chief handoff: %+v %v", handoff, err)
 		}
 	}, fakeagent.Claude)
@@ -445,7 +445,7 @@ func TestChiefOneDayHarnessOverrideKeepsTheMembersPinsOnTheirHarness(t *testing.
 	run := w.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	if _, err := cli.CrewHandoff(protocol.SessionID(id), "Rest until the next request.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+	if _, err := cli.CrewHandoff(protocol.SessionID(id), "Rest until the next request.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	setSetting(t, app, "default_model_codex", "gpt-6.1-sol")
@@ -479,7 +479,7 @@ func TestDeletingAProfileRetiresItsChiefAndAnAwakeChiefRefusesDeletion(t *testin
 	if refused := remove(); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "put the chief to sleep first: attn crew sleep chief") {
 		t.Fatalf("delete with awake Chief: %+v", refused)
 	}
-	if _, err := w.Client().CrewHandoff(protocol.SessionID(id), "The profile is being removed.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+	if _, err := w.Client().CrewHandoff(protocol.SessionID(id), "The profile is being removed.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	if deleted := remove(); !deleted.Success {

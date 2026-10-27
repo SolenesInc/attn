@@ -95,20 +95,26 @@ while True:
             cli("settings", "set", "crew_memory_enabled", "true")
             cli("settings", "set", "crew.heartbeat_enabled", "false")
             cli("settings", "set", "crew.autosleep_enabled", "false")
-            day = cli("crew", "wake", member, structured=True)
-            live = day["session_id"]
+            awake = cli("crew", "wake", member, structured=True)
+            live = awake["session_id"]
             events.recv(1)
             first = prime(live)
             assert "Before your first `attn memory add`" in first
             oldest = sorted((home / "handoffs").glob("*.md"))[0]
             cli("memory", "import", "-", "--session", live, stdin=oldest.name + " A historical letter imported for the verification.\n")
+            memory_log = home / "memory" / "log.jsonl"
+            imported = json.loads(memory_log.read_text())
+            imported["day"] = {"letter": imported.pop("session")["letter"]}
+            memory_log.write_text(json.dumps(imported) + "\n")
+            legacy = cli("memory", "zoom", "0", "--session", live, structured=True)
+            assert legacy["letter"].endswith(oldest.name) and "[session: " in legacy["lines"][0]
             cli("memory", "add", "The user wants decisions to keep their reasons.", "--session", live)
             cli("memory", "recall", "reasons", "--session", live)
             cli("memory", "zoom", "0-1", "--session", live)
-            handoff = cli("handoff", "--nap", "--day", "Verified memory through the CLI.", "-m", "The verification exercised a copied home; production files were only read.", "--session", live, structured=True)
+            handoff = cli("handoff", "--nap", "--summary", "Verified memory through the CLI.", "-m", "The verification exercised a copied home; production files were only read.", "--session", live, structured=True)
             retried = cli("handoff", "--retry", "--session", live, structured=True)
-            assert handoff["path"] == retried["path"] and handoff["day_id"] == retried["day_id"]
-            cli("memory", "zoom", str(handoff["day_id"]), "--session", live)
+            assert handoff["path"] == retried["path"] and handoff["entry_id"] == retried["entry_id"]
+            cli("memory", "zoom", str(handoff["entry_id"]), "--session", live)
             while True:
                 pending = cli("memory", "summarize", "--session", live, structured=True)
                 if pending.get("handoff"):
@@ -130,7 +136,11 @@ while True:
             cli("memory", "rewrite", "0-1", "--session", live)
             cli("memory", "forget", "1", "--session", live)
             cli("memory", "recall", "reasons", "--session", live)
-            transcript.append("PASS: add, recall, zoom, import, handoff --day, retry, summarize, successor wake view, rewrite and forget.")
+            entries = [json.loads(line) for line in memory_log.read_text().splitlines()]
+            assert all("day" not in entry for entry in entries)
+            assert entries[2]["session"]["id"] != live
+            transcript.append("PASS: legacy JSONL references read and rewritten as session references.")
+            transcript.append("PASS: add, recall, zoom, import, handoff --summary, retry, summarize, successor wake view, rewrite and forget.")
         finally:
             try:
                 if live and daemon.poll() is None:

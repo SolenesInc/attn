@@ -142,7 +142,7 @@ func TestRepliesToACrewPartyFollowItsNextSession(t *testing.T) {
 	if len(batch.Items) != 1 || batch.Items[0].Sender == nil || batch.Items[0].Sender.Ref != "member:keel" || batch.Items[0].Sender.Name != "Keel" || protocol.Deref(batch.Items[0].ReplyTo) != "Keel" {
 		t.Fatalf("member sender: %+v", batch.Items)
 	}
-	next := crewHandoff(t, cli, old, "Continue the conversation with our peer.", false, protocol.CrewDayCloseNap)
+	next := crewHandoff(t, cli, old, "Continue the conversation with our peer.", false, protocol.CrewSessionCloseNap)
 	id := string(protocol.Deref(next.SessionID))
 	if id == "" || next.NapError != nil {
 		t.Fatalf("nap: %+v", next)
@@ -208,7 +208,7 @@ func TestACrewPullRequestWatchFollowsTheNextSessionAndCanBeStoppedThere(t *testi
 	run.Reply("Ready. <!-- attn:state=idle -->")
 	watchPullRequestAs(t, cli, old, protocol.PullRequestWatchModeCodex, "")
 	awaitWatchedPullRequest(app, old, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.Watching) })
-	next := crewHandoff(t, cli, old, "Keep watching the PR.", false, protocol.CrewDayCloseNap)
+	next := crewHandoff(t, cli, old, "Keep watching the PR.", false, protocol.CrewSessionCloseNap)
 	id := string(protocol.Deref(next.SessionID))
 	w.Launched(id)
 	awaitWatchedPullRequest(app, id, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.Watching) })

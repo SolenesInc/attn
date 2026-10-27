@@ -164,7 +164,7 @@ func TestInboxDeliveryWakesAgainOnlyAfterDelayAndFollowsTheMember(t *testing.T) 
 		if got := day.promptsContaining(inboxDoorbell); got != 1 {
 			t.Fatalf("wake ring=%d", got)
 		}
-		if _, err := cli.CrewHandoff(protocol.SessionID(day.id), "sleep before reading", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(day.id), "sleep before reading", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(5*time.Minute - time.Second)
@@ -371,11 +371,11 @@ func TestAGardenBellForACaseVariantTenderReachesTheRegisteredMember(t *testing.T
 			t.Fatal(err)
 		}
 		synctest.Wait()
-		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
-		if dayID == "" {
+		boundSessionID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		if boundSessionID == "" {
 			t.Fatal("Garden bell did not wake the registered tender")
 		}
-		day := w.bootBubbleClaude(t, string(dayID))
+		day := w.bootBubbleClaude(t, string(boundSessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		mail := readInbox(t, cli, day.id, 0).Items
 		if len(mail) != 1 || mail[0].Address != "member:trellis" || !strings.Contains(mail[0].Content, seed) {
@@ -399,7 +399,7 @@ func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 		initial := w.bootBubbleClaude(t, string(initialID))
 		initial.reply("Ready. <!-- attn:state=idle -->")
 		readInbox(t, cli, string(initialID), 0)
-		if _, err := cli.CrewHandoff(initialID, "Sleep before the message", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(initialID, "Sleep before the message", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		sent := sendAgentMessage(t, cli, "sender", seed, "the deployment is ready")
@@ -465,7 +465,7 @@ func TestTheThirdInboxWakeCompletesItsRingAndNeverWakesAFourthDay(t *testing.T) 
 			if day.promptsContaining(inboxDoorbell) != 1 {
 				t.Fatalf("wake %d did not finish its ring", attempt)
 			}
-			if _, err := cli.CrewHandoff(id, "sleep unread", false, protocol.CrewDayCloseSleep, ""); err != nil {
+			if _, err := cli.CrewHandoff(id, "sleep unread", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 				t.Fatal(err)
 			}
 			w.advance(5 * time.Minute)
@@ -543,8 +543,8 @@ func TestRestartDuringAnInboxWakeWaitsAndSpendsAnotherAttempt(t *testing.T) {
 		registerSessions(t, w, cli, "sender")
 		sendAgentMessage(t, cli, "sender", "trellis", "read after restarting")
 		synctest.Wait()
-		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
-		day := w.bootBubbleClaude(t, string(dayID))
+		boundSessionID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		day := w.bootBubbleClaude(t, string(boundSessionID))
 		w.restart()
 		day.cli = w.Client()
 		day.reply("Ready. <!-- attn:state=idle -->")
@@ -616,7 +616,7 @@ func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 	})
 }
 
-func TestAMessageToACrewDaysSessionIDFollowsTheMemberIntoItsNextDay(t *testing.T) {
+func TestAMessageToACrewSessionsSessionIDFollowsTheMemberIntoItsNextDay(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -625,7 +625,7 @@ func TestAMessageToACrewDaysSessionIDFollowsTheMemberIntoItsNextDay(t *testing.T
 		first := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
 		first.reply("Ready. <!-- attn:state=idle -->")
 		sent := sendAgentMessage(t, cli, "sender", first.id, "Reply for the next day")
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "sleep unread", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "sleep unread", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		next := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))

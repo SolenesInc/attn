@@ -196,7 +196,7 @@ func TestAnInterruptedCrewLaunchIsTheLedgerRowWhenItsConversationSurvives(t *tes
 			run := s.Launched(string(first.SessionID))
 			run.Prompted()
 			run.Reply("Done. <!-- attn:state=idle -->")
-			handed, err := s.Client().CrewHandoff(first.SessionID, "A completed day.", false, protocol.CrewDayCloseSleep, "")
+			handed, err := s.Client().CrewHandoff(first.SessionID, "A completed day.", false, protocol.CrewSessionCloseSleep, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -254,7 +254,7 @@ func TestAnInterruptedCrewLaunchIsTheLedgerRowWhenItsConversationSurvives(t *tes
 					t.Fatal(launched.err)
 				}
 				expected = launched.result.SessionID
-				if _, err := s.Client().CrewHandoff(expected, "The newer completed day.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+				if _, err := s.Client().CrewHandoff(expected, "The newer completed day.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 					t.Fatal(err)
 				}
 				recovery.Release()

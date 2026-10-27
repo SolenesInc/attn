@@ -288,7 +288,7 @@ try {
   const boundMember = await awakeBinding;
   runner.assert(boundMember.binding_session === firstSession, 'the roster binds the requested first day', { boundMember, firstSession });
   await observer.waitForSession({ id: firstSession, timeoutMs: 30_000 });
-  await waitForFileSignal(wakeReceipt, 'the first crew day mock launch');
+  await waitForFileSignal(wakeReceipt, 'the first crew session mock launch');
   fs.unlinkSync(wakeReceipt);
   await waitForDom('[data-testid="sidebar-queue"]');
   await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);

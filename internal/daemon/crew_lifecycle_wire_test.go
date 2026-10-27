@@ -12,7 +12,7 @@ import (
 
 var crewHeartbeat = prompts.RenderText("crew", "heartbeat", prompts.Values{})
 
-func crewDayInBubble(t *testing.T, w *world, settings map[string]string) (*testworld.Peer, *bubbleClaude) {
+func crewSessionInBubble(t *testing.T, w *world, settings map[string]string) (*testworld.Peer, *bubbleClaude) {
 	t.Helper()
 	writeCrewCharter(t, w, "trellis")
 	w.restart()
@@ -37,7 +37,7 @@ func pastedContaining(term *testworld.Terminal, text string) int {
 
 func TestACrewDayWhoseContextIsAboutToLapseIsWarmedOnce(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, day := crewDayInBubble(t, w, nil)
+		_, day := crewSessionInBubble(t, w, nil)
 
 		w.advance(54 * time.Minute)
 		if got := day.term.Pasted(); len(got) != 0 {
@@ -57,7 +57,7 @@ func TestACrewDayWhoseContextIsAboutToLapseIsWarmedOnce(t *testing.T) {
 
 func TestACrewDayWaitingOnTheUserIsWarmedLikeAnIdleOne(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, day := crewDayInBubble(t, w, nil)
+		app, day := crewSessionInBubble(t, w, nil)
 		app.TypeLine(day.id, "pick a colour for the banner")
 		day.reply("Red or blue? <!-- attn:state=waiting_input -->")
 		waiting := queriedSession(t, day.cli, day.id)
@@ -73,7 +73,7 @@ func TestACrewDayWaitingOnTheUserIsWarmedLikeAnIdleOne(t *testing.T) {
 
 func TestAnUntakenHeartbeatLeavesTheContextClockAndTheComposerFree(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, day := crewDayInBubble(t, w, nil)
+		_, day := crewSessionInBubble(t, w, nil)
 		registerSessions(t, w, day.cli, "sender")
 		day.term.OnSubmit(nil)
 		before := protocol.Deref(queriedSession(t, day.cli, day.id).LastModelRequestAt)
@@ -98,7 +98,7 @@ func TestAnUntakenHeartbeatLeavesTheContextClockAndTheComposerFree(t *testing.T)
 
 func TestACrewDayIsAskedOnceToCloseWhenTheUserIsAway(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
+		_, day := crewSessionInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
 		day.term.OnSubmit(nil)
 		w.advance(56 * time.Minute)
 		items := readInbox(t, day.cli, day.id, 0).Items
@@ -114,7 +114,7 @@ func TestACrewDayIsAskedOnceToCloseWhenTheUserIsAway(t *testing.T) {
 
 func TestACrewDayIsAskedToCloseWhenTheUserIsAwayAndAgainOnlyAfterItsNextWarmWindow(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
+		_, day := crewSessionInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
 		sleepAsk := prompts.RenderText("crew", "sleep-away", prompts.Values{})
 
 		w.advance(54 * time.Minute)
@@ -155,7 +155,7 @@ func TestACrewDayMidTurnOrAwaitingApprovalIsLeftAlone(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
-				app, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60", "auto_approve_enabled": "false"})
+				app, day := crewSessionInBubble(t, w, map[string]string{"crew.away_seconds": "60", "auto_approve_enabled": "false"})
 				app.TypeLine(day.id, "refactor the checkout")
 				w.advance(0)
 				tc.enter(t, day)
@@ -174,7 +174,7 @@ func TestACrewDayMidTurnOrAwaitingApprovalIsLeftAlone(t *testing.T) {
 
 func TestTheCrewSwitchesTurnOffHeartbeatsAndCloseAsks(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false"})
+		app, day := crewSessionInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false"})
 		w.advance(56 * time.Minute)
 		if got := day.term.Pasted(); len(got) != 0 {
 			t.Fatalf("with heartbeats off the day was sent %q", got)
@@ -190,7 +190,7 @@ func TestTheCrewSwitchesTurnOffHeartbeatsAndCloseAsks(t *testing.T) {
 
 func TestAHarnessCacheLifetimeSettingMovesTheHeartbeat(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, day := crewDayInBubble(t, w, map[string]string{"crew.cache_ttl_seconds.claude": "600"})
+		_, day := crewSessionInBubble(t, w, map[string]string{"crew.cache_ttl_seconds.claude": "600"})
 		w.advance(4 * time.Minute)
 		if got := day.term.Pasted(); len(got) != 0 {
 			t.Fatalf("a ten-minute context was nudged at four minutes: %q", got)

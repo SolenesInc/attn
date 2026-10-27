@@ -42,11 +42,11 @@ type Member struct {
 	AwarenessDirs  []string           `json:"awareness_dirs"`
 	BindingSession protocol.SessionID `json:"binding_session"`
 
-	LetterFile      string                `json:"letter_file"`
-	LetterSession   protocol.SessionID    `json:"letter_session"`
-	LetterDay       string                `json:"letter_day,omitempty"`
-	LetterClose     protocol.CrewDayClose `json:"letter_close,omitempty"`
-	AutonomousWakes []string              `json:"autonomous_wakes"`
+	LetterFile      string                    `json:"letter_file"`
+	LetterSession   protocol.SessionID        `json:"letter_session"`
+	LetterSummary   string                    `json:"letter_summary,omitempty"`
+	LetterClose     protocol.CrewSessionClose `json:"letter_close,omitempty"`
+	AutonomousWakes []string                  `json:"autonomous_wakes"`
 }
 
 func (m Member) HomeDir(dataRoot string) string {

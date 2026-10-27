@@ -320,9 +320,9 @@ func parseCrewSetArgs(args []string) (crewSetArgs, error) {
 	profile := fs.String("profile", "", "resolve names in this profile")
 	fs.SetOutput(io.Discard)
 	cwd := fs.String("cwd", "", "where the member's sessions launch")
-	agent := fs.String("agent", "", "the harness the member's days run on; empty goes back to the default")
-	model := fs.String("model", "", "the model the member's days run on; empty goes back to the configured default")
-	effort := fs.String("effort", "", "the effort the member's days run on; empty goes back to the harness default")
+	agent := fs.String("agent", "", "the harness the member's sessions run on; empty goes back to the default")
+	model := fs.String("model", "", "the model the member's sessions run on; empty goes back to the configured default")
+	effort := fs.String("effort", "", "the effort the member's sessions run on; empty goes back to the harness default")
 	desktopName := fs.String("desktop-name", "", "name for the new desktop of own or an empty slot (defaults to the member name)")
 	desktop := fs.String("launch-desktop", "", "own, a desktop digit (an empty slot gets a new desktop), name or id in this member profile")
 	var dirs crewDirList
