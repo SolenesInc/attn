@@ -700,6 +700,7 @@ func TestEnrollmentLeavesHomeJobsDormantUntilTheMachineLeaves(t *testing.T) {
 	agent.Prompted()
 	agent.Reply("Title work. <!-- attn:state=waiting_input -->")
 	awaitTask("session_title", func(task protocol.Task) bool { return task.Attempts > 0 && task.State != "running" })
+	testworld.AwaitSession(pair.App, local, func(s protocol.Session) bool { return s.Label == "Machine work title" })
 	kept := awaitTask("garden_review_classify", func(task protocol.Task) bool { return task.ID == failed.ID })
 	if kept.State != "queued" || kept.Attempts != 0 {
 		t.Fatalf("enrolled home job was consumed: %+v", kept)
