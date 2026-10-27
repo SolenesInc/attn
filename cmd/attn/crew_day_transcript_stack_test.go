@@ -36,12 +36,18 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 			}
 			testworld.AwaitTaskDone(app, "conversation_keep")
 			target := string(day.SessionID)
+			letter := filepath.Base(handoff.Path)
 			s.Stop()
 			s.Start()
 			if agent == fakeagent.Claude {
 				list := s.Attn("conversation", "list")
-				requireStdout(t, list, "1 kept", "crew session trellis "+target)
+				requireStdout(t, list, "1 kept", "crew letter trellis "+letter)
 				fmt.Printf("$ attn conversation list\n%s", list.Stdout)
+				var listed protocol.KeptConversationListResult
+				s.Attn("conversation", "list", "--json").JSON(t, &listed)
+				if len(listed.Rows) != 1 || len(listed.Rows[0].CrewLetters) != 1 || listed.Rows[0].CrewLetters[0].Filename != letter || listed.Rows[0].CrewLetters[0].OccurredAt.IsZero() {
+					t.Fatalf("letter reference = %+v, want the filed letter %s with its date", listed, letter)
+				}
 				paths, err := filepath.Glob(filepath.Join(s.Dir, "toolhome", ".claude", "projects", "*", run.ConversationID+".jsonl"))
 				if err != nil || len(paths) != 1 {
 					t.Fatalf("Claude source transcript: %v, %v", paths, err)
@@ -54,10 +60,10 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 					keepPassAfterAnotherSessionCloses(t, s, pass)
 				}
 				list = s.Attn("conversation", "list")
-				requireStdout(t, list, "1 kept", "crew session trellis "+target)
+				requireStdout(t, list, "1 kept", "crew letter trellis "+letter)
 				fmt.Printf("$ attn conversation list (v2 disabled, source removed, two keep passes)\n%s", list.Stdout)
 				refused := s.Attn("conversation", "forget", target)
-				if refused.Code == 0 || !strings.Contains(refused.Stderr, "trellis "+target) {
+				if refused.Code == 0 || !strings.Contains(refused.Stderr, "trellis "+letter) {
 					t.Fatalf("forget a crew day's transcript: %+v", refused)
 				}
 			}

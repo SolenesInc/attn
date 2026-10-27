@@ -5273,9 +5273,10 @@ model KeptConversationSeed {
   slug: string;
   title: string;
 }
-model KeptConversationCrewDay {
+model KeptConversationCrewLetter {
   member: string;
-  day_id: string;
+  filename: string;
+  occurred_at: utcDateTime;
 }
 model KeptConversationRow {
   agent: string;
@@ -5287,7 +5288,7 @@ model KeptConversationRow {
   pinned_at?: string;
   pending_reason?: string;
   seeds: KeptConversationSeed[];
-  crew_days?: KeptConversationCrewDay[];
+  crew_letters?: KeptConversationCrewLetter[];
 }
 @extension("x-on", #{ home: true })
 model KeptConversationListMessage {

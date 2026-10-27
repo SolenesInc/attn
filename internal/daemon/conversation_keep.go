@@ -176,12 +176,12 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 	}
 }
 
-func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConversationCrewDay, error) {
+func (d *Daemon) crewLetterReferences() (map[conversationKey][]protocol.KeptConversationCrewLetter, error) {
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		return nil, err
 	}
-	referenced := make(map[conversationKey][]protocol.KeptConversationCrewDay)
+	referenced := make(map[conversationKey][]protocol.KeptConversationCrewLetter)
 	for _, member := range members {
 		dir, err := d.validateCrewHandoffsDir(member)
 		if err != nil {
@@ -194,7 +194,6 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 		if err != nil {
 			return nil, fmt.Errorf("crew letter references for %s: %w", member.ID, err)
 		}
-		seen := make(map[protocol.SessionID]bool)
 		for _, letter := range letters {
 			if letter.IsDir() || !strings.HasSuffix(letter.Name(), ".md") {
 				continue
@@ -209,10 +208,13 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 			if err != nil {
 				return nil, err
 			}
-			if sessionID == "" || seen[sessionID] {
+			if sessionID == "" {
 				continue
 			}
-			seen[sessionID] = true
+			when, err := crewHandoffTime(letter.Name())
+			if err != nil {
+				return nil, err
+			}
 			session := d.store.SessionLedgerEntry(sessionID)
 			if session == nil {
 				continue
@@ -222,7 +224,7 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 				continue
 			}
 			key := conversationKey{session.Agent, resumeID}
-			referenced[key] = append(referenced[key], protocol.KeptConversationCrewDay{Member: member.ID, DayID: string(sessionID)})
+			referenced[key] = append(referenced[key], protocol.KeptConversationCrewLetter{Member: member.ID, Filename: letter.Name(), OccurredAt: when})
 		}
 	}
 	return referenced, nil
@@ -237,11 +239,11 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	for key := range seeds {
 		referenced[key] = true
 	}
-	days, err := d.crewDayReferences()
+	letters, err := d.crewLetterReferences()
 	if err != nil {
 		return nil, err
 	}
-	for key := range days {
+	for key := range letters {
 		referenced[key] = true
 	}
 	pins, err := d.store.ConversationPins()

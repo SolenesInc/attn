@@ -122,8 +122,8 @@ func conversationList(args []string) {
 			for _, seed := range row.Seeds {
 				reasons = append(reasons, "open seed "+seed.Slug+" ("+seed.ID+")")
 			}
-			for _, day := range row.CrewDays {
-				reasons = append(reasons, "crew session "+day.Member+" "+day.DayID)
+			for _, letter := range row.CrewLetters {
+				reasons = append(reasons, "crew letter "+letter.Member+" "+letter.Filename)
 			}
 			if kept.DeleteAfter != nil {
 				reasons = append(reasons, "deletes "+conversationDate(*kept.DeleteAfter))

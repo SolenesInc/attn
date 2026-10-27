@@ -139,7 +139,7 @@ try {
   await keepPass();
   const listing = cli(['conversation', 'list'], { json: true });
   assert.equal(listing.count, 1);
-  assert(listing.rows[0].crew_days.some((day) => day.member === member && day.day_id === enabled));
+  assert(listing.rows[0].crew_letters.some((letter) => letter.member === member && letter.filename === path.basename(filed.path) && letter.occurred_at));
   assert(!listing.rows.some((row) => row.session_ids.includes(disabled)));
   const sources = fs.readdirSync(path.join(root, 'tools', '.claude', 'projects'), { recursive: true }).filter((name) => name.endsWith(`${listing.rows[0].resume_id}.jsonl`));
   assert.equal(sources.length, 1);

@@ -33,13 +33,13 @@ async function open(result = fixture) {
 }
 
 describe('App kept conversations ledger', () => {
-  it('names the crew session that keeps a copy and offers no Forget action', async () => {
+  it('names the letter that keeps a copy and offers no Forget action', async () => {
     const { daemon } = await open({ count: 1, stored_bytes: copy.bytes, pending_count: 0, rows: [
       { agent: 'claude', resume_id: 'crew', title: 'Trellis yesterday', session_ids: ['s-crew'], seeds: [],
-        crew_days: [{ member: 'trellis', day_id: 's-crew' }], kept: copy },
+        crew_letters: [{ member: 'trellis', filename: '2026-10-27T23-58Z-trellis_01.000000000-12345.md', occurred_at: '2026-10-27T23:58:00Z' }], kept: copy },
     ] });
-    expect(within(row('Trellis yesterday')).getByText('Crew session: trellis s-crew')).toBeInTheDocument();
-    expect(inspector().getByText('trellis s-crew')).toBeInTheDocument();
+    expect(within(row('Trellis yesterday')).getByText('Crew letter: Trellis · 27 Oct 2026')).toBeInTheDocument();
+    expect(inspector().getByText('Trellis · 27 Oct 2026')).toHaveAttribute('title', '2026-10-27T23-58Z-trellis_01.000000000-12345.md');
     expect(inspector().queryByRole('button', { name: 'Forget…' })).toBeNull();
     expect(row('Trellis yesterday')).not.toHaveAttribute('data-verbs', expect.stringContaining('Forget'));
     expect(daemon.sentOf('kept_conversation_list')).toEqual([request()]);
