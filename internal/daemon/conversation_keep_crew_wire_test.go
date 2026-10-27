@@ -76,7 +76,7 @@ func TestConversationKeepPausesExpiryUntilCrewHomesAreReadable(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "crew_memory_enabled", "true")
 	day := wakeCrew(t, cli, "trellis", "")
-	w.Launched(string(day.SessionID))
+	w.Launched(string(day.SessionID)).Prompted()
 	closed, err := cli.CrewHandoff(day.SessionID, "Keep this letter.", false, protocol.CrewDayCloseSleep, "Remember this day.")
 	if err != nil || protocol.Deref(closed.Outcome) != protocol.CrewDayCloseSleep {
 		t.Fatalf("close crew day: %+v, %v", closed, err)
