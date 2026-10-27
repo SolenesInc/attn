@@ -19,13 +19,16 @@ type WireDaemon struct {
 	stopped chan error
 }
 
-func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, gardenClock ...func() time.Time) (*WireDaemon, error) {
+func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, nativeWatch bool, gardenClock ...func() time.Time) (*WireDaemon, error) {
 	d := New(socketPath)
+	d.notebookSyncWatch = nativeWatch
 	if len(gardenClock) > 0 {
 		d.gardenNow = gardenClock[0]
 	}
 	if terminals != nil {
 		d.ptyBackend = terminals
+	}
+	if terminals != nil || !nativeWatch {
 		d.notebookWatch = func(string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
 	}
 	d.listener = unix

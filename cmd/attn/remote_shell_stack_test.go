@@ -154,8 +154,14 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 			t.Fatalf("reattach after reconnect: %s", protocol.Deref(result.Error))
 		}
 	}
-	app.TypeLine(id, "echo before-$((1+1))")
-	app.AwaitScreen(id, "before-2")
+	echo := func(command, output string) {
+		result := home.Attn("terminal", "run", string(terminal), command, "--wait")
+		if result.Code != 0 || !strings.Contains(result.Stdout, output) {
+			t.Fatalf("remote echo: %+v", result)
+		}
+		app.AwaitScreen(id, output)
+	}
+	echo("echo before-$((1+1))", "before-2")
 	remote.Signal(syscall.SIGSTOP)
 	defer remote.Signal(syscall.SIGCONT)
 	outpostState(app, "outpost", protocol.OutpostStateStalled)
@@ -189,12 +195,12 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	if attach.Success || !strings.Contains(protocol.Deref(attach.Error), "outpost") {
 		t.Fatalf("offline attach: %+v", attach)
 	}
-	remote.Signal(syscall.SIGCONT)
-	outpostState(app, "outpost", protocol.OutpostStateConnected)
-	reattach()
-	app.TypeLine(id, "echo reconnected-$((2+2))")
-	app.AwaitScreen(id, "reconnected-4")
 	mark := len(app.Log())
+	remote.Signal(syscall.SIGCONT)
+	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+	reattach()
+	echo("echo reconnected-$((2+2))", "reconnected-4")
+	mark = len(app.Log())
 	remote.Stop()
 	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
@@ -202,14 +208,12 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	remote.Start()
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	reattach()
-	app.TypeLine(id, "echo outpost-restart-$((3+3))")
-	app.AwaitScreen(id, "outpost-restart-6")
+	echo("echo outpost-restart-$((3+3))", "outpost-restart-6")
 	home.Stop()
 	home.Start()
 	app = home.App()
 	outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
-	app.TypeLine(id, "echo home-restart-$((4+4))")
-	app.AwaitScreen(id, "home-restart-8")
+	echo("echo home-restart-$((4+4))", "home-restart-8")
 	mark = len(app.Log())
 	remote.Stop()
 	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
@@ -238,8 +242,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	if !protocol.Deref(revived.Revived) {
 		t.Fatalf("shell was not revived: %s", protocol.Deref(revived.Error))
 	}
-	app.TypeLine(id, "echo revived-$((5+5))")
-	app.AwaitScreen(id, "revived-10")
+	echo("echo revived-$((5+5))", "revived-10")
 	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State != protocol.SessionStateRecoverable })
 	t.Log("lost bridge refused input/resize/close/split/kill/reload/attach; live shell survived both daemon restarts; missing worker became recoverable")
 }

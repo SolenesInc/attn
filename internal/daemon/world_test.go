@@ -89,7 +89,7 @@ func (w *world) start() {
 	if w.terms != nil {
 		terminals = w.terms
 	}
-	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, w.gardenClock)
+	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, !w.bubbled, w.gardenClock)
 	if err != nil {
 		w.T.Fatalf("start daemon: %v", err)
 	}

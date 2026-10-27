@@ -213,6 +213,7 @@ type Daemon struct {
 	recovering          bool
 	recoverySettled     chan struct{}
 	notebookSync        notebookSyncRuntime
+	notebookSyncWatch   bool
 	notebookMu          sync.Mutex
 	notebookStore       *notebook.Store
 	notebookWatcherMu   sync.Mutex
@@ -504,6 +505,7 @@ func New(socketPath string) *Daemon {
 
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		notebookSyncWatch:   true,
 		notebookWatch:       openNotebookWatch,
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
@@ -540,6 +542,7 @@ func NewForTesting(socketPath string) *Daemon {
 	manager := pty.NewManager(nil)
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		notebookSyncWatch:   true,
 		notebookWatch:       openNotebookWatch,
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,

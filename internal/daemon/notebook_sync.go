@@ -167,7 +167,7 @@ func (d *Daemon) notebookEngineConfig(home, root string, peers []string) synccon
 	folder := cfg.Defaults.Folder.Copy()
 	folder.ID, folder.Path, folder.Type = "notebook-"+home, root, syncconfig.FolderTypeSendReceive
 	folder.RescanIntervalS = 3600
-	folder.FSWatcherEnabled = true
+	folder.FSWatcherEnabled = d.notebookSyncWatch
 	folder.Versioning.Type = "trashcan"
 	folder.Versioning.FSPath = filepath.Join(d.dataRoot, "notebook-trash")
 	folder.Versioning.Params = map[string]string{"cleanoutDays": strconv.Itoa(notebookTrashDays)}
