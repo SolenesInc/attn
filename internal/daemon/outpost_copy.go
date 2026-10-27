@@ -63,6 +63,15 @@ func (d *Daemon) sendOutpostCopyBatch(ctx context.Context, host string, conn *br
 
 func (d *Daemon) outpostHandlers() bridge.Handlers {
 	return bridge.Handlers{
+		notebookChannel: func(conn *bridge.Conn, incoming ssh.NewChannel) {
+			if !d.life.Go("notebookStream", func() {
+				d.configureNotebookSync()
+				d.life.Go("notebookReports", func() { d.sendNotebookSyncReports(conn) })
+				d.serveNotebookSync(conn, incoming)
+			}) {
+				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
+			}
+		},
 		bridgeCall: d.callBridgeHandler(""),
 		bridgeCallRecovery: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("reportOutpostMachine", func() {
@@ -153,6 +162,10 @@ func (d *Daemon) dropStaleCopy() error {
 	}
 	d.refreshChangedSettings(before)
 	d.pruneRuntimesWithoutSession(d.life.Context())
+	if err := d.dropNotebookSyncFromOtherHome(status.HomeDaemonID); err != nil {
+		return err
+	}
+	d.configureNotebookSync()
 	return nil
 }
 

@@ -171,10 +171,56 @@ is lost during a command, the error says that it may have run.
 
 Files on an outpost don't open on the Mac yet. **Open in editor** and
 ⌘-clicked paths in an outpost shell fail and name the outpost, and nothing
-opens a Mac file that happens to have the same path. Attaching or detaching a
-seed file from an outpost also fails before any file changes. With an outpost shell
-in front, the editor tile and the file opener (⌘P) start at your notebook
-root.
+opens a Mac file that happens to have the same path. With an outpost shell in
+front, the editor tile and the file opener (⌘P) start at your notebook root.
+
+## Notebook sync
+
+Pairing an outpost starts two-way sync of the whole Notebook. Each machine has
+its own folder, selected by its machine setting `notebook.root`. Read the
+resolved path with `attn settings get notebook.root.effective` on that machine.
+Files edited, created or deleted on either machine reach the others. Knowledge
+notes and seed artifacts stay ordinary files you can read and edit with native
+tools. Append journal entries with `attn journal append --entry '<text>'`, so
+concurrent appends share the home's writer and date.
+
+Before the first sync, attn moves a non-empty outpost folder it has no index for
+to `<root>.before-sync-<date>`. The outpost row names that saved folder. The home
+supplies the initial contents. Later connections resume from the existing index.
+Changing `notebook.root` while paired sync is active refuses and names the peers.
+Turn Outposts off at the home, or clear `outpost_listen` on the outpost, before
+changing that machine's root.
+
+Settings → Outposts shows first sync, syncing with the bytes and items left,
+in sync, or the error and its reason. It also shows a count of conflict copies.
+Concurrent edits keep both versions as an original and a
+`*.sync-conflict-*` copy. Each new conflict copy produces one notification at
+the home. Compare the files, merge the content you need, and remove the copy to
+clear the count. Received deletions and replacements go to
+`<data-dir>/notebook-trash/` on the receiving machine for 30 days. This trash
+keeps the latest received replacement at each path.
+
+From an outpost shell, `attn seed attach <seed> --path <file> --move` or `--copy` reads
+that outpost's file. `attn seed detach <seed> --path <filename> --to <destination>`
+writes its destination on that outpost. Each command waits for the matching
+change at the home before returning, so a following check report can name the
+artifact as evidence. A sync failure names what is left. After fixing it, retry
+the same command. `attn seed show <seed>` prints the artifact folder for the
+machine you called from.
+
+The machine-local `.attn` folder, atomic-write and seed-transfer temporary files,
+and `.DS_Store` do not sync. Other dotfiles remain content. attn writes its
+marker under `.attn` and adds no `.stfolder` or `.stignore`. If the marker or root
+is removed later, sync stops with an error instead of spreading deletions.
+
+The engine runs at the home while Outposts is on and a paired outpost remains.
+On an outpost it runs while enrolled and listening, including while disconnected.
+Turning the home switch off stops its engine and keeps its index. Removing an
+outpost drops that device from the home. `attn enrollment leave` stops the
+outpost's engine and drops its index, retaining its Notebook files. The next
+pairing treats that folder as a first sync again. On the outpost,
+`attn settings list --all` includes `notebook_sync_state` and
+`notebook_sync_last_error`.
 
 ## Show the host in your prompt
 

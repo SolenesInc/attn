@@ -126,6 +126,7 @@ var Placements = map[string][]Placement{
 	"mute_pr":                          {Placement{LocatorHome, ""}},
 	"mute_repo":                        {Placement{LocatorHome, ""}},
 	"notebook_guide":                   {Placement{LocatorHome, ""}},
+	"notebook_sync_report":             {Placement{LocatorHome, ""}},
 	"open_browser":                     {Placement{LocatorHome, ""}},
 	"open_markdown":                    {Placement{LocatorHome, ""}},
 	"open_seed":                        {Placement{LocatorHome, ""}},
@@ -150,7 +151,8 @@ var Placements = map[string][]Placement{
 	"record_vent":                      {Placement{LocatorHome, ""}},
 	"rename_session":                   {Placement{LocatorHome, ""}},
 	"restart_shared_codex":             {Placement{LocatorHere, ""}},
-	"seed_artifact_transfer":           {Placement{LocatorHere, ""}},
+	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
+	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
 	"seed_check":                       {Placement{LocatorHome, ""}},
 	"seed_edit":                        {Placement{LocatorHome, ""}},
 	"seed_link":                        {Placement{LocatorHome, ""}},
@@ -1420,6 +1422,18 @@ func (m NotebookGuideMessage) Locate() string {
 	return ""
 }
 
+func (NotebookSyncReportMessage) CommandName() string {
+	return "notebook_sync_report"
+}
+
+func (m NotebookSyncReportMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m NotebookSyncReportMessage) Locate() string {
+	return ""
+}
+
 func (OpenBrowserMessage) CommandName() string {
 	return "open_browser"
 }
@@ -1725,11 +1739,23 @@ func (SeedArtifactTransferMessage) CommandName() string {
 }
 
 func (m SeedArtifactTransferMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
+	return Placement{LocatorHome, ""}
 }
 
 func (m SeedArtifactTransferMessage) Locate() string {
 	return ""
+}
+
+func (SeedArtifactTransferHereMessage) CommandName() string {
+	return "seed_artifact_transfer_here"
+}
+
+func (m SeedArtifactTransferHereMessage) Placement() Placement {
+	return Placement{LocatorMachine, "host"}
+}
+
+func (m SeedArtifactTransferHereMessage) Locate() string {
+	return string(m.Host)
 }
 
 func (SeedCheckMessage) CommandName() string {

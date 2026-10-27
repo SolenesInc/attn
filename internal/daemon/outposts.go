@@ -15,15 +15,17 @@ import (
 )
 
 type outpostDial struct {
-	cancel      context.CancelFunc
-	done        chan struct{}
-	conn        *bridge.Conn
-	state       bridge.State
-	since       string
-	build       string
-	lastError   string
-	lastErrorAt string
-	errorKind   string
+	cancel       context.CancelFunc
+	done         chan struct{}
+	conn         *bridge.Conn
+	state        bridge.State
+	since        string
+	build        string
+	lastError    string
+	lastErrorAt  string
+	errorKind    string
+	notebook     *protocol.OutpostNotebook
+	notebookRoot string
 }
 
 type outpostsRuntime struct {
@@ -61,6 +63,7 @@ func (d *Daemon) configureOutposts() {
 		d.logf("list outposts: %v", err)
 		return
 	}
+	d.configureNotebookSync()
 	enabled := d.outpostsEnabled()
 	d.coalesceSnapshots(func() {
 		for _, row := range rows {
@@ -183,6 +186,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 				}
 			} else {
 				row.HostKey, row.DaemonID = seen.HostKey, seen.DaemonID
+				d.configureNotebookSync()
 				d.publishFact(FactOutpostChanged, row.ID, nil)
 			}
 		}
@@ -207,11 +211,13 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 }
 
 func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial, conn *bridge.Conn) {
+	defer func() { d.logf("outpost %s bridge closed: largest heartbeat gap %s", id, conn.MaxHeartbeatGap()) }()
 	defer conn.Close()
 	if !d.setOutpostConn(id, run, conn) {
 		return
 	}
 	defer d.setOutpostConn(id, run, nil)
+	d.life.Go("notebookStream:"+id, func() { d.openNotebookSync(conn) })
 	sending := make(chan struct{})
 	if !d.life.Go("outpostCopy:"+id, func() {
 		defer close(sending)

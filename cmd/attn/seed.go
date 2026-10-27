@@ -991,6 +991,9 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 	fprintHandoff(w, result.Handoff)
 	fprintSeed(w, result.Seed, result.Watching)
 	fprintSeedChecks(w, result.Seed)
+	if result.ArtifactDir != nil {
+		fmt.Fprintf(w, "artifact folder  %s\n", *result.ArtifactDir)
+	}
 	if continuation := result.Seed.Continuation; continuation != nil && continuation.KeptConversation != nil {
 		kept := continuation.KeptConversation
 		switch {

@@ -23,8 +23,9 @@ type outpostProbe struct {
 	Error string
 }
 type outpostMachine struct {
-	Live   map[protocol.SessionID]outpostLiveTerminal
-	Probes map[protocol.SessionID]outpostProbe
+	NotebookRoot string
+	Live         map[protocol.SessionID]outpostLiveTerminal
+	Probes       map[protocol.SessionID]outpostProbe
 }
 
 func (d *Daemon) outpostMachineReport() outpostMachine {
@@ -45,6 +46,7 @@ func (d *Daemon) outpostMachineReport() outpostMachine {
 		}
 		report.Probes[id] = result
 	}
+	report.NotebookRoot, _ = d.notebookRoot()
 	d.monitors().notifyViewsChanged()
 	return report
 }
@@ -55,6 +57,11 @@ func (d *Daemon) recoverOutpost(ctx context.Context, host string, conn *bridge.C
 	if err := conn.Call(ctx, bridgeCallRecovery, struct{}{}, &report); err != nil {
 		return err
 	}
+	d.outposts.mu.Lock()
+	if run := d.outposts.dialers[host]; run != nil && run.conn == conn {
+		run.notebookRoot = report.NotebookRoot
+	}
+	d.outposts.mu.Unlock()
 	machine := machineReport{live: make(map[protocol.SessionID]liveTerminal), probes: make(map[protocol.SessionID]livenessProbe)}
 	var sessions []protocol.SessionID
 	previous := map[protocol.SessionID]struct{}{}

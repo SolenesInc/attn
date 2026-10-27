@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/protocol"
 	"nhooyr.io/websocket"
 )
@@ -338,13 +339,25 @@ func (p *probe) sequence(label, terminal string) error {
 	return json.NewEncoder(os.Stdout).Encode(map[string]any{"mode": label + "-seq", "bytes": total, "seconds": time.Since(began).Seconds()})
 }
 
+func (p *probe) startEcho(terminal string) error {
+	p.mu.Lock()
+	p.echo = terminal
+	p.outputs[terminal] = nil
+	p.mu.Unlock()
+	if err := p.input(terminal, "stty raw -echo; python3 -u -c 'import os,sys; print(\"echo_\"+\"READY\",flush=True); [os.write(1,b\"<\"+line+b\">\") for line in sys.stdin.buffer]'\r"); err != nil {
+		return err
+	}
+	return p.screen(terminal, "echo_READY")
+}
+
 func run() error {
 	url := flag.String("url", "", "isolated home's WebSocket URL")
 	data := flag.String("data", "", "isolated home's data directory")
 	address := flag.String("address", "", "outpost bridge address")
 	name := flag.String("name", "ai-sandbox", "outpost name")
 	cwd := flag.String("cwd", "/tmp", "outpost working directory")
-	mode := flag.String("mode", "scenario", "scenario, direct, derp, remove, or local")
+	mode := flag.String("mode", "scenario", "scenario, direct, derp, notebook, remove, or local")
+	notebookEvents := flag.String("notebook-events", "", "write actual Notebook row messages as JSON (notebook mode)")
 	cut := flag.String("cut-command", "", "local script that cuts and automatically restores the outpost route")
 	samples := flag.Int("samples", 1000, "echo samples per mode")
 	flag.Parse()
@@ -410,6 +423,7 @@ func run() error {
 		fmt.Println("two local shells ran, ATTN_HOST unset, exit 1 retained; Outposts off")
 		return nil
 	}
+	pairingStarted := time.Now()
 	host := ""
 	p.mu.Lock()
 	for _, f := range p.frames {
@@ -449,14 +463,17 @@ func run() error {
 		_, err := p.request(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host}, protocol.EventOutpostsUpdated, func(f map[string]any) bool { rows, _ := f["outposts"].([]any); return len(rows) == 0 })
 		return err
 	}
-	defer func() {
-		_, err := p.request(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host}, protocol.EventOutpostsUpdated, func(f map[string]any) bool { rows, _ := f["outposts"].([]any); return len(rows) == 0 })
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "remove outpost:", err)
-		} else {
-			fmt.Println("removed outpost and closed its terminals")
-		}
-	}()
+	if *mode != "notebook" {
+		defer func() {
+			_, err := p.request(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host}, protocol.EventOutpostsUpdated, func(f map[string]any) bool { rows, _ := f["outposts"].([]any); return len(rows) == 0 })
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "remove outpost:", err)
+			} else {
+				fmt.Println("removed outpost and closed its terminals")
+			}
+		}()
+	}
+
 	shell, err := p.spawn(host, *cwd, "")
 	if err != nil {
 		return err
@@ -469,6 +486,69 @@ func run() error {
 	}
 	if err := p.screen(shell, "__attn_host="+*name+" system=Linux"); err != nil {
 		return err
+	}
+	if *mode == "notebook" {
+		defer p.send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(p.owners[shell])})
+		if err := p.startEcho(shell); err != nil {
+			return err
+		}
+		synced := func() bool {
+			for i := len(p.frames) - 1; i >= 0; i-- {
+				rows, ok := p.frames[i]["outposts"].([]any)
+				if !ok {
+					continue
+				}
+				for _, value := range rows {
+					row, _ := value.(map[string]any)
+					if row["id"] != host {
+						continue
+					}
+					notebook, _ := row["notebook"].(map[string]any)
+					if notebook["state"] == "error" {
+						p.err = fmt.Errorf("notebook: %v", notebook)
+						return false
+					}
+					return notebook["state"] == "in_sync"
+				}
+			}
+			return false
+		}
+		completed := make(chan error, 1)
+		go func() {
+			err := p.await(synced)
+			if err == nil {
+				_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"first_sync_seconds": time.Since(pairingStarted).Seconds(), "bulk_window_bytes": bridge.BulkCredit})
+			}
+			completed <- err
+		}()
+		for batch := 0; ; batch++ {
+			if err := p.measure(fmt.Sprintf("notebook-%d", batch), *samples); err != nil {
+				return err
+			}
+			select {
+			case err := <-completed:
+				if err != nil {
+					return err
+				}
+				if *notebookEvents != "" {
+					p.mu.Lock()
+					var frames []map[string]any
+					for _, frame := range p.frames {
+						if frame["outposts"] != nil {
+							frames = append(frames, frame)
+						}
+					}
+					raw, err := json.MarshalIndent(frames, "", "  ")
+					p.mu.Unlock()
+					if err != nil {
+						return err
+					}
+					return os.WriteFile(*notebookEvents, raw, 0600)
+				}
+				return nil
+			default:
+			}
+		}
 	}
 	split, err := p.spawn(host, *cwd, shell)
 	if err != nil {
@@ -527,17 +607,7 @@ func run() error {
 		return err
 	}
 
-	startEcho := func(terminal string) error {
-		p.mu.Lock()
-		p.echo = terminal
-		p.outputs[terminal] = nil
-		p.mu.Unlock()
-		if err := p.input(terminal, "stty raw -echo; python3 -u -c 'import os,sys; print(\"echo_\"+\"READY\",flush=True); [os.write(1,b\"<\"+line+b\">\") for line in sys.stdin.buffer]'\r"); err != nil {
-			return err
-		}
-		return p.screen(terminal, "echo_READY")
-	}
-	if err := startEcho(shell); err != nil {
+	if err := p.startEcho(shell); err != nil {
 		return err
 	}
 	if err := p.measure(*mode+"-idle", *samples); err != nil {
@@ -556,7 +626,7 @@ func run() error {
 	if err := p.attach(local, true); err != nil {
 		return err
 	}
-	if err := startEcho(local); err != nil {
+	if err := p.startEcho(local); err != nil {
 		return err
 	}
 	if err := p.measure(*mode+"-local-under-remote-flood", *samples); err != nil {

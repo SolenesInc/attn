@@ -157,9 +157,9 @@ func (d *Daemon) terminalAct(caller *protocol.Session, target *selectedTerminal,
 	return nil
 }
 
-func (d *Daemon) terminalContext(conn net.Conn) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(d.life.Context())
-	d.life.Go("terminalCommandDisconnect", func() { _, _ = io.Copy(io.Discard, conn); cancel() })
+func (d *Daemon) connectionContext(parent context.Context, conn net.Conn) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	d.life.Go("commandDisconnect", func() { _, _ = io.Copy(io.Discard, conn); cancel() })
 	return ctx, cancel
 }
 
@@ -294,7 +294,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 	}
 	terminal := d.primaryTerminal(id)
 	if command := protocol.Deref(msg.Command); command != "" {
-		connectionCtx, cancelConnection := d.terminalContext(conn)
+		connectionCtx, cancelConnection := d.connectionContext(d.life.Context(), conn)
 		defer cancelConnection()
 		ctx, cancel := context.WithTimeout(connectionCtx, terminalFirstPromptTripwire)
 		defer cancel()
@@ -354,7 +354,7 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 			return
 		}
 		if !state.IntegrationSeen && protocol.Deref(msg.Wait) {
-			connectionCtx, cancelConnection := d.terminalContext(conn)
+			connectionCtx, cancelConnection := d.connectionContext(d.life.Context(), conn)
 			defer cancelConnection()
 			ctx, cancel := context.WithTimeout(connectionCtx, terminalFirstPromptTripwire)
 			defer cancel()
@@ -430,7 +430,7 @@ func (d *Daemon) handleTerminalWait(conn net.Conn, msg *protocol.TerminalWaitMes
 		d.sendError(conn, "prompt rule: wait --until prompt requires a shell; use wait --until exit for an agent")
 		return
 	}
-	ctx, cancel := d.terminalContext(conn)
+	ctx, cancel := d.connectionContext(d.life.Context(), conn)
 	defer cancel()
 	result, err := Call[protocol.TerminalWaitResult](ctx, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: target.terminal, Until: msg.Until, AfterBlockID: msg.AfterBlockID})
 	if err != nil && ctx.Err() == nil {

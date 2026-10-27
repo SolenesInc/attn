@@ -55,6 +55,7 @@ func (d *Daemon) configureOutpostListener() {
 	r := &d.outpost
 	r.configure.Lock()
 	defer r.configure.Unlock()
+	defer d.configureNotebookSync()
 	r.mu.Lock()
 	old := r.listener
 	r.listener = nil
@@ -182,11 +183,13 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 	if previous != nil {
 		_ = previous.Close()
 	}
+	d.configureNotebookSync()
 	if !d.life.Go("outpostViews", func() { d.sendOutpostViews(d.life.Context(), conn) }) {
 		_ = conn.Close()
 		return
 	}
 	if !d.life.Go("outpostBridge", func() {
+		defer func() { d.logf("home bridge closed: largest heartbeat gap %s", conn.MaxHeartbeatGap()) }()
 		for state := range conn.States() {
 			r.mu.Lock()
 			current := r.listener == run && run.conn == conn

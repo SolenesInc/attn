@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { outpostIsUpdating, outpostUpdateText } from './OutpostUpdateBanner';
-import type { OutpostInfo } from '../types/generated';
+import type { OutpostInfo, OutpostNotebook } from '../types/generated';
 
 const stateTone: Record<OutpostInfo['state'], string> = {
   connecting: '', connected: 'good', stalled: 'warn', lost: 'bad', refused: 'bad',
@@ -10,6 +10,23 @@ const stateTone: Record<OutpostInfo['state'], string> = {
 
 function Timestamp({ value }: { value: string }) {
   return <time dateTime={value} title={value}>{new Date(value).toLocaleString()}</time>;
+}
+
+function NotebookSyncStatus({ notebook }: { notebook: OutpostNotebook }) {
+  const bytes = notebook.need_bytes ?? 0;
+  const items = notebook.need_items ?? 0;
+  const unit = bytes >= 1024 ** 3 ? 'GB' : bytes >= 1024 ** 2 ? 'MB' : bytes >= 1024 ? 'kB' : 'B';
+  const divisor = { GB: 1024 ** 3, MB: 1024 ** 2, kB: 1024, B: 1 }[unit];
+  const remaining = `${divisor === 1 ? bytes : (bytes / divisor).toFixed(1)} ${unit} and ${items} ${items === 1 ? 'item' : 'items'} left`;
+  const label = { first_sync: 'first sync', syncing: 'syncing', in_sync: 'in sync', error: 'error' }[notebook.state];
+  const conflicts = notebook.conflicts ?? 0;
+  return <div className="settings-outpost-notebook" role="status">
+    <p className={notebook.state === 'error' ? 'settings-warning' : 'settings-description'}>
+      {notebook.state === 'error' ? `Notebook sync error: ${notebook.error}` : `Notebook: ${label}${(bytes > 0 || items > 0) ? ` · ${remaining}` : ''}`}
+    </p>
+    {conflicts > 0 && <p className="settings-warning">{conflicts} conflict {conflicts === 1 ? 'copy' : 'copies'}</p>}
+    {notebook.previous_root && <p className="settings-description">Previous folder saved at {notebook.previous_root}</p>}
+  </div>;
 }
 
 export function OutpostsSettings() {
@@ -80,6 +97,7 @@ export function OutpostsSettings() {
                     {row.daemon_id && <div className="settings-meta-row"><span>Daemon</span><code>{row.daemon_id}</code></div>}
                     {row.host_key_fingerprint && <div className="settings-meta-row"><span>Host key</span><code>{row.host_key_fingerprint}</code></div>}
                     {row.last_error && <div className="settings-warning settings-outpost-error"><p>{row.last_error}</p>{row.last_error_at && <Timestamp value={row.last_error_at} />}</div>}
+                    {row.notebook && <NotebookSyncStatus notebook={row.notebook} />}
                     {row.update && <p className="settings-description" role="status">{outpostUpdateText(row)}</p>}
                     <div className="settings-outpost-actions">
                       {row.build && homeBuild && row.build !== homeBuild && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : 'Update to home build'}</button>}

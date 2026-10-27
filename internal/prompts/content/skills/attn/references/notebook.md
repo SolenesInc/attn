@@ -4,12 +4,16 @@ Load this reference when you read or maintain the attn Notebook — the durable,
 instance-wide markdown store — especially when your session is the chief of staff.
 The Notebook outlives any single agent or profile.
 
-The Notebook is plain markdown on disk, and you maintain it by **editing the files
-directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
+The Notebook is plain markdown on disk. Read it and edit knowledge notes with
+native tools (Read/Write/Edit and `ls`/`rg`). Append journal entries through
+`attn journal append`, which serializes writes at the home.
 There is no `attn notebook` CLI. The notebook root is given to you in your
 operating guidance (the chief-of-staff launch injection); it is
 `~/attn-notebook` by default (per-instance variants append the instance name). Paths
-below are written relative to that `<root>`.
+below are written relative to that `<root>`. On an outpost, use that machine's
+`notebook.root.effective` from `attn settings get notebook.root.effective`. Its
+Notebook syncs with the home. `attn seed show <seed>` prints that machine's
+artifact folder.
 
 ## Orient First
 
@@ -43,16 +47,16 @@ The knowledge base is not a task tracker. Capture what is *known*, not what is
 
 ## Append A Journal Entry
 
-Open today's file (`<root>/journal/<YYYY-MM-DD>.md`), creating it if absent, and
-append your entry. A new file carries OKF frontmatter:
+Append a short prose entry through the home:
 
-    ---
-    type: journal
-    title: 2026-06-18
-    ---
+```sh
+attn journal append --entry 'What changed and why it matters.'
+attn journal append --date 2026-06-18 --entry 'An entry for a specific day.'
+```
 
-Then add a short, dated, prose entry. Backfill a specific day by editing that
-day's file directly.
+The command creates the day's file with journal frontmatter when needed. Without
+`--date`, it uses the home's date. Use the command from outposts too, so concurrent
+appends share the same writer. Read the resulting file through your local copy.
 
 ## Write Or Edit A Knowledge Note
 

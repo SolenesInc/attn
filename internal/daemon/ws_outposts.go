@@ -88,6 +88,10 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		delete(r.dialers, id)
 		r.mu.Unlock()
 	}
+	d.configureNotebookSync()
+	if action == "remove" {
+		d.forgetNotebookSyncPeer(row.DaemonID)
+	}
 	d.publishFact(FactOutpostChanged, id, nil)
 	return nil
 }
@@ -124,6 +128,7 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 		run := r.dialers[row.ID]
 		_, info.Reach = outpostReach(enabled, run)
 		if run != nil {
+			info.Notebook = run.notebook
 			info.State = protocol.OutpostState(run.state)
 			info.StateSince = run.since
 			if run.build != "" {
