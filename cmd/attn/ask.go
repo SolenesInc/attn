@@ -204,8 +204,9 @@ A block's first line is the question; the rest is context. Choices are
 attn ask prints the ask's id and returns at once. Carry on with work that does
 not depend on the answer. When the user answers, attn types the answer into
 the conversation as their message, approvals included. By then they have
-likely moved on and will not read what you write back, so if you still need
-them, ask again.
+likely moved on and will not read what you write back there. If their answer
+asks you something, reply with a new ask; an ask can be plain markdown with no
+question block. If you still need them, ask again.
 
 commands:
   (none)                 open an ask from stdin or --file
