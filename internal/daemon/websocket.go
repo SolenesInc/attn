@@ -1049,18 +1049,30 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSettleTurn:
 		if err := d.handleSettleTurn(msg.(*protocol.SettleTurnMessage)); err != nil {
 			d.logf("settle rejected: %v", err)
+			if d.sessionHost(msg.(*protocol.SettleTurnMessage).SessionID) != "" {
+				d.sendCommandError(client, protocol.CmdSettleTurn, err.Error())
+			}
 		}
 	case protocol.CmdSnoozeTurn:
 		if err := d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage)); err != nil {
 			d.logf("snooze rejected: %v", err)
+			if d.sessionHost(msg.(*protocol.SnoozeTurnMessage).SessionID) != "" {
+				d.sendCommandError(client, protocol.CmdSnoozeTurn, err.Error())
+			}
 		}
 	case protocol.CmdWakeTurn:
 		if err := d.handleWakeTurn(msg.(*protocol.WakeTurnMessage)); err != nil {
 			d.logf("unsnooze rejected: %v", err)
+			if d.sessionHost(msg.(*protocol.WakeTurnMessage).SessionID) != "" {
+				d.sendCommandError(client, protocol.CmdWakeTurn, err.Error())
+			}
 		}
 	case protocol.CmdCancelCountdown:
 		if err := d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage)); err != nil {
 			d.logf("cancel countdown rejected: %v", err)
+			if d.sessionHost(msg.(*protocol.CancelCountdownMessage).SessionID) != "" {
+				d.sendCommandError(client, protocol.CmdCancelCountdown, err.Error())
+			}
 		}
 
 	case protocol.CmdPRVisited:

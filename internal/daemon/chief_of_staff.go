@@ -154,6 +154,10 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, "", fmt.Errorf("missing session_id"))
 		return
 	}
+	if host := d.sessionHost(sessionID); msg.ChiefOfStaff && host != "" {
+		d.sendChiefOfStaffResult(client, sessionID, true, "", fmt.Errorf("outpost limit: the chief runs only at the home, not on %s", d.outpostName(host)))
+		return
+	}
 
 	profileID, err := d.store.SessionProfileID(sessionID)
 	if err != nil || profileID == "" {

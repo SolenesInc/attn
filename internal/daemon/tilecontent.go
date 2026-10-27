@@ -248,6 +248,9 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 }
 
 func (d *Daemon) receiveSentFile(sessionID protocol.SessionID, path string) {
+	if d.sessionHost(sessionID) != "" {
+		return
+	}
 	if d.openSentFilesEnabled() {
 		desktopID, tileID, err := d.openMarkdownTile(path, sessionID)
 		if err == nil {

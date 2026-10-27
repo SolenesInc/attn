@@ -6,7 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
-func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view sessionmonitor.View) {
+func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view sessionmonitor.View, catchUp bool) {
 	if previous.HarnessTitle.V != view.HarnessTitle.V && d.store.SessionLabels(session).UserLabel == "" {
 		d.publishFact(FactSessionRenamed, string(session), nil)
 	}
@@ -14,7 +14,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 		d.publishFact(FactSessionTitleChanged, string(session), nil)
 	}
 	for path, sequence := range view.SentFiles.Entries {
-		if previous.SentFiles.Entries[path] != sequence {
+		if !catchUp && previous.SentFiles.Entries[path] != sequence {
 			d.receiveSentFile(session, path)
 		}
 	}

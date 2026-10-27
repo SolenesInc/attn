@@ -38,8 +38,8 @@ attn agent close instead.
 
 Open --host selects an outpost by name or id. Without --cwd it starts in the
 outpost's home directory; --cwd names a directory on the outpost.
-Only shells run on outposts. Commands that need attn's daemon are unavailable
-in those shells; run them from an agent at the home.
+Claude, Codex and shells run on outposts. An agent's attn commands reach the
+home. Spawning chief, crew and plugin agents on outposts is unavailable.
 
 Open preserves focus: first terminal right (or --down), later terminals below
 the last live terminal you opened there. --desktop starts at its active tile.

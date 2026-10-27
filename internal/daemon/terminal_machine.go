@@ -21,6 +21,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	parts := map[string]machinePart{}
 	runs(parts, false, d.applySetting)
 	runs(parts, false, d.applyMonitorView)
+	runs(parts, false, d.terminalExited)
 	d.registerMonitorParts(parts)
 	runs(parts, false, d.receiveNotebookSyncReport)
 	runs(parts, false, d.transferSeedArtifactHere)
@@ -76,10 +77,12 @@ func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMess
 		if home == nil {
 			return struct{}{}, errors.New("home bridge is not connected")
 		}
-		if err := d.store.ApplyCopy(home.Context(), home.Peer().DaemonID, msg.Copy); err != nil {
+		if err := d.applyOutpostCopy(home.Context(), home.Peer().DaemonID, msg.Copy); err != nil {
 			return struct{}{}, err
 		}
-		d.forgetMonitor(session.ID)
+		if agent == nil || !agent.AddedTerminal {
+			d.forgetMonitor(session.ID)
+		}
 	}
 	opts.HostName = protocol.Deref(msg.HostName)
 	d.expectTerminal(msg.TerminalID, session.ID)

@@ -6,7 +6,7 @@ import type { UISessionState } from '../types/sessionState';
 import { normalizeSessionState } from '../types/sessionState';
 import type { SessionAgent } from '../types/sessionAgent';
 import { normalizeSessionAgent } from '../types/sessionAgent';
-import type { AutomationProvenance, Desktop, SessionPullRequest } from '../types/generated';
+import type { AutomationProvenance, Desktop, OutpostInfo, SessionPullRequest } from '../types/generated';
 import { listenPtyEvents, ptyReload, type PtySpawnArgs } from '../pty/bridge';
 import {
   createDefaultDesktopState,
@@ -39,6 +39,8 @@ export interface Session {
 }
 
 export interface DaemonSessionSnapshot {
+	 host?: string;
+	 offline?: boolean;
   chief_of_staff?: boolean;
   turn_owed?: boolean;
   turn_opened_at?: string;
@@ -63,6 +65,8 @@ export interface DaemonSessionSnapshot {
 }
 
 export interface SessionStore extends SessionNavigationState, SessionNavigationActions {
+	 outposts: OutpostInfo[];
+	 syncOutposts: (outposts: OutpostInfo[]) => void;
   sessions: Session[];
   navigationSessions: DaemonSessionSnapshot[];
   navigationProfileId: string;
@@ -90,6 +94,10 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
   reloadSession: (id: string, size?: { cols: number; rows: number }) => Promise<void>;
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => void;
   syncFromArrangement: (profileId: string, currentDesktopId: string | null, desktops: Desktop[], arrival: Arrival) => void;
+}
+
+export function sessionIsOffline(session: { host?: string }, outposts: readonly OutpostInfo[]): boolean {
+  return Boolean(session.host && (outposts.find((row) => row.id === session.host)?.reach ?? 'unreachable') === 'unreachable');
 }
 
 const MIN_STABLE_COLS = 20;
@@ -134,6 +142,8 @@ function samePullRequests(
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
+  outposts: [],
+  syncOutposts: (outposts) => set((state) => reconcileSessionNavigation(state, { outposts })),
   ...initialSessionNavigation(),
   ...createSessionNavigationActions(set, get),
   navigationSessions: [],

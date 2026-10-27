@@ -753,7 +753,11 @@ export function useDaemonSocket({
   const [isReady, setIsReady] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
-  const [outposts, setOutposts] = useState<OutpostInfo[]>([]);
+  const [outposts, setOutpostRows] = useState<OutpostInfo[]>([]);
+  const setOutposts = useCallback((rows: OutpostInfo[]) => {
+    useSessionStore.getState().syncOutposts(rows);
+    setOutpostRows(rows);
+  }, []);
   const [outpostCommandError, setOutpostCommandError] = useState('');
   const [homeBuild, setHomeBuild] = useState('');
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
@@ -1160,6 +1164,7 @@ export function useDaemonSocket({
             // session its terminal now shows before the sessions update drops it.
             useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
             syncNavigationFromProfiles({ kind: 'scope' });
+            setOutposts(data.outposts ?? []);
             callbacksRef.current.onSessionsUpdate(nextSessions);
             callbacksRef.current.onSeedsUpdate?.(
               data.seeds || [],
@@ -1186,7 +1191,6 @@ export function useDaemonSocket({
             callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);
 
             const nextSettings = data.settings || {};
-            setOutposts(data.outposts ?? []);
             settingsRef.current = nextSettings;
             callbacksRef.current.onSettingsUpdate?.(nextSettings);
             const nextWarnings = data.warnings || [];

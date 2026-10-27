@@ -25,6 +25,7 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pausepoint"
+	profilespkg "github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -912,7 +913,19 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 		r.d.logf("shared Codex: %v", err)
 		return
 	}
+	known := make(map[string]bool, len(profiles))
 	for _, profile := range profiles {
+		known[profile.ID] = true
+	}
+	for _, session := range r.d.store.List("") {
+		if !known[session.ProfileID] && r.d.store.SessionLink(session.ID) == codexLinkKind {
+			profiles = append(profiles, profilespkg.Profile{ID: session.ProfileID})
+			known[session.ProfileID] = true
+		}
+	}
+	owned := make(map[harness.TerminalID]bool, len(profiles))
+	for _, profile := range profiles {
+		owned[codexServerTerminal(profile.ID)] = true
 		if _, running := live[codexServerTerminal(profile.ID)]; !running {
 			r.serverGone(profile.ID)
 			continue
@@ -926,6 +939,13 @@ func (r *codexShared) recoverProcesses(ctx context.Context) {
 			r.d.logf("shared Codex: reconnect to the app-server of profile %s: %v", profile.ID, err)
 		}
 		cancel()
+	}
+	for terminal := range r.d.localLiveTerminals(ctx) {
+		if r.runsLink(terminal) && !owned[terminal] {
+			if err := r.d.removePTYSession(terminal); err != nil {
+				r.d.logf("shared Codex: remove app-server %s without an owning profile: %v", terminal, err)
+			}
+		}
 	}
 }
 

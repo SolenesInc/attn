@@ -27,7 +27,7 @@ func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.Answer, 
 	if !h.apply(view, false) {
 		return sessionmonitor.Answer{}, false
 	}
-	if h.daemon.copiedSession(h.sessionID()) {
+	if h.daemon.monitors().copied(h.sessionID()) {
 		return sessionmonitor.Answer{}, true
 	}
 	pending := view.PendingSwitch.V
@@ -98,6 +98,8 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 		return false
 	}
 	binding.applied = view
+	firstOnBridge := h.bridge != nil && binding.bridge != h.bridge
+	binding.bridge = h.bridge
 	h.catchUp(session, binding, nil)
 	r.applyMu.Unlock()
 	for _, id := range linked {
@@ -106,7 +108,7 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 	if _, _, usageChanged := sessionmonitor.CostChange(previous, view); usageChanged {
 		d.publishFact(FactSessionCostChanged, string(session), nil)
 	}
-	d.reactMonitorView(session, previous, view)
+	d.reactMonitorView(session, previous, view, firstOnBridge)
 	return true
 }
 
@@ -190,16 +192,18 @@ func decodePullRequests(raw string) map[string]sessionmonitor.PullRequest {
 func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 	state, turn, driver := view.State.V, view.Turn.V, view.Driver.V
 	return store.SessionRuntimeState{
-		State: state.State, Since: state.Since, Updated: state.Updated,
-		Turn:               store.TurnStamps{OpenedAt: turn.OpenedAt, SettledAt: turn.SettledAt, SnoozedUntil: turn.SnoozedUntil, AgentAt: turn.AgentAt, RequestedAt: turn.RequestedAt},
-		LastModelRequestAt: view.LastModelRequestAt.V,
-		Driver:             store.AgentDriverReportCursor{PluginName: driver.Plugin, RunID: driver.Run, Seq: driver.Sequence},
-		DriverMetadata:     driver.Metadata,
-		DriverTranscript:   driver.TranscriptPath,
-		Branch:             view.Branch.V,
-		HarnessTitle:       view.HarnessTitle.V,
-		LastSeen:           view.LastSeen.V,
-		PullRequests:       encodePullRequests(view.PullRequests.Entries),
+		Live: view.Live.V, State: state.State, Since: state.Since, Updated: state.Updated,
+		Turn:                       store.TurnStamps{OpenedAt: turn.OpenedAt, SettledAt: turn.SettledAt, SnoozedUntil: turn.SnoozedUntil, AgentAt: turn.AgentAt, RequestedAt: turn.RequestedAt},
+		LastModelRequestAt:         view.LastModelRequestAt.V,
+		Driver:                     store.AgentDriverReportCursor{PluginName: driver.Plugin, RunID: driver.Run, Seq: driver.Sequence},
+		DriverMetadata:             driver.Metadata,
+		DriverTranscript:           driver.TranscriptPath,
+		Branch:                     view.Branch.V,
+		HarnessTitle:               view.HarnessTitle.V,
+		LastSeen:                   view.LastSeen.V,
+		PullRequests:               encodePullRequests(view.PullRequests.Entries),
+		ConversationNativeID:       view.Conversation.V.NativeID,
+		ConversationTranscriptPath: view.Conversation.V.TranscriptPath,
 	}
 }
 

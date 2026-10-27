@@ -184,6 +184,16 @@ func (r *Runner) RegisterWith(kind string, fn HandlerFunc, cfg HandlerConfig) er
 	return nil
 }
 
+func (r *Runner) RegisteredKinds() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kinds := make([]string, 0, len(r.handlers))
+	for kind := range r.handlers {
+		kinds = append(kinds, kind)
+	}
+	return kinds
+}
+
 func (r *Runner) Start() error {
 	if r.disabled {
 		return nil

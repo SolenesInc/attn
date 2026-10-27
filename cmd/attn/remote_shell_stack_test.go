@@ -59,11 +59,6 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 	app.TypeLine(split, "printf 'split-host=%s\\n' \"$ATTN_HOST\"; pwd")
 	app.AwaitScreen(split, "split-host=outpost")
 	app.AwaitScreen(split, session.Directory)
-	denied, _, _ := home.RequestSpawn(app, fakeagent.Claude, home.Path("denied"), func(msg *protocol.SpawnSessionMessage) { msg.Host = protocol.Ptr(host) })
-	if denied.Success || !strings.Contains(protocol.Deref(denied.Error), "only shells") {
-		t.Fatalf("remote agent limit: %+v", denied)
-	}
-
 	got = run("run", string(opened.TerminalID), "printf 'blocked-ready\\n'; sleep 600")
 	if got.Code != 0 {
 		t.Fatalf("start blocking shell command: %+v", got)

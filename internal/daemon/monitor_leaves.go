@@ -180,7 +180,7 @@ func (d *Daemon) readMonitorStateTrace(_ context.Context, msg protocol.MonitorSt
 
 func (d *Daemon) readMonitorTranscriptPage(_ context.Context, msg protocol.MonitorTranscriptPageMessage) (protocol.MonitorTranscriptPageResult, error) {
 	var result protocol.MonitorTranscriptPageResult
-	session := d.store.SessionLedgerEntry(msg.SessionID)
+	session := d.monitorTranscriptSession(msg.SessionID)
 	if session == nil {
 		return result, fmt.Errorf("session_not_found")
 	}
@@ -213,7 +213,7 @@ func transcriptReadErrorKind(err error) string {
 }
 
 func (d *Daemon) readMonitorLastAssistant(_ context.Context, msg protocol.MonitorLastAssistantMessage) (protocol.MonitorLastAssistantResult, error) {
-	session := d.store.SessionLedgerEntry(msg.SessionID)
+	session := d.monitorTranscriptSession(msg.SessionID)
 	if session == nil {
 		return protocol.MonitorLastAssistantResult{}, fmt.Errorf("session_not_found")
 	}
@@ -223,4 +223,15 @@ func (d *Daemon) readMonitorLastAssistant(_ context.Context, msg protocol.Monito
 	}
 	message, err := transcript.ExtractLastAssistantMessage(path, agentPeekMessageMaxChars)
 	return protocol.MonitorLastAssistantResult{Text: message}, err
+}
+
+func (d *Daemon) monitorTranscriptSession(id protocol.SessionID) *protocol.SessionLedgerEntry {
+	if session := d.store.SessionLedgerEntry(id); session != nil {
+		return session
+	}
+	records := d.store.SessionRuntimeRecords(id)
+	if records.HomeDaemonID == "" || records.Agent == "" {
+		return nil
+	}
+	return &protocol.SessionLedgerEntry{ID: id, Agent: records.Agent}
 }

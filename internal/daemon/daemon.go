@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -308,6 +309,7 @@ type Daemon struct {
 	conversationKeepMu   sync.Mutex
 	jobQueueMu           sync.RWMutex
 	jobQueue             *jobs.Runner
+	jobQueueRoleChanged  chan struct{}
 	taskFailureRenderers map[string]taskFailureRenderer
 
 	sessionActivityRunsMu sync.Mutex
@@ -525,6 +527,7 @@ func New(socketPath string) *Daemon {
 		tailscale:           newTailscaleRuntime(),
 		plugins:             newPluginRegistry(),
 		pluginHealthEnabled: true,
+		jobQueueRoleChanged: make(chan struct{}, 1),
 		pluginDir:           pluginDirForSocket(socketPath),
 		bundledPluginDir:    bundledPluginDirForExecutable(),
 		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
@@ -559,12 +562,13 @@ func NewForTesting(socketPath string) *Daemon {
 		startedCh:        make(chan struct{}),
 		restartRequested: make(chan struct{}),
 
-		tailscale:        newTailscaleRuntime(),
-		plugins:          newPluginRegistry(),
-		pluginDir:        pluginDirForSocket(socketPath),
-		bundledPluginDir: bundledPluginDirForExecutable(),
-		spawnLocks:       make(map[protocol.SessionID]*spawnLock),
-		jobQueue:         jobs.New(jobs.Options{}),
+		tailscale:           newTailscaleRuntime(),
+		plugins:             newPluginRegistry(),
+		pluginDir:           pluginDirForSocket(socketPath),
+		bundledPluginDir:    bundledPluginDirForExecutable(),
+		spawnLocks:          make(map[protocol.SessionID]*spawnLock),
+		jobQueue:            jobs.New(jobs.Options{}),
+		jobQueueRoleChanged: make(chan struct{}, 1),
 	}
 	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
@@ -821,14 +825,27 @@ func (d *Daemon) Start() error {
 
 	queueStarted := make(chan error, 1)
 	if !d.life.Go("jobQueue", func() {
-		err := d.startJobQueue()
+		home := d.enrollmentStatus().IsHome()
+		err := d.startJobQueue(home)
 		queueStarted <- err
 		if err != nil {
 			return
 		}
-		runner := d.jobQueueRef()
-		<-d.life.Done()
-		runner.Stop()
+		for {
+			select {
+			case <-d.life.Done():
+				d.jobQueueRef().Stop()
+				return
+			case <-d.jobQueueRoleChanged:
+				if current := d.enrollmentStatus().IsHome(); current != home {
+					d.jobQueueRef().Stop()
+					if err := d.startJobQueue(current); err != nil {
+						d.logf("background jobs after enrollment change: %v", err)
+					}
+					home = current
+				}
+			}
+		}
 	}) {
 		return errDaemonStopping
 	}
@@ -1044,6 +1061,15 @@ func (d *Daemon) pruneRuntimesWithoutSession(ctx context.Context) {
 		if _, shown := d.shownIn(terminal); shown || d.linkProcess(terminal) {
 			continue
 		}
+		pending := false
+		for _, raw := range d.store.PendingSessionSwitches() {
+			for _, conversation := range decodePendingSwitch(raw) {
+				pending = pending || conversation.Terminal == terminal
+			}
+		}
+		if pending {
+			continue
+		}
 		if err := d.removePTYSession(terminal); err != nil {
 			d.logf("pruning terminal %s without a session failed: %v", terminal, err)
 		}
@@ -1166,6 +1192,7 @@ type recoveryRules struct {
 	allowIdleDemotion     bool
 	allowTombstoneCleanup bool
 	previousRunSessions   map[protocol.SessionID]struct{}
+	placements            map[protocol.SessionID][]harness.TerminalID
 	startedAt             time.Time
 }
 
@@ -1342,55 +1369,68 @@ func (d *Daemon) recoverRecords(machine machineReport, sessions []protocol.Sessi
 	}
 
 	for _, sessionID := range sessions {
-		if _, fromPreviousRun := rules.previousRunSessions[sessionID]; !fromPreviousRun {
-			continue
-		}
-		if _, ok := machine.live[sessionID]; ok || d.hidden(sessionID) {
-			continue
-		}
-		session := d.store.Get(sessionID)
-		if session == nil {
-			continue
-		}
-		if sessionUpdatedAfter(session, rules.startedAt) {
-			report.SkippedRecent++
-			continue
-		}
-		if probe, probed := machine.probes[sessionID]; probed {
-			if probe.err != nil {
-				d.logf("worker liveness probe failed for session %s: %v", sessionID, probe.err)
-				report.LivenessUnknown++
-				continue
-			}
-			if probe.likelyAlive {
-				report.LikelyAlive++
-				continue
-			}
-		}
-		if !rules.allowIdleDemotion {
-			report.SkippedIdle++
-			continue
-		}
-		d.releaseExitedCrewBinding(sessionID)
-		if d.store.GetSessionExit(sessionID) != nil {
-			continue
-		}
-		if d.canReviveSession(session) {
-			if session.State == protocol.SessionStateRecoverable {
-				continue
-			}
-			d.recoverSessionState(sessionID)
-			report.StateUpdated++
-			report.MarkedRecoverable++
-			report.markChanged(sessionID)
-		} else {
-			d.removeReapedSession(sessionID)
-			report.Reaped++
-			report.markChanged(sessionID)
-		}
+		d.recoverMissingSession(sessionID, machine, rules, &report)
 	}
 
 	return report
+}
+
+func (d *Daemon) recoverMissingSession(sessionID protocol.SessionID, machine machineReport, rules recoveryRules, report *workerReconcileReport) {
+	if rules.placements != nil {
+		release := d.acquireSpawnLock(sessionID)
+		defer release()
+		if !slices.Equal(rules.placements[sessionID], d.terminalsOf(sessionID)) {
+			report.SkippedRecent++
+			return
+		}
+	}
+
+	if _, fromPreviousRun := rules.previousRunSessions[sessionID]; !fromPreviousRun {
+		return
+	}
+	if _, ok := machine.live[sessionID]; ok || d.hidden(sessionID) {
+		return
+	}
+	session := d.store.Get(sessionID)
+	if session == nil {
+		return
+	}
+	if sessionUpdatedAfter(session, rules.startedAt) {
+		report.SkippedRecent++
+		return
+	}
+	if probe, probed := machine.probes[sessionID]; probed {
+		if probe.err != nil {
+			d.logf("worker liveness probe failed for session %s: %v", sessionID, probe.err)
+			report.LivenessUnknown++
+			return
+		}
+		if probe.likelyAlive {
+			report.LikelyAlive++
+			return
+		}
+	}
+	if !rules.allowIdleDemotion {
+		report.SkippedIdle++
+		return
+	}
+	d.releaseExitedCrewBinding(sessionID)
+	if d.store.GetSessionExit(sessionID) != nil {
+		return
+	}
+	if d.canReviveSession(session) {
+		if session.State == protocol.SessionStateRecoverable {
+			return
+		}
+		d.recoverSessionState(sessionID)
+		report.StateUpdated++
+		report.MarkedRecoverable++
+		report.markChanged(sessionID)
+	} else {
+		d.removeReapedSession(sessionID)
+		report.Reaped++
+		report.markChanged(sessionID)
+	}
 }
 
 func (d *Daemon) adoptLiveTerminal(sessionID protocol.SessionID, live liveTerminal, report *workerReconcileReport) {
@@ -1854,6 +1894,9 @@ func (d *Daemon) terminateSession(sessionID protocol.SessionID, sig syscall.Sign
 }
 
 func (d *Daemon) markSessionTerminationIntent(sessionID protocol.SessionID) error {
+	if err := d.requireLiveSessionHost(sessionID); err != nil {
+		return err
+	}
 	d.sessionMonitor(sessionID).MarkForcedStop()
 	if d.store != nil {
 		if err := d.store.MarkSessionIntentionalClose(sessionID, time.Now()); err != nil {
@@ -1901,6 +1944,10 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, te
 func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionTeardown, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
 	lifecycleLock.Lock()
+	if err := d.requireLiveSessionHost(sessionID); err != nil {
+		lifecycleLock.Unlock()
+		return nil, err
+	}
 	session := d.store.Get(sessionID)
 	if session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
@@ -1911,7 +1958,7 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 	if session != nil && session.Agent == protocol.AgentShellValue {
 		d.sessionMonitor(sessionID).MarkForcedStop()
 	}
-	if session != nil && session.Agent != protocol.AgentShellValue {
+	if session != nil && session.Agent != protocol.AgentShellValue && (d.sessionHost(sessionID) == "" || d.sessionHasLiveWorker(sessionID)) {
 		var err error
 		prepared, err = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "prepare"})
 		if err != nil {
@@ -2069,6 +2116,9 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 }
 
 func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) error {
+	if d.sessionHost(sessionID) != "" && !d.sessionLive(context.Background(), sessionID) {
+		return d.closeSessionRecord(sessionID, closed)
+	}
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
 		return d.closeSessionRecord(sessionID, closed)
 	}

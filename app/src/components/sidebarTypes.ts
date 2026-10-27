@@ -18,6 +18,7 @@ export interface LocalSession {
   title?: string;
   state: UISessionState;
   offline?: boolean;
+  host?: string;
   agent?: string;
   branch?: string;
   isWorktree?: boolean;

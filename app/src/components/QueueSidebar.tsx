@@ -207,12 +207,13 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
   if (!queue) return null;
 
   const turns = queue.turns;
+  const waitingCount = turns.filter((row) => !row.session.offline).length;
   const lead = turns.slice(0, leadCount);
   const hidden = turns.length - lead.length;
   const pinnedCrew = new Set(queue.crew.map((row) => row.session.id));
   const matches = (row: QueueRow<QueueBandSessionView>) =>
     !agentFilter || sessionDisplayName(row.session).toLowerCase().includes(agentFilter.toLowerCase());
-  const hiddenWaiting = turns.slice(leadCount).filter((row) => !pinnedCrew.has(row.session.id)).length;
+  const hiddenWaiting = turns.slice(leadCount).filter((row) => !row.session.offline && !pinnedCrew.has(row.session.id)).length;
   const hiddenWorking = queue.settled.filter((row) => !pinnedCrew.has(row.session.id)).length;
   const hiddenSnoozed = queue.snoozed.filter((row) => !pinnedCrew.has(row.session.id)).length;
   const more = hiddenWaiting + hiddenWorking + hiddenSnoozed;
@@ -242,18 +243,18 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
   const snoozed = queue.snoozed.filter(matches);
 
   return (
-    <div className="queue-waiting-card" data-testid="queue-waiting-card" data-callout-anchor="queue" data-waiting={turns.length}>
+    <div className="queue-waiting-card" data-testid="queue-waiting-card" data-callout-anchor="queue" data-waiting={waitingCount}>
       <button
         type="button"
         className="queue-section-rule queue-waiting-head"
         data-testid="queue-waiting-head"
         title={`Open the oldest turn (${formatShortcut('session.jumpToWaiting')})`}
         onClick={onJumpToWaiting}
-        disabled={turns.length === 0}
+        disabled={waitingCount === 0}
       >
-        {turns.length > 0 ? (
+        {waitingCount > 0 ? (
           <span className="queue-waiting-count">
-            <span className="queue-waiting-number">{turns.length}</span> waiting
+            <span className="queue-waiting-number">{waitingCount}</span> waiting
           </span>
         ) : (
           <span className="queue-waiting-count is-zero" data-testid="queue-empty">
@@ -367,7 +368,7 @@ function DesktopStrip() {
     .filter((desktop) => visualIndexOfDesktop(desktop.id) >= 0)
     .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
   const extras = desktops.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
-  const waitingOn = new Set((queue?.turns ?? []).map((row) => row.desktopId));
+  const waitingOn = new Set((queue?.turns ?? []).filter((row) => !row.session.offline).map((row) => row.desktopId));
   const current = desktops.find((desktop) => desktop.id === selectedDesktopId);
   const currentIsExtra = Boolean(current && visualIndexOfDesktop(current.id) < 0);
 

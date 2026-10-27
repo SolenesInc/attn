@@ -30,7 +30,9 @@ func (s *Store) liveSessionCost(sessionID protocol.SessionID) (*sessionCostEntry
 		return entry, true, nil
 	}
 	var raw, closedAt string
-	if err := s.db.QueryRow("SELECT session_cost_json, closed_at FROM sessions_with_runtime WHERE id = ?", sessionID).Scan(&raw, &closedAt); err != nil {
+	if err := s.db.QueryRow(`SELECT r.session_cost_json, COALESCE(s.closed_at, 'closed')
+		FROM session_runtime r LEFT JOIN sessions s ON s.id = r.session_id WHERE r.session_id = ?
+		UNION ALL SELECT '', closed_at FROM sessions WHERE id = ? AND NOT EXISTS (SELECT 1 FROM session_runtime WHERE session_id = ?)`, sessionID, sessionID, sessionID).Scan(&raw, &closedAt); err != nil {
 		return nil, false, err
 	}
 	state, err := decodeSessionMonitorCost(raw)

@@ -9,16 +9,19 @@ export function HeaderSettlingIndicator({
   firesAt,
   held,
   onCancel,
+  frozen,
 }: {
   firesAt?: string;
   held?: boolean;
   onCancel?: () => void;
+  frozen?: boolean;
 }) {
   return (
     <>
       <button
         type="button"
-        className={held ? 'settling-header settling-header--held' : 'settling-header'}
+        className={held || frozen ? 'settling-header settling-header--held' : 'settling-header'}
+        disabled={frozen}
         // The pane header is a leaf-drag handle, so a click that drifts would
         // relocate the pane instead of keeping the turn.
         onPointerDown={(event) => event.stopPropagation()}
@@ -26,16 +29,16 @@ export function HeaderSettlingIndicator({
           event.stopPropagation();
           onCancel?.();
         }}
-        title="Keep this turn"
-        aria-label="Keep this turn"
+        title={frozen ? 'Settling paused while the host is unreachable' : 'Keep this turn'}
+        aria-label={frozen ? 'Settling paused while the host is unreachable' : 'Keep this turn'}
         data-testid="settling-indicator"
       >
         <span className="settling-dot" aria-hidden="true" />
-        <span className="settling-header-label">{held ? 'Settling paused' : 'Settling…'}</span>
-        <SettleCancelHint verb="keep" />
+        <span className="settling-header-label">{held || frozen ? 'Settling paused' : 'Settling…'}</span>
+        {!frozen && <SettleCancelHint verb="keep" />}
       </button>
       <div className="settling-header-track" aria-hidden="true">
-        {firesAt ? (
+        {firesAt && !frozen ? (
           <CountdownFill firesAt={firesAt} className="settling-header-track-fill" direction="drain" />
         ) : (
           <div className="settling-header-track-fill settling-track-fill--held" />

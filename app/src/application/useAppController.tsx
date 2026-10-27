@@ -530,6 +530,7 @@ export function useAppController({
   const visibleCountdownSessionIds = useMemo(() => {
     const ids: string[] = [];
     for (const session of enrichedLocalSessions) {
+      if (session.offline) continue;
       if (!onScreenSessionIds.has(session.id)) continue;
       if (session.autoSettleFiresAt || session.autoSettleHeld)
         ids.push(session.id);
@@ -538,8 +539,8 @@ export function useAppController({
   }, [enrichedLocalSessions, onScreenSessionIds]);
   const armDismissSessionId = useMemo(
     () =>
-      shownAgentId && onScreenSessionIds.has(shownAgentId) ? shownAgentId : undefined,
-    [shownAgentId, onScreenSessionIds],
+      shownAgentId && onScreenSessionIds.has(shownAgentId) && !enrichedLocalSessions.find((session) => session.id === shownAgentId)?.offline ? shownAgentId : undefined,
+    [shownAgentId, onScreenSessionIds, enrichedLocalSessions],
   );
   const handleCancelCountdown = useMemo(() => {
     if (visibleCountdownSessionIds.length > 0) {

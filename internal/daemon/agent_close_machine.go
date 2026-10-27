@@ -41,7 +41,7 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 		}
 		monitor.FenceInput()
 		session := d.store.Get(msg.SessionID)
-		if session != nil && session.Agent == protocol.SessionAgentCodex {
+		if session != nil {
 			monitor.FinishAndSettleUsage(session.Agent, d.store.GetSessionConversation(session.ID).TranscriptPath)
 		} else {
 			monitor.FinishUsage()

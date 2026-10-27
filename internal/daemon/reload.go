@@ -255,6 +255,9 @@ func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows
 	lock := d.sessionLifecycleLockFor(sessionID)
 	lock.Lock()
 	defer lock.Unlock()
+	if err := d.requireLiveSessionHost(sessionID); err != nil {
+		return nil, err
+	}
 	if d.sessionTeardownInFlight(sessionID) {
 		return nil, errors.New("session is closing")
 	}
@@ -306,10 +309,7 @@ type ptyRespawn struct {
 }
 
 func (d *Daemon) handleReloadSession(client *wsClient, msg *protocol.ReloadSessionMessage) {
-	err := d.requireSessionHost(msg.ID)
-	if err == nil {
-		err = d.reloadSessionForClient(msg.ID, msg.Cols, msg.Rows)
-	}
+	err := d.reloadSessionForClient(msg.ID, msg.Cols, msg.Rows)
 	result := protocol.ReloadSessionResultMessage{
 		Event:   protocol.EventReloadSessionResult,
 		ID:      msg.ID,

@@ -77,6 +77,9 @@ func (d *Daemon) handleSessionTranscript(conn net.Conn, msg *protocol.SessionTra
 
 func (d *Daemon) inspectableTranscriptPath(sessionID protocol.SessionID, agent string) string {
 	binding := d.store.GetSessionConversation(sessionID)
+	if records := d.store.SessionRuntimeRecords(sessionID); records.HomeDaemonID != "" && binding.NativeID == "" {
+		binding.NativeID, binding.TranscriptPath = records.ConversationNativeID, records.ConversationTranscriptPath
+	}
 	for _, path := range []string{binding.TranscriptPath, d.store.GetAgentDriverTranscriptPath(sessionID)} {
 		if path != "" {
 			if _, err := os.Stat(path); err == nil {

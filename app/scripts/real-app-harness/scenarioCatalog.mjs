@@ -272,7 +272,7 @@ export const scenarioCatalog = [
   {
     id: 'outposts-settings',
     runnerId: 'OutpostsSettings',
-    label: 'Outposts: pairing, remote CLI shells, native splits, offline typing and screen recovery, re-pair and Remove confirmation',
+    label: 'Outposts: pairing, remote shells and Claude, native splits, offline queue skips, typing and screen recovery, re-pair and Remove confirmation',
     command: ['node', 'scripts/real-app-harness/scenario-outposts-settings.mjs'],
   },
   {

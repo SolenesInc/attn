@@ -212,6 +212,20 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 				return fmt.Errorf("apply copy of %s %s: %w", row.Table, row.Key, err)
 			}
 		}
+		for _, id := range deleted {
+			if err := s.saveUnsavedSessionCostTx(tx, protocol.SessionID(id)); err != nil {
+				return err
+			}
+			var exists bool
+			if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ? AND copied_from = ?)`, id, home).Scan(&exists); err != nil {
+				return err
+			}
+			if exists {
+				if err := finalizeSessionCostTx(tx, protocol.SessionID(id)); err != nil {
+					return err
+				}
+			}
+		}
 		if err := deleteCopiedSessions(tx, `copied_from = ? AND id IN (SELECT value FROM json_each(?))`, home, jsonList(deleted)); err != nil {
 			return err
 		}
@@ -220,6 +234,11 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 	})
 	if err != nil {
 		return err
+	}
+	for _, row := range rows {
+		if row.Table == protocol.CopyTableSessions && row.Columns == nil {
+			s.forgetSessionCost(protocol.SessionID(row.Key))
+		}
 	}
 	if settingsChanged {
 		if err := s.reloadSettingsLocked(); err != nil {
@@ -235,15 +254,43 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 func (s *Store) DropCopyNotFrom(home string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var removed []protocol.SessionID
 	err := s.copyTransaction(context.Background(), func(tx *sql.Tx) error {
+		rows, err := tx.Query(`SELECT session_id FROM session_runtime WHERE home_daemon_id != '' AND home_daemon_id != ?
+			UNION SELECT id FROM sessions WHERE copied_from != '' AND (copied_from != ? OR closed_at != '')`, home, home)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id protocol.SessionID
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			removed = append(removed, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM session_runtime WHERE home_daemon_id != '' AND home_daemon_id != ?`, home); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`DELETE FROM session_runtime WHERE session_id IN (SELECT id FROM sessions WHERE copied_from != '' AND (copied_from != ? OR closed_at != ''))`, home); err != nil {
+			return err
+		}
 		if err := deleteCopiedSessions(tx, `copied_from != '' AND (copied_from != ? OR closed_at != '')`, home); err != nil {
 			return err
 		}
-		_, err := tx.Exec(`DELETE FROM settings WHERE copied_from != '' AND copied_from != ?`, home)
+		_, err = tx.Exec(`DELETE FROM settings WHERE copied_from != '' AND copied_from != ?`, home)
 		return err
 	})
 	if err != nil {
 		return err
+	}
+	for _, id := range removed {
+		s.forgetSessionCost(id)
 	}
 	if err := s.reloadSettingsLocked(); err != nil {
 		return err
@@ -255,6 +302,12 @@ func (s *Store) DropCopyNotFrom(home string) error {
 func deleteCopiedSessions(tx *sql.Tx, where string, args ...any) error {
 	selected := `SELECT id FROM sessions WHERE ` + where
 	for _, table := range append([]string{"terminal_bindings"}, sessionOwnedTables...) {
+		if table == "session_runtime" {
+			if _, err := tx.Exec(`UPDATE session_runtime SET home_daemon_id = (SELECT copied_from FROM sessions WHERE id = session_id) WHERE session_id IN (`+selected+`)`, args...); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.Exec(`DELETE FROM `+table+` WHERE session_id IN (`+selected+`)`, args...); err != nil {
 			return fmt.Errorf("drop copied %s: %w", table, err)
 		}

@@ -95,9 +95,9 @@ export function useSidebarState({
     onToggleFlow?.();
   };
   const sessionWantsAttention = (session: LocalSession) =>
-    queue
+    !session.offline && (queue
       ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
-      : isAttentionSessionState(session.state);
+      : isAttentionSessionState(session.state));
 
   const [agentFilter, setAgentFilter] = useState('');
   if (!agentListOpen && agentFilter) setAgentFilter('');

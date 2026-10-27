@@ -223,6 +223,9 @@ func (d *Daemon) replayPendingSwitches() {
 		launch := d.monitorLaunch(shown)
 		launch.PendingSwitch = pending
 		conversation := d.store.GetSessionConversation(id)
+		if saved := d.store.SessionRuntimeRecords(id); saved.HomeDaemonID != "" {
+			conversation.NativeID, conversation.TranscriptPath = saved.ConversationNativeID, saved.ConversationTranscriptPath
+		}
 		launch.Conversation = sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath}
 		if cost, err := d.store.SessionCostCheckpoint(id); err == nil {
 			launch.Cost = cost

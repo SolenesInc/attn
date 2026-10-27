@@ -52,6 +52,9 @@ const (
 	DriverTranscriptApplied    = "driver-transcript-applied"
 	CopyBatchStaged            = "copy-batch-staged"
 	CopyBatchApplied           = "copy-batch-applied"
+	NotebookStreamOpen         = "notebook-stream-open"
+	OutpostRecoveryReported    = "outpost-recovery-reported"
+	OutpostRecoveryApplied     = "outpost-recovery-applied"
 	ForwardSocketCreated       = "forward-socket-created"
 )
 

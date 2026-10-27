@@ -113,6 +113,9 @@ func (plan *spawnPlan) commit() {
 
 func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (*spawnRequest, *spawnRejection) {
 	requestedAgent := strings.TrimSpace(strings.ToLower(msg.Agent))
+	if host := protocol.Deref(msg.Host); host != "" && requestedAgent != "" && requestedAgent != protocol.AgentShellValue && requestedAgent != "claude" && requestedAgent != "codex" {
+		return nil, &spawnRejection{err: fmt.Errorf("outpost limit: plugin harness %s runs only at the home, not on %s", requestedAgent, host)}
+	}
 	pluginDriver, hasPluginDriver := d.ensurePluginRegistry().driver(requestedAgent)
 	agent := normalizeSpawnAgent(msg.Agent)
 	if hasPluginDriver {
@@ -122,11 +125,11 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	}
 	isShell := agent == protocol.AgentShellValue
 	if host := protocol.Deref(msg.Host); host != "" {
-		if !isShell {
-			return nil, &spawnRejection{err: fmt.Errorf("outpost limit: only shells can run on %s; agents on outposts are not supported", host)}
+		if protocol.Deref(msg.ChiefOfStaff) || (policy.launchPlacement != nil && policy.launchPlacement.kind == "crew") || d.crewMemberBoundTo(msg.ID) != "" {
+			return nil, &spawnRejection{err: fmt.Errorf("outpost limit: the chief and crew run only at the home, not on %s", host)}
 		}
 		if !d.outpostsEnabled() {
-			return nil, &spawnRejection{err: errors.New("outposts_enabled is off; remote shells need it on")}
+			return nil, &spawnRejection{err: errors.New("outposts_enabled is off; remote terminals need it on")}
 		}
 		row, err := d.resolveOutpost(host)
 		if err != nil {
@@ -135,6 +138,11 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		msg.Host = protocol.Ptr(row.ID)
 		if _, _, err = d.outpostConn(row.ID); err != nil {
 			return nil, &spawnRejection{err: err}
+		}
+		if !isShell {
+			if err := d.NotebookReady(row.ID); err != nil {
+				return nil, &spawnRejection{err: err}
+			}
 		}
 	}
 	if !isShell && !hasPluginDriver {
@@ -407,7 +415,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		if err != nil {
 			plan.rollback(d, msg.ID)
 			if req.existingSession == nil {
-				d.store.Remove(msg.ID)
+				d.discardSpawnSession(msg.ID)
 				d.forgetMonitor(msg.ID)
 			}
 			return &spawnOutcome{err: err}
@@ -415,10 +423,10 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.agent.PreviousLink = previousLink
 	}
 	if err := d.startSessionTerminal(session, terminal, plan.spawnOpts, plan.agent); err != nil {
-		if req.existingSession == nil {
-			d.store.Remove(msg.ID)
-		}
 		plan.rollback(d, msg.ID)
+		if req.existingSession == nil {
+			d.discardSpawnSession(msg.ID)
+		}
 		if plan.chiefAssigned {
 			d.clearChiefOfStaffIfSession(msg.ID)
 		}
@@ -453,6 +461,7 @@ func (d *Daemon) startSessionTerminal(session *protocol.Session, terminal harnes
 			return err
 		}
 	}
+	d.expectTerminal(terminal, session.ID)
 	_, err = Call[struct{}](context.Background(), d.router(), msg)
 	return err
 }
@@ -559,11 +568,11 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
 	}
 	if req.placed.err != nil {
-		if req.existingSession == nil {
-			d.store.Remove(session.ID)
-		}
 		cleanupErr := errors.Join(d.killSessionRuntime(plan.spawnOpts.ID), d.removeSessionRuntime(plan.spawnOpts.ID))
 		plan.rollback(d, msg.ID)
+		if req.existingSession == nil {
+			d.discardSpawnSession(session.ID)
+		}
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
@@ -729,4 +738,13 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 		launch.Plugin = &AgentPluginLaunch{Plugin: req.pluginDriver.PluginName, Params: params, Resume: req.pluginDriver.Capabilities["resume"] && (req.existingSession != nil || params.ResumeSessionID != "")}
 	}
 	return launch, nil
+}
+
+func (d *Daemon) discardSpawnSession(id protocol.SessionID) {
+	session, link := d.store.Get(id), d.linkOf(id)
+	d.store.Remove(id)
+	d.forgetMonitor(id)
+	if session != nil && link != nil {
+		d.life.Go("linkReleasedAfterSpawnDiscard", func() { link.profileReleased(session.ProfileID) })
+	}
 }

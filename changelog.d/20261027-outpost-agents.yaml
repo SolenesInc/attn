@@ -1,0 +1,3 @@
+kind: added
+area: outposts
+change: Run Claude and Codex on outposts, with their turns, conversations, cost and PR links shown on the Mac. Messages queue while an outpost is unreachable, and the queue skips its offline agents.

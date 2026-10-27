@@ -164,7 +164,7 @@ export function SidebarSessionCountdowns({
   return (
     <>
       {showSettling && (session.autoSettleFiresAt || session.autoSettleHeld) ? (
-        <SidebarSettlingBar firesAt={session.autoSettleFiresAt} held={session.autoSettleHeld} />
+        <SidebarSettlingBar firesAt={session.offline ? undefined : session.autoSettleFiresAt} held={session.autoSettleHeld || session.offline} />
       ) : null}
     </>
   );

@@ -50,7 +50,9 @@ session                 attn's record of one conversation in one profile; like
                         one chat in a chat app's history
 ├─ conversation (1)     the harness's chat history
 ├─ terminal (0..n)      the terminals showing it; a terminal shows 1 session
-│                       at a time
+│                       at a time; when its agent moves to another
+│                       conversation (/clear, /new, /resume, Codex /agents),
+│                       the terminal shows that conversation's session
 ├─ worktree (at most 1) the git worktree the agent works in; several
 │                       sessions can share one
 ├─ stake (at most 1)    the seed assigned to the session by its delegation;
@@ -196,6 +198,10 @@ home                    the main daemon the user's app connects to
    │  └─ refused       the outpost was reached, but no key was accepted, its
    │                   identity changed, or it runs a different build
    └─ outpost (1)     a remote daemon paired to that home
+
+setting                 a daemon option, read and set with attn settings
+├─ home setting         the home decides it; outposts keep a read-only copy
+└─ machine setting      each machine decides its own, like its harness paths
 ```
 
 ```text

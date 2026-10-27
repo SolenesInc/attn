@@ -156,7 +156,7 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 				continue
 			}
 			entry := d.store.SessionLedgerEntry(executionID)
-			if entry == nil {
+			if entry == nil || d.sessionHost(entry.ID) != "" {
 				continue
 			}
 			if _, dispatched := d.gardenDispatch(entry.ID); !dispatched {
@@ -235,6 +235,9 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 		return nil, err
 	}
 	for _, pin := range pins {
+		if d.sessionHost(pin.SessionID) != "" {
+			continue
+		}
 		referenced[conversationKey{pin.Agent, pin.ResumeID}] = true
 	}
 	return referenced, nil
@@ -634,6 +637,9 @@ func restoreConversationArchive(path, agent, resumeID string, now time.Time) err
 }
 
 func (d *Daemon) keptConversationForSession(id protocol.SessionID) *protocol.KeptConversation {
+	if d.sessionHost(id) != "" {
+		return nil
+	}
 	entry := d.store.SessionLedgerEntry(id)
 	if entry == nil {
 		return nil

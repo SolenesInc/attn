@@ -150,7 +150,7 @@ export function Dashboard({
   const turnSessions = useMemo(() => (
     queueModeEnabled
       ? awakeSessions
-        .filter((s) => sessionParticipatesInQueue(s, crewQueueEnabled) && s.turnOwed && !s.chiefOfStaff)
+        .filter((s) => !s.offline && sessionParticipatesInQueue(s, crewQueueEnabled) && s.turnOwed && !s.chiefOfStaff)
         .sort(compareTurnOrder)
       : []
   ), [queueModeEnabled, crewQueueEnabled, awakeSessions]);
@@ -158,7 +158,7 @@ export function Dashboard({
   const settledSessions = useMemo(() => (
     queueModeEnabled
       ? awakeSessions.filter((s) => (
-        !sessionParticipatesInQueue(s, crewQueueEnabled)
+        s.offline || !sessionParticipatesInQueue(s, crewQueueEnabled)
         || !(s.turnOwed && !s.chiefOfStaff)
       ))
       : awakeSessions
@@ -223,7 +223,7 @@ export function Dashboard({
       {s.chiefOfStaff && <ChiefOfStaffBadge compact />}
       {age && <span className="session-turn-age">{age}</span>}
       {wake && <span className="session-wake-at">{wake}</span>}
-      {wake && onWakeTurn && (
+      {wake && !s.offline && onWakeTurn && (
         <button
           type="button"
           className="session-wake-btn"

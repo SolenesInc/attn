@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func headlessScratchCwd() (string, error) {
@@ -32,19 +33,38 @@ func (d *Daemon) setJobQueue(runner *jobs.Runner) {
 	d.jobQueueMu.Unlock()
 }
 
-func (d *Daemon) startJobQueue() error {
-	var queueStore jobs.Store
-	if d.store != nil {
-		queueStore = d.newSQLJobStore()
+func (d *Daemon) refreshJobQueueRole() {
+	select {
+	case d.jobQueueRoleChanged <- struct{}{}:
+	default:
 	}
-	return d.startJobQueueWithStore(queueStore)
 }
 
-func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
-	d.importLegacyTasks()
+func (d *Daemon) startJobQueue(home bool) error {
+	var queueStore jobs.Store
+	var sqlQueue *store.JobStore
+	if d.store != nil {
+		sqlQueue = d.newSQLJobStore()
+		queueStore = sqlQueue
+	}
+
+	if home {
+		d.importLegacyTasks()
+	}
 	opts := jobs.Options{Log: d.logf, Store: queueStore}
 	runner := jobs.New(opts)
 	if !runner.Disabled() {
+		if err := d.registerTaskWithFailureRenderer(
+			runner,
+			sessionTitleKind,
+			d.sessionTitleHandler,
+			jobs.HandlerConfig{Timeout: sessionTitleTimeout}, d.renderSessionTitleFailure,
+		); err != nil {
+			d.logf("session title: register session_title: %v", err)
+		}
+		d.registerWorktreeSweepCron(runner)
+	}
+	if !runner.Disabled() && home {
 
 		if err := d.registerTaskWithFailureRenderer(
 			runner,
@@ -56,14 +76,6 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 			}, d.renderSessionActivityFailure,
 		); err != nil {
 			d.logf("session activity: register session_activity: %v", err)
-		}
-		if err := d.registerTaskWithFailureRenderer(
-			runner,
-			sessionTitleKind,
-			d.sessionTitleHandler,
-			jobs.HandlerConfig{Timeout: sessionTitleTimeout}, d.renderSessionTitleFailure,
-		); err != nil {
-			d.logf("session title: register session_title: %v", err)
 		}
 		if err := d.registerTaskWithFailureRenderer(
 			runner,
@@ -136,7 +148,6 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 		}
 		d.registerCrewLifecycleCron(runner)
 		d.registerSessionPullRequestRefreshCron(runner)
-		d.registerWorktreeSweepCron(runner)
 		d.registerConversationKeepCron(runner)
 		d.registerCodexUpdateCheckCron(runner)
 		if err := runner.RegisterCron(
@@ -156,10 +167,16 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 			d.failGardenReviewJob(j)
 		}
 	})
+	if !home && sqlQueue != nil {
+		sqlQueue.OnlyKinds(runner.RegisteredKinds())
+	}
 	if err := runner.Start(); err != nil {
 		return fmt.Errorf("start background jobs: %w", err)
 	}
 	d.setJobQueue(runner)
+	if !home {
+		return nil
+	}
 	if _, err := runner.Enqueue(conversationKeepKind+"_tick", jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
 		d.logf("conversation keep: enqueue startup: %v", err)
 	}

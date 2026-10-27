@@ -98,7 +98,7 @@ func addSession(args []string) error {
 	profile := fs.String("profile", "", "owning profile id (defaults to the daemon's selected profile)")
 	place := fs.Bool("place", false, "place the session on the profile's current desktop beside its active pane")
 	cwd := fs.String("cwd", "", "session working directory (required)")
-	host := fs.String("host", "", "outpost name or id to run the shell on (defaults to the home's machine)")
+	host := fs.String("host", "", "outpost name or id to run the terminal on (defaults to the home's machine)")
 	agent := fs.String("agent", "claude", "agent: claude | codex | shell")
 	label := fs.String("label", "", "session label (defaults to dir basename)")
 	initialPromptFile := fs.String("initial-prompt-file", "", "file containing the initial agent prompt")

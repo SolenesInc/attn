@@ -119,6 +119,25 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 	if err := json.Unmarshal(request, &rows); err != nil {
 		return nil, fmt.Errorf("decode copy batch: %w", err)
 	}
+	if err := d.applyOutpostCopy(ctx, home, rows); err != nil {
+		return nil, err
+	}
+	d.pruneRuntimesWithoutSession(d.life.Context())
+	pausepoint.At(pausepoint.CopyBatchApplied)
+	return nil, nil
+}
+
+func (d *Daemon) applyOutpostCopy(ctx context.Context, home string, rows []protocol.CopyRow) error {
+	released := make(map[string]linkRuntime)
+	for _, row := range rows {
+		if row.Table == protocol.CopyTableSessions && row.Columns == nil {
+			if session := d.store.Get(protocol.SessionID(row.Key)); session != nil {
+				if link := d.linkOf(session.ID); link != nil {
+					released[session.ProfileID] = link
+				}
+			}
+		}
+	}
 	var before map[string]string
 	for _, row := range rows {
 		if row.Table == protocol.CopyTableSettings {
@@ -127,19 +146,30 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 		}
 	}
 	if err := d.store.ApplyCopy(ctx, home, rows); err != nil {
-		return nil, err
+		return err
 	}
 	if before != nil {
 		d.refreshChangedSettings(before)
 	}
-	d.pruneRuntimesWithoutSession(d.life.Context())
-	pausepoint.At(pausepoint.CopyBatchApplied)
-	return nil, nil
+	d.replayPendingSwitches()
+	d.bindMonitorCandidates()
+	for profile, link := range released {
+		d.life.Go("linkReleasedAfterCopy", func() { link.profileReleased(profile) })
+	}
+	return nil
 }
 
 // dropStaleCopy keeps only the copy from the home this daemon is enrolled to, and closes a bridge from any
 // other home.
 func (d *Daemon) dropStaleCopy() error {
+	released := make(map[string]linkRuntime)
+	for _, session := range d.store.List("") {
+		if d.copiedSession(session.ID) {
+			if link := d.linkOf(session.ID); link != nil {
+				released[session.ProfileID] = link
+			}
+		}
+	}
 	before := d.settingValues()
 	d.outpost.mu.Lock()
 	status, err := enrollment.Load(d.dataRoot)
@@ -161,7 +191,11 @@ func (d *Daemon) dropStaleCopy() error {
 		return err
 	}
 	d.refreshChangedSettings(before)
+	d.refreshJobQueueRole()
 	d.pruneRuntimesWithoutSession(d.life.Context())
+	for profile, link := range released {
+		d.life.Go("linkReleasedAfterEnrollment", func() { link.profileReleased(profile) })
+	}
 	if err := d.dropNotebookSyncFromOtherHome(status.HomeDaemonID); err != nil {
 		return err
 	}

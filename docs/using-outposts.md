@@ -4,10 +4,11 @@ Outposts are experimental. An outpost is another computer running attn, such
 as a Linux box or a cloud VM, that your home connects to. Your home is the attn
 on the Mac where you use the app. One home can connect to several outposts.
 
-Shells on an outpost appear in terminal tiles beside your local terminals.
-The tile header shows the outpost's name after the title. Input, screen
-updates, and terminal commands pass through your home. Agents and file tiles
-stay on the home's machine.
+Claude, Codex and shells on an outpost appear in terminal tiles beside your
+local terminals. The tile header shows the outpost's name after the title.
+Input, screen updates and terminal commands pass through your home. Agents
+run on the outpost; their state, turns, cost and PR links reach the Mac.
+File tiles stay on the home's machine.
 
 ## Set up an outpost
 
@@ -162,10 +163,9 @@ daemon. If the shell process on the outpost is gone when the daemons
 reconnect, the home marks the shell recoverable. **Resume** starts a new shell
 in its place.
 
-Only shells run on outposts for now. Spawning an agent with a host fails.
 An `attn` command in an outpost shell or a plain SSH shell reaches the home
-through the outpost. [Garden](glossary.md) commands and document subscriptions use the home's
-records. Hooks and machine settings run on the outpost. If the home is
+through the outpost. [Garden](glossary.md) commands and document subscriptions
+use the home's records. Hooks and machine settings run on the outpost. If the home is
 unreachable, the command fails immediately and names the home. If the bridge
 is lost during a command, the error says that it may have run.
 
@@ -173,6 +173,35 @@ Files on an outpost don't open on the Mac yet. **Open in editor** and
 ⌘-clicked paths in an outpost shell fail and name the outpost, and nothing
 opens a Mac file that happens to have the same path. With an outpost shell in
 front, the editor tile and the file opener (⌘P) start at your notebook root.
+
+## Run agents on an outpost
+
+Install and log in to Claude Code or Codex on the outpost. Each machine uses
+its own harness executable and credentials. Home settings, including monitor
+policy, are copied read-only to outposts; machine settings, including harness
+executables, stay local to each machine.
+
+The outpost's first Notebook sync must finish before an agent can start.
+An early spawn refuses and names the remaining work. From the home checkout,
+spawn through the app protocol's `spawn_session` with a `host`, or:
+
+```sh
+go run ./scripts/wsctl add-session --host studio --agent claude --cwd /home/user/project
+```
+
+Use `--agent codex` for Codex. The directory is on the outpost. The Mac can
+settle, snooze and unsnooze the agent's turn, read its assistant messages and
+transcript, and reload its current conversation. Harness commands such as
+`/clear`, `/new` and `/resume` keep the conversation chain and each session's
+cost. The agent's `attn` commands reach the home through its outpost daemon.
+
+The chief and crew run only at the home. Spawning, waking or handing off a
+crew member on an outpost, or making an outpost agent the chief, refuses and
+names that limit. Plugin harnesses, including Pi, also run only at the home.
+
+Outpost conversations have no kept copy at the home. Files sent by a remote
+agent open no tile and enter no recent-file list. Transcript reads go to the
+outpost, so they need its connection.
 
 ## Notebook sync
 
@@ -244,7 +273,19 @@ when Outposts is off. Each offline terminal stays in place. Its state dot
 becomes hollow and crossed, and its sidebar and home screen rows have a faint
 red tint. A strip over the terminal says "<name> unreachable · typing is not
 sent" without changing the terminal's size. Typing and resizes are not sent,
-and close, split, kill, and reload refuse immediately, naming the outpost.
+and close, split, kill and reload of a live terminal refuse immediately,
+naming the outpost. A stopped, recoverable agent still supports record-only
+close, rename and priority changes.
+
+Offline agents keep their queue rows, marked, but Next, automatic advance,
+⌘J and waiting counts skip them. Settle, snooze, unsnooze, countdown cancel
+and annotation submit are hidden. A running auto-settle countdown shows
+frozen, and the assistant window names the unreachable outpost. Rename and
+priority remain available.
+
+Messages and rings to an offline agent queue durably at the home. The sender
+gets a receipt naming the outpost. When it reconnects, delivery resumes at a
+safe prompt, including the usual protection for a recently typed draft.
 
 While the home is still connecting to an outpost, its terminals don't look
 offline, but typing is not sent yet. This happens after the home starts, when
