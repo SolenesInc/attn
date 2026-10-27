@@ -167,19 +167,19 @@ func TestReplyOpensWithTheAskAndEndsWithTheReminder(t *testing.T) {
 			[]protocol.AskPart{{Question: &protocol.AskQuestion{Key: "q1", Kind: protocol.AskQuestionKindText, Prompt: "Why?", Choices: []protocol.AskChoice{}}}},
 			[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("Because.")}},
 			"Ship it.\nToday.",
-			"🙋 The user answered the ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\nThey added:\n\n> Ship it.\n> Today.\n\n---\n\nThey have likely moved on and will not read what you write back; if you still need them, ask again.",
+			"🙋 The user answered the ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\nThey added:\n\n> Ship it.\n> Today.\n\n---\n\nThey have likely moved on and will not read what you write back here. If their answer asks you something, reply with a new ask. If you still need them, ask again.",
 		},
 		"answers without a note": {
 			[]protocol.AskPart{{Question: &protocol.AskQuestion{Key: "q1", Kind: protocol.AskQuestionKindText, Prompt: "Why?", Choices: []protocol.AskChoice{}}}},
 			[]protocol.AskAnswer{{Key: "q1", Picked: []string{}, Text: protocol.Ptr("Because.")}},
 			"",
-			"🙋 The user answered the ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\n---\n\nThey have likely moved on and will not read what you write back; if you still need them, ask again.",
+			"🙋 The user answered the ask \"Heads up\" (a-2).\n\n## 1. Why?\n\n> Because.\n\n---\n\nThey have likely moved on and will not read what you write back here. If their answer asks you something, reply with a new ask. If you still need them, ask again.",
 		},
 		"only a note": {
 			[]protocol.AskPart{{Markdown: protocol.Ptr("FYI")}},
 			nil,
 			"Ship it.\nToday.",
-			"🙋 The user answered the ask \"Heads up\" (a-2).\n\nThey added:\n\n> Ship it.\n> Today.\n\n---\n\nThey have likely moved on and will not read what you write back; if you still need them, ask again.",
+			"🙋 The user answered the ask \"Heads up\" (a-2).\n\nThey added:\n\n> Ship it.\n> Today.\n\n---\n\nThey have likely moved on and will not read what you write back here. If their answer asks you something, reply with a new ask. If you still need them, ask again.",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
