@@ -1,0 +1,5 @@
+# Fix root causes
+
+Apply when debugging, and before adding a guard for a state that broke something.
+
+Fix the fault, not the place it surfaced. Reproduce first, then ask why at each step until the answer is a wrong decision in the code rather than a consequence of an earlier one; when stuck, instrument instead of guessing. Ask whether the state that triggered the symptom is legitimate. If the system may be in that state, the code that broke on it is the cause. If it should never exist, a guard where it broke hides the bug: find what produced the state. Guards, retries, swallowed errors and clamped values are where bugs usually hide. When a failure appears only after a restart, suspect persisted state first. Fix every instance of the pattern, and when the deciding fact took a deep dig, propose the cheap, always-on signal that would have shown it at first look. When two fixes that share an assumption have failed, [attack the premise](attack-the-premise.md). [Debugging](../references/debugging.md) holds the process.

@@ -61,5 +61,13 @@ func workflowSkillRecipient() Recipient {
 		name := strings.TrimSuffix(strings.TrimPrefix(source, "content/skills/attn-workflow/references/"), ".md")
 		r.Events = append(r.Events, On(name, "reference", "Loaded on demand through the installed attn-workflow skill.", Document("attn-workflow-skill."+name, source)))
 	}
+	principles, err := fs.Glob(content, "content/skills/attn-workflow/principles/*.md")
+	if err != nil {
+		panic(err)
+	}
+	for _, source := range principles {
+		name := "principle-" + strings.TrimSuffix(strings.TrimPrefix(source, "content/skills/attn-workflow/principles/"), ".md")
+		r.Events = append(r.Events, On(name, "principle", "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.", Document("attn-workflow-skill."+name, source)))
+	}
 	return r
 }

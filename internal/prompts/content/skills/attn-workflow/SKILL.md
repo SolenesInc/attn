@@ -7,7 +7,7 @@ description: Use when an assigned role refers to this skill, the user asks you t
 
 ## Start
 
-Match the task to one process in the table, read its reference, and load further references as the work requires. When you leave out a part of the process, say which part and why, in the conversation and on the seed when there is one, so the omission is visible instead of silent. A follow-up in the same conversation continues the same process; re-match when the user names a new task. When the assignment arrived through a noisy channel, such as a long thread or a vague report, restate the problem and the outcome in your own words before acting, so a misreading costs one message instead of one wrong change.
+Match the task to one process in the table, read its reference and the principles it names, and load further references as the work requires. When you leave out a part of the process, say which part and why, in the conversation and on the seed when there is one, so the omission is visible instead of silent. A follow-up in the same conversation continues the same process; re-match when the user names a new task. When the assignment arrived through a noisy channel, such as a long discussion or a vague report, restate the problem and the outcome in your own words before acting, so a misreading costs one message instead of one wrong change.
 
 | Task | Reference |
 |---|---|
@@ -33,29 +33,47 @@ When the user asks you to work as one of these roles in the current conversation
 
 Independent judgment, such as an Orchestrator reviewing a Builder's change, options compared side by side, or a second review, is worth more when the two sides run on different models, because each model misses different things. That difference comes from the user's delegation roles: choose the role and an alternative whose condition fits, as the `attn` skill's delegation reference describes, and do not override a model the user did not ask to change. When the roles put both sides on one model, say so where you report the judgment. A second review by a separate Reviewer delegation runs only when the user asks for one, as that reference says. When a change is contested or costly to reverse, you may suggest one as its own question; a plan or handoff the user approves is not that request, even when it mentions a Reviewer.
 
-## Engineering judgment
+## Principles
 
-Apply these principles when planning, implementing, and reviewing software changes.
+Apply these principles when planning, implementing, and reviewing software changes. Each lives in its own file under `principles/`. A line here says when a principle applies and what it asks in one clause; it is a trigger, not the rule. Before you apply a principle, read its file in full. Each process reference names the principles it relies on: read those when you load the process, and any other whose trigger fits the work. When a principle changes a decision, name it in your report or seed note with the choice it changed, and cite only principles whose file you read in this session.
 
-Match rigor to the software's actual requirements, operating conditions, and consequences of failure. Before adding validation, guards, recovery paths, or other defensive machinery, consider whether the failure is credible here and whether an existing boundary already handles it on every path that reaches this code. Prefer the simplest design that preserves the required behavior. A conceivable failure alone does not justify added complexity; a credible risk can justify prevention before it has ever occurred.
+Shape the change:
 
-Parse, don't validate: establish invariants at the earliest appropriate boundary and preserve them through types, data structures, and ownership. Prefer representations that make invalid states unrepresentable, so internal code can rely on established guarantees instead of repeatedly validating them. Keep state-dependent checks where the relevant state is authoritative. Use the simplest representation that provides the needed guarantee.
+- [Match rigor to consequences](principles/match-rigor-to-consequences.md): before adding validation, guards, or recovery paths. Guard only credible failures that no existing boundary already handles.
+- [Smallest change](principles/smallest-change.md): sizing a diff, or tempted to add a layer, option, or abstraction. The smallest change that delivers the full requirement, with each choice made once.
+- [Subtract before you add](principles/subtract-before-you-add.md): sequencing an addition, refactor, or rewrite. Remove dead weight first, then build on the simpler base.
+- [Derived things must earn their place](principles/derived-things-must-earn-their-place.md): before adding a doc, comment, summary, generated file, or copy of state. Prefer a better option; otherwise add it with a way to keep it current.
+- [Refactor first](principles/refactor-first.md): building a capability something may already do. Give the shared path what it lacks instead of growing a parallel mechanism.
+- [Redesign around the new requirement](principles/redesign-around-the-new-requirement.md): integrating a requirement the design did not anticipate. Build what you would have built had it been known from the start.
+- [Model the domain first](principles/model-the-domain-first.md): before writing logic, or when code branches a lot. Name the data shape and encode the domain in a structure, not scattered conditionals.
+- [Experience first](principles/experience-first.md): product, interface, or scope tradeoffs. Choose the experience of whoever consumes the work over implementation convenience.
+- [Compare options before committing](principles/compare-options-before-committing.md): a decision with no precedent, or one that depends on feel. Build two or three different options and compare them side by side.
 
-Refactor first: before building a capability, find every existing path that already does the same job, searching for what it does rather than for the new feature's name. When the change needs something those paths lack, give it to the shared code in a behavior-preserving refactor, then build the change on top; do not grow a parallel mechanism inside the feature. Signs the refactor was skipped: reusing only the last step of an existing path, a new store that duplicates an existing one, or a fix that works only through incidental coupling with another part of the system.
+Structure:
 
-Prove it works: before reporting a change complete, check the real thing on the surface the change affects, the command, the running product, the stored value, the trace, rather than a proxy such as a green build or your own account of the work. Script the check when you can, so a reviewer reruns it instead of trusting you. A check that could not run is inconclusive, which is not a pass; say so. Label each claim in a report as measured, inferred or guessed: measured when you observed it in a run, inferred when the code implies it, guessed when neither. Never hand the user a check you could run yourself.
+- [Parse, don't validate](principles/parse-dont-validate.md): validation, error handling, adapters, types and signatures. Check at the boundary, trust the types inside, make invalid states unrepresentable.
+- [Minimize reader load](principles/minimize-reader-load.md): code that is hard to trace. Cut layers to trace and state to hold in mind.
+- [Make operations idempotent](principles/make-operations-idempotent.md): a step that changes state and can be interrupted or retried. Converge on the same end state from any partial run.
+- [Separate before serializing shared state](principles/separate-before-serializing-shared-state.md): concurrent actors, processes or agents, that might write the same thing. Remove the sharing before adding a lock.
+- [Migrate callers, then delete the old way](principles/migrate-callers-then-delete-the-old-way.md): a new interface replacing an old one. Move every caller you own and delete the old one in the same piece of work; name the callers you cannot change.
+- [Converge on the outcome](principles/converge-on-the-outcome.md): a planned rewrite or migration. Aim at the verified end state, not smooth midpoints held up by throwaway compatibility code.
 
-Build the lever: for work that is not trivial, write the tool that does it, a script, a codemod, a generator, instead of working by hand. The tool is the artifact a reviewer can read and rerun; hand-done work can only be checked by redoing it. Do the first unit by hand to learn the recipe, then build the tool and prove it on that unit. Keep it the smallest script that does the job, never a framework, and keep it where the reviewer can rerun it: linked from the change or attached to the seed, committed when the work outlives the session.
+Verification:
 
-Sequence verifiable units: order multi-step work as small units that each end in a check, and verify each before starting the next, so a break is caught at the unit that caused it. Put the proof before the change, so you watch your own assumption fail and then hold instead of trusting it: the failing test before the fix, the subtraction before the reshape, the baseline before the treatment.
+- [Prove it works](principles/prove-it-works.md): before reporting any change complete. Check the real thing on the affected surface, and label each claim measured, inferred, or guessed.
+- [Fix root causes](principles/fix-root-causes.md): debugging, or about to guard a state that broke something. Fix the first wrong decision, not where it surfaced.
+- [Test behavior, not implementation](principles/test-behavior-not-implementation.md): writing, keeping, or reviewing a test. It fails when behavior breaks and passes when only internals change.
+- [Explain the number](principles/explain-the-number.md): before trusting or reporting a measured number. Name its limiter and rule out what else it measures.
+- [Build the lever](principles/build-the-lever.md): any work that is not trivial, including work fanned out to other agents. Write the script that does or proves it.
+- [Sequence verifiable units](principles/sequence-verifiable-units.md): multi-step work, and the order of commits and pull requests. Small units, each checked before the next, proof before the change.
+- [Attack the premise](principles/attack-the-premise.md): two fixes sharing one assumption failed the same check, or fixes keep arriving in one shape. Test the assumption before a third fix.
 
-Attack the premise: when two fixes that share one assumption have failed the same check, write the assumption down and test it directly before writing a third. Each failed fix is evidence against the belief it rested on. The design is the assumption when fixes pass but keep arriving in the same shape: special cases for unrelated edge cases, casts or optional fields that are always set, a lock where the design said nothing was shared, callers that must know the callee's internal rules. Stop patching. Redesign as if the new constraint had been known from the start, aiming smaller than the patched design, and bring the redesign to the coordinating agent named in the brief, or to the user when none is named, before more patches land.
+Working with the user and other agents:
 
-**Derived things must earn their place.** The work is the truth. Anything derived from it goes stale when the work changes: documentation, code comments, summaries, generated files, copies of state. Before adding one, ask whether it is valuable enough to exist, and look for a better option that removes the need: clearer names or structure in the work itself, a pointer to the source, or deriving it when it's needed. Add it only when no better option exists, and then with a way to keep it current, as [Derived things](references/derived-things.md) describes.
-
-Update what a decision overturns: when the user's decision contradicts the repository's docs, code, or agent guidance, change them as part of the task. When the change falls outside the task, plant a seed for it that names the decision. Until those statements change, they teach what the decision overturned to every agent that reads them, including you once your context is summarized.
-
-Encode lessons in structure: when the user or a reviewer corrects the same kind of mistake a second time, the instruction that failed is the symptom. Fix the class at the highest level that works, as [Correction](references/correction.md) describes, or plant it as a seed when it falls outside the task.
+- [Never block on the user](principles/never-block-on-the-user.md): tempted to stop and ask during execution. Decide reversible calls, settle facts by running them, and bring the rest to your coordinator or the user.
+- [Guard the context window](principles/guard-the-context-window.md): large outputs, files or searches, or work that may outlast your context. Delegate the bulk and keep what must survive in the seed.
+- [Update what a decision overturns](principles/update-what-a-decision-overturns.md): the user's decision contradicts docs, code, or agent guidance. Change them in the task, or plant a seed.
+- [Encode lessons in structure](principles/encode-lessons-in-structure.md): the same kind of mistake corrected, or the same instruction written, a second time. Fix the class with structure, not another instruction.
 
 ## Writing
 

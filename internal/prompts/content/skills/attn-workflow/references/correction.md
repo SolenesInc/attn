@@ -1,6 +1,8 @@
 # Correction
 
-Use this process when a kind of mistake keeps coming back: the user or a reviewer corrects agents for it a second time, a review finding repeats an earlier one, or a bug's cause has happened before. Fix the class, not only the instance, so the next agent cannot make it.
+Principles this process relies on: [Encode lessons in structure](../principles/encode-lessons-in-structure.md), [Parse, don't validate](../principles/parse-dont-validate.md), [Test behavior, not implementation](../principles/test-behavior-not-implementation.md), [Update what a decision overturns](../principles/update-what-a-decision-overturns.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+
+Use this process when a kind of mistake keeps coming back: the user or a reviewer corrects agents for it a second time, a review finding repeats an earlier one, or a bug's cause has happened before. It also applies when you find yourself writing the same instruction a second time, such as one rule repeated across briefs. Fix the class, not only the instance, so the next agent cannot make it.
 
 Assume the next contributor is an agent that sees only the files it opened, copies the nearest example, and takes the shortest path that compiles, as [Design](design.md) describes under Check the structure behind it. An instruction that agent never opens does not reach it.
 
@@ -13,7 +15,7 @@ Name the class you arrived with, and find its earlier instances in recent commit
 Go down a level only when the level above cannot remove the class:
 
 1. **Remove it with structure.** Give the state one owner and the task one supported way, hide internals so the wrong import fails, keep one list and derive the others, and delete the old way and the dead code an agent would copy. These are the structure checks in [Design](design.md); make the move with [Refactoring](refactoring.md).
-2. **Make it unwritable with types.** Represent the rule so the wrong code does not compile, as the skill's engineering judgment describes under parse, don't validate.
+2. **Make it unwritable with types.** Represent the rule so the wrong code does not compile, as [Parse, don't validate](../principles/parse-dont-validate.md) describes.
 3. **Fail the build with a check.** When the wrong code still compiles, add a lint or CI check whose error names the file, type or function to use instead. When the pattern is already common, fail only when a change adds more of it.
 4. **Test the behavior.** Add the test of the promise the mistake broke. A test that still passes when that behavior breaks, or fails when only internals change, does not guard the promise: replace it with one that does, or delete it when another test already covers the promise, following the repository's testing guidance.
 5. **Write guidance last, and only for judgment calls.** Nothing fails when an agent skips a sentence. When a rule needs judgment and nothing can enforce it, put it where agents read it at the moment of the decision, with an example of the failure. When a level above covers the class, do not also add the instruction; the check's or test's error carries the fix.

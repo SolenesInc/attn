@@ -1,5 +1,7 @@
 # Derived things
 
+Principles this process relies on: [Derived things must earn their place](../principles/derived-things-must-earn-their-place.md), [Subtract before you add](../principles/subtract-before-you-add.md), [Encode lessons in structure](../principles/encode-lessons-in-structure.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+
 Use this process before you add something derived from the work, such as
 documentation, a code comment, a summary, a generated file or a copy of state,
 and when you build or change what keeps one current.

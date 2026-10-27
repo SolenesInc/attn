@@ -1,0 +1,5 @@
+# Parse, don't validate
+
+Apply when wiring validation, error handling, or adapters, and when designing types or signatures.
+
+Establish invariants at the earliest appropriate boundary and preserve them through types, data structures, and ownership. Validate input, narrow types and handle errors where data crosses into the system, such as command-line arguments, config files, network messages and external APIs, and trust the types inside. Keep decisions in pure functions that a thin shell calls, so they can be tested without the framework, and do not let a boundary's private types, such as its transport, storage or wire types, leak through the interface. Prefer representations that make invalid states unrepresentable: give values that must not mix their own types even when they share a primitive, handle every variant of a union, and derive types from the schema that owns the shape, such as a protocol definition, a migration, or an API spec, instead of writing a parallel one. Keep state-dependent checks where the relevant state is authoritative. Use the simplest representation that provides the needed guarantee.

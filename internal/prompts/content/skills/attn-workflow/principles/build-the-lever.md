@@ -1,0 +1,5 @@
+# Build the lever
+
+Apply to any work that is not trivial: edits, migrations, analyses, checks, and work fanned out to other agents.
+
+For work that is not trivial, write the tool that does it, a script, a codemod, a generator, instead of working by hand. Scripting the check itself is how you [prove it works](prove-it-works.md). The tool is the artifact a reviewer can read and rerun; hand-done work can only be checked by redoing it. Do the first unit by hand to learn the recipe, then build the tool and prove it on that unit. Keep it the smallest script that does the job, never a framework, and keep it where the reviewer can rerun it: linked from the change or attached to the seed, committed when the work outlives the session. A tool that handles every unit in one pass beats delegating agents to apply the recipe by hand. When you do fan work out, put the recipe, its check, and what not to touch in one place outside what the agents edit, such as a section of the plot body or a file attached to the plot, and name it in every child's body as reading required before they start: a delegate reads only its own seed unless told otherwise.

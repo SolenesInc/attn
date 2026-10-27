@@ -34,16 +34,17 @@ The attn-workflow skill's technical writing reference
 (`internal/prompts/content/skills/attn-workflow/references/technical-writing.md`,
 embedded in the attn binary and installed into agent skill directories) copies
 pstack's `technical-writing` skill, adapted where it names other pstack skills.
-Its correction reference (`references/correction.md`) and the encode-lessons
-principle in `SKILL.md` adapt pstack's `correct` skill and its
-encode-lessons-in-structure principle. The structure checks in
-`references/design.md`, the design-twice, tradeoffs and alternatives guidance in
-`references/planning.md`, and the redesign signals in `SKILL.md` adapt pstack's
-`architect` skill. The independent-review, standing-brief and second-review
+Its correction reference (`references/correction.md`) adapts pstack's `correct`
+skill. The principle files under `principles/` adapt pstack's `principle-*`
+skills, renamed and rewritten in attn's terms; the redesign signals in
+`principles/attack-the-premise.md` also draw on pstack's `architect` skill. The
+structure checks in `references/design.md` and the design-twice, tradeoffs and
+alternatives guidance in `references/planning.md` adapt the `architect` skill. The independent-review, standing-brief and second-review
 guidance in `references/orchestration.md` and `references/review.md` adapts
 pstack's orchestrate and autopilot playbooks and its `interrogate` skill:
 
 https://github.com/cursor/plugins/tree/main/pstack
+https://github.com/backnotprop/pstack
 
 Copyright (c) 2026 Lauren Tan
 
