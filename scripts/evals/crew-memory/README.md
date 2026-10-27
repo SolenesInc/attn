@@ -18,7 +18,9 @@ if the flow is missing:
 node scripts/evals/crew-memory/restore.mjs /path/to/seed-artifacts/pilot-flow.tar.gz
 ```
 
-Restore copies the exact cases, state, binary, and any saved results to
+Restore reads the saved `private_root` from the archive and copies the exact
+cases, state, binary and saved results there. All entries must belong to that
+one root under `/private/tmp`. The usual unit flow uses
 `/private/tmp/crew-memory-eval-private`. It refuses to overwrite an existing
 flow. It prints the computed digest and saved approval without making model
 calls. Keep the pinned Claude executable installed at the reviewed path.
@@ -81,7 +83,7 @@ brief. It must not turn a member suggestion into a user decision or invent an
 approval. After each case, one separate check by the `judge_model` compares
 each delivered simulator message with its own task, disclosures and public day
 brief. Greetings, thanks, acknowledgements of orientation or checking,
-questions, saying I do not know, and restating the public day brief are
+questions, saying "I do not know", and restating the public day brief are
 allowed. New product decisions, work approvals, access constraints and changes
 to who performs the task still need support in the supplied sources. The
 check's verdict and usage are saved with the grading receipts. Unsent
@@ -141,17 +143,17 @@ and removal of those directories after completed calls. A synthetic personal
 configuration supplies canaries, and the check fails if any canary reaches the
 controller requests.
 
-The script also verifies that flagged and unverified fidelity verdicts leave the case
-grade in place and that the summary reports the all-case pass rate beside the
-checked-faithful pass rate. The member receives a multiline paste with
-Claude's native paste-tag rollout enabled in its disposable configuration. The
-check verifies the wrapped text reaches the member and the controller
+The script also verifies that flagged and unverified fidelity verdicts leave
+the case grade in place and that the summary reports the all-case pass rate
+beside the checked-faithful pass rate. The member receives a multiline paste
+with Claude's native paste-tag rollout enabled in its disposable configuration.
+The check verifies the wrapped text reaches the member and the controller
 recognizes its completion. It also rechecks a saved fidelity verdict with one
-additional fidelity call, preserving the grade and the previous verdict
-without starting another member or simulator call. A judge-only replay makes
-exactly two outcome-judge calls, changes the synthetic grade and preserves the
-fidelity verdict. The summary includes retired-result costs without counting
-those results in scores. The script prints its receipt path under
+additional fidelity call, preserving the grade and the previous verdict without
+starting another member or simulator call. A judge-only replay makes exactly
+two outcome-judge calls, changes the synthetic grade and preserves the fidelity
+verdict. The summary includes retired-result costs without counting those
+results in scores. The script prints its receipt path under
 `private_root/print-proof-*`.
 
 The `--refuse-sleep` probe asks for direct confirmation after the inbox sleep
@@ -309,6 +311,67 @@ node scripts/evals/crew-memory/run.mjs \
 The `e2e` stage refuses to start until both unit cases have completed. Save a new
 flow snapshot afterward. Its twelve days count as one case.
 
+## Run the six-day trajectory pilot
+
+A separately reviewed letters-only stage uses `pilot_stage: "trajectory"`,
+`approvals.trajectory_pilot`, and exactly two `trajectory_ids`. Each selected
+case has six fixed `scripted_message` values, one output file and required
+fields per day, and a frozen `fact_ledger`. Other end-to-end cases still require
+twelve days. This stage runs only `baseline`, with one repetition per case:
+
+```sh
+node scripts/evals/crew-memory/run.mjs \
+  --flow "$CREW_EVAL_FLOW" --variant baseline \
+  --model claude-opus-5-5 --reps 1 --pilot-stage trajectory
+```
+
+The runner sends each frozen message directly after the member settles. It
+makes no simulator or simulator-fidelity model calls for these scripts. Native
+input matching confirms delivery, and `scripted-turns.json` records the exact
+messages. Fidelity is recorded as `faithful` with mode `fixed_messages`.
+
+Each day's task file is saved to `day-snapshots.json` before closure, so a
+later failure preserves completed daily work. The result's `day_outputs` field
+holds the same snapshots, so a later file edit cannot repair an earlier probe.
+Each day's carry capture (what the member can take into the next day) includes
+every new or changed regular file, every new letter and the memory log.
+Unchanged initial files remain readable by the member. The outcome keys come
+from the frozen messages and fact ledger, never from filed letters. Missing
+required fields on a probe day fail the outcome and appear separately in
+`probe_omissions`. An explicit JSON `null` counts as a provided answer. The
+semantic judges decide whether it is correct.
+
+Two outcome votes grade the work. Two additional votes diagnose each day's
+carry against the facts available then, including later reversals. They inspect
+all carry surfaces together. Absence from the latest letter alone is not loss.
+The diagnostic votes distinguish irrelevant or unscored text from unsupported
+assertions. This stage writes no memory entries, so memory-entry metrics do not
+apply. These repeated votes measure judge noise. Human calibration remains
+separate. All available call receipts count toward known spend. If a carry
+diagnostic fails, completed outcome grades remain saved, with partial
+diagnostic votes, `diagnostics_status: "unverified"`, and the error. Missing
+call receipts leave spend marked incomplete.
+
+Run the native six-day proofs without paid calls before release:
+
+```sh
+node scripts/evals/crew-memory/check-model-calls.mjs "$CREW_EVAL_FLOW/_state.json" --trajectory
+node scripts/evals/crew-memory/check-model-calls.mjs "$CREW_EVAL_FLOW/_state.json" --trajectory --second-trajectory
+node scripts/evals/crew-memory/check-model-calls.mjs "$CREW_EVAL_FLOW/_state.json" --trajectory --omit-probe-field
+node scripts/evals/crew-memory/check-model-calls.mjs "$CREW_EVAL_FLOW/_state.json" --trajectory --abort-trajectory-diagnostic
+node scripts/evals/crew-memory/check-model-calls.mjs "$CREW_EVAL_FLOW/_state.json" --trajectory --fail-day-six
+```
+
+The proofs send each complete scripted message, file six letters and preserve a
+day-five snapshot after a deliberate day-six edit. The omission probe fails its
+required-field grade even when the synthetic outcome judges return yes. Read
+the seed's pre-registered drift and budget rule before sizing the next run.
+Neither these proofs nor the pilot approve a full memory comparison. The
+private release driver runs the seed's receipt-analysis script afterward,
+recording per-type outcomes, omission reasons, judge disagreement, daily role
+costs and comparison projections. Projections are inferred from pilot receipts,
+not measured costs for a longer run.
+
 ## Review the report before a full run
 
 ```sh
@@ -328,13 +391,14 @@ fidelity calls. A row with an unverified check is marked "+ unknown spend".
 `report.html` keeps the original all-case grades.
 
 Keep the cumulative receipt ledger in `spend-ledger.json` at the flow root and
-include it in `harness_paths`. It must hold three USD numbers: `hard_total_cap_usd` (the whole-eval ceiling),
-`known_spend_usd` (known spend through a checkpoint), and
-`known_flow_spend_at_checkpoint_usd` (the part of this flow’s spend already
-counted there). `summarize.mjs` adds only the flow’s spending since that
-checkpoint, writes `spend-summary.json`, and prints cumulative known spend in
-`measurements.md`. Unknown native and auxiliary costs remain outside
-that lower bound. Keep those gaps visible when sizing the next run.
+include it in `harness_paths`. It must hold three USD numbers:
+`hard_total_cap_usd` (the whole-eval ceiling), `known_spend_usd` (known spend
+through a checkpoint), and `known_flow_spend_at_checkpoint_usd` (the part of
+this flow's spend already counted there). `summarize.mjs` adds only the flow's
+spending since that checkpoint, writes `spend-summary.json`, and prints
+cumulative known spend in `measurements.md`. Unknown native and auxiliary
+costs remain outside that lower bound. Keep those gaps visible when sizing the
+next run.
 
 After reviewing a checker change, recheck saved simulator turns without rerunning
 the member, simulator or outcome judges. The same digest and stage approval
@@ -376,17 +440,17 @@ grading, and measured budget under `approvals.cases`, `approvals.grading`, and
 change the digest and require human review and approval again.
 
 A separately approved stale-entry diagnostic can run `--variant v1` with
-`--pilot-stage use`. Its reviewed state needs `approvals.use_pilot`, `approvals.stale_pilot`, and exactly
-three `stale_probe_ids`. Each selected use case needs `stale_entry` and
-`frozen_memory`, a directory under the flow containing exactly that one entry.
-Include every frozen memory file in `harness_paths`. Public tasks, historical
-letters and grading claims stay identical to the baseline. Each selected probe
-needs a saved baseline reference under `baseline/ref/`; missing references are
-refused before any member run. This diagnostic
-measures harm from an old decision whose later override is available in the
-letters. It does not measure memory-writing quality or approve a full memory
-comparison. Other memory variants remain disabled pending approved thresholds
-and frozen-build verification.
+`--pilot-stage use`. Its reviewed state needs `approvals.use_pilot`,
+`approvals.stale_pilot`, and exactly three `stale_probe_ids`. Each selected
+use case needs `stale_entry` and `frozen_memory`, a directory under the flow
+containing exactly that one entry. Include every frozen memory file in
+`harness_paths`. Public tasks, historical letters and grading claims stay
+identical to the baseline. Each selected probe needs a saved baseline reference
+under `baseline/ref/`. Missing references are refused before any member run.
+This diagnostic measures harm from an old decision whose later override is
+available in the letters. It does not measure memory-writing quality or approve
+a full memory comparison. Other memory variants remain disabled pending
+approved thresholds and frozen-build verification.
 
 Build the diagnostic fixtures through the real memory CLI on disposable
 localhost-only instances with dummy credentials:
@@ -397,9 +461,9 @@ node scripts/evals/crew-memory/check-model-calls.mjs "$CREW_EVAL_FLOW/_state.jso
 ```
 
 The fixture builder wakes a bound session, adds the old ruling through
-`attn memory add`, verifies the single entry and copies attn's memory files into
-the flow. It refuses existing fixture destinations. The entry text names the
-old decision date; its storage timestamp records fixture creation. Use a
+`attn memory add`, verifies the single entry and copies attn's memory files
+into the flow. It refuses existing fixture destinations. The entry text names
+the old decision date. Its storage timestamp records fixture creation. Use a
 memory-capable attn binary and review its digest separately from the baseline
 binary. The localhost proof checks both the real provider request and Claude's
 native transcript.
@@ -410,5 +474,5 @@ prompt. It matches `api-request` to `api-request-shape` by native session and
 shape hash, then saves `wake-view.json`. Missing evidence is a harness failure
 before grading. `engagement.wake_view` is true only after that confirmation.
 Use-case pairwise judges receive only the task output files, with randomized
-labels; the memory log and closure letters are excluded from that comparison.
+labels. The memory log and closure letters are excluded from that comparison.
 The seed tracks calibration, the trajectory comparison and remaining evidence.

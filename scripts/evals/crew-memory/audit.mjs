@@ -28,7 +28,9 @@ for (const input of cases) {
     }
     files[check.path] = JSON.stringify(root);
   }
-  const oracle = programmatic(input, { files });
+  const day_outputs = input.fact_ledger ? input.days.map((day, index) => ({ day: index + 1,
+    files: { [day.output]: JSON.stringify(Object.fromEntries(day.required_fields.map(field => [field, 'synthetic present field']))) } })) : undefined;
+  const oracle = programmatic(input, { files, day_outputs });
   const nullGrade = programmatic(input, { files: {} });
   if (Object.values(oracle).some(value => value !== 1) || Object.values(nullGrade).some(value => value !== 0)) throw new Error(`oracle/null failed for ${input.id}`);
   receipts.push({ case_id: input.id, unit: input.unit, source_hashes_valid: true,
@@ -58,6 +60,6 @@ const report = ['# Crew memory eval audit', '',
   '', 'These checks do not prove the full runner or model judge. Oracle/null coverage above enters the programmatic grader directly.',
   '', 'Pending before a full paid pass:', '', ...result.pending.map(item => '- ' + item),
   '', 'The case set uses agent-written letters as records of real user decisions. The user has not yet verified the proposed tasks or grading claims.',
-  'The twelve-day trajectory is one case. Its days and the repeated judge votes are not independent observations.'];
+  'Each trajectory is one case. Its days and the repeated judge votes are not independent observations.'];
 writeFileSync(join(config.private_root, 'audit.md'), report.join('\n') + '\n');
 console.log(report.join('\n'));

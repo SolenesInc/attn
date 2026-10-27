@@ -1,0 +1,3 @@
+kind: internal
+area: crew
+change: Replay fixed six-day crew eval scripts, preserve daily outputs and separate carry diagnostics from task grades.
