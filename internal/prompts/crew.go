@@ -31,7 +31,7 @@ func crewRecipient() Recipient {
 	noLetter := template("crew.no-letter", "content/crew/no-letter.md", TextField("handoffs_dir", "Handoffs dir"))
 	closure := template("crew.closure", "content/crew/closure.md", handoffsDirname, name)
 	memoryClosure := template("crew.closure-memory", "content/crew/closure-memory.md", handoffsDirname, name)
-	memory := template("crew.memory", "content/crew/memory.md", memoryView)
+	memory := template("crew.memory", "content/crew/memory.md", memoryView, TextField("handoffs_dir", "Handoffs dir"))
 
 	heldList := template("crew.garden", "content/crew/garden.md", heldSeeds)
 	heldMore := template("crew.garden-more", "content/crew/garden-more.md", heldTotal, heldLimit)

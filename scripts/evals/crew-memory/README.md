@@ -441,7 +441,7 @@ change the digest and require human review and approval again.
 
 A separately approved stale-entry diagnostic can run `--variant v1` with
 `--pilot-stage use`. Its reviewed state needs `approvals.use_pilot`,
-`approvals.stale_pilot`, and exactly three `stale_probe_ids`. Each selected
+`approvals.stale_pilot`, and one to three distinct `stale_probe_ids`. Each selected
 use case needs `stale_entry` and `frozen_memory`, a directory under the flow
 containing exactly that one entry. Include every frozen memory file in
 `harness_paths`. Public tasks, historical letters and grading claims stay
