@@ -53,6 +53,8 @@ async function main() {
   const pdfId = randomUUID();
   const imageOut = path.join(runner.sessionDir, 'agent-quick-capture.png');
   const pdfOut = path.join(runner.sessionDir, 'agent-quick-capture.pdf');
+  const captureRead = path.join(runner.sessionDir, 'quick-capture-read');
+  let captureWatcher;
   const chiefs = [];
   const crewName = `promptprobe-${randomUUID().slice(0, 8)}`;
   const crewLabel = `Promptprobe${crewName.slice('promptprobe'.length)}`;
@@ -83,6 +85,7 @@ async function main() {
             { type: 'attn', args: ['agent', 'attachment', captureId, attachmentId, '--out', imageOut] },
             { type: 'attn', args: ['agent', 'attachment', captureId, pdfId, '--out', pdfOut] },
             { type: 'reply', text: 'QUICK_CAPTURE_READ', state: 'idle' },
+            { type: 'touch', path: captureRead },
           ],
         } : {
           includes: '📬 You have unread items',
@@ -108,7 +111,7 @@ async function main() {
         const text = instructions(captured.text, agent);
         runner.writeText(`${name}-launch.jsonl`, captured.text);
         runner.assert(text.includes('Track work that outlives this turn in seeds'), 'launch carries Garden instructions', { name });
-        runner.assert(text.includes("You are this profile's Chief") === chief, 'chief branch matches session role', { name });
+        runner.assert(text.includes("You are the Chief") === chief, 'chief branch matches session role', { name });
         launches.push({ id: result.sessionId, cwd });
       });
     }
@@ -146,17 +149,24 @@ async function main() {
         data_base64: pdf.toString('base64'), final: true }, 'quick_capture_result');
       runner.assert(uploadedPDF.result.upload.attachment.media_type === 'application/pdf', 'PDF finalizes without image validation');
       const agent = launches[2];
-      const completed = observer.waitForMessage(data => data.event === 'session_state_changed' &&
-        data.session?.id === agent.id && data.session?.state === 'idle' ? data : null, 'quick capture agent finishes reading the capture');
+      const completed = new Promise((resolve, reject) => {
+        captureWatcher = fs.watch(runner.sessionDir, (_event, name) => {
+          if (name === path.basename(captureRead) && fs.existsSync(captureRead)) resolve();
+        });
+        captureWatcher.once('error', reject);
+      });
       const saved = await observer.requestResult({ cmd: 'quick_capture_send', capture_id: captureId,
         mailbox: { kind: 'chief' }, content: 'PROMPT_QUICK_CAPTURE', attachment_ids: [attachmentId, pdfId] }, 'quick_capture_result');
       runner.assert(saved.result.record.id === captureId, 'save returns the requested durable identity');
       await completed;
+      captureWatcher.close();
+      captureWatcher = null;
       const receipt = await observer.requestResult({ cmd: 'quick_capture_get', capture_id: captureId }, 'quick_capture_result');
       runner.assert(Boolean(receipt.result.record.read_at), 'typing the quick capture commits a read receipt');
       const text = transcripts(agent.cwd)[0]?.text || '';
       const spoken = transcriptTurns(text).map(turn => turn.text).join('\n');
       runner.writeText('quick-capture.txt', spoken);
+      runner.assert(spoken.includes('QUICK_CAPTURE_READ'), 'agent finishes both attachment commands');
       const typed = transcriptTurns(text).filter(turn => turn.role === 'user' && turn.text.includes('PROMPT_QUICK_CAPTURE'));
       runner.assert(typed.length === 1 && typed[0].text.includes('Message from the user, sent through Quick Capture.') && !typed[0].text.includes('📬'),
         'the quick capture reaches the agent once, as the user\'s own message', { typed });
@@ -209,6 +219,7 @@ async function main() {
     await runner.finishFailure(error, { sessions });
     process.exitCode = 1;
   } finally {
+    captureWatcher?.close();
     for (const sessionId of chiefs) {
       try { cli(['handoff', '--session', sessionId, '--sleep', '-m', 'The prompt scenario is over.']); } catch {}
     }

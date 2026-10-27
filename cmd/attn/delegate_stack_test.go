@@ -339,3 +339,34 @@ func TestDelegateDesktopPlacesTheAgentOnTheNamedDesktop(t *testing.T) {
 		}
 	}
 }
+
+func TestAddingDelegationRolesTurnsTheTableOn(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Start()
+	for _, args := range [][]string{
+		{"install"},
+		{"add", "extra-builder", "--builtin", "builder"},
+		{"add", "build", "--name", "Build"},
+		{"copy", "build", "build-copy"},
+	} {
+		requireStdout(t, s.Attn("delegate", "roles", "disable"), "revision")
+		requireStdout(t, s.Attn(append([]string{"delegate", "roles"}, args...)...), "revision")
+		var preferences protocol.DelegationPreferences
+		s.Attn("delegate", "roles", "show", "--json").JSON(t, &preferences)
+		if !preferences.Enabled {
+			t.Fatalf("roles %q left the table off", args)
+		}
+	}
+	requireStdout(t, s.Attn("delegate", "roles", "rm", "build-copy"), "revision")
+	requireStdout(t, s.Attn("delegate", "roles", "rm", "build"), "revision")
+	var empty protocol.DelegationPreferences
+	s.Attn("delegate", "roles", "show", "--json").JSON(t, &empty)
+	for _, role := range empty.Roles {
+		requireStdout(t, s.Attn("delegate", "roles", "rm", role.ID), "revision")
+	}
+	s.Attn("delegate", "roles", "show", "--json").JSON(t, &empty)
+	if !empty.Enabled || len(empty.Roles) != 0 {
+		t.Fatalf("removing the last role changed the table switch: %+v", empty)
+	}
+}

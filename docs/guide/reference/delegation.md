@@ -48,12 +48,11 @@ frontend work, or consequential work that needs a stronger model. "Anything
 else" covers delegations no role fits.
 
 Attn comes bundled with its own delegation roles you can opt into with "Add Attn
-roles" in Settings > Delegation, or ask an agent to run
+roles" in Settings > Delegation, or by asking an agent to run
 `attn delegate roles install`. Doing that also installs the attn-workflow skill for your harnesses. The
 skill is necessary for the bundled roles, and any agent on your computer can use
 it (although it's designed to be used inside Attn). To change how a bundled role
-works, make an editable copy of it. Named instances refuse the user-global
-skill install; you can still add custom roles there.
+works, make an editable copy of it.
 
 ### Attn's roles
 
@@ -122,7 +121,7 @@ It reads your table with `attn delegate roles`, which lists only the roles that 
 <details>
 <summary>What does "Add Attn roles" install, and what happens to the roles I already have?</summary>
 
-It adds the Attn roles your table doesn't have yet, each without a model, so agents can't pick one until you set its model. It also installs the attn-workflow skill for each harness you have, in `~/.claude/skills/attn-workflow` (Claude Code), `~/.agents/skills/attn-workflow` (Codex and Pi). From then on Attn keeps those folders matching its own copy, so anything you change or add inside them gets replaced or removed. Your own roles stay, and when one's name starts with an Attn role's name, Attn asks whether to add the Attn role beside it or replace yours (replacing keeps your row's models and on/off state).
+It adds the Attn roles your table doesn't have yet, each without a model, so agents can't pick one until you set its model. It also installs the attn-workflow skill for each harness you have, in `~/.claude/skills/attn-workflow` (Claude Code) and `~/.agents/skills/attn-workflow` (Codex and Pi). From then on Attn keeps those folders matching its own copy, so anything you change or add inside them gets replaced or removed. Your own roles stay, and when one's name starts with an Attn role's name, Attn asks whether to add the Attn role beside it or replace yours (replacing keeps your row's models and on/off state).
 </details>
 
 <details>

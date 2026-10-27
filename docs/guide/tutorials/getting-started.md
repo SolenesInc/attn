@@ -83,17 +83,18 @@ efforts. The Chief can:
 - Change your Attn settings.
 - Guide you in how to use Attn.
 
-In the sidebar, choose the Chief's harness and model, check the Notebook
-folder, and wake it. In its first session, the Chief helps you choose delegation
-roles, explains how your Notebook is laid out, and offers a tour of the app.
-It also asks whether you want to help attn's maintainers by sharing usage
+Check your sidebar to pick your initial Chief setup and wake it. In its first
+session, the Chief guides you through Attn and sets things up with you: which
+roles your delegated agents use and how your Notebook is laid out. It can also
+give you a tour of the app and build something small with you.
+
+The Chief asks whether you want to help attn's maintainers by sharing usage
 analytics, and explains how to send selected agent reports called vents.
 Recording and sharing are off by default; see
 [Telemetry](../reference/telemetry.md) for what is recorded and sent.
-You can skip anything, or build something together to try it out.
 
-Ask the Chief to walk you through Attn again anytime, or run
-`attn onboarding again`.
+To go through onboarding again later, ask the Chief or run `attn onboarding again`.
+
 After that, the Chief is your agent, and you can use it however you like. Its
 official purpose is to help you manage Attn and your own efforts, but you can do
 whatever you want with it.

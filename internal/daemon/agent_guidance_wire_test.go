@@ -83,13 +83,13 @@ func TestAChiefIsGuidedAsTheChiefAndMarkedSoItsHooksAddNoAgentGuidance(t *testin
 				marker   string
 				unmarked string
 			}{
-				{"the chief", chief, "You are this profile's Chief", "ATTN_CHIEF_GUIDANCE", "ATTN_AGENT_GUIDANCE"},
+				{"the chief", chief, "You are the Chief", "ATTN_CHIEF_GUIDANCE", "ATTN_AGENT_GUIDANCE"},
 				{"a worker", worker, agentGuidanceLead, "ATTN_AGENT_GUIDANCE", "ATTN_CHIEF_GUIDANCE"},
 			} {
 				guidance := launchGuidance(t, tc.run)
 				other := agentGuidanceLead
 				if tc.guidance == agentGuidanceLead {
-					other = "You are this profile's Chief"
+					other = "You are the Chief"
 				}
 				if !strings.Contains(guidance, tc.guidance) || strings.Contains(guidance, other) {
 					t.Errorf("%s %s launched without only its own guidance:\n%s", tc.name, h, guidance)

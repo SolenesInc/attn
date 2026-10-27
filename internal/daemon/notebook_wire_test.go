@@ -209,8 +209,8 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 			fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
 				return m.Root == root && m.Origin == "agent" && slices.Contains(m.Paths, "index.md")
 			})
-			if listed := notebookEntryPaths(notebookAskList(app, "").Entries); !slices.Contains(listed, "index.md") || !slices.Contains(listed, "log.md") || !slices.Contains(listed, "knowledge/index.md") {
-				t.Fatalf("the chief's guide scaffolded %v, want index.md, log.md and knowledge/index.md", listed)
+			if listed := notebookEntryPaths(notebookAskList(app, "").Entries); !slices.Contains(listed, "index.md") || slices.Contains(listed, "log.md") || !slices.Contains(listed, "knowledge/index.md") {
+				t.Fatalf("the chief's guide scaffolded %v, want index.md and knowledge/index.md without log.md", listed)
 			}
 		})
 	}

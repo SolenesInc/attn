@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -256,7 +255,12 @@ func TestARetiredMemberThatClearsStillReceivesItsSleepRequest(t *testing.T) {
 		if err != nil || retired.Sleep == nil || protocol.Deref(retired.Sleep.DeliveryStatus) != protocol.AgentMsgStatusQueued {
 			t.Fatalf("queued retirement = %+v %v", retired, err)
 		}
+		submitted := make(chan string)
+		day.term.OnSubmit(func(prompt string) { submitted <- prompt })
 		app.TypeLine(string(wake.SessionID), "/clear")
+		if prompt := <-submitted; prompt != "/clear" {
+			t.Fatalf("retired day received %q, want /clear", prompt)
+		}
 		day.transcript = fakeagent.WriteClaudeTranscript(t, day.term.Options.CWD, "cleared")
 		if err := cli.ObserveAgentConversation(protocol.TerminalID(day.self), day.transcript.ConversationID, day.transcript.Path); err != nil {
 			t.Fatal(err)
@@ -265,9 +269,10 @@ func TestARetiredMemberThatClearsStillReceivesItsSleepRequest(t *testing.T) {
 		awaitClosed(app, string(wake.SessionID))
 		day.id = string(next.ID)
 		day.reply("Ready in this conversation. <!-- attn:state=idle -->")
-		w.advance(30 * time.Second)
-		if got := day.prompts(); day.promptsContaining(inboxDoorbell) != 1 {
-			t.Fatalf("cleared retired day received %q", got)
+		if prompt := <-submitted; !strings.Contains(prompt, inboxDoorbell) {
+			t.Fatalf("cleared retired day received %q", prompt)
+		} else {
+			day.take(prompt)
 		}
 		mail := readInbox(t, cli, string(next.ID), 0)
 		found := false
