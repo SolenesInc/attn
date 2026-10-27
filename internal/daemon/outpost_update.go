@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -103,7 +104,7 @@ func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpo
 		return nil
 	}
 	var binary string
-	if os.Getenv("ATTN_HARNESS_DATA_DIR") != "" && buildinfo.Channel == "source" && os.Getenv("ATTN_HARNESS_OUTPOST_BINARY") != "" {
+	if (os.Getenv("ATTN_HARNESS_DATA_DIR") != "" || config.Instance() != "") && buildinfo.Channel == "source" && os.Getenv("ATTN_HARNESS_OUTPOST_BINARY") != "" {
 		if conn.Target().Platform != runtime.GOOS+"/"+runtime.GOARCH {
 			return fmt.Errorf("test source strategy cannot supply platform %s", conn.Target().Platform)
 		}
