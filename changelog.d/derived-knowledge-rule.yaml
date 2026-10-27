@@ -1,0 +1,3 @@
+kind: changed
+area: agents
+change: The attn-workflow skill requires a reason and a way to stay current before writing knowledge derived from the work, including code comments.
