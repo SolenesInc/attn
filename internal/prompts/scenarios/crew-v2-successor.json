@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "crew-v2-successor",
+  "description": "Successor after a nap, with crew v2 on.",
+  "recipient": "crew",
+  "event": "successor",
+  "values": {
+    "crew_v2_enabled": "true"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "id": "crew-v2-with-handoff",
+  "description": "Crew v2: Crew identity with a charter and predecessor letter.",
+  "recipient": "crew",
+  "event": "priming",
+  "values": {
+    "display_name": "Maintainer",
+    "home_dir": "/workspace/crew/maintainer",
+    "has_charter": "true",
+    "cwd": "/workspace/project",
+    "awareness_dirs": "/workspace/project",
+    "handoff": "Continue seed-search (`s-2q41xd`). Read its seed and notes, then /workspace/project/cmd/attn/seed.go before discussing the search command.",
+    "older_handoffs": "`older.md`",
+    "handoffs_dirname": "handoffs",
+    "charter_file": "/workspace/crew/maintainer/charter.md",
+    "charter_path": "",
+    "handoff_name": "previous.md",
+    "handoffs_dir": "/workspace/crew/maintainer/handoffs",
+    "crew_v2_enabled": "true"
+  },
+  "inputs": {
+    "garden_holdings": "crew-v2-garden-holdings"
+  }
+}

@@ -1047,20 +1047,51 @@
                     "kind": "compose",
                     "children": [
                       {
-                        "kind": "text",
-                        "id": "crew.garden",
-                        "source": "content/crew/garden.md",
-                        "bindings": [
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "crew_v2_enabled",
+                            "kind": "flag",
+                            "description": "Use the crew v2 operating model."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
                           {
-                            "name": "held_seeds",
-                            "node": {
-                              "kind": "input",
-                              "field": {
+                            "kind": "text",
+                            "id": "crew.v2.garden",
+                            "source": "content/crew/v2/garden.md",
+                            "bindings": [
+                              {
                                 "name": "held_seeds",
-                                "kind": "text",
-                                "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "held_seeds",
+                                    "kind": "text",
+                                    "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                                  }
+                                }
                               }
-                            }
+                            ]
+                          },
+                          {
+                            "kind": "text",
+                            "id": "crew.garden",
+                            "source": "content/crew/garden.md",
+                            "bindings": [
+                              {
+                                "name": "held_seeds",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "held_seeds",
+                                    "kind": "text",
+                                    "description": "Held seeds with their freshest handoff notes, one entry per blank-line-separated block."
+                                  }
+                                }
+                              }
+                            ]
                           }
                         ]
                       },
@@ -1193,6 +1224,32 @@
                           "id": "crew.home-files",
                           "source": "content/crew/home-files.md"
                         }
+                      },
+                      {
+                        "name": "compaction",
+                        "node": {
+                          "kind": "choose",
+                          "condition": {
+                            "field": {
+                              "name": "crew_v2_enabled",
+                              "kind": "flag",
+                              "description": "Use the crew v2 operating model."
+                            },
+                            "test": "enabled"
+                          },
+                          "children": [
+                            {
+                              "kind": "text",
+                              "id": "crew.v2.compaction",
+                              "source": "content/crew/v2/compaction.md"
+                            },
+                            {
+                              "kind": "text",
+                              "id": "crew.compaction",
+                              "source": "content/crew/compaction.md"
+                            }
+                          ]
+                        }
                       }
                     ]
                   },
@@ -1226,20 +1283,51 @@
                         ]
                       },
                       {
-                        "kind": "text",
-                        "id": "crew.first-day",
-                        "source": "content/crew/first-day.md",
-                        "bindings": [
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "crew_v2_enabled",
+                            "kind": "flag",
+                            "description": "Use the crew v2 operating model."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
                           {
-                            "name": "charter_path",
-                            "node": {
-                              "kind": "input",
-                              "field": {
+                            "kind": "text",
+                            "id": "crew.v2.first-day",
+                            "source": "content/crew/v2/first-day.md",
+                            "bindings": [
+                              {
                                 "name": "charter_path",
-                                "kind": "text",
-                                "description": "Charter path"
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "charter_path",
+                                    "kind": "text",
+                                    "description": "Charter path"
+                                  }
+                                }
                               }
-                            }
+                            ]
+                          },
+                          {
+                            "kind": "text",
+                            "id": "crew.first-day",
+                            "source": "content/crew/first-day.md",
+                            "bindings": [
+                              {
+                                "name": "charter_path",
+                                "node": {
+                                  "kind": "input",
+                                  "field": {
+                                    "name": "charter_path",
+                                    "kind": "text",
+                                    "description": "Charter path"
+                                  }
+                                }
+                              }
+                            ]
                           }
                         ]
                       }
@@ -1310,6 +1398,24 @@
                 ]
               },
               {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "crew_v2_enabled",
+                    "kind": "flag",
+                    "description": "Use the crew v2 operating model."
+                  },
+                  "test": "enabled"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "crew.v2.operating-model",
+                    "source": "content/crew/v2/operating-model.md"
+                  }
+                ]
+              },
+              {
                 "kind": "choose",
                 "condition": {
                   "field": {
@@ -1327,20 +1433,51 @@
                         "kind": "join",
                         "children": [
                           {
-                            "kind": "text",
-                            "id": "crew.letter",
-                            "source": "content/crew/letter.md",
-                            "bindings": [
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "crew_v2_enabled",
+                                "kind": "flag",
+                                "description": "Use the crew v2 operating model."
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
                               {
-                                "name": "handoff_name",
-                                "node": {
-                                  "kind": "input",
-                                  "field": {
+                                "kind": "text",
+                                "id": "crew.v2.letter",
+                                "source": "content/crew/v2/letter.md",
+                                "bindings": [
+                                  {
                                     "name": "handoff_name",
-                                    "kind": "text",
-                                    "description": "Handoff name"
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "handoff_name",
+                                        "kind": "text",
+                                        "description": "Handoff name"
+                                      }
+                                    }
                                   }
-                                }
+                                ]
+                              },
+                              {
+                                "kind": "text",
+                                "id": "crew.letter",
+                                "source": "content/crew/letter.md",
+                                "bindings": [
+                                  {
+                                    "name": "handoff_name",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "handoff_name",
+                                        "kind": "text",
+                                        "description": "Handoff name"
+                                      }
+                                    }
+                                  }
+                                ]
                               }
                             ]
                           },
@@ -1469,6 +1606,32 @@
                         "description": "Display name"
                       }
                     }
+                  },
+                  {
+                    "name": "letter_contents",
+                    "node": {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "crew_v2_enabled",
+                          "kind": "flag",
+                          "description": "Use the crew v2 operating model."
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "crew.v2.closure-letter",
+                          "source": "content/crew/v2/closure-letter.md"
+                        },
+                        {
+                          "kind": "text",
+                          "id": "crew.closure-letter",
+                          "source": "content/crew/closure-letter.md"
+                        }
+                      ]
+                    }
                   }
                 ]
               }
@@ -1480,9 +1643,27 @@
           "delivery": "user_message",
           "description": "crew_wake.go: today's first message.",
           "body": {
-            "kind": "text",
-            "id": "crew.wake",
-            "source": "content/crew/wake.md"
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "crew_v2_enabled",
+                "kind": "flag",
+                "description": "Use the crew v2 operating model."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "crew.v2.wake",
+                "source": "content/crew/v2/wake.md"
+              },
+              {
+                "kind": "text",
+                "id": "crew.wake",
+                "source": "content/crew/wake.md"
+              }
+            ]
           }
         },
         {
@@ -1490,9 +1671,27 @@
           "delivery": "user_message",
           "description": "crew_handoff.go: successor after a nap.",
           "body": {
-            "kind": "text",
-            "id": "crew.successor",
-            "source": "content/crew/successor.md"
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "crew_v2_enabled",
+                "kind": "flag",
+                "description": "Use the crew v2 operating model."
+              },
+              "test": "enabled"
+            },
+            "children": [
+              {
+                "kind": "text",
+                "id": "crew.v2.successor",
+                "source": "content/crew/v2/successor.md"
+              },
+              {
+                "kind": "text",
+                "id": "crew.successor",
+                "source": "content/crew/successor.md"
+              }
+            ]
           }
         },
         {
@@ -3154,6 +3353,18 @@
             "kind": "text",
             "id": "attn-skill.callouts",
             "source": "content/skills/attn/references/callouts.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "charter",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.charter",
+            "source": "content/skills/attn/references/charter.md",
             "verbatim": true,
             "keep_final_newline": true
           }
@@ -5522,5 +5733,5 @@
       ]
     }
   ],
-  "definitions_hash": "0d4ecbad1db2ccf4743b33e01dc6f666733e2c9aed075ca7d323068b43e36012"
+  "definitions_hash": "43256e76fc0454917acb784f3ebf2fe09a98b075c33d251ea2feb1ecf77aee71"
 }

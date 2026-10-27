@@ -1,0 +1,1 @@
+When it is time, write to your successor in your own words. Say where things stand, what to pick up next, and what the user needs to decide. Name the seed ids and paths your successor needs to follow into the work. Decisions and their reasons are already on their seeds; point there instead of copying them into the letter.

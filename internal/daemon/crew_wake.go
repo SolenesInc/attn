@@ -62,8 +62,6 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 	return false
 }
 
-var crewWakePrompt = prompts.RenderText("crew", "wake", prompts.Values{})
-
 // A wake the user did not start is announced with who asked for it.
 type crewWakeRequest struct {
 	RequestedBy string
@@ -120,6 +118,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		CharterPath:   member.CharterPath(d.dataRoot),
 		CWD:           member.CWD,
 		AwarenessDirs: member.AwarenessDirs,
+		V2Enabled:     d.crewV2Enabled(),
 	}
 	d.primeCrewGarden(&priming, member.ID)
 	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {
@@ -343,7 +342,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		return nil, err
 	}
 
-	initialPrompt := crewWakePrompt
+	initialPrompt := prompts.RenderText("crew", "wake", prompts.Values{"crew_v2_enabled": fmt.Sprint(d.crewV2Enabled())})
 	_, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
 		ID:            sessionID,

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/prompttest"
 )
 
@@ -34,4 +35,24 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		out["inline/"+strconv.Itoa(len(text))] = strings.TrimPrefix(got, text[:min(len(text), handoffInlineLimit)])
 	}
 	prompttest.Equal(t, "crew", out)
+}
+
+func TestCrewV2PromptCompatibility(t *testing.T) {
+	firstDay := Priming{Member: "keeper", HomeDir: "/tmp/home", V2Enabled: true, GardenRead: true}
+	existing := firstDay
+	existing.Charter = "Charter."
+	existing.CWD = "/tmp/work {{literal}}"
+	existing.AwarenessDirs = []string{"/tmp/one", "/tmp/two"}
+	existing.HandoffName = "letter.md"
+	existing.Handoff = "Follow s-example to /tmp/work."
+	existing.OlderHandoffs = []string{"old.md"}
+	existing.Held = []HeldSeed{{ID: "s-example", Slug: "example", Title: "Example work", Handoff: "Read the work."}}
+	out := map[string]string{
+		"first-day": firstDay.Block(),
+		"existing":  existing.Block(),
+	}
+	for _, event := range []string{"wake", "successor"} {
+		out[event] = prompts.RenderText("crew", event, prompts.Values{"crew_v2_enabled": "true"})
+	}
+	prompttest.Equal(t, "crew-v2", out)
 }
