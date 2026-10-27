@@ -108,7 +108,7 @@ func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, 
 
 	handoffs := make([]protocol.CrewHandoffSummary, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || strings.HasSuffix(entry.Name(), ".md.json") || strings.HasSuffix(entry.Name(), ".pending") {
 			continue
 		}
 		occurredAt, err := crewHandoffTime(entry.Name())

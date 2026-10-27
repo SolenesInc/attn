@@ -50,12 +50,12 @@ func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, isChief, sel
 	member, block, _, err := d.crewPrimeForSession(sessionID)
 	if err != nil {
 		d.logf("crew: refusing launch priming for session %s: %v", sessionID, err)
-		if d.crewMemoryEnabled() {
+		if d.crewV2Enabled() {
 			return launch, nil, err
 		}
 		return launch, nil, nil
 	}
 	launch.Crew = block
-	launch.CrewMemoryEnabled = block != "" && d.crewMemoryEnabled()
+	launch.CrewV2Enabled = block != "" && d.crewV2Enabled()
 	return launch, member.AwarenessDirs, nil
 }

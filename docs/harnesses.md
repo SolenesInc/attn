@@ -116,12 +116,6 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   and command lists in the probe. Fresh working/config directories plus the
   memory-off switch kept synthetic personal-context canaries out of the
   simulator and judge requests (2.1.310).
-- Native JSONL includes `api-request` records with `querySource`, model and
-  `shapeHash`, plus `api-request-shape` records containing the system prompt.
-  Matching the main-thread request to its shape by session and shape hash
-  exposes the crew memory wake view. The crew eval’s localhost proof checked
-  the same stale entry in that transcript and the actual provider request
-  before sending its task (2.1.310).
 - A Bash tool calling `attn handoff --sleep` can file its letter and exit
   before Claude persists the final tool call to JSONL. In the 2.1.310 local
   provider probe, the fifth member request closed the session while the file
@@ -259,7 +253,7 @@ Read in the source at openai/codex 4aa94dce and checked against the
 - `memories.use_memories=false` skips memory instructions while leaving the
   feature and its startup pipeline enabled.
 
-With `crew_memory_enabled`, attn sets `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` for
+With `crew_v2_enabled`, attn sets `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` for
 a crew member's Claude and sets both `features.memories=false` and
 `memories.generate_memories=false` for their Codex. Existing harness memory
 files stay in place. Changing the setting takes effect at the member's next

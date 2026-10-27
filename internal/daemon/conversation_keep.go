@@ -183,22 +183,36 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 	}
 	referenced := make(map[conversationKey][]protocol.KeptConversationCrewDay)
 	for _, member := range members {
-		lock := d.crewMemoryLock(member.ID)
-		lock.Lock()
-		home, err := d.crewMemoryHome(member)
-		var memory crew.Memory
-		if err == nil {
-			memory, err = crew.ReadMemory(home)
-		}
-		lock.Unlock()
+		dir, err := d.validateCrewHandoffsDir(member)
 		if err != nil {
-			return nil, fmt.Errorf("crew day references for %s: %w", member.ID, err)
+			return nil, err
 		}
-		for id, entry := range memory.Entries {
-			if entry.Day == nil || entry.Day.Session == "" {
+		letters, err := os.ReadDir(dir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("crew letter references for %s: %w", member.ID, err)
+		}
+		seen := make(map[protocol.SessionID]bool)
+		for _, letter := range letters {
+			if letter.IsDir() || !strings.HasSuffix(letter.Name(), ".md") {
 				continue
 			}
-			sessionID := protocol.SessionID(entry.Day.Session)
+			path := filepath.Join(dir, letter.Name())
+			for _, file := range []string{path, path + ".json"} {
+				if err := d.validateCrewLetterPath(member, file); err != nil {
+					return nil, err
+				}
+			}
+			sessionID, err := crew.HandoffSession(path)
+			if err != nil {
+				return nil, err
+			}
+			if sessionID == "" || seen[sessionID] {
+				continue
+			}
+			seen[sessionID] = true
 			session := d.store.SessionLedgerEntry(sessionID)
 			if session == nil {
 				continue
@@ -208,7 +222,7 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 				continue
 			}
 			key := conversationKey{session.Agent, resumeID}
-			referenced[key] = append(referenced[key], protocol.KeptConversationCrewDay{Member: member.ID, DayID: strconv.Itoa(id)})
+			referenced[key] = append(referenced[key], protocol.KeptConversationCrewDay{Member: member.ID, DayID: string(sessionID)})
 		}
 	}
 	return referenced, nil

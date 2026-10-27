@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/launchcontract"
@@ -22,6 +21,10 @@ import (
 )
 
 var crewNapPrompt = prompts.RenderText("crew", "successor", prompts.Values{})
+
+func (d *Daemon) crewV2Enabled() bool {
+	return parseBooleanSetting(d.homeSetting(SettingCrewV2Enabled))
+}
 
 func (d *Daemon) transferCrewBinding(memberID string, from protocol.SessionID, to protocol.SessionID) error {
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
@@ -68,67 +71,28 @@ func (d *Daemon) boundCrewMember(sessionID protocol.SessionID) (crew.Member, boo
 	return crew.Member{}, false, nil
 }
 
-func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose, day string) (result *protocol.CrewHandoffResult, err error) {
+func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
-	return d.crewHandoffLocked(sessionID, note, retry, close, day)
+	return d.crewHandoffLocked(sessionID, note, retry, close)
 }
 
-func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose, day string) (*protocol.CrewHandoffResult, error) {
+func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, retry bool, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
 	if sessionID == "" {
 		return nil, fmt.Errorf("a handoff is filed by the session living the day; none was named (run from its terminal or pass --session)")
 	}
 	member, bound := d.crewMemberForSession(sessionID)
 	if !bound {
-		return nil, fmt.Errorf("this session is not living a crew member's day, so it has no day-line to close. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
+		return nil, fmt.Errorf("this session is not living a crew member's day, so it has no letter to file. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
 	}
-	memoryEnabled := d.crewMemoryEnabled()
-	if memoryEnabled {
-		if retry && day == "" {
-			day = member.LetterDay
-		}
-		if day == "" {
-			return nil, fmt.Errorf("--day is missing: one line of at most %d bytes saying what this day was. It goes into your memory", crew.MaxMemoryBytes)
-		}
-		if err := crew.ValidateMemoryText(day); err != nil {
-			return nil, err
-		}
-		if retry && close == "" {
-			close = member.LetterClose
-		}
-	}
-	path, err := d.crewLetterForHandoff(member, sessionID, note, retry, day, close, memoryEnabled)
+	path, err := d.crewLetterForHandoff(member, sessionID, note, retry)
 	if err != nil {
 		return nil, err
 	}
-
-	if retry && close == "" && !memoryEnabled {
+	if retry && close == "" {
 		close = protocol.CrewDayCloseNap
 	}
-
-	var dayID *string
-	if memoryEnabled {
-		if retry {
-			if err := d.recordCrewLetter(member.ID, sessionID, path, day, close); err != nil {
-				return nil, err
-			}
-		}
-		crashpoint.At("crew-memory-letter-recorded")
-		id, pending, err := d.crewMemoryDay(member, sessionID, path, day)
-		if err != nil {
-			return nil, fmt.Errorf("letter filed at %s; memory day line failed: %w; run attn handoff --retry", path, err)
-		}
-		dayID = protocol.Ptr(fmt.Sprint(id))
-		crashpoint.At("crew-memory-day-appended")
-		if pending != 0 {
-			return &protocol.CrewHandoffResult{Member: member.ID, Path: path, DayID: dayID, PendingSummaries: protocol.Ptr(pending)}, nil
-		}
-	}
-	result, err := d.crewTurnover(member, sessionID, path, close)
-	if result != nil {
-		result.DayID = dayID
-	}
-	return result, err
+	return d.crewTurnover(member, sessionID, path, close)
 }
 
 func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, path string, close protocol.CrewDayClose) (*protocol.CrewHandoffResult, error) {
@@ -167,7 +131,7 @@ func (d *Daemon) crewDayEndsHere(close protocol.CrewDayClose, now time.Time) boo
 	return d.UserAwayFor(now) >= d.crewAwayLimit()
 }
 
-func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.SessionID, note string, retry bool, day string, close protocol.CrewDayClose, memoryEnabled bool) (string, error) {
+func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.SessionID, note string, retry bool) (string, error) {
 	if err := d.requireCrewFiles(member); err != nil {
 		return "", err
 	}
@@ -192,26 +156,28 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	if _, err := d.validateCrewHandoffsDir(member); err != nil {
 		return "", err
 	}
-	path, err := crew.FileHandoff(member.HomeDir(d.dataRoot), member.ID, note, time.Now())
+	var filingSession protocol.SessionID
+	if d.crewV2Enabled() {
+		filingSession = sessionID
+	}
+	path, err := crew.FileHandoff(member.HomeDir(d.dataRoot), member.ID, note, time.Now(), filingSession)
 	if err != nil {
 		return "", err
 	}
 	d.logf("crew: %s filed a letter at %s (%d bytes)", crew.DisplayName(member.ID), path, len(note))
-	if err := d.recordCrewLetter(member.ID, sessionID, path, day, close); err != nil && memoryEnabled {
+	if err := d.recordCrewLetter(member.ID, sessionID, path); err != nil {
 		return "", err
 	}
 	return path, nil
 }
 
-func (d *Daemon) recordCrewLetter(memberID string, sessionID protocol.SessionID, path, day string, close protocol.CrewDayClose) error {
+func (d *Daemon) recordCrewLetter(memberID string, sessionID protocol.SessionID, path string) error {
 	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != sessionID {
 			return false, nil
 		}
 		member.LetterFile = filepath.Base(path)
 		member.LetterSession = sessionID
-		member.LetterDay = day
-		member.LetterClose = close
 		return true, nil
 	}); err != nil {
 		d.logf("crew: recording %s's filed letter at %s: %v", crew.DisplayName(memberID), path, err)
@@ -357,7 +323,7 @@ func (d *Daemon) closeNappedSession(sessionID protocol.SessionID, teardown *sess
 }
 
 func (d *Daemon) handleCrewHandoff(conn net.Conn, msg *protocol.CrewHandoffMessage) {
-	result, err := d.crewHandoff(protocol.TrimID(msg.SessionID), msg.Note, protocol.Deref(msg.Retry), protocol.Deref(msg.Close), protocol.Deref(msg.Day))
+	result, err := d.crewHandoff(protocol.TrimID(msg.SessionID), msg.Note, protocol.Deref(msg.Retry), protocol.Deref(msg.Close))
 	if err != nil {
 		d.sendCrewError(conn, "handoff", err)
 		return

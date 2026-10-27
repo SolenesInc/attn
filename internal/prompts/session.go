@@ -87,7 +87,7 @@ type Launch struct {
 	ToolVents              bool
 	QuickCapture           bool
 	Crew                   string
-	CrewMemoryEnabled      bool
+	CrewV2Enabled          bool
 }
 
 func (l Launch) Values() Values {

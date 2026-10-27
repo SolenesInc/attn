@@ -202,7 +202,6 @@ type Daemon struct {
 	inboxUnsubscribe         func()
 	monitorPolicyUnsubscribe func()
 	crewWakeMu               sync.Mutex
-	crewMemoryLocks          sync.Map
 	crewExitedMu             sync.Mutex
 	crewExitedSessions       map[string]string
 	supportInputTraceOnce    sync.Once
@@ -2960,9 +2959,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
 	case protocol.CmdCrewHandoff:
 		d.handleCrewHandoff(conn, msg.(*protocol.CrewHandoffMessage))
-	case protocol.CmdCrewMemoryAdd, protocol.CmdCrewMemoryRecall, protocol.CmdCrewMemoryZoom,
-		protocol.CmdCrewMemorySummarize, protocol.CmdCrewMemoryForget, protocol.CmdCrewMemoryRewrite, protocol.CmdCrewMemoryImport:
-		d.handleCrewMemory(conn, msg)
 	case protocol.CmdStop:
 		d.handleStop(conn, msg.(*protocol.StopMessage))
 	case protocol.CmdFilesEdited:

@@ -37,6 +37,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 		want []string
 	}{
 		{[]string{"handoff"}, []string{"-m -"}},
+		{[]string{"handoff", "--day", "removed", "-m", "letter"}, []string{"flag provided but not defined: -day"}},
 		{[]string{"handoff", "-m", "   "}, []string{"-m -"}},
 		{[]string{"handoff", "--retry", "-m", "another one"}, []string{"--retry"}},
 		{[]string{"handoff", "-m", "x", "trellis"}, []string{`"trellis"`}},

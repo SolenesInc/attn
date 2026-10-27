@@ -173,7 +173,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 				names = append(names, "open seed "+seed.Slug)
 			}
 			for _, day := range days[key] {
-				names = append(names, "crew day "+day.Member+" #"+day.DayID)
+				names = append(names, "crew session "+day.Member+" "+day.DayID)
 			}
 			sort.Strings(names)
 			if row.PinnedAt != nil {
@@ -284,10 +284,10 @@ func (d *Daemon) forgetConversation(id string) error {
 		if len(days[key]) > 0 {
 			names := make([]string, 0, len(days[key]))
 			for _, day := range days[key] {
-				names = append(names, day.Member+" #"+day.DayID)
+				names = append(names, day.Member+" "+day.DayID)
 			}
 			sort.Strings(names)
-			return fmt.Errorf("conversation %s is kept by crew days: %s", key.resumeID, strings.Join(names, ", "))
+			return fmt.Errorf("conversation %s is kept by crew sessions: %s", key.resumeID, strings.Join(names, ", "))
 		}
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
 		if !exists || !kept.DeletedAt.IsZero() {

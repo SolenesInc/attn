@@ -47,7 +47,7 @@ const (
 	SettingAsksEnabled                   HomeSetting    = "asks_enabled"
 	SettingCaptureShortcut               HomeSetting    = "capture.shortcut"
 	SettingQuickCaptureEnabled           HomeSetting    = "quick_capture_enabled"
-	SettingCrewMemoryEnabled             HomeSetting    = "crew_memory_enabled"
+	SettingCrewV2Enabled                 HomeSetting    = "crew_v2_enabled"
 	SettingCalloutsEnabled               HomeSetting    = "callouts_enabled"
 	SettingAutoSettleArmSeconds          HomeSetting    = "auto_settle_arm_seconds"
 	SettingAutoSettleCountdownSeconds    HomeSetting    = "auto_settle_countdown_seconds"

@@ -122,21 +122,6 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		AwarenessDirs: member.AwarenessDirs,
 	}
 	d.primeCrewGarden(&priming, member.ID)
-	var memory crew.Memory
-	if d.crewMemoryEnabled() {
-		lock := d.crewMemoryLock(member.ID)
-		lock.Lock()
-		home, pathErr := d.crewMemoryHome(member)
-		if pathErr == nil {
-			memory, pathErr = crew.ReadMemory(home)
-		}
-		lock.Unlock()
-		if pathErr != nil {
-			return crew.Priming{}, pathErr
-		}
-		priming.MemoryEnabled = true
-		priming.MemoryView = memory.WakeView()
-	}
 	if charter, err := os.ReadFile(member.CharterPath(d.dataRoot)); err == nil {
 		priming.Charter = string(charter)
 	} else if !os.IsNotExist(err) {
@@ -171,11 +156,7 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		}
 	}
 	priming.HandoffName = names[0]
-	if priming.MemoryEnabled {
-		priming.ImportLetters = len(memory.Entries) == 0
-	} else {
-		priming.OlderHandoffs = names[1:]
-	}
+	priming.OlderHandoffs = names[1:]
 	letterPath := filepath.Join(handoffsDir, names[0])
 	if letter, err := os.ReadFile(letterPath); err == nil {
 		priming.Handoff = string(letter)
@@ -430,8 +411,8 @@ func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) 
 		result.Guidance = protocol.Ptr(block)
 		result.AwarenessDirs = append(result.AwarenessDirs, member.AwarenessDirs...)
 		result.PrimingBytes = len(block)
-		if d.crewMemoryEnabled() {
-			result.MemoryEnabled = protocol.Ptr(true)
+		if d.crewV2Enabled() {
+			result.V2Enabled = protocol.Ptr(true)
 		}
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewPrimeResult: result})

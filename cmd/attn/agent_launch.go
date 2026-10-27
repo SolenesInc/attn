@@ -130,21 +130,21 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	opts := agentdriver.SpawnOpts{
-		TerminalID:        terminalID,
-		CWD:               cwd,
-		Label:             parsed.label,
-		InitialPrompt:     initialPrompt,
-		ResumeSessionID:   parsed.resumeID,
-		ResumePicker:      parsed.resumePicker,
-		YoloMode:          parsed.yoloMode,
-		Executable:        driver.ResolveExecutable(""),
-		SocketPath:        config.SocketPath(),
-		WrapperPath:       resolveWrapperPath(),
-		CodexRemote:       consumeOneShotEnv("ATTN_CODEX_REMOTE"),
-		QuickCapture:      consumeOneShotEnv("ATTN_QUICK_CAPTURE_ENABLED") == "true",
-		Vent:              consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
-		ToolVents:         consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
-		CrewMemoryEnabled: consumeOneShotBoolEnv("ATTN_CREW_MEMORY_ENABLED"),
+		TerminalID:      terminalID,
+		CWD:             cwd,
+		Label:           parsed.label,
+		InitialPrompt:   initialPrompt,
+		ResumeSessionID: parsed.resumeID,
+		ResumePicker:    parsed.resumePicker,
+		YoloMode:        parsed.yoloMode,
+		Executable:      driver.ResolveExecutable(""),
+		SocketPath:      config.SocketPath(),
+		WrapperPath:     resolveWrapperPath(),
+		CodexRemote:     consumeOneShotEnv("ATTN_CODEX_REMOTE"),
+		QuickCapture:    consumeOneShotEnv("ATTN_QUICK_CAPTURE_ENABLED") == "true",
+		Vent:            consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
+		ToolVents:       consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
+		CrewV2Enabled:   consumeOneShotBoolEnv("ATTN_CREW_V2_ENABLED"),
 	}
 
 	if _, err := agentdriver.EnsureAttnSkillInstalled(driver.Name()); err != nil {
@@ -171,10 +171,10 @@ func runAgentDirectly(requestedAgent string) {
 	opts.SelfReportPullRequests = !caps.HasHooks
 	if prime, err := c.CrewPrime(sessionID); err == nil {
 		opts.CrewPriming = protocol.Deref(prime.Guidance)
-		opts.CrewMemoryEnabled = protocol.Deref(prime.MemoryEnabled)
+		opts.CrewV2Enabled = protocol.Deref(prime.V2Enabled)
 		opts.AwarenessDirs = prime.AwarenessDirs
-	} else if opts.CrewMemoryEnabled {
-		fmt.Fprintf(os.Stderr, "attn: crew memory priming: %v\n", err)
+	} else if opts.CrewV2Enabled {
+		fmt.Fprintf(os.Stderr, "attn: crew priming: %v\n", err)
 		os.Exit(1)
 	}
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
