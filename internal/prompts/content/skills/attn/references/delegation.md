@@ -132,6 +132,9 @@ attn delegate status <request-id>
 
 Retry identical input with the same `--request-id` to retrieve or continue that operation. A changed request needs a new ID. A terminal failed operation stays failed; an intentional new attempt uses the existing seed and explicit checkout under a new request ID.
 
+After a home restart, an accepted operation waits for its outpost to reconnect.
+Its status names that host. Removing the outpost fails the waiting operation.
+
 Launch failures leave transferred ownership and created worktrees/branches in place. Read the error's resource paths and current state, then explicitly reuse or remove the checkout. Attn does not restore the old owner or clean up the worktree automatically. An unknown outcome is not evidence that nothing started.
 
 When the delegate's work is complete and you no longer need its session, read the seed and use the close rules in `attn`'s conversation reference. A close is immediate; it is separate from harvesting the assignment.

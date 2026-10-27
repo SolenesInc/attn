@@ -133,9 +133,8 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 			changed = true
 		}
 	}
-	if changed && r.changed != nil {
-		close(r.changed)
-		r.changed = nil
+	if changed {
+		r.notifyChangedLocked()
 	}
 	r.mu.Unlock()
 	if changed {
@@ -143,6 +142,13 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 	}
 	if connected {
 		d.kickOutpostInboxes(id)
+	}
+}
+
+func (r *outpostsRuntime) notifyChangedLocked() {
+	if r.changed != nil {
+		close(r.changed)
+		r.changed = nil
 	}
 }
 
@@ -156,6 +162,7 @@ func (d *Daemon) setOutpostConn(id string, run *outpostDial, conn *bridge.Conn) 
 		return false
 	}
 	run.conn = conn
+	r.notifyChangedLocked()
 	return true
 }
 

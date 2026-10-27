@@ -210,6 +210,9 @@ The target machine expands and checks the directory, refs and worktree path,
 and creates the worktree. An outpost agent uses `--host home` to delegate at
 the home. Unknown or unreachable hosts refuse before acceptance. A home
 restart resumes an accepted delegation on the same machine and path.
+If that outpost is offline, the accepted operation waits for its return;
+`attn delegate status <request-id>` names the host it is waiting for. Removing
+that outpost fails the waiting operation.
 
 The chief and crew run only at the home. Spawning, waking or handing off a
 crew member on an outpost, or making an outpost agent the chief, refuses and

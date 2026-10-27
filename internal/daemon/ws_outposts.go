@@ -89,6 +89,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	} else {
 		r.mu.Lock()
 		delete(r.dialers, id)
+		r.notifyChangedLocked()
 		r.mu.Unlock()
 	}
 	d.configureNotebookSync()

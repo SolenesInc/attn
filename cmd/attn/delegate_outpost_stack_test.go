@@ -63,10 +63,137 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 	if protocol.Deref(session.Host) != pair.Host {
 		t.Fatalf("delegate host = %q; want caller's %q", protocol.Deref(session.Host), pair.Host)
 	}
-	if prompt := outpost.LaunchedCarrying(pair.App.Terminal(result.SessionID)).Prompted(); !strings.Contains(prompt, result.SeedID) {
+	delegateTerminal := pair.App.Terminal(result.SessionID)
+	agent := outpost.LaunchedCarrying(delegateTerminal)
+	if prompt := agent.Prompted(); !strings.Contains(prompt, result.SeedID) {
 		t.Fatalf("delegate prompt = %q; want seed %s", prompt, result.SeedID)
 	}
+	agent.Reply("Ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(pair.App, result.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+	initial, err := home.Client().SeedShow("", result.SeedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	announcements := []*testworld.Peer{pair.App}
+	checkReceipts := func(step string) {
+		t.Helper()
+		shown, err := home.Client().SeedShow("", result.SeedID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		registered := 0
+		for _, peer := range announcements {
+			for _, event := range peer.Received() {
+				if event.Event == protocol.EventSessionRegistered && event.Session != nil && string(event.Session.ID) == result.SessionID {
+					registered++
+				}
+			}
+		}
+		lifecycle := map[string]int{}
+		for _, producer := range readBusLog(t, home).Producers {
+			lifecycle[producer.Name] = producer.Events
+		}
+		if lifecycle["garden.seed.planted"] != 1 || lifecycle["garden.seed.tended"] != 1 ||
+			shown.Seed.TenderSession != protocol.SessionID(result.SessionID) || protocol.Deref(shown.Seed.LastExecutionID) != protocol.SessionID(result.SessionID) {
+			t.Fatalf("%s: planted=%d tended=%d tender=%s last execution=%s", step, lifecycle["garden.seed.planted"], lifecycle["garden.seed.tended"], shown.Seed.TenderSession, protocol.Deref(shown.Seed.LastExecutionID))
+		}
+		if registered != 1 || shown.NotesTotal != initial.NotesTotal || pair.App.Terminal(result.SessionID) != delegateTerminal {
+			t.Fatalf("%s: registrations=%d notes=%d (initial %d) terminal=%s (initial %s)", step, registered, shown.NotesTotal, initial.NotesTotal, pair.App.Terminal(result.SessionID), delegateTerminal)
+		}
+		t.Logf("%s: planted=%d tended=%d registrations=%d seed notes=%d terminal=%s", step, lifecycle["garden.seed.planted"], lifecycle["garden.seed.tended"], registered, shown.NotesTotal, delegateTerminal)
+	}
+	checkReceipts("after launch")
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
+	mark := len(pair.App.Log())
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
+	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	checkReceipts("after reconnect")
+	for _, restart := range []struct {
+		name  string
+		stack *testworld.Stack
+	}{{"home", home}, {"outpost", outpost}} {
+		mark = len(pair.App.Log())
+		restart.stack.Stop()
+		restart.stack.Start()
+		if restart.name == "home" {
+			pair.App = home.App()
+			announcements = append(announcements, pair.App)
+			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
+		} else {
+			outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+		}
+		pair.App.TypeLine(result.SessionID, "after "+restart.name+" restart")
+		agent.Prompted()
+		agent.Reply("Still ready. <!-- attn:state=waiting_input -->")
+		testworld.AwaitSession(pair.App, result.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+		checkReceipts("after " + restart.name + " restart")
+	}
 	t.Logf("outpost caller=%s: terminal=%s delegate=%s host=%s", source, terminal.TerminalID, result.SessionID, pair.Host)
+}
+
+func TestADelegationWritesItsOutpostFailureNoteOnceAcrossReconnectAndRestarts(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	cwd := outpost.Path("failure")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outpost.ExitAtNextBoot(1, "The selected model is unavailable")
+	request := protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: "outpost-failed-before-first-turn", Host: &pair.Host, Cwd: cwd, Agent: protocol.Ptr("claude"),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Do not repeat the launch failure note")},
+	}
+	if _, err := home.Client().Delegate(request); err == nil || !strings.Contains(err.Error(), "before its first turn") {
+		t.Fatalf("pre-first-turn failure: %v", err)
+	}
+	operation, err := home.Client().DelegationStatus(request.RequestID)
+	if err != nil || operation.SeedID == nil {
+		t.Fatalf("failed operation=%+v, %v", operation, err)
+	}
+	checkNote := func(step string) {
+		t.Helper()
+		if _, err := home.Client().Delegate(request); err == nil || !strings.Contains(err.Error(), "before its first turn") {
+			t.Fatalf("%s retry: %v", step, err)
+		}
+		shown, err := home.Client().SeedShow("", *operation.SeedID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		failures := 0
+		for _, note := range shown.Notes {
+			if strings.Contains(note.Body, "before starting its first turn") {
+				failures++
+			}
+		}
+		if failures != 1 || shown.NotesTotal != 1 {
+			t.Fatalf("%s: failure notes=%d total=%d; want one", step, failures, shown.NotesTotal)
+		}
+		t.Logf("%s: pre-first-turn failure notes=%d total=%d", step, failures, shown.NotesTotal)
+	}
+	checkNote("after failure")
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
+	mark := len(pair.App.Log())
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
+	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	checkNote("after reconnect")
+	for _, restarted := range []struct {
+		name  string
+		stack *testworld.Stack
+	}{{"home", home}, {"outpost", outpost}} {
+		mark = len(pair.App.Log())
+		restarted.stack.Stop()
+		restarted.stack.Start()
+		if restarted.name == "home" {
+			pair.App = home.App()
+			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
+		} else {
+			outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+		}
+		checkNote("after " + restarted.name + " restart")
+	}
 }
 
 func TestDelegationCheckoutOccupancyIsScopedToItsMachine(t *testing.T) {
@@ -212,41 +339,88 @@ func TestDelegationSelectsTheTargetMachineAndCreatesItsWorktreeThere(t *testing.
 }
 
 func TestAnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart(t *testing.T) {
-	home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	pair := testworld.PrepareOutpostPair(t, home, outpost)
-	pair.Start()
-	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	source := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("source"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
-	outpost.LaunchedCarrying(pair.App.Terminal(source))
-	boot := outpost.HoldNextBoot()
-	request := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: "restart-on-outpost", SourceSessionID: protocol.Ptr(protocol.SessionID(source)),
-		Cwd: outpost.Path("source"), Agent: protocol.Ptr("claude"),
-		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Keep this launch on the caller's machine")},
+	for _, finish := range []string{"reconnect", "remove and leave"} {
+		t.Run(finish, func(t *testing.T) {
+			home := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			pair := testworld.PrepareOutpostPair(t, home, outpost)
+			pair.Start()
+			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+			source := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("source"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+			outpost.LaunchedCarrying(pair.App.Terminal(source))
+			boot := outpost.HoldNextBoot()
+			callerDirectory := home.Path("cli")
+			if err := os.MkdirAll(callerDirectory, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			request := protocol.DelegateMessage{
+				Cmd: protocol.CmdDelegate, RequestID: "restart-on-outpost", SourceSessionID: protocol.Ptr(protocol.SessionID(source)),
+				Cwd: outpost.Path("source"), CwdBase: &callerDirectory, Agent: protocol.Ptr("claude"), Model: protocol.Ptr(""),
+				Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Keep this launch on the caller's machine")},
+			}
+			accepted, err := home.Client().StartDelegation(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			outpost.AwaitHeldBoot()
+			terminal := pair.App.Terminal(string(accepted.SessionID))
+			prepared, err := home.Client().DelegationStatus(request.RequestID)
+			if err != nil || prepared.SeedID == nil {
+				t.Fatalf("prepared delegation=%+v: %v", prepared, err)
+			}
+			home.Stop()
+			requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", ""))
+			home.Start()
+			pair.App = home.App()
+			retry := home.Launch(testworld.Invocation{Dir: callerDirectory, Args: []string{
+				"delegate", "--request-id", request.RequestID, "--source-session", source,
+				"--brief", *request.Assignment.Brief, "--cwd", request.Cwd, "--agent", "claude", "--model", "default",
+			}})
+			waiting := `waiting for outpost "outpost" to reconnect`
+			retry.AwaitStderr(waiting)
+			status := home.Attn("delegate", "status", request.RequestID)
+			requireStdout(t, status)
+			var pending protocol.DelegationOperation
+			status.JSON(t, &pending)
+			if pending.OperationID != accepted.OperationID || pending.State != protocol.DelegationOperationStatePreparing || !strings.Contains(pending.Progress, waiting) {
+				t.Fatalf("waiting operation=%+v; want %s on the named outpost", pending, accepted.OperationID)
+			}
+			t.Logf("home restarted while target offline: %s", strings.TrimSpace(status.Stdout))
+			if finish == "remove and leave" {
+				mark := pair.App.EventCount()
+				pair.App.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
+				testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+				requireStdout(t, outpost.Attn("enrollment", "leave"), "no longer enrolled")
+				boot()
+				failed := retry.Wait()
+				if failed.Code == 0 || !strings.Contains(failed.Stderr, `delegation outpost "outpost" was removed`) {
+					t.Fatalf("removed target must end the pending delegation: %+v", failed)
+				}
+				t.Logf("removed target ends the wait: %s", strings.TrimSpace(failed.Stderr))
+				return
+			}
+			requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", pair.Address), pair.Address)
+			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
+			boot()
+			completed := retry.Wait()
+			if completed.Code != 0 {
+				t.Fatal(completed)
+			}
+			var result protocol.DelegateResult
+			completed.JSON(t, &result)
+			if result.SessionID != accepted.SessionID || result.SeedID != *prepared.SeedID || pair.App.Terminal(string(result.SessionID)) != terminal {
+				t.Fatalf("recovered delegation=%+v terminal=%s; want session %s terminal=%s", result, pair.App.Terminal(string(result.SessionID)), accepted.SessionID, terminal)
+			}
+			session := testworld.AwaitSession(pair.App, string(result.SessionID), func(s protocol.Session) bool { return true })
+			if protocol.Deref(session.Host) != pair.Host {
+				t.Fatalf("recovered host=%q; want %q", protocol.Deref(session.Host), pair.Host)
+			}
+			if prompt := outpost.LaunchedCarrying(pair.App.Terminal(string(result.SessionID))).Prompted(); !strings.Contains(prompt, result.SeedID) {
+				t.Fatalf("recovered prompt=%q", prompt)
+			}
+			t.Logf("home restart resumed session=%s on host=%s", result.SessionID, pair.Host)
+		})
 	}
-	accepted, err := home.Client().StartDelegation(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	outpost.AwaitHeldBoot()
-	home.Stop()
-	home.Start()
-	pair.App = home.App()
-	outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
-	boot()
-	result, err := home.Client().Delegate(request)
-	if err != nil || result.SessionID != accepted.SessionID {
-		t.Fatalf("recovered delegation=%+v, %v; want session %s", result, err, accepted.SessionID)
-	}
-	session := testworld.AwaitSession(pair.App, string(result.SessionID), func(s protocol.Session) bool { return true })
-	if protocol.Deref(session.Host) != pair.Host {
-		t.Fatalf("recovered host=%q; want %q", protocol.Deref(session.Host), pair.Host)
-	}
-	if prompt := outpost.LaunchedCarrying(pair.App.Terminal(string(result.SessionID))).Prompted(); !strings.Contains(prompt, result.SeedID) {
-		t.Fatalf("recovered prompt=%q", prompt)
-	}
-	t.Logf("home restart resumed session=%s on host=%s", result.SessionID, pair.Host)
 }
 
 func TestADelegationNamesItsCheckoutIfItDisappearsBeforeTheMachineLaunches(t *testing.T) {

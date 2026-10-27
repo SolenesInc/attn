@@ -184,18 +184,6 @@ func (d *Daemon) runDelegationOperation(id string) {
 	case <-d.life.Done():
 		return
 	}
-	release, held := d.life.Hold("runDelegationOperation")
-	if !held {
-		return
-	}
-	defer release()
-	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		d.runDelegationOperationProtected(protection, id)
-		return nil
-	})
-}
-
-func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupProtection, id string) {
 	record, err := d.store.GetDelegationOperation(id)
 	if err != nil {
 		d.logf("delegate operation %s disappeared: %v", id, err)
@@ -204,6 +192,74 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 	if record.Operation.State == protocol.DelegationOperationStateCompleted || record.Operation.State == protocol.DelegationOperationStateFailed {
 		return
 	}
+	var target delegationTarget
+	if err := json.Unmarshal([]byte(record.RequestJSON), &target); err != nil {
+		d.finishDelegationFailure(id, err)
+		return
+	}
+	if err := d.waitForDelegationHost(id, target.Host); err != nil {
+		d.finishDelegationFailure(id, err)
+		return
+	}
+	release, held := d.life.Hold("runDelegationOperation")
+	if !held {
+		return
+	}
+	defer release()
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		d.runDelegationOperationProtected(protection, record)
+		return nil
+	})
+}
+
+func (d *Daemon) waitForDelegationHost(id, host string) error {
+	if host == "" {
+		return nil
+	}
+	name := host
+	reported := false
+	for {
+		r := &d.outposts
+		r.mu.Lock()
+		if r.changed == nil {
+			r.changed = make(chan struct{})
+		}
+		changed := r.changed
+		r.mu.Unlock()
+		rows, err := d.store.ListOutposts()
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, row := range rows {
+			if row.ID == host {
+				name, found = row.Name, true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("delegation outpost %q was removed", name)
+		}
+		if _, _, err := d.outpostConn(host); err == nil {
+			return nil
+		}
+		if !reported {
+			if err := d.store.UpdateDelegationOperation(id, protocol.DelegationOperationStatePreparing,
+				fmt.Sprintf("waiting for outpost %q to reconnect", name), "", "", "", nil, nil, time.Now()); err != nil {
+				return err
+			}
+			reported = true
+		}
+		select {
+		case <-d.life.Done():
+			return d.life.Context().Err()
+		case <-changed:
+		}
+	}
+}
+
+func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupProtection, record *store.DelegationOperationRecord) {
+	id := record.Operation.OperationID
 	_ = d.store.UpdateDelegationOperation(id, protocol.DelegationOperationStatePreparing,
 		"validating delegation request", "", "", "", nil, nil, time.Now())
 	var shape struct {
