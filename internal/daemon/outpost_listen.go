@@ -24,13 +24,14 @@ type outpostListener struct {
 }
 
 type outpostRuntime struct {
-	configure sync.Mutex
-	mu        sync.Mutex
-	listener  *outpostListener
-	state     string
-	lastError string
-	errorKind string
-	listen    func(string, string) (net.Listener, error)
+	configure  sync.Mutex
+	mu         sync.Mutex
+	enrollment enrollment.Status
+	listener   *outpostListener
+	state      string
+	lastError  string
+	errorKind  string
+	listen     func(string, string) (net.Listener, error)
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
@@ -89,7 +90,13 @@ func (d *Daemon) configureOutpostListener() {
 		Logf:           d.logf,
 		Handlers:       d.outpostHandlers(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
-			if _, err := enrollment.RecordHome(d.dataRoot, home.DaemonID, home.Name); err != nil {
+			r.mu.Lock()
+			status, err := enrollment.RecordHome(d.dataRoot, home.DaemonID, home.Name)
+			if err == nil {
+				r.enrollment = status
+			}
+			r.mu.Unlock()
+			if err != nil {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}
 			}
 			return nil
@@ -201,12 +208,12 @@ func (d *Daemon) outpostSettings() (state, home, lastError string) {
 	r := &d.outpost
 	r.mu.Lock()
 	state, lastError = r.state, r.lastError
+	if !r.enrollment.IsHome() {
+		home = r.enrollment.HomeDaemonID
+	}
 	r.mu.Unlock()
 	if state == "" {
 		state = "off"
-	}
-	if status, err := enrollment.Load(d.dataRoot); err == nil && !status.IsHome() {
-		home = status.HomeDaemonID
 	}
 	return state, home, lastError
 }

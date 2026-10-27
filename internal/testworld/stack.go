@@ -126,6 +126,21 @@ func (s *Stack) StartHeldAt(p *Pause) {
 	p.Await()
 }
 
+func (s *Stack) StartHeldBeforeReady(p *Pause) func() {
+	s.T.Helper()
+	started := make(chan struct{})
+	go func() {
+		defer close(started)
+		s.launch()
+	}()
+	s.T.Cleanup(func() {
+		p.releaseAll()
+		<-started
+	})
+	p.Await()
+	return func() { <-started }
+}
+
 func (s *Stack) start(vars ...string) {
 	s.T.Helper()
 	s.launch(vars...)

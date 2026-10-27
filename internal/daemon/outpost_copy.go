@@ -121,7 +121,12 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 // dropStaleCopy keeps only the copy from the home this daemon is enrolled to, and closes a bridge from any
 // other home.
 func (d *Daemon) dropStaleCopy() error {
+	d.outpost.mu.Lock()
 	status, err := enrollment.Load(d.dataRoot)
+	if err == nil {
+		d.outpost.enrollment = status
+	}
+	d.outpost.mu.Unlock()
 	if err != nil {
 		return err
 	}

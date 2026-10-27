@@ -28,6 +28,7 @@ const (
 	BusAnnounce        = "bus-announce"
 	BusEventHandled    = "bus-event-handled"
 
+	DaemonEnrollmentLoaded    = "daemon-enrollment-loaded"
 	DaemonStartupRecovery     = "daemon-startup-recovery"
 	SessionInputPasteGap      = "session-input-paste-gap"
 	SessionInputLaneContended = "session-input-lane-contended"

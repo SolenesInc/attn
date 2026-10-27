@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
-	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"golang.org/x/crypto/ssh"
@@ -37,12 +36,7 @@ func (c bufferedSocket) Read(p []byte) (int, error) { return c.reader.Read(p) }
 
 func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionID) {
 	d := r.daemon
-	status, err := enrollment.Load(d.dataRoot)
-	if err != nil {
-		d.sendError(socket, err.Error())
-		return
-	}
-	conn, name, err := d.homeConn(status)
+	conn, name, err := d.homeConn(d.enrollmentStatus())
 	if err != nil {
 		d.sendError(socket, err.Error())
 		return

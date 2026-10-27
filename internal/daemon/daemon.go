@@ -632,6 +632,7 @@ func (d *Daemon) Start() error {
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
+	pausepoint.At(pausepoint.DaemonEnrollmentLoaded)
 	if err := d.recoverQuickCaptureAssets(); err != nil {
 		d.logf("quick capture asset recovery incomplete: %v", err)
 	}
@@ -764,6 +765,9 @@ func (d *Daemon) Start() error {
 			return err
 		}
 		d.listener = unixListener
+	}
+	if err := d.dropStaleCopy(); err != nil {
+		return fmt.Errorf("refresh enrollment before serving commands: %w", err)
 	}
 	listener := d.listener
 	d.log("daemon started")
@@ -2565,11 +2569,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 			return
 		}
 		if place.Locator == protocol.LocatorHome || cmd == protocol.CmdSeedArtifactTransfer {
-			status, statusErr := enrollment.Load(d.dataRoot)
-			if statusErr != nil {
-				d.sendError(conn, statusErr.Error())
-				return
-			}
+			status := d.enrollmentStatus()
 			if !status.IsHome() {
 				if cmd == protocol.CmdSeedArtifactTransfer {
 					d.sendError(conn, fmt.Sprintf("%s is not supported on outpost %s until Notebook sync is available", cmd, d.bridgeIdentity().Name))

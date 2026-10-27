@@ -285,6 +285,12 @@ func (p *Peer) Log() []json.RawMessage {
 	return log
 }
 
+func (p *Peer) EventCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.frames)
+}
+
 func (p *Peer) Close() {
 	p.mu.Lock()
 	p.closing = true

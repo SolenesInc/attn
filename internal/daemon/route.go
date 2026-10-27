@@ -91,10 +91,7 @@ func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
 		host = d.sessionHost(session)
 	}
 	if home {
-		status, err := enrollment.Load(d.dataRoot)
-		if err != nil {
-			return nil, err
-		}
+		status := d.enrollmentStatus()
 		if !status.IsHome() {
 			conn, _, err := d.homeConn(status)
 			return conn, err
