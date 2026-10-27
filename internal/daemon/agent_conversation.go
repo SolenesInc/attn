@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"net"
 	"strings"
@@ -19,7 +20,7 @@ type agentConversationObservation struct {
 	TranscriptPath string             `json:"transcript_path,omitempty"`
 }
 
-func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.SetSessionResumeIDMessage) {
+func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Conn, msg *protocol.SetSessionResumeIDMessage) {
 	terminal := protocol.TrimID(msg.ID)
 	observation := agentConversationObservation{
 		NativeID:       strings.TrimSpace(msg.ResumeSessionID),
@@ -54,8 +55,10 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 		d.sendError(conn, "conversation observation could not be saved")
 		return
 	}
-	if !receipt.Switching() {
-		if err := receipt.Wait(d.life.Context()); err != nil {
+	if receipt != nil && !receipt.Switching() {
+		ctx, cancel := d.connectionContext(ctx, conn)
+		defer cancel()
+		if err := receipt.Wait(ctx); err != nil {
 			d.sendError(conn, err.Error())
 			return
 		}
