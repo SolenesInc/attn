@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Wait for mock-agent delivery and transcript readiness in the chief epic's flaky tests.
