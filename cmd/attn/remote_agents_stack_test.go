@@ -921,6 +921,51 @@ func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *test
 	t.Logf("recovery kept resumed session %s in live terminal %s before its copy arrived; tokens=%d", first, terminal, ready.Usage.TotalTokens)
 }
 
+func TestAnOutpostConversationStaysRecoverableWhenItsWorkerIsGone(t *testing.T) {
+	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		t.Run(string(harness), func(t *testing.T) {
+			home := testworld.NewStack(t)
+			outpost := testworld.NewStack(t, testworld.WithAgents(harness))
+			pair := testworld.PrepareOutpostPair(t, home, outpost)
+			pair.Start()
+			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+			app := pair.App
+			id := home.Spawn(app, harness, outpost.Path("missing-worker"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+			terminal := app.Terminal(id)
+			agent := outpost.LaunchedCarrying(terminal)
+			app.TypeLine(id, "before losing the worker")
+			agent.Prompted()
+			conversation := agent.ConversationID
+			first := "Ready before loss. <!-- attn:state=waiting_input -->"
+			agent.Reply(first)
+			testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) && s.Usage != nil })
+			mark := len(app.Log())
+			outpost.Reboot()
+			outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+			outpost.Start()
+			outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+			testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateRecoverable })
+			reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 100, Rows: 30}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == id })
+			if !reloaded.Success {
+				t.Fatalf("recover remote conversation: %s", protocol.Deref(reloaded.Error))
+			}
+			resumed := outpost.LaunchedCarrying(terminal)
+			if resumed.ConversationID != conversation {
+				t.Fatalf("recovered conversation %s, want %s", resumed.ConversationID, conversation)
+			}
+			mark = len(app.Log())
+			app.TypeLine(id, "after recovering")
+			resumed.Prompted()
+			second := "Recovered ready. <!-- attn:state=waiting_input -->"
+			resumed.Reply(second)
+			ready := testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool {
+				return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens == 2*(len(first)+len(second))
+			})
+			t.Logf("%s remote-only conversation %s remains recoverable with its worker gone; reload keeps %d tokens", harness, conversation, ready.Usage.TotalTokens)
+		})
+	}
+}
+
 func TestADroppedOutpostSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) {
 	home := testworld.NewStack(t)
 	owners := home.PauseEvery(pausepoint.ConversationOwnerResolved)
