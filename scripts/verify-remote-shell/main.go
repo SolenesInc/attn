@@ -37,6 +37,7 @@ type probe struct {
 	stalled             bool
 	measuredTerminal    string
 	measuredBytes       int
+	measuredEvents      int
 	measuredTail        []byte
 	measuredEnd         bool
 	err                 error
@@ -72,6 +73,7 @@ func (p *probe) read() {
 				id := string(terminal)
 				if id == p.measuredTerminal {
 					p.measuredBytes += len(data)
+					p.measuredEvents++
 					p.measuredTail = append(p.measuredTail, data...)
 					marker := []byte("__cpu_finished")
 					if bytes.Contains(p.measuredTail, marker) {
@@ -109,6 +111,9 @@ func (p *probe) read() {
 				if frame["event"] == "pty_desync" {
 					p.desyncs++
 					reattach, _ = frame["id"].(string)
+					if reattach == p.measuredTerminal {
+						p.err = fmt.Errorf("CPU measurement desynced: %v", frame["reason"])
+					}
 				}
 				if rows, ok := frame["outposts"].([]any); ok {
 					for _, value := range rows {
@@ -503,6 +508,7 @@ func run() error {
 	if *mode == "cpu" {
 		p.mu.Lock()
 		p.measuredTerminal = split
+		delete(p.outputs, split)
 		p.mu.Unlock()
 		began := time.Now()
 		if err := p.input(split, "seq 1 12500000; printf '__cpu_%s\\n' finished\r"); err != nil {
@@ -513,8 +519,9 @@ func run() error {
 		}
 		p.mu.Lock()
 		total := p.measuredBytes
+		events := p.measuredEvents
 		p.mu.Unlock()
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{"mode": "cpu", "bytes": total, "seconds": time.Since(began).Seconds()})
+		return json.NewEncoder(os.Stdout).Encode(map[string]any{"mode": "cpu", "bytes": total, "events": events, "seconds": time.Since(began).Seconds()})
 	}
 	if err := p.sequence(*mode, split); err != nil {
 		return err
