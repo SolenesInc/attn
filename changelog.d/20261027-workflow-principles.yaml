@@ -1,0 +1,4 @@
+kind: changed
+area: agents
+change: The attn-workflow skill keeps each engineering principle in its own file under an index of when each applies, and adds the rest of pstack's principles, among them never blocking on the user, guarding the context window, idempotent operations and separating shared state.
+notes: Each process reference names the principles it relies on, so loading a process loads them. Agents name a principle when it changes a decision and cite only principles they read.

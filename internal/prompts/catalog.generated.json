@@ -3970,6 +3970,306 @@
             "verbatim": true,
             "keep_final_newline": true
           }
+        },
+        {
+          "id": "principle-attack-the-premise",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-attack-the-premise",
+            "source": "content/skills/attn-workflow/principles/attack-the-premise.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-build-the-lever",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-build-the-lever",
+            "source": "content/skills/attn-workflow/principles/build-the-lever.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-compare-options-before-committing",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-compare-options-before-committing",
+            "source": "content/skills/attn-workflow/principles/compare-options-before-committing.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-converge-on-the-outcome",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-converge-on-the-outcome",
+            "source": "content/skills/attn-workflow/principles/converge-on-the-outcome.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-encode-lessons-in-structure",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-encode-lessons-in-structure",
+            "source": "content/skills/attn-workflow/principles/encode-lessons-in-structure.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-experience-first",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-experience-first",
+            "source": "content/skills/attn-workflow/principles/experience-first.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-explain-the-number",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-explain-the-number",
+            "source": "content/skills/attn-workflow/principles/explain-the-number.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-fix-root-causes",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-fix-root-causes",
+            "source": "content/skills/attn-workflow/principles/fix-root-causes.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-guard-the-context-window",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-guard-the-context-window",
+            "source": "content/skills/attn-workflow/principles/guard-the-context-window.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-make-operations-idempotent",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-make-operations-idempotent",
+            "source": "content/skills/attn-workflow/principles/make-operations-idempotent.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-match-rigor-to-consequences",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-match-rigor-to-consequences",
+            "source": "content/skills/attn-workflow/principles/match-rigor-to-consequences.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-migrate-callers-then-delete-the-old-way",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-migrate-callers-then-delete-the-old-way",
+            "source": "content/skills/attn-workflow/principles/migrate-callers-then-delete-the-old-way.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-minimize-reader-load",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-minimize-reader-load",
+            "source": "content/skills/attn-workflow/principles/minimize-reader-load.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-model-the-domain-first",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-model-the-domain-first",
+            "source": "content/skills/attn-workflow/principles/model-the-domain-first.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-never-block-on-the-user",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-never-block-on-the-user",
+            "source": "content/skills/attn-workflow/principles/never-block-on-the-user.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-parse-dont-validate",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-parse-dont-validate",
+            "source": "content/skills/attn-workflow/principles/parse-dont-validate.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-prove-it-works",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-prove-it-works",
+            "source": "content/skills/attn-workflow/principles/prove-it-works.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-redesign-around-the-new-requirement",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-redesign-around-the-new-requirement",
+            "source": "content/skills/attn-workflow/principles/redesign-around-the-new-requirement.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-refactor-first",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-refactor-first",
+            "source": "content/skills/attn-workflow/principles/refactor-first.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-separate-before-serializing-shared-state",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-separate-before-serializing-shared-state",
+            "source": "content/skills/attn-workflow/principles/separate-before-serializing-shared-state.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-sequence-verifiable-units",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-sequence-verifiable-units",
+            "source": "content/skills/attn-workflow/principles/sequence-verifiable-units.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-smallest-change",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-smallest-change",
+            "source": "content/skills/attn-workflow/principles/smallest-change.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-subtract-before-you-add",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-subtract-before-you-add",
+            "source": "content/skills/attn-workflow/principles/subtract-before-you-add.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-test-behavior-not-implementation",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-test-behavior-not-implementation",
+            "source": "content/skills/attn-workflow/principles/test-behavior-not-implementation.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
+          "id": "principle-update-what-a-decision-overturns",
+          "delivery": "principle",
+          "description": "Loaded on demand through the attn-workflow skill's principle index or a process reference that names it.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.principle-update-what-a-decision-overturns",
+            "source": "content/skills/attn-workflow/principles/update-what-a-decision-overturns.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
         }
       ]
     },
@@ -5210,5 +5510,5 @@
       ]
     }
   ],
-  "definitions_hash": "79d32ee8968927207d8caa3ae477925e56cd3d42243d3cd9770935673af3266e"
+  "definitions_hash": "0d4ecbad1db2ccf4743b33e01dc6f666733e2c9aed075ca7d323068b43e36012"
 }

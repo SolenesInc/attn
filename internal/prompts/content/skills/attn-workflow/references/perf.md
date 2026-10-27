@@ -1,5 +1,7 @@
 # Perf
 
+Principles this process relies on: [Explain the number](../principles/explain-the-number.md), [Build the lever](../principles/build-the-lever.md), [Sequence verifiable units](../principles/sequence-verifiable-units.md), [Prove it works](../principles/prove-it-works.md), [Attack the premise](../principles/attack-the-premise.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+
 Use this process when something is measured to be slow, large, or busy when it should be idle: a slow command, a leak, a process that burns CPU while nothing happens, a number that must improve against a target. The work is a measurement before it is a change. A fix that is not measured is a hypothesis.
 
 ## Reproduce and measure

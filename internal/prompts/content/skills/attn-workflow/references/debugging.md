@@ -1,5 +1,7 @@
 # Debugging
 
+Principles this process relies on: [Fix root causes](../principles/fix-root-causes.md), [Attack the premise](../principles/attack-the-premise.md), [Prove it works](../principles/prove-it-works.md), [Sequence verifiable units](../principles/sequence-verifiable-units.md), [Build the lever](../principles/build-the-lever.md), [Test behavior, not implementation](../principles/test-behavior-not-implementation.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+
 Use this process to investigate bugs, test failures, and unexpected behavior.
 When the symptom is a measurement, such as slowness, growth, or CPU while
 nothing happens, use [Perf](perf.md) instead. Establish a supported explanation
@@ -46,8 +48,7 @@ mistake that has happened before, the class needs fixing too: follow
 [Correction](correction.md), or plant it as a seed when it falls outside the
 task.
 
-When two fixes that shared an assumption have failed the same check, attack the
-premise as the skill's engineering judgment describes: test the assumption
+When two fixes that shared an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md): test the assumption
 before a third fix, and when it fails, reassess the diagnosis and approach.
 Consider a broader design problem when the evidence supports it, and discuss
 scope changes with the user.

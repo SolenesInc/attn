@@ -1,5 +1,7 @@
 # Prototype
 
+Principles this process relies on: [Compare options before committing](../principles/compare-options-before-committing.md), [Experience first](../principles/experience-first.md), [Refactor first](../principles/refactor-first.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+
 Prototype when a decision is easier to make by comparing options than by describing them: a screen, a flow, an interaction, or the shape of an interface, as [Design](design.md) defines it. A prototype is a spike whose product is a set of options, so the spike rules in [Discuss](discuss.md) apply: its code is disposable, and what carries forward is the choice and what the options revealed.
 
 ## Frame the decision

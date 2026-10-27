@@ -1,5 +1,7 @@
 # Orchestration
 
+Principles this process relies on: [Never block on the user](../principles/never-block-on-the-user.md), [Guard the context window](../principles/guard-the-context-window.md), [Separate before serializing shared state](../principles/separate-before-serializing-shared-state.md), [Build the lever](../principles/build-the-lever.md), [Prove it works](../principles/prove-it-works.md), [Attack the premise](../principles/attack-the-premise.md), [Encode lessons in structure](../principles/encode-lessons-in-structure.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+
 Own execution of the agreed plan. Read the plan in the seed and inspect enough relevant code to prepare useful assignments. Use settled design decisions; what goes back to the user, and how, is under Questions for the user.
 
 Delegate implementation where a cheaper model can carry it out reliably. Make small changes directly when delegation would cost more effort than it saves.
@@ -8,7 +10,7 @@ Write each Builder's brief as `attn seed guide` describes under WRITING A BODY, 
 
 After delegating, wait for updates. Updates may report completion, a progress checkpoint, or a question needing advice. Use those updates to decide when to inspect code, answer questions, review results, or adjust assignments. Avoid following every implementation step in parallel with Builder. The brief is the standing record of the assignment: when you redirect a Builder, change its brief first, then message it, because a resumed or replacement Builder reads the brief, not your earlier messages.
 
-When advising, read the relevant code and evidence and ask follow-up questions as needed. Help resolve the issue and keep the plan current when decisions change or a finding is overturned. If an assignment stalls, reassess the brief and model choice before repeating the same approach. When two of a Builder's fixes that shared an assumption have failed the same check, attack the premise as the skill's engineering judgment describes before approving a third. When you correct Builders for the same kind of mistake twice, fix the class: in this plan's briefs when it is specific to the plan, and with [Correction](correction.md) when it lives in the repository, planting it as a seed when that work falls outside the agreed plan.
+When advising, read the relevant code and evidence and ask follow-up questions as needed. Help resolve the issue and keep the plan current when decisions change or a finding is overturned. If an assignment stalls, reassess the brief and model choice before repeating the same approach. When two of a Builder's fixes that shared an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md) before approving a third. When you correct Builders for the same kind of mistake twice, fix the class: in this plan's briefs when it is specific to the plan, and with [Correction](correction.md) when it lives in the repository, planting it as a seed when that work falls outside the agreed plan.
 
 ## Questions for the user
 

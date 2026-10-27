@@ -1,0 +1,5 @@
+# Attack the premise
+
+Apply when two fixes that share one assumption have failed the same check, or fixes keep arriving in the same shape.
+
+When two fixes that share one assumption have failed the same check, write the assumption down and test it directly before writing a third. Each failed fix is evidence against the belief it rested on. Make the test a check you can rerun, as [Build the lever](build-the-lever.md) describes. If the evidence confirms the assumption, ask the next why, as [Fix root causes](fix-root-causes.md) describes: the earlier fixes may have treated a consequence instead of the cause. The design is the assumption when fixes pass but keep arriving in the same shape: special cases for unrelated edge cases, casts or optional fields that are always set, a lock where the design said nothing was shared, callers that must know the callee's internal rules. Stop patching. [Redesign](redesign-around-the-new-requirement.md) as if the new constraint had been known from the start, aiming smaller than the patched design, and bring the redesign to the coordinating agent named in the brief, or to the user when none is named, before more patches land.

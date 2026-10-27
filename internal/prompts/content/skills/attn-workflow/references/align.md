@@ -1,6 +1,8 @@
 
 # Align
 
+Principles this process relies on: [Experience first](../principles/experience-first.md), [Update what a decision overturns](../principles/update-what-a-decision-overturns.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
+
 Build shared understanding. Make your interpretation visible to the user, uncover differences, and challenge assumptions to strengthen the idea.
 
 Read and use [discuss](discuss.md) for the interview: investigation, question rounds, and recommendations. Apply the alignment concerns below within that conversation, and close with the reflection under Finish in conversation.
