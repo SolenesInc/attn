@@ -67,7 +67,7 @@ func TestChiefOnboardingFullDoneAndAgainReachBothHarnesses(t *testing.T) {
 	}
 }
 
-func TestAnEstablishedProfileKeepsItsTourAsOldSessionsChange(t *testing.T) {
+func TestAnEstablishedInstallSkipsOnboardingAsOldSessionsChange(t *testing.T) {
 	w := &world{World: prepareWorld(t, fakeagent.Claude)}
 	db, err := store.OpenDBAtSchemaVersion(filepath.Join(w.Dir, "attn.db"), 1793111476175147-1)
 	if err != nil {
@@ -87,18 +87,18 @@ func TestAnEstablishedProfileKeepsItsTourAsOldSessionsChange(t *testing.T) {
 	}
 	w.start()
 	cli := w.Client()
-	onboarding(t, cli, protocol.OnboardingActionShow, protocol.FirstDayTour)
+	onboarding(t, cli, protocol.OnboardingActionShow, protocol.FirstDayNone)
 	id := configureChief(t, w, fakeagent.Claude, "sonnet")
-	if got := launchGuidance(t, w.Launched(id)); !strings.Contains(got, "open with the short tour") {
-		t.Fatalf("tour launch: %s", got)
+	if got := launchGuidance(t, w.Launched(id)); strings.Contains(got, "attn skill --reference onboarding") {
+		t.Fatalf("established install launch: %s", got)
 	}
 	registerSessions(t, w, cli, "legacy")
-	onboarding(t, cli, protocol.OnboardingActionShow, protocol.FirstDayTour)
+	onboarding(t, cli, protocol.OnboardingActionShow, protocol.FirstDayNone)
 	if _, err := cli.AgentClose("legacy", protocol.SessionID(id), "Existing work finished"); err != nil {
 		t.Fatal(err)
 	}
 	w.restart()
-	onboarding(t, w.Client(), protocol.OnboardingActionShow, protocol.FirstDayTour)
+	onboarding(t, w.Client(), protocol.OnboardingActionShow, protocol.FirstDayNone)
 	onboarding(t, w.Client(), protocol.OnboardingActionAgain, protocol.FirstDayFull)
 	w.restart()
 	onboarding(t, w.Client(), protocol.OnboardingActionShow, protocol.FirstDayFull)
@@ -159,5 +159,26 @@ func TestOnboardingIsScopedToTheRequestingProfile(t *testing.T) {
 	}
 	if _, err := cli.Onboarding(protocol.OnboardingActionShow, "", "missing-profile"); err == nil {
 		t.Fatal("unknown profile accepted")
+	}
+}
+
+func TestASecondProfileInAnEstablishedInstallSkipsOnboarding(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	registerSessions(t, w, cli, "existing-work")
+	app := w.App()
+	other := createProfile(app, "Other")
+	result, err := cli.Onboarding(protocol.OnboardingActionShow, "", other.ID)
+	if err != nil || result.FirstDay != protocol.FirstDayNone || !result.Onboarded {
+		t.Fatalf("second profile onboarding = %+v, %v", result, err)
+	}
+	result, err = cli.Onboarding(protocol.OnboardingActionShow, "", app.SelectedProfile())
+	if err != nil || result.FirstDay != protocol.FirstDayFull {
+		t.Fatalf("original profile onboarding = %+v, %v", result, err)
+	}
+	w.restart()
+	result, err = w.Client().Onboarding(protocol.OnboardingActionShow, "", other.ID)
+	if err != nil || result.FirstDay != protocol.FirstDayNone {
+		t.Fatalf("second profile after restart = %+v, %v", result, err)
 	}
 }

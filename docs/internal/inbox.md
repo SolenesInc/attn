@@ -17,9 +17,7 @@ an item.
 
 ## Who an item is for
 
-A party is a session or crew member. An actor is a party, the user or attn.
-An address names who an item is for: a session, or a mailbox for a crew member
-or seed tender. The tender is the party that claims the seed.
+An address names who an item is for: a session, a crew member or a seed.
 
 | Address | Who reads it | When nobody holds it |
 |---|---|---|
@@ -27,9 +25,10 @@ or seed tender. The tender is the party that claims the seed.
 | crew member | the member's current session | attn wakes the member (see [Wakes](#wakes)). |
 | seed | the seed's current tender | The item waits for the next tender. A member tender is woken like a member address. |
 
-The Chief has a crew member mailbox. Mail wakes them after a manual sleep.
-They never auto-sleep. Until their harness is configured, mail waits; their
-first wake also waits while the user is away.
+The Chief is a crew member, so mail wakes them after a manual sleep. attn
+never auto-sleeps the Chief. Mail for the Chief waits until the user picks the
+Chief's harness, and the Chief's first wake waits until the user next opens
+attn.
 
 An item follows its mailbox. When a member's session ends, their next session
 gets the unread items. When a seed gets a new tender, the new tender gets the
@@ -42,11 +41,9 @@ The sender picks the address:
 - `attn agent msg <session>` addresses the member when that session is bound
   to one, so the message follows the member into the next session. Otherwise
   it addresses the session. An explicit `session:<id>` addresses that session.
-- `attn agent msg chief` addresses the profile's Chief member, even after a
-  rename.
+- `attn agent msg chief` addresses the Chief, even after a rename.
 - `attn agent msg <seed-id>` addresses the seed.
-- A seed update addresses the tender and every watcher as their party. A
-  member's claim and watches survive naps, `/clear` and sleep.
+- A seed update addresses the tender and every watcher as their party.
 - Crew sleep and auto-sleep requests address the session. They are about that
   one session, and a wake to deliver them makes no sense.
 
@@ -75,8 +72,8 @@ with the reason, when:
 Some Garden events put a seed update in the inbox of the seed's tender and of
 every party that watches the seed or a seed it is part of. attn excludes the
 party that caused the event, and any party told about it directly, such
-as the new tender of a delegation or handover. An event caused by the user or
-attn excludes no party as its author.
+as the new tender of a delegation or handover. When the user or attn
+causes the event, no party counts as its author, so no party is excluded.
 
 | Event | Seed update |
 |---|---|
@@ -103,9 +100,9 @@ so the two differ only when a tender or watch changes in between.
 `attn seed show` and `attn seed notes` mark the reader's unread update for that
 seed as read. attn withdraws a recipient's unread update for a seed when they
 no longer have a claim or watch covering it. A session-addressed update is
-also withdrawn when that session closes. A member-addressed update stays
-through naps, `/clear` and sleep while the member still has that claim or
-watch. A new tender does not get updates from before they tended the seed.
+also withdrawn when that session closes. A member's claims and watches outlive
+their sessions, so a member-addressed update stays through naps, `/clear` and
+sleep. A new tender does not get updates from before they tended the seed.
 
 ### User messages
 
@@ -233,8 +230,8 @@ wakes the member before it rings.
   set by `crew.wake_limit` and `crew.wake_limit_window_seconds`. A wake from
   the sidebar or `attn crew wake` does not count, and neither does a wake for
   an unread user message: like those, it is the user's.
-- A missing member home or charter prevents the wake without spending an
-  attempt. attn retries while those files are missing.
+- A missing home or charter stops the wake without using an attempt. attn
+  tries again every 5 minutes until the files are back.
 - A wake refused by the wake limit, or one whose agent fails to launch, still
   uses an attempt. attn tries again after 5 minutes. After 3 attempts the items wait
   for a read or a new item.
@@ -259,8 +256,8 @@ whether or not it was read before.
 
 `attn agent msg` replies at once with what happens next: the agent was rung,
 the message waits for a safe prompt or for an outstanding ring to be read, a
-member is being woken, the message waits for a tender or Chief configuration,
-or the wake limit is used up (with the setting to change). `attn agent msg-status <id>`
+member is being woken, the message waits for a tender or for the Chief's
+harness, or the wake limit is used up (with the setting to change). `attn agent msg-status <id>`
 shows the sender whether their message is queued, notified or read.
 
 ## Limits

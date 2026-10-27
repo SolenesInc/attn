@@ -125,7 +125,7 @@ func TestAnUnconfiguredChiefWaitsForItsHarnessAndModel(t *testing.T) {
 		t.Fatalf("first wake did not create Chief's office: %+v", chiefDesktop)
 	}
 	run := w.Launched(id)
-	if guidance := launchGuidance(t, run); !strings.Contains(guidance, "You are this profile's Chief") || !strings.Contains(guidance, "CHARTER.md") {
+	if guidance := launchGuidance(t, run); !strings.Contains(guidance, "You are the Chief") || !strings.Contains(guidance, "CHARTER.md") {
 		t.Fatalf("chief launch guidance: %s", guidance)
 	}
 	if prompt := run.Prompted(); !strings.Contains(prompt, "You have been woken") {
@@ -413,7 +413,7 @@ func TestUpgradePreservesTheOldChiefsMemberAndItsWork(t *testing.T) {
 			handover = item.Content
 		}
 	}
-	if !strings.Contains(handover, "Keel's session, previous-chief") || !strings.Contains(handover, "Keel remains a crew member and keeps its seeds and watches") || !strings.Contains(handover, "member:keel") || strings.Contains(handover, "--force") || strings.Contains(handover, "Tell it to stop") {
+	if !strings.Contains(handover, "Keel's session, previous-chief") || !strings.Contains(handover, "Keel remains a crew member and keeps their claims and watches") || !strings.Contains(handover, "member:keel") || strings.Contains(handover, "--force") || strings.Contains(handover, "Tell it to stop") {
 		t.Fatalf("member-owned handover: %s", handover)
 	}
 	previous := showSession(t, cli, "previous-chief")

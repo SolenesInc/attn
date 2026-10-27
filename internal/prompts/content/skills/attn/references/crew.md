@@ -1,26 +1,15 @@
 # Crew
 
-Each profile has a Chief and can have other permanent crew members. Names
-resolve in your profile. Read `attn crew --help` for command flags.
+Crew members are permanent agents with a charter, letters (the note each session leaves for the next) and a home folder. The Chief is one of them. Read `attn crew --help` for commands and flags.
 
-New homes live at `<notebook>/crew/<name>/`, with a numeric suffix if the
-folder is taken. The registry keeps the absolute home path. Charters and
-letters are Notebook files, so the user can edit and annotate them in attn.
+A member's home is `<notebook>/crew/<lowercase name>/`, with a numeric suffix if that folder is taken. It holds their `CHARTER.md` and a `handoffs/` folder of letters. These are Notebook files, so the user can edit and annotate them in attn.
 
-The Chief works from the Notebook root. Other members work from their own
-home, or the directory saved with `attn crew set <member> --cwd <dir>`.
+With Crew memory on, their `memory/` folder holds the memory they keep across sessions.
 
-`attn crew rename <member> <name>` moves a Notebook home to match the name.
-For a Notebook home, put the member to sleep first with
-`attn crew sleep <member>` and wait for their session to close.
+Some older members have their home under the attn data directory instead. `attn crew list` shows each member's home. `attn crew move-home <member>` moves an older home into the Notebook.
 
-Legacy members can be renamed while awake; their homes under the attn data
-directory stay in place. To move one and every file in it into the profile's current
-Notebook, put the member to sleep, then run `attn crew move-home <member>`.
-The home and Notebook must be on the same volume; a move across volumes is
-refused and leaves the original home intact.
+`attn crew rename <member> <name>` renames a Notebook home folder to match the new name. An older home stays where it is.
 
-Changing `notebook.root` repoints the Notebook and the Chief's next wake or
-handoff. Clearing, reloading or recovering an existing conversation keeps
-its working folder. Existing homes keep their absolute paths. Help the user
-move those files when they ask.
+The Chief works from the Notebook root. Other members work from their home, or from the directory set with `attn crew set <member> --cwd <dir>`.
+
+After `attn settings set notebook.root <folder>`, the Chief's next session starts in the new folder. A running session keeps its folder, even if the user clears, reloads or recovers that conversation. Changing `notebook.root` doesn't move any member's home. No command moves a Notebook home to a new root, and attn can't find a home moved by hand.

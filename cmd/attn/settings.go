@@ -14,9 +14,9 @@ import (
 func writeSettingsHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn settings <command> [--profile <name|id>]
 
-Read and change settings. list shows which apply to one profile or all profiles.
-Inside attn, use the session's profile. Outside attn, list and profile settings
-need --profile when several profiles exist. Daemon settings need no profile.
+Read and change settings. A setting applies to one profile or to all profiles,
+and the list command shows which. Inside an attn session, the commands act on
+the session's profile.
 
 commands:
   list [--all] [--json]  show keys, scopes, values and descriptions;

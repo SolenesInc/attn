@@ -1,7 +1,7 @@
 # The Attn guide
 
 How to use Attn. Read the pages here, or in the terminal with
-`attn help <topic>`, using the topic names below. The Chief answers your
+`attn guide <topic>`, using the topic names below. The Chief answers your
 questions from the same pages.
 
 The guide uses the glossary's words. Where the app still shows an older word
