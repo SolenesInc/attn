@@ -1,4 +1,4 @@
-import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
+import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { SessionPriority } from '../SessionPriority';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
@@ -540,8 +540,8 @@ interface SessionInspectorProps {
 }
 
 function LedgerHost({ host }: { host: string }) {
-  const api = useOptionalDaemonApi();
-  const name = api?.outposts.find((outpost) => outpost.id === host)?.name ?? host;
+  const api = useDaemonApi();
+  const name = api.outposts.find((outpost) => outpost.id === host)?.name ?? host;
   return <span title={`Runs on ${name}`}>{name}</span>;
 }
 

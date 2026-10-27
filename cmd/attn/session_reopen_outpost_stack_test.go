@@ -13,13 +13,23 @@ import (
 )
 
 func TestLedgerResumesAnOutpostAgentOnItsMachineWithItsConversationAndCost(t *testing.T) {
-	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-		t.Run(string(harness), func(t *testing.T) {
+	for _, scenario := range []struct {
+		name    string
+		harness fakeagent.Harness
+		shared  bool
+	}{
+		{"claude", fakeagent.Claude, false}, {"codex", fakeagent.Codex, false}, {"shared codex", fakeagent.Codex, true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			harness := scenario.harness
 			home := testworld.NewStack(t)
 			outpost := testworld.NewStack(t, testworld.WithAgents(harness))
 			pair := testworld.PrepareOutpostPair(t, home, outpost)
 			pair.Start()
 			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+			if scenario.shared {
+				shareOutpostCodex(t, pair)
+			}
 			cwd := outpost.Path("agent")
 			outpost.SetCodexFolderTrust(cwd, "trusted")
 			id := home.Spawn(pair.App, harness, cwd, func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
@@ -36,6 +46,9 @@ func TestLedgerResumesAnOutpostAgentOnItsMachineWithItsConversationAndCost(t *te
 			testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
 				return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
 			})
+			if scenario.shared {
+				outpost.CodexServer().AwaitStopped()
+			}
 			mark := len(pair.App.Log())
 			outpost.Stop()
 			outpost.Start()
@@ -55,7 +68,7 @@ func TestLedgerResumesAnOutpostAgentOnItsMachineWithItsConversationAndCost(t *te
 			if protocol.Deref(resumed.Host) != pair.Host {
 				t.Fatalf("resumed host=%s want=%s", protocol.Deref(resumed.Host), pair.Host)
 			}
-			t.Logf("%s ledger resume: host=%s conversation=%s tokens=%d after outpost restart", harness, pair.Host, conversation, resumed.Usage.TotalTokens)
+			t.Logf("%s ledger resume: host=%s conversation=%s tokens=%d after outpost restart", scenario.name, pair.Host, conversation, resumed.Usage.TotalTokens)
 		})
 	}
 }

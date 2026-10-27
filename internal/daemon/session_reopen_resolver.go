@@ -24,11 +24,12 @@ func (d *Daemon) resolveReopen(
 	entry protocol.SessionLedgerEntry,
 ) (sessionReopenVerdict, error) {
 	verdict := sessionReopenVerdict{
-		SessionID: entry.ID,
-		Entry:     &entry,
-		Execution: d.reopenExecutionFromLedger(&entry),
-		Resume:    strings.TrimSpace(d.store.GetResumeSessionID(entry.ID)),
-		Live:      protocol.Deref(entry.ClosedAt) == "" && d.sessionActive(entry.ID),
+		SessionID:      entry.ID,
+		Entry:          &entry,
+		DirectoryState: directoryUnknown,
+		Execution:      d.reopenExecutionFromLedger(&entry),
+		Resume:         strings.TrimSpace(d.store.GetResumeSessionID(entry.ID)),
+		Live:           protocol.Deref(entry.ClosedAt) == "" && d.sessionActive(entry.ID),
 	}
 	d.planReopenProfile(&verdict)
 

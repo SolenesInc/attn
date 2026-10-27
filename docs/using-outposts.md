@@ -201,8 +201,7 @@ cost. The agent's `attn` commands reach the home through its outpost daemon.
 A closed session's ledger row shows its outpost. **Reopen** in the Sessions
 ledger, or `attn session reopen <id>`, resumes its conversation on that same
 outpost with its cost continuing. An unreachable or removed outpost refuses
-resume and names the host. attn does not keep copies of outpost conversations;
-if the harness deleted the conversation, resume says it is no longer in storage.
+resume and names the host.
 
 `attn delegate` also defaults to the caller's machine. From a home agent,
 delegate onto an outpost with:
@@ -224,7 +223,8 @@ The chief and crew run only at the home. Spawning, waking or handing off a
 crew member on an outpost, or making an outpost agent the chief, refuses and
 names that limit. Plugin harnesses, including Pi, also run only at the home.
 
-Outpost conversations have no kept copy at the home. Files sent by a remote
+Outpost conversations have no kept copy at the home. If the harness deleted
+the conversation, resume says it is no longer in storage. Files sent by a remote
 agent open no tile and enter no recent-file list. Transcript reads go to the
 outpost, so they need its connection.
 
