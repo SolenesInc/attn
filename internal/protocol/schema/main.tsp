@@ -527,6 +527,7 @@ model ClientHelloMessage {
   app_channel?: string;
 }
 
+@extension("x-on", #{ home: true })
 model UnregisterMessage {
   cmd: "unregister";
   id: SessionID;
@@ -535,6 +536,7 @@ model UnregisterMessage {
   close_reason?: string;
 }
 
+@extension("x-on", #{ here: true })
 model StateMessage {
   cmd: "state";
   id: TerminalID;
@@ -561,6 +563,7 @@ model StateMessage {
 // the user for 60s — so it needs no message-string parsing. It arrives ~6s
 // after the underlying event, which makes it a corroborator rather than a
 // low-latency trigger.
+@extension("x-on", #{ here: true })
 model HookNotificationMessage {
   cmd: "hook_notification";
   id: TerminalID;
@@ -577,6 +580,7 @@ model HookNotificationMessage {
 // error_type is the harness's own classification ("rate_limit", "overloaded",
 // "billing_error", "authentication_failed", …) and error_message is its
 // human-readable form.
+@extension("x-on", #{ here: true })
 model HookStopFailureMessage {
   cmd: "hook_stop_failure";
   id: TerminalID;
@@ -589,6 +593,7 @@ model HookStopFailureMessage {
 // 26s — but it paints no spinner frames and opens no turn, so between turns it
 // reads as a session that went quiet and settles. active is true on PreCompact
 // and false on PostCompact; trigger is "manual" or "auto".
+@extension("x-on", #{ here: true })
 model HookCompactionMessage {
   cmd: "hook_compaction";
   id: TerminalID;
@@ -599,6 +604,7 @@ model HookCompactionMessage {
 // A path-bearing hook observed the provider-owned conversation currently hosted
 // by one stable attn session. The identity and exact live path are stored as one
 // durable binding; a pathless observation cannot replace it.
+@extension("x-on", #{ here: true })
 model SetSessionResumeIDMessage {
   cmd: "set_session_resume_id";
   id: TerminalID;
@@ -606,6 +612,7 @@ model SetSessionResumeIDMessage {
   transcript_path?: string;
 }
 
+@extension("x-on", #{ home: true })
 model SessionInstructionsMessage {
   cmd: "session_instructions";
   target_session_id: string;
@@ -614,6 +621,7 @@ model SessionInstructionsMessage {
 
 // Reads provider-neutral, redacted transcript events strictly after the opaque
 // cursor. The daemon owns native transcript discovery and cursor validation.
+@extension("x-on", #{ home: true })
 model SessionTranscriptMessage {
   cmd: "session_transcript";
   target_session_id: string;
@@ -624,6 +632,7 @@ model SessionTranscriptMessage {
 // Live sessions by default, `closed` for the closed ones alone, `all` for both.
 // Newest first, where newest means the close for a closed session and the last
 // sighting for a live one.
+@extension("x-on", #{ home: true })
 model SessionListMessage {
   cmd: "session_list";
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -648,6 +657,7 @@ model SessionListMessage {
 }
 
 // Reads one ledger row, live or closed, by exact session id.
+@extension("x-on", #{ home: true })
 model SessionShowMessage {
   cmd: "session_show";
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -656,6 +666,7 @@ model SessionShowMessage {
 
 // Brings a closed or stopped session back under its own id. Without an action it performs
 // the plain reopen, and refuses naming what is offered instead.
+@extension("x-on", #{ home: true })
 model SessionReopenMessage {
   cmd: "session_reopen";
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -667,6 +678,7 @@ model SessionReopenMessage {
 // Replays the daemon's per-session ring of state observations so a wrong color
 // can be explained: which sources spoke, what each claimed, and what happened to
 // each claim. Diagnostic only — reading it changes nothing.
+@extension("x-on", #{ home: true })
 model StateExplainMessage {
   cmd: "state_explain";
   target_session_id: string;
@@ -676,6 +688,7 @@ model StateExplainMessage {
 // assistant message, and the rendered screen, all served from what the daemon
 // already holds. Passive by construction — nothing here touches the target's
 // PTY or generates input, so watching costs the observed agent nothing.
+@extension("x-on", #{ home: true })
 model AgentPeekMessage {
   cmd: "agent_peek";
   target_session_id: string;    // crew name, full session id, or unique session prefix
@@ -688,6 +701,7 @@ model AgentPeekMessage {
 // tender the daemon resolves. The caller decides which field it fills — a seed
 // id has a shape the CLI recognizes — so the daemon is handed authority instead
 // of a string to sniff.
+@extension("x-on", #{ home: true })
 model AgentMsgMessage {
   cmd: "agent_msg";
   target_session_id: string;    // full id or unique prefix; empty when addressing a seed
@@ -702,6 +716,7 @@ model AgentMsgMessage {
 // reason is what the next reader has to go on.
 // Exactly one destination, the same shape as AgentMsgMessage: a session by id or
 // unique prefix, or a seed whose tender the daemon resolves.
+@extension("x-on", #{ home: true })
 model AgentCloseMessage {
   cmd: "agent_close";
   target_session_id: string;    // full id or unique prefix; empty when addressing a seed
@@ -726,6 +741,7 @@ model AgentCloseResult {
   seed_ids: string[];           // the seeds the closed session tended, each of which got the note
 }
 
+@extension("x-on", #{ home: true })
 model AgentReloadMessage {
   cmd: "agent_reload";
   source_session_id: SessionID;
@@ -776,6 +792,7 @@ model QuickCaptureListResult {
   draft_assets: QuickCaptureDraftAsset[];
   next_cursor?: string;
 }
+@extension("x-on", #{ home: true })
 model QuickCaptureSendMessage {
   profile_id?: string;
   cmd: "quick_capture_send";
@@ -785,12 +802,14 @@ model QuickCaptureSendMessage {
   content: string;
   attachment_ids: string[];
 }
+@extension("x-on", #{ home: true })
 model QuickCaptureGetMessage {
   profile_id?: string;
   cmd: "quick_capture_get";
   request_id?: string;
   capture_id: string;
 }
+@extension("x-on", #{ home: true })
 model QuickCaptureListMessage {
   profile_id?: string;
   cmd: "quick_capture_list";
@@ -798,6 +817,7 @@ model QuickCaptureListMessage {
   limit: safeint;
   cursor?: string;
 }
+@extension("x-on", #{ home: true })
 model QuickCaptureAttachmentPutMessage {
   profile_id?: string;
   cmd: "quick_capture_attachment_put";
@@ -809,6 +829,7 @@ model QuickCaptureAttachmentPutMessage {
   data_base64: string;
   final: boolean;
 }
+@extension("x-on", #{ home: true })
 model QuickCaptureAttachmentGetMessage {
   source_session_id?: SessionID;
   profile_id?: string;
@@ -818,6 +839,7 @@ model QuickCaptureAttachmentGetMessage {
   attachment_id: string;
   offset: safeint;
 }
+@extension("x-on", #{ home: true })
 model QuickCaptureAttachmentDiscardMessage {
   profile_id?: string;
   cmd: "quick_capture_attachment_discard";
@@ -857,6 +879,7 @@ model QuickCaptureReadMessage {
   read_at: string;
 }
 
+@extension("x-on", #{ home: true })
 model AgentInboxMessage {
   cmd: "agent_inbox";
   message_id?: string;
@@ -865,6 +888,7 @@ model AgentInboxMessage {
 }
 
 // The sender inspects the durable lifecycle of one peer message.
+@extension("x-on", #{ home: true })
 model AgentMsgStatusMessage {
   cmd: "agent_msg_status";
   message_id: string;
@@ -882,6 +906,7 @@ model AgentMsgStatusMessage {
 // Both are optional: a hook binary predating them reports neither, and the
 // daemon then classifies the stop as terminal, which is what such a hook already
 // caused by omitting the state update.
+@extension("x-on", #{ here: true })
 model StopMessage {
   cmd: "stop";
   id: TerminalID;
@@ -901,6 +926,7 @@ model StopBackgroundTask {
 // Files an agent just wrote, reported by the tool-use hook after a completed
 // edit. Paths are absolute; the daemon keeps only the ones the ⌘P opener can
 // show, so a session reporting source files costs a no-op rather than log rows.
+@extension("x-on", #{ here: true })
 model FilesEditedMessage {
   cmd: "files_edited";
   id: TerminalID;
@@ -909,6 +935,7 @@ model FilesEditedMessage {
 
 // A pull request the session's agent just opened. The daemon owns validation
 // (known host, parseable number) and dedup, so a repeated report is a no-op.
+@extension("x-on", #[#{ terminal: "terminal_id" }, #{ home: true }])
 model PullRequestCreatedMessage {
   cmd: "pull_request_created";
   id: SessionID;
@@ -917,12 +944,14 @@ model PullRequestCreatedMessage {
 }
 
 // The way out: drops one recorded pull request from a session.
+@extension("x-on", #{ home: true })
 model PullRequestForgetMessage {
   cmd: "pull_request_forget";
   id: SessionID;
   url: string;
 }
 
+@extension("x-on", #{ home: true })
 model PullRequestWatchMessage {
   cmd: "pull_request_watch";
   id: SessionID;
@@ -931,6 +960,7 @@ model PullRequestWatchMessage {
   reviewer?: string;
 }
 
+@extension("x-on", #{ home: true })
 model PullRequestUnwatchMessage {
   cmd: "pull_request_unwatch";
   id: SessionID;
@@ -1070,6 +1100,7 @@ model HarnessModelsResultMessage {
   tier_defaults: TierDefaults;
 }
 
+@extension("x-on", #{ home: true })
 model DelegationRolesMessage {
   cmd: "delegation_roles";
 }
@@ -1095,16 +1126,19 @@ model DelegationPreferencesRevision {
   changes: string[];
 }
 
+@extension("x-on", #{ home: true })
 model DelegationPreferencesShowMessage {
   cmd: "delegation_preferences_show";
 }
 
+@extension("x-on", #{ home: true })
 model DelegationPreferencesCommitMessage {
   cmd: "delegation_preferences_commit";
   preferences: DelegationPreferences;
   message?: string;
 }
 
+@extension("x-on", #{ home: true })
 model DelegationPreferencesHistoryMessage {
   cmd: "delegation_preferences_history";
   limit?: safeint;
@@ -1114,6 +1148,7 @@ model DelegationPreferencesHistoryResult {
   revisions: DelegationPreferencesRevision[];
 }
 
+@extension("x-on", #{ home: true })
 model DelegationPreferencesRollbackMessage {
   cmd: "delegation_preferences_rollback";
   revision?: safeint;
@@ -1149,6 +1184,7 @@ model DelegateCheckout {
   path?: string;
 }
 
+@extension("x-on", #{ home: true })
 model DelegateMessage {
   profile_id?: string;
   cmd: "delegate";
@@ -1182,6 +1218,7 @@ model SeedHandoverRequest {
   note_id?: string; // Reserved recovery identity for a new handoff note.
 }
 
+@extension("x-on", #{ home: true })
 model DelegateStatusMessage {
   profile_id?: string;
   source_session_id?: SessionID;
@@ -1231,11 +1268,13 @@ model NotebookSendToChiefMessage {
 // root is; the launcher injects the canonical operating guidance from that. This
 // is the one surviving unix-socket notebook command after the user-facing
 // `attn notebook …` subcommands were removed.
+@extension("x-on", #{ home: true })
 model NotebookGuideMessage {
   cmd: "notebook_guide";
   session_id?: SessionID; // when set, session_is_chief reflects this session's role
 }
 
+@extension("x-on", #{ home: true })
 model JournalAppendMessage {
   cmd: "journal_append";
   source_session_id?: SessionID;
@@ -1333,6 +1372,7 @@ model ClearAnalyticsRecordsResultMessage {
 // Record one app action or CLI outcome in the analytics outbox. No reply; the
 // daemon drops it while analytics.enabled is off. props holds code-defined
 // values only (ids, kinds, counts), never user text.
+@extension("x-on", #{ here: true })
 model RecordAnalyticsMessage {
   cmd: "record_analytics";
   stream: string; // app or cli
@@ -1478,6 +1518,7 @@ model DelegateWorktreeRequest {
   existing_branch?: boolean;
 }
 
+@extension("x-on", #{ home: true })
 model QueryMessage {
   cmd: "query";
   filter?: string;
@@ -1499,6 +1540,7 @@ model SettleTurnMessage {
 // Open asks for the user: called while the agent works, the turn opens when that
 // run stops; called while it is stopped, the turn opens now. Settle closes only a
 // turn the agent opened itself. With the queue flow off both do nothing.
+@extension("x-on", #{ home: true })
 model AgentTurnMessage {
   cmd: "agent_turn";
   session_id: SessionID;
@@ -1525,6 +1567,7 @@ model AgentTurnResult {
   outcome: AgentTurnOutcome;
 }
 
+@extension("x-on", #{ home: true })
 model SetSessionPriorityMessage {
   cmd: "set_session_priority";
   session_id: SessionID;
@@ -1539,6 +1582,7 @@ model SetSessionPriorityMessage {
 // `until` is an absolute ISO instant computed by the client, because "tomorrow"
 // and "Monday" are calendar questions that need the user's timezone, which the
 // daemon does not have. Fire-and-forget.
+@extension("x-on", #{ home: true })
 model SnoozeTurnMessage {
   cmd: "snooze_turn";
   caller_session_id?: SessionID;
@@ -1549,6 +1593,7 @@ model SnoozeTurnMessage {
 // WakeTurnMessage ends a snooze early. It clears the deadline; whether a turn
 // then opens depends on the state the agent is in at that instant, which is the
 // daemon's call. Fire-and-forget.
+@extension("x-on", #{ home: true })
 model WakeTurnMessage {
   cmd: "wake_turn";
   caller_session_id?: SessionID;
@@ -1560,16 +1605,19 @@ model CancelCountdownMessage {
   session_id: SessionID;
 }
 
+@extension("x-on", #{ home: true })
 model QueryPRsMessage {
   cmd: "query_prs";
   filter?: string;
 }
 
+@extension("x-on", #{ home: true })
 model MutePRMessage {
   cmd: "mute_pr";
   id: string;
 }
 
+@extension("x-on", #{ home: true })
 model MuteRepoMessage {
   cmd: "mute_repo";
   repo: string;
@@ -1580,21 +1628,25 @@ model MuteAuthorMessage {
   author: string;
 }
 
+@extension("x-on", #{ home: true })
 model CollapseRepoMessage {
   cmd: "collapse_repo";
   repo: string;
   collapsed: boolean;
 }
 
+@extension("x-on", #{ home: true })
 model QueryReposMessage {
   cmd: "query_repos";
   filter?: string;
 }
 
+@extension("x-on", #{ home: true })
 model QueryAuthorsMessage {
   cmd: "query_authors";
 }
 
+@extension("x-on", #{ home: true })
 model FetchPRDetailsMessage {
   cmd: "fetch_pr_details";
   id: string;
@@ -1613,11 +1665,13 @@ model PRVisitedMessage {
   id: string;
 }
 
+@extension("x-on", #{ here: true })
 model ListWorktreesMessage {
   cmd: "list_worktrees";
   main_repo: string;
 }
 
+@extension("x-on", #{ here: true })
 model CreateWorktreeMessage {
   cmd: "create_worktree";
   main_repo: string;
@@ -1627,6 +1681,7 @@ model CreateWorktreeMessage {
   request_id?: string;
 }
 
+@extension("x-on", #{ here: true })
 model DeleteWorktreeMessage {
   cmd: "delete_worktree";
   path: string;
@@ -1637,6 +1692,7 @@ model DeleteWorktreeMessage {
 // The Worktrees surface: every worktree of every repository attn tracks, read
 // from the registry. Never runs git, so it answers at once however slow the
 // repository is.
+@extension("x-on", #{ here: true })
 model WorktreeListMessage {
   cmd: "worktree_list";
   main_repo?: string;
@@ -1658,6 +1714,7 @@ model WorktreeRepository {
 }
 
 // Keep this worktree forever: the sweep names it pinned and never reclaims it.
+@extension("x-on", #{ here: true })
 model WorktreeKeepMessage {
   cmd: "worktree_keep";
   path: string;
@@ -1669,6 +1726,7 @@ model WorktreeKeepResult {
   worktree: Worktree;
 }
 
+@extension("x-on", #{ here: true })
 model WorktreeSweepLogMessage {
   cmd: "worktree_sweep_log";
   main_repo?: string;
@@ -1683,6 +1741,7 @@ model WorktreeSweepLogResult {
 
 // Ask for a refresh now instead of waiting for the tick. Returns as soon as the
 // pass is queued; the rows update through worktree_state_changed.
+@extension("x-on", #{ here: true })
 model WorktreeRefreshMessage {
   cmd: "worktree_refresh";
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -1692,12 +1751,14 @@ model WorktreeRefreshResult {
   queued: boolean;
 }
 
+@extension("x-on", #{ here: true })
 model GetSettingsMessage {
   cmd: "get_settings";
   key?: string;
   all?: boolean;
 }
 
+@extension("x-on", #{ here: true })
 model SetSettingMessage {
   cmd: "set_setting";
   request_id?: string;
@@ -1725,6 +1786,7 @@ model RepairOutpostMessage { cmd: "repair_outpost"; id: string; }
 model UpdateOutpostMessage { cmd: "update_outpost"; id: string; }
 
 // Sent by `attn enrollment leave`: the daemon keeps only the copy from the home it is still enrolled to, stopping the terminals it ran for any other home and closing that home's bridge.
+@extension("x-on", #{ here: true })
 model DropOutpostCopyMessage { cmd: "drop_outpost_copy"; }
 
 model ListPluginsMessage {
@@ -1770,11 +1832,13 @@ model MergePRMessage {
   method: string; // "squash", "merge", "rebase"
 }
 
+@extension("x-on", #{ here: true })
 model InjectTestPRMessage {
   cmd: "inject_test_pr";
   pr: PR;
 }
 
+@extension("x-on", #{ here: true })
 model InjectTestSessionMessage {
   cmd: "inject_test_session";
   session: Session;
@@ -1886,6 +1950,7 @@ model GetRepoInfoMessage {
 // revision) instead of persisting it; see Daemon.automationApplyWithGuards.
 // Both are absent/zero when creating. request_id is optional, used only by
 // WS for correlation, like automation_delete's below.
+@extension("x-on", #{ home: true })
 model AutomationApplyMessage {
   launch_desktop?: string; // own, an empty slot, or a desktop ref of the item's profile
   cmd: "automation_apply";
@@ -1900,6 +1965,7 @@ model AutomationApplyMessage {
   launch_desktop_setting?: LaunchDesktopSetting;
   source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
+@extension("x-on", #{ home: true })
 model AutomationRunMessage { cmd: "automation_run"; definition_id: safeint; request_id: string; input_json?: string; pr_url?: string; profile_id?: string; source_session_id?: SessionID; }
 
 // Dual-surface (unix-socket `attn automation validate` + WS "Validate"
@@ -1908,6 +1974,7 @@ model AutomationRunMessage { cmd: "automation_run"; definition_id: safeint; requ
 // just a thinner call to ParseDefinitionYAML — see AutomationValidateResultMessage
 // below for why a validate that skipped one of apply's checks would actively
 // lie to the user.
+@extension("x-on", #{ home: true })
 model AutomationValidateMessage {
   cmd: "automation_validate";
   definition_yaml: string;
@@ -1918,6 +1985,7 @@ model AutomationValidateMessage {
 // mirrors automation_apply/automation_run's shape. request_id is optional
 // because the WS path uses it for correlation but the socket/CLI path
 // doesn't need one.
+@extension("x-on", #{ home: true })
 model AutomationDeleteMessage {
   cmd: "automation_delete";
   definition_id: safeint;
@@ -1929,6 +1997,7 @@ model AutomationDeleteMessage {
 // Same dual-surface shape as automation_delete above. Unlike delete, cleanup
 // is disk-only (worktrees only; never rows or artifacts) and repeatable —
 // see AutomationCleanupResultMessage's cleaned/kept_dirty/kept_active fields.
+@extension("x-on", #{ home: true })
 model AutomationCleanupMessage {
   cmd: "automation_cleanup";
   definition_id: safeint;
@@ -1942,6 +2011,7 @@ model AutomationCleanupMessage {
 // WS-only automations surface: list definitions, list one definition's runs, and
 // toggle enabled. automation_run (above) is reused for WS run-now; it already
 // carries request_id for correlation.
+@extension("x-on", #{ home: true })
 model AutomationDefinitionsGetMessage {
   cmd: "automation_definitions_get";
   request_id?: string;
@@ -1955,6 +2025,7 @@ model AutomationDefinitionsGetMessage {
 // one frontend code path and the template can never structurally drift from
 // what ParseDefinitionYAML accepts. An unknown nonzero definition_id
 // surfaces as success=false with an error, like the other WS lookups above.
+@extension("x-on", #{ home: true })
 model AutomationDefinitionGetMessage {
   cmd: "automation_definition_get";
   definition_id: safeint;
@@ -1962,6 +2033,7 @@ model AutomationDefinitionGetMessage {
   profile_id?: string;
   source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
+@extension("x-on", #{ home: true })
 model AutomationRunsGetMessage {
   cmd: "automation_runs_get";
   definition_id: safeint;
@@ -1969,6 +2041,7 @@ model AutomationRunsGetMessage {
   profile_id?: string;
   source_session_id?: SessionID; // The calling agent; scopes the request to its profile.
 }
+@extension("x-on", #{ home: true })
 model AutomationSetEnabledMessage {
   cmd: "automation_set_enabled";
   definition_id: safeint;
@@ -2286,6 +2359,7 @@ model SetClientPresenceMessage {
 // current line with the time it was generated. It is the CLI's way to see a
 // feature whose whole output otherwise lives on the dashboard — including why
 // nothing is being generated, which is almost always the tier.
+@extension("x-on", #{ home: true })
 model ActivityStatusMessage {
   cmd: "activity_status";
 }
@@ -2315,6 +2389,7 @@ model ActivityStatusSession {
 // would keep the wrong line forever. Clearing also drops the read cursor, so the
 // next line is generated from what happens next rather than from a window that
 // was already summarized.
+@extension("x-on", #{ home: true })
 model ClearSessionActivityMessage {
   cmd: "clear_session_activity";
   id: SessionID;
@@ -2353,6 +2428,7 @@ model ReloadSessionMessage {
 // each path attn can show (markdown today); anything else is dropped
 // silently. paths are absolute; session_id docks the tiles beside the sending
 // session, falling back to the focused agent.
+@extension("x-on", #[#{ terminal: "terminal_id" }, #{ home: true }])
 model OpenSentFilesMessage {
   cmd: "open_sent_files";
   paths: string[];
@@ -2366,6 +2442,7 @@ model OpenSentFilesMessage {
 // bound to session_id (the opener); when empty the daemon falls back to the
 // currently selected session. request_id correlates the websocket reply
 // (OpenMarkdownResultMessage) and is unused on the unix-socket path.
+@extension("x-on", #{ home: true })
 model OpenMarkdownMessage {
   cmd: "open_markdown";
   path: string;
@@ -2385,6 +2462,7 @@ model OpenMarkdownResultMessage {
   tile_id?: string;
 }
 
+@extension("x-on", #{ home: true })
 model OpenSeedMessage {
   "profile_id"?: string;
   cmd: "open_seed";
@@ -2748,14 +2826,17 @@ model MarkdownAnnotationsSubmitResultMessage {
 
 // Open or retarget the docked browser tile. Sent by `attn browser open`.
 // When session_id is empty the daemon targets the currently selected session.
+@extension("x-on", #{ home: true })
 model OpenBrowserMessage {
   cmd: "open_browser";
   url: string;
   session_id?: SessionID;
 }
 
+@extension("x-on", #{ home: true })
 model CalloutShowMessage { cmd: "callout_show"; session_id: SessionID; steps: CalloutShowStep[]; }
 model CalloutShowStep { anchor: string; text: string; }
+@extension("x-on", #{ home: true })
 model CalloutAnchorsMessage { cmd: "callout_anchors"; session_id: SessionID; }
 model CalloutAnchorsResult { anchors: CalloutAnchorInfo[]; app_showing_profile: boolean; }
 model CalloutAnchorInfo { name: string; description: string; on_screen?: boolean; }
@@ -2780,6 +2861,7 @@ model CalloutResultMessage {
 
 // Ask the visible in-app browser host to perform an action. Sent by the CLI
 // over the unix socket; the daemon brokers it to a capable Tauri client.
+@extension("x-on", #{ home: true })
 model BrowserControlMessage {
   cmd: "browser_control";
   action: string;
@@ -2916,6 +2998,7 @@ enum TerminalWaitUntil {
   prompt,
   exit
 }
+@extension("x-on", #{ home: true })
 model TerminalListMessage {
   cmd: "terminal_list";
   caller_session_id: SessionID;
@@ -2934,6 +3017,7 @@ model TerminalEntry {
   position?: string;
   opened_by?: SessionID;
 }
+@extension("x-on", #{ home: true })
 model TerminalOpenMessage {
   cmd: "terminal_open";
   host?: string;
@@ -2949,6 +3033,7 @@ model TerminalOpenResult {
   desktop_id: string;
   pane_id: string;
 }
+@extension("x-on", #{ home: true })
 model TerminalInputMessage {
   cmd: "terminal_input";
   caller_session_id: SessionID;
@@ -2962,6 +3047,7 @@ model TerminalInputResult {
   terminal_id: TerminalID;
   last_block_id?: int64;
 }
+@extension("x-on", #{ home: true })
 model TerminalReadMessage {
   cmd: "terminal_read";
   caller_session_id: SessionID;
@@ -2973,6 +3059,7 @@ model TerminalReadResult {
   text: string;
   block?: TerminalBlock;
 }
+@extension("x-on", #{ home: true })
 model TerminalWaitMessage {
   cmd: "terminal_wait";
   caller_session_id: SessionID;
@@ -2991,6 +3078,7 @@ model TerminalWaitResult {
   exited?: boolean;
   exit_code?: int32;
 }
+@extension("x-on", #{ home: true })
 model TerminalCloseMessage {
   cmd: "terminal_close";
   caller_session_id: SessionID;
@@ -3123,6 +3211,7 @@ model TerminalShellResult {
 // The moved pane becomes its new desktop's active leaf only when it was its old
 // desktop's and the new one is not the current desktop; the current desktop
 // never changes.
+@extension("x-on", #{ home: true })
 model DesktopMoveSessionMessage {
   cmd: "desktop_move_session";
   session_id: SessionID;
@@ -3327,12 +3416,14 @@ model LaunchDesktopItem {
   setting: LaunchDesktopSetting;
   confirmed: boolean;
 }
+@extension("x-on", #{ home: true })
 model LaunchDesktopGetMessage {
   cmd: "launch_desktop_get";
   request_id: string;
   kind: LaunchDesktopKind;
   item_id: string;
 }
+@extension("x-on", #{ home: true })
 model LaunchDesktopSetMessage {
   profile_id?: string;
   source_session_id?: SessionID;
@@ -3425,6 +3516,7 @@ model MigrationChangedMessage {
 
 // Rename a session's display label. The stored label is authoritative once set:
 // it survives session re-registration and respawn so a rename is durable.
+@extension("x-on", #{ home: true })
 model RenameSessionMessage {
   cmd: "rename_session";
   session_id: SessionID;
@@ -3435,6 +3527,7 @@ model RenameSessionMessage {
 // clears the pin so the launch falls back to the chief or per-agent default
 // settings. A changed pin on a live claude/codex session reloads the agent in
 // place (resume-preserving) so the cap takes effect immediately.
+@extension("x-on", #{ home: true })
 model SetSessionContextWindowCapMessage {
   cmd: "set_session_context_window_cap";
   session_id: SessionID;
@@ -3627,6 +3720,7 @@ model AskReply {
 
 // seed_id names a seed the session tends; without it the ask is about the
 // session's stake, when it has one.
+@extension("x-on", #{ home: true })
 model AskOpenMessage {
   cmd: "ask_open";
   session_id: SessionID;
@@ -3636,6 +3730,7 @@ model AskOpenMessage {
   base_dir: string;
 }
 
+@extension("x-on", #{ home: true })
 model AskListMessage {
   cmd: "ask_list";
   session_id: SessionID;
@@ -3647,6 +3742,7 @@ model AskListResult {
   asks: Ask[];
 }
 
+@extension("x-on", #{ home: true })
 model AskCloseMessage {
   cmd: "ask_close";
   session_id: SessionID;
@@ -3746,12 +3842,14 @@ model Vent {
   send?: VentSend;
 }
 
+@extension("x-on", #{ home: true })
 model RecordVentMessage {
   cmd: "record_vent";
   session_id: SessionID;
   text: string;
 }
 
+@extension("x-on", #{ home: true })
 model WithdrawVentMessage {
   cmd: "withdraw_vent";
   session_id: SessionID;
@@ -3893,6 +3991,7 @@ model SharedCodexState {
 // turns waiting on an approval or a question, lets the others finish for a
 // minute, then stops the app-server and whatever still runs. Clears a failed
 // restart.
+@extension("x-on", #{ here: true })
 model RestartSharedCodexMessage {
   cmd: "restart_shared_codex";
   request_id?: string;
@@ -3934,6 +4033,7 @@ model InstallCodexUpdateResultMessage {
 
 // attn codex status. With refresh, attn first reads the installed Codex again,
 // as attn codex update asks after running Codex's update.
+@extension("x-on", #{ here: true })
 model CodexStatusMessage {
   cmd: "codex_status";
   caller_session_id?: SessionID;
@@ -4712,6 +4812,7 @@ model StoredDocument {
 
 // Declare a collection, replacing any previous declaration. Redeclaring is how a
 // collection gains a queryable field; documents are never rewritten.
+@extension("x-on", #{ home: true })
 model DocDefineMessage {
   "cmd": "doc_define";
   "schema": DocumentCollectionSchema;
@@ -4723,6 +4824,7 @@ model DocDefineResult {
 }
 
 // Remove a collection's declaration and every document under it.
+@extension("x-on", #{ home: true })
 model DocUndefineMessage {
   "cmd": "doc_undefine";
   "namespace": string;
@@ -4736,6 +4838,7 @@ model DocUndefineResult {
 }
 
 // Every declared collection — the operator's index of what exists.
+@extension("x-on", #{ home: true })
 model DocCollectionsMessage {
   "cmd": "doc_collections";
 }
@@ -4752,6 +4855,7 @@ model DocCollectionsResult {
 // failed assertion writes nothing and answers with an error naming both
 // revisions. Revisions start at 1, which is what makes 0 unambiguous as "must
 // not exist".
+@extension("x-on", #{ home: true })
 model DocPutMessage {
   "cmd": "doc_put";
   "namespace": string;
@@ -4777,6 +4881,7 @@ model DocPutResult {
   "seq": safeint;
 }
 
+@extension("x-on", #{ home: true })
 model DocGetMessage {
   "cmd": "doc_get";
   "namespace": string;
@@ -4800,6 +4905,7 @@ model DocGetResult {
 // deleting on the strength of a body you read is the same lost-update hazard as
 // overwriting one. Absent deletes unconditionally. Unlike a put, 0 is refused:
 // "delete this if it does not exist" is not an assertion a delete can act on.
+@extension("x-on", #{ home: true })
 model DocDeleteMessage {
   "cmd": "doc_delete";
   "namespace": string;
@@ -4822,6 +4928,7 @@ model DocDeleteResult {
   "seq": safeint;
 }
 
+@extension("x-on", #{ home: true })
 model DocQueryMessage {
   "cmd": "doc_query";
   "query": DocumentQuery;
@@ -4838,6 +4945,7 @@ model DocQueryResult {
 // filters (and the after cursor, if any) mean exactly what they mean for
 // doc_query; sort and limit are ignored, because they decide which matches come
 // back and never how many there are.
+@extension("x-on", #{ home: true })
 model DocCountMessage {
   "cmd": "doc_count";
   "query": DocumentQuery;
@@ -4894,6 +5002,7 @@ model DocumentRevision {
 // connection and an id would name nothing. Deliveries then arrive as
 // DocSubscriptionDeliveryMessage rather than as responses on this connection,
 // and doc_unsubscribe is the way out.
+@extension("x-on", #{ home: true })
 model DocSubscribeMessage {
   "cmd": "doc_subscribe";
   "query": DocumentQuery;
@@ -5086,6 +5195,7 @@ model KeptConversationRow {
   seeds: KeptConversationSeed[];
   crew_days?: KeptConversationCrewDay[];
 }
+@extension("x-on", #{ home: true })
 model KeptConversationListMessage {
   cmd: "kept_conversation_list";
   include_deleted?: boolean;
@@ -5098,12 +5208,14 @@ model KeptConversationListResult {
   stored_bytes: safeint;
   next_delete_after?: string;
 }
+@extension("x-on", #{ home: true })
 model KeptConversationKeepMessage {
   cmd: "kept_conversation_keep";
   session_id: string;
   keep: boolean;
   request_id?: string;
 }
+@extension("x-on", #{ home: true })
 model KeptConversationForgetMessage {
   cmd: "kept_conversation_forget";
   session_id: string;
@@ -5270,6 +5382,7 @@ model SeedCheckDefinition {
 
 // Move one check. Every move writes one check note in the same commit as the
 // seed, and never blocks a lifecycle move.
+@extension("x-on", #{ home: true })
 model SeedCheckMessage {
   "profile_id"?: string;
 
@@ -5316,6 +5429,7 @@ model SeedCheckResultMessage {
 
 // Plant a seed. Planting costs one line: the daemon already knows who is
 // asking, and the garden is one space — plots are its only grouping.
+@extension("x-on", #{ home: true })
 model SeedPlantMessage {
   "profile_id"?: string;
 
@@ -5342,6 +5456,7 @@ model SeedPlantResult {
 // Plant a whole plot in one move: the crown and its children, with the
 // children's sequencing edges. Validation is all-before-anything — a payload
 // that cannot be a plot is refused before one seed is written.
+@extension("x-on", #{ home: true })
 model SeedPlotMessage {
   "profile_id"?: string;
 
@@ -5371,6 +5486,7 @@ model SeedPlotResult {
 
 // List the garden, newest first. One space, no scope: plots group, `show`
 // drills.
+@extension("x-on", #{ home: true })
 model SeedListMessage {
   "profile_id"?: string;
 
@@ -5397,6 +5513,7 @@ model SeedListResult {
 // Find seeds by keyword. Search reads titles, bodies and every log entry
 // across the whole garden, closed seeds included: "was this already done or
 // abandoned" is as much the question as "is someone on it".
+@extension("x-on", #{ home: true })
 model SeedSearchMessage {
   "profile_id"?: string;
 
@@ -5430,6 +5547,7 @@ model SeedSearchResult {
   "searched": int32;
 }
 
+@extension("x-on", #{ home: true })
 model SeedShowMessage {
   "profile_id"?: string;
 
@@ -5472,6 +5590,7 @@ model SeedShowResult {
 // Replace one seed's markdown body without moving its lifecycle or claim.
 // The daemon re-reads on a revision conflict so a concurrent tend/park is
 // preserved rather than overwritten by the editor's older snapshot.
+@extension("x-on", #{ home: true })
 model SeedEditMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
@@ -5533,6 +5652,7 @@ model SeedArtifact {
 // Move or copy a local file into seed ownership, or detach one to an explicit
 // destination. Source and destination paths are absolute so the daemon,
 // never a caller's cwd, decides which file is mutated.
+@extension("x-on", #{ here: true })
 model SeedArtifactTransferMessage {
   "profile_id"?: string;
 
@@ -5627,6 +5747,7 @@ model SeedCheckTally {
 // re-parenting a seed never renames it. The daemon refuses what cannot be a
 // relation — an edge onto a seed that is not planted, a second crown, a cycle —
 // naming both seeds and the edge to remove.
+@extension("x-on", #{ home: true })
 model SeedLinkMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
@@ -5650,6 +5771,7 @@ model SeedLinkResult {
 // What can be tended right now. Scope is inferred — the daemon knows who is
 // asking, so the common form takes no flags at all: the whole garden, unless
 // the calling session was dispatched at a crown, and then that plot.
+@extension("x-on", #{ home: true })
 model SeedReadyMessage {
   "profile_id"?: string;
 
@@ -5681,6 +5803,7 @@ model SeedReadyResult {
 // One lifecycle move. The five verbs share a command because they are one state
 // machine: the daemon reads the seed, checks the move against the state it is
 // actually in, and refuses by name — the seed, its state, and the way out.
+@extension("x-on", #{ home: true })
 model SeedTransitionMessage {
   "profile_id"?: string;
 
@@ -5773,6 +5896,7 @@ model SeedNote {
   "artifact"?: SeedArtifactReference;
 }
 
+@extension("x-on", #{ home: true })
 model SeedNoteMessage {
   "profile_id"?: string;
 
@@ -5816,6 +5940,7 @@ model SeedNoteResultMessage {
 }
 
 // The whole log, newest first — what `show`'s bounded list points at.
+@extension("x-on", #{ home: true })
 model SeedNotesMessage {
   "profile_id"?: string;
 
@@ -5833,6 +5958,7 @@ model SeedNotesResult {
 
 // Add or remove one session's ordinary watch on a seed. The watch survives
 // daemon restarts and session state changes; unwatch is the exact way out.
+@extension("x-on", #{ home: true })
 model SeedWatchMessage {
   "profile_id"?: string;
 
@@ -5886,6 +6012,7 @@ model SeedResumeResultMessage {
 // Give an open seed to the Chief when its next working context needs judgment.
 // The optional guidance is the user's exception to the saved placement, not a
 // replacement for the seed body or log.
+@extension("x-on", #{ home: true })
 model SeedSendToChiefMessage {
   "profile_id"?: string;
 
@@ -6005,6 +6132,7 @@ model SeedReviewActionContext {
   "evidence_version": string;
 }
 
+@extension("x-on", #{ home: true })
 model SeedReviewStartMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
@@ -6013,6 +6141,7 @@ model SeedReviewStartMessage {
   "request_id"?: string;
 }
 
+@extension("x-on", #{ home: true })
 model SeedReviewShowMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
@@ -6023,6 +6152,7 @@ model SeedReviewShowMessage {
   "review_id"?: string;
 }
 
+@extension("x-on", #{ home: true })
 model SeedReviewCancelMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
@@ -6032,6 +6162,7 @@ model SeedReviewCancelMessage {
   "review_id": string;
 }
 
+@extension("x-on", #{ home: true })
 model SeedReviewRetryMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
@@ -6042,6 +6173,7 @@ model SeedReviewRetryMessage {
   "seed_id": string;
 }
 
+@extension("x-on", #{ home: true })
 model SeedReviewKeepMessage {
   "profile_id"?: string;
   "source_session_id"?: SessionID;
@@ -6232,6 +6364,7 @@ model AutoModeDenialInfo {
   "created_at": string;
 }
 
+@extension("x-on", #{ home: true })
 model AutoModeShowMessage {
   "cmd": "automode_show";
   "cwd"?: string;
@@ -6246,6 +6379,7 @@ model AutoModeShowResult {
   "proposals": AutoModeProposalInfo[];
 }
 
+@extension("x-on", #{ home: true })
 model AutoModeEnvSlotMessage {
   "cmd": "automode_env_slot";
   "slot": string;
@@ -6253,6 +6387,7 @@ model AutoModeEnvSlotMessage {
   "request_id"?: string;
 }
 
+@extension("x-on", #{ home: true })
 model AutoModeEnvNotesMessage {
   "cmd": "automode_env_notes";
   "notes": string[];
@@ -6265,6 +6400,7 @@ model AutoModeEnvResult {
 
 // Record a proposal. Refused at submission when it could never be promoted: a
 // value that is not the JSON of a rule or of a host amendment.
+@extension("x-on", #{ home: true })
 model AutoModeProposeMessage {
   "cmd": "automode_propose";
   "kind": string;
@@ -6277,6 +6413,7 @@ model AutoModeProposeResult {
   "proposal": AutoModeProposalInfo;
 }
 
+@extension("x-on", #{ home: true })
 model AutoModeDenialsMessage {
   "cmd": "automode_denials";
   "limit"?: safeint;
@@ -6632,6 +6769,7 @@ model AgentPeekResult {
 // Read the crew roster: every registered member, awake or asleep. The registry
 // serves the read; the member's home stays plain markdown on disk and is never
 // copied onto the wire.
+@extension("x-on", #{ home: true })
 model CrewListMessage {
   cmd: "crew_list";
 }
@@ -6674,6 +6812,7 @@ model CrewCharterDocument {
   token: string;
 }
 
+@extension("x-on", #{ home: true })
 model CrewCharterGetMessage {
   cmd: "crew_charter_get";
   member: string;
@@ -6694,6 +6833,7 @@ model CrewCharterGetResultMessage {
   charter?: CrewCharterDocument;
 }
 
+@extension("x-on", #{ home: true })
 model CrewCharterSetMessage {
   cmd: "crew_charter_set";
   member: string;
@@ -6730,6 +6870,7 @@ model CrewHandoffDocument {
   token: string;
 }
 
+@extension("x-on", #{ home: true })
 model CrewHandoffsGetMessage {
   cmd: "crew_handoffs_get";
   member: string;
@@ -6750,6 +6891,7 @@ model CrewHandoffsGetResultMessage {
   handoffs: CrewHandoffSummary[];
 }
 
+@extension("x-on", #{ home: true })
 model CrewHandoffGetMessage {
   cmd: "crew_handoff_get";
   member: string;
@@ -6775,6 +6917,7 @@ model CrewHandoffGetResultMessage {
 // with its awareness dirs and its priming. Home-only. A member whose day is
 // already live is not woken twice — the result names that session instead, so
 // the caller focuses it rather than racing the single-holder rule.
+@extension("x-on", #{ home: true })
 model CrewWakeMessage {
   cmd: "crew_wake";
   member: string;
@@ -6826,6 +6969,7 @@ model CrewWakeResult {
 // the daemon delivers a user-originated request telling the member to write its
 // handoff and file it with `attn handoff --sleep`; it does not kill the member.
 // Home-only. An asleep member is a named no-op rather than a silent success.
+@extension("x-on", #{ home: true })
 model CrewSleepMessage {
   cmd: "crew_sleep";
   member: string;
@@ -6860,6 +7004,7 @@ model CrewSleepResult {
 // Record where a member's sessions launch and which directories its charter is
 // about. Registry state, not prose: the home's markdown is never rewritten, and
 // an omitted field is left as it was.
+@extension("x-on", #{ home: true })
 model CrewSetMessage {
   launch_desktop?: string; // own, an empty slot, or a desktop ref of the item's profile
   cmd: "crew_set";
@@ -6900,6 +7045,7 @@ model CrewSetResultMessage {
 // What a launching session needs to be its member: the composed priming block
 // and the directories to open. Asked by the attn wrapper for every launch, so
 // the answer is empty for the sessions — most of them — that are nobody.
+@extension("x-on", #{ home: true })
 model CrewPrimeMessage {
   cmd: "crew_prime";
   session_id: SessionID;
@@ -6919,6 +7065,7 @@ model CrewPrimeResult {
 // the line is append-only, so a name already taken is refused rather than
 // overwritten. Home-only, and refused for a session that holds no binding: a
 // crew handoff is a member's day-line, and a session that is nobody has none.
+@extension("x-on", #{ home: true })
 model CrewHandoffMessage {
   cmd: "crew_handoff";
   session_id: SessionID;
@@ -6957,12 +7104,14 @@ model CrewHandoffResult {
   outcome?: CrewDayClose;
 }
 
+@extension("x-on", #{ home: true })
 model CrewMemoryAddMessage {
   cmd: "crew_memory_add";
   session_id?: SessionID;
   text: string;
 }
 
+@extension("x-on", #{ home: true })
 model CrewMemoryRecallMessage {
   cmd: "crew_memory_recall";
   session_id?: SessionID;
@@ -6971,6 +7120,7 @@ model CrewMemoryRecallMessage {
   pattern: string;
 }
 
+@extension("x-on", #{ home: true })
 model CrewMemoryZoomMessage {
   cmd: "crew_memory_zoom";
   session_id?: SessionID;
@@ -6979,6 +7129,7 @@ model CrewMemoryZoomMessage {
   target: string;
 }
 
+@extension("x-on", #{ home: true })
 model CrewMemorySummarizeMessage {
   cmd: "crew_memory_summarize";
   session_id?: SessionID;
@@ -6990,18 +7141,21 @@ model CrewMemoryAnswer {
   text: string;
 }
 
+@extension("x-on", #{ home: true })
 model CrewMemoryForgetMessage {
   cmd: "crew_memory_forget";
   session_id?: SessionID;
   id: int64;
 }
 
+@extension("x-on", #{ home: true })
 model CrewMemoryRewriteMessage {
   cmd: "crew_memory_rewrite";
   session_id?: SessionID;
   range: string;
 }
 
+@extension("x-on", #{ home: true })
 model CrewMemoryImportMessage {
   cmd: "crew_memory_import";
   session_id?: SessionID;

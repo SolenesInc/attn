@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const frozenUpdateHello = `{"bridge":1,"daemon_id":"d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","build":{"version":"next","source_fingerprint":"git:next","protocol_version":"next"},"update":1}`
+const frozenUpdateHello = `{"bridge":2,"daemon_id":"d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"home","instance":"default","build":{"version":"next","source_fingerprint":"git:next","protocol_version":"next"},"update":1}`
 const frozenUpdateHeader = `{"update":1,"build":{"version":"next","source_fingerprint":"git:next","protocol_version":"next"},"platform":"linux/amd64","size":5,"sha256":"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824","encoding":"zstd"}`
 
 func TestOutpostUpdateFrozenTranscript(t *testing.T) {
@@ -23,6 +23,7 @@ func TestOutpostUpdateFrozenTranscript(t *testing.T) {
 			wrongPlatform := mode == "wrong-platform"
 			cancelled := make(chan struct{}, 1)
 			w := pair(t)
+			w.cfg.Self.Name, w.cfg.Self.Instance = "outpost", "default"
 			restarted := make(chan struct{}, 1)
 			w.cfg.Update = &bridge.UpdateServer{Target: bridge.UpdateTarget{Platform: "linux/amd64", Executable: "/home/user/.local/bin/attn"}, Receive: func(ctx context.Context, header bridge.UpdateHeader, compressed io.Reader, verifying func()) error {
 				raw, _ := json.Marshal(header)
@@ -76,6 +77,8 @@ func TestOutpostUpdateFrozenTranscript(t *testing.T) {
 				Bridge   int    `json:"bridge"`
 				Update   int    `json:"update"`
 				DaemonID string `json:"daemon_id"`
+				Name     string `json:"name"`
+				Instance string `json:"instance"`
 				Target   struct {
 					Platform   string `json:"platform"`
 					Executable string `json:"executable"`
@@ -85,7 +88,7 @@ func TestOutpostUpdateFrozenTranscript(t *testing.T) {
 			if err := json.NewDecoder(control).Decode(&answer); err != nil {
 				t.Fatal(err)
 			}
-			if answer.Bridge != 1 || answer.Update != 1 || answer.DaemonID != outpost.DaemonID || answer.Target.Platform != "linux/amd64" || answer.Target.Executable != "/home/user/.local/bin/attn" || answer.Refused != nil {
+			if answer.Bridge != 2 || answer.Update != 1 || answer.DaemonID != outpost.DaemonID || answer.Name != "outpost" || answer.Instance != "default" || answer.Target.Platform != "linux/amd64" || answer.Target.Executable != "/home/user/.local/bin/attn" || answer.Refused != nil {
 				t.Fatalf("update hello answer changed: %+v", answer)
 			}
 			header := frozenUpdateHeader

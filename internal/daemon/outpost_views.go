@@ -11,10 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"golang.org/x/crypto/ssh"
 )
-
-const bridgeCallView = "monitor_view"
 
 func (d *Daemon) copiedSession(id protocol.SessionID) bool {
 	_, copied := d.store.SessionHost(id)
@@ -22,35 +19,25 @@ func (d *Daemon) copiedSession(id protocol.SessionID) bool {
 }
 
 func (d *Daemon) homeHandlers(host string) bridge.Handlers {
-	return bridge.Handlers{bridgeCallView: func(conn *bridge.Conn, incoming ssh.NewChannel) {
-		if !d.life.Go("applyOutpostView", func() {
-			bridge.Answer(incoming, func(_ context.Context, raw []byte) (any, error) {
-				var msg protocol.ApplyMonitorViewMessage
-				if err := json.Unmarshal(raw, &msg); err != nil {
-					return nil, err
-				}
-				if !d.isOutpostConn(host, conn) {
-					return nil, fmt.Errorf("outpost bridge was replaced")
-				}
-				if d.sessionHost(msg.SessionID) != host {
-					return nil, nil
-				}
-				var view sessionmonitor.View
-				if err := json.Unmarshal([]byte(msg.View), &view); err != nil {
-					return nil, err
-				}
-				if view.Epoch.V != msg.Epoch {
-					return nil, fmt.Errorf("monitor epoch differs from its view")
-				}
-				if !d.applyHomeView(msg.SessionID, view, host, conn) {
-					return nil, fmt.Errorf("monitor view was not applied")
-				}
-				return nil, nil
-			})
-		}) {
-			_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
-		}
-	}}
+	return bridge.Handlers{bridgeCall: d.callBridgeHandler(host), bridgeForward: d.forwardBridgeHandler(host)}
+}
+
+func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitorViewMessage) (struct{}, error) {
+	origin, remote := OriginOf(ctx)
+	if remote && d.sessionHost(msg.SessionID) != origin.Host {
+		return struct{}{}, fmt.Errorf("session %s does not run on %s", msg.SessionID, origin.Name)
+	}
+	var view sessionmonitor.View
+	if err := json.Unmarshal([]byte(msg.View), &view); err != nil {
+		return struct{}{}, err
+	}
+	if view.Epoch.V != msg.Epoch {
+		return struct{}{}, fmt.Errorf("monitor epoch differs from its view")
+	}
+	if !d.applyHomeView(msg.SessionID, view, origin.Host, origin.bridge) {
+		return struct{}{}, fmt.Errorf("monitor view was not applied")
+	}
+	return struct{}{}, nil
 }
 
 func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
@@ -75,7 +62,7 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 			}
 			raw, err := json.Marshal(view)
 			if err == nil {
-				err = conn.Call(ctx, bridgeCallView, protocol.ApplyMonitorViewMessage{Cmd: "apply_monitor_view", SessionID: id, Epoch: view.Epoch.V, View: string(raw)}, nil)
+				_, err = Call[struct{}](ctx, d.router(), protocol.ApplyMonitorViewMessage{Cmd: "apply_monitor_view", SessionID: id, Epoch: view.Epoch.V, View: string(raw)})
 			}
 			if err != nil {
 				failure = err

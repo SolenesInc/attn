@@ -38,7 +38,7 @@ func TestOutpostListenerSettingsPairingAndReplacement(t *testing.T) {
 	address := bridgeAddress(t)
 	requireStdout(t, s.Attn("settings", "set", "outpost_listen", address), address)
 	awaitOutpostListener(app, "listening")
-	identity := bridge.Identity{DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	identity := bridge.Identity{Name: "the-home-not-this-outpost", Instance: "default", DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 	dial := func() (*bridge.Conn, *bridge.Pin) {
 		t.Helper()
 		c, pin, err := bridge.Dial(context.Background(), bridge.DialConfig{Address: address, Self: identity, AgentSocket: a.Socket})
@@ -78,6 +78,18 @@ func TestOutpostListenerSettingsPairingAndReplacement(t *testing.T) {
 	awaitOutpostListener(app, "error")
 	requireStdout(t, s.Attn("settings", "get", "outpost_last_error"), address)
 	requireStdout(t, s.Attn("settings", "set", "outpost_listen", ""), "outpost_listen =")
+	for _, restart := range []bool{false, true} {
+		if restart {
+			s.Stop()
+			s.Start()
+		}
+		result := s.Attn("seed", "ls")
+		if result.Code == 0 || !strings.Contains(result.Stderr, identity.Name+" is unreachable") {
+			t.Fatalf("saved home name after restart=%v: %+v", restart, result)
+		}
+		t.Logf("saved home name after restart=%v: %s", restart, strings.TrimSpace(result.Stderr))
+	}
+
 }
 
 func TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal(t *testing.T) {
@@ -91,7 +103,7 @@ func TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal(t *testing.T) {
 	id := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shell"))
 	app.TypeLine(id, "echo ready-$((1+1))")
 	app.AwaitScreen(id, "ready-2")
-	identity := bridge.Identity{DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	identity := bridge.Identity{Instance: "default", DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 	conn, _, err := bridge.Dial(context.Background(), bridge.DialConfig{Address: address, Self: identity, AgentSocket: a.Socket})
 	if err != nil {
 		t.Fatal(err)
@@ -99,18 +111,18 @@ func TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal(t *testing.T) {
 	defer conn.Close()
 	terminal := protocol.TerminalID(app.Terminal(id))
 	remove := protocol.TerminalRemoveMessage{Cmd: protocol.CmdTerminalRemove, TerminalID: terminal}
-	if err := conn.Call(context.Background(), "terminal", remove, nil); err != nil {
+	if err := conn.Call(context.Background(), "call", remove, nil); err != nil {
 		t.Fatalf("removing the terminal: %v", err)
 	}
 	kill := protocol.TerminalKillMessage{Cmd: protocol.CmdTerminalKill, TerminalID: terminal, Signal: "SIGTERM"}
-	if err := conn.Call(context.Background(), "terminal", kill, nil); err == nil {
+	if err := conn.Call(context.Background(), "call", kill, nil); err == nil {
 		t.Fatal("an ordinary kill of a missing terminal succeeded")
 	}
 	kill.EndingSessionID = protocol.Ptr(protocol.SessionID(id))
-	if err := conn.Call(context.Background(), "terminal", kill, nil); err != nil {
+	if err := conn.Call(context.Background(), "call", kill, nil); err != nil {
 		t.Fatalf("teardown of a terminal already removed by copy cleanup: %v", err)
 	}
-	if err := conn.Call(context.Background(), "terminal", remove, nil); err != nil {
+	if err := conn.Call(context.Background(), "call", remove, nil); err != nil {
 		t.Fatalf("removing a terminal already gone: %v", err)
 	}
 }

@@ -28,6 +28,7 @@ const (
 	BusAnnounce       = "bus-announce"
 	BusEventHandled   = "bus-event-handled"
 
+	DaemonEnrollmentLoaded    = "daemon-enrollment-loaded"
 	DaemonStartupRecovery     = "daemon-startup-recovery"
 	SessionInputPasteGap      = "session-input-paste-gap"
 	SessionInputLaneContended = "session-input-lane-contended"
@@ -40,6 +41,7 @@ const (
 	DriverTranscriptApplied   = "driver-transcript-applied"
 	CopyBatchStaged           = "copy-batch-staged"
 	CopyBatchApplied          = "copy-batch-applied"
+	ForwardSocketCreated      = "forward-socket-created"
 )
 
 type armed struct {

@@ -34,13 +34,18 @@ type Stack struct {
 }
 
 type stackSetup struct {
-	harnesses []fakeagent.Harness
+	harnesses       []fakeagent.Harness
+	withoutAgentKit bool
 }
 
 type StackOption func(*stackSetup)
 
 func WithAgents(h ...fakeagent.Harness) StackOption {
 	return func(s *stackSetup) { s.harnesses = append(s.harnesses, h...) }
+}
+
+func WithoutAgentKit() StackOption {
+	return func(s *stackSetup) { s.withoutAgentKit = true }
 }
 
 func NewStack(t *testing.T, opts ...StackOption) *Stack {
@@ -53,7 +58,8 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 		opt(&setup)
 	}
 	binary := AttnBinary(t)
-	s := &Stack{World: Prepare(t, binary, setup.harnesses...), binary: binary}
+	world := prepareIn(t, worldDir(t), binary, setup.harnesses, !setup.withoutAgentKit)
+	s := &Stack{World: world, binary: binary}
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1")})
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +125,21 @@ func (s *Stack) StartHeldAt(p *Pause) {
 	s.T.Helper()
 	s.launch()
 	p.Await()
+}
+
+func (s *Stack) StartHeldBeforeReady(p *Pause) func() {
+	s.T.Helper()
+	started := make(chan struct{})
+	go func() {
+		defer close(started)
+		s.launch()
+	}()
+	s.T.Cleanup(func() {
+		p.releaseAll()
+		<-started
+	})
+	p.Await()
+	return func() { <-started }
 }
 
 func (s *Stack) start(vars ...string) {

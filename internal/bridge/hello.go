@@ -6,6 +6,8 @@ import (
 
 type Identity struct {
 	DaemonID string `json:"daemon_id"`
+	Name     string `json:"name"`
+	Instance string `json:"instance"`
 	Build    Build  `json:"build"`
 }
 
@@ -35,11 +37,24 @@ type hello struct {
 	Refused *Refusal      `json:"refused,omitempty"`
 }
 
-func greeting(self Identity) hello { return hello{Bridge: 1, Identity: self} }
+func greeting(self Identity) hello { return hello{Bridge: 2, Identity: self} }
 
 func (h hello) check() error {
-	if h.Bridge != 1 || h.DaemonID == "" {
+	if h.Bridge != 2 {
+		return fmt.Errorf("bridge version 2 required, received %d; install this build by hand once", h.Bridge)
+	}
+	if h.DaemonID == "" {
 		return fmt.Errorf("invalid bridge hello: bridge=%d, daemon_id=%q", h.Bridge, h.DaemonID)
+	}
+	return nil
+}
+
+func instanceRefusal(home, outpost Identity) *Refusal {
+	if outpost.Instance == "" {
+		return &Refusal{Peer: &outpost, Reason: "instance", Detail: fmt.Sprintf("outpost %s did not name its instance; install this build by hand once before connecting home instance %q", outpost.DaemonID, home.Instance)}
+	}
+	if home.Instance == "" || home.Instance != outpost.Instance {
+		return &Refusal{Peer: &outpost, Reason: "instance", Detail: fmt.Sprintf("home instance %q cannot use outpost instance %q", home.Instance, outpost.Instance)}
 	}
 	return nil
 }

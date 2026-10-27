@@ -1,0 +1,3 @@
+kind: added
+area: outposts
+change: Run garden and document commands from outpost shells through the home, with named errors when the home is unreachable.

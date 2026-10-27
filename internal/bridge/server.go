@@ -120,7 +120,8 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 		return err
 	}
 	answer := greeting(cfg.Self)
-	if cfg.Admit != nil {
+	answer.Refused = instanceRefusal(home.Identity, cfg.Self)
+	if answer.Refused == nil && cfg.Admit != nil {
 		answer.Refused = cfg.Admit(home.Identity)
 	}
 	if home.Update == 1 && cfg.Update != nil {

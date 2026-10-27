@@ -27,7 +27,7 @@ type world struct {
 	gardenClock func() time.Time
 }
 
-func newWorld(t *testing.T, agents ...fakeagent.Harness) *world {
+func newWorld(t testing.TB, agents ...fakeagent.Harness) *world {
 	t.Helper()
 	w := &world{World: prepareWorld(t, agents...)}
 	w.start()
@@ -64,7 +64,7 @@ func inPreparedBubble(t *testing.T, prepared *testworld.World, script func(t *te
 	})
 }
 
-func prepareWorld(t *testing.T, agents ...fakeagent.Harness) *testworld.World {
+func prepareWorld(t testing.TB, agents ...fakeagent.Harness) *testworld.World {
 	t.Helper()
 	wrapper := ""
 	if len(agents) > 0 {
@@ -73,7 +73,7 @@ func prepareWorld(t *testing.T, agents ...fakeagent.Harness) *testworld.World {
 	return setWorldEnv(t, testworld.Prepare(t, wrapper, agents...))
 }
 
-func setWorldEnv(t *testing.T, prepared *testworld.World) *testworld.World {
+func setWorldEnv(t testing.TB, prepared *testworld.World) *testworld.World {
 	t.Helper()
 	for _, pair := range prepared.Vars {
 		key, value, _ := strings.Cut(pair, "=")

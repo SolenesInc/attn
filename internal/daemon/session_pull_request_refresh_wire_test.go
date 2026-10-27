@@ -262,6 +262,39 @@ func TestAPullRequestIsAskedAboutLessAsItCoolsAndNotAtAllOnceMerged(t *testing.T
 	})
 }
 
+func TestUnwatchedPullRequestPollingPausesUntilItsSessionIsRevived(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "Check the change")
+		agent.reply("Checked. <!-- attn:state=idle -->")
+		recordPullRequest(t, w.Client(), agent.id, shopPull(71))
+		if fetched, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); fetched != 1 {
+			t.Fatalf("live session fetched %d times, want once", fetched)
+		}
+		w.stop()
+		agent.term.Exit(1)
+		w.start()
+		app = w.App()
+		if session := queriedSession(t, w.Client(), agent.id); session.State != protocol.SessionStateRecoverable {
+			t.Fatalf("session after restart is %s, want recoverable", session.State)
+		}
+		if fetched, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); fetched != 0 {
+			t.Fatalf("recoverable session fetched %d times, want none", fetched)
+		}
+		reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(agent.id), Cols: 80, Rows: 24}, protocol.EventReloadSessionResult,
+			func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == agent.id })
+		if !reloaded.Success {
+			t.Fatalf("reload: %+v", reloaded)
+		}
+		w.bootBubbleClaude(t, agent.id)
+		if fetched, _ := gh.fetchesDuring(w, protocol.HeatHotInterval); fetched != 1 {
+			t.Fatalf("revived session fetched %d times, want once", fetched)
+		}
+	})
+}
+
 func TestAFailingPullRequestClaimsNoStatusAndIsRetriedAtItsOwnPace(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gh.set(func(gh *refreshedPullRequest) { gh.snapshotFails = true })

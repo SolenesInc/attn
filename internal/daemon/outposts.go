@@ -254,7 +254,7 @@ func (d *Daemon) syncOutpost(ctx context.Context, id string, conn *bridge.Conn) 
 		return
 	}
 	theme := d.currentTerminalTheme()
-	if err := conn.Call(ctx, bridgeCallTerminal, protocol.TerminalThemeMessage{Cmd: protocol.CmdTerminalTheme, Host: id, Foreground: theme.Foreground, Background: theme.Background, Cursor: theme.Cursor, AnsiPalette: theme.ANSIPalette[:]}, nil); err != nil {
+	if err := conn.Call(ctx, bridgeCall, protocol.TerminalThemeMessage{Cmd: protocol.CmdTerminalTheme, Host: id, Foreground: theme.Foreground, Background: theme.Background, Cursor: theme.Cursor, AnsiPalette: theme.ANSIPalette[:]}, nil); err != nil {
 		d.logf("outpost %s theme: %v", id, err)
 	}
 	d.sendOutpostCopy(ctx, id, conn)

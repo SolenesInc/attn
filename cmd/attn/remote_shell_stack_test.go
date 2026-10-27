@@ -16,18 +16,15 @@ import (
 )
 
 func TestRemoteShellRunsThroughTheHome(t *testing.T) {
-	a := testworld.NewSSHAgent(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	pair := testworld.PrepareOutpostPair(t, home, remote)
 	for _, s := range []*testworld.Stack{remote, home} {
-		a.Authorize(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
 		s.Start()
 	}
-	address := bridgeAddress(t)
-	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
-	app := enableOutposts(t, home)
-	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
-	host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
+	pair.Connect()
+	app := pair.App
+	host := pair.Host
 	caller := home.Spawn(app, fakeagent.Claude, home.Path("agent"))
 	home.Launched(caller)
 	run := func(args ...string) testworld.Result {
@@ -85,8 +82,8 @@ func TestRemoteShellRunsThroughTheHome(t *testing.T) {
 		t.Fatalf("shell did not return to prompt after cancel: %+v", got)
 	}
 	got = run("run", string(opened.TerminalID), "attn seed ls", "--wait")
-	if got.Code != 1 || !strings.Contains(got.Stdout, "outpost limit") {
-		t.Fatalf("remote CLI fence: %+v", got)
+	if got.Code != 0 {
+		t.Fatalf("remote CLI forward: %+v", got)
 	}
 	app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: opened.TerminalID, Cols: 93, Rows: 31})
 	got = run("run", string(opened.TerminalID), "stty size", "--wait")

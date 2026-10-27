@@ -47,7 +47,7 @@ type farOutpost struct {
 	workers sync.WaitGroup
 }
 
-func startFarOutpost(t *testing.T, w *world) *farOutpost {
+func startFarOutpost(t *testing.T, w *world, connected func(*bridge.Conn)) *farOutpost {
 	t.Helper()
 	_, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -58,11 +58,14 @@ func startFarOutpost(t *testing.T, w *world) *farOutpost {
 		t.Fatal(err)
 	}
 	o := &farOutpost{network: memnet.Listen(), keyring: agent.NewKeyring(), key: key}
+	if connected == nil {
+		connected = func(*bridge.Conn) {}
+	}
 	o.port.Store(50000)
 	if err := o.keyring.Add(agent.AddedKey{PrivateKey: key}); err != nil {
 		t.Fatal(err)
 	}
-	self := bridge.Identity{DaemonID: "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
+	self := bridge.Identity{Instance: "default", DaemonID: "d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
 	go func() {
@@ -73,7 +76,7 @@ func startFarOutpost(t *testing.T, w *world) *farOutpost {
 			Handlers: bridge.Handlers{daemon.BridgeCallRecovery: func(_ *bridge.Conn, incoming ssh.NewChannel) {
 				bridge.Answer(incoming, func(context.Context, []byte) (any, error) { return struct{}{}, nil })
 			}},
-		}, func(*bridge.Conn) {})
+		}, connected)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -221,7 +224,7 @@ func TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges(t *testing.T) {
 			prepared := prepareWorld(t)
 			t.Setenv("SSH_AUTH_SOCK", "agent")
 			inPreparedBubble(t, prepared, func(t *testing.T, w *world) {
-				far := startFarOutpost(t, w)
+				far := startFarOutpost(t, w, nil)
 				app := w.App()
 				setSetting(t, app, "outposts_enabled", "true")
 				app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Address: outpostAddress.String()})
@@ -264,7 +267,7 @@ func TestARefusedOutpostPublishesWhenItsRefusalChanges(t *testing.T) {
 	prepared := prepareWorld(t)
 	t.Setenv("SSH_AUTH_SOCK", "agent")
 	inPreparedBubble(t, prepared, func(t *testing.T, w *world) {
-		far := startFarOutpost(t, w)
+		far := startFarOutpost(t, w, nil)
 		if err := far.keyring.RemoveAll(); err != nil {
 			t.Fatal(err)
 		}

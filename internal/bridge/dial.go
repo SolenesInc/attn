@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -158,6 +159,9 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 	decoder := json.NewDecoder(control)
 	var answer hello
 	err = decoder.Decode(&answer)
+	if errors.Is(err, io.EOF) {
+		err = fmt.Errorf("outpost at %s closed before its bridge hello; if it runs an older build, install this build by hand once: %w", cfg.Address, err)
+	}
 	if err == nil {
 		err = answer.check()
 	}
@@ -171,6 +175,8 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 			if cfg.update && answer.Refused.Reason == "build" {
 				err = fmt.Errorf("outpost build %s predates updates from the home; install this build by hand once: %w", answer.Build, err)
 			}
+		} else if refusal := instanceRefusal(cfg.Self, answer.Identity); refusal != nil {
+			err = refusal
 		} else if cfg.update && (answer.Update != 1 || answer.Target == nil) {
 			err = fmt.Errorf("outpost build %s predates updates from the home; install this build by hand once", answer.Build)
 		} else if refusal := buildRefusal(cfg.Self, answer.Identity); !cfg.update && refusal != nil {

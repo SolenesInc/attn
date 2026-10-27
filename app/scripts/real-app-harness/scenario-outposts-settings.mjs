@@ -114,9 +114,10 @@ try {
   await run('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
   await run('ssh-add', [key]);
   const outpostData = path.join(root, 'outpost');
-  fs.mkdirSync(outpostData);
-  const outpostEnv = instanceCliEnv('', {
+  fs.mkdirSync(outpostData, { mode: 0o700 });
+  const outpostEnv = instanceCliEnv(instance, {
     ATTN_DATA_DIR: outpostData,
+    ATTN_HARNESS_DATA_DIR: outpostData,
     ATTN_HARNESS_NOTEBOOK_ROOT: path.join(outpostData, 'notebook'), ATTN_WS_PORT: String(await port()), ATTN_DAEMON_READY_FD: '3',
     ATTN_AUTHORIZED_KEYS_PATH: `${key}.pub`, ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off',
     ATTN_HARNESS_SKILL_SYNC: 'off', ATTN_PTY_BACKEND: 'embedded', ATTN_CACHED_SHELL_ENV: '[]',

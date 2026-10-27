@@ -63,7 +63,7 @@ func (d *Daemon) sendOutpostCopyBatch(ctx context.Context, host string, conn *br
 
 func (d *Daemon) outpostHandlers() bridge.Handlers {
 	return bridge.Handlers{
-		bridgeCallTerminal: d.terminalBridgeHandler(),
+		bridgeCall: d.callBridgeHandler(""),
 		bridgeCallRecovery: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("reportOutpostMachine", func() {
 				bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) {
@@ -121,7 +121,12 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 // dropStaleCopy keeps only the copy from the home this daemon is enrolled to, and closes a bridge from any
 // other home.
 func (d *Daemon) dropStaleCopy() error {
+	d.outpost.mu.Lock()
 	status, err := enrollment.Load(d.dataRoot)
+	if err == nil {
+		d.outpost.enrollment = status
+	}
+	d.outpost.mu.Unlock()
 	if err != nil {
 		return err
 	}

@@ -55,7 +55,7 @@ func analyticsSafeValues(stream analytics.Stream, name string) analytics.Allowli
 	}
 }
 
-func (d *Daemon) handleRecordAnalytics(msg *protocol.RecordAnalyticsMessage, caller protocol.TerminalID) {
+func (d *Daemon) handleRecordAnalytics(msg *protocol.RecordAnalyticsMessage, caller protocol.SessionID) {
 	stream := analytics.Stream(msg.Stream)
 	if stream != analytics.StreamApp && stream != analytics.StreamCLI {
 		d.logf("analytics: record_analytics refused stream %q: use app or cli", msg.Stream)
@@ -69,15 +69,11 @@ func (d *Daemon) handleRecordAnalytics(msg *protocol.RecordAnalyticsMessage, cal
 	d.recordAnalytics(stream, msg.Name, string(sessionID), props)
 }
 
-func (d *Daemon) withAnalyticsCaller(props map[string]any, terminal protocol.TerminalID) (map[string]any, protocol.SessionID) {
+func (d *Daemon) withAnalyticsCaller(props map[string]any, sessionID protocol.SessionID) (map[string]any, protocol.SessionID) {
 	if props == nil {
 		props = map[string]any{}
 	}
 	props["caller"] = "human"
-	if terminal == "" {
-		return props, ""
-	}
-	sessionID := d.sessionInTerminal(terminal)
 	if sessionID == "" {
 		return props, ""
 	}
@@ -119,8 +115,8 @@ func socketFrameCaller(frame []byte) (cmd string, caller protocol.TerminalID) {
 	return fields.Cmd, protocol.Deref(fields.CallerID)
 }
 
-func (d *Daemon) recordingCLICommand(conn net.Conn, frame []byte, parseErr error) (*analyticsReplyConn, func()) {
-	cmd, caller := socketFrameCaller(frame)
+func (d *Daemon) recordingCLICommand(conn net.Conn, frame []byte, parseErr error, caller protocol.SessionID) (*analyticsReplyConn, func()) {
+	cmd, _ := socketFrameCaller(frame)
 	props, sessionID := d.withAnalyticsCaller(nil, caller)
 	record := func(errorKind string) {
 		props["ok"] = errorKind == ""

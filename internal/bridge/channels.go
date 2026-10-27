@@ -77,7 +77,7 @@ func (c *Conn) Call(ctx context.Context, kind string, request, response any) err
 	if large {
 		route := map[string]string{}
 		if placed, ok := request.(protocol.Placed); ok {
-			route["cmd"] = placed.Command()
+			route["cmd"] = placed.CommandName()
 			if field := placed.Placement().Field; field != "" {
 				route[field] = placed.Locate()
 			}

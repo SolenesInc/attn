@@ -10,9 +10,9 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const bridgeCallTerminal = "terminal"
+const bridgeCall = "call"
 
-func (d *Daemon) terminalBridgeHandler() func(*bridge.Conn, ssh.NewChannel) {
+func (d *Daemon) callBridgeHandler(host string) func(*bridge.Conn, ssh.NewChannel) {
 	order := &terminalOrder{}
 	return func(conn *bridge.Conn, incoming ssh.NewChannel) {
 		var header struct {
@@ -37,6 +37,19 @@ func (d *Daemon) terminalBridgeHandler() func(*bridge.Conn, ssh.NewChannel) {
 				full, err := part.decode(raw)
 				if err != nil {
 					return nil, err
+				}
+				if host != "" {
+					if !d.isOutpostConn(host, conn) {
+						return nil, fmt.Errorf("outpost bridge was replaced")
+					}
+					row, err := d.resolveOutpost(host)
+					if err != nil {
+						return nil, err
+					}
+					ctx = context.WithValue(ctx, originKey{}, Origin{Host: host, Name: row.Name, bridge: conn})
+				}
+				if host != "" {
+					return Call[any](ctx, d.router(), full)
 				}
 				return part.run(ctx, full)
 			})
