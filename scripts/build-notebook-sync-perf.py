@@ -18,11 +18,12 @@ def notebook(s):
    lines.append('diag.NotebookProbeWalks.Add(1)');walks+=1
  assert walks==1
  s='\n'.join(lines)+'\n'
+ s=s.replace('func (d *Daemon) refreshNotebookSync(run *notebookSyncRun) {', 'func (d *Daemon) refreshNotebookSync(run *notebookSyncRun) {\n diag.NotebookProbeRefreshes.Add(1)',1)
  return s
 def diag(s):
  s=s.replace('"runtime"','"runtime"\n"sync/atomic"\n"github.com/prometheus/client_golang/prometheus"',1)
- s=s.replace('type Stats struct {','var NotebookProbeEvents atomic.Uint64\nvar NotebookProbeWalks atomic.Uint64\nvar NotebookProbeBroadcasts atomic.Uint64\n\ntype Stats struct {',1)
- s=s.replace('"pid":', '"notebook_engine_events": NotebookProbeEvents.Load(),\n"notebook_conflict_walks": NotebookProbeWalks.Load(),\n"notebook_broadcasts": NotebookProbeBroadcasts.Load(),\n"pid":',1)
+ s=s.replace('type Stats struct {','var NotebookProbeRefreshes atomic.Uint64\nvar NotebookProbeEvents atomic.Uint64\nvar NotebookProbeWalks atomic.Uint64\nvar NotebookProbeBroadcasts atomic.Uint64\n\ntype Stats struct {',1)
+ s=s.replace('"pid":', '"notebook_sync_refreshes": NotebookProbeRefreshes.Load(),\n"notebook_engine_events": NotebookProbeEvents.Load(),\n"notebook_conflict_walks": NotebookProbeWalks.Load(),\n"notebook_broadcasts": NotebookProbeBroadcasts.Load(),\n"pid":',1)
  s=s.replace('w.Header().Set("Content-Type", "application/json")', '''families, err := prometheus.DefaultGatherer.Gather()
  counts := map[string]float64{}
  if err == nil { for _, family := range families { if family.GetName() == "syncthing_events_total" { for _, metric := range family.Metric { for _, label := range metric.Label { if label.GetName() == "state" { counts[label.GetValue()] += metric.GetCounter().GetValue() } } } } } }

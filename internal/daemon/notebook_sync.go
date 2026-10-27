@@ -299,6 +299,20 @@ func (d *Daemon) startNotebookSync(home, root string, peers []string) error {
 			defer sub.Unsubscribe()
 			d.refreshNotebookConflicts(run)
 			d.refreshNotebookSync(run)
+			refreshReady := make(chan struct{}, 1)
+			var refresh *time.Timer
+			defer func() {
+				if refresh != nil {
+					refresh.Stop()
+				}
+			}()
+			queueRefresh := func() {
+				if refresh == nil {
+					refresh = d.life.AfterFunc("notebookRefresh", notebookProgressInterval, func() {
+						refreshReady <- struct{}{}
+					})
+				}
+			}
 			for {
 				select {
 				case event, ok := <-sub.C():
@@ -310,12 +324,17 @@ func (d *Daemon) startNotebookSync(home, root string, peers []string) error {
 						if data["folder"] == run.folder {
 							paths, _ := data["filenames"].([]string)
 							d.updateNotebookConflicts(run, paths)
+							d.refreshNotebookRows()
 						}
 					}
-					d.refreshNotebookSync(run)
+					queueRefresh()
 				case <-sub.Overflow():
 					d.logf("Notebook sync event overflow; refreshing conflicts and health")
 					d.refreshNotebookConflicts(run)
+					d.refreshNotebookRows()
+					queueRefresh()
+				case <-refreshReady:
+					refresh = nil
 					d.refreshNotebookSync(run)
 				case <-ctx.Done():
 					return
