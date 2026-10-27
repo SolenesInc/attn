@@ -211,6 +211,13 @@
   text-decoration: line-through;
 }
 
+.analytics-kind {
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  margin-right: 6px;
+}
+
 .analytics-footer {
   display: flex;
   justify-content: space-between;

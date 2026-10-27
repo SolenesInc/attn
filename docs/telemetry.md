@@ -10,10 +10,11 @@ shows every record, exactly as it is stored and sent.
 |---|---|---|
 | `analytics.enabled` | off | Records usage in the local outbox, gives new sessions `attn vent`, and shows Settings › Analytics. Experimental. |
 | `analytics.sharing_enabled` | off | Uploads the outbox to attn's maintainers. Needs `analytics.enabled`. |
-| `analytics.share_vents` | off | While sharing is on, queues each new vent, with its text, for the next upload. Without it, a vent leaves only when you press `x` on it. |
+| `analytics.share_vents` | off | While sharing is on, queues each new attn vent, with its text, for the next upload. Without it, a vent leaves only when you press `x` on it. |
+| `analytics.tool_vents` | off | Lets new sessions also send tool vents, about the agent's other tools. Tool vents never leave the machine. |
 
 With `analytics.enabled` off, nothing is recorded and nothing is sent, whatever
-the other two say.
+the others say.
 
 ## What is recorded
 
@@ -31,7 +32,7 @@ Every record is one line of JSON:
 | `app` | Shortcuts and palette commands used, Settings sections opened, queue advances, the kind of a UI error |
 | `cli` | The outcome of each `attn` command, whether an agent or a person ran it, and the agent's harness. An agent's command carries its hashed session as the subject, matching that session's facts. A command from a person's shell has no subject. |
 | `sample` | A resource sample of the daemon every 5 minutes: memory, goroutines, open files, CPU time, database size, bus size, connected clients |
-| `vent` | A vent you chose to send |
+| `vent` | An attn vent you chose to send |
 
 `seq` counts records within a stream, so the server stores each record once.
 
@@ -50,6 +51,14 @@ they are stored:
   delegation, automation, crew, chief) and its state. Repository facts carry
   three booleans: has an `AGENTS.md`, is a worktree, has a remote. Names and
   paths never leave.
+
+An agent files each vent as one of two kinds. An attn vent is about attn
+itself: its commands, its instructions, or how it works inside the harness. A
+tool vent is about the agent's other tools: a skill, another CLI or MCP server,
+the harness's own permissions and approval review. Agents learn about tool vents only when `analytics.tool_vents`
+was on when their session launched. Only attn vents can be sent. Press `s` on a
+vent to file it under the other kind; filing a queued vent under tools takes
+it out of the queue, and a sent vent stays attn.
 
 A vent record carries the vent whole, because a vent without its text says
 nothing:

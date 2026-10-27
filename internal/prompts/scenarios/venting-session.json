@@ -10,6 +10,7 @@
     "asks_enabled": "true",
     "vent_enabled": "true",
     "crew_priming": "",
-    "self_report_pull_requests": "false"
+    "self_report_pull_requests": "false",
+    "tool_vents_enabled": "false"
   }
 }

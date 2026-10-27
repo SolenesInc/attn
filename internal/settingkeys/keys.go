@@ -84,6 +84,7 @@ const (
 	SettingAnalyticsEnabled              MachineSetting = "analytics.enabled"
 	SettingAnalyticsSharingEnabled       HomeSetting    = "analytics.sharing_enabled"
 	SettingAnalyticsShareVents           HomeSetting    = "analytics.share_vents"
+	SettingAnalyticsToolVents            HomeSetting    = "analytics.tool_vents"
 	SettingWorktreeSweepEnabled          MachineSetting = "worktree_sweep_enabled"
 	SettingSessionsFilters               HomeSetting    = "sessions.filters"
 	SettingPluginPriorities              HomeSetting    = "plugin_provider_priorities"

@@ -139,9 +139,42 @@
                 },
                 "children": [
                   {
-                    "kind": "text",
-                    "id": "session.vent-guidance",
-                    "source": "content/session/vent-guidance.md"
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "session.vent-guidance",
+                        "source": "content/session/vent-guidance.md"
+                      },
+                      {
+                        "kind": "choose",
+                        "condition": {
+                          "field": {
+                            "name": "tool_vents_enabled",
+                            "kind": "flag",
+                            "description": "Offer tool vents when the session launched with analytics.tool_vents on."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "session.vent-tools",
+                            "source": "content/session/vent-tools.md"
+                          },
+                          {
+                            "kind": "text",
+                            "id": "session.vent-attn-only",
+                            "source": "content/session/vent-attn-only.md"
+                          }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "session.vent-rules",
+                        "source": "content/session/vent-rules.md"
+                      }
+                    ]
                   }
                 ]
               },
@@ -5357,5 +5390,5 @@
       ]
     }
   ],
-  "definitions_hash": "4c0498ed632fea8ff3ba7f9b84beafd4a474e84632c0e185f0286be9b587eddb"
+  "definitions_hash": "3076396f5adac2505158d1d3e1ce054291d93220c45240826c21d59d738089cf"
 }

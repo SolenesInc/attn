@@ -110,7 +110,7 @@ import { handleProfileDaemonEvent, syncNavigationFromProfiles, type MigrationRes
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { usePendingTerminalInput } from '../store/pendingTerminalInput';
-import type { Desktop } from '../types/generated';
+import type { Desktop, VentKind } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
@@ -3666,6 +3666,9 @@ export function useDaemonSocket({
   const sendSetVentSend = useCallback((ventId: string, send: boolean): Promise<true> =>
     sendRequest('set_vent_send', { vent_id: ventId, send }, 'Changing where the vent goes timed out'), [sendRequest]);
 
+  const sendSetVentKind = useCallback((ventId: string, kind: VentKind): Promise<true> =>
+    sendRequest('set_vent_kind', { vent_id: ventId, kind }, 'Filing the vent timed out'), [sendRequest]);
+
   const sendAskAnswer = useCallback((askId: string, answers: AskAnswer[], note: string): Promise<true> =>
     sendRequest('ask_answer', { ask_id: askId, answers, ...(note.trim() ? { note } : {}) }, 'Sending the answer timed out'), [sendRequest]);
 
@@ -4389,6 +4392,7 @@ export function useDaemonSocket({
     sendClearAnalyticsRecords,
     sendForgetAnalyticsInstall,
     sendSetVentSend,
+    sendSetVentKind,
     sendAskAnswer,
     sendRestartSharedCodex,
     sendInstallCodexUpdate,

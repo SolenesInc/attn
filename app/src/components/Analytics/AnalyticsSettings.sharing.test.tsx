@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { VentSend, type Vent } from '../../types/generated';
+import { VentKind, VentSend, type Vent } from '../../types/generated';
 import { daemonSession, DEFAULT_PROFILE_ID } from '../../test/daemonFixtures';
 import { gesture } from '../../test/renderApp';
 import type { ScriptedDaemon } from '../../test/scriptedDaemon';
@@ -11,6 +11,7 @@ const REFUSAL = 'attn-ingest refused the batch: events_per_install_per_minute is
 const VENT: Vent = {
   id: 'v-new',
   session_id: 's1',
+  kind: VentKind.Attn,
   text: '`attn seed tend s-f68sja` refused: held by a session that ended two hours ago.',
   created_at: '2026-10-24T14:02:11Z',
   context: {
@@ -30,6 +31,13 @@ function serveSharing(daemon: ScriptedDaemon, status: { last_refusal?: string },
     vents = vents.map((v) => (v.id === vent_id ? { ...v, send: send ? VentSend.Queued : undefined } : v));
     return [
       { event: 'set_vent_send_result', success: true, vent_id },
+      { event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents },
+    ];
+  });
+  daemon.on('set_vent_kind', ({ vent_id, kind }) => {
+    vents = vents.map((v) => (v.id === vent_id ? { ...v, kind: kind as VentKind, send: kind === VentKind.Tools ? undefined : v.send } : v));
+    return [
+      { event: 'set_vent_kind_result', success: true, vent_id },
       { event: 'vents_updated', profile_id: DEFAULT_PROFILE_ID, vents },
     ];
   });
@@ -66,7 +74,7 @@ describe('Settings › Analytics sharing', () => {
     expect(daemon.sentOf('set_vent_send').map(({ send }) => send)).toEqual([false]);
     expect(inspector().getByText('Kept on this machine')).toBeInTheDocument();
     await press(daemon, 'm');
-    expect(screen.getByTestId('analytics-machine')).toHaveTextContent('New vents are sent with their text.');
+    expect(screen.getByTestId('analytics-machine')).toHaveTextContent('New attn vents are sent with their text.');
   });
 
   it('sends a vent with x, keeps it with x again, and undoes with u', async () => {
@@ -81,6 +89,36 @@ describe('Settings › Analytics sharing', () => {
     expect(daemon.sentOf('set_vent_send').map(({ send }) => send)).toEqual([true, false, true]);
   });
 
+  it('keeps a tool vent here with sharing on, and sends it with x once s files it under attn, and u puts it back in the queue', async () => {
+    const daemon = await openAnalytics({ 'analytics.sharing_enabled': 'true' }, {}, [{ ...VENT, kind: VentKind.Tools }]);
+    expect(inspector().getByText('· tool vents never leave it')).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Vents' })).toHaveTextContent(/fix garden bell staleness.*tools/);
+    await press(daemon, 'x');
+    expect(daemon.sentOf('set_vent_send')).toEqual([]);
+    await press(daemon, 's');
+    expect(screen.getByRole('status')).toHaveTextContent('Filed “fix garden bell staleness” under attn.');
+    expect(inspector().queryByText('· tool vents never leave it')).toBeNull();
+    await press(daemon, 'x');
+    await press(daemon, 's');
+    expect(screen.getByRole('status')).toHaveTextContent('Filed “fix garden bell staleness” under tools; it stays on this machine.');
+    expect(inspector().getByText('Kept on this machine')).toBeInTheDocument();
+    expect(daemon.sentOf('set_vent_kind').map(({ kind }) => kind)).toEqual([VentKind.Attn, VentKind.Tools]);
+    expect(daemon.sentOf('set_vent_send').map(({ send }) => send)).toEqual([true]);
+    await press(daemon, 'u');
+    expect(inspector().getByText('Sending with the next batch')).toBeInTheDocument();
+    expect(daemon.sentOf('set_vent_kind').map(({ kind }) => kind)).toEqual([VentKind.Attn, VentKind.Tools, VentKind.Attn]);
+    expect(daemon.sentOf('set_vent_send').map(({ send }) => send)).toEqual([true, true]);
+  });
+
+  it('turns tool vents on from the machine settings', async () => {
+    const daemon = await openAnalytics({});
+    await press(daemon, 'm');
+    const row = screen.getByText('Tool vents').closest('.settings-row-card') as HTMLElement;
+    expect(row).toHaveTextContent('Agents vent only about attn.');
+    await gesture(daemon, () => fireEvent.click(within(row).getByRole('button', { name: 'Enable' })));
+    expect(savedSettings(daemon)).toEqual([['analytics.tool_vents', 'true']]);
+  });
+
   it('shows a refusal with its limit on the strip and in the Share row', async () => {
     const daemon = await openAnalytics({ 'analytics.sharing_enabled': 'true' }, { last_refusal: REFUSAL });
     expect(page()).toHaveTextContent('SharingRefused · 12 waiting');
@@ -93,7 +131,7 @@ describe('Settings › Analytics sharing', () => {
     const daemon = await openAnalytics({ 'analytics.sharing_enabled': 'true', 'analytics.share_vents': 'true' });
     await press(daemon, 'm');
     expect(screen.getByTestId('analytics-machine')).toHaveTextContent('Last sent');
-    expect(screen.getByTestId('analytics-machine')).toHaveTextContent('New vents are sent with their text.');
+    expect(screen.getByTestId('analytics-machine')).toHaveTextContent('New attn vents are sent with their text.');
     const share = screen.getByText("Share with attn's maintainers").closest('.settings-row-card') as HTMLElement;
     await gesture(daemon, () => fireEvent.click(within(share).getByRole('button', { name: 'Disable' })));
     expect(savedSettings(daemon)).toEqual([['analytics.sharing_enabled', 'false']]);

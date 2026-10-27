@@ -1,0 +1,10 @@
+kind: changed
+area: agents
+change: >
+  Agents now say what each vent is about with `attn vent --about attn|tools`.
+  Attn vents report attn itself and are the only ones that can be sent to
+  attn's maintainers. Tool vents report the agent's other tools (skills,
+  other CLIs, harness permissions), never leave the machine, and are offered only
+  when Settings › Analytics › Tool vents is on, off by default. Press `s` on a
+  vent to file it under the other kind.
+symptom: Agents vented about skills, other tools and permission reviews, not attn.

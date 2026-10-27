@@ -27,16 +27,26 @@ const (
 	ventsRetention     = 30 * 24 * time.Hour
 )
 
-func (d *Daemon) launchVentIntent(sessionID protocol.SessionID) (bool, []string) {
-	if intent, ok := d.store.LaunchIntent(sessionID); ok {
-		return intent.Vent, intent.Experimental
-	}
-	return d.analyticsEnabled(), d.experimentalSettingsOn()
+type ventLaunch struct {
+	Vent         bool
+	ToolVents    bool
+	Experimental []string
 }
 
-func (d *Daemon) launchedWithVent(sessionID protocol.SessionID) bool {
-	vent, _ := d.launchVentIntent(sessionID)
-	return vent
+func (d *Daemon) launchVentIntent(sessionID protocol.SessionID) ventLaunch {
+	if intent, ok := d.store.LaunchIntent(sessionID); ok {
+		return ventLaunch{Vent: intent.Vent, ToolVents: intent.ToolVents, Experimental: intent.Experimental}
+	}
+	vent := d.analyticsEnabled()
+	return ventLaunch{Vent: vent, ToolVents: vent && d.toolVentsEnabled(), Experimental: d.experimentalSettingsOn()}
+}
+
+func (v ventLaunch) applyTo(intent *store.LaunchIntent) {
+	intent.Vent, intent.ToolVents, intent.Experimental = v.Vent, v.ToolVents, v.Experimental
+}
+
+func (d *Daemon) toolVentsEnabled() bool {
+	return parseBooleanSetting(d.homeSetting(SettingAnalyticsToolVents))
 }
 
 func (d *Daemon) experimentalSettingsOn() []string {
@@ -55,7 +65,7 @@ func (d *Daemon) handleRecordVent(conn net.Conn, msg *protocol.RecordVentMessage
 		d.sendError(conn, err.Error())
 		return
 	}
-	if d.analyticsSharing() && parseBooleanSetting(d.homeSetting(SettingAnalyticsShareVents)) {
+	if vent.Kind == protocol.VentKindAttn && d.analyticsSharing() && parseBooleanSetting(d.homeSetting(SettingAnalyticsShareVents)) {
 		if err := d.queueVentRecord(vent); err != nil {
 			d.logf("vent %s: queueing its record: %v", vent.ID, err)
 		} else {
@@ -68,6 +78,9 @@ func (d *Daemon) handleRecordVent(conn net.Conn, msg *protocol.RecordVentMessage
 }
 
 func (d *Daemon) queueVentRecord(vent storedVent) error {
+	if vent.Kind != protocol.VentKindAttn {
+		return fmt.Errorf("vent %s is about the agent's other tools, so it stays on this machine. File it under attn first if it is about attn", vent.ID)
+	}
 	record, err := vent.record()
 	if err != nil {
 		return err
@@ -128,6 +141,36 @@ func (d *Daemon) setVentSend(id string, send bool, profileID string) error {
 	return nil
 }
 
+func (d *Daemon) handleSetVentKind(client *wsClient, msg *protocol.SetVentKindMessage) {
+	result := protocol.SetVentKindResultMessage{Event: protocol.EventSetVentKindResult, RequestID: msg.RequestID, VentID: msg.VentID}
+	if err := d.setVentKind(strings.TrimSpace(msg.VentID), msg.Kind, client.selectedProfile()); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) setVentKind(id string, kind protocol.VentKind, profileID string) error {
+	if kind != protocol.VentKindAttn && kind != protocol.VentKindTools {
+		return fmt.Errorf("%q is not a vent kind: use attn or tools", kind)
+	}
+	if _, err := d.profileVent(id, profileID); err != nil {
+		return err
+	}
+	d.analyticsUpload.run.Lock()
+	changed, err := d.store.SetVentKind(id, kind)
+	d.analyticsUpload.run.Unlock()
+	switch {
+	case errors.Is(err, store.ErrVentSent):
+		return fmt.Errorf("vent %s was already sent to attn's maintainers, so it stays an attn vent", id)
+	case err != nil || !changed:
+		return err
+	}
+	d.publishFact(FactVentChanged, id, nil)
+	return nil
+}
+
 func (d *Daemon) announceVentSends(vents []store.Vent) {
 	if len(vents) == 0 {
 		return
@@ -148,8 +191,18 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 	if !d.analyticsEnabled() {
 		return storedVent{}, errors.New("usage analytics is off on this machine, so attn records no vents. Keep working")
 	}
-	if !d.launchedWithVent(sessionID) {
+	launch := d.launchVentIntent(sessionID)
+	if !launch.Vent {
 		return storedVent{}, errors.New("this session launched while usage analytics was off, so it cannot vent. Keep working")
+	}
+	switch msg.Kind {
+	case protocol.VentKindAttn:
+	case protocol.VentKindTools:
+		if !d.toolVentsEnabled() || !launch.ToolVents {
+			return storedVent{}, fmt.Errorf("tool vents are off for this session (%s), so it vents only about attn itself. Keep working", SettingAnalyticsToolVents)
+		}
+	default:
+		return storedVent{}, fmt.Errorf("%q is not a vent kind: a vent is about attn or about your other tools", msg.Kind)
 	}
 	text := strings.TrimSpace(msg.Text)
 	if text == "" {
@@ -163,7 +216,7 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 		return storedVent{}, err
 	}
 	vent := storedVent{store.Vent{
-		ID: id, ProfileID: session.ProfileID, SessionID: sessionID, Text: text,
+		ID: id, ProfileID: session.ProfileID, SessionID: sessionID, Kind: msg.Kind, Text: text,
 		Turn:      fmt.Sprintf("%d:%d", d.startedAt.UnixNano(), d.monitorRun(sessionID)),
 		Context:   d.ventContext(session),
 		CreatedAt: time.Now(),
@@ -180,12 +233,11 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 
 func (d *Daemon) ventContext(session *protocol.Session) protocol.VentContext {
 	intent, _ := d.store.LaunchIntent(session.ID)
-	_, experimental := d.launchVentIntent(session.ID)
 	context := protocol.VentContext{
 		SessionLabel: session.Label,
 		Harness:      session.Agent,
 		Build:        d.analyticsBuild(),
-		Experimental: experimental,
+		Experimental: d.launchVentIntent(session.ID).Experimental,
 	}
 	if context.Experimental == nil {
 		context.Experimental = []string{}
@@ -470,7 +522,7 @@ func nonEmpty(values ...string) []string {
 }
 
 func (v storedVent) wire() protocol.Vent {
-	wire := protocol.Vent{ID: v.ID, SessionID: v.SessionID, Text: v.Text, Context: v.Context, CreatedAt: v.CreatedAt.UTC().Format(time.RFC3339Nano)}
+	wire := protocol.Vent{ID: v.ID, SessionID: v.SessionID, Kind: v.Kind, Text: v.Text, Context: v.Context, CreatedAt: v.CreatedAt.UTC().Format(time.RFC3339Nano)}
 	if !v.WithdrawnAt.IsZero() {
 		wire.WithdrawnAt = protocol.Ptr(v.WithdrawnAt.UTC().Format(time.RFC3339Nano))
 	}

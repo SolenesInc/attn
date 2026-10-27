@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "venting-session-tools",
+  "description": "Ordinary session that launched with usage analytics and tool vents on, so it can vent about attn and about the machine setup.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "notebook_root": "",
+    "garden_available": "true",
+    "asks_enabled": "true",
+    "vent_enabled": "true",
+    "crew_priming": "",
+    "self_report_pull_requests": "false",
+    "tool_vents_enabled": "true"
+  }
+}

@@ -165,6 +165,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdPlantVentSeed:                 commandMetadata(false, true),
 	protocol.CmdUnplantVentSeed:               commandMetadata(false, true),
 	protocol.CmdSetVentSend:                   commandMetadata(false, true),
+	protocol.CmdSetVentKind:                   commandMetadata(false, true),
 	protocol.CmdSpawnSession:                  commandMetadata(true, true),
 	protocol.CmdAttachSession:                 commandMetadata(true, true),
 	protocol.CmdDetachSession:                 commandMetadata(true, true),

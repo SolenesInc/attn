@@ -379,7 +379,7 @@ func (d *Daemon) announceReload(sessionID protocol.SessionID, opts ptybackend.Sp
 func (d *Daemon) recordReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
 	intent := launchIntentFromSpawnOptions(opts, d.isChiefOfStaffSession(sessionID))
 	intent.Asks = d.launchedWithAsks(sessionID)
-	intent.Vent, intent.Experimental = d.launchVentIntent(sessionID)
+	d.launchVentIntent(sessionID).applyTo(&intent)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
 		intent.AutoMode = prior.AutoMode
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode

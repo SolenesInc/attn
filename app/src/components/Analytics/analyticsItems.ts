@@ -1,4 +1,4 @@
-import { VentSend, type Seed, type Vent } from '../../types/generated';
+import { VentKind, VentSend, type Seed, type Vent } from '../../types/generated';
 
 export const VIEWS = ['vents', 'all', 'bus', 'app', 'cli', 'sample'] as const;
 export type View = (typeof VIEWS)[number];
@@ -32,6 +32,7 @@ export function ventDestination(vent: Vent, sharing: boolean): VentDestination {
   const sent = vent.send === VentSend.Sent;
   const queued = !withdrawn && vent.send === VentSend.Queued;
   if (sent) return { label: "Sent to attn's maintainers", note: '', leaving: true, movable: false };
+  if (vent.kind === VentKind.Tools) return { label: 'Kept on this machine', note: 'tool vents never leave it', leaving: false, movable: false };
   if (queued) return { label: sharing ? 'Sending with the next batch' : 'Sending once sharing is on', note: '', leaving: true, movable: true };
   return { label: 'Kept on this machine', note: withdrawn ? 'withdrawn' : sharing ? '' : 'sharing is off', leaving: false, movable: sharing && !withdrawn };
 }

@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { describe, expect, it, vi } from 'vitest';
-import type { Vent } from '../../types/generated';
+import { VentKind, type Vent } from '../../types/generated';
 import { daemonSeed, daemonSession, DEFAULT_PROFILE_ID } from '../../test/daemonFixtures';
 import { gesture } from '../../test/renderApp';
 import type { ScriptedDaemon } from '../../test/scriptedDaemon';
@@ -11,6 +11,7 @@ function vent(id: string, overrides: Partial<Vent> = {}): Vent {
   return {
     id,
     session_id: 's1',
+    kind: VentKind.Attn,
     text: '`attn seed tend s-f68sja` refused: held by a session that ended two hours ago.',
     created_at: '2026-10-24T14:02:11Z',
     context: {

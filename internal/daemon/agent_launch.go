@@ -22,7 +22,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		if launch.CrewMemoryEnabled {
 			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMORY_ENABLED=1")
 		}
-		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", launch.QuickCapture), fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent))
+		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", launch.QuickCapture), fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents))
 		return nil
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
@@ -40,7 +40,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		Model:                 opts.Model, Effort: opts.Effort, AutoCompactWindow: opts.ContextWindowCap,
 		Executable: executable, SocketPath: d.socketPath,
 		WrapperPath:  launchenv.ActiveAttnExecutable(),
-		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks, Vent: launch.Vent,
+		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks, Vent: launch.Vent, ToolVents: launch.ToolVents,
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
 		CrewMemoryEnabled:      launch.CrewMemoryEnabled,
 		SelfReportPullRequests: launch.SelfReportPullRequests,

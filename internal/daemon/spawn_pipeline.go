@@ -390,7 +390,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
 	intent.Asks = d.launchedWithAsks(session.ID)
-	intent.Vent, intent.Experimental = d.launchVentIntent(session.ID)
+	d.launchVentIntent(session.ID).applyTo(&intent)
 	intent.AutoMode = msg.AutoMode
 	if req.autoModeDriver {
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)

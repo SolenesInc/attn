@@ -52,10 +52,11 @@ function shareCopy(sharing: boolean, status: AnalyticsStatus | null, offeringDel
 
 const toggled = (on: boolean) => (on ? 'false' : 'true');
 
-export function AnalyticsMachine({ status, sharing, sendVents, onSetSetting, onDisableRecording, onClear, onForget }: {
+export function AnalyticsMachine({ status, sharing, sendVents, toolVents, onSetSetting, onDisableRecording, onClear, onForget }: {
   status: AnalyticsStatus | null;
   sharing: boolean;
   sendVents: boolean;
+  toolVents: boolean;
   onSetSetting: (key: string, value: string) => void;
   onDisableRecording: () => void;
   onClear: () => void;
@@ -78,10 +79,13 @@ export function AnalyticsMachine({ status, sharing, sendVents, onSetSetting, onD
         </Confirmable>
       </Row>
       {(sharing || sendVents) && (
-        <Row title="Send vents" copy={sendVents ? 'New vents are sent with their text.' : 'Vents stay here unless you send one.'}>
+        <Row title="Send vents" copy={sendVents ? 'New attn vents are sent with their text.' : 'Vents stay here unless you send one.'}>
           <button type="button" className="settings-action" onClick={() => onSetSetting('analytics.share_vents', toggled(sendVents))}>{sendVents ? 'Disable' : 'Enable'}</button>
         </Row>
       )}
+      <Row title="Tool vents" copy={toolVents ? 'New sessions also vent about their other tools: skills, other CLIs, harness permissions. These never leave this machine.' : 'Agents vent only about attn. Turn on to also hear about their other tools (skills, other CLIs, harness permissions), kept on this machine.'}>
+        <button type="button" className="settings-action" onClick={() => onSetSetting('analytics.tool_vents', toggled(toolVents))}>{toolVents ? 'Disable' : 'Enable'}</button>
+      </Row>
       <Row title="Kept on this machine for 7 days" copy={`${status ? `${recordCount(status.records)}, ${formatBytes(status.bytes)}. ` : ''}Dismissed and withdrawn vents are kept 30 days.`} />
       <Row title="Forget this install" copy="Deletes this install's data on the server and starts a new install id.">
         <Confirmable asking={confirm === 'forget'} label="Delete from server" onYes={onForget} onDone={done}>

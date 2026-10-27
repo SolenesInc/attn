@@ -35,7 +35,8 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 }
 
 func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, isChief, selfReportPullRequests bool) (hooks.Launch, []string, error) {
-	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), Vent: d.launchedWithVent(sessionID), SelfReportPullRequests: selfReportPullRequests, QuickCapture: parseBooleanSetting(d.homeSetting(SettingQuickCaptureEnabled))}
+	vents := d.launchVentIntent(sessionID)
+	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), Vent: vents.Vent, ToolVents: vents.ToolVents, SelfReportPullRequests: selfReportPullRequests, QuickCapture: parseBooleanSetting(d.homeSetting(SettingQuickCaptureEnabled))}
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
 		if err != nil {
