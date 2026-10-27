@@ -68,6 +68,21 @@ func TestDuplexBulkLeavesTerminalEchoAndHeartbeatsResponsive(t *testing.T) {
 				}
 			})
 		}
+		measureEcho := func() time.Duration {
+			began := time.Now()
+			if err := client.Call(w.ctx, "input", struct{}{}, nil); err != nil {
+				t.Fatal(err)
+			}
+			if event := <-terminal.Events(); string(event.Data) != "echo" {
+				t.Fatalf("terminal output=%q", event.Data)
+			}
+			ack(terminal)
+			return time.Since(began)
+		}
+		idle := make([]time.Duration, 100)
+		for i := range idle {
+			idle[i] = measureEcho()
+		}
 		payload := bytes.Repeat([]byte("duplex-bulk"), 1<<20)
 		results := make(chan error, 4)
 		for _, s := range []*bridge.BulkStream{a, b} {
@@ -88,21 +103,14 @@ func TestDuplexBulkLeavesTerminalEchoAndHeartbeatsResponsive(t *testing.T) {
 		}
 		delays := make([]time.Duration, 100)
 		for i := range delays {
-			began := time.Now()
-			if err := client.Call(w.ctx, "input", struct{}{}, nil); err != nil {
-				t.Fatal(err)
-			}
-			if event := <-terminal.Events(); string(event.Data) != "echo" {
-				t.Fatalf("terminal output=%q", event.Data)
-			}
-			ack(terminal)
-			delays[i] = time.Since(began)
+			delays[i] = measureEcho()
 		}
 		for range 4 {
 			if err := <-results; err != nil {
 				t.Fatal(err)
 			}
 		}
+		heartbeatGap := max(client.MaxHeartbeatGap(), server.MaxHeartbeatGap())
 		_ = client.Close()
 		_ = server.Close()
 		workers.Wait()
@@ -111,10 +119,11 @@ func TestDuplexBulkLeavesTerminalEchoAndHeartbeatsResponsive(t *testing.T) {
 			t.Errorf("bulk caused heartbeat state=%s", state)
 		}
 		slices.Sort(delays)
+		slices.Sort(idle)
 		if delays[99] > 200*time.Millisecond {
 			t.Errorf("duplex bulk echo max=%s exceeds bound=%s", delays[99], 200*time.Millisecond)
 		}
-		t.Logf("rate=2800000B/s bulk_bytes_each_direction=%d window=%d echo_p50=%s echo_p99=%s echo_max=%s", len(payload), bridge.BulkCredit, delays[50], delays[98], delays[99])
+		t.Logf("rate=2800000B/s bulk_bytes_each_direction=%d window=%d idle_p99=%s echo_p50=%s echo_p99=%s echo_max=%s heartbeat_max=%s", len(payload), bridge.BulkCredit, idle[98], delays[50], delays[98], delays[99], heartbeatGap)
 	})
 }
 
