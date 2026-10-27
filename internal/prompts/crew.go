@@ -2,6 +2,7 @@ package prompts
 
 func crewRecipient() Recipient {
 	name := TextField("display_name", "Display name")
+	v2 := FlagField("crew_v2_enabled", "Use the crew v2 operating model.")
 	home := TextField("home_dir", "Home dir")
 	charter := FlagField("has_charter", "A charter exists")
 	cwd := TextField("cwd", "Cwd")
@@ -19,16 +20,38 @@ func crewRecipient() Recipient {
 
 	identity := Use("crew.identity", "content/crew/identity.md", Bind("display_name", Input(name)), Bind("home_dir", Input(home)),
 		Bind("home_ownership", Use("crew.home-files", "content/crew/home-files.md")))
-	existingCharter := template("crew.charter", "content/crew/charter.md", TextField("charter_file", "Charter file"))
-	firstDay := template("crew.first-day", "content/crew/first-day.md", TextField("charter_path", "Charter path"))
+	v2Identity := template("crew.v2.identity", "content/crew/v2/identity.md", name, home)
+	charterFile := TextField("charter_file", "Charter file")
+	existingCharter := template("crew.charter", "content/crew/charter.md", charterFile)
+	charterPath := TextField("charter_path", "Charter path")
+	v2Charter := template("crew.v2.charter", "content/crew/v2/charter.md", charterPath)
+	firstDay := template("crew.first-day", "content/crew/first-day.md", charterPath)
+	v2FirstDay := template("crew.v2.first-day", "content/crew/v2/first-day.md", charterPath)
 	launchDirectory := template("crew.cwd", "content/crew/cwd.md", cwd)
 	awarenessDirectories := template("crew.awareness", "content/crew/awareness.md", awareness)
-	letter := template("crew.letter", "content/crew/letter.md", TextField("handoff_name", "Handoff name"))
-	olderLetters := template("crew.older-letters", "content/crew/older-letters.md", handoffsDirname, older)
-	noLetter := template("crew.no-letter", "content/crew/no-letter.md", TextField("handoffs_dir", "Handoffs dir"))
-	closure := template("crew.closure", "content/crew/closure.md", handoffsDirname, name)
+	launchContext := Compose(
+		Choose(Enabled(v2),
+			Join("", v2Identity, Choose(Enabled(charter), v2Charter, v2FirstDay), When(Present(cwd), launchDirectory), When(Present(awareness), awarenessDirectories)),
+			Join("", identity, Choose(Enabled(charter), existingCharter, firstDay), When(Present(cwd), launchDirectory), When(Present(awareness), awarenessDirectories))),
+		When(Enabled(v2), Use("crew.v2.compaction", "content/crew/v2/compaction.md")))
+	handoffName := TextField("handoff_name", "Handoff name")
+	letter := Choose(Enabled(v2),
+		template("crew.v2.letter", "content/crew/v2/letter.md", handoffName),
+		template("crew.letter", "content/crew/letter.md", handoffName))
+	olderLetters := Choose(Enabled(v2),
+		template("crew.v2.older-letters", "content/crew/v2/older-letters.md", handoffsDirname),
+		template("crew.older-letters", "content/crew/older-letters.md", handoffsDirname, older))
+	handoffsDir := TextField("handoffs_dir", "Handoffs dir")
+	noLetter := Choose(Enabled(v2),
+		template("crew.v2.no-letter", "content/crew/v2/no-letter.md", handoffsDir),
+		template("crew.no-letter", "content/crew/no-letter.md", handoffsDir))
+	closure := Choose(Enabled(v2),
+		template("crew.v2.closure", "content/crew/v2/closure.md", handoffsDirname),
+		template("crew.closure", "content/crew/closure.md", handoffsDirname, name))
 
-	heldList := template("crew.garden", "content/crew/garden.md", heldSeeds)
+	heldList := Choose(Enabled(v2),
+		template("crew.v2.garden", "content/crew/v2/garden.md", heldSeeds),
+		template("crew.garden", "content/crew/garden.md", heldSeeds))
 	heldMore := template("crew.garden-more", "content/crew/garden-more.md", heldTotal, heldLimit)
 	plots := template("crew.garden-plots", "content/crew/garden-plots.md", plotReady)
 	noHoldings := Use("crew.garden-empty", "content/crew/garden-empty.md")
@@ -43,17 +66,15 @@ func crewRecipient() Recipient {
 					noHoldings))),
 		On("priming", "launch_instructions", "internal/crew.Priming.Block: appended to launch instructions. The adapter prepares paths, display name and bounded handoff text.",
 			Compose(
-				Join("", identity,
-					Choose(Enabled(charter), existingCharter, firstDay),
-					When(Present(cwd), launchDirectory),
-					When(Present(awareness), awarenessDirectories)),
+				launchContext,
+				When(Enabled(v2), Use("crew.v2.operating-model", "content/crew/v2/operating-model.md")),
 				Choose(Present(handoff),
 					Compose(Join("", letter, When(Present(older), olderLetters)), Input(handoff)),
 					noLetter),
 				When(Present(holdings), Input(holdings)),
 				closure)),
-		On("wake", "user_message", "crew_wake.go: today's first message.", Use("crew.wake", "content/crew/wake.md")),
-		On("successor", "user_message", "crew_handoff.go: successor after a nap.", Use("crew.successor", "content/crew/successor.md")),
+		On("wake", "user_message", "crew_wake.go: today's first message.", Choose(Enabled(v2), Use("crew.v2.wake", "content/crew/v2/wake.md"), Use("crew.wake", "content/crew/wake.md"))),
+		On("successor", "user_message", "crew_handoff.go: successor after a nap.", Choose(Enabled(v2), Use("crew.v2.successor", "content/crew/v2/successor.md"), Use("crew.successor", "content/crew/successor.md"))),
 		On("sleep-requested", "user_message", "crew_sleep.go: user requested closure.", Use("crew.sleep-requested", "content/crew/sleep-requested.md")),
 		On("heartbeat", "user_message", "crew_lifecycle.go: keep the context cache warm.", Use("crew.heartbeat", "content/crew/heartbeat.md")),
 		On("sleep-away", "user_message", "crew_lifecycle.go: close after the user has been away.", Use("crew.sleep-away", "content/crew/sleep-away.md")),

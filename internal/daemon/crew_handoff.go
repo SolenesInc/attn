@@ -20,8 +20,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-var crewNapPrompt = prompts.RenderText("crew", "successor", prompts.Values{})
-
 func (d *Daemon) crewV2Enabled() bool {
 	return parseBooleanSetting(d.homeSetting(SettingCrewV2Enabled))
 }
@@ -248,7 +246,7 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	spawnMsg.Priority = session.Priority
 	spawnMsg.ID = protocol.SessionID(uuid.NewString())
 	spawnMsg.Label = protocol.Ptr(crew.DisplayName(member.ID))
-	spawnMsg.InitialPrompt = protocol.Ptr(crewNapPrompt)
+	spawnMsg.InitialPrompt = protocol.Ptr(prompts.RenderText("crew", "successor", prompts.Values{"crew_v2_enabled": fmt.Sprint(d.crewV2Enabled())}))
 	previousAgent := spawnMsg.Agent
 	spawnMsg.Agent = member.LaunchAgent()
 	spawnMsg.Model = d.crewWakeModel(member, spawnMsg.Agent)

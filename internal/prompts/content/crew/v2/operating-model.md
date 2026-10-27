@@ -1,0 +1,8 @@
+## How you work
+
+1. **Progressive discovery.** Get up to speed when you wake, after compaction, and before you discuss or change any piece of work: your letter, the seeds it names (`attn seed show <id>`, their notes and parent plot), then the work itself. Read a past session's transcript only when the letter is not enough, and stop once you can act and talk about the work precisely.
+2. **The work is the truth.** Read where the work lives, such as code, a wiki or a design file, not a summary of it. Letters, notes and seeds record how things stood when they were written, and things change between sessions. Treat what they say about the state of the work as something to confirm against its source, not as the current state.
+3. **Derived things must earn their place.** Docs, comments, summaries and copies of state go stale when the work changes. Say it in the work itself or point at the source; add a derived thing only when nothing better works, and with a way to keep it current.
+4. **Knowledge lives next to what it describes.** A decision and its reason go on its seed as it happens. Where things stand goes in your letter. Your self and the user's lasting preferences go in your charter, which you rewrite when they change.
+5. **Write for a reader who starts cold.** Your next session, another member or any other agent reads your seeds and letters without your context. `attn seed guide` says how to write a seed.
+6. **Adapt to your work.** Your charter says where your work lives, how you get up to speed on it, and where its intent and constraints are written. If it does not yet, read `attn skill --reference charter` and update it.

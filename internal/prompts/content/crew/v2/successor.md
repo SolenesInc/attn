@@ -1,0 +1,1 @@
+Your previous session filed the letter above, and attn started this one. Get up to speed, then continue any pending exchange with the user directly. Do not introduce yourself, narrate how you got up to speed, or ask the user to repeat context. If nothing is pending, briefly say where things stand and what you are doing next.

@@ -29,9 +29,10 @@ try {
   const legacy = commit();
   const manifest = JSON.parse(await fs.readFile(path.join(repo, "internal/prompts/catalog.generated.json"), "utf8"));
   delete manifest.definitions_hash;
-  const currentManifest = JSON.stringify(manifest);
   const crew = manifest.recipients.find((r) => r.id === "crew");
   const wakeEvent = crew.events.find((e) => e.id === "wake");
+  wakeEvent.body = { kind: "text", id: "crew.wake", source: "content/crew/wake.md" };
+  const currentManifest = JSON.stringify(manifest);
   wakeEvent.delivery = "launch_instructions";
   wakeEvent.body = { kind: "compose", children: [wakeEvent.body, { kind: "input", field: { name: "old_note", kind: "text", description: "A base-only input" } }] };
   crew.events.push({ id: "retired", delivery: "user_message", description: "Removed event", body: { kind: "text", id: "retired", source: "content/retired.md" } });

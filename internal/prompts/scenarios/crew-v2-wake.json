@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "id": "crew-v2-wake",
+  "description": "Crew v2: First message after waking a crew member.",
+  "recipient": "crew",
+  "event": "wake",
+  "values": {
+    "crew_v2_enabled": "true"
+  }
+}

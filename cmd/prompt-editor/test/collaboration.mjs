@@ -45,6 +45,7 @@ try {
         await fs.cp(path.join(repo, "internal/prompts", name), path.join(root, name), { recursive: true });
     const manifest = JSON.parse(await fs.readFile(path.join(repo, "internal/prompts/catalog.generated.json"), "utf8"));
     delete manifest.definitions_hash;
+    manifest.recipients.find((recipient) => recipient.id === "crew").events.find((event) => event.id === "wake").body = { kind: "text", id: "crew.wake", source };
     await fs.writeFile(path.join(root, "catalog.generated.json"), JSON.stringify(manifest));
     await fs.writeFile(wake, "Wake from the base.\n");
     git("init", "-b", "next");
