@@ -186,6 +186,7 @@ var Placements = map[string][]Placement{
 	"state_explain":                    {Placement{LocatorHome, ""}},
 	"stop":                             {Placement{LocatorHere, ""}},
 	"terminal_close":                   {Placement{LocatorHome, ""}},
+	"terminal_exited":                  {Placement{LocatorHome, ""}},
 	"terminal_input":                   {Placement{LocatorHome, ""}},
 	"terminal_kill":                    {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_launch":                  {Placement{LocatorTerminal, "terminal_id"}},
@@ -2151,6 +2152,18 @@ func (m TerminalCloseMessage) Placement() Placement {
 }
 
 func (m TerminalCloseMessage) Locate() string {
+	return ""
+}
+
+func (TerminalExitedMessage) CommandName() string {
+	return "terminal_exited"
+}
+
+func (m TerminalExitedMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TerminalExitedMessage) Locate() string {
 	return ""
 }
 

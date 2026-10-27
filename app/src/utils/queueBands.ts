@@ -46,6 +46,7 @@ export function autoSettleSeconds(
 }
 
 export interface QueueBandSession extends DesktopViewSession {
+  offline?: boolean;
   chiefOfStaff?: boolean;
   priority?: boolean;
   turnOwed?: boolean;
@@ -84,10 +85,10 @@ export interface QueueActions {
 }
 
 export function queueActions(
-  session: Pick<QueueBandSession, 'automation' | 'crewMember' | 'chiefOfStaff' | 'turnOwed' | 'turnSnoozedUntil'>,
+  session: Pick<QueueBandSession, 'offline' | 'automation' | 'crewMember' | 'chiefOfStaff' | 'turnOwed' | 'turnSnoozedUntil'>,
   { queueMode, crewInQueue, now }: { queueMode: boolean; crewInQueue: boolean; now: number },
 ): QueueActions {
-  if (session.chiefOfStaff || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
+  if (session.offline || session.chiefOfStaff || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
   const inQueue = queueMode && sessionParticipatesInQueue(session, crewInQueue);
   return { settle: Boolean(session.turnOwed) && (inQueue || Boolean(session.automation)), snooze: inQueue };
 }
@@ -132,7 +133,7 @@ export function oldestWantedTurn<TSession extends QueueBandSession>(
 ): TSession | null {
   let oldest: TSession | null = null;
   for (const session of sessions) {
-    if (!wants(session)) continue;
+    if (session.offline || !wants(session)) continue;
     if (!oldest || compareTurnOrder(session, oldest) < 0) {
       oldest = session;
     }
@@ -273,7 +274,7 @@ function nextOwedAfter<TSession extends QueueBandSession>(
   const start = current === -1 ? 0 : current + 1;
   for (let offset = 0; offset < turns.length; offset += 1) {
     const row = turns[(start + offset) % turns.length];
-    if (row.session.id !== settledSessionId && stillOwed.has(row.session.id)) {
+    if (!row.session.offline && row.session.id !== settledSessionId && stillOwed.has(row.session.id)) {
       return row;
     }
   }
@@ -285,7 +286,7 @@ function nextOwedAfter<TSession extends QueueBandSession>(
 export function headOfQueue<TSession extends QueueBandSession>(
   bands: QueueBands<TSession> | null,
 ): QueueRow<TSession> | null {
-  return bands?.turns[0] ?? null;
+  return bands?.turns.find((row) => !row.session.offline) ?? null;
 }
 
 /** The agent `step` rows away from `fromId` in the order the sidebar lists the queue:
@@ -295,7 +296,7 @@ export function stepQueue<TSession extends QueueBandSession>(
   fromId: string | null,
   step: 1 | -1,
 ): TSession | null {
-  const order = [...bands.turns, ...bands.settled, ...bands.snoozed];
+  const order = [...bands.turns, ...bands.settled, ...bands.snoozed].filter((row) => !row.session.offline);
   if (order.length === 0) return null;
   const index = order.findIndex((row) => row.session.id === fromId);
   const next = index < 0 ? (step === 1 ? 0 : order.length - 1) : (index + step + order.length) % order.length;
@@ -317,10 +318,10 @@ export function advanceAfterTurnClosed<TSession extends QueueBandSession>(
   if (!sessionId || !bands) return null;
   const owedBefore = previousTurns.some((row) => row.session.id === sessionId);
   const closed = [...bands.settled, ...bands.snoozed].find((row) => row.session.id === sessionId);
-  if (!owedBefore || !closed || closed.session.turnByAgent) return null;
+  if (!owedBefore || !closed || closed.session.offline || closed.session.turnByAgent) return null;
   const head = headOfQueue(bands);
   if (head?.session.priority) return { to: 'session', row: head };
-  const stillOwed = new Set(bands.turns.map((row) => row.session.id));
+  const stillOwed = new Set(bands.turns.filter((row) => !row.session.offline).map((row) => row.session.id));
   const next = nextOwedAfter(previousTurns, sessionId, stillOwed) ?? headOfQueue(bands);
   return next ? { to: 'session', row: next } : { to: 'dashboard' };
 }

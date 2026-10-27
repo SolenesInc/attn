@@ -87,6 +87,9 @@ func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, er
 	var due []string
 	for _, session := range d.store.List("") {
 		live[session.ID] = struct{}{}
+		if d.unreachableSessionHost(session.ID) != "" {
+			continue
+		}
 		if !sessionGeneratesActivity(session) {
 			continue
 		}

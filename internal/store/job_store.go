@@ -11,6 +11,7 @@ import (
 var _ jobs.Store = (*JobStore)(nil)
 
 type JobStore struct {
+	kinds   []string
 	store   *Store
 	lockDir string
 	log     jobs.LogFunc
@@ -20,6 +21,8 @@ type JobStore struct {
 func NewJobStore(s *Store, lockDir string, log jobs.LogFunc) *JobStore {
 	return &JobStore{store: s, lockDir: lockDir, log: log}
 }
+
+func (a *JobStore) OnlyKinds(kinds []string) { a.kinds = append([]string(nil), kinds...) }
 
 func (a *JobStore) Init() error { return nil }
 
@@ -73,7 +76,7 @@ func (a *JobStore) List() ([]*jobs.Job, error) {
 }
 
 func (a *JobStore) Eligible(now time.Time, limit int) ([]*jobs.Job, error) {
-	recs, err := a.store.EligibleJobs(now, limit)
+	recs, err := a.store.EligibleJobs(now, limit, a.kinds...)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +84,7 @@ func (a *JobStore) Eligible(now time.Time, limit int) ([]*jobs.Job, error) {
 }
 
 func (a *JobStore) NextScheduled() (time.Time, bool, error) {
-	return a.store.NextScheduledJob()
+	return a.store.NextScheduledJob(a.kinds...)
 }
 
 func (a *JobStore) TrimDone(cutoff time.Time) (int, error) {

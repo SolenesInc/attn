@@ -240,6 +240,9 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 }
 
 func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionID, action crew.Action, cache crew.CacheState, now time.Time) {
+	if d.unreachableSessionHost(sessionID) != "" {
+		return
+	}
 	switch action {
 	case crew.ActionHeartbeat:
 		session := d.store.Get(sessionID)

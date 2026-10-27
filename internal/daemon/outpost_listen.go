@@ -104,6 +104,7 @@ func (d *Daemon) configureOutpostListener() {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}
 			}
 			d.refreshChangedSettings(before)
+			d.refreshJobQueueRole()
 			return nil
 		},
 		OnError: func(err error) {

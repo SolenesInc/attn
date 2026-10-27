@@ -78,6 +78,7 @@ export function QueueBar() {
 function WaitingPill() {
   const { queue, onOpenAgents } = useSidebarContext();
   const turns = queue?.turns ?? [];
+  const waitingCount = turns.filter((row) => !row.session.offline).length;
   const lead = turns.slice(0, LEAD_TURNS);
   const hidden = turns.length - lead.length;
   return (
@@ -86,12 +87,12 @@ function WaitingPill() {
       className="queue-bar-pill"
       data-testid="queue-bar-pill"
       data-callout-anchor="queue"
-      data-waiting={turns.length}
+      data-waiting={waitingCount}
       onClick={onOpenAgents}
     >
       <span className="queue-bar-pill-count">
-        <span className={`queue-bar-dot ${turns.length ? 'is-waiting' : ''}`} />
-        {turns.length ? `${turns.length} waiting` : 'nothing owed'}
+        <span className={`queue-bar-dot ${waitingCount ? 'is-waiting' : ''}`} />
+        {waitingCount ? `${waitingCount} waiting` : 'nothing owed'}
       </span>
       {lead.length > 0 && <span className="queue-bar-sep">·</span>}
       {lead.map((row, index) => (
@@ -379,7 +380,9 @@ function DesktopChips() {
     .sort((a, b) => visualIndexOfDesktop(a.id) - visualIndexOfDesktop(b.id));
   const extras = desktops.filter((desktop) => visualIndexOfDesktop(desktop.id) < 0);
   const waitingOn = new Map<string, number>();
-  for (const row of queue?.turns ?? []) waitingOn.set(row.desktopId, (waitingOn.get(row.desktopId) ?? 0) + 1);
+  for (const row of queue?.turns ?? []) {
+    if (!row.session.offline) waitingOn.set(row.desktopId, (waitingOn.get(row.desktopId) ?? 0) + 1);
+  }
   const extrasWaiting = extras.reduce((total, desktop) => total + (waitingOn.get(desktop.id) ?? 0), 0);
 
   return (

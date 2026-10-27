@@ -87,10 +87,11 @@ export function useAttentionQueue({
       turnOwed?: boolean;
       crewMember?: string;
       automation?: { definition_id: number };
+      offline?: boolean;
     }) =>
-      queueModeEnabled
+      !session.offline && (queueModeEnabled
         ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
-        : isAttentionSessionState(session.state),
+        : isAttentionSessionState(session.state)),
     [queueModeEnabled, crewQueueEnabled],
   );
 
@@ -211,7 +212,7 @@ export function useAttentionQueue({
   );
 
   useEffect(() => {
-    if (snoozeMenu && !enrichedLocalSessions.some((session) => session.id === snoozeMenu.session.id)) {
+    if (snoozeMenu && !enrichedLocalSessions.some((session) => session.id === snoozeMenu.session.id && !session.offline)) {
       setSnoozeMenu(null);
     }
   }, [enrichedLocalSessions, snoozeMenu]);

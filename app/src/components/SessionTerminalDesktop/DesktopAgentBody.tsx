@@ -91,6 +91,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
           desktopId={desktopId}
           sessionId={agentPane.sessionId}
           annotationApi={annotationApi}
+          unavailableReason={paneSession?.offline ? `${paneSession.hostName} is unreachable` : undefined}
           // At most one pane owns ⌘Enter for the annotation send shortcut.
           paneActive={isActiveSession && sessionVisible && shortcutsEnabled && activeLeafId === agentPane.id}
           fontSize={fontSize}

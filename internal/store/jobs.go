@@ -130,28 +130,39 @@ func (s *Store) ListJobs() ([]JobRecord, error) {
 	return collectJobRows(rows, "list jobs")
 }
 
-func (s *Store) EligibleJobs(now time.Time, limit int) ([]JobRecord, error) {
+func (s *Store) EligibleJobs(now time.Time, limit int, kinds ...string) ([]JobRecord, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("store: no database")
 	}
+	where := ""
+	args := []any{now.UTC().Format(sortableTimeFormat)}
+	if len(kinds) > 0 {
+		where = " AND kind IN (SELECT value FROM json_each(?))"
+		args = append(args, jsonList(kinds))
+	}
+	args = append(args, limit)
 	rows, err := s.db.Query(
 		`SELECT `+jobColumns+` FROM jobs
-		 WHERE state IN ('queued', 'failed') AND scheduled_at <= ?
-		 ORDER BY priority DESC, scheduled_at ASC, created_at ASC
-		 LIMIT ?`,
-		now.UTC().Format(sortableTimeFormat), limit)
+		 WHERE state IN ('queued', 'failed') AND scheduled_at <= ?`+where+`
+		 ORDER BY priority DESC, scheduled_at ASC, created_at ASC LIMIT ?`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("store: eligible jobs: %w", err)
 	}
 	return collectJobRows(rows, "eligible jobs")
 }
 
-func (s *Store) NextScheduledJob() (time.Time, bool, error) {
+func (s *Store) NextScheduledJob(kinds ...string) (time.Time, bool, error) {
 	if s.db == nil {
 		return time.Time{}, false, fmt.Errorf("store: no database")
 	}
+	where := ""
+	var args []any
+	if len(kinds) > 0 {
+		where = " AND kind IN (SELECT value FROM json_each(?))"
+		args = append(args, jsonList(kinds))
+	}
 	var next sql.NullString
-	if err := s.db.QueryRow(`SELECT MIN(scheduled_at) FROM jobs WHERE state IN ('queued', 'failed')`).Scan(&next); err != nil {
+	if err := s.db.QueryRow(`SELECT MIN(scheduled_at) FROM jobs WHERE state IN ('queued', 'failed')`+where, args...).Scan(&next); err != nil {
 		return time.Time{}, false, fmt.Errorf("store: next scheduled job: %w", err)
 	}
 	if !next.Valid {

@@ -30,9 +30,10 @@ export function DesktopAgentSignals({ agentPane, paneSession }: DesktopAgentProp
         <HeaderSettlingIndicator
           firesAt={autoSettleFiresAt}
           held={autoSettleHeld}
+          frozen={paneSession?.offline}
           onCancel={() => onCancelCountdown?.(agentPane.sessionId)}
         />
-      ) : autoSettleDismissArmed ? (
+      ) : autoSettleDismissArmed && !paneSession?.offline ? (
         <HeaderSettleKeptChip onDisarm={() => onCancelCountdown?.(agentPane.sessionId)} />
       ) : null}
       {paneSeedDisplay.kind !== 'none' && onOpenSeed ? (

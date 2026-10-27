@@ -98,11 +98,24 @@ func (d *Daemon) liveTerminals(ctx context.Context) map[harness.TerminalID]struc
 }
 
 func (d *Daemon) terminalLive(t harness.TerminalID) bool {
+	if session, ok := d.shownIn(t); ok && d.sessionHost(session) != "" {
+		return d.sessionLive(context.Background(), session)
+	}
 	_, live := d.liveTerminals(context.Background())[t]
 	return live
 }
 
 func (d *Daemon) sessionLive(ctx context.Context, sessionID protocol.SessionID) bool {
+	if d.sessionHost(sessionID) != "" {
+		if d.store.Get(sessionID) == nil {
+			return false
+		}
+		view, ok := d.monitorViewFor(sessionID)
+		if !ok {
+			view = d.storedMonitorView(sessionID)
+		}
+		return view.Live.V
+	}
 	live := d.liveTerminals(ctx)
 	for _, id := range d.terminalsOf(sessionID) {
 		if _, ok := live[id]; ok {

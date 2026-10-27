@@ -45,6 +45,7 @@ const (
 	ConversationSwitchAnswer   = "conversation-switch-answer"
 	ConversationInputLookup    = "conversation-input-lookup"
 	ConversationCandidateBound = "conversation-candidate-bound"
+	ConversationSwitchDropped  = "conversation-switch-dropped"
 	ConversationReportReady    = "conversation-report-ready"
 	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
 	PtyExitHandled             = "pty-exit-handled"
@@ -52,6 +53,10 @@ const (
 	DriverTranscriptApplied    = "driver-transcript-applied"
 	CopyBatchStaged            = "copy-batch-staged"
 	CopyBatchApplied           = "copy-batch-applied"
+	NotebookStreamOpen         = "notebook-stream-open"
+	OutpostRecoveryReported    = "outpost-recovery-reported"
+	OutpostRecoveryStarted     = "outpost-recovery-started"
+	OutpostRecoveryApplied     = "outpost-recovery-applied"
 	ForwardSocketCreated       = "forward-socket-created"
 )
 

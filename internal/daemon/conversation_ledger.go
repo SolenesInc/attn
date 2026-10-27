@@ -236,6 +236,9 @@ func (d *Daemon) keepConversation(id string, keep bool) error {
 	if err != nil {
 		return err
 	}
+	if host := d.sessionHost(protocol.SessionID(session)); keep && host != "" {
+		return fmt.Errorf("outpost limit: conversations on %s are not kept", d.outpostName(host))
+	}
 	if keep {
 		if !d.conversationKnown(agentdriver.Get(key.agent), key.resumeID) {
 			return fmt.Errorf("nothing left to keep: %s no longer has conversation %s and attn has no copy", key.agent, key.resumeID)

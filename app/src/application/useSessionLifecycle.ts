@@ -41,7 +41,7 @@ export function useSessionLifecycle({
   } | null>(null);
   const refuseOffline = useCallback((id: string) => {
     const session = enrichedLocalSessions.find((entry) => entry.id === id);
-    if (!session?.offline) return false;
+    if (!session?.offline || session.state === 'recoverable') return false;
     showError(`${session.hostName} is unreachable; this needs it now`);
     return true;
   }, [enrichedLocalSessions, showError]);

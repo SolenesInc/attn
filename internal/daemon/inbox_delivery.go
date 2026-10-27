@@ -183,6 +183,13 @@ func (d *Daemon) deliverInboxLocked(a inbox.Address, state *inboxDeliveryState) 
 	if err != nil {
 		return receipt, err
 	}
+	if holder != nil {
+		if host := d.unreachableSessionHost(holder.ID); host != "" {
+			name := d.outpostName(host)
+			receipt.Detail = fmt.Sprintf("queued: %s is on %s, which is unreachable; it rings when %s is back", holder.Label, name, name)
+			return receipt, nil
+		}
+	}
 	finishingWake := holder != nil && holder.ID == state.wakeSession
 	if holder == nil || !finishingWake {
 		state.wakeSession = ""

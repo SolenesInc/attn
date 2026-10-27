@@ -7,15 +7,18 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/crashpoint"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
 func (d *Daemon) copiedSession(id protocol.SessionID) bool {
 	_, copied := d.store.SessionHost(id)
-	return copied
+	return copied || d.store.SessionRuntimeRecords(id).HomeDaemonID != ""
 }
 
 func (d *Daemon) homeHandlers(host string) bridge.Handlers {
@@ -37,7 +40,18 @@ func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitor
 	if !d.applyHomeView(msg.SessionID, view, origin.Host, origin.bridge) {
 		return protocol.ApplyMonitorViewResult{}, fmt.Errorf("monitor view was not applied")
 	}
-	answer := d.answerMonitorSwitch(msg.SessionID, view.PendingSwitch.V, nil)
+	proposed := view.PendingSwitch.V
+	if proposed.Terminal != "" {
+		shown, _ := d.shownIn(proposed.Terminal)
+		if held := d.store.GetSessionConversation(shown).NativeID; held != "" && held != proposed.NativeID {
+			pausepoint.At(pausepoint.ConversationSwitchDecision)
+		}
+	}
+	answer := d.answerMonitorSwitch(msg.SessionID, proposed, nil)
+	if answer.Outcome == sessionmonitor.SwitchOpened || answer.Outcome == sessionmonitor.SwitchShows {
+		crashpoint.At("monitor-switch-applied")
+		pausepoint.At(pausepoint.ConversationSwitchAnswer)
+	}
 	result := protocol.ApplyMonitorViewResult{}
 	if answer.Conversation != "" {
 		result.Switch = &protocol.SwitchAnswer{Conversation: answer.Conversation, Outcome: protocol.SwitchOutcome(answer.Outcome), SessionID: protocol.Ptr(answer.Session)}
@@ -50,13 +64,6 @@ func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitor
 				return result, err
 			}
 			result.Switch.Cost = protocol.Ptr(string(raw))
-		}
-		if remote && answer.Session != "" {
-			rows, err := d.store.SessionCopy(answer.Session)
-			if err != nil {
-				return result, err
-			}
-			result.Switch.Copy = rows
 		}
 	}
 	return result, nil
@@ -71,7 +78,7 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 		changed := r.viewChanges()
 		live := d.liveTerminals(ctx)
 		for id, monitor := range r.each() {
-			if !d.copiedSession(id) {
+			if !r.copied(id) {
 				continue
 			}
 			view := monitor.Snapshot()
@@ -83,8 +90,12 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 				continue
 			}
 			raw, err := json.Marshal(view)
+			var result protocol.ApplyMonitorViewResult
 			if err == nil {
-				_, err = Call[struct{}](ctx, d.router(), protocol.ApplyMonitorViewMessage{Cmd: "apply_monitor_view", SessionID: id, Epoch: view.Epoch.V, View: string(raw)})
+				result, err = Call[protocol.ApplyMonitorViewResult](ctx, d.router(), protocol.ApplyMonitorViewMessage{Cmd: "apply_monitor_view", SessionID: id, Epoch: view.Epoch.V, View: string(raw)})
+			}
+			if err == nil && result.Switch != nil {
+				err = d.applyOutpostSwitch(monitor, *result.Switch)
 			}
 			if err != nil {
 				failure = err
@@ -118,15 +129,32 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 	}
 }
 
+func (d *Daemon) applyOutpostSwitch(monitor *sessionmonitor.Monitor, reply protocol.SwitchAnswer) error {
+	answer := sessionmonitor.Answer{Conversation: reply.Conversation, Outcome: sessionmonitor.SwitchOutcome(reply.Outcome), Session: protocol.Deref(reply.SessionID), Reason: protocol.Deref(reply.Reason)}
+	if reply.Cost != nil {
+		answer.Cost = &sessioncost.Checkpoint{}
+		if err := json.Unmarshal([]byte(*reply.Cost), answer.Cost); err != nil {
+			return err
+		}
+	}
+
+	(monitorHost{daemon: d}).Answered(monitor, answer)
+	return nil
+}
+
 func (d *Daemon) storedMonitorView(id protocol.SessionID) sessionmonitor.View {
 	launch := d.monitorLaunch(id)
 	return sessionmonitor.View{
+		Live:               sessionmonitor.Value[bool]{V: d.store.SessionRuntimeRecords(id).Live},
 		State:              sessionmonitor.Value[sessionmonitor.StateView]{V: sessionmonitor.StateView{State: launch.State, Since: launch.StateSince, Updated: launch.StateUpdated}},
 		Turn:               sessionmonitor.Value[sessionmonitor.TurnStamps]{V: launch.Turn},
 		Branch:             sessionmonitor.Value[attngit.BranchInfo]{V: launch.Branch},
 		LastSeen:           sessionmonitor.Value[time.Time]{V: launch.LastSeen},
 		LastModelRequestAt: sessionmonitor.Value[time.Time]{V: launch.LastModelRequestAt},
 		HarnessTitle:       sessionmonitor.Value[string]{V: launch.HarnessTitle},
+		PullRequests:       sessionmonitor.KeyedSet[string, sessionmonitor.PullRequest]{Entries: d.recordedLinks(id)},
+		CostInitialized:    sessionmonitor.Value[bool]{V: launch.Cost.Initialized},
+		Cost:               sessionmonitor.KeyedSet[string, sessioncost.SourceTotals]{Entries: launch.Cost.SourceTotals()},
 		Exit:               sessionmonitor.Value[*sessionmonitor.Exit]{V: launch.Exit},
 	}
 }

@@ -486,10 +486,6 @@ func (d *Daemon) handleTerminalClose(conn net.Conn, msg *protocol.TerminalCloseM
 		d.sendError(conn, err.Error())
 		return
 	}
-	if err := d.requireSessionHost(target.ID); err != nil {
-		d.sendError(conn, err.Error())
-		return
-	}
 	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: string(caller.ID), Reason: "shell closed by attn terminal close"}, nil)
 	if err != nil {
 		d.sendError(conn, err.Error())

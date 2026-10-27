@@ -76,6 +76,29 @@ func (d *Daemon) requireSessionHost(id protocol.SessionID) error {
 	return nil
 }
 
+func (d *Daemon) unreachableSessionHost(id protocol.SessionID) string {
+	if host := d.sessionHost(id); host != "" {
+		if _, _, err := d.outpostConn(host); err != nil {
+			return host
+		}
+	}
+	return ""
+}
+
+func (d *Daemon) requireLiveSessionHost(id protocol.SessionID) error {
+	if d.sessionLive(context.Background(), id) {
+		return d.requireSessionHost(id)
+	}
+	return nil
+}
+
+func (d *Daemon) outpostName(host string) string {
+	if row, err := d.resolveOutpost(host); err == nil {
+		return row.Name
+	}
+	return host
+}
+
 func (d *Daemon) sendOutpostTheme(ctx context.Context, host string) error {
 	theme := d.currentTerminalTheme()
 	_, err := Call[struct{}](ctx, d.router(), protocol.TerminalThemeMessage{Cmd: protocol.CmdTerminalTheme, Host: host, Foreground: theme.Foreground, Background: theme.Background, Cursor: theme.Cursor, AnsiPalette: theme.ANSIPalette[:]})

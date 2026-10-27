@@ -78,6 +78,7 @@ export interface AnnotatedTerminalProps extends TerminalProps {
   // Gates the send shortcut's *registration*: the dispatcher consumes ⌘Enter
   // whenever a handler exists, so every mounted pane registering would eat it.
   paneActive?: boolean;
+  unavailableReason?: string;
 }
 
 interface Notice {
@@ -109,7 +110,7 @@ function deliveredUnchanged(current: readonly TerminalAnnotation[], sent: readon
 
 export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerminalProps>(
   function AnnotatedTerminal(
-    { desktopId, sessionId, annotationApi, paneActive = false, ...terminalProps },
+    { desktopId, sessionId, annotationApi, paneActive = false, unavailableReason, ...terminalProps },
     ref,
   ) {
     // Built once: `useRef(new …)` would construct and discard a store per render.
@@ -237,6 +238,12 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
 
     useEffect(() => {
       if (!enabled || !sessionId) return;
+      if (unavailableReason) {
+        windowStatusRef.current = 'unavailable';
+        windowDetailRef.current = unavailableReason;
+        windowErrorRef.current = null;
+        return;
+      }
       let cancelled = false;
       let request = 0;
       const refresh = () => {
@@ -264,7 +271,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         cancelled = true;
         unsubscribe();
       };
-    }, [annotationApi, bump, enabled, sessionId, store]);
+    }, [annotationApi, bump, enabled, sessionId, store, unavailableReason]);
 
     const closeComposer = useCallback((restoreFocus = true) => {
       setComposer(null);
@@ -540,7 +547,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     };
 
     const performSend = (): Promise<TerminalSendResult | null> | null => {
-      if (annotations.length === 0 || !annotationApi) return null;
+      if (unavailableReason || annotations.length === 0 || !annotationApi) return null;
       flushNoteSave();
       if (composed && composer?.writing) {
         const comment = draft.trim();
@@ -605,7 +612,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     const { outcome, send } = useAnnotationSend<TerminalSendResult>({
       send: performSend,
       shortcutId: 'terminal.sendAnnotations',
-      enabled: enabled && paneActive && annotations.length > 0,
+      enabled: enabled && !unavailableReason && paneActive && annotations.length > 0,
       sentClearMs: 2200,
     });
 
@@ -870,6 +877,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
               <span className="anno-panel-title">Annotations</span>
               <span className="anno-panel-count">{annotations.length}</span>
             </div>
+            {unavailableReason && <div className="anno-panel-outcome" role="status">{unavailableReason}</div>}
             <div className="anno-panel-body">
               {annotations.map((annotation) => (
                 <div key={annotation.id} className="anno-card">
@@ -932,7 +940,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
                   <span className="anno-panel-n">
                     {annotations.length} annotation{annotations.length === 1 ? '' : 's'}
                   </span>
-                  <button
+                  {!unavailableReason && <button
                     type="button"
                     className="anno-panel-send"
                     onClick={send}
@@ -942,7 +950,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
                     {paneActive && outcome?.kind !== 'sending' ? (
                       <span className="anno-panel-send-key">{formatShortcut('terminal.sendAnnotations')}</span>
                     ) : null}
-                  </button>
+                  </button>}
                 </>
               )}
             </div>

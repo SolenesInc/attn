@@ -4,6 +4,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
@@ -76,9 +77,10 @@ func (h monitorHost) Answered(source *sessionmonitor.Monitor, answer sessionmoni
 	if answer.Outcome == sessionmonitor.SwitchDropped {
 		source.AdoptDropped(candidate)
 		source.SettleSwitch(answer.Conversation, source, answer.Reason)
+		pausepoint.At(pausepoint.ConversationSwitchDropped)
 		return
 	}
-	d.bindMonitorCandidates()
+	d.bindMonitorTerminals()
 }
 
 func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor, answer sessionmonitor.Answer) {
@@ -140,7 +142,7 @@ func (d *Daemon) monitorInTerminal(terminal harness.TerminalID, session protocol
 	return r.Input(terminal, d.sessionMonitor(session))
 }
 
-func (d *Daemon) bindMonitorCandidates() {
+func (d *Daemon) bindMonitorTerminals() {
 	for _, source := range d.monitors().each() {
 		proposed, ok := source.PendingSwitch()
 		if !ok {
@@ -158,5 +160,28 @@ func (d *Daemon) bindMonitorCandidates() {
 			continue
 		}
 		d.bindMonitorCandidate(source, candidate, sessionmonitor.Answer{Conversation: proposed.NativeID, Session: shown})
+	}
+	for terminal := range d.localLiveTerminals(d.life.Context()) {
+		shown, ok := d.shownIn(terminal)
+		if !ok || !d.copiedSession(shown) || d.sessionMonitor(shown) != nil {
+			continue
+		}
+		if input := d.monitors().registry.Input(terminal, nil); input != nil {
+			if input.Session() == "" || d.store.Get(input.Session()) != nil {
+				continue
+			}
+			d.forgetMonitor(input.Session())
+		}
+		live := liveTerminal{terminal: terminal}
+		if provider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider); ok {
+			info, err := provider.SessionInfo(d.life.Context(), terminal)
+			live.info, live.haveInfo = info, err == nil
+			if err != nil {
+				d.logf("copied terminal %s: read running state: %v", terminal, err)
+			}
+		}
+		if session := d.store.Get(shown); session != nil {
+			d.resumeMonitor(session, live)
+		}
 	}
 }

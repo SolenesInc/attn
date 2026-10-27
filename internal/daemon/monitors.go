@@ -15,10 +15,17 @@ import (
 
 type monitorBinding struct {
 	copied     bool
+	bridge     *bridge.Conn
 	monitor    *sessionmonitor.Monitor
 	applied    sessionmonitor.View
 	catchUp    *time.Timer
 	retryDelay time.Duration
+}
+
+func (r *monitorIndex) copied(id protocol.SessionID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.sessions[id] != nil && r.sessions[id].copied
 }
 
 type monitorIndex struct {
@@ -337,6 +344,9 @@ func (d *Daemon) kickMonitorTerminals() {
 				copied := binding != nil && binding.copied
 				r.mu.Unlock()
 				if copied {
+					if _, pending := monitor.PendingSwitch(); pending {
+						continue
+					}
 					d.forgetMonitor(sessionID)
 					continue
 				}

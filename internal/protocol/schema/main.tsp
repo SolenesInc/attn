@@ -8301,6 +8301,13 @@ alias DaemonEvent =
   | AutoModeStateChangedMessage;
 
 @extension("x-on", #{ home: true })
+model TerminalExitedMessage {
+  cmd: "terminal_exited";
+  session_id: SessionID;
+  running: TerminalID[];
+}
+
+@extension("x-on", #{ home: true })
 model ApplyMonitorViewMessage {
   cmd: "apply_monitor_view";
   session_id: SessionID;
@@ -8317,7 +8324,6 @@ model SwitchAnswer {
   outcome: SwitchOutcome;
   session_id?: SessionID;
   reason?: string;
-  copy?: CopyRow[];
   cost?: string;
 }
 

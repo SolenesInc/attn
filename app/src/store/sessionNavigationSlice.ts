@@ -1,4 +1,5 @@
 import type { SessionStore } from './sessions';
+import { sessionIsOffline } from './sessions';
 import type { ActiveLeaf, Arrangement } from '../navigation/activeLeaf';
 import type { LeafHistoryDirection } from '../navigation/leafHistory';
 import type { LeafMoved } from '../types/generated';
@@ -102,7 +103,7 @@ export function reconcileSessionNavigation(
 ): Partial<SessionStore> {
   const next = { ...state, ...update };
   next.navigationQueue = navigationQueue(
-    next.navigationSessions,
+    next.navigationSessions.map((session) => ({ ...session, offline: sessionIsOffline(session, next.outposts) })),
     next.navigationProfileId,
     next.navigationDesktops,
     next.navigationSettings,

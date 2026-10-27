@@ -114,6 +114,7 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 		return
 	}
 	changed := run.state != state
+	connected := changed && state == bridge.StateConnected
 	if changed {
 		run.state, run.since = state, time.Now().UTC().Format(time.RFC3339Nano)
 	}
@@ -139,6 +140,9 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 	r.mu.Unlock()
 	if changed {
 		d.publishFact(FactOutpostChanged, id, nil)
+	}
+	if connected {
+		d.kickOutpostInboxes(id)
 	}
 }
 

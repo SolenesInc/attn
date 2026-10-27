@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/syncthing/lib/attnsync"
@@ -728,6 +729,7 @@ func (d *Daemon) serveNotebookSync(conn *bridge.Conn, incoming ssh.NewChannel) {
 }
 
 func (d *Daemon) openNotebookSync(conn *bridge.Conn) {
+	pausepoint.At(pausepoint.NotebookStreamOpen)
 	run := d.notebookSyncEngine()
 	if run == nil {
 		return

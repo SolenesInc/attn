@@ -244,6 +244,7 @@ export function SidebarPopovers() {
           priority={actionsSession?.priority}
           onTogglePriority={onTogglePriority && actionsSession ? () => onTogglePriority(actionsSession) : undefined}
           chiefOfStaff={sessionActionsTarget.chiefOfStaff}
+          host={actionsSession?.host}
           anchor={sessionActionsTarget.anchor}
           canRename={Boolean(onRenameSession)}
           onRename={() => {

@@ -12338,9 +12338,6 @@ type SwitchAnswer struct {
 	// Conversation corresponds to the JSON schema field "conversation".
 	Conversation string `json:"conversation"`
 
-	// Copy corresponds to the JSON schema field "copy".
-	Copy []CopyRow `json:"copy,omitempty,omitzero"`
-
 	// Cost corresponds to the JSON schema field "cost".
 	Cost *string `json:"cost,omitempty,omitzero"`
 
@@ -12542,6 +12539,17 @@ type TerminalExit struct {
 
 	// Signal corresponds to the JSON schema field "signal".
 	Signal *string `json:"signal,omitempty,omitzero"`
+}
+
+type TerminalExitedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Running corresponds to the JSON schema field "running".
+	Running []TerminalID `json:"running"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
 }
 
 type TerminalID string

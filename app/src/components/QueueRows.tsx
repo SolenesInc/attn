@@ -54,7 +54,7 @@ function QueueRowControls({
   onWake,
   onOpenActions,
 }: {
-  session: Pick<QueueBandSessionView, 'id' | 'label'>;
+  session: Pick<QueueBandSessionView, 'id' | 'label' | 'offline'>;
   onSettle?: () => void;
   onSnooze?: (event: ReactMouseEvent) => void;
   onWake?: () => void;
@@ -64,7 +64,7 @@ function QueueRowControls({
 
   return (
     <div className="session-actions">
-      {onWake && (
+      {onWake && !session.offline && (
         <button
           type="button"
           className="queue-row-wake"
@@ -79,7 +79,7 @@ function QueueRowControls({
           ↩
         </button>
       )}
-      {onSnooze && (
+      {onSnooze && !session.offline && (
         <button
           type="button"
           className="queue-row-snooze"
@@ -106,7 +106,7 @@ function QueueRowControls({
           •••
         </button>
       )}
-      {onSettle && (
+      {onSettle && !session.offline && (
         <button
           type="button"
           className="queue-row-settle"
@@ -202,7 +202,7 @@ export function QueueRowView({
         onOpenActions={onOpenActions}
       />
       {showSettling && (session.autoSettleFiresAt || session.autoSettleHeld) && (
-        <SidebarSettlingBar firesAt={session.autoSettleFiresAt} held={session.autoSettleHeld} />
+        <SidebarSettlingBar firesAt={session.offline ? undefined : session.autoSettleFiresAt} held={session.autoSettleHeld || session.offline} />
       )}
     </div>
   );
