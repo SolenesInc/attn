@@ -14,6 +14,7 @@ tests=$(rg --no-filename '^func Test' \
   internal/daemon/inbox_attempts_wire_test.go \
   internal/daemon/quiet_notifications_wire_test.go \
   internal/daemon/auto_settle_wire_test.go \
+  internal/daemon/snooze*_wire_test.go \
   internal/daemon/activity*wire_test.go \
   internal/daemon/crew_lifecycle_wire_test.go \
   internal/daemon/session_pull_requests_wire_test.go \
