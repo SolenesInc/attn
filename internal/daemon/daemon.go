@@ -2003,7 +2003,9 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 			}
 			return
 		}
-		d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown, sig)
+		if d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown, sig) {
+			d.store.ClearSessionIntentionalClose(sessionID)
+		}
 	}
 	// A close the user asked for still ends the session while the daemon stops, on the caller's goroutine.
 	if !d.life.Go("terminateSessionAsync", terminate) {

@@ -228,6 +228,24 @@ func TestClauseOrder(t *testing.T) {
 			wantReason: ReasonApprovalOpen,
 		},
 		{
+			why: "but with a reviewer in the loop, an approval request reaches the " +
+				"user only when the agent's own status says blocked: the reviewer " +
+				"clears most requests without a word, and a long command it let " +
+				"through sends no all-clear until it ends",
+			evidence: evidence{TerminalEvidence: TerminalEvidence{
+				ProgramStatus:  seen(SourceProgramStatus, ClaimBusy, 2*time.Second),
+				ReviewerInLoop: true,
+
+				LastBusyAt: now.Add(-2 * time.Second)},
+				ConversationEvidence: ConversationEvidence{
+					LastHarnessEvent: seen(SourceHarnessEvent, ClaimApprovalPending, time.Second),
+					TurnOpen:         true,
+					TurnEverOpened:   true},
+			},
+			wantState:  protocol.SessionStateWorking,
+			wantReason: ReasonProgramWorking,
+		},
+		{
 			why: "and a newer program status record outranks an older harness " +
 				"edge: an approval a hook settled without a dialog never sends " +
 				"its own all-clear, and the agent reporting done is the answer",

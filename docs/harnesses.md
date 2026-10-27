@@ -116,11 +116,25 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   and command lists in the probe. Fresh working/config directories plus the
   memory-off switch kept synthetic personal-context canaries out of the
   simulator and judge requests (2.1.310).
+- Native JSONL includes `api-request` records with `querySource`, model and
+  `shapeHash`, plus `api-request-shape` records containing the system prompt.
+  Matching the main-thread request to its shape by session and shape hash
+  exposes the crew memory wake view. The crew eval’s localhost proof checked
+  the same stale entry in that transcript and the actual provider request
+  before sending its task (2.1.310).
 - A Bash tool calling `attn handoff --sleep` can file its letter and exit
   before Claude persists the final tool call to JSONL. In the 2.1.310 local
   provider probe, the fifth member request closed the session while the file
   retained only the four work requests. Persisted closure records therefore
   do not guarantee a complete trace of that final call.
+- An interactive paste can be stored as `\n\n<pasted_content id="hhhh">\n`,
+  the pasted text, and `\n</pasted_content id="hhhh">\n`, with the same four
+  hexadecimal characters in both tags. A 2.1.310 paid eval trace preserved
+  the inner text exactly while adding this container. Its installed source
+  gates wrapping on `tengu_virtual_pancake`; an offline probe needs that
+  cached flag enabled and `CLAUDE_CODE_GB_DISK_CACHE_WHEN_TELEMETRY_OFF=1`
+  while telemetry is disabled. Plain text remains possible, so matching
+  native user input must account for both forms.
 
 Probed on 2.1.309 with a mock API and an isolated `CLAUDE_CONFIG_DIR`:
 
@@ -505,6 +519,14 @@ Read in the source at openai/codex rust-v0.163.0 and c3bb20602d:
 - rust-v0.163.0 sends `blocked` without a kind. Later builds (#54114) add
   `kind=permission` for approvals and `kind=question` for questions and
   elicitations.
+
+Seen in attn's production log on 0.164.0, a shared Codex tile with the guardian
+reviewer:
+
+- PermissionRequest fires before the guardian reviews, and no hook reports the
+  guardian's answer. A command it let through that kept running as a
+  background terminal sent no PostToolUse; the next hook came with the agent's
+  next tool call, 214 s later, while the TUI kept reporting `working`.
 
 Read in the source at openai/codex rust-v0.162.1, and the switches probed on
 it with a model on a closed port. A shared Codex tile follows the conversation

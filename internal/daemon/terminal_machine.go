@@ -211,6 +211,9 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 		d.terminals().noteEnding(terminal, ending, time.Now())
 	}
 	err := d.ptyBackend.Kill(ctx, terminal, parseSignal(msg.Signal))
+	if ending != "" && (errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist)) {
+		err = nil
+	}
 	if err != nil && stop {
 		d.clearTerminalExitIntent(terminal, terminalExitStop)
 	}
@@ -221,7 +224,11 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 }
 
 func (d *Daemon) removeTerminal(ctx context.Context, msg protocol.TerminalRemoveMessage) (struct{}, error) {
-	return struct{}{}, d.ptyBackend.Remove(ctx, msg.TerminalID)
+	err := d.ptyBackend.Remove(ctx, msg.TerminalID)
+	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
+		err = nil
+	}
+	return struct{}{}, err
 }
 
 func (d *Daemon) themeTerminals(ctx context.Context, msg protocol.TerminalThemeMessage) (struct{}, error) {

@@ -29,6 +29,8 @@ type outpostRuntime struct {
 	listener  *outpostListener
 	state     string
 	lastError string
+	errorKind string
+	listen    func(string, string) (net.Listener, error)
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
@@ -61,7 +63,7 @@ func (d *Daemon) configureOutpostListener() {
 	}
 	address := d.daemonSetting(settingOutpostListen)
 	if address == "" {
-		d.setOutpostListenerState(nil, "off", "")
+		d.setOutpostListenerState(nil, "off", nil)
 		return
 	}
 	ctx, cancel := context.WithCancel(d.life.Context())
@@ -69,14 +71,18 @@ func (d *Daemon) configureOutpostListener() {
 	r.mu.Lock()
 	r.listener = run
 	r.mu.Unlock()
-	listener, err := net.Listen("tcp", address)
+	listen := r.listen
+	if listen == nil {
+		listen = net.Listen
+	}
+	listener, err := listen("tcp", address)
 	if err != nil {
 		cancel()
 		close(run.done)
-		d.setOutpostListenerState(run, "error", fmt.Sprintf("outpost_listen %s: %v", address, err))
+		d.setOutpostListenerState(run, "error", fmt.Errorf("outpost_listen %s: %w", address, err))
 		return
 	}
-	d.setOutpostListenerState(run, "listening", "")
+	d.setOutpostListenerState(run, "listening", nil)
 	cfg := bridge.ServerConfig{
 		Self: d.bridgeIdentity(), HostKeyPath: filepath.Join(d.dataRoot, "bridge_host_key"),
 		AuthorizedKeys: func() ([]byte, error) { return os.ReadFile(config.AuthorizedKeysPath()) },
@@ -94,14 +100,14 @@ func (d *Daemon) configureOutpostListener() {
 			if errors.As(err, &refusal) {
 				state = "refused"
 			}
-			d.setOutpostListenerState(run, state, err.Error())
+			d.setOutpostListenerState(run, state, err)
 		},
 	}
 	if !d.life.Go("outpostListener", func() {
 		defer close(run.done)
 		defer cancel()
 		if err := bridge.Serve(ctx, listener, cfg, func(conn *bridge.Conn) { d.acceptOutpostBridge(run, conn) }); err != nil && ctx.Err() == nil {
-			d.setOutpostListenerState(run, "error", err.Error())
+			d.setOutpostListenerState(run, "error", err)
 		}
 	}) {
 		_ = listener.Close()
@@ -110,11 +116,11 @@ func (d *Daemon) configureOutpostListener() {
 	}
 }
 
-func (d *Daemon) setOutpostListenerState(run *outpostListener, state, detail string) {
-	d.updateOutpostListenerState(run, nil, state, detail)
+func (d *Daemon) setOutpostListenerState(run *outpostListener, state string, err error) {
+	d.updateOutpostListenerState(run, nil, state, err)
 }
 
-func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.Conn, state, detail string) {
+func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.Conn, state string, err error) {
 	r := &d.outpost
 	r.mu.Lock()
 	if r.listener != run || conn != nil && run.conn != conn {
@@ -128,14 +134,18 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 			state = r.state
 		}
 	}
-	lastError := r.lastError
+	errorChanged := false
 	if state == "bridged" {
-		lastError = ""
-	} else if detail != "" {
-		lastError = detail
+		errorChanged = r.lastError != ""
+		r.lastError, r.errorKind = "", ""
+	} else if err != nil {
+		r.lastError = err.Error()
+		kind := bridge.ErrorKind(err)
+		errorChanged = kind != r.errorKind
+		r.errorKind = kind
 	}
-	stateChanged, errorChanged := r.state != state, r.lastError != lastError
-	r.state, r.lastError = state, lastError
+	stateChanged := r.state != state
+	r.state = state
 	r.mu.Unlock()
 	d.coalesceSnapshots(func() {
 		if stateChanged {
@@ -175,11 +185,11 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 			}
 			switch state {
 			case bridge.StateConnected:
-				d.updateOutpostListenerState(run, conn, "bridged", "")
+				d.updateOutpostListenerState(run, conn, "bridged", nil)
 			case bridge.StateStalled:
-				d.updateOutpostListenerState(run, conn, "stalled", "")
+				d.updateOutpostListenerState(run, conn, "stalled", nil)
 			case bridge.StateLost:
-				d.updateOutpostListenerState(run, conn, "listening", conn.Err().Error())
+				d.updateOutpostListenerState(run, conn, "listening", conn.Err())
 			}
 		}
 	}) {
