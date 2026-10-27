@@ -196,7 +196,7 @@ try {
     runner.registerCleanup('crew-fixture', async () => {
       const member = JSON.parse(runAttn(['crew', 'list', '--json'])).find(member => member.id === mailbox);
       if (member?.binding_session) {
-        runAttn(['handoff', '--session', member.binding_session, '--sleep', '-m', 'Synthetic capture scenario complete']);
+        runAttn(['handoff', '--session', member.binding_session, '-m', 'Synthetic capture scenario complete']);
         await observer.waitFor(() => !observer.getSession(member.binding_session), 'synthetic crew session closed');
       }
       fs.rmSync(home, { recursive: true, force: true });

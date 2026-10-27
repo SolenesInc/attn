@@ -80,7 +80,7 @@ sorting.
 **Presence.** Apps are the only source of user presence. If no app reports for
 90 seconds, attn treats you as away. Away time counts from the last report
 showing you present, or from daemon startup if there has been none. Crew
-turnover and activity generation use that same presence reading.
+away notices and activity generation use that same presence reading.
 
 **Panes, splits, and first-class shells.** A desktop can hold several sessions
 side by side. Split a pane, open a plain shell as its own session from the same

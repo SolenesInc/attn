@@ -29,7 +29,7 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 			run.Prompted()
 			converse(app, run, string(day.SessionID), "Remember the day's decision.", "Keep the reasons beside the decision.")
 			var handoff protocol.CrewHandoffResult
-			closed := s.Run(testworld.Invocation{Session: string(day.SessionID), Args: []string{"handoff", "--sleep", "-m", "Dear successor, keep the reasons.", "--json"}})
+			closed := s.Run(testworld.Invocation{Session: string(day.SessionID), Args: []string{"handoff", "-m", "Dear successor, keep the reasons.", "--json"}})
 			closed.JSON(t, &handoff)
 			if closed.Code != 0 || handoff.SessionID != nil {
 				t.Fatalf("close crew day: %+v, %+v", closed, handoff)
@@ -82,7 +82,7 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 			next := s.Launched(string(withoutV2.SessionID))
 			next.Prompted()
 			converse(app, next, string(withoutV2.SessionID), "Another session with v2 off.", "This transcript has no letter reference.")
-			closed = s.Run(testworld.Invocation{Session: string(withoutV2.SessionID), Args: []string{"handoff", "--sleep", "-m", "Filed with v2 off.", "--json"}})
+			closed = s.Run(testworld.Invocation{Session: string(withoutV2.SessionID), Args: []string{"handoff", "-m", "Filed with v2 off.", "--json"}})
 			closed.JSON(t, &handoff)
 			testworld.AwaitTaskDone(app, "conversation_keep")
 			var kept protocol.KeptConversationListResult

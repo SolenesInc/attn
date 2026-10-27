@@ -7116,7 +7116,7 @@ model CrewWakeResult {
 
 // Ask an awake member to close its day and sleep. This is consented closure:
 // the daemon delivers a user-originated request telling the member to write its
-// handoff and file it with `attn handoff --sleep`; it does not kill the member.
+// handoff and file it with `attn handoff`; it does not kill the member.
 // Home-only. An asleep member is a named no-op rather than a silent success.
 @extension("x-on", #{ home: true })
 model CrewSleepMessage {
@@ -7223,9 +7223,8 @@ model CrewHandoffMessage {
   // writing one. The way out of a turnover that failed behind a filed letter:
   // the line is append-only, so the letter cannot be written a second time.
   retry?: boolean;
-  // What the filing does to the day. Absent lets attn decide from whether the
-  // user is here: a day that closes while nobody is around does not start
-  // another one, because sleeping through an absence is the point.
+  // What the filing does to the session. Absent ends the session and leaves
+  // the member asleep until something wakes it. Only nap starts a new session.
   close?: CrewDayClose;
 }
 

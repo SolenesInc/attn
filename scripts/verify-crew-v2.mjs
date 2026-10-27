@@ -127,7 +127,7 @@ try {
   cli(['crew', 'set', member, '--cwd', home, '--agent', 'claude']);
   cli(['settings', 'set', 'crew_v2_enabled', 'true']);
   const enabled = await wake();
-  const filed = cli(['handoff', '--sleep', '-m', 'The copied-data verification filed this letter without --day.', '--session', enabled], { json: true });
+  const filed = cli(['handoff', '-m', 'The copied-data verification filed this letter without --day.', '--session', enabled], { json: true });
   assert.equal(filed.outcome, 'sleep');
   await keepPass();
   await stop();
@@ -135,7 +135,7 @@ try {
   await connect();
   cli(['settings', 'set', 'crew_v2_enabled', 'false']);
   const disabled = await wake();
-  cli(['handoff', '--sleep', '-m', 'This letter was filed with v2 off.', '--session', disabled], { json: true });
+  cli(['handoff', '-m', 'This letter was filed with v2 off.', '--session', disabled], { json: true });
   await keepPass();
   const listing = cli(['conversation', 'list'], { json: true });
   assert.equal(listing.count, 1);
@@ -151,7 +151,7 @@ try {
 } finally {
   if (daemon && daemon.exitCode === null) {
     const members = cli(['crew', 'list'], { json: true, quiet: true });
-    for (const entry of members) if (entry.binding_session) cli(['handoff', '--sleep', '-m', 'Verification cleanup.', '--session', entry.binding_session], { quiet: true });
+    for (const entry of members) if (entry.binding_session) cli(['handoff', '-m', 'Verification cleanup.', '--session', entry.binding_session], { quiet: true });
   }
   await stop();
   if (fs.existsSync(path.join(data, 'daemon.log'))) fs.copyFileSync(path.join(data, 'daemon.log'), path.join(receipts, 'daemon.log'));

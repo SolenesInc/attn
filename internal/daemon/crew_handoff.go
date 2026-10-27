@@ -89,9 +89,6 @@ func (d *Daemon) crewHandoffLocked(sessionID protocol.SessionID, note string, re
 	if err != nil {
 		return nil, err
 	}
-	if retry && close == "" {
-		close = protocol.CrewDayCloseNap
-	}
 	return d.crewTurnover(member, sessionID, path, close)
 }
 
@@ -101,7 +98,7 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s's day to close: %w", crew.DisplayName(member.ID), err)
 	}
-	if d.crewDayEndsHere(close, time.Now()) {
+	if close != protocol.CrewDayCloseNap {
 		if err := d.closeNappedSession(sessionID, teardown); err != nil {
 			d.cancelSessionTeardown(sessionID, teardown)
 			return nil, err
@@ -119,16 +116,6 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 	result.SessionID = protocol.Ptr(newSessionID)
 	result.Outcome = protocol.Ptr(protocol.CrewDayCloseNap)
 	return result, nil
-}
-
-func (d *Daemon) crewDayEndsHere(close protocol.CrewDayClose, now time.Time) bool {
-	switch close {
-	case protocol.CrewDayCloseSleep:
-		return true
-	case protocol.CrewDayCloseNap:
-		return false
-	}
-	return d.UserAwayFor(now) >= d.crewAwayLimit()
 }
 
 func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.SessionID, note string, retry bool) (string, error) {

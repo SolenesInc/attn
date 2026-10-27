@@ -56,7 +56,7 @@ commands:
         If already awake, return the existing session.
 
   sleep <member> [--json]
-        Ask the member to write a handoff and close with attn handoff --sleep.
+        Ask the member to write a handoff and close with attn handoff.
         The member closes its own session. Do nothing if already asleep.
 
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
@@ -231,7 +231,7 @@ func crewSleepOutcomeLine(result *protocol.CrewSleepResult) string {
 		}
 		return fmt.Sprintf("Sleep request for %s is queued in session %s — %s", name, agentShortID(string(protocol.Deref(result.SessionID))), detail)
 	}
-	return fmt.Sprintf("Asked %s in session %s to write its handoff and file it with `attn handoff --sleep`.", name, agentShortID(string(protocol.Deref(result.SessionID))))
+	return fmt.Sprintf("Asked %s in session %s to write its handoff and file it with `attn handoff`.", name, agentShortID(string(protocol.Deref(result.SessionID))))
 }
 
 type crewDirList struct {

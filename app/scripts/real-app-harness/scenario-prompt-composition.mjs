@@ -66,7 +66,7 @@ async function main() {
       { includes: '📬 You have unread items', actions: [
         { type: 'attn', args: ['agent', 'inbox'] },
         { type: 'touch', path: 'sleep-received' },
-        { type: 'attn', args: ['handoff', '--sleep', '-m', 'PROMPT_TEST_LETTER'] },
+        { type: 'attn', args: ['handoff', '-m', 'PROMPT_TEST_LETTER'] },
       ] },
     ] });
     await launchFreshAppAndConnect(client, observer);
@@ -172,11 +172,17 @@ async function main() {
       runner.assert(instructions(captured.text, 'codex').includes(`You are **${crewLabel}**`), 'crew identity reaches developer instructions');
       const duplicate = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       runner.assert(duplicate.already_awake === true && duplicate.session_id === first.session_id, 'wake does not create a second day');
+      observer.send({ cmd: 'set_client_presence', visible: true, dashboard_visible: false, idle_seconds: 0 });
+      await observer.requestResult({ cmd: 'set_setting', key: 'crew.heartbeat_enabled', value: 'false' }, 'settings_updated');
+      const presence = JSON.parse(cli(['activity', '--json']));
+      runner.assert(presence.presence_tier === 'present' || presence.presence_tier === 'watching', 'the user is present before plain handoff', presence);
       cli(['crew', 'sleep', crewName, '--json']);
       await waitFor(() => fs.existsSync(path.join(crewHome, 'sleep-received')), 'sleep prompt receipt');
       runner.assert(transcripts(crewHome).some(file => file.text.includes('user is asking you to close')), 'inbox read delivers the sleep request');
       await waitFor(() => fs.existsSync(path.join(crewHome, 'handoffs')) && fs.readdirSync(path.join(crewHome, 'handoffs')).length, 'filed handoff');
       await waitFor(() => !observer.sessionsById.has(first.session_id), 'first day closed');
+      const sleeping = JSON.parse(cli(['crew', 'list', '--json'])).find(member => member.id === crewName);
+      runner.assert(sleeping && !sleeping.binding_session, 'plain handoff leaves the member asleep while the user is present', sleeping);
       const second = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       sessions.push(second.session_id);
       const successor = await waitFor(() => transcripts(crewHome).find(file => file.name !== captured.name && file.text.includes('CREW_READY')), 'successor wake');
