@@ -149,7 +149,6 @@ func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalResta
 	if err != nil {
 		return struct{}{}, err
 	}
-	d.monitors().registry.DropSwitches(msg.TerminalID)
 	plugin, err := d.prepareMachineAgent(msg.SessionID, &opts, agent, true)
 	if err != nil {
 		return struct{}{}, err
@@ -161,6 +160,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if plugin != nil {
 		defer plugin.abort()
 	}
+	d.monitors().registry.DropSwitches(msg.TerminalID)
 	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
 	d.syncMonitorConversation(sessionID)

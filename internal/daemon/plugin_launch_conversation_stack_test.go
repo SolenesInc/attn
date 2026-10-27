@@ -111,7 +111,7 @@ func TestAPendingMetadataReplyDoesNotBlockTheDriversReloadResponse(t *testing.T)
 	s.Start()
 	app := s.App()
 	driver := dialDriverAt(t, s.DialUnix, "snipe-plugin")
-	driver.register("snipe", map[string]bool{"resume": true, "state_reporting": true})
+	driver.register("snipe", map[string]bool{"resume": true, "state_reporting": true, "launch_instructions": true})
 	awaitDriverAvailable(app, "snipe")
 	session := s.Spawn(app, scriptedAgent, s.Path("shop"))
 	first := driver.launched()
@@ -126,12 +126,12 @@ func TestAPendingMetadataReplyDoesNotBlockTheDriversReloadResponse(t *testing.T)
 	driver.mu.Lock()
 	driver.holdLaunch = true
 	driver.mu.Unlock()
-	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24})
+	app.Send(protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: protocol.SessionID(session), ChiefOfStaff: true})
 	reply := driver.asked("driver.resume", nil)
 	driver.launched()
 	applying.Release()
 	driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
-	if result := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session }); !result.Success {
+	if result := testworld.Await(app, protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return string(r.SessionID) == session }); !result.Success {
 		t.Fatalf("reload failed while a metadata reply waited: %s", protocol.Deref(result.Error))
 	}
 	if err := <-reported; err == nil {
