@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -161,12 +162,12 @@ func (m *Monitor) PendingSwitch() (Conversation, bool) {
 }
 
 func (r *Registry) Input(terminal harness.TerminalID, fallback *Monitor) *Monitor {
+	if fallback == nil {
+		pausepoint.At(pausepoint.ConversationInputLookup)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if candidate := r.inputs[terminal]; candidate != nil {
-		return candidate
-	}
-	return fallback
+	return r.currentInTerminalLocked(terminal, fallback)
 }
 
 func (m *Monitor) Candidate(conversation string) *Monitor {

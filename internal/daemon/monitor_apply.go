@@ -27,6 +27,9 @@ func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.Answer, 
 	if !h.apply(view, false) {
 		return sessionmonitor.Answer{}, false
 	}
+	if h.daemon.copiedSession(h.sessionID()) {
+		return sessionmonitor.Answer{}, true
+	}
 	pending := view.PendingSwitch.V
 	if pending.NativeID != "" && pending.Terminal != "" {
 		shown, _ := h.daemon.shownIn(pending.Terminal)

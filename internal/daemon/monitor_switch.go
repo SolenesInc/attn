@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
@@ -120,6 +121,9 @@ func (d *Daemon) bindMonitorCandidate(source, candidate *sessionmonitor.Monitor,
 	}
 	if source.Session() != monitor.Session() && d.store.Get(source.Session()) == nil {
 		d.forgetMonitor(source.Session())
+	}
+	if source.Session() != monitor.Session() {
+		pausepoint.At(pausepoint.ConversationCandidateBound)
 	}
 }
 

@@ -41,6 +41,8 @@ const (
 	ConversationSwitchDecision = "conversation-switch-decision"
 	ConversationSwitchObserved = "conversation-switch-observed"
 	ConversationSwitchAnswer   = "conversation-switch-answer"
+	ConversationInputLookup    = "conversation-input-lookup"
+	ConversationCandidateBound = "conversation-candidate-bound"
 	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
 	PtyExitHandled             = "pty-exit-handled"
 	DriverTranscriptCaptured   = "driver-transcript-captured"

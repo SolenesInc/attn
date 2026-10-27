@@ -421,3 +421,33 @@ func TestAnEndedRuntimeCannotReplayItsUnansweredSwitchOverItsReplacement(t *test
 	s.Start()
 	restartedSession(s.App(), string(last.ID))
 }
+
+func TestInputFindsItsConversationWhenBindingFinishesDuringLookup(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
+	answer := s.PauseAt(pausepoint.ConversationSwitchAnswer)
+	lookup := s.PauseAt(pausepoint.ConversationInputLookup)
+	bound := s.PauseAt(pausepoint.ConversationCandidateBound)
+	s.Start()
+	app := s.App()
+	first := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.Label = protocol.Ptr("Original")
+	})
+	agent := s.Launched(first)
+	app.TypeLine(first, "/clear")
+	agent.Prompted()
+	answer.Await()
+	next := awaitSuccessor(app, first)
+	app.TypeLine(string(next.ID), "fix cart discounts")
+	lookup.Await()
+	answer.Release()
+	bound.Await()
+	bound.Release()
+	lookup.Release()
+	if got := agent.Prompted(); got != "fix cart discounts" {
+		t.Fatalf("input after binding = %q", got)
+	}
+	title := s.HeadlessTask()
+	title.Answer("Fix cart discounts")
+	awaitLabel(app, string(next.ID), "Fix cart discounts")
+}
