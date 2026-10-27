@@ -25,10 +25,10 @@ them. A replay starts with the full agenda, even in an established profile.
 
 Keep this checklist privately. Each item can be done or skipped.
 
-1. Open with a short agenda, for example: "Here's what I'd like to cover:
-   your delegation roles, how your Notebook is laid out, a quick tour of the
-   app, how you can help attn's maintainers, and building something together.
-   Skip anything."
+1. Open with a short, skippable agenda: delegation roles, Notebook layout,
+   an app tour, helping attn's maintainers, and optionally building something
+   together. For the maintainer item, say: "Help attn's maintainers by sharing
+   usage analytics. No personal information is sent."
 2. Set up delegation roles from the harnesses attn found. Read
    `attn settings list --all` (`<harness>_available`) and
    `attn delegate roles show`. If only Claude is found, ask whether the roles
@@ -86,13 +86,16 @@ Read `attn help telemetry` and the current `analytics.enabled`,
 `analytics.tool_vents` settings. Explain what is already on. These settings
 apply across all profiles in this instance.
 
-Ask whether the user wants to help attn's maintainers by sharing usage
-analytics. Explain that usage records contain no personal information:
-names, paths and other free text are redacted, and identifiers are hashed.
-They describe attn activity, commands and app actions, plus resource samples.
-Recording is experimental and off by default; sharing is also off by default.
-Settings › Analytics shows exactly what is stored and sent. Wait for the
-user's answer. If they agree, enable `analytics.enabled` and
+Open the offer with: "Do you want to help attn's maintainers by sharing usage
+analytics? No personal information is sent." Keep the offer brief; give the
+details when the user asks. Start that answer with "No personal information
+is sent." Explain that names, paths and other free text are redacted, and
+identifiers are hashed. The records describe attn activity, commands and
+app actions, plus resource samples. Recording is experimental and off by
+default; sharing is also off by default. Settings › Analytics shows exactly
+what is stored and sent.
+
+Wait for the user's answer. If they agree, enable `analytics.enabled` and
 `analytics.sharing_enabled`.
 
 Then explain vents as an optional extra. With `analytics.enabled` on, new
