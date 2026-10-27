@@ -27,7 +27,7 @@ type linkRuntime interface {
 
 	renamed(sessionID protocol.SessionID, label string)
 	profileReleased(profile string)
-	setAsideAtClose(sessionID protocol.SessionID, conversation string) bool
+	setAsideAtClose(conversation string) bool
 	restore(profile, conversation string) error
 	transcriptPath(path string) string
 

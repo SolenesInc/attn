@@ -1358,16 +1358,17 @@ func (d *Daemon) recoverRecords(machine machineReport, sessions []protocol.Sessi
 			if _, live := machine.live[sessionID]; live {
 				continue
 			}
-			if d.sessionTeardownInFlight(sessionID) {
-				continue
-			}
 			existing := d.store.Get(sessionID)
 			teardown := d.resumeSessionTeardown(sessionID)
 			if teardown != nil {
-				if !d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown, syscall.SIGTERM) {
+				notified := d.notifyPreparedPluginDriverSessionClosed(sessionID, teardown, syscall.SIGTERM)
+				if notified {
+					d.store.ClearSessionIntentionalClose(sessionID)
+				}
+				teardown.releaseLifecycle()
+				if !notified {
 					continue
 				}
-				d.store.ClearSessionIntentionalClose(sessionID)
 			}
 			if existing != nil {
 				report.Reaped++
@@ -2012,21 +2013,30 @@ func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *s
 }
 
 func (d *Daemon) resumeSessionTeardown(sessionID protocol.SessionID) *sessionTeardown {
+	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
+	lifecycleLock.Lock()
+	if d.sessionTeardownInFlight(sessionID) {
+		lifecycleLock.Unlock()
+		return nil
+	}
 	driverRun, found, err := d.store.PrepareExistingSessionTeardown(sessionID, time.Now())
 	if err != nil {
+		lifecycleLock.Unlock()
 		d.logf("session teardown recovery failed for %s: %v", sessionID, err)
 		return nil
 	}
 	if !found {
+		lifecycleLock.Unlock()
 		return nil
 	}
 	session := d.store.Get(sessionID)
 	terminals := d.terminalsOf(sessionID)
 	if err := d.closeSession(sessionID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+		lifecycleLock.Unlock()
 		d.logf("session teardown recovery close failed for %s: %v", sessionID, err)
 		return nil
 	}
-	return &sessionTeardown{session: session, terminals: terminals, driverRun: driverRun}
+	return &sessionTeardown{session: session, terminals: terminals, driverRun: driverRun, lifecycleLock: lifecycleLock}
 }
 
 func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID protocol.SessionID, teardown *sessionTeardown, sig syscall.Signal) bool {

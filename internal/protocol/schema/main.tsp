@@ -3191,6 +3191,49 @@ model AgentCatalogResult {
 }
 
 @extension("x-on", #{ machine: "host" })
+model ReopenInspectMessage {
+  cmd: "reopen_inspect";
+  host: string;
+  session_id: SessionID;
+  cwd: string;
+  agent: string;
+  conversation: string;
+  branch: string;
+  repository: string;
+  repository_subdir: string;
+  link: string;
+  has_launch_intent: boolean;
+  branch_merged: boolean;
+}
+model ReopenInspection {
+  verdict: SessionReopen;
+  recreate_path: string;
+  remote: string;
+  stale_registration: boolean;
+}
+
+@extension("x-on", #{ machine: "host" })
+model ReopenWorktreeMessage {
+  cmd: "reopen_worktree";
+  host: string;
+  session_id: SessionID;
+  cwd: string;
+  agent: string;
+  conversation: string;
+  branch: string;
+  repository: string;
+  repository_subdir: string;
+  action: SessionReopenAction;
+  recreate_path: string;
+  remote: string;
+  stale_registration: boolean;
+}
+model ReopenWorktreeResult {
+  path: string;
+  cwd: string;
+}
+
+@extension("x-on", #{ machine: "host" })
 model CheckoutInspectMessage {
   cmd: "checkout_inspect";
   host: string;
@@ -7360,6 +7403,7 @@ model SessionTranscriptResult {
 // A session as the ledger holds it. Distinct from Session, which is the live
 // broadcast shape: this one outlives the runtime and carries how it ended.
 model SessionLedgerEntry {
+  host?: string;
   priority?: boolean;
   turn_snoozed_until?: string;
   id: SessionID;

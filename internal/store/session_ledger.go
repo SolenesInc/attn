@@ -286,7 +286,7 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 const ledgerSelect = `SELECT id, user_label, harness_title, agent, directory, profile_id, priority,
 	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
 	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
-	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason, turn_snoozed_until,
+	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason, turn_snoozed_until, host,
  COALESCE((SELECT pinned_at FROM kept_conversation_pins p WHERE p.agent=sessions.agent AND p.resume_id=sessions.resume_session_id), '')`
 
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
@@ -604,6 +604,7 @@ func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) pr
 		Label:      session.Label,
 		Agent:      session.Agent,
 		Directory:  session.Directory,
+		Host:       session.Host,
 		ProfileID:  session.ProfileID,
 		Priority:   session.Priority,
 		Branch:     session.Branch,
@@ -642,6 +643,7 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		closeReason      string
 		pinnedAt         string
 		snoozedUntil     string
+		host             string
 	)
 
 	err := row.Scan(
@@ -664,10 +666,14 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 		&closedBy,
 		&closeReason,
 		&snoozedUntil,
+		&host,
 		&pinnedAt,
 	)
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
+	}
+	if host != "" {
+		entry.Host = protocol.Ptr(host)
 	}
 	entry.Label = labels.shown(entry.ID, entry.Directory, entry.Agent)
 	if until, err := time.Parse(time.RFC3339Nano, snoozedUntil); err == nil && until.After(time.Now()) && closedAt == "" {

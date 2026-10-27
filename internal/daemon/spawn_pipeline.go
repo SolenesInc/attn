@@ -382,7 +382,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		return d.executeAddedTerminal(req, plan)
 	}
 	msg := req.msg
-	if req.existingSession != nil && d.sessionLive(context.Background(), msg.ID) {
+	if req.existingSession != nil && !req.policy.fromLedger && d.sessionLive(context.Background(), msg.ID) {
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{alreadyLive: true}
 	}
