@@ -1,6 +1,6 @@
 ---
 name: attn
-description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, the Notebook, markdown, terminals, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
+description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, the Notebook, markdown, moving and controlling terminals across desktops, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
 ---
 
 # attn
@@ -43,7 +43,7 @@ For delegation mechanics and configured role selection, read [references/delegat
 
 ## Capability Index
 
-- **Open shell splits, read terminals, type into them, wait, or close them:** read
+- **Open shell splits, read terminals, type into them, wait, move them between desktops, or close them:** read
   [references/terminal.md](references/terminal.md).
 
 - **Create an authorized Attn delegation:** read [references/delegation.md](references/delegation.md).

@@ -106,7 +106,7 @@ async function main() {
           await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'delegation opening turn stopped');
           const desktop = await observer.createDesktop();
           execFileSync(appDaemonInTree(options.appPath), [
-            'session', 'move', desktop.id, '--session', sessionId,
+            'terminal', 'move', sessionId, desktop.id,
           ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance(), { ATTN_TERMINAL_ID: observer.terminalOf(agents[0].sessionId) }) });
           await observer.waitFor(() => observer.desktopOf(sessionId)?.id === desktop.id, 'beta moved to its own desktop');
           await client.request('select_session', { sessionId });

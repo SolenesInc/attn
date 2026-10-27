@@ -1,0 +1,6 @@
+kind: fixed
+area: asks
+change: >
+  When your answer to an ask asks the agent something, the agent replies with a
+  new ask instead of writing the reply into its own terminal, where you would
+  likely never read it.

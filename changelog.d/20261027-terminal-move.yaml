@@ -1,0 +1,4 @@
+kind: changed
+area: cli
+change: Move agents and shells between desktops with attn terminal move, keeping their processes running. It replaces attn session move.
+notes: Terminal open --desktop now creates a missing numbered desktop. CLI help and the attn skill describe moving and session commands.

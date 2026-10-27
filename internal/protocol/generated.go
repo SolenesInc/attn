@@ -3932,40 +3932,6 @@ type DesktopMoveLeafMessage struct {
 	WithDelegates *bool `json:"with_delegates,omitempty,omitzero"`
 }
 
-type DesktopMoveSessionMessage struct {
-	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
-	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Desktop corresponds to the JSON schema field "desktop".
-	Desktop string `json:"desktop"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-}
-
-type DesktopMoveSessionResult struct {
-	// DesktopCreated corresponds to the JSON schema field "desktop_created".
-	DesktopCreated *bool `json:"desktop_created,omitempty,omitzero"`
-
-	// DesktopID corresponds to the JSON schema field "desktop_id".
-	DesktopID string `json:"desktop_id"`
-
-	// FromDesktopID corresponds to the JSON schema field "from_desktop_id".
-	FromDesktopID *string `json:"from_desktop_id,omitempty,omitzero"`
-
-	// PaneID corresponds to the JSON schema field "pane_id".
-	PaneID string `json:"pane_id"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-
-	// Unchanged corresponds to the JSON schema field "unchanged".
-	Unchanged *bool `json:"unchanged,omitempty,omitzero"`
-}
-
 type DesktopPane struct {
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
@@ -8957,10 +8923,6 @@ type Response struct {
 	// DelegationRoles corresponds to the JSON schema field "delegation_roles".
 	DelegationRoles *DelegationRolesResult `json:"delegation_roles,omitempty,omitzero"`
 
-	// DesktopMoveSessionResult corresponds to the JSON schema field
-	// "desktop_move_session_result".
-	DesktopMoveSessionResult *DesktopMoveSessionResult `json:"desktop_move_session_result,omitempty,omitzero"`
-
 	// DocCollectionsResult corresponds to the JSON schema field
 	// "doc_collections_result".
 	DocCollectionsResult *DocCollectionsResult `json:"doc_collections_result,omitempty,omitzero"`
@@ -9123,6 +9085,9 @@ type Response struct {
 	// TerminalInputResult corresponds to the JSON schema field
 	// "terminal_input_result".
 	TerminalInputResult *TerminalInputResult `json:"terminal_input_result,omitempty,omitzero"`
+
+	// TerminalMoveResult corresponds to the JSON schema field "terminal_move_result".
+	TerminalMoveResult *TerminalMoveResult `json:"terminal_move_result,omitempty,omitzero"`
 
 	// TerminalOpenResult corresponds to the JSON schema field "terminal_open_result".
 	TerminalOpenResult *TerminalOpenResult `json:"terminal_open_result,omitempty,omitzero"`
@@ -12677,6 +12642,43 @@ type TerminalListMessage struct {
 
 	// Desktop corresponds to the JSON schema field "desktop".
 	Desktop *string `json:"desktop,omitempty,omitzero"`
+}
+
+type TerminalMoveMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID SessionID `json:"caller_session_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Desktop corresponds to the JSON schema field "desktop".
+	Desktop string `json:"desktop"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+}
+
+type TerminalMoveResult struct {
+	// DesktopCreated corresponds to the JSON schema field "desktop_created".
+	DesktopCreated *bool `json:"desktop_created,omitempty,omitzero"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// FromDesktopID corresponds to the JSON schema field "from_desktop_id".
+	FromDesktopID *string `json:"from_desktop_id,omitempty,omitzero"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID string `json:"pane_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// TerminalID corresponds to the JSON schema field "terminal_id".
+	TerminalID TerminalID `json:"terminal_id"`
+
+	// Unchanged corresponds to the JSON schema field "unchanged".
+	Unchanged *bool `json:"unchanged,omitempty,omitzero"`
 }
 
 type TerminalOpenMessage struct {

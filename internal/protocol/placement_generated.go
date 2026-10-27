@@ -88,7 +88,6 @@ var Placements = map[string][]Placement{
 	"delegation_preferences_show":      {Placement{LocatorHome, ""}},
 	"delegation_roles":                 {Placement{LocatorHome, ""}},
 	"delete_worktree":                  {Placement{LocatorHere, ""}},
-	"desktop_move_session":             {Placement{LocatorHome, ""}},
 	"doc_collections":                  {Placement{LocatorHome, ""}},
 	"doc_count":                        {Placement{LocatorHome, ""}},
 	"doc_define":                       {Placement{LocatorHome, ""}},
@@ -192,6 +191,7 @@ var Placements = map[string][]Placement{
 	"terminal_kill":                    {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_launch":                  {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_list":                    {Placement{LocatorHome, ""}},
+	"terminal_move":                    {Placement{LocatorHome, ""}},
 	"terminal_open":                    {Placement{LocatorHome, ""}},
 	"terminal_pointer_activity":        {Placement{LocatorTerminal, "id"}},
 	"terminal_read":                    {Placement{LocatorHome, ""}},
@@ -964,18 +964,6 @@ func (m DeleteWorktreeMessage) Placement() Placement {
 }
 
 func (m DeleteWorktreeMessage) Locate() string {
-	return ""
-}
-
-func (DesktopMoveSessionMessage) CommandName() string {
-	return "desktop_move_session"
-}
-
-func (m DesktopMoveSessionMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m DesktopMoveSessionMessage) Locate() string {
 	return ""
 }
 
@@ -2224,6 +2212,18 @@ func (m TerminalListMessage) Placement() Placement {
 }
 
 func (m TerminalListMessage) Locate() string {
+	return ""
+}
+
+func (TerminalMoveMessage) CommandName() string {
+	return "terminal_move"
+}
+
+func (m TerminalMoveMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TerminalMoveMessage) Locate() string {
 	return ""
 }
 

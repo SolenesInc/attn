@@ -2858,8 +2858,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleTerminalWait(conn, msg.(*protocol.TerminalWaitMessage))
 	case protocol.CmdTerminalClose:
 		d.handleTerminalClose(conn, msg.(*protocol.TerminalCloseMessage))
-	case protocol.CmdDesktopMoveSession:
-		d.handleDesktopMoveSession(conn, msg.(*protocol.DesktopMoveSessionMessage))
+	case protocol.CmdTerminalMove:
+		d.handleTerminalMove(conn, msg.(*protocol.TerminalMoveMessage))
 	case protocol.CmdDropOutpostCopy:
 		if err := d.dropStaleCopy(); err != nil {
 			d.sendError(conn, err.Error())

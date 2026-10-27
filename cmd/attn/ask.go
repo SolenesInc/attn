@@ -181,7 +181,8 @@ To ask permission for a risky action, name the exact action and its target in
 the question, such as the command, branch or environment. The answer approves
 only what the question names.
 
-The ask is markdown with question blocks in it:
+The ask is markdown. Question blocks in it ask the user something; an ask
+without one just tells them something:
 
   :::question            pick one choice
   :::question-multi      pick any number of choices
@@ -204,8 +205,8 @@ A block's first line is the question; the rest is context. Choices are
 attn ask prints the ask's id and returns at once. Carry on with work that does
 not depend on the answer. When the user answers, attn types the answer into
 the conversation as their message, approvals included. By then they have
-likely moved on and will not read what you write back, so if you still need
-them, ask again.
+likely moved on and will not read what you write back there. If their answer
+asks you something, reply with a new ask. If you still need them, ask again.
 
 commands:
   (none)                 open an ask from stdin or --file

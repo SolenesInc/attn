@@ -25,16 +25,25 @@ func writeTerminalHelp(w io.Writer) {
   send <terminal> (--text "<text>" | --keys C-c Escape Enter ...) [--desktop <ref>]
   read <terminal> [--last | --scrollback [--lines <n>]]
   wait <terminal> --until prompt|exit [--timeout <seconds>]
+  move [<terminal>] <desktop> [--json]
   close <terminal> [--desktop <ref>]
 
 Run inside an attn agent. A target is a terminal id or unique terminal-id
 prefix printed by ls. A session id/prefix or awake crew name also works when
 that session shows in exactly one terminal; otherwise choose a terminal id.
 All targets belong to the caller's profile.
-Reads reach every desktop; actions on another desktop require --desktop.
-Shells accept input from any agent. Typing into agents requires self, a
-transitive delegation chain, or the profile's chief. Close agents with
-attn agent close instead.
+Reads and moves reach every desktop; typing and closing on another desktop
+require --desktop. Any agent may type into or move a shell. Typing into or
+moving agents requires self, a transitive delegation chain, or the profile's
+chief. Close agents with attn agent close instead.
+
+Move defaults to your session. <desktop> is a shortcut digit, its name as shown
+(case-insensitive), or its id. A missing numbered desktop is created. The
+terminal keeps running beside the destination's active tile. The user's current
+desktop stays put; a moved active tile becomes active at its destination only
+when that desktop is not current. Move yourself and a shell with two calls:
+  attn terminal move 8
+  attn terminal move <shell> 8
 
 Open --host selects an outpost by name or id. Without --cwd it starts in the
 outpost's home directory; --cwd names a directory on the outpost.
@@ -43,8 +52,9 @@ home. Spawning chief, crew and plugin agents on outposts is unavailable.
 
 Open preserves focus: first terminal right (or --down), later terminals below
 the last live terminal you opened there. --desktop starts at its active tile.
-Open with a command requires OSC 133: known unsupported shells are refused
-before opening. First-prompt wait limit=30s (measured 9-176ms in fish/zsh/bash).
+A missing numbered --desktop is created; ls, typing, and closing require an
+existing desktop. Open with a command requires OSC 133: known unsupported
+shells are refused before opening. First-prompt wait limit=30s (measured 9-176ms in fish/zsh/bash).
 On timeout the terminal stays open, nothing is typed later; use send there.
 Open without a command for shells without integration.
 Commands run through the shell, preserving history. run requires a prompt;
@@ -163,7 +173,7 @@ func parseTerminalArgs(args []string) (terminalArgs, error) {
 		}
 	}
 	allowed := map[string]string{
-		"ls": "--desktop --all --json", "open": "--host --down --desktop --cwd --json", "run": "--wait --timeout --desktop --json", "send": "--text --keys --desktop", "read": "--last --scrollback --lines --json", "wait": "--until --timeout --json", "close": "--desktop",
+		"ls": "--desktop --all --json", "open": "--host --down --desktop --cwd --json", "run": "--wait --timeout --desktop --json", "send": "--text --keys --desktop", "read": "--last --scrollback --lines --json", "wait": "--until --timeout --json", "close": "--desktop", "move": "--json",
 	}
 	valid, ok := allowed[parsed.action]
 	if !ok {
@@ -180,6 +190,9 @@ func parseTerminalArgs(args []string) (terminalArgs, error) {
 		want = 0
 	}
 	if parsed.action == "run" {
+		want = 2
+	}
+	if parsed.action == "move" && len(parsed.positional) == 2 {
 		want = 2
 	}
 	if len(parsed.positional) != want {
@@ -286,6 +299,12 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 			direction = protocol.TerminalDirectionDown
 		}
 		message = protocol.TerminalOpenMessage{Cmd: protocol.CmdTerminalOpen, CallerSessionID: caller, Host: nonEmpty(args.host), Desktop: desktop, Direction: &direction, Cwd: nonEmpty(args.cwd), Command: nonEmpty(args.command)}
+	case "move":
+		target = string(caller)
+		if len(args.positional) == 2 {
+			target = args.positional[0]
+		}
+		message = protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: caller, Target: target, Desktop: args.positional[len(args.positional)-1]}
 	case "send", "run":
 		data := args.text
 		if args.hasKeys {
@@ -333,6 +352,8 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 			result = response.TerminalEntries
 		case "open":
 			result = response.TerminalOpenResult
+		case "move":
+			result = response.TerminalMoveResult
 		case "read":
 			result = response.TerminalReadResult
 		case "run":
@@ -361,6 +382,16 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 				return 1, errors.New("daemon omitted terminal_open_result")
 			}
 			fmt.Println(response.TerminalOpenResult.TerminalID)
+		case "move":
+			result := response.TerminalMoveResult
+			if result == nil {
+				return 1, errors.New("daemon omitted terminal_move_result")
+			}
+			if protocol.Deref(result.Unchanged) {
+				fmt.Printf("%s already is on desktop %s\n", result.TerminalID, result.DesktopID)
+			} else {
+				fmt.Printf("%s moved to desktop %s\n", result.TerminalID, result.DesktopID)
+			}
 		case "read":
 			if response.TerminalReadResult == nil {
 				return 1, errors.New("daemon omitted terminal_read_result")

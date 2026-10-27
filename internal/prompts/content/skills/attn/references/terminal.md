@@ -1,7 +1,8 @@
 # Terminals beside your agent
 
 Use `attn terminal` inside an attn agent to open shell splits, inspect terminals,
-type into them, wait for a command or terminal to finish, and close shells.
+type into them, wait for a command or terminal to finish, move terminals between
+desktops, and close shells.
 Run `attn terminal --help` for the full syntax and supported key names.
 
 ```sh
@@ -11,6 +12,7 @@ attn terminal read <id>
 attn terminal send <id> --keys C-c
 attn terminal run <id> "make test" --wait
 attn terminal read <id> --last
+attn terminal move <id> 8
 attn terminal close <id>
 ```
 
@@ -20,7 +22,7 @@ Opening preserves the user's focus. Your first terminal goes to your right;
 `--down` puts it below you. Later ones stack below your most recently opened
 live terminal on that desktop. With `--desktop <ref>`, the first split starts
 at that desktop's active tile. `--cwd <dir>` selects the directory; otherwise
-it uses your session's directory.
+it uses your session's directory. A missing numbered `--desktop` is created.
 
 `open -- command` waits for the shell's first OSC 133 prompt before typing.
 Known unsupported shells are refused before opening. A first-prompt wait
@@ -44,22 +46,43 @@ Every target belongs to your profile. Crew names follow their current session
 and never wake a sleeping member.
 
 If your session has tiles on several desktops, pass `--desktop` for listing
-and actions. If it has several tiles on one desktop, `open` also needs
+and typing or closing. If it has several tiles on one desktop, `open` also needs
 `--desktop` to select that desktop's active tile as the anchor.
 
 - `ls` shows your desktop; `--all` shows all desktops in your profile.
-- `read` and `wait` can inspect any terminal in your profile.
+- `read` and `wait` can inspect any terminal in your profile. `move` reaches
+  every desktop too, without `--desktop`.
 - `open`, `run`, `send` and `close` on another desktop require an explicit
   `--desktop <ref>`. A refusal prints the value to pass.
-- Any agent can type into a shell. To type into an agent, it must be you or
+- Any agent can type into or move a shell. To type into or move an agent, it must be you or
   below you in your delegation chain, including delegates' delegates. Your
-  profile's chief can type into any agent in the profile.
+  profile's chief can type into or move any agent in the profile.
 - `close` closes shells. Use `attn agent close` to close an agent.
 
 Typing goes straight to the terminal, as keyboard input does. `send --text`
 writes literal bytes; it does not press Enter for you. Use `send --keys Enter`
 to submit text, or `run` for a shell command. `send --keys C-c` interrupts the
 foreground program.
+
+## Move
+
+`attn terminal move [<terminal>] <desktop>` moves one terminal, keeping its
+process running. Without a target, it moves your session's terminal. A session
+shown in several terminals needs an explicit terminal id.
+
+```sh
+attn terminal move 8
+attn terminal move <shell-id> 8
+```
+
+The calls work in either order. `<desktop>` is its shortcut digit, name as shown
+(case-insensitive), or id. A missing numbered desktop is created on its shortcut
+slot. Listing, typing, and closing with `--desktop` require an existing desktop.
+
+The terminal goes beside the destination's active tile. Your profile's current
+desktop never changes. The moved tile becomes active at the destination only
+when it was active at the source and the destination is not current. Moving an
+agent whose tile was removed gives its existing terminal a tile there.
 
 ## Reading and waiting
 

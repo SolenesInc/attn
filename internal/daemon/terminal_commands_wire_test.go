@@ -79,4 +79,17 @@ func TestTerminalCommandsAddressEachTileOfASharedConversation(t *testing.T) {
 	if strings.Contains(firstRead.TerminalReadResult.Text, "second independent draft") || strings.Contains(secondRead.TerminalReadResult.Text, "first independent draft") {
 		t.Fatalf("drafts crossed terminals: first=%q second=%q", firstRead.TerminalReadResult.Text, secondRead.TerminalReadResult.Text)
 	}
+	_, err = cli.TerminalCommand(context.Background(), protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(caller), Target: caller, Desktop: home})
+	if err == nil || !strings.Contains(err.Error(), firstTerminal) || !strings.Contains(err.Error(), secondTerminal) {
+		t.Fatalf("ambiguous move must name both terminals: %v", err)
+	}
+	moved := call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: protocol.SessionID(caller), Target: secondTerminal, Desktop: home}).TerminalMoveResult
+	if moved == nil || string(moved.TerminalID) != secondTerminal || moved.DesktopID != home {
+		t.Fatalf("moving the selected terminal: %+v", moved)
+	}
+	for _, terminal := range []string{firstTerminal, secondTerminal} {
+		if desktop, _ := tileOf(t, w, app, terminal); desktop != home {
+			t.Fatalf("terminal %s on %s, want %s", terminal, desktop, home)
+		}
+	}
 }
