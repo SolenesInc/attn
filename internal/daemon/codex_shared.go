@@ -178,7 +178,7 @@ func (r *codexShared) canRun(req *spawnRequest) bool {
 }
 
 func (r *codexShared) enabledForNewLaunches() bool {
-	return parseBooleanSetting(r.d.daemonSetting(SettingCodexSharedEnabled))
+	return parseBooleanSetting(r.d.homeSetting(SettingCodexSharedEnabled))
 }
 
 func (r *codexShared) admit(profile, conversation string) error {

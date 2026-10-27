@@ -1087,7 +1087,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetSettingsWS(client)
 	case protocol.CmdSetSetting:
 		setting := msg.(*protocol.SetSettingMessage)
-		if setting.Key == SettingSharedPTYHostEnabled {
+		if setting.Key == string(SettingSharedPTYHostEnabled) {
 			d.life.Go("handleSetSettingWS", func() { d.handleSetSettingWS(client, setting) })
 		} else {
 			d.handleSetSettingWS(client, setting)

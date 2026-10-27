@@ -28,7 +28,7 @@ const (
 )
 
 func (d *Daemon) analyticsEnabled() bool {
-	return parseBooleanSetting(d.daemonSetting(SettingAnalyticsEnabled))
+	return parseBooleanSetting(d.machineSetting(SettingAnalyticsEnabled))
 }
 
 func (d *Daemon) configureAnalytics() {

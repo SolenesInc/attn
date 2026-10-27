@@ -27,7 +27,7 @@ const (
 )
 
 func (d *Daemon) asksSettingOn() bool {
-	return parseBooleanSetting(d.daemonSetting(SettingAsksEnabled))
+	return parseBooleanSetting(d.homeSetting(SettingAsksEnabled))
 }
 
 func (d *Daemon) launchedWithAsks(sessionID protocol.SessionID) bool {

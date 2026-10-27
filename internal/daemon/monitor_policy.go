@@ -52,8 +52,8 @@ func (d *Daemon) monitorPolicyFrom(sources monitorPolicySources, sessionID proto
 
 func monitorPolicySetting(key string) bool {
 	switch key {
-	case SettingAutoSettleEnabled, SettingAutoSettleArmSeconds, SettingAutoSettleCountdownSeconds, SettingHeadlessTasksEnabled,
-		SettingQueueQuietNotifications, SettingQueueModeEnabled:
+	case string(SettingAutoSettleEnabled), string(SettingAutoSettleArmSeconds), string(SettingAutoSettleCountdownSeconds), string(SettingHeadlessTasksEnabled),
+		string(SettingQueueQuietNotifications), string(SettingQueueModeEnabled):
 		return true
 	}
 	return false

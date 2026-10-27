@@ -2396,6 +2396,7 @@ type CopyRow struct {
 type CopyTable string
 
 const CopyTableSessions CopyTable = "sessions"
+const CopyTableSettings CopyTable = "settings"
 const CopyTableTerminalBindings CopyTable = "terminal_bindings"
 
 type CreateWorktreeFromBranchMessage struct {

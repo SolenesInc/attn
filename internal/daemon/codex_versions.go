@@ -33,7 +33,7 @@ func (r *codexShared) binary(configured string) string {
 	env := pty.MergeEnvironment(os.Environ(), r.d.loginShellEnvironment())
 	name := strings.TrimSpace(configured)
 	if name == "" {
-		name = strings.TrimSpace(r.d.daemonSetting(SettingCodexExecutable))
+		name = strings.TrimSpace(r.d.machineSetting(SettingCodexExecutable))
 	}
 	if name == "" {
 		name, _ = pty.LookupEnv(env, codex.ExecutableEnvVar())
@@ -258,12 +258,12 @@ func (r *codexShared) versionsChanged(profiles ...string) {
 
 func (r *codexShared) settingChanged(key string) {
 	switch key {
-	case SettingCodexSharedEnabled:
+	case string(SettingCodexSharedEnabled):
 		if r.enabledForNewLaunches() {
 			r.d.queueCodexUpdateCheck()
 		}
 		r.versionsChanged()
-	case SettingCodexExecutable:
+	case string(SettingCodexExecutable):
 		r.refreshInstalledSoon()
 	}
 }

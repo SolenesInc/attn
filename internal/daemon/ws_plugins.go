@@ -14,15 +14,13 @@ import (
 )
 
 const (
-	SettingPluginPriorities        = "plugin_provider_priorities"
-	SettingInstalledBundledPlugins = "installed_bundled_plugins"
-	pluginInstallationAvailable    = "available"
-	pluginInstallationInstalled    = "installed"
-	pluginRuntimeStateStopped      = "stopped"
-	pluginRuntimeStateStarting     = "starting"
-	pluginRuntimeStateConnected    = "connected"
-	pluginRuntimeStateDegraded     = "degraded"
-	pluginRuntimeStateParked       = "parked"
+	pluginInstallationAvailable = "available"
+	pluginInstallationInstalled = "installed"
+	pluginRuntimeStateStopped   = "stopped"
+	pluginRuntimeStateStarting  = "starting"
+	pluginRuntimeStateConnected = "connected"
+	pluginRuntimeStateDegraded  = "degraded"
+	pluginRuntimeStateParked    = "parked"
 )
 
 func (d *Daemon) handleListPluginsWS(client *wsClient) {
@@ -342,7 +340,7 @@ func (d *Daemon) sendPluginActionResult(client *wsClient, action, name string, s
 }
 
 func (d *Daemon) pluginPriorities() map[string]int {
-	raw := strings.TrimSpace(d.daemonSetting(SettingPluginPriorities))
+	raw := strings.TrimSpace(d.homeSetting(SettingPluginPriorities))
 	if raw == "" {
 		return map[string]int{}
 	}
@@ -364,7 +362,7 @@ func (d *Daemon) setPluginPriority(name string, priority int) error {
 	if err != nil {
 		return fmt.Errorf("encode plugin priorities: %w", err)
 	}
-	d.store.SetSetting(SettingPluginPriorities, string(encoded))
+	d.store.SetSetting(string(SettingPluginPriorities), string(encoded))
 	d.ensurePluginRegistry().setPriorities(priorities)
 	return nil
 }

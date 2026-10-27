@@ -296,7 +296,7 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		configuredExecutable = legacyExecutableFromSpawnMessage(msg, req.agent)
 	}
 	plan := &spawnPlan{}
-	autoApprove := (req.agent == "claude" || req.agent == "codex") && defaultOnBooleanSetting(d.daemonSetting(SettingAutoApproveEnabled))
+	autoApprove := (req.agent == "claude" || req.agent == "codex") && defaultOnBooleanSetting(d.homeSetting(SettingAutoApproveEnabled))
 	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), LoginShellEnv: d.cachedLoginShellEnv(), AutoApprove: autoApprove, Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
 	requestedChief := protocol.Deref(msg.ChiefOfStaff)
 	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["launch_instructions"] {

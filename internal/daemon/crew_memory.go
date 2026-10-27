@@ -17,7 +17,7 @@ import (
 )
 
 func (d *Daemon) crewMemoryEnabled() bool {
-	return parseBooleanSetting(d.daemonSetting(SettingCrewMemoryEnabled))
+	return parseBooleanSetting(d.homeSetting(SettingCrewMemoryEnabled))
 }
 
 func (d *Daemon) crewMemoryLock(member string) *sync.Mutex {

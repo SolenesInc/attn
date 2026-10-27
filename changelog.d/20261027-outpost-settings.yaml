@@ -1,0 +1,3 @@
+kind: added
+area: outposts
+change: Outposts read home settings locally, forward home-setting changes to the home, and keep machine settings separate. Leaving enrollment restores the machine's earlier settings.

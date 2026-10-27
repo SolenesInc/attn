@@ -63,7 +63,7 @@ func (d *Daemon) configureOutpostListener() {
 		old.cancel()
 		<-old.done
 	}
-	address := d.daemonSetting(settingOutpostListen)
+	address := d.machineSetting(settingOutpostListen)
 	if address == "" {
 		d.setOutpostListenerState(nil, "off", nil)
 		return

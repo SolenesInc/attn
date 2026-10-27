@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/settingkeys"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -77,6 +78,12 @@ func (r *Router) bridge(msg protocol.Placed) (*bridge.Conn, error) {
 	switch msg.Placement().Locator {
 	case protocol.LocatorHome:
 		home = true
+	case protocol.LocatorSetting:
+		spec, err := writableSetting(msg.Locate())
+		if err != nil {
+			return nil, err
+		}
+		home = spec.class == settingkeys.Home
 	case protocol.LocatorMachine:
 		host = msg.Locate()
 	case protocol.LocatorSession:

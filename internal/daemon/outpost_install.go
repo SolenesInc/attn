@@ -54,7 +54,7 @@ func (d *Daemon) installOutpostBuild(ctx context.Context, header bridge.UpdateHe
 	if os.Getenv("INVOCATION_ID") == "" {
 		return fmt.Errorf("outpost is not running under systemd (INVOCATION_ID is empty); install the documented user unit")
 	}
-	if parseBooleanSetting(d.daemonSetting(SettingSharedPTYHostEnabled)) {
+	if parseBooleanSetting(d.machineSetting(SettingSharedPTYHostEnabled)) {
 		return fmt.Errorf("outpost has pty_shared_host_enabled on; this update carries attn only and would leave attn-pty-host on the old build")
 	}
 	executable, err := os.Executable()

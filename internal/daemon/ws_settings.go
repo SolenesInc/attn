@@ -43,6 +43,10 @@ func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMe
 }
 
 func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingEntry, error) {
+	return Call[*protocol.SettingEntry](d.life.Context(), d.router(), *msg)
+}
+
+func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage) (*protocol.SettingEntry, error) {
 	spec, err := writableSetting(msg.Key)
 	if err != nil {
 		return nil, err
@@ -50,7 +54,7 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 	if err := spec.validate(d, msg.Key, msg.Value); err != nil {
 		return nil, err
 	}
-	if msg.Key == SettingSharedPTYHostEnabled {
+	if msg.Key == string(SettingSharedPTYHostEnabled) {
 		err = d.setSharedPTYHostEnabled(parseBooleanSetting(msg.Value))
 	} else {
 		err = d.store.SetSettingChecked(msg.Key, msg.Value)
@@ -58,53 +62,58 @@ func (d *Daemon) setSetting(msg *protocol.SetSettingMessage) (*protocol.SettingE
 	if err != nil {
 		return nil, err
 	}
-	if msg.Key == string(settingOutpostsEnabled) {
+	d.settingChanged(msg.Key, msg.Value)
+
+	entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil))
+	return &entry, nil
+}
+
+func (d *Daemon) settingChanged(key, value string) {
+	if key == string(settingOutpostsEnabled) {
 		d.configureOutposts()
 	}
-	if msg.Key == string(settingOutpostListen) {
+	if key == string(settingOutpostListen) {
 		d.configureOutpostListener()
 	}
-	if harness, ok := isAgentExecutableSettingKey(msg.Key); ok {
+	if harness, ok := isAgentExecutableSettingKey(key); ok {
 		d.invalidateHarnessModels(harness)
 	}
-	if isSessionCostPriceSetting(msg.Key) {
+	if isSessionCostPriceSetting(key) {
 		d.publishSessionCostReprices()
 	}
-	if msg.Key == SettingAnalyticsEnabled {
+	if key == string(SettingAnalyticsEnabled) {
 		d.configureAnalytics()
 	}
-	if msg.Key == SettingAnalyticsEnabled || msg.Key == SettingAnalyticsSharingEnabled {
+	if key == string(SettingAnalyticsEnabled) || key == string(SettingAnalyticsSharingEnabled) {
 		if !d.analyticsSharing() {
 			d.analyticsUpload.withdraw()
 		}
 		d.queueAnalyticsShip()
 	}
-	if msg.Key == SettingTailscaleEnabled {
+	if key == string(SettingTailscaleEnabled) {
 		d.ensureTailscaleServeFromSettings()
 	}
-	if msg.Key == SettingHeadlessContextWindowCap {
+	if key == string(SettingHeadlessContextWindowCap) {
 		d.applyHeadlessContextWindowCap()
 	}
-	if msg.Key == SettingHeadlessTasksEnabled {
+	if key == string(SettingHeadlessTasksEnabled) {
 		d.applyHeadlessTasksMode()
 	}
-	if monitorPolicySetting(msg.Key) {
+	if monitorPolicySetting(key) {
 		d.pushMonitorPolicies()
 	}
-	if msg.Key == SettingAutoSettleEnabled {
-		if parseBooleanSetting(msg.Value) {
+	if key == string(SettingAutoSettleEnabled) {
+		if parseBooleanSetting(value) {
 			d.armAutoSettleForRunningSessions()
 		} else {
 			d.cancelAllAutoSettle()
 		}
 	}
-	if msg.Key == SettingActivityEnabled && !parseBooleanSetting(msg.Value) {
+	if key == string(SettingActivityEnabled) && !parseBooleanSetting(value) {
 		d.clearAllSessionActivity()
 	}
-	d.publishSettingsFact(FactSettingChanged, msg.Key)
-	d.codexShared().settingChanged(msg.Key)
-	entry := settingEntry(spec, msg.Key, d.daemonSetting(daemonSettingKey(msg.Key)))
-	return &entry, nil
+	d.publishSettingsFact(FactSettingChanged, key)
+	d.codexShared().settingChanged(key)
 }
 
 func (d *Daemon) publishSettingsFact(name, subject string) {
@@ -157,7 +166,7 @@ func canonicalExecutableSettingKey(agent string) string {
 }
 
 func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
-	stored := d.store.GetAllSettings()
+	stored := d.settingValues()
 	settings := make(map[string]interface{}, len(stored)+8)
 	for k, v := range stored {
 		settings[k] = v
@@ -214,73 +223,73 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		}
 	}
 
-	if _, ok := settings[SettingClaudeAvailable]; !ok {
-		settings[SettingClaudeAvailable] = settings[availabilitySettingKey(string(protocol.SessionAgentClaude))]
+	if _, ok := settings[string(SettingClaudeAvailable)]; !ok {
+		settings[string(SettingClaudeAvailable)] = settings[availabilitySettingKey(string(protocol.SessionAgentClaude))]
 	}
-	if _, ok := settings[SettingCodexAvailable]; !ok {
-		settings[SettingCodexAvailable] = settings[availabilitySettingKey(string(protocol.SessionAgentCodex))]
+	if _, ok := settings[string(SettingCodexAvailable)]; !ok {
+		settings[string(SettingCodexAvailable)] = settings[availabilitySettingKey(string(protocol.SessionAgentCodex))]
 	}
-	settings[SettingPTYBackendMode] = d.ptyBackendMode()
+	settings[string(SettingPTYBackendMode)] = d.ptyBackendMode()
 	sharedEnabled, sharedActive := d.sharedPTYHostSettings()
-	settings[SettingSharedPTYHostEnabled] = strconv.FormatBool(sharedEnabled)
-	settings[SettingSharedPTYHostActive] = strconv.FormatBool(sharedActive)
+	settings[string(SettingSharedPTYHostEnabled)] = strconv.FormatBool(sharedEnabled)
+	settings[string(SettingSharedPTYHostActive)] = strconv.FormatBool(sharedActive)
 	if cfg, err := d.store.GetAutoModeConfig(); err == nil {
-		settings[SettingAutoModeEnabledDefault] = strconv.FormatBool(cfg.EnabledDefault)
+		settings[string(SettingAutoModeEnabledDefault)] = strconv.FormatBool(cfg.EnabledDefault)
 	}
 	if root, err := d.notebookRoot(); err == nil {
-		settings[SettingNotebookRootEffective] = root
+		settings[string(SettingNotebookRootEffective)] = root
 	}
 	d.lastBackupMu.Lock()
 	lastBackupAt := d.lastBackupAt
 	d.lastBackupMu.Unlock()
 	if !lastBackupAt.IsZero() {
-		settings[SettingDBLastBackupAt] = lastBackupAt.Format(time.RFC3339)
+		settings[string(SettingDBLastBackupAt)] = lastBackupAt.Format(time.RFC3339)
 	}
-	settings[SettingTailscaleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingTailscaleEnabled]))
-	settings[SettingQueueModeEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueModeEnabled]))
-	settings[SettingDirectAgentLaunchEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingDirectAgentLaunchEnabled]))
-	settings[SettingQueueCrewEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueCrewEnabled]))
-	settings[SettingQueueShowHiddenSessions] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingQueueShowHiddenSessions]))
-	settings[SettingQueueQuietNotifications] = strconv.FormatBool(parseBooleanSetting(stored[SettingQueueQuietNotifications]))
-	settings[SettingCodexSharedEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingCodexSharedEnabled]))
-	settings[SettingSidebarHarnessLogosEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingSidebarHarnessLogosEnabled]))
-	settings[SettingAutoApproveEnabled] = strconv.FormatBool(defaultOnBooleanSetting(stored[SettingAutoApproveEnabled]))
-	settings[SettingAutoSettleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoSettleEnabled]))
-	settings[SettingCalloutsEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingCalloutsEnabled]))
-	settings[SettingAsksEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAsksEnabled]))
-	settings[SettingAnalyticsEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAnalyticsEnabled]))
-	settings[SettingAnalyticsSharingEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAnalyticsSharingEnabled]))
-	settings[SettingAnalyticsShareVents] = strconv.FormatBool(parseBooleanSetting(stored[SettingAnalyticsShareVents]))
-	settings[SettingAutoSettleArmSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleArmSeconds], defaultAutoSettleArmSeconds) / time.Second))
-	settings[SettingAutoSettleCountdownSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleCountdownSeconds], defaultAutoSettleCountdownSeconds) / time.Second))
-	settings[SettingOpenSentFilesEnabled] = strconv.FormatBool(d.openSentFilesEnabled())
-	settings[SettingHeadlessTasksEnabled] = strconv.FormatBool(headless.Enabled())
-	settings[SettingHeadlessTasksEnabledStored] = strconv.FormatBool(d.headlessTasksStored())
+	settings[string(SettingTailscaleEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingTailscaleEnabled)]))
+	settings[string(SettingQueueModeEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueModeEnabled)]))
+	settings[string(SettingDirectAgentLaunchEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingDirectAgentLaunchEnabled)]))
+	settings[string(SettingQueueCrewEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueCrewEnabled)]))
+	settings[string(SettingQueueShowHiddenSessions)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingQueueShowHiddenSessions)]))
+	settings[string(SettingQueueQuietNotifications)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueQuietNotifications)]))
+	settings[string(SettingCodexSharedEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCodexSharedEnabled)]))
+	settings[string(SettingSidebarHarnessLogosEnabled)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingSidebarHarnessLogosEnabled)]))
+	settings[string(SettingAutoApproveEnabled)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingAutoApproveEnabled)]))
+	settings[string(SettingAutoSettleEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAutoSettleEnabled)]))
+	settings[string(SettingCalloutsEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCalloutsEnabled)]))
+	settings[string(SettingAsksEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAsksEnabled)]))
+	settings[string(SettingAnalyticsEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAnalyticsEnabled)]))
+	settings[string(SettingAnalyticsSharingEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAnalyticsSharingEnabled)]))
+	settings[string(SettingAnalyticsShareVents)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingAnalyticsShareVents)]))
+	settings[string(SettingAutoSettleArmSeconds)] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[string(SettingAutoSettleArmSeconds)], defaultAutoSettleArmSeconds) / time.Second))
+	settings[string(SettingAutoSettleCountdownSeconds)] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[string(SettingAutoSettleCountdownSeconds)], defaultAutoSettleCountdownSeconds) / time.Second))
+	settings[string(SettingOpenSentFilesEnabled)] = strconv.FormatBool(d.openSentFilesEnabled())
+	settings[string(SettingHeadlessTasksEnabled)] = strconv.FormatBool(headless.Enabled())
+	settings[string(SettingHeadlessTasksEnabledStored)] = strconv.FormatBool(d.headlessTasksStored())
 	if raw, ok := headless.Override(); ok {
-		settings[SettingHeadlessTasksEnabledOverride] = raw
+		settings[string(SettingHeadlessTasksEnabledOverride)] = raw
 	}
-	settings[SettingChiefContextWindowCap] = strconv.Itoa(resolveContextWindowCap(stored[SettingChiefContextWindowCap]))
-	settings[SettingHeadlessContextWindowCap] = strconv.Itoa(resolveContextWindowCap(stored[SettingHeadlessContextWindowCap]))
-	settings[SettingActivityEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingActivityEnabled]))
-	settings[SettingActivityPresenceIdleSeconds] = strconv.Itoa(int(d.presenceIdleLimit() / time.Second))
-	if intervals, err := parseActivityIntervals(stored[SettingActivityIntervals]); err == nil {
+	settings[string(SettingChiefContextWindowCap)] = strconv.Itoa(resolveContextWindowCap(stored[string(SettingChiefContextWindowCap)]))
+	settings[string(SettingHeadlessContextWindowCap)] = strconv.Itoa(resolveContextWindowCap(stored[string(SettingHeadlessContextWindowCap)]))
+	settings[string(SettingActivityEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingActivityEnabled)]))
+	settings[string(SettingActivityPresenceIdleSeconds)] = strconv.Itoa(int(d.presenceIdleLimit() / time.Second))
+	if intervals, err := parseActivityIntervals(stored[string(SettingActivityIntervals)]); err == nil {
 		if encoded, err := json.Marshal(intervals); err == nil {
-			settings[SettingActivityIntervals] = string(encoded)
+			settings[string(SettingActivityIntervals)] = string(encoded)
 		}
 	}
-	if advisor, err := parseGardenAdvisorConfig(stored[SettingGardenAdvisor]); err == nil {
+	if advisor, err := parseGardenAdvisorConfig(stored[string(SettingGardenAdvisor)]); err == nil {
 		if encoded, err := json.Marshal(advisor); err == nil {
-			settings[SettingGardenAdvisor] = string(encoded)
+			settings[string(SettingGardenAdvisor)] = string(encoded)
 		}
 	}
-	settings[SettingCrewHeartbeatEnabled] = strconv.FormatBool(d.crewBoolSetting(SettingCrewHeartbeatEnabled))
-	settings[SettingCrewAutoSleepEnabled] = strconv.FormatBool(d.crewBoolSetting(SettingCrewAutoSleepEnabled))
-	settings[SettingCrewCacheTTLSeconds] = strconv.Itoa(int(d.crewCacheTTL("") / time.Second))
-	settings[SettingCrewHeartbeatLeadSeconds] = strconv.Itoa(int(d.crewHeartbeatLead() / time.Second))
-	settings[SettingCrewAwaySeconds] = strconv.Itoa(int(d.crewAwayLimit() / time.Second))
+	settings[string(SettingCrewHeartbeatEnabled)] = strconv.FormatBool(d.crewBoolSetting(SettingCrewHeartbeatEnabled))
+	settings[string(SettingCrewAutoSleepEnabled)] = strconv.FormatBool(d.crewBoolSetting(SettingCrewAutoSleepEnabled))
+	settings[string(SettingCrewCacheTTLSeconds)] = strconv.Itoa(int(d.crewCacheTTL("") / time.Second))
+	settings[string(SettingCrewHeartbeatLeadSeconds)] = strconv.Itoa(int(d.crewHeartbeatLead() / time.Second))
+	settings[string(SettingCrewAwaySeconds)] = strconv.Itoa(int(d.crewAwayLimit() / time.Second))
 	crewWakes := d.crewWakeLedger()
-	settings[SettingCrewWakeLimit] = strconv.Itoa(crewWakes.Limit)
-	settings[SettingCrewWakeLimitWindowSeconds] = strconv.Itoa(int(crewWakes.Window / time.Second))
+	settings[string(SettingCrewWakeLimit)] = strconv.Itoa(crewWakes.Limit)
+	settings[string(SettingCrewWakeLimitWindowSeconds)] = strconv.Itoa(int(crewWakes.Window / time.Second))
 
 	settings[string(settingOutpostsEnabled)] = strconv.FormatBool(d.outpostsEnabled())
 	state, home, lastError := d.outpostSettings()
@@ -329,7 +338,7 @@ func (d *Daemon) chiefLaunchModel(ctx context.Context, agent, executable string,
 	if !chief {
 		return ""
 	}
-	explicit := strings.TrimSpace(d.daemonSetting(daemonSettingKey(SettingChiefModelPrefix + strings.ToLower(strings.TrimSpace(agent)))))
+	explicit := strings.TrimSpace(d.homeSetting(SettingChiefModelPrefix + HomeSetting(strings.ToLower(strings.TrimSpace(agent)))))
 	if agent != "claude" && agent != "codex" {
 		return explicit
 	}
@@ -340,7 +349,7 @@ func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
 	if !chief {
 		return ""
 	}
-	if effort := strings.TrimSpace(d.daemonSetting(daemonSettingKey(SettingChiefEffortPrefix + strings.ToLower(strings.TrimSpace(agent))))); effort != "" {
+	if effort := strings.TrimSpace(d.homeSetting(SettingChiefEffortPrefix + HomeSetting(strings.ToLower(strings.TrimSpace(agent))))); effort != "" {
 		return effort
 	}
 	if agent == "claude" || agent == "codex" {
@@ -350,15 +359,15 @@ func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
 }
 
 func settingShapesCrewLaunch(key string) bool {
-	return strings.HasPrefix(key, SettingDefaultModelPrefix) || strings.HasPrefix(key, SettingDefaultEffortPrefix)
+	return strings.HasPrefix(key, string(SettingDefaultModelPrefix)) || strings.HasPrefix(key, string(SettingDefaultEffortPrefix))
 }
 
 func (d *Daemon) defaultLaunchModel(agent string) string {
-	return strings.TrimSpace(d.daemonSetting(daemonSettingKey(SettingDefaultModelPrefix + strings.ToLower(strings.TrimSpace(agent)))))
+	return strings.TrimSpace(d.homeSetting(SettingDefaultModelPrefix + HomeSetting(strings.ToLower(strings.TrimSpace(agent)))))
 }
 
 func (d *Daemon) defaultLaunchEffort(agent string) string {
-	return strings.TrimSpace(d.daemonSetting(daemonSettingKey(SettingDefaultEffortPrefix + strings.ToLower(strings.TrimSpace(agent)))))
+	return strings.TrimSpace(d.homeSetting(SettingDefaultEffortPrefix + HomeSetting(strings.ToLower(strings.TrimSpace(agent)))))
 }
 
 func (d *Daemon) resolveLaunchModel(ctx context.Context, agent, executable string, chief bool, requested string) string {
@@ -388,10 +397,10 @@ func (d *Daemon) launchContextWindowCap(sessionID protocol.SessionID, agent stri
 		}
 	}
 	if chief {
-		return resolveContextWindowCap(d.daemonSetting(SettingChiefContextWindowCap))
+		return resolveContextWindowCap(d.homeSetting(SettingChiefContextWindowCap))
 	}
-	key := SettingDefaultContextWindowCapPrefix + strings.ToLower(strings.TrimSpace(agent))
-	if v := strings.TrimSpace(d.store.GetSetting(key)); v != "" {
+	key := string(SettingDefaultContextWindowCapPrefix) + strings.ToLower(strings.TrimSpace(agent))
+	if v := strings.TrimSpace(d.homeSetting(HomeSetting(key))); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}
@@ -403,14 +412,14 @@ func (d *Daemon) applyHeadlessContextWindowCap() {
 	if d.store == nil {
 		return
 	}
-	agentdriver.SetHeadlessContextWindowCap(resolveContextWindowCap(d.daemonSetting(SettingHeadlessContextWindowCap)))
+	agentdriver.SetHeadlessContextWindowCap(resolveContextWindowCap(d.homeSetting(SettingHeadlessContextWindowCap)))
 }
 
 func (d *Daemon) headlessTasksStored() bool {
 	if d.store == nil {
 		return true
 	}
-	value, ok := headless.ParseSwitch(d.daemonSetting(SettingHeadlessTasksEnabled))
+	value, ok := headless.ParseSwitch(d.homeSetting(SettingHeadlessTasksEnabled))
 	return !ok || value
 }
 

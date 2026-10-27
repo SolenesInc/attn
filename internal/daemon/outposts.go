@@ -36,7 +36,7 @@ type outpostsRuntime struct {
 }
 
 func (d *Daemon) outpostsEnabled() bool {
-	return parseBooleanSetting(d.daemonSetting(settingOutpostsEnabled))
+	return parseBooleanSetting(d.machineSetting(settingOutpostsEnabled))
 }
 
 func (d *Daemon) configureOutposts() {

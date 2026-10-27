@@ -39,6 +39,7 @@ type Store struct {
 	agentMetadata          map[protocol.SessionID]string
 	recentLocations        map[string]*protocol.RecentLocation
 	settings               map[string]string
+	settingCopies          map[string]map[string]string
 	writes                 *tableWrites
 	sessionRows            sessionRows
 	touchedAt              map[protocol.SessionID]time.Time
@@ -100,12 +101,12 @@ func New() *Store {
 }
 
 func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*Store, error) {
-	settings, err := readSettings(db)
+	settings, copies, err := readSettings(db)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, writes: writes}, nil
+	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, settingCopies: copies, writes: writes}, nil
 }
 
 func newMapBackedStore() *Store {
@@ -478,13 +479,14 @@ func (s *Store) Remove(id protocol.SessionID) []string {
 		delete(s.sessionCosts, id)
 		return nil
 	}
-	delete(s.touchedAt, id)
-	s.forgetSessionCost(id)
-	s.unplaceSessionsLocked("Remove", "session_id = ?", id)
 	asks, err := deleteSessionRows(s.db, id)
 	if err != nil {
 		log.Printf("[store] Remove: session %s: %v", id, err)
+		return nil
 	}
+	delete(s.touchedAt, id)
+	s.forgetSessionCost(id)
+	s.unplaceSessionsLocked("Remove", "session_id = ?", id)
 	s.announceTerminalBindingsLocked()
 	return asks
 }
@@ -495,27 +497,34 @@ func deleteSessionRows(db *sql.DB, id protocol.SessionID) ([]string, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	var failures []error
-	exec := func(what, query string, args ...any) {
-		if _, err := tx.Exec(query, args...); err != nil {
-			failures = append(failures, fmt.Errorf("drop %s: %w", what, err))
-		}
+	statements := []struct {
+		table, query string
+		args         []any
+	}{
+		{"terminal_bindings", "DELETE FROM terminal_bindings WHERE session_id = ?", []any{id}},
+		{"sessions", "DELETE FROM sessions WHERE id = ?", []any{id}},
+		{"session_pull_requests", `DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.address NOT LIKE 'session:%')`, []any{id}},
+		{"pull_request_watches", `DELETE FROM pull_request_watches WHERE address=?`, []any{"session:" + id}},
 	}
-	exec("terminal bindings", "DELETE FROM terminal_bindings WHERE session_id = ?", id)
-	exec("the session", "DELETE FROM sessions WHERE id = ?", id)
-	exec("session PRs", `DELETE FROM session_pull_requests WHERE session_id=? AND NOT EXISTS(SELECT 1 FROM pull_request_watches w WHERE w.session_id=session_pull_requests.session_id AND w.pr_id=session_pull_requests.pr_id AND w.address NOT LIKE 'session:%')`, id)
-	exec("session PR watches", `DELETE FROM pull_request_watches WHERE address=?`, "session:"+id)
 	for _, table := range sessionOwnedTables {
-		exec(table, "DELETE FROM "+table+" WHERE session_id = ?", id)
+		statements = append(statements, struct {
+			table, query string
+			args         []any
+		}{table, "DELETE FROM " + table + " WHERE session_id = ?", []any{id}})
+	}
+	for _, statement := range statements {
+		if _, err := tx.Exec(statement.query, statement.args...); err != nil {
+			return nil, fmt.Errorf("drop %s: %w", statement.table, err)
+		}
 	}
 	asks, err := closeAsksTo(tx, inbox.ToSession(id))
 	if err != nil {
-		failures = append(failures, fmt.Errorf("close the session's asks: %w", err))
+		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, errors.Join(append(failures, err)...)
+		return nil, err
 	}
-	return asks, errors.Join(failures...)
+	return asks, nil
 }
 
 func (s *Store) List(stateFilter string) []*protocol.Session {
@@ -1844,8 +1853,7 @@ func (s *Store) SetSettingChecked(key, value string) error {
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO settings (key, value) VALUES (?, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
 		key, value)
 	if err != nil {
 		return fmt.Errorf("set setting %q: %w", key, err)
@@ -1862,7 +1870,7 @@ func (s *Store) DeleteSetting(key string) {
 		return
 	}
 
-	if _, err := s.db.Exec(`DELETE FROM settings WHERE key = ?`, key); err != nil {
+	if _, err := s.db.Exec(`DELETE FROM settings WHERE key = ? AND copied_from = ''`, key); err != nil {
 		log.Printf("[store] DeleteSetting %q: %v", key, err)
 		return
 	}
@@ -1880,22 +1888,55 @@ func (s *Store) GetAllSettings() map[string]string {
 	return result
 }
 
-func readSettings(db *sql.DB) (map[string]string, error) {
-	rows, err := db.Query("SELECT key, value FROM settings")
+func readSettings(db *sql.DB) (map[string]string, map[string]map[string]string, error) {
+	rows, err := db.Query("SELECT * FROM settings")
 	if err != nil {
-		return nil, fmt.Errorf("read settings: %w", err)
+		return nil, nil, fmt.Errorf("read settings: %w", err)
 	}
 	defer rows.Close()
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, nil, err
+	}
 	settings := make(map[string]string)
+	copies := make(map[string]map[string]string)
 	for rows.Next() {
 		var key string
-		var value sql.NullString
-		if err := rows.Scan(&key, &value); err != nil {
-			return nil, fmt.Errorf("read settings: %w", err)
+		var value, origin sql.NullString
+		targets := []any{&key, &value}
+		if len(columns) == 3 {
+			targets = append(targets, &origin)
 		}
-		settings[key] = value.String
+		if err := rows.Scan(targets...); err != nil {
+			return nil, nil, fmt.Errorf("read settings: %w", err)
+		}
+		home := origin.String
+		if home == "" {
+			settings[key] = value.String
+		} else {
+			if copies[home] == nil {
+				copies[home] = make(map[string]string)
+			}
+			copies[home][key] = value.String
+		}
 	}
-	return settings, rows.Err()
+	return settings, copies, rows.Err()
+}
+
+func (s *Store) CopiedSetting(key, home string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.settingCopies[home][key]
+}
+
+func (s *Store) CopiedSettings(home string) map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make(map[string]string, len(s.settingCopies[home]))
+	for key, value := range s.settingCopies[home] {
+		result[key] = value
+	}
+	return result
 }
 
 func recentLocationTarget(path string) (string, string) {
