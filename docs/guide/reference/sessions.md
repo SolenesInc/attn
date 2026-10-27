@@ -94,6 +94,8 @@ Your agents run outside the daemon, so a daemon restart leaves them running unle
 <summary>Which conversations does Attn keep a copy of?</summary>
 
 Only Claude Code's, since Claude Code prunes its conversations after 30 days and the other harnesses keep their own. Attn copies a conversation while it belongs to the latest delegation of an open seed, or once you keep it with Keep conversation on its row in the Sessions tab or `attn conversation keep <session-id>`, waiting until a live conversation has been quiet for a day. The copies live compressed in `~/.attn/conversations/`, and when you resume a conversation Claude Code no longer has, Attn puts its copy back first. Once no open seed or pin holds a copy, Attn deletes it 14 days later (the Conversations tab shows the date), and Forget deletes it right away without touching Claude Code's files, except while an open seed still needs it.
+
+If a crew home or memory cannot be read, Attn keeps copying and listing other conversations and pauses expiry. A warning names the unavailable paths. Expiry resumes once they are readable again.
 </details>
 
 <details>

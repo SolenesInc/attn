@@ -103,7 +103,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 		return nil, err
 	}
 	days, err := d.crewDayReferences()
-	if err != nil {
+	if days == nil && err != nil {
 		return nil, err
 	}
 	entries, err := d.store.ConversationSessions("")
