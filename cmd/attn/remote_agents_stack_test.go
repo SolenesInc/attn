@@ -778,6 +778,7 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 			observed.Await()
 			requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", ""), "outpost_listen")
 			outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+			pendingAt := time.Now()
 			observed.Release()
 			agent.Prompted()
 			if prompt := agent.Prompted(); prompt != "offline work" {
@@ -829,13 +830,23 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 			ready := testworld.AwaitSessionSince(app, mark, string(next.ID), func(s protocol.Session) bool {
 				return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens == want
 			})
+			closed := testworld.AwaitSince(app, mark, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+				return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == current
+			}).SessionLedgerEntry
+			predecessorTokens := 2 * len(firstReply)
+			if scenario == "resume-closed" {
+				predecessorTokens = 2 * len("Second ready. <!-- attn:state=waiting_input -->")
+			}
+			if protocol.Deref(closed.ClosedAt) == "" || closed.Usage == nil || closed.Usage.TotalTokens != predecessorTokens {
+				t.Fatalf("offline predecessor close: %+v, want tokens=%d", closed, predecessorTokens)
+			}
 			if app.Terminal(string(ready.ID)) != string(terminal) || protocol.Deref(ready.Host) != pair.Host {
 				t.Fatalf("offline successor changed placement: %+v", ready)
 			}
 			if scenario != "outpost-restart" {
 				opened, err := time.Parse(time.RFC3339Nano, protocol.Deref(ready.TurnOpenedAt))
-				if err != nil || !opened.Before(reconnectedAt) {
-					t.Fatalf("turn opened %s, want before reconnect %s: %v", protocol.Deref(ready.TurnOpenedAt), reconnectedAt, err)
+				if err != nil || opened.Before(pendingAt) || !opened.Before(reconnectedAt) {
+					t.Fatalf("turn opened %s, want between switch %s and reconnect %s: %v", protocol.Deref(ready.TurnOpenedAt), pendingAt, reconnectedAt, err)
 				}
 			}
 			t.Logf("%s: offline conversation returns in terminal %s, host %s, tokens=%d, turn=%s", scenario, terminal, pair.Host, ready.Usage.TotalTokens, protocol.Deref(ready.TurnOpenedAt))
@@ -869,11 +880,6 @@ func TestADroppedOutpostSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) {
 	one.Prompted()
 	dropFirst := owners.Take()
 	conversation := one.ConversationID
-	second := home.Spawn(app, fakeagent.Codex, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) {
-		m.Host = protocol.Ptr(pair.Host)
-		m.ResumeSessionID = protocol.Ptr(conversation)
-	})
-	outpost.LaunchedCarrying(app.Terminal(second))
 	server := outpost.CodexServer()
 	halt := sync.OnceFunc(func() { server.Halt(conversation) })
 	t.Cleanup(halt)
@@ -882,6 +888,11 @@ func TestADroppedOutpostSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) {
 	request := protocol.SessionAnnotationsSubmitMessage{Cmd: protocol.CmdSessionAnnotationsSubmit, RequestID: uuid.NewString(), SessionID: protocol.SessionID(first), Text: "fix checkout"}
 	delivery.Send(request)
 	awaitDelivery()
+	second := home.Spawn(app, fakeagent.Codex, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) {
+		m.Host = protocol.Ptr(pair.Host)
+		m.ResumeSessionID = protocol.Ptr(conversation)
+	})
+	outpost.LaunchedCarrying(app.Terminal(second))
 	dropFirst()
 	dropped.Await()
 	releaseDelivery()
