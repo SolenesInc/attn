@@ -1,0 +1,4 @@
+kind: fixed
+area: analytics
+change: Hooks from shared Codex sessions are recorded as their agent's commands, with the session and harness, instead of as commands a person ran.
+symptom: Settings › Analytics showed most cli records, mostly state, as caller human with no subject.

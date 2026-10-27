@@ -1652,7 +1652,7 @@ func runHookStop() {
 		os.Exit(1)
 	}
 
-	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	c := hookClient(sessionID)
 	if err := c.SendStop(sessionID, transcriptPath, stopFacts(input)); err != nil {
 		fmt.Fprintf(os.Stderr, "error sending stop: %v\n", err)
 		os.Exit(1)
@@ -1680,7 +1680,7 @@ func runHookSessionStart() {
 		os.Exit(1)
 	}
 
-	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	c := hookClient(sessionID)
 	observeAgentConversation(c, sessionID, input.SessionID, input.TranscriptPath)
 }
 
@@ -1694,7 +1694,7 @@ func runHookState() {
 		os.Exit(1)
 	}
 
-	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	c := hookClient(sessionID)
 	observePromptConversation(c, sessionID, hookEvent, input)
 	if err := c.UpdateStateFromHookEvidence(sessionID, state, input.PermissionMode, hookEvent, input.Prompt); err != nil {
 		fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
@@ -1715,7 +1715,7 @@ func runHookNotification() {
 		return
 	}
 
-	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	c := hookClient(sessionID)
 	if err := c.RecordNotification(sessionID, input.NotificationType, input.Message); err != nil {
 		fmt.Fprintf(os.Stderr, "error recording notification: %v\n", err)
 		os.Exit(1)
@@ -1736,7 +1736,7 @@ func runHookStopFailure() {
 		return
 	}
 
-	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	c := hookClient(sessionID)
 	if err := c.RecordStopFailure(sessionID, errorType, input.ErrorMessage); err != nil {
 		fmt.Fprintf(os.Stderr, "error recording stop failure: %v\n", err)
 		os.Exit(1)
@@ -1754,7 +1754,7 @@ func runHookCompact() {
 	var input hookInput
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
-	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	c := hookClient(sessionID)
 	if err := c.RecordCompaction(sessionID, active, input.Trigger); err != nil {
 		fmt.Fprintf(os.Stderr, "error recording compaction: %v\n", err)
 		os.Exit(1)
@@ -1770,7 +1770,7 @@ func runHookToolUse() {
 		os.Exit(1)
 	}
 
-	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
+	c := hookClient(sessionID)
 	if strings.TrimSpace(input.AgentID) == "" {
 		if err := c.UpdateState(sessionID, protocol.StateWorking); err != nil {
 			fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
@@ -1836,6 +1836,10 @@ func runProbeTUI() {
 		fmt.Fprintf(os.Stderr, "attn _probe-tui: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func hookClient(caller protocol.TerminalID) *client.Client {
+	return client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH"))).WithCaller(caller)
 }
 
 func hookCaller(id protocol.TerminalID, input hookInput) protocol.TerminalID {
