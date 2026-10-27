@@ -20,14 +20,12 @@ type linkRuntime interface {
 	enabledForNewLaunches() bool
 	admit(profile, conversation string) error
 	prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error
-	launchFailed(t harness.TerminalID, profile string)
 	relaunch(opts *ptybackend.SpawnOptions)
 
 	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
 	runsLink(t harness.TerminalID) bool
 
 	renamed(sessionID protocol.SessionID, label string)
-	closing(sessionID protocol.SessionID) (afterClose func())
 	profileReleased(profile string)
 	setAsideAtClose(sessionID protocol.SessionID, conversation string) bool
 	restore(profile, conversation string) error

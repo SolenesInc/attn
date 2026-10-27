@@ -24,6 +24,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -213,11 +214,6 @@ func (r *codexShared) answerTrustIfKnown(opts *ptybackend.SpawnOptions) {
 	if v := r.views[opts.ID]; v != nil {
 		v.trusted = opts.CWD
 	}
-}
-
-func (r *codexShared) launchFailed(t harness.TerminalID, profile string) {
-	r.closeView(t)
-	r.idleSoon(profile)
 }
 
 func (r *codexShared) ensureServer(ctx context.Context, profile, executable string) (*codexServer, error) {
@@ -527,7 +523,10 @@ func (r *codexShared) terminalDropped(t harness.TerminalID) {
 	r.mu.Unlock()
 	if v != nil {
 		r.closeView(t)
-		r.idleSoon(v.profile)
+		r.d.life.Go("codexServerIdle", func() {
+			r.profileReleased(v.profile)
+			pausepoint.At(pausepoint.CodexViewReleaseChecked)
+		})
 	}
 }
 

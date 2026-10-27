@@ -37,14 +37,6 @@ func (d *Daemon) isChiefOfStaffSession(sessionID protocol.SessionID) bool {
 	return err == nil && d.chiefOfProfile(profileID) == sessionID
 }
 
-func (d *Daemon) chiefForCaller(callerSessionID protocol.SessionID) string {
-	profile, err := d.callerProfile(callerSessionID)
-	if err != nil {
-		return ""
-	}
-	return string(d.chiefOfProfile(profile.ID))
-}
-
 func (d *Daemon) chiefForClient(client *wsClient) string {
 	return string(d.chiefOfProfile(d.profileForClient(client)))
 }

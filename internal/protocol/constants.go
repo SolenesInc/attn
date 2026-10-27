@@ -271,6 +271,13 @@ const (
 )
 
 const (
+	CmdLaunchCommitted       = "launch_committed"
+	CmdConversationReadiness = "conversation_readiness"
+	CmdAgentCatalog          = "agent_catalog"
+	CmdAgentLaunchClose      = "agent_launch_close"
+)
+
+const (
 	CmdProfileCreate        = "profile_create"
 	CmdProfileRename        = "profile_rename"
 	CmdProfileDelete        = "profile_delete"

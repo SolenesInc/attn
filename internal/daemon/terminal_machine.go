@@ -15,7 +15,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 func (d *Daemon) machineParts() map[string]machinePart {
@@ -25,6 +24,10 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	d.registerMonitorParts(parts)
 	runs(parts, false, d.startTerminal)
 	runs(parts, false, d.restartTerminal)
+	runs(parts, false, d.commitAgentLaunch)
+	runs(parts, false, d.readConversationReadiness)
+	runs(parts, true, d.readAgentCatalog)
+	runs(parts, false, d.closeAgentMachine)
 	runs(parts, true, d.readTerminalLaunch)
 	runs(parts, false, d.writeTerminal)
 	runs(parts, true, d.readTerminalText)
@@ -55,8 +58,12 @@ func (d *Daemon) decodeLaunch(launch string) (ptybackend.SpawnOptions, error) {
 	return opts, nil
 }
 
-func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMessage) (struct{}, error) {
+func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMessage) (_ struct{}, launchErr error) {
 	opts, err := d.decodeLaunch(msg.Launch)
+	if err != nil {
+		return struct{}{}, err
+	}
+	agent, err := decodeAgentLaunch(msg.Agent)
 	if err != nil {
 		return struct{}{}, err
 	}
@@ -74,19 +81,61 @@ func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMess
 	}
 	opts.HostName = protocol.Deref(msg.HostName)
 	d.expectTerminal(msg.TerminalID, session.ID)
+	if agent != nil && agent.PreviousLink != agent.Link {
+		if prior := d.linkNamed(agent.PreviousLink); prior != nil {
+			defer d.life.Go("linkReleasedAfterLaunch", func() { prior.profileReleased(agent.Profile) })
+		}
+	}
+	defer func() {
+		if launchErr == nil {
+			return
+		}
+		d.terminals().unexpect(msg.TerminalID)
+		d.kickMonitorTerminals()
+	}()
 	opts.ID = msg.TerminalID
 	branchInfo, _ := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, session.Directory)
 	applyBranchInfo(&session, branchInfo)
-	d.startSessionMonitorSeeded(&session, sessionmonitor.Evidence{TerminalEvidence: sessionstate.TerminalEvidence{ReviewerInLoop: opts.ApprovalRoute.ReviewerInLoop()}})
-	d.sessionMonitor(session.ID).RememberInitialPrompt("")
-	if err := d.spawnSessionRuntime(session.ID, opts); err != nil {
-		d.sessionMonitor(session.ID).ForgetInitialPrompt()
+	d.seedAgentMonitor(&session, opts, agent)
+	plugin, err := d.prepareMachineAgent(session.ID, &opts, agent, false)
+	if err != nil {
 		return struct{}{}, err
 	}
+	if plugin != nil && !d.beginAgentDriverRun(session.ID, plugin.pluginName, plugin.runID) {
+		plugin.abort()
+		return struct{}{}, fmt.Errorf("initialize plugin driver run cursor")
+	}
+	if agent != nil && agent.AddedTerminal {
+		err = d.startTerminalRuntime(opts)
+	} else {
+		err = d.spawnSessionRuntime(session.ID, opts)
+	}
+	if err != nil {
+		d.sessionMonitor(session.ID).ForgetInitialPrompt()
+		if plugin != nil {
+			d.endAgentDriverRun(session.ID)
+			plugin.abort()
+		}
+		return struct{}{}, err
+	}
+	d.agentStarted(session.ID, agent)
 	if len(msg.Copy) > 0 {
 		d.clearExitScreenBefore(session.ID, startedAt)
 	}
 	return struct{}{}, nil
+}
+
+func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) error {
+	err := d.startTerminalRuntime(opts)
+	if err == nil {
+		d.sessionMonitor(sessionID).ResetInput()
+	}
+	return err
+}
+
+func (d *Daemon) startTerminalRuntime(opts ptybackend.SpawnOptions) error {
+	opts.DaemonEnv = d.spawnRoutingEnv()
+	return d.ptyBackend.Spawn(context.Background(), withLifecycleID(opts))
 }
 
 func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalRestartMessage) (struct{}, error) {
@@ -94,8 +143,24 @@ func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalResta
 	if err != nil {
 		return struct{}{}, err
 	}
+	agent, err := decodeAgentLaunch(msg.Agent)
+	if err != nil {
+		return struct{}{}, err
+	}
+	plugin, err := d.prepareMachineAgent(msg.SessionID, &opts, agent, true)
+	if err != nil {
+		return struct{}{}, err
+	}
+	return d.restartPreparedTerminal(ctx, msg, opts, plugin)
+}
+
+func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.TerminalRestartMessage, opts ptybackend.SpawnOptions, plugin *preparedPluginReload) (struct{}, error) {
+	if plugin != nil {
+		defer plugin.abort()
+	}
 	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
+	d.syncMonitorConversation(sessionID)
 	d.sessionMonitor(sessionID).FenceInput()
 	unlockEnds := d.replaceRuntime(sessionID, terminal)
 	opts = withLifecycleID(opts)
@@ -111,6 +176,17 @@ func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalResta
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
 		d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
 		return struct{}{}, fmt.Errorf("respawn failed for %s: %w", sessionID, spawnErr)
+	}
+	if plugin != nil {
+		if err := plugin.commit(); err != nil {
+			d.markReplaced(terminal, opts.LifecycleID)
+			_ = d.ptyBackend.Kill(ctx, terminal, syscall.SIGTERM)
+			_ = d.ptyBackend.Remove(ctx, terminal)
+			unlockEnds()
+			d.closePluginDriverSession(sessionID, "reload_failed", nil, "")
+			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
+			return struct{}{}, fmt.Errorf("activate plugin run failed for %s: %w", sessionID, err)
+		}
 	}
 	unlockEnds()
 	d.sessionMonitor(sessionID).ResetInput()
@@ -221,6 +297,11 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 	}
 	if err != nil && ending != "" {
 		d.terminals().takeEnding(terminal)
+	}
+	if (err == nil || errors.Is(err, pty.ErrSessionNotFound)) && stop {
+		if sessionID, shown := d.shownIn(terminal); shown {
+			d.closePluginDriverSession(sessionID, "killed", nil, msg.Signal)
+		}
 	}
 	return struct{}{}, err
 }

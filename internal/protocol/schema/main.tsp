@@ -3090,7 +3090,7 @@ model TerminalCloseMessage {
 // Machine parts of terminal commands. The home runs a command's home part and
 // reaches its machine part through the router, on the machine its x-on names.
 
-// Launches a shell's terminal on the machine named by host (empty: the home's
+// Launches a terminal on the machine named by host (empty: the home's
 // machine). The machine expects the terminal, seeds the session's monitor from
 // session and its own read of the branch, and spawns with its own theme and
 // login environment. launch is ptybackend.SpawnOptions as encoding/json, as the
@@ -3104,6 +3104,7 @@ model TerminalStartMessage {
   session: Session;
   terminal_id: TerminalID;
   launch: string;
+  agent?: string;
 }
 
 // Kills and respawns a running terminal in place with launch
@@ -3115,6 +3116,57 @@ model TerminalRestartMessage {
   session_id: SessionID;
   terminal_id: TerminalID;
   launch: string;
+  agent?: string;
+}
+
+@extension("x-on", #{ terminal: "terminal_id" })
+model LaunchCommittedMessage {
+  cmd: "launch_committed";
+  terminal_id: TerminalID;
+  committed: boolean;
+  profile_id: string;
+}
+
+@extension("x-on", #{ machine: "host" })
+model ConversationReadinessMessage {
+  cmd: "conversation_readiness";
+  host: string;
+  agent: string;
+  conversation: string;
+  restore: boolean;
+  profile: string;
+  link: string;
+}
+model ConversationReadinessResult {
+  known: boolean;
+  ready: boolean;
+}
+
+@extension("x-on", #{ machine: "host" })
+model AgentCatalogMessage {
+  cmd: "agent_catalog";
+  host: string;
+}
+model AgentCatalogResult {
+  machine: string;
+  harnesses: Harness[];
+}
+
+@extension("x-on", #{ session: "session_id" })
+model AgentLaunchCloseMessage {
+  cmd: "agent_launch_close";
+  session_id: SessionID;
+  phase: "prepare" | "cancel" | "drain" | "committed" | "notify";
+  driver?: string;
+  terminal_id?: TerminalID;
+  signal?: string;
+  profile?: string;
+  conversation?: string;
+  archive?: boolean;
+}
+model AgentLaunchCloseResult {
+  driver?: string;
+  view?: string;
 }
 
 // Reads what a terminal's runtime recorded about its launch, and its size.

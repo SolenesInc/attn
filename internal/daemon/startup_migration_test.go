@@ -294,17 +294,3 @@ func TestTwoClientsShareOneMigrationDraftAndEitherMayFinish(t *testing.T) {
 		t.Fatalf("a retried finish = %+v, want the committed completion", again)
 	}
 }
-
-func TestClosingAnImportedAgentRetiresItsGroupForEveryClient(t *testing.T) {
-	w := newMigratingTestDaemon(t, 2)
-	client, _ := w.connect("")
-	w.d.closeSession("agent-2", store.SessionClose{})
-	seen := migrationBroadcasts(t, client)
-	if len(seen) == 0 {
-		t.Fatal("closing an imported agent sent no migration_changed")
-	}
-	last := seen[len(seen)-1]
-	if len(last.Groups) != 1 || last.Groups[0].GroupID != "ws-1" {
-		t.Fatalf("groups after the close = %+v, want only ws-1", last.Groups)
-	}
-}

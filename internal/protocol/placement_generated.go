@@ -28,8 +28,10 @@ type Placed interface {
 
 var Placements = map[string][]Placement{
 	"activity_status":                  {Placement{LocatorHome, ""}},
+	"agent_catalog":                    {Placement{LocatorMachine, "host"}},
 	"agent_close":                      {Placement{LocatorHome, ""}},
 	"agent_inbox":                      {Placement{LocatorHome, ""}},
+	"agent_launch_close":               {Placement{LocatorSession, "session_id"}},
 	"agent_msg":                        {Placement{LocatorHome, ""}},
 	"agent_msg_status":                 {Placement{LocatorHome, ""}},
 	"agent_peek":                       {Placement{LocatorHome, ""}},
@@ -59,6 +61,7 @@ var Placements = map[string][]Placement{
 	"clear_session_activity":           {Placement{LocatorHome, ""}},
 	"codex_status":                     {Placement{LocatorHere, ""}},
 	"collapse_repo":                    {Placement{LocatorHome, ""}},
+	"conversation_readiness":           {Placement{LocatorMachine, "host"}},
 	"create_worktree":                  {Placement{LocatorHere, ""}},
 	"crew_charter_get":                 {Placement{LocatorHome, ""}},
 	"crew_charter_set":                 {Placement{LocatorHome, ""}},
@@ -110,6 +113,7 @@ var Placements = map[string][]Placement{
 	"kept_conversation_forget":         {Placement{LocatorHome, ""}},
 	"kept_conversation_keep":           {Placement{LocatorHome, ""}},
 	"kept_conversation_list":           {Placement{LocatorHome, ""}},
+	"launch_committed":                 {Placement{LocatorTerminal, "terminal_id"}},
 	"launch_desktop_get":               {Placement{LocatorHome, ""}},
 	"launch_desktop_set":               {Placement{LocatorHome, ""}},
 	"link_rename":                      {Placement{LocatorSession, "session_id"}},
@@ -240,6 +244,18 @@ func (m ActivityStatusMessage) Locate() string {
 	return ""
 }
 
+func (AgentCatalogMessage) CommandName() string {
+	return "agent_catalog"
+}
+
+func (m AgentCatalogMessage) Placement() Placement {
+	return Placement{LocatorMachine, "host"}
+}
+
+func (m AgentCatalogMessage) Locate() string {
+	return string(m.Host)
+}
+
 func (AgentCloseMessage) CommandName() string {
 	return "agent_close"
 }
@@ -262,6 +278,18 @@ func (m AgentInboxMessage) Placement() Placement {
 
 func (m AgentInboxMessage) Locate() string {
 	return ""
+}
+
+func (AgentLaunchCloseMessage) CommandName() string {
+	return "agent_launch_close"
+}
+
+func (m AgentLaunchCloseMessage) Placement() Placement {
+	return Placement{LocatorSession, "session_id"}
+}
+
+func (m AgentLaunchCloseMessage) Locate() string {
+	return string(m.SessionID)
 }
 
 func (AgentMsgMessage) CommandName() string {
@@ -610,6 +638,18 @@ func (m CollapseRepoMessage) Placement() Placement {
 
 func (m CollapseRepoMessage) Locate() string {
 	return ""
+}
+
+func (ConversationReadinessMessage) CommandName() string {
+	return "conversation_readiness"
+}
+
+func (m ConversationReadinessMessage) Placement() Placement {
+	return Placement{LocatorMachine, "host"}
+}
+
+func (m ConversationReadinessMessage) Locate() string {
+	return string(m.Host)
 }
 
 func (CreateWorktreeMessage) CommandName() string {
@@ -1222,6 +1262,18 @@ func (m KeptConversationListMessage) Placement() Placement {
 
 func (m KeptConversationListMessage) Locate() string {
 	return ""
+}
+
+func (LaunchCommittedMessage) CommandName() string {
+	return "launch_committed"
+}
+
+func (m LaunchCommittedMessage) Placement() Placement {
+	return Placement{LocatorTerminal, "terminal_id"}
+}
+
+func (m LaunchCommittedMessage) Locate() string {
+	return string(m.TerminalID)
 }
 
 func (LaunchDesktopGetMessage) CommandName() string {

@@ -275,6 +275,10 @@ func (w *World) LaunchedCarrying(id string) *fakeagent.Run {
 	return w.kit.Launched(id)
 }
 
+func (w *World) NextLaunch() func() *fakeagent.Run {
+	return w.kit.NextLaunch()
+}
+
 func (w *World) HeadlessTask() *fakeagent.HeadlessTask {
 	w.T.Helper()
 	return w.kit.HeadlessTask()

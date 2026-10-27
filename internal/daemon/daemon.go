@@ -1894,33 +1894,49 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 			d.logf("garden: preserving execution %s before session removal: %v", sessionID, err)
 		}
 	}
-	monitor := d.sessionMonitor(sessionID)
-	monitor.MarkForcedStop()
-	retired := monitor.EndDriverRun()
-	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID),
-		store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence}, time.Now())
-	if err != nil {
-		monitor.ClearForcedStop()
-		if retired.Run != "" {
-			monitor.RestoreDriverRun(retired)
+	var prepared protocol.AgentLaunchCloseResult
+	if session != nil && session.Agent == protocol.AgentShellValue {
+		d.sessionMonitor(sessionID).MarkForcedStop()
+	}
+	if session != nil && session.Agent != protocol.AgentShellValue {
+		var err error
+		prepared, err = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "prepare"})
+		if err != nil {
+			lifecycleLock.Unlock()
+			return nil, err
 		}
+	}
+	var retired sessionmonitor.DriverMetadata
+	if prepared.Driver != nil {
+		if err := json.Unmarshal([]byte(*prepared.Driver), &retired); err != nil {
+			lifecycleLock.Unlock()
+			return nil, err
+		}
+	}
+	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence}, time.Now())
+	if err != nil {
+		_, _ = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "cancel", Driver: prepared.Driver})
 		lifecycleLock.Unlock()
 		return nil, err
 	}
 	pausepoint.At(pausepoint.SessionTeardownPrepared)
-	monitor.RetireDriver(driverRun.RunID)
 	return &sessionTeardown{session: session, terminals: d.terminalsOf(sessionID), driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
-func (d *Daemon) commitSessionUnregister(sessionID protocol.SessionID, closed store.SessionClose) {
-	d.closeSession(sessionID, closed)
+func (d *Daemon) commitSessionUnregister(sessionID protocol.SessionID, closed store.SessionClose) error {
+	return d.closeSession(sessionID, closed)
 }
 
 func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *sessionTeardown) {
 	defer teardown.releaseLifecycle()
-	d.sessionMonitor(sessionID).ClearForcedStop()
-	if run := d.store.SessionTeardownDriverRun(sessionID); run.RunID != "" {
-		d.sessionMonitor(sessionID).RestoreDriverRun(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
+	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
+		d.sessionMonitor(sessionID).ClearForcedStop()
+	} else {
+		run := d.store.SessionTeardownDriverRun(sessionID)
+		raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
+		if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "cancel", Driver: protocol.Ptr(string(raw))}); err != nil {
+			d.logf("cancel machine teardown: %v", err)
+		}
 	}
 	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
 		d.logf("cancel session teardown failed for %s: %v", sessionID, err)
@@ -1938,7 +1954,10 @@ func (d *Daemon) resumeSessionTeardown(sessionID protocol.SessionID) *sessionTea
 	}
 	session := d.store.Get(sessionID)
 	terminals := d.terminalsOf(sessionID)
-	d.closeSession(sessionID, store.SessionClose{By: store.SessionClosedByUser})
+	if err := d.closeSession(sessionID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+		d.logf("session teardown recovery close failed for %s: %v", sessionID, err)
+		return nil
+	}
 	return &sessionTeardown{session: session, terminals: terminals, driverRun: driverRun}
 }
 
@@ -1955,7 +1974,11 @@ func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID protocol.Sess
 	}
 	if claimed {
 		if run.TerminalID != "" {
-			d.notifyPluginDriverSessionClosed(run.PluginName, run.TerminalID, run.RunID, "killed", nil, signalName(sig))
+			raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
+			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "notify", TerminalID: protocol.Ptr(run.TerminalID), Driver: protocol.Ptr(string(raw)), Signal: protocol.Ptr(signalName(sig))}); err != nil {
+				d.logf("notify machine teardown: %v", err)
+				return false
+			}
 		} else {
 			d.logf("plugin session close: legacy teardown has no terminal: session=%s run=%s", sessionID, run.RunID)
 		}
@@ -2032,7 +2055,40 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 	return done
 }
 
-func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) {
+func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) error {
+	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
+		return d.closeSessionRecord(sessionID, closed)
+	}
+	if err := d.drainAgentBeforeClose(sessionID); err != nil {
+		return err
+	}
+	session := d.store.Get(sessionID)
+	linked := session != nil && d.store.SessionLink(sessionID) == codexLinkKind
+	if err := d.closeSessionRecord(sessionID, closed); err != nil {
+		if linked {
+			_, _ = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Profile: protocol.Ptr(session.ProfileID)})
+		}
+		return err
+	}
+	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed"}); err != nil {
+		d.logf("machine close: %v", err)
+	}
+	if linked {
+		profile, conversation := session.ProfileID, d.store.GetSessionConversation(sessionID).NativeID
+		d.life.Go("linkAfterSessionClose", func() {
+			lifecycle := d.sessionLifecycleLockFor(sessionID)
+			lifecycle.Lock()
+			defer lifecycle.Unlock()
+			archive := d.store.OtherOpenSessionHolding(conversation, "") == ""
+			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(conversation), Archive: protocol.Ptr(archive)}); err != nil {
+				d.logf("machine close archive: %v", err)
+			}
+		})
+	}
+	return nil
+}
+
+func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.SessionClose) error {
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
 		d.decorateSessionWithTitle(session)
 		closed.FallbackLabel = protocol.Deref(session.Title)
@@ -2040,19 +2096,10 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 			closed.FallbackLabel = store.DefaultSessionLabel(session.Directory, sessionID)
 		}
 	}
-	var afterClose func()
-	if l := d.linkOf(sessionID); l != nil {
-		afterClose = l.closing(sessionID)
-	}
-	d.recordSessionClose(sessionID, func() (store.SessionClosure, error) {
-		return d.store.CloseSession(sessionID, closed, time.Now())
-	})
-	if afterClose != nil {
-		d.life.Go("linkAfterSessionClose", afterClose)
-	}
+	return d.recordSessionClose(sessionID, func() (store.SessionClosure, error) { return d.store.CloseSession(sessionID, closed, time.Now()) })
 }
 
-func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (store.SessionClosure, error)) {
+func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (store.SessionClosure, error)) error {
 	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
@@ -2060,13 +2107,12 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
 	}
-	defer d.sessionMonitor(sessionID).FinishUsage()()
 	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
 	d.clearSnoozeState(sessionID)
-	d.sessionMonitor(sessionID).FenceInput()
 	closure, err := commit()
 	if err != nil {
 		d.logf("close session %s: %v", sessionID, err)
+		return err
 	}
 	d.forgetMonitor(sessionID)
 	d.announceClosedAsks(closure.Asks)
@@ -2083,6 +2129,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
+	return nil
 }
 
 func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
@@ -2959,7 +3006,11 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
 		return
 	}
-	d.commitSessionUnregister(msg.ID, store.SessionClose{By: store.SessionClosedByUser})
+	if err := d.commitSessionUnregister(msg.ID, store.SessionClose{By: store.SessionClosedByUser}); err != nil {
+		d.cancelSessionTeardown(msg.ID, teardown)
+		d.sendError(conn, fmt.Sprintf("close session: %v", err))
+		return
+	}
 	d.sendOK(conn)
 
 	if teardown != nil && teardown.session != nil {

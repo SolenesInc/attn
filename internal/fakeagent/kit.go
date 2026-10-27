@@ -42,6 +42,7 @@ type Kit struct {
 	failures       []string
 	headless       chan *HeadlessTask
 	nextBootResult *bootingResult
+	nextLaunch     chan *Run
 	answerer       func(*HeadlessTask)
 }
 
@@ -136,6 +137,24 @@ func (k *Kit) Launched(sessionID string) *Run {
 	case <-time.After(HangGuard):
 		k.t.Fatalf("no fake agent launched for session %s within %s%s", sessionID, HangGuard, k.failureSummary())
 		return nil
+	}
+}
+
+func (k *Kit) NextLaunch() func() *Run {
+	k.t.Helper()
+	k.mu.Lock()
+	launch := make(chan *Run, 1)
+	k.nextLaunch = launch
+	k.mu.Unlock()
+	return func() *Run {
+		k.t.Helper()
+		select {
+		case run := <-launch:
+			return run
+		case <-time.After(HangGuard):
+			k.t.Fatalf("no fake agent launched within %s%s", HangGuard, k.failureSummary())
+			return nil
+		}
 	}
 }
 
@@ -262,7 +281,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 			k.mu.Unlock()
 		}
 		if f.Role == roleAgent {
-			k.launchesFor(f.AttnSessionID) <- &Run{
+			run := &Run{
 				PID:            f.Pid,
 				Harness:        f.Harness,
 				SessionID:      f.AttnSessionID,
@@ -275,6 +294,14 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				Yolo:           f.Yolo,
 				t:              k.t,
 				fake:           f,
+			}
+			k.launchesFor(f.AttnSessionID) <- run
+			k.mu.Lock()
+			launch := k.nextLaunch
+			k.nextLaunch = nil
+			k.mu.Unlock()
+			if launch != nil {
+				launch <- run
 			}
 		}
 	case methodUnexpected:

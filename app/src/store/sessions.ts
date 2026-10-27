@@ -62,10 +62,6 @@ export interface DaemonSessionSnapshot {
   pull_requests?: SessionPullRequest[];
 }
 
-interface LauncherConfig {
-  executables: Record<string, string>;
-}
-
 export interface SessionStore extends SessionNavigationState, SessionNavigationActions {
   sessions: Session[];
   navigationSessions: DaemonSessionSnapshot[];
@@ -75,7 +71,6 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
   navigationSettings: Record<string, string>;
   navigationQueue: QueueBands<QueueBandSession> | null;
   connected: boolean;
-  launcherConfig: LauncherConfig;
   desktopSnapshots: Record<string, TerminalDesktopSnapshot>;
   desktopIdBySessionId: Record<string, string>;
 
@@ -93,7 +88,6 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
   removeSessionLocalState: (id: string) => void;
   takeSessionSpawnArgs: (id: string, cols: number, rows: number) => PtySpawnArgs | null;
   reloadSession: (id: string, size?: { cols: number; rows: number }) => Promise<void>;
-  setLauncherConfig: (config: LauncherConfig) => void;
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => void;
   syncFromArrangement: (profileId: string, currentDesktopId: string | null, desktops: Desktop[], arrival: Arrival) => void;
 }
@@ -138,7 +132,6 @@ function samePullRequests(
   });
 }
 
-
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
   ...initialSessionNavigation(),
@@ -150,9 +143,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   navigationSettings: {},
   navigationQueue: null,
   connected: false,
-  launcherConfig: {
-    executables: {},
-  },
   desktopSnapshots: {},
   desktopIdBySessionId: {},
 
@@ -226,7 +216,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   takeSessionSpawnArgs: (id: string, cols: number, rows: number) => {
-    const { sessions, launcherConfig } = get();
+    const { sessions } = get();
     const session = sessions.find((entry) => entry.id === id);
     if (!session) {
       return null;
@@ -237,7 +227,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       resolvedCols = 80;
       resolvedRows = 24;
     }
-    const selectedExecutable = launcherConfig.executables[session.agent] || '';
     return {
       id,
       cwd: session.cwd,
@@ -253,13 +242,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       // Explicit false is a real answer here, so the field is sent whenever it was
       // set and is never `&&`-collapsed away.
       ...(session.autoMode !== undefined ? { auto_mode: session.autoMode } : {}),
-      ...(selectedExecutable ? { executable: selectedExecutable } : {}),
-      ...(session.agent === 'claude' && selectedExecutable
-        ? { claude_executable: selectedExecutable }
-        : {}),
-      ...(session.agent === 'codex' && selectedExecutable
-        ? { codex_executable: selectedExecutable }
-        : {}),
+
     };
   },
 
@@ -274,10 +257,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       rows = 24;
     }
     await ptyReload({ id, cols, rows });
-  },
-
-  setLauncherConfig: (config: LauncherConfig) => {
-    set({ launcherConfig: config });
   },
 
   syncFromDaemonSessions: (daemonSessions: DaemonSessionSnapshot[]) => {

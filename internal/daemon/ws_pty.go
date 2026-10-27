@@ -870,9 +870,6 @@ func (d *Daemon) killSessionRuntimeAsync(sessionID protocol.SessionID, terminals
 			}
 		}
 	}
-	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
-		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
-	}
 	if err != nil {
 		if shouldLogPtyCommandError(err) {
 			d.logf("kill_session failed for %s: %v", sessionID, err)

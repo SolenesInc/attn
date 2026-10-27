@@ -258,6 +258,21 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 	w.CodexServer().AwaitStopped()
 }
 
+func TestASharedCodexLaunchWhoseTerminalCannotStartLetsItsAppServerStop(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	id := protocol.SessionID(uuid.NewString())
+	refused := testworld.Request(app, protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: id, Agent: string(fakeagent.Codex), Cwd: w.Path("missing"),
+		ProfileID: app.SelectedProfile(), Placement: &protocol.SessionPlacement{}, Cols: 100, Rows: 30,
+	}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == id })
+	if refused.Success {
+		t.Fatal("shared Codex started in a missing directory")
+	}
+	w.CodexServer().AwaitStopped()
+}
+
 func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Codex)
 	app := w.App()

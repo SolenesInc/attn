@@ -29,7 +29,10 @@ func (d *Daemon) beginSessionClose(
 	if err != nil {
 		return sessionCloseInFlight{}, err
 	}
-	d.commitSessionUnregister(sessionID, closed)
+	if err := d.commitSessionUnregister(sessionID, closed); err != nil {
+		d.cancelSessionTeardown(sessionID, teardown)
+		return sessionCloseInFlight{}, err
+	}
 	if client != nil {
 		for _, terminal := range teardown.terminals {
 			d.detachSession(client, terminal)
