@@ -31,6 +31,7 @@ func TestAnExitBeforeASwitchAnswerEndsTheCommittedConversation(t *testing.T) {
 	if conversation == original {
 		t.Fatal("clear did not start a new conversation")
 	}
+	mark := len(app.Log())
 	agent.Exit(1)
 	exiting.Await()
 	exiting.Release()
@@ -45,9 +46,9 @@ func TestAnExitBeforeASwitchAnswerEndsTheCommittedConversation(t *testing.T) {
 	if current.TerminalExit == nil || current.TerminalExit.Code != 1 {
 		t.Fatalf("committed session lost its exit: %+v", current)
 	}
-	if reason := protocol.Deref(current.StateReason); reason != "process_exited" {
-		t.Fatalf("committed session state=%s reason=%q, want its process exit", current.State, reason)
-	}
+	testworld.AwaitSessionSince(app, mark, string(next.ID), func(x protocol.Session) bool {
+		return x.TerminalExit != nil && x.TerminalExit.Code == 1 && protocol.Deref(x.StateReason) == "process_exited"
+	})
 	closed := showSession(t, s.Client(), first)
 	if protocol.Deref(closed.ClosedAt) == "" {
 		t.Fatal("the predecessor reopened when the committed conversation exited")
