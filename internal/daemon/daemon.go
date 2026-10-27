@@ -1688,7 +1688,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.forgetTerminalTitle(info.ID)
 		return false
 	}
-	d.bindMonitorCandidates()
+	d.bindMonitorTerminals()
 	owner, bound, shown := d.terminals().takeExiting(info.ID)
 	sessionID := owner.session
 	pausepoint.At(pausepoint.PtyExitOwnerResolved)

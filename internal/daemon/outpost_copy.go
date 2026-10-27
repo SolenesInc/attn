@@ -152,7 +152,7 @@ func (d *Daemon) applyOutpostCopy(ctx context.Context, home string, rows []proto
 		d.refreshChangedSettings(before)
 	}
 	d.replayPendingSwitches()
-	d.bindMonitorCandidates()
+	d.bindMonitorTerminals()
 	for profile, link := range released {
 		d.life.Go("linkReleasedAfterCopy", func() { link.profileReleased(profile) })
 	}

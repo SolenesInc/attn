@@ -922,54 +922,105 @@ func TestADroppedOutpostSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) {
 	t.Log("dropped candidate keeps in-flight and subsequent delivery; reload retains each recorded conversation")
 }
 
-func TestARemoteReloadDropsTheSwitchOfTheRuntimeItReplaced(t *testing.T) {
-	home := testworld.NewStack(t)
-	deciding := home.PauseAt(pausepoint.ConversationSwitchDecision)
-	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	pair := testworld.PrepareOutpostPair(t, home, outpost)
-	pair.Start()
-	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	app := pair.App
-	first := home.Spawn(app, fakeagent.Claude, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
-	terminal := app.Terminal(first)
-	agent := outpost.LaunchedCarrying(terminal)
-	app.TypeLine(first, "before reload")
-	agent.Prompted()
-	conversation := agent.ConversationID
-	agent.Reply("Ready. <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
-	app.TypeLine(first, "/clear")
-	agent.Prompted()
-	deciding.Await()
-	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(first), Cols: 100, Rows: 30}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == first })
-	if !reloaded.Success {
-		t.Fatal(reloaded)
+func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
+	totals := make(map[string]int)
+	for _, reload := range []bool{false, true} {
+		name := "control"
+		if reload {
+			name = "delayed-switch-after-reload"
+		}
+		t.Run(name, func(t *testing.T) {
+			home := testworld.NewStack(t)
+			var deciding *testworld.Pause
+			if reload {
+				deciding = home.PauseAt(pausepoint.ConversationSwitchDecision)
+			}
+			outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			pair := testworld.PrepareOutpostPair(t, home, outpost)
+			pair.Start()
+			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+			app := pair.App
+			first := home.Spawn(app, fakeagent.Claude, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+			terminal := app.Terminal(first)
+			agent := outpost.LaunchedCarrying(terminal)
+			firstReply := "Ready. <!-- attn:state=waiting_input -->"
+			app.TypeLine(first, "before reload")
+			agent.Prompted()
+			conversation := agent.ConversationID
+			agent.Reply(firstReply)
+			testworld.AwaitSession(app, first, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) && s.Usage != nil })
+			if reload {
+				app.TypeLine(first, "/clear")
+				agent.Prompted()
+				deciding.Await()
+				reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(first), Cols: 100, Rows: 30}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == first })
+				if !reloaded.Success {
+					t.Fatal(reloaded)
+				}
+				agent = outpost.LaunchedCarrying(terminal)
+				if agent.ConversationID != conversation {
+					t.Fatalf("reload resumed %s, want %s", agent.ConversationID, conversation)
+				}
+			}
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after reload\r"})
+			agent.Prompted()
+			secondReply := "Replacement ready. <!-- attn:state=waiting_input -->"
+			var staleID protocol.SessionID
+			if reload {
+				deciding.Release()
+				stale := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
+					return e.Session != nil && protocol.Deref(e.Session.Succeeds) == protocol.SessionID(first)
+				}).Session
+				staleID = stale.ID
+				t.Logf("stale decision committed %s while terminal %s runs %s", stale.ID, terminal, conversation)
+				testworld.AwaitSession(app, string(staleID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			}
+			finishedAt := time.Now()
+			finishedMark := len(app.Log())
+			agent.Reply(secondReply)
+			if reload {
+				finished := testworld.AwaitSessionSince(app, finishedMark, string(staleID), func(s protocol.Session) bool {
+					return protocol.Deref(s.TurnOwed) && s.State != protocol.SessionStateWorking && !protocol.Timestamp(protocol.Deref(s.TurnOpenedAt)).Time().Before(finishedAt)
+				})
+				t.Logf("autonomous finish observed on %s: state=%s turn=%v seen=%s", staleID, finished.State, protocol.Deref(finished.TurnOwed), finished.LastSeen)
+			}
+			mark := len(app.Log())
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after stale commit\r"})
+			agent.Prompted()
+			thirdReply := "Healed ready. <!-- attn:state=waiting_input -->"
+			agent.Reply(thirdReply)
+			want := 2 * len(firstReply+secondReply+thirdReply)
+			ready := testworld.AwaitSessionSince(app, mark, first, func(s protocol.Session) bool {
+				return protocol.Deref(s.TurnOwed) && s.State == protocol.SessionStateWaitingInput && s.Usage != nil && s.Usage.TotalTokens == want
+			})
+			if app.Terminal(first) != terminal {
+				t.Fatal("next prompt moved the original conversation to another terminal")
+			}
+			outpost.Stop()
+			outpost.Start()
+			app = home.App()
+			outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
+			mark = len(app.Log())
+			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after restart\r"})
+			agent.Prompted()
+			if agent.ConversationID != conversation {
+				t.Fatalf("restart changed conversation to %s", agent.ConversationID)
+			}
+			lastReply := "Still original. <!-- attn:state=waiting_input -->"
+			agent.Reply(lastReply)
+			final := testworld.AwaitSessionSince(app, mark, first, func(s protocol.Session) bool {
+				return protocol.Deref(s.TurnOwed) && s.State == protocol.SessionStateWaitingInput && s.Usage != nil && s.Usage.TotalTokens == ready.Usage.TotalTokens+2*len(lastReply)
+			})
+			if app.Terminal(first) != terminal {
+				t.Fatal("restart moved the original conversation to another terminal")
+			}
+			totals[name] = final.Usage.TotalTokens
+			t.Logf("%s: next-prompt tokens=%d final tokens=%d native=%s terminal=%s", name, ready.Usage.TotalTokens, final.Usage.TotalTokens, conversation, terminal)
+		})
 	}
-	replacement := outpost.LaunchedCarrying(terminal)
-	if replacement.ConversationID != conversation {
-		t.Fatalf("reload resumed %s, want %s", replacement.ConversationID, conversation)
+	if len(totals) == 2 && totals["control"] != totals["delayed-switch-after-reload"] {
+		t.Fatalf("reload tokens=%d, control=%d", totals["delayed-switch-after-reload"], totals["control"])
 	}
-	deciding.Release()
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after reload\r"})
-	replacement.Prompted()
-	replacement.Reply("Replacement ready. <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, first, func(s protocol.Session) bool {
-		return protocol.Deref(s.TurnOwed) && s.State == protocol.SessionStateWaitingInput
-	})
-	outpost.Stop()
-	outpost.Start()
-	app = home.App()
-	outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after restart\r"})
-	replacement.Prompted()
-	if replacement.ConversationID != conversation {
-		t.Fatalf("restart changed conversation to %s", replacement.ConversationID)
-	}
-	replacement.Reply("Still original. <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, first, func(s protocol.Session) bool {
-		return protocol.Deref(s.TurnOwed) && s.State == protocol.SessionStateWaitingInput
-	})
-	t.Logf("reload and outpost restart retain %s in terminal %s", conversation, terminal)
 }
 
 func TestOutpostClaudeConversationSharingRespectsTheMachine(t *testing.T) {
