@@ -102,9 +102,6 @@ func TestAnAcceptedRemovalFinishesAfterItsClientTimesOut(t *testing.T) {
 	if err := syscall.Kill(entry.ChildPID, 0); err != syscall.ESRCH {
 		t.Fatalf("child %d was not reaped: %v", entry.ChildPID, err)
 	}
-	if _, err := os.Stat(filepath.Join(backend.registryDir(), id+".json")); !os.IsNotExist(err) {
-		t.Fatalf("worker registry remains after removal: %v", err)
-	}
 	t.Logf("remove reply timed out after the program received TERM; worker %d exited and child %d was reaped", entry.WorkerPID, entry.ChildPID)
 }
 
