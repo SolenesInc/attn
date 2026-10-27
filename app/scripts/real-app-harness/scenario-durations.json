@@ -354,6 +354,14 @@
         "seconds": 28.012,
         "runnerClass": "local macOS",
         "note": "Green ATTN_VERDICT durationMs=28012, including cleanup. Covers vents new/done, dismiss and undo, plant and undo, records by stream, clear, and a 5 s idle check. Remeasure on Linux CI."
+      },
+      "outpost-update": {
+        "run": "outpost-update-2026-10-27T00-13-40-017Z",
+        "job": "Local packaged scenario, upwcd4g4 named instance",
+        "recordedAt": "2026-10-27",
+        "seconds": 39.165,
+        "runnerClass": "local macOS",
+        "note": "Green serial matrix durationMs=39165; scenario ATTN_VERDICT durationMs=38664 including cleanup and recording. Native banner and Settings row each push to a real supervised daemon, show restart and outcome; dismissal stays hidden during the row push. Remeasure on Linux CI."
       }
     }
   },
@@ -424,6 +432,7 @@
     "quick-capture": 206.599,
     "agent-reload": 13.867,
     "outposts-settings": 71.931,
-    "analytics-settings": 28.012
+    "analytics-settings": 28.012,
+    "outpost-update": 39.165
   }
 }
