@@ -212,7 +212,7 @@ const tendBetweenDays = async (seed) => {
   fs.unlinkSync(claimReadReceipt);
   const day = crewMember(asleep).binding_session;
   const closed = waitForCrew(asleep, (member) => !member.binding_session, 'the member returns between days');
-  json(['handoff', '--sleep', '-m', 'Read the Garden claim update', '--session', day, '--json']);
+  json(['handoff', '-m', 'Read the Garden claim update', '--session', day, '--json']);
   await closed;
 };
 const plant = (args) => {
@@ -242,7 +242,7 @@ try {
       { includes: '📬 You have unread items', submitHook: false, actions: [
         { type: 'attn', args: ['agent', 'inbox'] },
         { type: 'wait_for_file', path: 'continue-sleep', timeoutMs: 30_000 },
-        { type: 'attn', args: ['handoff', '--sleep', '-m', 'CREW_PANEL_HANDOFF'] },
+        { type: 'attn', args: ['handoff', '-m', 'CREW_PANEL_HANDOFF'] },
       ] },
     ],
   });

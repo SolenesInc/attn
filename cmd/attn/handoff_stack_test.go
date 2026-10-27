@@ -41,7 +41,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 		{[]string{"handoff", "-m", "   "}, []string{"-m -"}},
 		{[]string{"handoff", "--retry", "-m", "another one"}, []string{"--retry"}},
 		{[]string{"handoff", "-m", "x", "trellis"}, []string{`"trellis"`}},
-		{[]string{"handoff", "-m", "x", "--sleep", "--nap"}, []string{"--sleep", "--nap"}},
+		{[]string{"handoff", "-m", "x", "--sleep"}, []string{"flag provided but not defined: -sleep"}},
 	} {
 		refused := s.Attn(row.args...)
 		if refused.Code != 2 || !strings.HasPrefix(refused.Stderr, "handoff: ") {
@@ -55,7 +55,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 	s.Start()
 	keel := wakeMember(t, s, "keel")
 	letter := "Dear next keel,\nthe join test is the gate.\n"
-	slept := s.Run(testworld.Invocation{Args: []string{"handoff", "-m", "-", "--sleep"}, Session: keel, Stdin: letter})
+	slept := s.Run(testworld.Invocation{Args: []string{"handoff", "-m", "-"}, Session: keel, Stdin: letter})
 	requireStdout(t, slept, "Keel's letter is filed at ", "Keel is asleep.")
 	if filed, err := os.ReadFile(filedLetter(t, slept.Stdout, "Keel")); err != nil || string(filed) != letter {
 		t.Fatalf("the filed letter reads %q (%v), want %q", filed, err, letter)
@@ -87,7 +87,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOverAsAsked(t *testing.T) {
 	if err := os.MkdirAll(workdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	retried := s.Run(testworld.Invocation{Args: []string{"handoff", "--retry"}, Session: trellis})
+	retried := s.Run(testworld.Invocation{Args: []string{"handoff", "--retry", "--nap"}, Session: trellis})
 	requireStdout(t, retried, "Trellis's letter was already filed at "+path+".\n", "Trellis's next day is session ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
 	if next == "" || string(next) == trellis || !strings.Contains(retried.Stdout, string("session "+next[:8]+", waking now")) {

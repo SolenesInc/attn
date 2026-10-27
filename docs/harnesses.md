@@ -116,7 +116,7 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   and command lists in the probe. Fresh working/config directories plus the
   memory-off switch kept synthetic personal-context canaries out of the
   simulator and judge requests (2.1.310).
-- A Bash tool calling `attn handoff --sleep` can file its letter and exit
+- A Bash tool filing the crew member's letter can close the session
   before Claude persists the final tool call to JSONL. In the 2.1.310 local
   provider probe, the fifth member request closed the session while the file
   retained only the four work requests. Persisted closure records therefore

@@ -42,6 +42,48 @@ func crewLetters(t *testing.T, w *world, member string) []string {
 	return names
 }
 
+func TestPlainHandoffSleepsWhileTheUserIsPresentAndNapReloads(t *testing.T) {
+	for _, v2 := range []string{"false", "true"} {
+		t.Run("crew_v2_enabled="+v2, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				writeCrewCharter(t, w, "trellis")
+				w.restart()
+				app, cli := w.App(), w.Client()
+				setSetting(t, app, "crew_v2_enabled", v2)
+				presenceReport(app, protocol.SetClientPresenceMessage{Visible: true, IdleSeconds: protocol.Ptr(0.0)})
+				presenceTierIs(t, cli, "before plain handoff", "present")
+				day := wakeCrew(t, cli, "trellis", "")
+				w.bootBubbleClaude(t, string(day.SessionID))
+				before := crewSessionCount(t, cli)
+				ended := crewHandoff(t, cli, string(day.SessionID), "The work is settled.", false, "")
+				if protocol.Deref(ended.Outcome) != protocol.CrewDayCloseSleep || ended.SessionID != nil || ended.NapError != nil {
+					t.Fatalf("plain handoff = %+v, want sleep with no successor", ended)
+				}
+				testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
+					return e.Session != nil && e.Session.ID == day.SessionID
+				})
+				if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
+					t.Fatalf("plain handoff left trellis bound to %s", *binding)
+				}
+				if got := crewSessionCount(t, cli); got != before-1 {
+					t.Fatalf("plain handoff left %d sessions, want %d", got, before-1)
+				}
+				day = wakeCrew(t, cli, "trellis", "")
+				w.bootBubbleClaude(t, string(day.SessionID))
+				napped := crewHandoff(t, cli, string(day.SessionID), "Reload with the saved harness.", false, protocol.CrewDayCloseNap)
+				successor := protocol.Deref(napped.SessionID)
+				if protocol.Deref(napped.Outcome) != protocol.CrewDayCloseNap || napped.NapError != nil || successor == "" || successor == day.SessionID {
+					t.Fatalf("explicit nap = %+v, want a new session", napped)
+				}
+				w.bootBubbleClaude(t, string(successor))
+				if binding := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); binding != successor {
+					t.Fatalf("explicit nap bound trellis to %q, want %s", binding, successor)
+				}
+			})
+		})
+	}
+}
+
 func TestCrewCanFileTwoLettersWithinTheSameMinute(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
@@ -80,7 +122,7 @@ func TestCrewCanFileTwoLettersWithinTheSameMinute(t *testing.T) {
 	})
 }
 
-func TestAHandoffFilesTheLetterAndWakesTheNextDay(t *testing.T) {
+func TestANapFilesTheLetterAndWakesTheNextDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()
 	cli := w.Client()
@@ -88,7 +130,7 @@ func TestAHandoffFilesTheLetterAndWakesTheNextDay(t *testing.T) {
 	day := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
 	letter := "Dear next trellis,\n\n#901 is waiting on review.\n"
-	handed := crewHandoff(t, cli, string(day.SessionID), letter, false, "")
+	handed := crewHandoff(t, cli, string(day.SessionID), letter, false, protocol.CrewDayCloseNap)
 	successor := protocol.Deref(handed.SessionID)
 	if protocol.Deref(handed.Outcome) != protocol.CrewDayCloseNap || handed.NapError != nil || successor == "" || successor == day.SessionID {
 		t.Fatalf("handoff = %+v, want a nap into a fresh day", handed)
@@ -170,7 +212,7 @@ func TestAFailedNapKeepsTheLetterAndTheDayAndARetryTurnsItOver(t *testing.T) {
 	}
 
 	day, workDir := wakeInDirectoryThatThenMoves("alder")
-	failed := crewHandoff(t, cli, string(day.SessionID), "The letter, written once.", false, "")
+	failed := crewHandoff(t, cli, string(day.SessionID), "The letter, written once.", false, protocol.CrewDayCloseNap)
 	if failed.NapError == nil || failed.SessionID != nil {
 		t.Fatalf("handoff from a day whose directory moved = %+v, want a nap error and no successor", failed)
 	}
@@ -185,7 +227,7 @@ func TestAFailedNapKeepsTheLetterAndTheDayAndARetryTurnsItOver(t *testing.T) {
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	retried := crewHandoff(t, cli, string(day.SessionID), "", true, "")
+	retried := crewHandoff(t, cli, string(day.SessionID), "", true, protocol.CrewDayCloseNap)
 	successor := protocol.Deref(retried.SessionID)
 	if protocol.Deref(retried.Outcome) != protocol.CrewDayCloseNap || retried.NapError != nil || successor == "" || retried.Path != failed.Path {
 		t.Fatalf("retry = %+v, want a nap on the letter already filed at %s", retried, failed.Path)
@@ -201,17 +243,25 @@ func TestAFailedNapKeepsTheLetterAndTheDayAndARetryTurnsItOver(t *testing.T) {
 		t.Errorf("the successor was not primed by the letter already filed:\n%s", primed)
 	}
 
-	t.Run("a retry can put the member to sleep instead", func(t *testing.T) {
+	t.Run("a plain retry puts the member to sleep", func(t *testing.T) {
 		day, _ := wakeInDirectoryThatThenMoves("keel")
-		if failed := crewHandoff(t, cli, string(day.SessionID), "Tonight's letter.", false, ""); failed.NapError == nil {
+		if failed := crewHandoff(t, cli, string(day.SessionID), "Tonight's letter.", false, protocol.CrewDayCloseNap); failed.NapError == nil {
 			t.Fatalf("handoff = %+v, want the nap to fail", failed)
 		}
-		slept := crewHandoff(t, cli, string(day.SessionID), "", true, protocol.CrewDayCloseSleep)
-		if protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep {
-			t.Fatalf("retry --sleep = %+v, want sleep", slept)
+		before := crewSessionCount(t, cli)
+		letters := crewLetters(t, w, "keel")
+		slept := crewHandoff(t, cli, string(day.SessionID), "", true, "")
+		if protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep || slept.SessionID != nil {
+			t.Fatalf("plain retry = %+v, want sleep with no successor", slept)
 		}
 		if binding := crewRosterMember(t, cli, "keel").BindingSession; binding != nil {
 			t.Fatalf("keel is still bound to %s after being told to sleep", *binding)
+		}
+		if got := crewSessionCount(t, cli); got != before-1 {
+			t.Fatalf("plain retry left %d sessions, want %d", got, before-1)
+		}
+		if after := crewLetters(t, w, "keel"); !slices.Equal(after, letters) {
+			t.Fatalf("plain retry changed letters from %q to %q", letters, after)
 		}
 	})
 }
@@ -247,7 +297,7 @@ func TestHandoffRefusalsLeaveTheDayRunning(t *testing.T) {
 
 	keel := wakeCrew(t, cli, "keel", "")
 	w.Launched(string(keel.SessionID))
-	handed := crewHandoff(t, cli, string(keel.SessionID), "Filed and gone.", false, "")
+	handed := crewHandoff(t, cli, string(keel.SessionID), "Filed and gone.", false, protocol.CrewDayCloseNap)
 	w.Launched(string(protocol.Deref(handed.SessionID)))
 	_, err = cli.CrewHandoff(protocol.Deref(handed.SessionID), "", true, "")
 	crewErrorContains(t, err, "filed no letter yet")

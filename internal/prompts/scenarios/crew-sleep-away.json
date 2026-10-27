@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "crew-sleep-away",
+  "description": "The away notice asks the member to file its letter and sleep.",
+  "recipient": "crew",
+  "event": "sleep-away",
+  "values": {}
+}

@@ -65,7 +65,7 @@ async function main() {
       // letter must wait for the previous letter's minute to end.
       const nextMinute = Math.ceil((lastHandoffAt + 1) / 60_000) * 60_000;
       await delay(Math.max(0, nextMinute - Date.now()));
-      run(['handoff', '--session', current, '--sleep', '-m', 'Crew header verification finished.']);
+      run(['handoff', '--session', current, '-m', 'Crew header verification finished.']);
       await observer.waitFor(() => !observer.getSession(current), 'the crew session to close', 10_000);
     }
   });
@@ -128,7 +128,7 @@ async function main() {
     });
     await runner.step('retain_the_member_claim_across_sessions_and_open_it', async () => {
       lastHandoffAt = Date.now();
-      run(['handoff', '--session', sessionId, '--sleep', '-m', 'Continue checking the member claim.']);
+      run(['handoff', '--session', sessionId, '-m', 'Continue checking the member claim.']);
       const next = await wake();
       runner.assert(next !== sessionId, 'crew starts a new session', { sessionId, next });
       await header(next, 'Review release notes');

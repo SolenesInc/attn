@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "crew-sleep-requested",
+  "description": "The user asks the member to file its letter and sleep.",
+  "recipient": "crew",
+  "event": "sleep-requested",
+  "values": {}
+}
