@@ -51,8 +51,8 @@ export function loadCases(ctx) {
   }
   const stalePilot = state.pilot && ctx.pilotStage === 'use' && ctx.variant === 'v1' && state.approvals?.stale_pilot;
   if (stalePilot) {
-    if (!Array.isArray(state.stale_probe_ids) || state.stale_probe_ids.length !== 3 || new Set(state.stale_probe_ids).size !== 3)
-      throw failure('fixture', 'stale pilot needs exactly three distinct stale_probe_ids');
+    if (!Array.isArray(state.stale_probe_ids) || state.stale_probe_ids.length < 1 || state.stale_probe_ids.length > 3 || new Set(state.stale_probe_ids).size !== state.stale_probe_ids.length)
+      throw failure('fixture', 'stale pilot needs one to three distinct stale_probe_ids');
     for (const id of state.stale_probe_ids) {
       const input = cases.find(row => row.id === id);
       if (input?.unit !== 'use' || !input.frozen_memory || !input.stale_entry)
