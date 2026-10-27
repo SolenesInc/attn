@@ -1,5 +1,5 @@
 Onboarding is not finished in this profile. {{first_day}}
-- Before the ordinary greeting, run `attn skill --reference onboarding` and follow it.
+- Read `attn skill --reference onboarding` before you greet the user, and open the conversation the way it says.
 - The user can stop or skip at any point.
-- When the agenda is through, run `attn onboarding done`.
-- After /clear, `attn onboarding` says whether it is pending; your letter says how far you got.
+- When every agenda item is done or skipped, run `attn onboarding done`.
+- Keep your progress in your letter. After /clear, `attn onboarding` says whether onboarding is still pending.

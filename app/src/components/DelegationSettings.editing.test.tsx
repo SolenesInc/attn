@@ -14,10 +14,11 @@ const openDelegation = (table: DelegationTable = {}) =>
 
 it('copies a maintained role with its configured model and state, not the template', async () => {
   const configured: Role = { ...template, enabled: false, choices: [{ id: 'default', name: 'Default', when: '', selection: { harness: 'codex', provider: '', model: 'model-a', effort: 'high' } }] };
-  const { daemon, saves, lastSaved } = await openDelegation({ roles: [configured] });
+  const { daemon, saves, lastSaved } = await openDelegation({ roles: [configured], enabled: false });
   fireEvent.click(screen.getByRole('button', { name: 'Builder' }));
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Make an editable copy' })));
   expect(saves()).toHaveLength(1);
+  expect(lastSaved().enabled).toBe(true);
   const copy = lastSaved().roles[1];
   expect(copy.builtin).toBeUndefined();
   expect(copy.name).toBe('Builder (custom)');
@@ -51,6 +52,7 @@ it('adopts maintained roles from the empty state with the install flag and shows
   const [adoption] = saves();
   expect(adoption.install_workflow_skill).toBe(true);
   expect(adoption.preferences.workflow_skill_enabled).toBe(true);
+  expect(adoption.preferences.enabled).toBe(true);
   expect(adoption.preferences.roles[0].builtin).toBe('builder');
   expect(adoption.preferences.roles[0].instructions).toBe('');
 
@@ -132,10 +134,11 @@ it('renders a maintained role by built-in kind and offers a missing one by name'
   const configured: Role = { ...structuredClone(template), id: 'orchestrator', builtin: 'pathfinder' };
   const pathfinderView: Role = { ...configured, name: 'Pathfinder', icon: 'search', description: 'Investigate the path', instructions: 'Find the path', stopping_point: 'Return a plan' };
   const orchestratorView: Role = { ...structuredClone(template), id: 'orchestrator', builtin: 'orchestrator', name: 'Orchestrator', icon: 'spark', description: 'Coordinate work', instructions: 'Coordinate', stopping_point: 'Return the outcome' };
-  const { daemon, saves } = await openDelegation({ roles: [configured], templates: [orchestratorView], expanded: () => [pathfinderView, orchestratorView], harnesses: [] });
+  const { daemon, saves } = await openDelegation({ roles: [configured], enabled: false, templates: [orchestratorView], expanded: () => [pathfinderView, orchestratorView], harnesses: [] });
   expect(screen.getByRole('button', { name: 'Pathfinder' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Orchestrator' })).not.toBeInTheDocument();
   await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: '+ Orchestrator' })));
+  expect(saves()[0].preferences.enabled).toBe(true);
   expect(saves()[0].preferences.roles.map(role => role.builtin)).toEqual(['pathfinder', 'orchestrator']);
 });
 
@@ -202,4 +205,14 @@ it('makes an alternative the default and keeps the former default as an alternat
   expect(saves()).toHaveLength(2);
   expect(server.preferences.roles[0].default_choice_id).toBe('default');
   expect(daemon.sentOf('harness_models')).toHaveLength(0);
+});
+
+it('turns delegation roles on when a custom role is added and keeps them on when it is deleted', async () => {
+  const { daemon, lastSaved } = await openDelegation({ enabled: false });
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: '+ Custom role' })));
+  expect(lastSaved().enabled).toBe(true);
+  expect(screen.getByRole('switch', { name: 'Delegation preferences' })).toHaveAttribute('aria-checked', 'true');
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Delete' })));
+  expect(lastSaved().roles).toHaveLength(0);
+  expect(lastSaved().enabled).toBe(true);
 });

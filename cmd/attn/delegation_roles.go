@@ -95,7 +95,7 @@ reading:
 changing (each accepts -m TEXT, the reason recorded in history):
   install
         install Attn's maintained roles and their attn-workflow skill.
-        Keep existing roles; set models afterwards with set.
+        Keep existing roles.
         Named instances refuse the user-global skill install.
   add <role> --name NAME [guidance] [model]
         a custom role. Its default model comes from the model flags.
@@ -533,6 +533,7 @@ func addRole(roleID string, builtin *optionalText, guidance guidanceEdits, model
 		guidance.apply(&role)
 		model.apply(&role.Choices[0].Selection)
 		cfg.Roles = append(cfg.Roles, role)
+		cfg.Enabled = true
 		return nil
 	}
 }
@@ -614,6 +615,7 @@ func copyRole(sourceID, roleID string, name *optionalText) delegationRolesEdit {
 		copied.Choices = slices.Clone(source.Choices)
 		index := slices.IndexFunc(cfg.Roles, func(r protocol.DelegationRole) bool { return r.ID == sourceID })
 		cfg.Roles = slices.Insert(cfg.Roles, index+1, copied)
+		cfg.Enabled = true
 		return nil
 	}
 }

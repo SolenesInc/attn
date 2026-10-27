@@ -92,7 +92,8 @@ func (d *Daemon) relocateCrewHome(id store.CrewIdentity, member crew.Member, rev
 	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, id.Key.String(), false)
 	if err := syscall.Rename(source, home); err != nil {
 		if errors.Is(err, syscall.EXDEV) {
-			return member, revision, fmt.Errorf("cannot move crew home from %s to %s: the folders are on different volumes; automatic moves across volumes are not supported, and the original home is unchanged", previous, home)
+			//lint:ignore ST1005 This user-facing refusal uses complete sentences.
+			return member, revision, fmt.Errorf("cannot move %s's home from %s to %s: they are on different volumes, and attn moves a home only within one volume. Nothing changed; %s keeps working from %s.", id.Name, previous, home, id.Name, previous)
 		}
 		return member, revision, fmt.Errorf("move crew home from %s to %s: %w", source, home, err)
 	}

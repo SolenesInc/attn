@@ -70,7 +70,7 @@ func TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins(t *testin
 		t.Errorf("the reload ran pi resuming %v %s on %q at %q (yolo %v), want it resuming %s on provider/model at high effort in yolo",
 			second.Resumed, second.ConversationID, model, thinking, second.Yolo, first.ConversationID)
 	}
-	if !strings.Contains(guidance, "You are this profile's Chief") {
+	if !strings.Contains(guidance, "You are the Chief") {
 		t.Error("the reloaded chief was launched without the chief guidance")
 	}
 	converse(t, app, chief, second, "plan the week")
