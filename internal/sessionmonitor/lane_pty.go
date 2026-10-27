@@ -54,7 +54,6 @@ func (l *lane) clearUnstartedUserSubmitLocked() {
 func (l *lane) placePTYLocked(ctx context.Context, delivery Delivery) Attempt {
 	m := l.monitor
 	if err := l.ptySafetyLocked(delivery.AllowUserComposer); err != nil {
-		l.armRetryLocked(delivery, err)
 		return Attempt{Stage: Deferred, Err: err}
 	}
 	l.clearUnstartedUserSubmitLocked()

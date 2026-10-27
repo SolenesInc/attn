@@ -102,29 +102,31 @@ func SameExit(a, b *Exit) bool {
 }
 
 type View struct {
-	Conversation       Value[Conversation]                   `fact:"session.conversation.changed"`
-	CostInitialized    Value[bool]                           `fact:"session.cost.changed"`
-	Cost               KeyedSet[string, *sessioncost.Source] `fact:"session.cost.changed"`
-	FirstReportAt      Value[time.Time]                      `fact:"-"`
-	Key                Value[Key]                            `fact:"-"`
-	Epoch              Value[string]                         `fact:"-"`
-	Revision           Value[uint64]                         `fact:"-"`
-	Succeeds           Value[Key]                            `fact:"-"`
-	State              Value[StateView]                      `fact:"session.state.changed"`
-	Turn               Value[TurnStamps]                     `fact:"session.state.changed"`
-	AutoSettle         Value[AutoSettleView]                 `fact:"session.state.changed"`
-	LastModelRequestAt Value[time.Time]                      `fact:"session.model_request.started"`
-	Driver             Value[DriverMetadata]                 `fact:"session.state.changed"`
-	Branch             Value[attngit.BranchInfo]             `fact:"session.branch.changed"`
-	PullRequests       KeyedSet[string, PullRequest]         `fact:"session.pull_request.changed"`
-	SentFiles          KeyedSet[string, uint64]              `fact:"-"`
-	HarnessTitle       Value[string]                         `fact:"session.renamed"`
-	TerminalTitle      Value[string]                         `fact:"session.title.changed"`
-	LastSeen           Value[time.Time]                      `fact:"-"`
-	PendingSwitch      Value[Conversation]                   `fact:"-"`
-	Exit               Value[*Exit]                          `fact:"session.pty.exited"`
-	Live               Value[bool]                           `fact:"-"`
-	AssistantWindow    Value[uint64]                         `fact:"session.assistant_window.changed"`
+	Conversation       Value[Conversation]                        `fact:"session.conversation.changed"`
+	CostInitialized    Value[bool]                                `fact:"session.cost.changed"`
+	Cost               KeyedSet[string, sessioncost.SourceTotals] `fact:"session.cost.changed"`
+	Run                Value[uint64]                              `fact:"-"`
+	NotificationRun    Value[bool]                                `fact:"-"`
+	FirstReportAt      Value[time.Time]                           `fact:"-"`
+	Key                Value[Key]                                 `fact:"-"`
+	Epoch              Value[string]                              `fact:"-"`
+	Revision           Value[uint64]                              `fact:"-"`
+	Succeeds           Value[Key]                                 `fact:"-"`
+	State              Value[StateView]                           `fact:"session.state.changed"`
+	Turn               Value[TurnStamps]                          `fact:"session.state.changed"`
+	AutoSettle         Value[AutoSettleView]                      `fact:"session.state.changed"`
+	LastModelRequestAt Value[time.Time]                           `fact:"session.model_request.started"`
+	Driver             Value[DriverMetadata]                      `fact:"session.state.changed"`
+	Branch             Value[attngit.BranchInfo]                  `fact:"session.branch.changed"`
+	PullRequests       KeyedSet[string, PullRequest]              `fact:"session.pull_request.changed"`
+	SentFiles          KeyedSet[string, uint64]                   `fact:"-"`
+	HarnessTitle       Value[string]                              `fact:"session.renamed"`
+	TerminalTitle      Value[string]                              `fact:"session.title.changed"`
+	LastSeen           Value[time.Time]                           `fact:"-"`
+	PendingSwitch      Value[Conversation]                        `fact:"-"`
+	Exit               Value[*Exit]                               `fact:"session.pty.exited"`
+	Live               Value[bool]                                `fact:"-"`
+	AssistantWindow    Value[uint64]                              `fact:"session.assistant_window.changed"`
 }
 
 func (m *Monitor) viewLocked() View {
@@ -151,7 +153,7 @@ func (m *Monitor) snapshotLocked() View {
 		Conversation:       Value[Conversation]{m.conversationInput},
 		Succeeds:           Value[Key]{m.succeeds},
 		CostInitialized:    Value[bool]{m.costInitialized},
-		Cost:               KeyedSet[string, *sessioncost.Source]{Entries: m.cost},
+		Cost:               KeyedSet[string, sessioncost.SourceTotals]{Entries: m.costTotals},
 		Key:                Value[Key]{m.keyLocked()},
 		Epoch:              Value[string]{m.epoch},
 		Revision:           Value[uint64]{m.revision},
@@ -161,6 +163,8 @@ func (m *Monitor) snapshotLocked() View {
 		LastModelRequestAt: Value[time.Time]{m.lastModelRequestAt},
 		Driver:             Value[DriverMetadata]{m.driver},
 		FirstReportAt:      Value[time.Time]{m.firstReportAt},
+		Run:                Value[uint64]{m.input.epoch},
+		NotificationRun:    Value[bool]{m.input.inNotificationRunLocked()},
 		Branch:             Value[attngit.BranchInfo]{m.branch},
 		PullRequests:       KeyedSet[string, PullRequest]{Entries: m.pullRequests},
 		SentFiles:          KeyedSet[string, uint64]{Entries: m.sentFiles},

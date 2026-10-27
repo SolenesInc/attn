@@ -20,6 +20,7 @@ import (
 
 func (d *Daemon) machineParts() map[string]machinePart {
 	parts := map[string]machinePart{}
+	d.registerMonitorParts(parts)
 	runs(parts, false, d.startTerminal)
 	runs(parts, false, d.restartTerminal)
 	runs(parts, true, d.readTerminalLaunch)

@@ -66,6 +66,7 @@ type Monitor struct {
 	stopped             bool
 	saveMu              sync.Mutex
 	saved               savedView
+	reacted             View
 	registry            *Registry
 	home                Home
 	label               string
@@ -95,6 +96,7 @@ type Monitor struct {
 	exit                *Exit
 	costInitialized     bool
 	cost                map[string]*sessioncost.Source
+	costTotals          map[string]sessioncost.SourceTotals
 	costOwners          map[string]costOwner
 	evidence            sessionstate.ConversationEvidence
 	resolveAt           time.Time
@@ -210,6 +212,7 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 	m.initializeLocked(start)
 	m.input = m.freshLaneLocked()
 	m.saved.view = m.snapshotLocked()
+	m.saved.cost = sessioncost.Checkpoint{Initialized: m.costInitialized, Sources: m.cost}
 	w.monitors[m] = struct{}{}
 	r.monitors[m] = struct{}{}
 	return m
@@ -317,7 +320,7 @@ func (m *Monitor) Stop() {
 	m.saveMu.Lock()
 	m.mu.Lock()
 	lane := m.input
-	lane.stopRetriesLocked()
+	lane.stopLocked()
 	if m.autoSettle != nil {
 		m.autoSettle.timer.Stop()
 		m.autoSettle = nil
@@ -335,7 +338,6 @@ func (m *Monitor) Stop() {
 	m.stopSaveRetryLocked()
 	m.mu.Unlock()
 	m.saveMu.Unlock()
-	lane.running.Wait()
 }
 
 func (r *Registry) rearm() {
@@ -360,11 +362,8 @@ func (r *Registry) Close() {
 	}
 	for _, lane := range lanes {
 		lane.mu.Lock()
-		lane.stopRetriesLocked()
+		lane.stopLocked()
 		lane.mu.Unlock()
-	}
-	for _, lane := range lanes {
-		lane.running.Wait()
 	}
 }
 

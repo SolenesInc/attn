@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"slices"
@@ -12,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
-	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -133,25 +133,19 @@ func (d *Daemon) publishSessionPullRequestMembershipChanged(prID string, extraSe
 }
 
 func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	if monitor := d.sessionMonitor(rec.SessionID); monitor != nil {
-		if !monitor.ReportPullRequest(rec.PRID, sessionmonitor.PullRequest{Repository: rec.Repository, Number: rec.Number, URL: rec.URL}) {
-			return fmt.Errorf("record pull request %s: monitor view was not applied", rec.PRID)
-		}
-		return nil
-	}
-	recorded, err := d.store.RecordSessionPullRequest(rec, time.Now())
+	result, err := Call[protocol.PullRequestLinkResult](context.Background(), d.router(), protocol.PullRequestLinkMessage{Cmd: protocol.CmdPullRequestLink, SessionID: rec.SessionID, Kind: protocol.PullRequestLinkKindRecord, PRID: rec.PRID, Repository: protocol.Ptr(rec.Repository), Number: protocol.Ptr(rec.Number), URL: protocol.Ptr(rec.URL)})
 	if err != nil {
-		return fmt.Errorf("record pull request %s: %w", rec.PRID, err)
+		return err
 	}
-	if recorded {
-		d.publishFact(FactSessionPullRequestChanged, string(rec.SessionID), sessionPullRequestFact{PRID: rec.PRID})
+	if !result.Applied {
+		return fmt.Errorf("record pull request %s: monitor view was not applied", rec.PRID)
 	}
 	return nil
 }
 
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
-	if !d.sessionMonitor(rec.SessionID).ForgetPullRequest(rec.PRID) {
-		return fmt.Errorf("forget pull request %s: the session's monitor could not save it", rec.PRID)
+	if err := d.forgetMonitorPullRequest(rec.SessionID, rec.PRID); err != nil {
+		return err
 	}
 	addresses := d.inboxRoleAddresses(rec.SessionID)
 	forgotten := false
@@ -161,8 +155,10 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 			return fmt.Errorf("forget pull request %s: %w", rec.PRID, err)
 		}
 		for _, session := range sessions {
-			if session != rec.SessionID {
-				d.sessionMonitor(session).ForgetPullRequest(rec.PRID)
+			if session != rec.SessionID && d.store.Get(session) != nil {
+				if err := d.forgetMonitorPullRequest(session, rec.PRID); err != nil {
+					return err
+				}
 			}
 		}
 		forgotten = forgotten || removed
@@ -302,4 +298,15 @@ func (d *Daemon) sessionPullRequestRecords(sessionID protocol.SessionID, address
 		}
 	}
 	return records
+}
+
+func (d *Daemon) forgetMonitorPullRequest(session protocol.SessionID, pr string) error {
+	result, err := Call[protocol.PullRequestLinkResult](context.Background(), d.router(), protocol.PullRequestLinkMessage{Cmd: protocol.CmdPullRequestLink, SessionID: session, Kind: protocol.PullRequestLinkKindForget, PRID: pr})
+	if err != nil {
+		return err
+	}
+	if !result.Applied {
+		return fmt.Errorf("forget pull request %s: the session's monitor could not save it", pr)
+	}
+	return nil
 }

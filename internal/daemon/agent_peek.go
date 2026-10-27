@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/transcript"
 )
 
 const agentPeekMessageMaxChars = annotatableMessageMaxChars
@@ -22,6 +20,10 @@ func (d *Daemon) handleAgentPeek(conn net.Conn, msg *protocol.AgentPeekMessage) 
 	session, errCode := d.resolveAgentPeekTarget(msg.TargetSessionID)
 	if session == nil {
 		d.sendError(conn, errCode)
+		return
+	}
+	if err := d.requireSessionHost(session.ID); err != nil {
+		d.sendError(conn, err.Error())
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
@@ -102,11 +104,11 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 	if profile, err := d.store.GetProfile(decorated.ProfileID); err == nil {
 		result.ProfileName = protocol.Ptr(profile.Name)
 	}
-	if path := d.inspectableTranscriptPath(session.ID, session.Agent); path != "" {
-		if message, err := transcript.ExtractLastAssistantMessage(path, agentPeekMessageMaxChars); err == nil && strings.TrimSpace(message) != "" {
-			result.LastAssistantMessage = protocol.Ptr(message)
-		}
+	answer, err := Call[protocol.MonitorLastAssistantResult](context.Background(), d.router(), protocol.MonitorLastAssistantMessage{Cmd: protocol.CmdMonitorLastAssistant, SessionID: session.ID})
+	if err == nil && strings.TrimSpace(answer.Text) != "" {
+		result.LastAssistantMessage = protocol.Ptr(answer.Text)
 	}
+
 	result.Screen = d.agentPeekScreen(session.ID)
 	if exit := d.store.GetSessionExitScreen(session.ID); exit != nil {
 		result.Exit = &protocol.AgentPeekExit{Code: exit.ExitCode, At: exit.ExitedAt}
@@ -121,23 +123,20 @@ func (d *Daemon) agentPeekResult(session *protocol.Session) *protocol.AgentPeekR
 }
 
 func (d *Daemon) agentPeekScreen(sessionID protocol.SessionID) *protocol.AgentPeekScreen {
-	provider, ok := d.ptyBackend.(ptybackend.ScreenSnapshotProvider)
-	if !ok {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), agentPeekSnapshotTimeout)
 	defer cancel()
-	snapshot, err := provider.ScreenSnapshot(ctx, d.primaryTerminal(sessionID))
+	snapshot, err := Call[protocol.GetScreenSnapshotResultMessage](ctx, d.router(), protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: protocol.TerminalID(d.primaryTerminal(sessionID))})
 	if err != nil {
 		d.logf("agent peek snapshot unavailable: session=%s err=%v", sessionID, err)
 		return nil
 	}
-	if snapshot.Screen == nil || !snapshot.Screen.HasText {
+	text, err := Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: d.primaryTerminal(sessionID), Mode: protocol.TerminalReadModeScreen})
+	if err != nil || text.Text == "" {
 		return nil
 	}
 	return &protocol.AgentPeekScreen{
-		Text: snapshot.Screen.Text,
-		Cols: int(snapshot.Screen.Cols),
-		Rows: int(snapshot.Screen.Rows),
+		Text: text.Text,
+		Cols: protocol.Deref(snapshot.Cols),
+		Rows: protocol.Deref(snapshot.Rows),
 	}
 }

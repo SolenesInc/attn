@@ -71,7 +71,6 @@ type Delivery struct {
 	Placement         Placement
 	AllowUserComposer bool
 	BypassInitialGate bool
-	Resend            func()
 }
 
 func MaintenanceInput(domain string, key string, text string, placement Placement) Delivery {
@@ -125,9 +124,9 @@ type lane struct {
 	mu      *sync.Mutex
 	monitor *Monitor
 
-	retries                  map[string]*retry
 	run                      *runState
 	placing                  bool
+	placed                   map[string]Attempt
 	creditNextRun            bool
 	notifyNextRun            bool
 	stoppedAfterNotification bool
@@ -135,7 +134,6 @@ type lane struct {
 	userSubmit               bool
 	phase                    protocol.SessionState
 	stopped                  bool
-	running                  sync.WaitGroup
 }
 
 var (
@@ -155,11 +153,6 @@ func (e *quietError) Error() string {
 }
 
 func (e *quietError) Unwrap() error { return ErrComposerDirty }
-
-type retry struct {
-	timer  *time.Timer
-	resend func()
-}
 
 var PlacingRetry = 3 * time.Second
 
@@ -186,9 +179,8 @@ func (m *Monitor) FenceInput() {
 	}
 	m.mu.Lock()
 	lane := m.input
-	lane.stopRetriesLocked()
+	lane.stopLocked()
 	m.mu.Unlock()
-	lane.running.Wait()
 }
 
 func (m *Monitor) ResetInput() {
@@ -207,53 +199,7 @@ func (m *Monitor) freshLaneLocked() *lane {
 	return l
 }
 
-func (l *lane) armRetryLocked(delivery Delivery, err error) {
-	after, retryable := RetryDelay(err)
-	if !retryable || delivery.Resend == nil {
-		return
-	}
-	l.scheduleLocked(delivery.ID.String(), after, delivery.Resend)
-}
-
-func (l *lane) scheduleLocked(key string, after time.Duration, resend func()) {
-	host := l.monitor.registry.host
-	if l.stopped || host.Ended() {
-		return
-	}
-	if l.retries == nil {
-		l.retries = make(map[string]*retry)
-	}
-	if existing := l.retries[key]; existing != nil {
-		existing.timer.Stop()
-	}
-	pending := &retry{resend: resend}
-	pending.timer = host.AfterFunc("sessionInputRetry", after, func() { l.monitor.fireRetry(key, pending) })
-	l.retries[key] = pending
-}
-
-func (m *Monitor) fireRetry(key string, self *retry) {
-	m.mu.Lock()
-	l := m.input
-	owner := !l.stopped && l.retries[key] == self
-	if owner {
-		delete(l.retries, key)
-		l.running.Add(1)
-	}
-	m.mu.Unlock()
-	if !owner {
-		return
-	}
-	defer l.running.Done()
-	self.resend()
-}
-
-func (l *lane) stopRetriesLocked() {
-	l.stopped = true
-	for key, pending := range l.retries {
-		pending.timer.Stop()
-		delete(l.retries, key)
-	}
-}
+func (l *lane) stopLocked() { l.stopped = true }
 
 func (m *Monitor) Place(ctx context.Context, delivery Delivery) Attempt {
 	if m == nil {
@@ -276,6 +222,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	l := m.input
+	if placed, ok := l.placed[delivery.ID.String()]; ok {
+		return placed, runRef{}
+	}
 	deferred := func(err error) (Attempt, runRef) {
 		return Attempt{Stage: Deferred, Err: err}, runRef{}
 	}
@@ -283,7 +232,6 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return deferred(ErrLaneClosed)
 	}
 	if l.placing {
-		l.armRetryLocked(delivery, errPlacingAnother)
 		return deferred(errPlacingAnother)
 	}
 	if !delivery.BypassInitialGate && m.evidence.InitialPromptOwed {
@@ -304,6 +252,10 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	if attempt.Stage != Placed {
 		return attempt, runRef{}
 	}
+	if l.placed == nil {
+		l.placed = make(map[string]Attempt)
+	}
+	l.placed[delivery.ID.String()] = attempt
 	return attempt, l.tookLocked(delivery)
 }
 

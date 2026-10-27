@@ -1,6 +1,11 @@
 package sessionmonitor
 
-import "time"
+import (
+	"fmt"
+	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/statetrace"
+	"time"
+)
 
 type CommandKind uint8
 
@@ -85,4 +90,35 @@ func (m *Monitor) Revision() uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.revision
+}
+
+func (m *Monitor) Execute(kind CommandKind, turn, until, now time.Time) (bool, error) {
+	view, applied := m.Do(Command{Key: m.Key(), Kind: kind, Turn: turn, Until: until}, now)
+	if kind == Snooze {
+		pausepoint.At(pausepoint.SessionSnoozeCommitted)
+	}
+	if !applied {
+		return false, nil
+	}
+	if !m.publish(view) {
+		action := "settle"
+		if kind == Snooze {
+			action = "snooze"
+		}
+		if kind == Wake {
+			action = "unsnooze"
+		}
+		return false, fmt.Errorf("%s is pending; attn will keep retrying until it is saved", action)
+	}
+	if kind == Wake {
+		m.traceWake("user")
+		return true, nil
+	}
+	m.CancelAutoSettle("settled by user")
+	cause := "settle"
+	if kind == HandBack {
+		cause = "ask answer"
+	}
+	m.Trace(statetrace.Observation{Source: "user", Claim: string(view.State.V.State), Detail: view.State.V.Reason, Cause: cause, Outcome: statetrace.OutcomeApplied})
+	return true, nil
 }
