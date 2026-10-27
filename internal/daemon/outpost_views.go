@@ -22,22 +22,44 @@ func (d *Daemon) homeHandlers(host string) bridge.Handlers {
 	return bridge.Handlers{bridgeCall: d.callBridgeHandler(host), bridgeForward: d.forwardBridgeHandler(host)}
 }
 
-func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitorViewMessage) (struct{}, error) {
+func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitorViewMessage) (protocol.ApplyMonitorViewResult, error) {
 	origin, remote := OriginOf(ctx)
 	if remote && d.sessionHost(msg.SessionID) != origin.Host {
-		return struct{}{}, fmt.Errorf("session %s does not run on %s", msg.SessionID, origin.Name)
+		return protocol.ApplyMonitorViewResult{}, fmt.Errorf("session %s does not run on %s", msg.SessionID, origin.Name)
 	}
 	var view sessionmonitor.View
 	if err := json.Unmarshal([]byte(msg.View), &view); err != nil {
-		return struct{}{}, err
+		return protocol.ApplyMonitorViewResult{}, err
 	}
 	if view.Epoch.V != msg.Epoch {
-		return struct{}{}, fmt.Errorf("monitor epoch differs from its view")
+		return protocol.ApplyMonitorViewResult{}, fmt.Errorf("monitor epoch differs from its view")
 	}
 	if !d.applyHomeView(msg.SessionID, view, origin.Host, origin.bridge) {
-		return struct{}{}, fmt.Errorf("monitor view was not applied")
+		return protocol.ApplyMonitorViewResult{}, fmt.Errorf("monitor view was not applied")
 	}
-	return struct{}{}, nil
+	answer := d.answerMonitorSwitch(msg.SessionID, view.PendingSwitch.V, nil)
+	result := protocol.ApplyMonitorViewResult{}
+	if answer.Conversation != "" {
+		result.Switch = &protocol.SwitchAnswer{Conversation: answer.Conversation, Outcome: protocol.SwitchOutcome(answer.Outcome), SessionID: protocol.Ptr(answer.Session)}
+		if answer.Reason != "" {
+			result.Switch.Reason = &answer.Reason
+		}
+		if answer.Cost != nil {
+			raw, err := json.Marshal(answer.Cost)
+			if err != nil {
+				return result, err
+			}
+			result.Switch.Cost = protocol.Ptr(string(raw))
+		}
+		if remote && answer.Session != "" {
+			rows, err := d.store.SessionCopy(answer.Session)
+			if err != nil {
+				return result, err
+			}
+			result.Switch.Copy = rows
+		}
+	}
+	return result, nil
 }
 
 func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {

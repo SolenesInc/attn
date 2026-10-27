@@ -149,9 +149,6 @@ func (s *Store) closeSessionTx(tx *sql.Tx, id protocol.SessionID, closed Session
 	if err := finalizeSessionCostTx(tx, id); err != nil {
 		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)
 	}
-	if _, err := tx.Exec(`UPDATE session_runtime SET pending_switch = '' WHERE session_id = ?`, id); err != nil {
-		return false, false, nil, fmt.Errorf("close session %s pending switch: %w", id, err)
-	}
 	unplacedAt := time.Now().UTC().Format(sortableTimeFormat)
 	if err := unplaceClosingSession(tx, unplacedAt, id); err != nil {
 		return false, false, nil, fmt.Errorf("close session %s: %w", id, err)

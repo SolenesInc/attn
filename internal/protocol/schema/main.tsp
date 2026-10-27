@@ -8284,6 +8284,21 @@ model ApplyMonitorViewMessage {
   view: string;
 }
 
+model ApplyMonitorViewResult {
+  switch?: SwitchAnswer;
+}
+
+model SwitchAnswer {
+  conversation: string;
+  outcome: SwitchOutcome;
+  session_id?: SessionID;
+  reason?: string;
+  copy?: CopyRow[];
+  cost?: string;
+}
+
+enum SwitchOutcome { Bound: "bound", Opened: "opened", Shows: "shows", InPlace: "in_place", Dropped: "dropped" }
+
 enum MonitorCommandKind { Settle: "settle", HandBack: "hand_back", Snooze: "snooze", Wake: "wake", CancelCountdown: "cancel_countdown", AgentTurn: "agent_turn" }
 enum SessionPlacePhase { PromptReady: "prompt_ready", WorkingOrPromptReady: "working_or_prompt_ready", TurnBoundary: "turn_boundary" }
 enum SessionPlaceOrigin { Maintenance: "maintenance", UserConversation: "user_conversation" }

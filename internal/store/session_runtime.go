@@ -22,7 +22,6 @@ type SessionRuntimeState struct {
 	Branch             git.BranchInfo
 	HarnessTitle       string
 	LastSeen           time.Time
-	PendingSwitch      string
 	PullRequests       string
 }
 
@@ -73,7 +72,9 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 		if s.runtimeRecords == nil {
 			s.runtimeRecords = make(map[protocol.SessionID]SessionRuntimeRecords)
 		}
-		s.runtimeRecords[id] = SessionRuntimeRecords{PendingSwitch: state.PendingSwitch, PullRequests: state.PullRequests}
+		records := s.runtimeRecords[id]
+		records.PullRequests = state.PullRequests
+		s.runtimeRecords[id] = records
 		return true
 	}
 	request := ""
@@ -87,8 +88,8 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 	result, err := s.db.Exec(`INSERT INTO session_runtime (session_id, state, state_since, state_updated_at,
 		turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, turn_requested_at, last_model_request_at,
 		agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_metadata, agent_driver_transcript_path,
-		branch, is_worktree, main_repo, repository, harness_title, last_seen, pending_switch, pull_requests)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		branch, is_worktree, main_repo, repository, harness_title, last_seen, pull_requests)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 		WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')
 		ON CONFLICT (session_id) DO UPDATE SET state = excluded.state, state_since = excluded.state_since, state_updated_at = excluded.state_updated_at,
 		turn_opened_at = excluded.turn_opened_at, turn_settled_at = excluded.turn_settled_at, turn_snoozed_until = excluded.turn_snoozed_until,
@@ -98,11 +99,11 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 		agent_driver_transcript_path = excluded.agent_driver_transcript_path, branch = excluded.branch, is_worktree = excluded.is_worktree,
 		main_repo = excluded.main_repo, repository = excluded.repository, harness_title = excluded.harness_title,
 		last_seen = CASE WHEN excluded.last_seen = '' THEN session_runtime.last_seen ELSE excluded.last_seen END,
-		pending_switch = excluded.pending_switch, pull_requests = excluded.pull_requests`,
+		pull_requests = excluded.pull_requests`,
 		id, string(state.State), string(protocol.NewTimestamp(state.Since)), string(protocol.NewTimestamp(state.Updated)),
 		turnStamp(state.Turn.OpenedAt), turnStamp(state.Turn.SettledAt), turnStamp(state.Turn.SnoozedUntil), turnStamp(state.Turn.AgentAt), turnStamp(state.Turn.RequestedAt), request,
 		state.Driver.PluginName, state.Driver.RunID, state.Driver.Seq, state.DriverMetadata, state.DriverTranscript,
-		state.Branch.Branch, boolToInt(state.Branch.IsWorktree), state.Branch.MainRepo, state.Branch.Repository, state.HarnessTitle, lastSeen, state.PendingSwitch, state.PullRequests, id)
+		state.Branch.Branch, boolToInt(state.Branch.IsWorktree), state.Branch.MainRepo, state.Branch.Repository, state.HarnessTitle, lastSeen, state.PullRequests, id)
 	if err != nil {
 		log.Printf("[store] save session runtime: session=%s: %v", id, err)
 		return false
@@ -148,4 +149,61 @@ func (s *Store) HasSessionRuntime(id protocol.SessionID) bool {
 		log.Printf("[store] session %s runtime existence: %v", id, err)
 	}
 	return exists
+}
+
+func (s *Store) SaveSessionPendingSwitches(pending map[protocol.SessionID]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		if s.runtimeRecords == nil {
+			s.runtimeRecords = make(map[protocol.SessionID]SessionRuntimeRecords)
+		}
+		for id, chain := range pending {
+			saved := s.runtimeRecords[id]
+			saved.PendingSwitch = chain
+			s.runtimeRecords[id] = saved
+		}
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for id, chain := range pending {
+		if _, err := tx.Exec(`INSERT INTO session_runtime(session_id, pending_switch) VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET pending_switch = excluded.pending_switch`, id, chain); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) PendingSessionSwitches() map[protocol.SessionID]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	pending := make(map[protocol.SessionID]string)
+	if s.db == nil {
+		for id, records := range s.runtimeRecords {
+			if records.PendingSwitch != "" {
+				pending[id] = records.PendingSwitch
+			}
+		}
+		return pending
+	}
+	rows, err := s.db.Query(`SELECT session_id, pending_switch FROM session_runtime WHERE pending_switch != ''`)
+	if err != nil {
+		log.Printf("[store] pending switches: %v", err)
+		return pending
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id protocol.SessionID
+		var chain string
+		if err := rows.Scan(&id, &chain); err != nil {
+			log.Printf("[store] pending switch: %v", err)
+			continue
+		}
+		pending[id] = chain
+	}
+	return pending
 }

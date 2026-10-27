@@ -438,7 +438,6 @@ func (d *Daemon) ensureEventBus() {
 	d.subscribeInboxFacts()
 	d.subscribeMonitorPolicyFacts()
 	d.subscribeDocumentFacts()
-	d.subscribeAgentConversationFacts()
 	d.subscribeSessionPullRequestFacts()
 	d.gardenSeedEventConsumerErr = d.registerGardenSeedEventConsumer()
 }
@@ -465,7 +464,6 @@ func (d *Daemon) stopEventBus() {
 	}
 	d.unsubscribeMonitorPolicyFacts()
 	d.unsubscribeDocumentFacts()
-	d.unsubscribeAgentConversationFacts()
 	d.unsubscribeSessionPullRequestFacts()
 	if d.busUnsubscribe != nil {
 		d.busUnsubscribe()

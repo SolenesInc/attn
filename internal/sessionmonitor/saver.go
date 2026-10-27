@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 )
@@ -16,6 +17,7 @@ type CostSave struct {
 
 type Saver interface {
 	SaveRuntime(session protocol.SessionID, saved, view View, cost *CostSave) error
+	MovePending(from, to protocol.SessionID, remaining, moved []Conversation) error
 }
 
 type savedView struct {
@@ -41,10 +43,54 @@ func (m *Monitor) publish(view View) bool {
 	if stopped || !m.save(view) {
 		return false
 	}
-	applied := m.home.Applied(view)
+	if m.Session() == "" {
+		if !view.Turn.V.OpenedAt.IsZero() {
+			pausepoint.At(pausepoint.ConversationCandidateTurn)
+		}
+		m.react(view)
+		return true
+	}
+	if !m.savePending() {
+		return false
+	}
+	m.mu.Lock()
+	if view.PendingSwitch.V != m.pendingHeadLocked() {
+		m.mu.Unlock()
+		return true
+	}
+	if m.switchApplying {
+		m.mu.Unlock()
+		return true
+	}
+	switching := view.PendingSwitch.V.NativeID != ""
+	m.switchApplying = switching
+	m.mu.Unlock()
+	if switching {
+		if m.registry.host.Go("applyMonitorSwitch", func() { m.applyHome(view, true) }) {
+			return true
+		}
+		m.mu.Lock()
+		m.switchApplying = false
+		m.mu.Unlock()
+		return false
+	}
+	return m.applyHome(view, switching)
+}
+
+func (m *Monitor) applyHome(view View, switching bool) bool {
+	answer, applied := m.home.Applied(view)
 	m.react(view)
-	if applied {
-		m.SettleSwitch(view.Conversation.V.NativeID)
+	if applied && answer.Conversation != "" {
+		m.registry.host.Answered(m, answer)
+	}
+	if switching {
+		m.mu.Lock()
+		m.switchApplying = false
+		next := m.pendingHeadLocked()
+		m.mu.Unlock()
+		if applied && next != view.PendingSwitch.V {
+			m.Refresh()
+		}
 	}
 	return applied
 }

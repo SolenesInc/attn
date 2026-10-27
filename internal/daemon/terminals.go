@@ -74,13 +74,25 @@ func (d *Daemon) primaryTerminal(sessionID protocol.SessionID) harness.TerminalI
 	return ""
 }
 
-func (d *Daemon) liveTerminals(ctx context.Context) map[harness.TerminalID]struct{} {
+func (d *Daemon) localLiveTerminals(ctx context.Context) map[harness.TerminalID]struct{} {
 	live := make(map[harness.TerminalID]struct{})
-	if d.ptyBackend == nil {
-		return live
+	if d.ptyBackend != nil {
+		for _, id := range d.ptyBackend.TerminalIDs(ctx) {
+			live[id] = struct{}{}
+		}
 	}
-	for _, id := range d.ptyBackend.TerminalIDs(ctx) {
-		live[id] = struct{}{}
+	return live
+}
+
+func (d *Daemon) liveTerminals(ctx context.Context) map[harness.TerminalID]struct{} {
+	live := d.localLiveTerminals(ctx)
+	for _, binding := range d.terminals().Bindings() {
+		if d.sessionHost(binding.SessionID) == "" {
+			continue
+		}
+		if view, ok := d.monitorViewFor(binding.SessionID); ok && view.Live.V {
+			live[binding.TerminalID] = struct{}{}
+		}
 	}
 	return live
 }
@@ -91,10 +103,6 @@ func (d *Daemon) terminalLive(t harness.TerminalID) bool {
 }
 
 func (d *Daemon) sessionLive(ctx context.Context, sessionID protocol.SessionID) bool {
-	if d.sessionHost(sessionID) != "" {
-		view, ok := d.monitorViewFor(sessionID)
-		return ok && view.Live.V
-	}
 	live := d.liveTerminals(ctx)
 	for _, id := range d.terminalsOf(sessionID) {
 		if _, ok := live[id]; ok {

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
@@ -46,6 +46,9 @@ func (d *Daemon) handleObserveAgentConversation(conn net.Conn, msg *protocol.Set
 		}
 		terminal = view
 	}
+	if held := d.store.GetSessionConversation(d.sessionInTerminal(terminal)).NativeID; held != "" && held != observation.NativeID {
+		pausepoint.At(pausepoint.ConversationSwitchObserved)
+	}
 	d.conversationIn(terminal, observation)
 	d.sendOK(conn)
 }
@@ -58,11 +61,18 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 	d.proposeMonitorConversation(observation, sessionmonitor.ConversationObserved, t)
 }
 
-func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation agentConversationObservation, candidate *sessionmonitor.Monitor) bool {
+func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, proposed sessionmonitor.Conversation, observation agentConversationObservation) bool {
+	t := proposed.Terminal
 	cur, placed := d.terminals().Showing(t)
 	if current := d.store.Get(cur); !placed || (current != nil && !conversationIsSession(current.Agent)) {
 		observation.SessionID = d.sessionInTerminal(t)
-		return d.observeOrQueueAgentConversation(observation, candidate)
+		defer d.lockSessionLifecycles(observation.SessionID)()
+		if source != nil {
+			if pending, _ := source.PendingSwitch(); pending != proposed {
+				return false
+			}
+		}
+		return d.observeOrQueueAgentConversation(observation)
 	}
 	held := d.store.GetSessionConversation(cur).NativeID
 	var owner protocol.SessionID
@@ -70,6 +80,11 @@ func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation age
 		owner = d.store.ConversationOwner(cur, observation.NativeID)
 	}
 	defer d.lockSessionLifecycles(cur, owner)()
+	if source != nil {
+		if pending, _ := source.PendingSwitch(); pending != proposed {
+			return false
+		}
+	}
 	session := d.store.Get(cur)
 	if shown, _ := d.terminals().Showing(t); shown != cur || session == nil || !d.terminalLive(t) {
 		d.logf("agent conversation: dropped %s from terminal %s, which no longer runs session %s", observation.NativeID, t, cur)
@@ -77,7 +92,7 @@ func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation age
 	}
 	observation.SessionID = session.ID
 	if held = d.store.GetSessionConversation(session.ID).NativeID; held == observation.NativeID {
-		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
+		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation)
 	}
 	if now := d.store.ConversationOwner(session.ID, observation.NativeID); now != owner {
 		d.logf("agent conversation: dropped %s from terminal %s; its owner changed from %q to %q meanwhile", observation.NativeID, t, owner, now)
@@ -86,13 +101,13 @@ func (d *Daemon) acceptMonitorConversation(t harness.TerminalID, observation age
 	var err error
 	switch {
 	case owner == "" && held == "":
-		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
+		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation)
 	case owner == "":
-		err = d.opened(t, session, observation, candidate)
+		err = d.opened(t, session, observation)
 	case d.ownerLive(owner) && !d.conversationShowsInManyTerminals(session.ID):
-		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
+		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation)
 	default:
-		err = d.shows(t, session, owner, observation, candidate)
+		err = d.shows(t, session, owner, observation)
 	}
 	if err != nil {
 		d.logf("agent conversation: terminal %s could not move on from session %s for %s; it keeps it: %v", t, session.ID, observation.NativeID, err)
@@ -113,7 +128,7 @@ func conversationDecidesIdentity(driver agentdriver.Driver) bool {
 	return agentdriver.EffectiveCapabilities(driver).ConversationIsSession
 }
 
-func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation, candidate *sessionmonitor.Monitor) bool {
+func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationObservation) bool {
 	m := d.sessionMonitor(observation.SessionID)
 	if m == nil {
 		return false
@@ -121,7 +136,7 @@ func (d *Daemon) observeOrQueueAgentConversation(observation agentConversationOb
 	if m.QueueConversationWhile(func() bool { return d.store.Get(observation.SessionID) == nil }, observation.monitored()) {
 		return true
 	}
-	return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, candidate)
+	return d.applyAgentConversation(observation, d.store.TransitionSessionConversation)
 }
 
 func (d *Daemon) consumePendingAgentConversation(sessionID protocol.SessionID) (agentConversationObservation, bool) {
@@ -138,34 +153,7 @@ func (o agentConversationObservation) monitored() sessionmonitor.ConversationObs
 }
 
 func (d *Daemon) proposeMonitorConversation(observation agentConversationObservation, proposal sessionmonitor.ConversationProposal, terminal harness.TerminalID) bool {
-	return d.sessionMonitor(observation.SessionID).ProposeConversation(observation.monitored(), proposal, terminal)
-}
-
-func (d *Daemon) admitMonitorConversation(monitor *sessionmonitor.Monitor, view sessionmonitor.View) bool {
-	if view.Succeeds.V == (sessionmonitor.Key{}) {
-		d.logf("monitor apply: unknown entry %+v without predecessor", view.Key.V)
-		return false
-	}
-	var session protocol.SessionID
-	for id, candidate := range d.monitors().each() {
-		if candidate.Key() == view.Succeeds.V {
-			session = id
-			break
-		}
-	}
-	if session == "" || view.Conversation.V.NativeID == "" {
-		d.logf("monitor apply: unknown entry %+v with predecessor %+v", view.Key.V, view.Succeeds.V)
-		return false
-	}
-	conversation := view.Conversation.V
-	observation := agentConversationObservation{SessionID: session, NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath}
-	if conversation.Terminal != "" {
-		return d.acceptMonitorConversation(conversation.Terminal, observation, monitor)
-	}
-	if conversation.Proposal == sessionmonitor.ConversationReported {
-		return d.applyAgentConversation(observation, d.store.ClaimSessionConversation, monitor)
-	}
-	return d.applyAgentConversation(observation, d.store.TransitionSessionConversation, monitor)
+	return d.monitorInTerminal(terminal, observation.SessionID).ProposeConversation(observation.monitored(), proposal, terminal)
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
@@ -176,7 +164,7 @@ func (d *Daemon) claimAgentConversation(observation agentConversationObservation
 	return d.proposeMonitorConversation(observation, sessionmonitor.ConversationReported, "")
 }
 
-func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error), candidate *sessionmonitor.Monitor) bool {
+func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID protocol.SessionID, nativeID string, transcriptPath string) (bool, error)) bool {
 	changed, err := transition(observation.SessionID, observation.NativeID, observation.TranscriptPath)
 	if errors.Is(err, store.ErrConversationClaimed) {
 		d.logf("agent conversation: %s is bound to another session, session=%s", observation.NativeID, observation.SessionID)
@@ -187,13 +175,9 @@ func (d *Daemon) applyAgentConversation(observation agentConversationObservation
 		return false
 	}
 	if !changed {
-		d.syncMonitorConversation(observation.SessionID)
-		d.sessionMonitor(observation.SessionID).EnsureTranscriptWatcher(observation.TranscriptPath)
 		return true
 	}
 
-	monitor := d.startSessionMonitorFrom(observation.SessionID, "", candidate)
-	monitor.SetConversation(observation.monitored())
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, string(observation.SessionID), observation)
 	d.mirrorLabel(observation.SessionID)
@@ -206,46 +190,38 @@ func (d *Daemon) resetSessionActivityRuntime(sessionID protocol.SessionID) {
 	d.sessionActivityRunsMu.Unlock()
 }
 
-func (d *Daemon) subscribeAgentConversationFacts() {
-	if d.eventBus == nil || d.conversationUnsubHooks != nil {
-		return
-	}
-	d.conversationUnsubHooks = d.eventBus.Subscribe(
-		bus.Filter{FactSessionConversationChanged},
-		d.rebindTranscriptWatcherForConversation,
-	)
-}
-
-func (d *Daemon) unsubscribeAgentConversationFacts() {
-	if d.conversationUnsubHooks != nil {
-		d.conversationUnsubHooks()
-		d.conversationUnsubHooks = nil
-	}
-}
-
-func (d *Daemon) rebindTranscriptWatcherForConversation(event bus.Event) {
-	session := d.store.Get(protocol.SessionID(event.Subject))
-	if session == nil || !sessionmonitor.IsTranscriptWatchedAgent(session.Agent) {
-		return
-	}
-	var observation agentConversationObservation
-	if err := event.Decode(&observation); err != nil {
-		d.logf("agent conversation: decode fact for session %s: %v", event.Subject, err)
-	}
-	d.sessionMonitor(session.ID).StartTranscriptWatcher(observation.TranscriptPath)
-}
-
 func (d *Daemon) replayPendingSwitches() {
-	for sessionID, monitor := range d.monitors().each() {
-		pending, ok := monitor.PendingSwitch()
+	for id, raw := range d.store.PendingSessionSwitches() {
+		if d.sessionMonitor(id) != nil {
+			continue
+		}
+		pending := decodePendingSwitch(raw)
+		if len(pending) == 0 {
+			continue
+		}
+		shown, ok := d.shownIn(pending[0].Terminal)
 		if !ok {
 			continue
 		}
-		d.logf("agent conversation: replaying the switch session %s saved to %s before the restart", sessionID, pending.NativeID)
-		if pending.Terminal == "" {
-			monitor.ObserveResumeID(pending.NativeID)
-			continue
+		launch := d.monitorLaunch(shown)
+		launch.PendingSwitch = pending
+		conversation := d.store.GetSessionConversation(id)
+		launch.Conversation = sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath}
+		if cost, err := d.store.SessionCostCheckpoint(id); err == nil {
+			launch.Cost = cost
 		}
-		d.conversationIn(pending.Terminal, agentConversationObservation{NativeID: pending.NativeID, TranscriptPath: pending.TranscriptPath})
+		r := d.monitors()
+		monitor := r.registry.Start(nil, sessionmonitor.Start{Session: id, Terminal: pending[0].Terminal, Conversation: conversation.NativeID, Launch: func() sessionmonitor.Launch { return launch }, Policy: d.monitorPolicyFrom(d.monitorPolicySources(), shown)})
+		r.mu.Lock()
+		r.sessions[id] = &monitorBinding{monitor: monitor, applied: monitor.Snapshot(), copied: d.copiedSession(id)}
+		homeOf(monitor).bind(id)
+		r.mu.Unlock()
+	}
+
+	for _, monitor := range d.monitors().each() {
+		monitor.RebuildCandidates()
+		if _, ok := monitor.PendingSwitch(); ok {
+			monitor.Refresh()
+		}
 	}
 }

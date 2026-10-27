@@ -49,33 +49,47 @@ func TestASharedCodexTerminalShowsTheSessionOfEachConversationItSwitchesToBefore
 	conversation := codex.ConversationID
 	tax := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	taxCodex := w.Launched(tax)
+	taxTerminal := app.Terminal(tax)
 	app.TypeLine(tax, "look at the tax table")
 	taxCodex.Prompted()
 	taxCodex.Reply("Looked. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, tax, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	typeInto(app, terminal, "/resume "+taxCodex.ConversationID+"\r")
-	codex.Prompted()
-	if got := sessionShownIn(t, w, app, terminal); got != tax {
+	switchTo := func(command, previous string) string {
+		t.Helper()
+		mark := len(app.Log())
+		typeInto(app, terminal, command+"\r")
+		codex.Prompted()
+		var shown string
+		testworld.AwaitSince(app, mark, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
+			for _, desktop := range e.Desktops {
+				for _, pane := range desktop.Panes {
+					if string(pane.RuntimeID) == terminal && string(pane.SessionID) != previous {
+						shown = string(pane.SessionID)
+						return true
+					}
+				}
+			}
+			return false
+		})
+		return shown
+	}
+	if got := switchTo("/resume "+taxCodex.ConversationID, checkout); got != tax {
 		t.Fatalf("after /resume of the conversation of %s, terminal %s shows session %s", tax, terminal, got)
 	}
 	if left := queriedSession(t, w.Client(), checkout); !protocol.Deref(left.Hidden) || left.State != protocol.SessionStateWaitingInput {
 		t.Errorf("the session the terminal left is %s (hidden=%v), want it hidden and still waiting on the user", left.State, protocol.Deref(left.Hidden))
 	}
 
-	typeInto(app, terminal, "/new\r")
-	codex.Prompted()
-	fresh := sessionShownIn(t, w, app, terminal)
+	fresh := switchTo("/new", tax)
 	if fresh == checkout || fresh == tax {
 		t.Fatalf("after /new, terminal %s shows session %s, want a new one", terminal, fresh)
 	}
-	if got := sessionShownIn(t, w, app, app.Terminal(tax)); got != tax {
+	if got := sessionShownIn(t, w, app, taxTerminal); got != tax {
 		t.Errorf("the tile of %s shows session %s after the other terminal left it", tax, got)
 	}
 
-	typeInto(app, terminal, "/resume "+conversation+"\r")
-	codex.Prompted()
-	if got := sessionShownIn(t, w, app, terminal); got != checkout {
+	if got := switchTo("/resume "+conversation, fresh); got != checkout {
 		t.Fatalf("after /resume of the conversation of %s, terminal %s shows session %s", checkout, terminal, got)
 	}
 	if back := queriedSession(t, w.Client(), checkout); protocol.Deref(back.Hidden) || back.State != protocol.SessionStateWaitingInput {

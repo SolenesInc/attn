@@ -149,6 +149,7 @@ func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalResta
 	if err != nil {
 		return struct{}{}, err
 	}
+	d.monitors().registry.DropSwitches(msg.TerminalID)
 	plugin, err := d.prepareMachineAgent(msg.SessionID, &opts, agent, true)
 	if err != nil {
 		return struct{}{}, err
@@ -309,6 +310,7 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 }
 
 func (d *Daemon) removeTerminal(ctx context.Context, msg protocol.TerminalRemoveMessage) (struct{}, error) {
+	d.monitors().registry.DropSwitches(msg.TerminalID)
 	err := d.ptyBackend.Remove(ctx, msg.TerminalID)
 	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		err = nil

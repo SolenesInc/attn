@@ -11,7 +11,25 @@ import (
 )
 
 type Home interface {
-	Applied(View) bool
+	Applied(View) (Answer, bool)
+}
+
+type SwitchOutcome string
+
+const (
+	SwitchBound   SwitchOutcome = "bound"
+	SwitchOpened  SwitchOutcome = "opened"
+	SwitchShows   SwitchOutcome = "shows"
+	SwitchInPlace SwitchOutcome = "in_place"
+	SwitchDropped SwitchOutcome = "dropped"
+)
+
+type Answer struct {
+	Conversation string
+	Outcome      SwitchOutcome
+	Session      protocol.SessionID
+	Reason       string
+	Cost         *sessioncost.Checkpoint
 }
 
 type Policy struct {
@@ -26,6 +44,7 @@ type Policy struct {
 type Launch struct {
 	Known              bool
 	Agent              protocol.SessionAgent
+	Profile            string
 	Link               string
 	StartedAt          time.Time
 	Directory          string
@@ -41,7 +60,7 @@ type Launch struct {
 	Exit               *Exit
 	Conversation       ConversationObservation
 	LastSeen           time.Time
-	PendingSwitch      Conversation
+	PendingSwitch      []Conversation
 	PullRequests       map[string]PullRequest
 }
 
@@ -130,6 +149,9 @@ func (m *Monitor) terminalViews() terminalViews {
 }
 
 func (m *Monitor) primaryTerminalLocked() harness.TerminalID {
+	if m.session == "" && m.conversationInput.Terminal != "" {
+		return m.conversationInput.Terminal
+	}
 	current := m.terminalViews()
 	views := current.terminals
 	if len(views) == 0 && !m.watch.linked {

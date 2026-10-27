@@ -243,9 +243,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 
 	var attempt Attempt
 	handled := false
-	if m.registry.host.Link(m, delivery.origin.voice()) != nil {
-		attempt, handled = l.placeOverLinkLocked(ctx, delivery)
-	}
+	attempt, handled = l.placeOverLinkLocked(ctx, delivery)
 	if !handled {
 		attempt = l.placePTYLocked(ctx, delivery)
 	}
@@ -369,7 +367,7 @@ func (l *lane) observePhaseLocked(phase protocol.SessionState) {
 		l.ensureRunLocked()
 		return
 	}
-	if previous == protocol.SessionStateWorking {
+	if previous == protocol.SessionStateWorking && !ReportsTurnStarts(string(l.monitor.agent)) {
 		l.userSubmit = false
 	}
 	if l.run != nil {

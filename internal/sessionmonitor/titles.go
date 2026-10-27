@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/transcript"
@@ -126,10 +125,6 @@ func (m *Monitor) TitleTarget() (*protocol.Session, bool) {
 func (m *Monitor) TitleKey() string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	key, _ := json.Marshal(struct {
-		Terminal  string
-		Session   protocol.SessionID
-		StartedAt string
-	}{string(m.watch.terminalID), m.session, m.startedAt.UTC().Format(time.RFC3339Nano)})
+	key, _ := json.Marshal(struct{ Terminal, Conversation string }{string(m.watch.terminalID), m.conversation})
 	return string(key)
 }

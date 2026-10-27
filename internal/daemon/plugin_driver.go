@@ -802,18 +802,6 @@ func (d *Daemon) resolvePluginDriverLaunch(reg pluginDriverRegistration, params 
 	return result, nil
 }
 
-func (d *Daemon) sessionUsesPluginMessageDelivery(session *protocol.Session) bool {
-	if session == nil {
-		return false
-	}
-	cursor := d.store.GetAgentDriverRun(session.ID)
-	if cursor.PluginName == "" {
-		return false
-	}
-	driver, ok := d.ensurePluginRegistry().driver(session.Agent)
-	return ok && driver.PluginName == cursor.PluginName && driver.Capabilities["message_delivery"]
-}
-
 func pluginCommandEnv(values map[string]string) ([]string, error) {
 	keys := make([]string, 0, len(values))
 	for key, value := range values {
