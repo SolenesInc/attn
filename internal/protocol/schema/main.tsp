@@ -1209,8 +1209,10 @@ model DelegateMessage {
   cmd: "delegate";
   request_id: string; // Stable caller-supplied idempotency key for one logical delegation
   source_session_id?: SessionID;
+  host?: string;
   assignment: DelegateAssignment;
   cwd: string;
+  cwd_base?: string;
   checkout?: DelegateCheckout;
   agent?: string;
   label?: string;
@@ -1690,9 +1692,11 @@ model ListWorktreesMessage {
   main_repo: string;
 }
 
-@extension("x-on", #{ here: true })
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model CreateWorktreeMessage {
   cmd: "create_worktree";
+  host?: string;
+  owner?: DelegationWorktreeOwner;
   main_repo: string;
   branch: string;
   path?: string;
@@ -1925,12 +1929,25 @@ model ListBranchesMessage {
   main_repo: string;
 }
 
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model CreateWorktreeFromBranchMessage {
   cmd: "create_worktree_from_branch";
+  host?: string;
+  owner?: DelegationWorktreeOwner;
   main_repo: string;
   branch: string;
   path?: string;
   request_id?: string;
+}
+
+model DelegationWorktreeOwner {
+  token: string;
+  recovering: boolean;
+}
+model WorktreeCreation {
+  path: string;
+  branch: string;
+  error?: string;
 }
 
 model GetDefaultBranchMessage {
@@ -3165,10 +3182,43 @@ model ConversationReadinessResult {
 model AgentCatalogMessage {
   cmd: "agent_catalog";
   host: string;
+  models_for?: string;
 }
 model AgentCatalogResult {
   machine: string;
   harnesses: Harness[];
+  models?: HarnessModel[];
+}
+
+@extension("x-on", #{ machine: "host" })
+model CheckoutInspectMessage {
+  cmd: "checkout_inspect";
+  host: string;
+  cwd: string;
+  refs?: string[];
+  worktree_branch?: string;
+  worktree_path?: string;
+  directories?: string[];
+}
+model CheckoutRef {
+  ref: string;
+  commit: string;
+}
+model CheckoutDirectory {
+  path: string;
+  repo_root: string;
+}
+model CheckoutInspection {
+  cwd: string;
+  exists: boolean;
+  is_directory: boolean;
+  repo_root: string;
+  main_repo: string;
+  branch: string;
+  repository_subdir: string;
+  refs: CheckoutRef[];
+  worktree_path: string;
+  directories: CheckoutDirectory[];
 }
 
 @extension("x-on", #{ session: "session_id" })

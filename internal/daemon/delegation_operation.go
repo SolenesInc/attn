@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,11 +17,21 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) startDelegation(msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
-	return d.startDelegationForeground(msg)
+type acceptedDelegationRequest struct {
+	protocol.DelegateMessage
+	delegationTarget
 }
 
-func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
+type delegationTarget struct {
+	Host string `json:"resolved_host"`
+	Cwd  string `json:"resolved_cwd"`
+}
+
+func (d *Daemon) startDelegation(ctx context.Context, msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
+	return d.startDelegationForeground(ctx, msg)
+}
+
+func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {
 		requestID = uuid.NewString()
@@ -82,7 +93,11 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 			}
 		}
 	}
-	resolved, err := d.resolveDelegationPreferences(msg)
+	host, err := d.resolveCallerHost(protocol.Deref(msg.SourceSessionID), msg.Host)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := d.resolveDelegationPreferences(msg, host)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +136,30 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 			parentSeedID, _ = d.gardenDispatchCrown(sourceID)
 		}
 	}
-	baseCommit, err := d.resolveAcceptedDelegationBase(msg)
+	callerHost := ""
+	if origin, remote := OriginOf(ctx); remote {
+		callerHost = origin.Host
+	}
+	cwd := msg.Cwd
+	if base := protocol.Deref(msg.CwdBase); base != "" && callerHost == host && !filepath.IsAbs(cwd) && !namesHome(cwd) {
+		cwd = base + string(filepath.Separator) + cwd
+	}
+	inspection, err := d.delegationCheckout(host, cwd, msg.Checkout)
+	if err != nil {
+		return nil, err
+	}
+	baseCommit := ""
+	if msg.Checkout != nil && msg.Checkout.Kind == protocol.DelegateCheckoutKindNewWorktree {
+		if inspection.MainRepo == "" {
+			return nil, fmt.Errorf("checkout flags are invalid outside Git: %s", inspection.Cwd)
+		}
+		base := strings.TrimSpace(protocol.Deref(msg.Checkout.From))
+		baseCommit = checkoutCommit(inspection, base)
+		if baseCommit == "" {
+			return nil, fmt.Errorf("base ref %q is unavailable; fetch it explicitly or choose another ref", base)
+		}
+	}
+	encoded, err = json.Marshal(acceptedDelegationRequest{DelegateMessage: *msg, delegationTarget: delegationTarget{Host: host, Cwd: inspection.Cwd}})
 	if err != nil {
 		return nil, err
 	}
@@ -192,6 +230,15 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 		d.finishDelegationFailure(id, fmt.Errorf("decode accepted delegation request: %w", err))
 		return
 	}
+	var target delegationTarget
+	if err := json.Unmarshal([]byte(record.RequestJSON), &target); err != nil {
+		d.finishDelegationFailure(id, err)
+		return
+	}
+	msg.Host = protocol.Ptr(target.Host)
+	if target.Cwd != "" {
+		msg.Cwd = target.Cwd
+	}
 	var resolved *delegationprefs.Resolved
 	if record.ResolvedPreferences != "" {
 		if err := json.Unmarshal([]byte(record.ResolvedPreferences), &resolved); err != nil {
@@ -201,7 +248,7 @@ func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupPro
 	}
 	runtime, err := d.resolveDelegateRuntimeWithHandoverSnapshot(
 		&msg, protocol.Deref(record.Operation.SeedID), record.BaseCommit, record.HandoffNoteID,
-		record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned,
+		record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath),
 		record.HandoverSeedRev, record.HandoverTenderSession, record.HandoverTenderMember, id, record.ParentSeedID,
 	)
 	if err != nil {

@@ -22,6 +22,9 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		if name == "" {
 			return fmt.Errorf("outpost name is required")
 		}
+		if strings.EqualFold(name, "home") {
+			return fmt.Errorf("outpost name %q is reserved for the home", name)
+		}
 		if err := validateOutpostAddress(address); err != nil {
 			return err
 		}

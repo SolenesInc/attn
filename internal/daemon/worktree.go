@@ -60,13 +60,11 @@ func (d *Daemon) listedWorktreesAsProtocol(mainRepo string, liveWorktrees []git.
 }
 
 func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, error) {
-	var createdPath string
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var createErr error
-		createdPath, createErr = d.doCreateWorktreeProtected(protection, msg)
-		return createErr
-	})
-	return createdPath, err
+	result, err := Call[protocol.WorktreeCreation](context.Background(), d.router(), *msg)
+	if err == nil && result.Error != nil {
+		err = errors.New(*result.Error)
+	}
+	return result.Path, err
 }
 
 func (d *Daemon) doCreateWorktreeProtected(protection foregroundCleanupProtection, msg *protocol.CreateWorktreeMessage) (string, error) {

@@ -36,6 +36,7 @@ const (
 	SessionTeardownPrepared    = "session-teardown-prepared"
 	SessionExitObserved        = "session-process-exit-observed"
 	AgentTerminalStarted       = "agent-terminal-started"
+	TerminalStarting           = "terminal-starting"
 	AgentLaunchReady           = "agent-launch-ready"
 	CodexViewReleaseChecked    = "codex-view-release-checked"
 	ConversationCandidateTurn  = "conversation-candidate-turn"

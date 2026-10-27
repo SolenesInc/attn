@@ -20,18 +20,20 @@ import (
 )
 
 type AgentLaunch struct {
-	Context       hooks.Launch
-	AwarenessDirs []string
-	Direct        bool
-	InitialPrompt string
-	Link          string
-	PreviousLink  string
-	Profile       string
-	Plugin        *AgentPluginLaunch
-	Monitor       sessionmonitor.Launch
-	AddedTerminal bool
-	FreshCost     bool
-	StartedAt     time.Time
+	Context              hooks.Launch
+	AwarenessDirs        []string
+	Direct               bool
+	InitialPrompt        string
+	Link                 string
+	PreviousLink         string
+	Profile              string
+	Plugin               *AgentPluginLaunch
+	Monitor              sessionmonitor.Launch
+	InstallWorkflowSkill bool
+	RequireWorkflowSkill bool
+	AddedTerminal        bool
+	FreshCost            bool
+	StartedAt            time.Time
 }
 
 type AgentPluginLaunch struct {
@@ -78,6 +80,11 @@ func (d *Daemon) agentLaunchContext(sessionID protocol.SessionID, agent string, 
 func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) (*preparedPluginReload, error) {
 	if launch == nil {
 		return nil, nil
+	}
+	if launch.InstallWorkflowSkill {
+		if err := d.ensureDelegationWorkflowSkill(opts.Agent, launch.RequireWorkflowSkill); err != nil {
+			return nil, err
+		}
 	}
 	if launch.Plugin != nil {
 		p := launch.Plugin
@@ -255,12 +262,20 @@ func (d *Daemon) placedConversationReadiness(session protocol.SessionID, host, a
 	return Call[protocol.ConversationReadinessResult](context.Background(), d.router(), protocol.ConversationReadinessMessage{Cmd: protocol.CmdConversationReadiness, Host: host, Agent: agent, Conversation: conversation, Restore: restore, Profile: profile, Link: d.store.SessionLink(session)})
 }
 
-func (d *Daemon) readAgentCatalog(_ context.Context, _ protocol.AgentCatalogMessage) (protocol.AgentCatalogResult, error) {
+func (d *Daemon) readAgentCatalog(ctx context.Context, msg protocol.AgentCatalogMessage) (protocol.AgentCatalogResult, error) {
 	name, err := os.Hostname()
 	if err != nil {
 		return protocol.AgentCatalogResult{}, err
 	}
-	return protocol.AgentCatalogResult{Machine: name, Harnesses: d.delegationHarnesses()}, nil
+	result := protocol.AgentCatalogResult{Machine: name, Harnesses: d.delegationHarnesses()}
+	if agent := protocol.Deref(msg.ModelsFor); agent != "" {
+		catalog, err := d.discoverHarnessModels(ctx, agent)
+		if err != nil {
+			return result, err
+		}
+		result.Models = catalog.Models
+	}
+	return result, nil
 }
 
 func (d *Daemon) requireCatalogAgent(host, agent, explicit string) error {

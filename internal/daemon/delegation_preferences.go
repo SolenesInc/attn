@@ -231,15 +231,7 @@ func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {
 	return msg.Role != nil || msg.Choice != nil || protocol.Deref(msg.Fallback)
 }
 
-func (d *Daemon) ensureDelegationWorkflowSkill(resolved *delegationprefs.Resolved) error {
-	harness := resolved.Selection.Harness
-	cfg, err := d.store.GetDelegationPreferences()
-	if err != nil {
-		return err
-	}
-	if !cfg.WorkflowSkillEnabled {
-		return nil
-	}
+func (d *Daemon) ensureDelegationWorkflowSkill(harness string, required bool) error {
 	paths, attempted, err := agentdriver.EnsureWorkflowSkillsInstalled([]string{harness})
 	if err != nil {
 		return fmt.Errorf("sync attn-workflow before delegated role launch: %w", err)
@@ -248,13 +240,13 @@ func (d *Daemon) ensureDelegationWorkflowSkill(resolved *delegationprefs.Resolve
 		d.logf("skipping user-global attn-workflow skill sync for instance %q", config.InstanceLabel())
 		return nil
 	}
-	if len(paths) == 0 && resolved.Builtin != nil {
+	if len(paths) == 0 && required {
 		return fmt.Errorf("harness %q has no supported attn-workflow skill directory", harness)
 	}
 	return nil
 }
 
-func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage) (*delegationprefs.Resolved, error) {
+func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage, host string) (*delegationprefs.Resolved, error) {
 	if !usesDelegationPreferences(msg) {
 		if msg.Provider != nil {
 			return nil, fmt.Errorf("--provider requires --role or --fallback; direct plugin delegation uses provider/model")
@@ -283,7 +275,7 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage) (*d
 		return nil, err
 	}
 	if s.Model != "" {
-		catalog, err := d.discoverHarnessModels(context.Background(), s.Harness)
+		catalog, err := Call[protocol.AgentCatalogResult](context.Background(), d.router(), protocol.AgentCatalogMessage{Cmd: protocol.CmdAgentCatalog, Host: host, ModelsFor: &s.Harness})
 		if err != nil {
 			return nil, fmt.Errorf("validate selected model: %w", err)
 		}

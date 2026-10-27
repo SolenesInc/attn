@@ -1,39 +1,41 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/garden"
-	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 var errLegacyDelegationRequest = errors.New("this pending delegation used the retired implicit launch contract")
 
 type resolvedDelegationLaunch struct {
-	Cmd                string
-	RequestID          string
-	ProfileID          *string
-	SourceSessionID    *protocol.SessionID
-	Assignment         protocol.DelegateAssignment
-	Checkout           *protocol.DelegateCheckout
-	Cwd                string
-	Agent              *string
-	Label              *string
-	YoloMode           *bool
-	Priority           *bool
-	Model              *string
-	Effort             *string
-	AllowWorktreeReuse *bool
-	Role               *string
-	Choice             *string
-	Fallback           *bool
-	Provider           *string
-	Review             *protocol.SeedReviewActionContext
-	Desktop            *string
+	Cmd                  string
+	RequestID            string
+	ProfileID            *string
+	SourceSessionID      *protocol.SessionID
+	Assignment           protocol.DelegateAssignment
+	Checkout             *protocol.DelegateCheckout
+	InstallWorkflowSkill bool
+	RequireWorkflowSkill bool
+	Host                 *string
+	Inspection           protocol.CheckoutInspection
+	Cwd                  string
+	Agent                *string
+	Label                *string
+	YoloMode             *bool
+	Priority             *bool
+	Model                *string
+	Effort               *string
+	AllowWorktreeReuse   *bool
+	Role                 *string
+	Choice               *string
+	Fallback             *bool
+	Provider             *string
+	Review               *protocol.SeedReviewActionContext
+	Desktop              *string
 
 	Brief                 *string
 	Worktree              *protocol.DelegateWorktreeRequest
@@ -49,7 +51,7 @@ type resolvedDelegationLaunch struct {
 func resolveLaunchInput(msg *protocol.DelegateMessage) resolvedDelegationLaunch {
 	return resolvedDelegationLaunch{
 		ProfileID: msg.ProfileID, RequestID: msg.RequestID, SourceSessionID: msg.SourceSessionID,
-		Assignment: msg.Assignment, Checkout: msg.Checkout, Cwd: msg.Cwd,
+		Assignment: msg.Assignment, Checkout: msg.Checkout, Cwd: msg.Cwd, Host: msg.Host,
 		Agent: msg.Agent, Label: msg.Label, YoloMode: msg.YoloMode, Priority: msg.Priority,
 		Model: msg.Model, Effort: msg.Effort, AllowWorktreeReuse: msg.AllowWorktreeReuse,
 		Role: msg.Role, Choice: msg.Choice, Fallback: msg.Fallback, Provider: msg.Provider,
@@ -114,30 +116,9 @@ func validateDelegateRequestShape(msg *protocol.DelegateMessage) error {
 	return nil
 }
 
-func (d *Daemon) resolveAcceptedDelegationBase(msg *protocol.DelegateMessage) (string, error) {
-	if msg.Checkout == nil || msg.Checkout.Kind != protocol.DelegateCheckoutKindNewWorktree {
-		return "", nil
-	}
-	directory, err := validateDelegationDirectory(msg.Cwd)
-	if err != nil {
-		return "", err
-	}
-	_, mainRepo, err := d.readCheckoutRepo(context.Background(), delegationGitTask, directory)
-	if err != nil {
-		return "", fmt.Errorf("checkout flags are invalid outside Git: %s", directory)
-	}
-	base := strings.TrimSpace(protocol.Deref(msg.Checkout.From))
-	commit, err := d.gitOutput(context.Background(), delegationGitTask, attngit.OpMetadata, mainRepo, "rev-parse", "--verify", base+"^{commit}")
-	if err != nil || strings.TrimSpace(string(commit)) == "" {
-		return "", fmt.Errorf("base ref %q is unavailable; fetch it explicitly or choose another ref", base)
-	}
-	return strings.TrimSpace(string(commit)), nil
-}
-
 func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	msg *protocol.DelegateMessage,
 	reservedSeedID string, reservedBaseCommit string, reservedNoteID string, sessionID protocol.SessionID, ownedWorktreePath string,
-	worktreeOwned bool,
 	handoverSeedRev int,
 	handoverTenderSession, handoverTenderMember string,
 	operationID string,
@@ -212,67 +193,53 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		}
 	}
 
-	directory, err := validateDelegationDirectory(msg.Cwd)
+	inspection, err := d.delegationCheckout(protocol.Deref(msg.Host), msg.Cwd, msg.Checkout)
 	if err != nil {
 		return nil, err
 	}
-	runtime.Cwd = directory
-	repoRoot, mainRepo, gitErr := d.readCheckoutRepo(context.Background(), delegationGitTask, directory)
-	if gitErr != nil {
+	runtime.Cwd, runtime.Inspection = inspection.Cwd, inspection
+	if inspection.MainRepo == "" {
 		if msg.Checkout != nil {
-			return nil, fmt.Errorf("checkout flags are invalid outside Git: %s", directory)
+			return nil, fmt.Errorf("checkout flags are invalid outside Git: %s", inspection.Cwd)
 		}
 		return &runtime, nil
 	}
 	if msg.Checkout == nil {
 		return nil, fmt.Errorf("git checkout requires reuse or new_worktree with branch arguments; no worker started")
 	}
-	repoRoot = attngit.CanonicalizePath(repoRoot)
+	branch := strings.TrimSpace(msg.Checkout.Branch)
 	switch msg.Checkout.Kind {
 	case protocol.DelegateCheckoutKindReuse:
-		branchOutput, err := d.gitOutput(context.Background(), delegationGitTask, attngit.OpMetadata, directory, "symbolic-ref", "--short", "HEAD")
-		branch := strings.TrimSpace(string(branchOutput))
-		if err != nil || branch == "" {
-			return nil, fmt.Errorf("cannot reuse detached or unreadable checkout %s: %v", repoRoot, err)
+		if inspection.Branch == "" {
+			return nil, fmt.Errorf("cannot reuse detached or unreadable checkout %s", inspection.RepoRoot)
 		}
-		if branch != strings.TrimSpace(msg.Checkout.Branch) {
-			return nil, fmt.Errorf("branch mismatch: expected %s; %s is on %s. No worker started; seed ownership unchanged", msg.Checkout.Branch, repoRoot, branch)
+		if inspection.Branch != branch {
+			return nil, fmt.Errorf("branch mismatch: expected %s; %s is on %s. No worker started; seed ownership unchanged", branch, inspection.RepoRoot, inspection.Branch)
 		}
 	case protocol.DelegateCheckoutKindNewWorktree, protocol.DelegateCheckoutKindExistingBranchWorktree:
-		runtime.Worktree = &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(mainRepo), Branch: strings.TrimSpace(msg.Checkout.Branch), Path: msg.Checkout.Path}
+		runtime.Worktree = &protocol.DelegateWorktreeRequest{Repo: protocol.Ptr(inspection.MainRepo), Branch: branch}
+		if msg.Checkout.Path != nil {
+			runtime.Worktree.Path = protocol.Ptr(inspection.WorktreePath)
+		}
+		exists := checkoutCommit(inspection, "refs/heads/"+branch) != ""
 		if msg.Checkout.Kind == protocol.DelegateCheckoutKindExistingBranchWorktree {
-			exists, refErr := d.refExists(context.Background(), delegationGitTask, mainRepo, "refs/heads/"+runtime.Worktree.Branch)
-			if refErr != nil {
-				return nil, refErr
-			}
 			if !exists {
-				return nil, fmt.Errorf("local branch %q does not exist; create it with --branch and --from when starting from a remote ref", runtime.Worktree.Branch)
+				return nil, fmt.Errorf("local branch %q does not exist; create it with --branch and --from when starting from a remote ref", branch)
 			}
 			runtime.Worktree.ExistingBranch = protocol.Ptr(true)
 		} else {
-			expectedPath := strings.TrimSpace(protocol.Deref(msg.Checkout.Path))
-			if expectedPath == "" {
-				expectedPath = attngit.GenerateWorktreePath(mainRepo, runtime.Worktree.Branch)
-			}
-			ownedRecovery := worktreeOwned && strings.TrimSpace(ownedWorktreePath) != "" &&
-				attngit.CanonicalizePath(ownedWorktreePath) == attngit.CanonicalizePath(expectedPath)
-			exists, refErr := d.refExists(context.Background(), delegationGitTask, mainRepo, "refs/heads/"+runtime.Worktree.Branch)
-			if refErr != nil {
-				return nil, refErr
-			}
+			ownedRecovery := ownedWorktreePath != "" && ownedWorktreePath == inspection.WorktreePath
 			if exists && !ownedRecovery {
-				return nil, fmt.Errorf("branch %q already exists; use --existing-branch or choose another name", runtime.Worktree.Branch)
+				return nil, fmt.Errorf("branch %q already exists; use --existing-branch or choose another name", branch)
 			}
-			base := strings.TrimSpace(protocol.Deref(msg.Checkout.From))
-			resolvedCommit := strings.TrimSpace(reservedBaseCommit)
-			if resolvedCommit == "" {
-				commit, err := d.gitOutput(context.Background(), delegationGitTask, attngit.OpMetadata, mainRepo, "rev-parse", "--verify", base+"^{commit}")
-				if err != nil || strings.TrimSpace(string(commit)) == "" {
-					return nil, fmt.Errorf("base ref %q is unavailable; fetch it explicitly or choose another ref", base)
-				}
-				resolvedCommit = strings.TrimSpace(string(commit))
+			commit := reservedBaseCommit
+			if commit == "" {
+				commit = checkoutCommit(inspection, protocol.Deref(msg.Checkout.From))
 			}
-			runtime.Worktree.StartingFrom = protocol.Ptr(resolvedCommit)
+			if commit == "" {
+				return nil, fmt.Errorf("base ref %q is unavailable; fetch it explicitly or choose another ref", protocol.Deref(msg.Checkout.From))
+			}
+			runtime.Worktree.StartingFrom = protocol.Ptr(commit)
 		}
 	}
 	return &runtime, nil
