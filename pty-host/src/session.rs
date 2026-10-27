@@ -968,6 +968,13 @@ impl Session {
         }
         if !self.wait_for_exit(deadline.saturating_duration_since(Instant::now())) {
             self.publish_escalation(signal, libc::SIGKILL);
+            if shell_close {
+                eprintln!(
+                    "shell close escalated for {}: grace={}ms escalation=SIGKILL",
+                    self.id,
+                    SHELL_CLOSE_GRACE.as_millis()
+                );
+            }
             self.signal_processes(libc::SIGKILL)?;
             if !self.wait_for_exit(TERMINATE_TIMEOUT) {
                 return Err("timed out waiting for terminal process to exit".to_owned());

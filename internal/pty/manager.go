@@ -462,7 +462,7 @@ func (m *Manager) KillWithEscalation(sessionID string, sig syscall.Signal, onEsc
 	if err != nil {
 		return err
 	}
-	return session.killWithEscalation(sig, defaultKillTimeout, onEscalate)
+	return session.killWithEscalation(sig, defaultKillTimeout, onEscalate, m.logf)
 }
 
 func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {
@@ -512,7 +512,7 @@ func (m *Manager) Shutdown() {
 	m.mu.RUnlock()
 
 	for _, session := range sessions {
-		_ = session.kill(syscall.SIGTERM, defaultKillTimeout)
+		_ = session.kill(syscall.SIGTERM, defaultKillTimeout, m.logf)
 	}
 }
 

@@ -942,11 +942,11 @@ const sighupRepeat = 500 * time.Millisecond
 
 const shellCloseGrace = 500 * time.Millisecond
 
-func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration) error {
-	return s.killWithEscalation(sig, waitTimeout, nil)
+func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration, logf LogFunc) error {
+	return s.killWithEscalation(sig, waitTimeout, nil, logf)
 }
 
-func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal)) (result error) {
+func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal), logf LogFunc) (result error) {
 	s.exitMu.RLock()
 	running := s.running
 	s.exitMu.RUnlock()
@@ -1018,6 +1018,9 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 	}
 	if onEscalate != nil {
 		onEscalate(syscall.SIGKILL)
+	}
+	if s.agent == "shell" && logf != nil {
+		logf("shell close escalated for %s: grace=%s escalation=SIGKILL", s.id, waitTimeout)
 	}
 	if err := s.signalProcesses(syscall.SIGKILL); err != nil {
 		return err
