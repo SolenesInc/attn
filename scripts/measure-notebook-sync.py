@@ -74,7 +74,7 @@ def main():
                 print(json.dumps({'ready':name,'pid':daemon.pid}),flush=True)
             def sample(name):
                 with urllib.request.urlopen(endpoints[name]+'/debug/vars') as response: return json.load(response)
-            if 'notebook_engine_events' not in sample('home'): raise RuntimeError('requires the counter overlay from build-perf-probe.py')
+            if 'notebook_engine_events' not in sample('home'): raise RuntimeError('requires the counter overlay from build-notebook-sync-perf.py')
             home, outpost = environments['home'], environments['outpost']
             address = '127.0.0.1:'+str(free_port())
             run([str(args.attn),'settings','set','outpost_listen',address],outpost)

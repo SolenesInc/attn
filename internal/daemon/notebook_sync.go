@@ -30,6 +30,7 @@ import (
 
 const notebookChannel = "notebook"
 const notebookTrashDays = 30
+const notebookProgressInterval = 500 * time.Millisecond
 
 type notebookSyncDisk struct {
 	Initialized  bool
@@ -67,6 +68,7 @@ type notebookSyncRun struct {
 	remote       map[string]notebookSyncSnapshot
 	conflicts    map[string]struct{}
 	homeState    protocol.OutpostNotebook
+	progress     *time.Timer
 }
 
 type notebookSyncRuntime struct {
@@ -322,6 +324,10 @@ func (d *Daemon) startNotebookSync(home, root string, peers []string) error {
 		})
 		<-serving
 		d.notebookSync.mu.Lock()
+		if run.progress != nil {
+			run.progress.Stop()
+			run.progress = nil
+		}
 		if d.notebookSync.run == run {
 			d.notebookSync.run = nil
 			d.notebookSyncChangedLocked()
@@ -567,11 +573,45 @@ func (d *Daemon) refreshNotebookRows() {
 		}
 		d.outposts.mu.Unlock()
 		if changed {
+			d.cancelNotebookProgress()
 			d.publishFact(FactOutpostChanged, row.ID, nil)
 		} else if progress {
-			d.projectOutpostsUpdated()
+			d.queueNotebookProgress()
 		}
 	}
+}
+
+func (d *Daemon) cancelNotebookProgress() {
+	r := &d.notebookSync
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if run := r.run; run != nil && run.progress != nil {
+		run.progress.Stop()
+		run.progress = nil
+	}
+}
+
+func (d *Daemon) queueNotebookProgress() {
+	r := &d.notebookSync
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	run := r.run
+	if run == nil || run.ctx.Err() != nil || run.progress != nil {
+		return
+	}
+	var timer *time.Timer
+	timer = d.life.AfterFunc("notebookProgress", notebookProgressInterval, func() {
+		r.mu.Lock()
+		current := r.run == run && run.ctx.Err() == nil && run.progress == timer
+		if current {
+			run.progress = nil
+		}
+		r.mu.Unlock()
+		if current {
+			d.projectOutpostsUpdated()
+		}
+	})
+	run.progress = timer
 }
 
 func (d *Daemon) receiveNotebookSyncReport(ctx context.Context, msg protocol.NotebookSyncReportMessage) (protocol.OutpostNotebook, error) {
