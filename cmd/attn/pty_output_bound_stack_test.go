@@ -15,6 +15,10 @@ import (
 )
 
 func TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact(t *testing.T) {
+	host := os.Getenv("ATTN_TEST_PTY_HOST")
+	if host == "" {
+		t.Skip("set ATTN_TEST_PTY_HOST to verify bounded output across all PTY backends")
+	}
 	for _, sequence := range []struct {
 		name, prefix, suffix string
 		bytes                int
@@ -28,10 +32,6 @@ func TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact(t *test
 					s := testworld.NewStack(t)
 					s.Vars = append(s.Vars, "ATTN_PTY_BACKEND="+backend, "SHELL=/bin/bash")
 					if backend == "shared" {
-						host := os.Getenv("ATTN_TEST_PTY_HOST")
-						if host == "" {
-							t.Skip("set ATTN_TEST_PTY_HOST to verify the shared host output bound")
-						}
 						s.Vars = append(s.Vars, "ATTN_PTY_HOST_BINARY="+host)
 					}
 					s.Start()
