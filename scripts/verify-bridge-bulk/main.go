@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/pprof"
 	"slices"
 	"strconv"
 	"strings"
@@ -32,6 +33,17 @@ type transfer struct {
 type zeros struct{}
 
 func (zeros) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+func watchBridge(c *bridge.Conn) {
+	dumped := false
+	for state := range c.States() {
+		fmt.Fprintf(os.Stderr, "bridge_state=%s heartbeat_gap_s=%.6f\n", state, c.MaxHeartbeatGap().Seconds())
+		if state == bridge.StateStalled && !dumped {
+			dumped = true
+			_ = pprof.Lookup("goroutine").WriteTo(os.Stderr, 2)
+		}
+	}
+}
 
 func main() {
 	serve := flag.Bool("serve", false, "serve the isolated bridge and real shell")
@@ -131,7 +143,11 @@ func server(ctx context.Context, address, data, keys string, self bridge.Identit
 	}
 	fmt.Println("ready", listener.Addr())
 	return bridge.Serve(ctx, listener, bridge.ServerConfig{Self: self, HostKeyPath: filepath.Join(data, "bridge_host_key"), AuthorizedKeys: func() ([]byte, error) { return os.ReadFile(keys) }, Handlers: handlers, OnError: func(err error) { fmt.Fprintln(os.Stderr, err) }}, func(c *bridge.Conn) {
-		go func() { <-c.Done(); _ = backend.Remove(context.Background(), "echo") }()
+		go func() {
+			watchBridge(c)
+			fmt.Fprintln(os.Stderr, "bridge_ended:", c.Err())
+			_ = backend.Remove(context.Background(), "echo")
+		}()
 	})
 }
 
@@ -140,7 +156,11 @@ func measure(ctx context.Context, address string, self bridge.Identity, request 
 	if err != nil {
 		return err
 	}
-	defer c.Close()
+	defer func() {
+		_ = c.Close()
+		fmt.Fprintf(os.Stderr, "bridge_ended: %v heartbeat_gap_s=%.6f\n", c.Err(), c.MaxHeartbeatGap().Seconds())
+	}()
+	go watchBridge(c)
 	if err := c.Call(ctx, "spawn", struct{}{}, nil); err != nil {
 		return err
 	}

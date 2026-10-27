@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import os
 from pathlib import Path
 import shlex
@@ -50,6 +51,7 @@ for label in args.windows:
             remote.stdin.write("set -eu\n" + script)
             remote.stdin.close()
             remote_pid = int(remote.stdout.readline().strip())
+            (args.receipts / (label + "-instance.json")).write_text(json.dumps({"instance": instance, "remote_pid": remote_pid, "address": args.address, "remote_data": remote_data}) + "\n")
             ready = remote.stdout.readline().strip()
             if not ready.startswith("ready "):
                 raise RuntimeError("probe failed to start: " + ready)
@@ -65,9 +67,10 @@ for label in args.windows:
                 command = [str(args.probes / ("probe-" + str(window))), "--address", args.address, "--data", home, "--bytes", str(args.bytes)]
                 if raw:
                     command += ["--ssh-only"]
-                result = subprocess.run(command, env=env, text=True, capture_output=True)
-                (args.receipts / (label + ".log")).write_text(result.stdout + result.stderr)
-                print(result.stdout + result.stderr, flush=True)
+                client_log = args.receipts / (label + ".log")
+                with client_log.open("w") as output:
+                    result = subprocess.run(command, env=env, text=True, stdout=output, stderr=subprocess.STDOUT)
+                print(client_log.read_text(), flush=True)
                 result.check_returncode()
         finally:
             if remote_pid is not None and remote.poll() is None:
