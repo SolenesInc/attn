@@ -1,0 +1,3 @@
+kind: fixed
+area: conversations
+change: Conversations keep being archived and listed when a crew home is unavailable. Expiry pauses until all crew memories can be read, with a warning naming the unavailable paths.
