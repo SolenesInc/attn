@@ -1,0 +1,3 @@
+kind: fixed
+area: chief
+change: Adding a delegation role turns roles on, and new profiles skip first-day onboarding when the install already has sessions.

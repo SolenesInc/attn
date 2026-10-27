@@ -127,7 +127,7 @@ garden                  a profile's issue tracker
 └─ seed (0..n)          a ticket
    ├─ state (1)         planted, growing, parked, harvested or withered
    ├─ seed (0..n)       a subtask
-   ├─ claim (at most 1)   the assignment; its tender is a session or crew member
+   ├─ tender (at most 1)  the party that claims the seed; like an assignee
    ├─ watcher (0..n)    a party that follows the seed and
    │                    its subtasks; like a watcher on a ticket
    ├─ note (0..n)       a comment in the ticket's log
@@ -136,7 +136,6 @@ garden                  a profile's issue tracker
    │  ├─ report (at most 1)   the proof someone recorded for it
    │  └─ verdict (at most 1)  confirmed or rejected
    └─ edge (0..n)       blocks or discovered-from
-tender                  the party that claims a seed; like an assignee
 tend                    claim a seed; like assigning a ticket to yourself
 plot                    an epic: a seed with child seeds
 shared check            a check on a plot that every seed under it proves
@@ -147,8 +146,7 @@ packet                  an epic template
 crew member             an agent with a permanent identity and memory
 ├─ name (1)             the member’s name; unique in their profile
 ├─ charter (1)          who the member is and what they live for
-├─ member home (at most 1)  the folder for the charter, letters and memory; new homes
-│                       live in the Notebook
+├─ member home (1)      the folder that holds the charter and the letters
 ├─ memory (1)           what the member remembers from past days
 │  ├─ entry (0..n)      one line the member remembers
 │  │  └─ day line       the entry that closes a day; it links its letter and
@@ -158,7 +156,8 @@ crew member             an agent with a permanent identity and memory
 ├─ letter (0..n)        what one of the member's sessions leaves for their
 │                       next sessions; like a shift handoff
 └─ session (at most 1)  the member's current session
-chief                   the crew member that coordinates one profile
+chief                   the crew member that coordinates a profile and
+                        everything in it; like a chief of staff
 onboarding              the Chief's first conversation to help the user set up
                         and learn attn
 asleep                  the member has no session, until something wakes them

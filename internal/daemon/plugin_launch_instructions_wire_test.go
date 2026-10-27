@@ -40,7 +40,7 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 				{launch: "agent", content: agent.Instructions.Content,
 					want: []string{hooks.AgentGuidance, hooks.GardenGuidance, askGuidanceLead}, unwant: []string{"shared context"}},
 				{launch: "chief", content: chief.Instructions.Content,
-					want: []string{"You are this profile's Chief", chief.Instructions.NotebookRoot, hooks.GardenGuidance, askGuidanceLead}},
+					want: []string{"You are the Chief", chief.Instructions.NotebookRoot, hooks.GardenGuidance, askGuidanceLead}},
 			} {
 				for _, want := range row.want {
 					if !strings.Contains(row.content, want) {

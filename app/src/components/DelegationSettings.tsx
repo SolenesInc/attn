@@ -294,14 +294,14 @@ export function DelegationSettings({ policy }: { policy: DelegationPreferencesPo
 
   const addRole = () => {
     const role: DelegationRole = { id: newID('role'), name: 'New role', icon: '', enabled: true, description: '', instructions: '', stopping_point: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Default', when: '', selection: emptySelection() }] };
-    commit(withRoles([...config.roles, role]));
+    commit({ ...config, enabled: true, roles: [...config.roles, role] });
     rows.expand(role.id);
   };
   const copyRole = (role: DelegationRole) => {
     const v = view(role);
     const copy: DelegationRole = { ...structuredClone(v), id: newID('role'), builtin: undefined, name: `${v.name} (custom)`, enabled: role.enabled, default_choice_id: role.default_choice_id, choices: structuredClone(role.choices) };
     const index = config.roles.findIndex(r => r.id === role.id);
-    commit(withRoles([...config.roles.slice(0, index + 1), copy, ...config.roles.slice(index + 1)]));
+    commit({ ...config, enabled: true, roles: [...config.roles.slice(0, index + 1), copy, ...config.roles.slice(index + 1)] });
     rows.expand(copy.id);
   };
   const deleteRole = (role: DelegationRole) => {

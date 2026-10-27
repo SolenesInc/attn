@@ -834,12 +834,12 @@ func TestNewInASharedCodexChiefTerminalStartsAPlainConversation(t *testing.T) {
 	codex.Prompted()
 	codex.Reply("Planned. <!-- attn:state=idle -->")
 	server := w.CodexServer()
-	if got := server.Instructions(codex.ConversationID); !strings.Contains(got, "You are this profile's Chief") {
+	if got := server.Instructions(codex.ConversationID); !strings.Contains(got, "You are the Chief") {
 		t.Fatalf("the chief's conversation started with:\n%s\nwant the chief guidance", got)
 	}
 
 	moveOn(t, app, codex, terminal, "/new", "fix the build")
-	if got := server.Instructions(codex.ConversationID); strings.Contains(got, "You are this profile's Chief") || !strings.Contains(got, agentGuidanceLead) {
+	if got := server.Instructions(codex.ConversationID); strings.Contains(got, "You are the Chief") || !strings.Contains(got, agentGuidanceLead) {
 		t.Errorf("the conversation /new started in the chief's terminal began with:\n%s\nwant only the agent guidance", got)
 	}
 }
