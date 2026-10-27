@@ -69,13 +69,6 @@ var Placements = map[string][]Placement{
 	"crew_handoff_get":                 {Placement{LocatorHome, ""}},
 	"crew_handoffs_get":                {Placement{LocatorHome, ""}},
 	"crew_list":                        {Placement{LocatorHome, ""}},
-	"crew_memory_add":                  {Placement{LocatorHome, ""}},
-	"crew_memory_forget":               {Placement{LocatorHome, ""}},
-	"crew_memory_import":               {Placement{LocatorHome, ""}},
-	"crew_memory_recall":               {Placement{LocatorHome, ""}},
-	"crew_memory_rewrite":              {Placement{LocatorHome, ""}},
-	"crew_memory_summarize":            {Placement{LocatorHome, ""}},
-	"crew_memory_zoom":                 {Placement{LocatorHome, ""}},
 	"crew_prime":                       {Placement{LocatorHome, ""}},
 	"crew_set":                         {Placement{LocatorHome, ""}},
 	"crew_sleep":                       {Placement{LocatorHome, ""}},
@@ -736,90 +729,6 @@ func (m CrewListMessage) Placement() Placement {
 }
 
 func (m CrewListMessage) Locate() string {
-	return ""
-}
-
-func (CrewMemoryAddMessage) CommandName() string {
-	return "crew_memory_add"
-}
-
-func (m CrewMemoryAddMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewMemoryAddMessage) Locate() string {
-	return ""
-}
-
-func (CrewMemoryForgetMessage) CommandName() string {
-	return "crew_memory_forget"
-}
-
-func (m CrewMemoryForgetMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewMemoryForgetMessage) Locate() string {
-	return ""
-}
-
-func (CrewMemoryImportMessage) CommandName() string {
-	return "crew_memory_import"
-}
-
-func (m CrewMemoryImportMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewMemoryImportMessage) Locate() string {
-	return ""
-}
-
-func (CrewMemoryRecallMessage) CommandName() string {
-	return "crew_memory_recall"
-}
-
-func (m CrewMemoryRecallMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewMemoryRecallMessage) Locate() string {
-	return ""
-}
-
-func (CrewMemoryRewriteMessage) CommandName() string {
-	return "crew_memory_rewrite"
-}
-
-func (m CrewMemoryRewriteMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewMemoryRewriteMessage) Locate() string {
-	return ""
-}
-
-func (CrewMemorySummarizeMessage) CommandName() string {
-	return "crew_memory_summarize"
-}
-
-func (m CrewMemorySummarizeMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewMemorySummarizeMessage) Locate() string {
-	return ""
-}
-
-func (CrewMemoryZoomMessage) CommandName() string {
-	return "crew_memory_zoom"
-}
-
-func (m CrewMemoryZoomMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewMemoryZoomMessage) Locate() string {
 	return ""
 }
 

@@ -647,7 +647,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		config = make(map[string]any)
 	}
 	r.capContext(config, sessionID, chief)
-	if _, bound := r.d.crewMemberForSession(sessionID); bound && r.d.crewMemoryEnabled() {
+	if _, bound := r.d.crewMemberForSession(sessionID); bound && r.d.crewV2Enabled() {
 		config["features.memories"] = false
 		config["memories.generate_memories"] = false
 	}

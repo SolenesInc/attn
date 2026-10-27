@@ -1189,27 +1189,9 @@
                       {
                         "name": "home_ownership",
                         "node": {
-                          "kind": "choose",
-                          "condition": {
-                            "field": {
-                              "name": "crew_memory_enabled",
-                              "kind": "flag",
-                              "description": "Experimental crew memory is enabled."
-                            },
-                            "test": "enabled"
-                          },
-                          "children": [
-                            {
-                              "kind": "text",
-                              "id": "crew.home-memory",
-                              "source": "content/crew/home-memory.md"
-                            },
-                            {
-                              "kind": "text",
-                              "id": "crew.home-files",
-                              "source": "content/crew/home-files.md"
-                            }
-                          ]
+                          "kind": "text",
+                          "id": "crew.home-files",
+                          "source": "content/crew/home-files.md"
                         }
                       }
                     ]
@@ -1366,24 +1348,6 @@
                             "kind": "when",
                             "condition": {
                               "field": {
-                                "name": "crew_memory_enabled",
-                                "kind": "flag",
-                                "description": "Experimental crew memory is enabled."
-                              },
-                              "test": "enabled"
-                            },
-                            "children": [
-                              {
-                                "kind": "text",
-                                "id": "crew.letter-memory",
-                                "source": "content/crew/letter-memory.md"
-                              }
-                            ]
-                          },
-                          {
-                            "kind": "when",
-                            "condition": {
-                              "field": {
                                 "name": "older_handoffs",
                                 "kind": "text",
                                 "description": "Older handoffs"
@@ -1480,151 +1444,31 @@
                 ]
               },
               {
-                "kind": "when",
-                "condition": {
-                  "field": {
-                    "name": "crew_memory_enabled",
-                    "kind": "flag",
-                    "description": "Experimental crew memory is enabled."
-                  },
-                  "test": "enabled"
-                },
-                "children": [
+                "kind": "text",
+                "id": "crew.closure",
+                "source": "content/crew/closure.md",
+                "bindings": [
                   {
-                    "kind": "compose",
-                    "children": [
-                      {
+                    "name": "handoffs_dirname",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "handoffs_dirname",
                         "kind": "text",
-                        "id": "crew.memory",
-                        "source": "content/crew/memory.md",
-                        "bindings": [
-                          {
-                            "name": "memory_view",
-                            "node": {
-                              "kind": "input",
-                              "field": {
-                                "name": "memory_view",
-                                "kind": "text",
-                                "description": "Wake view, recent entries in full and older ones as summaries."
-                              }
-                            }
-                          },
-                          {
-                            "name": "handoffs_dir",
-                            "node": {
-                              "kind": "input",
-                              "field": {
-                                "name": "handoffs_dir",
-                                "kind": "text",
-                                "description": "Handoffs dir"
-                              }
-                            }
-                          }
-                        ]
-                      },
-                      {
-                        "kind": "when",
-                        "condition": {
-                          "field": {
-                            "name": "import_letters",
-                            "kind": "flag",
-                            "description": "The member has letters and no memory entries yet."
-                          },
-                          "test": "enabled"
-                        },
-                        "children": [
-                          {
-                            "kind": "text",
-                            "id": "crew.memory-import",
-                            "source": "content/crew/memory-import.md",
-                            "bindings": [
-                              {
-                                "name": "handoffs_dir",
-                                "node": {
-                                  "kind": "input",
-                                  "field": {
-                                    "name": "handoffs_dir",
-                                    "kind": "text",
-                                    "description": "Handoffs dir"
-                                  }
-                                }
-                              }
-                            ]
-                          }
-                        ]
+                        "description": "Handoffs dirname"
                       }
-                    ]
-                  }
-                ]
-              },
-              {
-                "kind": "choose",
-                "condition": {
-                  "field": {
-                    "name": "crew_memory_enabled",
-                    "kind": "flag",
-                    "description": "Experimental crew memory is enabled."
-                  },
-                  "test": "enabled"
-                },
-                "children": [
-                  {
-                    "kind": "text",
-                    "id": "crew.closure-memory",
-                    "source": "content/crew/closure-memory.md",
-                    "bindings": [
-                      {
-                        "name": "handoffs_dirname",
-                        "node": {
-                          "kind": "input",
-                          "field": {
-                            "name": "handoffs_dirname",
-                            "kind": "text",
-                            "description": "Handoffs dirname"
-                          }
-                        }
-                      },
-                      {
-                        "name": "display_name",
-                        "node": {
-                          "kind": "input",
-                          "field": {
-                            "name": "display_name",
-                            "kind": "text",
-                            "description": "Display name"
-                          }
-                        }
-                      }
-                    ]
+                    }
                   },
                   {
-                    "kind": "text",
-                    "id": "crew.closure",
-                    "source": "content/crew/closure.md",
-                    "bindings": [
-                      {
-                        "name": "handoffs_dirname",
-                        "node": {
-                          "kind": "input",
-                          "field": {
-                            "name": "handoffs_dirname",
-                            "kind": "text",
-                            "description": "Handoffs dirname"
-                          }
-                        }
-                      },
-                      {
+                    "name": "display_name",
+                    "node": {
+                      "kind": "input",
+                      "field": {
                         "name": "display_name",
-                        "node": {
-                          "kind": "input",
-                          "field": {
-                            "name": "display_name",
-                            "kind": "text",
-                            "description": "Display name"
-                          }
-                        }
+                        "kind": "text",
+                        "description": "Display name"
                       }
-                    ]
+                    }
                   }
                 ]
               }
@@ -1656,27 +1500,9 @@
           "delivery": "user_message",
           "description": "crew_sleep.go: user requested closure.",
           "body": {
-            "kind": "choose",
-            "condition": {
-              "field": {
-                "name": "crew_memory_enabled",
-                "kind": "flag",
-                "description": "Experimental crew memory is enabled."
-              },
-              "test": "enabled"
-            },
-            "children": [
-              {
-                "kind": "text",
-                "id": "crew.sleep-requested-memory",
-                "source": "content/crew/sleep-requested-memory.md"
-              },
-              {
-                "kind": "text",
-                "id": "crew.sleep-requested",
-                "source": "content/crew/sleep-requested.md"
-              }
-            ]
+            "kind": "text",
+            "id": "crew.sleep-requested",
+            "source": "content/crew/sleep-requested.md"
           }
         },
         {
@@ -1694,27 +1520,9 @@
           "delivery": "user_message",
           "description": "crew_lifecycle.go: close after the user has been away.",
           "body": {
-            "kind": "choose",
-            "condition": {
-              "field": {
-                "name": "crew_memory_enabled",
-                "kind": "flag",
-                "description": "Experimental crew memory is enabled."
-              },
-              "test": "enabled"
-            },
-            "children": [
-              {
-                "kind": "text",
-                "id": "crew.sleep-away-memory",
-                "source": "content/crew/sleep-away-memory.md"
-              },
-              {
-                "kind": "text",
-                "id": "crew.sleep-away",
-                "source": "content/crew/sleep-away.md"
-              }
-            ]
+            "kind": "text",
+            "id": "crew.sleep-away",
+            "source": "content/crew/sleep-away.md"
           }
         }
       ]
@@ -5390,5 +5198,5 @@
       ]
     }
   ],
-  "definitions_hash": "3076396f5adac2505158d1d3e1ce054291d93220c45240826c21d59d738089cf"
+  "definitions_hash": "79d32ee8968927207d8caa3ae477925e56cd3d42243d3cd9770935673af3266e"
 }

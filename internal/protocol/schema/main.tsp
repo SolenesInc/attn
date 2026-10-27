@@ -5273,9 +5273,10 @@ model KeptConversationSeed {
   slug: string;
   title: string;
 }
-model KeptConversationCrewDay {
+model KeptConversationCrewLetter {
   member: string;
-  day_id: string;
+  filename: string;
+  occurred_at: utcDateTime;
 }
 model KeptConversationRow {
   agent: string;
@@ -5287,7 +5288,7 @@ model KeptConversationRow {
   pinned_at?: string;
   pending_reason?: string;
   seeds: KeptConversationSeed[];
-  crew_days?: KeptConversationCrewDay[];
+  crew_letters?: KeptConversationCrewLetter[];
 }
 @extension("x-on", #{ home: true })
 model KeptConversationListMessage {
@@ -6758,10 +6759,6 @@ model Response {
   crew_set_result?: CrewSetResult;
   crew_prime_result?: CrewPrimeResult;
   crew_handoff_result?: CrewHandoffResult;
-  crew_memory_add_result?: CrewMemoryAddResult;
-  crew_memory_read_result?: CrewMemoryReadResult;
-  crew_memory_summarize_result?: CrewMemorySummarizeResult;
-  crew_memory_change_result?: CrewMemoryChangeResult;
   seed_plant_result?: SeedPlantResult;
   seed_plot_result?: SeedPlotResult;
   seed_list_result?: SeedListResult;
@@ -7159,7 +7156,7 @@ model CrewPrimeResult {
   guidance?: string;
   awareness_dirs: string[];
   priming_bytes: int32;
-  memory_enabled?: boolean;
+  v2_enabled?: boolean;
 }
 
 // File the calling session's member letter and end its day. The note is the
@@ -7172,7 +7169,6 @@ model CrewHandoffMessage {
   cmd: "crew_handoff";
   session_id: SessionID;
   note: string;
-  day?: string;
   // Turn the day over with the letter this day already filed, instead of
   // writing one. The way out of a turnover that failed behind a filed letter:
   // the line is append-only, so the letter cannot be written a second time.
@@ -7195,8 +7191,6 @@ enum CrewDayClose {
 model CrewHandoffResult {
   member: string;
   path: string;
-  day_id?: int64;
-  pending_summaries?: int32;
   // The session living the member's new day. Absent when no nap ran.
   session_id?: SessionID;
   // Why no successor was woken, when none was.
@@ -7204,100 +7198,6 @@ model CrewHandoffResult {
   // What the day did: `nap` started the next one, `sleep` ended it. Absent when
   // neither happened, which is what nap_error explains.
   outcome?: CrewDayClose;
-}
-
-@extension("x-on", #{ home: true })
-model CrewMemoryAddMessage {
-  cmd: "crew_memory_add";
-  session_id?: SessionID;
-  text: string;
-}
-
-@extension("x-on", #{ home: true })
-model CrewMemoryRecallMessage {
-  cmd: "crew_memory_recall";
-  session_id?: SessionID;
-  profile_id?: string;
-  member?: string;
-  pattern: string;
-}
-
-@extension("x-on", #{ home: true })
-model CrewMemoryZoomMessage {
-  cmd: "crew_memory_zoom";
-  session_id?: SessionID;
-  profile_id?: string;
-  member?: string;
-  target: string;
-}
-
-@extension("x-on", #{ home: true })
-model CrewMemorySummarizeMessage {
-  cmd: "crew_memory_summarize";
-  session_id?: SessionID;
-  answers?: CrewMemoryAnswer[];
-}
-
-model CrewMemoryAnswer {
-  range: string;
-  text: string;
-}
-
-@extension("x-on", #{ home: true })
-model CrewMemoryForgetMessage {
-  cmd: "crew_memory_forget";
-  session_id?: SessionID;
-  id: int64;
-}
-
-@extension("x-on", #{ home: true })
-model CrewMemoryRewriteMessage {
-  cmd: "crew_memory_rewrite";
-  session_id?: SessionID;
-  range: string;
-}
-
-@extension("x-on", #{ home: true })
-model CrewMemoryImportMessage {
-  cmd: "crew_memory_import";
-  session_id?: SessionID;
-  lines: CrewMemoryImportLine[];
-}
-
-model CrewMemoryImportLine {
-  letter: string;
-  text: string;
-}
-
-model CrewMemoryAddResult {
-  member: string;
-  id: int64;
-}
-
-model CrewMemoryReadResult {
-  member: string;
-  lines: string[];
-  matches?: int32;
-  letter?: string;
-  session_id?: SessionID;
-}
-
-model CrewMemorySummaryBlock {
-  range: string;
-  lines: string[];
-}
-
-model CrewMemorySummarizeResult {
-  member: string;
-  pending_summaries: int32;
-  blocks: CrewMemorySummaryBlock[];
-  handoff?: CrewHandoffResult;
-}
-
-model CrewMemoryChangeResult {
-  member: string;
-  pending_summaries: int32;
-  imported?: int32;
 }
 
 // The roster, pushed on initial_state and whenever a member is registered,

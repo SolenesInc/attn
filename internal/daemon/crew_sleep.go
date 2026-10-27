@@ -73,7 +73,7 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 		}, nil
 	}
 
-	prompt := prompts.RenderText("crew", "sleep-requested", prompts.Values{"crew_memory_enabled": fmt.Sprint(d.crewMemoryEnabled())})
+	prompt := prompts.RenderText("crew", "sleep-requested", prompts.Values{})
 	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", crew.DisplayName(member.ID), err)

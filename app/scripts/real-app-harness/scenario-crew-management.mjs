@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs, shownAgentId } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore, shownAgentId } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -260,6 +260,8 @@ try {
     agentExecutables: { codex: wrapper, claude: wrapper },
   });
   await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
+  queueDaemonSettingRestore(observer, 'crew_v2_enabled');
+  runAttn(['settings', 'set', 'crew_v2_enabled', 'true']);
   runAttn(['crew', 'set', awake, '--cwd', awakeHome, '--agent', 'codex']);
   membersRegistered = true;
   runAttn(['crew', 'set', asleep, '--cwd', asleepHome]);
@@ -569,6 +571,10 @@ try {
     await sleptEvent;
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Asleep' });
     await screenshot('10-member-asleep.png');
+    await click('[data-testid="crew-tab-handoffs"]');
+    await waitForDom('[data-testid="crew-handoff-reader"]', { textIncludes: 'CREW_PANEL_HANDOFF' });
+    runner.assert((await panelText()).includes('2 letters'), 'v2 session records stay out of the letter history');
+    await click('[data-testid="crew-tab-launch"]');
     const wokenEvent = waitForCrew(awake, (member) => member.binding_session && member.binding_session !== firstSession, 'the next wake', 45_000);
     const wakeLaunchReceipt = waitForFileSignal(wakeReceipt, 'the next mock launch', 45_000);
     await click('[data-testid="crew-wake"]');

@@ -54,7 +54,7 @@ const (
 	SettingAsksEnabled                   = settingkeys.SettingAsksEnabled
 	SettingCaptureShortcut               = settingkeys.SettingCaptureShortcut
 	SettingQuickCaptureEnabled           = settingkeys.SettingQuickCaptureEnabled
-	SettingCrewMemoryEnabled             = settingkeys.SettingCrewMemoryEnabled
+	SettingCrewV2Enabled                 = settingkeys.SettingCrewV2Enabled
 	SettingCalloutsEnabled               = settingkeys.SettingCalloutsEnabled
 	SettingAutoSettleArmSeconds          = settingkeys.SettingAutoSettleArmSeconds
 	SettingAutoSettleCountdownSeconds    = settingkeys.SettingAutoSettleCountdownSeconds
@@ -141,7 +141,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(settingOutpostLastError), scope: daemonScope, description: "Last outpost bridge error, kept until the next successful connection.", readOnly: true},
 	{key: string(SettingCaptureShortcut), scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: string(SettingQuickCaptureEnabled), scope: daemonScope, experimental: true, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingCrewMemoryEnabled), scope: daemonScope, experimental: true, description: "Enable experimental crew memory: true or false. Crew guidance and harness memory settings apply at the next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: string(SettingCrewV2Enabled), scope: daemonScope, experimental: true, description: "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingNewSessionLauncherEnabled), scope: daemonScope, experimental: true, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingDirectAgentLaunchEnabled), scope: daemonScope, experimental: true, description: "Launch agents directly: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingCodexSharedEnabled), scope: daemonScope, experimental: true, description: "Use the shared Codex app server: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},

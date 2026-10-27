@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { KeptConversationListResult, KeptConversationRow } from '../../types/generated';
+import type { KeptConversationCrewLetter, KeptConversationListResult, KeptConversationRow } from '../../types/generated';
+import { crewDisplayName } from '../../utils/crewName';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { matchesWords } from './ledgerQuery';
 import { fullStamp } from './ledgerTime';
@@ -27,6 +28,12 @@ function date(iso: string): string {
   return iso.slice(0, 10);
 }
 
+const letterDateFormat = new Intl.DateTimeFormat('en-GB', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+function letterLabel(letter: KeptConversationCrewLetter): string {
+  return `${crewDisplayName(letter.member)} · ${letterDateFormat.format(new Date(letter.occurred_at))}`;
+}
+
 function pinned(row: KeptConversationRow): boolean {
   return Boolean(row.pinned_at || row.kept?.pinned_at);
 }
@@ -37,7 +44,7 @@ function retention(row: KeptConversationRow): string {
   const pin = row.pinned_at || kept?.pinned_at;
   if (pin) return `Forever · pinned ${date(pin)}`;
   if (row.seeds.length) return `Open: ${row.seeds.map((seed) => seed.slug || seed.title).join(', ')}`;
-  if (row.crew_days?.length) return `Crew day: ${row.crew_days.map((day) => `${day.member} #${day.day_id}`).join(', ')}`;
+  if (row.crew_letters?.length) return `Crew letter: ${row.crew_letters.map(letterLabel).join(', ')}`;
   if (kept?.delete_after) return `Deletes ${date(kept.delete_after)}`;
   return row.pending_reason || 'Waiting for the next keep pass';
 }
@@ -45,7 +52,7 @@ function retention(row: KeptConversationRow): string {
 function verbs(row: KeptConversationRow, confirming: boolean): RowVerb[] {
   if (confirming) return [{ id: 'cancel', label: 'Cancel' }, { id: 'confirm-forget', label: 'Forget now', danger: true }];
   const actions: RowVerb[] = [{ id: pinned(row) ? 'unkeep' : 'keep', label: pinned(row) ? 'Unkeep' : 'Keep forever' }];
-  if (row.kept && !row.kept.deleted_at && row.seeds.length === 0 && !row.crew_days?.length) actions.push({ id: 'forget', label: 'Forget…', danger: true });
+  if (row.kept && !row.kept.deleted_at && row.seeds.length === 0 && !row.crew_letters?.length) actions.push({ id: 'forget', label: 'Forget…', danger: true });
   return actions;
 }
 
@@ -151,8 +158,8 @@ function ConversationInspector({ row, confirming, note, onCopy, onOpenSeed, onVe
         {row.seeds.length > 0 && <Field label="Open seeds">{row.seeds.map((seed) => <div key={seed.id}>
           <button type="button" className="ledger-link" onClick={() => onOpenSeed(seed.id)}>{seed.slug || seed.title}</button>
         </div>)}<div className="ledger-muted">Harvest or wither these seeds before forgetting the copy.</div></Field>}
-        {!!row.crew_days?.length && <Field label="Crew days">{row.crew_days.map((day) => <div key={`${day.member}:${day.day_id}`}>
-          {day.member} #{day.day_id}
+        {!!row.crew_letters?.length && <Field label="Crew letters">{row.crew_letters.map((letter) => <div key={`${letter.member}:${letter.filename}`} title={letter.filename}>
+          {letterLabel(letter)}
         </div>)}</Field>}
         {confirming && <p className="ledger-verdict-text">Delete attn’s copy of {row.title || row.resume_id} ({amount(row.kept?.bytes ?? 0)})? Claude’s own files are not touched.</p>}
         {note && note.kind !== 'busy' && <p className="ledger-row-note is-refused" role="status">{note.text}</p>}

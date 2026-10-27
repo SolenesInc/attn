@@ -102,7 +102,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	if err != nil {
 		return nil, err
 	}
-	days, err := d.crewDayReferences()
+	letters, err := d.crewLetterReferences()
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	for key := range seeds {
 		references[key] = true
 	}
-	for key := range days {
+	for key := range letters {
 		references[key] = true
 	}
 	for key := range references {
@@ -168,12 +168,12 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 				continue
 			}
 			row.Kept, row.SourceBytes = nil, nil
-			names := make([]string, 0, len(seeds[key])+len(days[key]))
+			names := make([]string, 0, len(seeds[key])+len(letters[key]))
 			for _, seed := range seeds[key] {
 				names = append(names, "open seed "+seed.Slug)
 			}
-			for _, day := range days[key] {
-				names = append(names, "crew day "+day.Member+" #"+day.DayID)
+			for _, letter := range letters[key] {
+				names = append(names, "crew letter "+letter.Member+" "+letter.Filename)
 			}
 			sort.Strings(names)
 			if row.PinnedAt != nil {
@@ -194,7 +194,7 @@ func (d *Daemon) keptConversationList(includeDeleted bool) (*protocol.KeptConver
 	}
 	for key, row := range rowsByKey {
 		row.Title, row.SessionIds, row.Seeds = key.resumeID, []protocol.SessionID{}, seeds[key]
-		row.CrewDays = days[key]
+		row.CrewLetters = letters[key]
 		if row.Seeds == nil {
 			row.Seeds = []protocol.KeptConversationSeed{}
 		}
@@ -277,17 +277,17 @@ func (d *Daemon) forgetConversation(id string) error {
 			sort.Strings(names)
 			return fmt.Errorf("conversation %s is kept by open seeds: %s; harvest or wither them before forgetting", key.resumeID, strings.Join(names, ", "))
 		}
-		days, err := d.crewDayReferences()
+		letters, err := d.crewLetterReferences()
 		if err != nil {
 			return err
 		}
-		if len(days[key]) > 0 {
-			names := make([]string, 0, len(days[key]))
-			for _, day := range days[key] {
-				names = append(names, day.Member+" #"+day.DayID)
+		if len(letters[key]) > 0 {
+			names := make([]string, 0, len(letters[key]))
+			for _, letter := range letters[key] {
+				names = append(names, letter.Member+" "+letter.Filename)
 			}
 			sort.Strings(names)
-			return fmt.Errorf("conversation %s is kept by crew days: %s", key.resumeID, strings.Join(names, ", "))
+			return fmt.Errorf("conversation %s is kept by crew letters: %s", key.resumeID, strings.Join(names, ", "))
 		}
 		kept, exists := d.store.KeptConversation(key.agent, key.resumeID)
 		if !exists || !kept.DeletedAt.IsZero() {

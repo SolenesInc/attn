@@ -176,29 +176,45 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 	}
 }
 
-func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConversationCrewDay, error) {
+func (d *Daemon) crewLetterReferences() (map[conversationKey][]protocol.KeptConversationCrewLetter, error) {
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		return nil, err
 	}
-	referenced := make(map[conversationKey][]protocol.KeptConversationCrewDay)
+	referenced := make(map[conversationKey][]protocol.KeptConversationCrewLetter)
 	for _, member := range members {
-		lock := d.crewMemoryLock(member.ID)
-		lock.Lock()
-		home, err := d.crewMemoryHome(member)
-		var memory crew.Memory
-		if err == nil {
-			memory, err = crew.ReadMemory(home)
-		}
-		lock.Unlock()
+		dir, err := d.validateCrewHandoffsDir(member)
 		if err != nil {
-			return nil, fmt.Errorf("crew day references for %s: %w", member.ID, err)
+			return nil, err
 		}
-		for id, entry := range memory.Entries {
-			if entry.Day == nil || entry.Day.Session == "" {
+		letters, err := os.ReadDir(dir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("crew letter references for %s: %w", member.ID, err)
+		}
+		for _, letter := range letters {
+			if letter.IsDir() || !strings.HasSuffix(letter.Name(), ".md") {
 				continue
 			}
-			sessionID := protocol.SessionID(entry.Day.Session)
+			path := filepath.Join(dir, letter.Name())
+			for _, file := range []string{path, path + ".json"} {
+				if err := d.validateCrewLetterPath(member, file); err != nil {
+					return nil, err
+				}
+			}
+			sessionID, err := crew.HandoffSession(path)
+			if err != nil {
+				return nil, err
+			}
+			if sessionID == "" {
+				continue
+			}
+			when, err := crewHandoffTime(letter.Name())
+			if err != nil {
+				return nil, err
+			}
 			session := d.store.SessionLedgerEntry(sessionID)
 			if session == nil {
 				continue
@@ -208,7 +224,7 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 				continue
 			}
 			key := conversationKey{session.Agent, resumeID}
-			referenced[key] = append(referenced[key], protocol.KeptConversationCrewDay{Member: member.ID, DayID: strconv.Itoa(id)})
+			referenced[key] = append(referenced[key], protocol.KeptConversationCrewLetter{Member: member.ID, Filename: letter.Name(), OccurredAt: when})
 		}
 	}
 	return referenced, nil
@@ -223,11 +239,11 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	for key := range seeds {
 		referenced[key] = true
 	}
-	days, err := d.crewDayReferences()
+	letters, err := d.crewLetterReferences()
 	if err != nil {
 		return nil, err
 	}
-	for key := range days {
+	for key := range letters {
 		referenced[key] = true
 	}
 	pins, err := d.store.ConversationPins()
