@@ -35,6 +35,8 @@ const (
 	SessionSnoozeCommitted    = "session-snooze-committed"
 	SessionTeardownPrepared   = "session-teardown-prepared"
 	SessionExitObserved       = "session-process-exit-observed"
+	AgentTerminalStarted      = "agent-terminal-started"
+	CodexViewReleaseChecked   = "codex-view-release-checked"
 	PtyExitOwnerResolved      = "pty-exit-owner-resolved"
 	PtyExitHandled            = "pty-exit-handled"
 	DriverTranscriptCaptured  = "driver-transcript-captured"

@@ -172,15 +172,22 @@ func (d *Daemon) agentStarted(sessionID protocol.SessionID, launch *AgentLaunch)
 
 func (d *Daemon) commitAgentLaunch(_ context.Context, msg protocol.LaunchCommittedMessage) (struct{}, error) {
 	sessionID, ok := d.shownIn(msg.TerminalID)
-	if !ok {
-		return struct{}{}, nil
-	}
 	if !msg.Committed {
-		if session := d.store.Get(sessionID); session != nil {
-			d.abortMachineAgent(sessionID, msg.TerminalID, session.ProfileID)
+		if ok {
+			d.abortMachineAgent(sessionID, msg.TerminalID)
+		} else {
+			d.linkTerminalDropped(msg.TerminalID)
 		}
+		d.life.Go("releaseLinksAfterLaunchAbort", func() {
+			for _, link := range d.links() {
+				link.profileReleased(msg.ProfileID)
+			}
+		})
 		d.terminals().unexpect(msg.TerminalID)
 		d.kickMonitorTerminals()
+		return struct{}{}, nil
+	}
+	if !ok {
 		return struct{}{}, nil
 	}
 	if exit := d.finishPluginSessionLaunch(sessionID, true); exit != nil {
@@ -189,16 +196,14 @@ func (d *Daemon) commitAgentLaunch(_ context.Context, msg protocol.LaunchCommitt
 	return struct{}{}, nil
 }
 
-func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harness.TerminalID, profile string) {
+func (d *Daemon) abortMachineAgent(sessionID protocol.SessionID, terminal harness.TerminalID) {
 	d.sessionMonitor(sessionID).ForgetInitialPrompt()
 	d.abortPluginSessionLaunch(sessionID, "launch_failed")
-	if l := d.linkOf(sessionID); l != nil {
-		l.launchFailed(terminal, profile)
-	}
+	d.linkTerminalDropped(terminal)
 }
 
-func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool) {
-	_, err := Call[struct{}](context.Background(), d.router(), protocol.LaunchCommittedMessage{Cmd: protocol.CmdLaunchCommitted, TerminalID: terminal, Committed: committed})
+func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, profileID string) {
+	_, err := Call[struct{}](context.Background(), d.router(), protocol.LaunchCommittedMessage{Cmd: protocol.CmdLaunchCommitted, TerminalID: terminal, Committed: committed, ProfileID: profileID})
 	if err != nil {
 		d.logf("launch_committed: terminal=%s committed=%t: %v", terminal, committed, err)
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -92,7 +93,7 @@ type spawnOutcome struct {
 
 func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if plan.agent != nil {
-		d.launchCommitted(plan.spawnOpts.ID, false)
+		d.launchCommitted(plan.spawnOpts.ID, false, plan.agent.Profile)
 	}
 	if d.store.Get(sessionID) == nil {
 		d.forgetMonitor(sessionID)
@@ -414,11 +415,10 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.agent.PreviousLink = previousLink
 	}
 	if err := d.startSessionTerminal(session, terminal, plan.spawnOpts, plan.agent); err != nil {
-		plan.rollback(d, msg.ID)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
-			d.forgetMonitor(msg.ID)
 		}
+		plan.rollback(d, msg.ID)
 		if plan.chiefAssigned {
 			d.clearChiefOfStaffIfSession(msg.ID)
 		}
@@ -426,6 +426,8 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	if req.isShell {
 		d.clearExitScreenBefore(msg.ID, req.spawnStartedAt)
+	} else {
+		pausepoint.At(pausepoint.AgentTerminalStarted)
 	}
 	return &spawnOutcome{}
 }
@@ -557,11 +559,10 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		req.placed = d.placeAnsweringRequester(session, req.placement, req.policy.requester)
 	}
 	if req.placed.err != nil {
-		cleanupErr := errors.Join(d.killSessionRuntime(plan.spawnOpts.ID), d.removeSessionRuntime(plan.spawnOpts.ID))
 		if req.existingSession == nil {
 			d.store.Remove(session.ID)
-			d.forgetMonitor(session.ID)
 		}
+		cleanupErr := errors.Join(d.killSessionRuntime(plan.spawnOpts.ID), d.removeSessionRuntime(plan.spawnOpts.ID))
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
@@ -575,7 +576,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
 	}
 	if plan.agent != nil {
-		d.launchCommitted(plan.spawnOpts.ID, true)
+		d.launchCommitted(plan.spawnOpts.ID, true, plan.agent.Profile)
 	}
 	return &spawnOutcome{}
 }
@@ -589,7 +590,7 @@ func (d *Daemon) commitAddedTerminal(req *spawnRequest, plan *spawnPlan, session
 	}
 	plan.commit()
 	d.publishFact(FactSessionReregistered, string(session.ID), nil)
-	d.launchCommitted(plan.spawnOpts.ID, true)
+	d.launchCommitted(plan.spawnOpts.ID, true, plan.agent.Profile)
 	return &spawnOutcome{}
 }
 

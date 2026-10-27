@@ -90,9 +90,6 @@ func (d *Daemon) startTerminal(_ context.Context, msg protocol.TerminalStartMess
 		if launchErr == nil {
 			return
 		}
-		if agent != nil {
-			d.abortMachineAgent(session.ID, msg.TerminalID, agent.Profile)
-		}
 		d.terminals().unexpect(msg.TerminalID)
 		d.kickMonitorTerminals()
 	}()

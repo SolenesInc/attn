@@ -247,6 +247,38 @@ func TestALaunchWhoseTerminalCannotStartClosesItsRun(t *testing.T) {
 	}
 }
 
+func TestALaunchWhosePlacementFailsClosesItsDriverRun(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
+	awaitDriverAvailable(app, "snipe")
+	cwd := w.Path("shop")
+	anchor := w.Spawn(app, shellHarness, cwd)
+	desktop, pane := placedPane(t, w, anchor)
+	driver.mu.Lock()
+	driver.holdLaunch = true
+	driver.mu.Unlock()
+	request := protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(uuid.NewString()), Agent: "snipe", Cwd: cwd,
+		ProfileID: app.SelectedProfile(), Cols: 100, Rows: 30,
+		Placement: &protocol.SessionPlacement{DesktopID: protocol.Ptr(desktop.ID), AnchorPaneID: protocol.Ptr(pane)},
+	}
+	app.Send(request)
+	call := driver.asked("driver.spawn", nil)
+	if closed := closeTileFromApp(w.App(), desktop.ID, pane); !closed.Success {
+		t.Fatal(protocol.Deref(closed.Error))
+	}
+	driver.answer(call, map[string]any{"argv": []string{"/bin/cat"}})
+	launch := driver.launched()
+	refused := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == request.ID })
+	if refused.Success {
+		t.Fatal("launch beside a removed anchor succeeded")
+	}
+	if got := driver.closed(); got.SessionID != launch.SessionID || got.RunID != launch.RunID || got.Reason != "launch_failed" {
+		t.Fatalf("failed placement closed %+v, want run %s closed as launch_failed", got, launch.RunID)
+	}
+}
+
 func TestAStopIsClassifiedOnlyForItsOwnRunAndAFailedVerdictIsUnknown(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Claude)
 	app := w.App()

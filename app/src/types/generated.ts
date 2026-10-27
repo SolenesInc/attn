@@ -6600,6 +6600,7 @@ export enum KittyPlacementsMessageEvent {
 export interface LaunchCommittedMessage {
     cmd:         LaunchCommittedMessageCmd;
     committed:   boolean;
+    profile_id:  string;
     terminal_id: string;
     [property: string]: any;
 }
@@ -22721,6 +22722,7 @@ const typeMap: any = {
     "LaunchCommittedMessage": o([
         { json: "cmd", js: "cmd", typ: r("LaunchCommittedMessageCmd") },
         { json: "committed", js: "committed", typ: true },
+        { json: "profile_id", js: "profile_id", typ: "" },
         { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
     "LaunchDesktopGetMessage": o([
