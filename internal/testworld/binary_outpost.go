@@ -30,7 +30,8 @@ func buildOutpostFixture(kind string) (string, error) {
 		return "", err
 	}
 	root := filepath.Dir(strings.TrimSpace(string(module)))
-	name, transform := "", func(s string) string { return s }
+	var name string
+	var transform func(string) string
 	switch kind {
 	case "newer-schema":
 		name = "internal/store/migrations.go"
