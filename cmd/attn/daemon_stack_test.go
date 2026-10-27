@@ -52,13 +52,19 @@ func TestDaemonUnderANamedInstanceOpensWithABannerNamingItsSocketAndPort(t *test
 		t.Fatal(err)
 	}
 
-	s.Vars = append(s.Vars, "ATTN_INSTANCE=banner")
-	s.Start()
-	s.Stop()
-	stderr := s.DaemonStderr()
-	banner, _, _ := strings.Cut(stderr, "\n")
+	env := []string{"ATTN_INSTANCE=banner"}
+	t.Cleanup(func() {
+		if result := s.Run(testworld.Invocation{Args: []string{"daemon", "stop"}, Env: env}); result.Code != 0 {
+			t.Errorf("stop the named daemon: %+v", result)
+		}
+	})
+	got := s.Run(testworld.Invocation{Args: []string{"daemon", "ensure"}, Env: env})
+	if got.Code != 0 {
+		t.Fatalf("start the named daemon: %+v", got)
+	}
+	banner, _, _ := strings.Cut(got.Stderr, "\n")
 	if want := "[attn instance=banner socket=" + s.Socket + " port=" + port + "]"; banner != want {
-		t.Fatalf("attn daemon under instance banner opened stderr with %q, want %q\nstderr:\n%s", banner, want, stderr)
+		t.Fatalf("attn daemon under instance banner opened stderr with %q, want %q\nstderr:\n%s", banner, want, got.Stderr)
 	}
 }
 

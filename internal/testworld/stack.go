@@ -226,15 +226,6 @@ func (s *Stack) stderrPath() string {
 	return filepath.Join(s.Dir, "daemon.stderr")
 }
 
-func (s *Stack) DaemonStderr() string {
-	s.T.Helper()
-	data, err := os.ReadFile(s.stderrPath())
-	if err != nil {
-		s.T.Fatal(err)
-	}
-	return string(data)
-}
-
 func (s *Stack) Stop() {
 	if s.daemon == nil {
 		return
