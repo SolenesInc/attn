@@ -19,7 +19,8 @@ import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mj
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const VENT = 'ANALYTICS7 attn seed tend refused a seed held by a session that ended two hours ago. Retried twice, then used --force.';
-const WITHDRAWN = 'ANALYTICS8 kubectl cannot reach the cluster from this VM.';
+const WITHDRAWN = 'ANALYTICS8 attn ask list printed asks from another profile.';
+const TOOL = 'ANALYTICS9 The ship-pr skill links a skill file that does not exist.';
 const IDLE_MS = 5_000;
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -42,8 +43,8 @@ async function press(key) {
   await client.request('dom_focus', { selector: page });
   await driver.pressKey(key);
 }
-async function vent(session, words) {
-  const recorded = await cli('vent', '--session', session, words);
+async function vent(session, words, about = 'attn') {
+  const recorded = await cli('vent', '--about', about, '--session', session, words);
   return recorded.match(/vent (v-[a-z0-9]+) recorded/)[1];
 }
 
@@ -54,14 +55,17 @@ runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, cre
 try {
   await launchFreshAppAndConnect(client, observer);
   queueDaemonSettingRestore(observer, 'analytics.enabled');
-  await writeDaemonSettings([{ key: 'analytics.enabled', value: 'true' }]);
-  const [first, second] = [path.join(root, 'garden'), path.join(root, 'deploy')];
-  fs.mkdirSync(first);
-  fs.mkdirSync(second);
+  queueDaemonSettingRestore(observer, 'analytics.tool_vents');
+  await writeDaemonSettings([{ key: 'analytics.enabled', value: 'true' }, { key: 'analytics.tool_vents', value: 'true' }]);
+  const [first, second, third] = [path.join(root, 'garden'), path.join(root, 'deploy'), path.join(root, 'release')];
+  for (const dir of [first, second, third]) fs.mkdirSync(dir);
   const venting = await createSessionAndWaitForInitialPane({ client, observer, cwd: first, label: 'fix garden bell staleness', agent: 'claude' });
   created.push(venting);
   const withdrawing = await createSessionAndWaitForInitialPane({ client, observer, cwd: second, label: 'songcheck deploy', agent: 'claude' });
   created.push(withdrawing);
+  const tooling = await createSessionAndWaitForInitialPane({ client, observer, cwd: third, label: 'write release notes', agent: 'claude' });
+  created.push(tooling);
+  await vent(tooling, TOOL, 'tools');
   await vent(venting, VENT);
   await cli('vent', 'withdraw', '--session', withdrawing, await vent(withdrawing, WITHDRAWN));
 
@@ -74,6 +78,15 @@ try {
     runner.assert(list.indexOf('New') < list.indexOf('ANALYTICS7') && list.indexOf('ANALYTICS7') < list.indexOf('Done') && list.indexOf('Done') < list.indexOf('ANALYTICS8'), 'new vent above the withdrawn one', list);
     await wait(inspector, { textIncludes: 'Kept on this machine' });
     await shot('00-vents');
+  });
+  await runner.step('tool_vent_stays_here', async () => {
+    await wait('ol[aria-label="Vents"] .analytics-kind', { textIncludes: 'tools' });
+    await client.request('dom_click', { selector: 'ol[aria-label="Vents"] li:nth-child(2) button' });
+    await wait(inspector, { textIncludes: 'ANALYTICS9' });
+    await wait(inspector, { textIncludes: 'tool vents never leave it' });
+    await shot('00-tool-vent');
+    await client.request('dom_click', { selector: 'ol[aria-label="Vents"] li:first-child button' });
+    await wait(inspector, { textIncludes: 'ANALYTICS7' });
   });
   await runner.step('dismiss_undo_with_keys', async () => {
     await press('d');
@@ -110,10 +123,12 @@ try {
   await runner.step('clear_the_local_record', async () => {
     await press('m');
     await wait('[data-testid="analytics-machine"]', { textIncludes: 'records,' });
+    await wait('[data-testid="analytics-machine"]', { textIncludes: 'Tool vents' });
+    await shot('04-machine');
     await client.request('dom_click', { selector: '[data-testid="analytics-machine"] .settings-row-card:last-child button.danger' });
     await client.request('dom_click', { selector: '.analytics-confirm button.danger' });
     await wait('[role="status"]', { textIncludes: 'Cleared' });
-    await shot('04-cleared');
+    await shot('05-cleared');
     await press('m');
   });
   await runner.step('idle_page_is_still', async () => {
@@ -121,7 +136,7 @@ try {
     await delay(IDLE_MS);
     runner.assert(animations.length === 0, 'no animation runs on the open page', animations);
     runner.assert((await text(page)) === before, `the page did not change in ${IDLE_MS}ms idle`, { before });
-    await shot('05-idle');
+    await shot('06-idle');
   });
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
 } catch (error) {
