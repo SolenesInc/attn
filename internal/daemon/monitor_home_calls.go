@@ -35,9 +35,9 @@ func (d *Daemon) autoSettleSettings() sessionmonitor.AutoSettleSettings {
 		return sessionmonitor.AutoSettleSettings{}
 	}
 	return sessionmonitor.AutoSettleSettings{
-		Enabled:   parseBooleanSetting(d.daemonSetting(SettingAutoSettleEnabled)),
-		Arm:       resolveAutoSettleSeconds(d.daemonSetting(SettingAutoSettleArmSeconds), defaultAutoSettleArmSeconds),
-		Countdown: resolveAutoSettleSeconds(d.daemonSetting(SettingAutoSettleCountdownSeconds), defaultAutoSettleCountdownSeconds),
+		Enabled:   parseBooleanSetting(d.homeSetting(SettingAutoSettleEnabled)),
+		Arm:       resolveAutoSettleSeconds(d.homeSetting(SettingAutoSettleArmSeconds), defaultAutoSettleArmSeconds),
+		Countdown: resolveAutoSettleSeconds(d.homeSetting(SettingAutoSettleCountdownSeconds), defaultAutoSettleCountdownSeconds),
 	}
 }
 
@@ -159,7 +159,7 @@ func (d *Daemon) runClassifier(ctx context.Context, agent protocol.SessionAgent,
 			ctx,
 			driver,
 			text,
-			d.store.GetSetting(executableSettingKey(string(agent))),
+			d.machineSetting(MachineSetting(executableSettingKey(string(agent)))),
 			directory,
 			d.classifierModel(ctx, string(agent)),
 			timeout,
@@ -172,7 +172,7 @@ func (d *Daemon) runClassifier(ctx context.Context, agent protocol.SessionAgent,
 		ctx,
 		claude,
 		text,
-		d.store.GetSetting(canonicalExecutableSettingKey("claude")),
+		d.machineSetting(SettingClaudeExecutable),
 		"",
 		d.classifierModel(ctx, "claude"),
 		timeout,
@@ -323,11 +323,11 @@ func (d *Daemon) classifyPluginStop(session *protocol.Session, text string) (str
 }
 
 func (d *Daemon) quietNotifications() bool {
-	return parseBooleanSetting(d.daemonSetting(SettingQueueQuietNotifications)) && d.queueFlowOn()
+	return parseBooleanSetting(d.homeSetting(SettingQueueQuietNotifications)) && d.queueFlowOn()
 }
 
 func (d *Daemon) queueFlowOn() bool {
-	return parseBooleanSetting(d.daemonSetting(SettingQueueModeEnabled))
+	return parseBooleanSetting(d.homeSetting(SettingQueueModeEnabled))
 }
 
 func (d *Daemon) touchSession(sessionID protocol.SessionID) {

@@ -42,7 +42,7 @@ func (d *Daemon) launchedWithVent(sessionID protocol.SessionID) bool {
 func (d *Daemon) experimentalSettingsOn() []string {
 	on := []string{}
 	for _, spec := range settingSpecs {
-		if spec.experimental && parseBooleanSetting(d.store.GetSetting(spec.key)) {
+		if spec.experimental && parseBooleanSetting(d.settingValue(spec, spec.key, nil)) {
 			on = append(on, spec.key)
 		}
 	}
@@ -55,7 +55,7 @@ func (d *Daemon) handleRecordVent(conn net.Conn, msg *protocol.RecordVentMessage
 		d.sendError(conn, err.Error())
 		return
 	}
-	if d.analyticsSharing() && parseBooleanSetting(d.daemonSetting(SettingAnalyticsShareVents)) {
+	if d.analyticsSharing() && parseBooleanSetting(d.homeSetting(SettingAnalyticsShareVents)) {
 		if err := d.queueVentRecord(vent); err != nil {
 			d.logf("vent %s: queueing its record: %v", vent.ID, err)
 		} else {

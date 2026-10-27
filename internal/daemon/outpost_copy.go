@@ -110,8 +110,18 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 	if err := json.Unmarshal(request, &rows); err != nil {
 		return nil, fmt.Errorf("decode copy batch: %w", err)
 	}
+	var before map[string]string
+	for _, row := range rows {
+		if row.Table == protocol.CopyTableSettings {
+			before = d.settingValues()
+			break
+		}
+	}
 	if err := d.store.ApplyCopy(ctx, home, rows); err != nil {
 		return nil, err
+	}
+	if before != nil {
+		d.refreshChangedSettings(before)
 	}
 	d.pruneRuntimesWithoutSession(d.life.Context())
 	pausepoint.At(pausepoint.CopyBatchApplied)
@@ -121,6 +131,7 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 // dropStaleCopy keeps only the copy from the home this daemon is enrolled to, and closes a bridge from any
 // other home.
 func (d *Daemon) dropStaleCopy() error {
+	before := d.settingValues()
 	d.outpost.mu.Lock()
 	status, err := enrollment.Load(d.dataRoot)
 	if err == nil {
@@ -140,6 +151,7 @@ func (d *Daemon) dropStaleCopy() error {
 	if err := d.store.DropCopyNotFrom(home); err != nil {
 		return err
 	}
+	d.refreshChangedSettings(before)
 	d.pruneRuntimesWithoutSession(d.life.Context())
 	return nil
 }

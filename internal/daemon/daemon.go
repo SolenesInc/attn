@@ -47,6 +47,7 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/settingkeys"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -620,8 +621,6 @@ func (d *Daemon) Start() error {
 	d.store.OnEmptyDesktop(d.desktopEmptied)
 	d.removeLegacyStateFile()
 	d.ensurePluginSupervisor()
-	d.applyHeadlessContextWindowCap()
-	d.applyHeadlessTasksMode()
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
 	}
@@ -636,11 +635,13 @@ func (d *Daemon) Start() error {
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}
+	d.applyHeadlessContextWindowCap()
+	d.applyHeadlessTasksMode()
 	pausepoint.At(pausepoint.DaemonEnrollmentLoaded)
 	if err := d.recoverQuickCaptureAssets(); err != nil {
 		d.logf("quick capture asset recovery incomplete: %v", err)
 	}
-	if d.daemonSetting(settingOutpostListen) != "" {
+	if d.machineSetting(settingOutpostListen) != "" {
 		d.configureOutpostListener()
 	}
 	if d.outpostsEnabled() {
@@ -723,7 +724,7 @@ func (d *Daemon) Start() error {
 			break
 		}
 
-		sharedEnabled := parseBooleanSetting(d.daemonSetting(SettingSharedPTYHostEnabled))
+		sharedEnabled := parseBooleanSetting(d.machineSetting(SettingSharedPTYHostEnabled))
 		useSharedForNew := sharedEnabled && sharedBackend.SharedArtifactReady()
 		if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
 			useSharedForNew = true
@@ -2572,7 +2573,21 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 			d.sendError(conn, fmt.Sprintf("%s declares no placement", cmd))
 			return
 		}
-		if place.Locator == protocol.LocatorHome || cmd == protocol.CmdSeedArtifactTransfer {
+		homeSetting := false
+		if place.Locator == protocol.LocatorSetting {
+			setting, ok := msg.(*protocol.SetSettingMessage)
+			if !ok {
+				d.sendError(conn, "setting locator requires a setting key")
+				return
+			}
+			spec, err := writableSetting(setting.Key)
+			if err != nil {
+				d.sendError(conn, err.Error())
+				return
+			}
+			homeSetting = spec.class == settingkeys.Home
+		}
+		if place.Locator == protocol.LocatorHome || homeSetting || cmd == protocol.CmdSeedArtifactTransfer {
 			status := d.enrollmentStatus()
 			if !status.IsHome() {
 				if cmd == protocol.CmdSeedArtifactTransfer {

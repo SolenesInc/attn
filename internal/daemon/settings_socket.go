@@ -8,11 +8,12 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/settingkeys"
 )
 
-func settingEntry(spec settingSpec, key, value string) protocol.SettingEntry {
+func (d *Daemon) settingEntry(spec settingSpec, key, value string) protocol.SettingEntry {
 	entry := protocol.SettingEntry{Key: key, Scope: protocol.SettingScopeDaemon, Description: spec.description, Value: &value}
-	if spec.readOnly {
+	if spec.readOnly || spec.class == settingkeys.Home && !d.enrollmentStatus().IsHome() {
 		entry.ReadOnly = protocol.Ptr(true)
 	}
 	if strings.Contains(key, "<") {
@@ -27,7 +28,10 @@ func (d *Daemon) settingValue(spec settingSpec, key string, computed map[string]
 		value, _ := computed[key].(string)
 		return value
 	}
-	return d.daemonSetting(daemonSettingKey(key))
+	if spec.class == settingkeys.Machine {
+		return d.machineSetting(MachineSetting(key))
+	}
+	return d.homeSetting(HomeSetting(key))
 }
 
 func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.SettingsListResult, *protocol.SettingEntry, error) {
@@ -42,7 +46,7 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 	if key != "" {
 		spec, _ := lookupSetting(key)
 		value := d.settingValue(spec, key, values)
-		entry := settingEntry(spec, key, value)
+		entry := d.settingEntry(spec, key, value)
 		return nil, &entry, nil
 	}
 	result := &protocol.SettingsListResult{Entries: []protocol.SettingEntry{}}
@@ -51,7 +55,7 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 			continue
 		}
 		value := d.settingValue(spec, spec.key, values)
-		result.Entries = append(result.Entries, settingEntry(spec, spec.key, value))
+		result.Entries = append(result.Entries, d.settingEntry(spec, spec.key, value))
 		if !strings.Contains(spec.key, "<") {
 			continue
 		}
@@ -59,7 +63,7 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 			matched, ok := lookupSetting(concrete)
 			if ok && matched.key == spec.key && concrete != spec.key {
 				value := d.settingValue(spec, concrete, values)
-				result.Entries = append(result.Entries, settingEntry(spec, concrete, value))
+				result.Entries = append(result.Entries, d.settingEntry(spec, concrete, value))
 			}
 		}
 	}

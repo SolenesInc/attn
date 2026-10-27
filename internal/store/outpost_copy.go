@@ -10,11 +10,13 @@ import (
 
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/settingkeys"
 )
 
 var copyKeys = map[protocol.CopyTable]string{
 	protocol.CopyTableSessions:         "id",
 	protocol.CopyTableTerminalBindings: "terminal_id",
+	protocol.CopyTableSettings:         "key",
 }
 
 type OutboxBatch struct {
@@ -96,6 +98,9 @@ func queryOutbox(db *sql.DB, host string) ([]outboxEntry, error) {
 
 func currentCopyRows(db *sql.DB, host string, entry outboxEntry, carried map[string]bool) ([]protocol.CopyRow, error) {
 	switch entry.table {
+	case protocol.CopyTableSettings:
+		row, err := copyRow(db, entry.table, entry.key, `SELECT * FROM settings WHERE key = ? AND copied_from = ''`, entry.key)
+		return []protocol.CopyRow{row}, err
 	case protocol.CopyTableSessions:
 		row, err := copyRow(db, entry.table, entry.key, `SELECT * FROM sessions WHERE id = ? AND host = ? AND closed_at = ''`, entry.key, host)
 		return []protocol.CopyRow{row}, err
@@ -160,48 +165,66 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	tx, err := s.db.Begin()
+	settingsChanged := false
+	err := s.copyTransaction(ctx, func(tx *sql.Tx) error {
+		var err error
+		var sessions, bindings, settings []protocol.CopyRow
+		var deleted []string
+		for _, row := range rows {
+			switch {
+			case row.Table == protocol.CopyTableSessions && row.Columns == nil:
+				deleted = append(deleted, row.Key)
+			case row.Table == protocol.CopyTableSessions:
+				row.Columns["copied_from"] = home
+				sessions = append(sessions, row)
+			case row.Table == protocol.CopyTableTerminalBindings:
+				bindings = append(bindings, row)
+			case row.Table == protocol.CopyTableSettings:
+				settingsChanged = true
+				if settingkeys.ClassOf(row.Key) != settingkeys.Home {
+					return fmt.Errorf("cannot copy machine setting %s", row.Key)
+				}
+				if row.Columns != nil {
+					row.Columns["copied_from"] = home
+				}
+				settings = append(settings, row)
+			default:
+				return fmt.Errorf("copy row names unknown table %q", row.Table)
+			}
+		}
+		columns := map[protocol.CopyTable]map[string]bool{}
+		for table := range copyKeys {
+			if columns[table], err = tableColumns(tx, string(table)); err != nil {
+				return err
+			}
+		}
+		for _, row := range append(append(sessions, bindings...), settings...) {
+			if row.Columns == nil {
+				if row.Table == protocol.CopyTableSettings {
+					_, err = tx.Exec(`DELETE FROM settings WHERE key = ? AND copied_from = ?`, row.Key, home)
+				} else {
+					_, err = tx.Exec(`DELETE FROM terminal_bindings WHERE terminal_id = ?`, row.Key)
+				}
+			} else {
+				err = upsertCopyRow(tx, row, columns[row.Table])
+			}
+			if err != nil {
+				return fmt.Errorf("apply copy of %s %s: %w", row.Table, row.Key, err)
+			}
+		}
+		if err := deleteCopiedSessions(tx, `copied_from = ? AND id IN (SELECT value FROM json_each(?))`, home, jsonList(deleted)); err != nil {
+			return err
+		}
+		pausepoint.At(pausepoint.CopyBatchStaged)
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	var sessions, bindings []protocol.CopyRow
-	var deleted []string
-	for _, row := range rows {
-		switch {
-		case row.Table == protocol.CopyTableSessions && row.Columns == nil:
-			deleted = append(deleted, row.Key)
-		case row.Table == protocol.CopyTableSessions:
-			row.Columns["copied_from"] = home
-			sessions = append(sessions, row)
-		case row.Table == protocol.CopyTableTerminalBindings:
-			bindings = append(bindings, row)
-		default:
-			return fmt.Errorf("copy row names unknown table %q", row.Table)
-		}
-	}
-	columns := map[protocol.CopyTable]map[string]bool{}
-	for table := range copyKeys {
-		if columns[table], err = tableColumns(tx, string(table)); err != nil {
+	if settingsChanged {
+		if err := s.reloadSettingsLocked(); err != nil {
 			return err
 		}
-	}
-	for _, row := range append(sessions, bindings...) {
-		if row.Columns == nil {
-			_, err = tx.Exec(`DELETE FROM terminal_bindings WHERE terminal_id = ?`, row.Key)
-		} else {
-			err = upsertCopyRow(tx, row, columns[row.Table])
-		}
-		if err != nil {
-			return fmt.Errorf("apply copy of %s %s: %w", row.Table, row.Key, err)
-		}
-	}
-	if err := deleteCopiedSessions(tx, `copied_from = ? AND id IN (SELECT value FROM json_each(?))`, home, jsonList(deleted)); err != nil {
-		return err
-	}
-	pausepoint.At(pausepoint.CopyBatchStaged)
-	if err := tx.Commit(); err != nil {
-		return err
 	}
 	s.announceTerminalBindingsLocked()
 	return nil
@@ -212,15 +235,17 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 func (s *Store) DropCopyNotFrom(home string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	tx, err := s.db.Begin()
+	err := s.copyTransaction(context.Background(), func(tx *sql.Tx) error {
+		if err := deleteCopiedSessions(tx, `copied_from != '' AND (copied_from != ? OR closed_at != '')`, home); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`DELETE FROM settings WHERE copied_from != '' AND copied_from != ?`, home)
+		return err
+	})
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	if err := deleteCopiedSessions(tx, `copied_from != '' AND (copied_from != ? OR closed_at != '')`, home); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
+	if err := s.reloadSettingsLocked(); err != nil {
 		return err
 	}
 	s.announceTerminalBindingsLocked()
@@ -257,7 +282,11 @@ func upsertCopyRow(tx *sql.Tx, row protocol.CopyRow, known map[string]bool) erro
 			updates = append(updates, name+" = excluded."+name)
 		}
 	}
-	query := `INSERT INTO ` + string(row.Table) + ` (` + strings.Join(names, ", ") + `) VALUES (` + strings.TrimSuffix(strings.Repeat("?, ", len(names)), ", ") + `) ON CONFLICT(` + keyColumn + `) DO `
+	conflict := keyColumn
+	if row.Table == protocol.CopyTableSettings {
+		conflict += ", copied_from"
+	}
+	query := `INSERT INTO ` + string(row.Table) + ` (` + strings.Join(names, ", ") + `) VALUES (` + strings.TrimSuffix(strings.Repeat("?, ", len(names)), ", ") + `) ON CONFLICT(` + conflict + `) DO `
 	if len(updates) == 0 {
 		query += `NOTHING`
 	} else {
@@ -313,10 +342,13 @@ func (s *Store) RequeueOutpostCopy(host string) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT host,'sessions',id FROM sessions WHERE host = ? AND closed_at = '' ON CONFLICT(tbl,key) DO NOTHING`, host); err != nil {
+	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT host,'sessions',id FROM sessions WHERE host = ? AND closed_at = '' ON CONFLICT(host,tbl,key) DO NOTHING`, host); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT s.host,'terminal_bindings',b.terminal_id FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE s.host = ? AND s.closed_at = '' ON CONFLICT(tbl,key) DO NOTHING`, host); err != nil {
+	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT s.host,'terminal_bindings',b.terminal_id FROM terminal_bindings b JOIN sessions s ON s.id = b.session_id WHERE s.host = ? AND s.closed_at = '' ON CONFLICT(host,tbl,key) DO NOTHING`, host); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO outpost_outbox(host,tbl,key) SELECT ?, 'settings', key FROM settings WHERE copied_from = '' AND attn_home_setting(key) ON CONFLICT(host,tbl,key) DO NOTHING`, host); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {
@@ -339,4 +371,34 @@ func (s *Store) SessionHost(id protocol.SessionID) (host string, copied bool) {
 	var origin string
 	_ = s.db.QueryRow(`SELECT host,copied_from FROM sessions WHERE id = ?`, id).Scan(&host, &origin)
 	return host, origin != ""
+}
+
+func (s *Store) copyTransaction(ctx context.Context, apply func(*sql.Tx) error) error {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if err := conn.Raw(func(raw any) error { raw.(*sqliteConnection).copyApplying = true; return nil }); err != nil {
+		return err
+	}
+	defer conn.Raw(func(raw any) error { raw.(*sqliteConnection).copyApplying = false; return nil })
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := apply(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) reloadSettingsLocked() error {
+	settings, copies, err := readSettings(s.db)
+	if err != nil {
+		return err
+	}
+	s.settings, s.settingCopies = settings, copies
+	return nil
 }

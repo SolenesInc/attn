@@ -3,6 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseCommonArgs, printCommonHelp, queryDaemonDb } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
@@ -137,8 +138,8 @@ function legacyWorkspacesSql(fixtureDir) {
   return statements.join('\n');
 }
 
-function sqlite(dbPath, script) {
-  execFileSync('sqlite3', [dbPath], { input: script, stdio: ['pipe', 'pipe', 'pipe'] });
+function sqlite(dbPath, script, env) {
+  execFileSync('go', ['run', './scripts/migration-fixture', dbPath], { cwd: fileURLToPath(new URL('../../..', import.meta.url)), input: script, env, stdio: ['pipe', 'pipe', 'pipe'] });
 }
 
 async function poll(read, predicate, description, timeoutMs = 20_000) {
@@ -238,7 +239,7 @@ async function main() {
       seeded = true;
       const legacyDir = path.join(runner.sessionDir, 'legacy');
       fs.mkdirSync(legacyDir, { recursive: true });
-      sqlite(dbPath, legacyWorkspacesSql(fs.realpathSync(legacyDir)));
+      sqlite(dbPath, legacyWorkspacesSql(fs.realpathSync(legacyDir)), instanceCliEnv(instance));
     });
 
     await runner.step('startup_converts_and_the_app_opens_on_the_intro', async () => {

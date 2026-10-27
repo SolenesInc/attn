@@ -22,6 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/rankkey"
+	"github.com/victorarias/attn/internal/settingkeys"
 )
 
 const sqliteFileConnectionPoolSize = 16
@@ -1562,7 +1563,21 @@ func (c *sqliteConnector) Connect(context.Context) (driver.Conn, error) {
 		c.release(nil)
 		return nil, err
 	}
-	return &sqliteConnection{SQLiteConn: conn.(*sqlite3.SQLiteConn), owner: c}, nil
+	connection := &sqliteConnection{SQLiteConn: conn.(*sqlite3.SQLiteConn), owner: c}
+	if err := connection.RegisterFunc("attn_require_copy_applier", func(table, key string) (bool, error) {
+		if !connection.copyApplying {
+			return false, fmt.Errorf("cannot write copied %s row %s", table, key)
+		}
+		return true, nil
+	}, false); err != nil {
+		_ = connection.Close()
+		return nil, err
+	}
+	if err := connection.RegisterFunc("attn_home_setting", func(key string) bool { return settingkeys.ClassOf(key) == settingkeys.Home }, true); err != nil {
+		_ = connection.Close()
+		return nil, err
+	}
+	return connection, nil
 }
 
 func (c *sqliteConnector) Driver() driver.Driver {
@@ -1614,7 +1629,8 @@ func (c *sqliteConnector) release(err error) {
 
 type sqliteConnection struct {
 	*sqlite3.SQLiteConn
-	owner *sqliteConnector
+	owner        *sqliteConnector
+	copyApplying bool
 }
 
 func (c *sqliteConnection) Close() error {
@@ -1638,7 +1654,11 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, nil, err
 	}
+	db, writes := connectSQLite(dbPath)
+	return db, writes, nil
+}
 
+func connectSQLite(dbPath string) (*sql.DB, *tableWrites) {
 	writes := &tableWrites{}
 	db := sql.OpenDB(&sqliteConnector{
 		driver: &sqlite3.SQLiteDriver{ConnectHook: func(conn *sqlite3.SQLiteConn) error {
@@ -1673,7 +1693,7 @@ func openSQLite(dbPath string) (*sql.DB, *tableWrites, error) {
 		db.SetMaxOpenConns(sqliteFileConnectionPoolSize)
 		db.SetMaxIdleConns(sqliteFileConnectionPoolSize)
 	}
-	return db, writes, nil
+	return db, writes
 }
 
 func (s *Store) RefuseCommits() func() {
@@ -1722,10 +1742,7 @@ func migratedSchemaImage() ([]byte, error) {
 }
 
 func buildMigratedSchemaImage() ([]byte, error) {
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		return nil, err
-	}
+	db, _ := connectSQLite(":memory:")
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 	if _, err := upgradeSchema(db, ":memory:"); err != nil {
@@ -1739,7 +1756,7 @@ func buildMigratedSchemaImage() ([]byte, error) {
 	var image []byte
 	err = conn.Raw(func(driverConn any) error {
 		var err error
-		image, err = driverConn.(*sqlite3.SQLiteConn).Serialize("main")
+		image, err = driverConn.(*sqliteConnection).Serialize("main")
 		return err
 	})
 	return image, err

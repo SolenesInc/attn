@@ -310,6 +310,7 @@ enum OutpostReach {
 enum CopyTable {
   sessions,
   terminal_bindings,
+  settings,
 }
 
 model CopyRow {
@@ -1758,7 +1759,7 @@ model GetSettingsMessage {
   all?: boolean;
 }
 
-@extension("x-on", #{ here: true })
+@extension("x-on", #{ setting: "key" })
 model SetSettingMessage {
   cmd: "set_setting";
   request_id?: string;

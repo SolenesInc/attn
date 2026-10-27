@@ -63,7 +63,7 @@ func (d *Daemon) configureOutpostListener() {
 		old.cancel()
 		<-old.done
 	}
-	address := d.daemonSetting(settingOutpostListen)
+	address := d.machineSetting(settingOutpostListen)
 	if address == "" {
 		d.setOutpostListenerState(nil, "off", nil)
 		return
@@ -92,6 +92,7 @@ func (d *Daemon) configureOutpostListener() {
 		Handlers:       d.outpostHandlers(),
 		Update:         d.outpostUpdateServer(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
+			before := d.settingValues()
 			r.mu.Lock()
 			status, err := enrollment.RecordHome(d.dataRoot, home.DaemonID, home.Name)
 			if err == nil {
@@ -101,6 +102,7 @@ func (d *Daemon) configureOutpostListener() {
 			if err != nil {
 				return &bridge.Refusal{Reason: "home", Detail: err.Error()}
 			}
+			d.refreshChangedSettings(before)
 			return nil
 		},
 		OnError: func(err error) {

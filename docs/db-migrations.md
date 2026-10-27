@@ -18,7 +18,9 @@ restore a backup taken before the upgrade with `attn db restore`.
   and refuses to overwrite it; rerun to get the current timestamp. Existing
   14-digit UTC-second IDs remain supported. Write SQL in the empty file.
 - Write plain SQL. Each migration runs once; do not add existence guards to
-  accommodate another branch's schema.
+  accommodate another branch's schema. Keep the schema readable by system SQLite
+  on supported platforms, which can be older than the Go driver's bundled version.
+  Packaged-app checks exercise those readers too.
 - Use Go only for data logic SQL cannot express:
 
   ```sh

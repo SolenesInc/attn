@@ -99,7 +99,7 @@ func (d *Daemon) analyticsBuild() analytics.Build {
 }
 
 func (d *Daemon) analyticsSharing() bool {
-	return d.analyticsEnabled() && parseBooleanSetting(d.daemonSetting(SettingAnalyticsSharingEnabled))
+	return d.analyticsEnabled() && parseBooleanSetting(d.homeSetting(SettingAnalyticsSharingEnabled))
 }
 
 func (d *Daemon) queueAnalyticsShip() {

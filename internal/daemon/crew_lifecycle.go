@@ -99,17 +99,17 @@ func (m *crewLifecycleMemo) forget(sessionID protocol.SessionID) {
 	delete(m.lastSleepPromptAttempt, sessionID)
 }
 
-func (d *Daemon) crewBoolSetting(name string) bool {
+func (d *Daemon) crewBoolSetting(name HomeSetting) bool {
 	if d.store == nil {
 		return true
 	}
-	return !strings.EqualFold(strings.TrimSpace(d.store.GetSetting(name)), "false")
+	return !strings.EqualFold(strings.TrimSpace(d.homeSetting(name)), "false")
 }
 
-func (d *Daemon) crewSeconds(name string, fallback, min, max int) time.Duration {
+func (d *Daemon) crewSeconds(name HomeSetting, fallback, min, max int) time.Duration {
 	seconds := fallback
 	if d.store != nil {
-		raw := strings.TrimSpace(d.store.GetSetting(name))
+		raw := strings.TrimSpace(d.homeSetting(name))
 		if raw != "" {
 			parsed := resolveBoundedIntSetting(raw, fallback, min, max)
 			if parsed == fallback && raw != fmt.Sprint(fallback) {
@@ -131,8 +131,8 @@ func (d *Daemon) crewCacheTTL(agent string) time.Duration {
 		fallback = crewCacheTTLCodex
 	}
 	if agent != "" && d.store != nil {
-		if raw := strings.TrimSpace(d.daemonSetting(daemonSettingKey(SettingCrewCacheTTLPrefix + agent))); raw != "" {
-			return d.crewSeconds(SettingCrewCacheTTLPrefix+agent, fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
+		if raw := strings.TrimSpace(d.homeSetting(SettingCrewCacheTTLPrefix + HomeSetting(agent))); raw != "" {
+			return d.crewSeconds(SettingCrewCacheTTLPrefix+HomeSetting(agent), fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 		}
 	}
 	return d.crewSeconds(SettingCrewCacheTTLSeconds, fallback, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
@@ -149,7 +149,7 @@ func (d *Daemon) crewAwayLimit() time.Duration {
 func (d *Daemon) crewWakeLedger() crew.WakeLedger {
 	limit := crewWakeLimitDefault
 	if d.store != nil {
-		if raw := strings.TrimSpace(d.daemonSetting(SettingCrewWakeLimit)); raw != "" {
+		if raw := strings.TrimSpace(d.homeSetting(SettingCrewWakeLimit)); raw != "" {
 			limit = resolveBoundedIntSetting(raw, crewWakeLimitDefault, 0, crewWakeLimitMax)
 		}
 	}

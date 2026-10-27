@@ -113,6 +113,9 @@ func runSettings() {
 		if value == "" {
 			value = "-"
 		}
+		if protocol.Deref(entry.ReadOnly) {
+			scope += ", read-only"
+		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", entry.Key, scope, value, entry.Description)
 	}
 	_ = w.Flush()

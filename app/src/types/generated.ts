@@ -2889,6 +2889,7 @@ export interface CopyRow {
 
 export enum CopyTable {
     Sessions = "sessions",
+    Settings = "settings",
     TerminalBindings = "terminal_bindings",
 }
 
@@ -26570,6 +26571,7 @@ const typeMap: any = {
     ],
     "CopyTable": [
         "sessions",
+        "settings",
         "terminal_bindings",
     ],
     "CreateWorktreeFromBranchMessageCmd": [

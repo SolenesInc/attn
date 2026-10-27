@@ -175,7 +175,7 @@ var Placements = map[string][]Placement{
 	"set_session_context_window_cap":   {Placement{LocatorHome, ""}},
 	"set_session_priority":             {Placement{LocatorHome, ""}},
 	"set_session_resume_id":            {Placement{LocatorHere, ""}},
-	"set_setting":                      {Placement{LocatorHere, ""}},
+	"set_setting":                      {Placement{LocatorSetting, "key"}},
 	"snooze_turn":                      {Placement{LocatorHome, ""}},
 	"state":                            {Placement{LocatorHere, ""}},
 	"state_explain":                    {Placement{LocatorHome, ""}},
@@ -2021,11 +2021,11 @@ func (SetSettingMessage) CommandName() string {
 }
 
 func (m SetSettingMessage) Placement() Placement {
-	return Placement{LocatorHere, ""}
+	return Placement{LocatorSetting, "key"}
 }
 
 func (m SetSettingMessage) Locate() string {
-	return ""
+	return string(m.Key)
 }
 
 func (SnoozeTurnMessage) CommandName() string {

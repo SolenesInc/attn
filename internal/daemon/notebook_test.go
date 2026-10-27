@@ -14,7 +14,7 @@ import (
 func newNotebookDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
+	d.store.SetSetting(string(SettingNotebookRoot), t.TempDir())
 	return d
 }
 
@@ -33,13 +33,13 @@ func readNotebookWSEvent(t *testing.T, ch chan outboundMessage, target any) {
 func TestNotebookWatcherFollowsRootChange(t *testing.T) {
 	d := newNotebookDaemon(t)
 	t.Cleanup(d.stopNotebookWatcher)
-	rootA := d.store.GetSetting(SettingNotebookRoot)
+	rootA := d.store.GetSetting(string(SettingNotebookRoot))
 	rootB := t.TempDir()
 	client := &wsClient{send: make(chan outboundMessage, 64)}
 	d.wsHub.clients[client] = true
 
 	listNotebook(t, d)
-	d.store.SetSetting(SettingNotebookRoot, rootB)
+	d.store.SetSetting(string(SettingNotebookRoot), rootB)
 	if listed := listNotebook(t, d); len(listed) != 0 {
 		t.Fatalf("listing after the root moved to an empty directory returned %v", listed)
 	}

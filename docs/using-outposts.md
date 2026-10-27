@@ -81,6 +81,25 @@ with production or another named instance.
 The first connection pairs them, with no prompt. The home remembers the
 outpost's identity, and the outpost accepts only this home from then on.
 
+## Read and change settings
+
+Home settings, such as model defaults and automatic settlement, apply on every
+outpost. Each outpost keeps a read-only copy and reads it locally, including
+while the home is unreachable. `attn settings set` on an outpost changes a home
+setting at the home. The copy follows when the bridge delivers the change.
+`attn settings list --all` marks the outpost's home settings read-only.
+
+Machine settings describe one computer: harness executables, the terminal
+backend and shared terminal host, worktree sweep, analytics recording,
+`notebook.root`, `outposts_enabled`, and `outpost_listen`. Changing one on an
+outpost changes only that outpost. Computed machine values, such as harness
+availability and connection status, also describe the computer where you read
+them.
+
+After `attn enrollment leave`, the machine uses the settings it had before
+pairing. Home settings can be read while offline, but changing them requires
+the home to be reachable.
+
 ## Update outposts
 
 After installing a new home build, click **Update outposts** in the banner
