@@ -47,6 +47,9 @@ func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.De
 	if err := validateDelegateRequestShape(msg); err != nil {
 		return nil, err
 	}
+	if filepath.IsAbs(msg.Cwd) || namesHome(msg.Cwd) {
+		msg.CwdBase = nil
+	}
 	profile, err := d.resolveGardenProfile(protocol.Deref(msg.SourceSessionID), protocol.Deref(msg.ProfileID), "")
 	if err != nil {
 		return nil, err
@@ -69,6 +72,9 @@ func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.De
 		}
 		if protocol.TrimID(protocol.Deref(saved.SourceSessionID)) == "" {
 			saved.SourceSessionID = nil
+		}
+		if filepath.IsAbs(saved.Cwd) || namesHome(saved.Cwd) {
+			saved.CwdBase = nil
 		}
 		normalized, err := json.Marshal(saved)
 		if err != nil {

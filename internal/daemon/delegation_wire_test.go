@@ -34,7 +34,8 @@ func TestADelegationRetryReturnsTheAcceptedOperationAfterTheRolesChange(t *testi
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	request := brief(cwd, "rename the checkout module")
+	request := brief(".", "rename the checkout module")
+	request.CwdBase = &cwd
 	request.RequestID = "rename-request"
 	request.Role = protocol.Ptr("build")
 
@@ -61,6 +62,11 @@ func TestADelegationRetryReturnsTheAcceptedOperationAfterTheRolesChange(t *testi
 	changed.Assignment.Brief = protocol.Ptr("rename the payments module")
 	if _, err := cli.StartDelegation(changed); err == nil || !strings.Contains(err.Error(), "different inputs") {
 		t.Errorf("a retry that changed the request under the same request id = %v; want the request-id conflict", err)
+	}
+	changed = request
+	changed.CwdBase = protocol.Ptr(w.Path("another"))
+	if _, err := cli.StartDelegation(changed); err == nil || !strings.Contains(err.Error(), "different inputs") {
+		t.Errorf("a retry that changed the relative directory's base = %v; want the request-id conflict", err)
 	}
 }
 
