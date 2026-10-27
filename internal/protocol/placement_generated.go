@@ -144,6 +144,7 @@ var Placements = map[string][]Placement{
 	"record_analytics":                 {Placement{LocatorHere, ""}},
 	"record_vent":                      {Placement{LocatorHome, ""}},
 	"rename_session":                   {Placement{LocatorHome, ""}},
+	"reopen_inspect":                   {Placement{LocatorMachine, "host"}},
 	"restart_shared_codex":             {Placement{LocatorHere, ""}},
 	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
 	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
@@ -1656,6 +1657,18 @@ func (m RenameSessionMessage) Placement() Placement {
 
 func (m RenameSessionMessage) Locate() string {
 	return ""
+}
+
+func (ReopenInspectMessage) CommandName() string {
+	return "reopen_inspect"
+}
+
+func (m ReopenInspectMessage) Placement() Placement {
+	return Placement{LocatorMachine, "host"}
+}
+
+func (m ReopenInspectMessage) Locate() string {
+	return string(m.Host)
 }
 
 func (RestartSharedCodexMessage) CommandName() string {

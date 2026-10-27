@@ -271,6 +271,7 @@ const (
 	CmdConversationReadiness = "conversation_readiness"
 	CmdAgentCatalog          = "agent_catalog"
 	CmdCheckoutInspect       = "checkout_inspect"
+	CmdReopenInspect         = "reopen_inspect"
 	CmdAgentLaunchClose      = "agent_launch_close"
 )
 

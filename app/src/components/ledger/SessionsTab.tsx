@@ -1,3 +1,4 @@
+import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import { SessionPriority } from '../SessionPriority';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
@@ -187,9 +188,9 @@ export function SessionsTab({
       seed: seedForSession?.(entry.id) ?? null,
       sessionLabel,
       nameText,
-      canKeepConversation: !!setConversationKeep,
+      canKeepConversation: !!setConversationKeep && !entry.host,
       actionsAvailable: !!onReopen,
-      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && attemptFor(entry)?.verdict?.directoryState !== 'missing',
+      canShowWorktree: !entry.host && !!onShowWorktree && !!entry.is_worktree && attemptFor(entry)?.verdict?.directoryState !== 'missing',
       now: now(),
     }),
   })), [visible, attemptFor, isLive, seedForSession, sessionLabel, nameText, onReopen, onShowWorktree, now, setConversationKeep, keepNotices]);
@@ -426,6 +427,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const meta: ReactNode[] = [
     entry.priority ? <SessionPriority key="priority" priority /> : null,
     entry.agent,
+    entry.host ? <LedgerHost key="host" host={entry.host} /> : null,
     profileText(entry) || null,
     <span className="is-mono is-path" title={entry.directory} key="dir">{shortPath(entry.directory)}</span>,
     entry.branch ? <span className="is-mono" key="branch">{entry.branch}</span> : null,
@@ -537,6 +539,12 @@ interface SessionInspectorProps {
   actionsAvailable: boolean;
 }
 
+function LedgerHost({ host }: { host: string }) {
+  const api = useOptionalDaemonApi();
+  const name = api?.outposts.find((outpost) => outpost.id === host)?.name ?? host;
+  return <span title={`Runs on ${name}`}>{name}</span>;
+}
+
 function SessionKicker({ entry, live }: { entry: SessionLedgerEntry; live: boolean }) {
   return (
     <>
@@ -545,6 +553,7 @@ function SessionKicker({ entry, live }: { entry: SessionLedgerEntry; live: boole
       {live && entry.hidden && <span title={HIDDEN_HINT}>· hidden</span>}
       <span>·</span>
       <span>{entry.agent}</span>
+      {entry.host && <><span>·</span><LedgerHost host={entry.host} /></>}
     </>
   );
 }
@@ -607,7 +616,7 @@ function SessionInspector({
       {isClosed(entry) && (
         <ReopenVerdict profileDeleted={!!entry.profile_deleted} verdict={verdict} note={note} nameText={nameText} onVerb={onVerb} actionsAvailable={actionsAvailable} />
       )}
-      <ConversationPinAction available={canKeepConversation} entry={entry} note={note} closed={isClosed(entry)} onVerb={onVerb} />
+      <ConversationPinAction available={canKeepConversation && !entry.host} entry={entry} note={note} closed={isClosed(entry)} onVerb={onVerb} />
       {live && (
         <div className="ledger-verdict-actions">
           <button type="button" className="ledger-verb is-primary" onClick={() => onVerb('focus')}>

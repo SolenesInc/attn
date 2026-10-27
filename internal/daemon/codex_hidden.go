@@ -296,8 +296,8 @@ func (r *codexShared) archiveConversation(profile string, closed protocol.Sessio
 	}
 }
 
-func (r *codexShared) setAsideAtClose(sessionID protocol.SessionID, conversation string) bool {
-	return conversation != "" && r.launchedShared(sessionID) && transcript.FindArchivedCodexTranscript(conversation) != ""
+func (r *codexShared) setAsideAtClose(conversation string) bool {
+	return conversation != "" && transcript.FindArchivedCodexTranscript(conversation) != ""
 }
 
 func (r *codexShared) restore(profile, conversation string) error {

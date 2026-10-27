@@ -32,6 +32,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.readConversationReadiness)
 	runs(parts, true, d.readAgentCatalog)
 	runs(parts, true, d.inspectCheckout)
+	runs(parts, true, d.inspectReopenHere)
 	runs(parts, false, d.createWorktreeHere)
 	runs(parts, false, d.createWorktreeFromBranchHere)
 	runs(parts, false, d.closeAgentMachine)

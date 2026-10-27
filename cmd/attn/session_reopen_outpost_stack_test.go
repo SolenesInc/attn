@@ -1,0 +1,118 @@
+package main_test
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
+)
+
+func TestLedgerResumesAnOutpostAgentOnItsMachineWithItsConversationAndCost(t *testing.T) {
+	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		t.Run(string(harness), func(t *testing.T) {
+			home := testworld.NewStack(t)
+			outpost := testworld.NewStack(t, testworld.WithAgents(harness))
+			pair := testworld.PrepareOutpostPair(t, home, outpost)
+			pair.Start()
+			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+			cwd := outpost.Path("agent")
+			outpost.SetCodexFolderTrust(cwd, "trusted")
+			id := home.Spawn(pair.App, harness, cwd, func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+			first := outpost.LaunchedCarrying(pair.App.Terminal(id))
+			pair.App.TypeLine(id, "first work")
+			first.Prompted()
+			conversation := first.ConversationID
+			reply := "First work done. <!-- attn:state=waiting_input -->"
+			first.Reply(reply)
+			testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens == 2*len(reply) })
+			if err := home.Client().Unregister(protocol.SessionID(id)); err != nil {
+				t.Fatal(err)
+			}
+			testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+				return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
+			})
+			mark := len(pair.App.Log())
+			outpost.Stop()
+			outpost.Start()
+			outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+			reopened, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			second := outpost.LaunchedCarrying(pair.App.Terminal(id))
+			if !second.Resumed || second.ConversationID != conversation || reopened.Directory != cwd {
+				t.Fatalf("resume=%t conversation=%s want=%s directory=%s", second.Resumed, second.ConversationID, conversation, reopened.Directory)
+			}
+			pair.App.TypeLine(id, "second work")
+			second.Prompted()
+			second.Reply(reply)
+			resumed := testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens == 4*len(reply) })
+			if protocol.Deref(resumed.Host) != pair.Host {
+				t.Fatalf("resumed host=%s want=%s", protocol.Deref(resumed.Host), pair.Host)
+			}
+			t.Logf("%s ledger resume: host=%s conversation=%s tokens=%d after outpost restart", harness, pair.Host, conversation, resumed.Usage.TotalTokens)
+		})
+	}
+}
+
+func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	cwd := outpost.Path("agent")
+	outpost.SetCodexFolderTrust(cwd, "trusted")
+	id := home.Spawn(pair.App, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	run := outpost.LaunchedCarrying(pair.App.Terminal(id))
+	pair.App.TypeLine(id, "save a conversation")
+	run.Prompted()
+	run.Reply("Saved. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(pair.App, id, func(s protocol.Session) bool { return s.Usage != nil })
+	if err := home.Client().Unregister(protocol.SessionID(id)); err != nil {
+		t.Fatal(err)
+	}
+	testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
+	})
+	checkRefusal := func(want ...string) {
+		t.Helper()
+		_, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id)})
+		for _, text := range want {
+			if err == nil || !strings.Contains(err.Error(), text) {
+				t.Fatalf("resume error=%v, want %q", err, text)
+			}
+		}
+		shown, showErr := home.Client().SessionShow(protocol.SessionID(id))
+		if showErr != nil || protocol.Deref(shown.Entry.ClosedAt) == "" || protocol.Deref(shown.Entry.Host) != pair.Host {
+			t.Fatalf("failed resume changed ledger: %+v, %v", shown, showErr)
+		}
+		t.Logf("resume refused, ledger remains closed on %s: %v", pair.Host, err)
+	}
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
+	checkRefusal("outpost", "unreachable")
+	mark := len(pair.App.Log())
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
+	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	rollouts, err := filepath.Glob(filepath.Join(outpost.Dir, "toolhome", ".codex", "sessions", "*", "*", "*", "*-"+run.ConversationID+".jsonl"))
+	if err != nil || len(rollouts) != 1 {
+		t.Fatalf("rollouts=%v, %v", rollouts, err)
+	}
+	if err := os.Remove(rollouts[0]); err != nil {
+		t.Fatal(err)
+	}
+	checkRefusal("conversation "+run.ConversationID, "no longer in codex's storage")
+	if err := os.RemoveAll(cwd); err != nil {
+		t.Fatal(err)
+	}
+	checkRefusal("no longer exists", cwd, pair.Host)
+	mark = len(pair.App.Log())
+	pair.App.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
+	testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	checkRefusal("outpost", pair.Host, "does not exist")
+}

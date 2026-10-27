@@ -198,6 +198,12 @@ transcript, and reload its current conversation. Harness commands such as
 `/clear`, `/new` and `/resume` keep the conversation chain and each session's
 cost. The agent's `attn` commands reach the home through its outpost daemon.
 
+A closed session's ledger row shows its outpost. **Reopen** in the Sessions
+ledger, or `attn session reopen <id>`, resumes its conversation on that same
+outpost with its cost continuing. An unreachable or removed outpost refuses
+resume and names the host. attn does not keep copies of outpost conversations;
+if the harness deleted the conversation, resume says it is no longer in storage.
+
 `attn delegate` also defaults to the caller's machine. From a home agent,
 delegate onto an outpost with:
 

@@ -16,14 +16,12 @@ type reopenBranchKey struct {
 }
 
 type reopenGit interface {
-	BranchInfo(context.Context, string) (*attngit.BranchInfo, error)
 	BranchAvailability(context.Context, string, string) (branchInspection, error)
 }
 
 func (d *Daemon) resolveReopen(
 	ctx context.Context,
 	entry protocol.SessionLedgerEntry,
-	gitView reopenGit,
 ) (sessionReopenVerdict, error) {
 	verdict := sessionReopenVerdict{
 		SessionID: entry.ID,
@@ -31,12 +29,6 @@ func (d *Daemon) resolveReopen(
 		Execution: d.reopenExecutionFromLedger(&entry),
 		Resume:    strings.TrimSpace(d.store.GetResumeSessionID(entry.ID)),
 		Live:      protocol.Deref(entry.ClosedAt) == "" && d.sessionActive(entry.ID),
-	}
-	host := d.sessionHost(entry.ID)
-	if host != "" {
-		verdict.DirectoryState = directoryUnavailable
-	} else {
-		verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
 	}
 	d.planReopenProfile(&verdict)
 
@@ -48,13 +40,25 @@ func (d *Daemon) resolveReopen(
 		verdict.Reason = fmt.Sprintf("profile %s was deleted; this session cannot reopen in another profile", verdict.ProfileID)
 		return verdict, nil
 	}
-	if host != "" {
-		verdict.Reason = d.outpostPathRefusal(verdict.Execution.Cwd, host)
-		return verdict, nil
-	}
 	_, hasLaunchIntent := d.store.LaunchIntent(entry.ID)
-	if err := d.decideReopenPlace(ctx, &verdict, hasLaunchIntent, gitView); err != nil {
+	inspection, err := Call[protocol.ReopenInspection](ctx, d.router(), protocol.ReopenInspectMessage{
+		Cmd: protocol.CmdReopenInspect, Host: protocol.Deref(entry.Host), SessionID: entry.ID,
+		Cwd: verdict.Execution.Cwd, Agent: verdict.Execution.Agent, Conversation: verdict.Resume,
+		Branch: verdict.Execution.Branch, Repository: verdict.Execution.RepositoryRoot, RepositorySubdir: verdict.Execution.RepositorySubdir,
+		Link: d.store.SessionLink(entry.ID), HasLaunchIntent: hasLaunchIntent, BranchMerged: d.branchMerged(entry.ID, verdict.Execution.Branch),
+	})
+	if err != nil {
 		return sessionReopenVerdict{}, err
+	}
+	machine := inspection.Verdict
+	verdict.Reopenable, verdict.Actions = machine.Reopenable, machine.Actions
+	verdict.DirectoryState, verdict.BranchState = machine.DirectoryState, protocol.Deref(machine.BranchState)
+	verdict.Reason, verdict.Warning = protocol.Deref(machine.Reason), protocol.Deref(machine.Warning)
+	verdict.RecreatePath = inspection.RecreatePath
+	verdict.Inspection = branchInspection{State: verdict.BranchState, Remote: inspection.Remote, StaleRegistration: inspection.StaleRegistration}
+	if protocol.Deref(entry.Host) != "" && verdict.DirectoryState == directoryMissing {
+		verdict.Actions = nil
+		verdict.Reason = fmt.Sprintf("its directory %s no longer exists on outpost %s", verdict.Execution.Cwd, protocol.Deref(entry.Host))
 	}
 	return verdict, nil
 }
@@ -74,12 +78,6 @@ func (d *Daemon) scheduledReopenGit() scheduledReopenGit {
 		inspect = inspectReopenBranchAdmitted
 	}
 	return scheduledReopenGit{daemon: d, inspect: inspect}
-}
-
-func (g scheduledReopenGit) BranchInfo(ctx context.Context, directory string) (*attngit.BranchInfo, error) {
-	return gitValue(ctx, g.daemon.gitExecution(), reopenGitTask, func(runCtx context.Context, client *attngit.Client) (*attngit.BranchInfo, error) {
-		return client.GetBranchInfo(runCtx, directory)
-	})
 }
 
 func (g scheduledReopenGit) BranchAvailability(

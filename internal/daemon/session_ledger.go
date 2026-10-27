@@ -109,7 +109,6 @@ func (d *Daemon) handleSessionList(conn net.Conn, msg *protocol.SessionListMessa
 
 func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []protocol.SessionReopenEntry {
 	verdicts := make([]*protocol.SessionReopenEntry, len(entries))
-	gitView := d.scheduledReopenGit()
 	pending := make(chan int, len(entries))
 	for i, entry := range entries {
 		if protocol.Deref(entry.ClosedAt) != "" {
@@ -122,7 +121,7 @@ func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []
 		workers[i] = func() {
 			for index := range pending {
 				entry := entries[index]
-				verdict, err := d.resolveReopen(context.Background(), entry, gitView)
+				verdict, err := d.resolveReopen(context.Background(), entry)
 				if err != nil {
 					d.logf("session list: resolve reopen eligibility for session %s: %v", entry.ID, err)
 					continue
@@ -151,7 +150,7 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 	d.decorateLedgerEntryWithUsage(&result.Entry)
 	d.decorateLedgerEntryHidden(&result.Entry)
 	d.decorateLedgerEntryWithTitle(&result.Entry)
-	verdict, err := d.resolveReopen(context.Background(), *entry, d.scheduledReopenGit())
+	verdict, err := d.resolveReopen(context.Background(), *entry)
 	if err != nil {
 		d.logf("session show: resolve reopen eligibility for session %s: %v", entry.ID, err)
 	} else {

@@ -1,0 +1,3 @@
+kind: added
+area: outposts
+change: Resume closed outpost sessions from the Sessions ledger on their original machine, with their conversation and cost continuing. Ledger rows show the host.
