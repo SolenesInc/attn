@@ -57,7 +57,7 @@ func (m *Manager) Handoff(sessionID string) (HandoffState, error) {
 	if err != nil {
 		if session.hasQuiesced() {
 			m.forget(sessionID)
-			_ = session.kill(syscall.SIGTERM, defaultKillTimeout)
+			_ = session.kill(syscall.SIGTERM, defaultKillTimeout, m.logf)
 			session.closePTY()
 			return HandoffState{}, fmt.Errorf("handoff of session %s failed after its read loop stopped; session killed: %w", sessionID, err)
 		}

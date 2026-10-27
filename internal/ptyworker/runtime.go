@@ -1236,14 +1236,15 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		}
 		c.sendResult(req.ID, map[string]any{"ok": true})
 	case MethodRemove:
-		if err := c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM); err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
+		c.shutdown = true
+		c.stopsRuntime = true
+		err := c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM)
+		c.runtime.manager.Remove(c.runtime.cfg.SessionID)
+		if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {
 			c.sendError(req.ID, ErrIO, err.Error())
 			return
 		}
-		c.runtime.manager.Remove(c.runtime.cfg.SessionID)
 		c.sendResult(req.ID, map[string]any{"ok": true})
-		c.shutdown = true
-		c.stopsRuntime = true
 	case MethodWatch:
 		c.runtime.deliverMu.Lock()
 		defer c.runtime.deliverMu.Unlock()

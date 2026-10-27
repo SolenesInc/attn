@@ -402,7 +402,7 @@ func TestSharedHost_OneLifecycleStreamCoversMultipleSessions(t *testing.T) {
 	}
 }
 
-func TestSharedHost_ShellCloseUsesHangup(t *testing.T) {
+func TestSharedHost_ShellCloseHandlesIgnoredHangup(t *testing.T) {
 	binary := os.Getenv("ATTN_TEST_PTY_HOST")
 	if binary == "" {
 		t.Skip("set ATTN_TEST_PTY_HOST to an attn-pty-host binary")
@@ -428,7 +428,7 @@ func TestSharedHost_ShellCloseUsesHangup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stream.Close()
-	if err := backend.Input(context.Background(), "shell", []byte("exec /bin/sh -c 'trap \"exit 23\" TERM; printf \"__REA%s__\\n\" DY; while :; do read line || exit; done'\n")); err != nil {
+	if err := backend.Input(context.Background(), "shell", []byte("exec /bin/sh -c 'trap \"\" HUP; trap \"exit 23\" TERM; printf \"__REA%s__\\n\" DY; while :; do read line || exit; done'\n")); err != nil {
 		t.Fatal(err)
 	}
 	waitForStreamText(t, stream, "__READY__")
@@ -437,8 +437,8 @@ func TestSharedHost_ShellCloseUsesHangup(t *testing.T) {
 	}
 	select {
 	case info := <-exited:
-		if info.Signal != "SIGHUP" {
-			t.Fatalf("shell exit = %+v, want SIGHUP without a preceding SIGTERM", info)
+		if info.Signal != "" || info.ExitCode != 23 {
+			t.Fatalf("shell exit = %+v, want its TERM trap to exit 23 despite ignored HUP", info)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("missing shell exit notification")
