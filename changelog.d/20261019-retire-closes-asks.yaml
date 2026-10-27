@@ -1,3 +1,0 @@
-kind: fixed
-area: crew
-change: Retiring a crew member closes their open asks, so they leave the Asks drawer instead of waiting there as "(asleep)". `attn crew retire` lists the asks it closed; restoring the member doesn't reopen them.

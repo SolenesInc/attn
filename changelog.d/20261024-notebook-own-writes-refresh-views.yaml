@@ -1,5 +1,5 @@
 kind: fixed
 area: notebook
-change: An open notebook file refreshes after attn journal append, send-to-chief, a write from another window, or the chief's notebook scaffold.
+change: An open notebook file refreshes after attn journal append, a write from another window, or the chief's notebook scaffold.
 symptom: The open view kept showing the old content until it was reopened.
 notes: The unused notebook_changed message and notebook.file.changed bus fact are removed, so whole-tree rescans no longer republish hundreds of unchanged notes.

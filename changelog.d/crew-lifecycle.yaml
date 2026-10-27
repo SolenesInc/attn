@@ -1,3 +1,3 @@
 kind: added
 area: crew
-change: Create, retire and restore crew members from the CLI. Clearing a member's conversation keeps them awake, with crew prime to re-orient.
+change: "Create, retire and restore crew members with `attn crew create`, `retire` and `restore`. Retiring a member closes their open asks. Clearing a member's conversation keeps them awake, and `attn crew prime` gives them their instructions again."

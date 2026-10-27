@@ -98,7 +98,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	}
 	found := false
 	for _, note := range notes.Notes {
-		if note.Author.Ref == "attn" && note.Body == "Keel was retired; attn released its claim." {
+		if note.Author.Ref == "attn" && note.Body == "Keel was retired, so attn released their claim." {
 			found = true
 		}
 	}

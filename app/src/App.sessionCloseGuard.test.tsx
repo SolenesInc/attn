@@ -42,7 +42,7 @@ describe('chief and crew sessions are protected from close', () => {
     const { daemon } = await renderOrchestrator({ chief, crew_member: 'coda' });
     pressCmdW();
     expect(closeCommands(daemon)).toEqual([]);
-    expect(toast()).toHaveTextContent('Coda is protected. Put Coda to sleep to close its session.');
+    expect(toast()).toHaveTextContent("You can't close a crew member's session. Put Coda to sleep instead.");
   });
 
   it.each([true, false])('offers Sleep for a bound member (chief=%s)', async (chief) => {

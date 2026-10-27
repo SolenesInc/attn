@@ -95,8 +95,8 @@ reading:
 changing (each accepts -m TEXT, the reason recorded in history):
   install
         install Attn's maintained roles and their attn-workflow skill.
-        Keep existing roles.
-        Named instances refuse the user-global skill install.
+        Your roles stay. When one of yours already uses an Attn role's name,
+        the Attn role gets a numeric suffix, such as builder-2.
   add <role> --name NAME [guidance] [model]
         a custom role. Its default model comes from the model flags.
   add <role> --builtin pathfinder|builder|reviewer|orchestrator|prototyper [model]

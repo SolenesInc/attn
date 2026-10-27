@@ -104,7 +104,7 @@ func (r delivery) toMember(k who.MemberKey) (recipient, error) {
 		return r.toSession(id)
 	}
 	if err := r.d.mailRefusal(who.Member(k).Address()); err != nil {
-		return recipient{wait: fmt.Sprintf("%s; restore it: attn crew restore %s", err, r.d.memberName(k))}, nil
+		return recipient{wait: fmt.Sprintf("%s; the mail waits until `attn crew restore %s` brings them back", err, r.d.memberName(k))}, nil
 	}
 	if reason := r.d.chiefWakeHeld(k); reason != "" {
 		return recipient{wait: reason}, nil

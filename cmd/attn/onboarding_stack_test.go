@@ -17,8 +17,8 @@ func TestOnboardingCommandsReportAndPersistTheNextFirstDay(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	s.Start()
-	requireStdout(t, s.Attn("onboarding"), "full path", "Pick a harness and model")
-	requireStdout(t, s.Attn("onboarding", "done"), "finished onboarding", "attn onboarding again")
+	requireStdout(t, s.Attn("onboarding"), "full path", "Pick their harness and model")
+	requireStdout(t, s.Attn("onboarding", "done"), "has no onboarding pending", "attn onboarding again")
 	var result protocol.OnboardingResult
 	s.Attn("onboarding", "--json").JSON(t, &result)
 	if !result.Onboarded || result.FirstDay != protocol.FirstDayNone {

@@ -682,10 +682,10 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
   const chiefCommands: PaletteCommand[] = [];
   if (chief.view) {
     const openSetup = () => { setSidebarCollapsed(false); chief.actions.edit(); };
-    if (chief.view.phase === 'unconfigured') chiefCommands.push({ id: 'chief-setup', title: 'Set up the chief', keywords: ['chief', 'harness', 'model'], icon: '⌁', run: openSetup });
-    if (chief.view.phase === 'asleep') chiefCommands.push({ id: 'chief-wake', title: 'Wake the chief', keywords: ['chief', 'wake'], icon: '☀', run: chief.actions.wake });
-    if (chief.view.phase === 'awake') chiefCommands.push({ id: 'chief-sleep', title: 'Put the chief to sleep', keywords: ['chief', 'sleep'], icon: '☾', run: chief.actions.sleep });
-    if (chief.view.agent) chiefCommands.push({ id: 'chief-route', title: "Change the chief's harness and model", keywords: ['chief', 'harness', 'model', 'effort'], icon: '⌁', run: openSetup });
+    if (chief.view.phase === 'unconfigured') chiefCommands.push({ id: 'chief-setup', title: 'Set up the Chief', keywords: ['chief', 'harness', 'model'], icon: '⌁', run: openSetup });
+    if (chief.view.phase === 'asleep') chiefCommands.push({ id: 'chief-wake', title: 'Wake the Chief', keywords: ['chief', 'wake'], icon: '☀', run: chief.actions.wake });
+    if (chief.view.phase === 'awake') chiefCommands.push({ id: 'chief-sleep', title: 'Put the Chief to sleep', keywords: ['chief', 'sleep'], icon: '☾', run: chief.actions.sleep });
+    if (chief.view.agent) chiefCommands.push({ id: 'chief-route', title: "Change the Chief's harness and model", keywords: ['chief', 'harness', 'model', 'effort'], icon: '⌁', run: openSetup });
   }
   return [...chiefCommands, ...navigationCommands, ...sharedCodexCommands, ...actionMenuItemsWithQueueActions];
 }

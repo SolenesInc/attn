@@ -284,7 +284,7 @@ func crewSleepOutcomeLine(result *protocol.CrewSleepResult) string {
 		}
 		return fmt.Sprintf("Sleep request for %s is queued in session %s — %s", name, agentShortID(string(protocol.Deref(result.SessionID))), detail)
 	}
-	return fmt.Sprintf("Asked %s in session %s to write its handoff and file it with `attn handoff --sleep`.", name, agentShortID(string(protocol.Deref(result.SessionID))))
+	return fmt.Sprintf("Asked %s in session %s to write their handoff letter and file it with `attn handoff --sleep`. They sleep once they file it.", name, agentShortID(string(protocol.Deref(result.SessionID))))
 }
 
 type crewDirList struct {

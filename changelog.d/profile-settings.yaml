@@ -1,4 +1,4 @@
 kind: added
 area: settings
-change: Each profile has its own Notebook folder. Read and change settings with `attn settings list|get|set`.
+change: "Each profile has its own Notebook folder. `attn settings` now also changes settings for one profile, and `attn settings list` shows whether each setting applies to one profile or to all profiles."
 notes: Existing profiles keep their folders. New profiles get folders named after them.
