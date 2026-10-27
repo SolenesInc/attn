@@ -3840,6 +3840,18 @@
           }
         },
         {
+          "id": "derived-things",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.derived-things",
+            "source": "content/skills/attn-workflow/references/derived-things.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "design",
           "delivery": "reference",
           "description": "Loaded on demand through the installed attn-workflow skill.",

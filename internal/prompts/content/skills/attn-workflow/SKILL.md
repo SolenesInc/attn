@@ -21,6 +21,7 @@ Match the task to one process in the table, read its reference, and load further
 | Change structure or shape while preserving behavior | [Refactoring](references/refactoring.md) |
 | Find what makes something slow, large or busy when it should be idle, and make it measurably better, once or against a target | [Perf](references/perf.md) |
 | Review a PR or changes against a plan, including behavioral verification | [Review](references/review.md) |
+| Decide whether a derived thing, such as a doc, a comment or a generated file, should exist, and build what keeps it current | [Derived things](references/derived-things.md) |
 | Make a kind of mistake that keeps coming back impossible to repeat in the repository | [Correction](references/correction.md) |
 | Delegate agreed work, advise implementers, and judge completion | [Orchestration](references/orchestration.md) |
 
@@ -50,7 +51,7 @@ Sequence verifiable units: order multi-step work as small units that each end in
 
 Attack the premise: when two fixes that share one assumption have failed the same check, write the assumption down and test it directly before writing a third. Each failed fix is evidence against the belief it rested on. The design is the assumption when fixes pass but keep arriving in the same shape: special cases for unrelated edge cases, casts or optional fields that are always set, a lock where the design said nothing was shared, callers that must know the callee's internal rules. Stop patching. Redesign as if the new constraint had been known from the start, aiming smaller than the patched design, and bring the redesign to the coordinating agent named in the brief, or to the user when none is named, before more patches land.
 
-Derived knowledge earns its place: the work is the truth. Documentation, including code comments, is derived from it. Before writing anything that restates the work, establish why it needs to exist and how it will stay current, such as a verification skill that checks it against the work. Otherwise, point at the source.
+**Derived things must earn their place.** The work is the truth. Anything derived from it goes stale when the work changes: documentation, code comments, summaries, generated files, copies of state. Before adding one, ask whether it is valuable enough to exist, and look for a better option that removes the need: clearer names or structure in the work itself, a pointer to the source, or deriving it when it's needed. Add it only when no better option exists, and then with a way to keep it current, as [Derived things](references/derived-things.md) describes.
 
 Update what a decision overturns: when the user's decision contradicts the repository's docs, code, or agent guidance, change them as part of the task. When the change falls outside the task, plant a seed for it that names the decision. Until those statements change, they teach what the decision overturned to every agent that reads them, including you once your context is summarized.
 
