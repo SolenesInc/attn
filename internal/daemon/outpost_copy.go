@@ -110,22 +110,18 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 	if err := json.Unmarshal(request, &rows); err != nil {
 		return nil, fmt.Errorf("decode copy batch: %w", err)
 	}
-	before := map[string]string{}
+	var before map[string]string
 	for _, row := range rows {
 		if row.Table == protocol.CopyTableSettings {
-			before[row.Key] = d.homeSetting(HomeSetting(row.Key))
+			before = d.settingValues()
+			break
 		}
 	}
 	if err := d.store.ApplyCopy(ctx, home, rows); err != nil {
 		return nil, err
 	}
-	for _, row := range rows {
-		if row.Table == protocol.CopyTableSettings {
-			value := d.homeSetting(HomeSetting(row.Key))
-			if before[row.Key] != value {
-				d.settingChanged(row.Key, value)
-			}
-		}
+	if before != nil {
+		d.refreshChangedSettings(before)
 	}
 	d.pruneRuntimesWithoutSession(d.life.Context())
 	pausepoint.At(pausepoint.CopyBatchApplied)
@@ -155,17 +151,7 @@ func (d *Daemon) dropStaleCopy() error {
 	if err := d.store.DropCopyNotFrom(home); err != nil {
 		return err
 	}
-	after := d.settingValues()
-	for key := range before {
-		if _, ok := after[key]; !ok {
-			after[key] = ""
-		}
-	}
-	for key, value := range after {
-		if before[key] != value {
-			d.settingChanged(key, value)
-		}
-	}
+	d.refreshChangedSettings(before)
 	d.pruneRuntimesWithoutSession(d.life.Context())
 	return nil
 }

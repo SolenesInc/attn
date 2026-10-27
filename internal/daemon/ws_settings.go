@@ -116,6 +116,20 @@ func (d *Daemon) settingChanged(key, value string) {
 	d.codexShared().settingChanged(key)
 }
 
+func (d *Daemon) refreshChangedSettings(before map[string]string) {
+	after := d.settingValues()
+	for key := range before {
+		if _, ok := after[key]; !ok {
+			after[key] = ""
+		}
+	}
+	for key, value := range after {
+		if before[key] != value {
+			d.settingChanged(key, value)
+		}
+	}
+}
+
 func (d *Daemon) publishSettingsFact(name, subject string) {
 	d.refreshTailscaleServeState()
 	d.publishFact(name, subject, nil)

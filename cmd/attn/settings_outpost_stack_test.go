@@ -84,3 +84,26 @@ func TestOutpostSettingsCopyRoutePersistAndRestoreLocalValues(t *testing.T) {
 	}
 	t.Log("home setting copied and read-only; outpost home write reached home; machine write stayed local; offline restart retained home values; leave restored standalone values including family keys")
 }
+
+func TestOutpostEnrollmentAppliesUnsetHomeDefaultsToRunningServices(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	for _, stack := range []*testworld.Stack{home, outpost} {
+		stack.Vars = append(stack.Vars, "ATTN_HEADLESS_TASKS=")
+	}
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	home.Start()
+	outpost.Start()
+	requireStdout(t, outpost.Attn("settings", "set", "headless_tasks.enabled", "false"), "false")
+	if got := outpost.App().Initial.Settings["headless_tasks.enabled"]; got != "false" {
+		t.Fatalf("standalone mode = %v, want false", got)
+	}
+	pair.Connect()
+	if got := outpost.App().Initial.Settings["headless_tasks.enabled"]; got != "true" {
+		t.Fatalf("enrolled service mode = %v, want home's unset/default true", got)
+	}
+	requireStdout(t, outpost.Attn("enrollment", "leave"), "no longer enrolled")
+	if got := outpost.App().Initial.Settings["headless_tasks.enabled"]; got != "false" {
+		t.Fatalf("service mode after leave = %v, want restored standalone false", got)
+	}
+	t.Log("first enrollment applies home defaults to the running headless service; leave restores its standalone mode")
+}
