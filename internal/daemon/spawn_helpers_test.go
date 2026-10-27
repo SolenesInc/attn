@@ -6,17 +6,9 @@ import (
 	"syscall"
 
 	"github.com/victorarias/attn/internal/harness"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
-
-func spawnTestClient() *wsClient {
-	return &wsClient{
-		send:            make(chan outboundMessage, 8),
-		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
-	}
-}
 
 type fakeOutputStream struct {
 	mu         sync.Mutex
