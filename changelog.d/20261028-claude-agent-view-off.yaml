@@ -1,0 +1,5 @@
+kind: fixed
+area: sessions
+symptom: In a Claude session, ← on an empty prompt or /bg made attn lose the session's label and links, pointed the agent's attn commands at another terminal, and made Reload session fail.
+change: attn launches Claude with Claude's agent view turned off, so ← and /bg no longer move the conversation into Claude's background daemon, out of attn's terminal.
+notes: Claude Code 2.1.312's agent view forks the conversation into a daemon that attn cannot follow. Claude run by hand in a shell terminal keeps it, and shell terminals no longer inherit CLAUDE_CODE_DISABLE_AGENT_VIEW or CLAUDE_CODE_DISABLE_AUTO_MEMORY from an agent that started the attn daemon. Conversations already in Claude's daemon keep running until stopped with `claude stop <id>`.

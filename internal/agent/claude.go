@@ -126,7 +126,7 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 }
 
 func (c *Claude) BuildEnv(opts SpawnOpts) []string {
-	var env []string
+	env := []string{"CLAUDE_CODE_DISABLE_AGENT_VIEW=1"}
 	if opts.CrewV2Enabled {
 		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	}

@@ -21,7 +21,7 @@ func TestAgentsNeverInheritTheClaudeSessionThatStartedTheDaemon(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	session := []string{"CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_EXECPATH", "CLAUDE_CODE_SSE_PORT",
-		"CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "CLAUDE_CODE_NO_FLICKER", "CLAUDE_EFFORT"}
+		"CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "CLAUDE_CODE_NO_FLICKER", "CLAUDE_EFFORT", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"}
 	for _, key := range session {
 		s.Vars = append(s.Vars, key+"=from-the-parent-claude")
 	}
