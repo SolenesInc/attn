@@ -54,6 +54,7 @@ func TestAutoApproveDefaultsOnAndRespectsAnExplicitChoice(t *testing.T) {
 }
 
 func TestClaudeLaunchesAndReloadsWithItsAgentViewOff(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_DISABLE_AGENT_VIEW", "")
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Claude)
