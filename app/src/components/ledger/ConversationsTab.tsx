@@ -11,7 +11,7 @@ import type { LedgerMenu, ListItem, RowNote, RowVerb } from './LedgerPrimitives'
 export interface ConversationsTabProps {
   listConversations: (includeDeleted: boolean) => Promise<KeptConversationListResult>;
   setKeep: (conversationId: string, keep: boolean) => Promise<boolean>;
-  forget: (conversationId: string) => Promise<boolean>;
+  forget: (conversationId: string, unlinkCrewLetters: boolean) => Promise<boolean>;
   changeSignal: number;
   connectionGeneration: number;
   onOpenSeed: (seedId: string) => void;
@@ -52,7 +52,7 @@ function retention(row: KeptConversationRow): string {
 function verbs(row: KeptConversationRow, confirming: boolean): RowVerb[] {
   if (confirming) return [{ id: 'cancel', label: 'Cancel' }, { id: 'confirm-forget', label: 'Forget now', danger: true }];
   const actions: RowVerb[] = [{ id: pinned(row) ? 'unkeep' : 'keep', label: pinned(row) ? 'Unkeep' : 'Keep forever' }];
-  if (row.kept && !row.kept.deleted_at && row.seeds.length === 0 && !row.crew_letters?.length) actions.push({ id: 'forget', label: 'Forget…', danger: true });
+  if (row.kept && !row.kept.deleted_at && row.seeds.length === 0) actions.push({ id: 'forget', label: 'Forget…', danger: true });
   return actions;
 }
 
@@ -98,7 +98,7 @@ export function ConversationsTab({
     setConfirmForget(null);
     setNotices((current) => ({ ...current, [key]: { kind: 'busy', text: verb === 'confirm-forget' ? 'forgetting…' : 'changing pin…' } }));
     const id = `conversation:${row.resume_id}`;
-    const request = verb === 'confirm-forget' ? forget(id) : setKeep(id, verb === 'keep');
+    const request = verb === 'confirm-forget' ? forget(id, Boolean(row.crew_letters?.length)) : setKeep(id, verb === 'keep');
     void request.then(() => {
       setNotices((current) => ({ ...current, [key]: undefined }));
     }).catch((failure: Error) => {
@@ -162,6 +162,7 @@ function ConversationInspector({ row, confirming, note, onCopy, onOpenSeed, onVe
           {letterLabel(letter)}
         </div>)}</Field>}
         {confirming && <p className="ledger-verdict-text">Delete attn’s copy of {row.title || row.resume_id} ({amount(row.kept?.bytes ?? 0)})? Claude’s own files are not touched.</p>}
+        {confirming && !!row.crew_letters?.length && <p className="ledger-verdict-text">These letters stay, but will no longer point to this transcript: {row.crew_letters.map(letterLabel).join(', ')}.</p>}
         {note && note.kind !== 'busy' && <p className="ledger-row-note is-refused" role="status">{note.text}</p>}
         <div className="ledger-verdict-actions">{verbs(row, confirming).map((verb) => <button key={verb.id} type="button"
           className={`ledger-verb${verb.danger ? ' is-danger' : ''}`} disabled={note?.kind === 'busy'} onClick={() => onVerb(verb.id)}>{verb.label}</button>)}</div>

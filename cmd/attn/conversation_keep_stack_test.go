@@ -46,7 +46,7 @@ func TestDatabaseRestorePreservesConversationArchivesFromAfterTheSnapshot(t *tes
 			}
 			testworld.AwaitTaskDone(app, "conversation_keep")
 			if state == "deleted" || state == "damaged" {
-				if err := s.Client().KeptConversationForget(run.ConversationID); err != nil {
+				if _, err := s.Client().KeptConversationForget(run.ConversationID, false); err != nil {
 					t.Fatal(err)
 				}
 			} else if err := s.Client().KeptConversationKeep(run.ConversationID, false); err != nil {

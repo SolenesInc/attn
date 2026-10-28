@@ -3785,8 +3785,8 @@ export function useDaemonSocket({
     sendRequest('kept_conversation_keep', { session_id: sessionId, keep }, 'Changing the conversation pin timed out')
   ), [sendRequest]);
 
-  const forgetConversation = useCallback((sessionId: string): Promise<boolean> => (
-    sendRequest('kept_conversation_forget', { session_id: sessionId }, 'Forgetting the conversation timed out')
+  const forgetConversation = useCallback((sessionId: string, unlinkCrewLetters: boolean): Promise<boolean> => (
+    sendRequest('kept_conversation_forget', { session_id: sessionId, unlink_crew_letters: unlinkCrewLetters }, 'Forgetting the conversation timed out')
   ), [sendRequest]);
 
   const listWorktrees = useCallback((mainRepo?: string): Promise<WorktreeListResult> => {

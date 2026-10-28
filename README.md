@@ -103,6 +103,16 @@ continues after the last worktree is removed and across daemon restarts.
 Browsing a repository does not enroll it. The sweep keeps dirty, unmerged,
 unpushed, pinned worktrees and those used by live sessions or open seeds.
 
+**Kept conversations.** The Ledger's Conversations tab shows attn's copies of
+Claude transcripts and what keeps them. **Forget…** deletes a copy after you
+confirm. For a copy kept by crew letters, the confirmation names the letters:
+they stay unchanged and no longer point to that transcript. From the CLI, run
+`attn conversation forget <id>` to see which letters keep a copy, then rerun
+with `--unlink-crew-letters` to consent. The command names the letters that
+lost their transcript. Open seeds still block Forget; harvest or wither them
+first. Claude's own files stay untouched. If removal fails partway, the error
+names what changed and how to finish.
+
 ## Supported agents
 
 | Agent | State detection | Resume |

@@ -5806,6 +5806,15 @@ type KeptConversationForgetMessage struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
+
+	// UnlinkCrewLetters corresponds to the JSON schema field "unlink_crew_letters".
+	UnlinkCrewLetters *bool `json:"unlink_crew_letters,omitempty,omitzero"`
+}
+
+type KeptConversationForgetResult struct {
+	// UnlinkedCrewLetters corresponds to the JSON schema field
+	// "unlinked_crew_letters".
+	UnlinkedCrewLetters []KeptConversationCrewLetter `json:"unlinked_crew_letters"`
 }
 
 type KeptConversationForgetResultEvent struct {
@@ -5814,6 +5823,10 @@ type KeptConversationForgetResultEvent struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// KeptConversationForgetResult corresponds to the JSON schema field
+	// "kept_conversation_forget_result".
+	KeptConversationForgetResult *KeptConversationForgetResult `json:"kept_conversation_forget_result,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
@@ -8982,6 +8995,10 @@ type Response struct {
 	// JournalAppendResult corresponds to the JSON schema field
 	// "journal_append_result".
 	JournalAppendResult *JournalAppendResult `json:"journal_append_result,omitempty,omitzero"`
+
+	// KeptConversationForgetResult corresponds to the JSON schema field
+	// "kept_conversation_forget_result".
+	KeptConversationForgetResult *KeptConversationForgetResult `json:"kept_conversation_forget_result,omitempty,omitzero"`
 
 	// KeptConversationListResult corresponds to the JSON schema field
 	// "kept_conversation_list_result".
@@ -13235,6 +13252,10 @@ type WebSocketEvent struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID *string `json:"id,omitempty,omitzero"`
+
+	// KeptConversationForgetResult corresponds to the JSON schema field
+	// "kept_conversation_forget_result".
+	KeptConversationForgetResult *KeptConversationForgetResult `json:"kept_conversation_forget_result,omitempty,omitzero"`
 
 	// KeptConversationListResult corresponds to the JSON schema field
 	// "kept_conversation_list_result".
