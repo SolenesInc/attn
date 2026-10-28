@@ -51,12 +51,10 @@ func (d *Daemon) resolveReopen(
 	if err != nil {
 		return sessionReopenVerdict{}, err
 	}
-	machine := inspection.Verdict
-	verdict.Reopenable, verdict.Actions = machine.Reopenable, machine.Actions
-	verdict.DirectoryState, verdict.BranchState = machine.DirectoryState, protocol.Deref(machine.BranchState)
-	verdict.Reason, verdict.Warning = protocol.Deref(machine.Reason), protocol.Deref(machine.Warning)
-	verdict.RecreatePath = inspection.RecreatePath
-	verdict.Inspection = branchInspection{State: verdict.BranchState, Remote: inspection.Remote, StaleRegistration: inspection.StaleRegistration}
+	verdict.applyInspection(inspection)
+	if host := protocol.Deref(entry.Host); host != "" && verdict.Reason != "" {
+		verdict.Reason = fmt.Sprintf("on outpost %q: %s", d.outpostName(host), verdict.Reason)
+	}
 
 	return verdict, nil
 }

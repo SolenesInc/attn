@@ -81,6 +81,15 @@ func (v *sessionReopenVerdict) toProtocol() *protocol.SessionReopen {
 	return out
 }
 
+func (v *sessionReopenVerdict) applyInspection(inspection protocol.ReopenInspection) {
+	machine := inspection.Verdict
+	v.Reopenable, v.Actions = machine.Reopenable, machine.Actions
+	v.DirectoryState, v.BranchState = machine.DirectoryState, protocol.Deref(machine.BranchState)
+	v.Reason, v.Warning = protocol.Deref(machine.Reason), protocol.Deref(machine.Warning)
+	v.RecreatePath = inspection.RecreatePath
+	v.Inspection = branchInspection{State: v.BranchState, Remote: inspection.Remote, StaleRegistration: inspection.StaleRegistration}
+}
+
 func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Dispatch {
 	execution, _ := d.gardenDispatch(entry.ID)
 	execution.SessionID = entry.ID
@@ -143,7 +152,9 @@ func (d *Daemon) decideReopenPlace(
 		verdict.Reason = fmt.Sprintf("session %s saved no directory to reopen in", verdict.SessionID)
 		return nil
 	default:
-		verdict.Reason = "its directory cannot be opened"
+		if verdict.Reason == "" {
+			verdict.Reason = "its directory cannot be opened"
+		}
 		return nil
 	}
 }

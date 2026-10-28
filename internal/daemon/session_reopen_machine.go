@@ -9,17 +9,25 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspectMessage) (protocol.ReopenInspection, error) {
-	verdict := sessionReopenVerdict{
-		SessionID: msg.SessionID,
-		Execution: garden.Dispatch{Cwd: msg.Cwd, Agent: msg.Agent, Branch: msg.Branch, RepositoryRoot: msg.Repository, RepositorySubdir: msg.RepositorySubdir},
-		Resume:    msg.Conversation, Link: msg.Link, BranchMerged: msg.BranchMerged,
+func newMachineReopenVerdict(sessionID protocol.SessionID, cwd, agent, conversation, branch, repository, repositorySubdir string) sessionReopenVerdict {
+	return sessionReopenVerdict{
+		SessionID:      sessionID,
+		Execution:      garden.Dispatch{Cwd: cwd, Agent: agent, Branch: branch, RepositoryRoot: repository, RepositorySubdir: repositorySubdir},
+		Resume:         conversation,
 		DirectoryState: directoryUnknown,
 	}
+}
+
+func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspectMessage) (protocol.ReopenInspection, error) {
+	verdict := newMachineReopenVerdict(msg.SessionID, msg.Cwd, msg.Agent, msg.Conversation, msg.Branch, msg.Repository, msg.RepositorySubdir)
+	verdict.Link, verdict.BranchMerged = msg.Link, msg.BranchMerged
 	if strings.TrimSpace(msg.Cwd) != "" {
 		checkout, err := d.inspectCheckout(ctx, protocol.CheckoutInspectMessage{Cwd: msg.Cwd})
 		switch {
-		case err != nil || checkout.Exists && !checkout.IsDirectory:
+		case err != nil:
+			verdict.DirectoryState = directoryUnavailable
+			verdict.Reason = fmt.Sprintf("its directory cannot be opened: %v", err)
+		case checkout.Exists && !checkout.IsDirectory:
 			verdict.DirectoryState = directoryUnavailable
 		case !checkout.Exists:
 			verdict.DirectoryState = directoryMissing
@@ -37,12 +45,9 @@ func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspe
 }
 
 func (d *Daemon) recreateReopenHere(ctx context.Context, msg protocol.ReopenWorktreeMessage) (protocol.ReopenWorktreeResult, error) {
-	verdict := sessionReopenVerdict{
-		SessionID: msg.SessionID,
-		Execution: garden.Dispatch{Cwd: msg.Cwd, Agent: msg.Agent, Branch: msg.Branch, RepositoryRoot: msg.Repository, RepositorySubdir: msg.RepositorySubdir},
-		Resume:    msg.Conversation, RecreatePath: msg.RecreatePath,
-		Inspection: branchInspection{Remote: msg.Remote, StaleRegistration: msg.StaleRegistration},
-	}
+	verdict := newMachineReopenVerdict(msg.SessionID, msg.Cwd, msg.Agent, msg.Conversation, msg.Branch, msg.Repository, msg.RepositorySubdir)
+	verdict.RecreatePath = msg.RecreatePath
+	verdict.Inspection = branchInspection{Remote: msg.Remote, StaleRegistration: msg.StaleRegistration}
 	var result protocol.ReopenWorktreeResult
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(ctx, func(protection foregroundCleanupProtection) error {
 		path, err := d.recreateReopenWorktreeProtected(protection, &verdict, msg.Action)
