@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: The slopradar workflow cancels an in-progress run when a newer push lands on the same pull request, and Bench A/B cancels older runs in its concurrency group, so a push burst does not stack redundant jobs on the runners.
