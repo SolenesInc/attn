@@ -90,6 +90,14 @@ func (v *sessionReopenVerdict) applyInspection(inspection protocol.ReopenInspect
 	v.Inspection = branchInspection{State: v.BranchState, Remote: inspection.Remote, StaleRegistration: inspection.StaleRegistration}
 }
 
+func (v *sessionReopenVerdict) machineTarget() protocol.ReopenTarget {
+	return protocol.ReopenTarget{
+		SessionID: v.SessionID, Conversation: v.Resume,
+		Cwd: v.Execution.Cwd, Agent: v.Execution.Agent, Branch: v.Execution.Branch,
+		Repository: v.Execution.RepositoryRoot, RepositorySubdir: v.Execution.RepositorySubdir,
+	}
+}
+
 func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) garden.Dispatch {
 	execution, _ := d.gardenDispatch(entry.ID)
 	execution.SessionID = entry.ID
@@ -386,9 +394,7 @@ func (d *Daemon) performReopenLocked(
 	case protocol.SessionReopenActionRecreateWorktreeAndReopen,
 		protocol.SessionReopenActionFetchRecreateAndReopen:
 		recreated, err := Call[protocol.ReopenWorktreeResult](protection.Context(), d.router(), protocol.ReopenWorktreeMessage{
-			Cmd: protocol.CmdReopenWorktree, Host: protocol.Deref(verdict.Entry.Host), SessionID: verdict.SessionID,
-			Cwd: verdict.Execution.Cwd, Agent: verdict.Execution.Agent, Conversation: verdict.Resume,
-			Branch: verdict.Execution.Branch, Repository: verdict.Execution.RepositoryRoot, RepositorySubdir: verdict.Execution.RepositorySubdir,
+			Cmd: protocol.CmdReopenWorktree, Host: protocol.Deref(verdict.Entry.Host), Target: verdict.machineTarget(),
 			Action: action, RecreatePath: verdict.RecreatePath, Remote: verdict.Inspection.Remote, StaleRegistration: verdict.Inspection.StaleRegistration,
 		})
 		if err != nil {
