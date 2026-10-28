@@ -78,6 +78,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 				if !identity.Retired {
 					return
 				}
+				pausepoint.At(pausepoint.MemberRetiredClearSleep)
 				if _, err := d.crewSleep(who.RequestFromApp(identity.ProfileID), "member:"+memberKey.String()); err != nil {
 					d.logf("crew: request sleep after retired clear: %v", err)
 				}

@@ -30,6 +30,7 @@ const (
 
 	DaemonEnrollmentLoaded     = "daemon-enrollment-loaded"
 	MemberClearCommit          = "member-clear-commit"
+	MemberRetiredClearSleep    = "member-retired-clear-sleep"
 	MemberWakeRequested        = "member-wake-requested"
 	MemberLaunchCommit         = "member-launch-commit"
 	DaemonStartupRecovery      = "daemon-startup-recovery"
@@ -48,6 +49,7 @@ const (
 	ConversationSwitchAnswer   = "conversation-switch-answer"
 	ConversationInputLookup    = "conversation-input-lookup"
 	ConversationCandidateBound = "conversation-candidate-bound"
+	ConversationCandidateStart = "conversation-candidate-start"
 	ConversationReportReady    = "conversation-report-ready"
 	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
 	PtyExitHandled             = "pty-exit-handled"
