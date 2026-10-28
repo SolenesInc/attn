@@ -1,3 +1,3 @@
 kind: changed
 area: inbox
-change: Crew messages, replies, PR watches and auto-mode proposals follow the member across sessions. Agent targets resolve inside the caller's profile, and queued mail states why it waits.
+change: "Messages to a crew member, replies to them, PR watches and auto-mode proposals reach the member in any of their sessions. `attn agent` commands find agents only in your own profile. From a plain shell, choose the profile with `--profile`. Mail that waits says why."

@@ -660,7 +660,7 @@ commands:
   callout <anchors|show>            point at the app with a callout
   browser <command>                 open and control the in-app browser
   automation <command>              manage and run durable automations
-  settings list|get|set             read and change daemon or profile settings
+  settings list|get|set             read and change settings
   preflight                         diagnose tools, paths, routing, and launch settings
   pr <command>                      watch or inspect pull request readiness
   codex status|update|restart       shared Codex versions, its update and restart
@@ -686,11 +686,11 @@ commands:
   instance-env <instance|--unset>   print shell commands for selecting an instance
   skill [--reference <name>|--list] print the bundled agent skill and its references
   guide [<topic>]                   read the user guide
-  onboarding [done|again]          show or change the Chief's first day
+  onboarding [done|again]           show, finish or restart the Chief's onboarding
   prompts <command>                inspect prompt sources and scenario composition
   version [--json]                  print version, channel and commit
 
-Are you an AI agent? Use these when your task calls for them:
+For AI agents:
   attn skill    how to operate Attn
   attn guide    the user guide, to answer questions about Attn
 `)

@@ -94,7 +94,7 @@ func (d *Daemon) releaseRetiredClaimsProtected(protection foregroundCleanupProte
 		if err != nil {
 			return released, err
 		}
-		_, _, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, []seedEvents.Occurrence{occurrence}, []garden.Note{{Seed: seed.ID, Kind: garden.NoteKindNote, Author: who.Attn(), Body: fmt.Sprintf("%s was retired; attn released its claim.", m.Name)}}, false)
+		_, _, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, []seedEvents.Occurrence{occurrence}, []garden.Note{{Seed: seed.ID, Kind: garden.NoteKindNote, Author: who.Attn(), Body: fmt.Sprintf("%s was retired, so attn released their claim.", m.Name)}}, false)
 		if err != nil {
 			return released, err
 		}
@@ -131,7 +131,8 @@ func (d *Daemon) handleCrewRetire(conn net.Conn, msg *protocol.CrewRetireMessage
 		return
 	}
 	if d.isChief(m.Key) {
-		d.sendCrewError(conn, "retire", fmt.Errorf("the Chief can't be retired; change its charter, harness or model instead"))
+		//lint:ignore ST1005 This user-facing refusal uses complete sentences.
+		d.sendCrewError(conn, "retire", fmt.Errorf("the Chief can't be retired. To change how they work, edit their CHARTER.md. To change their harness or model, run `attn crew set chief`. The app's Manage crew panel (⌘K) changes both too."))
 		return
 	}
 	retired, err := d.retireCrewMember(m)

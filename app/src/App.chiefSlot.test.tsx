@@ -94,7 +94,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     daemon.on('harness_models', () => {});
     await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...settings, claude_executable: '/refreshed-harness' } }));
     const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
-    const close = setup().getByRole('button', { name: 'Close chief setup' });
+    const close = setup().getByRole('button', { name: 'Close Chief setup' });
     await gesture(daemon, () => {
       if (destination === 'terminal') terminal.focus();
       if (destination === 'close') close.focus();
@@ -126,7 +126,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ agent: 'codex', model: 'gpt-6.1-sol', effort: 'medium' })]);
     expect(slot().getByText('waking…')).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'crew_updated', profile_id: member().profile_id, members: [member({ agent: 'codex', model: 'gpt-6.1-sol' })] }));
-    expect(setup().getByRole('heading', { name: 'Wake your captain' })).toBeInTheDocument();
+    expect(setup().getByRole('heading', { name: 'Set up Captain' })).toBeInTheDocument();
     expect(setup().getByRole('textbox', { name: 'Notebook folder' })).toBeDisabled();
     expect(setup().getByRole('button', { name: 'Waking…' })).toBeDisabled();
   });
@@ -162,7 +162,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
   });
   it('rechecks available harnesses and hides the selector when only one fits', async () => {
     const { daemon } = await renderApp({ initialState: { settings: { ...settings, claude_available: 'false', codex_available: 'false' }, crew: [member()] } });
-    expect(setup().getByText(/No harness here can run the chief/)).toBeInTheDocument();
+    expect(setup().getByText(/No harness here can run the Chief/)).toBeInTheDocument();
     expect(setup().getByRole('button', { name: 'Check again' })).toHaveFocus();
     expect(setup().getByRole('button', { name: 'Settings › Agents' })).toBeInTheDocument();
     expect(setup().queryByRole('button', { name: /Wake/ })).toBeNull();

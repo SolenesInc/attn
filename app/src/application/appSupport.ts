@@ -22,7 +22,7 @@ export const UPDATE_BANNER_DISMISSED_STORAGE_KEY = 'attn.update_banner.dismissed
 
 export function crewMemberCloseHint(memberId: string): string {
   const name = memberName(memberId);
-  return `${name} is protected. Put ${name} to sleep to close its session.`;
+  return `You can't close a crew member's session. Put ${name} to sleep instead.`;
 }
 
 export function sessionCloseProtectionHint(sessions: DaemonSession[], id: string): string | null {

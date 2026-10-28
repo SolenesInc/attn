@@ -124,12 +124,12 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
   }}>
     <span className="chief-pop-notch" aria-hidden="true" style={{ top: position?.notch }} />
     <header className="chief-pop-head">
-      <h3>{firstRun ? `Wake your ${chief.name.toLowerCase()}` : `${chief.name}'s harness`}</h3>
-      <button type="button" className="chief-pop-close" aria-label="Close chief setup" onClick={() => onClose()}><kbd>esc</kbd></button>
+      <h3>{firstRun ? `Set up ${chief.name}` : `${chief.name}'s harness`}</h3>
+      <button type="button" className="chief-pop-close" aria-label="Close Chief setup" onClick={() => onClose()}><kbd>esc</kbd></button>
     </header>
     <div className="chief-pop-body">
     {checking ? <p className="chief-quiet" role="status">Checking harnesses…</p> : !harnesses.length || catalog.error ? <>
-      {catalog.error ? <p className="chief-setup-error" role="alert">{catalog.error}</p> : <p className="chief-quiet">No harness here can run the chief. Install Claude Code or Codex to wake it.</p>}
+      {catalog.error ? <p className="chief-setup-error" role="alert">{catalog.error}</p> : <p className="chief-quiet">No harness here can run the Chief. Install Claude Code or Codex to wake it.</p>}
       <div className="chief-link-row">
         <button ref={retainFocus} type="button" className="chief-link" onClick={recheck}>Check again</button>
         {onOpenSettings && <button type="button" className="chief-link" onClick={onOpenSettings}>Settings › Agents</button>}

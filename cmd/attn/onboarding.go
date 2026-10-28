@@ -15,14 +15,14 @@ func runOnboarding() {
 	if hasHelpFlag(args) {
 		fmt.Println(`usage: attn onboarding [done|again] [--profile <name|id>] [--json]
 
-With no action, show whether this profile's Chief finished onboarding and
-which first day its next wake runs: full, tour or none.
-  done   finish onboarding; future wakes are ordinary
-  again  run the full path again on the next wake, nap or attn crew prime
+With no action, show whether the Chief's onboarding is pending, and which
+path it takes: the full path, or the tour for a user who used attn before
+the Chief.
+  done   mark onboarding finished
+  again  start the full path again in the Chief's next session
 
-Inside attn, use the session's profile. Outside attn, use --profile when
-several profiles exist. The Chief can follow the playbook in its current
-conversation after again; the command does not wake it.`)
+again doesn't wake the Chief. An awake Chief can run it, then start the full
+path in their current conversation.`)
 		return
 	}
 	fs := flag.NewFlagSet("onboarding", flag.ContinueOnError)
@@ -49,13 +49,13 @@ conversation after again; the command does not wake it.`)
 	}
 	switch result.FirstDay {
 	case protocol.FirstDayNone:
-		fmt.Printf("%s finished onboarding. attn onboarding again runs it again.\n", result.Chief)
+		fmt.Printf("%s has no onboarding pending. To run the full path, use `attn onboarding again`.\n", result.Chief)
 	case protocol.FirstDayTour:
-		fmt.Printf("%s has not finished onboarding. This profile was in use before its Chief; the next wake opens with the short tour.\n", result.Chief)
+		fmt.Printf("%s's onboarding is pending. Their next session opens with the tour, because attn was in use before the Chief.\n", result.Chief)
 	default:
-		fmt.Printf("%s has not finished onboarding. The next wake opens with the full path.\n", result.Chief)
+		fmt.Printf("%s's onboarding is pending. Their next session opens with the full path.\n", result.Chief)
 	}
 	if !result.Configured {
-		fmt.Println("Pick a harness and model in the Chief's slot to start.")
+		fmt.Println("The Chief has no harness yet. Pick their harness and model in the sidebar, or run `attn crew set chief --agent <harness> --model <model>`.")
 	}
 }

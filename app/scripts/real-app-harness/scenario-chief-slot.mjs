@@ -129,11 +129,11 @@ try {
     }
     for (const executable of missing) fs.unlinkSync(executable);
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-    await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the chief' });
+    await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the Chief' });
     runner.writeJson('no-harness-settings.json', Object.fromEntries(['claude', 'codex'].map(agent => [agent, observer.getSetting(`${agent}_available`)])));
     await screenshot('01-chief-no-harness');
     await click('[data-testid="chief-setup"] .chief-link');
-    await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the chief' });
+    await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the Chief' });
     for (const [agent, executable] of originals) cli(['settings', 'set', `${agent}_executable`, executable]);
     await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
     await driver.pressKey('Escape');
@@ -219,8 +219,8 @@ try {
     runner.writeJson('parked-window-configured.json', await client.request('get_window_bounds'));
     await pressShortcutKeys(client, driver, 'ui.commandPalette');
     await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
-    await driver.typeText("Change the chief's harness and model");
-    await waitDom('.unified-palette-option[aria-selected="true"]', { textIncludes: "Change the chief's harness and model" });
+    await driver.typeText("Change the Chief's harness and model");
+    await waitDom('.unified-palette-option[aria-selected="true"]', { textIncludes: "Change the Chief's harness and model" });
     await driver.pressEnter();
     await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
     await screenshot('03-chief-route-from-collapsed-sidebar');

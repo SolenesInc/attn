@@ -24,7 +24,7 @@ func TestTheGuideCommandReadsTheEmbeddedGuide(t *testing.T) {
 	requireLines(t, "unknown topic", missing.Stderr, `no topic "nope"`, "getting-started", "attn <command> --help")
 	for _, command := range []string{"help", "-h", "--help"} {
 		help := s.Attn(command)
-		requireStdout(t, help, "Are you an AI agent?", "attn skill", "attn guide")
+		requireStdout(t, help, "For AI agents:", "attn skill", "attn guide")
 		if !strings.HasSuffix(help.Stdout, "  attn guide    the user guide, to answer questions about Attn\n") {
 			t.Fatalf("agent footer is not last: %s", help.Stdout)
 		}

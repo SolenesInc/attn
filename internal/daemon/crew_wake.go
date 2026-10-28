@@ -331,7 +331,7 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 
 func (d *Daemon) crewWakeSessionWithChargeLocked(key who.MemberKey, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
 	if err := d.mailRefusal(who.Member(key).Address()); err != nil {
-		return nil, fmt.Errorf("%w; `attn crew restore %s` brings it back", err, d.memberName(key))
+		return nil, fmt.Errorf("%w; `attn crew restore %s` brings them back", err, d.memberName(key))
 	}
 	member, _, err := d.crewMember(key)
 	if err != nil {

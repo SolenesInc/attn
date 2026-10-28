@@ -99,7 +99,7 @@ func (d *Daemon) crewSleep(r who.Requester, name string) (*protocol.CrewSleepRes
 		return nil, fmt.Errorf("record %s's sleep request: %w", d.storedMemberName(member.Key.String()), err)
 	}
 	status := protocol.AgentMsgStatusNotified
-	detail := fmt.Sprintf("asked %s in session %s to write its handoff and file it with `attn handoff --sleep`", d.storedMemberName(member.Key.String()), shortSessionID(sessionID))
+	detail := fmt.Sprintf("asked %s in session %s to write their handoff letter and file it with `attn handoff --sleep`. They sleep once they file it.", d.storedMemberName(member.Key.String()), shortSessionID(sessionID))
 	if !receipt.Rang {
 		status = protocol.AgentMsgStatusQueued
 		detail = receipt.Detail

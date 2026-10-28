@@ -1,3 +1,3 @@
 kind: added
 area: chief
-change: The Chief guides your first day with delegation roles, a Notebook introduction and an app tour. Run attn onboarding again to repeat it, and attn guide to read the built-in user guide.
+change: "The first time the Chief runs, it shows you around: what's new if you already use attn, or, on a new install, it sets up your delegation roles and Notebook with you. Run `attn onboarding again` to go through the full setup anytime. `attn guide` prints the new built-in user guide."

@@ -379,7 +379,7 @@ function AwakeCrewRow({
               type="button"
               className="queue-row-sleep"
               data-testid={`queue-crew-sleep-${member}`}
-              title={`Ask ${name} to close its day and sleep`}
+              title={`Ask ${name} to wrap up and sleep`}
               aria-label={`Ask ${name} to sleep`}
               onClick={onSleep}
             >

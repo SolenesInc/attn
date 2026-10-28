@@ -142,7 +142,7 @@ try {
     const userState = await client.request('get_state');
     runner.assert(shownAgentId(userState) === userWake.session_id, 'An app wake shows the member in the app', { view: userState.view, activeLeaf: userState.activeLeaf });
     await driver.pressKey('w', { command: true, shift: process.platform === 'linux' });
-    await wait('.toast', { textIncludes: 'is protected' });
+    await wait('.toast', { textIncludes: "You can't close a crew member's session." });
     const error = await client.request('dom_text', { selector: '.toast' });
     runner.assert(error.text.includes(memberHeading.text), 'Closing a crew session still explains its protection', error);
     runner.assert(!error.text.includes('Dismiss') && !error.text.includes('fades'), 'The error has no dismissal button or timer explanation', error);

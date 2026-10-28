@@ -367,8 +367,9 @@ export function DesktopSettings({
           <h3>Notebook Folder</h3>
           <p className="settings-description">
             Journals and knowledge for <strong>{profileName}</strong>, saved as plain markdown you own.
-            Leave blank for a folder named after this profile. Changing the folder doesn't move existing notes;
-            move or sync them yourself.
+            Leave blank for a folder named after this profile. Changing the folder doesn't move anything.
+            You can move your notes yourself, but leave the old <code>crew/</code> folder where it is:
+            attn keeps your crew members there, and can't find them if the folder moves.
           </p>
         </div>
         <div className="settings-block-body">

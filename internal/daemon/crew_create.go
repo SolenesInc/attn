@@ -37,7 +37,7 @@ func (d *Daemon) createCrewMember(b crewBirth) (store.CrewIdentity, error) {
 		return store.CrewIdentity{}, err
 	} else if found {
 		if existing.Retired {
-			return store.CrewIdentity{}, fmt.Errorf("%s is retired: restore it or pick another name", existing.Name)
+			return store.CrewIdentity{}, fmt.Errorf("%s is retired: restore them with `attn crew restore %s`, or pick another name", existing.Name, existing.Name)
 		}
 		profile, err := d.store.GetProfile(b.ProfileID)
 		if err != nil {
