@@ -21,7 +21,7 @@ If the checkout does not build or start, fix it or report exactly why before you
 
 ## Ask the user what the features are
 
-The user owns what each feature means. Before you write any description, ask them which features exist and what each is for, in their words. Give them a suggested list built from source to answer from: the ways in with their paths, candidate sub-features, and where the tests live. A delegation can build that list.
+The user owns what each feature means. Before you write any description, ask them which features exist and what each is for, in their words. Give them a suggested list built from source to answer from: the ways in with their paths, candidate sub-features, and where the tests live. A subagent can build that list.
 
 When the user asks you to draft instead, draft from their own existing words, such as product docs, the glossary or the README, and present it as a draft for their review. The first map sets the style. Add later features by following the existing entries, as small diffs the user reviews.
 
