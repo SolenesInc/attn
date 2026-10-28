@@ -4278,6 +4278,18 @@
           }
         },
         {
+          "id": "feature-map",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.feature-map",
+            "source": "content/skills/attn-workflow/references/feature-map.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "implementation",
           "delivery": "reference",
           "description": "Loaded on demand through the installed attn-workflow skill.",
