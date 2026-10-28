@@ -121,6 +121,32 @@ func TestTheReopenVerdictReadsWhatBecameOfTheDirectory(t *testing.T) {
 	}
 }
 
+func TestReopenReportsWhyItsDirectoryCannotBeInspected(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	cwd := w.Path("uninspectable")
+	session := closedReopenCodex(t, w, app, cli, cwd)
+	if err := os.Rename(cwd, cwd+".saved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(cwd), cwd); err != nil {
+		t.Fatal(err)
+	}
+	_, cause := os.Stat(cwd)
+	if cause == nil {
+		t.Fatal("the directory can still be inspected")
+	}
+	verdict := reopenVerdict(t, cli, session)
+	if verdict.Reopenable || len(verdict.Actions) != 0 || verdict.DirectoryState != "unavailable" || !strings.Contains(protocol.Deref(verdict.Reason), cause.Error()) {
+		t.Fatalf("uninspectable directory verdict=%+v reason=%q, want refusal naming %q", verdict, protocol.Deref(verdict.Reason), cause)
+	}
+	_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(session)})
+	if err == nil || !strings.Contains(err.Error(), cause.Error()) {
+		t.Fatalf("resume error=%v, want inspection cause %q", err, cause)
+	}
+	t.Logf("ledger reason: %s\nresume refusal: %v", protocol.Deref(verdict.Reason), err)
+}
+
 func TestTheReopenVerdictFollowsWhatBecameOfTheBranch(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

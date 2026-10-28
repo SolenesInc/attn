@@ -3190,10 +3190,7 @@ model AgentCatalogResult {
   models?: HarnessModel[];
 }
 
-@extension("x-on", #{ machine: "host" })
-model ReopenInspectMessage {
-  cmd: "reopen_inspect";
-  host: string;
+model ReopenTarget {
   session_id: SessionID;
   cwd: string;
   agent: string;
@@ -3201,6 +3198,13 @@ model ReopenInspectMessage {
   branch: string;
   repository: string;
   repository_subdir: string;
+}
+
+@extension("x-on", #{ machine: "host" })
+model ReopenInspectMessage {
+  cmd: "reopen_inspect";
+  host: string;
+  target: ReopenTarget;
   link: string;
   has_launch_intent: boolean;
   branch_merged: boolean;
@@ -3216,13 +3220,7 @@ model ReopenInspection {
 model ReopenWorktreeMessage {
   cmd: "reopen_worktree";
   host: string;
-  session_id: SessionID;
-  cwd: string;
-  agent: string;
-  conversation: string;
-  branch: string;
-  repository: string;
-  repository_subdir: string;
+  target: ReopenTarget;
   action: SessionReopenAction;
   recreate_path: string;
   remote: string;

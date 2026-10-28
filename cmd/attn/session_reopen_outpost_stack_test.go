@@ -95,7 +95,7 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
 		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
 	})
-	checkRefusal := func(want ...string) {
+	checkRefusal := func(inspected bool, want ...string) {
 		t.Helper()
 		_, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id)})
 		for _, text := range want {
@@ -107,13 +107,45 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 		if showErr != nil || protocol.Deref(shown.Entry.ClosedAt) == "" || protocol.Deref(shown.Entry.Host) != pair.Host {
 			t.Fatalf("failed resume changed ledger: %+v, %v", shown, showErr)
 		}
+		if inspected && shown.Reopen == nil {
+			t.Fatal("the ledger has no verdict from the outpost inspection")
+		}
+		if shown.Reopen != nil {
+			for _, text := range want {
+				if !strings.Contains(protocol.Deref(shown.Reopen.Reason), text) {
+					t.Fatalf("ledger reason=%q, want %q", protocol.Deref(shown.Reopen.Reason), text)
+				}
+			}
+		}
 		t.Logf("resume refused, ledger remains closed on %s: %v", pair.Host, err)
 	}
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
-	checkRefusal("outpost", "unreachable")
+	checkRefusal(false, "outpost", "unreachable")
 	mark := len(pair.App.Log())
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
 	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	if err := os.Rename(cwd, cwd+".saved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Base(cwd), cwd); err != nil {
+		t.Fatal(err)
+	}
+	_, cause := os.Stat(cwd)
+	if cause == nil {
+		t.Fatal("the outpost directory can still be inspected")
+	}
+	checkRefusal(true, `on outpost "outpost"`, cause.Error())
+	refused := home.Attn("session", "reopen", id)
+	if refused.Code == 0 || !strings.Contains(refused.Stderr, cause.Error()) || !strings.Contains(refused.Stderr, "outpost") {
+		t.Fatalf("CLI resume=%+v, want outpost and inspection cause %q", refused, cause)
+	}
+	t.Logf("CLI refusal: %s", refused.Stderr)
+	if err := os.Remove(cwd); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(cwd+".saved", cwd); err != nil {
+		t.Fatal(err)
+	}
 	rollouts, err := filepath.Glob(filepath.Join(outpost.Dir, "toolhome", ".codex", "sessions", "*", "*", "*", "*-"+run.ConversationID+".jsonl"))
 	if err != nil || len(rollouts) != 1 {
 		t.Fatalf("rollouts=%v, %v", rollouts, err)
@@ -121,15 +153,15 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	if err := os.Remove(rollouts[0]); err != nil {
 		t.Fatal(err)
 	}
-	checkRefusal("conversation "+run.ConversationID, "no longer in codex's storage")
+	checkRefusal(true, `on outpost "outpost"`, "conversation "+run.ConversationID, "no longer in codex's storage")
 	if err := os.RemoveAll(cwd); err != nil {
 		t.Fatal(err)
 	}
-	checkRefusal("no longer exists")
+	checkRefusal(true, `on outpost "outpost"`, "no longer exists")
 	mark = len(pair.App.Log())
 	pair.App.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
 	testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
-	checkRefusal("outpost", pair.Host, "does not exist")
+	checkRefusal(false, "outpost", pair.Host, "does not exist")
 }
 
 func TestLedgerRecreatesAnOutpostWorktreeAndContinuesItsConversationAndCost(t *testing.T) {

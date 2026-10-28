@@ -180,6 +180,25 @@ async function main() {
       runner.writeText('session-show-closed.txt', shown);
     });
 
+    await runner.step('an_inspection_failure_keeps_its_cause', async () => {
+      const saved = `${worktree}.saved`;
+      fs.renameSync(worktree, saved);
+      try {
+        fs.symlinkSync(path.basename(worktree), worktree, 'dir');
+        const shown = attn(daemonBinary, instance, 'session', 'show', sessionId);
+        runner.assert(/^reopen\s+no: /m.test(shown) && shown.includes(worktree) && shown.includes('symbolic links'),
+          'the ledger reason names the directory and why inspection failed', { shown });
+        const refused = attnAllowingFailure(daemonBinary, instance, 'session', 'reopen', sessionId);
+        runner.assert(refused.status !== 0 && refused.stderr.includes(worktree) && refused.stderr.includes('symbolic links'),
+          'the resume refusal keeps the inspection error', refused);
+        runner.writeText('session-show-inspection-failure.txt', shown);
+        runner.writeText('reopen-inspection-failure.txt', refused.stderr);
+      } finally {
+        fs.rmSync(worktree, { force: true });
+        fs.renameSync(saved, worktree);
+      }
+    });
+
     await runner.step('reopen_from_the_cli', async () => {
       const out = attn(daemonBinary, instance, 'session', 'reopen', sessionId);
       runner.assert(out.includes(sessionId) && out.includes('reopened'), 'reopen must report the session it brought back', { out });

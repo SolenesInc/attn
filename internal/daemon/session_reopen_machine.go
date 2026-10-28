@@ -9,23 +9,31 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspectMessage) (protocol.ReopenInspection, error) {
-	verdict := sessionReopenVerdict{
-		SessionID: msg.SessionID,
-		Execution: garden.Dispatch{Cwd: msg.Cwd, Agent: msg.Agent, Branch: msg.Branch, RepositoryRoot: msg.Repository, RepositorySubdir: msg.RepositorySubdir},
-		Resume:    msg.Conversation, Link: msg.Link, BranchMerged: msg.BranchMerged,
+func newMachineReopenVerdict(target protocol.ReopenTarget) sessionReopenVerdict {
+	return sessionReopenVerdict{
+		SessionID:      target.SessionID,
+		Execution:      garden.Dispatch{Cwd: target.Cwd, Agent: target.Agent, Branch: target.Branch, RepositoryRoot: target.Repository, RepositorySubdir: target.RepositorySubdir},
+		Resume:         target.Conversation,
 		DirectoryState: directoryUnknown,
 	}
-	if strings.TrimSpace(msg.Cwd) != "" {
-		checkout, err := d.inspectCheckout(ctx, protocol.CheckoutInspectMessage{Cwd: msg.Cwd})
+}
+
+func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspectMessage) (protocol.ReopenInspection, error) {
+	verdict := newMachineReopenVerdict(msg.Target)
+	verdict.Link, verdict.BranchMerged = msg.Link, msg.BranchMerged
+	if strings.TrimSpace(msg.Target.Cwd) != "" {
+		checkout, err := d.inspectCheckout(ctx, protocol.CheckoutInspectMessage{Cwd: msg.Target.Cwd})
 		switch {
-		case err != nil || checkout.Exists && !checkout.IsDirectory:
+		case err != nil:
+			verdict.DirectoryState = directoryUnavailable
+			verdict.Reason = fmt.Sprintf("its directory cannot be opened: %v", err)
+		case checkout.Exists && !checkout.IsDirectory:
 			verdict.DirectoryState = directoryUnavailable
 		case !checkout.Exists:
 			verdict.DirectoryState = directoryMissing
 		default:
 			verdict.DirectoryState = directoryPresent
-			if current, saved := strings.TrimSpace(checkout.Branch), strings.TrimSpace(msg.Branch); current != "" && saved != "" && current != saved {
+			if current, saved := strings.TrimSpace(checkout.Branch), strings.TrimSpace(msg.Target.Branch); current != "" && saved != "" && current != saved {
 				verdict.Warning = fmt.Sprintf("it is on branch %s now; the session ran on %s", current, saved)
 			}
 		}
@@ -37,12 +45,9 @@ func (d *Daemon) inspectReopenHere(ctx context.Context, msg protocol.ReopenInspe
 }
 
 func (d *Daemon) recreateReopenHere(ctx context.Context, msg protocol.ReopenWorktreeMessage) (protocol.ReopenWorktreeResult, error) {
-	verdict := sessionReopenVerdict{
-		SessionID: msg.SessionID,
-		Execution: garden.Dispatch{Cwd: msg.Cwd, Agent: msg.Agent, Branch: msg.Branch, RepositoryRoot: msg.Repository, RepositorySubdir: msg.RepositorySubdir},
-		Resume:    msg.Conversation, RecreatePath: msg.RecreatePath,
-		Inspection: branchInspection{Remote: msg.Remote, StaleRegistration: msg.StaleRegistration},
-	}
+	verdict := newMachineReopenVerdict(msg.Target)
+	verdict.RecreatePath = msg.RecreatePath
+	verdict.Inspection = branchInspection{Remote: msg.Remote, StaleRegistration: msg.StaleRegistration}
 	var result protocol.ReopenWorktreeResult
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(ctx, func(protection foregroundCleanupProtection) error {
 		path, err := d.recreateReopenWorktreeProtected(protection, &verdict, msg.Action)

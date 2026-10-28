@@ -8675,23 +8675,11 @@ type RenameSessionMessage struct {
 }
 
 type ReopenInspectMessage struct {
-	// Agent corresponds to the JSON schema field "agent".
-	Agent string `json:"agent"`
-
-	// Branch corresponds to the JSON schema field "branch".
-	Branch string `json:"branch"`
-
 	// BranchMerged corresponds to the JSON schema field "branch_merged".
 	BranchMerged bool `json:"branch_merged"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
-
-	// Conversation corresponds to the JSON schema field "conversation".
-	Conversation string `json:"conversation"`
-
-	// Cwd corresponds to the JSON schema field "cwd".
-	Cwd string `json:"cwd"`
 
 	// HasLaunchIntent corresponds to the JSON schema field "has_launch_intent".
 	HasLaunchIntent bool `json:"has_launch_intent"`
@@ -8702,14 +8690,8 @@ type ReopenInspectMessage struct {
 	// Link corresponds to the JSON schema field "link".
 	Link string `json:"link"`
 
-	// Repository corresponds to the JSON schema field "repository".
-	Repository string `json:"repository"`
-
-	// RepositorySubdir corresponds to the JSON schema field "repository_subdir".
-	RepositorySubdir string `json:"repository_subdir"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
+	// Target corresponds to the JSON schema field "target".
+	Target ReopenTarget `json:"target"`
 }
 
 type ReopenInspection struct {
@@ -8726,24 +8708,35 @@ type ReopenInspection struct {
 	Verdict SessionReopen `json:"verdict"`
 }
 
-type ReopenWorktreeMessage struct {
-	// Action corresponds to the JSON schema field "action".
-	Action SessionReopenAction `json:"action"`
-
+type ReopenTarget struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
 
 	// Branch corresponds to the JSON schema field "branch".
 	Branch string `json:"branch"`
 
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
 	// Conversation corresponds to the JSON schema field "conversation".
 	Conversation string `json:"conversation"`
 
 	// Cwd corresponds to the JSON schema field "cwd".
 	Cwd string `json:"cwd"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+
+	// RepositorySubdir corresponds to the JSON schema field "repository_subdir".
+	RepositorySubdir string `json:"repository_subdir"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+}
+
+type ReopenWorktreeMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action SessionReopenAction `json:"action"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
 
 	// Host corresponds to the JSON schema field "host".
 	Host string `json:"host"`
@@ -8754,17 +8747,11 @@ type ReopenWorktreeMessage struct {
 	// Remote corresponds to the JSON schema field "remote".
 	Remote string `json:"remote"`
 
-	// Repository corresponds to the JSON schema field "repository".
-	Repository string `json:"repository"`
-
-	// RepositorySubdir corresponds to the JSON schema field "repository_subdir".
-	RepositorySubdir string `json:"repository_subdir"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-
 	// StaleRegistration corresponds to the JSON schema field "stale_registration".
 	StaleRegistration bool `json:"stale_registration"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target ReopenTarget `json:"target"`
 }
 
 type ReopenWorktreeResult struct {

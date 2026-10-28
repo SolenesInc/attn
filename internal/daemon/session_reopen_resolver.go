@@ -43,20 +43,16 @@ func (d *Daemon) resolveReopen(
 	}
 	_, hasLaunchIntent := d.store.LaunchIntent(entry.ID)
 	inspection, err := Call[protocol.ReopenInspection](ctx, d.router(), protocol.ReopenInspectMessage{
-		Cmd: protocol.CmdReopenInspect, Host: protocol.Deref(entry.Host), SessionID: entry.ID,
-		Cwd: verdict.Execution.Cwd, Agent: verdict.Execution.Agent, Conversation: verdict.Resume,
-		Branch: verdict.Execution.Branch, Repository: verdict.Execution.RepositoryRoot, RepositorySubdir: verdict.Execution.RepositorySubdir,
+		Cmd: protocol.CmdReopenInspect, Host: protocol.Deref(entry.Host), Target: verdict.machineTarget(),
 		Link: d.store.SessionLink(entry.ID), HasLaunchIntent: hasLaunchIntent, BranchMerged: d.branchMerged(entry.ID, verdict.Execution.Branch),
 	})
 	if err != nil {
 		return sessionReopenVerdict{}, err
 	}
-	machine := inspection.Verdict
-	verdict.Reopenable, verdict.Actions = machine.Reopenable, machine.Actions
-	verdict.DirectoryState, verdict.BranchState = machine.DirectoryState, protocol.Deref(machine.BranchState)
-	verdict.Reason, verdict.Warning = protocol.Deref(machine.Reason), protocol.Deref(machine.Warning)
-	verdict.RecreatePath = inspection.RecreatePath
-	verdict.Inspection = branchInspection{State: verdict.BranchState, Remote: inspection.Remote, StaleRegistration: inspection.StaleRegistration}
+	verdict.applyInspection(inspection)
+	if host := protocol.Deref(entry.Host); host != "" && verdict.Reason != "" {
+		verdict.Reason = fmt.Sprintf("on outpost %q: %s", d.outpostName(host), verdict.Reason)
+	}
 
 	return verdict, nil
 }
