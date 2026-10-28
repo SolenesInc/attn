@@ -53,6 +53,26 @@ func TestAutoApproveDefaultsOnAndRespectsAnExplicitChoice(t *testing.T) {
 	}
 }
 
+func TestClaudeLaunchesAndReloadsWithItsAgentViewOff(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
+			session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+			assertAgentViewOff := func(launch string) {
+				t.Helper()
+				if run := w.Launched(session); !slices.Contains(run.Env, "CLAUDE_CODE_DISABLE_AGENT_VIEW=1") {
+					t.Errorf("claude's %s can move its conversation into Claude's background daemon, out of this terminal", launch)
+				}
+			}
+			assertAgentViewOff("launch")
+			launchIntentReload(t, app, session)
+			assertAgentViewOff("reload")
+		})
+	}
+}
+
 func TestLaunchChoicesReachTheAgentAsFlagsAndLeaveNoOneShotVariableBehind(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
