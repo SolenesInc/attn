@@ -66,7 +66,7 @@ async function main() {
   try {
     fs.mkdirSync(memberHome, { recursive: true });
     fs.writeFileSync(path.join(memberHome, 'CHARTER.md'), '# Trellis\n\nKeep the reasons in your letter.\n');
-    writeMockAgentFixture(memberHome, { name: 'Crew transcript', resumable: true, minimumWorkingMs: 0,
+    writeMockAgentFixture(memberHome, { name: 'Crew transcript', resumable: true, minimumWorkingMs: 0, turns: [],
       defaultActions: [{ type: 'reply', text: 'CREW_TRANSCRIPT_READY', state: 'idle' }] });
     await runner.step('launch_isolated_app', async () => {
       await client.quitApp();

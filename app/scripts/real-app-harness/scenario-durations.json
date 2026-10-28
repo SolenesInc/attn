@@ -31,12 +31,12 @@
         "note": "Green ATTN_VERDICT durationMs=15337, including cleanup and recording. Covers home dock input, Crew layering and Garden fullscreen restore dismissal. Remeasure on Linux CI."
       },
       "conversations-surface": {
-        "run": "conversations-surface-2026-10-01T20-03-13-079Z",
-        "job": "Local packaged scenario, conv-tab isolated instance",
-        "recordedAt": "2026-10-01",
-        "seconds": 9.112,
+        "run": "conversations-surface-2026-10-27T23-59-25-049Z",
+        "job": "Local packaged scenario, forget-crew isolated instance",
+        "recordedAt": "2026-10-28",
+        "seconds": 16.687,
         "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=9112, including cleanup, with native keyboard input and recording attached to seed s-yq8ngw. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=16687, including cleanup. Covers four copies, crew member/date confirmation, Cancel preserving the session record, and Forget removing that record while keeping the letter unchanged. Remeasure on Linux CI."
       },
       "snooze-keyboard": {
         "run": "snooze-keyboard-2026-09-30T21-06-25-232Z",
@@ -374,7 +374,7 @@
     }
   },
   "seconds": {
-    "conversations-surface": 9.112,
+    "conversations-surface": 16.687,
     "snooze-keyboard": 103.8,
     "agent-close": 8.2,
     "agent-queue": 132.293,
