@@ -14,7 +14,7 @@ import (
 func TestAShellPaneInheritsNeitherTheClaudeSessionThatStartedTheDaemonNorItsWorkersTransport(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
-	s.StartWith("CLAUDECODE=1", "CLAUDE_CODE_SESSION_ID=inherited-claude-session", "CLAUDE_EFFORT=max")
+	s.StartWith("CLAUDECODE=1", "CLAUDE_CODE_SESSION_ID=inherited-claude-session", "CLAUDE_EFFORT=max", "CLAUDE_CODE_DISABLE_AGENT_VIEW=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	app := s.App()
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 	envFile := filepath.Join(s.Dir, "shell.env")
@@ -26,7 +26,7 @@ func TestAShellPaneInheritsNeitherTheClaudeSessionThatStartedTheDaemonNorItsWork
 	}
 	for _, pair := range strings.Split(string(dumped), "\n") {
 		switch key, _, _ := strings.Cut(pair, "="); key {
-		case "CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT":
+		case "CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT", "CLAUDE_CODE_DISABLE_AGENT_VIEW", "CLAUDE_CODE_DISABLE_AUTO_MEMORY":
 			t.Errorf("a shell pane inherited %s from the Claude session that started the daemon", pair)
 		case "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_EXTERNAL_ENV", "ATTN_PTY_DAEMON_ENV":
 			t.Errorf("a shell pane inherited its worker's transport variable %s", pair)
