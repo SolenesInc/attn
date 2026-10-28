@@ -636,7 +636,7 @@ func TestAMembersPullRequestWatchSurvivesItsCreatingDayAndCanBeStoppedFromTheNex
 		watchPullRequestOn(t, cli, first.id, protocol.PullRequestWatchModeGreen)
 		w.advance(time.Second)
 		readInbox(t, cli, first.id, 0)
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day please", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day please", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := cli.Unregister(protocol.SessionID(first.id)); err != nil {
@@ -702,7 +702,7 @@ func TestAMemberCanForgetItsWatchFromTheNextDay(t *testing.T) {
 		watchPullRequestOn(t, cli, first.id, protocol.PullRequestWatchModeGreen)
 		w.advance(time.Second)
 		readInbox(t, cli, first.id, 0)
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := cli.Unregister(protocol.SessionID(first.id)); err != nil {
@@ -739,7 +739,7 @@ func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
 			t.Fatalf("initial readiness=%+v", pr)
 		}
 		readInbox(t, cli, first.id, 0)
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "next day", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		next := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))

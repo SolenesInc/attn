@@ -45,7 +45,7 @@ func TestACrewMembersDayCannotBeClosedByAnAgent(t *testing.T) {
 	_, err := cli.AgentClose(string(day.SessionID), protocol.SessionID(chief), "looks finished to me")
 	agentCloseRefused(t, err, "session_close_protected", "Trellis is protected from closing; put Trellis to sleep first")
 	if live := queriedIDs(t, cli, ""); !slices.Contains(live, string(day.SessionID)) {
-		t.Errorf("live sessions = %v, want the crew day still there", live)
+		t.Errorf("live sessions = %v, want the crew session still there", live)
 	}
 }
 

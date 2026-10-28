@@ -15,9 +15,9 @@ import (
 func writeHandoffHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn handoff -m "<your letter>"
 
-File the letter closing this crew member's day. You write it; attn files it into
-the active instance's crew directory under <member>/handoffs/, with a UTC-stamped
-name, and never edits the prose. A correction is a new letter.
+File the letter closing this crew member's session. You write it; attn files it
+in the member's home under handoffs/, with a UTC-stamped name, and never edits
+the prose. A correction is a new letter.
 
 By default, attn decides the turnover from presence: a successor wakes while the
 user is around, and the member sleeps while the user is away. --sleep and --nap
@@ -25,37 +25,37 @@ decide it explicitly.
 
 With crew_memory_enabled off, filing immediately runs the turnover.
 
-With crew_memory_enabled on, --day is required: one line of at most 280 bytes
-saying what this day was. After filing the letter and the day line, attn keeps
-this day running while summaries are pending. Run attn memory summarize and
-pipe the answers to attn memory summarize -. Repeat until none remain. The last
-answer runs the requested turnover, including --sleep.
+With crew_memory_enabled on, --summary is required: one line of at most 280 bytes
+saying what this session was. After filing the letter and the session line, attn
+keeps this session running while summaries are pending. Run attn memory summarize
+and pipe the answers to attn memory summarize -. Repeat until none remain. The
+last answer runs the requested turnover, including --sleep.
 
-If turnover fails, the letter stays filed and this day keeps running. --retry
-uses that letter and repairs a missing day line without adding another one.
+If turnover fails, the letter stays filed and this session keeps running. --retry
+uses that letter and repairs a missing session line without adding another one.
 With memory enabled it preserves the requested close. With memory disabled a
-retry starts the next day regardless of presence. --retry --sleep explicitly
-ends the day with no successor in either case.
+retry starts the next session regardless of presence. --retry --sleep explicitly
+ends the session with no successor in either case.
 
-Only the session living a member's day can file one. The note for whoever tends
-a piece of work next is the other axis: attn seed note <id> -m "…" --handoff.
+Only the session bound to a crew member can file its letter. A note for whoever
+tends a piece of work next belongs on its seed: attn seed note <id> -m "…" --handoff.
 
 flags:
   -m <text>          the letter; - reads it from stdin
-  --day <line>       the day line, required with crew_memory_enabled
-  --retry            turn the day over with the letter already filed; no -m
-  --sleep            end the day; do not start the next one
-  --nap              start the next day even if the user is away
-  --session <id>     the session closing its day (defaults to the current session)
+  --summary <line>   the session line, required with crew_memory_enabled
+  --retry            close the session with its filed letter; no -m
+  --sleep            end the session; do not start the next one
+  --nap              start the next session even if the user is away
+  --session <id>     the session to close (defaults to the current session)
   --json             print the machine result as JSON
 `)
 }
 
 type handoffArgs struct {
 	note    string
-	day     string
+	summary string
 	retry   bool
-	close   protocol.CrewDayClose
+	close   protocol.CrewSessionClose
 	session protocol.SessionID
 	json    bool
 }
@@ -64,33 +64,33 @@ func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (hand
 	fs := flag.NewFlagSet("handoff", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	message := fs.String("m", "", "the letter; - reads it from stdin")
-	day := fs.String("day", "", "one line for the memory, required with crew_memory_enabled")
-	retry := fs.Bool("retry", false, "turn the day over with the letter already filed")
-	sleep := fs.Bool("sleep", false, "end the day rather than starting the next one")
-	nap := fs.Bool("nap", false, "start the next day even if the user is away")
-	session := fs.String("session", "", "the session closing its day (defaults to the current session)")
+	summary := fs.String("summary", "", "one line for the memory, required with crew_memory_enabled")
+	retry := fs.Bool("retry", false, "close the session with the letter already filed")
+	sleep := fs.Bool("sleep", false, "end the session rather than starting the next one")
+	nap := fs.Bool("nap", false, "start the next session even if the user is away")
+	session := fs.String("session", "", "the session to close (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := parseFlags(fs, args); err != nil {
 		return handoffArgs{}, err
 	}
 	if *sleep && *nap {
-		return handoffArgs{}, errors.New("--sleep ends the day and --nap starts the next one; pass one or neither, and neither lets attn decide from whether the user is around")
+		return handoffArgs{}, errors.New("--sleep ends the session and --nap starts the next one; pass one or neither, and neither lets attn decide from whether the user is around")
 	}
 	if fs.NArg() != 0 {
 		return handoffArgs{}, fmt.Errorf("handoff takes its letter in -m, not %q", strings.Join(fs.Args(), " "))
 	}
 	if *retry && strings.TrimSpace(*message) != "" {
-		return handoffArgs{}, errors.New("--retry turns the day over with the letter you already filed, so it takes no -m; drop one of the two")
+		return handoffArgs{}, errors.New("--retry closes the session with the letter you already filed, so it takes no -m; drop one of the two")
 	}
 	if !*retry && strings.TrimSpace(*message) == "" {
 		return handoffArgs{}, errors.New(`the letter is the handoff — pass it with -m "<your letter>", or -m - to pipe it in`)
 	}
-	parsed := handoffArgs{note: *message, day: *day, retry: *retry, session: protocol.SessionID(strings.TrimSpace(*session)), json: *jsonOut}
+	parsed := handoffArgs{note: *message, summary: *summary, retry: *retry, session: protocol.SessionID(strings.TrimSpace(*session)), json: *jsonOut}
 	switch {
 	case *sleep:
-		parsed.close = protocol.CrewDayCloseSleep
+		parsed.close = protocol.CrewSessionCloseSleep
 	case *nap:
-		parsed.close = protocol.CrewDayCloseNap
+		parsed.close = protocol.CrewSessionCloseNap
 	}
 	if parsed.session == "" {
 		parsed.session = protocol.TrimID(envSession())
@@ -114,7 +114,7 @@ func runHandoff(args []string) {
 		}
 		note = string(raw)
 	}
-	result, err := client.New("").CrewHandoff(parsed.session, note, parsed.retry, parsed.close, parsed.day)
+	result, err := client.New("").CrewHandoff(parsed.session, note, parsed.retry, parsed.close, parsed.summary)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "handoff: %v\n", err)
 		os.Exit(1)
@@ -133,14 +133,14 @@ func printHandoffResult(result *protocol.CrewHandoffResult, retry bool) {
 		fmt.Printf("%s's letter is filed at %s.\n", result.Name, result.Path)
 	}
 	if pending := protocol.Deref(result.PendingSummaries); pending != 0 {
-		fmt.Printf("Day line #%s filed; %d summaries pending. This day keeps running. Run attn memory summarize, then pipe the answers to attn memory summarize -. The last answer completes the requested turnover.\n", protocol.Deref(result.DayID), pending)
+		fmt.Printf("Session line #%s filed; %d summaries pending. This session keeps running. Run attn memory summarize, then pipe the answers to attn memory summarize -. The last answer completes the requested turnover.\n", protocol.Deref(result.EntryID), pending)
 		return
 	}
 	if napErr := strings.TrimSpace(protocol.Deref(result.NapError)); napErr != "" {
 		fmt.Fprintf(os.Stderr, "handoff: could not wake a successor: %s\n%s still has this session. Run `attn handoff --retry` to use the filed letter; do not write another.\n", napErr, result.Name)
 		os.Exit(1)
 	}
-	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseSleep {
+	if protocol.Deref(result.Outcome) == protocol.CrewSessionCloseSleep {
 		fmt.Printf("%s is asleep. No successor was started. Click %[1]s in the sidebar to wake them.\n", result.Name)
 		return
 	}

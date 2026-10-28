@@ -92,6 +92,11 @@
                 ]
               },
               {
+                "kind": "text",
+                "id": "session.vocabulary",
+                "source": "content/vocabulary.md"
+              },
+              {
                 "kind": "when",
                 "condition": {
                   "field": {
@@ -5552,5 +5557,5 @@
       ]
     }
   ],
-  "definitions_hash": "14828146c6b6676896d519af14e53f6f70c89628a3f5fdd0ece96ddd55eed857"
+  "definitions_hash": "19497ab747fe069d013e2e5988218d9f78601472cc36494da5a8e4437e71370b"
 }

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -127,7 +126,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	if err != nil || !again.AlreadyRetired || len(again.ReleasedSeeds) != 0 {
 		t.Fatalf("repeat retire = %+v %v", again, err)
 	}
-	if _, err := cli.CrewHandoff(wake.SessionID, "Retired for now.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+	if _, err := cli.CrewHandoff(wake.SessionID, "Retired for now.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	w.restart()
@@ -204,9 +203,9 @@ func TestRetiredMembersDoNotBlockProfileDeletion(t *testing.T) {
 func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
 	for _, how := range []struct {
 		name  string
-		close protocol.CrewDayClose
+		close protocol.CrewSessionClose
 	}{
-		{name: "default"}, {name: "nap", close: protocol.CrewDayCloseNap},
+		{name: "default"}, {name: "nap", close: protocol.CrewSessionCloseNap},
 	} {
 		t.Run(how.name, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Claude)
@@ -224,7 +223,7 @@ func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil || filed.NapError != nil {
+			if protocol.Deref(filed.Outcome) != protocol.CrewSessionCloseSleep || filed.SessionID != nil || filed.NapError != nil {
 				t.Fatalf("retired closure = %+v", filed)
 			}
 			letter, err := os.ReadFile(filed.Path)
@@ -256,7 +255,12 @@ func TestARetiredMemberThatClearsStillReceivesItsSleepRequest(t *testing.T) {
 		if err != nil || retired.Sleep == nil || protocol.Deref(retired.Sleep.DeliveryStatus) != protocol.AgentMsgStatusQueued {
 			t.Fatalf("queued retirement = %+v %v", retired, err)
 		}
+		submitted := make(chan string)
+		day.term.OnSubmit(func(prompt string) { submitted <- prompt })
 		app.TypeLine(string(wake.SessionID), "/clear")
+		if prompt := <-submitted; prompt != "/clear" {
+			t.Fatalf("retired day received %q, want /clear", prompt)
+		}
 		day.transcript = fakeagent.WriteClaudeTranscript(t, day.term.Options.CWD, "cleared")
 		if err := cli.ObserveAgentConversation(protocol.TerminalID(day.self), day.transcript.ConversationID, day.transcript.Path); err != nil {
 			t.Fatal(err)
@@ -265,9 +269,10 @@ func TestARetiredMemberThatClearsStillReceivesItsSleepRequest(t *testing.T) {
 		awaitClosed(app, string(wake.SessionID))
 		day.id = string(next.ID)
 		day.reply("Ready in this conversation. <!-- attn:state=idle -->")
-		w.advance(30 * time.Second)
-		if got := day.prompts(); day.promptsContaining(inboxDoorbell) != 1 {
-			t.Fatalf("cleared retired day received %q", got)
+		if prompt := <-submitted; !strings.Contains(prompt, inboxDoorbell) {
+			t.Fatalf("cleared retired day received %q", prompt)
+		} else {
+			day.take(prompt)
 		}
 		mail := readInbox(t, cli, string(next.ID), 0)
 		found := false
@@ -286,8 +291,8 @@ func TestARetiredMemberThatClearsStillReceivesItsSleepRequest(t *testing.T) {
 		if err != nil || len(all.Members) != 1 || all.Members[0].Key != created.Member.Key || !all.Members[0].Retired || protocol.Deref(all.Members[0].BindingSession) != next.ID {
 			t.Fatalf("cleared retired member = %+v %v", all, err)
 		}
-		filed, err := cli.CrewHandoff(next.ID, "Retired, with the cleared day finished.", false, protocol.CrewDayCloseNap, "")
-		if err != nil || protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil {
+		filed, err := cli.CrewHandoff(next.ID, "Retired, with the cleared day finished.", false, protocol.CrewSessionCloseNap, "")
+		if err != nil || protocol.Deref(filed.Outcome) != protocol.CrewSessionCloseSleep || filed.SessionID != nil {
 			t.Fatalf("retired clear closure = %+v %v", filed, err)
 		}
 		letter, err := os.ReadFile(filed.Path)

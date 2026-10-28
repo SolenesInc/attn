@@ -87,7 +87,7 @@ func TestDelegatorsHearTheirDelegatesUntilTheyUnwatchAcrossRestarts(t *testing.T
 
 func TestACrewDelegatorsWatchStaysWithTheMemberAfterANap(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, first := crewDayInBubble(t, w, nil)
+		_, first := crewSessionInBubble(t, w, nil)
 		cli := w.Client()
 		if err := os.MkdirAll(w.Path("worker"), 0o755); err != nil {
 			t.Fatal(err)
@@ -112,7 +112,7 @@ func TestACrewDelegatorsWatchStaysWithTheMemberAfterANap(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "waiting for the worker", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "waiting for the worker", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		gardenNudgeNote(t, cli, worker.id, delegated.SeedID, "ready for review", true)

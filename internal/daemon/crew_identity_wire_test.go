@@ -151,7 +151,7 @@ func TestAMemberIsOneLedgerRow(t *testing.T) {
 	day := wakeCrew(t, cli, "Keel", "")
 	w.Launched(string(day.SessionID))
 	for range 2 {
-		result := crewHandoff(t, cli, string(day.SessionID), "Leave this for tomorrow.", false, protocol.CrewDayCloseNap)
+		result := crewHandoff(t, cli, string(day.SessionID), "Leave this for tomorrow.", false, protocol.CrewSessionCloseNap)
 		if result.NapError != nil || result.SessionID == nil {
 			t.Fatalf("nap: %+v", result)
 		}
@@ -199,7 +199,7 @@ func TestAFailedCrewWakeKeepsItsLastLedgerRow(t *testing.T) {
 		w.restart()
 		cli := w.Client()
 		day := wakeCrew(t, cli, "Keel", "")
-		if _, err := cli.CrewHandoff(day.SessionID, "Keep this day in the ledger.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(day.SessionID, "Keep this day in the ledger.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		w.terms.RefuseNextSpawn(errors.New("PTY allocation failed"))
@@ -225,7 +225,7 @@ func TestAResumedCrewConversationStaysInTheOpenLedgerAfterANewWake(t *testing.T)
 	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
-	if _, err := cli.CrewHandoff(day.SessionID, "Resume this conversation later.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+	if _, err := cli.CrewHandoff(day.SessionID, "Resume this conversation later.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: day.SessionID}); err != nil {

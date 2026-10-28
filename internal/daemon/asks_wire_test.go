@@ -423,7 +423,7 @@ func TestAnAskFollowsItsAddresseeNotTheSessionThatFiledIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("crew ask: %v", err)
 	}
-	successor := protocol.Deref(crewHandoff(t, cli, string(day.SessionID), "Still waiting on the cache answer.", false, protocol.CrewDayCloseNap).SessionID)
+	successor := protocol.Deref(crewHandoff(t, cli, string(day.SessionID), "Still waiting on the cache answer.", false, protocol.CrewSessionCloseNap).SessionID)
 	w.Launched(string(successor))
 	if shown := w.App().Initial.Asks; len(shown) != 1 || shown[0].ID != asked.ID || protocol.Deref(shown[0].CrewMember) != "trellis" {
 		t.Fatalf("after trellis napped the app shows %+v, want its open ask", shown)

@@ -45,6 +45,9 @@ domain concepts with the user.
 10. Each coined name's definition maps it to the established term that carries
     its meaning (seed → ticket, plot → epic). Choose established terms with care:
     they bring all their associations with them.
+11. When a term that agents in attn see changes in docs/internal/glossary.md,
+    update internal/prompts/content/vocabulary.md to match. The glossary stays
+    the detailed version for agents working on attn.
 
 ## Tech debt
 

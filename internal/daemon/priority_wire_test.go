@@ -76,7 +76,7 @@ func TestCrewNapInheritsPriority(t *testing.T) {
 	if err := cli.SetSessionPriority(day.SessionID, true); err != nil {
 		t.Fatal(err)
 	}
-	next := crewHandoff(t, cli, string(day.SessionID), "Continue the work", false, protocol.CrewDayCloseNap)
+	next := crewHandoff(t, cli, string(day.SessionID), "Continue the work", false, protocol.CrewSessionCloseNap)
 	id := protocol.Deref(next.SessionID)
 	w.Launched(string(id))
 	if !protocol.Deref(queriedSession(t, cli, string(id)).Priority) {

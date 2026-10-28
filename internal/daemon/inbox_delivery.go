@@ -259,7 +259,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			if member := memberID; member != "" {
 				key := to.wake
 				d.crewWakeMu.Lock()
-				result, err := d.crewWakeDayWithChargeLocked(key, "", attempt.FromUser == 0, func() error {
+				result, err := d.crewWakeSessionWithChargeLocked(key, "", attempt.FromUser == 0, func() error {
 					started, err := d.store.StampInboxAttempt(a, now)
 					if err != nil {
 						return err

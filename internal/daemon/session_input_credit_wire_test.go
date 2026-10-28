@@ -9,7 +9,7 @@ import (
 
 func TestAHeartbeatArmsNoAutoSettleButTheUsersAnswerInTheSameRunDoes(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, day := crewDayInBubble(t, w, map[string]string{"auto_settle_enabled": "true"})
+		app, day := crewSessionInBubble(t, w, map[string]string{"auto_settle_enabled": "true"})
 		app.TypeLine(day.id, "pick a colour for the banner")
 		day.reply("Red or blue? <!-- attn:state=waiting_input -->")
 		if waiting := queriedSession(t, day.cli, day.id); !protocol.Deref(waiting.TurnOwed) {

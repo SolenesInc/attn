@@ -329,16 +329,16 @@ func TestQuickCapturesWakeAMemberWithoutSpendingItsWakeLimit(t *testing.T) {
 		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("trellis")}
 		first := sendQuickCapture(t, app, mailbox, "first user request")
 		synctest.Wait()
-		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
-		if dayID == "" {
+		boundSessionID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		if boundSessionID == "" {
 			t.Fatal("a quick capture did not wake the member under crew.wake_limit=0")
 		}
-		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(e protocol.BackgroundLaunchMessage) bool { return e.SessionID == dayID })
+		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(e protocol.BackgroundLaunchMessage) bool { return e.SessionID == boundSessionID })
 		if arrival.RequestedBy != "a quick capture" {
 			t.Fatalf("wake requested_by=%q", arrival.RequestedBy)
 		}
 		second := sendQuickCapture(t, app, mailbox, "second user request")
-		day := w.bootBubbleClaude(t, string(dayID))
+		day := w.bootBubbleClaude(t, string(boundSessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if got := day.promptsContaining(first.Content); got != 1 {
 			t.Fatalf("the wake typed the first quick capture %d times, want once", got)
@@ -351,17 +351,17 @@ func TestQuickCapturesWakeAMemberWithoutSpendingItsWakeLimit(t *testing.T) {
 				t.Fatalf("a typed quick capture is unread in history: %+v", r)
 			}
 		}
-		if items := readInbox(t, cli, string(dayID), 0).Items; len(items) != 0 {
+		if items := readInbox(t, cli, string(boundSessionID), 0).Items; len(items) != 0 {
 			t.Fatalf("typed quick captures stayed in the inbox: %+v", items)
 		}
-		if _, err := cli.CrewHandoff(dayID, "finished the quick captures", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(boundSessionID, "finished the quick captures", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 
 		third := sendQuickCapture(t, app, mailbox, "one more thing")
 		synctest.Wait()
 		nextID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
-		if nextID == "" || nextID == dayID {
+		if nextID == "" || nextID == boundSessionID {
 			t.Fatalf("a quick capture right after the member slept woke %q, want a new session at once", nextID)
 		}
 		next := w.bootBubbleClaude(t, string(nextID))

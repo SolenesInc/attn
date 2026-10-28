@@ -58,6 +58,20 @@ Attn keeps its own copy of conversations a harness would delete. Keep one
 forever with "Keep conversation" on its session in the ledger, and forget it from
 the Conversations tab.
 
+## Reload
+
+"Reload this agent" in the command palette restarts an agent in place with its
+saved conversation. Running work is interrupted and non-persistent state may
+be lost.
+
+`attn agent reload <session-or-member-or-seed>...` does the same from the CLI.
+Targets resolve inside the caller's profile. A crew name follows the member's
+current session, including after a rename. Sleeping members stay asleep.
+A session may reload itself and its delegates, including delegates of delegates.
+The Chief may reload any agent in the profile, or use `--all` to include every
+agent there. Shells are excluded. Run `attn agent reload --help` for flags and
+batch results.
+
 ## Details
 
 <details>

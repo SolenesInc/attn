@@ -23,7 +23,7 @@ on its seed with attn seed note <id> -m "…".
 
   add "<line>"           remember one UTF-8 line, at most 280 bytes
   recall '<regex>'       search entries, case insensitive; newest matches within 20000 bytes
-  zoom <id|range>        open a summary's halves, or an entry's day references
+  zoom <id|range>        open a summary's halves, or an entry's session references
   summarize             list every block ready to summarize and its sources
   summarize -           read answers from stdin: <range> <one line> per block
   forget <id>           blank an entry; dependent summaries need rewriting
@@ -31,17 +31,18 @@ on its seed with attn seed note <id> -m "…".
   import -              read <letter filename> <one line> per letter from stdin
 
 Entry ids start at 0. Ranges include both ends: 16-31. Summaries also fit in
-280 bytes. At closure, file with attn handoff --day "<one line>" -m -,
+280 bytes. At closure, file with attn handoff --summary "<one line>" -m -,
 then summarize until no blocks remain. attn handoff --help describes the
 turnover and --retry.
 
 Import letters oldest first, before the first summary exists. Import can shift
-the ids already handed out that day. Imported letters have no session, so zoom shows only the letter. Day lines
-filed with attn handoff --day link to both the letter and
+the ids already handed out in this session. Imported letters have no recorded
+session, so zoom shows only the letter. Session lines filed with
+attn handoff --summary link to both the letter and
 attn session transcript <session>.
 
 memory/ is written by attn. Members and the user change it only through these
-commands. Forget preserves the id and day references. Rewrite preserves entries.
+commands. Forget preserves the id and session references. Rewrite preserves entries.
 
 flags:
   --session <id>    defaults to the current session

@@ -164,7 +164,7 @@ func TestQuickCaptureGuidanceFollowsTheExperimentAtEachLaunch(t *testing.T) {
 					}
 					chief.Prompted()
 					chief.Reply("Ready. <!-- attn:state=idle -->")
-					if _, err := w.Client().CrewHandoff(protocol.SessionID(id), "Rest.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+					if _, err := w.Client().CrewHandoff(protocol.SessionID(id), "Rest.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 						t.Fatal(err)
 					}
 				}

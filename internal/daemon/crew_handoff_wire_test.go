@@ -16,7 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func crewHandoff(t *testing.T, cli *client.Client, session, letter string, retry bool, close protocol.CrewDayClose) *protocol.CrewHandoffResult {
+func crewHandoff(t *testing.T, cli *client.Client, session, letter string, retry bool, close protocol.CrewSessionClose) *protocol.CrewHandoffResult {
 	t.Helper()
 	result, err := cli.CrewHandoff(protocol.SessionID(session), letter, retry, close, "")
 	if err != nil {
@@ -48,11 +48,11 @@ func TestCrewCanFileTwoLettersWithinTheSameMinute(t *testing.T) {
 		cli, app := w.Client(), w.App()
 		first := wakeCrew(t, cli, "trellis", "")
 		w.bootBubbleClaude(t, string(first.SessionID))
-		one := crewHandoff(t, cli, string(first.SessionID), "The first letter.\n", false, protocol.CrewDayCloseSleep)
+		one := crewHandoff(t, cli, string(first.SessionID), "The first letter.\n", false, protocol.CrewSessionCloseSleep)
 		w.advance(time.Nanosecond)
 		second := wakeCrew(t, cli, "trellis", "")
 		w.bootBubbleClaude(t, string(second.SessionID))
-		two := crewHandoff(t, cli, string(second.SessionID), "The second letter.\n", false, protocol.CrewDayCloseSleep)
+		two := crewHandoff(t, cli, string(second.SessionID), "The second letter.\n", false, protocol.CrewSessionCloseSleep)
 		listed := testworld.Request(app, protocol.CrewHandoffsGetMessage{Cmd: protocol.CmdCrewHandoffsGet, Member: "trellis", RequestID: protocol.Ptr("letters")},
 			protocol.EventCrewHandoffsGetResult, func(r protocol.CrewHandoffsGetResultMessage) bool { return r.RequestID == "letters" })
 		want := []string{filepath.Base(two.Path), filepath.Base(one.Path), legacy}
@@ -87,7 +87,7 @@ func TestAHandoffFilesTheLetterAndWakesTheNextDay(t *testing.T) {
 	letter := "Dear next trellis,\n\n#901 is waiting on review.\n"
 	handed := crewHandoff(t, cli, string(day.SessionID), letter, false, "")
 	successor := protocol.Deref(handed.SessionID)
-	if protocol.Deref(handed.Outcome) != protocol.CrewDayCloseNap || handed.NapError != nil || successor == "" || successor == day.SessionID {
+	if protocol.Deref(handed.Outcome) != protocol.CrewSessionCloseNap || handed.NapError != nil || successor == "" || successor == day.SessionID {
 		t.Fatalf("handoff = %+v, want a nap into a fresh day", handed)
 	}
 	if body, err := os.ReadFile(handed.Path); err != nil || string(body) != letter {
@@ -117,7 +117,7 @@ func TestAHandoffFilesTheLetterAndWakesTheNextDay(t *testing.T) {
 		setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
 		day := wakeCrew(t, cli, "keel", "")
 		w.Launched(string(day.SessionID))
-		handed := crewHandoff(t, cli, string(day.SessionID), "Codex signing off: the fence lands first.", false, protocol.CrewDayCloseNap)
+		handed := crewHandoff(t, cli, string(day.SessionID), "Codex signing off: the fence lands first.", false, protocol.CrewSessionCloseNap)
 		next := w.Launched(string(protocol.Deref(handed.SessionID)))
 		if next.Harness != fakeagent.Codex || crewLaunchFlag(next.Argv, "--model") != "" {
 			t.Fatalf("the successor launched %s with argv %q, want codex on its default model", next.Harness, next.Argv)
@@ -134,8 +134,8 @@ func TestAHandoffFilesTheLetterAndWakesTheNextDay(t *testing.T) {
 		day := wakeCrew(t, cli, "alder", "")
 		w.Launched(string(day.SessionID))
 		before := crewSessionCount(t, cli)
-		slept := crewHandoff(t, cli, string(day.SessionID), "Signing off for the night.", false, protocol.CrewDayCloseSleep)
-		if protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep || slept.SessionID != nil {
+		slept := crewHandoff(t, cli, string(day.SessionID), "Signing off for the night.", false, protocol.CrewSessionCloseSleep)
+		if protocol.Deref(slept.Outcome) != protocol.CrewSessionCloseSleep || slept.SessionID != nil {
 			t.Fatalf("sleep = %+v, want the day ended with no successor", slept)
 		}
 		if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
@@ -183,7 +183,7 @@ func TestAFailedNapKeepsTheLetterAndTheDayAndARetryTurnsItOver(t *testing.T) {
 	}
 	retried := crewHandoff(t, cli, string(day.SessionID), "", true, "")
 	successor := protocol.Deref(retried.SessionID)
-	if protocol.Deref(retried.Outcome) != protocol.CrewDayCloseNap || retried.NapError != nil || successor == "" || retried.Path != failed.Path {
+	if protocol.Deref(retried.Outcome) != protocol.CrewSessionCloseNap || retried.NapError != nil || successor == "" || retried.Path != failed.Path {
 		t.Fatalf("retry = %+v, want a nap on the letter already filed at %s", retried, failed.Path)
 	}
 	w.Launched(string(successor))
@@ -202,8 +202,8 @@ func TestAFailedNapKeepsTheLetterAndTheDayAndARetryTurnsItOver(t *testing.T) {
 		if failed := crewHandoff(t, cli, string(day.SessionID), "Tonight's letter.", false, ""); failed.NapError == nil {
 			t.Fatalf("handoff = %+v, want the nap to fail", failed)
 		}
-		slept := crewHandoff(t, cli, string(day.SessionID), "", true, protocol.CrewDayCloseSleep)
-		if protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep {
+		slept := crewHandoff(t, cli, string(day.SessionID), "", true, protocol.CrewSessionCloseSleep)
+		if protocol.Deref(slept.Outcome) != protocol.CrewSessionCloseSleep {
 			t.Fatalf("retry --sleep = %+v, want sleep", slept)
 		}
 		if binding := crewRosterMember(t, cli, "keel").BindingSession; binding != nil {
@@ -307,7 +307,7 @@ func TestDeliveryWakesChargeTheLimitAndReportAnAlreadyUsedLimit(t *testing.T) {
 			if day.promptsContaining(inboxDoorbell) != 1 {
 				t.Fatalf("day %d did not ring", attempt)
 			}
-			if _, err := cli.CrewHandoff(id, "sleep unread", false, protocol.CrewDayCloseSleep, ""); err != nil {
+			if _, err := cli.CrewHandoff(id, "sleep unread", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 				t.Fatal(err)
 			}
 			if attempt == 1 {

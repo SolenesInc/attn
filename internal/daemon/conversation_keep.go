@@ -177,12 +177,12 @@ func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.Ke
 	}
 }
 
-func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConversationCrewDay, error) {
+func (d *Daemon) crewSessionReferences() (map[conversationKey][]protocol.KeptConversationCrewSession, error) {
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		return nil, err
 	}
-	referenced := make(map[conversationKey][]protocol.KeptConversationCrewDay)
+	referenced := make(map[conversationKey][]protocol.KeptConversationCrewSession)
 	var readErrors error
 	for _, member := range members {
 		if member.Home == "" {
@@ -197,14 +197,14 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 		}
 		lock.Unlock()
 		if err != nil {
-			readErrors = errors.Join(readErrors, fmt.Errorf("crew day references for %s: %w", member.Key.String(), err))
+			readErrors = errors.Join(readErrors, fmt.Errorf("crew session references for %s: %w", member.Key.String(), err))
 			continue
 		}
 		for id, entry := range memory.Entries {
-			if entry.Day == nil || entry.Day.Session == "" {
+			if entry.Session == nil || entry.Session.ID == "" {
 				continue
 			}
-			sessionID := protocol.SessionID(entry.Day.Session)
+			sessionID := protocol.SessionID(entry.Session.ID)
 			session := d.store.SessionLedgerEntry(sessionID)
 			if session == nil {
 				continue
@@ -214,7 +214,7 @@ func (d *Daemon) crewDayReferences() (map[conversationKey][]protocol.KeptConvers
 				continue
 			}
 			key := conversationKey{session.Agent, resumeID}
-			referenced[key] = append(referenced[key], protocol.KeptConversationCrewDay{Member: member.Key.String(), Name: d.memberName(member.Key), DayID: strconv.Itoa(id)})
+			referenced[key] = append(referenced[key], protocol.KeptConversationCrewSession{Member: member.Key.String(), Name: d.memberName(member.Key), EntryID: strconv.Itoa(id)})
 		}
 	}
 	return referenced, readErrors
@@ -229,11 +229,11 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	for key := range seeds {
 		referenced[key] = true
 	}
-	days, dayReadErr := d.crewDayReferences()
-	if days == nil && dayReadErr != nil {
-		return nil, dayReadErr
+	crewSessions, referencesErr := d.crewSessionReferences()
+	if crewSessions == nil && referencesErr != nil {
+		return nil, referencesErr
 	}
-	for key := range days {
+	for key := range crewSessions {
 		referenced[key] = true
 	}
 	pins, err := d.store.ConversationPins()
@@ -243,7 +243,7 @@ func (d *Daemon) referencedConversations() (map[conversationKey]bool, error) {
 	for _, pin := range pins {
 		referenced[conversationKey{pin.Agent, pin.ResumeID}] = true
 	}
-	return referenced, dayReadErr
+	return referenced, referencesErr
 }
 
 func (d *Daemon) keepConversations(now time.Time) {

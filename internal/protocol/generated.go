@@ -2693,11 +2693,6 @@ type CrewCreateResult struct {
 	Member CrewMember `json:"member"`
 }
 
-type CrewDayClose string
-
-const CrewDayCloseNap CrewDayClose = "nap"
-const CrewDayCloseSleep CrewDayClose = "sleep"
-
 type CrewHandoffDocument struct {
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
@@ -2762,13 +2757,10 @@ type CrewHandoffGetResultMessage struct {
 
 type CrewHandoffMessage struct {
 	// Close corresponds to the JSON schema field "close".
-	Close *CrewDayClose `json:"close,omitempty,omitzero"`
+	Close *CrewSessionClose `json:"close,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
-
-	// Day corresponds to the JSON schema field "day".
-	Day *string `json:"day,omitempty,omitzero"`
 
 	// Note corresponds to the JSON schema field "note".
 	Note string `json:"note"`
@@ -2778,11 +2770,14 @@ type CrewHandoffMessage struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
+
+	// Summary corresponds to the JSON schema field "summary".
+	Summary *string `json:"summary,omitempty,omitzero"`
 }
 
 type CrewHandoffResult struct {
-	// DayID corresponds to the JSON schema field "day_id".
-	DayID *string `json:"day_id,omitempty,omitzero"`
+	// EntryID corresponds to the JSON schema field "entry_id".
+	EntryID *string `json:"entry_id,omitempty,omitzero"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
@@ -2794,7 +2789,7 @@ type CrewHandoffResult struct {
 	NapError *string `json:"nap_error,omitempty,omitzero"`
 
 	// Outcome corresponds to the JSON schema field "outcome".
-	Outcome *CrewDayClose `json:"outcome,omitempty,omitzero"`
+	Outcome *CrewSessionClose `json:"outcome,omitempty,omitzero"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
@@ -3251,6 +3246,11 @@ type CrewRetireResult struct {
 	// Unread corresponds to the JSON schema field "unread".
 	Unread int `json:"unread"`
 }
+
+type CrewSessionClose string
+
+const CrewSessionCloseNap CrewSessionClose = "nap"
+const CrewSessionCloseSleep CrewSessionClose = "sleep"
 
 type CrewSetMessage struct {
 	// Agent corresponds to the JSON schema field "agent".
@@ -6219,9 +6219,9 @@ type KeptConversation struct {
 	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
 }
 
-type KeptConversationCrewDay struct {
-	// DayID corresponds to the JSON schema field "day_id".
-	DayID string `json:"day_id"`
+type KeptConversationCrewSession struct {
+	// EntryID corresponds to the JSON schema field "entry_id".
+	EntryID string `json:"entry_id"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
@@ -6333,8 +6333,8 @@ type KeptConversationRow struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
 
-	// CrewDays corresponds to the JSON schema field "crew_days".
-	CrewDays []KeptConversationCrewDay `json:"crew_days,omitempty,omitzero"`
+	// CrewSessions corresponds to the JSON schema field "crew_sessions".
+	CrewSessions []KeptConversationCrewSession `json:"crew_sessions,omitempty,omitzero"`
 
 	// Kept corresponds to the JSON schema field "kept".
 	Kept *KeptConversation `json:"kept,omitempty,omitzero"`

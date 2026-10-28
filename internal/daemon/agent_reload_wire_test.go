@@ -112,3 +112,33 @@ func TestAgentReloadAllIncludesChiefAndCrewButOnlyInTheirProfile(t *testing.T) {
 		}
 	}, fakeagent.Claude)
 }
+
+func TestAgentReloadFollowsACrewMembersCurrentName(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		app, cli := w.App(), w.Client()
+		chief := configureChiefOn(t, w, app, fakeagent.Claude, "sonnet")
+		member := wakeCrew(t, cli, "Trellis", "").SessionID
+		reload := func(name string) {
+			t.Helper()
+			result, err := cli.AgentReload([]string{name}, protocol.SessionID(chief), false)
+			if err != nil || len(result.Outcomes) != 1 || !result.Outcomes[0].Success || protocol.Deref(result.Outcomes[0].SessionID) != member {
+				t.Fatalf("reload %q = %+v, %v; want crew session %s", name, result, err, member)
+			}
+			terminal := app.Terminal(string(member))
+			testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
+			t.Logf("reload %q respawned crew session %s", name, member)
+		}
+		reload("Trellis")
+		if _, err := cli.CrewRename("Trellis", "Canopy"); err != nil {
+			t.Fatal(err)
+		}
+		old, err := cli.AgentReload([]string{"Trellis"}, protocol.SessionID(chief), false)
+		if err != nil || len(old.Outcomes) != 1 || old.Outcomes[0].Success || protocol.Deref(old.Outcomes[0].Error) == "" {
+			t.Fatalf("reload old name = %+v, %v; want a refusal", old, err)
+		}
+		reload("Canopy")
+		reload("member:trellis")
+	}, fakeagent.Claude)
+}

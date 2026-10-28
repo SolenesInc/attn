@@ -31,7 +31,7 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 		if _, err := cli.SeedTransition(first, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		crewHandoff(t, cli, string(first), "Wake when the build is ready.", false, protocol.CrewDayCloseSleep)
+		crewHandoff(t, cli, string(first), "Wake when the build is ready.", false, protocol.CrewSessionCloseSleep)
 		home := filepath.Join(w.Dir, "crew", "trellis")
 		saved := home + "-saved"
 		if err := os.Rename(home, saved); err != nil {
@@ -51,11 +51,11 @@ func TestAGardenBellRetriesAfterACrewRosterPathFailureIsRepaired(t *testing.T) {
 			t.Fatal(err)
 		}
 		w.advance(inbox.AttemptDelay)
-		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
-		if dayID == "" {
+		boundSessionID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
+		if boundSessionID == "" {
 			t.Fatal("Garden event was lost during the roster failure")
 		}
-		day := w.bootBubbleClaude(t, string(dayID))
+		day := w.bootBubbleClaude(t, string(boundSessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if mail := readInbox(t, cli, day.id, 0).Items; len(mail) != 1 || !strings.Contains(mail[0].Content, seed) {
 			t.Fatalf("recovered Garden mail=%+v; want the failed event delivered", mail)

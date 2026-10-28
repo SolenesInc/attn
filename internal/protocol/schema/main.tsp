@@ -5286,10 +5286,10 @@ model KeptConversationSeed {
   slug: string;
   title: string;
 }
-model KeptConversationCrewDay {
+model KeptConversationCrewSession {
   member: string;
   name: string;
-  day_id: string;
+  entry_id: string;
 }
 model KeptConversationRow {
   agent: string;
@@ -5301,7 +5301,7 @@ model KeptConversationRow {
   pinned_at?: string;
   pending_reason?: string;
   seeds: KeptConversationSeed[];
-  crew_days?: KeptConversationCrewDay[];
+  crew_sessions?: KeptConversationCrewSession[];
 }
 @extension("x-on", #{ home: true })
 model KeptConversationListMessage {
@@ -6899,9 +6899,9 @@ model CrewMember {
   // Where the member's sessions launch; absent until the wake slice records one.
   cwd?: string;
   agent?: string;
-  // The model this member's days run on with its recorded harness. Absent takes
+  // The model this member's sessions run on with its recorded harness. Absent takes
   // the configured default for the launch harness, then the crew fallback when
-  // none is configured. A one-day agent override does not carry this model to
+  // none is configured. A single-session agent override does not carry this model to
   // another harness.
   `model`?: string;
   effort?: string;
@@ -6910,7 +6910,7 @@ model CrewMember {
   resolved_effort?: string;
   // The places the member's charter is about.
   awareness_dirs: string[];
-  // The session living this member's current day. Present only while that
+  // The session bound to this member. Present only while that
   // session is live — the daemon judges the binding at read, so presence IS
   // "awake" and a caller never re-derives liveness.
   binding_session?: SessionID;
@@ -7034,8 +7034,8 @@ model CrewHandoffGetResultMessage {
   handoff?: CrewHandoffDocument;
 }
 
-// Start a member's day: launch a session bound to it, in the member's own cwd,
-// with its awareness dirs and its priming. Home-only. A member whose day is
+// Start a member's session: launch a session bound to it, in the member's own cwd,
+// with its awareness dirs and its priming. Home-only. A member whose session is
 // already live is not woken twice — the result names that session instead, so
 // the caller focuses it rather than racing the single-holder rule.
 @extension("x-on", #{ home: true })
@@ -7054,7 +7054,7 @@ model CrewWakeMessage {
 }
 
 // CrewWakeResultMessage replies to a websocket crew_wake, correlated by
-// request_id. session_id is the day to focus — the member's, whether this call
+// request_id. session_id is the session to focus — the member's, whether this call
 // started it or found it already running. The session and its pane reach the UI
 // through the normal broadcasts, so the sidebar seeds nothing.
 model CrewWakeResultMessage {
@@ -7069,7 +7069,7 @@ model CrewWakeResultMessage {
   profile_id?: string;
   already_awake?: boolean;
   // Present when wake found a stale binding, released it, and started this
-  // fresh day. The caller names the repair instead of silently focusing a
+  // fresh session. The caller names the repair instead of silently focusing a
   // replacement for a process that had already exited.
   released_session_id?: SessionID;
 }
@@ -7079,15 +7079,15 @@ model CrewWakeResult {
   member: string;
   session_id: SessionID;
   profile_id: string;
-  // True when the member was already awake and session_id is the day that was
+  // True when the member was already awake and session_id is the session that was
   // already running — nothing was launched.
   already_awake: boolean;
-  // The dead day whose stale binding this wake released before launching the
+  // The dead session whose stale binding this wake released before launching the
   // returned session. Absent when there was no stale binding.
   released_session_id?: SessionID;
 }
 
-// Ask an awake member to close its day and sleep. This is consented closure:
+// Ask an awake member to close its session and sleep. This is consented closure:
 // the daemon delivers a user-originated request telling the member to write its
 // handoff and file it with `attn handoff --sleep`; it does not kill the member.
 // Home-only. An asleep member is a named no-op rather than a silent success.
@@ -7138,10 +7138,10 @@ model CrewSetMessage {
   cmd: "crew_set";
   member: string;
   cwd?: string;
-  // The harness the member's days run on. An empty string clears it back to
+  // The harness the member's sessions run on. An empty string clears it back to
   // the crew default — the way out, said the way `cwd` says it.
   agent?: string;
-  // The model the member's days run on. An empty string clears it back to the
+  // The model the member's sessions run on. An empty string clears it back to the
   // configured harness default, then the crew fallback.
   `model`?: string;
   effort?: string;
@@ -7210,49 +7210,49 @@ model CrewPrimeResult {
   memory_enabled?: boolean;
 }
 
-// File the calling session's member letter and end its day. The note is the
+// File the calling member's letter and end its session. The note is the
 // member's own prose — attn names the file and never edits what is in it — and
 // the line is append-only, so a name already taken is refused rather than
 // overwritten. Home-only, and refused for a session that holds no binding: a
-// crew handoff is a member's day-line, and a session that is nobody has none.
+// crew handoff is a member's session line, and a session that is nobody has none.
 @extension("x-on", #{ home: true })
 model CrewHandoffMessage {
   cmd: "crew_handoff";
   session_id: SessionID;
   note: string;
-  day?: string;
-  // Turn the day over with the letter this day already filed, instead of
+  summary?: string;
+  // Turn the session over with the letter this session already filed, instead of
   // writing one. The way out of a turnover that failed behind a filed letter:
   // the line is append-only, so the letter cannot be written a second time.
   retry?: boolean;
-  // What the filing does to the day. Absent lets attn decide from whether the
-  // user is here: a day that closes while nobody is around does not start
+  // What the filing does to the session. Absent lets attn decide from whether the
+  // user is here: a session that closes while nobody is around does not start
   // another one, because sleeping through an absence is the point.
-  close?: CrewDayClose;
+  close?: CrewSessionClose;
 }
 
-// Whether a filed letter starts the next day or ends this one.
-enum CrewDayClose {
+// Whether a filed letter starts the next session or ends this one.
+enum CrewSessionClose {
   nap,
   sleep,
 }
 
-// Where the letter landed, and what became of the day. A filed letter is never
+// Where the letter landed, and what became of the session. A filed letter is never
 // undone by what follows it: when the nap cannot run, the letter is still filed
 // and `nap_error` says why the successor was not woken.
 model CrewHandoffResult {
   name: string;
   member: string;
   path: string;
-  day_id?: int64;
+  entry_id?: int64;
   pending_summaries?: int32;
-  // The session living the member's new day. Absent when no nap ran.
+  // The member's successor session. Absent when no nap ran.
   session_id?: SessionID;
   // Why no successor was woken, when none was.
   nap_error?: string;
-  // What the day did: `nap` started the next one, `sleep` ended it. Absent when
+  // What the session did: `nap` started the next one, `sleep` ended it. Absent when
   // neither happened, which is what nap_error explains.
-  outcome?: CrewDayClose;
+  outcome?: CrewSessionClose;
 }
 
 @extension("x-on", #{ home: true })

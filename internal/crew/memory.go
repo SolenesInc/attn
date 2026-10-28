@@ -21,15 +21,34 @@ const MemoryWakeBudget = 96
 const MemoryRawBlock = 16
 const MemoryRecallBytes = 20000
 
-type MemoryDay struct {
-	Letter  string `json:"letter"`
-	Session string `json:"session,omitempty"`
+type MemorySession struct {
+	Letter string `json:"letter"`
+	ID     string `json:"id,omitempty"`
 }
 
 type MemoryEntry struct {
-	At   time.Time  `json:"at"`
-	Text string     `json:"text"`
-	Day  *MemoryDay `json:"day,omitempty"`
+	At      time.Time      `json:"at"`
+	Text    string         `json:"text"`
+	Session *MemorySession `json:"session,omitempty"`
+}
+
+func (entry *MemoryEntry) UnmarshalJSON(body []byte) error {
+	type storedEntry MemoryEntry
+	var stored struct {
+		storedEntry
+		Legacy *struct {
+			Letter  string `json:"letter"`
+			Session string `json:"session"`
+		} `json:"day"`
+	}
+	if err := json.Unmarshal(body, &stored); err != nil {
+		return err
+	}
+	*entry = MemoryEntry(stored.storedEntry)
+	if entry.Session == nil && stored.Legacy != nil {
+		entry.Session = &MemorySession{Letter: stored.Legacy.Letter, ID: stored.Legacy.Session}
+	}
+	return nil
 }
 
 type MemorySummary struct {
@@ -94,7 +113,7 @@ func ReadMemory(home string) (Memory, error) {
 		return m, err
 	}
 	for i, entry := range m.Entries {
-		if entry.At.IsZero() || (entry.Text != "" && ValidateMemoryText(entry.Text) != nil) || (entry.Day != nil && (entry.Day.Letter == "" || filepath.Base(entry.Day.Letter) != entry.Day.Letter)) {
+		if entry.At.IsZero() || (entry.Text != "" && ValidateMemoryText(entry.Text) != nil) || (entry.Session != nil && (entry.Session.Letter == "" || filepath.Base(entry.Session.Letter) != entry.Session.Letter)) {
 			return m, fmt.Errorf("%s line %d: invalid memory entry", memoryLog(home), i+1)
 		}
 	}
@@ -312,15 +331,15 @@ func (m *Memory) Forget(home string, id int) error {
 	return replaceMemoryLines(memoryLog(home), m.Entries)
 }
 
-func (m *Memory) Day(home string, entry MemoryEntry) (int, error) {
+func (m *Memory) Session(home string, entry MemoryEntry) (int, error) {
 	if err := ValidateMemoryText(entry.Text); err != nil {
 		return 0, err
 	}
 	for id, old := range m.Entries {
-		if old.Day == nil || old.Day.Session == "" || old.Day.Session != entry.Day.Session {
+		if old.Session == nil || old.Session.ID == "" || old.Session.ID != entry.Session.ID {
 			continue
 		}
-		if (old.Text == entry.Text || old.Text == "") && *old.Day == *entry.Day {
+		if (old.Text == entry.Text || old.Text == "") && *old.Session == *entry.Session {
 			return id, nil
 		}
 		if err := m.Rewrite(home, MemoryBlock{id / 2 * 2, id/2*2 + 2}); err != nil {
@@ -441,8 +460,8 @@ func (m Memory) Lines(blocks []MemoryBlock) []string {
 			if text == "" {
 				text = "(forgotten)"
 			}
-			if e.Day != nil {
-				text += " [day: " + e.Day.Letter + "]"
+			if e.Session != nil {
+				text += " [session: " + e.Session.Letter + "]"
 			}
 			lines = append(lines, fmt.Sprintf("#%d %s %s", b.Lo, e.At.UTC().Format(time.RFC3339), text))
 		} else {

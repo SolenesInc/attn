@@ -202,7 +202,7 @@ func TestChiefEpicUpgradesTheLatestMainDatabase(t *testing.T) {
 	}
 	entry := upgraded.SessionLedgerEntry("day")
 	if entry == nil || protocol.Deref(entry.MemberKey) != "keel" || protocol.Deref(entry.MemberName) != "Keel" {
-		t.Fatalf("crew day after main upgrade: %+v", entry)
+		t.Fatalf("crew session after main upgrade: %+v", entry)
 	}
 	seeds, _, err = upgraded.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
 	if err != nil {
