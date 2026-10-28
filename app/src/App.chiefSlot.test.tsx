@@ -67,7 +67,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
   });
   it.each(['ready', 'terminal'])('settles delayed discovery without taking focus from the user (%s)', async destination => {
     const { daemon } = await renderApp({ initialState: { settings, crew: [member()] }, script: daemon => { daemon.on('harness_models', () => {}); } });
-    expect(setup().getByRole('button', { name: /Wake Captain/ })).toBeDisabled();
+    expect(setup().getByRole('button', { name: /Wake Captain/ })).toHaveAttribute('aria-disabled', 'true');
     expect(screen.getByTestId('chief-setup')).toHaveFocus();
     let terminal: HTMLElement | undefined;
     if (destination === 'terminal') {
@@ -128,7 +128,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await gesture(daemon, () => daemon.emit({ event: 'crew_updated', profile_id: member().profile_id, members: [member({ agent: 'codex', model: 'gpt-6.1-sol' })] }));
     expect(setup().getByRole('heading', { name: 'Set up Captain' })).toBeInTheDocument();
     expect(setup().getByRole('textbox', { name: 'Notebook folder' })).toBeDisabled();
-    expect(setup().getByRole('button', { name: 'Waking…' })).toBeDisabled();
+    expect(setup().getByRole('button', { name: 'Waking…' })).toHaveAttribute('aria-disabled', 'true');
   });
   it('ignores the new-agent picker Option+digit shortcuts behind its dialog', async () => {
     const { daemon } = await renderApp({ initialState: { settings, crew: [member()] } });
@@ -156,7 +156,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(setup().getByRole('alert')).toHaveTextContent('Cannot start here');
     expect(setup().getByRole('radio', { name: /Sonnet/ })).toHaveAttribute('aria-checked', 'true');
     expect(setup().getByRole('textbox', { name: 'Notebook folder' })).toHaveValue('~/attn-notebook-work');
-    expect(setup().getByRole('button', { name: /Wake Captain/ })).toBeEnabled();
+    expect(setup().getByRole('button', { name: /Wake Captain/ })).toHaveAttribute('aria-disabled', 'false');
     expect(daemon.sentOf('crew_set')).toHaveLength(1);
     expect(daemon.sentOf('crew_wake')).toEqual([]);
   });
@@ -184,7 +184,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await Promise.all([userEvent.setup({ delay: null }).keyboard('{Enter}'), vi.advanceTimersByTimeAsync(10)]);
     await daemon.idle();
     expect(setup().queryByRole('alert')).toBeNull();
-    expect(setup().getByRole('button', { name: /Wake Captain/ })).toBeEnabled();
+    expect(setup().getByRole('button', { name: /Wake Captain/ })).toHaveAttribute('aria-disabled', 'false');
     expect(daemon.sentOf('crew_set')).toEqual([]);
   });
   it('can switch to another harness when the selected model lookup fails', async () => {
@@ -194,7 +194,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
         : { event: 'harness_models_result', success: true, models: [reportedModel('codex', 'gpt-6.1-sol', 'Sol', 'deep')], tier_defaults: { deep: 'gpt-6.1-sol' }, detail: '' });
     } });
     expect(setup().getByRole('alert')).toHaveTextContent('Claude model lookup failed');
-    expect(setup().getByRole('button', { name: /Wake Captain/ })).toBeDisabled();
+    expect(setup().getByRole('button', { name: /Wake Captain/ })).toHaveAttribute('aria-disabled', 'true');
     await gesture(daemon, () => fireEvent.click(setup().getByRole('radio', { name: 'Codex' })));
     expect(setup().queryByRole('alert')).toBeNull();
     expect(setup().getByRole('radio', { name: /Sol/ })).toHaveAttribute('aria-checked', 'true');
@@ -248,11 +248,11 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Ask Captain to sleep' })));
     await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Actions for Captain' })));
     await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Harness and model…' })));
-    expect(setup().getByRole('button', { name: 'Save for next wake' })).toBeDisabled();
+    expect(setup().getByRole('button', { name: 'Save for next wake' })).toHaveAttribute('aria-disabled', 'true');
     expect(daemon.sentOf('crew_set')).toEqual([]);
     await gesture(daemon, () => daemon.emit({ event: 'crew_sleep_result', request_id: daemon.sentOf('crew_sleep')[0].request_id, success: true, member: current.key, session_id: 'chief-day' }));
     expect(phase()).toBe('awake');
-    expect(setup().getByRole('button', { name: 'Save for next wake' })).toBeEnabled();
+    expect(setup().getByRole('button', { name: 'Save for next wake' })).toHaveAttribute('aria-disabled', 'false');
     daemon.on('crew_sleep', () => ({ event: 'crew_sleep_result', success: true, member: current.key, session_id: 'chief-day' }));
     await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Ask Captain to sleep' })));
     expect(daemon.sentOf('crew_sleep')).toHaveLength(2);
@@ -298,7 +298,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     const save = setup().getByRole('button', { name: awake ? 'Save for next wake' : /^Save/ });
     save.focus();
     await gesture(daemon, () => fireEvent.click(save));
-    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute('aria-disabled', 'true');
     save.blur();
     await gesture(daemon, () => daemon.emit({ event: 'crew_set_result', request_id: daemon.sentOf('crew_set')[0].request_id, success: true, conflict: false, member: current }));
     await act(() => vi.advanceTimersToNextFrame());
@@ -325,6 +325,37 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ member: 'member:chief-key', agent: 'claude', model: 'opus', effort: 'low' })]);
     expect(daemon.sentOf('crew_wake')).toEqual([]);
   });
+  it('keeps the focused primary inert during discovery and skips it when tabbing', async () => {
+    const current = member({ agent: 'claude', model: 'opus', binding_session: 'chief-day' });
+    const { daemon } = await renderApp({ initialState: { settings, crew: [current], sessions: [daemonSession('chief-day', { chief: true })], desktops: [soloDesktop('chief-day')] } });
+    await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Actions for Captain' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Harness and model…' })));
+    const save = setup().getByRole('button', { name: 'Save for next wake' });
+    expect(save).toHaveFocus();
+    daemon.on('harness_models', () => {});
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...settings, model_tier_overrides: JSON.stringify([{ harness: 'claude', provider: '', model: 'opus', tier: 'standard' }]) } }));
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).toHaveAttribute('tabindex', '-1');
+    expect(save).toHaveFocus();
+    await gesture(daemon, () => fireEvent.click(save));
+    const user = userEvent.setup({ delay: null });
+    await Promise.all([user.keyboard('{Enter} '), vi.advanceTimersByTimeAsync(0)]);
+    await daemon.idle();
+    expect(daemon.sentOf('crew_set')).toEqual([]);
+    await gesture(daemon, () => {
+      for (const request of daemon.sentOf('harness_models').filter(command => command.harness === 'claude')) daemon.replyTo(request, {
+        event: 'harness_models_result', request_id: request.request_id, success: true, models: [reportedModel('claude', 'opus', 'Opus', 'standard')], tier_defaults: { standard: 'opus' }, detail: 'Refreshed catalog',
+      });
+    });
+    expect(save).toHaveAttribute('aria-disabled', 'false');
+    expect(save).toHaveAttribute('tabindex', '0');
+    expect(save).toHaveFocus();
+    daemon.on('crew_set', () => undefined);
+    await Promise.all([user.keyboard('{Enter} '), vi.advanceTimersByTimeAsync(0)]);
+    await daemon.idle();
+    expect(daemon.sentOf('crew_set')).toEqual([expect.objectContaining({ member: 'member:chief-key', model: 'opus' })]);
+  });
+
   it('preserves terminal focus when a delayed configured Save completes', async () => {
     const current = member({ agent: 'claude', model: 'opus', binding_session: 'chief-day' });
     const desktop = soloDesktop('chief-day');
@@ -349,7 +380,7 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     for (const name of ['Harness and model…', 'Edit charter', 'Rename session', 'Reload session', 'Mark priority', 'Sleep Captain']) expect(screen.getByRole('menuitem', { name })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Close session' })).toBeNull();
     await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Harness and model…' })));
-    expect(setup().getByRole('button', { name: 'Save for next wake' })).toBeEnabled();
+    expect(setup().getByRole('button', { name: 'Save for next wake' })).toHaveAttribute('aria-disabled', 'false');
     daemon.on('crew_sleep', () => ({ event: 'crew_sleep_result', success: true, member: current.key, session_id: 'chief-day' }));
     await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Ask Captain to sleep' })));
     expect(daemon.sentOf('crew_sleep')).toHaveLength(1);

@@ -72,7 +72,7 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
   useLayoutEffect(() => {
     if (!focusRequested.current) return;
     const radio = focusRequested.current !== 'primary' && root.current?.querySelector<HTMLElement>(`[aria-label="${focusRequested.current}"] [aria-checked="true"]:not(:disabled)`);
-    const primary = root.current?.querySelector<HTMLElement>('.chief-pop-primary:not(:disabled), .chief-link:not(:disabled)');
+    const primary = root.current?.querySelector<HTMLElement>('.chief-pop-primary:not([aria-disabled="true"]), .chief-link:not(:disabled)');
     const target = radio || primary;
     if (target) { target.focus({ preventScroll: true }); focusRequested.current = null; }
     else root.current?.focus({ preventScroll: true });
@@ -168,7 +168,7 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
       </label>}
       {chief.setupError && <p className="chief-setup-error" role="alert">{chief.setupError}</p>}
       <footer className="chief-pop-foot">
-        <button type="button" className="chief-pop-primary" disabled={!canSave} onClick={submit}>{primaryLabel}<kbd aria-hidden="true">⏎</kbd></button>
+        <button type="button" className="chief-pop-primary" aria-disabled={!canSave} tabIndex={canSave ? 0 : -1} onClick={submit}>{primaryLabel}<kbd aria-hidden="true">⏎</kbd></button>
       </footer>
     </>}
     </div>

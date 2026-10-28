@@ -104,7 +104,7 @@ try {
     await run(binary, ['settings', 'set', 'notebook.root', previousRoot]);
   });
   const bounds = await client.request('get_window_bounds');
-  await client.request('set_window_bounds', { logicalBounds: { ...bounds.logicalBounds, x: 0, y: 0, width: 1200, height: 800 } });
+  await client.request('set_window_bounds', { logicalBounds: { ...bounds.logicalBounds, width: 1200, height: 800 } });
   observer.ws.on('message', raw => {
     try { const message = JSON.parse(raw.toString()); if (message.event === 'outposts_updated') rows.push(message); } catch {}
   });
@@ -153,7 +153,7 @@ try {
     await wait({ textIncludes: 'Notebook: in sync' });
     await run(binary, ['settings', 'set', 'outpost_listen', ''], remoteEnv);
     fs.unlinkSync(path.join(outpostRoot, '.attn', 'notebook-sync'));
-    const failed = receive(notebook => notebook?.state === 'error');
+    const failed = receive(notebook => notebook?.state === 'error' && notebook.error?.includes('folder marker missing'));
     await run(binary, ['settings', 'set', 'outpost_listen', address], remoteEnv);
     const row = await failed;
     runner.assert(row.notebook.error.includes('folder marker missing'), 'sync error names the cause', row);

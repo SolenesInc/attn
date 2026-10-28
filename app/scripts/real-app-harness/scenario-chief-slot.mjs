@@ -7,7 +7,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
-import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
+import { MOCK_AGENT_EXECUTABLE, MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 import { createWindowDriver } from './platform.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -16,10 +16,10 @@ if (!instance) throw new Error('Chief slot verification requires a named instanc
 const resources = resolveHarnessResources(instance);
 const env = { ...instanceCliEnv(instance), ATTN_WRAPPER_PATH: resources.appDaemon };
 const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
+const runner = createScenarioRunner(options, { scenarioId: 'CHIEF-SLOT', tier: 'local', prefix: 'chief-slot' });
 const client = new UiAutomationClient({ ...options, launchEnv: { ATTN_WRAPPER_PATH: resources.appDaemon } });
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
-const runner = createScenarioRunner(options, { scenarioId: 'CHIEF-SLOT', tier: 'local', prefix: 'chief-slot' });
 let profile;
 let previousProfile;
 let chief;
@@ -50,7 +50,7 @@ const openChiefRoute = async () => {
   await waitDom('[role="menu"] button:first-of-type', { textIncludes: 'Harness and model' });
   await screenshot(`03-chief-actions-${(await state()).phase}`);
   await click('[role="menu"] button:first-of-type');
-  await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+  await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
 };
 const roster = () => JSON.parse(cli(['crew', 'list', '--profile', profile.id, '--json']));
 runner.registerCleanup('close_observer', () => observer.close());
@@ -102,7 +102,7 @@ try {
       ] },
     ] });
     if (!(await state()).setupOpen) await click('[data-testid="chief-slot"] .queue-row-select');
-    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
     const body = await client.request('dom_bounds', { selector: '.chief-pop-body' });
     runner.writeJson('setup-body-bounds.json', body);
     runner.assert(body.scrollWidth === body.clientWidth && body.scrollHeight === body.clientHeight, 'first-run setup fits without clipping or scrollbars', body);
@@ -111,7 +111,7 @@ try {
     await waitDom('[data-testid="chief-slot"] .queue-row-select', { focused: true });
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await click('[data-testid="chief-slot"] .queue-row-select');
-    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
     await screenshot('01-chief-setup-desktop-flow');
     await driver.pressKey('Escape');
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
@@ -135,7 +135,7 @@ try {
     await click('[data-testid="chief-setup"] .chief-link');
     await waitDom('[data-testid="chief-setup"]', { textIncludes: 'No harness here can run the Chief' });
     for (const [agent, executable] of originals) cli(['settings', 'set', `${agent}_executable`, executable]);
-    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
     await driver.pressKey('Escape');
   });
   await runner.step('restored_live_terminal_keeps_setup_closed', async () => {
@@ -157,13 +157,13 @@ try {
   });
   await runner.step('enter_wakes_and_focuses', async () => {
     await click('[data-testid="chief-slot"] .queue-row-select');
-    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
     await driver.pressKey('Escape');
     await waitDom('[data-testid="chief-slot"] .queue-row-select', { focused: true });
     await driver.pressEnter();
-    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
     await screenshot('01-chief-setup-with-agent');
-    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
     const folderSelector = '[data-testid="chief-setup"] input[aria-label="Notebook folder"]';
     const { value: defaultFolder } = await client.request('dom_value', { selector: folderSelector });
     runner.assert(defaultFolder === cli(['settings', 'get', 'notebook.root', '--profile', profile.id]).trim(), 'the folder is prefilled with the profile Notebook', { defaultFolder });
@@ -180,7 +180,7 @@ try {
     await driver.typeText(notebookRoot);
     await screenshot('02-chief-model-and-folder');
     await driver.pressKey('Tab');
-    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
     const waking = waitDom('[data-testid="chief-slot"][data-chief-phase="configuring"]').then(() => screenshot('02-chief-waking'));
     await driver.pressEnter();
     await waking;
@@ -212,6 +212,24 @@ try {
     await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
     runner.writeJson('configured-save-focus.json', { state: await state(), focus: await client.request('dom_active_element') });
   });
+  await runner.step('configured_catalog_refresh_keeps_primary_focus', async () => {
+    await openChiefRoute();
+    const original = observer.getSetting('claude_executable');
+    const executable = path.join(runner.sessionDir, 'refreshed-claude.mjs');
+    fs.copyFileSync(MOCK_AGENT_EXECUTABLE, executable);
+    cli(['settings', 'set', 'claude_executable', executable]);
+    await client.request('set_setting', { key: 'model_tier_overrides', value: JSON.stringify([{ harness: 'claude', provider: '', model: MOCK_AGENT_MODEL, tier: 'standard' }]) });
+    await waitDom('[data-testid="chief-setup"] [aria-label="Chief model"]', { textIncludes: 'standard' });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
+    runner.writeJson('configured-refresh-focus.json', await client.request('dom_active_element'));
+    const body = await client.request('dom_bounds', { selector: '.chief-pop-body' });
+    runner.assert(body.scrollWidth === body.clientWidth && body.scrollHeight === body.clientHeight, 'configured setup fits without clipping or scrollbars', body);
+    await screenshot('03-chief-route-refreshed');
+    await driver.pressKey('Escape');
+    await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });
+    cli(['settings', 'set', 'claude_executable', original]);
+    await client.request('set_setting', { key: 'model_tier_overrides', value: JSON.stringify([{ harness: 'claude', provider: '', model: MOCK_AGENT_MODEL, tier: 'deep' }]) });
+  });
   await runner.step('configured_command_expands_the_sidebar_and_focuses_save', async () => {
     await pressShortcutKeys(client, driver, 'session.toggleSidebar');
     await waitDom('[data-testid="chief-slot"]', { absent: true });
@@ -222,7 +240,7 @@ try {
     await driver.typeText("Change the Chief's harness and model");
     await waitDom('.unified-palette-option[aria-selected="true"]', { textIncludes: "Change the Chief's harness and model" });
     await driver.pressEnter();
-    await waitDom('[data-testid="chief-setup"] .chief-pop-primary:not(:disabled)', { focused: true });
+    await waitDom('[data-testid="chief-setup"] .chief-pop-primary[aria-disabled="false"]', { focused: true });
     await screenshot('03-chief-route-from-collapsed-sidebar');
     await driver.pressKey('Escape');
     await waitDom(`[data-testid="queue-crew-select-${chief.key}"]`, { focused: true });

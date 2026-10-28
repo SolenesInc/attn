@@ -37,7 +37,7 @@
 .chief-pop-foot { display: flex; justify-content: flex-end; padding-top: 2px; }
 .chief-pop-primary { display: inline-flex; align-items: center; gap: 10px; height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: var(--accent); color: var(--color-bg-app) !important; font-weight: 600; }
 .chief-pop-primary kbd { color: inherit; opacity: .65; }
-.chief-pop-primary:disabled { opacity: .45; cursor: default; }
+.chief-pop-primary[aria-disabled="true"] { opacity: .45; cursor: default; }
 .chief-pop-primary:focus-visible { outline: 2px solid var(--color-text-primary) !important; outline-offset: 1px !important; }
 
 

@@ -1,0 +1,3 @@
+kind: fixed
+area: crew
+change: Chief setup keeps keyboard focus while its harness and model catalog refreshes.
