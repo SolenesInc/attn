@@ -9,6 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
@@ -119,6 +120,9 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 		}
 		r.policyMu.Lock()
 		monitor = r.registry.Start(monitor, start())
+		if candidate != nil {
+			pausepoint.At(pausepoint.ConversationCandidateStart)
+		}
 		r.mu.Lock()
 		if old := r.sessions[sessionID]; old != nil {
 			old.stopCatchUp()
