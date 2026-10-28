@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "session-reopen": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/40781364730",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-10-28",
+        "seconds": 6.562,
+        "runnerClass": "github-hosted Ubuntu 24.04 amd64",
+        "note": "Green last-matrix.json durationMs=6562 at 9252d331301aac90c0b3c0bcb42b74b736963fe5. Includes the directory inspection-error refusal, plain resume and worktree recreation."
+      },
       "codex-update": {
         "run": "scenario-codex-update-2026-10-25T01-05-28-467Z",
         "job": "Local packaged scenario, cxu isolated instance",
@@ -405,7 +413,7 @@
     "codex-update": 23.919,
     "pty-host-setting": 8.3,
     "session-close-ledger": 9.9,
-    "session-reopen": 6.2,
+    "session-reopen": 6.562,
     "session-usage": 10,
     "sessions-surface": 23.6,
     "terminal-annotations": 21.0,
