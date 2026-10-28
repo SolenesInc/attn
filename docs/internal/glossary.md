@@ -147,10 +147,10 @@ crew member             an agent with a permanent identity and memory
 ├─ name (1)             the member’s name; unique in their profile
 ├─ charter (1)          who the member is and what they live for
 ├─ member home (1)      the folder that holds the charter and the letters
-├─ memory (1)           what the member remembers from past days
+├─ memory (1)           what the member remembers from past sessions
 │  ├─ entry (0..n)      one line the member remembers
-│  │  └─ day line       the entry that closes a day; it links its letter and
-│  │                    session
+│  │  └─ session line   the entry that closes a session; it links its letter
+│  │                    and conversation
 │  └─ summary (0..n)    one line that stands for many entries
 ├─ launch desktop (1)   the desktop where their sessions start
 ├─ letter (0..n)        what one of the member's sessions leaves for their

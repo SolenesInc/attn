@@ -62,7 +62,7 @@ func (d *Daemon) crewMemoryMember(sessionID protocol.SessionID, name, profileID 
 			return crew.Member{}, err
 		}
 		if !bound {
-			return crew.Member{}, fmt.Errorf("session %s is not living a crew member's day, so it has no memory. A delegate reports on its seed: attn seed note <id> -m \"…\"", shortSessionID(sessionID))
+			return crew.Member{}, fmt.Errorf("session %s is not bound to a crew member, so it has no memory. A delegate reports on its seed: attn seed note <id> -m \"…\"", shortSessionID(sessionID))
 		}
 		return member, nil
 	}
@@ -134,7 +134,7 @@ func (d *Daemon) crewMemoryCommand(msg any) (protocol.Response, error) {
 		return protocol.Response{}, err
 	}
 	if summarized := result.CrewMemorySummarizeResult; summarized != nil && summarized.PendingSummaries == 0 {
-		if _, filed := member.FiledLetterFor(sessionID); filed && member.LetterDay != "" {
+		if _, filed := member.FiledLetterFor(sessionID); filed && member.LetterSummary != "" {
 			summarized.Handoff, err = d.crewTurnover(member, sessionID, filepath.Join(home, crew.HandoffsDirName, member.LetterFile), member.LetterClose)
 		}
 	}
@@ -152,8 +152,8 @@ func (d *Daemon) crewMemoryFiles(home string, member crew.Member, msg any, read 
 	if err != nil {
 		return protocol.Response{}, err
 	}
-	if _, summarizing := msg.(*protocol.CrewMemorySummarizeMessage); summarizing && member.LetterDay != "" && member.BindingSession == member.LetterSession {
-		if _, err := reconcileCrewMemoryDay(home, &memory, member, member.LetterSession, member.LetterFile, member.LetterDay); err != nil {
+	if _, summarizing := msg.(*protocol.CrewMemorySummarizeMessage); summarizing && member.LetterSummary != "" && member.BindingSession == member.LetterSession {
+		if _, err := reconcileCrewMemorySession(home, &memory, member, member.LetterSession, member.LetterFile, member.LetterSummary); err != nil {
 			return protocol.Response{}, err
 		}
 	}
@@ -241,7 +241,7 @@ func (d *Daemon) crewMemoryFiles(home string, member crew.Member, msg any, read 
 	return response, nil
 }
 
-func (d *Daemon) crewMemoryDay(member crew.Member, sessionID protocol.SessionID, path, day string) (int, int, error) {
+func (d *Daemon) crewMemorySession(member crew.Member, sessionID protocol.SessionID, path, summary string) (int, int, error) {
 	lock := d.crewMemoryLock(member.Key)
 	lock.Lock()
 	defer lock.Unlock()
@@ -253,16 +253,16 @@ func (d *Daemon) crewMemoryDay(member crew.Member, sessionID protocol.SessionID,
 	if err != nil {
 		return 0, 0, err
 	}
-	id, err := reconcileCrewMemoryDay(home, &memory, member, sessionID, filepath.Base(path), day)
+	id, err := reconcileCrewMemorySession(home, &memory, member, sessionID, filepath.Base(path), summary)
 	return id, len(memory.Pending()), err
 }
 
-func reconcileCrewMemoryDay(home string, memory *crew.Memory, member crew.Member, sessionID protocol.SessionID, letter, day string) (int, error) {
+func reconcileCrewMemorySession(home string, memory *crew.Memory, member crew.Member, sessionID protocol.SessionID, letter, summary string) (int, error) {
 	info, err := os.Stat(filepath.Join(home, crew.HandoffsDirName, letter))
 	if err != nil {
 		return 0, err
 	}
-	return memory.Day(home, crew.MemoryEntry{At: info.ModTime().UTC(), Text: day, Day: &crew.MemoryDay{Letter: letter, Session: string(sessionID)}})
+	return memory.Session(home, crew.MemoryEntry{At: info.ModTime().UTC(), Text: summary, Session: &crew.MemorySession{Letter: letter, ID: string(sessionID)}})
 }
 
 func recallCrewMemory(member, name string, memory crew.Memory, pattern string) (*protocol.CrewMemoryReadResult, error) {
@@ -303,10 +303,10 @@ func zoomCrewMemory(home, member, name string, memory crew.Memory, target string
 	result := &protocol.CrewMemoryReadResult{Member: member, Name: name, Lines: []string{}}
 	if block.Hi-block.Lo == 1 {
 		result.Lines = memory.Lines([]crew.MemoryBlock{block})
-		if day := memory.Entries[block.Lo].Day; day != nil {
-			result.Letter = protocol.Ptr(filepath.Join(home, crew.HandoffsDirName, day.Letter))
-			if day.Session != "" {
-				result.SessionID = protocol.Ptr(protocol.SessionID(day.Session))
+		if summary := memory.Entries[block.Lo].Session; summary != nil {
+			result.Letter = protocol.Ptr(filepath.Join(home, crew.HandoffsDirName, summary.Letter))
+			if summary.ID != "" {
+				result.SessionID = protocol.Ptr(protocol.SessionID(summary.ID))
 			}
 		}
 	} else {
@@ -319,8 +319,8 @@ func zoomCrewMemory(home, member, name string, memory crew.Memory, target string
 func (d *Daemon) crewMemoryImportEntries(member crew.Member, memory crew.Memory, lines []protocol.CrewMemoryImportLine) ([]crew.MemoryEntry, error) {
 	seen := map[string]bool{}
 	for _, entry := range memory.Entries {
-		if entry.Day != nil {
-			seen[entry.Day.Letter] = true
+		if entry.Session != nil {
+			seen[entry.Session.Letter] = true
 		}
 	}
 	var entries []crew.MemoryEntry
@@ -329,7 +329,7 @@ func (d *Daemon) crewMemoryImportEntries(member crew.Member, memory crew.Memory,
 			return nil, fmt.Errorf("%q is not a letter filename", line.Letter)
 		}
 		if seen[line.Letter] {
-			return nil, fmt.Errorf("letter %s already has a day line", line.Letter)
+			return nil, fmt.Errorf("letter %s already has a session line", line.Letter)
 		}
 		letter := filepath.Join(member.HomeDir(d.dataRoot), crew.HandoffsDirName, line.Letter)
 		if err := d.validateCrewLetterPath(member, letter); err != nil {
@@ -343,7 +343,7 @@ func (d *Daemon) crewMemoryImportEntries(member crew.Member, memory crew.Memory,
 			return nil, err
 		}
 		seen[line.Letter] = true
-		entries = append(entries, crew.MemoryEntry{At: at, Text: line.Text, Day: &crew.MemoryDay{Letter: line.Letter}})
+		entries = append(entries, crew.MemoryEntry{At: at, Text: line.Text, Session: &crew.MemorySession{Letter: line.Letter}})
 	}
 	return entries, nil
 }

@@ -161,7 +161,7 @@ func TestChiefFollowsTheCurrentNotebookWithoutMovingItsHome(t *testing.T) {
 	run := w.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	if _, err := cli.CrewHandoff(protocol.SessionID(id), "Use the current Notebook next time.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+	if _, err := cli.CrewHandoff(protocol.SessionID(id), "Use the current Notebook next time.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	before := crewRoster(t, cli)[0]
@@ -194,7 +194,7 @@ func TestACopiedDatabaseCannotUseAnotherHarnessNotebookHome(t *testing.T) {
 	run := source.Launched(id)
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
-	if _, err := source.Client().CrewHandoff(protocol.SessionID(id), "Rest.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+	if _, err := source.Client().CrewHandoff(protocol.SessionID(id), "Rest.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	home := crewRoster(t, source.Client())[0].HomeDir
@@ -268,7 +268,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	if _, err := cli.CrewMoveHome("keel"); err == nil || !strings.Contains(err.Error(), "Keel is awake; put it to sleep first: attn crew sleep Keel") {
 		t.Fatalf("awake move: %v", err)
 	}
-	if _, err := cli.CrewHandoff(awake.SessionID, "A letter that moves with me.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+	if _, err := cli.CrewHandoff(awake.SessionID, "A letter that moves with me.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	moved, err := cli.CrewMoveHome("keel")
@@ -391,7 +391,7 @@ func TestMissingCrewHomesAreNeverRecreated(t *testing.T) {
 			run := w.Launched(id)
 			run.Prompted()
 			run.Reply("Ready. <!-- attn:state=idle -->")
-			letter := crewHandoff(t, cli, id, "Keep my memory intact.", false, protocol.CrewDayCloseSleep)
+			letter := crewHandoff(t, cli, id, "Keep my memory intact.", false, protocol.CrewSessionCloseSleep)
 			charter, err := os.ReadFile(member.CharterPath)
 			if err != nil {
 				t.Fatal(err)
@@ -462,7 +462,7 @@ func TestMissingCrewHomesDoNotDisableOtherMembers(t *testing.T) {
 			if !read.Success {
 				t.Fatalf("unrelated charter read: %+v", read)
 			}
-			crewHandoff(t, cli, id, "Other members still work.", false, protocol.CrewDayCloseSleep)
+			crewHandoff(t, cli, id, "Other members still work.", false, protocol.CrewSessionCloseSleep)
 			w.Launched(string(wakeCrew(t, cli, "chief", "").SessionID))
 			if _, err := os.Stat(missing.Member.HomeDir); !os.IsNotExist(err) {
 				t.Fatalf("unrelated wake recreated missing home: %v", err)

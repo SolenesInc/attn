@@ -128,12 +128,12 @@ func TestAwayTimeStartsAtTheLastPresentReportRegardlessOfPresenceReads(t *testin
 				w.advance(29 * time.Second)
 				presenceTierIs(t, cli, "after the app disconnected", "away")
 				early := crewHandoff(t, cli, days["trellis"], "The last presence is still recent.", false, "")
-				if protocol.Deref(early.Outcome) != protocol.CrewDayCloseNap || early.NapError != nil {
+				if protocol.Deref(early.Outcome) != protocol.CrewSessionCloseNap || early.NapError != nil {
 					t.Fatalf("59 seconds after the last report the handoff = %+v, want a nap", early)
 				}
 				w.advance(time.Second)
 				ended := crewHandoff(t, cli, days["alder"], "The user has been away for a minute.", false, "")
-				if protocol.Deref(ended.Outcome) != protocol.CrewDayCloseSleep || ended.NapError != nil {
+				if protocol.Deref(ended.Outcome) != protocol.CrewSessionCloseSleep || ended.NapError != nil {
 					t.Fatalf("60 seconds after the last report the handoff = %+v, want sleep", ended)
 				}
 			})

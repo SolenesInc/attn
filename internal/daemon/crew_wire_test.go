@@ -538,7 +538,7 @@ func TestACopiedCrewUsesOnlyItsOwnFilesAndCanCloseSessions(t *testing.T) {
 		t.Fatalf("copied member was primed with the wrong files: %s", priming)
 	}
 	letter := "A letter filed by the copied instance.\n"
-	handed := crewHandoff(t, cli, string(woken.SessionID), letter, false, protocol.CrewDayCloseSleep)
+	handed := crewHandoff(t, cli, string(woken.SessionID), letter, false, protocol.CrewSessionCloseSleep)
 	if filepath.Dir(handed.Path) != filepath.Join(crewHome(copied, "trellis"), crew.HandoffsDirName) {
 		t.Fatalf("letter filed outside the copied instance: %s", handed.Path)
 	}
@@ -549,7 +549,7 @@ func TestACopiedCrewUsesOnlyItsOwnFilesAndCanCloseSessions(t *testing.T) {
 		t.Fatalf("copied instance touched the source letter: %v", err)
 	}
 	if got := crewSessionCount(t, cli); got != 0 {
-		t.Fatalf("copied crew day did not close: %d sessions remain", got)
+		t.Fatalf("copied crew session did not close: %d sessions remain", got)
 	}
 	plain := copied.Spawn(copied.App(), fakeagent.Claude, copied.Path("plain"))
 	copied.Launched(plain)
@@ -797,7 +797,7 @@ func TestCrewEditsFromTheAppAreRevisionChecked(t *testing.T) {
 		w.advance(time.Minute)
 		w.advance(3 * time.Minute)
 		awake := crewRosterMember(t, cli, "alder").Revision
-		filed := crewHandoff(t, cli, "alder-day", "Filed from the day.", false, protocol.CrewDayCloseNap)
+		filed := crewHandoff(t, cli, "alder-day", "Filed from the day.", false, protocol.CrewSessionCloseNap)
 		if !strings.Contains(protocol.Deref(filed.NapError), "crew.wake_limit=0") {
 			t.Fatalf("handoff = %+v, want the nap refused at the wake limit", filed)
 		}

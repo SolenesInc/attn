@@ -77,9 +77,9 @@ func TestConversationKeepPausesExpiryUntilCrewHomesAreReadable(t *testing.T) {
 	setSetting(t, app, "crew_memory_enabled", "true")
 	day := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID)).Prompted()
-	closed, err := cli.CrewHandoff(day.SessionID, "Keep this letter.", false, protocol.CrewDayCloseSleep, "Remember this day.")
-	if err != nil || protocol.Deref(closed.Outcome) != protocol.CrewDayCloseSleep {
-		t.Fatalf("close crew day: %+v, %v", closed, err)
+	closed, err := cli.CrewHandoff(day.SessionID, "Keep this letter.", false, protocol.CrewSessionCloseSleep, "Remember this day.")
+	if err != nil || protocol.Deref(closed.Outcome) != protocol.CrewSessionCloseSleep {
+		t.Fatalf("close crew session: %+v, %v", closed, err)
 	}
 	testworld.AwaitTaskDone(app, "conversation_keep")
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
@@ -108,10 +108,10 @@ func TestConversationKeepPausesExpiryUntilCrewHomesAreReadable(t *testing.T) {
 	}
 	healthyDays := 0
 	for _, row := range rows.Rows {
-		healthyDays += len(row.CrewDays)
+		healthyDays += len(row.CrewSessions)
 	}
 	if healthyDays != 1 {
-		t.Fatalf("readable crew day references = %d, want 1", healthyDays)
+		t.Fatalf("readable crew session references = %d, want 1", healthyDays)
 	}
 	lifeMove(t, cli, "", delegated.SeedID, "replant", "", "")
 	testworld.AwaitTaskDone(app, "conversation_keep")

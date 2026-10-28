@@ -282,7 +282,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 			return
 		}
 
-		d.logf("crew: asked %s to close its day — the user has been away and the cache is %s from lapsing",
+		d.logf("crew: asked %s to close its session — the user has been away and the cache is %s from lapsing",
 			d.storedMemberName(member.Key.String()), cache.Remaining().Round(time.Second))
 	}
 }

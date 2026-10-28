@@ -43,7 +43,7 @@ func TestChiefOnboardingFullDoneAndAgainReachBothHarnesses(t *testing.T) {
 			if got := crewPriming(t, cli, id); strings.Contains(got, "attn skill --reference onboarding") {
 				t.Fatalf("done remains in priming: %s", got)
 			}
-			if _, err := cli.CrewHandoff(protocol.SessionID(id), "Onboarding is done.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+			if _, err := cli.CrewHandoff(protocol.SessionID(id), "Onboarding is done.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 				t.Fatal(err)
 			}
 			next, err := cli.CrewWake("chief", "", "")

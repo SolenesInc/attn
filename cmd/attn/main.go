@@ -677,7 +677,7 @@ commands:
   enrollment <command>              this data folder's enrollment: status, leave
   seed <command>                    the garden: plant, tend, harvest, note, ls
   crew <command>                    the crew roster: who exists, who is awake
-  handoff -m "<letter>"             file this crew member's letter; the day turns over
+  handoff -m "<letter>"             file this crew member's letter and close the session
   memory <verb>                    add, search, zoom, summarize or repair crew memory
   doc <command>                     document store: collections, documents, live queries
   vision-check <image> <question>   answer a question about an image (single LLM call)

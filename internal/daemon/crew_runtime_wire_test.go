@@ -126,7 +126,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	if err != nil || !again.AlreadyRetired || len(again.ReleasedSeeds) != 0 {
 		t.Fatalf("repeat retire = %+v %v", again, err)
 	}
-	if _, err := cli.CrewHandoff(wake.SessionID, "Retired for now.", false, protocol.CrewDayCloseSleep, ""); err != nil {
+	if _, err := cli.CrewHandoff(wake.SessionID, "Retired for now.", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 		t.Fatal(err)
 	}
 	w.restart()
@@ -203,9 +203,9 @@ func TestRetiredMembersDoNotBlockProfileDeletion(t *testing.T) {
 func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
 	for _, how := range []struct {
 		name  string
-		close protocol.CrewDayClose
+		close protocol.CrewSessionClose
 	}{
-		{name: "default"}, {name: "nap", close: protocol.CrewDayCloseNap},
+		{name: "default"}, {name: "nap", close: protocol.CrewSessionCloseNap},
 	} {
 		t.Run(how.name, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Claude)
@@ -223,7 +223,7 @@ func TestARetiredMembersLetterClosesTheDayWithoutANap(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil || filed.NapError != nil {
+			if protocol.Deref(filed.Outcome) != protocol.CrewSessionCloseSleep || filed.SessionID != nil || filed.NapError != nil {
 				t.Fatalf("retired closure = %+v", filed)
 			}
 			letter, err := os.ReadFile(filed.Path)
@@ -291,8 +291,8 @@ func TestARetiredMemberThatClearsStillReceivesItsSleepRequest(t *testing.T) {
 		if err != nil || len(all.Members) != 1 || all.Members[0].Key != created.Member.Key || !all.Members[0].Retired || protocol.Deref(all.Members[0].BindingSession) != next.ID {
 			t.Fatalf("cleared retired member = %+v %v", all, err)
 		}
-		filed, err := cli.CrewHandoff(next.ID, "Retired, with the cleared day finished.", false, protocol.CrewDayCloseNap, "")
-		if err != nil || protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil {
+		filed, err := cli.CrewHandoff(next.ID, "Retired, with the cleared day finished.", false, protocol.CrewSessionCloseNap, "")
+		if err != nil || protocol.Deref(filed.Outcome) != protocol.CrewSessionCloseSleep || filed.SessionID != nil {
 			t.Fatalf("retired clear closure = %+v %v", filed, err)
 		}
 		letter, err := os.ReadFile(filed.Path)

@@ -10,8 +10,8 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestCrewMemoryCrashRetryRepairsOneDayAndPreservesSleep(t *testing.T) {
-	for _, point := range []string{"crew-memory-letter-recorded", "crew-memory-day-appended"} {
+func TestCrewMemoryCrashRetryRepairsOneSessionLineAndPreservesSleep(t *testing.T) {
+	for _, point := range []string{"crew-memory-letter-recorded", "crew-memory-session-appended"} {
 		t.Run(point, func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 			writeCharter(t, s, "trellis")
@@ -24,7 +24,7 @@ func TestCrewMemoryCrashRetryRepairsOneDayAndPreservesSleep(t *testing.T) {
 				return s.Run(testworld.Invocation{Session: string(day.SessionID), Args: args})
 			}
 			requireStdout(t, invoke("memory", "add", "A lesson that survives a crash."), "#0")
-			failed := invoke("handoff", "--sleep", "--day", "The crash recovery day.", "-m", "Dear successor, keep the lesson.")
+			failed := invoke("handoff", "--sleep", "--summary", "The crash recovery day.", "-m", "Dear successor, keep the lesson.")
 			if failed.Code == 0 {
 				t.Fatalf("handoff did not crash at %s: %+v", point, failed)
 			}
@@ -32,29 +32,29 @@ func TestCrewMemoryCrashRetryRepairsOneDayAndPreservesSleep(t *testing.T) {
 			s.Start()
 			var first protocol.CrewHandoffResult
 			invoke("handoff", "--retry", "--json").JSON(t, &first)
-			if protocol.Deref(first.DayID) != "1" || protocol.Deref(first.PendingSummaries) != 1 {
+			if protocol.Deref(first.EntryID) != "1" || protocol.Deref(first.PendingSummaries) != 1 {
 				t.Fatalf("recovered handoff = %+v", first)
 			}
 			var again protocol.CrewHandoffResult
 			invoke("handoff", "--retry", "--json").JSON(t, &again)
-			if first.Path != again.Path || protocol.Deref(again.DayID) != "1" {
+			if first.Path != again.Path || protocol.Deref(again.EntryID) != "1" {
 				t.Fatalf("second retry filed another day: %+v, %+v", first, again)
 			}
 			var read protocol.CrewMemoryReadResult
 			invoke("memory", "recall", ".", "--json").JSON(t, &read)
 			if protocol.Deref(read.Matches) != 2 {
-				t.Fatalf("retry left %d entries, want the lesson and one day line", protocol.Deref(read.Matches))
+				t.Fatalf("retry left %d entries, want the lesson and one session line", protocol.Deref(read.Matches))
 			}
 			done := s.Run(testworld.Invocation{Session: string(day.SessionID), Args: []string{"memory", "summarize", "-", "--json"}, Stdin: "0-1 Keep the lesson from the crash recovery day.\n"})
 			var summarized protocol.CrewMemorySummarizeResult
 			done.JSON(t, &summarized)
-			if summarized.Handoff == nil || protocol.Deref(summarized.Handoff.Outcome) != protocol.CrewDayCloseSleep || summarized.Handoff.SessionID != nil {
+			if summarized.Handoff == nil || protocol.Deref(summarized.Handoff.Outcome) != protocol.CrewSessionCloseSleep || summarized.Handoff.SessionID != nil {
 				t.Fatalf("summary lost the requested sleep: %+v", summarized)
 			}
 			if binding := crewRoster(t, s)["trellis"].BindingSession; binding != nil {
 				t.Fatalf("sleep left a successor: %s", *binding)
 			}
-			fmt.Printf("%s: one day line after two retries; final summary honored --sleep.\n", point)
+			fmt.Printf("%s: one session line after two retries; final summary honored --sleep.\n", point)
 		})
 	}
 }

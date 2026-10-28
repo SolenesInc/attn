@@ -15,7 +15,7 @@ import (
 )
 
 func TestCrewMemoryClosureWaitsAndHonorsTheRequestedClose(t *testing.T) {
-	for _, close := range []protocol.CrewDayClose{protocol.CrewDayCloseSleep, protocol.CrewDayCloseNap} {
+	for _, close := range []protocol.CrewSessionClose{protocol.CrewSessionCloseSleep, protocol.CrewSessionCloseNap} {
 		t.Run(string(close), func(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Claude)
 			cli := w.Client()
@@ -43,16 +43,16 @@ func TestCrewMemoryClosureWaitsAndHonorsTheRequestedClose(t *testing.T) {
 				t.Fatalf("add = %+v, %v", added, err)
 			}
 			_, err = cli.CrewHandoff(day.SessionID, "The letter.", false, close, "")
-			crewErrorContains(t, err, "--day", "280")
+			crewErrorContains(t, err, "--summary", "280")
 			handoff, err := cli.CrewHandoff(day.SessionID, "The letter.", false, close, "Measured limits, with the reasons kept.")
-			if err != nil || protocol.Deref(handoff.PendingSummaries) != 1 || protocol.Deref(handoff.DayID) != "1" || handoff.SessionID != nil {
+			if err != nil || protocol.Deref(handoff.PendingSummaries) != 1 || protocol.Deref(handoff.EntryID) != "1" || handoff.SessionID != nil {
 				t.Fatalf("pending handoff = %+v, %v", handoff, err)
 			}
 			if protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession) != day.SessionID {
 				t.Fatal("the day closed while summaries were pending")
 			}
 			retry, err := cli.CrewHandoff(day.SessionID, "", true, "", "")
-			if err != nil || protocol.Deref(retry.DayID) != "1" || retry.Path != handoff.Path {
+			if err != nil || protocol.Deref(retry.EntryID) != "1" || retry.Path != handoff.Path {
 				t.Fatalf("retry = %+v, %v", retry, err)
 			}
 			read, err := cli.MemoryRecall(day.SessionID, "", "", "Measured|limits")
@@ -72,7 +72,7 @@ func TestCrewMemoryClosureWaitsAndHonorsTheRequestedClose(t *testing.T) {
 			if err != nil || done.PendingSummaries != 0 || done.Handoff == nil || protocol.Deref(done.Handoff.Outcome) != close {
 				t.Fatalf("summary turnover = %+v, %v", done, err)
 			}
-			if close == protocol.CrewDayCloseSleep {
+			if close == protocol.CrewSessionCloseSleep {
 				if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil || crewSessionCount(t, cli) != before-1 {
 					t.Fatalf("sleep woke a successor: %v", binding)
 				}
@@ -106,13 +106,13 @@ func TestCrewMemoryBindingAndDisabledSetting(t *testing.T) {
 	}
 	w.Launched(string(delegated.Result.SessionID)).Prompted()
 	_, err = cli.MemoryAdd(delegated.Result.SessionID, "a duplicated lesson")
-	crewErrorContains(t, err, "attn seed note", "not living a crew member's day")
+	crewErrorContains(t, err, "attn seed note", "not bound to a crew member")
 	setSetting(t, app, "crew_memory_enabled", "false")
 	if got := crewPriming(t, cli, string(day.SessionID)); got != legacy || strings.Contains(got, "## Your memory") {
 		t.Fatal("disabled memory changed legacy priming")
 	}
-	closed, err := cli.CrewHandoff(day.SessionID, "The legacy letter, without --day.", false, protocol.CrewDayCloseSleep, "")
-	if err != nil || protocol.Deref(closed.Outcome) != protocol.CrewDayCloseSleep || closed.DayID != nil {
+	closed, err := cli.CrewHandoff(day.SessionID, "The legacy letter, without --summary.", false, protocol.CrewSessionCloseSleep, "")
+	if err != nil || protocol.Deref(closed.Outcome) != protocol.CrewSessionCloseSleep || closed.EntryID != nil {
 		t.Fatalf("legacy closure = %+v, %v", closed, err)
 	}
 }
@@ -170,7 +170,7 @@ func TestCrewMemoryUsesRawBlocksThenTheirHalvesAndRepairsCorrections(t *testing.
 			t.Fatal(err)
 		}
 	}
-	first, err := cli.CrewHandoff(day.SessionID, "First letter.", false, protocol.CrewDayCloseNap, "The old day line.")
+	first, err := cli.CrewHandoff(day.SessionID, "First letter.", false, protocol.CrewSessionCloseNap, "The old session line.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,12 +189,12 @@ func TestCrewMemoryUsesRawBlocksThenTheirHalvesAndRepairsCorrections(t *testing.
 	if err != nil || len(ready.Blocks) != 1 || ready.Blocks[0].Range != "0-31" || len(ready.Blocks[0].Lines) != 2 || !strings.Contains(ready.Blocks[0].Lines[0], "Summary of 0-15") {
 		t.Fatalf("large block sources = %+v, %v", ready, err)
 	}
-	corrected, err := cli.CrewHandoff(day.SessionID, "Corrected letter.", false, protocol.CrewDayCloseSleep, "The corrected day line.")
-	if err != nil || protocol.Deref(corrected.DayID) != protocol.Deref(first.DayID) || protocol.Deref(corrected.PendingSummaries) <= 1 {
+	corrected, err := cli.CrewHandoff(day.SessionID, "Corrected letter.", false, protocol.CrewSessionCloseSleep, "The corrected session line.")
+	if err != nil || protocol.Deref(corrected.EntryID) != protocol.Deref(first.EntryID) || protocol.Deref(corrected.PendingSummaries) <= 1 {
 		t.Fatalf("corrected day = %+v, %v", corrected, err)
 	}
 	zoom, err := cli.MemoryZoom(day.SessionID, "", "", "31")
-	if err != nil || !strings.Contains(zoom.Lines[0], "The corrected day line.") || protocol.Deref(zoom.Letter) != corrected.Path {
+	if err != nil || !strings.Contains(zoom.Lines[0], "The corrected session line.") || protocol.Deref(zoom.Letter) != corrected.Path {
 		t.Fatalf("corrected reference = %+v, %v", zoom, err)
 	}
 	if _, err := cli.MemoryForget(day.SessionID, 0); err != nil {
@@ -292,6 +292,35 @@ func TestCrewMemoryMalformedFilesRefuseWakeAndTornTailsRepairOnWrite(t *testing.
 	}
 }
 
+func TestCrewMemoryReadsLegacyReferencesThroughCorrections(t *testing.T) {
+	for _, tc := range []struct{ name, reference string }{
+		{"legacy", `"day":{"letter":%q,"session":"previous-session"}`},
+		{"session", `"session":{"letter":%q,"id":"previous-session"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newCrewWorld(t, fakeagent.Claude)
+			cli := w.Client()
+			setSetting(t, w.App(), "crew_memory_enabled", "true")
+			body := fmt.Sprintf("{\"at\":\"2026-10-25T20:00:00Z\",\"text\":\"Remember the decision.\","+tc.reference+"}\n", crewHomeLetters["trellis"])
+			writeCrewHomeFile(t, w, "trellis", filepath.Join("memory", "log.jsonl"), body)
+			awake := wakeCrew(t, cli, "trellis", "")
+			w.Launched(string(awake.SessionID))
+			for _, forgotten := range []bool{false, true} {
+				if forgotten {
+					if _, err := cli.MemoryForget(awake.SessionID, 0); err != nil {
+						t.Fatal(err)
+					}
+				}
+				read, err := cli.MemoryZoom(awake.SessionID, "", "", "0")
+				letter := filepath.Join(crewHome(w, "trellis"), "handoffs", crewHomeLetters["trellis"])
+				if err != nil || protocol.Deref(read.Letter) != letter || protocol.Deref(read.SessionID) != "previous-session" || !strings.Contains(read.Lines[0], "[session: ") {
+					t.Fatalf("session references after forgotten=%t: %+v, %v", forgotten, read, err)
+				}
+			}
+		})
+	}
+}
+
 func TestPendingMemoryTurnoverKeepsChiefAndRetirementRules(t *testing.T) {
 	for _, chief := range []bool{false, true} {
 		t.Run(fmt.Sprintf("chief=%v", chief), func(t *testing.T) {
@@ -311,7 +340,7 @@ func TestPendingMemoryTurnoverKeepsChiefAndRetirementRules(t *testing.T) {
 				if _, err := cli.MemoryAdd(session, "Keep the reason behind the decision."); err != nil {
 					t.Fatal(err)
 				}
-				close := protocol.CrewDayCloseNap
+				close := protocol.CrewSessionCloseNap
 				if chief {
 					close = ""
 				}
@@ -325,9 +354,9 @@ func TestPendingMemoryTurnoverKeepsChiefAndRetirementRules(t *testing.T) {
 					t.Fatal(err)
 				}
 				done, err := cli.MemorySummarize(session, []protocol.CrewMemoryAnswer{{Range: "0-1", Text: "The decision and its reason are durable."}})
-				want := protocol.CrewDayCloseSleep
+				want := protocol.CrewSessionCloseSleep
 				if chief {
-					want = protocol.CrewDayCloseNap
+					want = protocol.CrewSessionCloseNap
 				}
 				if err != nil || done.Handoff == nil || protocol.Deref(done.Handoff.Outcome) != want {
 					t.Fatalf("turnover after summaries = %+v %v, want %s", done, err, want)

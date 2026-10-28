@@ -70,7 +70,7 @@ export interface QueueBandOptions<TSession extends QueueBandSession = QueueBandS
   hidden?: readonly TSession[];
 }
 
-/** Automation runs are browsed separately from the queue. Crew days only join the
+/** Automation runs are browsed separately from the queue. Crew sessions only join the
  * queue when the user opts them in. */
 export function sessionParticipatesInQueue(
   session: Pick<QueueBandSession, 'automation' | 'crewMember'>,

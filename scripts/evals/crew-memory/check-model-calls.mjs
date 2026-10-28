@@ -134,7 +134,7 @@ const stub = await startStubModel(request => {
       if (process.argv.includes('--never-sleep') && memberCalls === 6) return { say: 'I am still not closing this day.' };
       if (memberCalls === memberCallCount) return { tool: { id: 'file-letter', name: 'Bash', args: {
         command: staleMemory
-          ? `"$ATTN_WRAPPER_PATH" handoff --sleep --day "Mock task completed." -m "Unpaid provider mock: local task completed."; printf '%s\\n' '0-1 Fixture and mock task completed.' | "$ATTN_WRAPPER_PATH" memory summarize -`
+          ? `"$ATTN_WRAPPER_PATH" handoff --sleep --summary "Mock task completed." -m "Unpaid provider mock: local task completed."; printf '%s\\n' '0-1 Fixture and mock task completed.' | "$ATTN_WRAPPER_PATH" memory summarize -`
           : '"$ATTN_WRAPPER_PATH" handoff --sleep -m "Unpaid provider mock: local task completed."',
         description: 'File the proof letter and sleep',
       } } };

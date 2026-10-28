@@ -66,7 +66,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 			return nil, err
 		}
 		d.crewWakeMu.Lock()
-		woke, err := d.crewWakeDayWithChargeLocked(key, "", false, nil, crewWakeRequest{UserStarted: true})
+		woke, err := d.crewWakeSessionWithChargeLocked(key, "", false, nil, crewWakeRequest{UserStarted: true})
 		d.crewWakeMu.Unlock()
 		if err != nil {
 			return nil, err

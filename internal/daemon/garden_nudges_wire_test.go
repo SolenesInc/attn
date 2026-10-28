@@ -284,7 +284,7 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 		first := w.bootBubbleClaude(t, string(protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)))
 		first.reply("Ready. <!-- attn:state=idle -->")
 		readInbox(t, cli, first.id, 0)
-		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "done for now", false, protocol.CrewDayCloseSleep, ""); err != nil {
+		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "done for now", false, protocol.CrewSessionCloseSleep, ""); err != nil {
 			t.Fatal(err)
 		}
 		gardenNudgeWatch(t, cli, "watcher", seed, false)
@@ -312,7 +312,7 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 
 func TestAMemberThatTendsAndWatchesGetsOneSeedUpdate(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		app, day := crewSessionInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
@@ -343,7 +343,7 @@ func TestAMemberThatTendsAndWatchesGetsOneSeedUpdate(t *testing.T) {
 
 func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		_, day := crewSessionInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
