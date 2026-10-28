@@ -1,21 +1,18 @@
-# React Doctor — finds security, performance, correctness, accessibility,
-# bundle-size, and architecture issues in React codebases.
-#
-# Docs: https://www.react.doctor/ci
-# Source: https://github.com/millionco/react-doctor
+# slopradar comments on pull requests. React Doctor reports findings on React
+# changes. Neither gates a pull request, and both stay out of ci.yml so CI does
+# not take their write token.
 
-name: React Doctor
+name: slopradar and React Doctor
 
 on:
+  pull_request:
   push:
     branches: [main]
     paths:
       - 'app/src/**'
       - 'app/package.json'
       - 'app/pnpm-lock.yaml'
-      - '.github/workflows/react-doctor.yml'
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+      - '.github/workflows/advisory.yml'
 
 permissions:
   contents: read
@@ -23,27 +20,45 @@ permissions:
   issues: write
   statuses: write
 
-# Cancels an in-flight scan when a new commit arrives on the same PR.
 concurrency:
-  group: react-doctor-${{ github.event.pull_request.number || github.ref }}
+  group: advisory-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  react-doctor:
+  advisory:
+    name: slopradar and React Doctor
     runs-on: ubuntu-24.04
     steps:
-      # The merge ref can include newer target changes than the event's base SHA.
-      # Scan the PR head with full history so only its changes enter the comparison.
       - uses: actions/checkout@v5
+        id: checkout
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
+      - name: slopradar
+        id: slopradar
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: SolenesInc/slopradar@main
+        with:
+          trend-months: "12"
+          comment: "true"
+
       - name: Report runner class
+        if: >-
+          always() &&
+          steps.checkout.outcome == 'success' &&
+          (github.event_name == 'push' ||
+           contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action))
         run: ./scripts/ci-runner-class.sh
 
       - name: Classify changed paths
         id: changes
+        if: >-
+          always() &&
+          steps.checkout.outcome == 'success' &&
+          (github.event_name == 'push' ||
+           contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action))
         uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
         with:
           token: ''
@@ -57,8 +72,14 @@ jobs:
       # mutable and this action runs on every PR with write access to comments,
       # issues, and statuses, so the exact code is frozen here. Bump the SHA
       # (and the comment) deliberately to take a new version.
-      - uses: millionco/react-doctor@01820bb4fd4d0a4aebcd8df2b2a143a098649cb2 # v2
-        if: steps.changes.outputs.react == 'true'
+      - name: React Doctor
+        if: >-
+          always() &&
+          steps.checkout.outcome == 'success' &&
+          steps.changes.outputs.react == 'true' &&
+          (github.event_name == 'push' ||
+           contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action))
+        uses: millionco/react-doctor@01820bb4fd4d0a4aebcd8df2b2a143a098649cb2 # v2
         with:
           # The React app is the `app/` workspace; there is no package.json at
           # the repo root for the default "." to find.
@@ -79,5 +100,14 @@ jobs:
         #   project: "web,admin"     # In a monorepo, scan specific workspace project(s)
 
       - name: Report skipped scan
-        if: steps.changes.outputs.react != 'true'
+        if: >-
+          always() &&
+          steps.changes.outcome == 'success' &&
+          steps.changes.outputs.react != 'true' &&
+          (github.event_name == 'push' ||
+           contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action))
         run: echo 'No React source or package inputs changed; scan skipped.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail when slopradar fails
+        if: always() && steps.slopradar.outcome == 'failure'
+        run: exit 1

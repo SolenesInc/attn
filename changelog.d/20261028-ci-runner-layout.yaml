@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: A pull request shares runners across checks that each took their own machine, and App acceptance runs as five shards, so one push holds fewer runners while the same checks still run on the same operating systems.

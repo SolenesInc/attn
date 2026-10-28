@@ -204,30 +204,12 @@ jobs:
         run: go run ./cmd/changelog-check
 
   script-tests:
-    name: Script tests
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          node: 'true'
-      - run: make test-scripts
-
-  # generated.go and generated.ts are compiled from internal/protocol/schema, and
-  # nothing was checking that the committed copies match. The other jobs cannot:
-  # the generated TS interfaces carry an `any` index signature, so `tsc` accepts a
-  # file with a wire field deleted from it — measured, exit 0. This regenerates
-  # from the schema and fails on any difference.
-  generated-types:
-    name: Generated types
+    name: Script tests, Plugins, and Tauri (ubuntu-24.04)
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Go and Node.js
         uses: ./.github/actions/setup-toolchains
@@ -235,364 +217,82 @@ jobs:
           go: 'true'
           node: 'true'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Script tests
+        run: make test-scripts
 
-      # The TypeSpec compiler the recipe invokes as `pnpm exec tsp`.
-      - name: Install schema toolchain
-        working-directory: internal/protocol/schema
-        run: pnpm install --frozen-lockfile
+      # The bundled plugins are compiled by the packaged-app build, which no CI job
+      # runs — so a plugin that only builds on a machine with warm node_modules got
+      # all the way to a contributor's fresh clone. This stages them the way the app
+      # build does, from a checkout that has nothing installed.
+      - name: Plugins — set up Linux sandbox
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
+        uses: ./.github/actions/setup-linux-sandbox
 
-      - name: Check migration history
-        env:
-          MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: make check-migrations
-
-      - name: Regenerate and diff
-        run: make check-types check-schema
-
-  backend:
-    name: Daemon
-    needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Report runner class
-        run: ./scripts/ci-runner-class.sh
-
-      - name: Set up Go
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          go-cache: 'false'
-
-      - name: Resolve Go cache paths
-        id: go-cache-paths
-        run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Go build cache
-        id: go-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ${{ steps.go-cache-paths.outputs.build }}
-            ${{ steps.go-cache-paths.outputs.modules }}
-          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
-
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-
-      # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
-      # prebuilt native archive (download-first, no zig) so vet/build/test link.
-      - name: Ensure native VT library
-        run: ./scripts/build-libghostty-vt.sh
-
-      - name: Read bun pin
+      - name: Plugins — read bun pin
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
         id: bun
         run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
 
-      # Bundled Pi and plugin runtime checks need the pinned Bun toolchain.
-      - name: Set up bun
+      - name: Plugins — set up bun
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ steps.bun.outputs.version }}
 
-      - name: Check formatting
-        run: |
-          if [ -n "$(gofmt -l .)" ]; then
-            echo "Go files are not formatted. Run 'gofmt -w .'"
-            gofmt -d .
-            exit 1
-          fi
-
-      - name: Vet
-        run: go vet ./...
-
-      - name: Lint
-        run: make lint-go
-
-      - name: Start ClickHouse for the attn-ingest tests
-        run: echo "ATTN_TEST_CLICKHOUSE_URL=$(./scripts/ingest-clickhouse.sh start)" >> "$GITHUB_ENV"
-
-      - name: Test
-        run: ./scripts/test-go.sh
-
-      - name: Check prompt catalog and scenarios
-        run: |
-          make check-prompts
-          go run ./cmd/prompt-editor check
-
-      - name: Save Go build cache
-        if: >-
-          always() && steps.go-cache.outcome == 'success' &&
-          steps.go-cache.outputs.cache-hit != 'true' &&
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.go-cache-paths.outputs.build }}
-            ${{ steps.go-cache-paths.outputs.modules }}
-          key: ${{ steps.go-cache.outputs.cache-primary-key }}
-
-  pty-compatibility:
-    name: PTY upgrade (${{ matrix.os }})
-    needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
-    runs-on: ${{ matrix.runs_on }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            runs_on: macos-14
-          - os: ubuntu-24.04
-            runs_on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Report runner class
-        run: ./scripts/ci-runner-class.sh
-      - uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          go-cache: 'false'
-      - name: Resolve Go cache paths
-        id: go-cache-paths
-        run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-      - name: Restore Go build cache
-        id: go-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ${{ steps.go-cache-paths.outputs.build }}
-            ${{ steps.go-cache-paths.outputs.modules }}
-          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-      - name: Build host and native terminal library
-        run: make build-pty-host
-      - name: Install listener discovery tool
-        if: runner.os == 'Linux'
-        run: command -v lsof >/dev/null || (sudo apt-get update && sudo apt-get install -y lsof)
-      - name: Verify old daemon and mixed host generations
-        run: bash scripts/test-pty-upgrade.sh
-      - name: Verify shared host protocol and lifecycle
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
-      - name: Verify instance cleanup with live host generations
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^(TestInstanceClean.*SharedHost|TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact|TestAProgramInAShellTile|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges|TestRestartNowLetsARunningTurnFinish|TestASharedCodexTerminalOpenedAfterADaemonRestart)' -count=1
-      - name: Save Go build cache
-        if: >-
-          always() && steps.go-cache.outcome == 'success' &&
-          steps.go-cache.outputs.cache-hit != 'true' &&
-          github.event_name == 'push' &&
-          github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ${{ steps.go-cache-paths.outputs.build }}
-            ${{ steps.go-cache-paths.outputs.modules }}
-          key: ${{ steps.go-cache.outputs.cache-primary-key }}
-
-  frontend:
-    name: Frontend
-    needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-24.04-arm
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go and Node.js
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          node: 'true'
-
-      - name: Check generated prompt catalogs
-        working-directory: .
+      - name: Plugins — check prompt catalog freshness
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
         run: go run ./cmd/promptgen --check
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Plugins — stage bundled plugins
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
+        run: ./scripts/build-bundled-plugins.sh "${RUNNER_TEMP}/bundled-plugins"
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Type check
-        run: pnpm run build
-
-      - name: Lint
-        run: pnpm run lint
-
-      - name: Test
-        run: pnpm test
-
-      - name: Test prompt editor helpers
-        working-directory: .
+      - name: Plugins — test plugins
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
         run: |
-          node --test cmd/prompt-editor/test/compare.test.mjs
-          app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
+          for plugin in plugins/*/; do
+            [ -f "${plugin}package.json" ] || continue
+            echo ">>> ${plugin}"
+            (cd "$plugin" && bun test)
+          done
 
-  # E2E runs apart from the unit job so the two overlap instead of stacking.
-  # Each shard is its own runner with its own throwaway daemon + Vite server,
-  # so the shared-daemon constraint that forces workers:1 in playwright.config
-  # still holds within a shard.
-  frontend-e2e:
-    name: Frontend E2E (${{ matrix.shard }}/3)
-    needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-24.04-arm
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Go and Node.js
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          node: 'true'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Ensure ghostty-vt artifacts
-        uses: ./.github/actions/cache-ghostty-vt
-        with:
-          include-wasm: 'true'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build attn binary
-        run: |
-          cd ..
-          ./scripts/build-libghostty-vt.sh
-          go build -o /tmp/attn ./cmd/attn
-
-      - name: Get Playwright version
-        id: playwright-version
-        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
-
-      # `install --with-deps` hung past 25 minutes on 2026-09-26 without saying
-      # whether apt or the download stalled; bounded steps name the one that does.
-      - name: Bound apt network waits
-        run: |
-          printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
-            | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts
-
-      # The suite only runs chromium (no projects configured), so skip the
-      # firefox/webkit downloads.
-      - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        timeout-minutes: 10
-        run: pnpm exec playwright install chromium
-
-      - name: Install Playwright OS deps
-        timeout-minutes: 10
-        run: pnpm exec playwright install-deps chromium
-
-      - name: E2E
-        env:
-          ATTN_E2E_BIN: /tmp/attn
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/3
-
-      - name: Test prompt editor in Chromium
-        if: matrix.shard == 1
-        working-directory: .
-        run: |
-          node cmd/prompt-editor/test/browser.mjs
-          node cmd/prompt-editor/test/collaboration.mjs
-
-  rust:
-    name: Tauri (${{ matrix.os }})
-    needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
-    runs-on: ${{ matrix.runs_on }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-14
-            runs_on: macos-14
-          - os: ubuntu-24.04
-            runs_on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: app/src-tauri
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Report runner class
-        working-directory: .
+      - name: Tauri (ubuntu-24.04) — report runner class
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
         run: ./scripts/ci-runner-class.sh
 
-      - name: Install Linux webview deps
-        if: runner.os == 'Linux'
+      - name: Tauri (ubuntu-24.04) — install Linux webview deps
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
             librsvg2-dev libgtk-3-dev libxdo-dev libssl-dev patchelf
 
-      - name: Set up Go
-        uses: ./.github/actions/setup-toolchains
-        with:
-          go: 'true'
-          go-cache: 'false'
-
-      - name: Resolve Go cache paths
-        id: go-cache-paths
+      - name: Tauri (ubuntu-24.04) — resolve Go cache paths
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        id: tauri-go-cache-paths
         run: |
-          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=${RUNNER_TEMP}/tauri-go-build-cache" >> "$GITHUB_OUTPUT"
+          echo "modules=${RUNNER_TEMP}/tauri-go-mod-cache" >> "$GITHUB_OUTPUT"
 
-      - name: Restore Go build cache
-        id: go-cache
+      - name: Tauri (ubuntu-24.04) — restore Go build cache
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        id: tauri-go-cache
         uses: actions/cache/restore@v4
         with:
           path: |
-            ${{ steps.go-cache-paths.outputs.build }}
-            ${{ steps.go-cache-paths.outputs.modules }}
+            ${{ steps.tauri-go-cache-paths.outputs.build }}
+            ${{ steps.tauri-go-cache-paths.outputs.modules }}
           key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
-      - name: Set up Rust
+      - name: Tauri (ubuntu-24.04) — set up Rust
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: '1.95.0'
           components: clippy, rustfmt
 
-      - name: Cache Rust build
+      - name: Tauri (ubuntu-24.04) — cache Rust build
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -602,10 +302,16 @@ jobs:
           # evict the rest of the repo's entries.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Ensure ghostty-vt artifacts
+      - name: Tauri (ubuntu-24.04) — ensure ghostty-vt artifacts
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
         uses: ./.github/actions/cache-ghostty-vt
 
-      - name: Build attn binary
+      - name: Tauri (ubuntu-24.04) — build attn binary
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
+        env:
+          GOCACHE: ${{ steps.tauri-go-cache-paths.outputs.build }}
+          GOMODCACHE: ${{ steps.tauri-go-cache-paths.outputs.modules }}
         run: |
           cd ../..
           ./scripts/build-libghostty-vt.sh
@@ -617,67 +323,515 @@ jobs:
           cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-${target_triple}"
           cd app/src-tauri
 
-      - name: PTY host fmt, clippy, and test
+      - name: Tauri (ubuntu-24.04) — PTY host fmt, clippy, and test
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
         run: |
           cd ../..
           cargo fmt --manifest-path pty-host/Cargo.toml -- --check
           cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path pty-host/Cargo.toml
 
-      - name: Cargo fmt
+      - name: Tauri (ubuntu-24.04) — cargo fmt
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
         run: cargo fmt -- --check
 
       # The pre-commit hook has always run clippy; CI never did, so a lint that
       # only the hook rejects reached main and blocked every local commit. Same
       # pinned toolchain on both sides, so they cannot disagree.
-      - name: Cargo clippy
+      - name: Tauri (ubuntu-24.04) — cargo clippy
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Cargo test
+      - name: Tauri (ubuntu-24.04) — cargo test
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
         run: cargo test
 
-  # The bundled plugins are compiled by the packaged-app build, which no CI job
-  # runs — so a plugin that only builds on a machine with warm node_modules got
-  # all the way to a contributor's fresh clone. This stages them the way the app
-  # build does, from a checkout that has nothing installed.
-  plugins:
-    name: Plugins
+      - name: Tauri (ubuntu-24.04) — save Go build cache
+        if: >-
+          always() &&
+          (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true') &&
+          steps.tauri-go-cache.outcome == 'success' &&
+          steps.tauri-go-cache.outputs.cache-hit != 'true' &&
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.tauri-go-cache-paths.outputs.build }}
+            ${{ steps.tauri-go-cache-paths.outputs.modules }}
+          key: ${{ steps.tauri-go-cache.outputs.cache-primary-key }}
+
+  # generated.go and generated.ts are compiled from internal/protocol/schema, and
+  # nothing was checking that the committed copies match. The other jobs cannot:
+  # the generated TS interfaces carry an `any` index signature, so `tsc` accepts a
+  # file with a wire field deleted from it — measured, exit 0. This regenerates
+  # from the schema and fails on any difference.
+  generated-pty-daemon:
+    name: Generated types, PTY upgrade (ubuntu-24.04), and Daemon
     needs: changes
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.plugins == 'true'
+    if: >-
+      needs.changes.outputs.force_all == 'true' ||
+      needs.changes.outputs.generated == 'true' ||
+      needs.changes.outputs.daemon == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Linux sandbox
-        uses: ./.github/actions/setup-linux-sandbox
+      - name: Generated types — set up Go and Node.js
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
+        uses: ./.github/actions/setup-toolchains
+        with:
+          go: 'true'
+          node: 'true'
+
+      - name: Daemon — set up Go
+        if: >-
+          (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true') &&
+          needs.changes.outputs.force_all != 'true' &&
+          needs.changes.outputs.generated != 'true'
+        uses: ./.github/actions/setup-toolchains
+        with:
+          go: 'true'
+          go-cache: 'false'
+
+      - name: PTY upgrade (ubuntu-24.04) and Daemon — resolve Go cache paths
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        id: go-cache-paths
+        run: |
+          echo "build=${RUNNER_TEMP}/go-build-cache" >> "$GITHUB_OUTPUT"
+          echo "modules=${RUNNER_TEMP}/go-mod-cache" >> "$GITHUB_OUTPUT"
+
+      - name: PTY upgrade (ubuntu-24.04) and Daemon — restore Go build cache
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        id: go-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+
+      - name: Daemon — report runner class
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Daemon — ensure ghostty-vt artifacts
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        uses: ./.github/actions/cache-ghostty-vt
+
+      # internal/ghosttyvt links libghostty-vt via cgo on Linux; fetch the
+      # prebuilt native archive (download-first, no zig) so vet/build/test link.
+      - name: Daemon — ensure native VT library
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        run: ./scripts/build-libghostty-vt.sh
+
+      - name: Daemon — read bun pin
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        id: bun
+        run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
+
+      # Bundled Pi and plugin runtime checks need the pinned Bun toolchain.
+      - name: Daemon — set up bun
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Daemon — check formatting
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go files are not formatted. Run 'gofmt -w .'"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Daemon — vet
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          GOCACHE: ${{ steps.go-cache-paths.outputs.build }}
+          GOMODCACHE: ${{ steps.go-cache-paths.outputs.modules }}
+        run: go vet ./...
+
+      - name: Daemon — lint
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          GOCACHE: ${{ steps.go-cache-paths.outputs.build }}
+          GOMODCACHE: ${{ steps.go-cache-paths.outputs.modules }}
+        run: make lint-go
+
+      - name: Daemon — start ClickHouse for the attn-ingest tests
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        run: echo "ATTN_TEST_CLICKHOUSE_URL=$(./scripts/ingest-clickhouse.sh start)" >> "$GITHUB_ENV"
+
+      - name: Daemon — test
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          GOCACHE: ${{ steps.go-cache-paths.outputs.build }}
+          GOMODCACHE: ${{ steps.go-cache-paths.outputs.modules }}
+        run: ./scripts/test-go.sh
+
+      - name: Daemon — check prompt catalog and scenarios
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          GOCACHE: ${{ steps.go-cache-paths.outputs.build }}
+          GOMODCACHE: ${{ steps.go-cache-paths.outputs.modules }}
+        run: |
+          make check-prompts
+          go run ./cmd/prompt-editor check
+
+      - name: PTY upgrade (ubuntu-24.04) — report runner class
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        run: ./scripts/ci-runner-class.sh
+
+      - name: PTY upgrade (ubuntu-24.04) — set up Rust
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: PTY upgrade (ubuntu-24.04) — ensure ghostty-vt artifacts
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        uses: ./.github/actions/cache-ghostty-vt
+
+      - name: PTY upgrade (ubuntu-24.04) — build host and native terminal library
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        run: make build-pty-host
+
+      - name: PTY upgrade (ubuntu-24.04) — install listener discovery tool
+        if: >-
+          (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true') &&
+          runner.os == 'Linux'
+        run: command -v lsof >/dev/null || (sudo apt-get update && sudo apt-get install -y lsof)
+
+      - name: PTY upgrade (ubuntu-24.04) — verify old daemon and mixed host generations
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          GOCACHE: ${{ steps.go-cache-paths.outputs.build }}
+          GOMODCACHE: ${{ steps.go-cache-paths.outputs.modules }}
+        run: bash scripts/test-pty-upgrade.sh
+
+      - name: PTY upgrade (ubuntu-24.04) — verify shared host protocol and lifecycle
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          GOCACHE: ${{ steps.go-cache-paths.outputs.build }}
+          GOMODCACHE: ${{ steps.go-cache-paths.outputs.modules }}
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
+
+      - name: PTY upgrade (ubuntu-24.04) — verify instance cleanup with live host generations
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          GOCACHE: ${{ steps.go-cache-paths.outputs.build }}
+          GOMODCACHE: ${{ steps.go-cache-paths.outputs.modules }}
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^(TestInstanceClean.*SharedHost|TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact|TestAProgramInAShellTile|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges|TestRestartNowLetsARunningTurnFinish|TestASharedCodexTerminalOpenedAfterADaemonRestart)' -count=1
+
+      - name: Generated types — install pnpm
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # The TypeSpec compiler the recipe invokes as `pnpm exec tsp`.
+      - name: Generated types — install schema toolchain
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
+        working-directory: internal/protocol/schema
+        run: pnpm install --frozen-lockfile
+
+      - name: Generated types — check migration history
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
+        env:
+          MIGRATION_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: make check-migrations
+
+      - name: Generated types — regenerate and diff
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.generated == 'true'
+        run: make check-types check-schema
+
+      - name: PTY upgrade (ubuntu-24.04) and Daemon — save Go build cache
+        if: >-
+          always() &&
+          (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true') &&
+          steps.go-cache.outcome == 'success' &&
+          steps.go-cache.outputs.cache-hit != 'true' &&
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
+
+  frontend:
+    name: Frontend and Frontend E2E
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go and Node.js
+        uses: ./.github/actions/setup-toolchains
+        with:
+          go: 'true'
+          node: 'true'
+
+      - name: Frontend — check generated prompt catalogs
+        working-directory: .
+        run: go run ./cmd/promptgen --check
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        working-directory: app
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend — type check
+        working-directory: app
+        run: pnpm run build
+
+      - name: Frontend — lint
+        working-directory: app
+        run: pnpm run lint
+
+      - name: Frontend — test
+        working-directory: app
+        run: pnpm test
+
+      - name: Frontend — test prompt editor helpers
+        working-directory: .
+        run: |
+          node --test cmd/prompt-editor/test/compare.test.mjs
+          app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
+
+      - name: Frontend E2E — ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+        with:
+          include-wasm: 'true'
+
+      - name: Frontend E2E — build attn binary
+        working-directory: app
+        run: |
+          cd ..
+          ./scripts/build-libghostty-vt.sh
+          go build -o /tmp/attn ./cmd/attn
+
+      - name: Frontend E2E — get Playwright version
+        id: playwright-version
+        working-directory: app
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Frontend E2E — cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
+
+      # `install --with-deps` hung past 25 minutes on 2026-09-26 without saying
+      # whether apt or the download stalled; bounded steps name the one that does.
+      - name: Frontend E2E — bound apt network waits
+        run: |
+          printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
+            | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts
+
+      # The suite only runs chromium (no projects configured), so skip the
+      # firefox/webkit downloads.
+      - name: Frontend E2E — install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        working-directory: app
+        run: pnpm exec playwright install chromium
+
+      - name: Frontend E2E — install Playwright OS deps
+        timeout-minutes: 10
+        working-directory: app
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Frontend E2E (1/3)
+        working-directory: app
+        env:
+          ATTN_E2E_BIN: /tmp/attn
+        run: pnpm exec playwright test --shard=1/3
+
+      - name: Test prompt editor in Chromium
+        working-directory: .
+        run: |
+          node cmd/prompt-editor/test/browser.mjs
+          node cmd/prompt-editor/test/collaboration.mjs
+
+      - name: Frontend E2E (2/3)
+        working-directory: app
+        env:
+          ATTN_E2E_BIN: /tmp/attn
+        run: pnpm exec playwright test --shard=2/3
+
+      - name: Frontend E2E (3/3)
+        working-directory: app
+        env:
+          ATTN_E2E_BIN: /tmp/attn
+        run: pnpm exec playwright test --shard=3/3
+
+  pty-tauri-macos:
+    name: PTY upgrade and Tauri (macos-14)
+    needs: changes
+    if: >-
+      needs.changes.outputs.force_all == 'true' ||
+      needs.changes.outputs.daemon == 'true' ||
+      needs.changes.outputs.tauri == 'true'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: ./.github/actions/setup-toolchains
         with:
           go: 'true'
+          go-cache: 'false'
 
-      - name: Read bun pin
-        id: bun
-        run: echo "version=$(awk '/^bun / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
-
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ steps.bun.outputs.version }}
-
-      - name: Check prompt catalog freshness
-        run: go run ./cmd/promptgen --check
-
-      - name: Stage bundled plugins
-        run: ./scripts/build-bundled-plugins.sh "${RUNNER_TEMP}/bundled-plugins"
-
-      - name: Test plugins
+      - name: Resolve Go cache paths
+        id: go-cache-paths
         run: |
-          for plugin in plugins/*/; do
-            [ -f "${plugin}package.json" ] || continue
-            echo ">>> ${plugin}"
-            (cd "$plugin" && bun test)
-          done
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go build cache
+        id: go-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: go-build-github-hosted-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
+
+      - name: PTY upgrade (macos-14) — report runner class
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        run: ./scripts/ci-runner-class.sh
+
+      - name: PTY upgrade (macos-14) — set up Rust
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+
+      - name: PTY upgrade (macos-14) — ensure ghostty-vt artifacts
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        uses: ./.github/actions/cache-ghostty-vt
+
+      - name: PTY upgrade (macos-14) — build host and native terminal library
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/pty-upgrade-target
+        run: make build-pty-host
+
+      - name: PTY upgrade (macos-14) — verify old daemon and mixed host generations
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          ATTN_TEST_PTY_HOST: ${{ runner.temp }}/pty-upgrade-target/release/attn-pty-host
+        run: bash scripts/test-pty-upgrade.sh
+
+      - name: PTY upgrade (macos-14) — verify shared host protocol and lifecycle
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          ATTN_TEST_PTY_HOST: ${{ runner.temp }}/pty-upgrade-target/release/attn-pty-host
+        run: go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
+
+      - name: PTY upgrade (macos-14) — verify instance cleanup with live host generations
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.daemon == 'true'
+        env:
+          ATTN_TEST_PTY_HOST: ${{ runner.temp }}/pty-upgrade-target/release/attn-pty-host
+        run: go test -race ./cmd/attn -run '^(TestInstanceClean.*SharedHost|TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact|TestAProgramInAShellTile|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges|TestRestartNowLetsARunningTurnFinish|TestASharedCodexTerminalOpenedAfterADaemonRestart)' -count=1
+
+      - name: Tauri (macos-14) — report runner class
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Tauri (macos-14) — set up Rust
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.95.0'
+          components: clippy, rustfmt
+
+      - name: Tauri (macos-14) — cache Rust build
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            app/src-tauri
+            pty-host
+          # Saving on PRs too would copy this cache into every branch scope and
+          # evict the rest of the repo's entries.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Tauri (macos-14) — ensure ghostty-vt artifacts
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        uses: ./.github/actions/cache-ghostty-vt
+
+      - name: Tauri (macos-14) — build attn binary
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
+        run: |
+          cd ../..
+          ./scripts/build-libghostty-vt.sh
+          go build -o /tmp/attn ./cmd/attn
+          make build-pty-host
+          target_triple="$(rustc -vV | awk '/host:/ {print $2}')"
+          mkdir -p app/src-tauri/binaries
+          cp /tmp/attn "app/src-tauri/binaries/attn-${target_triple}"
+          cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-${target_triple}"
+          cd app/src-tauri
+
+      - name: Tauri (macos-14) — PTY host fmt, clippy, and test
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
+        run: |
+          cd ../..
+          cargo fmt --manifest-path pty-host/Cargo.toml -- --check
+          cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path pty-host/Cargo.toml
+
+      - name: Tauri (macos-14) — cargo fmt
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
+        run: cargo fmt -- --check
+
+      # The pre-commit hook has always run clippy; CI never did, so a lint that
+      # only the hook rejects reached main and blocked every local commit. Same
+      # pinned toolchain on both sides, so they cannot disagree.
+      - name: Tauri (macos-14) — cargo clippy
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tauri (macos-14) — cargo test
+        if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.tauri == 'true'
+        working-directory: app/src-tauri
+        run: cargo test
+
+      - name: Save Go build cache
+        if: >-
+          always() && steps.go-cache.outcome == 'success' &&
+          steps.go-cache.outputs.cache-hit != 'true' &&
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ steps.go-cache-paths.outputs.build }}
+            ${{ steps.go-cache-paths.outputs.modules }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
   app-acceptance-build:
     name: App acceptance build
@@ -714,7 +868,7 @@ jobs:
           overwrite: true
 
   app-acceptance-shard:
-    name: App acceptance shard ${{ matrix.shard }}/4
+    name: App acceptance shard ${{ matrix.shard }}/5
     needs: [changes, app-acceptance-build]
     if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
     permissions:
@@ -724,7 +878,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     # No concurrency group: a shared one cancels unrelated waiting checks.
     runs-on: ubuntu-24.04
     # Heaviest shard 199.4s of a 785.7s matrix (run 34067680122); 40m is slack.
@@ -759,7 +913,7 @@ jobs:
           ATTN_REAL_APP_ARTIFACTS_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: >-
           xvfb-run -a -s '-noreset -screen 0 1600x1000x24'
-          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/4
+          pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/5
 
       - name: Collect daemon and worker logs
         if: always()
@@ -818,7 +972,7 @@ jobs:
           if [ "$MATRIX_OUTCOME" = success ]; then
             exit 0
           fi
-          echo "shard ${{ matrix.shard }}/4: the serial matrix is $MATRIX_OUTCOME;" \
+          echo "shard ${{ matrix.shard }}/5: the serial matrix is $MATRIX_OUTCOME;" \
             "the App acceptance job aggregates every shard's digest" >&2
           exit 1
 
@@ -858,7 +1012,7 @@ jobs:
         continue-on-error: true
         run: >-
           node app/scripts/real-app-harness/aggregate-shards.mjs
-          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 4
+          --results-dir "$RUNNER_TEMP/shard-results" --shard-count 5
           --out "$RUNNER_TEMP/matrix-digest.txt"
 
       - name: Upload the aggregated digest
@@ -1004,14 +1158,10 @@ jobs:
     needs:
       - changes
       - changelog
-      - generated-types
       - script-tests
-      - backend
-      - pty-compatibility
+      - generated-pty-daemon
       - frontend
-      - frontend-e2e
-      - rust
-      - plugins
+      - pty-tauri-macos
       - app-acceptance-build
       - app-acceptance-shard
       - app-acceptance-macos
@@ -1038,14 +1188,10 @@ jobs:
     needs:
       - changes
       - changelog
-      - generated-types
       - script-tests
-      - backend
-      - pty-compatibility
+      - generated-pty-daemon
       - frontend
-      - frontend-e2e
-      - rust
-      - plugins
+      - pty-tauri-macos
       - app-acceptance-build
       - app-acceptance-shard
       - app-acceptance-macos
