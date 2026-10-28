@@ -152,7 +152,7 @@ Probed on 2.1.303 with synthetic prompts and a local mock API:
   new conversation's transcript, preserving their `message.id` and usage.
   A message id therefore identifies the same request across root transcripts.
 
-### Background sessions (agent view)
+### Agent view
 
 Probed on 2.1.312 with real Claude in a fresh `CLAUDE_CONFIG_DIR` against a
 local mock API, and read in its bundled source.
@@ -177,14 +177,16 @@ local mock API, and read in its bundled source.
   is left. `claude daemon status` shows it; `claude daemon stop --any` stops it
   with its workers.
 - Workers inherit the daemon's environment, which is the environment of the
-  client that started it. A moved session keeps the flags of the session it
-  left, `--settings` included, so its hooks run the same commands as before.
+  client that started it. A worker keeps the flags of the process its
+  conversation left, `--settings` included, so its hooks run the same commands
+  as before.
   `ATTN_TERMINAL_ID` in its environment names the terminal that started the
   daemon, which may be another one. `CLAUDE_CODE_SESSION_ID` in a tool's
   environment is the running conversation's id.
-- The agent view in any terminal lists every background session of the config
-  directory, and opening one attaches it there, so two terminals can show one
-  worker. Its hooks still run the commands of the terminal it left.
+- The agent view in any terminal lists every conversation the daemon runs for
+  the config directory, and opening one attaches it there, so two terminals can
+  show one worker. Attaching fires no hook, and the worker's hooks still run the
+  commands of the terminal it left.
 - `claude -r <id>` of a conversation a worker runs exits 1: "That session is
   running in the background (<id>). Run `claude attach <id>` to open it, or
   `claude stop <id>` first to resume it here." `claude -r` of the original id
@@ -196,13 +198,17 @@ local mock API, and read in its bundled source.
   draft starts. Claude describes the switch as disabling "`claude agents`,
   `--bg`, /background, the on-demand daemon".
 
-attn launches Claude with `CLAUDE_CODE_DISABLE_AGENT_VIEW=1`. A conversation in
-Claude's daemon no longer runs in the terminal attn launched: attn would open a
-session for the draft and another for the fork, the agent's attn commands would
-name another terminal, and Reload could not resume it. The variable also
-reaches `claude` run from the agent's tools, so those cannot start background
-sessions that carry the agent's attn identity. Claude started by hand in a
-shell tile keeps its agent view.
+Claude's daemon lets several terminals show one conversation, as a link does,
+but nothing tells attn which terminal shows which worker. attn launches Claude
+with `CLAUDE_CODE_DISABLE_AGENT_VIEW=1` instead. Without it, a conversation
+moved into the daemon no longer runs in the terminal attn launched: attn would
+open one session for the draft and another for the fork, the agent's attn
+commands would name another terminal, and Reload session could not resume it.
+The variable also reaches `claude` run from the agent's tools, so those cannot
+start conversations in the daemon that carry the agent's attn identity. Claude
+that the user starts by hand in a terminal running a shell keeps its agent
+view; that terminal has no `ATTN_TERMINAL_ID`, so the conversation carries no
+attn identity.
 
 ### Auto memory
 
