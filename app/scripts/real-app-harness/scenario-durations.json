@@ -364,12 +364,12 @@
         "note": "Green serial matrix durationMs=39165; scenario ATTN_VERDICT durationMs=38664 including cleanup and recording. Native banner and Settings row each push to a real supervised daemon, show restart and outcome; dismissal stays hidden during the row push. Remeasure on Linux CI."
       },
       "notebook-sync": {
-        "run": "notebook-sync-2026-10-27T05-14-58-737Z",
-        "job": "Local packaged scenario, nb-sync-app named instance",
-        "recordedAt": "2026-10-27",
-        "seconds": 34.495,
-        "runnerClass": "local macOS",
-        "note": "Green serial matrix scenario, including recording and cleanup. Shows first sync with remaining bytes/items and saved previous folder, convergence, conflict, conflict removal and missing-marker error. Remeasure on Linux CI."
+        "run": "notebook-sync-2026-10-28T03-30-50-776Z",
+        "job": "Local packaged serial matrix, isolated linux-bf1596fdd6 instance",
+        "recordedAt": "2026-10-28",
+        "seconds": 19.975,
+        "runnerClass": "local Linux SSH runner",
+        "note": "Green serial matrix at source fingerprint tree:da917a7eee47, including cleanup. Includes healthy reconnect, conflict removal and the named missing-marker diagnostic."
       },
       "notebook-profile-scope": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/38011475678",
@@ -380,12 +380,12 @@
         "note": "Green ATTN_VERDICT notebook-profile-scope-2026-10-10T01-06-41-695Z durationMs=39473 at c35103154, including cleanup. Native Work/Home/Work switches verify the profile folder in Settings and its journal in the Notebook."
       },
       "chief-slot": {
-        "run": "chief-slot-2026-10-18T21-28-32-829Z",
-        "job": "Local packaged serial matrix, isolated linux-8c140d028b instance",
-        "recordedAt": "2026-10-18",
-        "seconds": 94.161,
-        "runnerClass": "local Linux SSH runner, 12 vCPU",
-        "note": "Green CHIEF-SLOT ATTN_VERDICT durationMs=94161 at 9d3e534fe with nonasserting CPU sampling removed, including cleanup. All eight functional steps passed within the unchanged 120s matrix tripwire. Earlier macOS parked-window and idle CPU receipts remain on s-fzyxav."
+        "run": "chief-slot-2026-10-28T03-29-07-221Z",
+        "job": "Local packaged serial matrix, isolated linux-bf1596fdd6 instance",
+        "recordedAt": "2026-10-28",
+        "seconds": 103.543,
+        "runnerClass": "local Linux SSH runner",
+        "note": "Green serial matrix at source fingerprint tree:da917a7eee47, including cleanup. Includes configured catalog-refresh focus, Escape/Save, automatic setup, restored-terminal focus and wake/sleep paths."
       }
     }
   },
@@ -458,8 +458,8 @@
     "outposts-settings": 71.931,
     "analytics-settings": 28.012,
     "outpost-update": 39.165,
-    "notebook-sync": 34.495,
+    "notebook-sync": 19.975,
     "notebook-profile-scope": 39.473,
-    "chief-slot": 94.161
+    "chief-slot": 103.543
   }
 }
