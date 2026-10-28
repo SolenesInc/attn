@@ -6,10 +6,9 @@ plot example and completion checks. Syntax lives in `attn seed --help`.
 
 ## Speaking the user's language
 
-Garden words have Jira-style equivalents: seed = ticket, ready = todo,
-plot = epic, harvested = done. Use the Garden word by default. When the user
-uses one of those Jira words, mirror it for that concept for the rest of the
-exchange. Do not correct them or switch the other concepts unless they do.
+Use the Garden word by default. When the user uses a Jira word from the
+vocabulary, mirror it for that concept for the rest of the exchange. Do not
+correct them or switch the other concepts unless they do.
 
 ## Planting work
 

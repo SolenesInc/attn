@@ -49,6 +49,7 @@ var session = Recipient{
 				Choose(Present(notebookRoot),
 					Compose(chiefGuidance, quickCaptureGuidance),
 					agentGuidance),
+				Use("session.vocabulary", "content/vocabulary.md"),
 				When(Enabled(gardenAvailable), gardenGuidance),
 				When(Enabled(asksEnabled), askGuidance),
 				When(Enabled(ventEnabled), ventGuidance),
