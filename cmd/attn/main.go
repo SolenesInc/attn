@@ -23,6 +23,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
@@ -618,17 +619,19 @@ func runPresence() {
 	fs := flag.NewFlagSet("presence", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	bareSessionID := fs.Bool("session-id", false, "print only the session id")
-	if err := parseFlags(fs, os.Args[2:]); err != nil || fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: attn presence [--session-id]")
+	bareSeedID := fs.Bool("seed-id", false, "print only the id of the seed the session works on")
+	if err := parseFlags(fs, os.Args[2:]); err != nil || fs.NArg() != 0 || (*bareSessionID && *bareSeedID) {
+		fmt.Fprintln(os.Stderr, "usage: attn presence [--session-id | --seed-id]")
 		os.Exit(2)
 	}
 	warnIfDaemonVersionMismatch()
 	sessionID, present := detectPresence()
-	if *bareSessionID {
-		if sessionID == "" {
-			os.Exit(1)
-		}
-		fmt.Println(sessionID)
+	switch {
+	case *bareSessionID:
+		printOrExit(sessionID)
+		return
+	case *bareSeedID:
+		printOrExit(seedOfSessionOrExit(protocol.SessionID(sessionID)))
 		return
 	}
 	if !present {
@@ -642,6 +645,51 @@ func runPresence() {
 	fmt.Printf("running inside attn (session %s)\n", sessionID)
 }
 
+func printOrExit(id string) {
+	if id == "" {
+		os.Exit(1)
+	}
+	fmt.Println(id)
+}
+
+func seedOfSessionOrExit(sessionID protocol.SessionID) string {
+	if sessionID == "" {
+		return ""
+	}
+	seedID, err := seedOfSession(client.New(""), sessionID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "attn: resolve the session's seed: %v\n", err)
+		os.Exit(1)
+	}
+	return seedID
+}
+
+func seedOfSession(c *client.Client, sessionID protocol.SessionID) (string, error) {
+	listed, err := c.List("")
+	if err != nil {
+		return "", err
+	}
+	for _, session := range listed.Sessions {
+		if session.ID == sessionID && protocol.Deref(session.SeedID) != "" {
+			return protocol.Deref(session.SeedID), nil
+		}
+	}
+	seeds, err := c.SeedList(sessionID, false, 0)
+	if err != nil {
+		return "", err
+	}
+	var tended []string
+	for _, seed := range seeds.Seeds {
+		if seed.TenderSession == sessionID && seed.Status == garden.StatusGrowing {
+			tended = append(tended, seed.ID)
+		}
+	}
+	if len(tended) != 1 {
+		return "", nil
+	}
+	return tended[0], nil
+}
+
 func runHelp() {
 	writeHelp(os.Stdout)
 }
@@ -650,8 +698,7 @@ func writeHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn <command>
 
 commands:
-  presence [--session-id]           check whether the current shell runs inside attn;
-                                    --session-id prints only its session id
+  presence [--session-id|--seed-id]  check whether the shell runs inside attn, or print only its session or seed
   agent list                        name every session running here
   agent peek <session-or-member>    read a session without interrupting it
   agent msg <target> "text"            notify a live session, crew member or seed's tender

@@ -1,3 +1,3 @@
 kind: added
 area: cli
-change: "`attn presence --session-id` prints only the current session's id, for scripts and git hooks."
+change: "`attn presence --session-id` and `attn presence --seed-id` print only the current session's id, or the id of the seed it works on, for scripts and git hooks."

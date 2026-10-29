@@ -11,5 +11,8 @@ done
 [ -n "$(git stripspace --strip-comments <"$message_file")" ] || exit 0
 
 session_id="$(attn presence --session-id 2>/dev/null)" || exit 0
-git interpret-trailers --in-place --if-exists doNothing \
-  --trailer "Attn-Session: $session_id" "$message_file"
+trailers=(--trailer "Attn-Session: $session_id")
+if seed_id="$(attn presence --seed-id 2>/dev/null)"; then
+  trailers+=(--trailer "Attn-Seed: $seed_id")
+fi
+git interpret-trailers --in-place --if-exists doNothing "${trailers[@]}" "$message_file"
