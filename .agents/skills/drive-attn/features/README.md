@@ -29,14 +29,33 @@ In the index, "both" means people and agents.
   copies production data out read-only. Never point an instance at
   `~/.attn`.
 - A feature that needs more in the daemon's environment says so in its
-  preconditions: export it in the instance shell, then stop the daemon and
-  start it again as [../SKILL.md](../SKILL.md) describes.
+  preconditions: append its `export` line to the env file, then stop the
+  daemon and start it again as [../SKILL.md](../SKILL.md) describes.
 - The baseline has no stand-in for Pi. A step that needs Pi, its plugin or
   the Guardian fails on the baseline, and its file names the scenarios that
   run the real `pi`.
 - Never drive an instance this run did not start.
 
 ## Driving conventions
+
+### The instance shell
+
+- "The instance shell" is a command that starts with
+  `. /tmp/drive-attn-<name>.env &&`, which sources the env file
+  [../SKILL.md](../SKILL.md)'s Launch writes. Every command in these files
+  runs there, written without the prefix, unless a step says otherwise.
+- Each command starts in a fresh shell, so a recipe variable, shell function
+  or background PID set in one is gone by the next. The command that sets one
+  appends it to the env file, whose `DRIVE_ENV` holds its own path:
+  `P=$(mktemp -d /tmp/drive-attn-<feature>.XXXX) && echo "export P=$P" >> $DRIVE_ENV`,
+  or, for a background process,
+  `{ python3 -m http.server 8765 & echo "export SRV=$!" >> $DRIVE_ENV; }`.
+  The braces matter: a bare `&` after the prefix backgrounds the prefix too,
+  and `$DRIVE_ENV` is empty in the foreground. Later commands see what was
+  appended, and a later append of the same name wins.
+- `wait` and `$?` reach only a process the same command started. A step that
+  needs a background process's exit code has the subshell that started it
+  write the code to a file, as [doc-store.md](doc-store.md) does.
 
 ### Doors and harnesses
 
@@ -56,11 +75,14 @@ In the index, "both" means people and agents.
   mock cannot raise a harness's event, the step may call the hidden hook
   verb the harness would (`./attn _hook-<event>`) and says so.
 - Protocol reads, sessions and terminal input: `wsctl`.
+- System-wide keys, which `bridge` cannot send because it reaches only the
+  app's own windows: the repository's input driver, as
+  [quick-capture.md](quick-capture.md) sets it up.
 - Plain shell tools set up and read: files, `git`, `jq`, `curl` against the
   mock GitHub, `file`, `stat`, `pbpaste`, `python3 -m http.server` for a
   local page, and the repository's own scripts a file names. A process a
-  recipe starts in the background keeps its PID from `$!` and stops by that
-  PID.
+  recipe starts in the background keeps its PID from `$!` in the env file
+  and stops by that PID.
 - A verb that calls a harness CLI itself, outside the daemon, never reaches
   the mock agent. Its recipe puts a stand-in on `PATH`, as
   [vision-check.md](vision-check.md) does.
@@ -68,8 +90,8 @@ In the index, "both" means people and agents.
   every session, and `attn plugin` and `attn automation` take `--help` as an
   unknown subcommand; read their source instead of asking them.
 - `./attn` is this checkout's build, run in the instance shell. `wsctl` and
-  `bridge` are the shell functions from [../SKILL.md](../SKILL.md). Every
-  command is literal: keep names, flags and JSON as written.
+  `bridge` are the shell functions the env file defines. Every command is
+  literal: keep names, flags and JSON as written.
 
 ### Sessions and the mock agent
 
@@ -269,10 +291,12 @@ path and scenario id must exist at HEAD.
 How the recipes were checked: [garden.md](garden.md)'s Driving it ran live
 on a named instance, daemon and CLI only, at commit `b3d0df90a`: every step
 from the instance shell and the Agents door, where the mock agent tended,
-watched, armed a harvest on merge and harvested. Its `bridge` steps, and
+watched, armed a harvest on merge and harvested. Its steps that arm a
+harvest without a url and take the arming back, its `bridge` steps, and
 every other file's Driving it, come from reading the source and the CLI's
-help at that commit, and have not run yet. A file whose recipe runs live
-says so here.
+help, and have not run yet. The env file and its prefix replaced the
+shell that run used; they were checked with a stand-in `attn`, not on an
+instance. A file whose recipe runs live says so here.
 
 ### Agents and sessions
 
@@ -303,7 +327,7 @@ says so here.
 
 ### Coordination
 
-- [Garden](garden.md) (both): The work tracker: seeds planted, tended and harvested; the unit agents hand off, work on, and stay organized with. Driving it ran live for the shell and the agents.
+- [Garden](garden.md) (both): The work tracker: seeds planted, tended and harvested; the unit agents hand off, work on, and stay organized with. Driving it ran live for the shell and the agents, except harvesting without a url and taking the arming back.
 - [Delegation](delegation.md) (both): One agent starts another on a seed, from any harness to any harness, as a full session the user can open and steer.
 - [Inbox](inbox.md) (agents): Messages, seed updates and quick captures addressed to an agent or a mailbox; a ring prompts the agent to read them, like a push notification.
 - [Asks](asks.md) (both): An agent asks the user a question and keeps working; the user answers in their own time, and the answer lands in the agent's conversation.

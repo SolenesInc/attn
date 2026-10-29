@@ -10,71 +10,83 @@ attn on a named instance, drives a feature through each way in, and keeps the
 proof. `docs/instances.md` and `app/scripts/real-app-harness/AGENTS.md` hold
 the detail; this file holds the commands you need in hand.
 
-Never touch production: not `~/.attn`, and not the `attn` on `PATH` without an
-instance selected. Kill only a PID you started or one the automation manifest
-names, never by name or pattern.
+Production stays out of every run: never point a daemon, app, recipe,
+harness or test at `~/.attn` or the production app. A feature that needs
+realistic data copies it out read-only. The `attn` on `PATH` is only for your
+own garden work on your stake, from your own session, as
+[Evidence](#evidence) shows and `AGENTS.md` allows. Kill only a PID you
+started or one the automation manifest names, never by name or pattern.
 
 ## Launch
 
-Run from the repository root in a shell of its own, so your own `attn` keeps
-pointing at the attn you run inside.
+Run from the repository root:
 
 ```bash
-make build                               # ./attn from this checkout
-eval "$(./attn instance-env <name>)"     # select the instance; clears inherited routing
-unset ATTN_INSIDE_APP ATTN_TERMINAL_ID ATTN_SESSION_ID ATTN_AGENT ATTN_WRAPPER_PATH \
-  ATTN_CODEX_SHARED_PROFILE CODEX_THREAD_ID CODEX_HOME
-export ATTN_CLAUDE_EXECUTABLE="$PWD/app/scripts/real-app-harness/mockAgent.mjs"
-export ATTN_CODEX_EXECUTABLE="$ATTN_CLAUDE_EXECUTABLE" ATTN_HEADLESS_TASKS=off
-export ATTN_TOOL_HOME="$(mktemp -d /tmp/drive-attn-toolhome.XXXX)" \
-  ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:1
-export ATTN_MOCK_GH_URL="http://127.0.0.1:$(./attn instance resolve --field mockGitHubPort)" \
-  ATTN_MOCK_GH_TOKEN=test-token ATTN_MOCK_GH_HOST=mock.github.local
-pnpm --dir app run real-app:mock-github ensure
-wsctl() { go run ./scripts/wsctl "$@"; }
-bridge() { pnpm --silent --dir app run real-app:bridge-cli -- "$@"; }
+make build                                              # ./attn from this checkout
+.agents/skills/drive-attn/scripts/write-env.sh <name>   # writes /tmp/drive-attn-<name>.env
+. /tmp/drive-attn-<name>.env && pnpm --dir app run real-app:mock-github ensure
 ```
+
+Every command after `write-env.sh` runs in the instance shell: it starts with
+`. /tmp/drive-attn-<name>.env &&`. Agents' command tools start a fresh shell
+for each command (Claude Code keeps only the working directory; Codex starts
+a new process), so a selection, variable or function from one command is
+gone by the next. Without the prefix, `./attn` acts on production as your
+own session, `wsctl` and `bridge` are undefined, and the mock GitHub reaches
+the `dev` instance. A missing file stops the command, and the file ends with
+a guard that fails unless `ATTN_INSTANCE` is `<name>`. In a shell that keeps
+its state, such as a person's terminal, source the file once in a terminal
+of its own instead, so your own `attn` keeps pointing at the attn you run
+inside. Code blocks here show the prefix; inline commands, here and in the
+feature map, leave it out.
 
 Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`: `dev` is
 shared with other work and installs the attn skill into your harness homes.
-The `unset` line drops the identity of the session you run in, so the
-instance does not mistake your shell for one of its terminals. The exports
-make the daemon launch the mock agent for `claude` and `codex`, refuse
-headless model tasks, and talk to the mock GitHub. `ATTN_TOOL_HOME` gives
-the instance a scratch harness home, so a mock conversation a fixture makes
-resumable lands there and not in your `~/.claude` or `~/.codex`.
-`ATTN_ANALYTICS_INGEST_URL` points analytics uploads at an address that goes
-nowhere, so turning sharing on cannot reach the real telemetry service.
+The env file selects the instance with `attn instance-env <name>`, which
+clears inherited routing, and moves to this checkout. Its `unset` line drops
+the identity of the session you run in, so the instance does not mistake
+your shell for one of its terminals. Its exports make the daemon launch the
+mock agent for `claude` and `codex`, refuse headless model tasks, and talk
+to the mock GitHub. `ATTN_TOOL_HOME` gives the instance a scratch harness
+home, so a mock conversation a fixture makes resumable lands there and not
+in your `~/.claude` or `~/.codex`. `ATTN_ANALYTICS_INGEST_URL` points
+analytics uploads at an address that goes nowhere, so turning sharing on
+cannot reach the real telemetry service. The file also defines `wsctl`,
+`bridge` and `DRIVE_ENV`, its own path, which recipes append their variables
+to ([features/README.md](features/README.md)). Running `write-env.sh` again
+starts the file over.
 
 Daemon only, for CLI and protocol work:
 
 ```bash
-./attn daemon ensure                     # {"status": "started"}, "already_running" or "restarted"
+. /tmp/drive-attn-<name>.env && ./attn daemon ensure   # {"status": "started"}, "already_running" or "restarted"
 ```
 
-Full app. `make install` starts the instance's daemon with this shell's
-environment, so run the exports above first:
+Full app. `make install` starts the instance's daemon with the instance
+shell's environment:
 
 ```bash
-make install INSTANCE=<name>
-bridge --launch --wait-ready ping        # {"frontendReady": true, "pong": true}
+. /tmp/drive-attn-<name>.env && make install INSTANCE=<name>
+. /tmp/drive-attn-<name>.env && bridge --launch --wait-ready ping   # {"frontendReady": true, "pong": true}
 ```
 
-`--launch` starts the app with this shell's environment and parks its window
-at the screen's edge. On macOS, `make run INSTANCE=<name>` opens the app
-through Launch Services instead, which drops these variables. If the daemon
-started without them (the doctor shows a real agent's executable), or a
-recipe needs another variable in the daemon's environment, quit the app with
-`./attn instance stop-app`, stop the daemon with
-`"$(./attn instance resolve --field appDaemon)" daemon stop`, export what is
-missing, then launch again.
+`--launch` starts the app with the instance shell's environment and parks
+its window at the screen's edge. On macOS, `make run INSTANCE=<name>` opens
+the app through Launch Services instead, which drops these variables. If the
+daemon started without them (the doctor shows a real agent's executable), or
+a recipe needs another variable in the daemon's environment, quit the app
+with `./attn instance stop-app`, stop the daemon with
+`"$(./attn instance resolve --field appDaemon)" daemon stop`, append the
+missing `export` line to the env file, then launch again.
 
 ## Doctor
 
-One read-only check, through the instance's own binary:
+One read-only check. With the app installed, through the instance's own
+binary (`appDaemon` is a file inside the installed app, so this fails with
+`no such file or directory` on a daemon-only instance):
 
 ```bash
-"$(./attn instance resolve --field appDaemon)" preflight --agent claude
+. /tmp/drive-attn-<name>.env && "$(./attn instance resolve --field appDaemon)" preflight --agent claude
 ```
 
 It must report `PASS` overall, with `routing.daemon instance=<name>`,
@@ -86,10 +98,15 @@ Most verbs, `seed`, `agent`, `daemon` and `preflight` among them, also print
 is selected. `./attn instance` shows the selection instead. For the build,
 the same binary's `version --json` must show the `sourceFingerprint` that
 `bash scripts/source-fingerprint.sh` prints for your tree, and
-`bridge --wait-ready` refuses an app built from other source. Daemon only:
-run `./attn preflight --agent claude`; the two `protocol.` checks fail
-because no app is installed, so it prints `FAIL (2 failed, 0 warnings)`
-and exits 1. Everything else must pass.
+`bridge --wait-ready` refuses an app built from other source. Daemon only,
+run the check through `./attn`:
+
+```bash
+. /tmp/drive-attn-<name>.env && ./attn preflight --agent claude
+```
+
+The two `protocol.` checks fail because no app is installed, so it prints
+`FAIL (2 failed, 0 warnings)` and exits 1. Everything else must pass.
 
 ## Drive
 
@@ -117,10 +134,10 @@ actions: `attn` runs an attn verb as that session, `reply` prints text,
 ```
 
 ```bash
-wsctl add-session --cwd <dir> --agent claude --label <label> --id <session>
-wsctl list                                         # terminal id: desktops[].panes[].runtime_id
-wsctl input --id <terminal> --text "tend s-xxxxxx" --enter
-./attn agent peek <session>                        # the agent's screen, as text
+. /tmp/drive-attn-<name>.env && wsctl add-session --cwd <dir> --agent claude --label <label> --id <session>
+. /tmp/drive-attn-<name>.env && wsctl list                    # terminal id: desktops[].panes[].runtime_id
+. /tmp/drive-attn-<name>.env && wsctl input --id <terminal> --text "tend s-xxxxxx" --enter
+. /tmp/drive-attn-<name>.env && ./attn agent peek <session>   # the agent's screen, as text
 ```
 
 **bridge.** Reads: `get_state`, the feature reads such as `garden_get_state`,
@@ -159,7 +176,7 @@ instance's app or your terminal.
   through the CLI, and the reverse.
 - Keep proof in a folder you name in your report
   (`mktemp -d /tmp/drive-attn-<feature>.XXXX`), or on your stake. From your
-  own session's shell, not the instance shell, run
+  own session, in a command without the instance shell's prefix, run
   `attn seed attach <stake> --path <file> --move`, then cite it with
   `attn seed check report <stake> <C#> -m "<summary>" --evidence <file name>`.
 - Recordings: `./scripts/pr-evidence.sh record --instance <name> --seconds 20
@@ -169,19 +186,20 @@ instance's app or your terminal.
 ## Cleanup
 
 ```bash
-./attn instance clean <name>
-pnpm --dir app run real-app:mock-github stop
-eval "$(./attn instance-env --unset)"
+. /tmp/drive-attn-<name>.env && ./attn instance clean <name>
+. /tmp/drive-attn-<name>.env && pnpm --dir app run real-app:mock-github stop
+rm /tmp/drive-attn-<name>.env
 ```
 
 `clean` stops the daemon, quits the app, reaps its workers, and removes the
 app and the data folder. If it reports a live app, run
 `./attn instance stop-app` and clean again; for an unconfirmed PID, follow
-`docs/instances.md`. Never delete a data folder by hand. `clean` leaves the
-instance's notebook folder, `~/attn-notebook-<name>`, with whatever the run
-wrote to the notebook or attached to seeds, and a later instance with the
-same name starts with it. The scratch tool home, `$ATTN_TOOL_HOME`, stays
-under `/tmp` too. Proof in your own folder or on
+`docs/instances.md`. Never delete a data folder by hand. Remove the env file
+only once both commands succeed, and close a terminal that sourced it.
+`clean` leaves the instance's notebook folder, `~/attn-notebook-<name>`,
+with whatever the run wrote to the notebook or attached to seeds, and a
+later instance with the same name starts with it. The scratch tool home,
+`$ATTN_TOOL_HOME`, stays under `/tmp` too. Proof in your own folder or on
 your stake survives; check that it is still there after cleaning.
 
 ## The feature map

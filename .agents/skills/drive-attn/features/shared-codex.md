@@ -72,11 +72,11 @@ Preconditions:
 - **Update, install and reload tiles.** Make a mock Codex install that reports 1.0.0 with 1.1.0 out, and restart the instance on it:
 
 ```bash
-X=$(mktemp -d /tmp/drive-attn-codex-install.XXXX)
+X=$(mktemp -d /tmp/drive-attn-codex-install.XXXX) && echo "export X=$X" >> $DRIVE_ENV
 echo 1.0.0 > $X/version; echo 1.1.0 > $X/latest
 printf '#!/bin/sh\nATTN_MOCK_CODEX_STATE_DIR=%s exec %s "$@"\n' "$X" "$R/app/scripts/real-app-harness/mockAgent.mjs" > $X/codex
 chmod +x $X/codex
-export ATTN_CODEX_EXECUTABLE=$X/codex
+echo "export ATTN_CODEX_EXECUTABLE=$X/codex" >> $DRIVE_ENV
 ./attn instance stop-app
 "$(./attn instance resolve --field appDaemon)" daemon stop
 bridge --launch --wait-ready ping
@@ -108,7 +108,7 @@ bridge --launch --wait-ready ping
 - Under shared Codex the mock plays only `reply` and `delay` actions; a fixture turn with any other action fails, such as `the shared Codex mock does not play attn actions`. An agent's attn verbs are driven through a plain Codex or Claude mock; `attn codex` needs no session, so `./attn` stands in for the agent here.
 - The switch decides how new terminals and ledger resumes launch. A Codex session already running stays plain until it closes.
 - Auto-approve is on by default for Claude Code and Codex. Under it an approval is handled by an automatic reviewer, and `pending_approval` can lag by about a minute; the `codex-shared` scenario turns it off for the approval steps, and the approval step here does the same.
-- The baseline's `ATTN_CODEX_EXECUTABLE` points at the mock itself, which cannot update. An update needs the pinned install above, and the daemon and app restarted from a shell that exports it; the variable wins over the executable set in Settings.
+- The baseline's `ATTN_CODEX_EXECUTABLE` points at the mock itself, which cannot update. An update needs the pinned install above, and the daemon and app restarted after the env file exports it; the variable wins over the executable set in Settings.
 - A new tile switched before its first prompt leaves no hidden session behind. Send a prompt before `/new`.
 - The app-server holds a conversation for about a minute after no terminal shows it; a plain Codex's `/resume` of it fails with `already has an active writer` until then.
 - `attn codex restart --now` stops turns waiting on an approval or a question at once. Use it only when that is what the step proves.

@@ -49,7 +49,7 @@ and mute.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The daemon started with the mock GitHub exports from [../SKILL.md](../SKILL.md), so the home screen lists the fixture's pull requests instead of "GitHub polling is off for instance <name>".
+- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The daemon started with the mock GitHub exports of the env file ([../SKILL.md](../SKILL.md)), so the home screen lists the fixture's pull requests instead of "GitHub polling is off for instance <name>".
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-pull-requests.XXXX)`.
 - An agent folder, `A=$(mktemp -d /tmp/drive-attn-pr-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`. `unwatch` comes before `watch` because the first turn whose `includes` matches wins:
 

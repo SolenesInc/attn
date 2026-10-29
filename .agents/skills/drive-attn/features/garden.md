@@ -13,7 +13,7 @@ checks.
 - `plot`: plant a plot and its children in one move; children run in parallel unless one blocks another.
 - `seed-tend`: claim a seed; one tender at a time.
 - `seed-moves`: park, harvest, wither and replant; a harvest or wither keeps its reason, and a park's comment lands on the log.
-- `harvest-when-merged`: arm a seed to harvest itself when its pull request merges.
+- `harvest-when-merged`: arm a seed to harvest itself when its pull request merges, named by url or the session's single open one; clear it to take the arming back.
 - `seed-notes`: the seed's log; a handoff note primes the next tender.
 - `seed-checks`: what a seed must prove: report, confirm, reject, uncheck and reopen.
 - `seed-watch`: follow a seed and its children; a ringing note or check move and every state move send the tender and watchers a seed update.
@@ -44,7 +44,7 @@ checks.
 
 ### Agents
 
-- `attn seed` (`cmd/attn/seed.go`): `plant`, `plot`, `ls`, `search`, `ready`, `show`, `notes`, `edit`, `tend`, `park`, `harvest` (with `--when-merged`), `wither`, `replant`, `note` (with `--handoff` and `--ring`), `check add|edit|remove|restore|report|confirm|reject|uncheck|reopen`, `watch`, `unwatch`, `link`, `unlink`, `attach`, `detach`, `export`, `review`, `prime`, `guide`, `send-to-chief`.
+- `attn seed` (`cmd/attn/seed.go`): `plant`, `plot`, `ls`, `search`, `ready`, `show`, `notes`, `edit`, `tend`, `park`, `harvest` (with `--when-merged [<pr-url>]`, which takes the session's single open pull request when it gets no url, and `--when-merged --clear`, which takes the arming back), `wither`, `replant`, `note` (with `--handoff` and `--ring`), `check add|edit|remove|restore|report|confirm|reject|uncheck|reopen`, `watch`, `unwatch`, `link`, `unlink`, `attach`, `detach`, `export`, `review`, `prime`, `guide`, `send-to-chief`.
 - `attn seed handover` is retired; it names `attn delegate --seed <id> --handover --cwd <path>`, which delegation owns. `send-to-chief` hands the seed to the chief, which crew owns.
 - `attn open <seed-id>` opens the seed as a tile beside the caller; `attn ticket` prints `attn seed --help` (`cmd/attn/main.go`).
 - Prompts: the garden contract in every session's instructions, also printed by `attn seed prime` (`internal/prompts/content/garden.md`); the craft `attn seed guide` prints (`internal/prompts/content/resources/seed-guide.md`); ready seeds and their handoffs at session start (`internal/prompts/content/session/garden-ready.md`, `garden-row.md`, `garden-handoff.md`); the seed update an agent reads from its inbox (`internal/prompts/content/session/garden-update.md`).
@@ -77,11 +77,17 @@ Preconditions:
     {"type": "attn", "args": ["seed", "harvest", "{{seed}}", "--when-merged", "https://mock.github.local/northwind/atlas/pull/412"]}]},
   {"includes": "harvest", "actions": [
     {"type": "capture", "name": "seed", "pattern": "(s-[a-z0-9]+)"},
-    {"type": "attn", "args": ["seed", "harvest", "{{seed}}", "-m", "done by the mock agent"]}]}
+    {"type": "attn", "args": ["seed", "harvest", "{{seed}}", "-m", "done by the mock agent"]}]},
+  {"includes": "arm", "actions": [
+    {"type": "capture", "name": "seed", "pattern": "(s-[a-z0-9]+)"},
+    {"type": "attn", "args": ["seed", "harvest", "{{seed}}", "--when-merged"]}]},
+  {"includes": "clear", "actions": [
+    {"type": "capture", "name": "seed", "pattern": "(s-[a-z0-9]+)"},
+    {"type": "attn", "args": ["seed", "harvest", "{{seed}}", "--when-merged", "--clear"]}]}
 ]}
 ```
 
-`<seed>`, `<plot>`, `<card>` and `<merge>` below are the ids the plant commands print; `<terminal>` is the agent's terminal id from `wsctl list`.
+`<seed>`, `<plot>`, `<card>`, `<own>` and `<merge>` below are the ids the plant commands print; `<terminal>` is the agent's terminal id from `wsctl list`.
 
 - **Plant.** A person plants a seed with a check from their shell. Run `./attn seed plant "Garden drive" -m "Exercise the garden" --check "C1=Shows in the garden"`. It prints `<seed>  garden-drive  Garden drive` and exits 0; `./attn seed show <seed>` shows `status planted` and C1 open.
 - **Plant a plot.** Run `./attn seed plot -f $P/plot.json`. It prints the plot, then `draft-step` and `check-step` with their ids. `./attn seed ready --plot <plot>` lists only `draft-step`, and `./attn seed ls` shows the plot with `1 ready · 1 blocked`.
@@ -98,13 +104,15 @@ Preconditions:
 - **Checks from both sides.** Run `echo proof > $P/proof2.txt`, `./attn seed attach <seed> --path $P/proof2.txt --copy` and `./attn seed check report <seed> C1 -m "seen in the garden" --evidence proof2.txt`; `./attn seed show <seed>` lists the report and `proof2.txt` under C1. Open the garden in the drawer, then click the row `[data-seed-row="<seed>"]` and `[aria-label="Confirm C1"]`, both natively. `bridge dom_wait '{"selector":"[aria-label=\"Uncheck C1\"]","timeoutMs":5000}'` matches, and `./attn seed show <seed> --json` shows C1 with `state: "confirmed"`. `./attn seed check reject <seed> C1 -m "needs a screenshot"` and `./attn seed check reopen <seed> C1` move it back.
 - **Seed tile.** Run `./attn open <seed>`. It prints `opened <seed>`, and in `wsctl list` the current desktop's `tree_json` holds a tile whose `tile_kind` is `seed` and whose `tile_params` is `<seed>`. On the seed's page, the "Open as tile" button, clicked natively, does the same.
 - **Board.** Plant a card for it: `./attn seed plant "Board drive"` prints `<card>`. Press ⌘⇧T until `frame` is `"full"`, and click `[aria-label="Garden view"] button:last-child` natively. `bridge garden_board_get_state` lists the columns `ready`, `growing`, `parked` and `closed`, with `<card>` under `ready`. Click `[data-seed="<card>"] .garden-card__body` natively: its menu opens on `Park…`. Run `bridge native_key '{"key":"ArrowDown"}'`, `bridge native_key '{"key":"Enter"}'`, `bridge native_text '{"text":"proved from the board"}'` and `bridge native_key '{"key":"Enter"}'`. `./attn seed show <card>` shows `status harvested`.
-- **Harvest when merged.** Plant `<merge>` with `./attn seed plant "Merge drive"`, then run `wsctl input --id <terminal> --text "merge <merge>" --enter`. Peek shows `harvests when northwind/atlas#412 merges`, and so does `./attn seed show <merge>`. Merge it on the mock GitHub: `curl -s -X POST "$ATTN_MOCK_GH_URL/__control/seed" -H 'content-type: application/json' -d '{"prs":[{"repo":"northwind/atlas","number":412,"title":"Cache the tile layout","state":"closed","merged":true}]}'`. Within one pull request refresh (30 seconds), `./attn seed show <merge>` shows `status harvested` and `reason PR #412 merged: Cache the tile layout`.
+- **Harvest when merged, with no url.** Run `./attn pr record https://mock.github.local/northwind/atlas/pull/412 --session garden-agent`: it prints `recorded https://mock.github.local/northwind/atlas/pull/412 for session garden-agent`, which makes 412 the session's only open pull request. Plant `<own>` with `./attn seed plant "Own drive"`, then run `wsctl input --id <terminal> --text "arm <own>" --enter`. Peek shows `harvests when northwind/atlas#412 merges`, and so does `./attn seed show <own>`.
+- **Take the arming back.** Run `wsctl input --id <terminal> --text "clear <own>" --enter`. Peek shows `harvest-on-merge cleared`. `./attn seed show <own>` keeps `status planted` and drops its `PR last checked` row, and `./attn seed notes <own> --limit 1` lists `harvest-on-merge cleared`. Once peek's `state:` line stops reading `working`, send the same input again: peek shows a `mock agent error:` block that names `has no harvest condition`.
+- **Harvest when merged.** Plant `<merge>` with `./attn seed plant "Merge drive"`, then run `wsctl input --id <terminal> --text "merge <merge>" --enter`. Peek shows `harvests when northwind/atlas#412 merges`, and so does `./attn seed show <merge>`. Merge it on the mock GitHub: `curl -s -X POST "$ATTN_MOCK_GH_URL/__control/seed" -H 'content-type: application/json' -d '{"prs":[{"repo":"northwind/atlas","number":412,"title":"Cache the tile layout","state":"closed","merged":true}]}'`. Within one pull request refresh (30 seconds), `./attn seed show <merge>` shows `status harvested` and `reason PR #412 merged: Cache the tile layout`, while `./attn seed show <own>` still shows `status planted`.
 - **The agent harvests.** Run `wsctl input --id <terminal> --text "harvest <seed>" --enter`. Peek shows `<seed> (garden-drive) is harvested`, `./attn seed ls` shows it `harvested`, and `bridge garden_board_get_state` lists it under `closed`.
 - **Moves from the shell.** `./attn seed replant <seed>` prints `is planted`, `./attn seed park <seed> -m "later"` prints `is dormant`, and `./attn seed wither <seed> -m "drive done"` prints `is withered`. `./attn seed notes <seed> --limit 3` lists the newest entries.
 - **Export.** Run `./attn seed export <seed> --out -`. It prints the title, the body and the checks as markdown.
 - **Review.** Run `./attn seed review start`. On the baseline it prints the review id with `complete` and `0 seeds`, then `no seeds needed review when this run started`. The "Review garden" button in the garden starts the same review.
 - **Guidance and retired verbs.** `./attn seed prime` starts with `attn keeps work as seeds in your profile's garden.`, and `./attn seed guide` prints the craft. `./attn ticket` prints `attn seed --help` and exits 2. `./attn seed handover <seed>` exits 1 naming `attn delegate --seed <id> --handover --cwd <path>`. `./attn seed send-to-chief <seed>` exits 1 with `this profile has no Chief` on the baseline; with a chief it is driven in [crew.md](crew.md), and the seed page's Resume and Handover in [delegation.md](delegation.md).
-- **Proof.** In `$P`, keep the output of each `./attn` command with its exit code; `./attn seed show <seed> --json` after the tend, the confirm and the harvest; `bridge garden_get_state` and `bridge garden_board_get_state` after each frame change; `bridge capture_screenshot '{"path":"<P>/garden-full.png"}'` with the garden fullscreen and `<P>/seed-chip.png` with the agent's tile, where `<P>` is the folder's path written out, since the JSON is single-quoted; and `./attn agent peek garden-agent` after the tend and after the ring. Put the way in in each file's name, such as `garden-shortcut-state.json`.
+- **Proof.** In `$P`, keep the output of each `./attn` command with its exit code; `./attn seed show <seed> --json` after the tend, the confirm and the harvest; `./attn seed show <own> --json` after the arm, the clear and the merge; `bridge garden_get_state` and `bridge garden_board_get_state` after each frame change; `bridge capture_screenshot '{"path":"<P>/garden-full.png"}'` with the garden fullscreen and `<P>/seed-chip.png` with the agent's tile, where `<P>` is the folder's path written out, since the JSON is single-quoted; and `./attn agent peek garden-agent` after the tend and after the ring. Put the way in in each file's name, such as `garden-shortcut-state.json`.
 
 ## Contexts
 
@@ -127,7 +135,7 @@ Preconditions:
 
 ## Gotchas
 
-- `tend`, `watch` and `harvest --when-merged` need a session. From a plain shell they exit 1 ("this call named nobody; run it from an attn session, or pass --member <name>", "watching is for a live attn session", "needs a session to track the pull request"). Drive them through the mock agent; `--member` acts as a crew member, which is another door.
+- `tend`, `watch` and arming with `harvest --when-merged` need a session. From a plain shell they exit 1 ("this call named nobody; run it from an attn session, or pass --member <name>", "watching is for a live attn session", "needs a session to track the pull request"). Drive them through the mock agent; `--member` acts as a crew member, which is another door.
 - A move on a seed somebody tends is refused, naming the tender, unless it carries `--force`. Plant a fresh seed for shell moves.
 - On a fresh instance, `attn seed attach` fails with `notebook root ... no such file or directory` until something creates the notebook folder; the journal append in the preconditions does.
 - A new check report clears the verdict. Attach and report first, then confirm.
@@ -136,6 +144,7 @@ Preconditions:
 - What's new on a fresh app takes ⌘⇧T: the shortcut seems dead until it is dismissed.
 - ⌘⇧T opens the garden in the frame used last, and fullscreen keeps its list or board view across relaunches. A run that opens fullscreen is not a bug.
 - `bridge capture_screenshot` leaves out terminal content and the seed chip's popover. Prove those with `./attn agent peek` and `bridge dom_text`.
+- `harvest --when-merged` with no url takes the session's one open pull request. With none it exits 1 with `has no open pull request; pass the url`, and with two or more it lists their urls and asks which one. A merged pull request does not count, so the no-url step runs before the merge.
 - `harvest --when-merged` fires on the next pull request refresh, not when the mock GitHub changes. Wait for `status harvested`; `wsctl refresh-prs` does not hurry it.
 - A review on the baseline finds nothing: it looks at growing seeds whose tender is gone and whose log went quiet, or whose folder was removed. A run with candidates needs copied data, and the advisor is a headless model task, which the baseline refuses.
 - Seed ids are random. Take them from the `plant` output or `--json`, never from an earlier run.

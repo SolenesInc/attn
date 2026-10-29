@@ -47,7 +47,7 @@ delete one now, and read what the sweep removed.
 Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`).
-- The daemon started with `export ATTN_WORKTREE_SWEEP_IDLE_DAYS=0` in the instance shell, so a merged, clean worktree is eligible at once. Without it, the removal steps see "too young for deep inspection".
+- The daemon started with `export ATTN_WORKTREE_SWEEP_IDLE_DAYS=0` appended to the env file, so a merged, clean worktree is eligible at once. Without it, the removal steps see "too young for deep inspection".
 - A repository on its real path, so the paths you type match the ones attn prints: `W=$(cd "$(mktemp -d /tmp/drive-attn-worktrees.XXXX)" && pwd -P)`, `git init -q -b main $W/repo` and `git -C $W/repo commit -q --allow-empty -m seed`.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-worktrees-proof.XXXX)`.
 - An agent in it to delegate from, with this fixture as `$W/repo/.attn-mock-agent.json`. The fixture stays untracked in the main checkout, which the sweep never touches:

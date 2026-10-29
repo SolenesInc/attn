@@ -61,7 +61,7 @@ Preconditions:
 - **Harnesses**: the context-cap command shows only for Claude Code and Codex agents. Shared Codex adds commands of its own ([shared-codex.md](shared-codex.md)).
 - **Keyboard and native input**: everything in the palette is a key. ↑ and ↓ step over the divider and headings, and Escape closes it and gives focus back to where it was. ⌘K and ⌘⇧K do nothing while Settings, the shortcut sheet, the location picker, What's new, the ledger, the fullscreen notebook, crew management, the fullscreen garden, another dialog waiting for an answer, or a snooze menu is open. The palette's settle, snooze and priority keys need a single-key binding; bound to a chord, the footer says it needs a single-key shortcut.
 - **Compatibility across versions**: history is kept by command id. A renamed id starts with no history.
-- **Flow**: agent rows follow queue order in both flows. In queue flow the command palette adds settle, snooze and unsnooze for the agent on screen. The agent palette's ⌘⇧E, ⌘⇧I and ⌘⇧S work in both flows.
+- **Flow**: agent rows follow queue order in both flows. In queue flow the command palette adds snooze and unsnooze for the agent on screen, and settle for any agent that owes a turn; in desktop flow settle shows only for an automation run ([queue-flow.md](queue-flow.md)). The agent palette's ⌘⇧E, ⌘⇧I and ⌘⇧S work in both flows.
 
 ## Tests
 
@@ -77,7 +77,7 @@ Preconditions:
 - Only picks in command mode are learned. Going to an agent or a tile, and pressing a command's shortcut directly, teach it nothing.
 - Every typed word must appear in a command's title, description or keywords. A word such as `queue` or `new` matches several commands, so type the whole title and check the highlighted row before Enter.
 - While the history loads, the list reads "Loading command history…" and Enter does nothing. Wait for `.unified-palette-option`.
-- A command missing from the list is usually conditional: the pinned ones need an agent on screen, settle, snooze and unsnooze need queue flow, and others need their feature to be available.
+- A command missing from the list is usually conditional: the pinned ones need an agent on screen, snooze and unsnooze need queue flow, settle needs an agent that owes a turn the user can settle, and others need their feature to be available.
 - Snoozing from the agent palette opens choices inside the palette: Escape returns to the agents instead of closing.
 - Settling or snoozing from the agent palette leaves it open; the change shows on the row.
 - Working but wrong: the attn skill's callouts reference shows a callout on `commands` that says "Everything attn can do, searchable (⌘K)", but ⌘K opens the agent palette; the Commands button and ⌘⇧K open the command palette (`internal/prompts/content/skills/attn/references/callouts.md`).

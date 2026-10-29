@@ -44,10 +44,10 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 
 Preconditions:
 
-- A shell at the repository root with this checkout built (`make build`) and no instance selected yet. Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`; `<name>` below.
+- This checkout built (`make build`) and the env file written, as [../SKILL.md](../SKILL.md)'s Launch says. Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`; `<name>` below.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-instances.XXXX)`.
 
-- **Select.** Run `eval "$(./attn instance-env <name>)"` and the `unset` line from [../SKILL.md](../SKILL.md)'s Launch, then `./attn instance`. It prints `attn instance: <name>`, then `data dir`, `socket` with `(no daemon socket)`, `ws port`, `bundle id`, `app` with `(not installed)` and `mock gh`, and no `CONFLICT` line.
+- **Select.** Run `./attn instance-env <name>`: it prints an `unset` line for each inherited routing variable, then `export ATTN_INSTANCE=<name>`, the lines the env file opens with. `./attn instance` prints `attn instance: <name>`, then `data dir`, `socket` with `(no daemon socket)`, `ws port`, `bundle id`, `app` with `(not installed)` and `mock gh`, and no `CONFLICT` line.
 - **Resolve.** `./attn instance resolve --field dataDir` prints the data folder. `./attn instance resolve` prints JSON with `"instance": "<name>"`, `wsPort`, `appDaemon` and `mockGitHubPort`. `./attn instance resolve --instance other --field wsPort` resolves another name without selecting it. `./attn instance tauri-config` prints the build's config overlay: `productName` and `identifier` match `appName` and `bundleId`, and the deep-link scheme is `deepLinkScheme`. `./attn instance env <name>` prints the same lines as `./attn instance-env <name>`.
 - **Start and stop the daemon.** `./attn daemon ensure` prints JSON with `"status": "started"`, with the banner on stderr. Run it again: `"status": "already_running"`. `./attn instance` now shows `(daemon socket present)`. `./attn daemon stop` prints `stopped daemon (pid <n>)`, and a second stop prints `daemon not running` with the reason.
 - **Which build runs.** `./attn version` prints the version, channel and commit, with `dirty` for an uncommitted tree. `./attn version --json` shows `sourceFingerprint`, equal to what `bash scripts/source-fingerprint.sh` prints for this tree.
@@ -59,8 +59,8 @@ Preconditions:
 - **Quit the app.** `./attn instance stop-app` prints `  app      ` and how the app stopped; `bridge ping` no longer answers.
 - **Refusals.** `./attn instance clean` exits 1 with `attn instance: clean requires an instance name`. `./attn profile list` exits 2 with `attn profile was renamed to attn instance. Run: attn instance list`.
 - **The Linux scheme.** Run `./attn instance register-scheme`. On macOS it exits 1 with `attn instance: register-scheme is Linux-only`, which is as far as this machine goes; report the Linux behavior unreached. On Linux it prints `>>> Registered <scheme>:// for <name>` and the desktop entry's path, and `./attn instance` shows the `handler` row as `(registered)`.
-- **Clean.** `./attn instance clean <name>` prints `>>> Cleaning instance <name>`, then a line for the app, the daemon, the workers and each removed folder. `./attn instance` shows `(no daemon socket)` and `(not installed)`. Then `eval "$(./attn instance-env --unset)"`.
-- **Proof.** In `$P`, keep each command with its stdout, stderr and exit code; `./attn instance resolve` and `./attn version --json` from the selected shell; and `bridge capture_screenshot '{"path":"<P>/instance-marker.png"}'` with the marker in view, where `<P>` is the folder's path written out. Put the way in in each file's name, such as `instances-daemon-ensure.txt`.
+- **Clean.** `./attn instance clean <name>` prints `>>> Cleaning instance <name>`, then a line for the app, the daemon, the workers and each removed folder. `./attn instance` shows `(no daemon socket)` and `(not installed)`. `./attn instance-env --unset` prints the same `unset` lines, then `unset ATTN_INSTANCE`; the instance shell ends when [../SKILL.md](../SKILL.md)'s Cleanup removes the env file.
+- **Proof.** In `$P`, keep each command with its stdout, stderr and exit code; `./attn instance resolve` and `./attn version --json`; and `bridge capture_screenshot '{"path":"<P>/instance-marker.png"}'` with the marker in view, where `<P>` is the folder's path written out. Put the way in in each file's name, such as `instances-daemon-ensure.txt`.
 
 ## Contexts
 
@@ -82,7 +82,7 @@ Preconditions:
 - `attn instance clean` with no instance name is refused; the default instance, production, is cleaned only with `--force`. Never pass it.
 - `./attn` in a shell with no instance selected, or the `attn` on `PATH`, talks to production. Most verbs print `[attn instance=<name> socket=<socket> port=<port>]` on stderr while an instance is selected (`internal/config/banner.go`); no banner means none. `./attn instance` shows the selection.
 - A routing override left in the shell, such as `ATTN_DATA_DIR` or `ATTN_SOCKET_PATH`, makes every other `attn` command refuse to run, and `./attn instance` prints `CONFLICT`. Select the instance again with `attn instance-env`, which clears them.
-- On macOS, `make run INSTANCE=<name>` opens the app through Launch Services, which drops the shell's environment. Launch with `bridge --launch` when the daemon needs the mock variables.
+- On macOS, `make run INSTANCE=<name>` opens the app through Launch Services, which drops the instance shell's environment. Launch with `bridge --launch` when the daemon needs the mock variables.
 - `make build` replaces `./attn` for every maintainer sharing the checkout. Build in a checkout of your own when others are driving.
 - `attn instance list` shows other maintainers' instances too. Never stop, drive or clean an instance this run did not start.
 - An app built from this checkout never asks GitHub for a newer release, so the "Version … is available on GitHub." notice cannot show on an instance. `app/src/App.releaseUpdates.test.tsx` covers it.

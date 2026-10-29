@@ -44,8 +44,8 @@ Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-telemetry.XXXX)`.
-- The baseline's `ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:1` in the daemon's environment, so a stray click on a sharing control cannot reach the real service. A daemon started from another shell lacks it: stop it and start it again from the baseline's shell.
-- Sharing only: a local attn-ingest on `127.0.0.1:8080`, started as "Running locally" in `docs/attn-ingest.md` says (`make ingest-clickhouse` needs Docker; `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), and the daemon started with `ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` instead. Without both, skip the sharing step and report it skipped.
+- The baseline's `ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:1` in the daemon's environment, so a stray click on a sharing control cannot reach the real service. A daemon started without the env file lacks it: stop it and start it again in the instance shell.
+- Sharing only: a local attn-ingest on `127.0.0.1:8080`, started as "Running locally" in `docs/attn-ingest.md` says (`make ingest-clickhouse` needs Docker; `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), and the daemon started with `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` appended to the env file instead. Without both, skip the sharing step and report it skipped.
 
 - **Turn recording on in the app.** Press ⌘, (`ui.openSettings`): run `bridge native_key '{"key":",","modifiers":["command"]}'`; `bridge settings_get_state` shows `open: true`. Click `[data-testid="settings-nav-experimental"]` natively, then `[data-testid="settings-analytics-toggle"]`. `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","timeoutMs":5000}'` matches, and `./attn settings get analytics.enabled` prints `true`.
 - **Off and on from the shell.** `./attn settings set analytics.enabled false` prints `analytics.enabled = false`, and `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","absent":true,"timeoutMs":5000}'` matches. `./attn settings set analytics.enabled true` brings the section back.
@@ -76,7 +76,7 @@ Preconditions:
 
 ## Gotchas
 
-- A named instance has no guard of its own against the real service. Turning sharing on, "Forget this install…" and "Delete from server" all reach `https://attn-telemetry.caketroll.cloud` unless the daemon was started with `ATTN_ANALYTICS_INGEST_URL`, which the baseline exports. `make install` and `./attn daemon ensure` start the daemon with the shell's environment, so a daemon started from another shell lacks it.
+- A named instance has no guard of its own against the real service. Turning sharing on, "Forget this install…" and "Delete from server" all reach `https://attn-telemetry.caketroll.cloud` unless the daemon was started with `ATTN_ANALYTICS_INGEST_URL`, which the baseline exports. `make install` and `./attn daemon ensure` start the daemon with the instance shell's environment, so a daemon started without the env file lacks it.
 - With `analytics.enabled` off nothing is recorded or sent, whatever the other settings say, and Settings › Analytics is absent.
 - The "Usage analytics" switch sits low in Settings › Experimental. A box below the window makes a native click miss: run `bridge dom_scroll_into_view '{"selector":"[data-testid=\"settings-analytics-toggle\"]"}'` before reading its box. Scrolling is setup, not the person's way in.
 - A click that removes the focused control, such as a "Clear…" or "Forget…" confirm, or `m` pressed on a Machine settings button, leaves the page without focus: its keys do nothing until a row or button inside it is clicked.

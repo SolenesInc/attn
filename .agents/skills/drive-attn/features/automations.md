@@ -32,6 +32,7 @@ question.
 - The automations drawer (`app/src/components/AutomationsPanel.tsx`): "New automation", "Close automations", and per automation its row, the on and off switch, "Run now" for manual triggers, "Edit", a failure badge, and its runs, each of which opens its session.
 - The form (`app/src/components/automations/AutomationForm.tsx`): name, folder, trigger (manual, scheduled or GitHub review request), cron with a plain-words reading, continuity, catch-up, repositories, harness and model, executable, prompt, "Save", "Cancel" and "Delete" with "Confirm delete".
 - Where people see and steer runs: each run is an agent tile on the automation's launch desktop, marked ⚡ in the sidebar. In queue flow the queue sidebar groups runs under their automation and the queue bar counts them.
+- Settling a run's turn, in either flow: ⌘⇧E, the palette's "Settle this agent" and the ✓ on the run's sidebar row. [queue-flow.md](queue-flow.md) owns and drives them.
 - Their own shell: `attn automation`, below.
 
 ### Agents
