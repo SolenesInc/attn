@@ -80,7 +80,7 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 
 	const attempts = 3
 	for range attempts {
-		read, err := d.readGardenTo(0, protocol.Deref(msg.ProfileID))
+		read, err := d.readGarden(protocol.Deref(msg.ProfileID))
 		if err != nil {
 			return seedCheckOutcome{}, err
 		}
@@ -117,7 +117,7 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 }
 
 func (d *Daemon) refuseRepeatedCheckIDs(checks []garden.Check, plotID, profileID string) error {
-	read, err := d.readGardenTo(0, profileID)
+	read, err := d.readGarden(profileID)
 	if err != nil {
 		return err
 	}

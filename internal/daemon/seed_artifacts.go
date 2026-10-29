@@ -315,7 +315,7 @@ func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
 }
 
 func (d *Daemon) reconcileSeedArtifactObservations() error {
-	read, err := d.readGardenTo(0)
+	read, err := d.readGarden()
 	if err != nil {
 		return err
 	}

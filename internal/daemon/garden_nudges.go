@@ -18,7 +18,7 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	if d.store == nil {
 		return nil, nil
 	}
-	read, err := d.readGardenTo(0)
+	read, err := d.readGarden()
 	if err != nil {
 		d.logf("garden bell: reading the graph to see what %s unblocked: %v", seedID, err)
 		return nil, nil
@@ -164,7 +164,7 @@ func (s gardenSubscriptions) coverageChecked(seedID string) (map[protocol.Sessio
 }
 
 func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
-	read, err := d.readGardenTo(0)
+	read, err := d.readGarden()
 	if err != nil {
 		return gardenSubscriptions{}, err
 	}
