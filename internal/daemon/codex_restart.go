@@ -270,8 +270,11 @@ func (r *codexShared) restart(s *codexServer, now bool) {
 	r.mu.Lock()
 	installed := r.installed
 	r.mu.Unlock()
-	binary := r.binary("")
-	version, err := r.preflight(s, binary)
+	binary, err := r.binary("")
+	var version string
+	if err == nil {
+		version, err = r.preflight(s, binary)
+	}
 	if err == nil && codexReleaseVersion(installed) && version != installed {
 		err = fmt.Errorf("it starts as Codex %s, not the installed %s", version, installed)
 	}

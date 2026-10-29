@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -88,11 +87,7 @@ func (d *Daemon) validateGardenAdvisorSetting(raw string) error {
 		return err
 	}
 	driver := agentdriver.Get(config.Agent)
-	configured := ""
-	if d.store != nil {
-		configured = d.machineSetting(MachineSetting(canonicalExecutableSettingKey(config.Agent)))
-	}
-	if _, err := exec.LookPath(driver.ResolveExecutable(configured)); err != nil {
+	if _, err := d.machineAgentExecutable(driver, ""); err != nil {
 		return fmt.Errorf("garden advisor executable for %s was not found: %w", config.Agent, err)
 	}
 	return nil
@@ -137,8 +132,7 @@ func (d *Daemon) resolveGardenAdvisor(
 	if !ok {
 		return nil, "", fmt.Errorf("agent %s does not support headless tasks", config.Agent)
 	}
-	configured := d.machineSetting(MachineSetting(canonicalExecutableSettingKey(config.Agent)))
-	executable, err := exec.LookPath(driver.ResolveExecutable(configured))
+	executable, err := d.machineAgentExecutable(driver, "")
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve %s executable: %w", config.Agent, err)
 	}
