@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"syscall"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/harness"
@@ -11,6 +13,13 @@ import (
 
 func ownTerminalID() protocol.TerminalID {
 	return protocol.TrimID(harness.TerminalFromEnv())
+}
+
+var errNoCurrentSession = errors.New("not showing a session")
+
+func currentCodexProfile() (string, bool) {
+	profile, _, ok := harness.ParseCodexThreadTerminal(ownTerminalID())
+	return profile, ok
 }
 
 func currentSession(c *client.Client) (protocol.SessionID, error) {
@@ -23,7 +32,7 @@ func currentSession(c *client.Client) (protocol.SessionID, error) {
 		return "", err
 	}
 	if sessionID == "" {
-		return "", fmt.Errorf("terminal %s is not showing a session", terminalID)
+		return "", fmt.Errorf("terminal %s is %w", terminalID, errNoCurrentSession)
 	}
 	return sessionID, nil
 }
@@ -31,7 +40,11 @@ func currentSession(c *client.Client) (protocol.SessionID, error) {
 func currentSessionOrExit() protocol.SessionID {
 	sessionID, err := currentSession(client.New(""))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
+		if errors.Is(err, syscall.EPERM) {
+			fmt.Fprintf(os.Stderr, "attn: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
+		}
 		os.Exit(1)
 	}
 	return sessionID

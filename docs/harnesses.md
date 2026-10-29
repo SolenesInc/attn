@@ -319,6 +319,24 @@ launch.
 
 ### Codex app-server and `--remote`
 
+Probed on 0.165.0 with a local mock model, an isolated `CODEX_HOME` and a
+non-production attn daemon:
+
+- A server-side `spawn_agent` sends `thread/status/changed` for the child to
+  an initialized control connection, but no `thread/started` for that child.
+  The connection also hears the child's turn, item and hook notifications.
+  `thread/read` returns its `parentThreadId` while its turn runs.
+- Restarting attn's daemon leaves the same app-server and child turn running.
+  On the new control connection, `thread/loaded/list` includes the child and
+  `thread/read` still returns its parent. Reconnecting sends no
+  `thread/started` replay.
+- With `workspace-write`, `on-request` approvals and code mode enabled,
+  `tools.exec_command({cmd: "attn seed show ..."})` fails to connect to attn's
+  Unix socket with `operation not permitted`. Adding
+  `prefix_rule(pattern = ["attn", "seed", "show"], decision = "allow")` to
+  `<CODEX_HOME>/rules/default.rules` lets the same command connect and read
+  the seed. The tool call uses default sandbox permissions in both runs.
+
 Probed on 0.160.0 with a mock model. Shared Codex relies on these.
 
 - `codex app-server --listen unix://PATH` speaks WebSocket (`GET /rpc`) on a

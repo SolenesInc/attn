@@ -31,7 +31,8 @@ func GenerateCodexConfigOverrides(terminalID, socketPath, wrapperPath string, la
 
 func GenerateCodexServerConfigOverrides(wrapperPath, socketPath, profile string) []string {
 	wrapper := hookWrapper(wrapperPath)
-	overrides := codexHookOverrides(codexHookCommand(wrapper, "env "+shellQuote(harness.CodexSharedProfileEnv+"="+profile)+" "))
+	environment := "env " + shellQuote(harness.CodexSharedProfileEnv+"="+profile) + " " + shellQuote("ATTN_TERMINAL_ID=") + " " + shellQuote("ATTN_SESSION_ID=") + " "
+	overrides := codexHookOverrides(codexHookCommand(wrapper, environment))
 	for _, env := range [][2]string{
 		{harness.CodexSharedProfileEnv, profile},
 		{"ATTN_TERMINAL_ID", ""},

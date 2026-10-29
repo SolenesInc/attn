@@ -1167,7 +1167,7 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		s.mu.Lock()
 		s.threads[t.c.conversation] = t
 		s.mu.Unlock()
-		s.broadcast("thread/started", map[string]any{"thread": s.metadata(t)})
+		s.status(t)
 		return promptedResult{ConversationID: t.c.conversation}, nil
 	}
 	return nil, fmt.Errorf("unknown method %q", method)

@@ -30,12 +30,11 @@ func ParseCodexThreadTerminal(t TerminalID) (profile, thread string, ok bool) {
 
 // TerminalFromEnv reads the terminal identity, including the spelling used by older launches.
 func TerminalFromEnv() TerminalID {
+	if id := os.Getenv("ATTN_TERMINAL_ID"); id != "" {
+		return TerminalID(id)
+	}
 	if profile, shared := os.LookupEnv(CodexSharedProfileEnv); shared {
 		return CodexThreadTerminal(profile, os.Getenv("CODEX_THREAD_ID"))
 	}
-	id := os.Getenv("ATTN_TERMINAL_ID")
-	if id == "" {
-		id = os.Getenv("ATTN_SESSION_ID")
-	}
-	return TerminalID(id)
+	return TerminalID(os.Getenv("ATTN_SESSION_ID"))
 }
