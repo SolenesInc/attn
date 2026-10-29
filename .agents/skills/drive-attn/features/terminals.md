@@ -1,47 +1,32 @@
 # Terminals
 
-A terminal is a real PTY in a tile: what the user types and what the program
-prints, with scrollback, find, links and images. Every agent runs in one, and
-so does every shell. People type, read, search, copy and click in it; agents
-open shells beside themselves, run commands in them, read what came back and
-close them. Terminals keep running when the app or the daemon restarts.
+A terminal tile shows a PTY, including scrollback, search, links and images.
+People type and read in it; agents can open shells, run commands and read the
+output. Terminals keep running across app and daemon restarts.
 
-## Sub-features
+## Actions and ways in
 
-- `terminal-input`: keys, text and paste reach the program as typed; ⌘ shortcuts stay with attn.
-- `terminal-output`: what the program prints, rendered with colors, styles and the terminal's title.
-- `scrollback`: history above the screen, kept across relaunch.
-- `find`: search the screen and scrollback, with match case.
-- `blocks`: with shell integration, each command and its output form a block to copy, filter or scroll to.
-- `context-menu`: right-click to copy, copy the command or output, paste, filter a block, find, scroll a block.
-- `links`: ⌘-click a URL to open it in the system browser, a markdown path to dock it in a tile ([markdown.md](markdown.md)), any other path to open it.
-- `images`: kitty graphics images drawn in the terminal.
-- `shell-tile`: a shell in its own tile, started by the user or an agent.
-- `shell-titles`: a shell's tile and sidebar name follow its program and folder.
-- `focus-terminal`: one key returns typing to the active tile's terminal.
-- `agent-terminals`: agents open, list, type into, run in, read, wait on and close shells; opened shells take no focus.
-- `pty-host`: terminals run in a dedicated PTY worker each, or in one shared PTY host behind an experimental setting.
+### Open, type, search and read
 
-## How to get to it
-
-### People
+Typing and paste reach the program; ⌘ shortcuts stay with attn. The terminal renders output with colors, styles and title, keeps scrollback across relaunch, draws kitty graphics images, and with shell integration groups a command and its output into a block. Shell names follow their program and folder. ⌘-click opens URLs in the system browser, markdown paths in a tile, and other paths normally.
 
 - Keys (`app/src/shortcuts/registry.ts`): ⌘T new shell on this desktop (`session.newTerminal`), which opens the location picker with the shell chosen ([agent-launch.md](agent-launch.md)), ⌘` puts typing back in the active tile's terminal (`terminal.open`), ⌘F find (`terminal.find`). ⌘C copies a selection; ⇧⌘C copies a selected block's command. ⌘=, ⌘- and ⌘0 resize the app's text, terminals included; [settings.md](settings.md) drives them.
 - In the terminal (`app/src/components/GhosttyTerminal.tsx`): typing and paste, the find bar ("Find", "Match case", "Previous match", "Next match", "Close find"), the block filter ("Filter block output"), ⌘-click on links, and the right-click menu (`app/src/components/TerminalContextMenu.tsx`) with Copy, Copy command, Copy output, Paste, Filter block output, Find, Scroll to top of block and Scroll to bottom of block.
 - Tile header (`app/src/components/SessionTerminalDesktop/DesktopAgentHeader.tsx`): "Rename session <name>" on a shell's tile.
-- Settings, Experimental, "Shared terminal host" (`app/src/components/SettingsModalSections.tsx`), the machine setting `pty_shared_host_enabled`.
-- Where people see what agents do: a shell an agent opens appears beside it with a pulse, without taking focus, and its tile shows what the agent typed and what ran.
-- Their own shell: nothing; `attn terminal`, below, refuses without a calling agent.
 - Splitting, zooming, moving and closing terminal tiles belong to [desktops.md](desktops.md).
 
-### Agents
+### Use terminals from an agent
+
+`attn terminal` requires a calling agent and refuses from a person's own shell.
 
 - `attn terminal` (`cmd/attn/terminal.go`): `ls [--desktop <ref> | --all] [--json]`, `open [--host <outpost|home>] [--down] [--desktop <ref>] [--cwd <dir>] [-- <command>]`, `run <terminal> "<command>" [--wait] [--timeout <seconds>] [--desktop <ref>]`, `send <terminal> (--text "<text>" | --keys C-c Escape Enter ...) [--desktop <ref>]`, `read <terminal> [--last | --scrollback [--lines <n>]]`, `wait <terminal> --until prompt|exit [--timeout <seconds>]`, `close <terminal> [--desktop <ref>]`. Typing and closing on another desktop need `--desktop`. `move` is in [desktops.md](desktops.md).
 - `attn agent peek <session>` reads another agent's screen ([agent-state.md](agent-state.md)).
-- Prompts: the attn skill's terminal reference, on placement, reach, typing, reading and waiting (`internal/prompts/content/skills/attn/references/terminal.md`), and its capability index (`internal/prompts/content/skills/attn/SKILL.md`).
+- Agents read the attn skill's terminal reference on placement, reach, typing, reading and waiting (`internal/prompts/content/skills/attn/references/terminal.md`), and its capability index (`internal/prompts/content/skills/attn/SKILL.md`).
+- A shell an agent opens appears beside it with a pulse, without taking focus, and its tile shows what the agent typed and what ran.
 
-### Triggers
+### Choose the terminal host
 
+- Settings, Experimental, "Shared terminal host" (`app/src/components/SettingsModalSections.tsx`), the machine setting `pty_shared_host_enabled`.
 - Every terminal starts in a PTY worker that outlives the app and the daemon (`internal/ptyworker`). With `pty_shared_host_enabled` on, new terminals start in the shared PTY host instead, and existing ones keep their worker (`internal/daemon/pty_settings.go`).
 
 ## Driving it
@@ -50,8 +35,8 @@ Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
 - A shell on your machine with OSC 133 shell integration (fish, zsh or bash); `run --wait`, `read --last` and `wait --until prompt` need it.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-terminals.XXXX)`, holding `notes.md` with `# Terminal link`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-terminals-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-terminals.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `notes.md` with `# Terminal link`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-terminals-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

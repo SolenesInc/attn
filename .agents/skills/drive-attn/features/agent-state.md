@@ -8,47 +8,27 @@ every agent in the sidebar, the home screen and the palette. Agents read it
 for every session with `attn agent list` and `attn agent peek`, and anyone can
 ask why a session has its state with `attn state explain`.
 
-## Sub-features
+## Actions and ways in
 
-- `state-shown`: the state beside each agent in the sidebar, the home screen's groups and the palette.
-- `agent-list`: every session on the daemon with its harness, profile, state and whether a turn is owed.
-- `agent-peek`: a session's state, last reply and screen, read without interrupting it.
-- `state-explain`: the claims behind a state, which source made each, and whether attn applied it.
-- `approval`: a permission prompt puts the agent in needs approval until it is answered.
-- `stop-verdict`: when a turn ends, its last message decides waiting or idle.
-- `activity-line`: a one-line summary of what each agent is doing, written by a background agent.
+### See an agent's state
 
-## How to get to it
+In desktop flow, a sidebar row `[data-testid="sidebar-session-<session>"]` carries `.session-lead[data-state]` and a harness logo labelled "<Harness> · <state>"; with logos off a dot replaces it (`app/src/components/SidebarRows.tsx`, [harnesses.md](harnesses.md)). Home (⌘⇧H, `session.goToDashboard`, `app/src/shortcuts/registry.ts`) groups sessions under "Waiting for input", "Pending approval", "Launching", "Working", "Scheduled", "Idle", "Recoverable" and "Unknown / error", with ids such as `session-group-waiting` and `session-group-pending`, and shows each activity line (`app/src/components/Dashboard.tsx`, [home.md](home.md)). Palette agent rows show waiting and approval (`app/src/components/palette/agentPaletteRows.ts`).
 
-### People
+People and agents run `attn agent list [--json]` for every session on the daemon, its harness, profile, state and owed turns, or `attn agent peek <session-or-member> [--json]` for state, last reply and screen without interrupting it (`cmd/attn/agent.go`). The skill names both (`internal/prompts/content/skills/attn/references/converse-and-observe.md`). `attn state explain <session> [--json]` shows each claim, its source and whether it applied (`cmd/attn/state_explain.go`).
 
-- Sidebar, in desktop flow (`app/src/components/SidebarRows.tsx`): each agent's row, `[data-testid="sidebar-session-<session>"]`, carries the state in `.session-lead[data-state]`, and its harness logo is labelled "<Harness> · <state>", such as "Claude · working". With harness logos off, a state dot takes its place ([harnesses.md](harnesses.md)).
-- Home screen, ⌘⇧H (`session.goToDashboard`, `app/src/shortcuts/registry.ts`): sessions grouped by state, "Waiting for input", "Pending approval", "Launching", "Working", "Scheduled", "Idle", "Recoverable" and "Unknown / error", each group with a `data-testid` such as `session-group-waiting` and `session-group-pending`, and each agent's activity line (`app/src/components/Dashboard.tsx`). The home screen itself is [home.md](home.md).
-- The palette's agent rows show whether an agent waits or needs approval (`app/src/components/palette/agentPaletteRows.ts`).
-- Settings, Background agents: "Generate activity lines" (`[data-testid="settings-activity-toggle"]`, setting `activity.enabled`), which stays disabled until an agent is chosen in "Session activity model" (setting `activity.config`), and when lines are written (`app/src/components/SessionActivitySettings.tsx`).
-- Their own shell: the verbs below.
+### Classify state and activity
 
-### Agents
+The session's monitor keeps the state (`internal/daemon/monitors.go`, `internal/daemon/session_state.go`), using hidden hook verbs `attn _hook-session-start`, `_hook-state`, `_hook-notification`, `_hook-stop`, `_hook-stop-failure`, `_hook-compact` and `_hook-tool-use` (`cmd/attn/main.go`, Claude Code hooks in `internal/hooks/hooks.go`); shared Codex reports through its app-server. A permission prompt sets needs approval until answered. When a turn ends, a background model judges whether the last message waits for the user (`internal/daemon/turn.go`, `internal/prompts/content/turn-classifier/classify.md`, `internal/daemon/headless_tasks.go`).
 
-- `attn agent list [--json]` and `attn agent peek <session-or-member> [--json]` (`cmd/attn/agent.go`).
-- `attn state explain <session> [--json]` (`cmd/attn/state_explain.go`).
-- `attn activity [--json]` and `attn activity clear <session>` (`cmd/attn/activity.go`).
-- Prompts: the attn skill's reference on other sessions, which names `agent list` and `agent peek` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`). The classifier and activity prompts go to background models, under Triggers.
-
-### Triggers
-
-- The harness reports through hidden verbs its hooks call: `attn _hook-session-start`, `_hook-state`, `_hook-notification`, `_hook-stop`, `_hook-stop-failure`, `_hook-compact` and `_hook-tool-use` (`cmd/attn/main.go`; Claude Code's hook settings in `internal/hooks/hooks.go`). Codex under shared Codex reports through its app-server.
-- Each session's monitor watches its agent on the machine it runs on and keeps its state (`internal/daemon/monitors.go`, `internal/daemon/session_state.go`).
-- When a turn ends, a background model judges whether the last message waits for the user (`internal/daemon/turn.go`, prompt `internal/prompts/content/turn-classifier/classify.md`, run by `internal/daemon/headless_tasks.go`).
-- With activity lines on, a background model writes each agent's line while someone can see it (`internal/daemon/activity.go`, prompts in `internal/prompts/content/activity/`).
+Settings, Background agents, offers "Generate activity lines" (`[data-testid="settings-activity-toggle"]`, `activity.enabled`), disabled until "Session activity model" (`activity.config`) is chosen, and controls when lines are written (`app/src/components/SessionActivitySettings.tsx`). When enabled, a background model writes a line while someone can see it (`internal/daemon/activity.go`, `internal/prompts/content/activity/`). People and agents run `attn activity [--json]` and `attn activity clear <session>` (`cmd/attn/activity.go`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), in desktop flow, the default.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-state.XXXX)`.
-- An agent folder, `S=$(mktemp -d /tmp/drive-attn-state-agent.XXXX)`, holding this fixture as `$S/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-state.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `S=$(mktemp -d /tmp/drive-attn-state-agent.XXXX) && echo "export S=$S" >> $DRIVE_ENV`, holding this fixture as `$S/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

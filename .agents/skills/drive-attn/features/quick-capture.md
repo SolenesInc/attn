@@ -1,43 +1,28 @@
 # Quick capture
 
-Send a message with attachments to the chief or crew from anywhere, with a
-global shortcut, like macOS Quick Note. A small panel opens over whatever app
-the user is in. They write a note, attach files or screenshots, pick the chief
-or a crew member, and press Enter. attn types the message into that agent's
-conversation as the user's message, waking an asleep member first. The
-panel keeps a draft between openings and lists recent messages with whether
-their agent has read them. Quick capture is an experimental setting, off by
-default, and the panel is macOS only.
+Send a message and attachments to the chief or crew from anywhere. attn
+wakes an asleep crew member if needed and types the message into the
+recipient's conversation.
+The macOS panel keeps unsent drafts and shows recent messages. Quick capture
+is experimental and off by default.
 
-## Sub-features
+## Actions and ways in
 
-- `capture-shortcut`: the global shortcut that opens the panel from any app, ⌃⌥⌘Space by default in production and unbound on a named instance, rebindable or off.
-- `capture-panel`: the panel itself: the message, the mailbox picker, Enter to send, Escape to hide.
-- `capture-mailbox`: send to the chief or one of the profile's crew members.
-- `capture-files`: attach files and images by paste or drop; the agent saves each with `attn agent attachment`.
-- `capture-draft`: the unsent text and files survive hiding the panel and restarting the app.
-- `capture-history`: recent messages, each marked once its agent retrieved it.
-- `capture-delivery`: the message lands as a user message in the mailbox's session, waking an asleep member.
-- `capture-guidance`: what attn tells agents about messages from quick capture.
+### Enable and open
 
-## How to get to it
+Turn on "Quick Capture" in Settings, Experimental (`[role="switch"][aria-label="Quick Capture"]`, `app/src/components/SettingsModalSections.tsx`). Open the panel with the global shortcut, ⌃⌥⌘Space in production and unbound on named instances (`app/src-tauri/core/src/quick_capture.rs`), or File → Quick Capture (`app/src-tauri/core/src/lib.rs`), which has no key equivalent. The menu is enabled only while quick capture is on.
 
-### People
+Rebind or disable the global shortcut in the keyboard shortcuts editor's "Global Quick Capture shortcut" section (`app/src/components/QuickCaptureShortcutEditor.tsx`, `app/src/components/ShortcutEditorModal.tsx`). It is stored as `capture.shortcut`; an empty value turns it off.
 
-- The global shortcut, ⌃⌥⌘Space by default in production and unbound on a named instance, registered with the system by the app (`app/src-tauri/core/src/quick_capture.rs`). It is rebound in the keyboard shortcuts editor's "Global Quick Capture shortcut" section (`app/src/components/QuickCaptureShortcutEditor.tsx`, inside `app/src/components/ShortcutEditorModal.tsx`), and kept in the `capture.shortcut` setting, where empty turns it off.
-- Native menu: File, Quick Capture (`app/src-tauri/core/src/lib.rs`), enabled while quick capture is on. It has no key equivalent.
-- The panel (`app/src/components/QuickCapture.tsx`): the "Message" field, "To: <mailbox>" (`[aria-label="Send to"]`, ⌘K) with its list, ⌘1 to ⌘4 for the first four mailboxes, Enter to send, Shift+Enter for a new line, Escape to close the list, then history, then the panel. "Recent messages" shows the history (`app/src/components/QuickCaptureHistory.tsx`), and attached files show as previews (`app/src/components/QuickCaptureAttachmentPreview.tsx`).
-- Settings, Experimental: the "Quick Capture" switch (`[role="switch"][aria-label="Quick Capture"]`, `app/src/components/SettingsModalSections.tsx`).
-- Where people see what agents do with it: the message appears in the chief's or member's terminal as typed text, and the history marks it once the agent retrieved it.
+### Compose and send
 
-### Agents
+In the panel (`app/src/components/QuickCapture.tsx`), type in "Message" and pick "To: <mailbox>" (`[aria-label="Send to"]`, ⌘K). ⌘1 to ⌘4 pick the first four mailboxes. Enter sends; Shift+Enter inserts a line. Escape closes the mailbox list, then history, then the panel. Paste or drop files and images to attach them; previews appear in `app/src/components/QuickCaptureAttachmentPreview.tsx`. The draft and files survive hiding the panel and restarting the app.
 
-- `attn agent attachment <capture-id> <attachment-id> --out <path>` saves a file the user attached (`cmd/attn/agent_attachment.go`). Agents never send a quick capture; they receive one.
-- Prompts: the quick capture guidance in the session instructions of agents launched while it is on (`internal/prompts/content/session/quick-capture.md`); the typed message and its file lines (`session/quick-capture-item.md`, `quick-capture-file.md`, `quick-capture-file-saved.md`).
+A sent capture enters the mailbox's inbox. A ring types it as a user message without the 📬 line, waking an asleep member first without counting against the wake limit (`internal/daemon/quick_captures.go`; `docs/inbox.md`). "Recent messages" (`app/src/components/QuickCaptureHistory.tsx`) marks a message once retrieved; the chief's or member's terminal shows the typed message.
 
-### Triggers
+### Receive an attachment
 
-- A sent capture is a user message in the chosen mailbox's inbox: a ring types it at once, without the 📬 line, and an asleep member is woken first without counting against the wake limit (`internal/daemon/quick_captures.go`; the rules are in `docs/inbox.md`).
+The receiving agent saves a file with `attn agent attachment <capture-id> <attachment-id> --out <path>` (`cmd/attn/agent_attachment.go`). Agents launched with quick capture on receive its guidance (`internal/prompts/content/session/quick-capture.md`); the message and file lines come from `session/quick-capture-item.md`, `quick-capture-file.md` and `quick-capture-file-saved.md`.
 
 ## Driving it
 
@@ -53,7 +38,7 @@ Preconditions:
 ]}
 ```
 
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - The panel is a window of its own, `capture`. `bridge native_key`, `native_text` and `native_mouse` reach it with `"window":"capture"` in their JSON. `bridge capture_state`, `capture_binding` and `capture_dismiss` read and drive it.
 - The repository's input driver (`app/scripts/real-app-harness/InputDriver.swift`) posts keys to the whole system, as the `quick-capture` scenario does to press the global shortcut. Add it to the env file as a function:
 

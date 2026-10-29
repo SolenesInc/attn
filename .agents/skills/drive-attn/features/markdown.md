@@ -7,46 +7,52 @@ tile follows edits on disk, so a document the agent keeps writing stays
 current while the user reads it. Review notes on a markdown tile belong to
 [annotations.md](annotations.md).
 
-## Sub-features
+## Actions and ways in
 
-- `file-open`: `attn open <file.md>` docks a markdown tile beside the caller, or beside the active tile when no session calls; a seed id opens a seed tile instead ([garden.md](garden.md)).
-- `file-opener`: ⌘P lists recent files on an empty query, fuzzy-searches the active agent's folder, and browses folders for a query starting with `/`, `~`, `./` or `../`.
-- `recent-files`: files opened before, the most used and most recent first; picking one returns to its tile when it is still open.
-- `markdown-render`: headings, tables, alerts, code with highlighting, images, Mermaid diagrams and frontmatter.
-- `live-reload`: the tile re-reads its file when it changes.
-- `terminal-link`: ⌘-click a markdown path in a terminal to dock it, bound to the session that terminal shows ([terminals.md](terminals.md)).
-- `document-focus`: show the document alone on the desktop, and return with Escape.
-- `open-in-editor`: open the active agent's folder in the user's editor.
+### Open a document
 
-## How to get to it
+⌘P (`file.open`, `app/src/shortcuts/registry.ts`) opens the markdown opener
+(`app/src/components/palette/MarkdownOpener.tsx`); the palette's `open-markdown-file` ("Open a
+markdown file", `app/src/application/useAppCommands.tsx`) does too. An empty query lists recent
+files, most used and recent first; a query fuzzy-searches the active agent's folder, or browses
+folders when it begins with `/`, `~`, `./` or `../`. Picking a recent file returns to its open tile.
+Inside a focused editor tile, ⌘P opens the note finder instead ([notebook.md](notebook.md)). ⌘-click
+a `.md` path in a terminal to dock it bound to that session
+(`app/src/components/GhosttyTerminal.tsx`, [terminals.md](terminals.md)). People and agents can run
+`attn open <file.md|seed-id> [--session <id>]` (`cmd/attn/main.go`): relative paths resolve from the
+command's folder; the tile docks beside the caller, the named session, or the active tile without a
+session. A seed id opens a seed tile ([garden.md](garden.md)).
 
-### People
+### Read and focus
 
-- ⌘P (`file.open`, `app/src/shortcuts/registry.ts`) opens the opener (`app/src/components/palette/MarkdownOpener.tsx`). Inside a focused editor tile, ⌘P opens that tile's note finder instead ([notebook.md](notebook.md)).
-- Palette (`app/src/application/useAppCommands.tsx`): `open-markdown-file` ("Open a markdown file"), and `open-in-editor` ("Open in editor"), offered while an agent with a local folder is on screen (`app/src/application/useOpenInEditor.ts`).
-- In a terminal, ⌘-click on a `.md` path (`app/src/components/GhosttyTerminal.tsx`).
-- Tile header (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`): "Focus document" (also ⌘⇧↩, `terminal.toggleMaximize`), and "Close tile". The tile's row in the sidebar (`app/src/components/SidebarRows.tsx`) has a "Close <title>" button that takes clicks while the pointer is over the row.
-- In the document (`app/src/components/MarkdownReader/index.tsx`): a fragment link scrolls the tile; images open in a lightbox.
-- Settings, the editor command (`editor_executable`) that "Open in editor" runs; without it, `$EDITOR` or `$VISUAL`.
-- Where people see what agents do: the tile an agent opens docks beside the agent's tile and follows the file as the agent writes it.
-- Their own shell: `attn open <file.md> [--session <id>]`.
+The tile renders headings, tables, alerts, highlighted code, images, Mermaid and frontmatter.
+Fragment links scroll and images open in a lightbox (`app/src/components/MarkdownReader/index.tsx`).
+The header's "Focus document" or ⌘⇧↩ (`terminal.toggleMaximize`) shows it alone; Escape returns.
+"Close tile" closes it (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`); its
+sidebar row's "Close <title>" button takes clicks while hovered
+(`app/src/components/SidebarRows.tsx`). The tile re-reads disk changes and shows an error if its
+file disappears or exceeds 1 MiB (`internal/daemon/tilecontent.go`).
 
-### Agents
+### Open the agent's folder in an editor
 
-- `attn open <file.md|seed-id> [--session <id>]` (`cmd/attn/main.go`): a relative path resolves against the folder `attn` runs in; the tile docks beside the caller, or beside `--session`'s tile.
-- Prompts: the attn skill's markdown reference (`internal/prompts/content/skills/attn/references/markdown.md`), named in its capability index as "Show the user a markdown document" (`internal/prompts/content/skills/attn/SKILL.md`), and `attn open <plot>` in the seed craft (`internal/prompts/content/resources/seed-guide.md`).
+Palette `open-in-editor` ("Open in editor") appears for an agent with a local folder
+(`app/src/application/useAppCommands.tsx`, `app/src/application/useOpenInEditor.ts`). Settings'
+`editor_executable` selects the command, falling back to `$EDITOR` or `$VISUAL`.
 
-### Triggers
+### Guide agents
 
-- An open markdown tile re-reads its file when the file changes on disk, and shows an error when the file goes away or grows past 1 MiB (`internal/daemon/tilecontent.go`).
+The attn skill's markdown reference (`internal/prompts/content/skills/attn/references/markdown.md`)
+is named "Show the user a markdown document" in its capability index
+(`internal/prompts/content/skills/attn/SKILL.md`); the seed craft names `attn open <plot>`
+(`internal/prompts/content/resources/seed-guide.md`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-markdown-proof.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-markdown.XXXX)`, holding `notes.md` (`# Drive notes` and a line of text), `second.md` (`# Second file`), `rich.md` (frontmatter with `type: note`, a `# Rich drive` heading, a `> [!NOTE]` alert and a fenced `mermaid` block holding `graph LR; A-->B`), and this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-markdown-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-markdown.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding `notes.md` (`# Drive notes` and a line of text), `second.md` (`# Second file`), `rich.md` (frontmatter with `type: note`, a `# Rich drive` heading, a `> [!NOTE]` alert and a fenced `mermaid` block holding `graph LR; A-->B`), and this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

@@ -8,36 +8,52 @@ search, switches it to commands: everything attn can do, with its shortcut,
 and the commands about the agent on screen pinned on top. Commands the user
 picks often rise in the list.
 
-## Sub-features
+## Actions and ways in
 
-- `agent-palette`: ⌘K; the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. Enter opens one, or wakes a sleeping crew member.
-- `command-palette`: ⌘⇧K, or `>` in the agent palette; every command attn offers, with its shortcut.
-- `palette-switch`: ⌘K and ⌘⇧K switch between the two and keep the typed text; the same key again closes the palette.
-- `palette-actions`: in the agent palette, ⌘⇧E settles, ⌘⇧I marks priority and ⌘⇧S snoozes the highlighted agent, without closing.
-- `palette-order`: commands rank by how well they match, then pinned, then how often and how lately the user picked them in this profile.
-- `palette-pins`: commands about the agent on screen come first: settle, reload, rename, priority, delegation chain, seeds, usage, context cap, open in editor, and in queue flow snooze and unsnooze.
+### Open and switch modes
 
-## How to get to it
+⌘K (`ui.actionMenu`) opens the agent palette; ⌘⇧K (`ui.commandPalette`) opens commands
+(`app/src/shortcuts/registry.ts`). The sidebar's `button[aria-label="Commands"]` opens commands
+(`app/src/components/SidebarHeader.tsx`); the queue bar's waiting pill opens agents
+(`app/src/components/QueueBar.tsx`), as does ⌘⇧A where the queue sidebar is hidden
+([sidebar.md](sidebar.md)). The two keys switch modes while keeping typed text; pressing the current
+mode's key closes it. Typing `>` switches agents to commands; deleting it switches back. ⌘P opens
+the markdown opener ([markdown.md](markdown.md)), or the note finder in an editor
+([notebook.md](notebook.md)).
 
-### People
+### Find an agent or tile
 
-- ⌘K (`ui.actionMenu`) opens the agent palette and ⌘⇧K (`ui.commandPalette`) the command palette (`app/src/shortcuts/registry.ts`).
-- The sidebar's `button[aria-label="Commands"]` opens the command palette (`app/src/components/SidebarHeader.tsx`). On the queue bar, the waiting pill opens the agent palette (`app/src/components/QueueBar.tsx`). ⌘⇧A opens the agent palette wherever the queue sidebar is not showing ([sidebar.md](sidebar.md)).
-- In the palette (`app/src/components/palette/UnifiedPalette.tsx`, `app/src/components/palette/Palette.tsx`): the input `[role="combobox"][aria-label="Agents"]`, or `[aria-label="Commands"]` in command mode; ↑ and ↓ move, Enter runs, Escape closes; typing `>` switches to commands and deleting it switches back. `.unified-palette-count` reads `<shown> of <all>`. Rows are `.unified-palette-option`, agents `[data-testid="palette-agent-<session>"]` and tiles `[data-testid="palette-tile-<tile>"]`. The footer names the settle and snooze keys (`[data-testid="palette-settle-hint"]`, `[data-testid="palette-snooze-hint"]`).
-- The commands come from `app/src/application/useAppCommands.tsx` and `app/src/application/useSharedCodex.tsx`. Each command belongs to its feature, whose file drives it.
-- ⌘P opens other finders, not this palette: the markdown opener ([markdown.md](markdown.md)), or the note finder inside the notebook or an editor tile ([notebook.md](notebook.md)).
-- Where people see what agents do: each agent row's status (`chief`, `waiting`, `approval`, `working`, `idle`, `snoozed`, or `asleep` for a crew member), its turn age, its desktop's number, the priority flag, and ⌘J beside the head of the queue.
+The agent palette lists chief and crew, turns in queue order, other agents, snoozed agents and
+tiles; Enter goes there or wakes a sleeping crew member. Rows show state (`chief`, `waiting`,
+`approval`, `working`, `idle`, `snoozed`, or `asleep` for crew), turn age, desktop number, priority,
+and ⌘J beside the queue head. ⌘⇧E settles, ⌘⇧I marks priority and ⌘⇧S snoozes the highlighted agent
+without closing the palette.
 
-### Agents
+### Find and run a command
 
-None. What agents do shows in the agent palette's rows: their state, turn and priority. `attn callout` can point at the `commands` anchor, which is the Commands button, not ⌘K ([callouts.md](callouts.md)).
+Commands show their shortcut, ranked by match, then pinned, then frequency and recency within the
+profile. Commands about the agent on screen are pinned: settle, reload, rename, priority, delegation
+chain, seeds, usage, context cap, open in editor, and, in queue flow, snooze and unsnooze. Commands
+come from `app/src/application/useAppCommands.tsx` and `app/src/application/useSharedCodex.tsx`;
+each feature's file drives its own commands.
+
+### Navigate the palette
+
+The input is `[role="combobox"][aria-label="Agents"]` or `[aria-label="Commands"]`; ↑ and ↓ move,
+Enter runs and Escape closes. `.unified-palette-count` reads `<shown> of <all>`; rows are
+`.unified-palette-option`, agent rows `[data-testid="palette-agent-<session>"]` and tile rows
+`[data-testid="palette-tile-<tile>"]`. The footer names settle and snooze keys
+(`[data-testid="palette-settle-hint"]`, `[data-testid="palette-snooze-hint"]`;
+`app/src/components/palette/UnifiedPalette.tsx`, `app/src/components/palette/Palette.tsx`). Agents
+have no palette verb; `attn callout` points at the `commands` anchor, the Commands button
+([callouts.md](callouts.md)).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-palette.XXXX)`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-palette-agent.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-palette.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-palette-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
 - Two agents: `wsctl add-session --cwd $A --agent claude --label pal-a --id pal-a`, then the same with `pal-b`. Both owe a turn once they finish booting.
 - A tile that is not an agent: `./attn seed plant "Palette tile"` prints a line of the seed's id, slug and title, and `<seed>` is that id. `./attn open <seed>` prints `opened <seed>` and puts its seed tile on the current desktop ([garden.md](garden.md)).
 

@@ -1,56 +1,46 @@
 # Shared Codex
 
-Codex sessions share one app-server that attn keeps updated and restarts. With
-the experimental setting on, every Codex terminal in a profile talks to one
-Codex app-server instead of running a Codex of its own. That lets a
-conversation outlive the terminal that showed it: a terminal that switches to
-another conversation leaves the first one running as a hidden session, which
-still queues, takes messages and answers approvals. When a newer Codex is out,
-attn offers to install it, moves the app-server to it once no turn runs, and
-offers to reload the tiles still on the old one. `docs/using-shared-codex.md`
+With Shared Codex on, a profile's Codex sessions share one app-server. A
+conversation can keep running as a hidden session after its terminal switches
+away. attn offers Codex updates, restarts the app-server when turns finish,
+and offers to reload tiles on the old version. `docs/using-shared-codex.md`
 is the user's guide.
 
-## Sub-features
+## Actions and ways in
 
-- `codex-shared-switch`: the Settings switch, off by default; it decides how new Codex terminals and resumes from the ledger launch.
-- `codex-status`: the Codex the app-server runs, the installed and latest ones, a pending restart and what it waits on, and the tiles on an older Codex.
-- `codex-hidden`: a conversation no tile shows stays live and hidden, in the ledger and, optionally, the queue.
-- `codex-approval`: an approval waits in the conversation, answered in its tile or after it opens in one.
-- `codex-update`: a daily check offers a newer Codex; Install runs Codex's own update in a terminal tile.
-- `codex-restart`: the app-server moves to the installed Codex once no turn runs, or now on request; a failed start keeps the old one running.
-- `codex-reload-tiles`: restart the tiles still on an older Codex, in the same conversations.
-- `codex-names`: a session's name and its Codex conversation's name follow each other.
+### Enable shared Codex
 
-## How to get to it
-
-### People
+The switch is off by default and controls new Codex terminals and ledger resumes.
 
 - Settings, Experimental (`app/src/components/SettingsModalSections.tsx`): "Shared Codex", `[data-testid="settings-shared-codex-toggle"]` (setting `codex_shared_enabled`), and "Show hidden sessions in the queue" (`[data-testid="settings-queue-hidden-sessions-toggle"]`, setting `queue_show_hidden_sessions`, on by default).
+- The first shared terminal starts the app-server as a terminal of its own; it stops when no open session and no shared terminal needs it (`internal/daemon/codex_shared.go`).
+
+### Switch conversations
+
+A hidden conversation remains live and can receive messages. An approval waits in its conversation and can be answered in its tile, or after opening it in one. A session name and its Codex conversation name follow each other.
+
+- In a shared Codex terminal: `/new`, `/resume <id>` and `/agents` switch its conversation.
+- A hidden session is marked `hidden` in the ledger ([ledger.md](ledger.md)) and queues without a desktop chip ([queue-flow.md](queue-flow.md)).
+- `attn opened this conversation.`, typed into a conversation attn opens in the app-server (`internal/prompts/content/session/codex-opened.md`).
+- attn answers Codex's folder trust question for a folder where an agent session already started a conversation, and for every automation (`docs/using-shared-codex.md`).
+
+### Inspect, update and restart
+
+People and agents can run these `attn codex` verbs. Status shows the app-server, installed and latest Codex versions, any pending restart and what it waits for, and tiles on an older Codex. Install runs Codex's own update in a terminal tile. A failed restart keeps the old app-server running; reloading old tiles keeps their conversations.
+
 - The banner at the top of the window, `[aria-label="Codex updates"]`, with Install, Restart now, Retry or Reload tiles as each applies, and a confirm prompt before a restart or a reload (`app/src/components/SharedCodexBanner.tsx`, `app/src/components/SharedCodexPrompts.tsx`). Closed, the same offer stays under the bell in the sidebar.
 - Palette, while each applies (`app/src/application/useSharedCodex.tsx`): `install-codex-update` ("Install Codex update"), `restart-shared-codex-now` ("Restart shared Codex now"), `retry-shared-codex-restart` ("Retry shared Codex restart") and `reload-old-codex-tiles` ("Reload old Codex tiles").
-- In a shared Codex terminal: `/new`, `/resume <id>` and `/agents` switch its conversation.
-- Where people see what agents do: a hidden session is marked `hidden` in the ledger ([ledger.md](ledger.md)) and queues without a desktop chip ([queue-flow.md](queue-flow.md)).
-- Their own shell: the verbs below.
-
-### Agents
-
 - `attn codex status [--profile <name|id>] [--json]`, `attn codex update [--profile]` and `attn codex restart [--now] [--profile]` (`cmd/attn/codex.go`). Inside a session they act on the session's profile.
-- Prompts: `attn opened this conversation.`, typed into a conversation attn opens in the app-server (`internal/prompts/content/session/codex-opened.md`).
-
-### Triggers
-
-- The first shared terminal starts the app-server as a terminal of its own; it stops when no open session and no shared terminal needs it (`internal/daemon/codex_shared.go`).
 - Once a day attn asks `codex doctor` for the latest Codex, and it reads the installed Codex when a shared terminal opens, when the app-server starts and when an update it ran finishes (`internal/daemon/codex_update.go`).
 - When the installed Codex differs from the one the app-server runs, attn restarts it once no turn runs and every shared terminal has finished starting (`internal/daemon/codex_restart.go`).
-- attn answers Codex's folder trust question for a folder where an agent session already started a conversation, and for every automation (`docs/using-shared-codex.md`).
 
 ## Driving it
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). `R=$PWD` at the repository root.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-codex.XXXX)`.
-- An agent folder, `C=$(mktemp -d /tmp/drive-attn-codex-agent.XXXX)`, holding this fixture as `$C/.attn-mock-agent.json`. Under shared Codex the mock plays only `reply` and `delay`; `"approval": true` makes it ask before it replies:
+- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). `R=$PWD && echo "export R=$R" >> $DRIVE_ENV` at the repository root.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-codex.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `C=$(mktemp -d /tmp/drive-attn-codex-agent.XXXX) && echo "export C=$C" >> $DRIVE_ENV`, holding this fixture as `$C/.attn-mock-agent.json`. Under shared Codex the mock plays only `reply` and `delay`; `"approval": true` makes it ask before it replies:
 
 ```json
 {"version": 1, "turns": [

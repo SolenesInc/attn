@@ -8,52 +8,59 @@ pull request links reach the home. The user adds, re-pairs, updates and
 removes outposts in Settings; agents open shells and delegate onto them with
 `--host`. Outposts are experimental and off by default.
 
-## Sub-features
+## Actions and ways in
 
-- `outposts-switch`: Outposts on or off at the home; off keeps the list and makes every outpost terminal offline.
-- `outpost-listen`: an outpost listens for its home on the address in `outpost_listen`.
-- `outpost-pair`: add an outpost by name and address; the first connection pins its host key and daemon id.
-- `bridge-states`: connecting, connected, stalled, lost and refused, with the last error.
-- `outpost-repair`: Re-pair forgets the pins and connects again.
-- `outpost-remove`: Remove closes the outpost's terminals in every profile, then forgets it.
-- `outpost-update`: push the home's build to an outpost, from a banner or its row.
-- `enrollment`: an outpost's data folder belongs to the home it first accepted, until `attn enrollment leave`.
-- `remote-terminals`: shells and agents on an outpost in tiles beside local ones; their attn commands reach the home.
-- `offline`: a terminal whose outpost is unreachable stays in place, marked, and sends no typing.
-- `ledger-resume`: a closed outpost session's ledger row names its outpost, and resume brings it back there with its conversation and cost. The ledger is [ledger.md](ledger.md)'s.
-- `notebook-sync`: the home and its outposts keep one notebook in sync; the outpost's row shows the sync. The notebook is [notebook.md](notebook.md)'s.
+### Enable and pair
 
-## How to get to it
+Settings, Experimental's Outposts switch `[role="switch"][aria-label="Outposts"]`
+(`app/src/components/SettingsModalSections.tsx`) or `attn settings set outposts_enabled true` on the
+home enables Outposts. Turning it off keeps the list and makes outpost terminals offline. On an
+outpost, `attn settings set outpost_listen <address:port>` sets its listener; `attn settings list --all` shows `outpost_state`, `outpost_home` and `outpost_last_error`. Settings, Outposts has "Add
+an outpost" with Name, Address and "Add outpost" (`app/src/components/OutpostsSettings.tsx`); first
+connection pins its host key and daemon id. Setup is in `docs/using-outposts.md`; opening Settings
+is [settings.md](settings.md).
 
-### People
+### Inspect, repair, update or remove
 
-- Settings, Experimental: the Outposts switch, `[role="switch"][aria-label="Outposts"]` (`app/src/components/SettingsModalSections.tsx`). Opening Settings is [settings.md](settings.md).
-- Settings, Outposts (`app/src/components/OutpostsSettings.tsx`): the "Add an outpost" form with Name, Address and "Add outpost"; each row's state, build, daemon id, host key, last error and notebook sync; and "Update to home build", "Re-pair" and "Remove", which asks "Remove and close N terminals" or "Remove and forget N terminals" with Cancel while the outpost has terminals.
-- The banner "Update outposts", with its dismiss button (`app/src/components/OutpostUpdateBanner.tsx`).
-- Where people see and steer what runs there: an outpost terminal's tile header shows the outpost's name after the title, and an offline one shows the strip "<name> unreachable · typing is not sent" (`app/src/components/SessionTerminalDesktop/DesktopAgentIdentity.tsx`, `app/src/components/SessionTerminalDesktop/DesktopOfflineNotice.tsx`). ⌘D (`terminal.splitVertical`) in an outpost shell opens another shell on the same outpost. A closed outpost session's row in the Sessions ledger shows the outpost's name, and its "Reopen" resumes the session on that outpost (`app/src/components/ledger/SessionsTab.tsx`); [ledger.md](ledger.md) owns the ledger.
-- Their own shell: on the home, `attn settings set outposts_enabled true`; on the outpost, `attn settings set outpost_listen <address:port>`, `attn settings list --all` for `outpost_state`, `outpost_home` and `outpost_last_error`, and `attn enrollment`, below. Setup is in `docs/using-outposts.md`.
+Each outpost row shows connecting, connected, stalled, lost or refused, the build, daemon id, host
+key, last error and notebook sync. "Re-pair" forgets pins and connects again. "Remove" closes its
+terminals in every profile and forgets it, with "Remove and close N terminals" or "Remove and forget
+N terminals" and Cancel when terminals exist. The row's "Update to home build" and the dismissible
+"Update outposts" banner (`app/src/components/OutpostUpdateBanner.tsx`) update outposts on a
+different build: the home builds or downloads the Linux binary, sends and verifies it, then restarts
+the outpost (`internal/daemon/outpost_update.go`). The home holds bridges with 0.5-second
+heartbeats, marks them stalled after 3 seconds of silence and lost after 10, and redials
+(`internal/daemon/outposts.go`, `internal/bridge`). An outpost data folder belongs to the first home
+accepted until `attn enrollment leave`; `attn enrollment status|leave` (`cmd/attn/enrollment.go`)
+inspect or release it on that outpost.
 
-### Agents
+### Run and resume remotely
 
-- `attn terminal open --host <outpost|home>` opens a shell on that machine beside the caller (`cmd/attn/terminal.go`); [terminals.md](terminals.md) owns the verb. An agent on an outpost opens on its own machine by default, and `--host home` reaches the home.
-- `attn delegate --host <outpost|home>` starts a delegate on that machine, where the folder, refs and worktree are checked; [delegation.md](delegation.md) owns it.
-- `attn session reopen <id>` resumes a closed outpost session on the outpost it ran on, and refuses naming the host while that outpost is unreachable or removed (`cmd/attn/session_reopen.go`); [ledger.md](ledger.md) owns the verb.
-- `attn enrollment status` and `attn enrollment leave` (`cmd/attn/enrollment.go`), run on an outpost to see or release the home it is enrolled to.
-- An agent on an outpost runs every other attn verb through its outpost daemon, which reaches the home; when the home is unreachable, the command fails at once and names it.
+An outpost terminal's header names its host; an unreachable host shows "<name> unreachable · typing
+is not sent" and leaves the tile in place
+(`app/src/components/SessionTerminalDesktop/DesktopAgentIdentity.tsx`,
+`app/src/components/SessionTerminalDesktop/DesktopOfflineNotice.tsx`). ⌘D (`terminal.splitVertical`)
+in an outpost shell opens another shell there. Agents use `attn terminal open --host <outpost|home>`
+(`cmd/attn/terminal.go`, [terminals.md](terminals.md)) or `attn delegate --host <outpost|home>`
+([delegation.md](delegation.md)); on an outpost, a terminal opens there by default and `--host home`
+reaches the home. A delegate's folder, refs and worktree are checked on its host. A closed outpost
+session's ledger row names its outpost and "Reopen" resumes it there
+(`app/src/components/ledger/SessionsTab.tsx`); `attn session reopen <id>` refuses and names an
+unreachable or removed host (`cmd/attn/session_reopen.go`, [ledger.md](ledger.md)).
 
-### Triggers
+### Reach the home
 
-- The home dials each outpost, holds the bridge with heartbeats every 0.5 seconds, marks it stalled after 3 seconds of silence and lost after 10, and redials (`internal/daemon/outposts.go`, `internal/bridge`).
-- After a new home build, the banner offers to update every outpost on a different build; the update builds or downloads the Linux binary, sends it, verifies it and restarts the outpost (`internal/daemon/outpost_update.go`).
-- A message or ring to an agent on an unreachable outpost waits at the home and is delivered when it reconnects; [inbox.md](inbox.md) covers delivery.
+Other attn commands from an outpost agent go through its daemon to the home; they fail at once and
+name an unreachable home. Messages or rings to an agent on an unreachable outpost wait at home until
+reconnect ([inbox.md](inbox.md)); notebook sync belongs to [notebook.md](notebook.md).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-outposts.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-outposts-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-outposts.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-outposts-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

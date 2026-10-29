@@ -7,45 +7,49 @@ time. People pick a harness for each agent, set each one's executable and
 default model, and install plugins; Pi itself comes as the bundled `attn-pi`
 plugin. The sidebar can mark each agent with its harness's logo.
 
-## Sub-features
+## Actions and ways in
 
-- `harness-choice`: pick the harness when starting an agent; the default comes from Settings.
-- `harness-settings`: each harness's executable, default model and effort, and auto-approve, plus what it supports, in Settings.
-- `harness-models`: the models each harness offers, and the light, standard and deep tiers mapped to them.
-- `plugins`: install a plugin from a folder or a Git repository, link a folder while developing one, install the bundled `attn-pi`, set a plugin's priority, uninstall.
-- `plugin-driver`: a plugin's driver starts its harness's agents and reports what they do.
-- `harness-logos`: the Claude, Codex or Pi mark beside each agent in the sidebar, or a state dot without it.
-- `shared-conversation-warning`: two tiles on one Claude Code or Pi conversation both warn until one closes.
+### Choose and configure a harness
 
-## How to get to it
+The new-agent picker's "Session agent" choice takes ⌥1–⌥9, or ⌥T for a shell
+(`app/src/components/NewSessionDialog/SessionControls.tsx`; [agent-launch.md](agent-launch.md)).
+Settings, Agents and models (`agents`, `app/src/components/SettingsModalSections.tsx`) sets "Default
+session agent", executable (empty uses PATH), default model and effort, auto-approve, and shows each
+harness's capabilities. Settings, Models (`models`, `app/src/components/ModelTierSettings.tsx`) maps
+light, standard and deep tiers to models; attn asks each harness which models it offers
+(`internal/daemon/harness_models.go`). People and agents can use `attn settings get|set` for
+`new_session_agent`, `claude_executable` and `codex_executable` ([settings.md](settings.md)).
 
-### People
+### Manage plugins
 
-- The new-agent picker's "Session agent" choice, ⌥1 to ⌥9 and ⌥T for a shell (`app/src/components/NewSessionDialog/SessionControls.tsx`); the picker itself is [agent-launch.md](agent-launch.md).
-- Settings, Agents and models (section `agents`, `app/src/components/SettingsModalSections.tsx`): "Default session agent", each harness's executable ("Empty uses the executable on PATH."), default model and effort, "Auto-approve", and what each harness supports.
-- Settings, Models (section `models`, `app/src/components/ModelTierSettings.tsx`): the tiers mapped to each harness's models.
-- Settings, Plugins (section `plugins`): the "Plugin source" field with Browse and "Install Plugin", a card per plugin with its version, Bundled, Installed or Available, its runtime state and health, an Install button for a bundled one, and a priority field.
-- Palette `toggle-harness-logos` ("Hide harness logos in the sidebar" or "Show harness logos in the sidebar", `app/src/application/useAppCommands.tsx`), the setting `sidebar_harness_logos_enabled`.
-- Where people see what agents do: the sidebar row's logo, labelled "<Harness> · <state>" (`app/src/components/SidebarRows.tsx`), and the notice above a tile whose conversation another tile also runs, "This conversation is also open in …" (`app/src/components/SharedConversationNotice.tsx`).
-- Their own shell: the verbs below.
+Settings, Plugins (`plugins`) has "Plugin source", Browse, "Install Plugin", each plugin's version,
+Bundled/Installed/Available status, runtime state and health, Install for bundled plugins, and
+priority. People and agents can run `attn plugin install --path <dir>`, `link --path <dir>`,
+`install-bundled <name>`, `list`, `uninstall <name>` and `remove <name>` (`cmd/attn/plugin.go`),
+each returning JSON. The supervisor starts installed plugins, restarts failures and stops them on
+uninstall (`internal/daemon/plugin_supervisor.go`); a driver starts and reports its harness's agents
+(`internal/daemon/plugin_driver.go`). Pi comes as the bundled `attn-pi` plugin.
 
-### Agents
+### See harness and conversation state
 
-- `attn plugin install --path <dir>`, `link --path <dir>`, `install-bundled <name>`, `list`, `uninstall <name>` and `remove <name>` (`cmd/attn/plugin.go`), each printing JSON.
-- `attn settings get|set` for `new_session_agent`, `claude_executable`, `codex_executable` and `sidebar_harness_logos_enabled` ([settings.md](settings.md)).
-- Prompts: a plugin driver that asks for launch instructions gets the same agent or chief guidance as the other harnesses (`internal/daemon/plugin_launch_instructions.go`); what attn tells every harness is [agent-guidance.md](agent-guidance.md), and Pi's sandbox and Guardian prompts are [auto-mode.md](auto-mode.md).
+Palette `toggle-harness-logos` ("Hide harness logos in the sidebar" or "Show harness logos in the
+sidebar", `app/src/application/useAppCommands.tsx`) and `attn settings get|set sidebar_harness_logos_enabled` control the logo. Sidebar rows label it "<Harness> · <state>"
+(`app/src/components/SidebarRows.tsx`); without a logo they show a state dot. Two tiles on one
+Claude Code or Pi conversation warn "This conversation is also open in …" until one closes
+(`app/src/components/SharedConversationNotice.tsx`).
 
-### Triggers
+### Receive guidance
 
-- The plugin supervisor starts each installed plugin, restarts it when it fails, and stops it on uninstall (`internal/daemon/plugin_supervisor.go`); its driver launches and reports its harness's agents (`internal/daemon/plugin_driver.go`).
-- attn asks each harness which models it offers (`internal/daemon/harness_models.go`).
+A plugin driver that asks for launch instructions gets the same agent or chief guidance as other
+harnesses (`internal/daemon/plugin_launch_instructions.go`). [agent-guidance.md](agent-guidance.md)
+owns that guidance; Pi's sandbox and Guardian prompts are in [auto-mode.md](auto-mode.md).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), in desktop flow, the default.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-harnesses.XXXX)`, and an empty agent folder `$P/codex`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-harnesses.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder `$P/codex`.
 
 `<P>` is the proof folder's path written out.
 

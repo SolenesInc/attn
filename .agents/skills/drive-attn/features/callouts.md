@@ -7,34 +7,19 @@ the named part of the window, one step at a time. The user steps through it
 with Enter or →, goes to a named agent or desktop with Enter, and ends it with
 Esc. Callouts are experimental and off until the user turns them on.
 
-## Sub-features
+## Actions and ways in
 
-- `callout-show`: up to 20 steps, each an anchor and at most 160 characters of text; a new callout replaces the one showing.
-- `callout-anchors`: the fixed anchors (`sidebar`, `home`, `commands`, `garden`, `desktops`, `queue`, `crew`, `settings-button`) with which are on screen now, and the `agent:<who>` and `desktop:<which>` anchors.
-- `callout-stepping`: Enter or → goes to the next step, Enter on an agent or desktop step goes there, Esc or a click outside ends it.
-- `callout-setting`: the experimental switch the user turns on; every call checks it.
-
-## How to get to it
-
-### People
-
-- Settings, Experimental, "Agent callouts" (`app/src/components/SettingsModalSections.tsx`), the home setting `callouts_enabled`.
-- The callout card (`app/src/callouts/CalloutOverlay.tsx`): the pointing agent's name and the step count, the text, "↵ Next", "↵ Done" or "↵ Go there", "→ Next" on agent and desktop steps, and "End callout". A step whose anchor is not on screen says "<anchor> isn't on screen".
-- Where people see what agents do: the card names the agent that points, and the ring marks what it points at.
-- Their own shell: `attn settings set callouts_enabled true`, and `attn callout show --session <id>` to point from a session.
-
-### Agents
-
-- `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--session <id>]` (`cmd/attn/callout.go`).
-- Prompts: the attn skill's callouts reference, on when to point, the anchors and the limits (`internal/prompts/content/skills/attn/references/callouts.md`), named in its capability index (`internal/prompts/content/skills/attn/SKILL.md`).
+- **Enable callouts.** Settings, Experimental, "Agent callouts" (`app/src/components/SettingsModalSections.tsx`) controls the home setting `callouts_enabled`; a person can run `attn settings set callouts_enabled true`. Every call checks the setting.
+- **Point.** Agents run `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--session <id>]` (`cmd/attn/callout.go`); a person can use `--session <id>` to point from a session. A callout has up to 20 steps, each with an anchor and at most 160 characters; a new one replaces the current one. Anchors are `sidebar`, `home`, `commands`, `garden`, `desktops`, `queue`, `crew`, `settings-button`, `agent:<who>` and `desktop:<which>`. The anchors command reports which are on screen. The skill's reference describes when to point, anchors and limits (`internal/prompts/content/skills/attn/references/callouts.md`, named in `internal/prompts/content/skills/attn/SKILL.md`).
+- **Follow or end.** The card names the agent, step count and text, and the ring marks its target (`app/src/callouts/CalloutOverlay.tsx`). Enter or → advances; Enter on an agent or desktop goes there. The card says "↵ Next", "↵ Done" or "↵ Go there", "→ Next" on agent and desktop steps, and "End callout". Escape or clicking outside ends it. An off-screen target says "<anchor> isn't on screen".
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), in desktop flow.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-callouts-proof.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-callouts.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-callouts-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-callouts.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

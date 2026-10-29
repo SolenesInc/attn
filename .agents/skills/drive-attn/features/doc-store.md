@@ -7,33 +7,21 @@ shared state there, change it only if nobody changed it first, and watch a
 query whose window updates as writes land. The garden is stored the same way,
 but `attn doc` cannot read or change it: only `attn seed` reaches it.
 
-## Sub-features
+## Actions and ways in
 
-- `doc-collections`: declare a collection with its queryable fields, redeclare it to add or drop one, remove it with every document, and list them.
-- `doc-crud`: put, get and delete a document; every read and write reports its revision and log position.
-- `doc-conditional`: `--expect <rev>` or `--expect absent` makes a write or delete conditional, refused when the document moved.
-- `doc-query`: filter, sort, page with `--after` and count; one answer, true at the position it reports.
-- `doc-watch`: a live query that prints its window again on every write that changes it, and resumes after a daemon restart with `--resume`.
+People and agents use `attn doc` from the shell (`cmd/attn/doc.go`); nothing in the app shows the store. Agents find the verb in `attn --help`. No bundled plugin uses it and the plugin API has no document methods.
 
-## How to get to it
-
-### People
-
-- Their own shell: the same `attn doc` verbs agents use, below. Nothing in the app shows the store.
-
-### Agents
-
-- `attn doc` (`cmd/attn/doc.go`): `define <namespace> <collection> [field:type ...]`, `undefine`, `collections [--json]`, `put <namespace> <collection> <id> <body|-> [--expect <rev|absent>]`, `get [--json]`, `delete [--expect <rev>]`, `query`, `count` and `watch [--resume]`, with the query flags `--where`, `--sort`, `--desc`, `--limit` and `--after`.
-- Prompts: none. Agents find the verb in `attn --help`, which the attn skill names as the authority for syntax.
-- Plugins: none. No bundled plugin uses the store, and the plugin API has no document methods.
+- **Manage collections.** `attn doc define <namespace> <collection> [field:type ...]` declares queryable fields; redeclare to add or drop fields. `undefine` removes the collection and all documents; `collections [--json]` lists them.
+- **Write and read.** `put <namespace> <collection> <id> <body|-> [--expect <rev|absent>]`, `get [--json]` and `delete [--expect <rev>]` write, read and delete. Reads and writes report revision and log position. `--expect` makes a write or delete conditional, refusing it when the document moved.
+- **Query or watch.** `query`, `count` and `watch [--resume]` take `--where`, `--sort`, `--desc`, `--limit` and `--after`. A query answers at the position it reports; a watch prints its window again when a write changes it and `--resume` continues after a daemon restart.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-doc-store.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-doc-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-doc-store.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-doc-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

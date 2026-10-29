@@ -9,50 +9,29 @@ next occurrence: a new one each time, one per pull request, or one only. The
 user follows runs from a drawer, and jumps to the next run that stopped with a
 question.
 
-## Sub-features
+## Actions and ways in
 
-- `automation-define`: a definition in YAML (`attn.dev/automations/v1alpha1`), validated, applied and shown again; or the same in the app's form.
-- `automation-manual`: a `manual` trigger, run from the CLI or the drawer's run button.
-- `automation-schedule`: a `scheduled` trigger with a cron and a time zone, and `catch_up` of `skip` or `latest` after downtime.
-- `automation-review-request`: a `github_review_requested` trigger that starts a run in a worktree at the pull request's head, one per pull request.
-- `automation-continuity`: `fresh` or `singleton` for schedules; review requests are always one per subject.
-- `automation-runs`: each occurrence's run, its state (`pending`, `delivered`, `failed`, `cancelled`) and its session.
-- `next-run`: go to the next run that stopped and owes the user a turn.
-- `automation-enable`: turn an automation off and on; turning it off cancels its pending runs.
-- `automation-cleanup`: remove finished runs' worktrees, keeping dirty and active ones; delete an automation, keeping its seeds and run history.
-- `automation-guidance`: the opening attn sends a run's agent.
+### Define and control
 
-## How to get to it
+The automations drawer (`app/src/components/AutomationsPanel.tsx`) opens from palette `automations` ("Show automations" or "Hide automations", `app/src/application/useAppCommands.tsx`) or the sidebar icon ("Show Automations" or "Hide Automations", `app/src/application/useAppSidebarActions.tsx`). It offers "New automation", "Close automations", each automation's on/off switch, "Run now" for manual triggers, "Edit", a failure badge and its runs. The form (`app/src/components/automations/AutomationForm.tsx`) has name, folder, trigger, cron with a plain-words reading, continuity, catch-up, repositories, harness and model, executable, prompt, "Save", "Cancel", and "Delete" with "Confirm delete".
 
-### People
+People and agents can run `attn automation` (`cmd/attn/automation.go`): `validate --file`, `apply --file` with `--launch-desktop` and `--desktop-name`, `list`, `show <id>`, `run <id>` with `--input-file`, `--pr-url` or `--request-id`, `runs <id>`, `enable <id>`, `disable <id>`, `delete <id>`, `cleanup <id>` and `set <id> --launch-desktop`; each takes `--profile`. The YAML definition is `attn.dev/automations/v1alpha1`; launch desktops are in [desktops.md](desktops.md). Disabling cancels pending runs. Cleanup removes finished runs' worktrees, keeping dirty and active ones; deletion keeps seeds and run history.
 
-- ⌘⇧J (`session.nextRun`, `app/src/shortcuts/registry.ts`) shows the next automation run that needs the user.
-- Palette (`app/src/application/useAppCommands.tsx`): `automations` ("Show automations" or "Hide automations"), and `next-run-needing-you` ("Next run needing you").
-- Sidebar: the automations icon, labelled "Show Automations" or "Hide Automations" (`app/src/application/useAppSidebarActions.tsx`).
-- The automations drawer (`app/src/components/AutomationsPanel.tsx`): "New automation", "Close automations", and per automation its row, the on and off switch, "Run now" for manual triggers, "Edit", a failure badge, and its runs, each of which opens its session.
-- The form (`app/src/components/automations/AutomationForm.tsx`): name, folder, trigger (manual, scheduled or GitHub review request), cron with a plain-words reading, continuity, catch-up, repositories, harness and model, executable, prompt, "Save", "Cancel" and "Delete" with "Confirm delete".
-- Where people see and steer runs: each run is an agent tile on the automation's launch desktop, marked ⚡ in the sidebar. In queue flow the queue sidebar groups runs under their automation and the queue bar counts them.
-- Settling a run's turn, in either flow: ⌘⇧E, the palette's "Settle this agent" and the ✓ on the run's sidebar row. [queue-flow.md](queue-flow.md) owns and drives them.
-- Their own shell: `attn automation`, below.
+### Trigger and follow runs
 
-### Agents
+A `manual` trigger runs from the CLI or drawer. A `scheduled` trigger uses cron, a time zone and `catch_up` of `skip` or `latest` after downtime; it uses `fresh` or `singleton` continuity. The scheduler checks every minute (`internal/daemon/automations_schedule.go`). When GitHub asks the user for review, `github_review_requested` starts a run at the next pull request refresh in a worktree at its head, one per pull request; a changed head or withdrawn request settles it on refresh (`internal/daemon/automations_github.go`). A run can have a session, and has state `pending`, `delivered`, `failed` or `cancelled`. Its outcome and work becoming ready are seed updates for watchers ([garden.md](garden.md), [inbox.md](inbox.md)).
 
-- `attn automation` (`cmd/attn/automation.go`): `validate --file`, `apply --file` with `--launch-desktop` and `--desktop-name`, `list`, `show <id>`, `run <id>` with `--input-file`, `--pr-url` or `--request-id`, `runs <id>`, `enable <id>`, `disable <id>`, `delete <id>`, `cleanup <id>`, and `set <id> --launch-desktop`; `--profile` on each. The launch desktop is in [desktops.md](desktops.md).
-- Prompts: a run's opening, which carries the delegation identity, the automation's prompt, the seed it reports to, and for a pull request its identity and the untrusted-data rules (`internal/prompts/content/delegation/identity.md`, `internal/prompts/content/automation/target.md`, `data.md`, `local-review.md`).
+A run is an agent tile on its launch desktop, marked ⚡ in the sidebar; in queue flow the sidebar groups runs by automation and the queue bar counts them. The drawer opens each run's session. ⌘⇧J (`session.nextRun`, `app/src/shortcuts/registry.ts`) or palette `next-run-needing-you` ("Next run needing you") shows the next run owing a turn. ⌘⇧E, palette "Settle this agent" and the run's sidebar ✓ settle its turn in either flow ([queue-flow.md](queue-flow.md)).
 
-### Triggers
-
-- A schedule comes due: the scheduler checks every minute and starts the occurrence's run (`internal/daemon/automations_schedule.go`).
-- A pull request asks the user for review on GitHub: the next pull request refresh starts a run, and a changed head or a withdrawn request settles it (`internal/daemon/automations_github.go`).
-- A run's outcome and its work becoming ready are seed updates for whoever watches its seed ([garden.md](garden.md), [inbox.md](inbox.md)).
+A run's opening carries its delegation identity, automation prompt, reporting seed and, for a pull request, identity and untrusted-data rules (`internal/prompts/content/delegation/identity.md`, `internal/prompts/content/automation/target.md`, `data.md`, `local-review.md`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`); the rest need only the daemon.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-automations.XXXX)`.
-- A run folder, `R=$(mktemp -d /tmp/drive-attn-automation-run.XXXX)`, holding this fixture as `$R/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-automations.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- A run folder, `R=$(mktemp -d /tmp/drive-attn-automation-run.XXXX) && echo "export R=$R" >> $DRIVE_ENV`, holding this fixture as `$R/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -61,7 +40,7 @@ Preconditions:
 ]}
 ```
 
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-automation-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-automation-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -135,6 +114,7 @@ EOF
 
 ```bash
 G=$(mktemp -d /tmp/drive-attn-review.XXXX)
+echo "export G=$G" >> $DRIVE_ENV
 git -C $G init -q
 git -C $G remote add origin https://mock.github.local/owner/repo.git
 cp $R/.attn-mock-agent.json $G/

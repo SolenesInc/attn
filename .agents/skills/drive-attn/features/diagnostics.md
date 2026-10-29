@@ -10,50 +10,32 @@ explain`, in [agent-state.md](agent-state.md). Typing that stops working has
 its own walk through `attn debug input` in
 `docs/diagnosing-terminal-input.md`.
 
-## Sub-features
+## Actions and ways in
 
-- `preflight`: one read-only check of tools, paths, routing, protocol and launch settings, naming the cause and the action for each failure.
-- `daemon-log`: the instance's `daemon.log`, filtered by time and pattern.
-- `frontend-logs`: the app's terminal incidents, lifecycle diagnostics and input decisions; `attn debug ls` lists the files.
-- `diagnostic-report`: a private report file saved from the palette, with optional recent terminal output.
-- `event-bus`: the log's window, producers, consumers, lag and pin alarm; a trim; a consumer disabled and enabled, from the CLI or Settings › Event bus.
-- `task-runner`: Settings › Task runner lists background tasks and retries a failed or dead one.
-- `db-backup`: a rotating backup when the daemon starts and every 6 hours, keeping the newest 12, plus a snapshot before each migration.
-- `db-restore`: swap a backup in while the daemon is stopped, keeping the replaced database beside it.
-- `migration-failure`: the app's screen after a data migration failed at startup, with the details to copy.
-- `diag-endpoint`: `ATTN_PPROF` opens a loopback pprof and `/debug/vars` endpoint on the daemon, for `docs/perf-testing.md`.
+### Inspect the instance
 
-## How to get to it
+A maintainer runs `attn preflight [--agent <name>] [--model <name>] [--effort <level>] [--app-path <path>] [--json]` for a read-only check of tools, paths, routing, protocol and launch settings, including cause and action for failures (`cmd/attn/preflight.go`). `attn debug ls|incidents|diagnostics|input|daemon-log` reads the daemon log and app terminal incidents, lifecycle diagnostics and input decisions, with `--tail`, `--grep` and for the daemon log `--since` (`cmd/attn/debug.go`).
 
-### People
+A maintainer can start a daemon with `ATTN_PPROF=1` or a port for a loopback pprof and `/debug/vars` endpoint (`internal/config/config.go`, `internal/diag/diag.go`, `docs/perf-testing.md`). `attn --help` lists these commands; no prompt attn sends names them. The repository's `CLAUDE.md` lists them for maintainers under Diagnostics.
 
-- Palette (`app/src/application/useAppCommands.tsx`): `create-diagnostic-report` ("Create diagnostic report") opens the report dialog (`app/src/components/DiagnosticReportPrompt.tsx`), which saves `attn-<time>.attn-report.json` into Downloads and shows it in Finder.
-- Settings › Task runner (`backgroundTasks`, `app/src/components/BackgroundTasksSettings.tsx`): background tasks, most recently updated first, each with its state, `kind:subject`, attempts and last error; Retry on a failed or dead one, and "Try again" when the list cannot load.
-- Settings › Event bus (`eventBus`, `app/src/components/EventBusSettings.tsx`): the log's size, producers, consumers with Disable or Enable (`[data-testid="bus-consumer-toggle-<consumer>"]`) and health. Opening the settings dialog is in [settings.md](settings.md).
-- The migration failure screen (`app/src/components/MigrationFailureScreen.tsx`): "attn seems broken after migration", the failure's facts and "Copy details".
-- A maintainer's shell: the verbs below, and `ATTN_PPROF=1` (or a port) in the environment of a daemon the run starts, which opens the loopback endpoint (`internal/config/config.go`, `internal/diag/diag.go`).
+### Inspect tasks and the event bus
 
-### Agents
+Settings › Task runner (`backgroundTasks`, `app/src/components/BackgroundTasksSettings.tsx`) lists tasks most recently updated first, each with state, `kind:subject`, attempts and last error; a failed or dead one offers Retry and a list that cannot load offers "Try again". A background task that exhausts its retries raises a notification.
 
-- `attn preflight [--agent <name>] [--model <name>] [--effort <level>] [--app-path <path>] [--json]` (`cmd/attn/preflight.go`).
-- `attn debug ls|incidents|diagnostics|input|daemon-log` with `--tail`, `--grep` and, for the daemon log, `--since` (`cmd/attn/debug.go`).
-- `attn bus status [--json]`, `trim`, `disable <consumer>` and `enable <consumer>` (`cmd/attn/bus.go`).
-- `attn db restore [path|latest]` (`cmd/attn/db.go`).
-- No prompt attn sends names these verbs; `attn --help` lists them, and the repository's `CLAUDE.md` lists them for maintainers under Diagnostics.
+Settings › Event bus (`eventBus`, `app/src/components/EventBusSettings.tsx`) shows the log's size, producers, consumers, lag and health, with Disable or Enable (`[data-testid="bus-consumer-toggle-<consumer>"]`); opening Settings is in [settings.md](settings.md). `attn bus status [--json]`, `trim`, `disable <consumer>` and `enable <consumer>` provide the CLI (`cmd/attn/bus.go`). An enabled consumer pinning the log past `ATTN_BUS_PIN_ALARM_AGE` raises a warning.
 
-### Triggers
+### Save a report or restore
 
-- The daemon writes a backup when it starts and every 6 hours (`internal/daemon/backup.go`).
-- An enabled consumer that pins the log past `ATTN_BUS_PIN_ALARM_AGE` raises a warning notification.
-- A background task that exhausts its retries raises a notification.
-- A data migration that fails at startup leaves `migration-failure.json` in the data folder (`internal/daemon/migration_failure.go`), and the app opens on the migration failure screen (`app/src-tauri/core/src/migration_failure.rs`).
+Palette `create-diagnostic-report` ("Create diagnostic report", `app/src/application/useAppCommands.tsx`) opens the report dialog (`app/src/components/DiagnosticReportPrompt.tsx`). It saves private `attn-<time>.attn-report.json` in Downloads, optionally including recent terminal output, and shows it in Finder.
+
+The daemon backs up at startup and every 6 hours, keeping the newest 12 plus pre-migration snapshots (`internal/daemon/backup.go`). `attn db restore [path|latest]` swaps a backup in while the daemon is stopped and keeps the replaced database beside it (`cmd/attn/db.go`). A data migration that fails at startup leaves `migration-failure.json` (`internal/daemon/migration_failure.go`) and opens the failure screen (`app/src-tauri/core/src/migration_failure.rs`, `app/src/components/MigrationFailureScreen.tsx`) with "attn seems broken after migration", facts and "Copy details".
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance. The CLI steps need only the daemon; the palette and settings steps need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-diagnostics.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-diagnostics.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 - **Preflight.** Daemon only, `./attn preflight --agent claude` prints its checks and `attn preflight: FAIL (2 failed, 0 warnings)`, because the two `protocol.` checks need an installed app, and exits 1. With the app installed, `"$(./attn instance resolve --field appDaemon)" preflight --agent claude` reports `PASS`. `--json` prints the stable report.
 - **Daemon log.** `./attn debug daemon-log --grep "daemon started"` prints `[<time>] INFO: daemon started`. `./attn debug daemon-log --since 10m --grep "database backup written"` names the backup taken at start. `./attn debug ls` prints `frontend debug dir:` with its files, then `daemon.log:` with its path and size.

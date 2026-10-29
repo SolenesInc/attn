@@ -210,8 +210,9 @@ by what people or agents want to do. Put each outcome beside all its ways in:
 shortcuts and registry ids, palette ids, menus, controls, CLI verbs, prompts
 and triggers. Name the source for each way in. Say who can use it and any
 precondition that changes the outcome. Link another feature when it owns the
-way in. Describe a behavior once; use a separate sub-feature list only when it
-helps navigate a feature. Older entries still group ways in by audience.
+way in. Lead with the outcome in direct language. Describe a behavior once;
+keep details that explain it or make a drive reproducible, and cut the rest.
+Use a separate sub-feature list only when it helps navigate a feature.
 
 The remaining sections follow in this order:
 
@@ -280,12 +281,15 @@ path and scenario id must exist at HEAD.
 How the recipes were checked: [garden.md](garden.md)'s Driving it ran live
 on a named instance, daemon and CLI only, at commit `b3d0df90a`: every step
 from the instance shell and the Agents door, where the mock agent tended,
-watched, armed a harvest on merge and harvested. Its steps that arm a
-harvest without a url and take the arming back, its `bridge` steps, and
-every other file's Driving it, come from reading the source and the CLI's
-help, and have not run yet. The env file and its prefix replaced the
-shell that run used; they were checked with a stand-in `attn`, not on an
-instance. A file whose recipe runs live says so here.
+watched, armed a harvest on merge and harvested. Its steps that arm a harvest
+without a url and take the arming back, and its `bridge` steps, have not run.
+That run used a persistent shell, before the env file and its prefix replaced
+it. At commit `65f8977df`, the desktop overview shortcut and agent-guidance
+launch and presence steps ran on a named instance using the env file. The
+vision-check text and JSON calls ran with a stand-in, and the document store
+declare, write, query, count and remove steps ran on a daemon-only instance.
+The full recipes have not run. Other steps come from reading source and CLI
+help.
 
 ### Agents and sessions
 

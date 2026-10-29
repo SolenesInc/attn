@@ -9,45 +9,60 @@ pull requests waiting on the user. The notifications popover holds what attn
 itself needs the user to know, such as a duty that failed for good. The app
 opens on home.
 
-## Sub-features
+## Actions and ways in
 
-- `dashboard`: the Sessions card, grouped by state; in queue flow "Your turn" first, then "Settled".
-- `all-settled`: queue flow's "All settled" banner, with what still runs and "Take me to the next agent that needs you".
-- `snoozed-group`: snoozed agents, soonest first, each with its due time and an unsnooze button.
-- `home-cards`: the Asks group, the Chief of Staff card and the Pull Requests card; [asks.md](asks.md), [crew.md](crew.md) and [pull-requests.md](pull-requests.md) own their content.
-- `notifications`: the popover of attn's own notifications, newest first: unread marked, a row expands to its detail and actions, and "Mark all read".
-- `critical-strip`: an unread critical notification shows as a strip at the top of the sidebar.
-- `whats-new`: the intro that opens on a new release, and the home banner that replays it.
-- `toasts`: short-lived errors and undo offers in a corner of the window; a click goes to the session or runs the action.
+### Open home and find sessions
 
-## How to get to it
+⌘⇧H (`session.goToDashboard`, `app/src/shortcuts/registry.ts`), palette `home` ("Home",
+`app/src/application/useAppCommands.tsx`), `[data-testid="sidebar-home"]`
+(`app/src/components/Sidebar.tsx`, `app/src/components/QueueSidebar.tsx`) or the rail's
+`[aria-label="Home"]` (`app/src/components/SidebarChrome.tsx`) opens home. A
+`[data-testid="session-<session>"]` row opens an agent and shows its state, activity, turn age and
+due time (`app/src/components/Dashboard.tsx`). In queue flow "Your turn" comes before "Settled";
+"All settled" shows what still runs and `[data-testid="follow-next-turn"]` offers "Take me to the
+next agent that needs you". `[data-testid="session-group-snoozed-header"]` expands snoozed agents,
+soonest first, and `[data-testid="session-wake-<session>"]` unsnoozes one. Home also hosts "+ New"
+([agent-launch.md](agent-launch.md)), `[data-testid="settings-button"]`
+([settings.md](settings.md)), Asks, Chief of Staff and Pull Requests ([asks.md](asks.md),
+[crew.md](crew.md), [pull-requests.md](pull-requests.md)). Agents have no home verb: their state
+groups them ([agent-state.md](agent-state.md)), `attn ask` adds to Asks, and `attn turn open` adds
+to "Your turn" ([queue-flow.md](queue-flow.md)); `attn callout` can point at `home` and
+`settings-button` ([callouts.md](callouts.md)).
 
-### People
+### Read notifications
 
-- ⌘⇧H (`session.goToDashboard`, `app/src/shortcuts/registry.ts`).
-- Palette (`app/src/application/useAppCommands.tsx`): `home` ("Home"), `notifications` ("Show notifications" or "Hide notifications"), `whats-new` ("What's new").
-- Sidebar: the Home row `[data-testid="sidebar-home"]` above everything (`app/src/components/Sidebar.tsx`, `app/src/components/QueueSidebar.tsx`), and `[aria-label="Home"]` on the rail (`app/src/components/SidebarChrome.tsx`). The bell, `[aria-label="Show Notifications"]`, with an `[aria-label="Unread notifications"]` dot when something is unread (`app/src/application/useAppSidebarActions.tsx`). The critical strip, `button.critical-strip` (`app/src/components/CriticalNotificationStrip.tsx`).
-- On home (`app/src/components/Dashboard.tsx`): a session row `[data-testid="session-<session>"]` opens the agent; the snoozed group's header `[data-testid="session-group-snoozed-header"]` expands it, and `[data-testid="session-wake-<session>"]` ends a snooze; the follow checkbox in `[data-testid="follow-next-turn"]`; "Replay the intro" and `[aria-label="Dismiss the intro banner"]` on the intro banner. Home also hosts "+ New" ([agent-launch.md](agent-launch.md)), the settings gear `[data-testid="settings-button"]` ([settings.md](settings.md)) and the cards above.
-- The notifications popover, `[role="dialog"][aria-label="Notifications"]` (`app/src/components/NotificationsPanel.tsx`): rows that expand on click and mark themselves read, each row's action buttons such as a retry, and "Mark all read".
-- What's new, `.whats-new-modal` (`app/src/components/WhatsNewModal.tsx`): ← and → step through it, Enter advances, Escape or "Close what's new" closes it for this release.
-- Toasts, `.toast` with role `alert` (`app/src/components/Toast.tsx`): a row's button goes to its session or runs its action, such as Undo.
-- Where people see what agents do: each row's state, activity line, turn age and due time, and what still runs under "All settled".
+The sidebar bell `[aria-label="Show Notifications"]`, with `[aria-label="Unread notifications"]`
+when unread (`app/src/application/useAppSidebarActions.tsx`), or palette `notifications` ("Show
+notifications"/"Hide notifications") opens `[role="dialog"][aria-label="Notifications"]`
+(`app/src/components/NotificationsPanel.tsx`). Newest rows come first; clicking expands and marks a
+row read, action buttons can retry, and "Mark all read" clears unread state. An unread critical
+notification appears in `button.critical-strip`
+(`app/src/components/CriticalNotificationStrip.tsx`). Notifications arise from duties needing the
+user: permanently failed background tasks with retry (`internal/daemon/notifications.go`), blocked
+auto-mode calls (`internal/daemon/automode.go`), a durable consumer holding the event log open
+(`internal/daemon/bus_pin_alarm.go`), a plugin that stopped restarting
+(`internal/daemon/plugin_runtime.go`), and a notebook conflict copy
+(`internal/daemon/notebook_sync.go`).
 
-### Agents
+### Read the intro
 
-None. What agents do shows here: their state groups them ([agent-state.md](agent-state.md)), `attn ask` adds a row to Asks ([asks.md](asks.md)), and `attn turn open` puts them under "Your turn" ([queue-flow.md](queue-flow.md)). `attn callout` can point at the `home` and `settings-button` anchors ([callouts.md](callouts.md)).
+What's new opens when the current release's intro has not been shown
+(`app/src/hooks/useWhatsNew.ts`). Palette `whats-new` ("What's new") opens the intro. The home banner offers
+"Replay the intro" and `[aria-label="Dismiss the intro banner"]`. In `.whats-new-modal`, ← and → step,
+Enter advances, and Escape or "Close what's new" closes it for this release
+(`app/src/components/WhatsNewModal.tsx`).
 
-### Triggers
+### Act on a toast
 
-- attn raises a notification when one of its duties needs the user: a background task that failed for good, with a retry (`internal/daemon/notifications.go`); a call auto mode blocked (`internal/daemon/automode.go`); a durable event-log consumer holding the log open (`internal/daemon/bus_pin_alarm.go`); a plugin it stopped restarting, which is critical (`internal/daemon/plugin_runtime.go`); and a notebook conflict copy (`internal/daemon/notebook_sync.go`).
-- What's new opens by itself when the app has not shown the current release's intro (`app/src/hooks/useWhatsNew.ts`).
+`.toast` with role `alert` shows short-lived errors and undo offers; its row button goes to the
+session or runs the action, such as Undo (`app/src/components/Toast.tsx`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers), launched fresh. Run the first two steps before the baseline's `bridge dismiss_whats_new`, which dismisses the intro and its banner; afterwards it changes nothing.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-home.XXXX)`, and an agent folder, `A=$(mktemp -d /tmp/drive-attn-home-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-home.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an agent folder, `A=$(mktemp -d /tmp/drive-attn-home-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

@@ -7,53 +7,65 @@ log what happened and prove their checks from the CLI. People read the garden
 beside their work, search it, move seeds across its board and judge the
 checks.
 
-## Sub-features
+## Actions and ways in
 
-- `seed-plant`: plant a seed with a markdown body and numbered checks.
-- `plot`: plant a plot and its children in one move; children run in parallel unless one blocks another.
-- `seed-tend`: claim a seed; one tender at a time.
-- `seed-moves`: park, harvest, wither and replant; a harvest or wither keeps its reason, and a park's comment lands on the log.
-- `harvest-when-merged`: arm a seed to harvest itself when its pull request merges, named by url or the session's single open one; clear it to take the arming back.
-- `seed-notes`: the seed's log; a handoff note primes the next tender.
-- `seed-checks`: what a seed must prove: report, confirm, reject, uncheck and reopen.
-- `seed-watch`: follow a seed and its children; a ringing note or check move and every state move send the tender and watchers a seed update.
-- `seed-edges`: blocks, part-of and discovered-from links; `ready` lists what nothing blocks.
-- `seed-artifacts`: files a seed owns, attached and detached.
-- `seed-search`: keyword search across the profile's garden, closed seeds included.
-- `garden-frame`: the garden as a drawer or fullscreen, with a list view and, fullscreen, a board view.
-- `garden-board`: columns Ready, In progress, Parked and Closed; moving a card moves the seed.
-- `seed-tile`: a seed opened as a tile beside the agent that tends it.
-- `seed-chip`: the seed a session tends, on its tile header, with its popover.
-- `garden-review`: an advisory review of growing seeds that went quiet.
-- `seed-export`: write a seed's body to a markdown file to read and annotate.
-- `garden-guidance`: what attn tells its agents about the garden.
+### Open and navigate the garden
 
-## How to get to it
+⌘⇧T (`board.open`, `app/src/shortcuts/registry.ts`) opens the last frame, initially the drawer;
+press it again to switch between drawer and fullscreen, Escape to close. Palette `garden-frame` ("Open the garden") and `show-tended-seeds` ("Show <agent>'s seeds",
+offered when the active agent tends a seed or has a stake,
+`app/src/application/useAppCommands.tsx`) and the sidebar's "Show the garden" or "Hide the garden"
+icon (`app/src/application/useAppSidebarActions.tsx`) also open it. The garden's search, seed and
+plot rows, trail and frame button ("Expand the garden" or "Return the garden to the dock") live in
+`app/src/components/GardenPanel.tsx`: arrows walk rows, ← climbs out of a plot, fullscreen → drills
+in, and `/` returns to search. Fullscreen's "Garden view" picks list or board
+(`app/src/components/GardenFrame.tsx`).
 
-### People
+### Create and find work
 
-- ⌘⇧T (`board.open`, `app/src/shortcuts/registry.ts`) opens the garden in the frame it last had, the drawer at first. Pressed again, it switches between the drawer and fullscreen. Escape closes it.
-- Palette (`app/src/application/useAppCommands.tsx`): `garden-frame` ("Open the garden" while closed), and `show-tended-seeds` ("Show <agent>'s seeds"), offered while the active agent tends a seed or has a stake.
-- Sidebar: the garden icon, labelled "Show the garden" or "Hide the garden" (`app/src/application/useAppSidebarActions.tsx`).
-- In the garden (`app/src/components/GardenPanel.tsx`): the search field, seed and plot rows, the trail back up a plot, the frame button ("Expand the garden" or "Return the garden to the dock"), "Review garden", and a seed's page with its checks ("Confirm C1", "Reject…", "Reopen") and the buttons "Open as tile", "Resume", "Handover" and "Send to Chief". Arrow keys walk rows, ← climbs out of a plot, fullscreen → drills into one, and `/` returns to search.
-- Fullscreen, the "Garden view" switch picks list or board (`app/src/components/GardenFrame.tsx`). On the board, drag a card to a column or open its menu to park, harvest, wither or replant it with a reason (`app/src/components/GardenBoard.tsx`).
-- On an agent's tile header, the chip of the seed it tends opens the seed's popover (`app/src/components/PaneSeedChip.tsx`).
-- Settings, Background agents, Garden advisor: the agent that classifies seeds during a review (`app/src/components/GardenAdvisorSettings.tsx`).
-- Where people see what agents do: the tender and state on each row and card, notes on the seed's log, the chip on the agent's tile, and the seed tile `attn open` puts beside the agent.
-- Their own shell: the same `attn seed` verbs agents use, below. Outside attn, `--profile <name|id>` picks the profile when there are several.
+People and agents use `attn seed plant`, `plot`, `ls`, `search`, `ready`, `show`, `edit` and
+`export` (`cmd/attn/seed.go`). Plant takes a markdown body and numbered checks; plot creates a
+parent and children, parallel unless blocked. Search includes closed seeds; ready lists those
+nothing blocks. Export writes markdown for reading and annotation. Outside attn, `--profile <name|id>` picks a profile when several exist.
 
-### Agents
+### Claim, move and hand over work
 
-- `attn seed` (`cmd/attn/seed.go`): `plant`, `plot`, `ls`, `search`, `ready`, `show`, `notes`, `edit`, `tend`, `park`, `harvest` (with `--when-merged [<pr-url>]`, which takes the session's single open pull request when it gets no url, and `--when-merged --clear`, which takes the arming back), `wither`, `replant`, `note` (with `--handoff` and `--ring`), `check add|edit|remove|restore|report|confirm|reject|uncheck|reopen`, `watch`, `unwatch`, `link`, `unlink`, `attach`, `detach`, `export`, `review`, `prime`, `guide`, `send-to-chief`.
-- `attn seed handover` is retired; it names `attn delegate --seed <id> --handover --cwd <path>`, which delegation owns. `send-to-chief` hands the seed to the chief, which crew owns.
-- `attn open <seed-id>` opens the seed as a tile beside the caller; `attn ticket` prints `attn seed --help` (`cmd/attn/main.go`).
-- Prompts: the garden contract in every session's instructions, also printed by `attn seed prime` (`internal/prompts/content/garden.md`); the craft `attn seed guide` prints (`internal/prompts/content/resources/seed-guide.md`); ready seeds and their handoffs at session start (`internal/prompts/content/session/garden-ready.md`, `garden-row.md`, `garden-handoff.md`); the seed update an agent reads from its inbox (`internal/prompts/content/session/garden-update.md`).
+`attn seed tend`, `park`, `harvest`, `wither` and `replant` manage a seed's state and single tender.
+Harvest and wither keep their reason; a park comment goes on the log. `harvest --when-merged [<pr-url>]` arms an automatic harvest, using the session's single open pull request when no URL is
+given; `--when-merged --clear` cancels it. The next pull request refresh after a merge harvests an
+armed seed (`internal/daemon/garden_harvest_when.go`). On the board, drag a card to Ready, In
+progress, Parked or Closed, or use its menu to park, harvest, wither or replant with a reason
+(`app/src/components/GardenBoard.tsx`). A seed page offers "Resume", "Handover" and "Send to Chief";
+`attn seed handover` is retired and names `attn delegate --seed <id> --handover --cwd <path>`, owned
+by [delegation.md](delegation.md). `attn seed send-to-chief` hands it to the chief, owned by
+[crew.md](crew.md).
 
-### Triggers
+### Read and open a seed
 
-- A state move, a ringing note or check move, an armed or cleared harvest condition, and a seed's last blocker closing send the tender and watchers a seed update, which rings them (`internal/daemon/garden_nudges.go`; the rules are in `docs/inbox.md`).
-- A seed armed with `harvest --when-merged` harvests itself when its pull request merges, on the next pull request refresh (`internal/daemon/garden_harvest_when.go`).
-- The garden advisor classifies seeds during a review and can draft a handoff (`internal/daemon/garden_advisor.go`, prompts in `internal/prompts/content/garden-advisor/`).
+Rows and cards show tender and state, the log shows notes, and the seed chip on an agent's tile
+opens its popover (`app/src/components/PaneSeedChip.tsx`). The seed page's "Open as tile" opens a seed tile; an agent can run `attn open <seed-id>` to open one beside itself; `attn ticket` prints `attn seed --help`
+(`cmd/attn/main.go`).
+
+### Log, prove and link work
+
+`attn seed notes`, `note` (`--handoff`, `--ring`), `check add|edit|remove|restore|report|confirm|reject|uncheck|reopen`, `link`, `unlink`, `attach` and
+`detach` manage the log, checks, blocks/part-of/discovered-from edges and owned files. A handoff
+note primes the next tender. The seed page offers "Confirm C1", "Reject…" and "Reopen" for checks.
+`watch` and `unwatch` follow a seed and its children; a state move, ringing note or ringing check move, an
+armed or cleared harvest condition, or a seed's last blocker closing sends the tender and watchers a
+seed update and rings them (`internal/daemon/garden_nudges.go`, `docs/inbox.md`).
+
+### Review and learn the garden
+
+"Review garden" and `attn seed review` invoke the advisor to review growing seeds that went quiet
+and possibly draft a handoff (`internal/daemon/garden_advisor.go`,
+`internal/prompts/content/garden-advisor/`); Settings, Background agents, Garden advisor chooses
+that agent (`app/src/components/GardenAdvisorSettings.tsx`). `attn seed prime` prints the garden
+contract included in each session (`internal/prompts/content/garden.md`); `attn seed guide` prints
+the craft (`internal/prompts/content/resources/seed-guide.md`). Ready seeds and handoffs arrive at
+session start (`internal/prompts/content/session/garden-ready.md`, `garden-row.md`,
+`garden-handoff.md`), and seed updates arrive in the inbox
+(`internal/prompts/content/session/garden-update.md`).
 
 ## Driving it
 
@@ -61,8 +73,8 @@ Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`); the rest need only the daemon.
 - The instance's notebook folder exists: `./attn journal append --entry "drive-attn setup"` prints `appended to journal/<date>.md`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-garden.XXXX)`, holding `plot.json`: `{"title":"Recipe plot","body":"Two steps.","children":[{"title":"Draft step","blocks":["check-step"]},{"title":"Check step"}]}`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-garden-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-garden.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `plot.json`: `{"title":"Recipe plot","body":"Two steps.","children":[{"title":"Draft step","blocks":["check-step"]},{"title":"Check step"}]}`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-garden-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

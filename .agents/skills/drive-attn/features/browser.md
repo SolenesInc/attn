@@ -6,41 +6,28 @@ captures screenshots or PDFs; the user watches the same tile, navigates it,
 and signs in by hand when a site asks. Each desktop has at most one browser
 tile, and its cookies and storage outlive restarts.
 
-## Sub-features
+## Actions and ways in
 
-- `browser-open`: open a URL in the desktop's browser tile, beside the caller; opening again navigates the same tile.
-- `browser-navigate`: the address field, back, forward and reload.
-- `browser-snapshot`: the page's URL, title, text and interactive elements, each with a reference to act on.
-- `browser-locate`: find or wait for an element by CSS, XPath, link text, role and name, text, label, placeholder, alt, title or test id.
-- `browser-input`: click, type into a field, press a key, scroll.
-- `browser-capture`: save a screenshot or a PDF of the page to a private file.
-- `browser-cookies`: list the page's cookies; sign-ins persist.
-- `browser-command`: call the WebDriver-shaped API directly.
+### Open and navigate
 
-## How to get to it
+People and agents run `attn browser open <url>` (`cmd/attn/main.go`). It opens beside the caller or navigates the existing browser tile. Without a session the person's shell uses the current desktop of the most recently used profile. No key or palette command opens a browser.
 
-### People
+The tile has "Browser address" (Enter navigates), "Reload browser", "Close tile" and the page itself (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`, `BrowserAddressForm.tsx`, `BrowserTileBody.tsx`). File → "Close Pane" (⌘W) closes it when the page has focus (`app/src-tauri/core/src/lib.rs`); the sidebar row offers "Reload <title>" and "Close <title>" while the pointer is over it (`app/src/components/SidebarRows.tsx`). The tile shows the page as the agent drives it. The user types credentials themselves; agents are told not to.
 
-- No key or palette command opens a browser tile; an agent or the user's shell does.
-- In the tile (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`, `BrowserAddressForm.tsx`, `BrowserTileBody.tsx`): the "Browser address" field (Enter navigates), "Reload browser", "Close tile", and the page itself, clicked and typed into like any browser.
-- File → "Close Pane" (⌘W) closes the browser tile while the page has focus (`app/src-tauri/core/src/lib.rs`).
-- The tile's row in the sidebar (`app/src/components/SidebarRows.tsx`): "Reload <title>" and "Close <title>" buttons, which take clicks while the pointer is over the row.
-- Where people see what agents do: the tile shows the page the agent drives as it changes, beside the agent's tile. The user types credentials themselves; agents are told not to.
-- Their own shell: the same `attn browser` verbs agents use, below. Without a session they act on the current desktop of the profile used most recently.
+### Inspect and drive
 
-### Agents
+`attn browser snapshot` reads URL, title, text and interactive elements with references. `find --using <strategy> --value <value> [--name <name>] [--all]` and `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]` locate elements by CSS, XPath, link text, role and name, text, label, placeholder, alt, title or test id. `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back` and `forward` drive the page. `cookies` lists cookies; `screenshot [path]` and `pdf [path] [--params <json>]` save private files; `command <action> [--params <json>]` calls the WebDriver-shaped API. Each takes `--session <id>` (`cmd/attn/main.go`).
 
-- `attn browser` (`cmd/attn/main.go`): `open <url>`, `snapshot`, `find --using <strategy> --value <value> [--name <name>] [--all]`, `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]`, `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back`, `forward`, `cookies`, `command <action> [--params <json>]`, `screenshot [path]`, `pdf [path] [--params <json>]`. Each takes `--session <id>`.
-- Prompts: the attn skill's browser reference, on the workflow, sessions, credentials and page content as untrusted (`internal/prompts/content/skills/attn/references/browser.md`), named in its capability index (`internal/prompts/content/skills/attn/SKILL.md`).
+The skill's browser reference covers the workflow, sessions, credentials and page content as untrusted (`internal/prompts/content/skills/attn/references/browser.md`, named in `internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The app is the browser host; without it every verb but `open` fails.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-browser.XXXX)`, holding `page.html`: `<title>Drive page</title><h1>Drive heading</h1><input aria-label="Search"><button onclick="document.querySelector('h1').textContent='Clicked '+document.querySelector('input').value">Go</button><a href="other.html">Other</a>`, and `other.html`: `<title>Other page</title><h1>Other heading</h1>`. The headings differ from the titles so a text wait matches the page, not its `<title>`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-browser.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `page.html`: `<title>Drive page</title><h1>Drive heading</h1><input aria-label="Search"><button onclick="document.querySelector('h1').textContent='Clicked '+document.querySelector('input').value">Go</button><a href="other.html">Other</a>`, and `other.html`: `<title>Other page</title><h1>Other heading</h1>`. The headings differ from the titles so a text wait matches the page, not its `<title>`.
 - A local page server: `{ python3 -m http.server 8765 --bind 127.0.0.1 --directory $P & echo "export SRV=$!" >> $DRIVE_ENV; }`. Stop it at the end with `kill $SRV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-browser-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-browser-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

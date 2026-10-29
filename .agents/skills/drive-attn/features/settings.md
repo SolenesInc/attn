@@ -1,30 +1,15 @@
 # Settings
 
-The settings dialog and `attn settings`: home settings shared with outposts,
-machine settings per machine. People change attn in a dialog that saves each
-change as they make it; people and agents read and change the same settings
-from the CLI. A home setting is decided by the home and copied read-only to
-its outposts; a machine setting, such as a harness executable or the worktree
-sweep, belongs to the machine that holds it. Each section of the dialog
-belongs to the feature it configures; this file covers the dialog, the CLI and
-Appearance.
+People change settings in a dialog; people and agents also use `attn settings`.
+The home decides home settings and copies them read-only to outposts; machine
+settings belong to each machine. This file covers the dialog, CLI and
+Appearance. The features below own their other settings.
 
-## Sub-features
+## Actions and ways in
 
-- `settings-dialog`: the dialog, its grouped sections, search and close.
-- `settings-autosave`: switches and choices save on click; text fields save on Enter or when focus leaves them, say "Saving…" and "Saved", and offer Retry when the daemon refuses the value.
-- `settings-cli`: `attn settings list`, `get` and `set`, with read-only computed values under `--all`.
-- `home-and-machine`: home settings decided at the home and read-only on outposts; machine settings per machine.
-- `experimental`: the switches for features still in development, off by default.
-- `appearance`: theme, and text size for the app and for the garden.
-- `mobile-and-hosts`: Tailscale Serve for a phone's browser, and the GitHub hosts attn found.
-
-## How to get to it
-
-### People
+### Open and navigate settings
 
 - ⌘, (`ui.openSettings`, `app/src/shortcuts/registry.ts`) opens the dialog, and closes it when open. It is protected: it can be rebound but never unbound.
-- ⌘=, ⌘- and ⌘0 (`ui.increaseFontSize`, `ui.decreaseFontSize`, `ui.resetFontSize`) change the app's text size, which Appearance also shows.
 - Palette (`app/src/application/useAppCommands.tsx`): `settings` ("Settings").
 - Home screen: the gear, `[data-testid="settings-button"]` (`app/src/components/Dashboard.tsx`).
 - In the dialog (`app/src/components/SettingsModal.tsx`, sections in `app/src/components/useSettingsModalState.ts`): the nav buttons `[data-testid="settings-nav-<section>"]`, "Search settings", the close button `[data-testid="settings-close"]`, the backdrop, and Escape. The sections and the feature that owns each:
@@ -33,21 +18,28 @@ Appearance.
   - Connectivity: Mobile and hosts (`connectivity`), Tailscale Serve for a phone's browser (`tailscale_enabled`) and the GitHub hosts attn found for [pull-requests.md](pull-requests.md); no other file owns Tailscale, so this one does. Outposts (`outposts`), shown while Outposts is on, [outposts.md](outposts.md).
   - Extensions: Plugins (`plugins`), [harnesses.md](harnesses.md).
   - System: Experimental (`experimental`), each switch with its feature; Task runner (`backgroundTasks`) and Event bus (`eventBus`), [diagnostics.md](diagnostics.md); Analytics (`analytics`), shown while analytics is on, [telemetry.md](telemetry.md).
-- Where people see what agents do: a setting an agent changes with `attn settings set` shows in the open dialog, as the toggle that reads its value.
-- Their own shell: `attn settings`, below.
 
-### Agents
+### Change settings
+
+Experimental features are off by default. Switches and choices save on click; text fields save on Enter or blur, show "Saving…" and "Saved", and offer Retry if the daemon refuses the value.
 
 - `attn settings` (`cmd/attn/settings.go`): `list` (with `--all` and `--json`), `get <key>` (with `--json`) and `set <key> <value>`. `set` to `""` restores the default where the key's description allows it. A key family such as `default_model_<harness>` is set through a concrete key, such as `default_model_claude`.
-- Prompts: the attn skill tells agents to read and change daemon settings with `attn settings list`, `get` and `set`, and that settings apply across all profiles (`internal/prompts/content/skills/attn/SKILL.md`).
+- The attn skill tells agents to read and change daemon settings with `attn settings list`, `get` and `set`, and that settings apply across all profiles (`internal/prompts/content/skills/attn/SKILL.md`).
+- A setting an agent changes with `attn settings set` shows in the open dialog, as the toggle that reads its value.
+
+### Change appearance
+
+Appearance controls the theme and the text size for the app and garden.
+
+- ⌘=, ⌘- and ⌘0 (`ui.increaseFontSize`, `ui.decreaseFontSize`, `ui.resetFontSize`) change the app's text size, which Appearance also shows.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The shell steps need only the daemon.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-settings.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-settings-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-settings.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-settings-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

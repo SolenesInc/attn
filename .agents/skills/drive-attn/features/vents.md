@@ -1,43 +1,26 @@
 # Vents
 
-Agents report what got in their way, for the user to review later, like a bug
-report. An agent that meets a broken attn command, instructions that
-contradict each other or a capability it had to work around sends a vent and
-keeps working; nobody replies. The user reads vents in Settings › Analytics,
-opens the session or transcript behind one, dismisses it or plants a seed from
-it, and can send attn vents to attn's maintainers. Vents need usage analytics
-on when the session launched.
+Agents report problems they hit and keep working; nobody replies. The user
+can review and triage vents, and send attn vents to the maintainers. Vents
+need usage analytics on when the session launched.
 
-## Sub-features
+## Actions and ways in
 
-- `vent-send`: an agent files a vent about attn, or about its other tools when tool vents are on; one per turn, up to 16 KB of text.
-- `vent-withdraw`: an agent takes back its own vent, to replace it with one that covers both.
-- `vent-guidance`: what attn tells a session about vents at launch.
-- `vent-review`: the user reads new vents above done ones, with the agent, model, build, stake seed and transcript behind each.
-- `vent-triage`: open the session, transcript or stake seed, dismiss or restore, and undo, from single keys.
-- `vent-plant`: plant a seed from a vent; undo withers it.
-- `vent-kind`: refile a vent under attn or tools.
-- `vent-share`: send an attn vent to attn's maintainers or keep it here; tool vents never leave the machine. The upload is in [telemetry.md](telemetry.md).
+### File or withdraw a vent
 
-## How to get to it
+Agents run `attn vent --about attn|tools "<text>"`, or supply text with `--file <path>` or stdin; `attn vent withdraw <id>` takes back a vent, and `--session <id>` acts as another session (`cmd/attn/vent.go`). An agent may file one vent per turn, up to 16 KB, and replace a withdrawn vent with one covering both issues.
 
-### People
+Launch instructions include `internal/prompts/content/session/vent-guidance.md` when usage analytics was on, then `vent-tools.md` if tool vents were on or `vent-attn-only.md`, then `vent-rules.md`. [agent-guidance.md](agent-guidance.md) covers delivery.
 
-- Settings › Analytics, the Vents list (`app/src/components/Analytics/AnalyticsSettings.tsx`). Reaching the section is in [telemetry.md](telemetry.md); it exists only while usage analytics is on.
-- Keys on the list (`app/src/components/Analytics/useVentTriage.tsx`): `j`/`k` or the arrows move, `o` opens the vent's live session, `t` opens its transcript, `g` its stake seed, `p` plants a seed, `d` dismisses or restores, `s` files it under attn or tools, `u` undoes the last action, `x` sends or keeps it while sharing is on. A row click selects a vent, and the inspector's buttons (Open session, Transcript, Stake seed, Plant seed, Dismiss or Restore, File under attn or tools, Send or Keep here) do what the keys do.
-- Machine settings (`m`, `app/src/components/Analytics/AnalyticsMachine.tsx`): "Send vents", listed while sharing or `analytics.share_vents` is on, and "Tool vents", the same as `analytics.share_vents` and `analytics.tool_vents` in `attn settings`.
-- Where people see what agents do: the count of new vents on the Vents tab, each row's session label, `tools` mark and age, and the inspector's context.
-- Their own shell: `attn settings set analytics.enabled|analytics.tool_vents|analytics.share_vents true|false` (`cmd/attn/settings.go`).
+### Review and triage
 
-### Agents
+Settings › Analytics has the Vents list while usage analytics is on (`app/src/components/Analytics/AnalyticsSettings.tsx`; [telemetry.md](telemetry.md)). It shows new vents above done ones, with the session label, `tools` mark, age and a count of new vents. The inspector shows the agent, model, build, stake seed and transcript behind each vent.
 
-- `attn vent --about attn|tools "<text>"`, or the text from `--file <path>` or stdin, and `attn vent withdraw <id>` (`cmd/attn/vent.go`). `--session <id>` acts as another session.
-- Prompts: the vent guidance in the launch instructions, only when usage analytics was on at launch: `internal/prompts/content/session/vent-guidance.md`, then `vent-tools.md` when tool vents were on or `vent-attn-only.md`, then `vent-rules.md`. How launch instructions reach each harness is in [agent-guidance.md](agent-guidance.md).
+In the list (`app/src/components/Analytics/useVentTriage.tsx`), `j`/`k` or arrows move, `o` opens the live session, `t` its transcript, `g` its stake seed, `p` plants a seed, `d` dismisses or restores, `s` files it under attn or tools, `u` undoes the last action, and `x` sends or keeps it while sharing is on. A row click selects; inspector buttons Open session, Transcript, Stake seed, Plant seed, Dismiss or Restore, File under attn or tools, and Send or Keep here do the same actions. Undoing a planted seed withers it. An hourly job deletes dismissed and withdrawn vents after 30 days (`internal/daemon/vents.go`).
 
-### Triggers
+### Choose what to share
 
-- An hourly job deletes dismissed and withdrawn vents after 30 days (`internal/daemon/vents.go`).
-- With sharing and `analytics.share_vents` on, each new attn vent is queued for the next upload.
+Machine settings (`m`, `app/src/components/Analytics/AnalyticsMachine.tsx`) has "Send vents", shown while sharing or `analytics.share_vents` is on, and "Tool vents". People can run `attn settings set analytics.enabled|analytics.tool_vents|analytics.share_vents true|false` (`cmd/attn/settings.go`). With sharing and `analytics.share_vents` on, new attn vents queue for upload; tool vents stay on this machine.
 
 ## Driving it
 
@@ -45,8 +28,8 @@ Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline's `ATTN_ANALYTICS_INGEST_URL` keeps a stray click on a sharing control away from the real service ([telemetry.md](telemetry.md)).
 - Usage analytics and tool vents on before the agent launches: `./attn settings set analytics.enabled true` prints `analytics.enabled = true`, and `./attn settings set analytics.tool_vents true` prints `analytics.tool_vents = true`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-vents.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-vents-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-vents.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-vents-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

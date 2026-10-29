@@ -8,50 +8,54 @@ from what agents open, the home screen and the attention drawer list the
 user's own pull requests and review requests from GitHub, with approve, merge
 and mute.
 
-## Sub-features
+## Actions and ways in
 
-- `pr-record`: a session records the pull request it opened; Claude Code and Codex record it from `gh pr create` on their own.
-- `pr-forget`: drop a recorded pull request from a session.
-- `pr-header`: the recorded pull request on the agent's tile header, with its status and a popover.
-- `pr-refresh`: recorded pull requests refresh at a pace that slows as they cool and stops once merged.
-- `pr-watch`: a durable watch in green, codex or formal-review mode; updates arrive as inbox notices.
-- `pr-wait-ready`: wait in the foreground for the next actionable update, outside the daemon.
-- `pr-list`: the user's pull requests and review requests polled from GitHub, on the home screen and in the attention drawer.
-- `pr-actions`: approve, merge, mute a pull request, mute its author or its repository, and unmute them in Settings.
-- `pr-open`: open a pull request in a new worktree session.
-- `pr-guidance`: what attn tells agents whose harness cannot report pull requests.
+### See and act on GitHub pull requests
 
-## How to get to it
+⌘⇧P (`dock.attention`, labelled "PRs drawer", `app/src/shortcuts/registry.ts`), palette `attention`
+("Open attention drawer", `app/src/application/useAppCommands.tsx`) and the sidebar dock's "PRs"
+chip (`app/src/components/SidebarChrome.tsx`, [shortcuts.md](shortcuts.md)) open the attention
+drawer (`app/src/components/AttentionDrawer.tsx`): sessions needing attention, then "Review
+Requested" and "Your PRs", each with Approve, Merge and Mute. ⌘R (`session.refreshPRs`) polls the
+list now. The home screen's "Yours" and "Review requested" cards open GitHub and offer "New worktree
+session", Approve, Merge with confirmation, Mute and mute-author; a review group's ⊘ mutes the
+repository (`app/src/components/Dashboard.tsx`, `app/src/components/PRActions.tsx`,
+[home.md](home.md)). Settings, Attention queue lists muted repositories and authors with Unmute
+(`app/src/components/SettingsModalSections.tsx`); Settings, Files and locations sets the Projects
+Directory used for new worktree sessions. The daemon polls GitHub every 90 seconds, on a named
+instance only with the mock GitHub or `ATTN_GITHUB_POLLING=on` (`internal/daemon/daemon.go`,
+`internal/daemon/github_polling.go`).
 
-### People
+### Record and inspect an agent's pull request
 
-- ⌘⇧P (`dock.attention`, labelled "PRs drawer", `app/src/shortcuts/registry.ts`) toggles the attention drawer: sessions needing attention, then "Review Requested" and "Your PRs", each pull request with Approve, Merge and Mute (`app/src/components/AttentionDrawer.tsx`).
-- ⌘R (`session.refreshPRs`) polls GitHub for the list now.
-- Palette (`app/src/application/useAppCommands.tsx`): `attention` ("Open attention drawer").
-- The sidebar dock's "PRs" chip opens the same drawer (`app/src/components/SidebarChrome.tsx`); the dock is set up in [shortcuts.md](shortcuts.md).
-- Home screen (`app/src/components/Dashboard.tsx`): the "Yours" and "Review requested" sections. Each card opens the pull request on GitHub and carries "New worktree session", Approve, Merge (with a confirmation), Mute and mute-author buttons (`app/src/components/PRActions.tsx`); a review group's ⊘ mutes the repository. The home screen itself is [home.md](home.md).
-- Settings, Attention queue: muted repositories and authors, each with Unmute (`app/src/components/SettingsModalSections.tsx`). Settings, Files and locations: the Projects Directory where "New worktree session" finds the repository.
-- Where people see what agents do: the agent's tile header shows `PR`, the repository's name and number with `↗` (`atlas#418 ↗`), and its status. A click opens the pull request's popover with its state, checks, review and merge status, and every pull request the session recorded (`app/src/components/SessionProvenance.tsx`, `app/src/components/SessionPullRequestPopover.tsx`).
-- Their own shell: `attn pr` with `--session <id>`, below.
+People and agents run `attn pr record`, `forget` or `ls` (`cmd/attn/pr.go`,
+`cmd/attn/pr_session.go`); inside a session it is implied, outside `--session <id>` selects it.
+Claude Code or Codex running `gh pr create` records the URL from its output automatically
+(`internal/hooks/pullrequest.go`); other harnesses get self-report guidance to run `attn pr record`
+(`internal/prompts/content/session/pull-request-guidance.md`). The tile header shows `PR`,
+repository and number with `↗` (e.g. `atlas#418 ↗`) and status; clicking opens a popover of state,
+checks, review, merge status and all recorded PRs (`app/src/components/SessionProvenance.tsx`,
+`app/src/components/SessionPullRequestPopover.tsx`). Recorded PRs refresh every 30 seconds while
+watched or recently active, then every 2 and 10 minutes as they cool, stopping once merged
+(`internal/daemon/session_pull_request_refresh.go`).
 
-### Agents
+### Watch or wait for readiness
 
-- `attn pr` (`cmd/attn/pr.go`, `cmd/attn/pr_session.go`): `record`, `forget`, `ls`, `watch` (`--mode green|codex|formal-review`, `--reviewer`), `unwatch`, `status`, and `wait-ready` (with `--repo`, `--mode`, `--timeout`, `--interval`, `--since`, `--reset`, `--ignore-author`, `--json`). Inside a session the session is implied; outside, `--session <id>` names it. `wait-ready` exits 0 ready, 1 checks failed, 2 usage, 3 changes requested, 4 new feedback, 5 error, merged or closed, and 124 timeout.
-- Prompts: the self-report guidance for harnesses without hooks, which asks the agent to run `attn pr record` (`internal/prompts/content/session/pull-request-guidance.md`). A watch's update reaches the agent as an inbox notice, "Pull request monitor: <what happened> for <pull request>." (`internal/daemon/session_pull_request_refresh.go`); how it is read is [inbox.md](inbox.md).
-
-### Triggers
-
-- A Claude Code or Codex agent that runs `gh pr create` has the URL in the command's output recorded on its session (`internal/hooks/pullrequest.go`).
-- Recorded pull requests refresh on a 30-second tick: every 30 seconds while watched or recently active, then every 2 and 10 minutes as they cool. A watched pull request's change in readiness or new feedback becomes an inbox notice, which rings the agent; a codex-mode watch is also checked again at its settling deadline (`internal/daemon/session_pull_request_refresh.go`).
-- The daemon polls GitHub for the user's pull requests every 90 seconds, on a named instance only with the mock GitHub or `ATTN_GITHUB_POLLING=on` (`internal/daemon/daemon.go`, `internal/daemon/github_polling.go`).
+People and agents run `attn pr watch` with `--mode green|codex|formal-review` and `--reviewer`; `unwatch` and `status`
+control or inspect the durable watch. Outside a session, these use `--session <id>`. A change in readiness or new feedback becomes an inbox notice,
+"Pull request monitor: <what happened> for <pull request>.", and rings the agent; a codex watch is
+also checked at its settling deadline (`internal/daemon/session_pull_request_refresh.go`,
+[inbox.md](inbox.md)). `attn pr wait-ready` waits in the foreground with `--repo`, `--mode`,
+`--timeout`, `--interval`, `--since`, `--reset`, `--ignore-author`, `--json`; it exits 0 ready, 1
+checks failed, 2 usage, 3 changes requested, 4 new feedback, 5 error/merged/closed, and 124 timeout.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The daemon started with the mock GitHub exports of the env file ([../SKILL.md](../SKILL.md)), so the home screen lists the fixture's pull requests instead of "GitHub polling is off for instance <name>".
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-pull-requests.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-pr-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`. `unwatch` comes before `watch` because the first turn whose `includes` matches wins:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-pull-requests.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-pr-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`. `unwatch` comes before `watch` because the first turn whose `includes` matches wins:
 
 ```json
 {"version": 1, "turns": [

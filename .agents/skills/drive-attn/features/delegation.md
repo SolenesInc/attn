@@ -8,50 +8,33 @@ the instructions, harness, model and effort for one type of work; the user
 keeps the roles, and agents choose among them. A handover gives a seed and its
 claim to a fresh agent while the previous one keeps running.
 
-## Sub-features
+## Actions and ways in
 
-- `delegate-brief`: start a delegate on new work; the brief becomes its seed, part of the dispatcher's stake when it has one.
-- `delegate-seed`: start a delegate on an existing seed nobody active tends.
-- `handover`: a new session takes over a seed and its claim, with a note; the previous agent keeps running.
-- `roles`: the user's roles, their alternatives and the fallback, kept in revisions with history and rollback.
-- `workflow-skill`: "Add Attn roles" adds attn's own roles and installs the attn-workflow skill they use beside the attn skill.
-- `delegate-placement`: the delegate opens beside the dispatcher, or on a named desktop, without changing what the user sees.
-- `delegate-checkout`: the machine, folder and Git checkout the delegate works in.
-- `delegation-status`: a stable request id to check or retry a delegation whose answer was lost.
-- `delegation-chain`: the dispatcher, peers and delegates of a session, as a card the keyboard walks.
-- `jump-to-dispatcher`: go from a delegate to the session that started it.
-- `seed-continue`: Resume and Handover on a seed's page.
-- `delegation-guidance`: what attn tells dispatchers and delegates, including the plan sign-off before dispatch and independent design candidates.
+### Delegate or hand over
 
-## How to get to it
+An agent or a person's shell uses `attn delegate` (`cmd/attn/main.go`): `--brief`, `--brief-file` or `--seed` chooses new work or an existing seed nobody active tends; a brief becomes a child of the dispatcher's stake when it has one. `--handover` with `-m` transfers a seed and its claim while the prior agent keeps running. The command takes `--cwd`, `--reuse-checkout`, `--new-worktree`, `--branch`, `--existing-branch`, `--from`, `--worktree-path`, `--allow-worktree-reuse`, `--host`, `--role`, `--choice`, `--fallback`, `--agent`, `--model`, `--provider`, `--effort`, `--name`, `--desktop`, `--priority`, `--yolo`, `--request-id`, `--source-session` and `--profile`. The delegate opens beside the dispatcher or on a named desktop without changing what the user sees. `attn delegate status <request-or-operation-id>` checks a delegation whose answer was lost; `--request-id` is its stable retry key. A person's shell supplies `--source-session <id>`.
 
-### People
+A seed's garden page has "Resume" and "Handover", with a form for "What should the new agent know?", working folder, Git checkout and agent (`app/src/components/GardenPanel.tsx`, `app/src/components/DelegationCheckoutFields.tsx`). `attn seed handover` is retired and names `attn delegate --seed <id> --handover --cwd <path>`; garden lists it. The delegate is a full session beside its dispatcher, with role on its tile header and stake on its seed chip; people can type into it.
 
-- ⌘⇧↑ (`session.orchestrator`, `app/src/shortcuts/registry.ts`) shows the shown agent's dispatcher.
-- Palette (`app/src/application/useAppCommands.tsx`): `show-delegation-chain` ("Show delegation chain"), offered while an agent is active.
-- Moving an agent with its delegates, from the palette or by dragging its sidebar row with ⌥ held, is [desktops.md](desktops.md)'s.
-- The chain trigger on a sidebar row and on the agent's tile header, which names the role, opens the delegation chain card; hovering a sidebar row's label opens it too (`app/src/components/DelegationChain.tsx`). In the card, ↑ ↓ Home End walk the chain, Enter opens an agent, Escape closes it.
-- A seed's page in the garden: "Resume" and "Handover", with the handover form that asks "What should the new agent know?", the working folder, the Git checkout and the agent (`app/src/components/GardenPanel.tsx`, `app/src/components/DelegationCheckoutFields.tsx`).
-- Settings, Delegation: the roles table, its switch, "Add Attn roles", which also installs the attn-workflow skill for each harness that has a skills folder, alternatives and "Anything else", the fallback (`app/src/components/DelegationSettings.tsx`).
-- Where people see and steer what agents do: the delegate is a full session in a tile beside its dispatcher, with its role on the tile header and the seed it tends on its seed chip. People type into it like any agent.
-- Their own shell: `attn delegate --source-session <id>` and `attn delegate roles`, below.
+### Choose roles
 
-### Agents
+Settings, Delegation, has the roles table and switch, alternatives, "Anything else" fallback and "Add Attn roles", which also installs attn-workflow for each harness with a skills folder (`app/src/components/DelegationSettings.tsx`). `attn delegate roles` (`cmd/attn/delegation_roles.go`) lists the catalog; `show`, `history`, `add`, `set`, `copy`, `rm`, `enable`, `disable`, `apply` and `rollback` manage revisions and history.
 
-- `attn delegate` (`cmd/attn/main.go`): `--brief`, `--brief-file` or `--seed`; `--handover` with `-m`; `--cwd` with `--reuse-checkout`, `--new-worktree`, `--branch`, `--existing-branch`, `--from`, `--worktree-path` and `--allow-worktree-reuse`; `--host`; `--role`, `--choice`, `--fallback`, `--agent`, `--model`, `--provider`, `--effort`; `--name`, `--desktop`, `--priority`, `--yolo`, `--request-id`, `--source-session`, `--profile`.
-- `attn delegate status <request-or-operation-id>` (`cmd/attn/main.go`).
-- `attn delegate roles` (`cmd/attn/delegation_roles.go`): with no command, the catalog agents choose from; `show`, `history`, `add`, `set`, `copy`, `rm`, `enable`, `disable`, `apply`, `rollback`.
-- `attn session list --tree` nests live sessions under their dispatchers (`cmd/attn/session_ledger.go`).
-- `attn seed handover` is retired and names `attn delegate --seed <id> --handover --cwd <path>`; garden lists it.
-- Prompts: the delegation boundary in every session's instructions (`internal/prompts/content/delegation-boundary.md`); the delegate's opening, which names its seed (`internal/prompts/content/delegation/identity.md`, `opening.md`, `seed.md`); the role's execution guidance and the catalog text (`internal/prompts/content/delegation-preferences/`); the attn skill's delegation references (`internal/prompts/content/skills/attn/references/delegation.md`, `delegated-agent.md`, `delegation-roles.md`); the attn-workflow skill, which tells a Pathfinder how to hand off a plan and when to run prototypes or independent candidates, and an Orchestrator how to delegate Builders (`internal/prompts/content/skills/attn-workflow/SKILL.md`, `references/planning.md`, `references/prototype.md`, `references/orchestration.md`). Without a daemon, `attn prompts show attn-workflow-skill` lists the skill and its references and `attn prompts render attn-workflow-skill planning` prints one ([agent-guidance.md](agent-guidance.md)).
+### Follow the chain
+
+⌘⇧↑ (`session.orchestrator`, `app/src/shortcuts/registry.ts`) shows the displayed agent's dispatcher. Palette `show-delegation-chain` ("Show delegation chain", `app/src/application/useAppCommands.tsx`) is offered while an agent is active. The sidebar row and tile-header chain triggers name the role and open the chain card; hovering the sidebar label also opens it (`app/src/components/DelegationChain.tsx`). ↑ ↓ Home End walk it, Enter opens an agent and Escape closes it. `attn session list --tree` nests live sessions under dispatchers (`cmd/attn/session_ledger.go`). Moving an agent with its delegates is owned by [desktops.md](desktops.md).
+
+### Guidance
+
+Every session gets the delegation boundary (`internal/prompts/content/delegation-boundary.md`); a delegate's opening names its seed (`internal/prompts/content/delegation/identity.md`, `opening.md`, `seed.md`). Role execution guidance and catalog text are in `internal/prompts/content/delegation-preferences/`; attn's references are `internal/prompts/content/skills/attn/references/delegation.md`, `delegated-agent.md` and `delegation-roles.md`. The attn-workflow skill covers Pathfinder plan sign-off before dispatch, handoff, prototypes and independent candidates, and Orchestrator delegation to Builders (`internal/prompts/content/skills/attn-workflow/SKILL.md`, `references/planning.md`, `references/prototype.md`, `references/orchestration.md`). Without a daemon, `attn prompts show attn-workflow-skill` lists it and `attn prompts render attn-workflow-skill planning` prints a reference ([agent-guidance.md](agent-guidance.md)).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`); the rest need only the daemon.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-delegation.XXXX)`.
-- A delegate folder, `D=$(mktemp -d /tmp/drive-attn-delegate.XXXX)`, outside Git, holding this fixture as `$D/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-delegation.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- A delegate folder, `D=$(mktemp -d /tmp/drive-attn-delegate.XXXX) && echo "export D=$D" >> $DRIVE_ENV`, outside Git, holding this fixture as `$D/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -61,7 +44,7 @@ Preconditions:
 ]}
 ```
 
-- A dispatcher folder, `A=$(mktemp -d /tmp/drive-attn-dispatcher.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`. Each turn takes the delegate folder from the prompt:
+- A dispatcher folder, `A=$(mktemp -d /tmp/drive-attn-dispatcher.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`. Each turn takes the delegate folder from the prompt:
 
 ```json
 {"version": 1, "turns": [

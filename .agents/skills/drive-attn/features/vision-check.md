@@ -1,26 +1,13 @@
 # Vision check
 
-Ask a model one question about an image. An agent that took a screenshot
-asks, for example, whether a button is blue, and gets one answer back on
-stdout, with the model, cost and turns on stderr. It is one call to Claude
-Code, whatever harness the agent runs in, and it never touches the daemon.
+Ask Claude Code one question about an image and get one answer. It runs without
+a daemon, whatever harness the agent uses.
 
-## Sub-features
+## Actions and ways in
 
-- `vision-ask`: one image (`.png`, `.jpg`, `.jpeg`, `.gif` or `.webp`) and one question, one answer.
-- `vision-json`: `--json` prints one line with the answer, model, cost, turns and `is_error`.
-- `vision-model`: `--model` picks the model (`sonnet` by default) and `--timeout` bounds the call (120 seconds by default).
+### Ask about an image
 
-## How to get to it
-
-### People
-
-- Their own shell: the same verb agents use, below. Nothing in the app reaches it.
-
-### Agents
-
-- `attn vision-check <image> <question> [--model sonnet] [--timeout 120s] [--json]` (`cmd/attn/vision_check.go`).
-- Prompts: none. Agents find the verb in `attn --help`.
+People and agents run `attn vision-check <image> <question> [--model sonnet] [--timeout 120s] [--json]` (`cmd/attn/vision_check.go`). It accepts `.png`, `.jpg`, `.jpeg`, `.gif` and `.webp`. The answer goes to stdout; model, cost and turns go to stderr. `--json` instead returns those fields, the answer and `is_error` together. `--model` defaults to `sonnet`, and `--timeout` defaults to 120 seconds. The app has no way in; agents find the verb in `attn --help`.
 
 ## Driving it
 
@@ -30,7 +17,7 @@ Preconditions:
 - A proof folder holding a stand-in `claude` and an image, so no real model is called:
 
 ```bash
-P=$(mktemp -d /tmp/drive-attn-vision-check.XXXX); mkdir -p $P/bin
+P=$(mktemp -d /tmp/drive-attn-vision-check.XXXX) && echo "export P=$P" >> $DRIVE_ENV && mkdir -p $P/bin
 cat > $P/bin/claude <<EOF
 #!/bin/sh
 printf '%s\n' "\$@" > $P/argv

@@ -10,42 +10,53 @@ Every `attn` command acts on the instance its shell selects. The full launch
 with the mock agent and the mock GitHub, the doctor and the cleanup are in
 [../SKILL.md](../SKILL.md); `docs/instances.md` covers the rest.
 
-## Sub-features
+## Actions and ways in
 
-- `instance-select`: `attn instance-env <name>` selects an instance in a shell and clears inherited routing; `--unset` returns the shell to production.
-- `instance-status`: `attn instance` shows the selection, its resources and what is running; `attn instance list` shows every instance on the machine.
-- `instance-resolve`: `attn instance resolve` prints an instance's resources as JSON, or one `--field`; tooling reads paths from it.
-- `instance-install`: `make install INSTANCE=<name>` builds and installs an instance's app, `make install-daemon INSTANCE=<name>` swaps only its daemon, `make run INSTANCE=<name>` installs and opens it, and `make dev` does all of it for `dev`.
-- `daemon-lifecycle`: `attn daemon ensure` starts the instance's daemon, or restarts one that does not match the binary; `attn daemon stop` stops it.
-- `instance-clean`: `attn instance clean <name>` stops the app, daemon and workers and removes the app, its local data and the data folder; `attn instance stop-app` only quits the app.
-- `build-identity`: `attn version` names the build and its source fingerprint; the app refuses a daemon of another instance.
-- `instance-marker`: a non-production app names its instance in the sidebar: `instance <name>` while expanded, `<name>` while collapsed or on the queue bar.
-- `instance-origin`: `attn instance set-origin` records the worktree an install came from, and `list` shows it.
-- `linux-scheme`: `attn instance register-scheme` claims the instance's deep-link scheme on Linux.
+Maintainers and agents can use the shell verbs below. Instance terminals carry their routing
+(`ATTN_INSTANCE`, `ATTN_SOCKET_PATH`, `ATTN_DATA_DIR` and the rest), so their `attn` commands reach
+that instance (`internal/daemon/spawn_routing.go`); no prompt names these verbs.
 
-## How to get to it
+### Select and inspect an instance
 
-### People
+`attn instance-env <name>` selects one and clears inherited routing; `--unset` returns to production
+and `--fish` emits fish syntax (`cmd/attn/instance_env.go`). `attn instance` or `status` shows the
+selection, resources and running processes; `list` shows instances and their origins. `resolve`
+prints resource JSON or one `--field`; tooling reads paths from it. `set-origin` records the source
+worktree; `env` and `tauri-config` also belong to `attn instance` (`cmd/attn/instance.go`).
 
-- A maintainer's shell: the verbs below.
-- Make targets (`Makefile`): `build`, `install INSTANCE=<name>`, `install-daemon INSTANCE=<name>`, `run INSTANCE=<name>`, and for `dev` the aliases `dev`, `install-dev` and `install-daemon-dev`.
-- In the app: the instance marker `[data-testid="sidebar-instance-marker"]`, which reads `instance <name>` in an expanded sidebar (`app/src/components/SidebarHeader.tsx`, in both flows) and `<name>` in the queue bar that replaces a collapsed sidebar in queue flow (`app/src/components/QueueBar.tsx`); a collapsed sidebar in desktop flow shows the name with the title `Instance: <name>` and no such `data-testid` (`app/src/components/SidebarChrome.tsx`); the refusal of a daemon from another instance (`app/src/utils/buildInstance.ts`); and why its daemon would not start, while the app retries.
+### Build and run
 
-### Agents
+`make build`, `make install INSTANCE=<name>`, `make install-daemon INSTANCE=<name>` and `make run INSTANCE=<name>` build, install, swap the daemon or install and open the app (`Makefile`); `dev`,
+`install-dev` and `install-daemon-dev` are aliases for `dev`. `attn daemon ensure|stop` starts,
+restarts a mismatched daemon or stops it (`cmd/attn/main.go`). An app starts its instance daemon
+when opened and retries until it starts (`ensure_daemon` in `app/src-tauri/core/src/lib.rs`, called
+from `app/src/hooks/useDaemonSocket.ts`).
 
-- `attn instance status|resolve|list|clean|stop-app|set-origin|tauri-config|register-scheme|env` (`cmd/attn/instance.go`); `attn instance-env <name>|--unset`, with `--fish` for fish (`cmd/attn/instance_env.go`); `attn daemon ensure|stop` and `attn version [--json]` (`cmd/attn/main.go`).
-- No prompt attn sends names these verbs. The agents an instance runs reach that instance with their own `attn` commands, because every terminal it starts carries its routing: `ATTN_INSTANCE`, `ATTN_SOCKET_PATH`, `ATTN_DATA_DIR` and the rest (`internal/daemon/spawn_routing.go`).
+### Check the build and routing
 
-### Triggers
+`attn version [--json]` names the build and source fingerprint (`cmd/attn/main.go`). A
+non-production app shows `[data-testid="sidebar-instance-marker"]` as `instance <name>` in the
+expanded sidebar (`app/src/components/SidebarHeader.tsx`) and `<name>` in the queue bar
+(`app/src/components/QueueBar.tsx`); a collapsed desktop-flow sidebar shows the name with title
+`Instance: <name>` and no marker test id (`app/src/components/SidebarChrome.tsx`). The app refuses
+another instance's daemon (`app/src/utils/buildInstance.ts`) and shows why its own daemon failed
+while retrying.
 
-- An app starts its instance's daemon when it opens and retries until it starts (`ensure_daemon` in `app/src-tauri/core/src/lib.rs`, called from `app/src/hooks/useDaemonSocket.ts`).
+### Stop and clean
+
+`attn instance stop-app` quits the app; `attn instance clean <name>` stops the app, daemon and
+workers and removes the app, app data and data folder (`cmd/attn/instance.go`).
+
+### Register a Linux deep link
+
+`attn instance register-scheme` claims the instance's scheme (`cmd/attn/instance.go`).
 
 ## Driving it
 
 Preconditions:
 
 - This checkout built (`make build`) and the env file written, as [../SKILL.md](../SKILL.md)'s Launch says. Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`; `<name>` below.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-instances.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-instances.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 - **Select.** Run `./attn instance-env <name>`: it prints an `unset` line for each inherited routing variable, then `export ATTN_INSTANCE=<name>`, the lines the env file opens with. `./attn instance` prints `attn instance: <name>`, then `data dir`, `socket` with `(no daemon socket)`, `ws port`, `bundle id`, `app` with `(not installed)` and `mock gh`, and no `CONFLICT` line.
 - **Resolve.** `./attn instance resolve --field dataDir` prints the data folder. `./attn instance resolve` prints JSON with `"instance": "<name>"`, `wsPort`, `appDaemon` and `mockGitHubPort`. `./attn instance resolve --instance other --field wsPort` resolves another name without selecting it. `./attn instance tauri-config` prints the build's config overlay: `productName` and `identifier` match `appName` and `bundleId`, and the deep-link scheme is `deepLinkScheme`. `./attn instance env <name>` prints the same lines as `./attn instance-env <name>`.

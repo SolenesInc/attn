@@ -12,42 +12,46 @@ drives them. Reading another agent's screen with `attn agent peek` is
 [agent-state.md](agent-state.md)'s, and what a ring's run does to the queue
 is [queue-flow.md](queue-flow.md)'s.
 
-## Sub-features
+## Actions and ways in
 
-- `peer-message`: one agent sends another a message; the sender gets a receipt at once.
-- `msg-status`: the sender checks whether its message is queued, notified or read.
-- `inbox-read`: read up to 20 unread items, oldest first, or one rung peer message again by id.
-- `mailbox`: address a crew member, the chief or a seed, so the item follows whoever holds that job.
-- `ring`: one prompt per address with unread items; at most 3 attempts per item, 5 minutes apart.
-- `inbox-guidance`: what attn tells agents about messages and rings.
+### Send and check a message
 
-## How to get to it
+`attn agent msg <session-or-member-or-seed> "text"` sends a peer message and returns a receipt;
+`attn agent msg-status <message-id>` checks whether it is queued, notified or read
+(`cmd/attn/agent.go`). Each accepts `--json`; `msg` takes `--source-session`, `msg-status` takes
+`--session`. People can send from their own shell as a session with `attn agent msg <target> "text" --source-session <id>`. A crew member, chief or seed address follows whoever holds that mailbox.
 
-### People
+### Read items
 
-- No control of its own opens the inbox. People see a ring as the 📬 line in the agent's terminal, and the typed text of their own answers and quick captures there.
-- Settings, Experimental: "Quiet notifications in the queue" keeps a ring's run out of the queue; [queue-flow.md](queue-flow.md) drives it.
-- Items people put in come through other features: an answer to an ask ([asks.md](asks.md)), a quick capture ([quick-capture.md](quick-capture.md)), and a Notebook selection sent to the chief ([notebook.md](notebook.md)).
-- Their own shell: `attn agent msg <target> "text" --source-session <id>` sends as that session, and `attn agent inbox --session <id>` reads as it.
+`attn agent inbox [message-id]` (`cmd/attn/agent.go`) reads 20 unread items by default, oldest first, or
+rereads one rung peer message by id; it accepts `--limit` (up to 50), `--session` and `--json`. From a person's
+shell, `attn agent inbox --session <id>` reads as that session. There is no separate inbox control:
+people see 📬 in the agent's terminal and their own answers and quick captures typed there. The ring
+text is `internal/prompts/content/session/inbox-notification.md`; item, more, empty and peer-message
+formats are in `session/inbox-item.md`, `inbox-more.md`, `inbox-empty.md`, `peer-message.md`, and
+the quiet-run note is `session/inbox-quiet.md`. The attn skill describes reaching agents in
+`internal/prompts/content/skills/attn/references/converse-and-observe.md`.
 
-### Agents
+### Receive a ring
 
-- `attn agent` (`cmd/attn/agent.go`): `msg <session-or-member-or-seed> "text"` with `--source-session`, `msg-status <message-id>` with `--session`, and `inbox [message-id]` with `--limit` and `--session`; `--json` on each.
-- Prompts: the ring's 📬 line (`internal/prompts/content/session/inbox-notification.md`); how `attn agent inbox` prints items (`session/inbox-item.md`, `inbox-more.md`, `inbox-empty.md`, `peer-message.md`); the quiet-run note (`session/inbox-quiet.md`); the rules for reaching another agent in the attn skill (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).
-
-### Triggers
-
-- An item lands, an outstanding ring ends, or the agent reaches a safe prompt: attn rings the address, retrying every 5 minutes up to 3 attempts per item (`internal/daemon/inbox_delivery.go`, `internal/daemon/inbox.go`).
-- An item for an asleep crew member wakes the member first; [crew.md](crew.md) drives it.
-- Seed updates ([garden.md](garden.md)), PR watch updates ([pull-requests.md](pull-requests.md)), answers ([asks.md](asks.md)), quick captures ([quick-capture.md](quick-capture.md)) and crew notices ([crew.md](crew.md)) arrive through this inbox; their features drive the events that cause them.
+When an item lands, an outstanding ring ends, or the agent reaches a safe prompt, attn rings an
+address with unread items, retrying every 5 minutes up to 3 attempts per item
+(`internal/daemon/inbox_delivery.go`, `internal/daemon/inbox.go`). An item for an asleep crew member
+wakes it first ([crew.md](crew.md)). Seed updates ([garden.md](garden.md)), PR watch updates
+([pull-requests.md](pull-requests.md)), answers ([asks.md](asks.md)), quick captures
+([quick-capture.md](quick-capture.md)) and crew notices ([crew.md](crew.md)) arrive here; their
+features drive the events. People send answers through [asks.md](asks.md), quick captures through
+[quick-capture.md](quick-capture.md), and Notebook selections to the chief
+through [notebook.md](notebook.md). Settings, Experimental's "Quiet notifications in the queue" keeps
+a ring's run out of the queue ([queue-flow.md](queue-flow.md)).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-inbox.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-inbox-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`. Both agents below run in it:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-inbox.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-inbox-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`. Both agents below run in it:
 
 ```json
 {"version": 1, "turns": [

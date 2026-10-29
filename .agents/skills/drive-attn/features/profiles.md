@@ -7,40 +7,40 @@ switches profiles from the window, creates, renames and deletes them, and
 attn always keeps at least one. An install upgraded from before profiles sorts
 its old arrangement into desktops of its first profile once, through a picker.
 
-## Sub-features
+## Actions and ways in
 
-- `profile-switch`: show another profile in the window; after a restart the app comes back on the profile it showed last.
-- `profile-create`: create a profile with one empty desktop, and switch to it.
-- `profile-rename`: rename a profile; names are unique among live profiles, ignoring case, and free again once deleted.
-- `profile-delete`: delete an empty profile; attn refuses while it holds anything, and always keeps one.
-- `profile-scope`: what belongs to a profile, and how another profile's things are refused as if they did not exist.
-- `profile-from-shell`: `--profile <name|id>` for verbs run outside attn when several profiles exist.
-- `profile-migration`: the one-time picker after an upgrade from before profiles.
+### Switch, create, rename and delete
 
-## How to get to it
+⌘⇧U (`profile.switch`, `app/src/shortcuts/registry.ts`) opens the switcher
+(`app/src/components/ProfileSwitcher.tsx`): ↑ and ↓ move, Enter switches, N names a new profile
+("Create and switch"), R renames, ⌫ asks to delete, Escape backs out or closes. Rows also offer
+"Rename <name>" and "Delete <name>", and the list has "New profile". Palette `switch-profile` opens
+it; `profile-<id>` switches directly ("Switch to <name>", `app/src/application/useAppCommands.tsx`).
+The sidebar's `.sidebar-profile-pill`, titled "Switch profile (⌘⇧U)"
+(`app/src/components/SidebarHeader.tsx`), and `[data-testid="queue-profile-pill"]`
+(`app/src/components/QueueBar.tsx`) open it too. A new profile starts with one empty desktop and
+becomes current. Names are unique case-insensitively among live profiles and become free after
+deletion. Delete refuses while the profile holds anything, and at least one profile stays. After
+restart the app returns to the profile it last showed.
 
-### People
+### Choose a profile in the shell
 
-- ⌘⇧U (`profile.switch`, `app/src/shortcuts/registry.ts`) opens the profile switcher (`app/src/components/ProfileSwitcher.tsx`): ↑ and ↓ move, Enter switches, N names a new profile ("Create and switch"), R renames, ⌫ asks to delete, and Escape backs out or closes. Each row also has "Rename <name>" and "Delete <name>" buttons, and the list has "New profile".
-- Palette (`app/src/application/useAppCommands.tsx`): `switch-profile` ("Switch profile") opens the switcher, and `profile-<id>` ("Switch to <name>") switches to each other profile directly.
-- The sidebar's profile pill, titled "Switch profile (⌘⇧U)" and showing the profile's name (`.sidebar-profile-pill`, `app/src/components/SidebarHeader.tsx`), and the queue bar's (`[data-testid="queue-profile-pill"]`, `app/src/components/QueueBar.tsx`).
-- The migration picker, after an upgrade from before profiles (`app/src/components/MigrationPicker/`).
-- Their own shell: outside an attn session, `--profile <name|id>` picks the profile on the verbs that act in one, such as `attn seed`, `attn automation`, `attn delegate`, `attn open`, `attn codex` and `attn agent attachment`; `attn session list` takes `--profile <id>` to list one profile's sessions, deleted profiles included. With one profile, they need no flag.
+Outside an attn session, `--profile <name|id>` selects the profile for scoped verbs such as `attn seed`, `attn automation`, `attn delegate`, `attn open`, `attn codex` and `attn agent attachment`;
+one profile needs no flag. `attn session list --profile <id>` lists one profile's sessions, deleted
+profiles included. An agent's commands act in its session's profile and cannot name another.
 
-### Agents
+### Migrate an old arrangement
 
-None. An agent's attn commands act in its session's profile and cannot name another.
-
-### Triggers
-
-- The first daemon start after an upgrade from before profiles prepares the migration, and the app shows the picker until it completes (`internal/daemon/profile_migration.go`).
+The first daemon start after an upgrade from before profiles prepares a migration; the app shows the
+picker until it completes (`internal/daemon/profile_migration.go`,
+`app/src/components/MigrationPicker/`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-profiles.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-profiles.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 `<default>` and `<drive>` below are the profile ids `bridge get_state` prints under `arrangement.profiles`; `<seed>` is the id `seed plant` prints.
 

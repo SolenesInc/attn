@@ -1,46 +1,33 @@
 # Worktrees
 
-The git worktrees agents work in: created for delegations, kept or swept when
-the work is done. Once attn creates a worktree in a repository, it tracks
-every worktree of that repository. A background sweep reclaims a worktree
-whose work has landed and that nothing holds, and says why it keeps each of
-the rest. People and agents can pin a worktree so the sweep never takes it,
-delete one now, and read what the sweep removed.
+attn creates worktrees for sessions and delegations. Once it creates one in a
+repository, it tracks that repository's worktrees. A background sweep, on by default, reclaims
+landed, clean, idle and unheld worktrees; people and agents can inspect, pin or delete them.
 
-## Sub-features
+## Actions and ways in
 
-- `worktree-create`: a worktree made by a delegation, the new session dialog or opening a pull request; that repository is tracked from then on.
-- `worktree-list`: every worktree of every tracked repository, with its branch, state and why the sweep keeps it.
-- `worktree-keep`: pin a worktree so the sweep never reclaims it, and unpin it.
-- `worktree-sweep`: the background pass that reclaims merged, clean, idle worktrees nothing holds, on by default.
-- `worktree-refresh`: run a pass now instead of on the hourly tick.
-- `worktree-delete`: remove a worktree now; a dirty one needs force, and its sessions close with it.
-- `worktree-log`: what was removed, by the sweep or by hand, and why; a removal also lands as a note on the seeds that worked there.
-- `worktree-names`: the generated branch name the new session dialog offers for a new worktree.
+### Create a worktree
 
-## How to get to it
+- ⌘N (`session.new`): the new session dialog's new worktree form, with a generated branch name, "Pick another name", and a start from the default or the current branch (`app/src/components/NewSessionDialog/RepoOptions.tsx`, `app/src/components/NewSessionDialog/worktreeNames.ts`). The dialog is [agent-launch.md](agent-launch.md)'s.
+- The home screen's "New worktree session" on a pull request card, driven in [pull-requests.md](pull-requests.md).
+- `attn delegate --new-worktree` creates the worktree a delegate works in (`--branch` with `--from`, or `--existing-branch`, and `--worktree-path`); delegation owns it.
 
-### People
+### Find and manage worktrees
+
+People and agents can run `attn worktree`; none of its verbs needs a session. A dirty worktree requires `--force` to delete, and deletion closes its sessions.
 
 - Palette (`app/src/application/useAppCommands.tsx`): `worktrees` ("Open worktrees") opens the Worktrees list.
 - ⌘⇧L (`sessions.open`, `app/src/shortcuts/registry.ts`) opens the ledger surface on Sessions, and `]` switches to Worktrees (`app/src/components/ledger/LedgerSurface.tsx`). A worktree session's row there has "Show worktree" (`app/src/components/ledger/SessionsTab.tsx`), unless the session ran on an outpost. The surface itself is [ledger.md](ledger.md)'s.
-- The Worktrees list (`app/src/components/ledger/WorktreesTab.tsx`): Active and Removed scopes, the status line's "refresh", and per row Keep or Unpin, "Sessions here", "Go to <session>" for each live session, and "Delete…", which asks for "Delete for real" or, when dirty, "Delete, losing changes".
-- ⌘N (`session.new`): the new session dialog's new worktree form, with a generated branch name, "Pick another name", and a start from the default or the current branch (`app/src/components/NewSessionDialog/RepoOptions.tsx`, `app/src/components/NewSessionDialog/worktreeNames.ts`). The dialog is [agent-launch.md](agent-launch.md)'s.
-- The home screen's "New worktree session" on a pull request card, driven in [pull-requests.md](pull-requests.md).
-- Settings, Files and locations: "Reclaim merged worktrees in the background", whose button reads Disable or Enable (`[data-testid="settings-worktree-sweep-toggle"]`, `app/src/components/SettingsModalSections.tsx`), and the Projects Directory.
-- Where people see what agents do: the list names the live sessions running in each worktree and the open seeds that point at it, and the seed's log gets a note when its worktree is removed.
-- Their own shell: the `attn worktree` verbs below.
-
-### Agents
-
+- The Worktrees list (`app/src/components/ledger/WorktreesTab.tsx`) shows each branch, state and reason it is kept, with Active and Removed scopes, the status line's "refresh", and per row Keep or Unpin, "Sessions here", "Go to <session>" for each live session, and "Delete…", which asks for "Delete for real" or, when dirty, "Delete, losing changes".
+- The list names the live sessions running in each worktree and the open seeds that point at it, and the seed's log gets a note when its worktree is removed.
 - `attn worktree` (`cmd/attn/worktree.go`): `list` and `log` (with `--repo`, `--limit`, `--json`), `keep`, `unkeep`, `delete` (with `--force`) and `refresh`. None needs a session.
-- `attn delegate --new-worktree` creates the worktree a delegate works in (`--branch` with `--from`, or `--existing-branch`, and `--worktree-path`); delegation owns it.
-- What agents read: a removal adds the note "attn <removed|deleted> the worktree <path> (branch <branch> of <repository>): <reason>." to each seed that worked there, on the seed's log (`internal/daemon/worktree_sweep.go`).
 
-### Triggers
+### Reclaim worktrees
 
+- Settings, Files and locations: "Reclaim merged worktrees in the background", whose button reads Disable or Enable (`[data-testid="settings-worktree-sweep-toggle"]`, `app/src/components/SettingsModalSections.tsx`), and the Projects Directory.
 - The sweep runs every hour on each tracked repository: it refreshes every worktree, keeps the ones a pin, a live session, an open seed, local changes, stashes, unpushed or unmerged commits or a recent change hold, and removes the rest once idle for 14 days (`internal/daemon/worktree_sweep.go`). `ATTN_WORKTREE_SWEEP_INTERVAL` and `ATTN_WORKTREE_SWEEP_IDLE_DAYS` in the daemon's environment change the hour and the 14 days.
 - Foreground work in a repository, such as creating or deleting a worktree, preempts an automatic removal there (`internal/daemon/worktree_maintenance.go`).
+- What agents read: a removal adds the note "attn <removed|deleted> the worktree <path> (branch <branch> of <repository>): <reason>." to each seed that worked there, on the seed's log (`internal/daemon/worktree_sweep.go`).
 
 ## Driving it
 
@@ -48,8 +35,8 @@ Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`).
 - The daemon started with `export ATTN_WORKTREE_SWEEP_IDLE_DAYS=0` appended to the env file, so a merged, clean worktree is eligible at once. Without it, the removal steps see "too young for deep inspection".
-- A repository on its real path, so the paths you type match the ones attn prints: `W=$(cd "$(mktemp -d /tmp/drive-attn-worktrees.XXXX)" && pwd -P)`, `git init -q -b main $W/repo` and `git -C $W/repo commit -q --allow-empty -m seed`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-worktrees-proof.XXXX)`.
+- A repository on its real path, so the paths you type match the ones attn prints: `W=$(cd "$(mktemp -d /tmp/drive-attn-worktrees.XXXX)" && pwd -P) && echo "export W=$W" >> $DRIVE_ENV`, `git init -q -b main $W/repo` and `git -C $W/repo commit -q --allow-empty -m seed`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-worktrees-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - An agent in it to delegate from, with this fixture as `$W/repo/.attn-mock-agent.json`. The fixture stays untracked in the main checkout, which the sweep never touches:
 
 ```json

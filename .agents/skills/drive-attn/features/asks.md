@@ -9,48 +9,27 @@ conversation as the user's message. An ask about a seed goes to whoever tends
 the seed by the time the user answers, and the seed keeps the answer as a
 note. Asks are an experimental setting, off by default.
 
-## Sub-features
+## Actions and ways in
 
-- `ask-open`: an agent opens an ask from markdown on stdin or a file and gets its id at once.
-- `ask-questions`: `:::question`, `:::question-multi` and `:::question-text` blocks, with choices, reasons and a recommended choice.
-- `ask-drawer`: the drawer where people read and answer asks one after another.
-- `ask-answer`: the user's answer, typed into the addressee's conversation as the user's message.
-- `ask-replied`: asks answered in the last day, shown again with their answers.
-- `ask-on-seed`: an ask about a seed the agent tends, answered to the seed's tender and kept as a note.
-- `ask-list`: an agent lists its open asks and those about seeds it tends.
-- `ask-close`: an agent withdraws an ask it no longer needs.
-- `ask-markers`: the open-ask chip on the agent's tile header and the marker on its sidebar row.
-- `ask-guidance`: what attn tells agents about asking.
+### Ask or withdraw
 
-## How to get to it
+Agents use `attn ask` (`cmd/attn/ask.go`) with markdown on stdin or `--file`, `--subject` and `--seed`; it returns an id immediately. `:::question`, `:::question-multi` and `:::question-text` blocks support choices, reasons and a recommended choice. `attn ask list` lists its open asks and asks about seeds it tends; `attn ask close <id>` withdraws one. The verbs also accept `--session` and `--json`; people can run `attn ask list --session <id>` and `attn ask close <id> --session <id>` from their own shell. Agents launched with asks on receive `internal/prompts/content/ask/guidance.md`.
 
-### People
+### Read and answer
 
-- ⌘⇧R (`dock.asks`, `app/src/shortcuts/registry.ts`) opens and closes the asks drawer, offered while asks are on or any ask exists.
-- Palette (`app/src/application/useAppCommands.tsx`): `asks` ("Open asks").
-- Sidebar: the asks icon, labelled "Asks" or "N open asks", each followed by the shortcut (`app/src/application/useAppSidebarActions.tsx`).
-- In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), the note "Anything else for <agent>?", "Send", "Replied" and "Close asks". Keys: ⌘↩ sends, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
-- On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on that ask (`app/src/components/Asks/PaneAskChip.tsx`); the sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`).
-- Settings, Experimental: the "Asks" switch (`[data-testid="settings-asks-toggle"]`, `app/src/components/SettingsModalSections.tsx`).
-- Where people see what agents do: the queue bar counts open asks and shows them on hover, and an ask row says "Waiting on you" when its agent also owes a turn.
-- Their own shell: `attn ask list --session <id>` and `attn ask close <id> --session <id>`.
+Enable "Asks" in Settings, Experimental (`[data-testid="settings-asks-toggle"]`, `app/src/components/SettingsModalSections.tsx`). While it is on or any ask exists, ⌘⇧R (`dock.asks`, `app/src/shortcuts/registry.ts`), palette `asks` ("Open asks", `app/src/application/useAppCommands.tsx`) or the sidebar icon ("Asks" or "N open asks", with shortcut, `app/src/application/useAppSidebarActions.tsx`) opens or closes the drawer. The asking agent's "Open ask: <subject>" tile chip opens it on that ask (`app/src/components/Asks/PaneAskChip.tsx`); its sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`). The queue bar counts asks and shows them on hover; a row says "Waiting on you" when its agent also owes a turn.
 
-### Agents
+The drawer (`app/src/components/Asks/AsksDrawer.tsx`) lists questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), a note "Anything else for <agent>?", "Send", "Replied" and "Close asks". Replied shows asks answered in the last day. ⌘↩ sends; j and k step through asks; r shows replies; o opens the asking agent; g opens the seed in the garden; Escape closes.
 
-- `attn ask` (`cmd/attn/ask.go`): with no command, opens an ask from stdin or `--file`, with `--subject` and `--seed`; `list`; `close <id>`; `--session` and `--json`.
-- Prompts: the asks guidance in the session instructions of agents launched with asks on (`internal/prompts/content/ask/guidance.md`); the answer as attn types it (`internal/prompts/content/ask/answer.md`, `entry.md`, `entry-picked.md`, `entry-recommended.md`, `entry-other.md`, `entry-unanswered.md`, `note.md`).
-
-### Triggers
-
-- The user's answer is a user message in the addressee's inbox; a ring types it into the conversation without waiting for the agent's turn to end (`internal/daemon/asks.go`; the rules are in `docs/inbox.md`).
+The answer becomes a user message in the addressee's inbox; a ring types it into the conversation without waiting for the agent's turn to end (`internal/daemon/asks.go`, `docs/inbox.md`). Its text comes from `internal/prompts/content/ask/answer.md`, `entry.md`, `entry-picked.md`, `entry-recommended.md`, `entry-other.md`, `entry-unanswered.md` and `note.md`.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-asks.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-asks-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-asks.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-asks-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

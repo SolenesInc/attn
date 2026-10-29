@@ -8,55 +8,34 @@ conversation. Closing ends the session for good, with a reason, and keeps its
 row in the ledger. An agent that stops without quitting cleanly keeps its last
 screen in its tile and offers Resume; a clean quit closes the session.
 
-## Sub-features
+## Actions and ways in
 
-- `launch-picker`: ⌘N opens the location picker; pick a folder and a harness, and the agent starts beside the active tile. ⌘⇧N splits sideways instead.
-- `launch-inline`: an empty desktop shows the picker on the desktop itself, and ⌘N puts focus there.
-- `launch-options`: the picker's harness choice and its YOLO and auto mode switches, the last only for a harness that supports auto mode; auto mode itself is in [auto-mode.md](auto-mode.md), worktrees offered for a repository in [worktrees.md](worktrees.md).
-- `launch-deep-link`: `attn` with no verb, run in a folder, opens the app on a spawn link for that folder; a session already there is selected instead.
-- `reload`: interrupt and restart an agent in place on the same conversation, model, effort and permission mode.
-- `close`: close a session for good with a reason; the chief and crew members refuse.
-- `stopped-tile`: an agent stopped other than by a clean quit keeps its last screen, with Resume and Close.
-- `clean-quit`: a process that quits cleanly closes its session into the ledger.
-- `launch-failure`: an agent that cannot start registers nothing.
-- `session-title`: a background model names a new session from its first prompt.
-- `launch-launcher`: the experimental "Launcher 2.0" replaces the picker with one dialog for the path, the repository and its worktree.
-- `launch-mode`: the experimental "Direct agent launches" switch, described in Settings as launching agents using less memory.
+### Start an agent
 
-## How to get to it
+⌘N (`session.new`, `app/src/shortcuts/registry.ts`), palette `new-agent` ("New agent", `app/src/application/useAppCommands.tsx`), the sidebar's "New agent" button (`app/src/components/SidebarHeader.tsx`) and the collapsed sidebar's "New Session" (`app/src/components/SidebarChrome.tsx`) open "New Session Location". On an empty desktop ⌘N focuses its launcher (`app/src/application/EmptyDesktopLauncher.tsx`); ⌘⇧N (`session.newHorizontal`) opens the picker and splits sideways.
 
-### People
+The picker (`app/src/components/LocationPicker.tsx`, controls in `app/src/components/NewSessionDialog/SessionControls.tsx`) has a path field with Tab completion, Recent and Directories lists, arrows, Enter to start, Escape to cancel, "Session agent" with ⌥1 to ⌥9 and ⌥T for a terminal, YOLO with ⌥Q, and auto mode for supporting harnesses. ⌥A reaches auto mode in Launcher 2.0 only ([auto-mode.md](auto-mode.md)); a repository offers worktrees ([worktrees.md](worktrees.md)).
 
-- ⌘N (`session.new`, `app/src/shortcuts/registry.ts`) opens the picker, titled "New Session Location", from the home screen or a desktop with tiles. On an empty desktop it focuses the launcher already on the desktop (`app/src/application/EmptyDesktopLauncher.tsx`). ⌘⇧N (`session.newHorizontal`) opens the picker and splits sideways.
-- The picker (`app/src/components/LocationPicker.tsx`, controls in `app/src/components/NewSessionDialog/SessionControls.tsx`): a path field with Tab completion, Recent and Directories lists, arrows, Enter to start, Escape to cancel, the "Session agent" choice with ⌥1 to ⌥9 and ⌥T for a terminal, YOLO with ⌥Q, and an auto mode switch for harnesses that support it (⌥A reaches it in Launcher 2.0 only).
-- Palette (`app/src/application/useAppCommands.tsx`): `new-agent` ("New agent") opens the picker; `reload-active-session` ("Reload this agent") is offered while an agent is on screen.
-- Sidebar: the "New agent" button in the header (`app/src/components/SidebarHeader.tsx`), "New Session" in the collapsed sidebar (`app/src/components/SidebarChrome.tsx`), and each row's actions button, `[data-testid="session-actions-<session>"]` (labelled "Actions for <name>"), whose menu holds "Reload session" and "Close session" (`app/src/components/SessionActionsPopover.tsx`).
-- ⌘W (`session.close`) closes the agent on screen, or the focused tile when it is not a terminal, or an empty desktop. In the packaged app the File menu item "Close Pane" carries ⌘W and does the same (`app/src-tauri/core/src/lib.rs`).
-- A stopped agent's tile says "Agent stopped. Resume to continue this conversation." with Resume and Close (`app/src/components/SessionTerminalDesktop/DesktopAgentBody.tsx`).
-- Settings, Experimental: "Launcher 2.0" (`new_session_launcher_enabled`) swaps the picker for `app/src/components/NewSessionLauncher.tsx`; "Direct agent launches" (`direct_agent_launch_enabled`, `[data-testid="settings-direct-agent-launch-toggle"]`) changes how agents start (`app/src/components/SettingsModalSections.tsx`).
-- Their own shell: `attn` with no verb, or `attn -s <label>`, in any folder opens the app on `<scheme>://spawn?cwd=<folder>&label=<label>` (`cmd/attn/main.go`, handled by `app/src/application/useAppDeepLinks.tsx`). The scheme is `attn-<instance>` for a named instance, `attn` for production.
-- Where people see what agents do: an agent that reloads or closes another appears as a restart or a closed tile, and the closed row in the ledger names who closed it and why ([ledger.md](ledger.md)).
+From their own shell, `attn` with no verb or `attn -s <label>` in a folder opens `<scheme>://spawn?cwd=<folder>&label=<label>` (`cmd/attn/main.go`, `app/src/application/useAppDeepLinks.tsx`). The scheme is `attn-<instance>` on a named instance, `attn` in production. A live session already in that folder is selected instead. Agents start another agent by [delegation](delegation.md), or open a shell beside themselves with `attn terminal open` ([terminals.md](terminals.md)). A spawn places the tile and starts the harness; a harness that cannot start leaves no session behind (`internal/daemon/spawn_pipeline.go`, `internal/daemon/agent_launch.go`). After the first prompt a background model titles the session unless a person named it (`internal/daemon/session_title.go`, `internal/prompts/content/session-title/`).
 
-### Agents
+Settings, Experimental, offers "Launcher 2.0" (`new_session_launcher_enabled`), a dialog for the path, repository and worktree (`app/src/components/NewSessionLauncher.tsx`), and "Direct agent launches" (`direct_agent_launch_enabled`, `[data-testid="settings-direct-agent-launch-toggle"]`), described as using less memory (`app/src/components/SettingsModalSections.tsx`).
 
-- `attn agent reload <session>... | --all` and `attn agent close <session-or-seed> -m "<reason>"`, both with `--source-session` and `--json` (`cmd/attn/agent_reload.go`, `cmd/attn/agent.go`). A session may reload or close itself and the agents below it in its delegation chain; the chief may act on any agent of its profile.
-- Starting another agent is delegation ([delegation.md](delegation.md)); opening a shell beside itself is `attn terminal open` ([terminals.md](terminals.md)).
-- Prompts: the attn skill's reference on other sessions, which names `agent reload` and `agent close` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).
+### Reload, close or resume
 
-### Triggers
+Palette `reload-active-session` ("Reload this agent", `app/src/application/useAppCommands.tsx`) and the row's `[data-testid="session-actions-<session>"]` ("Actions for <name>") offer "Reload session"; its menu also offers "Close session" (`app/src/components/SessionActionsPopover.tsx`). Reload restarts the agent in place on the same conversation, model, effort and permission mode. ⌘W (`session.close`) and File → "Close Pane" (`app/src-tauri/core/src/lib.rs`) close the agent on screen, the focused non-terminal tile, or an empty desktop. Closing a session keeps its row in the ledger with who closed it and why ([ledger.md](ledger.md)); chief and crew members refuse closure.
 
-- A spawn places the tile and starts the harness; a harness that cannot start leaves no session behind (`internal/daemon/spawn_pipeline.go`, `internal/daemon/agent_launch.go`).
-- A process that quits cleanly closes its session; any other exit, or an explicit stop, keeps the tile with its last screen (`internal/daemon/exit_screen.go`).
-- After the first prompt a background model titles the session, unless a person named it (`internal/daemon/session_title.go`, prompts in `internal/prompts/content/session-title/`).
+A clean process quit closes the session. Any other exit or explicit stop keeps the tile and its last screen (`internal/daemon/exit_screen.go`); the tile says "Agent stopped. Resume to continue this conversation." and offers Resume and Close (`app/src/components/SessionTerminalDesktop/DesktopAgentBody.tsx`).
+
+Agents use `attn agent reload <session>... | --all` and `attn agent close <session-or-seed> -m "<reason>"`, both with `--source-session` and `--json` (`cmd/attn/agent_reload.go`, `cmd/attn/agent.go`). A session may act on itself and agents below it in its delegation chain; the chief may act on any agent in its profile. The attn skill names these verbs (`internal/prompts/content/skills/attn/references/converse-and-observe.md`). People see a restart or closed tile when an agent acts.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), on the home screen.
-- `R=$PWD` in the instance shell, at the repository root.
-- A proof folder written with its physical path, `P=$(cd "$(mktemp -d /tmp/drive-attn-launch.XXXX)" && pwd -P)`, and two empty folders, `$P/picked` and `$P/link`. The picker and the spawn link record the folder as the machine resolves it, `/private/tmp/...` for a folder made under `/tmp`, so every path below starts from the resolved one.
-- An agent folder, `A=$(cd "$(mktemp -d /tmp/drive-attn-launch-agent.XXXX)" && pwd -P)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- `R=$PWD && echo "export R=$R" >> $DRIVE_ENV` in the instance shell, at the repository root.
+- A proof folder written with its physical path, `P=$(cd "$(mktemp -d /tmp/drive-attn-launch.XXXX)" && pwd -P) && echo "export P=$P" >> $DRIVE_ENV`, and two empty folders, `$P/picked` and `$P/link`. The picker and the spawn link record the folder as the machine resolves it, `/private/tmp/...` for a folder made under `/tmp`, so every path below starts from the resolved one.
+- An agent folder, `A=$(cd "$(mktemp -d /tmp/drive-attn-launch-agent.XXXX)" && pwd -P) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

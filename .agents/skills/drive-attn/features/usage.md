@@ -1,49 +1,30 @@
 # Usage and cost
 
-Tokens, cost and context window for each session. attn reads what each
-session spends from its harness's own transcript, native subagents included,
-prices it per model, and shows it on the agent's tile, in a receipt per model
-and in the ledger. Usage of a model with no known price still counts its
-tokens and marks the dollar amount as partial. People can set their own
-prices, and cap a Claude Code or Codex session's context window so it
-compacts at a budget they choose.
+attn shows each session's tokens, cost and context window from the harness
+transcript, including native subagents. Unknown prices leave the dollar amount
+partial. People can override prices and cap Claude Code or Codex sessions.
 
-## Sub-features
+## Actions and ways in
 
-- `usage-badge`: the tile header's badge: dollars when priced, `*` when part of it has no price, tokens when nothing is priced.
-- `usage-receipt`: totals per model with each one's tokens and cost, from the badge or the palette.
-- `ledger-usage`: the same usage on each ledger row and in `attn session show`.
-- `context-cap`: cap a Claude Code or Codex session's context window; the agent relaunches to compact at it.
-- `prices`: price overrides per model, and which model a usage is billed as.
-- `background-caps`: context window caps for the chief and for background model tasks.
+### See usage
 
-## How to get to it
+Hover or focus the tile badge `[data-testid="session-usage-<session>"]` ("Session usage <badge>") for a per-model receipt (`.session-usage-popover`); ↓ pins it and Escape closes it (`app/src/components/SessionTerminalDesktop/SessionUsage.tsx`). The badge shows dollars, `*` for a partial cost, or tokens when no model is priced. Palette command `show-session-usage` ("Show <agent>'s usage") opens the receipt pinned once usage is measured (`app/src/application/useAppCommands.tsx`). The selected session's ledger row shows the badge (`app/src/components/ledger/SessionsTab.tsx`).
 
-### People
+People and agents can read the `usage` line from `attn session show <id>` or the same data in `attn session list --json` (`cmd/attn/session_ledger.go`; [ledger.md](ledger.md)). As a transcript grows, attn adds usage and re-prices it when prices change (`internal/daemon/session_cost.go`).
 
-- The tile header's badge, `[data-testid="session-usage-<session>"]`, labelled "Session usage <badge>" (`app/src/components/SessionTerminalDesktop/SessionUsage.tsx`). Hovering or focusing it opens the receipt, `.session-usage-popover`; ↓ pins it and Escape closes it.
-- Palette (`app/src/application/useAppCommands.tsx`): `show-session-usage` ("Show <agent>'s usage"), offered once the agent on screen has measured usage, opens the receipt pinned. `set-session-context-cap` ("Cap <agent>'s context window", or "Change <agent>'s context window cap" once set), offered for Claude Code and Codex agents, opens a prompt with the field "Context window cap in tokens" (`app/src/components/SessionContextCapPrompt.tsx`).
-- The ledger's Sessions list shows the badge for the selected row (`app/src/components/ledger/SessionsTab.tsx`).
-- Settings, Agents and models, "Model pricing overrides" (`app/src/components/SessionCostPriceSettings.tsx`); Settings, Background agents, the Chief and headless context window caps (`app/src/components/SettingsModalSections.tsx`).
-- Their own shell: the verbs below.
+### Set prices and context caps
 
-### Agents
+Settings, Agents and models has "Model pricing overrides" for prices and which model a usage is billed as (`app/src/components/SessionCostPriceSettings.tsx`); Background agents has the chief and headless caps (`app/src/components/SettingsModalSections.tsx`). People and agents can run `attn settings set session_cost.price.<model> '<json>'` or clear the override with `""` (`cmd/attn/settings.go`). The JSON needs `input_usd_per_mtok`, `output_usd_per_mtok`, `cache_read_usd_per_mtok`, `cache_write_5m_usd_per_mtok` and `cache_write_1h_usd_per_mtok`. `headless_context_window_cap` and `chief_context_window_cap` set the background caps.
 
-- `attn session show <id>` prints a `usage` line, and `attn session list --json` carries the same (`cmd/attn/session_ledger.go`); the verbs are [ledger.md](ledger.md)'s.
-- `attn settings set session_cost.price.<model> '<json>'` sets a price, and `""` clears it (`cmd/attn/settings.go`). The JSON needs `input_usd_per_mtok`, `output_usd_per_mtok`, `cache_read_usd_per_mtok`, `cache_write_5m_usd_per_mtok` and `cache_write_1h_usd_per_mtok`. `headless_context_window_cap` and `chief_context_window_cap` set the background caps. No verb sets a session's context cap.
-
-### Triggers
-
-- As a harness writes its transcript, attn adds each new turn's usage to its session, its native subagents' included, and prices it again when a price setting changes (`internal/daemon/session_cost.go`).
-- Setting or clearing a session's cap relaunches its agent with the new compaction window (`internal/daemon/session_context_cap.go`).
+For an on-screen Claude Code or Codex agent, palette command `set-session-context-cap` ("Cap <agent>'s context window" or "Change <agent>'s context window cap") opens "Context window cap in tokens" (`app/src/components/SessionContextCapPrompt.tsx`). Setting or clearing it relaunches the agent to use the new compaction window (`internal/daemon/session_context_cap.go`); no CLI verb sets a session cap.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-usage.XXXX)`.
-- An agent folder, `U=$(mktemp -d /tmp/drive-attn-usage-agent.XXXX)`, holding `{"version": 1, "turns": [{"includes": "Measure", "actions": [{"type": "reply", "text": "Measured."}]}]}` as `$U/.attn-mock-agent.json`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-usage.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `U=$(mktemp -d /tmp/drive-attn-usage-agent.XXXX) && echo "export U=$U" >> $DRIVE_ENV`, holding `{"version": 1, "turns": [{"includes": "Measure", "actions": [{"type": "reply", "text": "Measured."}]}]}` as `$U/.attn-mock-agent.json`.
 - The agent, started and on screen: `wsctl add-session --cwd $U --agent claude --label usage-agent --id usage-agent --place`, then `bridge select_session '{"sessionId":"usage-agent"}'` for setup.
 
 `<terminal>` is the agent's terminal id from `wsctl list`; `<P>` is the proof folder's path written out.

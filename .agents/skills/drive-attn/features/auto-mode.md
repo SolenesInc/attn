@@ -10,47 +10,34 @@ people propose rules, hosts and policies from the CLI, and nothing they
 propose takes effect until the user promotes it in Settings. The environment,
 what the Guardian knows about this machine, is edited directly.
 
-## Sub-features
+## Actions and ways in
 
-- `automode-show`: the effective policy, the Guardian, the environment, the rules, the hosts and the pending proposals.
-- `automode-rules`: propose a prefix rule, allow, prompt or forbidden, that inherits or bypasses the sandbox; or propose removing one.
-- `automode-hosts`: propose allowing or denying a network host, or removing one.
-- `automode-policy`: propose an approval policy, a sandbox mode, or whether the proxy may reach localhost.
-- `automode-environment`: the slots the Guardian reads about this machine, such as trusted repositories, domains and registries, edited directly.
-- `proposal-promote`: the user promotes or discards each proposal in Settings.
-- `guardian`: the model and reasoning that answer prompts when auto mode is on.
-- `automode-denials`: recent denials, newest first, with the session, the rule and the reason.
-- `automode-launch`: whether new Pi sessions start in auto mode, the picker's switch, and `/auto` inside a session.
-- `repository-rules`: rules a repository's checkout carries, merged in for sessions in it.
+### Configure and propose
 
-## How to get to it
+Settings, Auto mode (section `autoMode`, `app/src/components/AutoModeSettings.tsx`) shows Global policy (new-sessions switch `[data-testid="automode-new-sessions"]`, "Approval policy", "Sandbox mode"), This machine's environment slots with `[data-testid="automode-slot-edit-<slot>"]`, Global rules, Network, Proposed rules with Promote `[data-testid="automode-promote-<id>"]` and Discard `[data-testid="automode-discard-<id>"]`, and Recent denials with refresh. "Guardian model" and "Guardian reasoning" are in `app/src/components/GuardianSettings.tsx`.
 
-### People
+People and agents run `attn automode` (`cmd/attn/automode.go`), each subcommand accepting `--json`:
 
-- Settings, Auto mode (section `autoMode`, `app/src/components/AutoModeSettings.tsx`): Global policy, with the new-sessions switch `[data-testid="automode-new-sessions"]`, "Approval policy" and "Sandbox mode"; This machine, the environment slots, each with its edit button `[data-testid="automode-slot-edit-<slot>"]`; Global rules; Network; Proposed rules, each with Promote `[data-testid="automode-promote-<id>"]` and Discard `[data-testid="automode-discard-<id>"]`; and Recent denials with a refresh button. The Guardian's "Guardian model" and "Guardian reasoning" are in `app/src/components/GuardianSettings.tsx`.
-- The new-agent picker's auto mode switch, `[data-testid="location-picker-automode-toggle"]`, shown only for a harness whose plugin offers auto mode, which is Pi with `attn-pi` installed (`app/src/components/NewSessionDialog/SessionControls.tsx`). Launcher 2.0 adds ⌥A for it; the standard picker has no key.
-- Inside a Pi session: `/auto on`, `/auto off` and `/auto status`, and `/permissions` for that session only (`plugins/attn-pi/docs/automode.md`).
-- Where people see what agents do: a denial is announced naming the session, what was blocked, why and who decided, and it lands in Recent denials.
-- Their own shell: `attn automode`, below.
+- `show` reads effective policy, Guardian, environment, rules, hosts and proposals; `denials [--limit <n>]` reads recent denials newest first, with session, rule and reason.
+- `env` reads the Guardian environment slots, including trusted repositories, domains and registries. `env set <slot> <value>…`, `env clear <slot>` and `env notes` (stdin) write them directly.
+- `rule add <token>…` and `rule remove <token>…` propose prefix rules with `--decision allow|prompt|forbidden`, `--sandbox inherit|bypass` and `--justification`.
+- `host add <host>` and `host remove <host>` propose network rules with `--decision allow|deny`. `policy` proposes `--approval-policy`, `--sandbox-mode` and `--allow-local-binding`.
 
-### Agents
+Only a user's promotion changes rules, hosts or policy (`PromoteAutoModeProposal`, `internal/store/automode.go`). attn also reads a folder's repository for `trusted_repo`, `repo_visibility` and the rules carried by its checkout (`internal/daemon/automode_detect.go`).
 
-- `attn automode` (`cmd/attn/automode.go`): `show`; `env`, `env set <slot> <value>…`, `env clear <slot>`, `env notes` (from stdin); `rule add <token>…` and `rule remove <token>…` with `--decision allow|prompt|forbidden`, `--sandbox inherit|bypass` and `--justification`; `host add <host>` and `host remove <host>` with `--decision allow|deny`; `policy` with `--approval-policy`, `--sandbox-mode` and `--allow-local-binding`; `denials [--limit <n>]`. Every subcommand takes `--json`. `rule`, `host` and `policy` record a proposal; `env` writes directly.
-- Prompts: what a Pi session is told about its sandbox, its credentials and its failures (`internal/prompts/content/pi/security/`), the Guardian's policy and answer format (`internal/prompts/content/pi/guardian/`), and the environment slots the Guardian reads (`internal/prompts/content/pi/environment/`).
+### Use auto mode
 
-### Triggers
+The picker switch `[data-testid="location-picker-automode-toggle"]` appears for a harness whose plugin offers auto mode, Pi with `attn-pi` installed (`app/src/components/NewSessionDialog/SessionControls.tsx`). Launcher 2.0 adds ⌥A; the standard picker has no key. In a Pi session, `/auto on`, `/auto off`, `/auto status` and `/permissions` apply to that session (`plugins/attn-pi/docs/automode.md`).
 
-- A Pi command that needs approval goes to the Guardian when auto mode is on, and to the user otherwise; a denial is recorded and announced (`internal/daemon/automode.go`).
-- attn reads the repository a folder belongs to for the `trusted_repo` and `repo_visibility` slots, and the rules its checkout carries (`internal/daemon/automode_detect.go`).
-- Only the user's promotion changes the rules, hosts or policy (`PromoteAutoModeProposal`, `internal/store/automode.go`).
+A Pi command needing approval goes to the Guardian when auto mode is on, otherwise to the user; a denial is recorded and announced with session, what was blocked, why and who decided (`internal/daemon/automode.go`). Pi's sandbox, credentials and failure prompts are in `internal/prompts/content/pi/security/`; the Guardian's policy and answer format are in `internal/prompts/content/pi/guardian/`, and its environment slots in `internal/prompts/content/pi/environment/`.
 
 ## Driving it
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). `R=$PWD` at the repository root.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-automode.XXXX)`, outside any git repository.
-- An agent folder, `M=$(mktemp -d /tmp/drive-attn-automode-agent.XXXX)`, holding this fixture as `$M/.attn-mock-agent.json`:
+- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). `R=$PWD && echo "export R=$R" >> $DRIVE_ENV` at the repository root.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-automode.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, outside any git repository.
+- An agent folder, `M=$(mktemp -d /tmp/drive-attn-automode-agent.XXXX) && echo "export M=$M" >> $DRIVE_ENV`, holding this fixture as `$M/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

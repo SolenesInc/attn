@@ -1,45 +1,29 @@
 # Keyboard shortcuts
 
-Every action has a shortcut, listed in a cheat sheet and rebindable. The cheat
-sheet shows the keys by category. The editor rebinds an action by recording a
-combination or a two-step chord, warns when the keys belong to another action,
-and resets or unbinds. It also chooses which shortcuts the sidebar's dock shows
-as clickable chips. Rebinds and the dock are one daemon setting, so they
-follow the user to every window and survive restarts.
+The shortcut sheet lists keys by category. The editor rebinds keys, records
+chords and chooses the sidebar dock's shortcuts. Bindings and dock choices
+are shared across windows and survive restarts.
 
-## Sub-features
+## Actions and ways in
 
-- `cheatsheet`: every shortcut by category, with its keys.
-- `shortcut-editor`: rebind by recording keys, reset one, unbind one, or restore every default.
-- `conflicts`: keys another action holds ask to Reassign; keys a required action holds are refused.
-- `protected`: Settings, Keyboard shortcuts and Quit can be rebound but never unbound.
-- `chords`: a leader combination, then one key, within 600 ms.
-- `dock`: the shortcuts the sidebar dock shows, in order, and the dock hidden or shown.
-- `linux-bindings`: Linux defaults, which use Ctrl where macOS uses ⌘.
-- `keybindings-setting`: rebinds and the dock as the home setting `keybindings_config`, read and reset from a shell.
+### View shortcuts
 
-## How to get to it
+⌘/ (`ui.showShortcuts`, `app/src/shortcuts/registry.ts`) opens or closes the sheet (`app/src/components/ShortcutsModal.tsx`); "Edit shortcuts" opens the editor. Palette commands `keyboard-shortcuts` ("Keyboard shortcuts") and `customize-shortcuts` ("Customize keyboard shortcuts") (`app/src/application/useAppCommands.tsx`) open them directly. "View all shortcuts →" in What's new also opens the sheet (`app/src/components/WhatsNewModal.tsx`).
 
-### People
+### Customize keys and the dock
 
-- ⌘/ (`ui.showShortcuts`, `app/src/shortcuts/registry.ts`) opens the cheat sheet and closes it (`app/src/components/ShortcutsModal.tsx`). Its "Edit shortcuts" button opens the editor.
-- Palette (`app/src/application/useAppCommands.tsx`): `keyboard-shortcuts` ("Keyboard shortcuts") and `customize-shortcuts` ("Customize keyboard shortcuts").
-- What's new: "View all shortcuts →" on every step opens the cheat sheet (`app/src/components/WhatsNewModal.tsx`).
-- The editor (`app/src/components/ShortcutEditorModal.tsx`): "Filter shortcuts"; per row, the key button to record ("Press keys…", Esc to cancel), "Record a chord", ☆ "Add to dock" or ★ "Remove from dock", ↺ to reset, ✕ to unbind, and the badges Customized, Required, Menu bar and Needs terminal; a Dock section with "Move <label> up", "Move <label> down" and "Remove <label> from dock"; "Restore Defaults". Key recording is `app/src/components/KeyCaptureInput.tsx`.
-- The sidebar's dock: chips for the docked shortcuts, clickable where the action allows, and "Hide dock" or "Show dock" (`app/src/components/SidebarChrome.tsx`). The sidebar is [sidebar.md](sidebar.md)'s.
-- After a chord's leader, a hint shows "then…" until the second key or the timeout (`app/src/components/ChordLeaderHud.tsx`).
-- Their own shell: `attn settings get keybindings_config` reads the rebinds and the dock as JSON, and `attn settings set keybindings_config ""` restores every default ([settings.md](settings.md)).
+In the editor (`app/src/components/ShortcutEditorModal.tsx`), "Filter shortcuts" finds an action. Its row records a key or uses "Record a chord", resets or unbinds it, and offers "Add to dock" or "Remove from dock". Recording says "Press keys…"; Escape cancels (`app/src/components/KeyCaptureInput.tsx`). Badges mark Customized, Required, Menu bar and Needs terminal. "Restore Defaults" resets all bindings. A conflicting binding asks to Reassign; keys held by a required action are refused. Settings, Keyboard shortcuts and Quit can be rebound but never unbound.
 
-### Agents
+A chord's second key follows its leader within 600 ms; "then…" shows until the key or timeout (`app/src/components/ChordLeaderHud.tsx`). The editor's Dock section offers "Move <label> up", "Move <label> down" and "Remove <label> from dock". The sidebar dock lets people click chips and use "Hide dock" or "Show dock" (`app/src/components/SidebarChrome.tsx`; [sidebar.md](sidebar.md)).
 
-None. An agent can only read or reset `keybindings_config` as a setting, which [settings.md](settings.md) covers.
+People and agents can read bindings and the dock as JSON with `attn settings get keybindings_config` and reset them with `attn settings set keybindings_config ""` ([settings.md](settings.md)).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), except where a step replays it.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-shortcuts.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-shortcuts.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 - **Read a binding.** Run `bridge shortcut_binding '{"shortcutId":"ui.showShortcuts"}'`. It returns `binding` with `key: "/"` and `meta: true`. `./attn settings get keybindings_config` prints an empty line on a fresh instance.
 - **The cheat sheet with its shortcut.** Press ⌘/: `bridge native_key '{"key":"/","modifiers":["command"]}'`, then `bridge dom_wait '{"selector":"#shortcuts-modal-title","timeoutMs":5000}'`. `bridge dom_text '{"selector":".shortcuts-body"}'` lists the categories, "App" among them, and their rows with keys, "Settings" and "Keyboard shortcuts" among the rows. Press ⌘/ again: `bridge dom_wait '{"selector":"#shortcuts-modal-title","absent":true,"timeoutMs":5000}'` matches.

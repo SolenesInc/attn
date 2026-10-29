@@ -8,51 +8,57 @@ editor; agents read and edit the files with their own tools and append to the
 journal through attn, so concurrent writers never collide. The chief treats
 it as its home.
 
-## Sub-features
+## Actions and ways in
 
-- `journal-append`: an entry appended to the day's journal file, created with journal frontmatter when needed; one writer for every agent.
-- `notebook-fullscreen`: the notebook over the whole window: its files, the open document, an outline and backlinks.
-- `editor-tile`: an editor docked beside the terminals, opened on the notebook or any other folder.
-- `live-editor`: markdown edited in place and saved to disk, with frontmatter shown as a card and links to missing notes marked.
-- `note-finder`: ⌘P inside the notebook or an editor tile finds a note by name.
-- `notebook-links`: root-absolute links between notes, followed in place, and the backlinks that point at a note.
-- `selection-to-chief`: a selection quoted into the notebook's [inbox.md](inbox.md) for the chief, which a ring tells; [crew.md](crew.md) owns what the chief does with it.
-- `editor-undo`: native ⌘Z and ⇧⌘Z undo and redo in the editor.
-- `notebook-root`: the folder the notebook lives in, a machine setting.
-- `notebook-sync`: an outpost's notebook syncs with the home's.
+### Open and edit
 
-## How to get to it
+⌥⌘N (`notebook.openTile`) opens an editor tile; ⇧⌥⌘N (`notebook.openFullscreen`) opens fullscreen
+(`app/src/shortcuts/registry.ts`). Palette `notebook` ("Open the notebook") and `notebook-tile`
+("Open Editor tile", `app/src/application/useAppCommands.tsx`), and the sidebar's "Open Notebook
+(⇧⌥⌘N)" button (`app/src/application/useAppSidebarActions.tsx`) offer the same paths. Fullscreen and
+tile show "Notebook files", a document with save status, Outline and Backlinks, and "chief: active"
+or "chief: idle" (`app/src/components/NotebookSurface.tsx`); fullscreen closes with Escape or
+"Close". The editor tile's "Editor root" picker opens the notebook or another folder
+(`app/src/components/notebook/NotebookTile.tsx`,
+`app/src/components/SessionTerminalDesktop/NotebookRootPicker.tsx`). Editing saves markdown to disk,
+displays frontmatter as a card and marks links to missing notes. ⌘Z and ⇧⌘Z undo and redo.
 
-### People
+### Find and follow notes
 
-- Keys (`app/src/shortcuts/registry.ts`): ⌥⌘N opens an editor tile (`notebook.openTile`), ⇧⌥⌘N opens the notebook fullscreen (`notebook.openFullscreen`).
-- Palette (`app/src/application/useAppCommands.tsx`): `notebook` ("Open the notebook") and `notebook-tile` ("Open Editor tile").
-- Sidebar: the "Open Notebook (⇧⌥⌘N)" button (`app/src/application/useAppSidebarActions.tsx`).
-- Fullscreen and tile (`app/src/components/NotebookSurface.tsx`): the "Notebook files" list, the document with its save status, the Outline and Backlinks sections, "Send to chief" over a selection, the "chief: active" or "chief: idle" status, and "Close" (Esc) fullscreen.
-- Editor tile (`app/src/components/notebook/NotebookTile.tsx`): its "Editor root" picker (`app/src/components/SessionTerminalDesktop/NotebookRootPicker.tsx`) and its note finder, "Find a note…" (`app/src/components/notebook/NotebookFinder.tsx`).
-- Settings: the notebook folder, blank for the default (`app/src/components/SettingsModalSections.tsx`), the machine setting `notebook.root`.
-- Where people see what agents do: journal entries and notes agents write appear in the open notebook as the files change, and the status shows whether the chief is active.
-- Their own shell: the files themselves, and the verbs below.
+⌘P within fullscreen or an editor tile opens "Find a note…"
+(`app/src/components/notebook/NotebookFinder.tsx`); links are root-absolute and open in place, and
+Backlinks lists notes pointing to the open document. Changes agents make to files appear in the open
+notebook.
 
-### Agents
+### Write journal entries
 
-- `attn journal append (--entry <text> | --entry-file <path>) [--date YYYY-MM-DD] [--session <id>] [--json]` (`cmd/attn/main.go`). There is no notebook CLI: agents read and edit notes with their own file tools.
-- `attn settings get notebook.root.effective` gives an outpost's notebook folder.
-- Prompts: the chief's instructions name the notebook as its home (`internal/prompts/content/chief.md`); the attn skill's notebook reference covers the two layers, frontmatter, links and the journal command (`internal/prompts/content/skills/attn/references/notebook.md`); the chief is told when a selection lands in its inbox (`internal/prompts/content/chief/inbox.md`).
+People and agents run `attn journal append (--entry <text> | --entry-file <path>) [--date YYYY-MM-DD] [--session <id>] [--json]` (`cmd/attn/main.go`); attn creates the day's file with
+journal frontmatter as needed and serializes appends. There is no notebook CLI: agents and people
+read and edit notes with file tools. The skill reference covers both layers, frontmatter, links and
+the journal (`internal/prompts/content/skills/attn/references/notebook.md`); the chief's
+instructions name the notebook as its home (`internal/prompts/content/chief.md`).
 
-### Triggers
+### Send a selection to the chief
 
-- An outpost's notebook syncs with the home's while Outposts is on (`internal/daemon/notebook_sync.go`).
-- A selection sent to the chief rings the profile's chief when there is one.
+"Send to chief" above a selection quotes it into the chief's [inbox.md](inbox.md), ringing the
+profile's chief when one exists. `internal/prompts/content/chief/inbox.md` tells the chief;
+[crew.md](crew.md) owns what it does.
+
+### Choose and sync the notebook
+
+Settings' `notebook.root` machine setting chooses its folder, blank for the default
+(`app/src/components/SettingsModalSections.tsx`). `attn settings get notebook.root.effective` gives
+an outpost's folder. While Outposts is on, the home's notebook syncs with its outposts
+(`internal/daemon/notebook_sync.go`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- `NB=$(./attn settings get notebook.root.effective)` names the instance's notebook, `~/attn-notebook-<name>`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-notebook-proof.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-notebook.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- `NB=$(./attn settings get notebook.root.effective) && printf 'export NB=%q\n' "$NB" >> "$DRIVE_ENV"` names the instance's notebook, `~/attn-notebook-<name>`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-notebook-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-notebook.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

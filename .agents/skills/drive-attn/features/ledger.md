@@ -10,48 +10,69 @@ list and read sessions, rename their own, read transcripts and resume sessions
 from the CLI. When a harness moves to another conversation, its terminal shows
 that conversation's session and the one it left goes to the ledger.
 
-## Sub-features
+## Actions and ways in
 
-- `ledger-list`: Live, Closed or All, newest first, filtered by time, profile and repository, in pages.
-- `ledger-row`: one session with its harness, the outpost it ran on, place, usage, who closed it and why, and whether it can come back.
-- `resume`: bring a closed or stopped session back under its own id, on its last or current desktop; an action that recreates a worktree or fetches a branch runs only when named.
-- `rename`: the name people read in the sidebar and the ledger.
-- `transcript`: a session's conversation as timestamped, redacted events.
-- `session-question`: ask a question of a Codex session's conversation and get exact excerpts back.
-- `session-tree`: every live session under the session that dispatched it.
-- `conversation-switch`: /clear, /new, /resume or Codex /agents move a terminal to that conversation's session.
-- `hidden-sessions`: live over a link with no tile showing them, marked hidden.
-- `kept-conversations`: attn's own copy of a Claude conversation its harness would delete: keep it forever, release it, or forget it.
+### Find and open sessions
 
-## How to get to it
+⌘⇧L (`sessions.open`, `app/src/shortcuts/registry.ts`), palette `sessions` ("Open the sessions
+list", `app/src/application/useAppCommands.tsx`) and sidebar "Open Ledger (⌘⇧L)"
+(`app/src/application/useAppSidebarActions.tsx`) open "Sessions, worktrees and conversations" on its
+last list. `]` moves between Sessions, Worktrees and Conversations
+(`app/src/components/ledger/LedgerSurface.tsx`); [worktrees.md](worktrees.md) owns Worktrees.
+Sessions offers Live, Closed or All, newest first, with a query field for tokens such as `profile:`
+and `repo:`. Each row shows harness, outpost, place, usage, who closed it and why, and whether it
+can return. Focus opens a live session; "Reopen" resumes a closed one under its own id, on its last
+or current desktop. Rows offer Show worktree, the tended seed, and Keep conversation or Unkeep for
+Claude; an outpost row names its host and offers neither Show worktree nor Keep
+(`app/src/components/ledger/SessionsTab.tsx`). A stopped tile's Resume is in
+[agent-launch.md](agent-launch.md). Recreating a worktree or fetching a branch runs only when its
+action is named.
 
-### People
+### List, inspect and resume from the CLI
 
-- ⌘⇧L (`sessions.open`, `app/src/shortcuts/registry.ts`) opens the ledger, the dialog "Sessions, worktrees and conversations", on its last list. The palette's `sessions` ("Open the sessions list", `app/src/application/useAppCommands.tsx`) and the sidebar's "Open Ledger (⌘⇧L)" button (`app/src/application/useAppSidebarActions.tsx`) do the same.
-- In the ledger (`app/src/components/ledger/LedgerSurface.tsx`): the lists Sessions, Worktrees and Conversations, with `]` moving to the next one; Worktrees belongs to [worktrees.md](worktrees.md). Sessions (`app/src/components/ledger/SessionsTab.tsx`) has the Live, Closed and All switch, a query field that takes tokens such as `profile:` and `repo:`, and on each row Focus for a live session, "Reopen" for a closed one, Show worktree, the seed it tends, and Keep conversation or Unkeep for a Claude session; a row that ran on an outpost names it and offers neither Show worktree nor Keep conversation. Conversations (`app/src/components/ledger/ConversationsTab.tsx`) takes Enter to keep or unkeep a row and `2` to ask to Forget it; "Forget…" is not offered while an open seed keeps the copy. A copy that crew letters keep lists them as `Crew letter: <Member> · <date>`, and its confirmation adds `These letters stay, but will no longer point to this transcript: <Member> · <date>.`; "Forget now" then unlinks the letters and deletes the copy in one step.
-- Palette `rename-active-session` ("Rename this session…") opens the "Rename session" dialog for the agent on screen; the sidebar row's actions menu has "Rename session" (`app/src/components/SessionActionsPopover.tsx`).
-- A stopped tile's Resume is in [agent-launch.md](agent-launch.md).
-- Their own shell: the verbs below. Outside attn, `--profile <id>` picks the profile.
+People and agents run `attn session list` with `--closed`, `--all`, `--tree`, `--reopen`, `--limit`,
+`--before`, `--repository`, `--last`, `--since`, `--until`, `--profile` and `--json`; `show <id>`;
+`transcript <id>` with `--after`, `--follow` and `--json`; `instructions <id> --question <text>`
+(Codex only, answered by a background model with prompts in
+`internal/prompts/content/session-instructions/`); or `reopen <id> [--action <name>]`
+(`cmd/attn/session_instructions.go`, `cmd/attn/session_ledger.go`, `cmd/attn/session_reopen.go`,
+`cmd/attn/session_tree.go`). Transcripts contain timestamped, redacted events; the tree groups live
+sessions under their dispatcher. `attn list` prints live sessions and profiles as JSON
+(`cmd/attn/main.go`); outside attn, `--profile <id>` selects a profile. The skill names `session list --tree` and `attn list --json`
+(`internal/prompts/content/skills/attn/references/converse-and-observe.md`). `priority`, `snooze`
+and `unsnooze` belong to [queue-flow.md](queue-flow.md).
 
-### Agents
+### Rename a session
 
-- `attn session` (`cmd/attn/session_instructions.go` dispatches it; the ledger verbs are in `cmd/attn/session_ledger.go`, `cmd/attn/session_reopen.go` and `cmd/attn/session_tree.go`): `list` with `--closed`, `--all`, `--tree`, `--reopen`, `--limit`, `--before`, `--repository`, `--last`, `--since`, `--until`, `--profile` and `--json`; `show <id>`; `transcript <id>` with `--after`, `--follow` and `--json`; `instructions <id> --question <text>` (Codex sessions only; a background model answers, with its prompts in `internal/prompts/content/session-instructions/`); `rename <name> [--session <id>]`; `reopen <id> [--action <name>]`. `priority`, `snooze` and `unsnooze` belong to [queue-flow.md](queue-flow.md).
-- `attn conversation list [--all] [--json]`, `keep`, `unkeep` and `forget <session-or-conversation-id> [--unlink-crew-letters]` (`cmd/attn/conversation.go`), taking `session:<id>` or `conversation:<id>` when an id is ambiguous. `forget` refuses a copy that crew letters keep and names each letter as `<member> <filename>`. `--unlink-crew-letters` consents: attn removes each letter's session record (the `.json` beside the letter in the member home's `handoffs/`), leaves the letters unchanged, deletes its copy and prints `letters that lost their transcript (letters are unchanged):` with one `<member> <filename>` line per letter. Open seeds block `forget` with or without the flag: harvest or wither them first.
-- `attn list` prints the live sessions and the profiles as JSON (`cmd/attn/main.go`).
-- Prompts: the garden contract tells agents to rename their session when the work drifts (`internal/prompts/content/garden.md`); the attn skill's reference on other sessions names `session list --tree` and `attn list --json` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).
+Palette `rename-active-session` ("Rename this session…") and the sidebar row actions menu's "Rename
+session" (`app/src/components/SessionActionsPopover.tsx`) open the dialog. `attn session rename <name> [--session <id>]` renames from the CLI; the garden contract tells agents to rename as work
+drifts (`internal/prompts/content/garden.md`).
 
-### Triggers
+### Keep or forget conversations
 
-- When a harness moves to another conversation, with /clear, /new, /resume or Codex /agents, the terminal shows that conversation's session. A Claude session left behind closes into the ledger; under shared Codex it stays open and hidden (`internal/daemon/monitor_switch.go`, `internal/daemon/agent_conversation.go`).
-- A keep pass decides which Claude conversations attn copies and when unpinned copies are deleted (`internal/daemon/conversation_keep.go`).
+The Conversations list takes Enter to keep or unkeep, and `2` to ask to Forget
+(`app/src/components/ledger/ConversationsTab.tsx`). An open seed blocks forgetting; copies kept by
+crew letters list `Crew letter: <Member> · <date>`, and confirmation says `These letters stay, but will no longer point to this transcript: <Member> · <date>.` "Forget now" unlinks letters and
+deletes the copy. `attn conversation list [--all] [--json]`, `keep`, `unkeep` and `forget <session-or-conversation-id> [--unlink-crew-letters]` (`cmd/attn/conversation.go`) accept
+`session:<id>` or `conversation:<id>` when ambiguous. Forget refuses copies kept by crew letters and
+names them `<member> <filename>`; the flag consents to removing each letter's session record (the
+`.json` beside the letter in the member home's `handoffs/`), leaves the letters, deletes the copy
+and prints `letters that lost their transcript (letters are unchanged):` with each `<member> <filename>`. An open seed blocks either form until harvested or withered. A keep pass decides when
+to copy Claude conversations and delete unpinned copies (`internal/daemon/conversation_keep.go`).
+
+### Follow a conversation switch
+
+/clear, /new, /resume or Codex /agents moves a terminal to the new conversation's session. A Claude
+session left behind closes into the ledger; shared Codex leaves it open and hidden, live over a link
+with no tile (`internal/daemon/monitor_switch.go`, `internal/daemon/agent_conversation.go`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-ledger.XXXX)`.
-- An agent folder, `L=$(mktemp -d /tmp/drive-attn-ledger-agent.XXXX)`, holding this fixture as `$L/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-ledger.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `L=$(mktemp -d /tmp/drive-attn-ledger-agent.XXXX) && echo "export L=$L" >> $DRIVE_ENV`, holding this fixture as `$L/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "resumable": true, "turns": [
@@ -60,7 +81,7 @@ Preconditions:
 ]}
 ```
 
-- For the crew-letter steps: a member home made before the daemon starts, as [crew.md](crew.md)'s preconditions describe, here `Q="$(./attn instance resolve --field dataDir)/crew/quill"` with `mkdir -p "$Q"` and `printf '# Quill\n\nFile a letter when asked.\n' > "$Q/CHARTER.md"`; crew v2 on, so a letter keeps its session's transcript: `./attn settings set crew_v2_enabled true`; and a member folder, `K=$(mktemp -d /tmp/drive-attn-ledger-crew.XXXX)`, holding this fixture as `$K/.attn-mock-agent.json`:
+- For the crew-letter steps: a member home made before the daemon starts, as [crew.md](crew.md)'s preconditions describe, here `Q="$(./attn instance resolve --field dataDir)/crew/quill" && echo "export Q=$Q" >> $DRIVE_ENV` with `mkdir -p "$Q"` and `printf '# Quill\n\nFile a letter when asked.\n' > "$Q/CHARTER.md"`; crew v2 on, so a letter keeps its session's transcript: `./attn settings set crew_v2_enabled true`; and a member folder, `K=$(mktemp -d /tmp/drive-attn-ledger-crew.XXXX) && echo "export K=$K" >> $DRIVE_ENV`, holding this fixture as `$K/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "resumable": true, "turns": [

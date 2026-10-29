@@ -10,56 +10,38 @@ a nap starts their next session from the letters. The chief is the session
 that coordinates one profile: seeds sent to the chief land with it, and it
 may close or reload any agent of the profile.
 
-## Sub-features
+## Actions and ways in
 
-- `crew-roster`: the members of the profile, asleep or awake, with their launch settings.
-- `crew-charter`: who the member is, kept in `CHARTER.md` in the member home and editable from the app.
-- `crew-launch`: the folder, harness, model, effort and awareness folders a member's next session starts with; the launch desktop is in [desktops.md](desktops.md).
-- `crew-wake`: start a session for an asleep member; asking an awake member returns its session.
-- `crew-sleep`: ask the member's session to file its letter and close.
-- `crew-letter`: the letter a session files with `attn handoff`, which ends the session and leaves the member asleep, or with `--nap` starts the member's next session from its letters.
-- `crew-mailbox`: items addressed to a member reach its current session, and wake it when it sleeps.
-- `crew-heartbeat`: attn keeps an idle member's cache warm, and puts it to sleep after the user is away.
-- `chief`: the profile's coordinating session; made from the session menu or the new-session picker.
-- `send-to-chief`: hand a seed to the chief to decide how it continues.
-- `crew-queue`: whether crew members owing a turn wait in the queue.
-- `crew-guidance`: what attn tells members and the chief.
+### Manage members
 
-## How to get to it
+Palette `manage-crew` ("Manage crew", `app/src/application/useAppCommands.tsx`) and the sidebar's "Crew" section and "manage" button open the panel (`app/src/components/SidebarChrome.tsx`, `app/src/components/QueueSidebar.tsx`, `app/src/components/QueueRows.tsx`). The panel (`app/src/components/CrewPanel.tsx`) has a member list and "Find a member" (`CrewRoster.tsx`); each member has "Launch settings" with "Wake" or "Sleep" (`CrewLaunchTab.tsx`), "Charter" (`CrewCharterTab.tsx`), "Handoffs" listing letters (`CrewHandoffsTab.tsx`), and "Seeds" (`CrewSeeds.tsx`). "Close" or Escape closes it. The charter lives in `CHARTER.md` in the member home; launch settings choose folder, harness, model, effort, awareness folders and [launch desktop](desktops.md).
 
-### People
+People and agents run `attn crew` (`cmd/attn/crew.go`): `list`, `wake <member> [--agent <name>]`, `sleep <member>`, and `set <member>` with `--cwd`, `--agent`, `--model`, `--effort`, `--launch-desktop`, `--desktop-name` and `--awareness-dir`; each takes `--json`. The sidebar's asleep member row has a sun button that wakes on a second click, and "Actions for <member>" opens its menu. Waking an awake member returns its session; a member's session is an ordinary agent tile named after it.
 
-- Palette (`app/src/application/useAppCommands.tsx`): `manage-crew` ("Manage crew"), and `toggle-crew-queue` ("Put the crew in the queue" or "Take the crew out of the queue").
-- Sidebar: the "Crew" section with its "manage" button and a row per asleep member whose sun button wakes them on a second click; "Actions for <member>" opens the member's menu (`app/src/components/SidebarChrome.tsx`, `app/src/components/QueueSidebar.tsx`, `app/src/components/QueueRows.tsx`).
-- The Manage crew panel (`app/src/components/CrewPanel.tsx`): the member list with "Find a member" (`CrewRoster.tsx`), and per member the tabs "Launch settings" with "Wake" or "Sleep" (`CrewLaunchTab.tsx`), "Charter" (`CrewCharterTab.tsx`), "Handoffs", which lists the letters (`CrewHandoffsTab.tsx`), and "Seeds" (`CrewSeeds.tsx`). "Close" or Escape closes it.
-- The chief: "Make chief of staff" and "Remove chief role" in a session's menu, with a transfer prompt when another session is chief (`app/src/components/SessionActionsPopover.tsx`, `app/src/components/ChiefOfStaffTransferPrompt.tsx`); the chief switch in the new-session picker (`app/src/components/NewSessionDialog/SessionControls.tsx`); the chief badge on its sidebar row.
-- A seed's page in the garden: "Send to Chief", with "What should Chief know?" (`app/src/components/GardenPanel.tsx`).
-- Settings, Background agents: the chief's model, effort and context budget. Crew v2 has no switch in the app: `attn settings set crew_v2_enabled true`.
-- Where people see what members do: a member's session is an ordinary agent tile named after the member; their letters are in the panel's "Handoffs" tab and in the member home.
-- Their own shell: `attn crew` and `attn seed send-to-chief`, below.
+### File letters and receive work
 
-### Agents
+`attn handoff -m "<letter>"` (`cmd/attn/handoff.go`) files a letter and ends the session, leaving the member asleep whether or not the user is at the machine. `-m -` reads stdin; `--nap` starts the next session from its letters; after a failed turnover, `--retry` uses the already-filed letter, asleep unless `--nap` is added. It also accepts `--session` and `--json`. Letters live in the panel's "Handoffs" tab and the member home. `attn seed tend|park|harvest ... --member <name>` acts as a member.
 
-- `attn crew` (`cmd/attn/crew.go`): `list`, `wake <member> [--agent <name>]`, `sleep <member>`, `set <member>` with `--cwd`, `--agent`, `--model`, `--effort`, `--launch-desktop`, `--desktop-name` and `--awareness-dir`; `--json` on each.
-- `attn handoff -m "<letter>"` (`cmd/attn/handoff.go`), with `-m -` to read the letter from stdin, `--nap`, `--retry`, `--session` and `--json`. Plain `attn handoff` files the letter, ends the session and leaves the member asleep, whether or not the user is at the machine; `--nap` ends it and starts the member's next session from its letters instead. After a failed turnover, `--retry` turns over with the letter already filed, asleep unless `--nap` is added.
-- `attn seed send-to-chief <id> [-m "<guidance>"]` (`cmd/attn/seed.go`), and `attn seed tend|park|harvest ... --member <name>` to act as a member.
-- `attn agent msg <member> "text"` addresses the member's mailbox; [inbox.md](inbox.md) drives it.
-- Prompts: `crew_v2_enabled`, read at each launch, picks the set a member gets. Off: the identity, charter or first day, letters, closure and garden in its session instructions (`internal/prompts/content/crew/`), the opening that wakes it (`crew/wake.md`) and the one a successor gets (`crew/successor.md`). On: the v2 set in `internal/prompts/content/crew/v2/` replaces each of those, openings included (`v2/wake.md`, `v2/successor.md`), and adds the compaction note and the operating model "How you work" (`v2/operating-model.md`). Either way: the sleep request (`crew/sleep-requested.md`, `crew/sleep-away.md`) and the heartbeat (`crew/heartbeat.md`); the chief's guidance (`internal/prompts/content/chief.md`), its Notebook inbox notice and its seed assignment (`internal/prompts/content/chief/inbox.md`, `chief/seed-assignment.md`).
-- The attn skill's charter reference, `attn skill --reference charter` (`internal/prompts/content/skills/attn/references/charter.md`), named in its capability index as "Write or update your crew charter" (`internal/prompts/content/skills/attn/SKILL.md`). A v2 member reads it on its first day before writing `CHARTER.md`, and when it adapts its charter to its work. `attn skill` itself is in [agent-guidance.md](agent-guidance.md).
+`attn agent msg <member> "text"` addresses the member's mailbox ([inbox.md](inbox.md)). An item wakes an asleep member before its ring, limited by `crew.wake_limit` per `crew.wake_limit_window_seconds` (`internal/daemon/crew_wake.go`, `internal/daemon/inbox_delivery.go`, `docs/inbox.md`). Every 60 seconds a lifecycle tick keeps an idle member's cache warm and asks it to sleep after the user has been away for `crew.away_seconds`; `crew.heartbeat_enabled` and `crew.autosleep_enabled` turn each off (`internal/daemon/crew_lifecycle.go`).
 
-### Triggers
+### Coordinate as chief
 
-- An item for an asleep member wakes them before the ring, within the wake limit of `crew.wake_limit` wakes per `crew.wake_limit_window_seconds` (`internal/daemon/crew_wake.go`, `internal/daemon/inbox_delivery.go`; rules in `docs/inbox.md`).
-- A lifecycle tick every 60 seconds sends an idle member a cache heartbeat before its cache lapses, and asks it to sleep once the user has been away for `crew.away_seconds` (`internal/daemon/crew_lifecycle.go`). `crew.heartbeat_enabled` and `crew.autosleep_enabled` turn each off.
+A session menu offers "Make chief of staff" and "Remove chief role", with a transfer prompt if another session is chief (`app/src/components/SessionActionsPopover.tsx`, `app/src/components/ChiefOfStaffTransferPrompt.tsx`); the new-session picker has a chief switch (`app/src/components/NewSessionDialog/SessionControls.tsx`), and the sidebar shows a chief badge. Settings, Background agents, configures the chief's model, effort and context budget. A seed's garden page offers "Send to Chief" with "What should Chief know?" (`app/src/components/GardenPanel.tsx`); people and agents can run `attn seed send-to-chief <id> [-m "<guidance>"]` (`cmd/attn/seed.go`). Palette `toggle-crew-queue` ("Put the crew in the queue" or "Take the crew out of the queue") controls whether members owing a turn queue (`app/src/application/useAppCommands.tsx`).
+
+### Member guidance
+
+`crew_v2_enabled`, read on launch, picks the prompts. Off: identity, charter or first day, letters, closure and garden (`internal/prompts/content/crew/`), with `crew/wake.md` and `crew/successor.md` openings. On: `internal/prompts/content/crew/v2/` replaces them, including `v2/wake.md`, `v2/successor.md`, and adds the compaction note and "How you work" (`v2/operating-model.md`). Either way, `crew/sleep-requested.md`, `crew/sleep-away.md` and `crew/heartbeat.md` cover sleep and heartbeat. Chief guidance is `internal/prompts/content/chief.md`, with its Notebook inbox notice and seed assignment in `internal/prompts/content/chief/inbox.md` and `chief/seed-assignment.md`. Crew v2 has no app switch: run `attn settings set crew_v2_enabled true`.
+
+The skill's `attn skill --reference charter` (`internal/prompts/content/skills/attn/references/charter.md`) is named "Write or update your crew charter" in `internal/prompts/content/skills/attn/SKILL.md`. A v2 member reads it on its first day before writing `CHARTER.md`, and when adapting its charter ([agent-guidance.md](agent-guidance.md)).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`); the rest need only the daemon.
-- A member home made before the daemon starts, since a daemon reads new homes only at start: `M="$(./attn instance resolve --field dataDir)/crew/fern"`, `mkdir -p "$M"` and `printf '# Fern\n\nWait for direction.\n' > "$M/CHARTER.md"`. With a daemon already running, stop it as [../SKILL.md](../SKILL.md) describes (through `"$(./attn instance resolve --field appDaemon)" daemon stop` once the app is installed), then start it again as the baseline does.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-crew.XXXX)`.
-- A member folder, `C=$(mktemp -d /tmp/drive-attn-crew-agent.XXXX)`, holding this fixture as `$C/.attn-mock-agent.json`:
+- A member home made before the daemon starts, since a daemon reads new homes only at start: `M="$(./attn instance resolve --field dataDir)/crew/fern" && printf 'export M=%q\n' "$M" >> "$DRIVE_ENV"`, `mkdir -p "$M"` and `printf '# Fern\n\nWait for direction.\n' > "$M/CHARTER.md"`. With a daemon already running, stop it as [../SKILL.md](../SKILL.md) describes (through `"$(./attn instance resolve --field appDaemon)" daemon stop` once the app is installed), then start it again as the baseline does.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-crew.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- A member folder, `C=$(mktemp -d /tmp/drive-attn-crew-agent.XXXX) && echo "export C=$C" >> $DRIVE_ENV`, holding this fixture as `$C/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

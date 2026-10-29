@@ -1,48 +1,38 @@
 # Sidebar
 
-The sidebar is the window's list of what the user works with, and its shape
-follows the profile's flow. In desktop flow it is the desktop sidebar: each
-desktop with its agents and tiles, which collapses to a thin column of desktop
-chips. In queue flow it is the queue sidebar: Home, the crew, the turns the
-user owes, the rest of the agents, automation runs and desktop chips, which
-collapses into the queue bar across the top. Its header holds the profile,
-Commands, the flow switch and the buttons for the garden, the notebook, the
-ledger, automations, notifications and asks.
+The sidebar follows the profile's flow. Desktop flow lists each desktop's
+agents and tiles in layout order, and collapses to a rail of desktop chips.
+Queue flow lists Home, crew, turns, agents and automation runs. It collapses
+to a bar with the waiting pill, asks, runs and desktop chips. The header
+reaches the profile, commands, flow switch and feature panels.
 
-## Sub-features
+## Actions and ways in
 
-- `desktop-sidebar`: desktop flow; each desktop with its agents and tiles, in layout order.
-- `collapsed-rail`: the desktop sidebar collapsed to a column with Home, Commands, the flow switch, the header buttons and desktop chips.
-- `queue-sidebar`: queue flow; Home, crew, the waiting card with the oldest turns, automation runs and desktop chips.
-- `queue-bar`: the queue sidebar collapsed into a strip: the waiting pill and its peek, asks, runs and desktop chips.
-- `agent-list`: every agent of the profile under the waiting card, with a filter.
-- `collapse`: hide the sidebar down to the rail or the bar, and bring it back.
-- `header`: the profile pill, New, Commands, the flow switch, collapse, and the buttons for the garden, notebook, ledger, automations, notifications and asks.
-- `session-rows`: one row per agent with its state, harness mark and actions menu; a clipped name shows in full on hover.
-
-## How to get to it
-
-### People
+### Collapse or expand
 
 - Keys (`app/src/shortcuts/registry.ts`): ⌘B (`session.toggleSidebar`) collapses and expands; ⌘⇧A (`sidebar.agentList`) opens and closes the agent list. Where the queue sidebar is not showing, ⌘⇧A opens the agent palette instead (`app/src/application/useAppController.tsx`).
 - Palette (`app/src/application/useAppCommands.tsx`): `toggle-sidebar` ("Hide the sidebar" or "Show the sidebar").
 - Header (`app/src/components/SidebarHeader.tsx`): `[aria-label="Collapse sidebar"]`, `[aria-label="New agent"]`, `button[aria-label="Commands"]`, the flow button, and the profile pill. The header buttons are named by what they do, such as "Show the garden" and "Show Notifications" (`app/src/application/useAppSidebarActions.tsx`); what each opens belongs to its feature.
+
+### Find and act on agents
+
+Agents change what the sidebar shows: `attn session rename` sets a row name ([ledger.md](ledger.md)), and `attn callout` can point at `sidebar`, `home`, `commands`, `garden`, `desktops`, `queue` and `crew` ([callouts.md](callouts.md)).
+
 - Desktop sidebar and rail (`app/src/components/Sidebar.tsx`, `app/src/components/SidebarChrome.tsx`, `app/src/components/SidebarDesktops.tsx`, `app/src/components/SidebarRows.tsx`): rows `[data-testid="sidebar-session-<session>"]` with `[aria-label="Open <name>"]` and the actions button `[data-testid="session-actions-<session>"]`, which queue rows carry too; desktop groups `[data-testid="sidebar-desktop-<desktop>"]`; the rail's `button[title="Expand sidebar"]`.
 - Queue sidebar and bar (`app/src/components/QueueSidebar.tsx`, `app/src/components/QueueBar.tsx`, `app/src/components/QueueRows.tsx`): `[data-testid="queue-agents-toggle"]` and the filter `[aria-label="Filter agents"]`; ↑ and ↓ walk the rows, a letter typed with the list open filters it, and Escape clears the filter, then closes the list, then returns to the agent on screen. On the bar, `[aria-label="Show sidebar"]` expands it, and the waiting pill `[data-testid="queue-bar-pill"]` opens the agent palette; hovering it shows a peek of the agents.
 - Every row's actions menu: "Mark priority", "Rename session", "Make chief of staff", "Reload session" and "Close session" (`app/src/components/SessionActionsPopover.tsx`). [queue-flow.md](queue-flow.md), [ledger.md](ledger.md), [crew.md](crew.md) and [agent-launch.md](agent-launch.md) own what each does.
-- Driven in other files: ⌘↑ and ⌘↓ step through what the sidebar lists, desktops in desktop flow ([desktops.md](desktops.md)) and the queue in queue flow ([queue-flow.md](queue-flow.md)); desktops are switched, renamed, closed and dragged between here ([desktops.md](desktops.md)); the flow button changes the shape ([queue-flow.md](queue-flow.md)); the dock of shortcut chips sits at the foot of the desktop sidebar ([shortcuts.md](shortcuts.md)); the harness logos on each row are [harnesses.md](harnesses.md)'s, and the instance marker in the header is [instances.md](instances.md)'s.
-- Where people see what agents do: each row's state dot, harness mark, priority flag and turn age, the waiting count, and the waiting dot on desktop chips.
+- Rows show state, harness, priority and turn age, and a clipped name shows in full on hover; the sidebar shows the waiting count and desktop chips show waiting dots.
 
-### Agents
+### Navigate related features
 
-None. Agents change what the sidebar shows without driving it: `attn session rename` sets the name a row shows ([ledger.md](ledger.md)), and `attn callout` can point at its `sidebar`, `home`, `commands`, `garden`, `desktops`, `queue` and `crew` anchors ([callouts.md](callouts.md)).
+- ⌘↑ and ⌘↓ step through what the sidebar lists, desktops in desktop flow ([desktops.md](desktops.md)) and the queue in queue flow ([queue-flow.md](queue-flow.md)); desktops are switched, renamed, closed and dragged between here ([desktops.md](desktops.md)); the flow button changes the shape ([queue-flow.md](queue-flow.md)); the dock of shortcut chips sits at the foot of the desktop sidebar ([shortcuts.md](shortcuts.md)); the harness logos on each row are [harnesses.md](harnesses.md)'s, and the instance marker in the header is [instances.md](instances.md)'s.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline starts in desktop flow.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-sidebar.XXXX)`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-sidebar-agent.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-sidebar.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-sidebar-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
 - Two agents: `wsctl add-session --cwd $A --agent claude --label side-a --id side-a`, then the same with `side-b`. With no session the sidebar starts collapsed; the first agent expands it.
 
 - **Open an agent from its row.** Run `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-side-a\"]","timeoutMs":5000}'`, then click `[aria-label="Open side-a"]` natively, converting its `bridge dom_bounds` box as the README says. `bridge get_state` shows `activeLeaf.sessionId: "side-a"`.

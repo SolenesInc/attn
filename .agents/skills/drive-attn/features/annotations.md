@@ -7,37 +7,27 @@ comment, a quick label or a deletion, adds a note, and sends everything at
 once. The agent receives the batch as the user's message, quoting each
 marked passage with what the user said about it.
 
-## Sub-features
+## Actions and ways in
 
-- `terminal-annotations`: ⌥-drag across an agent's finished message in its terminal to mark it, then label it, comment on it or remove the mark.
-- `markdown-annotations`: select text in a markdown or seed tile to comment on it, label it or mark it for deletion, and add an overall note.
-- `quick-labels`: one-click labels such as Verify this, Show the receipt, Give me an example and Consider alternatives; some carry instructions for the agent.
-- `annotation-drafts`: marks are saved as drafts, and survive an app relaunch and the agent's next turn.
-- `review-notes`: the list of a tile's marks, to open one again, edit it or remove it.
-- `send-batch`: ⌘↩ or the send button sends every mark, with the note, as one message, and clears what went.
-- `send-destination`: a markdown tile sends to its bound session or another session on the desktop; a seed tile sends to the seed's tender, or leaves a note on the seed when nobody tends it ([garden.md](garden.md) owns the seed).
+### Mark and review text
 
-## How to get to it
+In an agent's terminal, ⌥-drag across a finished message to mark it (`app/src/components/TerminalAnnotations/AnnotatedTerminal.tsx`). The popup offers "More labels", "Write a comment" and "Remove this annotation"; the "Annotation comment" box has a Comment button. The "Annotations" panel has "Remove annotation", "Note sent with these annotations" and "Send all".
 
-### People
+In a markdown or seed tile, select text, then Delete, Comment, Quick label or a label's emoji (`app/src/components/MarkdownReader/annotations/SelectionToolbar.tsx`, `AnnotationPopover.tsx`, `AnnotationSidebar.tsx`). Labels include Verify this, Show the receipt, Give me an example and Consider alternatives; some carry agent instructions. "Review notes" opens the list of marks to revisit, edit or remove. Draft marks survive an app relaunch and the agent's next turn.
 
-- Keys (`app/src/shortcuts/registry.ts`): ⌘↩ sends a terminal's marks (`terminal.sendAnnotations`) or a markdown tile's (`markdown.sendAnnotations`), whichever tile is active. Inside a comment box, ⌘↩ saves the comment instead.
-- In an agent's terminal (`app/src/components/TerminalAnnotations/AnnotatedTerminal.tsx`): ⌥-drag across its message; the mark's popup with "More labels", "Write a comment" and "Remove this annotation", and, once a comment is being written, the "Annotation comment" box with its Comment button; the "Annotations" panel with "Remove annotation", "Note sent with these annotations" and "Send all".
-- In a markdown or seed tile (`app/src/components/MarkdownReader/annotations/SelectionToolbar.tsx`, `AnnotationPopover.tsx`, `AnnotationSidebar.tsx`): select text, then Delete, Comment, Quick label or a label's emoji; the "Review notes" list.
-- The tile header (`app/src/components/SessionTerminalDesktop/TileAnnotationControls.tsx`): "Overall note", "Notes <n>", the send button ("Send <n>" to the bound session, or "Note on seed <n>"), and "Change annotation destination" with its "Send annotations to session" menu.
-- Where people see what agents do: the batch lands in the agent's conversation as the user's message, and the agent's reply follows in its terminal.
+### Send feedback
 
-### Agents
+⌘↩ sends the active terminal's marks (`terminal.sendAnnotations`) or markdown tile's (`markdown.sendAnnotations`); inside a comment box it saves the comment (`app/src/shortcuts/registry.ts`). The tile header offers "Overall note", "Notes <n>", a send button ("Send <n>" to the bound session or "Note on seed <n>"), and "Change annotation destination" with its "Send annotations to session" menu (`app/src/components/SessionTerminalDesktop/TileAnnotationControls.tsx`). A markdown tile can send to another session on the desktop; a seed sends to its tender or leaves a note when nobody tends it ([garden.md](garden.md)). Sending clears what went.
 
-- Prompts: agents have no verb; they receive annotations. The terminal batch starts "Feedback on your last message." and quotes each mark with its label and comment (`internal/prompts/content/annotations/terminal-*.md`). The markdown batch starts "# Markdown Annotations", names the file, and lists each mark by line (`internal/prompts/content/annotations/markdown-*.md`). Label instructions come from `internal/prompts/content/annotations/labels/`.
+Agents receive the batch as the user's message, then reply in their terminal; they have no annotation verb. Terminal batches start "Feedback on your last message." and quote marks with labels and comments (`internal/prompts/content/annotations/terminal-*.md`). Markdown batches start "# Markdown Annotations", name the file and list marks by line (`internal/prompts/content/annotations/markdown-*.md`). Label instructions are in `internal/prompts/content/annotations/labels/`.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-annotations-proof.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-annotations.XXXX)`, holding `plan.md` (`# Plan`, then the paragraph `Cache the tile layout before the first paint.`) and this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-annotations-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-annotations.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding `plan.md` (`# Plan`, then the paragraph `Cache the tile layout before the first paint.`) and this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
