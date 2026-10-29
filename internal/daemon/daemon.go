@@ -1967,7 +1967,7 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 	if session != nil && session.Agent == protocol.AgentShellValue {
 		d.sessionMonitor(sessionID).MarkForcedStop()
 	}
-	if session != nil && session.Agent != protocol.AgentShellValue && (d.sessionHost(sessionID) == "" || d.sessionHasLiveWorker(sessionID)) {
+	if session != nil && session.Agent != protocol.AgentShellValue && d.unreachableSessionHost(sessionID) == "" {
 		var err error
 		prepared, err = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "prepare"})
 		if err != nil {
@@ -2134,7 +2134,7 @@ func (d *Daemon) terminateSessionAsync(sessionID protocol.SessionID, sig syscall
 }
 
 func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.SessionClose) error {
-	if d.sessionHost(sessionID) != "" && !d.sessionLive(context.Background(), sessionID) {
+	if d.unreachableSessionHost(sessionID) != "" {
 		return d.closeSessionRecord(sessionID, closed)
 	}
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
@@ -2146,9 +2146,6 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 	session := d.store.Get(sessionID)
 	linked := session != nil && d.store.SessionLink(sessionID) == codexLinkKind
 	if err := d.closeSessionRecord(sessionID, closed); err != nil {
-		if linked {
-			_, _ = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Profile: protocol.Ptr(session.ProfileID)})
-		}
 		return err
 	}
 	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed"}); err != nil {
