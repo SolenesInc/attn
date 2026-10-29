@@ -279,7 +279,7 @@ func (l *nisseLink) watch(c *nisse.Client) {
 	err := c.Stream(l.d.life.Context(), "status/watch", nil, func(item json.RawMessage) {
 		var tree nisseTree
 		if json.Unmarshal(item, &tree) == nil {
-			l.events.run(l.d, func() { l.apply(tree) })
+			l.events.run(l.d, func() { l.apply(c, tree) })
 		}
 	})
 	c.Close()
@@ -301,18 +301,26 @@ func (l *nisseLink) watch(c *nisse.Client) {
 	}
 }
 
-func (l *nisseLink) apply(tree nisseTree) {
+func (l *nisseLink) apply(c *nisse.Client, tree nisseTree) {
 	if tree.Tag == "trees" {
 		busy := make(map[string]nisseTree, len(tree.Trees))
 		for _, t := range tree.Trees {
 			busy[t.Conversation] = t
 		}
+		var lastRuns map[string]*nisseEnded
 		for _, sessionID := range l.sessions() {
-			t, ok := busy[l.d.linkConversation(sessionID)]
-			if !ok {
-				t.Status = "idle"
+			conversation := l.d.linkConversation(sessionID)
+			if t, ok := busy[conversation]; ok {
+				l.observe(sessionID, t.Status, nil)
+				continue
 			}
-			l.observe(sessionID, t.Status, nil)
+			if !l.settlesOnServer(sessionID) {
+				continue
+			}
+			if lastRuns == nil {
+				lastRuns = l.lastRuns(c)
+			}
+			l.observe(sessionID, "idle", lastRuns[conversation])
 		}
 		return
 	}
@@ -328,6 +336,28 @@ func (l *nisseLink) apply(tree nisseTree) {
 		delete(l.ended, tree.Conversation)
 	}
 	l.observe(l.holder(tree.Conversation), tree.Status, ended)
+}
+
+func (l *nisseLink) settlesOnServer(sessionID protocol.SessionID) bool {
+	session := l.d.store.Get(sessionID)
+	return session != nil && (session.State == protocol.SessionStateWorking || session.State == protocol.SessionStatePendingApproval)
+}
+
+func (l *nisseLink) lastRuns(c *nisse.Client) map[string]*nisseEnded {
+	var conversations []struct {
+		ID    string      `json:"id"`
+		Ended *nisseEnded `json:"ended"`
+	}
+	ctx, cancel := context.WithTimeout(l.d.life.Context(), nisseCallLimit)
+	defer cancel()
+	if err := c.Call(ctx, "conversation/list", nil, &conversations); err != nil {
+		l.d.logf("nisse: reading how runs ended while attn was away: %v", err)
+	}
+	ended := make(map[string]*nisseEnded, len(conversations))
+	for _, conversation := range conversations {
+		ended[conversation.ID] = conversation.Ended
+	}
+	return ended
 }
 
 func (l *nisseLink) observe(sessionID protocol.SessionID, status string, ended *nisseEnded) {

@@ -700,7 +700,7 @@ moves to another conversation.
 
 ## Nisse
 
-Read in the source at victorarias/nisse af038f1.
+Read in the source at victorarias/nisse e749011.
 
 - One server per Nisse home holds every conversation; clients reach it over
   `NISSE_HOME/nisse.sock`. `nisse serve` refuses a home another server already
@@ -714,3 +714,5 @@ Read in the source at victorarias/nisse af038f1.
 - `status/watch` opens with the busy conversation trees and then sends one
   status per change of a tree (working, waiting on an approval, idle), with
   how its root's run ended. Subagents are part of their root's tree.
+- `conversation/list` carries `ended` on each conversation that has run: how
+  its last run ended, the same as `status/watch` says.

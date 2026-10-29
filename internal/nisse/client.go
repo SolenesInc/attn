@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 )
 
-const Protocol = 5
+const Protocol = 7
 
 const ackMethod = "@effect/rpc/Ack"
 

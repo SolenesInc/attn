@@ -180,6 +180,35 @@ func TestANisseSessionWorkingThroughADaemonRestartSettlesFromTheServerAfterIt(t 
 	}
 }
 
+func TestNisseSessionsKeepTheirAnswersAndLearnRunsThatEndedWhileTheDaemonWasDown(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "worker")
+	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
+	w := newWorld(t, fakeagent.Nisse)
+	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
+	app := w.App()
+	asked, askedTUI, server := nisseSession(t, w, app)
+	app.TypeLine(asked, "which index should the report use?")
+	askedTUI.Prompted()
+	server.Prompted(askedTUI.ConversationID)
+	server.Reply(askedTUI.ConversationID, "By date or by customer? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, asked, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	working := w.Spawn(app, fakeagent.Nisse, w.Path("shop"))
+	workingTUI := w.Launched(working)
+	app.TypeLine(working, "migrate the orders table")
+	workingTUI.Prompted()
+	server.Prompted(workingTUI.ConversationID)
+	testworld.AwaitSession(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+
+	w.stop()
+	server.Reply(workingTUI.ConversationID, "Migrated, but two rows failed. Retry them? <!-- attn:state=waiting_input -->")
+	w.start()
+	app = w.App()
+	testworld.AwaitSession(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if got := restartedSession(w.App(), asked); got.State != protocol.SessionStateWaitingInput {
+		t.Errorf("the session waiting on an answer is %s after the restart, want it still waiting", got.State)
+	}
+}
+
 func TestQuittingTheNisseTUIClosesTheSessionAndInterruptsItsRun(t *testing.T) {
 	w := newWorld(t, fakeagent.Nisse)
 	app := w.App()

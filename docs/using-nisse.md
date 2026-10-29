@@ -9,7 +9,7 @@ and a server that crashed resumes the runs it cut off.
 attn runs the `nisse` on your PATH, or the one `ATTN_NISSE_EXECUTABLE` names.
 Its home is `NISSE_HOME` from your login shell, by default `~/.nisse`, the same
 one the bare `nisse` uses, so attn and your terminal see the same
-conversations, sign-ins and config. attn needs Nisse protocol 5 or later.
+conversations, sign-ins and config. attn needs Nisse protocol 7 or later.
 
 ## Turn it on or off
 
@@ -46,6 +46,10 @@ The session's state comes from the server, not from the terminal:
 - a run that fails, or that crashed the server three times in a row, leaves
   the session **waiting** with the reason;
 - an interrupted run leaves it **idle**.
+
+A run that ends while attn is down settles the same way once attn is back, from
+how the server says the conversation's last run ended. A session that was
+already waiting or idle keeps its state through the restart.
 
 ## Messages
 

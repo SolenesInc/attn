@@ -118,12 +118,13 @@ type nisseSubmission struct {
 }
 
 type NisseConversation struct {
-	ID        string `json:"id"`
-	Cwd       string `json:"cwd"`
-	Provider  string `json:"provider,omitempty"`
-	Model     string `json:"model,omitempty"`
-	Effort    string `json:"effort,omitempty"`
-	Approvals string `json:"approvals,omitempty"`
+	ID        string         `json:"id"`
+	Cwd       string         `json:"cwd"`
+	Provider  string         `json:"provider,omitempty"`
+	Model     string         `json:"model,omitempty"`
+	Effort    string         `json:"effort,omitempty"`
+	Approvals string         `json:"approvals,omitempty"`
+	Ended     map[string]any `json:"ended,omitempty"`
 	status    string
 	requests  map[string]bool
 }
@@ -284,6 +285,14 @@ func (s *nisseServer) handle(c *nisseServerConn, id uint64, method string, raw j
 			s.convs[p.ID] = conv
 		}
 		return conv, ""
+	case "conversation/list":
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		convs := make([]*NisseConversation, 0, len(s.convs))
+		for _, conv := range s.convs {
+			convs = append(convs, conv)
+		}
+		return convs, ""
 	case "conversation/submit":
 		s.mu.Lock()
 		conv := s.convs[p.Conversation]
@@ -345,6 +354,9 @@ func (s *nisseServer) end(conversation string, ended map[string]any) string {
 
 func (s *nisseServer) statusLocked(conv *NisseConversation, status string, ended map[string]any) {
 	conv.status = status
+	if ended != nil {
+		conv.Ended = ended
+	}
 	s.seq++
 	item := map[string]any{"_tag": "tree", "conversation": conv.ID, "seq": s.seq, "status": status}
 	if ended != nil {
