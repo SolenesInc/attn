@@ -18,7 +18,7 @@ func TestASeedPlantedWhileAnotherUpdateOvertakesItsAnnouncementStillReachesTheAp
 	s.Start()
 	app := s.App()
 
-	planting := s.Launch(testworld.Invocation{Args: []string{"seed", "plant", "Water the ferns", "--json"}})
+	planting := s.Launch(testworld.Invocation{Args: []string{"seed", "plant", "Water the ferns", "-m", "Water the ferns before they dry out.", "--json"}})
 	announce.Await()
 	setSetting(t, app, "auto_approve_enabled", "true")
 	announce.Release()

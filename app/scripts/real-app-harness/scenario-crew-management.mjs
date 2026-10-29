@@ -330,7 +330,7 @@ try {
     runner.assert((await panelText()).includes('Tending 1'), 'the current day session claim appears once even with member attribution');
     await click('[data-testid="crew-seed-filter-planted"]');
     await waitForDom(`[data-testid="crew-seed-${crewPlot}"]`);
-    const livePlant = plant([`Crew live planting update ${memberSuffix}`, '--member', awake, '--session', firstSession]);
+    const livePlant = plant([`Crew live planting update ${memberSuffix}`, '-m', 'Keep live planting visible on the member header.', '--member', awake, '--session', firstSession]);
     await waitForDom(`[data-testid="crew-seed-${livePlant.id}"]`);
     const plantedText = await panelText();
     runner.assert(

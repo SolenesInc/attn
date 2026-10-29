@@ -65,8 +65,8 @@ func TestAnAgentAsksAboutASeedItTends(t *testing.T) {
 		return s.Run(testworld.Invocation{Args: args, Session: session, Stdin: stdin})
 	}
 	var tended, untended protocol.Seed
-	inSession("", "seed", "plant", "Pick the cache store", "--json").JSON(t, &tended)
-	inSession("", "seed", "plant", "Tune the queue", "--json").JSON(t, &untended)
+	inSession("", "seed", "plant", "Pick the cache store", "-m", "Choose where the cache lives.", "--json").JSON(t, &tended)
+	inSession("", "seed", "plant", "Tune the queue", "-m", "Tune the queue behavior.", "--json").JSON(t, &untended)
 	if tend := inSession("", "seed", "tend", tended.ID); tend.Code != 0 {
 		t.Fatalf("attn seed tend exited %d: %s", tend.Code, tend.Stderr)
 	}

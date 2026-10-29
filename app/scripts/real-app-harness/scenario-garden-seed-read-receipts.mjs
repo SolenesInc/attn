@@ -353,8 +353,8 @@ async function main() {
       cli(['seed', 'watch', seed, '--session', watcher.sessionId]);
       await submitPrompt(client, watcher.sessionId, watcher.paneId, HOLD_PROMPT);
       await observer.waitFor(() => fs.existsSync(path.join(watcherCwd, HOLD_READY)), 'watcher holding its turn');
-      keptChild = JSON.parse(cli(['seed', 'plant', 'Keep child subscription', '--part-of', seed, '--json'])).id;
-      droppedChild = JSON.parse(cli(['seed', 'plant', 'Stop inherited subscription', '--part-of', seed, '--json'])).id;
+      keptChild = JSON.parse(cli(['seed', 'plant', 'Keep child subscription', '-m', 'Keep the child watch active.', '--part-of', seed, '--json'])).id;
+      droppedChild = JSON.parse(cli(['seed', 'plant', 'Stop inherited subscription', '-m', 'Remove the inherited child watch.', '--part-of', seed, '--json'])).id;
       cli(['seed', 'watch', keptChild, '--session', watcher.sessionId]);
       cli(['seed', 'note', keptChild, '-m', 'Keep this queued child update', '--ring', '--session', author.sessionId]);
       cli(['seed', 'note', droppedChild, '-m', 'Discard this inherited update', '--ring', '--session', author.sessionId]);

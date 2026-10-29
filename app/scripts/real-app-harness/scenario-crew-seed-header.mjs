@@ -105,9 +105,9 @@ async function main() {
     await client.request('dom_click', { selector: '.warning-banner .banner-dismiss' }).catch((error) => {
       if (!String(error).includes('dom_click selector not found in DOM')) throw error;
     });
-    const first = json(['seed', 'plant', 'Review release notes', '--json']).id;
+    const first = json(['seed', 'plant', 'Review release notes', '-m', 'Review the release notes.', '--json']).id;
     unsettledSeeds.add(first);
-    const second = json(['seed', 'plant', 'Verify upload completion', '--json']).id;
+    const second = json(['seed', 'plant', 'Verify upload completion', '-m', 'Verify the upload finished.', '--json']).id;
     unsettledSeeds.add(second);
     await runner.step('show_member_claims_in_the_existing_header_and_popover', async () => {
       await header(sessionId, null);
