@@ -22,7 +22,7 @@ func TestAWaitingClaudeKeepsItsStateAcrossADaemonRestart(t *testing.T) {
 		agent.term.Heartbeat("not_busy", "Claude Code")
 		w.advance(0)
 		w.restart()
-		app = w.App()
+		w.App()
 		for _, elapsed := range []time.Duration{0, time.Minute} {
 			w.advance(elapsed)
 			got := queriedSession(t, w.Client(), agent.id)
