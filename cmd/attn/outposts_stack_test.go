@@ -59,9 +59,12 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	if first.DaemonID == nil || first.HostKeyFingerprint == nil || first.Build == nil {
 		t.Fatalf("unpaired connected row: %+v", first)
 	}
+	mark := p.EventCount()
 	remote.Stop()
+	outpostStateSince(p, "outpost", protocol.OutpostStateLost, mark)
+	mark = p.EventCount()
 	remote.Start()
-	again := outpostState(p, "outpost", protocol.OutpostStateConnected)
+	again := outpostStateSince(p, "outpost", protocol.OutpostStateConnected, mark)
 	if protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) || protocol.Deref(again.HostKeyFingerprint) != protocol.Deref(first.HostKeyFingerprint) {
 		t.Fatalf("restart changed pins: %+v -> %+v", first, again)
 	}
@@ -150,18 +153,20 @@ func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {
 	p := enableOutposts(t, home)
 	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "frozen", Address: address})
 	first := outpostState(p, "frozen", protocol.OutpostStateConnected)
+	mark := p.EventCount()
 	remote.Signal(syscall.SIGSTOP)
 	defer remote.Signal(syscall.SIGCONT)
-	stalled := outpostState(p, "frozen", protocol.OutpostStateStalled)
+	stalled := outpostStateSince(p, "frozen", protocol.OutpostStateStalled, mark)
 	if stalled.LastError != nil {
 		t.Fatalf("stall invents an error: %+v", stalled)
 	}
-	lost := outpostState(p, "frozen", protocol.OutpostStateLost)
+	lost := outpostStateSince(p, "frozen", protocol.OutpostStateLost, mark)
 	if !strings.Contains(protocol.Deref(lost.LastError), "10s") {
 		t.Fatalf("loss omits threshold: %+v", lost)
 	}
+	mark = p.EventCount()
 	remote.Signal(syscall.SIGCONT)
-	again := outpostState(p, "frozen", protocol.OutpostStateConnected)
+	again := outpostStateSince(p, "frozen", protocol.OutpostStateConnected, mark)
 	if again.LastError != nil || again.LastErrorAt != nil || protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) {
 		t.Fatalf("recovery: %+v", again)
 	}
@@ -215,13 +220,15 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			p = home.App()
 			replacement.Signal(syscall.SIGSTOP)
 			defer replacement.Signal(syscall.SIGCONT)
+			mark := p.EventCount()
 			p.Send(protocol.RepairOutpostMessage{Cmd: protocol.CmdRepairOutpost, ID: first.ID})
-			connecting := outpostState(p, "replaced", protocol.OutpostStateConnecting)
+			connecting := outpostStateSince(p, "replaced", protocol.OutpostStateConnecting, mark)
 			if protocol.Deref(connecting.LastError) != protocol.Deref(refused.LastError) || protocol.Deref(connecting.LastErrorAt) != protocol.Deref(refused.LastErrorAt) {
 				t.Fatalf("repair cleared the last error before success: before=%+v after=%+v", refused, connecting)
 			}
+			mark = p.EventCount()
 			replacement.Signal(syscall.SIGCONT)
-			repaired := outpostState(p, "replaced", protocol.OutpostStateConnected)
+			repaired := outpostStateSince(p, "replaced", protocol.OutpostStateConnected, mark)
 			if protocol.Deref(repaired.DaemonID) != protocol.Deref(remote.Initial.DaemonInstanceID) {
 				t.Fatalf("repair kept old pin: %+v", repaired)
 			}

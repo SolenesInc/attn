@@ -109,7 +109,9 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 	}
 	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return len(s.PullRequests) == 0 })
 	sender := home.Spawn(app, fakeagent.Harness("shell"), home.Path("sender"))
+	mark := app.EventCount()
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
 	if err := home.Client().SnoozeSession("", protocol.SessionID(id), time.Now().Add(time.Hour)); err == nil || !strings.Contains(err.Error(), "outpost is unreachable") {
 		t.Fatalf("offline snooze = %v", err)
 	}
@@ -118,9 +120,9 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 		t.Fatalf("offline message = %+v, %v", message, err)
 	}
 	t.Logf("offline message: %s", message.Detail)
-	mark := len(app.Log())
+	mark = app.EventCount()
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
-	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	if prompt := outpost.CodexServer().Prompted(agent.ConversationID); !strings.Contains(prompt, "attn") {
 		t.Fatalf("queued inbox ring = %q", prompt)
 	}
@@ -131,13 +133,20 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 		name  string
 		stack *testworld.Stack
 	}{{"home", home}, {"outpost", outpost}} {
+		mark = app.EventCount()
 		restart.stack.Stop()
-		restart.stack.Start()
-		app = home.App()
-		if restart.name == "home" {
-			announcements = append(announcements, app)
+		if restart.name == "outpost" {
+			outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
+			mark = app.EventCount()
 		}
-		outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
+		restart.stack.Start()
+		if restart.name == "home" {
+			app = home.App()
+			announcements = append(announcements, app)
+			outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
+		} else {
+			outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
+		}
 		app.TypeLine(id, "after "+restart.name+" restart")
 		agent.Prompted()
 		agent.Reply("Still current. <!-- attn:state=waiting_input -->")
@@ -301,7 +310,7 @@ func TestAHiddenOutpostCodexStaysLiveWhileOfflineAndCanBeShownAgain(t *testing.T
 	if on := home.Attn("settings", "set", "outposts_enabled", "true"); on.Code != 0 {
 		t.Fatal(on)
 	}
-	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reported.Await()
 	spawned := testworld.Request(app, protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: "show-hidden", Agent: "codex", Cwd: outpost.Path("agent"), Host: protocol.Ptr(pair.Host), ProfileID: app.SelectedProfile(), ResumeSessionID: protocol.Ptr(original), Placement: &protocol.SessionPlacement{}, Cols: 100, Rows: 30}, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == id || r.ID == "show-hidden" })
 	if !spawned.Success || string(spawned.ID) != id {
@@ -350,8 +359,10 @@ func TestAClosedOutpostConversationResumesWithItsOwnCostAfterAnOutpostRestart(t 
 	}
 	mark := len(app.Log())
 	outpost.Stop()
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
+	mark = app.EventCount()
 	outpost.Start()
-	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	mark = len(app.Log())
 	app.TypeLine(string(next.ID), "/resume "+original)
 	agent.Prompted()
@@ -422,9 +433,11 @@ func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 	deciding.Await()
 	mark := len(app.Log())
 	outpost.Stop()
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
+	mark = app.EventCount()
 	outpost.Start()
 	deciding.Release()
-	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	next := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
 		return e.Session != nil && protocol.Deref(e.Session.Succeeds) == protocol.SessionID(first)
 	}).Session
@@ -685,8 +698,10 @@ func TestEnrollmentLeavesHomeJobsDormantUntilTheMachineLeaves(t *testing.T) {
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	mark := len(pair.App.Log())
 	outpost.Stop()
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+	mark = pair.App.EventCount()
 	outpost.Start()
-	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 	app = outpost.App()
 	retried := testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: failed.ID, RequestID: protocol.Ptr("retry-local-review")}, protocol.EventTaskRetryResult, func(r protocol.TaskRetryResultMessage) bool { return r.RequestID == "retry-local-review" })
 	if !retried.Success || retried.Task == nil || retried.Task.State != "queued" {
@@ -805,8 +820,9 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 				outpost.Start()
 			}
 			reconnectedAt := time.Now()
+			connectionMark := app.EventCount()
 			requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", pair.Address), pair.Address)
-			outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+			outpostReachSince(app, connectionMark, "outpost", protocol.OutpostReachReachable)
 			var next *protocol.Session
 			if scenario == "resume-closed" {
 				next = testworld.AwaitSince(app, mark, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && string(e.Session.ID) == first }).Session
@@ -943,8 +959,9 @@ func TestAnOutpostConversationStaysRecoverableWhenItsWorkerIsGone(t *testing.T) 
 			mark := len(app.Log())
 			outpost.Reboot()
 			outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
+			connectionMark := app.EventCount()
 			outpost.Start()
-			outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+			outpostReachSince(app, connectionMark, "outpost", protocol.OutpostReachReachable)
 			testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateRecoverable })
 			reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 100, Rows: 30}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == id })
 			if !reloaded.Success {
@@ -1109,10 +1126,12 @@ func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
 			if app.Terminal(first) != terminal {
 				t.Fatal("next prompt moved the original conversation to another terminal")
 			}
+			mark = app.EventCount()
 			outpost.Stop()
+			outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
+			mark = app.EventCount()
 			outpost.Start()
-			app = home.App()
-			outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
+			outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 			mark = len(app.Log())
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after restart\r"})
 			agent.Prompted()

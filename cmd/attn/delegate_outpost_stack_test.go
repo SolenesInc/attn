@@ -70,6 +70,18 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 	}
 	agent.Reply("Ready. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(pair.App, result.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+	conversation := agent.ConversationID
+	exchangePrompt := func(prompt string) {
+		t.Helper()
+		mark := pair.App.EventCount()
+		pair.App.TypeLine(result.SessionID, prompt)
+		if received := agent.Prompted(); received != prompt || agent.ConversationID != conversation {
+			t.Fatalf("prompt=%q conversation=%s; want prompt=%q conversation=%s", received, agent.ConversationID, prompt, conversation)
+		}
+		agent.Reply("Still ready. <!-- attn:state=waiting_input -->")
+		testworld.AwaitSessionSince(pair.App, mark, result.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+		t.Logf("%s: prompt delivered in conversation %s", prompt, conversation)
+	}
 	initial, err := home.Client().SeedShow("", result.SeedID)
 	if err != nil {
 		t.Fatal(err)
@@ -103,29 +115,34 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 		t.Logf("%s: planted=%d tended=%d registrations=%d seed notes=%d terminal=%s", step, lifecycle["garden.seed.planted"], lifecycle["garden.seed.tended"], registered, shown.NotesTotal, delegateTerminal)
 	}
 	checkReceipts("after launch")
+	exchangePrompt("before reconnect")
+	mark := pair.App.EventCount()
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
-	mark := len(pair.App.Log())
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+	mark = pair.App.EventCount()
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
-	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+	exchangePrompt("after reconnect")
 	checkReceipts("after reconnect")
 	for _, restart := range []struct {
 		name  string
 		stack *testworld.Stack
 	}{{"home", home}, {"outpost", outpost}} {
-		mark = len(pair.App.Log())
+		mark = pair.App.EventCount()
 		restart.stack.Stop()
+		if restart.name == "outpost" {
+			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+			mark = pair.App.EventCount()
+		}
 		restart.stack.Start()
 		if restart.name == "home" {
 			pair.App = home.App()
 			announcements = append(announcements, pair.App)
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 		} else {
-			outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 		}
-		pair.App.TypeLine(result.SessionID, "after "+restart.name+" restart")
-		agent.Prompted()
-		agent.Reply("Still ready. <!-- attn:state=waiting_input -->")
-		testworld.AwaitSession(pair.App, result.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+		exchangePrompt("after " + restart.name + " restart")
 		checkReceipts("after " + restart.name + " restart")
 	}
 	t.Logf("outpost caller=%s: terminal=%s delegate=%s host=%s", source, terminal.TerminalID, result.SessionID, pair.Host)
@@ -174,23 +191,29 @@ func TestADelegationWritesItsOutpostFailureNoteOnceAcrossReconnectAndRestarts(t 
 		t.Logf("%s: pre-first-turn failure notes=%d total=%d", step, failures, shown.NotesTotal)
 	}
 	checkNote("after failure")
+	mark := pair.App.EventCount()
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
-	mark := len(pair.App.Log())
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+	mark = pair.App.EventCount()
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
-	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 	checkNote("after reconnect")
 	for _, restarted := range []struct {
 		name  string
 		stack *testworld.Stack
 	}{{"home", home}, {"outpost", outpost}} {
-		mark = len(pair.App.Log())
+		mark = pair.App.EventCount()
 		restarted.stack.Stop()
+		if restarted.name == "outpost" {
+			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+			mark = pair.App.EventCount()
+		}
 		restarted.stack.Start()
 		if restarted.name == "home" {
 			pair.App = home.App()
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 		} else {
-			outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 		}
 		checkNote("after " + restarted.name + " restart")
 	}
