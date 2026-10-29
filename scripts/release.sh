@@ -146,11 +146,6 @@ trap cleanup EXIT
 body="$work/pr-body.md"
 git worktree add -q --detach "$prepare" "$main_sha"
 cd "$prepare"
-fragment_count="$(find changelog.d -maxdepth 1 -type f -name '*.yaml' | wc -l | tr -d '[:space:]')"
-fragment_noun=fragments
-if [[ "$fragment_count" == 1 ]]; then
-  fragment_noun=fragment
-fi
 
 echo "Cutting ${release_branch} from ${main_sha}..."
 ./scripts/compile-changelog.sh
@@ -160,7 +155,7 @@ cargo metadata --manifest-path app/src-tauri/Cargo.toml --format-version 1 >/dev
 go run ./cmd/release-train version check "$version_tag"
 go run ./cmd/release-train manifest write --version "$version_tag" --main "$main_sha"
 
-git add -A CHANGELOG.md changelog.d .github/release-candidate.yml \
+git add -A CHANGELOG.md .github/release-candidate.yml \
   app/package.json app/pnpm-lock.yaml app/src-tauri/tauri.conf.json \
   app/src-tauri/Cargo.toml app/src-tauri/Cargo.lock
 git commit -m "chore(release): prepare ${version_tag}"
@@ -204,11 +199,11 @@ Releases accepted \`main\` commit [\`${main_sha:0:12}\`](${repo_url}/commit/${ma
 | Main Acceptance | [green check](${acceptance_url}) |
 | Candidate head | [\`${candidate_sha}\`](${repo_url}/commit/${candidate_sha}) |
 
-\`main\` may keep moving while this PR is open. Changes merged after the accepted commit ship with this release, and their changelog fragments stay pending for the next one.
+\`main\` may keep moving while this PR is open. Changes that land after the accepted commit ship with this release, and the next release's notes cover them.
 
 ## What changed
 
-- compiled ${fragment_count} changelog ${fragment_noun} into \`CHANGELOG.md\`
+- compiled the commits since the last release into \`CHANGELOG.md\`
 - updated every committed app version to \`${version_tag}\`
 - recorded the accepted main commit in \`.github/release-candidate.yml\`
 

@@ -305,7 +305,7 @@ working on:
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/prompt-authoring.md
 - Branches, PRs, merges, or waiting on reviews => docs/pull-requests.md
-- Changelog fragments, releases, or hotfixes => docs/making-a-release.md
+- Release notes, releases, or hotfixes => docs/making-a-release.md
 - Installing, launching, or verifying instances => docs/instances.md
 - Checking a change live through every way into a feature => the drive-attn
   skill (.agents/skills/drive-attn) and its feature map

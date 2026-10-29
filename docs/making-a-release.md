@@ -1,18 +1,21 @@
 # Making a release
 
-## Changelog fragments
+## Release notes
 
-Each ordinary PR adds a uniquely named `changelog.d/*.yaml`:
+Release notes are written from the commits that land on `main`.
+`scripts/compile-changelog.sh` reads the commits since the previous release,
+groups them by their `Attn-Seed:` trailers, and has Claude write the
+`CHANGELOG.md` section from each seed's title, description and notes and from
+the commits' messages. Commits without a seed, and seeds it cannot read, are
+judged by their messages alone, so write commit messages that say what users
+observe. Run the release inside attn, in the profile that holds attn's seeds,
+so their seeds can be read.
 
-```yaml
-kind: fixed # added | changed | fixed | removed | internal
-area: queue
-change: Auto-settle advances to the next agent with an outstanding turn.
-```
-
-Describe what users observe; invisible work uses `kind: internal`. Optional
-fields: `symptom`, `notes`. CI validates fragments;
-`go run ./cmd/changelog-check` does the same locally.
+The section ends with a marker naming the commits it covers, and the release
+checks require it, so no commit is skipped or covered twice. A pull request
+from a fork needs nothing extra: its squashed commit carries its title and
+description. Fragments left in `changelog.d` from before reach the writer with
+the commits that added them, and the next release deletes them.
 
 ## Release
 
@@ -22,14 +25,14 @@ From a clean, current `main` with green Acceptance:
 ./scripts/release.sh vX.Y.Z
 ```
 
-This cuts `release/vX.Y.Z` from that commit, compiles its fragments into
-`CHANGELOG.md`, bumps every version, and opens a PR to `main`. Merge it once
-`PR gate` and `App acceptance` are green. The merged commit is the release
-commit: when its Acceptance is green, it gets tagged and published.
+This cuts `release/vX.Y.Z` from that commit, compiles the commits since the
+last release into `CHANGELOG.md`, bumps every version, and opens a PR to
+`main`. Merge it once `PR gate` and `App acceptance` are green. The merged
+commit is the release commit: when its Acceptance is green, it gets tagged and
+published.
 
-`main` may keep moving while the release PR is open. Changes merged after the
-release was cut ship with it, and their fragments stay pending for the next
-release.
+`main` may keep moving while the release PR is open. Changes that land after
+the release was cut ship with it, and the next release's notes cover them.
 
 If the automated app acceptance cannot cover the release PR or the merged
 release commit, record a manual receipt for that exact commit with the command
@@ -40,7 +43,7 @@ release again with the same version.
 
 ## Hotfix
 
-Fix forward: merge the fix to `main`, then release a patch version.
+Fix forward: land the fix on `main`, then release a patch version.
 
 ## After publishing
 

@@ -167,14 +167,13 @@ jobs:
               - 'scripts/rust-zig-linker.sh'
               - 'scripts/rust-zig-ar.sh'
               - '.github/actions/setup-toolchains/**'
-  changelog:
-    name: Changelog
-    # Waits on app-acceptance because candidate-gate.sh reads that job's result,
-    # and !cancelled() keeps the gate running when the job is filtered out.
-    needs: [changes, app-acceptance]
+  release-candidate:
+    name: Release candidate
+    # Waits on app-acceptance because candidate-gate.sh reads that job's result.
+    needs: [app-acceptance]
     if: >-
-      !cancelled() &&
-      (github.event_name == 'pull_request' || needs.changes.outputs.force_all == 'true')
+      !cancelled() && github.event_name == 'pull_request' &&
+      startsWith(github.head_ref, 'release/v')
     permissions:
       actions: read
       checks: read
@@ -191,17 +190,11 @@ jobs:
         with:
           go: 'true'
 
-      - name: Gate pull request
-        if: github.event_name == 'pull_request'
+      - name: Validate the release candidate
         run: >-
-          ./scripts/changelog-gate.sh
-          "${{ github.base_ref }}"
-          "${{ github.head_ref }}"
+          ./scripts/candidate-gate.sh origin/main
           "${{ github.event.pull_request.head.sha }}"
-
-      - name: Validate pending fragments
-        if: github.event_name == 'push'
-        run: go run ./cmd/changelog-check
+          "${{ github.head_ref }}"
 
   script-tests:
     name: Script tests
@@ -1003,7 +996,7 @@ jobs:
     if: always() && github.event_name == 'pull_request'
     needs:
       - changes
-      - changelog
+      - release-candidate
       - generated-types
       - script-tests
       - backend
@@ -1037,7 +1030,6 @@ jobs:
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - changes
-      - changelog
       - generated-types
       - script-tests
       - backend
