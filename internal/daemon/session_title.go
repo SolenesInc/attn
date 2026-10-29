@@ -55,7 +55,9 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 	var monitor *sessionmonitor.Monitor
 	for _, candidate := range d.monitors().registry.Monitors() {
 		matches := candidate.TitleKey() == job.UniqueKey
-		if payload.SessionID == "" && !matches {
+		if payload.SessionID != "" {
+			matches = candidate.Session() == payload.SessionID
+		} else if !matches {
 			matches = candidate.Session() == protocol.SessionID(job.UniqueKey)
 		}
 		if matches {
@@ -64,6 +66,7 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 		}
 	}
 	if monitor == nil {
+		d.logf("session title %s: skipped job %s: no monitor for key %q", payload.SessionID, job.ID, job.UniqueKey)
 		return nil, nil
 	}
 	session, allowed := monitor.TitleTarget()
