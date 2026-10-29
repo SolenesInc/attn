@@ -51,19 +51,6 @@ func (repo *testRepository) write(path, content string) {
 	}
 }
 
-func (repo *testRepository) remove(path string) {
-	repo.t.Helper()
-	if err := os.Remove(filepath.Join(repo.root, path)); err != nil {
-		repo.t.Fatal(err)
-	}
-}
-
-func (repo *testRepository) exists(path string) bool {
-	repo.t.Helper()
-	_, err := os.Stat(filepath.Join(repo.root, path))
-	return err == nil
-}
-
 func (repo *testRepository) commit(subject string) string {
 	repo.t.Helper()
 	repo.git("add", "-A")
