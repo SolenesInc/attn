@@ -28,24 +28,9 @@ const (
 	codexVersionLimit        = 5 * time.Second
 )
 
-func (r *codexShared) binary(configured string) string {
+func (r *codexShared) binary(configured string) (string, error) {
 	codex := agentdriver.MustGet(string(protocol.SessionAgentCodex))
-	env := pty.MergeEnvironment(os.Environ(), r.d.loginShellEnvironment())
-	name := strings.TrimSpace(configured)
-	if name == "" {
-		name = strings.TrimSpace(r.d.machineSetting(SettingCodexExecutable))
-	}
-	if name == "" {
-		name, _ = pty.LookupEnv(env, codex.ExecutableEnvVar())
-		name = strings.TrimSpace(name)
-	}
-	if name == "" {
-		name = codex.DefaultExecutable()
-	}
-	if path, ok := pty.ResolveCommandPath(name, env); ok {
-		return path
-	}
-	return name
+	return r.d.machineAgentExecutable(codex, configured)
 }
 
 func (r *codexShared) run(ctx context.Context, binary string, args ...string) ([]byte, error) {
@@ -69,7 +54,11 @@ func codexOlder(version, than string) bool {
 }
 
 func (r *codexShared) installedVersion(ctx context.Context) (string, error) {
-	return r.versionOf(ctx, r.binary(""))
+	binary, err := r.binary("")
+	if err != nil {
+		return "", err
+	}
+	return r.versionOf(ctx, binary)
 }
 
 func (r *codexShared) versionOf(ctx context.Context, binary string) (string, error) {
@@ -217,7 +206,11 @@ func (d *Daemon) codexUpdateCheckHandler(ctx context.Context, _ *jobs.Job) (any,
 	if !r.enabledForNewLaunches() {
 		return nil, nil
 	}
-	out, err := r.run(ctx, r.binary(""), "doctor", "--json")
+	binary, err := r.binary("")
+	if err != nil {
+		return nil, err
+	}
+	out, err := r.run(ctx, binary, "doctor", "--json")
 	var report struct {
 		Checks map[string]struct {
 			Details map[string]any `json:"details"`

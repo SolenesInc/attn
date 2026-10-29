@@ -50,6 +50,47 @@ func TestASharedCodexKeepsItsAppServerTerminalAndConversationAcrossADaemonRestar
 	}
 }
 
+func TestASharedCodexSubagentCanReadAndWriteSeedsBeforeAndAfterADaemonRestart(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	shareCodex(t, app)
+	parent := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
+	codex := s.Launched(parent)
+	app.TypeLine(parent, "review the checkout")
+	codex.Prompted()
+	seed := plant(t, s, "Checkout findings")
+	server := s.CodexServer()
+	subagent := server.SpawnSubagent(codex.ConversationID)
+	server.Work(subagent)
+
+	for _, stage := range []string{"before restart", "after restart"} {
+		if stage == "after restart" {
+			s.Stop()
+			s.Start()
+		}
+		shown := server.RunTool(subagent, `"$ATTN_WRAPPER_PATH" seed show `+seed.ID)
+		if !strings.Contains(shown, seed.Title) {
+			t.Fatalf("%s: subagent read %q, want seed %s", stage, shown, seed.ID)
+		}
+		server.RunTool(subagent, `"$ATTN_WRAPPER_PATH" seed note `+seed.ID+` -m "`+stage+`"`)
+	}
+	notes, err := s.Client().SeedNotes("", seed.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(notes.Notes) != 2 {
+		t.Fatalf("subagent wrote %d notes, want two", len(notes.Notes))
+	}
+	for i, body := range []string{"after restart", "before restart"} {
+		note := notes.Notes[i]
+		if note.Body != body || string(note.AuthorSession) != parent {
+			t.Errorf("subagent note = %q by session %s, want %q by %s", note.Body, note.AuthorSession, body, parent)
+		}
+	}
+}
+
 func TestAStoppedSharedCodexSessionResumesWhenItsAppServerListensWhereTheRestartedDaemonDoesNotLook(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))

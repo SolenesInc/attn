@@ -13,7 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const frozenForwardHeader = `{"frame":{"cmd":"query"},"caller":""}`
+const frozenForwardHeader = `{"caller":""}`
 
 func TestOutpostForwardFrozenTranscript(t *testing.T) {
 	w := &world{World: prepareWorld(t)}
@@ -55,6 +55,9 @@ func TestOutpostForwardFrozenTranscript(t *testing.T) {
 		}
 		completed <- problem
 	}()
+	if _, err := io.WriteString(channel, `{"cmd":"query"}`); err != nil {
+		t.Fatal(err)
+	}
 	if err := channel.CloseWrite(); err != nil {
 		t.Fatal(err)
 	}

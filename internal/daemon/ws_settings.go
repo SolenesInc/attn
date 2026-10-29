@@ -196,7 +196,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		if configured == "" {
 			configured = strings.TrimSpace(stored[executableSettingKey(name)])
 		}
-		available := isAgentExecutableAvailable(configured, driver.DefaultExecutable())
+		available := d.isAgentExecutableAvailable(driver, configured)
 		settings[availabilitySettingKey(name)] = strconv.FormatBool(available)
 		if available {
 			if synced, err := agentdriver.EnsureAttnSkillInstalled(name); err != nil {
@@ -343,12 +343,8 @@ func (d *Daemon) ptyBackendMode() string {
 	}
 }
 
-func isAgentExecutableAvailable(configuredExecutable, defaultExecutable string) bool {
-	executable := strings.TrimSpace(configuredExecutable)
-	if executable == "" {
-		executable = defaultExecutable
-	}
-	_, err := exec.LookPath(executable)
+func (d *Daemon) isAgentExecutableAvailable(driver agentdriver.Driver, configured string) bool {
+	_, err := d.machineAgentExecutable(driver, configured)
 	return err == nil
 }
 
@@ -620,24 +616,15 @@ func validateProjectsDirectory(path string) error {
 	return nil
 }
 
-func validateExecutableSetting(value string) error {
+func (d *Daemon) validateExecutableSetting(value string) error {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
 
-	path, err := exec.LookPath(value)
+	_, err := d.machineExecutable(value)
 	if err != nil {
 		return fmt.Errorf("executable not found: %w", err)
 	}
-
-	info, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("cannot access executable: %w", err)
-	}
-	if info.IsDir() {
-		return fmt.Errorf("executable path points to a directory")
-	}
-
 	return nil
 }
 

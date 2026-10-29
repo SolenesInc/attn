@@ -34,6 +34,7 @@ const (
 	SessionInputLaneContended  = "session-input-lane-contended"
 	SessionSnoozeCommitted     = "session-snooze-committed"
 	SessionTeardownPrepared    = "session-teardown-prepared"
+	AgentCloseDrained          = "agent-close-drained"
 	SessionExitObserved        = "session-process-exit-observed"
 	AgentTerminalStarted       = "agent-terminal-started"
 	TerminalStarting           = "terminal-starting"

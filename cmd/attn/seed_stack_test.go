@@ -60,6 +60,89 @@ func lineOf(t *testing.T, text, id string) (int, string) {
 	return 0, ""
 }
 
+func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	for _, verb := range []string{
+		"plant", "plot", "ls", "search", "ready", "link", "unlink", "show",
+		"review", "review start", "review show", "review cancel", "review retry", "review keep",
+		"watch", "unwatch", "edit", "send-to-chief", "tend", "park", "harvest", "wither", "replant", "note",
+		"check", "check add", "check edit", "check remove", "check restore", "check report",
+		"check confirm", "check reject", "check uncheck", "check reopen",
+		"attach", "detach", "notes", "guide", "prime", "export",
+	} {
+		t.Run(verb, func(t *testing.T) {
+			args := append([]string{"seed"}, strings.Fields(verb)...)
+			var help string
+			for _, flag := range []string{"--help", "-h"} {
+				ran := s.Attn(append(slices.Clone(args), flag)...)
+				if ran.Code != 0 || ran.Stderr != "" || !strings.HasPrefix(ran.Stdout, verb+" ") && !strings.HasPrefix(ran.Stdout, verb+"\n") {
+					t.Fatalf("%s %s: exit %d, stdout %q, stderr %q", verb, flag, ran.Code, ran.Stdout, ran.Stderr)
+				}
+				if strings.Contains(ran.Stdout, "\ncommands:") || strings.Contains(ran.Stdout, "\n  plant ") && verb != "plant" {
+					t.Errorf("%s help printed the catalog: %s", verb, ran.Stdout)
+				}
+				help = ran.Stdout
+			}
+			foreign := "--flat"
+			if verb == "ls" {
+				foreign = "--plot"
+			}
+			ran := s.Attn(append(slices.Clone(args), foreign)...)
+			lines := strings.Split(strings.TrimSuffix(ran.Stderr, "\n"), "\n")
+			synopsis, _, _ := strings.Cut(help, "\n")
+			wantUsage := "usage: attn seed " + synopsis + " (attn seed " + verb + " --help)"
+			if ran.Code != 2 || ran.Stdout != "" || len(lines) != 2 ||
+				!strings.Contains(lines[0], strings.TrimPrefix(foreign, "--")) || lines[1] != wantUsage {
+				t.Errorf("%s %s: exit %d, stdout %q, stderr %q; want two-line usage %q", verb, foreign, ran.Code, ran.Stdout, ran.Stderr, wantUsage)
+			}
+		})
+	}
+	for _, args := range [][]string{
+		{"plant", "Wrong file flag", "-f", "brief.md"},
+		{"ls", "--plot", "s-missing"},
+		{"edit"},
+		{"check", "report"},
+		{"review", "cancel"},
+	} {
+		ran := s.Attn(append([]string{"seed"}, args...)...)
+		if ran.Code != 2 || ran.Stdout != "" || strings.Count(ran.Stderr, "\n") != 2 || !strings.Contains(ran.Stderr, "\nusage: attn seed "+args[0]) {
+			t.Errorf("seed %q: exit %d, stdout %q, stderr %q", args, ran.Code, ran.Stdout, ran.Stderr)
+		}
+	}
+}
+
+func TestEmptySeedMessageStdinCannotEraseABody(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	seed := plant(t, s, "Keep this brief", "-m", "the agreed body")
+	for _, stdin := range []string{"", " \n\t"} {
+		t.Run(fmt.Sprintf("stdin=%q", stdin), func(t *testing.T) {
+			for _, args := range [][]string{
+				{"edit", seed.ID}, {"plant", "Failed pipeline"}, {"note", seed.ID},
+			} {
+				ran := s.Run(testworld.Invocation{Args: append(append([]string{"seed"}, args...), "-m", "-"), Stdin: stdin})
+				if ran.Code != 2 || ran.Stdout != "" || !strings.Contains(ran.Stderr, "-m - read nothing from stdin; pass -m '' to clear the body") {
+					t.Errorf("seed %q: exit %d, stdout %q, stderr %q", args, ran.Code, ran.Stdout, ran.Stderr)
+				}
+			}
+			if got := showSeed(t, s, "", seed.ID).Seed; got.Body != seed.Body || got.Rev != seed.Rev {
+				t.Errorf("failed stdin changed body/revision: %+v", got)
+			}
+			var listed protocol.SeedListResult
+			s.Attn("seed", "ls", "--json").JSON(t, &listed)
+			if listed.Total != 1 {
+				t.Errorf("failed stdin planted a seed: %+v", listed)
+			}
+		})
+	}
+	s.Attn("seed", "edit", seed.ID, "-m", "")
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "" {
+		t.Errorf("explicit empty -m left body %q", got)
+	}
+}
+
 func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
@@ -75,27 +158,29 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	for _, row := range []struct {
 		args []string
 		want string
+		code int
 	}{
-		{[]string{"seed", "harvest", "s-7k3f9m", "--when-merged", "-m", "done"}, "takes no -m"},
-		{[]string{"seed", "harvest", "s-7k3f9m", "--when-merged", "s-2p4qxv"}, `"s-2p4qxv" is not a pull request url`},
-		{[]string{"seed", "harvest", "s-7k3f9m", "--clear"}, "`attn seed harvest <id> --when-merged --clear`"},
-		{[]string{"seed", "park", "s-7k3f9m", "--when-merged"}, "belongs to harvest"},
-		{[]string{"seed", "attach", "s-7k3f9m"}, "name the document"},
-		{[]string{"seed", "attach", "s-7k3f9m", "--repo", "attn"}, "name the document"},
-		{[]string{"seed", "attach", "s-7k3f9m", "--notebook", "nb-7", "--url", "https://example.test"}, "--notebook and --url were all given"},
-		{[]string{"seed", "attach", "s-7k3f9m", "--path", "plan.bin"}, "exactly one of --move or --copy"},
-		{[]string{"seed", "attach", "s-7k3f9m", "--path", "plan.bin", "--move", "--copy"}, "exactly one of --move or --copy"},
-		{[]string{"seed", "attach", "s-7k3f9m", "--path", "docs/plan.md", "--repo", "attn", "--copy"}, "apply only to a local --path without --repo"},
-		{[]string{"seed", "detach", "s-7k3f9m", "--path", "report.pdf"}, "requires --to <destination>"},
-		{[]string{"seed", "review", "show", "--model", "sonnet"}, `unknown flag "--model"`},
+		{[]string{"seed", "harvest", "s-7k3f9m", "--when-merged", "-m", "done"}, "takes no -m", 2},
+		{[]string{"seed", "harvest", "s-7k3f9m", "--when-merged", "s-2p4qxv"}, `"s-2p4qxv" is not a pull request url`, 2},
+		{[]string{"seed", "harvest", "s-7k3f9m", "--clear"}, "`attn seed harvest <id> --when-merged --clear`", 2},
+		{[]string{"seed", "park", "s-7k3f9m", "--when-merged"}, "flag provided but not defined: -when-merged", 2},
+		{[]string{"seed", "attach", "s-7k3f9m"}, "name the document", 1},
+		{[]string{"seed", "attach", "s-7k3f9m", "--repo", "attn"}, "name the document", 1},
+		{[]string{"seed", "attach", "s-7k3f9m", "--notebook", "nb-7", "--url", "https://example.test"}, "--notebook and --url were all given", 1},
+		{[]string{"seed", "attach", "s-7k3f9m", "--path", "plan.bin"}, "exactly one of --move or --copy", 1},
+		{[]string{"seed", "attach", "s-7k3f9m", "--path", "plan.bin", "--move", "--copy"}, "exactly one of --move or --copy", 1},
+		{[]string{"seed", "attach", "s-7k3f9m", "--path", "docs/plan.md", "--repo", "attn", "--copy"}, "apply only to a local --path without --repo", 1},
+		{[]string{"seed", "detach", "s-7k3f9m", "--path", "report.pdf"}, "requires --to <destination>", 1},
+		{[]string{"seed", "review", "show", "--model", "sonnet"}, `flag provided but not defined: -model`, 2},
 	} {
 		verb := strings.Join(row.args[:2], " ")
 		if row.args[1] == "review" {
 			verb = strings.Join(row.args[:3], " ")
 		}
-		requireFailure(t, s.Attn(row.args...), verb+": ", row.want)
+		ran := s.Attn(row.args...)
+		refused(t, ran, row.code, verb+": ")
+		requireLines(t, verb, ran.Stderr, row.want)
 	}
-
 	s.Start()
 	app := s.App()
 
@@ -394,7 +479,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 
 		requireLines(t, "report", seedAs(t, s, "", "check", "report", child, "C1", "-m", "tests pass", "--evidence", "https://example.test/run/1"),
 			"C1 reported on "+child+" (checked-child) · checks 0 of 2 confirmed · 1 to judge · 1 open\n")
-		requireFailure(t, s.Attn("seed", "check", "report", child, "C1", "-m", "x", "--shared"), "seed check report: ", "--shared belongs to add")
+		refused(t, s.Attn("seed", "check", "report", child, "C1", "-m", "x", "--shared"), 2, "seed check report: flag provided but not defined: -shared")
 		requireLines(t, "show", seedAs(t, s, "", "show", child),
 			"\n  C1  reported\n      Wire tests pass.\n      report  tests pass\n              https://example.test/run/1 · ",
 			"\n  C5  open · shared from "+plot.Crown.ID+"\n",

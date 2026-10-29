@@ -66,7 +66,10 @@ func quickCaptureRequestScope(msg any) quickCaptureScope {
 	}
 	return quickCaptureScope{}
 }
-func (d *Daemon) quickCaptureRequest(profileID string, msg any, transportBytes int) (*protocol.QuickCaptureResult, error) {
+
+const quickCaptureSocketDownloadBytes = 32 * 1024
+
+func (d *Daemon) quickCaptureRequest(profileID string, msg any, downloadChunkBytes int) (*protocol.QuickCaptureResult, error) {
 	switch m := msg.(type) {
 	case *protocol.QuickCaptureSendMessage:
 		if err := requireCanonicalUUID(m.CaptureID); err != nil {
@@ -122,7 +125,7 @@ func (d *Daemon) quickCaptureRequest(profileID string, msg any, transportBytes i
 		upload, err := d.quickCapturePut(profileID, m)
 		return &protocol.QuickCaptureResult{Upload: upload}, err
 	case *protocol.QuickCaptureAttachmentGetMessage:
-		download, err := d.quickCaptureDownload(profileID, m, transportBytes/2)
+		download, err := d.quickCaptureDownload(profileID, m, downloadChunkBytes)
 		return &protocol.QuickCaptureResult{Download: download}, err
 	case *protocol.QuickCaptureAttachmentDiscardMessage:
 		err := d.quickCaptureDiscard(profileID, m)
@@ -134,7 +137,7 @@ func (d *Daemon) handleQuickCapture(conn net.Conn, msg any) {
 	profileID, err := d.quickCaptureProfile(msg, "")
 	var result *protocol.QuickCaptureResult
 	if err == nil {
-		result, err = d.quickCaptureRequest(profileID, msg, maxInitialSocketFrameBytes)
+		result, err = d.quickCaptureRequest(profileID, msg, quickCaptureSocketDownloadBytes)
 	}
 	response := protocol.Response{Ok: err == nil, QuickCaptureResult: result}
 	if err != nil {
@@ -153,7 +156,7 @@ func (d *Daemon) handleQuickCaptureWS(client *wsClient, selected string, msg any
 	profileID, err := d.quickCaptureProfile(msg, selected)
 	var result *protocol.QuickCaptureResult
 	if err == nil {
-		result, err = d.quickCaptureRequest(profileID, msg, int(websocketReadLimit(client)))
+		result, err = d.quickCaptureRequest(profileID, msg, int(websocketReadLimit(client))/2)
 	}
 	response := protocol.QuickCaptureResultMessage{ProfileID: selected, Event: protocol.EventQuickCaptureResult, RequestID: quickCaptureRequestScope(msg).requestID, Success: err == nil, Result: result}
 	if err != nil {

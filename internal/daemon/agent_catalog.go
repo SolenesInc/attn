@@ -3,7 +3,6 @@ package daemon
 import (
 	"encoding/json"
 	"net/http"
-	"os/exec"
 	"sort"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -23,16 +22,17 @@ func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
 		}
 		driver := agentdriver.Get(name)
 		caps := agentdriver.EffectiveCapabilities(driver)
+		executable, err := d.machineAgentExecutable(driver, "")
 		entry := agentdriver.Descriptor{
 			Name:       name,
-			Executable: driver.ResolveExecutable(d.machineSetting(MachineSetting(canonicalExecutableSettingKey(name)))),
+			Executable: executable,
 			ModelPin:   caps.HasModelPin,
 			EffortPin:  caps.HasEffortPin,
 		}
-		if path, err := exec.LookPath(entry.Executable); err != nil {
+		if err != nil {
 			entry.Health, entry.Detail = agentdriver.HealthUnhealthy, err.Error()
 		} else {
-			entry.Health, entry.Detail = agentdriver.HealthHealthy, path
+			entry.Health, entry.Detail = agentdriver.HealthHealthy, executable
 		}
 		agents = append(agents, entry)
 	}

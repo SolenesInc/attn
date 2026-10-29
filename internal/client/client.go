@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -171,29 +172,38 @@ func NewWithDial(socketPath string, dial func() (net.Conn, error)) *Client {
 }
 
 func (c *Client) writeFrame(conn net.Conn, msg any) error {
-	if c.callerTerminal == "" {
-		return json.NewEncoder(conn).Encode(msg)
-	}
-	frame, err := json.Marshal(msg)
+	frame, err := c.marshalFrame(msg)
 	if err != nil {
 		return err
 	}
-	var named protocol.SocketCaller
-	if err := json.Unmarshal(frame, &named); err != nil {
-		return err
-	}
-	if named.CallerID != nil {
-		_, err = conn.Write(append(frame, '\n'))
-		return err
-	}
-	caller, err := json.Marshal(protocol.SocketCaller{CallerID: &c.callerTerminal})
-	if err != nil {
-		return err
-	}
-	caller[0] = ','
-	frame = append(append(frame[:len(frame)-1], caller...), '\n')
 	_, err = conn.Write(frame)
 	return err
+}
+
+func (c *Client) marshalFrame(msg any) ([]byte, error) {
+	frame, err := json.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	var named struct {
+		protocol.SocketCaller
+		Cmd string `json:"cmd"`
+	}
+	if err := json.Unmarshal(frame, &named); err != nil {
+		return nil, err
+	}
+	if c.callerTerminal != "" && named.CallerID == nil {
+		caller, err := json.Marshal(protocol.SocketCaller{CallerID: &c.callerTerminal})
+		if err != nil {
+			return nil, err
+		}
+		caller[0] = ','
+		frame = append(frame[:len(frame)-1], caller...)
+	}
+	if len(frame) > protocol.MaxSocketFrameBytes {
+		return nil, fmt.Errorf("%s request: max_socket_frame_bytes=%d, asked for %d bytes", named.Cmd, protocol.MaxSocketFrameBytes, len(frame))
+	}
+	return append(frame, '\n'), nil
 }
 
 func (c *Client) RecordAnalytics(stream, name string, props map[string]any) error {
@@ -251,18 +261,23 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 		}
 	}
 
+	frame, err := c.marshalFrame(msg)
+	if err != nil {
+		return nil, err
+	}
 	conn, err := c.connect()
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
 
-	if err := c.writeFrame(conn, msg); err != nil {
-		return nil, fmt.Errorf("send message: %w", err)
-	}
+	_, writeErr := conn.Write(frame)
 
 	var resp protocol.Response
 	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+		if writeErr != nil {
+			return nil, fmt.Errorf("send message: %w", writeErr)
+		}
 		return nil, fmt.Errorf("receive response: %w", err)
 	}
 
@@ -1127,6 +1142,9 @@ func (c *Client) IsRunning() bool {
 
 func explainConnectError(sockPath string, cause error) error {
 	instance := config.InstanceLabel()
+	if errors.Is(cause, syscall.EPERM) {
+		return fmt.Errorf("the sandbox blocks attn's socket at %s (instance=%s): %w\n  run this command with escalated permissions; in Codex, allow its prefix in ~/.codex/rules/default.rules for future runs", config.CollapseHome(sockPath), instance, cause)
+	}
 	base := fmt.Sprintf("connect to daemon at %s (instance=%s): %v",
 		config.CollapseHome(sockPath), instance, cause)
 	if hint := crossInstanceHint(); hint != "" {

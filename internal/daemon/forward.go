@@ -23,7 +23,6 @@ const bridgeForward = "forward"
 const forwardComplete = "forward-complete"
 
 type forwardRequest struct {
-	Frame  json.RawMessage    `json:"frame"`
 	Caller protocol.SessionID `json:"caller"`
 }
 
@@ -42,7 +41,7 @@ func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionI
 		return
 	}
 	lost := fmt.Sprintf("lost %s during this call; it may have run", name)
-	header, err := json.Marshal(forwardRequest{Frame: frame, Caller: caller})
+	header, err := json.Marshal(forwardRequest{Caller: caller})
 	if err != nil {
 		d.sendError(socket, err.Error())
 		return
@@ -74,7 +73,9 @@ func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionI
 	inputEnded := make(chan struct{})
 	goTransport(func() {
 		defer close(inputEnded)
-		_, _ = io.Copy(channel, socket)
+		if _, err := channel.Write(frame); err == nil {
+			_, _ = io.Copy(channel, socket)
+		}
 		_ = channel.CloseWrite()
 	})
 	defer func() {
@@ -135,9 +136,7 @@ func (d *Daemon) forwardBridgeHandler(host string) func(*bridge.Conn, ssh.NewCha
 			inputEnded := make(chan struct{})
 			goTransport(func() {
 				defer close(inputEnded)
-				if _, err := relay.Write(request.Frame); err == nil {
-					_, _ = io.Copy(relay, channel)
-				}
+				_, _ = io.Copy(relay, channel)
 				_ = relay.CloseWrite()
 			})
 			outputEnded := make(chan struct{})

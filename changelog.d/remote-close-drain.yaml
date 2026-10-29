@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: Keep final usage when an outpost agent exits, and release shared Codex servers after an interrupted close.

@@ -142,10 +142,11 @@ func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testin
 	source := s.Spawn(app, fakeagent.Claude, repo)
 	s.Launched(source)
 
+	requestID := uuid.NewString()
 	started := s.Run(testworld.Invocation{Session: source, Args: []string{"delegate",
 		"--brief", "Investigate the parser", "--cwd", repo,
 		"--new-worktree", "--branch", "feat/parser", "--from", "main",
-		"--model", "default", "--effort", "high"}})
+		"--model", "default", "--effort", "high", "--request-id", requestID}})
 	if started.Code != 0 {
 		t.Fatalf("attn delegate exited %d: %s", started.Code, started.Stderr)
 	}
@@ -166,6 +167,18 @@ func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testin
 	}
 	if seed := s.Attn("seed", "show", result.SeedID).Stdout; !strings.Contains(seed, "Investigate the parser") {
 		t.Errorf("seed %s does not carry the brief:\n%s", result.SeedID, seed)
+	}
+
+	for _, flags := range [][]string{nil, {"--profile", app.SelectedProfile(), "--session", source}} {
+		status := s.Run(testworld.Invocation{Session: source, Args: append([]string{"delegate", "status", requestID}, flags...)})
+		if status.Code != 0 {
+			t.Fatalf("delegate status exited %d: %s", status.Code, status.Stderr)
+		}
+		var operation protocol.DelegationOperation
+		status.JSON(t, &operation)
+		if operation.RequestID != requestID || string(operation.SessionID) != result.SessionID {
+			t.Errorf("delegate status = %+v, want request %s and session %s", operation, requestID, result.SessionID)
+		}
 	}
 
 	for _, tc := range []struct {

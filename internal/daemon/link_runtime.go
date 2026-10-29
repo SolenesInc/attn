@@ -20,7 +20,7 @@ type linkRuntime interface {
 	enabledForNewLaunches() bool
 	admit(profile, conversation string) error
 	prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error
-	relaunch(opts *ptybackend.SpawnOptions)
+	relaunch(opts *ptybackend.SpawnOptions) error
 
 	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
 	runsLink(t harness.TerminalID) bool

@@ -314,8 +314,6 @@ func readSocketFrame(reader *bufio.Reader) ([]byte, error) {
 	}
 }
 
-const maxInitialSocketFrameBytes = 64 * 1024
-
 func readInitialSocketFrame(reader *bufio.Reader, maxBytes int) ([]byte, error) {
 	if maxBytes <= 0 {
 		return nil, errors.New("initial socket frame size limit must be positive")
@@ -373,7 +371,7 @@ func readInitialSocketFrame(reader *bufio.Reader, maxBytes int) ([]byte, error) 
 		}
 	}
 
-	return nil, fmt.Errorf("initial socket frame exceeds %d bytes", maxBytes)
+	return nil, fmt.Errorf("initial socket frame: max_socket_frame_bytes=%d, asked for more than %d bytes", maxBytes, maxBytes)
 }
 
 func isJSONWhitespace(b byte) bool {

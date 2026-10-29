@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -136,7 +135,7 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, con
 	if !ok {
 		return "", fmt.Errorf("%s driver does not support headless tasks", agent)
 	}
-	executable, err := exec.LookPath(driver.ResolveExecutable(d.machineSetting(MachineSetting(canonicalExecutableSettingKey(agent)))))
+	executable, err := d.machineAgentExecutable(driver, "")
 	if err != nil {
 		return "", fmt.Errorf("resolve %s executable: %w", agent, err)
 	}

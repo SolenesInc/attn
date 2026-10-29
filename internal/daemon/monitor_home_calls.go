@@ -153,28 +153,22 @@ func (d *Daemon) monitorViewFor(session protocol.SessionID) (sessionmonitor.View
 }
 
 func (d *Daemon) runClassifier(ctx context.Context, agent protocol.SessionAgent, directory, text string, timeout time.Duration) (string, error) {
-	if agent != "" {
-		driver := agentdriver.Get(string(agent))
-		if state, err, ok := agentdriver.ClassifyWithDriver(
-			ctx,
-			driver,
-			text,
-			d.machineSetting(MachineSetting(executableSettingKey(string(agent)))),
-			directory,
-			d.classifierModel(ctx, string(agent)),
-			timeout,
-		); ok {
-			return state, err
-		}
+	driver := agentdriver.Get(string(agent))
+	if _, ok := agentdriver.GetClassifier(driver); !ok {
+		driver = agentdriver.Get("claude")
+		directory = ""
 	}
-	claude := agentdriver.Get("claude")
+	executable, err := d.machineAgentExecutable(driver, "")
+	if err != nil {
+		return protocol.StateUnknown, err
+	}
 	if state, err, ok := agentdriver.ClassifyWithDriver(
 		ctx,
-		claude,
+		driver,
 		text,
-		d.machineSetting(SettingClaudeExecutable),
-		"",
-		d.classifierModel(ctx, "claude"),
+		executable,
+		directory,
+		d.classifierModel(ctx, driver.Name()),
 		timeout,
 	); ok {
 		return state, err

@@ -1,0 +1,3 @@
+kind: fixed
+area: garden
+change: Seed commands show their own help, reject flags from other verbs, and refuse empty stdin instead of clearing a body.

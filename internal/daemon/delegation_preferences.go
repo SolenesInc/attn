@@ -27,7 +27,7 @@ func (d *Daemon) delegationHarnesses() []protocol.Harness {
 		if !caps.HasInitialPrompt || !d.agentOffered(name) {
 			continue
 		}
-		result = append(result, protocol.Harness{ID: name, Name: driver.DisplayName(), Available: isAgentExecutableAvailable(d.machineAgentExecutable(driver), driver.DefaultExecutable()), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin, Discovery: supportsModelDiscovery(driver)})
+		result = append(result, protocol.Harness{ID: name, Name: driver.DisplayName(), Available: d.isAgentExecutableAvailable(driver, ""), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin, Discovery: supportsModelDiscovery(driver)})
 	}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
 		if !driver.Capabilities["initial_prompt"] {

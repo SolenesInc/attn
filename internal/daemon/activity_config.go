@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -92,12 +91,7 @@ func (d *Daemon) validateActivitySetting(raw string) error {
 		return err
 	}
 	driver := agentdriver.Get(config.Agent)
-	configured := ""
-	if d.store != nil {
-		configured = d.machineSetting(MachineSetting(canonicalExecutableSettingKey(config.Agent)))
-	}
-	executable := driver.ResolveExecutable(configured)
-	if _, err := exec.LookPath(executable); err != nil {
+	if _, err := d.machineAgentExecutable(driver, ""); err != nil {
 		return fmt.Errorf("session activity executable for %s was not found: %w", config.Agent, err)
 	}
 	return nil
@@ -200,11 +194,7 @@ func (d *Daemon) resolveActivityExecutable(config activityConfig) (agentdriver.H
 	if !ok {
 		return nil, "", fmt.Errorf("agent %s does not support headless tasks", config.Agent)
 	}
-	configured := ""
-	if d.store != nil {
-		configured = d.machineSetting(MachineSetting(canonicalExecutableSettingKey(config.Agent)))
-	}
-	executablePath, err := exec.LookPath(driver.ResolveExecutable(configured))
+	executablePath, err := d.machineAgentExecutable(driver, "")
 	if err != nil {
 		return nil, "", fmt.Errorf("resolve %s executable: %w", config.Agent, err)
 	}

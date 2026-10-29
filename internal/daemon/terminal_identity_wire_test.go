@@ -172,3 +172,19 @@ func TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart(t *testing.T) 
 		})
 	}
 }
+
+func TestAnExplicitTerminalIdentityKeepsHooksIndependentOfAnOuterSharedCodex(t *testing.T) {
+	t.Setenv("ATTN_CODEX_SHARED_PROFILE", "outer-profile")
+	t.Setenv("CODEX_THREAD_ID", "outer-conversation")
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app := w.App()
+	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		session := w.Spawn(app, harness, w.Path(string(harness)))
+		agent := w.Launched(session)
+		app.TypeLine(session, "review the checkout")
+		agent.Prompted()
+		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+		agent.Reply("Review ready. Change the rounding? <!-- attn:state=waiting_input -->")
+		testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+	}
+}
