@@ -132,9 +132,10 @@ export function Dashboard({
   const queueModeEnabled = queue !== null;
 
   const snoozedSessions = useMemo(() => (
-    queue ? queue.snoozed.map((row) => row.session)
-      : sessions.filter((s) => isSnoozed(s.turnSnoozedUntil, now)).sort(compareWakeOrder)
-  ), [queue, sessions, now]);
+    (queue ? [...queue.snoozed.map((row) => row.session), ...(chiefSession ? [chiefSession] : [])] : sessions)
+      .filter((session) => isSnoozed(session.turnSnoozedUntil, now))
+      .sort(compareWakeOrder)
+  ), [queue, chiefSession, sessions, now]);
 
   const awakeSessions = useMemo(() => {
     const deferred = new Set(snoozedSessions.map((s) => s.id));
