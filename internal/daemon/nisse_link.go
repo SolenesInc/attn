@@ -126,10 +126,11 @@ func (l *nisseLink) prepareLaunch(opts *ptybackend.SpawnOptions, profile string)
 	return l.d.store.SaveTerminalView(store.TerminalView{TerminalID: string(opts.ID), Link: nisseLinkKind, ProfileID: profile})
 }
 
-func (l *nisseLink) relaunch(opts *ptybackend.SpawnOptions) {
+func (l *nisseLink) relaunch(opts *ptybackend.SpawnOptions) error {
 	if _, err := l.ensureServer(l.d.life.Context(), opts); err != nil {
 		l.d.logf("nisse: relaunching terminal %s before its server answers: %v", opts.ID, err)
 	}
+	return nil
 }
 
 func (l *nisseLink) resolveCaller(protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {

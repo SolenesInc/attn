@@ -2147,7 +2147,6 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 	}
 	session := d.store.Get(sessionID)
 	link := d.linkOf(sessionID)
-	linked := session != nil && d.store.SessionLink(sessionID) == codexLinkKind
 	if err := d.closeSessionRecord(sessionID, closed); err != nil {
 		return err
 	}
