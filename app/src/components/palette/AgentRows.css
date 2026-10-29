@@ -45,6 +45,20 @@
   border: 1px solid var(--color-text-tertiary);
 }
 
+.unified-palette-dot.is-unreachable {
+  position: relative;
+  background: transparent;
+  border: 1px solid var(--color-error);
+}
+
+.unified-palette-dot.is-unreachable::after {
+  position: absolute;
+  content: '';
+  inset: 2px -2px;
+  border-top: 1px solid var(--color-error);
+  transform: rotate(-45deg);
+}
+
 .unified-palette-dot.is-tile {
   border-radius: 2px;
   background: var(--color-border);
@@ -109,6 +123,11 @@
 }
 
 .unified-palette-pill.is-approval {
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+}
+
+.unified-palette-pill.is-unreachable {
   color: var(--color-error);
   background: color-mix(in srgb, var(--color-error) 14%, transparent);
 }

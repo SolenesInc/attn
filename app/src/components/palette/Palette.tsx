@@ -20,7 +20,7 @@ export interface PaletteProps<T> {
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>, highlighted: T | undefined) => boolean;
   inputPrefix?: ReactNode;
   inputSuffix?: ReactNode;
-  footer?: ReactNode;
+  footer?: ReactNode | ((highlighted: T | undefined) => ReactNode);
 }
 
 function selectableStep<T>(items: T[], from: number, direction: 1 | -1, isSelectable: (item: T) => boolean): number {
@@ -177,7 +177,7 @@ export function Palette<T>({
             )
           )}
         </ul>
-        {footer && <div className={`palette-footer ${variant}-footer`}>{footer}</div>}
+        {footer && <div className={`palette-footer ${variant}-footer`}>{typeof footer === 'function' ? footer(highlighted) : footer}</div>}
       </div>
     </div>
   );

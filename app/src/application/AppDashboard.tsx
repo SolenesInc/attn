@@ -19,7 +19,7 @@ export function AppDashboard() {
 
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
   const { setSettingsOpen, whatsNew, openAsk } = useAppPanelsContext();
-  const { queueModeEnabled, crewQueueEnabled, queueSessions } = useAttentionQueueContext();
+  const { queueBands, queueSessions } = useAttentionQueueContext();
   const askItems = useAskList(queueSessions);
   const asks = useMemo(
     () => askItems.map(({ ask, from }) => ({ id: ask.id, from, subject: ask.subject })),
@@ -37,8 +37,7 @@ export function AppDashboard() {
           isRefreshing={isRefreshingPRs}
           refreshError={refreshError}
           rateLimit={rateLimit}
-          queueModeEnabled={queueModeEnabled}
-          crewQueueEnabled={crewQueueEnabled}
+          queue={queueBands}
           activityStaleMs={activityStaleMs(settings)}
           followNextTurn={followNextTurn}
           onToggleFollowNextTurn={() => setFollowNextTurn((armed) => !armed)}

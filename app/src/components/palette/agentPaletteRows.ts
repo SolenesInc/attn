@@ -26,9 +26,10 @@ export interface AgentPaletteInput<S extends PaletteSession> {
   now: number;
 }
 
-export type AgentStatus = 'chief' | 'snoozed' | 'approval' | 'waiting' | 'working' | 'idle';
+export type AgentStatus = 'unreachable' | 'chief' | 'snoozed' | 'approval' | 'waiting' | 'working' | 'idle';
 
 export function agentStatus(session: PaletteSession, now: number): AgentStatus {
+  if (session.offline) return 'unreachable';
   if (session.chiefOfStaff) return 'chief';
   if (isSnoozed(session.turnSnoozedUntil, now)) return 'snoozed';
   if (session.turnOwed) return session.state === 'pending_approval' ? 'approval' : 'waiting';

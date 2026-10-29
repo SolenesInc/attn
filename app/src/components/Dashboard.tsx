@@ -11,7 +11,7 @@ import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import { getRepoName } from '../utils/repo';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { UISessionState } from '../types/sessionState';
-import { compareTurnOrder, compareWakeOrder, formatTurnAge, sessionParticipatesInQueue } from '../utils/queueBands';
+import { compareWakeOrder, formatTurnAge, type QueueBands } from '../utils/queueBands';
 import { formatWakeTime, isSnoozed } from '../utils/snoozeDurations';
 import { useNow, TURN_AGE_TICK_MS } from '../hooks/useNow';
 import appIcon from '../assets/icon.png';
@@ -68,8 +68,7 @@ interface DashboardProps {
   onOpenPR?: (pr: DaemonPR) => void;
   onOpenSettings: () => void;
   introBanner?: { onReplay: () => void; onDismiss: () => void };
-  queueModeEnabled?: boolean;
-  crewQueueEnabled?: boolean;
+  queue: QueueBands<DashboardSession> | null;
   followNextTurn?: boolean;
   onToggleFollowNextTurn?: () => void;
   activityStaleMs?: number;
@@ -119,8 +118,7 @@ export function Dashboard({
   onOpenPR,
   onOpenSettings,
   introBanner,
-  queueModeEnabled = false,
-  crewQueueEnabled = false,
+  queue,
   followNextTurn = false,
   onToggleFollowNextTurn,
   activityStaleMs = DEFAULT_ACTIVITY_STALE_MS,
@@ -131,38 +129,27 @@ export function Dashboard({
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
 
   const chiefSession = sessions.find((session) => session.chiefOfStaff);
-
-  const queueParticipants = useMemo(() => (
-    sessions.filter((session) => sessionParticipatesInQueue(session, crewQueueEnabled))
-  ), [sessions, crewQueueEnabled]);
+  const queueModeEnabled = queue !== null;
 
   const snoozedSessions = useMemo(() => (
-    (queueModeEnabled ? queueParticipants : sessions)
-      .filter((s) => isSnoozed(s.turnSnoozedUntil, now))
+    (queue ? [...queue.snoozed.map((row) => row.session), ...(chiefSession ? [chiefSession] : [])] : sessions)
+      .filter((session) => isSnoozed(session.turnSnoozedUntil, now))
       .sort(compareWakeOrder)
-  ), [queueModeEnabled, queueParticipants, sessions, now]);
+  ), [queue, chiefSession, sessions, now]);
 
   const awakeSessions = useMemo(() => {
     const deferred = new Set(snoozedSessions.map((s) => s.id));
     return sessions.filter((s) => !deferred.has(s.id));
   }, [sessions, snoozedSessions]);
 
-  const turnSessions = useMemo(() => (
-    queueModeEnabled
-      ? awakeSessions
-        .filter((s) => !s.offline && sessionParticipatesInQueue(s, crewQueueEnabled) && s.turnOwed && !s.chiefOfStaff)
-        .sort(compareTurnOrder)
-      : []
-  ), [queueModeEnabled, crewQueueEnabled, awakeSessions]);
+  const turnSessions = useMemo(() => queue?.turns.map((row) => row.session) ?? [], [queue]);
+  const reachableTurns = turnSessions.filter((session) => !session.offline).length;
+  const unreachableTurns = turnSessions.length - reachableTurns;
 
-  const settledSessions = useMemo(() => (
-    queueModeEnabled
-      ? awakeSessions.filter((s) => (
-        s.offline || !sessionParticipatesInQueue(s, crewQueueEnabled)
-        || !(s.turnOwed && !s.chiefOfStaff)
-      ))
-      : awakeSessions
-  ), [queueModeEnabled, crewQueueEnabled, awakeSessions]);
+  const settledSessions = useMemo(() => {
+    const turns = new Set(turnSessions.map((session) => session.id));
+    return awakeSessions.filter((session) => !turns.has(session.id));
+  }, [awakeSessions, turnSessions]);
 
   const stateGroups = useMemo(() => (
     STATE_GROUPS
@@ -170,7 +157,8 @@ export function Dashboard({
       .filter((group) => group.rows.length > 0)
   ), [settledSessions]);
 
-  const allSettled = queueModeEnabled && turnSessions.length === 0 && queueParticipants.length > 0;
+  const allSettled = queue !== null && turnSessions.length === 0
+    && Boolean(queue.chief || queue.settled.length || queue.snoozed.length);
 
   const stillRunning = useMemo(() => {
     const counts = [
@@ -476,7 +464,8 @@ export function Dashboard({
                   <div className="session-group" data-testid="session-group-turns">
                     <div className="group-label">
                       Your turn
-                      <span className="group-count">{turnSessions.length}</span>
+                      <span className="group-count">{reachableTurns}</span>
+                      {unreachableTurns > 0 && <span className="group-count">{unreachableTurns} unreachable</span>}
                     </div>
                     {turnSessions.map((s) => (
                       renderSessionRow(s, { age: formatTurnAge(s.turnOpenedAt, now) })

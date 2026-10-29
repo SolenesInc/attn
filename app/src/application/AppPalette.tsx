@@ -67,7 +67,7 @@ function OpenPalette({
   onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void;
 }) {
   const { desktopViews, handleSelectSession, handleSelectTile } = useNavigationContext();
-  const { crewQueueEnabled, queueHidden } = useAttentionQueueContext();
+  const { queueModeEnabled, crewQueueEnabled, queueHidden } = useAttentionQueueContext();
   const { handleWakeCrewMember } = useAppGardenActionsContext();
   const { desktopTileContents, sendSettleTurn, sendSnoozeTurn, sendSetSessionPriority, sendGetCommandUsage, sendRecordCommandUsage } = useDaemonApi();
   const desktops = useProfilesStore((state) => state.desktops);
@@ -123,6 +123,8 @@ function OpenPalette({
       onStateChange={onStateChange}
       onClose={onClose}
       agents={agents}
+      queueMode={queueModeEnabled}
+      crewInQueue={crewQueueEnabled}
       desktops={desktops}
       commands={commands}
       commandUsage={usage ?? []}

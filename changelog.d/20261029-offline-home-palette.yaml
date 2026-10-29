@@ -1,0 +1,3 @@
+kind: fixed
+area: queue
+change: Offline agents keep their Home queue band, and the agents palette hides unavailable turn actions. Turn command refusals are shown.

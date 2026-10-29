@@ -185,14 +185,23 @@ policy, are copied read-only to outposts; machine settings, including harness
 executables, stay local to each machine.
 
 The outpost's first Notebook sync must finish before an agent can start.
-An early spawn refuses and names the remaining work. From the home checkout,
-spawn through the app protocol's `spawn_session` with a `host`, or:
+An early spawn refuses and names the remaining work. From a home agent,
+delegate onto an outpost with:
 
 ```sh
-go run ./scripts/wsctl add-session --host studio --agent claude --cwd /home/user/project
+attn delegate --seed s-example --role builder --host ai-sandbox \
+  --cwd '~/project' --new-worktree --branch feature-x --from main
 ```
 
-Use `--agent codex` for Codex. The directory is on the outpost. The Mac can
+`attn delegate` defaults to the caller's machine. The target machine expands
+and checks the directory, refs and worktree path, and creates the worktree.
+An outpost agent uses `--host home` to delegate at the home. Unknown or
+unreachable hosts refuse before acceptance. A home restart resumes an
+accepted delegation on the same machine and path. If that outpost is offline,
+the accepted operation waits for its return; `attn delegate status <request-id>`
+names the host it is waiting for. Removing that outpost fails the waiting operation.
+
+The Mac can
 settle, snooze and unsnooze the agent's turn, read its assistant messages and
 transcript, and reload its current conversation. Harness commands such as
 `/clear`, `/new` and `/resume` keep the conversation chain and each session's
@@ -203,22 +212,6 @@ ledger, or `attn session reopen <id>`, resumes its conversation on that same
 outpost with its cost continuing. If its worktree was deleted, the ledger can
 offer to recreate it on that outpost, fetching the branch first when needed. An
 unreachable or removed outpost refuses resume and names the host.
-
-`attn delegate` also defaults to the caller's machine. From a home agent,
-delegate onto an outpost with:
-
-```sh
-attn delegate --seed s-example --role builder --host ai-sandbox \
-  --cwd '~/project' --new-worktree --branch feature-x --from main
-```
-
-The target machine expands and checks the directory, refs and worktree path,
-and creates the worktree. An outpost agent uses `--host home` to delegate at
-the home. Unknown or unreachable hosts refuse before acceptance. A home
-restart resumes an accepted delegation on the same machine and path.
-If that outpost is offline, the accepted operation waits for its return;
-`attn delegate status <request-id>` names the host it is waiting for. Removing
-that outpost fails the waiting operation.
 
 The chief and crew run only at the home. Spawning, waking or handing off a
 crew member on an outpost, or making an outpost agent the chief, refuses and

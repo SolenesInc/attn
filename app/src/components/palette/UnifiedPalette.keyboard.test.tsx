@@ -61,6 +61,8 @@ function renderPalette({
       <UnifiedPalette
         state={state}
         onStateChange={setState}
+        queueMode
+        crewInQueue={false}
         agents={{
           bands: buildQueueBands(views, { now: NOW }),
           crewRoster: [],
@@ -200,9 +202,9 @@ describe('UnifiedPalette keyboard flow', () => {
     setShortcutOverrides({ 'session.settle': { leader: { key: 'g', meta: true }, then: { key: 'e' } } });
     const palette = renderPalette();
 
+    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
     expect(screen.getByTestId('palette-settle-hint')).toHaveTextContent('settle needs a single-key shortcut');
     expect(screen.getByTestId('palette-snooze-hint')).not.toHaveTextContent('single-key');
-    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
     fireEvent.keyDown(palette.input(), { key: 'e', metaKey: true, shiftKey: true });
     expect(palette.onSettle).not.toHaveBeenCalled();
   });
@@ -221,6 +223,8 @@ describe('UnifiedPalette keyboard flow', () => {
             <UnifiedPalette
               state={state}
               onStateChange={setState}
+              queueMode
+              crewInQueue={false}
               agents={{ bands: buildQueueBands(views, { now: NOW }), crewRoster: [], desktops: views, tileTitle: () => '', now: NOW }}
               desktops={[]}
               commands={[{ id: 'crew', title: 'Manage crew', run }]}
