@@ -50,6 +50,8 @@ type Terminal struct {
 	stall     *terminalStall
 	removal   <-chan struct{}
 	gone      bool
+
+	lastSignal *pty.Observation
 }
 
 type terminalStall struct {
@@ -257,12 +259,22 @@ func (b *Terminals) TerminalIDs(context.Context) []harness.TerminalID {
 func (b *Terminals) Recover(ctx context.Context) (ptybackend.RecoveryReport, error) {
 	b.mu.Lock()
 	var report ptybackend.RecoveryReport
+	replay := make(map[harness.TerminalID]pty.Observation)
 	for _, term := range b.terminals {
 		if term.stall != nil {
 			report.Missing++
+		} else if term.running && term.lastSignal != nil {
+			replay[term.Options.ID] = *term.lastSignal
 		}
 	}
+	notify := b.onState
 	b.mu.Unlock()
+	if notify != nil {
+		for id, signal := range replay {
+			notify(id, pty.Observation{Source: pty.SourceWorkerInfo, Claim: "working", Detail: "watch subscribe replay", At: time.Now()})
+			notify(id, signal)
+		}
+	}
 	if report.Missing > 0 {
 		<-ctx.Done()
 	}
@@ -299,10 +311,14 @@ func (b *Terminals) SessionInfo(_ context.Context, id harness.TerminalID) (ptyba
 	if err != nil {
 		return ptybackend.SessionInfo{}, err
 	}
-	return ptybackend.SessionInfo{
+	info := ptybackend.SessionInfo{
 		SessionID: string(id), Agent: term.Options.Agent, CWD: term.Options.CWD,
 		Running: term.running, Cols: term.Options.Cols, Rows: term.Options.Rows,
-	}, nil
+	}
+	if term.lastSignal != nil {
+		info.LastSignal, info.HasLastSignal = *term.lastSignal, true
+	}
+	return info, nil
 }
 
 func (b *Terminals) ScreenSnapshot(_ context.Context, id harness.TerminalID) (pty.ScreenSnapshotInfo, error) {
@@ -399,10 +415,12 @@ func (t *Terminal) ProgramStatus(claim string) {
 
 func (t *Terminal) observe(source pty.Source, claim, detail string) {
 	t.owner.mu.Lock()
+	signal := pty.Observation{Source: source, Claim: claim, Detail: detail, At: time.Now()}
+	t.lastSignal = &signal
 	report := t.owner.onState
 	t.owner.mu.Unlock()
 	if report != nil {
-		report(t.Options.ID, pty.Observation{Source: source, Claim: claim, Detail: detail, At: time.Now()})
+		report(t.Options.ID, signal)
 	}
 }
 

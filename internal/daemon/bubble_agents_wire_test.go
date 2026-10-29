@@ -83,6 +83,7 @@ func (w *world) bootBubbleClaude(t *testing.T, id string) *bubbleClaude {
 
 func (a *bubbleClaude) take(prompt string) {
 	a.transcript.Prompt(prompt)
+	a.term.Heartbeat("busy", "Claude Code")
 	if err := a.cli.UpdateStateFromHookEvidence(protocol.TerminalID(a.self), protocol.StateWorking, "", "user_prompt_submit", prompt); err != nil {
 		a.t.Errorf("%s reports its prompt taken: %v", a.id, err)
 	}
@@ -92,6 +93,7 @@ func (a *bubbleClaude) reply(text string) {
 	a.t.Helper()
 	synctest.Wait()
 	a.transcript.Answer(text)
+	a.term.Heartbeat("not_busy", "Claude Code")
 	if err := a.cli.SendStop(protocol.TerminalID(a.self), a.transcript.Path, client.StopFacts{}); err != nil {
 		a.t.Fatalf("%s stops: %v", a.id, err)
 	}
