@@ -856,7 +856,7 @@ export function ExperimentalSettings({
           <div>
             <p className="settings-row-title">Crew v2</p>
             <p className="settings-row-copy" id="settings-crew-v2-description">
-              Crew letters keep their session's transcript, and harness memory is off for crew members. Applies at each member's next launch.
+              Crew members use the v2 operating model with harness memory off, starting at their next launch. Letters filed while it's on record their session so attn can keep its transcript.
             </p>
           </div>
           <button type="button" role="switch" aria-label="Crew v2"
