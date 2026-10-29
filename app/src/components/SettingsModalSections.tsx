@@ -651,6 +651,7 @@ export function ExperimentalSettings({
   directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
+  crewV2Enabled,
   analyticsEnabled,
   ptyBackendMode,
   sharedPtyHostEnabled,
@@ -666,6 +667,7 @@ export function ExperimentalSettings({
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
+  | 'crewV2Enabled'
   | 'analyticsEnabled'
   | 'ptyBackendMode'
   | 'sharedPtyHostEnabled'
@@ -848,6 +850,20 @@ export function ExperimentalSettings({
             className="settings-action" data-testid="settings-callouts-toggle"
             onClick={() => onSetSetting('callouts_enabled', calloutsEnabled ? 'false' : 'true')}>
             {calloutsEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Crew v2</p>
+            <p className="settings-row-copy" id="settings-crew-v2-description">
+              Crew letters keep their session's transcript, and harness memory is off for crew members. Applies at each member's next launch.
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Crew v2"
+            aria-checked={crewV2Enabled} aria-describedby="settings-crew-v2-description"
+            className="settings-action"
+            onClick={() => onSetSetting('crew_v2_enabled', crewV2Enabled ? 'false' : 'true')}>
+            {crewV2Enabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">

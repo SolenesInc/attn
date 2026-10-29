@@ -74,3 +74,19 @@ describe('Experimental settings for usage analytics', () => {
     ]);
   });
 });
+
+describe('Experimental settings for crew v2', () => {
+  it('starts off and saves the setting in both directions', async () => {
+    const daemon = await openSection('experimental');
+    const crewV2 = () => screen.getByRole('switch', { name: 'Crew v2' });
+    expect(crewV2()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(crewV2()));
+    expect(crewV2()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(crewV2()));
+    expect(crewV2()).toHaveAttribute('aria-checked', 'false');
+    expect(savedSettings(daemon)).toEqual([
+      ['crew_v2_enabled', 'true'],
+      ['crew_v2_enabled', 'false'],
+    ]);
+  });
+});
