@@ -26,6 +26,7 @@ func TestARestartKeepsAWorkingAgentWhoseTerminalDoesNotAnswer(t *testing.T) {
 				agent := w.bubbleClaude(t, app, "shop")
 				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "migrate the schema\r"})
 				testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+				agent.term.Heartbeat("busy", "Claude Code")
 
 				answer := agent.term.Stall(tc.alive, tc.probeErr)
 				w.restart()
