@@ -113,7 +113,7 @@ Preconditions:
 
 - `bridge` cannot click the macOS menu bar. ⌘W exercised the File menu accelerator (`handledBy: ["menu"]`), but a pointer click on File → Close Pane remains unreachable here; a packaged scenario using `createWindowDriver().menu` is required for that pointer path. No such proof ran here.
 - Reload proof needs `"resumable": true`: the mock then writes its conversation under the scratch harness home where attn can discover it. A changed `banner` proves that a new process read the fixture; the restored reply proves the conversation survived. `state_since` can stay unchanged across a reload because it dates the state, not the process.
-- Hover the sidebar row before clicking its actions button. The button's bounds exist even while the row hides it. At `b292a5aa5`, a replay still reported native input delivered without opening the menu; its `.session-actions-popover` wait failed, while a later click passed. Keep the failed attempt as a finding; a retry is not a clean first pass.
+- Hover the sidebar row before clicking its actions button. The button's bounds exist even while the row hides it.
 - On an empty desktop ⌘N opens no dialog: it focuses the launcher on the desktop, `[data-testid="empty-desktop-launcher"]`. Wait for the overlay only from the home screen or a desktop with tiles.
 - The picker starts its path field empty on a fresh instance. When Settings names a projects folder it starts with that path, and typed text lands after it; press ⌘A first to replace it.
 - The picker resolves the folder before it starts the agent, so a folder under `/tmp` runs as `/private/tmp/...` on macOS. Compare paths in that form, as the preconditions write them.

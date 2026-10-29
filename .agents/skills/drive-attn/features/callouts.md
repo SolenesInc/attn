@@ -84,7 +84,7 @@ Preconditions:
 
 ## Gotchas
 
-- The Agent callouts switch starts below the baseline Settings viewport. A DOM box is not proof that its click point is visible. Select Experimental before focusing Search settings; clicking the navigation button afterward clears keyboard focus, so Tab can move through the page behind Settings.
+- The Agent callouts switch starts below the baseline Settings viewport. Scroll it into view with `dom_scroll_into_view` as setup, then read its bounds and click natively. Native input rejects offscreen coordinates. Select Experimental before focusing Search settings; clicking navigation afterward clears keyboard focus, so Tab can move through the page behind Settings.
 - The setting is off on every fresh instance. A refusal naming Settings > Experimental > Agent callouts means the switch, not a bug.
 - While another overlay is open (Settings, the palette, What's new, the notebook), `callout show` is refused with `not on screen:` naming every anchor of the callout and `on screen now:` empty. Close the overlay and call again.
 - `callout show` returns as soon as the app accepts the card, before the user reads it; there is no completion. Prove the stepping from the app with `bridge`, not from the CLI.
@@ -93,4 +93,3 @@ Preconditions:
 - `bridge dom_click` on the card's buttons skips native input; drive the steps with `native_key`.
 - A step over 160 characters or a 21st step refuses the whole callout, naming the limit and the count; the callout already showing stays.
 - Working but wrong: Enter on an agent or desktop step goes there and ends the callout, so the steps after it never show; → moves on without going. A tour that puts such a step in the middle loses its tail when the user presses Enter.
-- "Agent callouts" can sit below the Settings viewport. Scroll it into view before reading its box and clicking natively. Converting an off-screen box can produce a coordinate outside the window and stall native input.

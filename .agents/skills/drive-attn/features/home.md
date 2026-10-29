@@ -86,14 +86,13 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/notifications_wire_test.go`.
-- Scenario: `home-dock`.
+- Scenario: `focusless-native` (parked macOS native input), `home-dock`.
 - Kernel: `internal/store/notifications_test.go`, `internal/daemon/notifications_render_test.go`.
 - App: `app/src/App.dashboard.test.tsx`, `app/src/App.homeDock.test.tsx`, `app/src/App.notifications.test.tsx`, `app/src/App.criticalNotifications.test.tsx`, `app/src/App.whatsNew.test.tsx`, `app/src/components/Toast.lifecycle.test.tsx`.
 
 ## Gotchas
 
 - On the reused `drive-2` instance at `8ed664831`, cleaning and reinstalling did not restore the fresh intro or its replay banner. The first two steps failed their freshness precondition. The palette still opened the intro, but that does not prove automatic opening or the banner controls. Keep those steps and report them as unreached when the release was already seen.
-- A Home gear click on the parked, inactive app twice reported input delivered while Settings stayed closed. The same click landed once the app was active, so this is a gap in the bridge's native input on the parked app, not in Home.
 - Live on `drive-3` at `b292a5aa5`: clicking `[aria-label="Hide Notifications"]` leaves `bridge notifications_get_state` at `present: true`. The open popover covers the bell. The recipe's native hide fails; the palette's `Hide notifications` closes it. Close the popover before checking another control, since it also intercepts clicks on home.
 - A fresh app opens What's new over home, and it holds the palette and most keys. The baseline's `bridge dismiss_whats_new` also dismisses the replay banner, so drive the intro first or not at all on that app.
 - The baseline raises no notification; the popover reads "No notifications.". A row needs another feature's failure: a call auto mode blocks ([auto-mode.md](auto-mode.md)), a durable event-log consumer that stops reading ([diagnostics.md](diagnostics.md)), a plugin attn gives up restarting, which is the critical one ([harnesses.md](harnesses.md)), or a background task that fails for good. The read steps fail on the baseline for that reason.

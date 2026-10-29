@@ -1186,9 +1186,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                 .is_some_and(|v| v == "1")
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                if let Some(window) = app.get_window("main") {
+                if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_always_on_top(true);
                     let _ = window.set_focusable(false);
+                    native_input::install_harness_window(&window)?;
                 }
             }
             Ok(())

@@ -71,7 +71,14 @@ shell's environment:
 ```
 
 `--launch` starts the app with the instance shell's environment and parks
-its window at the screen's edge. On macOS, `make run INSTANCE=<name>` opens
+its window at the screen's edge. Keep that default on a shared Mac: never
+activate or unpark it, set the parking or always-on-top variables yourself,
+or send physical input. That includes `open`, `make run`, `activateApp`,
+`osascript ... activate`, `cliclick`, the driver's `menu` and scrolling.
+Use `native_key` for menu shortcuts and DOM scrolling for setup. A native
+input failure is a bridge or harness bug to diagnose, not permission to take
+focus. A scenario that requires activation or system input needs a dedicated
+display; it cannot prove a shared-Mac recipe. On macOS, `make run INSTANCE=<name>` opens
 the app through Launch Services instead, which drops these variables. If the
 daemon started without them (the doctor shows a real agent's executable), or
 a recipe needs another variable in the daemon's environment, quit the app
@@ -155,11 +162,14 @@ use them to set up, never as proof of a person's way in. The actions are the
 `app/src-tauri/core/src/ui_automation.rs`, and quick capture's in
 `app/src/quickCapture/automationBridge.ts`.
 
-**Scenarios.** `pnpm --dir app run real-app:serial-matrix -- --scenario <id>`.
-CI runs them; run one locally only to reproduce a failure or develop one,
-after reading the harness guide. `driver.menu`, native window captures and
-recordings need macOS Accessibility or Screen Recording permission for the
-instance's app or your terminal.
+**Scenarios.** Read the scenario and the harness guide before running one.
+On a shared Mac, use a focus-free scenario directly, such as
+`node app/scripts/real-app-harness/scenario-focusless-native.mjs`, or the
+serial matrix with `--no-fresh-world --scenario <id>`. The default matrix
+calls `freshWorld.mjs`, whose pattern-based worker cleanup violates the
+repository's PID rule. Inspect other scenarios for activation, physical input
+and fresh-world calls too. Native captures and recordings need Screen
+Recording permission for the instance's app or your terminal.
 
 ## Evidence
 

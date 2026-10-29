@@ -147,8 +147,22 @@ In the index, "both" means people and agents.
   `toX` and `toY`), each with optional `modifiers`. A control that takes
   clicks only while the pointer is over its row, such as a sidebar row's
   buttons, needs a `move` over it first.
-- `native_key`, `native_text` and `native_mouse` act on the main window;
-  `"window":"capture"` in their JSON sends them to quick capture's panel.
+- Before calculating coordinates, show the intended desktop and scope the
+  selector to its visible tile. Retained desktops can have hidden elements
+  with empty boxes. Scroll offscreen controls into view with
+  `dom_scroll_into_view` as setup, then read their bounds again. Native input
+  rejects coordinates outside `[0,1)` and clicks in native window chrome.
+- `native_mouse` hit-tests the target window, including browser page webviews.
+  Keys and text follow its native first responder. An explicit `"window"`
+  targets that webview instead: `"window":"main"` for app controls,
+  `"window":"capture"` for quick capture, or a browser host's label.
+- On a shared Mac, keep the parked launch and use only focus-free input, as
+  [../SKILL.md](../SKILL.md#launch) requires. `native_input_state` reads real
+  app/window focus, frontmost PID, secure-input state and window geometry.
+  Keep those receipts around native actions; the app must remain inactive,
+  unfocusable and parked. `native_pointer_trace_start` and
+  `native_pointer_trace_read` bracket trusted mouse events and CSS hover;
+  reading stops observation.
 - A drawer (attention, asks, automations, garden) stays in the page while
   closed, hidden with `aria-hidden="true"`. Tell open from closed by that
   attribute, not by whether an inner selector is present.
