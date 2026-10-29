@@ -57,9 +57,9 @@ may close or reload any agent of the profile.
 Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`); the rest need only the daemon.
-- A member home made before the daemon starts, since a daemon reads new homes only at start: `M="$(./attn instance resolve --field dataDir)/crew/fern"`, `mkdir -p "$M"` and `printf '# Fern\n\nWait for direction.\n' > "$M/CHARTER.md"`. With a daemon already running, stop it as [../SKILL.md](../SKILL.md) describes (through `"$(./attn instance resolve --field appDaemon)" daemon stop` once the app is installed), then start it again as the baseline does.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-crew.XXXX)`.
-- A member folder, `C=$(mktemp -d /tmp/drive-attn-crew-agent.XXXX)`, holding this fixture as `$C/.attn-mock-agent.json`:
+- A member home made before the daemon starts, since a daemon reads new homes only at start: `M="$(./attn instance resolve --field dataDir)/crew/fern" && printf 'export M=%q\n' "$M" >> "$DRIVE_ENV"`, `mkdir -p "$M"` and `printf '# Fern\n\nWait for direction.\n' > "$M/CHARTER.md"`. With a daemon already running, stop it as [../SKILL.md](../SKILL.md) describes (through `"$(./attn instance resolve --field appDaemon)" daemon stop` once the app is installed), then start it again as the baseline does.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-crew.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- A member folder, `C=$(mktemp -d /tmp/drive-attn-crew-agent.XXXX) && echo "export C=$C" >> $DRIVE_ENV`, holding this fixture as `$C/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

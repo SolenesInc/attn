@@ -66,8 +66,8 @@ queue, but the user settles a run's turn the same way in either flow.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline starts in desktop flow with auto-settle off.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-queue.XXXX)`.
-- Two agent folders, `A=$(mktemp -d /tmp/drive-attn-queue-a.XXXX)` and `B=$(mktemp -d /tmp/drive-attn-queue-b.XXXX)`. `$A/.attn-mock-agent.json` holds this fixture:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-queue.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Two agent folders, `A=$(mktemp -d /tmp/drive-attn-queue-a.XXXX) && echo "export A=$A" >> $DRIVE_ENV` and `B=$(mktemp -d /tmp/drive-attn-queue-b.XXXX) && echo "export B=$B" >> $DRIVE_ENV`. `$A/.attn-mock-agent.json` holds this fixture:
 
 ```json
 {"version": 1, "turns": [
@@ -96,7 +96,7 @@ Preconditions:
 ```
 
 - The agents, started in order: `wsctl add-session --cwd $A --agent claude --label queue-a --id queue-a`. Re-read `./attn agent list` until `queue-a` shows `owed`. Then the same with `$B`, `queue-b` and `queue-b`. The wait makes `queue-a` the older turn. `<terminal-a>` and `<terminal-b>` are their terminal ids from `wsctl list`.
-- An automation run that owes a turn. A run folder, `R=$(mktemp -d /tmp/drive-attn-queue-run.XXXX)`, with `$R/.attn-mock-agent.json` holding `{"version": 1, "turns": [{"includes": "question", "actions": [{"type": "reply", "text": "Which option do you want?"}]}]}`, and a manual automation that starts its runs there, written with the paths filled in and applied:
+- An automation run that owes a turn. A run folder, `R=$(mktemp -d /tmp/drive-attn-queue-run.XXXX) && echo "export R=$R" >> $DRIVE_ENV`, with `$R/.attn-mock-agent.json` holding `{"version": 1, "turns": [{"includes": "question", "actions": [{"type": "reply", "text": "Which option do you want?"}]}]}`, and a manual automation that starts its runs there, written with the paths filled in and applied:
 
 ```bash
 cat > $P/run.yaml <<EOF

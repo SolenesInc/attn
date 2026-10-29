@@ -48,9 +48,9 @@ is the user's guide.
 
 Preconditions:
 
-- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). `R=$PWD` at the repository root.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-codex.XXXX)`.
-- An agent folder, `C=$(mktemp -d /tmp/drive-attn-codex-agent.XXXX)`, holding this fixture as `$C/.attn-mock-agent.json`. Under shared Codex the mock plays only `reply` and `delay`; `"approval": true` makes it ask before it replies:
+- The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). `R=$PWD && echo "export R=$R" >> $DRIVE_ENV` at the repository root.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-codex.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `C=$(mktemp -d /tmp/drive-attn-codex-agent.XXXX) && echo "export C=$C" >> $DRIVE_ENV`, holding this fixture as `$C/.attn-mock-agent.json`. Under shared Codex the mock plays only `reply` and `delay`; `"approval": true` makes it ask before it replies:
 
 ```json
 {"version": 1, "turns": [

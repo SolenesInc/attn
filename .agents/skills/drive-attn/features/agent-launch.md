@@ -54,9 +54,9 @@ screen in its tile and offers Resume; a clean quit closes the session.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), on the home screen.
-- `R=$PWD` in the instance shell, at the repository root.
-- A proof folder written with its physical path, `P=$(cd "$(mktemp -d /tmp/drive-attn-launch.XXXX)" && pwd -P)`, and two empty folders, `$P/picked` and `$P/link`. The picker and the spawn link record the folder as the machine resolves it, `/private/tmp/...` for a folder made under `/tmp`, so every path below starts from the resolved one.
-- An agent folder, `A=$(cd "$(mktemp -d /tmp/drive-attn-launch-agent.XXXX)" && pwd -P)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- `R=$PWD && echo "export R=$R" >> $DRIVE_ENV` in the instance shell, at the repository root.
+- A proof folder written with its physical path, `P=$(cd "$(mktemp -d /tmp/drive-attn-launch.XXXX)" && pwd -P) && echo "export P=$P" >> $DRIVE_ENV`, and two empty folders, `$P/picked` and `$P/link`. The picker and the spawn link record the folder as the machine resolves it, `/private/tmp/...` for a folder made under `/tmp`, so every path below starts from the resolved one.
+- An agent folder, `A=$(cd "$(mktemp -d /tmp/drive-attn-launch-agent.XXXX)" && pwd -P) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

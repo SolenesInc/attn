@@ -39,7 +39,7 @@ None. An agent can only read or reset `keybindings_config` as a setting, which [
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), except where a step replays it.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-shortcuts.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-shortcuts.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 - **Read a binding.** Run `bridge shortcut_binding '{"shortcutId":"ui.showShortcuts"}'`. It returns `binding` with `key: "/"` and `meta: true`. `./attn settings get keybindings_config` prints an empty line on a fresh instance.
 - **The cheat sheet with its shortcut.** Press ⌘/: `bridge native_key '{"key":"/","modifiers":["command"]}'`, then `bridge dom_wait '{"selector":"#shortcuts-modal-title","timeoutMs":5000}'`. `bridge dom_text '{"selector":".shortcuts-body"}'` lists the categories, "App" among them, and their rows with keys, "Settings" and "Keyboard shortcuts" among the rows. Press ⌘/ again: `bridge dom_wait '{"selector":"#shortcuts-modal-title","absent":true,"timeoutMs":5000}'` matches.

@@ -30,7 +30,7 @@ Preconditions:
 - A proof folder holding a stand-in `claude` and an image, so no real model is called:
 
 ```bash
-P=$(mktemp -d /tmp/drive-attn-vision-check.XXXX); mkdir -p $P/bin
+P=$(mktemp -d /tmp/drive-attn-vision-check.XXXX) && echo "export P=$P" >> $DRIVE_ENV && mkdir -p $P/bin
 cat > $P/bin/claude <<EOF
 #!/bin/sh
 printf '%s\n' "\$@" > $P/argv

@@ -56,8 +56,8 @@ sessions on a launch desktop.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-desktops.XXXX)`, holding `check.yaml`: `api_version: attn.dev/automations/v1alpha1`, `name: Local check`, `trigger: {type: manual}`, `prompt: Check locally.`, `launch: {driver: claude}`, `location: {type: directory, path: <P>}`, one key per line, with `<P>` written out.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-desktops-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`, with `<A>` written out as the folder's path:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-desktops.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `check.yaml`: `api_version: attn.dev/automations/v1alpha1`, `name: Local check`, `trigger: {type: manual}`, `prompt: Check locally.`, `launch: {driver: claude}`, `location: {type: directory, path: <P>}`, one key per line, with `<P>` written out.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-desktops-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`, with `<A>` written out as the folder's path:
 
 ```json
 {"version": 1, "turns": [

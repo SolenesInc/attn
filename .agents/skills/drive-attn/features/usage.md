@@ -42,8 +42,8 @@ compacts at a budget they choose.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-usage.XXXX)`.
-- An agent folder, `U=$(mktemp -d /tmp/drive-attn-usage-agent.XXXX)`, holding `{"version": 1, "turns": [{"includes": "Measure", "actions": [{"type": "reply", "text": "Measured."}]}]}` as `$U/.attn-mock-agent.json`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-usage.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `U=$(mktemp -d /tmp/drive-attn-usage-agent.XXXX) && echo "export U=$U" >> $DRIVE_ENV`, holding `{"version": 1, "turns": [{"includes": "Measure", "actions": [{"type": "reply", "text": "Measured."}]}]}` as `$U/.attn-mock-agent.json`.
 - The agent, started and on screen: `wsctl add-session --cwd $U --agent claude --label usage-agent --id usage-agent --place`, then `bridge select_session '{"sessionId":"usage-agent"}'` for setup.
 
 `<terminal>` is the agent's terminal id from `wsctl list`; `<P>` is the proof folder's path written out.

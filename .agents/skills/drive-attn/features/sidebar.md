@@ -42,7 +42,7 @@ None. Agents change what the sidebar shows without driving it: `attn session ren
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline starts in desktop flow.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-sidebar.XXXX)`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-sidebar-agent.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-sidebar.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-sidebar-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
 - Two agents: `wsctl add-session --cwd $A --agent claude --label side-a --id side-a`, then the same with `side-b`. With no session the sidebar starts collapsed; the first agent expands it.
 
 - **Open an agent from its row.** Run `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-side-a\"]","timeoutMs":5000}'`, then click `[aria-label="Open side-a"]` natively, converting its `bridge dom_bounds` box as the README says. `bridge get_state` shows `activeLeaf.sessionId: "side-a"`.

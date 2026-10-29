@@ -51,8 +51,8 @@ question.
 Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`); the rest need only the daemon.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-automations.XXXX)`.
-- A run folder, `R=$(mktemp -d /tmp/drive-attn-automation-run.XXXX)`, holding this fixture as `$R/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-automations.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- A run folder, `R=$(mktemp -d /tmp/drive-attn-automation-run.XXXX) && echo "export R=$R" >> $DRIVE_ENV`, holding this fixture as `$R/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -61,7 +61,7 @@ Preconditions:
 ]}
 ```
 
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-automation-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-automation-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -135,6 +135,7 @@ EOF
 
 ```bash
 G=$(mktemp -d /tmp/drive-attn-review.XXXX)
+echo "export G=$G" >> $DRIVE_ENV
 git -C $G init -q
 git -C $G remote add origin https://mock.github.local/owner/repo.git
 cp $R/.attn-mock-agent.json $G/

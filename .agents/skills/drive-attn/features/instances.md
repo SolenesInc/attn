@@ -45,7 +45,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 Preconditions:
 
 - This checkout built (`make build`) and the env file written, as [../SKILL.md](../SKILL.md)'s Launch says. Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`; `<name>` below.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-instances.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-instances.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 - **Select.** Run `./attn instance-env <name>`: it prints an `unset` line for each inherited routing variable, then `export ATTN_INSTANCE=<name>`, the lines the env file opens with. `./attn instance` prints `attn instance: <name>`, then `data dir`, `socket` with `(no daemon socket)`, `ws port`, `bundle id`, `app` with `(not installed)` and `mock gh`, and no `CONFLICT` line.
 - **Resolve.** `./attn instance resolve --field dataDir` prints the data folder. `./attn instance resolve` prints JSON with `"instance": "<name>"`, `wsPort`, `appDaemon` and `mockGitHubPort`. `./attn instance resolve --instance other --field wsPort` resolves another name without selecting it. `./attn instance tauri-config` prints the build's config overlay: `productName` and `identifier` match `appName` and `bundleId`, and the deep-link scheme is `deepLinkScheme`. `./attn instance env <name>` prints the same lines as `./attn instance-env <name>`.

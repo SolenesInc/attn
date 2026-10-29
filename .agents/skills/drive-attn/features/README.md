@@ -175,7 +175,8 @@ In the index, "both" means people and agents.
   otherwise. Remove what a recipe created when the next one needs a clean
   slate, but never the proof.
 - Each recipe keeps its proof in `P=$(mktemp -d
-  /tmp/drive-attn-<feature>.XXXX)`, made in its preconditions. `bridge` JSON
+  /tmp/drive-attn-<feature>.XXXX)`, made in its preconditions and appended to
+  the env file as above. `bridge` JSON
   is single-quoted, so a path in it is written out: `<P>` is that folder's
   path.
 - A way in is driven once, in the file that owns it; other files link there.

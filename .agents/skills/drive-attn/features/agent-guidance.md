@@ -46,8 +46,8 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 Preconditions:
 
 - The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-agent-guidance.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-guidance-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-agent-guidance.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-guidance-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

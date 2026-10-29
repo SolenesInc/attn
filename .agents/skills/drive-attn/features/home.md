@@ -47,7 +47,7 @@ None. What agents do shows here: their state groups them ([agent-state.md](agent
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers), launched fresh. Run the first two steps before the baseline's `bridge dismiss_whats_new`, which dismisses the intro and its banner; afterwards it changes nothing.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-home.XXXX)`, and an agent folder, `A=$(mktemp -d /tmp/drive-attn-home-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-home.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an agent folder, `A=$(mktemp -d /tmp/drive-attn-home-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

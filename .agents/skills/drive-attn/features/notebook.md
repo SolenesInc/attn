@@ -50,9 +50,9 @@ it as its home.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- `NB=$(./attn settings get notebook.root.effective)` names the instance's notebook, `~/attn-notebook-<name>`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-notebook-proof.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-notebook.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- `NB=$(./attn settings get notebook.root.effective) && printf 'export NB=%q\n' "$NB" >> "$DRIVE_ENV"` names the instance's notebook, `~/attn-notebook-<name>`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-notebook-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-notebook.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

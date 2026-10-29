@@ -53,7 +53,7 @@ Preconditions:
 ]}
 ```
 
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - The panel is a window of its own, `capture`. `bridge native_key`, `native_text` and `native_mouse` reach it with `"window":"capture"` in their JSON. `bridge capture_state`, `capture_binding` and `capture_dismiss` read and drive it.
 - The repository's input driver (`app/scripts/real-app-harness/InputDriver.swift`) posts keys to the whole system, as the `quick-capture` scenario does to press the global shortcut. Add it to the env file as a function:
 

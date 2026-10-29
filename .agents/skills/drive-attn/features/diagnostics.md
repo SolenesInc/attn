@@ -53,7 +53,7 @@ its own walk through `attn debug input` in
 Preconditions:
 
 - The baseline instance. The CLI steps need only the daemon; the palette and settings steps need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-diagnostics.XXXX)`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-diagnostics.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 
 - **Preflight.** Daemon only, `./attn preflight --agent claude` prints its checks and `attn preflight: FAIL (2 failed, 0 warnings)`, because the two `protocol.` checks need an installed app, and exits 1. With the app installed, `"$(./attn instance resolve --field appDaemon)" preflight --agent claude` reports `PASS`. `--json` prints the stable report.
 - **Daemon log.** `./attn debug daemon-log --grep "daemon started"` prints `[<time>] INFO: daemon started`. `./attn debug daemon-log --since 10m --grep "database backup written"` names the backup taken at start. `./attn debug ls` prints `frontend debug dir:` with its files, then `daemon.log:` with its path and size.

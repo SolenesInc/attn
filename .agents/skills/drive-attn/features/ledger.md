@@ -50,8 +50,8 @@ that conversation's session and the one it left goes to the ledger.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-ledger.XXXX)`.
-- An agent folder, `L=$(mktemp -d /tmp/drive-attn-ledger-agent.XXXX)`, holding this fixture as `$L/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-ledger.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `L=$(mktemp -d /tmp/drive-attn-ledger-agent.XXXX) && echo "export L=$L" >> $DRIVE_ENV`, holding this fixture as `$L/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "resumable": true, "turns": [
@@ -60,7 +60,7 @@ Preconditions:
 ]}
 ```
 
-- For the crew-letter steps: a member home made before the daemon starts, as [crew.md](crew.md)'s preconditions describe, here `Q="$(./attn instance resolve --field dataDir)/crew/quill"` with `mkdir -p "$Q"` and `printf '# Quill\n\nFile a letter when asked.\n' > "$Q/CHARTER.md"`; crew v2 on, so a letter keeps its session's transcript: `./attn settings set crew_v2_enabled true`; and a member folder, `K=$(mktemp -d /tmp/drive-attn-ledger-crew.XXXX)`, holding this fixture as `$K/.attn-mock-agent.json`:
+- For the crew-letter steps: a member home made before the daemon starts, as [crew.md](crew.md)'s preconditions describe, here `Q="$(./attn instance resolve --field dataDir)/crew/quill" && echo "export Q=$Q" >> $DRIVE_ENV` with `mkdir -p "$Q"` and `printf '# Quill\n\nFile a letter when asked.\n' > "$Q/CHARTER.md"`; crew v2 on, so a letter keeps its session's transcript: `./attn settings set crew_v2_enabled true`; and a member folder, `K=$(mktemp -d /tmp/drive-attn-ledger-crew.XXXX) && echo "export K=$K" >> $DRIVE_ENV`, holding this fixture as `$K/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "resumable": true, "turns": [

@@ -47,8 +47,8 @@ ask why a session has its state with `attn state explain`.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`), in desktop flow, the default.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-state.XXXX)`.
-- An agent folder, `S=$(mktemp -d /tmp/drive-attn-state-agent.XXXX)`, holding this fixture as `$S/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-state.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `S=$(mktemp -d /tmp/drive-attn-state-agent.XXXX) && echo "export S=$S" >> $DRIVE_ENV`, holding this fixture as `$S/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

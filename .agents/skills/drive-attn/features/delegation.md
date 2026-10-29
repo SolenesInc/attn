@@ -50,8 +50,8 @@ claim to a fresh agent while the previous one keeps running.
 Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`); the rest need only the daemon.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-delegation.XXXX)`.
-- A delegate folder, `D=$(mktemp -d /tmp/drive-attn-delegate.XXXX)`, outside Git, holding this fixture as `$D/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-delegation.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- A delegate folder, `D=$(mktemp -d /tmp/drive-attn-delegate.XXXX) && echo "export D=$D" >> $DRIVE_ENV`, outside Git, holding this fixture as `$D/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
@@ -61,7 +61,7 @@ Preconditions:
 ]}
 ```
 
-- A dispatcher folder, `A=$(mktemp -d /tmp/drive-attn-dispatcher.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`. Each turn takes the delegate folder from the prompt:
+- A dispatcher folder, `A=$(mktemp -d /tmp/drive-attn-dispatcher.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`. Each turn takes the delegate folder from the prompt:
 
 ```json
 {"version": 1, "turns": [

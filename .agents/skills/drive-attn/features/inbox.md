@@ -46,8 +46,8 @@ is [queue-flow.md](queue-flow.md)'s.
 Preconditions:
 
 - The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-inbox.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-inbox-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`. Both agents below run in it:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-inbox.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-inbox-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`. Both agents below run in it:
 
 ```json
 {"version": 1, "turns": [

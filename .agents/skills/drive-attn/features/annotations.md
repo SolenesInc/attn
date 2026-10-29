@@ -36,8 +36,8 @@ marked passage with what the user said about it.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-annotations-proof.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-annotations.XXXX)`, holding `plan.md` (`# Plan`, then the paragraph `Cache the tile layout before the first paint.`) and this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-annotations-proof.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-annotations.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding `plan.md` (`# Plan`, then the paragraph `Cache the tile layout before the first paint.`) and this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

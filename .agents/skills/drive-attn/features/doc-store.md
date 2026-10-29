@@ -32,8 +32,8 @@ but `attn doc` cannot read or change it: only `attn seed` reaches it.
 Preconditions:
 
 - The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-doc-store.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-doc-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-doc-store.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-doc-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

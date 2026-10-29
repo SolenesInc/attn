@@ -50,8 +50,8 @@ Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
 - A shell on your machine with OSC 133 shell integration (fish, zsh or bash); `run --wait`, `read --last` and `wait --until prompt` need it.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-terminals.XXXX)`, holding `notes.md` with `# Terminal link`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-terminals-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-terminals.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `notes.md` with `# Terminal link`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-terminals-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

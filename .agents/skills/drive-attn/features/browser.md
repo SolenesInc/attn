@@ -38,9 +38,9 @@ tile, and its cookies and storage outlive restarts.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The app is the browser host; without it every verb but `open` fails.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-browser.XXXX)`, holding `page.html`: `<title>Drive page</title><h1>Drive heading</h1><input aria-label="Search"><button onclick="document.querySelector('h1').textContent='Clicked '+document.querySelector('input').value">Go</button><a href="other.html">Other</a>`, and `other.html`: `<title>Other page</title><h1>Other heading</h1>`. The headings differ from the titles so a text wait matches the page, not its `<title>`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-browser.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `page.html`: `<title>Drive page</title><h1>Drive heading</h1><input aria-label="Search"><button onclick="document.querySelector('h1').textContent='Clicked '+document.querySelector('input').value">Go</button><a href="other.html">Other</a>`, and `other.html`: `<title>Other page</title><h1>Other heading</h1>`. The headings differ from the titles so a text wait matches the page, not its `<title>`.
 - A local page server: `{ python3 -m http.server 8765 --bind 127.0.0.1 --directory $P & echo "export SRV=$!" >> $DRIVE_ENV; }`. Stop it at the end with `kill $SRV`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-browser-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-browser-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
