@@ -216,11 +216,15 @@ func TestAnAnswerWaitsOutAnApprovalAndAnInboxRead(t *testing.T) {
 			t.Fatalf("ask: %v", err)
 		}
 		app.TypeLine(asker.id, "move the cache")
+		synctest.Wait()
 		terminal := protocol.TerminalID(w.Terminal(asker.id))
 		if err := cli.UpdateState(terminal, protocol.StatePendingApproval); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(0)
+		if s := queriedSession(t, cli, asker.id); s.State != protocol.SessionStatePendingApproval {
+			t.Fatalf("before the answer the agent is %s, want pending_approval", s.State)
+		}
 
 		answerCacheAsk(t, app, asked.ID)
 		sendAgentMessage(t, cli, "peer", asker.id, "the staging cache is already Postgres")

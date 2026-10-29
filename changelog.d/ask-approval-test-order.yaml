@@ -1,0 +1,3 @@
+kind: internal
+area: asks
+change: Wait for the fake agent to take its prompt before testing ask delivery during an approval.
