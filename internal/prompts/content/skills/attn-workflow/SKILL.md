@@ -21,7 +21,7 @@ Match the task to one process in the table, read its reference and the principle
 | Change structure or shape while preserving behavior | [Refactoring](references/refactoring.md) |
 | Find what makes something slow, large or busy when it should be idle, and make it measurably better, once or against a target | [Perf](references/perf.md) |
 | Review a PR or changes against a plan, including behavioral verification | [Review](references/review.md) |
-| Build a feature map of a product, with every way into each feature, as a skill that drives it live on an isolated instance (what pstack calls a verification skill) | [Feature map](references/feature-map.md) |
+| Build a feature map of a product, with every way into each feature, as a skill that drives it live on an isolated instance (also called a verification skill) | [Feature map](references/feature-map.md) |
 | Decide whether a derived thing, such as a doc, a comment or a generated file, should exist, and build what keeps it current | [Derived things](references/derived-things.md) |
 | Make a kind of mistake that keeps coming back impossible to repeat in the repository | [Correction](references/correction.md) |
 | Delegate agreed work, advise implementers, and judge completion | [Orchestration](references/orchestration.md) |
