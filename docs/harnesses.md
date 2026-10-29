@@ -700,7 +700,7 @@ moves to another conversation.
 
 ## Nisse
 
-Read in the source at victorarias/nisse e749011.
+Read in the source at victorarias/nisse 062ef0b.
 
 - One server per Nisse home holds every conversation; clients reach it over
   `NISSE_HOME/nisse.sock`. `nisse serve` refuses a home another server already
