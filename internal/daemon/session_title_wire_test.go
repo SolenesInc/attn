@@ -83,6 +83,44 @@ func TestEachAgentTitlesASessionFromThePromptItWasSpawnedWith(t *testing.T) {
 	}
 }
 
+func TestACodexInitialPromptTitlesItsSessionAfterItsConversationBinds(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Claude, fakeagent.Codex)
+	app := w.App()
+	first := w.Spawn(app, fakeagent.Claude, w.Path("first"))
+	claude := w.Launched(first)
+	app.TypeLine(first, "find the flaky test")
+	claude.Prompted()
+	firstTitle := w.HeadlessTask()
+
+	boot := w.HoldNextBoot()
+	t.Cleanup(boot)
+	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.InitialPrompt = protocol.Ptr("investigate the retry queue")
+	})
+	awaitTitleTask(app, session, func(task protocol.Task) bool { return task.State == "queued" })
+	boot()
+	codex := w.Launched(session)
+	if prompt := codex.Prompted(); prompt != "investigate the retry queue" {
+		t.Fatalf("Codex received %q, want the initial prompt", prompt)
+	}
+	read, err := w.Client().SessionTranscript(session, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(read.Events) != 1 || read.Events[0].Kind != "user" || protocol.Deref(read.Events[0].Text) != "investigate the retry queue" {
+		t.Fatalf("session transcript = %+v, want the bound conversation's initial prompt before the title runs", read.Events)
+	}
+
+	firstTitle.Answer("Flaky test hunt")
+	awaitLabel(app, first, "Flaky test hunt")
+	task := w.HeadlessTask()
+	if task.Harness != fakeagent.Codex || !strings.Contains(task.Prompt, "investigate the retry queue") {
+		t.Fatalf("the title task went to %s asking %q, want Codex asked about the initial prompt", task.Harness, task.Prompt)
+	}
+	task.Answer("Retry queue investigation")
+	awaitLabel(app, session, "Retry queue investigation")
+}
+
 func TestTheFirstPromptTheUserTypesTitlesTheSession(t *testing.T) {
 	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		t.Run(string(h), func(t *testing.T) {
@@ -101,6 +139,34 @@ func TestTheFirstPromptTheUserTypesTitlesTheSession(t *testing.T) {
 			awaitLabel(app, session, "Fix login flow")
 		})
 	}
+}
+
+func TestASharedCodexTitleStaysWithItsConversationWhenTheTileMovesOn(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	first := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
+	codex := w.Launched(first)
+	app.TypeLine(first, "find the flaky test")
+	codex.Prompted()
+	firstTitle := w.HeadlessTask()
+
+	app.TypeLine(first, "/new")
+	codex.Prompted()
+	next := awaitSuccessor(app, first)
+	app.TypeLine(string(next.ID), "the cart total ignores discounts")
+	codex.Prompted()
+	firstTitle.Answer("Flaky test hunt")
+	awaitLabel(app, first, "Flaky test hunt")
+	if label := w.sessionLabel(string(next.ID)); label == "Flaky test hunt" {
+		t.Fatal("the first conversation's title replaced the new conversation's label")
+	}
+	task := w.HeadlessTask()
+	if !strings.Contains(task.Prompt, "the cart total ignores discounts") {
+		t.Fatalf("the new conversation's title task asked %q", task.Prompt)
+	}
+	task.Answer("Fix cart discounts")
+	awaitLabel(app, string(next.ID), "Fix cart discounts")
 }
 
 func TestTheFirstPromptTypedIntoACodexNewChatTitlesItsNewSession(t *testing.T) {
