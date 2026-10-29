@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+message_file="$1"
+
+[ "${ATTN_INSIDE_APP:-}" = 1 ] || exit 0
+command -v attn >/dev/null || exit 0
+for replaying in rebase-merge rebase-apply; do
+  [ -e "$(git rev-parse --git-path "$replaying")" ] && exit 0
+done
+[ -n "$(git stripspace --strip-comments <"$message_file")" ] || exit 0
+
+session_id="$(attn presence --session-id 2>/dev/null)" || exit 0
+present="$(git interpret-trailers --parse "$message_file")"
+trailers=()
+grep -qi '^Attn-Session:' <<<"$present" || trailers+=(--trailer "Attn-Session: $session_id")
+if ! grep -qi '^Attn-Seed:' <<<"$present" && seed_ids="$(attn presence --seed-ids 2>/dev/null)"; then
+  while IFS= read -r seed_id; do
+    trailers+=(--trailer "Attn-Seed: $seed_id")
+  done <<<"$seed_ids"
+fi
+[ "${#trailers[@]}" -gt 0 ] || exit 0
+git interpret-trailers --in-place --if-exists addIfDifferent "${trailers[@]}" "$message_file"
