@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -156,6 +157,7 @@ running:
 			break running
 		}
 	}
+	pausepoint.At(pausepoint.BridgeConnectionClosed)
 	c.cancel()
 	_ = transport.Close()
 	workers.Wait()

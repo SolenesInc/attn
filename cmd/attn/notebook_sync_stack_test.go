@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -188,6 +189,61 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 	}
 	awaitNotebookFile(t, pair.App, home, filepath.Join("seeds", seed.ID, "copy.md"), "", true)
 	t.Log("detach wrote outpost destination; home removed source before return; check report accepted copy.md; seed show printed outpost artifact folder; external unlink of a copied artifact reached home")
+}
+
+func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
+	for _, side := range []string{"home", "outpost"} {
+		t.Run(side, func(t *testing.T) {
+			home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+			target, other, key, off, on := home, outpost, "outpost_listen", "", ""
+			if side == "outpost" {
+				target, other, key, off, on = outpost, home, "outposts_enabled", "false", "true"
+			}
+			closed := target.PauseAt(pausepoint.BridgeConnectionClosed)
+			pending := target.PauseAt(pausepoint.NotebookStreamError)
+			handled := target.PauseAt(pausepoint.NotebookStreamErrorHandled)
+			pair := testworld.PrepareOutpostPair(t, home, outpost)
+			pair.Start()
+			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+			seed := plant(t, home, "Reconnect receipt", "-m", "Attach through the replacement Notebook stream")
+			remoteApp := outpost.App()
+			if side == "home" {
+				on = pair.Address
+			}
+			requireStdout(t, other.Attn("settings", "set", key, off))
+			closed.Await()
+			pending.Await()
+			closed.Release()
+			writeNotebookFile(t, home, "replacement.md", "synced by the replacement stream")
+			requireStdout(t, other.Attn("settings", "set", key, on))
+			awaitNotebookFile(t, remoteApp, outpost, "replacement.md", "synced by the replacement stream", false)
+			pair.App = home.App()
+			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+			pending.Release()
+			handled.Await()
+			pair.App = home.App()
+			if rows := pair.App.Initial.Outposts; len(rows) != 1 || rows[0].Notebook == nil || rows[0].Notebook.State == protocol.OutpostNotebookStateError || rows[0].Notebook.Error != nil {
+				t.Fatalf("dead %s stream overwrote its replacement: %+v", side, rows)
+			}
+			handled.Release()
+			for _, stack := range []*testworld.Stack{home, outpost} {
+				result := stack.Attn("settings", "get", "notebook_sync_last_error")
+				requireStdout(t, result)
+				if strings.TrimSpace(result.Stdout) != "" {
+					t.Fatalf("dead %s stream left a Notebook error: %s", side, result.Stdout)
+				}
+			}
+			source := filepath.Join(outpost.Dir, "receipt.md")
+			if err := os.WriteFile(source, []byte("receipt after reconnect"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			requireStdout(t, outpost.Attn("seed", "attach", seed.ID, "--path", source, "--copy"))
+			if data, err := os.ReadFile(notebookPath(home, "seeds", seed.ID, "receipt.md")); err != nil || string(data) != "receipt after reconnect" {
+				t.Fatalf("first attach did not reach home: %q, %v", data, err)
+			}
+			t.Logf("%s: replacement synced replacement.md; delayed old error handled; fresh row and both CLI errors clear; first artifact attach reached home", side)
+		})
+	}
 }
 
 func TestNotebookConflictsAndMissingMarkerAreVisibleAfterReconnect(t *testing.T) {
