@@ -1,0 +1,3 @@
+kind: internal
+area: outposts
+change: Check normal-exit close identity after reconnect recovery finishes.
