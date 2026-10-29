@@ -37,6 +37,7 @@ None. What agents do shows in the agent palette's rows: their state, turn and pr
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
+- On macOS, with the app already launched, run `open -a "$(./attn instance resolve --field appPath)"` before native input. This activates only the selected instance; launching it first preserves the mock environment.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-palette.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-palette-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
 - Two agents: `wsctl add-session --cwd $A --agent claude --label pal-a --id pal-a`, then the same with `pal-b`. Both owe a turn once they finish booting.
 - A tile that is not an agent: `./attn seed plant "Palette tile"` prints a line of the seed's id, slug and title, and `<seed>` is that id. `./attn open <seed>` prints `opened <seed>` and puts its seed tile on the current desktop ([garden.md](garden.md)).

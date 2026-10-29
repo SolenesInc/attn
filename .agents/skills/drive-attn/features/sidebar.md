@@ -42,6 +42,7 @@ None. Agents change what the sidebar shows without driving it: `attn session ren
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline starts in desktop flow.
+- On macOS, with the app already launched, run `open -a "$(./attn instance resolve --field appPath)"` before native input. This activates only the selected instance; launching it first preserves the mock environment.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-sidebar.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-sidebar-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
 - Two agents: `wsctl add-session --cwd $A --agent claude --label side-a --id side-a`, then the same with `side-b`. With no session the sidebar starts collapsed; the first agent expands it.
 
@@ -52,7 +53,7 @@ Preconditions:
 - **The queue sidebar.** Run `./attn settings set queue_mode_enabled true`. `bridge dom_wait '{"selector":"[data-testid=\"sidebar-queue\"]","timeoutMs":5000}'` matches, and `bridge queue_get_state` shows `present: true` and `turns` naming `side-a` and `side-b`, which owe a turn since they booted. Settle `side-b` for setup: select it with `bridge select_session '{"sessionId":"side-b"}'` and press ⌘⇧E ([queue-flow.md](queue-flow.md)); `turns` now names only `side-a`.
 - **The agent list.** Run `bridge native_key '{"key":"a","modifiers":["command","shift"]}'`. `bridge queue_get_state` shows `agentList.expanded: true` and `settled` naming `side-b`, and `bridge dom_wait '{"selector":"[data-testid=\"queue-agent-filter\"]","focused":true,"timeoutMs":5000}'` matches. Run `bridge native_text '{"text":"zzz"}'`: `settled` is empty and the list reads `Nobody else.`. Press Escape: the filter clears. Press Escape again: `agentList.expanded` is false.
 - **The queue bar.** Press ⌘B. `bridge queue_get_state` shows `present: false` and `bar.present: true`, with `bar.waiting: 1` and `bar.crumbs` naming `side-a`. Click `[data-testid="queue-bar-pill"]` natively: `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Agents\"]","focused":true,"timeoutMs":5000}'` matches; press Escape. Press ⌘⇧A: the agent palette opens again, since the queue sidebar is not showing; press Escape. Click `[aria-label="Show sidebar"]` natively: `present` is true again.
-- **A row's actions.** Click `[data-testid="session-actions-side-a"]` natively. `bridge dom_text '{"selector":"[role=\"menu\"][aria-label=\"Actions for side-a\"]"}'` lists `Mark priority`, `Rename session`, `Make chief of staff`, `Reload session` and `Close session`. Press Escape: the menu closes.
+- **A row's actions.** Move over `.queue-row[data-session-id="side-a"]` with `bridge native_mouse`, then click `[data-testid="session-actions-side-a"]` natively. `bridge dom_text '{"selector":"[role=\"menu\"][aria-label=\"Actions for side-a\"]"}'` lists `Mark priority`, `Rename session`, `Make chief of staff`, `Reload session` and `Close session`. Press Escape: the menu closes.
 - **Proof.** In `$P`, keep `bridge get_state` after each step and `bridge queue_get_state` after each shape change, and capture each shape: `bridge capture_screenshot '{"path":"<P>/desktop-sidebar.png"}'`, then `rail.png`, `queue-sidebar.png` and `queue-bar.png`, with `<P>` written out. Put the way in in each file's name, such as `sidebar-collapse-key-state.json`.
 
 ## Contexts
@@ -73,6 +74,9 @@ Preconditions:
 - App: `app/src/App.sidebar.test.tsx`, `app/src/App.sidebarHeader.test.tsx`, `app/src/App.sidebarLabels.test.tsx`, `app/src/App.desktopSidebar.test.tsx`, `app/src/App.agentNavigation.test.tsx`, `app/src/App.queueRows.test.tsx`, `app/src/components/Sidebar.test.tsx`, `app/src/components/QueueSidebar.sections.test.tsx`, `app/src/components/QueueBar.sections.test.tsx`.
 
 ## Gotchas
+
+- In the `8ed664831` run, the queue-bar pill reported native input delivered but opened no palette until the selected app was activated with `open -a`. Its keyboard entry still worked. Activate the app before judging the native click.
+- The row-menu step also failed to show its popover during replay, including after activation. Keep that attempt as a finding; the successful agent-palette key does not prove the row menu.
 
 - On a fresh instance with no session, the sidebar is collapsed: the rail, or the queue bar in queue flow. It expands by itself when the first session appears, and collapses again when the last one goes. Launch an agent before judging the expanded shapes.
 - The queue bar has no Home row, no Commands button and no header buttons. Go home with ⌘⇧H and open drawers from the palette or their keys while it shows.

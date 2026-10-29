@@ -66,6 +66,7 @@ queue, but the user settles a run's turn the same way in either flow.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline starts in desktop flow with auto-settle off.
+- On macOS, with the app already launched, run `open -a "$(./attn instance resolve --field appPath)"` before native input. This activates only the selected instance; launching it first preserves the mock environment.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-queue.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - Two agent folders, `A=$(mktemp -d /tmp/drive-attn-queue-a.XXXX) && echo "export A=$A" >> $DRIVE_ENV` and `B=$(mktemp -d /tmp/drive-attn-queue-b.XXXX) && echo "export B=$B" >> $DRIVE_ENV`. `$A/.attn-mock-agent.json` holds this fixture:
 
