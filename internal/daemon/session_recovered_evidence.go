@@ -54,8 +54,12 @@ func recoveredHarnessEdge(existing *protocol.Session, info ptybackend.SessionInf
 	if !ok {
 		return nil, time.Time{}, false
 	}
-	if info.HasLastSignal && (recordClaims(info.LastSignal, claim) || info.LastSignal.At.After(concludedAt)) {
-		return nil, time.Time{}, false
+	if info.HasLastSignal {
+		signal := info.LastSignal
+		settledHeartbeat := signal.Source == pty.SourceHeartbeat && signal.Claim == "not_busy"
+		if recordClaims(signal, claim) || (!settledHeartbeat && signal.At.After(concludedAt)) {
+			return nil, time.Time{}, false
+		}
 	}
 	return func(e *sessionmonitor.Evidence) {
 		e.LastHarnessEvent = &sessionstate.Observation{

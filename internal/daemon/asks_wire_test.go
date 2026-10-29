@@ -258,6 +258,7 @@ func TestAnAnswerTypedIntoAWorkingAgentAfterARestartLeavesItsResultToTheUser(t *
 			t.Fatalf("ask: %v", err)
 		}
 		app.TypeLine(asker.id, "move the cache")
+		asker.term.Heartbeat("busy", "Claude Code")
 		w.advance(sessionmonitor.QuietWindow)
 
 		w.restart()
