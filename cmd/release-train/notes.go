@@ -49,8 +49,6 @@ type seedRecord struct {
 	} `json:"notes"`
 }
 
-type seedLookup func(id string) (seedRecord, error)
-
 func runNotes(root string, args []string, stdout io.Writer) error {
 	if len(args) != 1 || (args[0] != "render" && args[0] != "range") {
 		return errors.New("usage: release-train notes <render|range>")
@@ -63,7 +61,7 @@ func runNotes(root string, args []string, stdout io.Writer) error {
 		_, err = fmt.Fprintln(stdout, r.marker())
 		return err
 	}
-	rendered, err := renderNotes(root, r, showSeed)
+	rendered, err := renderNotes(root, r)
 	if err != nil {
 		return err
 	}
@@ -136,7 +134,7 @@ func readReleaseCommit(root, sha string) (releaseCommit, error) {
 	return commit, nil
 }
 
-func renderNotes(root string, r releaseRange, lookup seedLookup) (string, error) {
+func renderNotes(root string, r releaseRange) (string, error) {
 	commits, err := releaseCommits(root, r)
 	if err != nil {
 		return "", err
@@ -159,7 +157,7 @@ func renderNotes(root string, r releaseRange, lookup seedLookup) (string, error)
 	var out strings.Builder
 	fmt.Fprintf(&out, "%d commits since the last release (%s)\n", len(commits), r.revisions())
 	for _, id := range seedOrder {
-		record, err := lookup(id)
+		record, err := showSeed(id)
 		if err != nil {
 			fmt.Fprintf(&out, "\n=== seed %s: unknown (%v); judge its change from the commits alone\n", id, err)
 		} else {

@@ -1,7 +1,8 @@
 package main
 
 import (
-	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,6 +16,40 @@ func (repo *testRepository) commitMessage(paragraphs ...string) string {
 	}
 	repo.git(args...)
 	return repo.git("rev-parse", "HEAD")
+}
+
+func (repo *testRepository) releaseTrain(args ...string) string {
+	repo.t.Helper()
+	repo.t.Chdir(repo.root)
+	var out strings.Builder
+	if err := run(args, &out); err != nil {
+		repo.t.Fatalf("release-train %s: %v", strings.Join(args, " "), err)
+	}
+	return out.String()
+}
+
+func fakeAttn(t *testing.T, seeds map[string]string) {
+	t.Helper()
+	bin := t.TempDir()
+	records := t.TempDir()
+	for id, record := range seeds {
+		if err := os.WriteFile(filepath.Join(records, id+".json"), []byte(record), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script := `#!/bin/sh
+record="` + records + `/$3.json"
+if [ "$1 $2 $4" = "seed show --json" ] && [ -f "$record" ]; then
+  cat "$record"
+  exit 0
+fi
+echo "no seed $3" >&2
+exit 1
+`
+	if err := os.WriteFile(filepath.Join(bin, "attn"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 func TestNotesGroupTheCommitsSinceTheLastReleaseByTheirSeeds(t *testing.T) {
@@ -31,38 +66,17 @@ func TestNotesGroupTheCommitsSinceTheLastReleaseByTheirSeeds(t *testing.T) {
 	repo.write("gone.txt", "fix\n")
 	repo.commitMessage("fix(palette): keep the selection", "Attn-Seed: seed-gone")
 	repo.write("changelog.d/tidy.yaml", "kind: fixed\narea: queue\nchange: The queue keeps its order.\n")
-	repo.commitMessage("fix(queue): keep the order")
+	head := repo.commitMessage("fix(queue): keep the order")
 
-	seeds := map[string]seedRecord{}
-	band := seedRecord{}
-	band.Seed.Title, band.Seed.Body, band.Seed.Status = "Queue band", "Show who is waiting.", "harvested"
-	band.Notes = append(band.Notes, struct {
-		Kind string `json:"kind"`
-		Body string `json:"body"`
-	}{Kind: "note", Body: "Users asked for it."})
-	seeds["seed-band"] = band
-	palette := seedRecord{}
-	palette.Seed.Title, palette.Seed.Status = "Palette", "growing"
-	seeds["seed-palette"] = palette
-	lookup := func(id string) (seedRecord, error) {
-		record, ok := seeds[id]
-		if !ok {
-			return seedRecord{}, errors.New("no seed " + id)
-		}
-		return record, nil
-	}
+	fakeAttn(t, map[string]string{
+		"seed-band":    `{"seed":{"title":"Queue band","body":"Show who is waiting.","status":"harvested"},"notes":[{"kind":"note","body":"Users asked for it."}]}`,
+		"seed-palette": `{"seed":{"title":"Palette","body":"","status":"growing"},"notes":[]}`,
+	})
 
-	compiled, err := releaseRangeAt(repo.root, "HEAD")
-	if err != nil {
-		t.Fatal(err)
+	if got, want := repo.releaseTrain("notes", "range"), "<!-- changelog-commits: "+previousMain+".."+head+" -->\n"; got != want {
+		t.Fatalf("range = %q, want %q", got, want)
 	}
-	if compiled.from != previousMain {
-		t.Fatalf("range starts at %s, want the previous release's main %s", compiled.from, previousMain)
-	}
-	rendered, err := renderNotes(repo.root, compiled, lookup)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rendered := repo.releaseTrain("notes", "render")
 
 	groups := strings.Split(rendered, "\n=== ")
 	if !strings.HasPrefix(groups[0], "4 commits since the last release") {

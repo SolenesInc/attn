@@ -312,20 +312,17 @@ func TestTheNextReleaseCompilesWhatLandedDuringThisOne(t *testing.T) {
 	if _, err := validateAcceptedMain(repo.root, releaseSHA, defaultManifestPath); err != nil {
 		t.Fatal(err)
 	}
+	fakeAttn(t, nil)
 
-	next, err := releaseRangeAt(repo.root, releaseSHA)
-	if err != nil {
-		t.Fatal(err)
+	if got, want := repo.releaseTrain("notes", "range"), "<!-- changelog-commits: "+mainSHA+".."+releaseSHA+" -->\n"; got != want {
+		t.Fatalf("next release range = %q, want %q", got, want)
 	}
-	if next.from != mainSHA {
-		t.Fatalf("next release starts at %s, want the main this one compiled (%s)", next.from, mainSHA)
+	rendered := repo.releaseTrain("notes", "render")
+	if !strings.HasPrefix(rendered, "1 commits since the last release") || !strings.Contains(rendered, "fix(queue): later work") {
+		t.Fatalf("next release notes do not hold exactly the work that landed during this one:\n%s", rendered)
 	}
-	commits, err := releaseCommits(repo.root, next)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(commits) != 1 || commits[0].subject != "fix(queue): later work" {
-		t.Fatalf("next release compiles %+v, want only the work that landed during this one", commits)
+	if strings.Contains(rendered, "accepted change on main") {
+		t.Fatalf("next release notes repeat this release's work:\n%s", rendered)
 	}
 }
 
