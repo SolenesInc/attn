@@ -105,6 +105,7 @@ var programs = map[string]func(config) int{
 	string(Claude): runClaude,
 	string(Codex):  runCodex,
 	string(Pi):     runPiTerminal,
+	string(Nisse):  runNisse,
 	piPluginName:   runPiPlugin,
 	wrapperName:    runWrapperTripwire,
 	miseName:       runMise,

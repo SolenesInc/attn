@@ -141,7 +141,7 @@ func EnsureAttnSkillInstalled(harness string) (bool, error) {
 	case "codex":
 		return true, ensureAttnAgentsSkillInstalled()
 	default:
-		return false, nil
+		return true, nil
 	}
 }
 

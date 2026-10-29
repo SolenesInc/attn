@@ -24,10 +24,12 @@ type linkRuntime interface {
 
 	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
 	runsLink(t harness.TerminalID) bool
+	serverTerminal(profile string) harness.TerminalID
 
 	renamed(sessionID protocol.SessionID, label string)
 	profileReleased(profile string)
 	setAsideAtClose(conversation string) bool
+	sessionClosed(sessionID protocol.SessionID, profile, conversation string)
 	restore(profile, conversation string) error
 	transcriptPath(path string) string
 
@@ -38,7 +40,7 @@ type linkRuntime interface {
 }
 
 func (d *Daemon) links() []linkRuntime {
-	return []linkRuntime{d.codexShared()}
+	return []linkRuntime{d.codexShared(), d.nisse()}
 }
 
 func (d *Daemon) linkNamed(kind string) linkRuntime {

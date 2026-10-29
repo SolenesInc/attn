@@ -188,7 +188,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 
 	for _, name := range agentdriver.List() {
 		driver := agentdriver.Get(name)
-		if driver == nil {
+		if driver == nil || !d.agentOffered(name) {
 			continue
 		}
 		execKey := canonicalExecutableSettingKey(name)
@@ -267,6 +267,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[string(SettingQueueShowHiddenSessions)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingQueueShowHiddenSessions)]))
 	settings[string(SettingQueueQuietNotifications)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingQueueQuietNotifications)]))
 	settings[string(SettingCodexSharedEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCodexSharedEnabled)]))
+	settings[string(SettingNisseEnabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingNisseEnabled)]))
 	settings[string(SettingCrewV2Enabled)] = strconv.FormatBool(parseBooleanSetting(stored[string(SettingCrewV2Enabled)]))
 	settings[string(SettingSidebarHarnessLogosEnabled)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingSidebarHarnessLogosEnabled)]))
 	settings[string(SettingAutoApproveEnabled)] = strconv.FormatBool(defaultOnBooleanSetting(stored[string(SettingAutoApproveEnabled)]))

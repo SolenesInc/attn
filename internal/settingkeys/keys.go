@@ -40,6 +40,7 @@ const (
 	SettingQueueShowHiddenSessions       HomeSetting    = "queue_show_hidden_sessions"
 	SettingQueueQuietNotifications       HomeSetting    = "queue_quiet_notifications"
 	SettingCodexSharedEnabled            HomeSetting    = "codex_shared_enabled"
+	SettingNisseEnabled                  HomeSetting    = "nisse_enabled"
 	SettingSidebarHarnessLogosEnabled    HomeSetting    = "sidebar_harness_logos_enabled"
 	SettingAutoApproveEnabled            HomeSetting    = "auto_approve_enabled"
 	SettingOpenSentFilesEnabled          HomeSetting    = "open_sent_files_enabled"

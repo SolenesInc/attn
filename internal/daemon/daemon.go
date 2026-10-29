@@ -196,6 +196,8 @@ type Daemon struct {
 	terminalState            *terminalRegistry
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
+	nisseOnce                sync.Once
+	nisseState               *nisseLink
 	quickCaptureAssetMu      sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[inbox.Address]*inboxDeliveryState
@@ -2144,6 +2146,7 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 		return err
 	}
 	session := d.store.Get(sessionID)
+	link := d.linkOf(sessionID)
 	linked := session != nil && d.store.SessionLink(sessionID) == codexLinkKind
 	if err := d.closeSessionRecord(sessionID, closed); err != nil {
 		if linked {
@@ -2154,16 +2157,13 @@ func (d *Daemon) closeSession(sessionID protocol.SessionID, closed store.Session
 	if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed"}); err != nil {
 		d.logf("machine close: %v", err)
 	}
-	if linked {
+	if link != nil && session != nil {
 		profile, conversation := session.ProfileID, d.store.GetSessionConversation(sessionID).NativeID
 		d.life.Go("linkAfterSessionClose", func() {
 			lifecycle := d.sessionLifecycleLockFor(sessionID)
 			lifecycle.Lock()
 			defer lifecycle.Unlock()
-			archive := d.store.OtherOpenSessionHolding(conversation, "") == ""
-			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(conversation), Archive: protocol.Ptr(archive)}); err != nil {
-				d.logf("machine close archive: %v", err)
-			}
+			link.sessionClosed(sessionID, profile, conversation)
 		})
 	}
 	return nil

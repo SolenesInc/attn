@@ -238,6 +238,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           outpostsEnabled={state.outpostsEnabled}
           newSessionLauncherEnabled={state.newSessionLauncherEnabled}
           codexSharedEnabled={state.codexSharedEnabled}
+          nisseEnabled={state.nisseEnabled}
           queueShowHiddenSessions={state.queueShowHiddenSessions}
           queueQuietNotifications={state.queueQuietNotifications}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}

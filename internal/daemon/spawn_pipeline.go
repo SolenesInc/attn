@@ -122,7 +122,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 	agent := normalizeSpawnAgent(msg.Agent)
 	if hasPluginDriver {
 		agent = pluginDriver.Agent
-	} else if requestedAgent != "" && requestedAgent != protocol.AgentShellValue && agentdriver.Get(requestedAgent) == nil {
+	} else if requestedAgent != "" && requestedAgent != protocol.AgentShellValue && (agentdriver.Get(requestedAgent) == nil || !d.agentOffered(requestedAgent)) {
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q is not available", requestedAgent)}
 	}
 	isShell := agent == protocol.AgentShellValue

@@ -69,7 +69,7 @@ type codexServer struct {
 	held     map[string]codexThreadStatus
 	parents  map[string]string
 	attempt  *codexAttempt
-	events   codexEvents
+	events   linkEvents
 	running  string
 	binary   string
 	exited   chan struct{}
@@ -147,6 +147,10 @@ func (r *codexShared) ensureDir() error {
 func (r *codexShared) viewSocket(t harness.TerminalID) string {
 	sum := sha256.Sum256([]byte(t))
 	return filepath.Join(r.dir(), "t-"+hex.EncodeToString(sum[:8])+".sock")
+}
+
+func (r *codexShared) serverTerminal(profile string) harness.TerminalID {
+	return codexServerTerminal(profile)
 }
 
 func (r *codexShared) server(profile string) *codexServer {

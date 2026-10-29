@@ -1,0 +1,8 @@
+kind: added
+area: agents
+change: >
+  Experimental: with Nisse turned on in Settings → Experimental, attn offers
+  Nisse as a harness. attn starts the Nisse server, opens each session's
+  conversation in the Nisse TUI, follows its state from the server, delivers
+  messages as follow-ups through it, and interrupts the run when the session
+  closes.

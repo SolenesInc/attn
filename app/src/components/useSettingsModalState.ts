@@ -285,6 +285,7 @@ export function useSettingsModalState({
   const ptyBackendMode = (settings.pty_backend_mode || 'unknown').toLowerCase();
   const newSessionLauncherEnabled = settings.new_session_launcher_enabled === 'true';
   const codexSharedEnabled = settings.codex_shared_enabled === 'true';
+  const nisseEnabled = settings.nisse_enabled === 'true';
   const queueShowHiddenSessions = settings.queue_show_hidden_sessions !== 'false';
   const queueQuietNotifications = settings.queue_quiet_notifications === 'true';
   const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
@@ -738,6 +739,7 @@ export function useSettingsModalState({
     sharedPtyHostEnabled,
     newSessionLauncherEnabled,
     codexSharedEnabled,
+    nisseEnabled,
     queueShowHiddenSessions,
     queueQuietNotifications,
     directAgentLaunchEnabled,

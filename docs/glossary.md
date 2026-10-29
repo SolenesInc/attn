@@ -27,13 +27,14 @@ terminal                one PTY process in a terminal tile
 ├─ host (at most 1)    the outpost it runs on; no host means the home's machine
 └─ offline             its host is unreachable (bridge lost or refused, or
                        Outposts off); typing is not sent
-harness                 the agent CLI: Claude Code, Codex, pi
+harness                 the agent CLI: Claude Code, Codex, pi, Nisse
 model                   the AI model a harness runs
 ├─ tier (at most 1)      the intelligence a task needs: light, standard or deep
 └─ effort (at most 1)    how much reasoning the model uses
 link                    a way attn reaches a harness besides its terminal,
-                        such as the shared Codex app-server; a session runs
-                        over the link its conversation runs on now
+                        such as the shared Codex app-server or the Nisse
+                        server; a session runs over the link its
+                        conversation runs on now
 agent                   a harness that runs in a terminal; the user talks to
                         them; like a coding agent
 ├─ session (1 at a time)

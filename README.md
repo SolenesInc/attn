@@ -477,6 +477,7 @@ The full dev-loop, instance, and harness targets live in
 |---|---|
 | [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
 | [Shared Codex](docs/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server, with hidden sessions |
+| [Nisse](docs/using-nisse.md) | Experimental: Nisse sessions, whose runs live in the Nisse server |
 | [Outposts](docs/using-outposts.md) | Experimental: connect attn on other computers, where agents will run |
 | [Release](docs/making-a-release.md) | Maintainer runbook |
 
