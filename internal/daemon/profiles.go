@@ -26,6 +26,7 @@ type profileActionOutcome struct {
 	// The action may change what the requester shows, so it gets its own answer.
 	arranges bool
 	publish  func()
+	finish   func() (profileActionOutcome, error)
 }
 
 func (o profileActionOutcome) withProfile(profile profiles.Profile) profileActionOutcome {
@@ -226,36 +227,51 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 	previousProfile := client.selectedProfile()
 	client.holdArrangements()
 	outcome, err := run()
-	if pause := d.heldActionRan.Load(); pause != nil {
-		(*pause)()
-	}
-	if err == nil && outcome.profile != nil {
-		wire := protocolProfile(*outcome.profile)
-		result.Profile = &wire
-	}
-	if err == nil {
-		result.Desktops, err = protocolDesktops(outcome.desktops)
-	}
-	if err != nil {
-		fail(err)
+	complete := func(err error) {
+		if pause := d.heldActionRan.Load(); pause != nil {
+			(*pause)()
+		}
+		if err == nil && outcome.profile != nil {
+			wire := protocolProfile(*outcome.profile)
+			result.Profile = &wire
+		}
+		if err == nil {
+			result.Desktops, err = protocolDesktops(outcome.desktops)
+		}
+		if err != nil {
+			fail(err)
+			d.releaseArrangements(client)
+			return
+		}
+		if outcome.paneID != "" {
+			result.PaneID = protocol.Ptr(outcome.paneID)
+		}
+		result.Success = true
+		if outcome.arranges {
+			d.sendArrangement(client, requestID, outcome.moved)
+		}
+		if previousProfile != client.selectedProfile() {
+			d.sendProfileSnapshots(client)
+		}
+		d.sendToClient(client, result)
 		d.releaseArrangements(client)
+		if outcome.publish != nil {
+			outcome.publish()
+		}
+	}
+	if err == nil && outcome.finish != nil {
+		d.releaseArrangements(client)
+		finish := func() {
+			outcome, err = outcome.finish()
+			client.holdArrangements()
+			complete(err)
+		}
+		if !d.life.Go("finishProfileAction", finish) {
+			finish()
+		}
 		return
 	}
-	if outcome.paneID != "" {
-		result.PaneID = protocol.Ptr(outcome.paneID)
-	}
-	result.Success = true
-	if outcome.arranges {
-		d.sendArrangement(client, requestID, outcome.moved)
-	}
-	if previousProfile != client.selectedProfile() {
-		d.sendProfileSnapshots(client)
-	}
-	d.sendToClient(client, result)
-	d.releaseArrangements(client)
-	if outcome.publish != nil {
-		outcome.publish()
-	}
+	complete(err)
 }
 
 // While a client's own request runs, broadcasts to it wait, so its change reaches it first as its own answer.
@@ -433,28 +449,34 @@ func (d *Daemon) handleDesktopCreate(client *wsClient, msg *protocol.DesktopCrea
 }
 
 func (d *Daemon) handleDesktopClose(client *wsClient, msg *protocol.DesktopCloseMessage) {
-	d.coalesceSnapshots(func() {
-		d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-			desktop, err := d.store.GetDesktop(msg.DesktopID)
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		desktop, err := d.store.GetDesktop(msg.DesktopID)
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		var protected []string
+		for _, id := range d.sessionsEndedWith(desktop) {
+			if err := d.sessionCloseError(id); err != nil {
+				protected = append(protected, d.desktopSessionName(id)+": "+err.Error())
+			}
+		}
+		if len(protected) > 0 {
+			return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "Cannot close desktop: move these protected sessions first: %s", strings.Join(protected, "; "))
+		}
+		var profile profiles.Profile
+		var remote []profiles.Pane
+		var failures []string
+		d.coalesceSnapshots(func() {
+			profile, err = d.store.CloseDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
 			if err != nil {
-				return profileActionOutcome{}, err
+				return
 			}
-			var protected []string
-			for _, id := range d.sessionsEndedWith(desktop) {
-				if err := d.sessionCloseError(id); err != nil {
-					protected = append(protected, d.desktopSessionName(id)+": "+err.Error())
-				}
-			}
-			if len(protected) > 0 {
-				return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "Cannot close desktop: move these protected sessions first: %s", strings.Join(protected, "; "))
-			}
-			profile, err := d.store.CloseDesktop(msg.DesktopID, int64(msg.ExpectedRevision))
-			if err != nil {
-				return profileActionOutcome{}, err
-			}
-			var failures []string
 			for _, tile := range desktop.Panes {
 				if tile.SessionID == "" {
+					continue
+				}
+				if d.sessionHost(tile.SessionID) != "" {
+					remote = append(remote, tile)
 					continue
 				}
 				if err := d.closeTile(client, tile); err != nil {
@@ -462,11 +484,37 @@ func (d *Daemon) handleDesktopClose(client *wsClient, msg *protocol.DesktopClose
 				}
 			}
 			d.publishArrangementChanged(profile.ID)
+		})
+		if err != nil {
+			return profileActionOutcome{}, err
+		}
+		answers := make(chan string, len(remote))
+		for _, tile := range remote {
+			name := d.desktopSessionName(tile.SessionID)
+			d.offPumpInTerminalOrder(client, tile.RuntimeID, func() {
+				failure := ""
+				if err := d.closeTile(client, tile); err != nil {
+					failure = name + ": " + err.Error()
+				}
+				answers <- failure
+			})
+		}
+		finish := func() (profileActionOutcome, error) {
+			for range remote {
+				if failure := <-answers; failure != "" {
+					failures = append(failures, failure)
+				}
+			}
 			if len(failures) > 0 {
 				return profileActionOutcome{}, profiles.Errorf(profiles.CodeInvalid, "Desktop closed; failed to close sessions: %s", strings.Join(failures, "; "))
 			}
-			return profileActionOutcome{profile: &profile, arranges: true}, nil
-		})
+			profile, err := d.store.GetProfile(profile.ID)
+			return profileActionOutcome{profile: &profile, arranges: true}, err
+		}
+		if len(remote) == 0 {
+			return finish()
+		}
+		return profileActionOutcome{finish: finish}, nil
 	})
 }
 
@@ -539,16 +587,29 @@ func (d *Daemon) leafShown(client *wsClient, profile profiles.Profile, desktop p
 
 func (d *Daemon) handleDesktopShowSession(client *wsClient, msg *protocol.DesktopShowSessionMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		show := func() (profileActionOutcome, error) {
+			profile, desktop, leafID, err := d.store.ShowSession(msg.SessionID)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			return d.leafShown(client, profile, desktop, leafID), nil
+		}
+		if d.hidden(msg.SessionID) && d.sessionHost(msg.SessionID) != "" {
+			answer := make(chan error, 1)
+			d.inSessionOrder(client, msg.SessionID, func() { answer <- d.showHidden(msg.SessionID) })
+			return profileActionOutcome{finish: func() (profileActionOutcome, error) {
+				if err := <-answer; err != nil {
+					return profileActionOutcome{}, err
+				}
+				return show()
+			}}, nil
+		}
 		if d.hidden(msg.SessionID) {
 			if err := d.showHidden(msg.SessionID); err != nil {
 				return profileActionOutcome{}, err
 			}
 		}
-		profile, desktop, leafID, err := d.store.ShowSession(msg.SessionID)
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
-		return d.leafShown(client, profile, desktop, leafID), nil
+		return show()
 	})
 }
 
@@ -649,7 +710,19 @@ func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopC
 		if i < 0 {
 			return profileActionOutcome{}, profiles.Errorf(profiles.CodeNotFound, "desktop %s has no terminal tile %s", msg.DesktopID, msg.TileID)
 		}
-		if err := d.closeTile(client, desktop.Panes[i]); err != nil {
+		tile := desktop.Panes[i]
+		if d.sessionHost(tile.SessionID) != "" {
+			answer := make(chan error, 1)
+			d.offPumpInTerminalOrder(client, tile.RuntimeID, func() { answer <- d.closeTile(client, tile) })
+			return profileActionOutcome{finish: func() (profileActionOutcome, error) {
+				if err := <-answer; err != nil {
+					return profileActionOutcome{}, err
+				}
+				desktop, err := d.store.GetDesktop(msg.DesktopID)
+				return profileActionOutcome{desktops: []profiles.Desktop{desktop}, arranges: true}, err
+			}}, nil
+		}
+		if err := d.closeTile(client, tile); err != nil {
 			return profileActionOutcome{}, err
 		}
 		desktop, err = d.store.GetDesktop(msg.DesktopID)
@@ -659,6 +732,9 @@ func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopC
 
 func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
 	t := harness.TerminalID(tile.RuntimeID)
+	if owner, shown := d.shownIn(t); shown {
+		tile.SessionID = owner
+	}
 	if !d.closeTerminal(tile.SessionID, t) {
 		d.detachSession(client, tile.RuntimeID)
 		return nil

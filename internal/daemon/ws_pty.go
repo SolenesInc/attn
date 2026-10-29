@@ -176,6 +176,19 @@ func (d *Daemon) inTerminalOrder(client *wsClient, terminal protocol.TerminalID,
 	}
 }
 
+func (d *Daemon) inSessionOrder(client *wsClient, session protocol.SessionID, command func()) {
+	session = protocol.TrimID(session)
+	if d.sessionHost(session) != "" {
+		key := d.primaryTerminal(session)
+		if key == "" {
+			key = protocol.TerminalID("session/" + string(session))
+		}
+		d.offPumpInTerminalOrder(client, key, command)
+		return
+	}
+	command()
+}
+
 func (d *Daemon) offPumpInTerminalOrder(client *wsClient, terminal protocol.TerminalID, command func()) {
 	if !client.terminalOrder.queue(terminal, command) {
 		return
