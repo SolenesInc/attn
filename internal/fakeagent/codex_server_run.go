@@ -150,3 +150,8 @@ func (s *CodexServer) call(method string, params, result any) {
 		s.t.Fatalf("Codex app-server %s: %v", method, err)
 	}
 }
+
+func (s *CodexServer) CloseThread(conversation string) {
+	s.t.Helper()
+	s.call(methodCloseThread, serverThreadParams{ThreadID: conversation}, nil)
+}

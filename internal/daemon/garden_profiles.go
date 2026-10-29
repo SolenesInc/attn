@@ -13,7 +13,20 @@ import (
 
 func (d *Daemon) resolveGardenProfile(sessionID protocol.SessionID, requested string, selected string) (profiles.Profile, error) {
 	if sessionID = protocol.TrimID(sessionID); sessionID != "" {
-		return d.callerProfile(sessionID)
+		caller, err := d.callerProfile(sessionID)
+		if err != nil {
+			return profiles.Profile{}, err
+		}
+		if strings.TrimSpace(requested) != "" {
+			chosen, err := d.resolveGardenProfile("", requested, "")
+			if err != nil {
+				return profiles.Profile{}, err
+			}
+			if chosen.ID != caller.ID {
+				return profiles.Profile{}, fmt.Errorf("source session belongs to profile %q (%s); --profile names profile %q (%s)", caller.Name, caller.ID, chosen.Name, chosen.ID)
+			}
+		}
+		return caller, nil
 	}
 	if selected != "" {
 		return d.store.LiveProfile(selected)

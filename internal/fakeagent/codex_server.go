@@ -45,6 +45,7 @@ const (
 	methodDropControl    = "drop_control"
 	methodRunTool        = "run_tool"
 	methodSpawnSubagent  = "spawn_subagent"
+	methodCloseThread    = "close_thread"
 	codexApprovalRequest = "item/commandExecution/requestApproval"
 	codexDrainRefusal    = "Server is draining; retry after reconnecting"
 )
@@ -409,10 +410,24 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		if t, err := s.loaded(p.ThreadID); err == nil {
 			return map[string]any{"thread": s.metadata(t)}, nil, nil
 		}
-		if path, _ := s.findRollout(p.ThreadID); path == "" {
+		path, _ := s.findRollout(p.ThreadID)
+		if path == "" {
 			return nil, nil, fmt.Errorf("thread not loaded: %s", p.ThreadID)
 		}
-		return map[string]any{"thread": map[string]any{"id": p.ThreadID, "status": map[string]any{"type": "notLoaded"}}}, nil, nil
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer f.Close()
+		var meta struct {
+			Payload struct {
+				Parent string `json:"parent_thread_id"`
+			} `json:"payload"`
+		}
+		if err := json.NewDecoder(f).Decode(&meta); err != nil {
+			return nil, nil, err
+		}
+		return map[string]any{"thread": map[string]any{"id": p.ThreadID, "parentThreadId": meta.Payload.Parent, "status": map[string]any{"type": "notLoaded"}}}, nil, nil
 	case "thread/name/set":
 		if path, _ := s.findRollout(p.ThreadID); path == "" {
 			if _, err := s.loaded(p.ThreadID); err != nil {
@@ -629,7 +644,11 @@ func (s *codexAppServer) write(t *codexServerThread, lines ...any) error {
 	t.written = true
 	s.mu.Unlock()
 	if first {
-		lines = append([]any{codexSessionMeta(t.c.conversation, t.c.cwd, "codex-tui", t.started), codexTurnContext(t.c.approvals)}, lines...)
+		meta := codexSessionMeta(t.c.conversation, t.c.cwd, "codex-tui", t.started)
+		if t.parent != "" {
+			meta["payload"].(map[string]any)["parent_thread_id"] = t.parent
+		}
+		lines = append([]any{meta, codexTurnContext(t.c.approvals)}, lines...)
 	}
 	return appendLines(t.c.transcript, lines...)
 }
@@ -1070,6 +1089,9 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		t.question = true
 		s.mu.Unlock()
 		s.status(t)
+		return struct{}{}, nil
+	case methodCloseThread:
+		s.unload(p.ThreadID)
 		return struct{}{}, nil
 	case methodRunTool:
 		t, err := s.loaded(p.ThreadID)
