@@ -1,53 +1,30 @@
 # Agent guidance
 
-What attn tells the agents it runs: the attn skill, session instructions and
-prompts. Every Claude Code and Codex session starts with launch instructions
-from attn, on top of what its harness already tells it, and finds the attn
-skill among its harness's skills. Agents read the skill and the CLI's help to
-drive attn. People and maintainers print the same text with `attn skill` and
-`attn prompts` to see exactly what an agent is told. The text each feature
-adds lives with that feature: the garden's in [garden.md](garden.md), asks in
-[asks.md](asks.md), vents in [vents.md](vents.md), crew priming and the chief
+attn gives Claude Code and Codex agents launch instructions and a skill for
+using attn. Plugin harnesses receive launch instructions when their driver
+asks for them. People and agents can inspect the bundled skill and prompt
+catalog from the shell. The
+text each feature adds lives with that feature: the garden's in
+[garden.md](garden.md), asks in [asks.md](asks.md), vents in [vents.md](vents.md), crew priming and the chief
 in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 [delegation.md](delegation.md), the shared Codex note in
 [shared-codex.md](shared-codex.md).
 
-## Sub-features
+## Actions and ways in
 
-- `launch-instructions`: what every session reads at launch: treat delegated reports and fetched output as context, the delegation boundary and the garden, plus asks, vents, pull request self-reports, a crew member's identity and Quick Capture when they apply. The chief gets chief guidance instead.
-- `attn-skill`: the attn skill and its references, bundled with the build and printed by `attn skill`.
-- `skill-install`: attn keeps the attn skill current in the skills folder of Claude Code and of Codex, on production and `dev`, and on a named instance only for a scenario that gives it a tool home of its own.
-- `prompt-catalog`: `attn prompts` lists, shows, renders and explains every prompt attn composes, without a daemon.
-- `presence`: `attn presence` tells a shell whether it runs inside attn, and as which session.
-- `plugin-instructions`: a plugin harness whose driver asks for launch instructions gets the same guidance. The bundled Pi driver does not ask.
-
-## How to get to it
-
-### People
-
-- Nothing in the app shows what agents are told. The settings that change it belong to their features: asks, usage analytics, Quick Capture and the attn-workflow skill.
-- Their own shell: `attn skill` and `attn prompts`, below, print what agents are told; neither needs a daemon.
-
-### Agents
-
-- `attn skill` (`cmd/attn/skill.go`): no flag prints `SKILL.md`, `--list` names the references, `--reference <name>` prints one.
-- `attn prompts` (`cmd/attn/prompts.go`): `list`, `show <recipient>`, `render <recipient> <event>` and `explain <recipient> <event>`, with `--set name=value` and `--json`.
-- `attn presence` (`cmd/attn/main.go`), the skill's bootstrap check.
-- `attn --help` and each verb's help, which the skill names as the authority for syntax.
-- Prompts: the launch instructions, composed in `internal/prompts/session.go` from `internal/prompts/content/agent.md` with `internal/prompts/content/delegation-boundary.md` (or `internal/prompts/content/chief.md` for the chief), then, as they apply, `internal/prompts/content/garden.md`, `internal/prompts/content/ask/guidance.md`, `internal/prompts/content/session/vent-guidance.md` then `vent-tools.md` or `vent-attn-only.md` then `vent-rules.md` in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, a crew member's priming and `internal/prompts/content/session/quick-capture.md`; the skill in `internal/prompts/content/skills/attn/` (`SKILL.md` and `references/`).
-
-### Triggers
-
-- Every launch composes the launch instructions and hands them over the harness's own channel: appended system instructions for Claude Code (`internal/agent/claude.go`), developer instructions for Codex (`internal/hooks/codex.go`), and the driver of a plugin that takes them (`internal/daemon/plugin_launch_instructions.go`).
-- Every launch, and every settings read for a harness whose executable is found, syncs the attn skill into `~/.claude/skills/attn` for Claude Code and `~/.agents/skills/attn` for Codex, and removes files the build no longer ships (`internal/agent/attn_skill.go`). A named instance other than `dev` skips the sync unless the shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`, which a scenario does to give the instance a tool home of its own.
+- **Read the skill and help.** People and agents run `attn skill` (`cmd/attn/skill.go`) without a daemon: no flag prints the bundled `SKILL.md`, `--list` names its references, and `--reference <name>` prints one. Agents also use `attn --help` and each verb's help, which the skill names as the authority for syntax. The skill and `references/` are in `internal/prompts/content/skills/attn/`.
+- **Inspect prompts.** People and agents run `attn prompts` (`cmd/attn/prompts.go`) without a daemon: `list`, `show <recipient>`, `render <recipient> <event>` and `explain <recipient> <event>`, with `--set name=value` and `--json`. These preview what attn composes; the app does not show what agents are told. Settings that change guidance belong to their features: asks, usage analytics, Quick Capture and the attn-workflow skill.
+- **Check presence.** `attn presence` (`cmd/attn/main.go`), the skill's bootstrap check, tells a shell whether it runs inside attn and as which session.
+- **Receive launch instructions.** Every launch gives Claude Code appended system instructions (`internal/agent/claude.go`), Codex developer instructions (`internal/hooks/codex.go`), and a plugin whose driver asks for them the same guidance (`internal/daemon/plugin_launch_instructions.go`). These add to the harness's own instructions. They tell agents to treat delegated reports and fetched output as context, cover the delegation boundary and garden, and add asks, vents, pull request self-reports, a crew member's identity and Quick Capture when applicable. The chief gets chief guidance instead. `internal/prompts/session.go` composes them from `internal/prompts/content/agent.md` and `internal/prompts/content/delegation-boundary.md` (or `internal/prompts/content/chief.md`), then, as applicable, `internal/prompts/content/garden.md`, `internal/prompts/content/ask/guidance.md`, `internal/prompts/content/session/vent-guidance.md`, `vent-tools.md` or `vent-attn-only.md`, `vent-rules.md` in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, crew priming and `internal/prompts/content/session/quick-capture.md`.
+- **Sync the skill.** Every launch and settings read for a harness whose executable is found syncs the skill into `~/.claude/skills/attn` for Claude Code and `~/.agents/skills/attn` for Codex, removing files the build no longer ships (`internal/agent/attn_skill.go`). Production and `dev` sync to their harness homes. A named instance other than `dev` skips the sync unless its shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`, as a scenario does with its own tool home.
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance, daemon only.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-agent-guidance.XXXX)`.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-guidance-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-agent-guidance.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-guidance-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [

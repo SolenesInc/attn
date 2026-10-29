@@ -204,37 +204,26 @@ In the index, "both" means people and agents.
 
 ## Feature entry contract
 
-Every feature file has these sections, in this order:
+Each feature starts with a short paragraph from the user's point of view:
+what it is and what it is for. Then `## Actions and ways in` groups its actions
+by what people or agents want to do. Put each outcome beside all its ways in:
+shortcuts and registry ids, palette ids, menus, controls, CLI verbs, prompts
+and triggers. Name the source for each way in. Say who can use it and any
+precondition that changes the outcome. Link another feature when it owns the
+way in. Describe a behavior once; use a separate sub-feature list only when it
+helps navigate a feature. Older entries still group ways in by audience.
 
-1. `# <Name>`, then one short paragraph from the user's point of view: what
-   the feature is and what it is for. It may end by naming the files that own
-   related behavior.
-2. `## Sub-features`: short ids in backticks, one line each.
-3. `## How to get to it`, with `### People` and `### Agents` always present.
-   Add `### Triggers` only when something starts the feature without anyone
-   invoking it.
-   - People: shortcuts as the macOS binding with the registry id, palette
-     command ids, native menus, deep links, controls, where people see and
-     steer what agents do, and "Their own shell:" for the verbs they run.
-   - Agents: every `attn` verb and subcommand an agent can run for the
-     feature, whatever audience the index names, and the prompts attn sends
-     the agents it runs. People's "Their own shell:" points at these verbs
-     instead of repeating them. A setting the feature only reads through
-     `attn settings` may sit under People's own shell alone, with
-     [settings.md](settings.md) owning the verb.
-   - Write "None." when an audience has no way in, so the gap shows. One
-     sentence may follow, saying where that audience sees the feature
-     instead.
-   - Each way in names its source file once.
-4. `## Driving it`: a `Preconditions:` list, then labeled bullets that pair
+The remaining sections follow in this order:
+
+1. `## Driving it`: a `Preconditions:` list, then labeled bullets that pair
    one action with an exact command and what you observe: "- **Action.** What
    the person or agent does. Run `<command>`. <What you see>." An action that
    needs setup, a native action and a read chains those commands in one
    bullet. Use only the harnesses and conventions above. Cover every way in
    the file owns, and end with a **Proof.** bullet naming what to capture.
-5. `## Contexts`: only the contexts below that apply, one bullet each saying
+2. `## Contexts`: only the contexts below that apply, one bullet each saying
    how the feature behaves under it. A context left out does not apply.
-6. `## Tests`: pointers by kind, as paths or scenario ids, and nothing else.
+3. `## Tests`: pointers by kind, as paths or scenario ids, and nothing else.
    Leave out a kind with no tests.
    - Wire: a real daemon driven as a protocol client:
      `internal/daemon/*_wire_test.go`, and the other `internal/daemon` tests
@@ -250,7 +239,7 @@ Every feature file has these sections, in this order:
      included.
    - A `scripts/verify-*` bundle sits under the kind of the tests it runs,
      and under Stack when it runs more than one kind.
-7. `## Gotchas`: traps that waste or invalidate a run, and what "working but
+4. `## Gotchas`: traps that waste or invalidate a run, and what "working but
    wrong" looks like for the feature.
 
 Write from the user's point of view. Name user paths, stable handles,

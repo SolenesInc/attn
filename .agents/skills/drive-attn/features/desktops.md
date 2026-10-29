@@ -1,63 +1,35 @@
 # Desktops and tiles
 
-Desktops are arrangements of tiles, like macOS Spaces: switch, split, sort,
-and move tiles between desktops. Each profile has its own desktops, and every
-window shows the profile's current desktop. A tile is one rectangle on a
-desktop: a terminal tile, or a browser, markdown, seed or editor tile. People
-arrange desktops from the keyboard, the sidebar and the overview; agents move
-their own terminals and shells, and crew members and automations start their
-sessions on a launch desktop.
+A desktop is an arrangement of tiles, like a macOS Space. Each profile has
+its own desktops; every window shows the profile's current desktop. Tiles
+show terminals, browsers, markdown, seeds or the editor. An empty desktop
+shows the launcher (`app/src/application/EmptyDesktopLauncher.tsx`).
 
-## Sub-features
+## Actions and ways in
 
-- `desktop-switch`: go to a desktop with ⌘1–⌘9, the sidebar, the overview or the palette; the current desktop's digit goes back to the previous one.
-- `desktop-overview`: every desktop as a card, with keys to switch, send the active tile and create.
-- `desktop-new`: create a desktop, which takes the lowest free number; ⌘<n> or a move to a free digit creates that numbered desktop.
-- `desktop-rename`: name a desktop from the sidebar.
-- `desktop-close`: close a desktop and everything on it, after a confirmation; ⌘W closes an empty one.
-- `desktop-sort`: numbered desktops first, then names A–Z, with Undo; drag a desktop in the sidebar to reorder it.
-- `empty-desktop-sweep`: an unnamed empty desktop goes away 30 seconds after the user leaves it.
-- `tile-split`: open a shell beside or below the active terminal tile.
-- `tile-focus`: move the active tile with arrows; the focus style marks it (dim, rail or spotlight).
-- `tile-zoom`: zoom the active tile, or focus it alone on the desktop.
-- `tile-move`: send the active tile to another desktop and follow or stay; drag it; agents move terminals; move an agent with its delegates.
-- `tile-history`: walk back and forward through the tiles this window showed.
-- `tile-close`: close the active tile.
-- `launch-desktop`: the desktop where a crew member's or an automation's sessions start.
+Keys are in `app/src/shortcuts/registry.ts`, palette commands in
+`app/src/application/useAppCommands.tsx`, desktop sidebar controls in
+`app/src/components/SidebarDesktops.tsx`, and overview controls in
+`app/src/components/DesktopOverview.tsx`.
 
-## How to get to it
-
-### People
-
-- Keys (`app/src/shortcuts/registry.ts`): ⌘1–⌘9 (`desktop.select1`–`desktop.select9`), ⌥⌘1–⌥⌘9 move the active tile and follow (`desktop.send1`–`desktop.send9`), ⇧⌥⌘1–⇧⌥⌘9 move it and stay (`desktop.sendStay1`–`desktop.sendStay9`), ⌘G (`desktop.overview`), ⌘D and ⌘⇧D split (`terminal.splitVertical`, `terminal.splitHorizontal`), ⌘⇧Z zoom (`terminal.toggleZoom`), ⌘⇧↩ focus (`terminal.toggleMaximize`), ⌥⌘←→↑↓ (`terminal.focusLeft|Right|Up|Down`), ⌘W (`terminal.close`, `session.close`), ⌘[ and ⌘] (`session.historyBack`, `session.historyForward`), and in desktop flow ⌘↑ and ⌘↓ (`session.prev`, `session.next`).
-- Native menu (`app/src-tauri/core/src/lib.rs`): File → "Close Pane" carries ⌘W. It closes the focused markdown, seed, editor or browser tile; otherwise the terminal on screen, which ends its shell or agent; on an empty desktop, the desktop.
-- Palette (`app/src/application/useAppCommands.tsx`): `desktop-overview`, `new-desktop`, `close-desktop`, `sort-desktops`, `desktop-<id>` ("Go to <desktop>"), `move-with-delegates-<id>` ("Move with delegates to <desktop>", offered while the agent on screen has a delegate on this desktop), and `tile-focus-dim`, `tile-focus-rail`, `tile-focus-spotlight`.
-- Sidebar (`app/src/components/SidebarDesktops.tsx`): the "Desktop overview" row, each desktop's row ("Open <desktop>"), its "Rename <desktop>" and "Close <desktop>" buttons, dragging a desktop's row to reorder it, and dragging an agent's row onto another desktop; dropping it with ⌥ held brings the agent's delegates along. Each tile's row under its desktop has a "Close <title>" button, and a browser tile's row a "Reload <title>" button (`app/src/components/SidebarRows.tsx`). The row buttons take clicks only while the pointer is over the row. Closing a desktop asks first (`app/src/components/DesktopClosePrompt.tsx`).
-- Overview (`app/src/components/DesktopOverview.tsx`): arrows move, ↵ switches, ⇧↵ sends the active tile, digits switch, Esc closes, "+ New desktop" creates.
-- Tile headers (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`, `DesktopAgentHeader.tsx`): "Close tile", "Focus agent <name>", and dragging a header to another place or desktop (`app/src/application/useLeafDrag.ts`).
-- Launch desktop field in the crew launch tab and the automation form (`app/src/components/LaunchDesktopSelect.tsx`).
-- Where people see what agents do: terminals an agent opens or moves appear on their desktop in the sidebar; an empty desktop shows the launcher (`app/src/application/EmptyDesktopLauncher.tsx`).
-- Their own shell: the `--launch-desktop` verbs below. `attn terminal` refuses without a session.
-
-### Agents
-
-- `attn terminal move [<terminal>] <desktop>` (`cmd/attn/terminal.go`): moves the caller's terminal, or a shell, or an agent below the caller in its delegation chain. `<desktop>` is a digit, a name or an id; a missing numbered desktop is created. `attn terminal open --desktop <ref>` is in [terminals.md](terminals.md).
-- `attn crew set <member> --launch-desktop` (`cmd/attn/crew.go`) and `attn automation set <id> --launch-desktop`, `attn automation apply --file <yaml> --launch-desktop` (`cmd/attn/automation.go`).
-- `attn delegate --desktop` places a delegate ([delegation.md](delegation.md)), and `attn callout show desktop:<which>` points at a desktop ([callouts.md](callouts.md)).
-- Prompts: placement, reach and moves in the attn skill's terminal reference (`internal/prompts/content/skills/attn/references/terminal.md`).
-
-### Triggers
-
-- An unnamed desktop that is empty, not current and no item's launch desktop is removed 30 seconds after it empties (`internal/daemon/empty_desktops.go`).
-- A crew wake or an automation run starts its session on its launch desktop (`internal/daemon/launch_desktops.go`); crew and automations own the wake and the run.
+- **Switch.** Press ⌘1–⌘9 (`desktop.select1`–`desktop.select9`), click "Open <desktop>" in the sidebar, or use palette `desktop-<id>` ("Go to <desktop>"). Pressing the current desktop's digit returns to the previous one. In desktop flow, ⌘↑ and ⌘↓ (`session.prev`, `session.next`) step through desktops. Open the overview with ⌘G (`desktop.overview`), palette `desktop-overview`, or the sidebar's "Desktop overview" row. It shows each desktop as a card; arrows move, ↵ or a digit switches, and Esc closes it.
+- **Create.** Palette `new-desktop` and the overview's "+ New desktop" create the lowest free number. ⌘<n> or moving a tile to a free digit creates that numbered desktop.
+- **Rename, reorder or close.** The sidebar's "Rename <desktop>" names it; drag its row to reorder it. Palette `sort-desktops` puts numbered desktops first, then names A–Z, with Undo. "Close <desktop>" in the sidebar and palette `close-desktop` close the desktop and its tiles; closing a populated desktop asks first (`app/src/components/DesktopClosePrompt.tsx`). The sidebar's row buttons take clicks only while the pointer is over the row.
+- **Split, focus and zoom tiles.** ⌘D and ⌘⇧D (`terminal.splitVertical`, `terminal.splitHorizontal`) open a shell beside or below the active terminal. ⌥⌘←→↑↓ (`terminal.focusLeft|Right|Up|Down`) moves focus; palette `tile-focus-dim`, `tile-focus-rail` and `tile-focus-spotlight` choose its style. ⌘⇧Z (`terminal.toggleZoom`) zooms the active tile; ⌘⇧↩ (`terminal.toggleMaximize`) focuses it alone. The tile header's "Focus agent <name>" focuses an agent (`app/src/components/SessionTerminalDesktop/DesktopAgentHeader.tsx`).
+- **Move a tile.** ⌥⌘1–⌥⌘9 (`desktop.send1`–`desktop.send9`) send and follow; ⇧⌥⌘1–⇧⌥⌘9 (`desktop.sendStay1`–`desktop.sendStay9`) send and stay. In the overview, ⇧↵ sends the active tile to the selected desktop. Drag a tile header to another place or desktop (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`, `app/src/application/useLeafDrag.ts`), or drag an agent's sidebar row to another desktop. Drop with ⌥ held to bring its delegates, or use palette `move-with-delegates-<id>` ("Move with delegates to <desktop>"), offered while the agent on screen has a delegate on this desktop. An agent's opened or moved terminals appear in the sidebar.
+- **Move from an agent.** `attn terminal move [<terminal>] <desktop>` (`cmd/attn/terminal.go`) moves the caller's terminal, a shell, or an agent below the caller in its delegation chain. The desktop is a digit, name or id; a missing numbered desktop is created. It requires a session, so it refuses in the person's own shell. `attn terminal open --desktop <ref>` is in [terminals.md](terminals.md), `attn delegate --desktop` in [delegation.md](delegation.md), and `attn callout show desktop:<which>` in [callouts.md](callouts.md). Agents read placement, reach and moves in `internal/prompts/content/skills/attn/references/terminal.md`.
+- **Walk tile history.** ⌘[ and ⌘] (`session.historyBack`, `session.historyForward`) go back and forward through the tiles this window showed.
+- **Close a tile.** ⌘W (`terminal.close`, `session.close`) comes through File → "Close Pane" (`app/src-tauri/core/src/lib.rs`). It closes the focused markdown, seed, editor or browser tile; otherwise it ends the terminal on screen, including its shell or agent. On an empty desktop it closes the desktop. The tile header also has "Close tile" (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`); sidebar tile rows have "Close <title>", and browser rows have "Reload <title>" (`app/src/components/SidebarRows.tsx`).
+- **Choose a launch desktop.** Set it in the crew launch tab or automation form (`app/src/components/LaunchDesktopSelect.tsx`), or from the shell or an agent with `attn crew set <member> --launch-desktop` (`cmd/attn/crew.go`), `attn automation set <id> --launch-desktop` or `attn automation apply --file <yaml> --launch-desktop` (`cmd/attn/automation.go`). A crew wake or automation run starts its session there (`internal/daemon/launch_desktops.go`); [crew.md](crew.md) and [automations.md](automations.md) own those triggers.
+- **Sweep empty desktops.** An unnamed desktop that is empty, not current and no item's launch desktop is removed 30 seconds after it empties (`internal/daemon/empty_desktops.go`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-desktops.XXXX)`, holding `check.yaml`: `api_version: attn.dev/automations/v1alpha1`, `name: Local check`, `trigger: {type: manual}`, `prompt: Check locally.`, `launch: {driver: claude}`, `location: {type: directory, path: <P>}`, one key per line, with `<P>` written out.
-- An agent folder, `A=$(mktemp -d /tmp/drive-attn-desktops-agent.XXXX)`, holding this fixture as `$A/.attn-mock-agent.json`, with `<A>` written out as the folder's path:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-desktops.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `check.yaml`: `api_version: attn.dev/automations/v1alpha1`, `name: Local check`, `trigger: {type: manual}`, `prompt: Check locally.`, `launch: {driver: claude}`, `location: {type: directory, path: <P>}`, one key per line, with `<P>` written out.
+- An agent folder, `A=$(mktemp -d /tmp/drive-attn-desktops-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`, with `<A>` written out as the folder's path:
 
 ```json
 {"version": 1, "turns": [

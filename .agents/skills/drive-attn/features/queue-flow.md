@@ -9,65 +9,153 @@ the agent and it went back to work. Agents put themselves in the queue with
 `attn turn open` when they cannot go on without the user. Automation runs never
 queue, but the user settles a run's turn the same way in either flow.
 
-## Sub-features
+## Actions and ways in
 
-- `flow-switch`: turn queue flow on or off; the sidebar changes shape with it ([sidebar.md](sidebar.md)).
-- `turn-open`: a turn opens when an agent stops, or when it asks with `attn turn open`.
-- `queue-order`: priority turns first, then the oldest; shells, the chief and automation runs never queue.
-- `jump-to-waiting`: open the turn at the head of the queue.
-- `walk`: step through the queue's agents in order: the turns, then the working agents, then the snoozed ones.
-- `settle`: close a turn; the user moves on to the next one, or home when none is left.
-- `run-settle`: close an automation run's turn, in either flow; the user stays on the run ([automations.md](automations.md) owns runs).
-- `settle-move-on`: in queue flow, ⌘⇧E on an agent of the queue that owes no turn settles nothing and moves the user to the head of the queue, or home.
-- `auto-settle`: close a turn once the user steered the agent and it kept working, after a visible countdown.
-- `countdown-cancel`: stop the countdown and keep the turn; pressed again, let it settle again.
-- `snooze`: put an agent off until a set time; the user moves on.
-- `unsnooze`: end a snooze early; the agent's turn comes back at the back of the queue.
-- `priority`: mark an agent so its turns go first.
-- `quiet-notifications`: experimental; the stop of a notification run opens no turn unless the agent opened one with `attn turn open`.
-- `turn-guidance`: what attn tells its agents about turns.
+Shortcuts are in `app/src/shortcuts/registry.ts`, palette commands in
+`app/src/application/useAppCommands.tsx`, and queue rows in
+`app/src/components/QueueSidebar.tsx` and `app/src/components/QueueRows.tsx`.
+Settle, snooze and priority keys act on the focused queue row, otherwise on
+the agent on screen. In the agent palette they act on the highlighted agent;
+[palette.md](palette.md) drives those keys.
 
-## How to get to it
+### Switch flow
 
-### People
+The sidebar button says "Switch to queue flow" or "Switch to desktop flow"
+(`app/src/components/SidebarHeader.tsx`). The palette's `toggle-queue-mode`
+says "Turn on the agent queue" or "Turn off the agent queue". A person can
+also run `attn settings set queue_mode_enabled true` in their own shell.
+The sidebar changes shape ([sidebar.md](sidebar.md)); the setting is shared
+across profiles today.
 
-- Keys (`app/src/shortcuts/registry.ts`): ⌘J (`session.jumpToWaiting`) opens the head of the queue; ⌘↑ (`session.prev`) and ⌘↓ (`session.next`) step to the previous or next agent of the queue, wrapping, and from home start at its first or last row ([desktops.md](desktops.md) has them in desktop flow); ⌘⇧E (`session.settle`) settles; ⌘⇧S (`session.snooze`) opens the snooze menu; ⌘⇧I (`session.priority`) toggles priority; ⌘. (`session.cancelCountdown`) stops a countdown, or keeps the next turn of the agent on screen. Settle, snooze and priority act on the focused queue row, else on the agent on screen. ⌘⇧E settles an automation run's turn in either flow, and in desktop flow nothing else. In queue flow, on an agent of the queue that owes no turn and is not snoozed, it settles nothing and moves the user to the head of the queue, or home with "Take me to the next agent that needs you" checked when no turn is owed.
-- ⌘. reaches attn through the File menu's "Stop Countdown" item, because macOS takes the key before the web view (`app/src-tauri/core/src/lib.rs`).
-- Palette (`app/src/application/useAppCommands.tsx`): `toggle-queue-mode` ("Turn on the agent queue" or "Turn off the agent queue"), `jump-to-waiting` ("Jump to the oldest turn"), `settle-active-session` ("Settle this agent", while the agent on screen owes a turn ⌘⇧E can settle, so in desktop flow only on a run), `snooze-active-session` ("Snooze this agent…"), `wake-active-session` ("Wake this agent now", the unsnooze), `toggle-session-priority` ("Mark as priority" or "Clear priority"), `toggle-auto-settle` ("Turn on auto-settle"), and `toggle-crew-queue` ("Put the crew in the queue"), which [crew.md](crew.md) drives. In the agent palette, ⌘⇧E, ⌘⇧I and ⌘⇧S act on the highlighted agent; [palette.md](palette.md) drives them.
-- The sidebar's flow button, "Switch to queue flow" or "Switch to desktop flow" (`app/src/components/SidebarHeader.tsx`).
-- The queue sidebar (`app/src/components/QueueSidebar.tsx`, `app/src/components/QueueRows.tsx`): the "N waiting" head `[data-testid="queue-waiting-head"]` opens the head of the queue; each turn row has ✓ `[aria-label="Settle <name>"]` and ☾ `[aria-label="Snooze <name>"]`; a snoozed row in the agent list has ↩ `[aria-label="Wake <name>"]`; the row's actions menu `[data-testid="session-actions-<session>"]` has "Mark priority", or "Unmark priority" once set (`[data-testid="session-priority-action"]`, `app/src/components/SessionActionsPopover.tsx`).
-- An automation run's row, while the run owes a turn, has ✓ `[data-testid="session-settle-<session>"]`, titled "Settle this run (⌘⇧E)": in desktop flow on the run's launch desktop in the sidebar, and in queue flow inside its automation's group in the queue sidebar, which `[data-testid="sidebar-automation-header-<automation-id>"]` opens (`app/src/components/SidebarRows.tsx`, `app/src/components/SidebarDesktops.tsx`).
-- The snooze menu `[data-testid="snooze-menu"]`, with choices `snooze-choice-30m`, `1h`, `2h`, `4h`, `8h`, `tomorrow`, `saturday` and `monday` (`app/src/components/SnoozeMenu.tsx`).
-- The tile header during a countdown: "Settling…" `[data-testid="settling-indicator"]`, labelled "Keep this turn", and after a cancel the "Turn kept" chip `[data-testid="settle-kept-chip"]` (`app/src/components/SettlingIndicator.tsx`).
-- Settings, Attention queue (`[data-testid="settings-nav-hygiene"]`): the auto-settle switch `[data-testid="settings-auto-settle-toggle"]`, its arm delay and its countdown. Settings, Experimental (`[data-testid="settings-nav-experimental"]`): "Quiet notifications in the queue" (`settings-queue-quiet-notifications-toggle`), and "Show hidden sessions in the queue", which [shared-codex.md](shared-codex.md) drives (`app/src/components/SettingsModalSections.tsx`).
-- Home shows the turns under "Your turn", snoozed agents with their unsnooze button, and "All settled" when nothing is owed; [home.md](home.md) drives them.
-- Where people see what agents do: the waiting count, each turn's age, the priority flag, the countdown on the tile and the order of the rows.
-- Their own shell: `attn settings set queue_mode_enabled true`, and the `attn session` verbs below, which work from a plain shell.
+### Open and find a turn
 
-### Agents
+A turn opens when an agent becomes waiting, idle, needs approval or unknown
+(`internal/attention/turn.go`). Shells and the chief never owe a turn;
+automation runs can owe turns but never queue. Priority turns come first, then the
+oldest. An agent can run `attn turn open` (`cmd/attn/turn.go`) to request a turn.
+When called while working, it opens at the next stop. With queue flow off it
+succeeds and changes nothing.
 
-- `attn turn open|settle` (`cmd/attn/turn.go`): put the calling session in the queue, or take it out of a turn it opened itself. Run while working, `open` opens the turn at the stop. With queue flow off, both succeed and change nothing.
-- `attn session snooze <id>... --until <when>` and `attn session unsnooze <id>...` (`cmd/attn/session_snooze.go`): a session may snooze itself and the agents below it in its delegation chain; the chief may snooze any agent of its profile. `--until` takes an RFC3339 instant, a positive duration such as `30m` or `1h`, or `tomorrow`, `saturday` or `monday` at 09:00 local.
-- `attn session priority on|off [--session <id>]` (`cmd/attn/session_priority.go`): any agent may mark any session.
-- Reads: `attn agent list` shows `owed` in its TURN column (`cmd/attn/agent.go`); `attn session list --tree` shows `owed` or `snoozed until <instant>` (`cmd/attn/session_tree.go`).
-- The queue's settings through `attn settings` ([settings.md](settings.md), `internal/daemon/settings_registry.go`): `queue_mode_enabled`, `queue_crew_enabled`, `queue_show_hidden_sessions`, `queue_quiet_notifications`, `auto_settle_enabled`, `auto_settle_arm_seconds`, `auto_settle_countdown_seconds`.
-- `attn callout` can point at the `queue` anchor, the waiting card or, on the queue bar, the waiting pill ([callouts.md](callouts.md)).
-- Prompts: `attn turn --help`; the note `attn agent inbox` prints after the items when a notification started the run and quiet notifications keep its stop out of the queue (`internal/prompts/content/session/inbox-quiet.md`); the orchestration reference that tells agents to open their turn before ending with questions (`internal/prompts/content/skills/attn-workflow/references/orchestration.md`).
+Experimental quiet notifications change a notification run's stop: it opens
+a turn only for approval, an unknown state, or an agent that ran
+`attn turn open`. Enable "Quiet notifications in the queue" in Settings, Experimental
+(`[data-testid="settings-nav-experimental"]`,
+`settings-queue-quiet-notifications-toggle`,
+`app/src/components/SettingsModalSections.tsx`), or set
+`queue_quiet_notifications` through `attn settings` ([settings.md](settings.md),
+`internal/daemon/settings_registry.go`). After inbox items in a quiet notification run, `attn agent inbox` prints a
+note about this behavior (`internal/prompts/content/session/inbox-quiet.md`).
+`attn turn --help` explains when to open or settle a turn. The orchestration
+reference (`internal/prompts/content/skills/attn-workflow/references/orchestration.md`)
+tells agents to open one before ending with questions when they cannot use an ask.
 
-### Triggers
+⌘J (`session.jumpToWaiting`), the sidebar's "N waiting" head
+`[data-testid="queue-waiting-head"]`, and palette command `jump-to-waiting`
+("Jump to the oldest turn") open the head. ⌘↑ (`session.prev`) and ⌘↓
+(`session.next`) walk turns, working agents, then snoozed agents, wrapping;
+from home they start at the first or last row. [desktops.md](desktops.md)
+owns these keys in desktop flow.
 
-- A turn opens when an agent's state becomes waiting, idle, needs approval or unknown; shells and the chief never owe one (`internal/attention/turn.go`). With quiet notifications on, a stop after a notification run opens a turn only for approval, an unknown state, or an agent that ran `attn turn open`.
-- A snooze ends at its deadline and the turn opens again if the agent is stopped. An agent that exits or turns unknown breaks through its own snooze (`internal/sessionmonitor/turns.go`).
-- Auto-settle arms after the arm delay once the user's prompt set the agent working, counts down, and settles the turn. Typing or moving the pointer holds it until things are quiet (`internal/sessionmonitor/autosettle.go`).
-- When the turn on screen closes without the user moving, the app moves them to the next owed turn, or home with "Take me to the next agent that needs you" checked (`app/src/navigation/sessionNavigation.ts`).
+The sidebar shows the waiting count, turn age, priority and row order. Home
+shows turns under "Your turn", snoozed agents with their unsnooze button, and
+"All settled" when nothing is owed ([home.md](home.md) drives those controls).
+`attn agent list` shows `owed` in the TURN column (`cmd/attn/agent.go`), and
+`attn session list --tree` shows `owed` or `snoozed until <instant>`
+(`cmd/attn/session_tree.go`). `attn callout` can point at the `queue` anchor,
+the waiting card or the queue bar's waiting pill ([callouts.md](callouts.md)).
+
+### Settle a turn
+
+⌘⇧E (`session.settle`), a turn row's ✓ `[aria-label="Settle <name>"]`, or
+the palette's `settle-active-session` ("Settle this agent") closes a turn.
+When the turn on screen closes without the user moving, the app moves to the
+next owed turn, or home with "Take me to the next agent that needs you"
+checked (`app/src/navigation/sessionNavigation.ts`). In queue flow, ⌘⇧E on an
+agent that owes no turn and is not snoozed moves on without settling anything.
+
+An automation run's turn can be settled in either flow without moving the user
+([automations.md](automations.md)). Its row has ✓
+`[data-testid="session-settle-<session>"]`, titled "Settle this run (⌘⇧E)".
+In desktop flow the row is on the run's launch desktop; in queue flow it is in
+its automation's group, opened with
+`[data-testid="sidebar-automation-header-<automation-id>"]`
+(`app/src/components/SidebarRows.tsx`, `app/src/components/SidebarDesktops.tsx`).
+In desktop flow the key and palette command settle only runs. The palette
+command appears only when the on-screen agent owes a turn the key can settle.
+An agent can run `attn turn settle` (`cmd/attn/turn.go`) only for a turn it
+opened itself; with queue flow off it succeeds and changes nothing.
+
+### Snooze and unsnooze
+
+⌘⇧S (`session.snooze`), a row's ☾ `[aria-label="Snooze <name>"]`, or the
+palette's `snooze-active-session` ("Snooze this agent…") opens
+`[data-testid="snooze-menu"]`. Its choices are `snooze-choice-30m`, `1h`,
+`2h`, `4h`, `8h`, `tomorrow`, `saturday` and `monday`
+(`app/src/components/SnoozeMenu.tsx`). Snoozing moves the user on. A snoozed
+row's ↩ `[aria-label="Wake <name>"]` or the palette's `wake-active-session`
+("Wake this agent now") ends it early. At the deadline, the turn opens again
+if the agent is stopped; an exit or unknown state breaks through the snooze
+(`internal/sessionmonitor/turns.go`). An unsnoozed turn goes to the back.
+
+People can use these verbs from their own shell; agents can use them as a
+session (`cmd/attn/session_snooze.go`):
+
+- `attn session snooze <id>... --until <when>` accepts an RFC3339 instant, a
+  positive duration such as `30m` or `1h`, or `tomorrow`, `saturday` or
+  `monday` at 09:00 local.
+- `attn session unsnooze <id>...` ends a snooze early.
+
+A session may snooze itself and agents below it in its delegation chain; the
+chief may snooze any agent in its profile. A plain shell can act on any live
+session.
+
+### Set priority
+
+⌘⇧I (`session.priority`), the row's actions menu
+`[data-testid="session-actions-<session>"]` and its
+`[data-testid="session-priority-action"]` ("Mark priority" or "Unmark
+priority"), or the palette's `toggle-session-priority` ("Mark as priority" or
+"Clear priority") toggle priority (`app/src/components/SessionActionsPopover.tsx`).
+People and agents can run `attn session priority on|off [--session <id>]`
+(`cmd/attn/session_priority.go`); any agent may mark any session.
+
+### Auto-settle and keep a turn
+
+Auto-settle arms after the arm delay once the user's prompt sets the agent
+working, counts down, then settles the turn. Typing or moving the pointer
+holds it until things are quiet (`internal/sessionmonitor/autosettle.go`).
+Settings, Attention queue (`[data-testid="settings-nav-hygiene"]`) has the
+switch `[data-testid="settings-auto-settle-toggle"]`, arm delay and countdown
+(`app/src/components/SettingsModalSections.tsx`). The palette's
+`toggle-auto-settle` says "Turn on auto-settle". `attn settings` also exposes
+`auto_settle_enabled`, `auto_settle_arm_seconds` and
+`auto_settle_countdown_seconds` ([settings.md](settings.md),
+`internal/daemon/settings_registry.go`).
+
+During a countdown the tile header shows "Settling…"
+`[data-testid="settling-indicator"]`, labelled "Keep this turn". ⌘.
+(`session.cancelCountdown`) stops it or keeps the next turn of the agent on
+screen; pressing it again lets a later countdown start. The header then shows
+"Turn kept" `[data-testid="settle-kept-chip"]`
+(`app/src/components/SettlingIndicator.tsx`). ⌘. reaches attn through the
+File menu's "Stop Countdown" item because macOS takes it before the web view
+(`app/src-tauri/core/src/lib.rs`).
+
+### Related settings
+
+The palette's `toggle-crew-queue` ("Put the crew in the queue") is driven in
+[crew.md](crew.md). Settings, Experimental also has "Show hidden sessions in
+the queue", driven in [shared-codex.md](shared-codex.md). The corresponding
+`attn settings` keys are `queue_crew_enabled` and `queue_show_hidden_sessions`
+(`internal/daemon/settings_registry.go`).
 
 ## Driving it
 
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline starts in desktop flow with auto-settle off.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-queue.XXXX)`.
-- Two agent folders, `A=$(mktemp -d /tmp/drive-attn-queue-a.XXXX)` and `B=$(mktemp -d /tmp/drive-attn-queue-b.XXXX)`. `$A/.attn-mock-agent.json` holds this fixture:
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-queue.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Two agent folders, `A=$(mktemp -d /tmp/drive-attn-queue-a.XXXX) && echo "export A=$A" >> $DRIVE_ENV` and `B=$(mktemp -d /tmp/drive-attn-queue-b.XXXX) && echo "export B=$B" >> $DRIVE_ENV`. `$A/.attn-mock-agent.json` holds this fixture:
 
 ```json
 {"version": 1, "turns": [
@@ -96,7 +184,7 @@ Preconditions:
 ```
 
 - The agents, started in order: `wsctl add-session --cwd $A --agent claude --label queue-a --id queue-a`. Re-read `./attn agent list` until `queue-a` shows `owed`. Then the same with `$B`, `queue-b` and `queue-b`. The wait makes `queue-a` the older turn. `<terminal-a>` and `<terminal-b>` are their terminal ids from `wsctl list`.
-- An automation run that owes a turn. A run folder, `R=$(mktemp -d /tmp/drive-attn-queue-run.XXXX)`, with `$R/.attn-mock-agent.json` holding `{"version": 1, "turns": [{"includes": "question", "actions": [{"type": "reply", "text": "Which option do you want?"}]}]}`, and a manual automation that starts its runs there, written with the paths filled in and applied:
+- An automation run that owes a turn. A run folder, `R=$(mktemp -d /tmp/drive-attn-queue-run.XXXX) && echo "export R=$R" >> $DRIVE_ENV`, with `$R/.attn-mock-agent.json` holding `{"version": 1, "turns": [{"includes": "question", "actions": [{"type": "reply", "text": "Which option do you want?"}]}]}`, and a manual automation that starts its runs there, written with the paths filled in and applied:
 
 ```bash
 cat > $P/run.yaml <<EOF
