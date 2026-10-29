@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -276,4 +277,29 @@ func TestNisseOffersItsProvidersModelsWithoutKeepingItsServer(t *testing.T) {
 		t.Fatalf("Nisse's models = %q (%+v), want %q", offered, found, want)
 	}
 	w.NisseServer().AwaitStopped()
+}
+
+func TestADelegationRoleRunsTheNisseModelThePickerOffered(t *testing.T) {
+	w := newWorld(t, fakeagent.Nisse)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "nisse_enabled", "true")
+	roles := buildRole()
+	roles.Roles[0].Choices[0].Selection = protocol.DelegationSelection{Harness: "nisse", Provider: "openai", Model: "gpt-5.5", Effort: "high"}
+	if saved := savePreferences(app, roles); !saved.Success {
+		t.Fatalf("saving the build role on Nisse's openai/gpt-5.5: %s", protocol.Deref(saved.Error))
+	}
+	cwd := w.Path("api")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	request := brief(cwd, "rename the checkout module")
+	request.Role = protocol.Ptr("build")
+	accepted, err := cli.StartDelegation(request)
+	if err != nil {
+		t.Fatalf("delegating with the build role: %v", err)
+	}
+	nisse := w.Launched(string(accepted.SessionID))
+	if started := w.NisseServer().Started(nisse.ConversationID); started.Provider != "openai" || started.Model != "gpt-5.5" {
+		t.Fatalf("the delegated conversation started as %+v, want openai's gpt-5.5", started)
+	}
 }
