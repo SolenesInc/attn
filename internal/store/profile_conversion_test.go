@@ -457,7 +457,7 @@ func TestAFailedConversionLeavesTheDatabaseAsItWas(t *testing.T) {
 	f := newLegacyFixture(t)
 	f.agentWorkspace("good", "agent")
 	f.exec(`INSERT INTO workspaces (id, title, directory, created_at, rank) VALUES ('broken', 'Broken', '/fixture', 'now', 'z')`)
-	f.rawLayout("broken", "", `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","pane_id":"p1","type":"pane"},{"body":"Complete the assigned work.","pane_id":"p2","type":"pane"}],"direction":"diagonal","ratio":0.5,"split_id":"s","type":"split"}`)
+	f.rawLayout("broken", "", `{"type":"split","split_id":"s","direction":"diagonal","ratio":0.5,"children":[{"type":"pane","pane_id":"p1"},{"type":"pane","pane_id":"p2"}]}`)
 	f.exec(`DELETE FROM schema_migrations WHERE version >= 150`)
 
 	_, upgrade, err := f.convert()

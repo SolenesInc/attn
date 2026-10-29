@@ -33,9 +33,12 @@ func TestSeedBodyEditsRefuseLostWritesAndKeepRollbackHistory(t *testing.T) {
 	if first.BodyVersion != 2 || first.PreviousBytes != len(original) || first.NewBytes != len(other) {
 		t.Fatalf("first edit receipt: %+v", first)
 	}
-	for _, body := range []string{"stale replacement", "", " \n\t"} {
-		if _, err := cli.SeedEdit(id, body, base, ""); err == nil {
-			t.Fatalf("accepted stale or empty edit %q", body)
+	if _, err := cli.SeedEdit(id, "stale replacement", base, ""); err == nil {
+		t.Fatal("accepted a stale replacement")
+	}
+	for _, body := range []string{"", " \n\t"} {
+		if _, err := cli.SeedEdit(id, body, garden.BodySHA256(other), ""); err == nil {
+			t.Fatalf("accepted an empty edit %q", body)
 		}
 	}
 	if _, err := cli.SeedEdit(id, "missing base", "", ""); err == nil {
@@ -93,10 +96,9 @@ func TestSeedBodyEditsRefuseLostWritesAndKeepRollbackHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, body := range []string{original, other, secondBody} {
-		quoted, _ := json.Marshal(body)
-		if strings.Contains(string(encoded), string(quoted)) {
-			t.Fatalf("notes JSON carries an old body: %s", encoded)
+	for _, text := range []string{"Keep trailing whitespace", "Preserve trailing whitespace", "Another writer's change"} {
+		if strings.Contains(string(encoded), text) {
+			t.Fatalf("notes JSON carries body text: %s", encoded)
 		}
 	}
 	if !strings.Contains(string(encoded), "add coordination") || !strings.Contains(string(encoded), "wording") {

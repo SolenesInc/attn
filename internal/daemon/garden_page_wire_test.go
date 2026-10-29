@@ -33,6 +33,7 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		children := make([]protocol.SeedPlotChild, docstore.MaxLimit)
 		for i := range children {
 			children[i].Title = fmt.Sprintf("row %d", i)
+			children[i].Body = protocol.Ptr("Complete the assigned work.")
 		}
 		page, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "a page of seeds", Children: children})
 		if err != nil {

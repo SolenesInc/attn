@@ -566,7 +566,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			"noted on "+child+"\nhint: this note cites C5 but records no report. To record one:\n      attn seed check report "+child+" C5 -m \"<summary>\" --evidence <artifact|url>\n")
 		requireLines(t, "harvest", seedAs(t, s, "", "harvest", child, "-m", "done"),
 			"\nchecks: C5 is open. Checks never block a move; the tally stays on the seed.\n")
-		requireLines(t, "export", seedAs(t, s, "", "export", child, "--out", "-"), "\n## Checks\n\n0 of 2 confirmed · 1 to judge · 1 open\n\n- **C1** (reported) Wire tests pass.\n  - report: tests pass — https://example.test/run/1 · ")
+		if exported := seedAs(t, s, "", "export", child, "--out", "-"); exported != garden.Stamp(child, plot.Children[0].Body) {
+			t.Fatalf("checks changed the raw body export: %q", exported)
+		}
 
 		register(t, s, "checkwatcher", "checkwatcher")
 		seedAs(t, s, "checkwatcher", "watch", child)
