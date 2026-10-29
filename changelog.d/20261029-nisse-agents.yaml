@@ -1,0 +1,6 @@
+kind: added
+area: agents
+change: >
+  Experimental Nisse sessions start with attn's instructions, their agents'
+  `attn` commands act as their session, and the model pickers list the models
+  of every provider the Nisse server has.

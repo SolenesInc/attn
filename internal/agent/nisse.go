@@ -31,6 +31,7 @@ func (n *Nisse) Capabilities() Capabilities {
 		HasInitialPrompt:      true,
 		HasModelPin:           true,
 		HasEffortPin:          true,
+		HasLaunchInstructions: true,
 		ConversationIsSession: true,
 	}
 }
@@ -53,6 +54,9 @@ func (n *Nisse) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	}
 	if effort := strings.TrimSpace(opts.Effort); effort != "" {
 		args = append(args, "--effort", effort)
+	}
+	if instructions := opts.launchGuidance(); instructions != "" {
+		args = append(args, "--instructions", instructions)
 	}
 	if strings.TrimSpace(opts.InitialPrompt) != "" {
 		args = append(args, "--", opts.InitialPrompt)

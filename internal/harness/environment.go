@@ -28,6 +28,20 @@ func ParseCodexThreadTerminal(t TerminalID) (profile, thread string, ok bool) {
 	return rest[:i], rest[i+1:], true
 }
 
+const nisseConversationPrefix = "nisse:"
+
+func NisseConversationTerminal(conversation string) TerminalID {
+	if conversation = strings.TrimSpace(conversation); conversation == "" {
+		return ""
+	}
+	return TerminalID(nisseConversationPrefix + conversation)
+}
+
+func ParseNisseConversationTerminal(t TerminalID) (conversation string, ok bool) {
+	conversation, ok = strings.CutPrefix(strings.TrimSpace(string(t)), nisseConversationPrefix)
+	return conversation, ok && conversation != ""
+}
+
 // TerminalFromEnv reads the terminal identity, including the spelling used by older launches.
 func TerminalFromEnv() TerminalID {
 	if id := os.Getenv("ATTN_TERMINAL_ID"); id != "" {
@@ -35,6 +49,9 @@ func TerminalFromEnv() TerminalID {
 	}
 	if profile, shared := os.LookupEnv(CodexSharedProfileEnv); shared {
 		return CodexThreadTerminal(profile, os.Getenv("CODEX_THREAD_ID"))
+	}
+	if conversation := os.Getenv("NISSE_ROOT_CONVERSATION"); conversation != "" {
+		return NisseConversationTerminal(conversation)
 	}
 	return TerminalID(os.Getenv("ATTN_SESSION_ID"))
 }

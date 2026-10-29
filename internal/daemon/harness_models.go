@@ -82,6 +82,13 @@ func (d *Daemon) queryHarnessModels(harness, executable string) (harnessModelCat
 		if err := d.callPlugin(ctx, plugin.PluginName, "driver.models", map[string]string{"agent": harness}, &result); err != nil {
 			return harnessModelCatalog{}, err
 		}
+	} else if harness == nisseAgent {
+		models, err := d.nisse().models(ctx)
+		if err != nil {
+			return harnessModelCatalog{}, err
+		}
+		result.Models = models
+		result.Detail = "Models of the providers the Nisse server has."
 	} else {
 		driver := agentdriver.Get(harness)
 		if driver == nil {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -35,7 +36,7 @@ const (
 
 var nisseComposer = composer{prompt: "PROMPT "}
 
-var nisseFlags = flagSpec{values: map[string]bool{"--conversation": true, "--provider": true, "--model": true, "--effort": true}}
+var nisseFlags = flagSpec{values: map[string]bool{"--conversation": true, "--provider": true, "--model": true, "--effort": true, "--instructions": true}}
 
 func runNisse(cfg config) int {
 	if len(os.Args) > 1 && os.Args[1] == "serve" {
@@ -82,7 +83,7 @@ func (n *nisseTUI) begin(*terminal) error {
 	if n.args.has("--auto") {
 		start["approvals"] = "auto"
 	}
-	for flag, key := range map[string]string{"--provider": "provider", "--model": "model", "--effort": "effort"} {
+	for flag, key := range map[string]string{"--provider": "provider", "--model": "model", "--effort": "effort", "--instructions": "instructions"} {
 		if value := n.args.value(flag); value != "" {
 			start[key] = value
 		}
@@ -117,16 +118,33 @@ type nisseSubmission struct {
 	Text         string `json:"text"`
 }
 
+type NisseProviderModels struct {
+	Provider string       `json:"provider"`
+	Models   []NisseModel `json:"models"`
+}
+
+type NisseModel struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Efforts []string `json:"efforts"`
+}
+
+var NisseModels = []NisseProviderModels{
+	{Provider: "claude", Models: []NisseModel{{ID: "opus", Name: "Opus", Efforts: []string{"low", "medium", "high"}}}},
+	{Provider: "openai", Models: []NisseModel{{ID: "gpt-5.5", Name: "GPT-5.5", Efforts: []string{"low", "high"}}, {ID: "gpt-image", Name: "Image", Efforts: []string{}}}},
+}
+
 type NisseConversation struct {
-	ID        string         `json:"id"`
-	Cwd       string         `json:"cwd"`
-	Provider  string         `json:"provider,omitempty"`
-	Model     string         `json:"model,omitempty"`
-	Effort    string         `json:"effort,omitempty"`
-	Approvals string         `json:"approvals,omitempty"`
-	Ended     map[string]any `json:"ended,omitempty"`
-	status    string
-	requests  map[string]bool
+	ID           string         `json:"id"`
+	Cwd          string         `json:"cwd"`
+	Provider     string         `json:"provider,omitempty"`
+	Model        string         `json:"model,omitempty"`
+	Effort       string         `json:"effort,omitempty"`
+	Approvals    string         `json:"approvals,omitempty"`
+	Instructions string         `json:"instructions,omitempty"`
+	Ended        map[string]any `json:"ended,omitempty"`
+	status       string
+	requests     map[string]bool
 }
 
 type nisseServerConn struct {
@@ -272,6 +290,8 @@ func (s *nisseServer) handle(c *nisseServerConn, id uint64, method string, raw j
 	switch method {
 	case "initialize":
 		return map[string]any{"version": "fake", "protocol": nisse.Protocol}, ""
+	case "models/list":
+		return NisseModels, ""
 	case "conversation/start":
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -421,6 +441,14 @@ func (s *nisseServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) 
 		case <-time.After(HangGuard):
 			return nil, fmt.Errorf("conversation %s was not interrupted within %s", p.ThreadID, HangGuard)
 		}
+	case methodRunTool:
+		cmd := exec.Command("/bin/sh", "-c", p.Text)
+		cmd.Env = append(os.Environ(), "NISSE_ROOT_CONVERSATION="+p.ThreadID)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("%v: %s", err, out)
+		}
+		return promptedResult{Text: string(out), ConversationID: p.ThreadID}, nil
 	case methodNisseStarted:
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -520,6 +548,13 @@ func (s *NisseServer) Started(conversation string) NisseConversation {
 	var started NisseConversation
 	s.call(methodNisseStarted, serverThreadParams{ThreadID: conversation}, &started)
 	return started
+}
+
+func (s *NisseServer) RunTool(conversation, command string) string {
+	s.t.Helper()
+	var ran promptedResult
+	s.call(methodRunTool, serverThreadParams{ThreadID: conversation, Text: command}, &ran)
+	return ran.Text
 }
 
 func (s *NisseServer) Env() []string { return s.fake.Env }

@@ -16,7 +16,8 @@ same identity under `ATTN_SESSION_ID`. A terminal can change conversations with
 command starts; hooks apply to the conversation shown when the report arrives.
 Under shared Codex, hooks and commands run in the app-server and name their
 conversation instead: a hook by the `session_id` on its stdin, a command by
-`CODEX_THREAD_ID`. Native harness conversation ids remain separate text values.
+`CODEX_THREAD_ID`. Nisse runs commands in its server, and names the
+conversation people started by `NISSE_ROOT_CONVERSATION`. Native harness conversation ids remain separate text values.
 
 A session is attn's record of one conversation in one profile. A terminal
 shows one session at a time, and a session can show in any number of
@@ -711,6 +712,12 @@ Read in the source at victorarias/nisse 062ef0b.
   that id when there is none. A prompt after the flags is sent once it opens.
 - `conversation/submit` is idempotent by its `requestId`: a retried submit is
   one input.
+- Every `Bash` call, and Claude Code's process, runs with
+  `NISSE_ROOT_CONVERSATION` set to the id of the conversation people started.
+- `conversation/start` takes `instructions`, kept with the conversation and
+  not given to its subagents: OpenAI is told them after the `AGENTS.md` files,
+  and Claude Code appends them to its own system prompt.
+- `models/list` answers each provider's models, with the efforts each takes.
 - `status/watch` opens with the busy conversation trees and then sends one
   status per change of a tree (working, waiting on an approval, idle), with
   how its root's run ended. Subagents are part of their root's tree.

@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -239,5 +240,66 @@ func TestANisseConversationOpenInAnotherProfileIsRefusedThere(t *testing.T) {
 	})
 	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), side.ID) {
 		t.Errorf("resuming %s here while profile %s holds it = %+v, want it refused naming that profile", sideNisse.ConversationID, side.ID, refused)
+	}
+}
+
+func TestACommandANisseAgentRunsActsAsItsSession(t *testing.T) {
+	w := newWorld(t, fakeagent.Nisse)
+	app := w.App()
+	session, nisse, server := nisseSession(t, w, app)
+	if got := strings.TrimSpace(server.RunTool(nisse.ConversationID, `"$ATTN_WRAPPER_PATH" presence`)); got != "running inside attn (session "+session+")" {
+		t.Errorf("attn presence from the Nisse agent = %q, want session %s", got, session)
+	}
+}
+
+func TestANisseConversationStartsWithAttnsGuidance(t *testing.T) {
+	w := newWorld(t, fakeagent.Nisse)
+	app := w.App()
+	_, nisse, server := nisseSession(t, w, app)
+	guidance := server.Started(nisse.ConversationID).Instructions
+	if !strings.Contains(guidance, agentGuidanceLead) || !strings.Contains(guidance, "attn pr record") {
+		t.Errorf("the Nisse conversation started with:\n%s\nwant attn's agent guidance, which asks it to record its own pull requests", guidance)
+	}
+}
+
+func TestNisseOffersItsProvidersModelsWithoutKeepingItsServer(t *testing.T) {
+	w := newWorld(t, fakeagent.Nisse)
+	app := w.App()
+	setSetting(t, app, "nisse_enabled", "true")
+	found := testworld.Request(app, protocol.HarnessModelsMessage{Cmd: protocol.CmdHarnessModels, Harness: "nisse", RequestID: "nisse-models"},
+		protocol.EventHarnessModelsResult, func(r protocol.HarnessModelsResultMessage) bool { return r.RequestID == "nisse-models" })
+	var offered []string
+	for _, m := range found.Models {
+		offered = append(offered, m.Provider+"/"+m.ID+" "+string(m.EffortSupport)+" "+strings.Join(m.EffortLevels, ","))
+	}
+	want := []string{"claude/opus supported low,medium,high", "openai/gpt-5.5 supported low,high", "openai/gpt-image unsupported "}
+	if !found.Success || !slices.Equal(offered, want) {
+		t.Fatalf("Nisse's models = %q (%+v), want %q", offered, found, want)
+	}
+	w.NisseServer().AwaitStopped()
+}
+
+func TestADelegationRoleRunsTheNisseModelThePickerOffered(t *testing.T) {
+	w := newWorld(t, fakeagent.Nisse)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "nisse_enabled", "true")
+	roles := buildRole()
+	roles.Roles[0].Choices[0].Selection = protocol.DelegationSelection{Harness: "nisse", Provider: "openai", Model: "gpt-5.5", Effort: "high"}
+	if saved := savePreferences(app, roles); !saved.Success {
+		t.Fatalf("saving the build role on Nisse's openai/gpt-5.5: %s", protocol.Deref(saved.Error))
+	}
+	cwd := w.Path("api")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	request := brief(cwd, "rename the checkout module")
+	request.Role = protocol.Ptr("build")
+	accepted, err := cli.StartDelegation(request)
+	if err != nil {
+		t.Fatalf("delegating with the build role: %v", err)
+	}
+	nisse := w.Launched(string(accepted.SessionID))
+	if started := w.NisseServer().Started(nisse.ConversationID); started.Provider != "openai" || started.Model != "gpt-5.5" {
+		t.Fatalf("the delegated conversation started as %+v, want openai's gpt-5.5", started)
 	}
 }
