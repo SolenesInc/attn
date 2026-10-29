@@ -20,7 +20,7 @@ func TestTheSynchronousClientRoundTripsLegalSeedBodies(t *testing.T) {
 	cli := w.Client()
 	seed := plantSeedAs(t, cli, "", "large body")
 	for _, body := range []string{strings.Repeat("a", 100*1024), strings.Repeat("<", 64*1024), strings.Repeat("<", garden.MaxBodyBytes)} {
-		edited, err := cli.SeedEdit(seed, body)
+		edited, err := editSeedBody(t, cli, seed, body)
 		if err != nil {
 			t.Fatalf("edit %d body bytes: %v", len(body), err)
 		}

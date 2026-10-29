@@ -94,7 +94,7 @@ func TestEditingAWatchedSeedRingsNoOne(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := cli.SeedEdit(seed, "a better body"); err != nil {
+		if _, err := editSeedBody(t, cli, seed, "a better body"); err != nil {
 			t.Fatal(err)
 		}
 		w.advance(0)

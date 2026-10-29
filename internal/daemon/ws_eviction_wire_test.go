@@ -96,7 +96,7 @@ func TestGardenUpdatesKeepFlowingWhenAnotherClientFallsBehind(t *testing.T) {
 		var finalBody string
 		for i := range 300 {
 			finalBody = strconv.Itoa(i)
-			if _, err := cli.SeedEdit(seed, finalBody); err != nil {
+			if _, err := editSeedBody(t, cli, seed, finalBody); err != nil {
 				t.Fatalf("edit the seed while another client is stalled: %v", err)
 			}
 			synctest.Wait()

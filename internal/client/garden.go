@@ -210,8 +210,8 @@ func (c *Client) SeedArtifactTransfer(sessionID protocol.SessionID, seedID strin
 	return resp.SeedArtifactTransferResult, nil
 }
 
-func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error) {
-	resp, err := c.send(protocol.SeedEditMessage{Cmd: protocol.CmdSeedEdit, SeedID: seedID, Body: body})
+func (c *Client) SeedEdit(seedID, body, baseBodySHA256, note string) (*protocol.SeedEditResult, error) {
+	resp, err := c.send(protocol.SeedEditMessage{Cmd: protocol.CmdSeedEdit, SeedID: seedID, Body: body, BaseBodySHA256: baseBodySHA256, Note: protocol.Ptr(note)})
 	if err != nil {
 		return nil, err
 	}
@@ -219,6 +219,17 @@ func (c *Client) SeedEdit(seedID, body string) (*protocol.SeedEditResult, error)
 		return nil, fmt.Errorf("the daemon accepted the edit but returned no seed")
 	}
 	return resp.SeedEditResult, nil
+}
+
+func (c *Client) SeedRollback(seedID string, version *int) (*protocol.SeedRollbackResult, error) {
+	resp, err := c.send(protocol.SeedRollbackMessage{Cmd: protocol.CmdSeedRollback, SeedID: seedID, Version: version})
+	if err != nil {
+		return nil, err
+	}
+	if resp.SeedRollbackResult == nil {
+		return nil, fmt.Errorf("the daemon accepted the rollback but returned no result")
+	}
+	return resp.SeedRollbackResult, nil
 }
 
 type SeedTransitionOptions struct {

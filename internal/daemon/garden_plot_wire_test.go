@@ -149,7 +149,7 @@ func TestEveryResultCarriesThePlotProgressShowDoes(t *testing.T) {
 	}
 	crown := planted.Crown.ID
 	other := plantSeedAs(t, cli, string(planter), "elsewhere")
-	edited, err := cli.SeedEdit(crown, "# the plan, revised")
+	edited, err := editSeedBody(t, cli, crown, "# the plan, revised")
 	if err != nil {
 		t.Fatalf("edit: %v", err)
 	}

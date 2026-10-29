@@ -27,6 +27,7 @@ func (d *Daemon) ensureGardenCollections() {
 	for _, schema := range []docstore.CollectionSchema{
 		garden.SeedsSchema(),
 		garden.NotesSchema(),
+		garden.BodyVersionsSchema(),
 		garden.DispatchesSchema(),
 		garden.ReviewRunsSchema(),
 		garden.ReviewItemsSchema(),
@@ -740,53 +741,6 @@ func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protoco
 			References:  d.seedArtifactReferences(seed.ID),
 		},
 	})
-}
-
-func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage) {
-	if err := garden.ValidateBody(msg.Body); err != nil {
-		d.sendGardenError(conn, "edit", err)
-		return
-	}
-	seed, doc, err := d.applySeedBodyEdit(msg.SeedID, msg.Body)
-	if err != nil {
-		d.sendGardenError(conn, "edit", err)
-		return
-	}
-	d.sendGardenResponse(conn, protocol.Response{
-		Ok:             true,
-		SeedEditResult: &protocol.SeedEditResult{Seed: d.seedWire(seed, doc)},
-	})
-}
-
-func (d *Daemon) applySeedBodyEdit(id, body string, causedBy ...string) (garden.Seed, docstore.Document, error) {
-	schema, err := d.seedsCollection()
-	if err != nil {
-		return garden.Seed{}, docstore.Document{}, err
-	}
-	const attempts = 3
-	for range attempts {
-		seed, doc, err := d.readSeed(id)
-		if err != nil {
-			return garden.Seed{}, docstore.Document{}, err
-		}
-		seed.Body = body
-		occurrence, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.BodyEdited, seed.ID, seedEvents.CausePayload{
-			CausedBySessionID: protocol.SessionID(firstString(causedBy)),
-		})
-		if err != nil {
-			return garden.Seed{}, docstore.Document{}, err
-		}
-		written, err := d.writeSeedWithEvents(*schema, seed, doc.Rev, occurrence)
-		if err == nil {
-			return seed, written, nil
-		}
-		if !docstore.IsConflict(err) {
-			return garden.Seed{}, docstore.Document{}, err
-		}
-	}
-	return garden.Seed{}, docstore.Document{}, fmt.Errorf(
-		"%s was rewritten under all %d attempts to edit it; read it again with `attn seed show %s` and retry",
-		id, attempts, id)
 }
 
 func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocumentGetMessage) {

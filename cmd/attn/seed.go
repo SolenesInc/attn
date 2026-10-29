@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -43,6 +44,8 @@ func runSeed() {
 		runSeedReview(args)
 	case "edit":
 		runSeedEdit(args)
+	case "rollback":
+		runSeedRollback(args)
 	case "send-to-chief":
 		runSeedSendToChief(args)
 	case "export":
@@ -130,8 +133,13 @@ unwatch removes this seed's subscription; separate child or ancestor
 watches remain. show names the subscriptions that still cover a seed.`, []string{"json"}, false},
 	{`unwatch`, `unwatch <id> [--json]`, `Remove this seed's subscription. Separate child or ancestor watches remain.
 show names the subscriptions that still cover a seed.`, []string{"json"}, false},
-	{`edit`, `edit <id> -m <body> [--json]`, `replace the seed's markdown body without moving its state or claim.
-- reads stdin; empty or whitespace-only stdin is refused. An explicit -m '' clears the body.`, []string{"m", "json"}, false},
+	{`edit`, `edit <id> -m - [--note "<what changed>"] [--json]`, `save an exported body after editing the file with any tool. Keep the first
+stamp line. If the body changed since export, export again and reapply.
+Empty bodies are refused. Each edit saves a numbered version and a log entry;
+--note adds what changed to that entry.`, []string{"m", "note", "json"}, false},
+	{`rollback`, `rollback <id> [<version>] [--json]`, `restore the body before the newest version, or the numbered version.
+The restored body becomes a new version, so rollback can itself be rolled back.
+Edit entries in notes show the versions and size changes.`, []string{"json"}, false},
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
 -m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
@@ -185,10 +193,10 @@ how many more are here.`, []string{"limit", "json"}, true},
 for each, artifacts, and handoffs and steering.`, []string{}, false},
 	{`prime`, `prime`, `print the standing garden contract and this session's live garden
 position.`, []string{}, true},
-	{`export`, `export <id> [--out <path>] [--json]`, `write the seed's body to markdown, stamped as generated from the seed —
-the file to open, read and annotate. --out - writes to stdout; the
-default is <id>.md in the current directory. The seed stays the source:
-edit the seed and export again, never the file.`, []string{"out", "json"}, true},
+	{`export`, `export <id> [--out <path>] [--json]`, `write the raw body with a first-line stamp naming this seed and its body hash.
+Edit the file with any tool, keep its first line, then submit it with
+attn seed edit <id> -m - < <id>.md. --out - writes to stdout;
+the default is <id>.md in the current directory.`, []string{"out", "json"}, true},
 }
 
 type seedFlagDef struct {
@@ -199,7 +207,8 @@ type seedFlagDef struct {
 }
 
 var seedFlagDefs = []seedFlagDef{
-	{`m`, `<body>`, `markdown, or - to read stdin; empty stdin is refused; edit -m '' clears the body`, func(f *seedFlags) { f.fs.StringVar(&f.message, "m", "", "") }},
+	{`m`, `<body>`, `markdown, or - to read stdin; empty stdin is refused`, func(f *seedFlags) { f.fs.StringVar(&f.message, "m", "", "") }},
+	{`note`, `<text>`, `what changed, saved on the edit entry`, func(f *seedFlags) { f.fs.StringVar(&f.editNote, "note", "", "") }},
 	{`part-of`, `<plot>`, `plant under a plot`, func(f *seedFlags) { f.fs.StringVar(&f.partOf, "part-of", "", "") }},
 	{`discovered-from`, `<seed>`, `record the seed this work came from`, func(f *seedFlags) { f.fs.StringVar(&f.discoveredFrom, "discovered-from", "", "") }},
 	{`clear`, ``, `remove the harvest condition (with --when-merged)`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
@@ -381,6 +390,7 @@ type seedFlags struct {
 	discoveredFrom string
 	file           string
 	message        string
+	editNote       string
 	out            string
 	limit          int
 	handoff        bool
@@ -430,7 +440,7 @@ func (f *seedFlags) text(verb string) string {
 		seedFail(verb, fmt.Errorf("reading stdin: %w", err))
 	}
 	if strings.TrimSpace(string(raw)) == "" {
-		seedUsageError(verb, fmt.Errorf("-m - read nothing from stdin; pass -m '' to clear the body"))
+		seedUsageError(verb, fmt.Errorf("-m - read nothing from stdin; provide nonempty text"))
 	}
 	return string(raw)
 }
@@ -915,18 +925,48 @@ func runSeedEdit(args []string) {
 	if len(positionals) != 1 {
 		seedUsageError("edit", fmt.Errorf("needs exactly one seed id, got %d: attn seed edit s-7k3f9m -m -", len(positionals)))
 	}
+	id := positionals[0]
 	if !f.wasSet("m") {
-		seedUsageError("edit", fmt.Errorf("needs -m <body>; use -m - to read markdown from stdin, or -m '' to clear it"))
+		seedUsageError("edit", fmt.Errorf("%s", garden.EditRecipe(id)))
 	}
-	result, err := f.client().SeedEdit(positionals[0], f.text("edit"))
+	body, base, err := garden.ParseStamped(id, f.text("edit"))
+	if err != nil {
+		seedFail("edit", err)
+	}
+	result, err := f.client().SeedEdit(id, body, base, f.editNote)
 	if err != nil {
 		seedFail("edit", err)
 	}
 	if f.json {
-		writeJSON(result.Seed)
+		writeJSON(result)
 		return
 	}
-	fmt.Printf("updated %s at revision %d\n", result.Seed.ID, result.Seed.Rev)
+	fmt.Printf("updated %s: body v%d, %d → %d bytes\n", result.Seed.ID, result.BodyVersion, result.PreviousBytes, result.NewBytes)
+}
+
+func runSeedRollback(args []string) {
+	f := newSeedFlags("rollback")
+	positionals := f.parse("rollback", args)
+	if len(positionals) < 1 || len(positionals) > 2 {
+		seedUsageError("rollback", fmt.Errorf("needs a seed id and optional version: attn seed rollback s-7k3f9m [<version>]"))
+	}
+	var version *int
+	if len(positionals) == 2 {
+		number, err := strconv.Atoi(strings.TrimPrefix(positionals[1], "v"))
+		if err != nil || number < 1 {
+			seedUsageError("rollback", fmt.Errorf("version %q must be a positive number, like 2 or v2", positionals[1]))
+		}
+		version = &number
+	}
+	result, err := f.client().SeedRollback(positionals[0], version)
+	if err != nil {
+		seedFail("rollback", err)
+	}
+	if f.json {
+		writeJSON(result)
+		return
+	}
+	fmt.Printf("rolled %s back to v%d as v%d: %d → %d bytes\n", result.Seed.ID, result.RestoredVersion, result.BodyVersion, result.PreviousBytes, result.NewBytes)
 }
 
 func runSeedSendToChief(args []string) {
@@ -1619,7 +1659,7 @@ func runSeedExport(args []string) {
 	if err != nil {
 		seedFail("export", err)
 	}
-	rendered := garden.Export(gardenSeedFromWire(result.Seed)) + exportChecks(result.Seed)
+	rendered := garden.Stamp(result.Seed.ID, result.Seed.Body)
 
 	out := strings.TrimSpace(f.out)
 	if out == "-" {
@@ -1644,7 +1684,7 @@ func runSeedExport(args []string) {
 		}{result.Seed.ID, absolute, len(rendered)})
 		return
 	}
-	fmt.Printf("wrote %s from %s — edit the seed, not the file\n", absolute, result.Seed.ID)
+	fmt.Printf("wrote %s; edit it with any tool, keep its first line, then: attn seed edit %s -m - < %s\n", absolute, result.Seed.ID, absolute)
 }
 
 func gardenSeedFromWire(seed protocol.Seed) garden.Seed {

@@ -163,6 +163,7 @@ var Placements = map[string][]Placement{
 	"seed_review_retry":                {Placement{LocatorHome, ""}},
 	"seed_review_show":                 {Placement{LocatorHome, ""}},
 	"seed_review_start":                {Placement{LocatorHome, ""}},
+	"seed_rollback":                    {Placement{LocatorHome, ""}},
 	"seed_search":                      {Placement{LocatorHome, ""}},
 	"seed_send_to_chief":               {Placement{LocatorHome, ""}},
 	"seed_show":                        {Placement{LocatorHome, ""}},
@@ -1885,6 +1886,18 @@ func (m SeedReviewStartMessage) Placement() Placement {
 }
 
 func (m SeedReviewStartMessage) Locate() string {
+	return ""
+}
+
+func (SeedRollbackMessage) CommandName() string {
+	return "seed_rollback"
+}
+
+func (m SeedRollbackMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m SeedRollbackMessage) Locate() string {
 	return ""
 }
 

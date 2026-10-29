@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -66,7 +69,7 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 	for _, verb := range []string{
 		"plant", "plot", "ls", "search", "ready", "link", "unlink", "show",
 		"review", "review start", "review show", "review cancel", "review retry", "review keep",
-		"watch", "unwatch", "edit", "send-to-chief", "tend", "park", "harvest", "wither", "replant", "note",
+		"watch", "unwatch", "edit", "rollback", "send-to-chief", "tend", "park", "harvest", "wither", "replant", "note",
 		"check", "check add", "check edit", "check remove", "check restore", "check report",
 		"check confirm", "check reject", "check uncheck", "check reopen",
 		"attach", "detach", "notes", "guide", "prime", "export",
@@ -123,7 +126,7 @@ func TestEmptySeedMessageStdinCannotEraseABody(t *testing.T) {
 				{"edit", seed.ID}, {"plant", "Failed pipeline"}, {"note", seed.ID},
 			} {
 				ran := s.Run(testworld.Invocation{Args: append(append([]string{"seed"}, args...), "-m", "-"), Stdin: stdin})
-				if ran.Code != 2 || ran.Stdout != "" || !strings.Contains(ran.Stderr, "-m - read nothing from stdin; pass -m '' to clear the body") {
+				if ran.Code != 2 || ran.Stdout != "" || !strings.Contains(ran.Stderr, "-m - read nothing from stdin; provide nonempty text") {
 					t.Errorf("seed %q: exit %d, stdout %q, stderr %q", args, ran.Code, ran.Stdout, ran.Stderr)
 				}
 			}
@@ -137,9 +140,107 @@ func TestEmptySeedMessageStdinCannotEraseABody(t *testing.T) {
 			}
 		})
 	}
-	s.Attn("seed", "edit", seed.ID, "-m", "")
-	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "" {
-		t.Errorf("explicit empty -m left body %q", got)
+	if ran := s.Attn("seed", "edit", seed.ID, "-m", ""); ran.Code == 0 {
+		t.Fatal("an explicit empty -m erased the body")
+	}
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != seed.Body {
+		t.Errorf("explicit empty -m changed body to %q", got)
+	}
+	for _, args := range [][]string{
+		{"seed", "plant", "Empty body", "-m", ""},
+		{"seed", "plant", "Missing body"},
+	} {
+		var planted protocol.Seed
+		s.Attn(append(args, "--json")...).JSON(t, &planted)
+		if planted.Body != "" {
+			t.Fatalf("bodyless planting got %q", planted.Body)
+		}
+	}
+}
+
+func TestSeedExportEditAndRollback(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	const before = "# Work\n\nChange this line.  \n\n"
+	seed := plant(t, s, "A stamped body", "-m", before)
+	exported := seedAs(t, s, "", "export", seed.ID, "--out", "-")
+	if exported != garden.Stamp(seed.ID, before) {
+		t.Fatalf("export changed the body: %q", exported)
+	}
+	if err := os.MkdirAll(s.Path(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := s.Path("body.md")
+	requireLines(t, "export recipe", seedAs(t, s, "", "export", seed.ID, "--out", path), "keep its first line", "attn seed edit "+seed.ID+" -m - < "+path)
+	script := `from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+p.write_bytes(p.read_bytes().replace(b"Change this", b"Changed this"))
+`
+	if output, err := exec.Command("python3", "-c", script, path).CombinedOutput(); err != nil {
+		t.Fatalf("edit script: %v: %s", err, output)
+	}
+	file, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := strings.Replace(before, "Change this", "Changed this", 1)
+	ran := s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-", "--note", "update the agreed line"}, Stdin: string(file)})
+	requireStdout(t, ran, fmt.Sprintf("body v2, %d → %d bytes", len(before), len(after)))
+	for _, text := range []string{exported, "unstamped replacement"} {
+		refused := s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-"}, Stdin: text})
+		if refused.Code == 0 || !strings.Contains(refused.Stderr, "attn seed export "+seed.ID) {
+			t.Fatalf("missing export recipe: %+v", refused)
+		}
+	}
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != after {
+		t.Fatalf("body = %q", got)
+	}
+	var notes protocol.SeedNotesResult
+	s.Attn("seed", "notes", seed.ID, "--json").JSON(t, &notes)
+	if len(notes.Notes) != 1 || notes.Notes[0].Kind != garden.NoteKindEdit || !strings.Contains(notes.Notes[0].Body, "update the agreed line") {
+		t.Fatalf("edit entry: %+v", notes)
+	}
+	requireLines(t, "rollback", seedAs(t, s, "", "rollback", seed.ID), "back to v1 as v3", fmt.Sprintf("%d → %d bytes", len(after), len(before)))
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != before {
+		t.Fatalf("rollback body = %q", got)
+	}
+	seedAs(t, s, "", "rollback", seed.ID, "v2")
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != after {
+		t.Fatalf("named rollback body = %q", got)
+	}
+}
+
+func TestARollbackLosingARaceAsksToRetryTheRollback(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	read := s.PauseAt(pausepoint.SeedRollbackRead)
+	s.Start()
+	seed := plant(t, s, "Rollback race", "-m", "first")
+	edit := func(before, after string) {
+		t.Helper()
+		exported := seedAs(t, s, "", "export", seed.ID, "--out", "-")
+		ran := s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-"}, Stdin: strings.Replace(exported, "\n"+before, "\n"+after, 1)})
+		if ran.Code != 0 {
+			t.Fatalf("edit: %+v", ran)
+		}
+	}
+	edit("first", "second")
+	rollback := s.Launch(testworld.Invocation{Args: []string{"seed", "rollback", seed.ID, "1"}})
+	read.Await()
+	edit("second", "third")
+	read.Release()
+	refused := rollback.Wait()
+	if refused.Code == 0 || !strings.Contains(refused.Stderr, "run attn seed rollback "+seed.ID+" 1 again") || strings.Contains(refused.Stderr, "export") {
+		t.Fatalf("rollback conflict advice: %+v", refused)
+	}
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "third" {
+		t.Fatalf("rollback lost the newer body: %q", got)
+	}
+	seedAs(t, s, "", "rollback", seed.ID, "1")
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "first" {
+		t.Fatalf("retried rollback restored %q", got)
 	}
 }
 
@@ -231,10 +332,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			"handoff left on "+carried.ID+" — whoever tends it next reads this first")
 
 		exported := seedAs(t, s, "", "export", carried.ID, "--out", "-")
-		if !strings.HasPrefix(exported, "# Carry this\n") || !strings.Contains(exported, "\nthe plan\n") {
-			t.Errorf("export does not carry the title and body:\n%s", exported)
+		if exported != garden.Stamp(carried.ID, "the plan") {
+			t.Errorf("export does not carry the stamped raw body:\n%s", exported)
 		}
-		requireLines(t, "export", exported, "edit the crown, not this file", "`"+carried.ID+"`")
 
 		shown := seedAs(t, s, "", "show", carried.ID)
 		if !strings.HasPrefix(shown, "handoff — Keel, ") || !strings.Contains(shown, "\n  first line\n  second line\n\n"+carried.ID+" ") {
@@ -499,7 +599,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			"noted on "+child+"\nhint: this note cites C5 but records no report. To record one:\n      attn seed check report "+child+" C5 -m \"<summary>\" --evidence <artifact|url>\n")
 		requireLines(t, "harvest", seedAs(t, s, "", "harvest", child, "-m", "done"),
 			"\nchecks: C5 is open. Checks never block a move; the tally stays on the seed.\n")
-		requireLines(t, "export", seedAs(t, s, "", "export", child, "--out", "-"), "\n## Checks\n\n0 of 2 confirmed · 1 to judge · 1 open\n\n- **C1** (reported) Wire tests pass.\n  - report: tests pass — https://example.test/run/1 · ")
+		if exported := seedAs(t, s, "", "export", child, "--out", "-"); exported != garden.Stamp(child, plot.Children[0].Body) {
+			t.Fatalf("checks changed the raw body export: %q", exported)
+		}
 
 		register(t, s, "checkwatcher", "checkwatcher")
 		seedAs(t, s, "checkwatcher", "watch", child)

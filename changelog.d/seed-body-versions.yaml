@@ -1,0 +1,4 @@
+kind: added
+area: garden
+change: Seed body edits use stamped exports to refuse stale writes, save numbered versions, and support rollback.
+notes: Edits and rollbacks refuse empty bodies. Add --note to record what changed on the edit entry.

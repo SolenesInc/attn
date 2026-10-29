@@ -374,61 +374,6 @@ func wrapWords(text string, width int) []string {
 	}
 	return lines
 }
-
-func exportChecks(seed protocol.Seed) string {
-	var b strings.Builder
-	live := 0
-	for _, check := range seed.Checks {
-		if !check.Removed {
-			live++
-		}
-	}
-	if live > 0 {
-		fmt.Fprintf(&b, "\n## Checks\n\n%s\n\n", checkTallyLong(seedCheckTally(seed.Checks)))
-		for _, check := range seed.Checks {
-			if check.Removed {
-				continue
-			}
-			state := check.State
-			if check.Verdict != nil && check.Report == nil {
-				state += ", no report"
-			}
-			if from := protocol.Deref(check.From); from != "" {
-				state += ", shared from " + from
-			}
-			fmt.Fprintf(&b, "- **%s** (%s) %s\n", check.ID, state, strings.TrimSpace(check.Text))
-			if report := check.Report; report != nil {
-				fmt.Fprintf(&b, "  - report: %s — %s\n", report.Summary, reportProvenance(*report))
-			}
-			if verdict := check.Verdict; verdict != nil && protocol.Deref(verdict.Reason) != "" {
-				fmt.Fprintf(&b, "  - %s: %s\n", check.State, protocol.Deref(verdict.Reason))
-			}
-		}
-	}
-	shared := 0
-	for _, check := range seed.SharedChecks {
-		if !check.Removed {
-			shared++
-		}
-	}
-	if shared > 0 {
-		fmt.Fprintf(&b, "\n## Shared by every seed below\n\n")
-		for _, check := range seed.SharedChecks {
-			if check.Removed {
-				continue
-			}
-			confirmed := 0
-			for _, entry := range check.Seeds {
-				if entry.State == string(garden.CheckConfirmed) {
-					confirmed++
-				}
-			}
-			fmt.Fprintf(&b, "- **%s** (%d of %d confirmed) %s\n", check.ID, confirmed, len(check.Seeds), strings.TrimSpace(check.Text))
-		}
-	}
-	return b.String()
-}
-
 func parsePlantChecks(raw []string) ([]protocol.SeedCheckDefinition, error) {
 	out := make([]protocol.SeedCheckDefinition, 0, len(raw))
 	for _, entry := range raw {

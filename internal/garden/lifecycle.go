@@ -222,6 +222,7 @@ const (
 	NoteKindAttach  = "attach"
 	NoteKindDetach  = "detach"
 	NoteKindCheck   = "check"
+	NoteKindEdit    = "edit"
 )
 
 var NoteKinds = []string{NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach}
@@ -240,6 +241,9 @@ func ParseNoteKind(raw string) (string, error) {
 	}
 	if kind == NoteKindCheck {
 		return "", fmt.Errorf("a check note is written by the check move it records: `attn seed check report|confirm|reject|uncheck|reopen <id> <C#>`; a plain note keeps kind note")
+	}
+	if kind == NoteKindEdit {
+		return "", fmt.Errorf("an edit entry is written by `attn seed edit` or `attn seed rollback`; a plain note keeps kind note")
 	}
 	return "", fmt.Errorf("%q is not a kind of note; the kinds are %s", raw, strings.Join(NoteKinds, ", "))
 }

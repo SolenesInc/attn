@@ -105,7 +105,7 @@ func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 	t.Run("a member's claim is refused to a second session until it is parked", func(t *testing.T) {
 		seed := plantSeedAs(t, cli, first, "contended")
 		lifeMove(t, cli, first, seed, "tend", "", "trellis")
-		if _, err := cli.SeedEdit(seed, "edited body"); err != nil {
+		if _, err := editSeedBody(t, cli, seed, "edited body"); err != nil {
 			t.Fatal(err)
 		}
 		_, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", "alder", false, client.SeedTransitionOptions{})
@@ -286,7 +286,7 @@ func TestSeedRefusalsNameWhatIsWrongAndChangeNothing(t *testing.T) {
 			return err
 		}, []string{"s-zzzzzz"}},
 		{"editing an unplanted seed", func() error {
-			_, err := cli.SeedEdit("s-ffffff", "words")
+			_, err := cli.SeedEdit("s-ffffff", "words", "", "")
 			return err
 		}, []string{"s-ffffff"}},
 	} {
@@ -312,7 +312,7 @@ func TestEditingASeedChangesOnlyItsBody(t *testing.T) {
 	}
 	before := lifeMove(t, cli, editor, planted.Seed.ID, "tend", "", "trellis")
 
-	edited, err := cli.SeedEdit(before.ID, "# New body\n\nStill the same seed.")
+	edited, err := editSeedBody(t, cli, before.ID, "# New body\n\nStill the same seed.")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,10 +329,14 @@ func TestEditingASeedChangesOnlyItsBody(t *testing.T) {
 		t.Errorf("seed show reads body %q at revision %d after the edit", shown.Body, shown.Rev)
 	}
 
-	cleared, err := cli.SeedEdit(before.ID, "")
-	if err != nil || cleared.Seed.Body != "" {
-		t.Errorf("an explicit empty edit = %+v, %v; want the body cleared", cleared, err)
+	_, err = editSeedBody(t, cli, before.ID, "")
+	if err == nil {
+		t.Fatal("an empty edit erased the body")
 	}
+	if got := lifeShow(t, cli, before.ID).Seed; got.Body != after.Body || got.Rev != after.Rev {
+		t.Fatalf("empty edit changed the seed: %+v", got)
+	}
+
 }
 
 func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
@@ -446,7 +450,7 @@ func TestASeedsStateClockMovesOnlyWithItsLifecycle(t *testing.T) {
 		lifeClockAt(t, "planting", planted.Seed, plantedAt)
 
 		w.advance(time.Second)
-		edited, err := cli.SeedEdit(planted.Seed.ID, "a newer body")
+		edited, err := editSeedBody(t, cli, planted.Seed.ID, "a newer body")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -565,4 +569,13 @@ func lifeSeedIDs(seeds []protocol.Seed) []string {
 		ids = append(ids, seed.ID)
 	}
 	return ids
+}
+
+func editSeedBody(t *testing.T, cli *client.Client, id, body string) (*protocol.SeedEditResult, error) {
+	t.Helper()
+	shown, err := cli.SeedShow("", id)
+	if err != nil {
+		return nil, err
+	}
+	return cli.SeedEdit(id, body, garden.BodySHA256(shown.Seed.Body), "")
 }

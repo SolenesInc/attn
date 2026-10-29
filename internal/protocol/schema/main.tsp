@@ -5790,10 +5790,28 @@ model SeedEditMessage {
   "cmd": "seed_edit";
   "seed_id": string;
   "body": string;
+  "base_body_sha256": string;
+  "note"?: string;
 }
 
 model SeedEditResult {
   "seed": Seed;
+  "body_version": int32;
+  "previous_bytes": int32;
+  "new_bytes": int32;
+}
+
+@extension("x-on", #{ home: true })
+model SeedRollbackMessage {
+  "profile_id"?: string;
+  "source_session_id"?: SessionID;
+  "cmd": "seed_rollback";
+  "seed_id": string;
+  "version"?: int32;
+}
+
+model SeedRollbackResult extends SeedEditResult {
+  "restored_version": int32;
 }
 
 // One-shot reader payload shared by the seed tile and GardenPanel drill. Garden
@@ -6862,6 +6880,7 @@ model Response {
   seed_search_result?: SeedSearchResult;
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
+  seed_rollback_result?: SeedRollbackResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
   seed_send_to_chief_result?: SeedSendToChiefResult;

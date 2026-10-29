@@ -309,7 +309,7 @@ func TestAFailedReviewItemRetriesWithFreshEvidenceOrSettles(t *testing.T) {
 		}
 		receipts := gardenReviewReceipts(review)
 
-		if _, err := cli.SeedEdit(edited, "Use this newer body for the retry."); err != nil {
+		if _, err := editSeedBody(t, cli, edited, "Use this newer body for the retry."); err != nil {
 			t.Fatal(err)
 		}
 		retried, err := cli.SeedReviewRetry(review.Run.ID, edited)

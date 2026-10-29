@@ -128,6 +128,7 @@ const (
 	CmdSeedArtifactTransfer          = "seed_artifact_transfer"
 	CmdSeedArtifactTarget            = "seed_artifact_target"
 	CmdSeedEdit                      = "seed_edit"
+	CmdSeedRollback                  = "seed_rollback"
 	CmdSeedTransition                = "seed_transition"
 	CmdSeedNote                      = "seed_note"
 	CmdSeedCheck                     = "seed_check"

@@ -132,6 +132,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSeedArtifactTransfer:          decodeInto[SeedArtifactTransferMessage],
 	CmdSeedArtifactTarget:            decodeInto[SeedArtifactTargetMessage],
 	CmdSeedEdit:                      decodeInto[SeedEditMessage],
+	CmdSeedRollback:                  decodeInto[SeedRollbackMessage],
 	CmdSeedTransition:                decodeInto[SeedTransitionMessage],
 	CmdSeedNote:                      decodeInto[SeedNoteMessage],
 	CmdSeedCheck:                     decodeInto[SeedCheckMessage],

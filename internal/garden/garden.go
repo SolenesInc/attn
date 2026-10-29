@@ -270,17 +270,3 @@ func Decode(body []byte) (Seed, error) {
 	}
 	return seed, nil
 }
-
-func ExportStamp(id string) string {
-	return fmt.Sprintf("*generated from crown `%s` — edit the crown, not this file.*", id)
-}
-
-func Export(seed Seed) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", strings.TrimSpace(seed.Title))
-	fmt.Fprintf(&b, "%s\n", ExportStamp(seed.ID))
-	if body := strings.TrimRight(seed.Body, "\n"); body != "" {
-		fmt.Fprintf(&b, "\n%s\n", body)
-	}
-	return b.String()
-}
