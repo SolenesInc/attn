@@ -275,5 +275,5 @@ func TestShowingAHiddenRemoteSessionLeavesTheAppPumpAndArrangementsFree(t *testi
 	if !shown.Success {
 		t.Fatalf("show hidden remote session: %s", protocol.Deref(shown.Error))
 	}
-	app.Terminal(id)
+	outpost.LaunchedCarrying(app.Terminal(id))
 }
