@@ -31,7 +31,7 @@ func TestTheGardenAdvisorAdvisesAndDraftsWithTheReviewsFrozenRecipeFromBoundedEv
 		t.Fatalf("deleting %s: %s", worktreeRoot, protocol.Deref(deleted.Error))
 	}
 	seed := predecessor.SeedID
-	if _, err := cli.SeedEdit(seed, strings.Repeat("b", 20000)); err != nil {
+	if _, err := editSeedBody(t, cli, seed, strings.Repeat("b", 20000)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cli.SeedNote("", seed, strings.Repeat("n", 2000), "", "", false, nil); err != nil {
@@ -111,7 +111,7 @@ func TestEachReviewItemKeepsOnlyAdviceItCouldActOnForTheEvidenceItWasGiven(t *te
 		}
 		name := seeds[match[1]]
 		if name == "changed" {
-			if _, err := cli.SeedEdit(match[1], "New work arrived while the advisor was reading."); err != nil {
+			if _, err := editSeedBody(t, cli, match[1], "New work arrived while the advisor was reading."); err != nil {
 				t.Fatal(err)
 			}
 		}

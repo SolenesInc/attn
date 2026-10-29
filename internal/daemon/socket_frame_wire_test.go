@@ -20,7 +20,7 @@ func TestTheSynchronousClientRoundTripsLegalSeedBodies(t *testing.T) {
 	cli := w.Client()
 	seed := plantSeedAs(t, cli, "", "large body")
 	for _, body := range []string{strings.Repeat("a", 100*1024), strings.Repeat("<", 64*1024), strings.Repeat("<", garden.MaxBodyBytes)} {
-		edited, err := cli.SeedEdit(seed, body)
+		edited, err := editSeedBody(t, cli, seed, body)
 		if err != nil {
 			t.Fatalf("edit %d body bytes: %v", len(body), err)
 		}
@@ -36,7 +36,7 @@ func TestTheSynchronousClientNamesOversizeFramesBeforeSending(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client().WithCaller("")
 	body := strings.Repeat("<", garden.MaxBodyBytes)
-	msg := protocol.SeedPlotMessage{
+	msg := protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."),
 		Cmd: protocol.CmdSeedPlot, Title: "oversize plot",
 		Children: []protocol.SeedPlotChild{{Title: "one", Body: &body}, {Title: "two", Body: &body}},
 	}
@@ -72,7 +72,7 @@ func TestTheSynchronousClientReadsTheReplyAfterAWriteFailure(t *testing.T) {
 			conn, err := w.DialUnix()
 			return socketWriteFailure{conn}, err
 		})
-		planted, err := cli.SeedPlant("", "reply survives write failure", "", "", "", "")
+		planted, err := cli.SeedPlant("", "reply survives write failure", "Complete the assigned work.", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

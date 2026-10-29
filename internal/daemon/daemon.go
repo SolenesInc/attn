@@ -2920,6 +2920,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSeedArtifactTransfer(ctx, conn, msg.(*protocol.SeedArtifactTransferMessage))
 	case protocol.CmdSeedEdit:
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
+	case protocol.CmdSeedRollback:
+		d.handleSeedRollback(conn, msg.(*protocol.SeedRollbackMessage))
 	case protocol.CmdSeedTransition:
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote:

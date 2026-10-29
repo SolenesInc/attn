@@ -24,7 +24,7 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "shipper")
 		url := github.open(71, "Ship the daemon")
-		planted, err := cli.SeedPlant("shipper", "ship the daemon", "", "", "", "")
+		planted, err := cli.SeedPlant("shipper", "ship the daemon", "Complete the assigned work.", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -264,7 +264,7 @@ func TestAClearedOrEditedHarvestConditionMeetsTheMergeAsItStandsNow(t *testing.T
 
 		edited := plantSeedAs(t, cli, "shipper", "edited while it waits")
 		harvestArm(t, cli, "shipper", edited, github.open(72, "Another merge"))
-		if _, err := cli.SeedEdit(edited, "the same promise, a better body"); err != nil {
+		if _, err := editSeedBody(t, cli, edited, "the same promise, a better body"); err != nil {
 			t.Fatal(err)
 		}
 

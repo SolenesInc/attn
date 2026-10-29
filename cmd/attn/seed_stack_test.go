@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -15,12 +16,16 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func plant(t *testing.T, s *testworld.Stack, title string, args ...string) protocol.Seed {
 	t.Helper()
+	if !slices.Contains(args, "-m") {
+		args = append(args, "-m", "Complete the assigned work.")
+	}
 	var seed protocol.Seed
 	s.Attn(append([]string{"seed", "plant", title, "--json"}, args...)...).JSON(t, &seed)
 	return seed
@@ -66,7 +71,7 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 	for _, verb := range []string{
 		"plant", "plot", "ls", "search", "ready", "link", "unlink", "show",
 		"review", "review start", "review show", "review cancel", "review retry", "review keep",
-		"watch", "unwatch", "edit", "send-to-chief", "tend", "park", "harvest", "wither", "replant", "note",
+		"watch", "unwatch", "edit", "rollback", "send-to-chief", "tend", "park", "harvest", "wither", "replant", "note",
 		"check", "check add", "check edit", "check remove", "check restore", "check report",
 		"check confirm", "check reject", "check uncheck", "check reopen",
 		"attach", "detach", "notes", "guide", "prime", "export",
@@ -123,7 +128,7 @@ func TestEmptySeedMessageStdinCannotEraseABody(t *testing.T) {
 				{"edit", seed.ID}, {"plant", "Failed pipeline"}, {"note", seed.ID},
 			} {
 				ran := s.Run(testworld.Invocation{Args: append(append([]string{"seed"}, args...), "-m", "-"), Stdin: stdin})
-				if ran.Code != 2 || ran.Stdout != "" || !strings.Contains(ran.Stderr, "-m - read nothing from stdin; pass -m '' to clear the body") {
+				if ran.Code != 2 || ran.Stdout != "" || !strings.Contains(ran.Stderr, "-m - read nothing from stdin; provide nonempty text") {
 					t.Errorf("seed %q: exit %d, stdout %q, stderr %q", args, ran.Code, ran.Stdout, ran.Stderr)
 				}
 			}
@@ -137,9 +142,73 @@ func TestEmptySeedMessageStdinCannotEraseABody(t *testing.T) {
 			}
 		})
 	}
-	s.Attn("seed", "edit", seed.ID, "-m", "")
-	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "" {
-		t.Errorf("explicit empty -m left body %q", got)
+	if ran := s.Attn("seed", "edit", seed.ID, "-m", ""); ran.Code == 0 {
+		t.Fatal("an explicit empty -m erased the body")
+	}
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != seed.Body {
+		t.Errorf("explicit empty -m changed body to %q", got)
+	}
+	for _, args := range [][]string{
+		{"seed", "plant", "Empty body", "-m", ""},
+		{"seed", "plant", "Missing body"},
+	} {
+		if ran := s.Attn(args...); ran.Code == 0 || !strings.Contains(ran.Stderr, "nonempty body") {
+			t.Fatalf("empty planting was not refused: %+v", ran)
+		}
+	}
+}
+
+func TestSeedExportEditAndRollback(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	const before = "# Work\n\nChange this line.  \n\n"
+	seed := plant(t, s, "A stamped body", "-m", before)
+	exported := seedAs(t, s, "", "export", seed.ID, "--out", "-")
+	if exported != garden.Stamp(seed.ID, before) {
+		t.Fatalf("export changed the body: %q", exported)
+	}
+	if err := os.MkdirAll(s.Path(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := s.Path("body.md")
+	requireLines(t, "export recipe", seedAs(t, s, "", "export", seed.ID, "--out", path), "keep its first line", "attn seed edit "+seed.ID+" -m - < "+path)
+	script := `from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+p.write_bytes(p.read_bytes().replace(b"Change this", b"Changed this"))
+`
+	if output, err := exec.Command("python3", "-c", script, path).CombinedOutput(); err != nil {
+		t.Fatalf("edit script: %v: %s", err, output)
+	}
+	file, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := strings.Replace(before, "Change this", "Changed this", 1)
+	ran := s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-", "--note", "update the agreed line"}, Stdin: string(file)})
+	requireStdout(t, ran, fmt.Sprintf("body v2, %d → %d bytes", len(before), len(after)))
+	for _, text := range []string{exported, "unstamped replacement"} {
+		refused := s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-"}, Stdin: text})
+		if refused.Code == 0 || !strings.Contains(refused.Stderr, "attn seed export "+seed.ID) {
+			t.Fatalf("missing export recipe: %+v", refused)
+		}
+	}
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != after {
+		t.Fatalf("body = %q", got)
+	}
+	var notes protocol.SeedNotesResult
+	s.Attn("seed", "notes", seed.ID, "--json").JSON(t, &notes)
+	if len(notes.Notes) != 1 || notes.Notes[0].Kind != garden.NoteKindEdit || !strings.Contains(notes.Notes[0].Body, "update the agreed line") {
+		t.Fatalf("edit entry: %+v", notes)
+	}
+	requireLines(t, "rollback", seedAs(t, s, "", "rollback", seed.ID), "back to v1 as v3", fmt.Sprintf("%d → %d bytes", len(after), len(before)))
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != before {
+		t.Fatalf("rollback body = %q", got)
+	}
+	seedAs(t, s, "", "rollback", seed.ID, "v2")
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != after {
+		t.Fatalf("named rollback body = %q", got)
 	}
 }
 
@@ -185,8 +254,8 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	app := s.App()
 
 	t.Run("listings nest children under their plot and ready lists pickups", func(t *testing.T) {
-		first := plantPlot(t, s, `{"title": "First plot", "children": [{"title": "First child"}]}`)
-		second := plantPlot(t, s, `{"title": "Second plot", "children": [{"title": "Second child"}]}`)
+		first := plantPlot(t, s, `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"First child"}],"title":"First plot"}`)
+		second := plantPlot(t, s, `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"Second child"}],"title":"Second plot"}`)
 		loose := plant(t, s, "Loose seed")
 
 		nested := seedAs(t, s, "", "ls")
@@ -216,7 +285,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		}
 		requireLines(t, "ready", ready, "\n3 ready in the garden — `attn seed tend <id>` claims one\n")
 
-		found := s.Attn("seed", "plant", "Fix the leak", "--discovered-from", loose.ID)
+		found := s.Attn("seed", "plant", "Fix the leak", "-m", "Fix the discovered leak.", "--discovered-from", loose.ID)
 		requireStdout(t, found, " Fix the leak\n")
 		id, _, _ := strings.Cut(found.Stdout, " ")
 		if edges := showSeed(t, s, "", id).Seed.Edges; !slices.Contains(edges, protocol.SeedEdge{Kind: "discovered-from", To: loose.ID}) {
@@ -231,10 +300,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			"handoff left on "+carried.ID+" — whoever tends it next reads this first")
 
 		exported := seedAs(t, s, "", "export", carried.ID, "--out", "-")
-		if !strings.HasPrefix(exported, "# Carry this\n") || !strings.Contains(exported, "\nthe plan\n") {
-			t.Errorf("export does not carry the title and body:\n%s", exported)
+		if exported != garden.Stamp(carried.ID, "the plan") {
+			t.Errorf("export does not carry the stamped raw body:\n%s", exported)
 		}
-		requireLines(t, "export", exported, "edit the crown, not this file", "`"+carried.ID+"`")
 
 		shown := seedAs(t, s, "", "show", carried.ID)
 		if !strings.HasPrefix(shown, "handoff — Keel, ") || !strings.Contains(shown, "\n  first line\n  second line\n\n"+carried.ID+" ") {
@@ -320,7 +388,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	})
 
 	t.Run("closing a seed names what it freed and what it stranded", func(t *testing.T) {
-		house := plantPlot(t, s, `{"title": "Paint the house", "children": [{"title": "Scrape the walls"}, {"title": "Prime the walls"}, {"title": "Paint the walls"}]}`)
+		house := plantPlot(t, s, `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"Scrape the walls"},{"body":"Complete the assigned work.","title":"Prime the walls"},{"body":"Complete the assigned work.","title":"Paint the walls"}],"title":"Paint the house"}`)
 		scrape, prime, paint := house.Children[0], house.Children[1], house.Children[2]
 		scraped := seedAs(t, s, "", "harvest", scrape.ID, "-m", "scraped")
 		requireLines(t, "harvest", scraped, scrape.ID+" ("+scrape.StepSlug+") is harvested — scraped\n")
@@ -331,7 +399,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		requireLines(t, "harvest", closed, house.Crown.ID+" ("+house.Crown.StepSlug+") is harvested — good enough\n",
 			"its plot still holds 1 open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n")
 
-		shed := plantPlot(t, s, `{"title": "Build the shed", "children": [{"title": "Pour the slab"}]}`)
+		shed := plantPlot(t, s, `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"Pour the slab"}],"title":"Build the shed"}`)
 		poured := seedAs(t, s, "", "harvest", shed.Children[0].ID, "-m", "poured")
 		built := seedAs(t, s, "", "harvest", shed.Crown.ID, "-m", "built")
 		for _, out := range []string{scraped, tendedPlot, poured, built} {
@@ -471,8 +539,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	})
 
 	t.Run("checks print where each stands, from a move to a harvest", func(t *testing.T) {
-		plot := plantPlot(t, s, `{"title": "Checked plot", "checks": [{"id": "C5", "text": "CI is green.", "shared": true}],
-			"children": [{"title": "Checked child", "checks": [{"id": "C1", "text": "Wire tests pass."}]}]}`)
+		plot := plantPlot(t, s, `{"body":"Complete the assigned work.","checks":[{"id":"C5","shared":true,"text":"CI is green."}],"children":[{"body":"Complete the assigned work.","checks":[{"id":"C1","text":"Wire tests pass."}],"title":"Checked child"}],"title":"Checked plot"}`)
 		child := plot.Children[0].ID
 		loose := plant(t, s, "Checked seed", "--check", "C2=It works.")
 		requireLines(t, "show", seedAs(t, s, "", "show", loose.ID), "\nchecks  0 of 1 confirmed · 1 open\n  C2  open\n      It works.\n")

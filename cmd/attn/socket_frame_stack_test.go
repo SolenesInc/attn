@@ -25,17 +25,24 @@ func TestLargeSeedEditsAndEscapedVentsCrossTheOutpostBridge(t *testing.T) {
 	agent.Prompted()
 	terminal := pair.App.Terminal(source)
 	var seed protocol.Seed
-	created := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"seed", "plant", "large remote body", "--json"}})
+	created := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"seed", "plant", "large remote body", "-m", "Original body.", "--json"}})
 	if created.Code != 0 {
 		t.Fatalf("plant from outpost: %s", created.Stderr)
 	}
 	created.JSON(t, &seed)
 	body := strings.Repeat("body\n", 64*1024)
-	edited := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"seed", "edit", seed.ID, "-m", "-", "--json"}, Stdin: body})
+	exported := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"seed", "export", seed.ID, "--out", "-"}})
+	if exported.Code != 0 {
+		t.Fatalf("export from outpost: %s", exported.Stderr)
+	}
+	stamp, _, _ := strings.Cut(exported.Stdout, "\n")
+	edited := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"seed", "edit", seed.ID, "-m", "-", "--json"}, Stdin: stamp + "\n" + body})
 	if edited.Code != 0 {
 		t.Fatalf("edit %d body bytes from outpost: %s", len(body), edited.Stderr)
 	}
-	edited.JSON(t, &seed)
+	var result protocol.SeedEditResult
+	edited.JSON(t, &result)
+	seed = result.Seed
 	shown := showSeed(t, home, source, seed.ID)
 	if seed.Body != body || shown.Seed.Body != body {
 		t.Fatal("the forwarded edit did not reach home intact")

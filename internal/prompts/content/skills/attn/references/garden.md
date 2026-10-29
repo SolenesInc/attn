@@ -19,6 +19,21 @@ Every seed body, including a plot child, is a work prompt for someone without
 this conversation. State its task and outcome, starting context, constraints
 and completion check. A short body is enough when it supplies that direction.
 
+## Editing a body
+
+Export the body, edit the file with any tool, then submit it:
+
+    attn seed export s-7k3f9m
+    # edit s-7k3f9m; keep its first line
+    attn seed edit s-7k3f9m -m - --note "what changed" < s-7k3f9m.md
+
+The stamp names the seed and its body hash. If another edit changed the body,
+export again and reapply your change. Empty bodies are refused. Each edit saves
+an undoable body version and one log entry; --note adds your explanation there.
+Read the entries with `attn seed notes s-7k3f9m`. Restore the previous version
+with `attn seed rollback s-7k3f9m`, or a named one with
+`attn seed rollback s-7k3f9m 2`. Rollback saves a new version too.
+
 ## Planting a plot
 
 Keep the shared plan in the parent. Each child names its own work and tells the

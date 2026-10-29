@@ -24,9 +24,9 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 		planted, err := cli.SeedPlot("sess-a", "trellis", protocol.SeedPlotMessage{
 			Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 			Children: []protocol.SeedPlotChild{
-				{Title: "first step"},
-				{Title: "second step"},
-				{Title: "third step", Blocks: []string{"second-step"}},
+				{Body: protocol.Ptr("Complete the assigned work."), Title: "first step"},
+				{Body: protocol.Ptr("Complete the assigned work."), Title: "second step"},
+				{Body: protocol.Ptr("Complete the assigned work."), Title: "third step", Blocks: []string{"second-step"}},
 			},
 		})
 		if err != nil {
@@ -70,7 +70,7 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 			t.Errorf("ready in the fresh plot = %v, want the two unblocked children", ready)
 		}
 
-		joined, err := cli.SeedPlant("sess-a", "inside", "", planted.Crown.ID, "", "")
+		joined, err := cli.SeedPlant("sess-a", "inside", "Complete the assigned work.", planted.Crown.ID, "", "")
 		if err != nil {
 			t.Fatalf("plant into the plot: %v", err)
 		}
@@ -78,11 +78,11 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 			t.Errorf("--part-of planted with edges %+v, want it in the plot", edges)
 		}
 		total := gardenPlotList(t, cli, false, 0).Total
-		if _, err := cli.SeedPlant("sess-a", "orphan", "", "s-zzzzzz", "", ""); err == nil || !strings.Contains(err.Error(), "s-zzzzzz") {
+		if _, err := cli.SeedPlant("sess-a", "orphan", "Complete the assigned work.", "s-zzzzzz", "", ""); err == nil || !strings.Contains(err.Error(), "s-zzzzzz") {
 			t.Errorf("planting under a crown that is not here = %v, want a refusal naming it", err)
 		}
-		if _, err := cli.SeedPlot("sess-a", "", protocol.SeedPlotMessage{
-			Title: "ship it", Children: []protocol.SeedPlotChild{{Title: "a", Blocks: []string{"nobody"}}},
+		if _, err := cli.SeedPlot("sess-a", "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."),
+			Title: "ship it", Children: []protocol.SeedPlotChild{{Body: protocol.Ptr("Complete the assigned work."), Title: "a", Blocks: []string{"nobody"}}},
 		}); err == nil || !strings.Contains(err.Error(), "nobody") {
 			t.Errorf("a plot with a dangling blocks = %v, want a refusal naming it", err)
 		}
@@ -96,10 +96,10 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := spawnPanes(w, app, w.Path("planter"))[0].session
-	planted, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."),
 		Title: "ship it", Children: []protocol.SeedPlotChild{
-			{Title: "a"}, {Title: "b", Blocks: []string{"a"}},
-			{Title: "c"}, {Title: "d", Blocks: []string{"c"}}, {Title: "e"}, {Title: "f"},
+			{Body: protocol.Ptr("Complete the assigned work."), Title: "a"}, {Body: protocol.Ptr("Complete the assigned work."), Title: "b", Blocks: []string{"a"}},
+			{Body: protocol.Ptr("Complete the assigned work."), Title: "c"}, {Body: protocol.Ptr("Complete the assigned work."), Title: "d", Blocks: []string{"c"}}, {Body: protocol.Ptr("Complete the assigned work."), Title: "e"}, {Body: protocol.Ptr("Complete the assigned work."), Title: "f"},
 		},
 	})
 	if err != nil {
@@ -113,7 +113,7 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 			t.Fatalf("%s child %d: %v", move.verb, move.child, err)
 		}
 	}
-	if _, err := cli.SeedPlant(protocol.SessionID(planter), "g", "", planted.Children[4].ID, "", ""); err != nil {
+	if _, err := cli.SeedPlant(protocol.SessionID(planter), "g", "Complete the assigned work.", planted.Children[4].ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,15 +141,15 @@ func TestEveryResultCarriesThePlotProgressShowDoes(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	planter := protocol.SessionID(spawnPanes(w, app, w.Path("planter"))[0].session)
-	planted, err := cli.SeedPlot(planter, "", protocol.SeedPlotMessage{
-		Title: "wandering crown", Children: []protocol.SeedPlotChild{{Title: "a"}, {Title: "b", Blocks: []string{"a"}}},
+	planted, err := cli.SeedPlot(planter, "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."),
+		Title: "wandering crown", Children: []protocol.SeedPlotChild{{Body: protocol.Ptr("Complete the assigned work."), Title: "a"}, {Body: protocol.Ptr("Complete the assigned work."), Title: "b", Blocks: []string{"a"}}},
 	})
 	if err != nil {
 		t.Fatalf("plot: %v", err)
 	}
 	crown := planted.Crown.ID
 	other := plantSeedAs(t, cli, string(planter), "elsewhere")
-	edited, err := cli.SeedEdit(crown, "# the plan, revised")
+	edited, err := editSeedBody(t, cli, crown, "# the plan, revised")
 	if err != nil {
 		t.Fatalf("edit: %v", err)
 	}
@@ -230,9 +230,9 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	planted, err := cli.SeedPlot(protocol.SessionID(planner), "", protocol.SeedPlotMessage{
 		Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 		Children: []protocol.SeedPlotChild{
-			{Title: "first step", Blocks: []string{"third-step"}},
-			{Title: "second step"},
-			{Title: "third step"},
+			{Body: protocol.Ptr("Complete the assigned work."), Title: "first step", Blocks: []string{"third-step"}},
+			{Body: protocol.Ptr("Complete the assigned work."), Title: "second step"},
+			{Body: protocol.Ptr("Complete the assigned work."), Title: "third step"},
 		},
 	})
 	if err != nil {

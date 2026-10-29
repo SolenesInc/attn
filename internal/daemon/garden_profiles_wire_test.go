@@ -50,7 +50,7 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		registerSessions(t, w, cli, "default-worker")
 		original := plantSeedAs(t, cli, "default-worker", "free worker in Default")
 		lifeMove(t, cli, "default-worker", original, "tend", "", "keel")
-		if _, err := cli.WithGardenProfile("", "default-worker").SeedEdit(original, "legacy alias remains editable"); err != nil {
+		if _, err := editSeedBody(t, cli.WithGardenProfile("", "default-worker"), original, "legacy alias remains editable"); err != nil {
 			t.Fatal(err)
 		}
 		side := createProfile(app, "Side")
@@ -71,7 +71,7 @@ func TestFreeTenderNamesStayInsideTheirSeedsProfile(t *testing.T) {
 		w.advance(time.Second)
 		selectProfile(homeApp, home)
 		registerSessions(t, w, cli, "default-worker")
-		if _, err := cli.WithGardenProfile("", "default-worker").SeedEdit(original, "the existing free claim stays editable after registration"); err != nil {
+		if _, err := editSeedBody(t, cli.WithGardenProfile("", "default-worker"), original, "the existing free claim stays editable after registration"); err != nil {
 			t.Fatal(err)
 		}
 		lifeMove(t, cli, "default-worker", original, "tend", "", "keel")
@@ -96,14 +96,14 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		original := app.SelectedProfile()
 		registerSessions(t, w, cli, "default-worker")
-		a, err := cli.SeedPlant("default-worker", "profile boundary alpha", "", "", "", "")
+		a, err := cli.SeedPlant("default-worker", "profile boundary alpha", "Complete the assigned work.", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		side := createProfile(app, "Side")
 		selectProfile(app, side.ID)
 		registerSessions(t, w, cli, "side-worker")
-		b, err := cli.SeedPlant("side-worker", "profile boundary beta", "", "", "", "")
+		b, err := cli.SeedPlant("side-worker", "profile boundary beta", "Complete the assigned work.", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -139,14 +139,14 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 				_, err := cross.SeedTransition("default-worker", b.Seed.ID, "tend", "", "", true, client.SeedTransitionOptions{})
 				return err
 			}},
-			{"edit", func() error { _, err := cross.SeedEdit(b.Seed.ID, "cross-profile edit"); return err }},
+			{"edit", func() error { _, err := editSeedBody(t, cross, b.Seed.ID, "cross-profile edit"); return err }},
 			{"link", func() error { _, err := cross.SeedLink(a.Seed.ID, "blocks", b.Seed.ID, false); return err }},
 			{"note", func() error {
 				_, err := cross.SeedNote("default-worker", b.Seed.ID, "cross-profile note", "", "", false, nil)
 				return err
 			}},
 			{"child", func() error {
-				_, err := cross.SeedPlant("default-worker", "cross-profile child", "", b.Seed.ID, "", "")
+				_, err := cross.SeedPlant("default-worker", "cross-profile child", "Complete the assigned work.", b.Seed.ID, "", "")
 				return err
 			}},
 			{"delegate", func() error {
@@ -225,7 +225,7 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "1 open seeds") || !strings.Contains(protocol.Deref(refused.Error), "clean up") {
 			t.Fatalf("delete with open seed: %+v", refused)
 		}
-		child, err := cli.SeedPlant("side-worker", "completed archived child", "", seed, "", "")
+		child, err := cli.SeedPlant("side-worker", "completed archived child", "Complete the assigned work.", seed, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

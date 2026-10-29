@@ -67,6 +67,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdSeedArtifactTransfer:          commandMetadata(false, true),
 	protocol.CmdSeedArtifactTarget:            commandMetadata(false, true),
 	protocol.CmdSeedEdit:                      commandMetadata(false, true),
+	protocol.CmdSeedRollback:                  commandMetadata(false, true),
 	protocol.CmdSeedTransition:                commandMetadata(false, true),
 	protocol.CmdSeedNote:                      commandMetadata(false, true),
 	protocol.CmdSeedCheck:                     commandMetadata(false, true),

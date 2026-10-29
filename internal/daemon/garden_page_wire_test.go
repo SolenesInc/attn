@@ -34,7 +34,7 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		for i := range children {
 			children[i].Title = fmt.Sprintf("row %d", i)
 		}
-		page, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Title: "a page of seeds", Children: children})
+		page, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "a page of seeds", Children: children})
 		if err != nil {
 			t.Fatal(err)
 		}

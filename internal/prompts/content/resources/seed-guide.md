@@ -26,8 +26,23 @@ sentences can be a complete prompt.
 Keep the agreed task current in the body. What a spike or investigation
 established goes in the body too, as findings below the task, because later
 work builds on it. Progress, other evidence and handoffs go in the log. When the
-task changes, rewrite the body so it reads as the current task, and note what
-changed.
+task changes, rewrite the body so it reads as the current task. Use `--note`
+on the edit to record what changed.
+
+EDITING A BODY
+
+Export the body, edit the file with any tool, then submit it:
+
+    attn seed export s-7k3f9m
+    # edit s-7k3f9m; keep its first line
+    attn seed edit s-7k3f9m -m - --note "what changed" < s-7k3f9m.md
+
+The stamp names the seed and its body hash. If another edit changed the body,
+export again and reapply your change. Empty bodies are refused. Each edit saves
+an undoable body version and one log entry; --note adds your explanation there.
+Read the entries with `attn seed notes s-7k3f9m`. Restore the previous version
+with `attn seed rollback s-7k3f9m`, or a named one with
+`attn seed rollback s-7k3f9m 2`. Rollback saves a new version too.
 
 WRITING A PLOT
 
@@ -78,8 +93,7 @@ The endpoint child records a contract that the app child needs before starting.
 The plot's C3 is shared, so each child proves it with its own report. Each child's `blocks` array names the siblings that wait for it. Use the sibling's
 slug or full title. Pass `-` instead of a file to read the payload from stdin.
 
-    attn seed plant "..." --part-of <plot>   add another child
-    attn seed edit <id> -m "..."             update the agreed task; note what changed
+    attn seed plant "..." -m "..." --part-of <plot>   add another child
     attn open <plot>                        read the rendered plan
 
 Before planting or delegating, read each body with its named references as a

@@ -255,7 +255,7 @@ func TestSeedEditsAndHarvestSurviveReviewedResume(t *testing.T) {
 	if launch.ResumeSessionID != "saved-conversation" {
 		t.Errorf("the resume asked the driver to pick up %q, want saved-conversation, the conversation it reported", launch.ResumeSessionID)
 	}
-	if _, err := cli.SeedEdit(seed, "Updated assignment while the agent starts."); err != nil {
+	if _, err := editSeedBody(t, cli, seed, "Updated assignment while the agent starts."); err != nil {
 		t.Fatal(err)
 	}
 	lifeMove(t, cli, id, seed, "harvest", "The work is complete.", "")

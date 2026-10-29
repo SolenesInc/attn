@@ -9055,6 +9055,9 @@ type Response struct {
 	// SeedReviewResult corresponds to the JSON schema field "seed_review_result".
 	SeedReviewResult *SeedReviewResult `json:"seed_review_result,omitempty,omitzero"`
 
+	// SeedRollbackResult corresponds to the JSON schema field "seed_rollback_result".
+	SeedRollbackResult *SeedRollbackResult `json:"seed_rollback_result,omitempty,omitzero"`
+
 	// SeedSearchResult corresponds to the JSON schema field "seed_search_result".
 	SeedSearchResult *SeedSearchResult `json:"seed_search_result,omitempty,omitzero"`
 
@@ -9720,11 +9723,17 @@ type SeedEdge struct {
 }
 
 type SeedEditMessage struct {
+	// BaseBodySHA256 corresponds to the JSON schema field "base_body_sha256".
+	BaseBodySHA256 string `json:"base_body_sha256"`
+
 	// Body corresponds to the JSON schema field "body".
 	Body string `json:"body"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
@@ -9737,6 +9746,15 @@ type SeedEditMessage struct {
 }
 
 type SeedEditResult struct {
+	// BodyVersion corresponds to the JSON schema field "body_version".
+	BodyVersion int `json:"body_version"`
+
+	// NewBytes corresponds to the JSON schema field "new_bytes".
+	NewBytes int `json:"new_bytes"`
+
+	// PreviousBytes corresponds to the JSON schema field "previous_bytes".
+	PreviousBytes int `json:"previous_bytes"`
+
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
 }
@@ -10328,6 +10346,40 @@ type SeedReviewStartMessage struct {
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type SeedRollbackMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version *int `json:"version,omitempty,omitzero"`
+}
+
+type SeedRollbackResult struct {
+	// BodyVersion corresponds to the JSON schema field "body_version".
+	BodyVersion int `json:"body_version"`
+
+	// NewBytes corresponds to the JSON schema field "new_bytes".
+	NewBytes int `json:"new_bytes"`
+
+	// PreviousBytes corresponds to the JSON schema field "previous_bytes".
+	PreviousBytes int `json:"previous_bytes"`
+
+	// RestoredVersion corresponds to the JSON schema field "restored_version".
+	RestoredVersion int `json:"restored_version"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
 }
 
 type SeedSearchHit struct {

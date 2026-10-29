@@ -193,6 +193,9 @@ func ValidatePlant(title, body string) error {
 }
 
 func ValidateBody(body string) error {
+	if strings.TrimSpace(body) == "" {
+		return fmt.Errorf("a seed needs a nonempty body; empty or whitespace-only bodies are refused")
+	}
 	if n := len(body); n > MaxBodyBytes {
 		return fmt.Errorf("max_body_bytes=%d, asked for %d; a seed's body is a plan, not an archive", MaxBodyBytes, n)
 	}
@@ -269,18 +272,4 @@ func Decode(body []byte) (Seed, error) {
 		return Seed{}, fmt.Errorf("this seed's stored body is not readable: %w", err)
 	}
 	return seed, nil
-}
-
-func ExportStamp(id string) string {
-	return fmt.Sprintf("*generated from crown `%s` — edit the crown, not this file.*", id)
-}
-
-func Export(seed Seed) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", strings.TrimSpace(seed.Title))
-	fmt.Fprintf(&b, "%s\n", ExportStamp(seed.ID))
-	if body := strings.TrimRight(seed.Body, "\n"); body != "" {
-		fmt.Fprintf(&b, "\n%s\n", body)
-	}
-	return b.String()
 }

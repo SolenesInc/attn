@@ -7,15 +7,7 @@ import (
 )
 
 func TestParsePlotSpecReadsAWholePlot(t *testing.T) {
-	spec, err := ParsePlotSpec([]byte(`{
-		"title": "ship the thing",
-		"body": "# the plan",
-		"children": [
-			{"title": "first step", "body": "do it"},
-			{"title": "second step", "blocks": []},
-			{"title": "third step"}
-		]
-	}`))
+	spec, err := ParsePlotSpec([]byte(`{"body":"# the plan","children":[{"body":"do it","title":"first step"},{"blocks":[],"body":"Complete the assigned work.","title":"second step"},{"body":"Complete the assigned work.","title":"third step"}],"title":"ship the thing"}`))
 	if err != nil {
 		t.Fatalf("ParsePlotSpec: %v", err)
 	}
@@ -35,27 +27,27 @@ func TestParsePlotSpecRefusesWhatCannotBePlanted(t *testing.T) {
 		wants   []string
 	}{
 		"a typo'd key would silently drop the sequencing": {
-			`{"title":"t","children":[{"title":"a","block":["b"]}]}`,
+			`{"body":"Complete the assigned work.","children":[{"block":["b"],"body":"Complete the assigned work.","title":"a"}],"title":"t"}`,
 			[]string{"not a plot payload", "blocks"},
 		},
 		"no children is not a plot": {
-			`{"title":"t","children":[]}`,
+			`{"body":"Complete the assigned work.","children":[],"title":"t"}`,
 			[]string{"attn seed plant"},
 		},
 		"a blank crown title": {
-			`{"title":"   ","children":[{"title":"a"}]}`,
+			`{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"a"}],"title":"   "}`,
 			[]string{"crown"},
 		},
 		"two children deriving one slug": {
-			`{"title":"t","children":[{"title":"Do the thing"},{"title":"do the THING"}]}`,
+			`{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"Do the thing"},{"body":"Complete the assigned work.","title":"do the THING"}],"title":"t"}`,
 			[]string{"do-thing", "retitle"},
 		},
 		"blocks naming no sibling": {
-			`{"title":"t","children":[{"title":"a","blocks":["nobody"]}]}`,
+			`{"body":"Complete the assigned work.","children":[{"blocks":["nobody"],"body":"Complete the assigned work.","title":"a"}],"title":"t"}`,
 			[]string{"nobody", "no sibling's title or step slug", "a"},
 		},
 		"blocks that cycle": {
-			`{"title":"t","children":[{"title":"a","blocks":["b"]},{"title":"b","blocks":["a"]}]}`,
+			`{"body":"Complete the assigned work.","children":[{"blocks":["b"],"body":"Complete the assigned work.","title":"a"},{"blocks":["a"],"body":"Complete the assigned work.","title":"b"}],"title":"t"}`,
 			[]string{"cycle", "a", "b"},
 		},
 	}
@@ -75,7 +67,7 @@ func TestParsePlotSpecRefusesWhatCannotBePlanted(t *testing.T) {
 }
 
 func TestParsePlotSpecAcceptsATitleAsABlocksTarget(t *testing.T) {
-	spec, err := ParsePlotSpec([]byte(`{"title":"t","children":[{"title":"Draw the grid"},{"title":"Scroll the grid","blocks":["Draw the grid"]}]}`))
+	spec, err := ParsePlotSpec([]byte(`{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"Draw the grid"},{"blocks":["Draw the grid"],"body":"Complete the assigned work.","title":"Scroll the grid"}],"title":"t"}`))
 	if err != nil {
 		t.Fatalf("a sibling's title is refused as a blocks target: %v", err)
 	}
@@ -85,17 +77,17 @@ func TestParsePlotSpecAcceptsATitleAsABlocksTarget(t *testing.T) {
 }
 
 func TestValidatePlotSpecSeparatesAChainFromACycle(t *testing.T) {
-	chain := PlotSpec{Title: "t", Children: []PlotChildSpec{
-		{Title: "a", Blocks: []string{"b"}},
-		{Title: "b", Blocks: []string{"c"}},
-		{Title: "c"},
+	chain := PlotSpec{Body: "Complete the assigned work.", Title: "t", Children: []PlotChildSpec{
+		{Body: "Complete the assigned work.", Title: "a", Blocks: []string{"b"}},
+		{Body: "Complete the assigned work.", Title: "b", Blocks: []string{"c"}},
+		{Body: "Complete the assigned work.", Title: "c"},
 	}}
 	if err := ValidatePlotSpec(chain); err != nil {
 		t.Fatalf("a three-step chain was refused: %v", err)
 	}
 	cycle := chain
 	cycle.Children = append([]PlotChildSpec{}, chain.Children...)
-	cycle.Children[2] = PlotChildSpec{Title: "c", Blocks: []string{"a"}}
+	cycle.Children[2] = PlotChildSpec{Body: "Complete the assigned work.", Title: "c", Blocks: []string{"a"}}
 	if err := ValidatePlotSpec(cycle); err == nil {
 		t.Fatal("a three-step cycle was accepted")
 	}
@@ -104,7 +96,7 @@ func TestValidatePlotSpecSeparatesAChainFromACycle(t *testing.T) {
 func TestPlotSpecRoundTripsThroughItsPayload(t *testing.T) {
 	want := PlotSpec{Title: "t", Body: "b", Children: []PlotChildSpec{
 		{Title: "a", Body: "ab", Blocks: []string{"b"}},
-		{Title: "b"},
+		{Body: "Complete the assigned work.", Title: "b"},
 	}}
 	raw, err := json.Marshal(want)
 	if err != nil {

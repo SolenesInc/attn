@@ -43,7 +43,19 @@ Plans:
     attn seed link <a> part-of <b>   a joins b's plot; a seed sits in one plot at a time
     attn seed link <a> discovered-from <b>    a was discovered while working on b; the link records that origin but never orders or blocks anything
     attn seed ls [--flat]            everything planted and who holds it, children nested under their plot; --flat for one list
-    attn seed edit <id> -m "…"       replace the body; say what changed in a note
+
+Export the body, edit the file with any tool, then submit it:
+
+    attn seed export s-7k3f9m
+    # edit s-7k3f9m; keep its first line
+    attn seed edit s-7k3f9m -m - --note "what changed" < s-7k3f9m.md
+
+The stamp names the seed and its body hash. If another edit changed the body,
+export again and reapply your change. Empty bodies are refused. Each edit saves
+an undoable body version and one log entry; --note adds your explanation there.
+Read the entries with `attn seed notes s-7k3f9m`. Restore the previous version
+with `attn seed rollback s-7k3f9m`, or a named one with
+`attn seed rollback s-7k3f9m 2`. Rollback saves a new version too.
 
 Keeping up:
 
@@ -54,7 +66,7 @@ When attn sends an update notification, run the suggested command to read it. Re
     attn seed attach <id> --path <file> (--move | --copy)    bring a local file into durable seed ownership; Move is recommended
     attn seed detach <id> --path <filename> --to <destination>    move an owned file back out without overwriting
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere
-    attn seed export <id> [--out <path>]    the seed and its log as one markdown file
+    attn seed export <id> [--out <path>]    the raw body with its first-line stamp
 
 A new delegation starts an ordinary watch on its seed. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not.
 
