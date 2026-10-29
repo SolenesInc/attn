@@ -10,6 +10,7 @@ import { useAsksStore } from '../store/asks';
 import { useVentsStore } from '../store/vents';
 import { useSharedCodexStore } from '../store/sharedCodex';
 import { useTerminalRefusals } from '../store/terminalRefusals';
+import { useToastStore } from '../store/toasts';
 import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDATE } from './daemonSharedCodexEvents';
 import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
@@ -2316,6 +2317,9 @@ export function useDaemonSocket({
               break;
             }
             console.error('[Daemon] Command error:', data.cmd, data.error);
+            if (data.cmd === 'settle_turn' || data.cmd === 'snooze_turn' || data.cmd === 'wake_turn' || data.cmd === 'cancel_countdown') {
+              useToastStore.getState().append({ message: data.error || `Command ${data.cmd} failed` });
+            }
             rejectPendingForCommand(data.cmd, data.error || `Command ${data.cmd || ''} failed`);
             break;
 

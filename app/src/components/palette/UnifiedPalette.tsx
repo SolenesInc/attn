@@ -1,5 +1,5 @@
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import FocusTrap from '../AppFocusTrap';
 import type { CommandUsage, Desktop } from '../../types/generated';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -7,6 +7,7 @@ import { isChord, matchesShortcut, type ShortcutId } from '../../shortcuts/regis
 import { resolveBinding } from '../../shortcuts/resolver';
 import { SNOOZE_CHOICES, snoozeInstant, type SnoozeChoice } from '../../utils/snoozeDurations';
 import { slotShortcut } from '../../utils/desktops';
+import { queueActions, type QueueActions } from '../../utils/queueBands';
 import { KeyCombos } from '../Keycap';
 import { Palette } from './Palette';
 import {
@@ -32,6 +33,8 @@ interface UnifiedPaletteProps<S extends PaletteSession> {
   onStateChange: (state: PaletteState) => void;
   onClose: () => void;
   agents: AgentPaletteInput<S>;
+  queueMode: boolean;
+  crewInQueue: boolean;
   desktops: readonly Desktop[];
   commands: readonly PaletteCommand[];
   commandUsage?: readonly CommandUsage[];
@@ -71,6 +74,7 @@ function usePaletteItems<S extends PaletteSession>(
   commands: readonly PaletteCommand[],
   usage: readonly CommandUsage[],
   loading: boolean,
+  actions: (session: S) => QueueActions,
 ) {
   const { query } = state;
   const commandMode = query.startsWith(COMMAND_PREFIX);
@@ -87,7 +91,7 @@ function usePaletteItems<S extends PaletteSession>(
     ? allAgentRows.find((row) => row.kind === 'agent' && row.session.id === state.sessionId)
     : undefined;
 
-  if (state.mode === 'snooze' && snoozedRow?.kind === 'agent') {
+  if (state.mode === 'snooze' && snoozedRow?.kind === 'agent' && actions(snoozedRow.session).snooze) {
     return {
       mode: 'snooze' as const,
       snoozing: { session: snoozedRow.session, openedAt: state.openedAt },
@@ -131,7 +135,7 @@ function InPaletteAction({ id, label }: { id: ShortcutId; label: string }) {
   return <>{label} needs a single-key shortcut (chords don&apos;t work here)</>;
 }
 
-function PaletteFooter({ mode }: { mode: 'agents' | 'commands' | 'snooze' }) {
+function PaletteFooter({ mode, actions }: { mode: 'agents' | 'commands' | 'snooze'; actions: QueueActions }) {
   if (mode === 'snooze') {
     return (
       <>
@@ -156,8 +160,8 @@ function PaletteFooter({ mode }: { mode: 'agents' | 'commands' | 'snooze' }) {
       <span><b>↑↓</b> move</span>
       <span><b>↵</b> jump</span>
       <span>type <b>{COMMAND_PREFIX}</b> for commands</span>
-      <span data-testid="palette-settle-hint"><InPaletteAction id="session.settle" label="settle" /></span>
-      <span data-testid="palette-snooze-hint"><InPaletteAction id="session.snooze" label="snooze" /></span>
+      {actions.settle && <span data-testid="palette-settle-hint"><InPaletteAction id="session.settle" label="settle" /></span>}
+      {actions.snooze && <span data-testid="palette-snooze-hint"><InPaletteAction id="session.snooze" label="snooze" /></span>}
       <span><b>esc</b> closes</span>
     </>
   );
@@ -173,6 +177,8 @@ export function UnifiedPalette<S extends PaletteSession>({
   onStateChange,
   onClose,
   agents,
+  queueMode,
+  crewInQueue,
   desktops,
   commands,
   commandUsage = [],
@@ -186,7 +192,13 @@ export function UnifiedPalette<S extends PaletteSession>({
   onSnooze,
 }: UnifiedPaletteProps<S>) {
   const [agentKeyAfterSnooze, setAgentKeyAfterSnooze] = useState<string | null>(null);
-  const { mode, snoozing, items, count } = usePaletteItems(state, agents, commands, commandUsage, commandsLoading);
+  const actions = (session: S) => queueActions(session, { queueMode, crewInQueue, now: agents.now });
+  const itemActions = (item: Item<S> | undefined) => item?.mode === 'agents' && item.row.kind === 'agent'
+    ? actions(item.row.session) : { settle: false, snooze: false };
+  const { mode, snoozing, items, count } = usePaletteItems(state, agents, commands, commandUsage, commandsLoading, actions);
+  useEffect(() => {
+    if (state.mode === 'snooze' && !snoozing) onStateChange({ mode: 'search', query: state.query });
+  }, [state, snoozing, onStateChange]);
   const leaveSnooze = (session: S) => {
     setAgentKeyAfterSnooze(`agent:${session.id}`);
     onStateChange({ mode: 'search', query: state.query });
@@ -210,7 +222,7 @@ export function UnifiedPalette<S extends PaletteSession>({
 
   const pick = (item: Item<S>) => {
     if (item.mode === 'snooze') {
-      if (!snoozing) return;
+      if (!snoozing || !actions(snoozing.session).snooze) return;
       onSnooze(snoozing.session, snoozeInstant(item.choice.id, snoozing.openedAt));
       leaveSnooze(snoozing.session);
       return;
@@ -232,7 +244,7 @@ export function UnifiedPalette<S extends PaletteSession>({
     const agent = highlighted?.mode === 'agents' && highlighted.row.kind === 'agent' ? highlighted.row.session : null;
     if (pressed(event, 'session.settle')) {
       event.preventDefault();
-      if (agent?.turnOwed) onSettle(agent);
+      if (agent && itemActions(highlighted).settle) onSettle(agent);
       return true;
     }
     if (pressed(event, 'session.priority')) {
@@ -242,7 +254,7 @@ export function UnifiedPalette<S extends PaletteSession>({
     }
     if (pressed(event, 'session.snooze')) {
       event.preventDefault();
-      if (agent && !agent.chiefOfStaff) {
+      if (agent && itemActions(highlighted).snooze) {
         onStateChange({ mode: 'snooze', sessionId: agent.id, openedAt: new Date(), query: state.query });
       }
       return true;
@@ -293,7 +305,7 @@ export function UnifiedPalette<S extends PaletteSession>({
             </kbd>
           }
           inputSuffix={count !== null && <span className="unified-palette-count">{count}</span>}
-          footer={<PaletteFooter mode={mode} />}
+          footer={(highlighted) => <PaletteFooter mode={mode} actions={itemActions(highlighted)} />}
         />
       </div>
     </FocusTrap>
