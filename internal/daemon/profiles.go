@@ -587,16 +587,29 @@ func (d *Daemon) leafShown(client *wsClient, profile profiles.Profile, desktop p
 
 func (d *Daemon) handleDesktopShowSession(client *wsClient, msg *protocol.DesktopShowSessionMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		show := func() (profileActionOutcome, error) {
+			profile, desktop, leafID, err := d.store.ShowSession(msg.SessionID)
+			if err != nil {
+				return profileActionOutcome{}, err
+			}
+			return d.leafShown(client, profile, desktop, leafID), nil
+		}
+		if d.hidden(msg.SessionID) && d.sessionHost(msg.SessionID) != "" {
+			answer := make(chan error, 1)
+			d.inSessionOrder(client, msg.SessionID, func() { answer <- d.showHidden(msg.SessionID) })
+			return profileActionOutcome{finish: func() (profileActionOutcome, error) {
+				if err := <-answer; err != nil {
+					return profileActionOutcome{}, err
+				}
+				return show()
+			}}, nil
+		}
 		if d.hidden(msg.SessionID) {
 			if err := d.showHidden(msg.SessionID); err != nil {
 				return profileActionOutcome{}, err
 			}
 		}
-		profile, desktop, leafID, err := d.store.ShowSession(msg.SessionID)
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
-		return d.leafShown(client, profile, desktop, leafID), nil
+		return show()
 	})
 }
 
@@ -719,6 +732,9 @@ func (d *Daemon) handleDesktopCloseTile(client *wsClient, msg *protocol.DesktopC
 
 func (d *Daemon) closeTile(client *wsClient, tile profiles.Pane) error {
 	t := harness.TerminalID(tile.RuntimeID)
+	if owner, shown := d.shownIn(t); shown {
+		tile.SessionID = owner
+	}
 	if !d.closeTerminal(tile.SessionID, t) {
 		d.detachSession(client, tile.RuntimeID)
 		return nil

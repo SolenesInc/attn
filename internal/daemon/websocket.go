@@ -1179,7 +1179,14 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdGetRepoInfo:
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
 	case protocol.CmdAskAnswer:
-		d.handleAskAnswer(client, msg.(*protocol.AskAnswerMessage))
+		answer := msg.(*protocol.AskAnswerMessage)
+		if stored, err := d.store.GetOpenAsk(strings.TrimSpace(answer.AskID)); err == nil {
+			if holder := d.inboxHolder(stored.To); holder != nil {
+				d.inSessionOrder(client, holder.ID, func() { d.handleAskAnswer(client, answer) })
+				return
+			}
+		}
+		d.handleAskAnswer(client, answer)
 	case protocol.CmdSetVentDismissed:
 		d.handleSetVentDismissed(client, msg.(*protocol.SetVentDismissedMessage))
 	case protocol.CmdPlantVentSeed:
@@ -1301,7 +1308,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSeedDocumentGet:
 		d.handleSeedDocumentGet(client, msg.(*protocol.SeedDocumentGetMessage))
 	case protocol.CmdSeedTransition:
-		d.handleSeedTransitionWS(client, msg.(*protocol.SeedTransitionMessage))
+		transition := msg.(*protocol.SeedTransitionMessage)
+		if harvestWhenRequested(transition) {
+			d.inSessionOrder(client, protocol.Deref(transition.SourceSessionID), func() { d.handleSeedTransitionWS(client, transition) })
+		} else {
+			d.handleSeedTransitionWS(client, transition)
+		}
 	case protocol.CmdSeedNote:
 		d.handleSeedNoteWS(client, msg.(*protocol.SeedNoteMessage))
 	case protocol.CmdSeedCheck:

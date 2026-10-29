@@ -19,9 +19,20 @@ func TestRemoteMonitorCommandsLeaveTheAppPumpFree(t *testing.T) {
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	app := pair.App
-	id := home.Spawn(app, fakeagent.Claude, outpost.Path("remote"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	settings := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "asks_enabled", Value: "true", RequestID: protocol.Ptr("asks-on")}, protocol.EventSettingsUpdated,
+		func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "asks-on" })
+	if !protocol.Deref(settings.Success) {
+		t.Fatalf("enable asks: %s", protocol.Deref(settings.Error))
+	}
+	outpostApp := outpost.App()
+	if outpostApp.Initial.Settings["asks_enabled"] != "true" {
+		testworld.Await(outpostApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["asks_enabled"] == "true" })
+	}
+	id := home.Spawn(app, fakeagent.Claude, outpost.Path("remote"), func(m *protocol.SpawnSessionMessage) {
+		m.Host = &pair.Host
+		m.InitialPrompt = protocol.Ptr("work remotely")
+	})
 	remote := outpost.LaunchedCarrying(app.Terminal(id))
-	app.TypeLine(id, "work remotely")
 	remote.Prompted()
 	remote.Reply("Ready for review. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
@@ -29,6 +40,14 @@ func TestRemoteMonitorCommandsLeaveTheAppPumpFree(t *testing.T) {
 	local := home.Launched(localID)
 	app.Watch(localID)
 	session := protocol.SessionID(id)
+	asked, err := home.Client().AskOpen(session, "", ":::question\nWhich color?\n- [ ] Blue\n- [ ] Red\n:::\n", "Pick a color", outpost.Path("remote"))
+	if err != nil {
+		t.Fatalf("open remote ask: %v", err)
+	}
+	planted, err := home.Client().SeedPlant(session, "Review remote work", "Review the change before merging.", "", "", "")
+	if err != nil {
+		t.Fatalf("plant remote work: %v", err)
+	}
 	until := time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
 	path := home.Path("review.md")
 	uri := "attn://file/" + strings.ReplaceAll(url.QueryEscape(path), "+", "%20")
@@ -81,11 +100,29 @@ func TestRemoteMonitorCommandsLeaveTheAppPumpFree(t *testing.T) {
 			if got := remote.Prompted(); !strings.Contains(got, "Use blue for the banner") {
 				t.Fatalf("markdown annotation prompt: %q", got)
 			}
+			remote.Reply("Reviewed. <!-- attn:state=waiting_input -->")
+			testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 		}},
 		{"rename", protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: session, Label: "Remote review"}, func() {
 			r := testworld.Await(app, protocol.EventRenameResult, func(r protocol.RenameResultMessage) bool { return r.ID == session })
 			if !r.Success {
 				t.Fatalf("rename: %+v", r)
+			}
+		}},
+		{"ask_answer", protocol.AskAnswerMessage{Cmd: protocol.CmdAskAnswer, RequestID: "answer", AskID: asked.ID, Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Blue"}}}}, func() {
+			r := testworld.Await(app, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "answer" })
+			if !r.Success {
+				t.Fatalf("answer remote ask: %+v", r)
+			}
+			if got := remote.Prompted(); !strings.Contains(got, "Blue") {
+				t.Fatalf("ask answer prompt: %q", got)
+			}
+		}},
+		{"harvest_when_merged", protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("arm-harvest"), SeedID: planted.Seed.ID, Verb: "harvest", SourceSessionID: &session,
+			WhenMerged: &protocol.SeedHarvestWhenMerged{PullRequestURL: protocol.Ptr("https://github.com/example/project/pull/1")}}, func() {
+			r := testworld.Await(app, protocol.EventSeedTransitionResult, func(r protocol.SeedTransitionResultMessage) bool { return r.RequestID == "arm-harvest" })
+			if !r.Success {
+				t.Fatalf("arm remote harvest: %s", protocol.Deref(r.Error))
 			}
 		}},
 	} {
@@ -188,4 +225,55 @@ func TestRemoteDesktopClosesLeaveUnrelatedSnapshotsAndTypingFree(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestShowingAHiddenRemoteSessionLeavesTheAppPumpAndArrangementsFree(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	shareOutpostCodex(t, pair)
+	app := pair.App
+	outpost.SetCodexFolderTrust(outpost.Path("agent"), "trusted")
+	id := home.Spawn(app, fakeagent.Codex, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	agent := outpost.LaunchedCarrying(app.Terminal(id))
+	app.TypeLine(id, "before hiding")
+	agent.Prompted()
+	agent.Reply("Ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+	app.TypeLine(id, "/new")
+	agent.Prompted()
+	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
+	otherApp := home.App()
+	desktop := otherApp.Initial.Desktops[0]
+	func() {
+		outpost.Signal(syscall.SIGSTOP)
+		defer outpost.Signal(syscall.SIGCONT)
+		app.Send(protocol.DesktopShowSessionMessage{Cmd: protocol.CmdDesktopShowSession, RequestID: "show-hidden", SessionID: protocol.SessionID(id)})
+		setting := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "sidebar_harness_logos_enabled", Value: "true", RequestID: protocol.Ptr("local-setting")}, protocol.EventSettingsUpdated,
+			func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "local-setting" })
+		if !protocol.Deref(setting.Success) {
+			t.Fatalf("local setting during remote show: %s", protocol.Deref(setting.Error))
+		}
+		renamed := testworld.Request(otherApp, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "local-rename", DesktopID: desktop.ID, Name: "Local review"}, protocol.EventProfileActionResult,
+			func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "local-rename" })
+		if !renamed.Success {
+			t.Fatalf("rename local desktop: %+v", renamed)
+		}
+		testworld.Await(app, protocol.EventProfileArrangementChanged, func(m protocol.ProfileArrangementChangedMessage) bool {
+			for _, updated := range m.Desktops {
+				if updated.ID == desktop.ID && updated.Name == "Local review" {
+					return true
+				}
+			}
+			return false
+		})
+		t.Log("outpost stopped; local setting answered and another app's desktop rename arrived while showing the hidden session waited")
+	}()
+	shown := testworld.Await(app, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == "show-hidden" })
+	if !shown.Success {
+		t.Fatalf("show hidden remote session: %s", protocol.Deref(shown.Error))
+	}
+	app.Terminal(id)
 }
