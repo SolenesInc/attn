@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
@@ -55,18 +56,16 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 			return result, err
 		}
 		result.View = protocol.Ptr(string(raw))
-		if d.store.SessionLink(msg.SessionID) == codexLinkKind && session != nil {
-			r := d.codexShared()
-			r.mu.Lock()
-			r.archivingAfterClose[session.ProfileID]++
-			r.mu.Unlock()
-		}
+		pausepoint.At(pausepoint.AgentCloseDrained)
 	case "committed":
 		if msg.Profile == nil {
 			d.forgetMonitor(msg.SessionID)
 		} else {
 			r := d.codexShared()
 			profile := *msg.Profile
+			r.mu.Lock()
+			r.archivingAfterClose[profile]++
+			r.mu.Unlock()
 			defer func() {
 				r.mu.Lock()
 				if r.archivingAfterClose[profile]--; r.archivingAfterClose[profile] == 0 {
