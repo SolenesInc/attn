@@ -13,9 +13,10 @@ scripts/land.sh
 - Rebase onto `origin/main` at the start of every step, and land each slice as
   soon as it works. Unfinished work lands unwired, or behind an experimental
   setting that is off by default, rather than waiting on a branch.
-- A landing that changes what users observe adds a
-  [changelog fragment](making-a-release.md#changelog-fragments), or updates
-  the one an earlier slice of the same change added. Invisible work adds none.
+- Work that changes what users observe has a seed, and its
+  [changelog fragment](making-a-release.md#changelog-fragments) is named after
+  it: `changelog.d/<seed-id>.yaml`. The first slice users can observe adds it;
+  later slices update it. Invisible work adds none.
 - Meet the [verification requirements](instances.md#verification-requirements)
   before landing. A change that needs packaged-app CI before it lands goes
   through a pull request.

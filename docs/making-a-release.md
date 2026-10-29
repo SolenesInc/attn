@@ -2,8 +2,8 @@
 
 ## Changelog fragments
 
-Each ordinary PR, and each landing that changes what users observe, adds a
-uniquely named `changelog.d/*.yaml`:
+Each change users observe adds a `changelog.d/*.yaml`, named after its seed
+(`changelog.d/<seed-id>.yaml`) or, for a PR without one, uniquely:
 
 ```yaml
 kind: fixed # added | changed | fixed | removed | internal
@@ -11,9 +11,10 @@ area: queue
 change: Auto-settle advances to the next agent with an outstanding turn.
 ```
 
-Describe what users observe. A PR of invisible work uses `kind: internal`; a
-landing of it adds no fragment. Optional fields: `symptom`, `notes`. CI
-validates fragments; `go run ./cmd/changelog-check` does the same locally.
+Describe what users observe. A PR of invisible work adds one with
+`kind: internal`; a landing of it adds none. Optional fields: `symptom`,
+`notes`. CI validates fragments; `go run ./cmd/changelog-check` does the same
+locally.
 
 ## Release
 
