@@ -15,6 +15,13 @@ func ownTerminalID() protocol.TerminalID {
 	return protocol.TrimID(harness.TerminalFromEnv())
 }
 
+var errNoCurrentSession = errors.New("not showing a session")
+
+func currentCodexProfile() (string, bool) {
+	profile, _, ok := harness.ParseCodexThreadTerminal(ownTerminalID())
+	return profile, ok
+}
+
 func currentSession(c *client.Client) (protocol.SessionID, error) {
 	terminalID := ownTerminalID()
 	if terminalID == "" {
@@ -25,7 +32,7 @@ func currentSession(c *client.Client) (protocol.SessionID, error) {
 		return "", err
 	}
 	if sessionID == "" {
-		return "", fmt.Errorf("terminal %s is not showing a session", terminalID)
+		return "", fmt.Errorf("terminal %s is %w", terminalID, errNoCurrentSession)
 	}
 	return sessionID, nil
 }

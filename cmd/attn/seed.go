@@ -80,114 +80,115 @@ type seedVerb struct {
 	synopsis string
 	about    string
 	flags    []string
+	readOnly bool
 }
 
 var seedVerbs = []seedVerb{
 	{`plant`, `plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
 if the seed gains children, that body is the plot's plan. --part-of
-plants it under a plot. --check defines what the seed must prove.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}},
+plants it under a plot. --check defines what the seed must prove.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}, false},
 	{`plot`, `plot [-f <path>] [--json]`, `plant a whole plot in one move from a JSON payload (-f, or stdin):
 {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}],
 "children": [{"title": …, "body": …, "checks": […],
 "blocks": ["<sibling step slug>"]}]}. Children are parallel by
 default; blocks names the siblings a child holds back. A shared
 check is proven by every child. Prints the plot's id and each
-child's id and step slug.`, []string{"f", "member", "json"}},
+child's id and step slug.`, []string{"f", "member", "json"}, false},
 	{`ls`, `ls [--stale [--window <duration>]] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
 --flat prints one list. --stale narrows to open seeds whose log has not moved
 for the window (default %s) — a query for your judgment, never a
-reaper.`, formatWindow(garden.DefaultStaleWindow)), []string{"stale", "window", "flat", "json"}},
+reaper.`, formatWindow(garden.DefaultStaleWindow)), []string{"stale", "window", "flat", "json"}, true},
 	{`search`, `search <words> [--limit <n>] [--json]`, `find seeds by keyword across your profile's garden, harvested and withered
 included: titles, bodies and every log entry. A seed matches when one
 of those carries every word, and the line that did is printed under it.
 Title matches come first. Search before you plant, so a duplicate is
-found instead of created.`, []string{"limit", "json"}},
+found instead of created.`, []string{"limit", "json"}, true},
 	{`ready`, `ready [--plot <plot> | --all] [--json]`, `what you can tend right now, oldest first: nothing open blocks it,
 nobody is holding it, and it is not a plot — a plot's work is its
 children. With no flags the scope is your profile's garden — unless this
 session was dispatched at a plot, and then that plot; --all steps back
-out to the garden.`, []string{"plot", "all", "json"}},
+out to the garden.`, []string{"plot", "all", "json"}, true},
 	{`link`, `link <a> <blocks|part-of|discovered-from> <b> [--json]`, `relate two seeds. "a blocks b" keeps b out of ready until a closes;
 "a part-of b" puts a under b; b is then a plot. "a discovered-from b"
 records where work came from without ordering it. A structural cycle
-is refused, naming both seeds and the edge to remove.`, []string{"json"}},
-	{`unlink`, `unlink <a> <blocks|part-of|discovered-from> <b> [--json]`, `remove the edge. Every link has one.`, []string{"json"}},
+is refused, naming both seeds and the edge to remove.`, []string{"json"}, false},
+	{`unlink`, `unlink <a> <blocks|part-of|discovered-from> <b> [--json]`, `remove the edge. Every link has one.`, []string{"json"}, false},
 	{`show`, `show <id> [--json]`, `one seed: the freshest handoff left on it, its state, who tends it,
 every edge that touches it in both directions, its body, and the newest
-notes on its log.`, []string{"json"}},
+notes on its log.`, []string{"json"}, true},
 	{`review`, `review <start|show|cancel|retry|keep>`, `start an advisory Garden review, inspect its progressive results,
 cancel unfinished classification, retry one failed or changed item, or keep
 one seed growing and review it again after seven quiet days.
-The review never changes a seed's state.`, []string{}},
-	{`review start`, `review start [--json]`, `Start an advisory Garden review. The review never changes a seed's state.`, []string{"json"}},
-	{`review show`, `review show [<review-id>] [--json]`, `Inspect the review and its progressive results. With no id, show the latest review.`, []string{"json"}},
-	{`review cancel`, `review cancel <review-id> [--json]`, `Cancel unfinished classification.`, []string{"json"}},
-	{`review retry`, `review retry <review-id> <seed-id> [--json]`, `Retry one failed or changed review item.`, []string{"json"}},
-	{`review keep`, `review keep <review-id> <seed-id> [--json]`, `Keep a seed growing and review it again after seven quiet days.`, []string{"json"}},
+The review never changes a seed's state.`, []string{}, false},
+	{`review start`, `review start [--json]`, `Start an advisory Garden review. The review never changes a seed's state.`, []string{"json"}, false},
+	{`review show`, `review show [<review-id>] [--json]`, `Inspect the review and its progressive results. With no id, show the latest review.`, []string{"json"}, true},
+	{`review cancel`, `review cancel <review-id> [--json]`, `Cancel unfinished classification.`, []string{"json"}, false},
+	{`review retry`, `review retry <review-id> <seed-id> [--json]`, `Retry one failed or changed review item.`, []string{"json"}, false},
+	{`review keep`, `review keep <review-id> <seed-id> [--json]`, `Keep a seed growing and review it again after seven quiet days.`, []string{"json"}, false},
 	{`watch`, `watch <id> [--json]`, `watch this seed and its descendants. Delegation starts the same watch.
 unwatch removes this seed's subscription; separate child or ancestor
-watches remain. show names the subscriptions that still cover a seed.`, []string{"json"}},
+watches remain. show names the subscriptions that still cover a seed.`, []string{"json"}, false},
 	{`unwatch`, `unwatch <id> [--json]`, `Remove this seed's subscription. Separate child or ancestor watches remain.
-show names the subscriptions that still cover a seed.`, []string{"json"}},
+show names the subscriptions that still cover a seed.`, []string{"json"}, false},
 	{`edit`, `edit <id> -m <body> [--json]`, `replace the seed's markdown body without moving its state or claim.
-- reads stdin; empty or whitespace-only stdin is refused. An explicit -m '' clears the body.`, []string{"m", "json"}},
+- reads stdin; empty or whitespace-only stdin is refused. An explicit -m '' clears the body.`, []string{"m", "json"}, false},
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
--m adds an exception such as a special branch or directory.`, []string{"m", "json"}},
+-m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
 	{`tend`, `tend <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `claim the seed and start growing it. One tender at a time: tending a
 seed somebody else still holds is refused, naming them, and takes
 --force to go through anyway. The freshest handoff prints on the
-claim, so picking a seed up primes you.`, []string{"m", "member", "force", "json"}},
+claim, so picking a seed up primes you.`, []string{"m", "member", "force", "json"}, false},
 	{`park`, `park <id> [-m "<where you left it>"] [--member <name>] [--force] [--json]`, `pause the seed deliberately — it goes dormant and lets go of its
 tender. An optional comment lands on the log in the same move. Tending
-it again picks it back up.`, []string{"m", "member", "force", "json"}},
+it again picks it back up.`, []string{"m", "member", "force", "json"}, false},
 	{`harvest`, `harvest <id> (-m "<what got done>" | --when-merged [<pr-url>] [--clear]) [--member <name>] [--force] [--json]`, `close the seed as done. The reason is the point of the record.
 --when-merged closes nothing now: attn harvests the seed itself, with
 its own reason, when the pull request merges. Reach for it only when
 the merge is the last step. With no url it takes this session's single
 open pull request; --when-merged --clear takes the arming back and
-leaves the state alone.`, []string{"m", "member", "force", "json", "when-merged", "clear"}},
-	{`wither`, `wither <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up.`, []string{"m", "member", "force", "json"}},
+leaves the state alone.`, []string{"m", "member", "force", "json", "when-merged", "clear"}, false},
+	{`wither`, `wither <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up.`, []string{"m", "member", "force", "json"}, false},
 	{`replant`, `replant <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
 is free. Reopens a closed seed, un-parks a dormant one, and hands back
-one being grown.`, []string{"m", "member", "force", "json"}},
+one being grown.`, []string{"m", "member", "force", "json"}, false},
 	{`note`, `note <id> -m "<what happened>" [--handoff] [--ring] [--json]`, `append to the seed's log — what happened and what you learned, for
 whoever tends it next. - reads stdin. --handoff addresses it to your
 successor on this seed: show renders the freshest one first and tend
 prints it on the claim, so it is read before any work.
---ring tells the current tender and watchers to look; ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "member", "json"}},
+--ring tells the current tender and watchers to look; ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "member", "json"}, false},
 	{`check`, `check <add|edit|remove|restore|report|confirm|reject|uncheck|reopen>`, `Define, report, or judge what a seed must prove. Each move has its own --help.
-Checks never block a move. harvest lists the checks still open or rejected.`, []string{}},
+Checks never block a move. harvest lists the checks still open or rejected.`, []string{}, false},
 	{`check add`, `check add <id> <C#> "<statement>" [--shared]`, `Define a numbered statement (C1) that the body cites by id. On a plot,
 --shared makes every seed below it prove the check with its own report.
-Removed ids are never reused.`, []string{"m", "member", "ring", "json", "shared"}},
-	{`check edit`, `check edit <id> <C#> "<statement>"`, `Replace the check's statement.`, []string{"m", "member", "ring", "json"}},
-	{`check remove`, `check remove <id> <C#>`, `Remove a check. Its id stays reserved.`, []string{"m", "member", "ring", "json"}},
-	{`check restore`, `check restore <id> <C#>`, `Bring a removed check back with its result.`, []string{"m", "member", "ring", "json"}},
+Removed ids are never reused.`, []string{"m", "member", "ring", "json", "shared"}, false},
+	{`check edit`, `check edit <id> <C#> "<statement>"`, `Replace the check's statement.`, []string{"m", "member", "ring", "json"}, false},
+	{`check remove`, `check remove <id> <C#>`, `Remove a check. Its id stays reserved.`, []string{"m", "member", "ring", "json"}, false},
+	{`check restore`, `check restore <id> <C#>`, `Bring a removed check back with its result.`, []string{"m", "member", "ring", "json"}, false},
 	{`check report`, `check report <id> <C#> -m "<summary>" [--evidence <artifact|url>]... [--commit <rev>]`, `Record the proof for a check. --evidence is an artifact on the seed
 or an http(s) URL, and can repeat. A new report clears the verdict.
 If a check doesn't apply, report that too: say why and cite what
-shows it. The verdict decides.`, []string{"m", "member", "ring", "json", "evidence", "commit"}},
-	{`check confirm`, `check confirm <id> <C#> [-m "<how you verified it>"]`, `Confirm the check, with or without a report.`, []string{"m", "member", "ring", "json"}},
-	{`check reject`, `check reject <id> <C#> -m "<what would prove it>"`, `Reject the check. -m names what would prove it.`, []string{"m", "member", "ring", "json"}},
-	{`check uncheck`, `check uncheck <id> <C#> [-m "<why>"]`, `Clear the verdict and keep the report.`, []string{"m", "member", "ring", "json"}},
-	{`check reopen`, `check reopen <id> <C#> [-m "<why>"]`, `Clear the report and verdict.`, []string{"m", "member", "ring", "json"}},
+shows it. The verdict decides.`, []string{"m", "member", "ring", "json", "evidence", "commit"}, false},
+	{`check confirm`, `check confirm <id> <C#> [-m "<how you verified it>"]`, `Confirm the check, with or without a report.`, []string{"m", "member", "ring", "json"}, false},
+	{`check reject`, `check reject <id> <C#> -m "<what would prove it>"`, `Reject the check. -m names what would prove it.`, []string{"m", "member", "ring", "json"}, false},
+	{`check uncheck`, `check uncheck <id> <C#> [-m "<why>"]`, `Clear the verdict and keep the report.`, []string{"m", "member", "ring", "json"}, false},
+	{`check reopen`, `check reopen <id> <C#> [-m "<why>"]`, `Clear the report and verdict.`, []string{"m", "member", "ring", "json"}, false},
 	{`attach`, `attach <id> (--path <file> (--move | --copy | --repo <repository>) | --notebook <id> | --url <url>)`, `put a local regular file in durable seed-owned storage. Move is the
 recommended choice and leaves one editable canonical file; Copy keeps
 an independent source snapshot. Git-tracked files must use Copy.
-Notebook, URL and repository references remain associations.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "move", "copy"}},
+Notebook, URL and repository references remain associations.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "move", "copy"}, false},
 	{`detach`, `detach <id> (--path <filename> (--to <destination> | --reference | --repo <repository>) | --notebook <id> | --url <url>)`, `move a managed artifact back out without overwriting. An old linked
-path association can be removed explicitly with --reference instead.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "to", "reference"}},
+path association can be removed explicitly with --reference instead.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "to", "reference"}, false},
 	{`notes`, `notes <id> [--limit <n>] [--json]`, `the whole log, newest first. show renders the newest few and says
-how many more are here.`, []string{"limit", "json"}},
+how many more are here.`, []string{"limit", "json"}, true},
 	{`guide`, `guide`, `print the craft: writing a body, deliverable types and what "done" is
-for each, artifacts, and handoffs and steering.`, []string{}},
+for each, artifacts, and handoffs and steering.`, []string{}, false},
 	{`prime`, `prime`, `print the standing garden contract and this session's live garden
-position.`, []string{}},
+position.`, []string{}, true},
 	{`export`, `export <id> [--out <path>] [--json]`, `write the seed's body to markdown, stamped as generated from the seed —
 the file to open, read and annotate. --out - writes to stdout; the
 default is <id>.md in the current directory. The seed stays the source:
-edit the seed and export again, never the file.`, []string{"out", "json"}},
+edit the seed and export again, never the file.`, []string{"out", "json"}, true},
 }
 
 type seedFlagDef struct {
@@ -310,7 +311,8 @@ func seedUsageError(verb string, err error) {
 }
 
 func (f *seedFlags) client() *client.Client {
-	return client.New(config.SocketPath()).WithGardenProfile(strings.TrimSpace(f.profile), f.sessionID())
+	profile, session := f.scope()
+	return client.New(config.SocketPath()).WithGardenProfile(profile, session)
 }
 
 var seedPrimeText = hooks.GardenGuidance
@@ -364,6 +366,7 @@ func seedFail(verb string, err error) {
 }
 
 type seedFlags struct {
+	verb           seedVerb
 	fs             *flag.FlagSet
 	profile        string
 	session        string
@@ -401,7 +404,7 @@ type seedFlags struct {
 
 func newSeedFlags(verb string) *seedFlags {
 	entry := seedVerbNamed(verb)
-	f := &seedFlags{fs: flag.NewFlagSet("seed "+verb, flag.ContinueOnError)}
+	f := &seedFlags{verb: entry, fs: flag.NewFlagSet("seed "+verb, flag.ContinueOnError)}
 	f.fs.SetOutput(io.Discard)
 	for _, def := range seedFlagDefs {
 		if seedVerbHasFlag(entry, def.name) {
@@ -444,11 +447,32 @@ func (f *seedFlags) parse(verb string, args []string) []string {
 	return positionals
 }
 
-func (f *seedFlags) sessionID() protocol.SessionID {
-	if id := strings.TrimSpace(f.session); id != "" {
-		return protocol.SessionID(id)
+func (f *seedFlags) scope() (string, protocol.SessionID) {
+	profile := strings.TrimSpace(f.profile)
+	if f.verb.readOnly && profile != "" {
+		return profile, ""
 	}
-	return currentSessionOrExit()
+	if id := strings.TrimSpace(f.session); id != "" {
+		return profile, protocol.SessionID(id)
+	}
+	session, err := currentSession(client.New(config.SocketPath()))
+	if errors.Is(err, errNoCurrentSession) {
+		if f.verb.readOnly {
+			if profile, ok := currentCodexProfile(); ok {
+				return profile, ""
+			}
+		}
+		err = fmt.Errorf("%w; pass --session <id> to identify the caller; --profile <name|id> selects a garden and does not identify a session", err)
+	}
+	if err != nil {
+		seedFail(f.verb.name, err)
+	}
+	return profile, session
+}
+
+func (f *seedFlags) sessionID() protocol.SessionID {
+	_, session := f.scope()
+	return session
 }
 
 func (f *seedFlags) wasSet(name string) bool {
