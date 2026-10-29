@@ -127,13 +127,14 @@ setup_fixture() {
 	  git clone -q --depth 1 "file://$root" "$fixture_repo"
 	  git -C "$fixture_repo" config user.name 'Release Test'
 	  git -C "$fixture_repo" config user.email 'release@example.com'
-	  cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
+	  rm -rf "$fixture_repo/cmd/release-train"
+	  cp -R "$root/cmd/release-train" "$fixture_repo/cmd/release-train"
 	  git -C "$fixture_repo" switch -q -C main
-	  git -C "$fixture_repo" add cmd/release-train/main.go
-	  find "$fixture_repo/changelog.d" -type f -name '*.yaml' -delete
-	  git -C "$fixture_repo" add -A changelog.d
+	  git -C "$fixture_repo" add -A cmd/release-train
 	  git -C "$fixture_repo" commit -q --allow-empty -m 'release fixture baseline'
 	  baseline_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
+	  marker="$(cd "$fixture_repo" && go run ./cmd/release-train notes range)"
+	  printf '\n## [2099-01-01]\n\nNo changes users will notice.\n\n%s\n' "$marker" >>"$fixture_repo/CHANGELOG.md"
 
 	  (cd "$fixture_repo" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
 	  version=99.98.97
@@ -267,9 +268,8 @@ run_release_after_acceptance >"$work/duplicate.out"
 [[ "$(grep -c '^api --method POST repos/example/attn/dispatches ' "$FAKE_GH_LOG")" -eq 1 ]]
 grep -q 'not dispatching again' "$work/duplicate.out"
 
-printf '%s\n' 'kind: fixed' 'area: release' 'change: work after the release' \
-  >"$fixture_repo/changelog.d/after-release.yaml"
-git -C "$fixture_repo" add changelog.d/after-release.yaml
+printf '%s\n' 'work after the release' >"$fixture_repo/after-release.txt"
+git -C "$fixture_repo" add after-release.txt
 git -C "$fixture_repo" commit -q -m 'fix: ordinary work after the release'
 git -C "$fixture_repo" push -q origin main
 later_sha="$(git -C "$fixture_repo" rev-parse HEAD)"

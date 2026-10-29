@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -65,8 +64,8 @@ func run(args []string, stdout io.Writer) error {
 	switch args[0] {
 	case "version":
 		return runVersion(root, args[1:], stdout)
-	case "fragments":
-		return runFragments(root, args[1:], stdout)
+	case "notes":
+		return runNotes(root, args[1:], stdout)
 	case "manifest":
 		return runManifest(root, args[1:], stdout)
 	case "candidate":
@@ -87,8 +86,8 @@ func usage() string {
 commands:
   version set <vX.Y.Z>       update every committed version source
   version check <vX.Y.Z>     require every version source to agree
-  fragments render           render pending fragments for the release writer
-  fragments receipt          print the exact pending-fragment audit receipt
+  notes render               render the commits since the last release for the release writer
+  notes range                print the changelog marker for the commits since the last release
   manifest write [flags]     write .github/release-candidate.yml
   candidate validate [flags] validate a prepared release candidate
   accepted-main tag          print the manifest's release tag for main
@@ -288,63 +287,6 @@ func replaceVersion(data []byte, pattern *regexp.Regexp, version string) ([]byte
 	return out.Bytes(), nil
 }
 
-func runFragments(root string, args []string, stdout io.Writer) error {
-	if len(args) != 1 || (args[0] != "render" && args[0] != "receipt") {
-		return errors.New("usage: release-train fragments <render|receipt>")
-	}
-	if args[0] == "receipt" {
-		receipt, err := fragmentReceipt(root, "HEAD")
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(stdout, receipt)
-		return err
-	}
-	rendered, err := renderFragments(root)
-	if err != nil {
-		return err
-	}
-	_, err = io.WriteString(stdout, rendered)
-	return err
-}
-
-func renderFragments(root string) (string, error) {
-	dir := filepath.Join(root, "changelog.d")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", err
-	}
-	var names []string
-	for _, entry := range entries {
-		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".yaml") {
-			names = append(names, entry.Name())
-		}
-	}
-	sort.Strings(names)
-	var out strings.Builder
-	for _, name := range names {
-		path := filepath.Join("changelog.d", name)
-		subjectBytes, err := gitOutput(root, "log", "--diff-filter=A", "--format=%s", "-1", "--", path)
-		if err != nil {
-			return "", err
-		}
-		subject := strings.TrimSpace(string(subjectBytes))
-		if subject == "" {
-			subject = "(uncommitted)"
-		}
-		data, err := os.ReadFile(filepath.Join(root, path))
-		if err != nil {
-			return "", err
-		}
-		fmt.Fprintf(&out, "--- fragment: %s\n--- introduced by: %s\n%s", path, subject, data)
-		if len(data) == 0 || data[len(data)-1] != '\n' {
-			out.WriteByte('\n')
-		}
-		out.WriteByte('\n')
-	}
-	return out.String(), nil
-}
-
 func runManifest(root string, args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] != "write" {
 		return errors.New("usage: release-train manifest write --version vX.Y.Z --main <ref> [--output path]")
@@ -492,9 +434,6 @@ func validateCandidate(root string, input candidateValidation) error {
 	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
 		return err
 	}
-	if err := requireNoFragments(root, headSHA); err != nil {
-		return err
-	}
 	if err := requireCompiledChangelog(root, manifest.MainSHA, headSHA); err != nil {
 		return err
 	}
@@ -504,90 +443,25 @@ func validateCandidate(root string, input candidateValidation) error {
 	return nil
 }
 
-func requireNoFragments(root, ref string) error {
-	out, err := gitOutput(root, "ls-tree", "-r", "--name-only", ref, "--", "changelog.d")
-	if err != nil {
-		return err
-	}
-	var fragments []string
-	for _, path := range strings.Fields(string(out)) {
-		if strings.HasSuffix(path, ".yaml") {
-			fragments = append(fragments, path)
-		}
-	}
-	if len(fragments) > 0 {
-		return fmt.Errorf("candidate still contains pending changelog fragments: %s", strings.Join(fragments, ", "))
-	}
-	return nil
-}
-
-func requireReleasedFragmentsConsumed(root, mainSHA, headSHA string) error {
-	released, err := fragmentBlobs(root, mainSHA)
-	if err != nil {
-		return err
-	}
-	current, err := fragmentBlobs(root, headSHA)
-	if err != nil {
-		return err
-	}
-	var remaining []string
-	for path := range released {
-		if _, ok := current[path]; ok {
-			remaining = append(remaining, path)
-		}
-	}
-	sort.Strings(remaining)
-	if len(remaining) > 0 {
-		return fmt.Errorf("release still contains the changelog fragments it compiled: %s", strings.Join(remaining, ", "))
-	}
-	return nil
-}
-
 func requireCompiledChangelog(root, source, head string) error {
-	fragments, err := fragmentBlobs(root, source)
+	compiled, err := releaseRangeAt(root, source)
 	if err != nil {
 		return err
 	}
-	userFacing := false
-	for path := range fragments {
-		data, err := readRepositoryFile(root, source, path)
-		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		var fragment struct {
-			Kind string `yaml:"kind"`
-		}
-		if err := yaml.Unmarshal(data, &fragment); err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		if fragment.Kind != "internal" {
-			userFacing = true
-			break
-		}
-	}
-	if !userFacing {
-		return nil
-	}
+	marker := []byte(compiled.marker())
 	sourceChangelog, err := readRepositoryFile(root, source, "CHANGELOG.md")
 	if err != nil {
 		return err
+	}
+	if bytes.Contains(sourceChangelog, marker) {
+		return fmt.Errorf("source CHANGELOG.md already records commits %s", compiled.revisions())
 	}
 	headChangelog, err := readRepositoryFile(root, head, "CHANGELOG.md")
 	if err != nil {
 		return err
 	}
-	if bytes.Equal(sourceChangelog, headChangelog) {
-		return errors.New("user-facing changelog fragments were removed without updating CHANGELOG.md")
-	}
-	receipt, err := fragmentReceipt(root, source)
-	if err != nil {
-		return err
-	}
-	if bytes.Contains(sourceChangelog, []byte(receipt)) {
-		return errors.New("source CHANGELOG.md already contains its pending-fragment receipt")
-	}
-	if !bytes.Contains(headChangelog, []byte(receipt)) {
-		return errors.New("updated CHANGELOG.md does not contain the frozen fragment receipt")
+	if !bytes.Contains(headChangelog, marker) {
+		return fmt.Errorf("CHANGELOG.md does not record the compiled commits %s", compiled.revisions())
 	}
 	return nil
 }
@@ -621,7 +495,7 @@ func requireReleaseOnlyChanges(root, source, head, manifestPath string) error {
 		if allowed[path] {
 			continue
 		}
-		if strings.HasPrefix(path, "changelog.d/") && strings.HasSuffix(path, ".yaml") && status == "D" {
+		if strings.HasPrefix(path, "changelog.d/") && status == "D" {
 			continue
 		}
 		return fmt.Errorf("candidate changes non-release file %s (%s)", path, status)
@@ -684,9 +558,6 @@ func validateAcceptedMain(root, headRef, manifestPath string) (candidateManifest
 	if err := checkVersions(root, headSHA, manifest.Version); err != nil {
 		return candidateManifest{}, err
 	}
-	if err := requireReleasedFragmentsConsumed(root, manifest.MainSHA, headSHA); err != nil {
-		return candidateManifest{}, err
-	}
 	if err := requireCompiledChangelog(root, manifest.MainSHA, headSHA); err != nil {
 		return candidateManifest{}, err
 	}
@@ -703,45 +574,6 @@ func requireReleaseCommit(root, headSHA, manifestPath string) error {
 		return fmt.Errorf("%s is not a release commit; %s last changed at %s", headSHA, manifestPath, releaseSHA)
 	}
 	return nil
-}
-
-func fragmentBlobs(root, ref string) (map[string]string, error) {
-	out, err := gitOutput(root, "ls-tree", "-r", ref, "--", "changelog.d")
-	if err != nil {
-		return nil, err
-	}
-	fragments := map[string]string{}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 2)
-		metadata := strings.Fields(parts[0])
-		if len(parts) != 2 || len(metadata) != 3 {
-			return nil, fmt.Errorf("cannot parse git tree line %q", line)
-		}
-		if strings.HasSuffix(parts[1], ".yaml") {
-			fragments[parts[1]] = metadata[2]
-		}
-	}
-	return fragments, nil
-}
-
-func fragmentReceipt(root, ref string) (string, error) {
-	fragments, err := fragmentBlobs(root, ref)
-	if err != nil {
-		return "", err
-	}
-	paths := make([]string, 0, len(fragments))
-	for path := range fragments {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	digest := sha256.New()
-	for _, path := range paths {
-		fmt.Fprintf(digest, "%s\x00%s\n", path, fragments[path])
-	}
-	return fmt.Sprintf("<!-- changelog-fragments-sha256: %x -->", digest.Sum(nil)), nil
 }
 
 func normalizeVersion(value string) (string, string, error) {
