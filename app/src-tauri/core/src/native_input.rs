@@ -463,7 +463,7 @@ mod platform {
             objc2::ffi::class_addMethod(
                 std::ptr::from_ref(class).cast_mut(),
                 selector,
-                std::mem::transmute(harness_key_window as KeyWindowGetter),
+                std::mem::transmute::<KeyWindowGetter, Imp>(harness_key_window),
                 c"@@:".as_ptr(),
             )
         };
@@ -502,9 +502,10 @@ mod platform {
             PRESSED_BUTTONS_IMPLEMENTATION.get_or_init(|| method.implementation());
             let previous = INJECTED_BUTTONS.with(|state| state.replace(Some(buttons)));
             let implementation = unsafe {
-                method.set_implementation(std::mem::transmute(
-                    injected_buttons as unsafe extern "C-unwind" fn(&AnyClass, Sel) -> usize,
-                ))
+                method.set_implementation(std::mem::transmute::<
+                    unsafe extern "C-unwind" fn(&AnyClass, Sel) -> usize,
+                    Imp,
+                >(injected_buttons))
             };
             Self {
                 method,

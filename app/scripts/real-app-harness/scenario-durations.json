@@ -380,12 +380,12 @@
         "note": "Green serial matrix scenario, including recording and cleanup. Shows first sync with remaining bytes/items and saved previous folder, convergence, conflict, conflict removal and missing-marker error. Remeasure on Linux CI."
       },
       "focusless-native": {
-        "run": "focusless-native-2026-10-29T23-32-14-984Z",
+        "run": "focusless-native-2026-10-29T23-47-01-816Z",
         "job": "Local packaged scenario, focusless isolated instance",
         "recordedAt": "2026-10-30",
-        "seconds": 49.714,
+        "seconds": 9.93,
         "runnerClass": "local macOS arm64",
-        "note": "Green direct-scenario ATTN_VERDICT durationMs=49714, including cleanup, on source fingerprint tree:d602ffdabc741958f11fd2a6989700b79900ea46f719ba31f036e64e7e851c08. Covers parked native hover/actions, Settings selection, AppKit menu keys, terminal Alt-drag, rejected geometry and browser password input with real focus and secure input off. macOS only."
+        "note": "Green direct-scenario ATTN_VERDICT durationMs=9930, including launch and cleanup, on clean runtime commit 724b3bccb86b380294607bf72defcf22a3125d67. Covers parked native hover/actions, Settings selection, AppKit menu keys, terminal Alt-drag, rejected geometry and browser password input with real focus and secure input off. macOS only. Earlier concurrent cold verification took49714ms; its receipt remains on seed s-fvpn0q."
       }
     }
   },
@@ -459,6 +459,6 @@
     "analytics-settings": 28.012,
     "outpost-update": 39.165,
     "notebook-sync": 34.495,
-    "focusless-native": 49.714
+    "focusless-native": 9.93
   }
 }

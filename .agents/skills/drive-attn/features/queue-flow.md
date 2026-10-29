@@ -174,7 +174,6 @@ EOF
 
 ## Gotchas
 
-- Live on `drive-3` at `b292a5aa5`: the automation run's sidebar Settle button did not close its owed turn in desktop or queue flow. The native pointer witness matched `button.session-action-btn.session-settle-btn` in both independent replays, but `attn agent peek <run>` still reported `turn: owed to this session` after the deadline. The key and palette settled the same run. Keep the native row checks separate from those passing paths.
 - The quiet-notifications switch starts below the baseline window's visible Settings content. `bridge dom_bounds` still returns its offscreen box. Scroll it into view with `dom_scroll_into_view` as setup before reading its bounds and clicking natively; native input rejects offscreen coordinates. Clicking section navigation after focusing Search clears keyboard focus.
 - A mock agent owes a turn as soon as it finishes booting, in either flow. Expect `owed` before any prompt.
 - Typing into an agent does not settle its turn; only a settle, a snooze or auto-settle does. A turn the agent did not open is the user's: `attn turn settle` from the agent exits 1 with `only the user settles it`. A turn the agent opened with `attn turn open` can be settled by the agent.
