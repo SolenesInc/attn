@@ -59,7 +59,7 @@ func main() {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	self := bridge.Identity{DaemonID: "bulk-proof-home", Build: bridge.Build{Version: "probe", SourceFingerprint: "bulk-proof", ProtocolVersion: "bulk-proof"}}
+	self := bridge.Identity{DaemonID: "bulk-proof-home", Instance: "bulk-proof", Build: bridge.Build{Version: "probe", SourceFingerprint: "bulk-proof", ProtocolVersion: "bulk-proof"}}
 	var err error
 	if *serve {
 		self.DaemonID = "bulk-proof-outpost"

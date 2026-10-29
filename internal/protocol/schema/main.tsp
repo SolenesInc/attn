@@ -8320,9 +8320,7 @@ model ApplyMonitorViewResult {
 model SwitchOutcome {
   conversation: string;
   kind: SwitchOutcomeKind;
-  session_id?: SessionID;
   reason?: string;
-  cost?: string;
 }
 
 enum SwitchOutcomeKind { Bound: "bound", Opened: "opened", Shows: "shows", InPlace: "in_place", Dropped: "dropped" }

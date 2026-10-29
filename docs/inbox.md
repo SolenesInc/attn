@@ -267,6 +267,12 @@ shows the sender whether their message is queued, notified or read.
 | Peer messages from one sender to one address | 8 per 30 s | `agentMessageRateLimit` | |
 | Unread peer messages per address | 50 | `agentMessageQueueCap` | |
 | Items per `attn agent inbox` | 20 by default, 50 at most | `inbox.DefaultInboxLimit`, `inbox.MaxInboxLimit` | |
+| Remembered delivery IDs per session input lane | 65,536 | `sessionmonitor.MaxPlacedDeliveries` | Over 14 times the 4,390 user records in the busiest of 10 sampled inbox recipients' transcripts (2026-10-29). The sample counts whole conversations, including direct input and tool results, across up to 23 days. |
+
+Successful deliveries keep their first receipt until the input lane resets on
+an agent reload or daemon restart. Retries with the same ID return that receipt.
+At the delivery-ID limit, new deliveries fail before being typed, naming the
+session, limit and requested count. Existing IDs still return their receipts.
 
 ## Restarts
 

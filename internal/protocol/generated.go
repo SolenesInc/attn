@@ -12364,17 +12364,11 @@ type SwitchOutcome struct {
 	// Conversation corresponds to the JSON schema field "conversation".
 	Conversation string `json:"conversation"`
 
-	// Cost corresponds to the JSON schema field "cost".
-	Cost *string `json:"cost,omitempty,omitzero"`
-
 	// Kind corresponds to the JSON schema field "kind".
 	Kind SwitchOutcomeKind `json:"kind"`
 
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
 }
 
 type SwitchOutcomeKind string
