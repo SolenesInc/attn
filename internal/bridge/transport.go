@@ -55,8 +55,8 @@ func (p *bulkPacer) close() {
 }
 
 func (p *bulkPacer) wait(ctx context.Context) error {
-	ended := make(chan struct{})
-	stop := context.AfterFunc(ctx, func() { _ = p.file.SetWriteDeadline(time.Now()); close(ended) })
+	var ended chan struct{}
+	var stop func() bool
 	var pollErr error
 	err := p.socket.Write(func(fd uintptr) bool {
 		fds := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLOUT}}
@@ -66,12 +66,19 @@ func (p *bulkPacer) wait(ctx context.Context) error {
 				break
 			}
 		}
-		return pollErr != nil || fds[0].Revents != 0
+		ready := pollErr != nil || fds[0].Revents != 0
+		if !ready && stop == nil {
+			ended = make(chan struct{})
+			stop = context.AfterFunc(ctx, func() { _ = p.file.SetWriteDeadline(time.Now()); close(ended) })
+		}
+		return ready
 	})
-	if !stop() {
-		<-ended
+	if stop != nil {
+		if !stop() {
+			<-ended
+		}
+		_ = p.file.SetWriteDeadline(time.Time{})
 	}
-	_ = p.file.SetWriteDeadline(time.Time{})
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
