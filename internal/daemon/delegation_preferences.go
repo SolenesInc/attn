@@ -224,7 +224,7 @@ func (d *Daemon) projectDelegationPreferencesChanged() {
 
 func supportsModelDiscovery(driver agentdriver.Driver) bool {
 	_, ok := driver.(agentdriver.ModelDiscoverer)
-	return ok
+	return ok || driver.Name() == nisseAgent
 }
 
 func usesDelegationPreferences(msg *protocol.DelegateMessage) bool {

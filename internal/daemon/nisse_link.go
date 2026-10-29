@@ -133,8 +133,16 @@ func (l *nisseLink) relaunch(opts *ptybackend.SpawnOptions) error {
 	return nil
 }
 
-func (l *nisseLink) resolveCaller(protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {
-	return "", "", false
+func (l *nisseLink) resolveCaller(t protocol.TerminalID) (protocol.SessionID, harness.TerminalID, bool) {
+	conversation, ok := harness.ParseNisseConversationTerminal(harness.TerminalID(t))
+	if !ok {
+		return "", "", false
+	}
+	session := l.holder(conversation)
+	if session == "" {
+		return "", "", true
+	}
+	return session, l.d.primaryTerminal(session), true
 }
 
 func (l *nisseLink) runsLink(t harness.TerminalID) bool { return t == nisseServerTerminal }
@@ -167,6 +175,39 @@ func (l *nisseLink) recoverViews(ctx context.Context) {
 			l.terminalDropped(harness.TerminalID(view.TerminalID))
 		}
 	}
+}
+
+type nisseProviderModels struct {
+	Provider string `json:"provider"`
+	Models   []struct {
+		ID          string   `json:"id"`
+		Name        string   `json:"name"`
+		Description string   `json:"description"`
+		Efforts     []string `json:"efforts"`
+	} `json:"models"`
+}
+
+func (l *nisseLink) models(ctx context.Context) ([]protocol.HarnessModel, error) {
+	c, err := l.ensureServer(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer l.releaseUnlessUsed()
+	var providers []nisseProviderModels
+	if err := c.Call(ctx, "models/list", map[string]any{}, &providers); err != nil {
+		return nil, err
+	}
+	var models []protocol.HarnessModel
+	for _, p := range providers {
+		for _, m := range p.Models {
+			effort := protocol.ModelCapabilitySupportUnsupported
+			if len(m.Efforts) > 0 {
+				effort = protocol.ModelCapabilitySupportSupported
+			}
+			models = append(models, protocol.HarnessModel{Harness: nisseAgent, Provider: p.Provider, ID: m.ID, Name: m.Name, Description: m.Description, EffortSupport: effort, EffortLevels: append([]string{}, m.Efforts...), Access: protocol.ModelCapabilitySupportUnknown})
+		}
+	}
+	return models, nil
 }
 
 func (l *nisseLink) client() *nisse.Client {
@@ -455,7 +496,9 @@ func (l *nisseLink) sessionClosed(sessionID protocol.SessionID, _ string, conver
 	}
 }
 
-func (l *nisseLink) profileReleased(string) {
+func (l *nisseLink) profileReleased(string) { l.releaseUnlessUsed() }
+
+func (l *nisseLink) releaseUnlessUsed() {
 	l.ensureMu.Lock()
 	defer l.ensureMu.Unlock()
 	if len(l.sessions()) > 0 {

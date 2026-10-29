@@ -25,6 +25,12 @@ the Sessions ledger included.
   and YOLO the launch asked for. A model pin of the form `provider/model`, such
   as `openai/gpt-5.5`, also picks the provider. YOLO starts the conversation
   without asking before calls that change things.
+- A new conversation starts with attn's instructions, as other harnesses get
+  them at launch. Nisse keeps them with the conversation, so a resumed session
+  keeps the ones it started with.
+- The model pickers list the models of every provider the Nisse server has, as
+  `provider/model`. Listing them starts the server if none runs, and attn lets
+  go of it again when no Nisse session is open.
 - attn starts the Nisse server with `nisse serve` in a terminal of its own the
   first time a session needs it, so it keeps running through app and daemon
   restarts. If a server already serves the home, for example one your own
@@ -68,9 +74,9 @@ from the Sessions ledger to open its conversation in a new tile.
 A Nisse conversation belongs to the profile whose session holds it. Resuming
 it in another profile is refused while that session is open.
 
-## Limits
+## Agents using attn
 
-- Agents running in Nisse can't use `attn` commands yet; nothing tells attn
-  which session a Nisse tool call belongs to.
-- attn adds no launch instructions to a Nisse conversation yet, and its model
-  pickers don't list Nisse's models.
+A command a Nisse agent runs, in a subagent too, carries
+`NISSE_ROOT_CONVERSATION`, and attn reads it as the session holding that
+conversation. So `attn` commands from Nisse agents act as their session, as
+they do from other harnesses.
