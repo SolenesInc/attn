@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/sessionstate"
@@ -135,7 +134,9 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 			}
 		}
 		if reload {
-			l.relaunch(opts)
+			if err := l.relaunch(opts); err != nil {
+				return nil, err
+			}
 		} else if err := l.prepareLaunch(opts, launch.Profile); err != nil {
 			return nil, err
 		}
@@ -289,20 +290,4 @@ func (d *Daemon) requireCatalogAgent(host, agent, explicit string) error {
 		}
 	}
 	return fmt.Errorf("agent %q is not available on %s", agent, catalog.Machine)
-}
-
-func (d *Daemon) machineAgentExecutable(driver agentdriver.Driver) string {
-	env := pty.MergeEnvironment(os.Environ(), d.cachedLoginShellEnv())
-	name := strings.TrimSpace(d.machineSetting(MachineSetting(executableSettingKey(driver.Name()))))
-	if name == "" {
-		name, _ = pty.LookupEnv(env, driver.ExecutableEnvVar())
-		name = strings.TrimSpace(name)
-	}
-	if name == "" {
-		name = driver.DefaultExecutable()
-	}
-	if path, ok := pty.ResolveCommandPath(name, env); ok {
-		return path
-	}
-	return name
 }

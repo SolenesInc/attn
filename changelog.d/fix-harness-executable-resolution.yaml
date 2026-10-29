@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: Agents get generated titles and correct waiting states when their harness is installed on the login-shell PATH outside the daemon's PATH.

@@ -195,7 +195,10 @@ func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile strin
 	if err != nil {
 		return err
 	}
-	installed := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	installed, err := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	if err != nil {
+		return err
+	}
 	if _, err := r.ensureServer(r.d.life.Context(), profile, installed); err != nil {
 		return err
 	}
@@ -268,7 +271,10 @@ func (r *codexShared) startServer(ctx context.Context, s *codexServer, executabl
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &files); err != nil {
 		return fmt.Errorf("read the open-file limit for the shared Codex app-server: %w", err)
 	}
-	binary := r.binary(executable)
+	binary, err := r.binary(executable)
+	if err != nil {
+		return err
+	}
 	command := append([]string{"/bin/sh", "-c", codexServerLaunchScript, "attn-codex-server", strconv.FormatUint(files.Cur, 10), binary}, r.serverArgs(s.profile, s.socket)...)
 	opts := ptybackend.SpawnOptions{
 		ID: s.terminal, Agent: codexServerAgent, Label: "Codex app-server", CWD: r.dir(), Cols: 80, Rows: 24,
@@ -856,8 +862,11 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 	return found.terminal, true
 }
 
-func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) {
-	installed := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
+	installed, err := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
+	if err != nil {
+		return err
+	}
 	r.mu.Lock()
 	v := r.views[opts.ID]
 	if v != nil {
@@ -866,7 +875,7 @@ func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) {
 	r.mu.Unlock()
 	if v == nil {
 		opts.LaunchExecutable = installed
-		return
+		return nil
 	}
 	opts.CodexRemote = "unix://" + v.socket
 	r.answerTrustIfKnown(opts)
@@ -874,6 +883,7 @@ func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) {
 		r.d.logf("shared Codex: relaunching terminal %s before its app-server answers: %v", opts.ID, err)
 	}
 	opts.LaunchExecutable = r.terminalBinary(v.profile, installed)
+	return nil
 }
 
 func (r *codexShared) terminalExited(t harness.TerminalID) {

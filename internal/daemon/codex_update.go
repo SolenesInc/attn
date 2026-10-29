@@ -35,7 +35,11 @@ func (d *Daemon) handleInstallCodexUpdate(client *wsClient, msg *protocol.Instal
 
 func (d *Daemon) installCodexUpdate(profileID, desktopID string) error {
 	r := d.codexShared()
-	command := shellQuote(r.binary("")) + " update"
+	binary, err := r.binary("")
+	if err != nil {
+		return err
+	}
+	command := shellQuote(binary) + " update"
 	shell := pty.GetUserLoginShell()
 	if !pty.ShellIntegrationExpected(shell, pty.MergeEnvironment(os.Environ(), d.cachedLoginShellEnv())) {
 		return fmt.Errorf("your shell %s gives attn no command marks, so attn can't run Codex's update and tell when it finishes; run attn codex update in a terminal instead", shell)
@@ -159,10 +163,11 @@ func (d *Daemon) handleCodexStatus(conn net.Conn, msg *protocol.CodexStatusMessa
 	if protocol.Deref(msg.Refresh) {
 		r.refreshInstalled()
 	}
+	binary, _ := r.binary("")
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, CodexStatusResult: &protocol.CodexStatusResult{
 		ProfileID:   profile.ID,
 		ProfileName: profile.Name,
-		Executable:  r.binary(""),
+		Executable:  binary,
 		SharedCodex: r.wireState(profile.ID),
 	}})
 }

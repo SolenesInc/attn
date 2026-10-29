@@ -156,8 +156,8 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingChiefContextWindowCap), scope: daemonScope, description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
 	{key: "chief_model_<harness>", scope: daemonScope, description: "Model for chief sessions. Empty uses the deep intelligence tier.", validate: func(d *Daemon, key, value string) error { return nil }},
 	{key: "chief_effort_<harness>", scope: daemonScope, description: "Reasoning effort for chief sessions. Empty uses the default effort.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: string(SettingClaudeExecutable), scope: daemonScope, description: "Executable for Claude. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
-	{key: string(SettingCodexExecutable), scope: daemonScope, description: "Executable for Codex. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
+	{key: string(SettingClaudeExecutable), scope: daemonScope, description: "Executable for Claude. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) }},
+	{key: string(SettingCodexExecutable), scope: daemonScope, description: "Executable for Codex. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) }},
 	{key: string(SettingModelTierOverrides), scope: daemonScope, description: "Models for each intelligence tier as a JSON object. Empty uses harness defaults.", validate: func(d *Daemon, key, value string) error {
 		_, err := modeltiers.ParseOverrides(value)
 		return err
@@ -279,7 +279,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingReviewerModel), scope: daemonScope, description: "Review model. Empty uses the default review model.", validate: func(d *Daemon, key, value string) error {
 		return nil
 	}},
-	{key: "<harness>_executable", scope: daemonScope, description: "Executable for this harness. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return validateExecutableSetting(value) }},
+	{key: "<harness>_executable", scope: daemonScope, description: "Executable for this harness. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) }},
 	{key: "new_session_yolo_<location>", scope: daemonScope, description: "Start sessions at this location with approval bypass: true or false. The local location uses new_session_yolo_local.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: "new_session_destination_<repository>", scope: daemonScope, description: "New session destination for a repository: new_worktree or main_repo. Use local_<absolute-path> as the suffix. Empty uses the default destination.", validate: func(d *Daemon, key, value string) error { return validateNewSessionDestination(value) }},
 	{key: "default_model_<harness>", scope: daemonScope, description: "Model for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},

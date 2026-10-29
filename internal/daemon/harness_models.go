@@ -92,6 +92,10 @@ func (d *Daemon) queryHarnessModels(harness, executable string) (harnessModelCat
 			result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
 			return result, nil
 		}
+		executable, err := d.machineAgentExecutable(driver, executable)
+		if err != nil {
+			return harnessModelCatalog{}, err
+		}
 		cwd, err := os.MkdirTemp("", "attn-model-discovery-")
 		if err != nil {
 			return harnessModelCatalog{}, err

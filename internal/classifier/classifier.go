@@ -179,11 +179,11 @@ func TruncateForLog(value string) string {
 }
 
 func resolveCodexExecutable(configuredExecutable string) string {
-	if envExecutable := strings.TrimSpace(os.Getenv("ATTN_CODEX_EXECUTABLE")); envExecutable != "" {
-		return envExecutable
-	}
 	if configuredExecutable := strings.TrimSpace(configuredExecutable); configuredExecutable != "" {
 		return configuredExecutable
+	}
+	if envExecutable := strings.TrimSpace(os.Getenv("ATTN_CODEX_EXECUTABLE")); envExecutable != "" {
+		return envExecutable
 	}
 	return defaultCodexExecutable
 }
