@@ -260,7 +260,7 @@ const (
 	slowClientCloseReason            = "client too slow"
 	maxPTYDimValue                   = 65535
 	maxPTYPixelValue                 = 65535
-	defaultWebSocketReadBytes        = 1 << 20
+	defaultWebSocketReadBytes        = protocol.MaxSocketFrameBytes
 	maxBrowserHostWebSocketReadBytes = 32 << 20
 	ptyOutputSendWait                = 1 * time.Second
 )

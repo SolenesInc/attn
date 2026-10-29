@@ -17,6 +17,9 @@ const DocSubscriptionsPerClient = 64
 
 const AgentMessageMaxChars = 32 * 1024
 
+// A 1 MiB garden body needs at most 6 MiB after JSON escaping; 8 MiB leaves room for the envelope.
+const MaxSocketFrameBytes = 8 << 20
+
 const CapabilityBrowserHost = "browser_host"
 
 const CapabilityBinaryPtyOutput = "binary_pty_output"

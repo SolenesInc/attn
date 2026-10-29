@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -212,13 +213,13 @@ func TestTheSocketAnswersOversizeMessagesWithTheirLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	go io.WriteString(conn, `{"cmd":"agent_msg","content":"`+strings.Repeat("x", 64*1024)+`"`)
+	go io.WriteString(conn, `{"cmd":"agent_msg","content":"`+strings.Repeat("x", protocol.MaxSocketFrameBytes)+`"`)
 	var answer protocol.Response
 	if err := json.NewDecoder(conn).Decode(&answer); err != nil {
 		t.Fatalf("the daemon said nothing about a frame past its limit: %v", err)
 	}
-	if answer.Ok || !strings.Contains(protocol.Deref(answer.Error), "65536") {
-		t.Errorf("a frame past the limit = %+v, want a refusal naming 65536 bytes", answer)
+	if answer.Ok || !strings.Contains(protocol.Deref(answer.Error), strconv.Itoa(protocol.MaxSocketFrameBytes)) {
+		t.Errorf("a frame past the limit = %+v, want a refusal naming %d bytes", answer, protocol.MaxSocketFrameBytes)
 	}
 }
 
