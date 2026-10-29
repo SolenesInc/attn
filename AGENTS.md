@@ -108,6 +108,16 @@ count.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
 
+## Trunk-based development
+
+attn is developed trunk-based: changes land straight on `main`, review happens
+on `main` after they land, and releases ship only reviewed, green commits.
+[Trunk-based development](docs/trunk-based-development.md) is the process.
+
+- Land with `scripts/land.sh`.
+- Rebase onto `origin/main` at the start of every step and land each slice
+  that works. Commits held back on a branch turn into conflicts.
+
 ## PR posture
 
 ### Reviewer & author
@@ -304,7 +314,9 @@ working on:
 - The inbox: addresses, rings, wakes, seed updates or notices => docs/inbox.md
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/prompt-authoring.md
-- Branches, PRs, merges, or waiting on reviews => docs/pull-requests.md
+- Landing, verifying before landing, review on main, or a red main =>
+  docs/trunk-based-development.md
+- Pull requests, or waiting on their reviews => docs/pull-requests.md
 - Release notes, releases, or hotfixes => docs/making-a-release.md
 - Installing, launching, or verifying instances => docs/instances.md
 - Checking a change live through every way into a feature => the drive-attn

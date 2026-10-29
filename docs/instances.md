@@ -45,12 +45,14 @@ New pi sessions run the checkout; driver changes (`src/`) need a daemon restart.
 ## Verification requirements
 
 Lifecycle, protocol, PTY, background-runner, timing, and other app-observable
-changes need green packaged-app CI on the PR head, with scenarios covering the
-change. Report missing coverage and ask before merging.
+changes need scenarios covering them. A pull request needs green packaged-app
+CI on its head; report missing coverage and ask before merging. A landing is
+verified locally and by `main`'s full scenario matrix after it lands; see
+[Verifying before landing](trunk-based-development.md#verifying-before-landing).
 
-CI runs the scenario matrix; run scenarios locally only to reproduce a CI
-failure or develop a scenario, in a non-production instance. Check the installed
-build first, not whatever `attn` is on `PATH`:
+CI runs the scenario matrix. Run scenarios locally, in a non-production
+instance, to check a change before landing, reproduce a CI failure, or develop
+a scenario. Check the installed build first, not whatever `attn` is on `PATH`:
 
 ```bash
 "$(./attn instance resolve --field appDaemon)" preflight

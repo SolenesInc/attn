@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[ "${ATTN_LANDING:-}" = 1 ] && exit 0
+
+while read -r _ _ remote_ref _; do
+  if [ "$remote_ref" = refs/heads/main ]; then
+    echo "Land on main with scripts/land.sh. To push past it, use git push --no-verify." >&2
+    exit 1
+  fi
+done

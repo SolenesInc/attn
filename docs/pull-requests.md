@@ -1,5 +1,8 @@
 # Pull requests
 
+Contributors working from a fork go through a pull request. Maintainers and
+their agents follow [Trunk-based development](trunk-based-development.md).
+
 Every PR branches from and targets `main`.
 
 ```bash
