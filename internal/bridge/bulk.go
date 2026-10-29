@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const BulkCredit = 512 << 10
+const BulkCredit = 1024 << 10
 const bulkAcknowledgment = "attn-consumed"
 
 type BulkStream struct {

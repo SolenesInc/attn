@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import platform
 from pathlib import Path
 import re
 import subprocess
@@ -45,10 +46,10 @@ def run(name, test, count, replacement=None, expect_failure=False):
     records.append({'name': name, 'command': command, 'exit': result.returncode, 'log': log.name})
     print(name, 'exit=' + str(result.returncode), flush=True)
     for line in log.read_text().splitlines():
-        if 'echo_max=' in line or 'MB_s_each_direction=' in line:
+        if 'echo_max=' in line or 'MB_s_each_direction=' in line or 'peak_unsent=' in line:
             print(line.strip(), flush=True)
     if expect_failure:
-        if result.returncode == 0 or 'input round trip=' not in log.read_text():
+        if result.returncode == 0 or 'max_unsent_bytes=' not in log.read_text():
             raise RuntimeError('baseline did not reproduce bounded-input failure: ' + str(log))
     elif result.returncode:
         raise RuntimeError('check failed: ' + str(log))
@@ -63,11 +64,27 @@ metadata = {
 }
 (out / 'revision.json').write_text(json.dumps(metadata, indent=2) + '\n')
 base_files = git('ls-tree', '-r', '--name-only', args.base, 'internal/bridge').decode().splitlines()
-base = overlay('base', {path: git('show', args.base + ':' + path) for path in base_files if path.endswith('.go') and not path.endswith('_test.go')})
+base_source = {path: git('show', args.base + ':' + path) for path in base_files if path.endswith('.go') and not path.endswith('_test.go')}
+transport = base_source['internal/bridge/transport.go'].decode()
+transport = transport.replace('"net"', '"net"\n\t"syscall"').replace('raw.(*net.TCPConn)', 'raw.(syscall.Conn)').replace('if !ok {', 'if !ok || raw.LocalAddr().Network() != "tcp" {')
+base_source['internal/bridge/transport.go'] = transport.encode()
+metadata['baseline_adapter'] = 'Use syscall.Conn for transparent TCP observation; retain baseline LOWAT and writes.'
+(out / 'revision.json').write_text(json.dumps(metadata, indent=2) + '\n')
+base = overlay('base', base_source)
 try:
-    run('base-latency', 'TestBulkKernelQueueLeavesCallsResponsive', 1, base, expect_failure=True)
+    run('base-queue', 'TestBulkKernelQueueIsBounded', 1, base, expect_failure=True)
+    run('head-queue', 'TestBulkKernelQueueIsBounded', 3)
+    run('base-latency', 'TestBulkKernelQueueLeavesCallsResponsive', 1, base)
     run('base-throughput', 'TestKernelBulkThroughputReceipt', 3, base)
     current = (root / 'internal/bridge/transport.go').read_text()
+    if platform.system() == 'Darwin':
+        start = current.index('func (p *bulkPacer) wait(')
+        end = current.index('func boundUnsentBytes(', start)
+        unpaced = current[:start] + 'func (p *bulkPacer) wait(ctx context.Context) error { return ctx.Err() }\n\n' + current[end:]
+        unpaced = unpaced.replace('\n\t"time"', '')
+        mutation = overlay('no-pacing', {'internal/bridge/transport.go': unpaced.encode()})
+        run('no-pacing-queue', 'TestBulkKernelQueueIsBounded', 1, mutation, expect_failure=True)
+
     for chunk in (8192, 16384, 32768):
         candidate = re.sub(r'const bulkChunkBytes = .*', 'const bulkChunkBytes = ' + str(chunk), current)
         path = overlay('chunk-' + str(chunk), {'internal/bridge/transport.go': candidate.encode()})

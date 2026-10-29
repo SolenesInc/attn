@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
-	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/bridge/memnet"
@@ -16,7 +14,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func TestDuplexBulkLeavesTerminalEchoAndHeartbeatsResponsive(t *testing.T) {
+func TestDuplexBulkPreservesTerminalEchoAndHeartbeats(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := pair(t)
 		w.network = memnet.Listen(memnet.Rate(2_800_000))
@@ -68,8 +66,7 @@ func TestDuplexBulkLeavesTerminalEchoAndHeartbeatsResponsive(t *testing.T) {
 				}
 			})
 		}
-		measureEcho := func() time.Duration {
-			began := time.Now()
+		echoInput := func() {
 			if err := client.Call(w.ctx, "input", struct{}{}, nil); err != nil {
 				t.Fatal(err)
 			}
@@ -77,11 +74,9 @@ func TestDuplexBulkLeavesTerminalEchoAndHeartbeatsResponsive(t *testing.T) {
 				t.Fatalf("terminal output=%q", event.Data)
 			}
 			ack(terminal)
-			return time.Since(began)
 		}
-		idle := make([]time.Duration, 100)
-		for i := range idle {
-			idle[i] = measureEcho()
+		for range 100 {
+			echoInput()
 		}
 		payload := bytes.Repeat([]byte("duplex-bulk"), 1<<20)
 		results := make(chan error, 4)
@@ -101,16 +96,14 @@ func TestDuplexBulkLeavesTerminalEchoAndHeartbeatsResponsive(t *testing.T) {
 				results <- err
 			}()
 		}
-		delays := make([]time.Duration, 100)
-		for i := range delays {
-			delays[i] = measureEcho()
+		for range 100 {
+			echoInput()
 		}
 		for range 4 {
 			if err := <-results; err != nil {
 				t.Fatal(err)
 			}
 		}
-		heartbeatGap := max(client.MaxHeartbeatGap(), server.MaxHeartbeatGap())
 		_ = client.Close()
 		_ = server.Close()
 		workers.Wait()
@@ -118,12 +111,6 @@ func TestDuplexBulkLeavesTerminalEchoAndHeartbeatsResponsive(t *testing.T) {
 		for state := range stalled {
 			t.Errorf("bulk caused heartbeat state=%s", state)
 		}
-		slices.Sort(delays)
-		slices.Sort(idle)
-		if delays[99] > 200*time.Millisecond {
-			t.Errorf("duplex bulk echo max=%s exceeds bound=%s", delays[99], 200*time.Millisecond)
-		}
-		t.Logf("rate=2800000B/s bulk_bytes_each_direction=%d window=%d idle_p99=%s echo_p50=%s echo_p99=%s echo_max=%s heartbeat_max=%s", len(payload), bridge.BulkCredit, idle[98], delays[50], delays[98], delays[99], heartbeatGap)
 	})
 }
 

@@ -3,9 +3,7 @@
 package bridge_test
 
 import (
-	"context"
 	"io"
-	"net"
 	"testing"
 	"time"
 
@@ -24,21 +22,7 @@ func TestKernelBulkThroughputReceipt(t *testing.T) {
 			}
 		}()
 	}}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.startOn(listener)
-	client, _, err := bridge.Dial(w.ctx, bridge.DialConfig{Address: listener.Addr().String(), Self: home, AgentSocket: "agent", DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-		if network != "tcp" {
-			return w.dialContext(ctx, network, address)
-		}
-		return (&net.Dialer{}).DialContext(ctx, network, address)
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	server := <-w.server
+	client, server := tcpPair(t, w, nil)
 	defer client.Close()
 	defer server.Close()
 	channel, requests, err := client.Open(w.ctx, "bulk", nil)

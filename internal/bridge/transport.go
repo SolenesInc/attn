@@ -21,8 +21,8 @@ type bulkPacer struct {
 }
 
 func newBulkPacer(raw net.Conn) (*bulkPacer, error) {
-	tcp, ok := raw.(*net.TCPConn)
-	if !ok {
+	tcp, ok := raw.(syscall.Conn)
+	if !ok || raw.LocalAddr().Network() != "tcp" {
 		return nil, nil
 	}
 	socket, err := tcp.SyscallConn()
@@ -89,8 +89,8 @@ func (p *bulkPacer) wait(ctx context.Context) error {
 }
 
 func boundUnsentBytes(raw net.Conn) error {
-	tcp, ok := raw.(*net.TCPConn)
-	if !ok {
+	tcp, ok := raw.(syscall.Conn)
+	if !ok || raw.LocalAddr().Network() != "tcp" {
 		return nil
 	}
 	socket, err := tcp.SyscallConn()
