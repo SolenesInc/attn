@@ -1047,33 +1047,45 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			d.sendCommandError(client, protocol.CmdSetSessionPriority, err.Error())
 		}
 	case protocol.CmdSettleTurn:
-		if err := d.handleSettleTurn(msg.(*protocol.SettleTurnMessage)); err != nil {
-			d.logf("settle rejected: %v", err)
-			if d.sessionHost(msg.(*protocol.SettleTurnMessage).SessionID) != "" {
-				d.sendCommandError(client, protocol.CmdSettleTurn, err.Error())
+		settle := msg.(*protocol.SettleTurnMessage)
+		d.inSessionOrder(client, settle.SessionID, func() {
+			if err := d.handleSettleTurn(settle); err != nil {
+				d.logf("settle rejected: %v", err)
+				if d.sessionHost(settle.SessionID) != "" {
+					d.sendCommandError(client, protocol.CmdSettleTurn, err.Error())
+				}
 			}
-		}
+		})
 	case protocol.CmdSnoozeTurn:
-		if err := d.handleSnoozeTurn(msg.(*protocol.SnoozeTurnMessage)); err != nil {
-			d.logf("snooze rejected: %v", err)
-			if d.sessionHost(msg.(*protocol.SnoozeTurnMessage).SessionID) != "" {
-				d.sendCommandError(client, protocol.CmdSnoozeTurn, err.Error())
+		snooze := msg.(*protocol.SnoozeTurnMessage)
+		d.inSessionOrder(client, snooze.SessionID, func() {
+			if err := d.handleSnoozeTurn(snooze); err != nil {
+				d.logf("snooze rejected: %v", err)
+				if d.sessionHost(snooze.SessionID) != "" {
+					d.sendCommandError(client, protocol.CmdSnoozeTurn, err.Error())
+				}
 			}
-		}
+		})
 	case protocol.CmdWakeTurn:
-		if err := d.handleWakeTurn(msg.(*protocol.WakeTurnMessage)); err != nil {
-			d.logf("unsnooze rejected: %v", err)
-			if d.sessionHost(msg.(*protocol.WakeTurnMessage).SessionID) != "" {
-				d.sendCommandError(client, protocol.CmdWakeTurn, err.Error())
+		wake := msg.(*protocol.WakeTurnMessage)
+		d.inSessionOrder(client, wake.SessionID, func() {
+			if err := d.handleWakeTurn(wake); err != nil {
+				d.logf("unsnooze rejected: %v", err)
+				if d.sessionHost(wake.SessionID) != "" {
+					d.sendCommandError(client, protocol.CmdWakeTurn, err.Error())
+				}
 			}
-		}
+		})
 	case protocol.CmdCancelCountdown:
-		if err := d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage)); err != nil {
-			d.logf("cancel countdown rejected: %v", err)
-			if d.sessionHost(msg.(*protocol.CancelCountdownMessage).SessionID) != "" {
-				d.sendCommandError(client, protocol.CmdCancelCountdown, err.Error())
+		cancel := msg.(*protocol.CancelCountdownMessage)
+		d.inSessionOrder(client, cancel.SessionID, func() {
+			if err := d.handleCancelCountdown(cancel); err != nil {
+				d.logf("cancel countdown rejected: %v", err)
+				if d.sessionHost(cancel.SessionID) != "" {
+					d.sendCommandError(client, protocol.CmdCancelCountdown, err.Error())
+				}
 			}
-		}
+		})
 
 	case protocol.CmdPRVisited:
 		d.handlePRVisitedWS(msg.(*protocol.PRVisitedMessage))
@@ -1295,7 +1307,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSeedCheck:
 		d.handleSeedCheckWS(client, msg.(*protocol.SeedCheckMessage))
 	case protocol.CmdSessionMessagesGet:
-		d.handleSessionMessagesGet(client, msg.(*protocol.SessionMessagesGetMessage))
+		messages := msg.(*protocol.SessionMessagesGetMessage)
+		d.inSessionOrder(client, messages.SessionID, func() { d.handleSessionMessagesGet(client, messages) })
 	case protocol.CmdSessionAnnotationsGet:
 		d.handleSessionAnnotationsGet(client, msg.(*protocol.SessionAnnotationsGetMessage))
 	case protocol.CmdSessionAnnotationsSave:
@@ -1303,7 +1316,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSessionAnnotationsClear:
 		d.handleSessionAnnotationsClear(client, msg.(*protocol.SessionAnnotationsClearMessage))
 	case protocol.CmdSessionAnnotationsSubmit:
-		d.handleSessionAnnotationsSubmit(client, msg.(*protocol.SessionAnnotationsSubmitMessage))
+		submit := msg.(*protocol.SessionAnnotationsSubmitMessage)
+		d.inSessionOrder(client, submit.SessionID, func() { d.handleSessionAnnotationsSubmit(client, submit) })
 	case protocol.CmdMarkdownAnnotationsGet:
 		d.handleMarkdownAnnotationsGet(client, msg.(*protocol.MarkdownAnnotationsGetMessage))
 	case protocol.CmdMarkdownAnnotationsSave:
@@ -1311,13 +1325,15 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdMarkdownAnnotationsClear:
 		d.handleMarkdownAnnotationsClear(client, msg.(*protocol.MarkdownAnnotationsClearMessage))
 	case protocol.CmdMarkdownAnnotationsSubmit:
-		d.handleMarkdownAnnotationsSubmit(client, msg.(*protocol.MarkdownAnnotationsSubmitMessage))
+		submit := msg.(*protocol.MarkdownAnnotationsSubmitMessage)
+		d.inSessionOrder(client, protocol.SessionID(protocol.Deref(submit.TargetSessionID)), func() { d.handleMarkdownAnnotationsSubmit(client, submit) })
 	case protocol.CmdCalloutResult:
 		d.handleCalloutResult(client, msg.(*protocol.CalloutResultMessage))
 	case protocol.CmdBrowserControlResult:
 		d.handleBrowserControlResult(client, msg.(*protocol.BrowserControlResultMessage))
 	case protocol.CmdRenameSession:
-		d.handleRenameSession(client, msg.(*protocol.RenameSessionMessage))
+		rename := msg.(*protocol.RenameSessionMessage)
+		d.inSessionOrder(client, rename.SessionID, func() { d.handleRenameSession(client, rename) })
 	case protocol.CmdSetChiefOfStaff:
 		d.handleSetChiefOfStaff(client, msg.(*protocol.SetChiefOfStaffMessage))
 	default:

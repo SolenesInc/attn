@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: Remote turn actions, annotations, assistant messages, renames and closes keep local typing and app updates responsive when an outpost stalls.
