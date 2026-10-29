@@ -25,6 +25,7 @@ func TestSharedCodexSeedReadsUseTheirProfileWithoutACurrentSession(t *testing.T)
 		t.Fatalf("write fixture note: %+v", got)
 	}
 	env := []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_CODEX_SHARED_PROFILE=" + home, "CODEX_THREAD_ID=unresolved-conversation"}
+	exported := seedAs(t, s, "", "export", first.ID, "--out", "-", "--profile", home)
 	for _, row := range []struct {
 		args []string
 		want string
@@ -45,7 +46,9 @@ func TestSharedCodexSeedReadsUseTheirProfileWithoutACurrentSession(t *testing.T)
 	}
 	for _, args := range [][]string{
 		{"note", first.ID, "-m", "unattributed note"},
-		{"edit", first.ID, "-m", "unattributed edit"},
+		{"edit", first.ID, "-m", strings.Replace(exported, "Home body", "unattributed edit", 1)},
+		{"rollback", first.ID},
+		{"rollback", first.ID, "--profile", home},
 		{"review", "start"},
 		{"note", first.ID, "-m", "profile alone cannot identify an author", "--profile", home},
 	} {
