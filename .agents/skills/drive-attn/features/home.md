@@ -47,7 +47,6 @@ None. What agents do shows here: their state groups them ([agent-state.md](agent
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers), launched fresh. Run the first two steps before the baseline's `bridge dismiss_whats_new`, which dismisses the intro and its banner; afterwards it changes nothing.
-- On macOS, with the app already launched, run `open -a "$(./attn instance resolve --field appPath)"` before native input. This activates only the selected instance; launching it first preserves the mock environment.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-home.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an agent folder, `A=$(mktemp -d /tmp/drive-attn-home-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
@@ -94,7 +93,7 @@ Preconditions:
 ## Gotchas
 
 - On the reused `drive-2` instance at `8ed664831`, cleaning and reinstalling did not restore the fresh intro or its replay banner. The first two steps failed their freshness precondition. The palette still opened the intro, but that does not prove automatic opening or the banner controls. Keep those steps and report them as unreached when the release was already seen.
-- A Home gear click on the parked, inactive app twice reported input delivered while Settings stayed closed. After activating the selected instance with `open -a`, the same native click opened Settings. Retain the failed receipts and activate the app before replaying this path.
+- A Home gear click on the parked, inactive app twice reported input delivered while Settings stayed closed. Activating the app made the click land, but a driver never activates the app ([README.md](README.md#in-the-app)). Report this step as unreached with its receipts.
 - Live on `drive-3` at `b292a5aa5`: clicking `[aria-label="Hide Notifications"]` leaves `bridge notifications_get_state` at `present: true`. The open popover covers the bell. The recipe's native hide fails; the palette's `Hide notifications` closes it. Close the popover before checking another control, since it also intercepts clicks on home.
 - A fresh app opens What's new over home, and it holds the palette and most keys. The baseline's `bridge dismiss_whats_new` also dismisses the replay banner, so drive the intro first or not at all on that app.
 - The baseline raises no notification; the popover reads "No notifications.". A row needs another feature's failure: a call auto mode blocks ([auto-mode.md](auto-mode.md)), a durable event-log consumer that stops reading ([diagnostics.md](diagnostics.md)), a plugin attn gives up restarting, which is the critical one ([harnesses.md](harnesses.md)), or a background task that fails for good. The read steps fail on the baseline for that reason.

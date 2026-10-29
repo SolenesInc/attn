@@ -42,7 +42,6 @@ None. Agents change what the sidebar shows without driving it: `attn session ren
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`). The baseline starts in desktop flow.
-- On macOS, with the app already launched, run `open -a "$(./attn instance resolve --field appPath)"` before native input. This activates only the selected instance; launching it first preserves the mock environment.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-sidebar.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, and an empty agent folder, `A=$(mktemp -d /tmp/drive-attn-sidebar-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`.
 - Two agents: `wsctl add-session --cwd $A --agent claude --label side-a --id side-a`, then the same with `side-b`. With no session the sidebar starts collapsed; the first agent expands it.
 
@@ -75,7 +74,7 @@ Preconditions:
 
 ## Gotchas
 
-- In the `8ed664831` run, the queue-bar pill reported native input delivered but opened no palette until the selected app was activated with `open -a`. Its keyboard entry still worked. Activate the app before judging the native click.
+- In the `8ed664831` run, the queue-bar pill reported native input delivered but opened no palette until the app was activated, which a driver never does ([README.md](README.md#in-the-app)). Its keyboard entry still worked. Report the click as unreached with its receipts.
 - The row-menu step also failed to show its popover during replay, including after activation. Keep that attempt as a finding; the successful agent-palette key does not prove the row menu.
 - Live on `drive-3` at `b292a5aa5`: the open notifications popover covers `[aria-label="Hide Notifications"]`. A native click leaves `bridge notifications_get_state` at `present: true`, so the header's hide step fails. The palette's `Hide notifications` closes it before another independent check.
 - On a fresh instance with no session, the sidebar is collapsed: the rail, or the queue bar in queue flow. It expands by itself when the first session appears, and collapses again when the last one goes. Launch an agent before judging the expanded shapes.

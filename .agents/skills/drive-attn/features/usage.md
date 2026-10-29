@@ -42,7 +42,7 @@ compacts at a budget they choose.
 Preconditions:
 
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
-- For pixel proof, run `echo 'export ATTN_HARNESS_PARK_VISIBLE_PX=0' >> "$DRIVE_ENV"`, then run `bridge --fresh-launch --wait-ready ping` from the next instance shell. This puts the app fully on screen. Use a native window capture for the receipt and terminal.
+- For pixel proof of the receipt and terminal, use `bridge capture_native_window_screenshot`: it captures the parked window without bringing it forward.
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-usage.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - An agent folder, `U=$(mktemp -d /tmp/drive-attn-usage-agent.XXXX) && echo "export U=$U" >> $DRIVE_ENV`, holding `{"version": 1, "resumable": true, "turns": [{"includes": "Measure", "actions": [{"type": "reply", "text": "Measured."}]}]}` as `$U/.attn-mock-agent.json`.
 - The agent, started and on screen: `wsctl add-session --cwd $U --agent claude --label usage-agent --id usage-agent --place`, then `bridge select_session '{"sessionId":"usage-agent"}'` for setup.
