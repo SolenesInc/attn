@@ -303,6 +303,8 @@ working on:
 - Branches, PRs, merges, or waiting on reviews => docs/pull-requests.md
 - Changelog fragments, releases, or hotfixes => docs/making-a-release.md
 - Installing, launching, or verifying instances => docs/instances.md
+- Checking a change live through every way into a feature => the drive-attn
+  skill (.agents/skills/drive-attn) and its feature map
 - Frontend code or shortcuts => app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence =>
   app/scripts/real-app-harness/AGENTS.md
