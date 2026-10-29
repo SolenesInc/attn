@@ -74,7 +74,7 @@ Preconditions:
 
 ## Gotchas
 
-- In the `8ed664831` run, the queue-bar pill reported native input delivered but opened no palette until the app was activated, which a driver never does ([README.md](README.md#in-the-app)). Its keyboard entry still worked. Report the click as unreached with its receipts.
+- In the `8ed664831` run, the queue-bar pill reported native input delivered but opened no palette until the app was activated: a gap in the bridge's native input on the parked app, not in the sidebar. Its keyboard entry still worked.
 - The row-menu step also failed to show its popover during replay, including after activation. Keep that attempt as a finding; the successful agent-palette key does not prove the row menu.
 - Live on `drive-3` at `b292a5aa5`: the open notifications popover covers `[aria-label="Hide Notifications"]`. A native click leaves `bridge notifications_get_state` at `present: true`, so the header's hide step fails. The palette's `Hide notifications` closes it before another independent check.
 - On a fresh instance with no session, the sidebar is collapsed: the rail, or the queue bar in queue flow. It expands by itself when the first session appears, and collapses again when the last one goes. Launch an agent before judging the expanded shapes.

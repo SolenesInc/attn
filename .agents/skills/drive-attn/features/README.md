@@ -122,14 +122,6 @@ In the index, "both" means people and agents.
 
 ### In the app
 
-- Never take the user's focus or bring an attn window forward: the user is
-  working on this machine. The app stays parked at the screen's edge where
-  `bridge --launch` puts it. Never run `open`, `make run`, the `menu` input,
-  scroll input or `activateApp`, and never set `ATTN_HARNESS_PARK_VISIBLE_PX`
-  or `ATTN_HARNESS_ALWAYS_ON_TOP`. `native_key`, `native_text`,
-  `native_mouse` and `capture_native_window_screenshot` work on the parked
-  window. A step that only works with focus is unreached: report it with
-  its receipts as the proof rules say, for a person to check.
 - Prefer stable handles to coordinates and tab order: shortcut ids, palette
   command ids, `aria-label` and `data-testid` values, session and seed ids.
 - Shortcuts: press the macOS binding with `bridge native_key`. The binding

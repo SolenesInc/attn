@@ -71,8 +71,7 @@ shell's environment:
 ```
 
 `--launch` starts the app with the instance shell's environment and parks
-its window at the screen's edge. Never bring it forward or take focus: the
-user is working on this machine ([features/README.md](features/README.md#in-the-app)). On macOS, `make run INSTANCE=<name>` opens
+its window at the screen's edge. On macOS, `make run INSTANCE=<name>` opens
 the app through Launch Services instead, which drops these variables. If the
 daemon started without them (the doctor shows a real agent's executable), or
 a recipe needs another variable in the daemon's environment, quit the app
