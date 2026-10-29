@@ -65,7 +65,7 @@ regenerate() {
 
 regenerated=0
 rebase_onto_main() {
-  local generators conflicted
+  local generators conflicted generator
   local -a generator_list
   regenerated=0
   git rebase --quiet origin/main >/dev/null 2>&1 || true
@@ -78,7 +78,10 @@ rebase_onto_main() {
 $conflicted
 Rebase yourself with git rebase origin/main, then run scripts/land.sh again."
     fi
-    mapfile -t generator_list <<<"$generators"
+    generator_list=()
+    while IFS= read -r generator; do
+      generator_list+=("$generator")
+    done <<<"$generators"
     regenerate "${generator_list[@]}"
     regenerated=1
     GIT_EDITOR=true git rebase --continue >/dev/null 2>&1 || true
