@@ -96,14 +96,14 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 		app, cli := w.App(), w.Client()
 		original := app.SelectedProfile()
 		registerSessions(t, w, cli, "default-worker")
-		a, err := cli.SeedPlant("default-worker", "profile boundary alpha", "Complete the assigned work.", "", "", "")
+		a, err := cli.SeedPlant("default-worker", "profile boundary alpha", "", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		side := createProfile(app, "Side")
 		selectProfile(app, side.ID)
 		registerSessions(t, w, cli, "side-worker")
-		b, err := cli.SeedPlant("side-worker", "profile boundary beta", "Complete the assigned work.", "", "", "")
+		b, err := cli.SeedPlant("side-worker", "profile boundary beta", "", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -150,7 +150,7 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 				return err
 			}},
 			{"child", func() error {
-				_, err := cross.SeedPlant("default-worker", "cross-profile child", "Complete the assigned work.", b.Seed.ID, "", "")
+				_, err := cross.SeedPlant("default-worker", "cross-profile child", "", b.Seed.ID, "", "")
 				return err
 			}},
 			{"delegate", func() error {
@@ -229,7 +229,7 @@ func TestProfileDeletionKeepsSeedsInTheirOriginalProfile(t *testing.T) {
 		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "1 open seeds") || !strings.Contains(protocol.Deref(refused.Error), "clean up") {
 			t.Fatalf("delete with open seed: %+v", refused)
 		}
-		child, err := cli.SeedPlant("side-worker", "completed archived child", "Complete the assigned work.", seed, "", "")
+		child, err := cli.SeedPlant("side-worker", "completed archived child", "", seed, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

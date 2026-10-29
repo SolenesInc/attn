@@ -50,6 +50,13 @@ func EditRecipe(id string) string {
 	return fmt.Sprintf("edit takes an exported file; run attn seed export %s, edit it, then attn seed edit %s -m - < %s.md", id, id, id)
 }
 
+func ValidateBodyEdit(body string) error {
+	if strings.TrimSpace(body) == "" {
+		return fmt.Errorf("a body edit needs nonempty text; empty or whitespace-only bodies are refused")
+	}
+	return ValidateBody(body)
+}
+
 func ParseStamped(id, text string) (body, base string, err error) {
 	line, body, found := strings.Cut(text, "\n")
 	stamp := bodyStamp.FindStringSubmatch(strings.TrimSuffix(line, "\r"))
@@ -59,7 +66,7 @@ func ParseStamped(id, text string) (body, base string, err error) {
 	if stamp[1] != id {
 		return "", "", fmt.Errorf("this export belongs to %s, not %s; %s", stamp[1], id, EditRecipe(id))
 	}
-	if err := ValidateBody(body); err != nil {
+	if err := ValidateBodyEdit(body); err != nil {
 		return "", "", err
 	}
 	return body, stamp[2], nil

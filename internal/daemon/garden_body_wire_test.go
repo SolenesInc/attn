@@ -105,3 +105,55 @@ func TestSeedBodyEditsRefuseLostWritesAndKeepRollbackHistory(t *testing.T) {
 		t.Fatalf("edit notes missing from JSON: %s", encoded)
 	}
 }
+
+func TestASeedCanStartEmptyButEditsAndRollbackCannotClearIt(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	planted, err := cli.SeedPlant("", "Start with a title", "", "", "", "")
+	if err != nil || planted.Seed.Body != "" {
+		t.Fatalf("bodyless planting: %+v, %v", planted, err)
+	}
+	id := planted.Seed.ID
+	edited, err := cli.SeedEdit(id, "The agreed task.", garden.BodySHA256(""), "fill in the task")
+	if err != nil || edited.BodyVersion != 2 {
+		t.Fatalf("first edit: %+v, %v", edited, err)
+	}
+	if _, err := cli.SeedRollback(id, nil); err == nil || !strings.Contains(err.Error(), "nonempty") {
+		t.Fatalf("rollback to an empty body: %v", err)
+	}
+	if shown := lifeShow(t, cli, id).Seed; shown.Body != edited.Seed.Body || shown.Rev != edited.Seed.Rev {
+		t.Fatalf("refused rollback changed the seed: %+v", shown)
+	}
+	notes, err := cli.SeedNotes("", id, 0)
+	if err != nil || notes.Total != 1 {
+		t.Fatalf("refused rollback changed the log: %+v, %v", notes, err)
+	}
+}
+
+func TestCrewBodyEditsAndRollbacksNameTheirMember(t *testing.T) {
+	w := newCrewWorld(t)
+	if err := w.InjectCrewSession("editor", "Editor", w.Path("editor"), "keel"); err != nil {
+		t.Fatal(err)
+	}
+	cli := w.Client().WithGardenProfile("", "editor")
+	planted, err := cli.SeedPlant("editor", "Member edits", "First body.", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := planted.Seed.ID
+	if _, err := cli.SeedEdit(id, "Second body.", garden.BodySHA256(planted.Seed.Body), "revise"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.SeedRollback(id, nil); err != nil {
+		t.Fatal(err)
+	}
+	notes, err := cli.SeedNotes("editor", id, 0)
+	if err != nil || notes.Total != 2 {
+		t.Fatalf("edit log: %+v, %v", notes, err)
+	}
+	for _, note := range notes.Notes {
+		if note.Kind != garden.NoteKindEdit || note.AuthorMember != "keel" || note.AuthorSession != "editor" {
+			t.Fatalf("member edit attribution: %+v", note)
+		}
+	}
+}

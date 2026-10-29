@@ -17,15 +17,13 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func plant(t *testing.T, s *testworld.Stack, title string, args ...string) protocol.Seed {
 	t.Helper()
-	if !slices.Contains(args, "-m") {
-		args = append(args, "-m", "Complete the assigned work.")
-	}
 	var seed protocol.Seed
 	s.Attn(append([]string{"seed", "plant", title, "--json"}, args...)...).JSON(t, &seed)
 	return seed
@@ -152,8 +150,10 @@ func TestEmptySeedMessageStdinCannotEraseABody(t *testing.T) {
 		{"seed", "plant", "Empty body", "-m", ""},
 		{"seed", "plant", "Missing body"},
 	} {
-		if ran := s.Attn(args...); ran.Code == 0 || !strings.Contains(ran.Stderr, "nonempty body") {
-			t.Fatalf("empty planting was not refused: %+v", ran)
+		var planted protocol.Seed
+		s.Attn(append(args, "--json")...).JSON(t, &planted)
+		if planted.Body != "" {
+			t.Fatalf("bodyless planting got %q", planted.Body)
 		}
 	}
 }
@@ -212,6 +212,38 @@ p.write_bytes(p.read_bytes().replace(b"Change this", b"Changed this"))
 	}
 }
 
+func TestARollbackLosingARaceAsksToRetryTheRollback(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	read := s.PauseAt(pausepoint.SeedRollbackRead)
+	s.Start()
+	seed := plant(t, s, "Rollback race", "-m", "first")
+	edit := func(before, after string) {
+		t.Helper()
+		exported := seedAs(t, s, "", "export", seed.ID, "--out", "-")
+		ran := s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-"}, Stdin: strings.Replace(exported, "\n"+before, "\n"+after, 1)})
+		if ran.Code != 0 {
+			t.Fatalf("edit: %+v", ran)
+		}
+	}
+	edit("first", "second")
+	rollback := s.Launch(testworld.Invocation{Args: []string{"seed", "rollback", seed.ID, "1"}})
+	read.Await()
+	edit("second", "third")
+	read.Release()
+	refused := rollback.Wait()
+	if refused.Code == 0 || !strings.Contains(refused.Stderr, "run attn seed rollback "+seed.ID+" 1 again") || strings.Contains(refused.Stderr, "export") {
+		t.Fatalf("rollback conflict advice: %+v", refused)
+	}
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "third" {
+		t.Fatalf("rollback lost the newer body: %q", got)
+	}
+	seedAs(t, s, "", "rollback", seed.ID, "1")
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "first" {
+		t.Fatalf("retried rollback restored %q", got)
+	}
+}
+
 func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
@@ -254,8 +286,8 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	app := s.App()
 
 	t.Run("listings nest children under their plot and ready lists pickups", func(t *testing.T) {
-		first := plantPlot(t, s, `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"First child"}],"title":"First plot"}`)
-		second := plantPlot(t, s, `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"Second child"}],"title":"Second plot"}`)
+		first := plantPlot(t, s, `{"title": "First plot", "children": [{"title": "First child"}]}`)
+		second := plantPlot(t, s, `{"title": "Second plot", "children": [{"title": "Second child"}]}`)
 		loose := plant(t, s, "Loose seed")
 
 		nested := seedAs(t, s, "", "ls")
@@ -285,7 +317,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		}
 		requireLines(t, "ready", ready, "\n3 ready in the garden — `attn seed tend <id>` claims one\n")
 
-		found := s.Attn("seed", "plant", "Fix the leak", "-m", "Fix the discovered leak.", "--discovered-from", loose.ID)
+		found := s.Attn("seed", "plant", "Fix the leak", "--discovered-from", loose.ID)
 		requireStdout(t, found, " Fix the leak\n")
 		id, _, _ := strings.Cut(found.Stdout, " ")
 		if edges := showSeed(t, s, "", id).Seed.Edges; !slices.Contains(edges, protocol.SeedEdge{Kind: "discovered-from", To: loose.ID}) {
@@ -388,7 +420,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	})
 
 	t.Run("closing a seed names what it freed and what it stranded", func(t *testing.T) {
-		house := plantPlot(t, s, `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"Scrape the walls"},{"body":"Complete the assigned work.","title":"Prime the walls"},{"body":"Complete the assigned work.","title":"Paint the walls"}],"title":"Paint the house"}`)
+		house := plantPlot(t, s, `{"title": "Paint the house", "children": [{"title": "Scrape the walls"}, {"title": "Prime the walls"}, {"title": "Paint the walls"}]}`)
 		scrape, prime, paint := house.Children[0], house.Children[1], house.Children[2]
 		scraped := seedAs(t, s, "", "harvest", scrape.ID, "-m", "scraped")
 		requireLines(t, "harvest", scraped, scrape.ID+" ("+scrape.StepSlug+") is harvested — scraped\n")
@@ -399,7 +431,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		requireLines(t, "harvest", closed, house.Crown.ID+" ("+house.Crown.StepSlug+") is harvested — good enough\n",
 			"its plot still holds 1 open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n")
 
-		shed := plantPlot(t, s, `{"body":"Complete the assigned work.","children":[{"body":"Complete the assigned work.","title":"Pour the slab"}],"title":"Build the shed"}`)
+		shed := plantPlot(t, s, `{"title": "Build the shed", "children": [{"title": "Pour the slab"}]}`)
 		poured := seedAs(t, s, "", "harvest", shed.Children[0].ID, "-m", "poured")
 		built := seedAs(t, s, "", "harvest", shed.Crown.ID, "-m", "built")
 		for _, out := range []string{scraped, tendedPlot, poured, built} {
@@ -539,7 +571,8 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	})
 
 	t.Run("checks print where each stands, from a move to a harvest", func(t *testing.T) {
-		plot := plantPlot(t, s, `{"body":"Complete the assigned work.","checks":[{"id":"C5","shared":true,"text":"CI is green."}],"children":[{"body":"Complete the assigned work.","checks":[{"id":"C1","text":"Wire tests pass."}],"title":"Checked child"}],"title":"Checked plot"}`)
+		plot := plantPlot(t, s, `{"title": "Checked plot", "checks": [{"id": "C5", "text": "CI is green.", "shared": true}],
+			"children": [{"title": "Checked child", "checks": [{"id": "C1", "text": "Wire tests pass."}]}]}`)
 		child := plot.Children[0].ID
 		loose := plant(t, s, "Checked seed", "--check", "C2=It works.")
 		requireLines(t, "show", seedAs(t, s, "", "show", loose.ID), "\nchecks  0 of 1 confirmed · 1 open\n  C2  open\n      It works.\n")

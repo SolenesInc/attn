@@ -36,7 +36,7 @@ func TestTheSynchronousClientNamesOversizeFramesBeforeSending(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client().WithCaller("")
 	body := strings.Repeat("<", garden.MaxBodyBytes)
-	msg := protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."),
+	msg := protocol.SeedPlotMessage{
 		Cmd: protocol.CmdSeedPlot, Title: "oversize plot",
 		Children: []protocol.SeedPlotChild{{Title: "one", Body: &body}, {Title: "two", Body: &body}},
 	}
@@ -72,7 +72,7 @@ func TestTheSynchronousClientReadsTheReplyAfterAWriteFailure(t *testing.T) {
 			conn, err := w.DialUnix()
 			return socketWriteFailure{conn}, err
 		})
-		planted, err := cli.SeedPlant("", "reply survives write failure", "Complete the assigned work.", "", "", "")
+		planted, err := cli.SeedPlant("", "reply survives write failure", "", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

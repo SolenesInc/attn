@@ -16,7 +16,7 @@ func TestOpenSeedDocksBesideTheCallerAndBindsItsTender(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, desktop := setupAgentDesktopOn(t, d)
 	injectTestSession(t, d, protocol.Session{ID: "sess-a", Label: "tender", Directory: t.TempDir()})
-	seed := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."), SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "Read me"})
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "Read me"})
 	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
 
 	gotDesktop, tileID, err := d.openSeedTile(seed.ID, "session-1", false)
@@ -41,7 +41,7 @@ func TestOpenSeedDocksBesideTheCallerAndBindsItsTender(t *testing.T) {
 func TestAStandaloneSeedOpensOnTheCurrentDesktopWithoutBindingTheFocusedAgent(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, desktop := setupAgentDesktopOn(t, d)
-	seed := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "Read from Crew"})
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Read from Crew"})
 
 	gotDesktop, tileID, err := d.openSeedTile(seed.ID, "", true)
 	if err != nil {
@@ -74,8 +74,8 @@ func TestAStandaloneSeedOpensOnTheCurrentDesktopWithoutBindingTheFocusedAgent(t 
 func TestReopeningASeedResetsItsTileNavigatedToAnotherSeed(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, desktop := setupAgentDesktopOn(t, d)
-	first := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "First"})
-	second := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "Second"})
+	first := plant(t, d, protocol.SeedPlantMessage{Title: "First"})
+	second := plant(t, d, protocol.SeedPlantMessage{Title: "Second"})
 	_, tileID, err := d.openSeedTile(first.ID, "", true)
 	if err != nil {
 		t.Fatalf("open first seed: %v", err)
@@ -97,7 +97,7 @@ func TestReopeningASeedResetsItsTileNavigatedToAnotherSeed(t *testing.T) {
 func TestOpenSeedWSStandaloneDoesNotBindTheFocusedAgent(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, desktop := setupAgentDesktopOn(t, d)
-	seed := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "Open for an asleep member"})
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Open for an asleep member"})
 	client := &wsClient{send: make(chan outboundMessage, 1)}
 	d.handleOpenSeedWS(client, &protocol.OpenSeedMessage{
 		Cmd: protocol.CmdOpenSeed, SeedID: seed.ID, Standalone: protocol.Ptr(true), RequestID: protocol.Ptr("open-standalone"),
@@ -119,7 +119,7 @@ func TestOpeningASeedWhoseTenderClosedBindsTheOpener(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, desktop := setupAgentDesktopOn(t, d)
 	injectTestSession(t, d, protocol.Session{ID: "sess-a", Label: "tender", Directory: t.TempDir()})
-	seed := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."), SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "Left growing"})
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "Left growing"})
 	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
 	if _, err := d.store.CloseSession("sess-a", store.SessionClose{}, time.Now()); err != nil {
 		t.Fatal(err)

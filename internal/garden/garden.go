@@ -193,9 +193,6 @@ func ValidatePlant(title, body string) error {
 }
 
 func ValidateBody(body string) error {
-	if strings.TrimSpace(body) == "" {
-		return fmt.Errorf("a seed needs a nonempty body; empty or whitespace-only bodies are refused")
-	}
 	if n := len(body); n > MaxBodyBytes {
 		return fmt.Errorf("max_body_bytes=%d, asked for %d; a seed's body is a plan, not an archive", MaxBodyBytes, n)
 	}

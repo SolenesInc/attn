@@ -87,7 +87,7 @@ type seedVerb struct {
 }
 
 var seedVerbs = []seedVerb{
-	{`plant`, `plant "<title>" -m <body> [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
+	{`plant`, `plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
 if the seed gains children, that body is the plot's plan. --part-of
 plants it under a plot. --check defines what the seed must prove.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}, false},
 	{`plot`, `plot [-f <path>] [--json]`, `plant a whole plot in one move from a JSON payload (-f, or stdin):

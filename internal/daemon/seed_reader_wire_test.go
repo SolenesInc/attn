@@ -21,11 +21,11 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := cli.SeedPlant(protocol.SessionID(tender.session), "Child", "Complete the assigned work.", crown.Seed.ID, "", "")
+	child, err := cli.SeedPlant(protocol.SessionID(tender.session), "Child", "", crown.Seed.ID, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := cli.SeedPlant(protocol.SessionID(tender.session), "Grandchild", "Complete the assigned work.", child.Seed.ID, "", ""); err != nil {
+	if _, err := cli.SeedPlant(protocol.SessionID(tender.session), "Grandchild", "", child.Seed.ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := cli.SeedNote(protocol.SessionID(tender.session), crown.Seed.ID, "reader log entry", "", "", false, nil); err != nil {
@@ -142,7 +142,7 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 func TestAnnotationDraftsFollowTheirTypedDocumentSource(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	planted, err := cli.SeedPlant("", "Annotated seed", "Complete the assigned work.", "", "", "")
+	planted, err := cli.SeedPlant("", "Annotated seed", "", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -154,7 +154,7 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 		t.Fatal(err)
 	}
 	crown := plot.Seed.ID
-	inside, err := cli.SeedPlant(protocol.SessionID(planner), "inside", "Complete the assigned work.", crown, "", "")
+	inside, err := cli.SeedPlant(protocol.SessionID(planner), "inside", "", crown, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,11 +193,11 @@ func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 func TestReadyScopesToAPlotAndListsPlotsBeforeLooseSeeds(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
-	firstPlot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "first plot", Children: []protocol.SeedPlotChild{{Body: protocol.Ptr("Complete the assigned work."), Title: "first child"}}})
+	firstPlot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Title: "first plot", Children: []protocol.SeedPlotChild{{Title: "first child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPlot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "second plot", Children: []protocol.SeedPlotChild{{Body: protocol.Ptr("Complete the assigned work."), Title: "second child"}}})
+	secondPlot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Title: "second plot", Children: []protocol.SeedPlotChild{{Title: "second child"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func TestReadyScopesToAPlotAndListsPlotsBeforeLooseSeeds(t *testing.T) {
 		t.Errorf("ready --all seeds = %v, want %v", got, want)
 	}
 
-	deeper, err := cli.SeedPlant("", "deeper", "Complete the assigned work.", firstPlot.Children[0].ID, "", "")
+	deeper, err := cli.SeedPlant("", "deeper", "", firstPlot.Children[0].ID, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

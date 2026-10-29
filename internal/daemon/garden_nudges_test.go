@@ -20,11 +20,11 @@ func newSeededNudgeGarden(t *testing.T) seededNudgeGarden {
 	addGardenSession(t, d, "sess-b")
 	addGardenSession(t, d, "sess-c")
 	addGardenSession(t, d, "sess-d")
-	crown := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."), SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "ship seed nudges"})
-	child := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."),
+	crown := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "ship seed nudges"})
+	child := plant(t, d, protocol.SeedPlantMessage{
 		SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "daemon mechanics", PartOf: protocol.Ptr(crown.ID),
 	})
-	leaf := plant(t, d, protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."),
+	leaf := plant(t, d, protocol.SeedPlantMessage{
 		SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "delivery proof", PartOf: protocol.Ptr(child.ID),
 	})
 	return seededNudgeGarden{d: d, crown: crown, child: child, leaf: leaf}

@@ -34,7 +34,7 @@ EDITING A BODY
 Export the body, edit the file with any tool, then submit it:
 
     attn seed export s-7k3f9m
-    # edit s-7k3f9m; keep its first line
+    # edit s-7k3f9m.md; keep its first line
     attn seed edit s-7k3f9m -m - --note "what changed" < s-7k3f9m.md
 
 The stamp names the seed and its body hash. If another edit changed the body,
@@ -93,7 +93,7 @@ The endpoint child records a contract that the app child needs before starting.
 The plot's C3 is shared, so each child proves it with its own report. Each child's `blocks` array names the siblings that wait for it. Use the sibling's
 slug or full title. Pass `-` instead of a file to read the payload from stdin.
 
-    attn seed plant "..." -m "..." --part-of <plot>   add another child
+    attn seed plant "..." --part-of <plot>   add another child
     attn open <plot>                        read the rendered plan
 
 Before planting or delegating, read each body with its named references as a

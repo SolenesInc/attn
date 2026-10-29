@@ -27,6 +27,7 @@ const (
 	PtyWaitBlock      = "pty-wait-block"
 	BusAnnounce       = "bus-announce"
 	BusEventHandled   = "bus-event-handled"
+	SeedRollbackRead  = "seed-rollback-read"
 
 	DaemonEnrollmentLoaded     = "daemon-enrollment-loaded"
 	DaemonStartupRecovery      = "daemon-startup-recovery"

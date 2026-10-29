@@ -24,7 +24,7 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "shipper")
 		url := github.open(71, "Ship the daemon")
-		planted, err := cli.SeedPlant("shipper", "ship the daemon", "Complete the assigned work.", "", "", "")
+		planted, err := cli.SeedPlant("shipper", "ship the daemon", "", "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -126,7 +126,7 @@ func TestPlotProgressCountsEveryCheckOnceByState(t *testing.T) {
 		if progress == nil || progress.Checks == nil || *progress.Checks != want {
 			t.Errorf("plot progress = %+v, want checks %+v", progress, want)
 		}
-		plain, err := cli.SeedPlot(protocol.SessionID(sessions["planner"]), "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."), Title: "no checks", Children: []protocol.SeedPlotChild{{Body: protocol.Ptr("Complete the assigned work."), Title: "a"}}})
+		plain, err := cli.SeedPlot(protocol.SessionID(sessions["planner"]), "", protocol.SeedPlotMessage{Title: "no checks", Children: []protocol.SeedPlotChild{{Title: "a"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -148,13 +148,13 @@ func TestACheckIDNamesOneStatementInAPlotTree(t *testing.T) {
 		_, err := cli.SeedCheck(add)
 		lifeRefusal(t, "adding an id another seed of the plot uses", err, "C1", plot.Children[0].ID)
 
-		_, err = cli.SeedPlantMessage(protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."),
+		_, err = cli.SeedPlantMessage(protocol.SeedPlantMessage{
 			Title: "late child", PartOf: protocol.Ptr(plot.Crown.ID),
 			Checks: []protocol.SeedCheckDefinition{{ID: "C6", Text: "again"}},
 		})
 		lifeRefusal(t, "planting into the plot with a used id", err, "C6", plot.Crown.ID)
 
-		loose, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."),
+		loose, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
 			Title: "loose seed", Checks: []protocol.SeedCheckDefinition{{ID: "C2", Text: "repeats the app child"}},
 		})
 		if err != nil {
@@ -353,15 +353,15 @@ func spawnCheckSessions(w *world, app *testworld.Peer, names ...string) map[stri
 
 func checksPlot(t *testing.T, cli *client.Client, planner string) *protocol.SeedPlotResult {
 	t.Helper()
-	planted, err := cli.SeedPlot(protocol.SessionID(planner), "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."),
+	planted, err := cli.SeedPlot(protocol.SessionID(planner), "", protocol.SeedPlotMessage{
 		Title: "search moves to the daemon",
 		Checks: []protocol.SeedCheckDefinition{
 			{ID: "C5", Text: "The pull request is green on CI.", Shared: protocol.Ptr(true)},
 			{ID: "C6", Text: "Search behaves the same in the packaged app."},
 		},
 		Children: []protocol.SeedPlotChild{
-			{Body: protocol.Ptr("Complete the assigned work."), Title: "daemon search endpoint", Checks: []protocol.SeedCheckDefinition{{ID: "C1", Text: "Wire tests cover the queries."}}},
-			{Body: protocol.Ptr("Complete the assigned work."), Title: "app calls the endpoint", Checks: []protocol.SeedCheckDefinition{{ID: "C2", Text: "No stale results."}}},
+			{Title: "daemon search endpoint", Checks: []protocol.SeedCheckDefinition{{ID: "C1", Text: "Wire tests cover the queries."}}},
+			{Title: "app calls the endpoint", Checks: []protocol.SeedCheckDefinition{{ID: "C2", Text: "No stale results."}}},
 		},
 	})
 	if err != nil {
@@ -451,7 +451,7 @@ func TestAnInheritedResultAnswersOnlyThePlotThatDefinedIt(t *testing.T) {
 		leaf := first.Children[1].ID
 		checkMoveOK(t, cli, checkMove(leaf, "C5", "confirm", "seen it"))
 
-		other, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{Body: protocol.Ptr("Complete the assigned work."),
+		other, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
 			Title: "another plot", Checks: []protocol.SeedCheckDefinition{{ID: "C5", Text: "A different statement.", Shared: protocol.Ptr(true)}},
 		})
 		if err != nil {

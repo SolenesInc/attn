@@ -216,7 +216,7 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 		"agent msg: ", `the sender "ghost"`)
 
 	var seed protocol.Seed
-	s.Run(testworld.Invocation{Args: []string{"seed", "plant", "sweep the stale branches", "-m", "Sweep the stale branches.", "--json"}, Session: desk}).JSON(t, &seed)
+	s.Run(testworld.Invocation{Args: []string{"seed", "plant", "sweep the stale branches", "--json"}, Session: desk}).JSON(t, &seed)
 	if tend := s.Run(testworld.Invocation{Args: []string{"seed", "tend", seed.ID}, Session: desk}); tend.Code != 0 {
 		t.Fatalf("tend exited %d: %s", tend.Code, tend.Stderr)
 	}

@@ -641,7 +641,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	}
 	plant := func(title, partOf string) string {
 		t.Helper()
-		planted, err := cli.SeedPlant("planter", title, "Complete the assigned work.", partOf, "", "")
+		planted, err := cli.SeedPlant("planter", title, "", partOf, "", "")
 		if err != nil {
 			t.Fatalf("plant %q: %v", title, err)
 		}

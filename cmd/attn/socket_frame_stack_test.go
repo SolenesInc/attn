@@ -25,7 +25,7 @@ func TestLargeSeedEditsAndEscapedVentsCrossTheOutpostBridge(t *testing.T) {
 	agent.Prompted()
 	terminal := pair.App.Terminal(source)
 	var seed protocol.Seed
-	created := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"seed", "plant", "large remote body", "-m", "Original body.", "--json"}})
+	created := outpost.Run(testworld.Invocation{Terminal: terminal, Args: []string{"seed", "plant", "large remote body", "--json"}})
 	if created.Code != 0 {
 		t.Fatalf("plant from outpost: %s", created.Stderr)
 	}

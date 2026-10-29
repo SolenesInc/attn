@@ -32,7 +32,7 @@ const PLOT = {
   children: [
     { title: 'First parallel step', body: 'Nothing holds this one.', blocks: ['sequenced-step'] },
     { title: 'Second parallel step', body: 'Nothing holds this one either.' },
-    { title: 'The sequenced step', body: 'Start after its blockers finish.' },
+    { title: 'The sequenced step' },
   ],
 };
 
@@ -233,7 +233,7 @@ async function main() {
 
     await runner.step('dispatch_is_scope_and_not_a_fence', async () => {
       const outside = await runInPane(client, pane,
-        `attn seed plant "Work outside the plot" -m "Work independently of the plot." --session ${pane.sessionId}`, 's-');
+        `attn seed plant "Work outside the plot" --session ${pane.sessionId}`, 's-');
       strayID = seedIDs(outside).pop();
       const all = await runInPane(client, pane,
         `attn seed ready --all --session ${delegated}`, 'ready in the garden');

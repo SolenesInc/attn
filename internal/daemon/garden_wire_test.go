@@ -40,7 +40,7 @@ func TestEverySeedMoveReachesTheAppAsOneGardenPush(t *testing.T) {
 		if push := pushed("planting"); len(push.Seeds) != 1 || push.Seeds[0].ID != plot || protocol.Deref(push.Total) != 1 {
 			t.Fatalf("the planting pushed %d seeds of %d, want the new seed alone", len(push.Seeds), protocol.Deref(push.Total))
 		}
-		planted, err := cli.SeedPlant("gardener", "live a life", "Complete the assigned work.", plot, "", "")
+		planted, err := cli.SeedPlant("gardener", "live a life", "", plot, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -266,11 +266,11 @@ func TestSeedRefusalsNameWhatIsWrongAndChangeNothing(t *testing.T) {
 			return err
 		}, []string{"s-zzzzzz"}},
 		{"an empty title", func() error {
-			_, err := cli.SeedPlant("", "   ", "Complete the assigned work.", "", "", "")
+			_, err := cli.SeedPlant("", "   ", "", "", "", "")
 			return err
 		}, []string{"attn seed plant"}},
 		{"an over-long title", func() error {
-			_, err := cli.SeedPlant("", strings.Repeat("x", garden.MaxTitleChars+1), "Complete the assigned work.", "", "", "")
+			_, err := cli.SeedPlant("", strings.Repeat("x", garden.MaxTitleChars+1), "", "", "", "")
 			return err
 		}, []string{"401", "400"}},
 		{"a note past the limit", func() error {
@@ -336,6 +336,7 @@ func TestEditingASeedChangesOnlyItsBody(t *testing.T) {
 	if got := lifeShow(t, cli, before.ID).Seed; got.Body != after.Body || got.Rev != after.Rev {
 		t.Fatalf("empty edit changed the seed: %+v", got)
 	}
+
 }
 
 func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
@@ -374,14 +375,14 @@ func TestAPlantedSeedRoundTripsThroughListAndShow(t *testing.T) {
 		t.Errorf("the schema is not whole on a fresh seed: %+v", shown)
 	}
 
-	found, err := cli.SeedPlant("", "the follow-up", "Complete the assigned work.", "", planted.ID, "")
+	found, err := cli.SeedPlant("", "the follow-up", "", "", planted.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if edges := found.Seed.Edges; len(edges) != 1 || edges[0].Kind != "discovered-from" || edges[0].To != planted.ID {
 		t.Errorf("a seed planted discovered from another has edges %+v", edges)
 	}
-	_, err = cli.SeedPlant("", "must not land", "Complete the assigned work.", "", "s-miss11", "")
+	_, err = cli.SeedPlant("", "must not land", "", "", "s-miss11", "")
 	lifeRefusal(t, "planting from an unknown origin", err, "s-miss11")
 	if listed, err := cli.SeedList("", false, 0); err != nil || listed.Total != 3 {
 		t.Errorf("after the refused planting the garden holds %+v (%v), want 3 seeds", listed, err)
@@ -417,8 +418,8 @@ func TestEverySeedASessionTendsRemembersWhereItRan(t *testing.T) {
 	cwd := w.Path("shop")
 	worker := w.Spawn(app, fakeagent.Claude, cwd)
 	w.Launched(worker)
-	plot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{Body: protocol.Ptr("Complete the assigned work."),
-		Title: "the plot", Children: []protocol.SeedPlotChild{{Body: protocol.Ptr("Complete the assigned work."), Title: "first"}, {Body: protocol.Ptr("Complete the assigned work."), Title: "second"}},
+	plot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{
+		Title: "the plot", Children: []protocol.SeedPlotChild{{Title: "first"}, {Title: "second"}},
 	})
 	if err != nil {
 		t.Fatal(err)

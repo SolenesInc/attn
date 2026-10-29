@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -9,9 +10,14 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
+
+type seedBodyConflictError string
+
+func (e seedBodyConflictError) Error() string { return string(e) }
 
 func (d *Daemon) bodyVersionsCollection() (*docstore.CollectionSchema, error) {
 	return d.collectionFor(garden.Namespace, garden.CollectionBodyVersions)
@@ -32,6 +38,10 @@ func (d *Daemon) latestSeedBodyVersion(id string) (garden.BodyVersion, error) {
 func (d *Daemon) handleSeedEdit(conn net.Conn, msg *protocol.SeedEditMessage) {
 	result, err := d.applySeedBodyEdit(msg)
 	if err != nil {
+		var conflict seedBodyConflictError
+		if errors.As(err, &conflict) {
+			err = fmt.Errorf("%w; run attn seed export %s and reapply your change", err, msg.SeedID)
+		}
 		d.sendGardenError(conn, "edit", err)
 		return
 	}
@@ -79,11 +89,20 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 	if err != nil {
 		return nil, err
 	}
+	pausepoint.At(pausepoint.SeedRollbackRead)
 	edit, err := d.applySeedBodyEdit(&protocol.SeedEditMessage{
 		SeedID: seed.ID, Body: target.Body, BaseBodySHA256: garden.BodySHA256(seed.Body),
 		SourceSessionID: msg.SourceSessionID, Note: protocol.Ptr(fmt.Sprintf("rollback to v%d", version)),
 	})
 	if err != nil {
+		var conflict seedBodyConflictError
+		if errors.As(err, &conflict) {
+			retry := fmt.Sprintf("attn seed rollback %s", seed.ID)
+			if msg.Version != nil {
+				retry += fmt.Sprintf(" %d", *msg.Version)
+			}
+			return nil, fmt.Errorf("%w; run %s again", err, retry)
+		}
 		return nil, err
 	}
 	return &protocol.SeedRollbackResult{
@@ -93,7 +112,7 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 }
 
 func (d *Daemon) applySeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.SeedEditResult, error) {
-	if err := garden.ValidateBody(msg.Body); err != nil {
+	if err := garden.ValidateBodyEdit(msg.Body); err != nil {
 		return nil, err
 	}
 	var result *protocol.SeedEditResult
@@ -125,7 +144,7 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 			return nil, err
 		}
 		if msg.BaseBodySHA256 != garden.BodySHA256(seed.Body) {
-			return nil, fmt.Errorf("%s's body changed since this export; run attn seed export %s and reapply your change", seed.ID, seed.ID)
+			return nil, seedBodyConflictError(fmt.Sprintf("%s's body changed before it could be saved", seed.ID))
 		}
 		latest, err := d.latestSeedBodyVersion(seed.ID)
 		if err != nil {
@@ -153,6 +172,7 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 			Body:          fmt.Sprintf("body v%d: %d → %d bytes", version.Version, previousBytes, len(msg.Body)),
 			AuthorSession: protocol.TrimID(protocol.Deref(msg.SourceSessionID)),
 		}
+		note.AuthorMember = d.resolveTenderMember("", note.AuthorSession)
 		if text := strings.Join(strings.Fields(protocol.Deref(msg.Note)), " "); text != "" {
 			note.Body += " — " + text
 		}
@@ -206,5 +226,5 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 			PreviousBytes: previousBytes, NewBytes: len(msg.Body),
 		}, nil
 	}
-	return nil, fmt.Errorf("%s changed during all %d attempts to edit it; run attn seed export %s and reapply your change", msg.SeedID, attempts, msg.SeedID)
+	return nil, seedBodyConflictError(fmt.Sprintf("%s changed during all %d attempts to edit it", msg.SeedID, attempts))
 }
