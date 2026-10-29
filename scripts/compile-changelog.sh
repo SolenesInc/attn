@@ -57,7 +57,7 @@ if [[ "$TOP_DATE" == "$TODAY" ]]; then
 fi
 
 PROMPT="You are writing the changelog for attn, a macOS app that orchestrates
-coding agents. Below are raw changelog fragments, one per merged PR, written by
+coding agents. Below are raw changelog fragments, one per change, written by
 the engineers who shipped each change. Compile them into one dated CHANGELOG.md
 section.
 

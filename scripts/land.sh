@@ -95,7 +95,7 @@ run_checks() {
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(lint-frontend test-frontend)
   touches '^scripts/' && targets+=(test-scripts)
-  ./scripts/changelog-gate.sh main
+  go run ./cmd/changelog-check
   if [ "${#targets[@]}" -gt 0 ]; then
     make "${targets[@]}"
   fi
