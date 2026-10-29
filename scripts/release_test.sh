@@ -103,6 +103,10 @@ setup_fixture() {
   if ! git -C "$fixture_repo" diff --cached --quiet; then
     git -C "$fixture_repo" commit -q -m 'test(release): use current release tools'
   fi
+  printf 'version: 99.98.96\nmain_sha: %s\n' "$(git -C "$fixture_repo" rev-parse HEAD)" \
+    >"$fixture_repo/.github/release-candidate.yml"
+  git -C "$fixture_repo" add .github/release-candidate.yml
+  git -C "$fixture_repo" commit -q -m 'chore(release): prepare v99.98.96'
   printf '%s\n' 'candidate fixture' >"$fixture_repo/candidate-fixture.txt"
   git -C "$fixture_repo" add candidate-fixture.txt
   git -C "$fixture_repo" commit -q -m 'feat(release): add candidate fixture' -m 'Attn-Seed: seed-fixture'
