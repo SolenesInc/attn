@@ -18,7 +18,7 @@ Check correctness, failure and recovery behavior, compatibility, and interaction
 
 When the change adds or reshapes an interface, judge it from its callers with [Design](design.md). A parallel mechanism beside an existing one that does the same job, or a fix that relies on incidental coupling, is a finding about the design, not something to pin with a test.
 
-Assess existing tests and verification evidence against the reviewed revision. Ask what real failure each relevant test would catch. Run focused checks to resolve doubts, missing coverage, or contradictory results. Reuse evidence that still applies; repeat checks when changes or integration risks warrant it.
+Assess existing tests and verification evidence against the reviewed revision. Ask what real failure each relevant test would catch. When the repository has a `drive-*` skill, read the files of the features the change touches, and before you approve, check every way in and context they list that applies, from the evidence or by driving it yourself, and confirm the change updates the files for every way in it adds, removes or alters. Run focused checks to resolve doubts, missing coverage, or contradictory results. Reuse evidence that still applies; repeat checks when changes or integration risks warrant it.
 
 When the assignment calls for exercising the running product, use realistic, isolated data and the repository's verification guidance. Cover the relevant user interactions and integration paths. Record the revision and environment, the scenario or command, expected and observed behavior, and supporting logs or recordings. Distinguish passed, failed, blocked, and untested behavior.
 

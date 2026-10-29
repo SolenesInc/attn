@@ -53,6 +53,13 @@ case "$1 $2" in
 esac
 EOF
 
+cat >"$work/bin/attn" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == "seed show seed-fixture --json" ]] || { echo "no seed $3" >&2; exit 1; }
+printf '%s\n' '{"seed":{"title":"Candidate fixture seed","body":"","status":"harvested"},"notes":[]}'
+EOF
+
 cat >"$work/bin/claude" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -76,7 +83,7 @@ set -euo pipefail
 exit 0
 EOF
 done
-chmod +x "$work/bin/gh" "$work/bin/claude" "$work/bin/pnpm" "$work/bin/cargo"
+chmod +x "$work/bin/gh" "$work/bin/attn" "$work/bin/claude" "$work/bin/pnpm" "$work/bin/cargo"
 
 setup_fixture() {
   local name="$1"
@@ -90,15 +97,19 @@ setup_fixture() {
   git -C "$fixture_repo" config user.email 'release@example.com'
   git -C "$fixture_repo" switch -q -C main
   cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"
-  cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
-  if ! git -C "$fixture_repo" diff --quiet -- scripts/compile-changelog.sh cmd/release-train/main.go; then
-    git -C "$fixture_repo" add scripts/compile-changelog.sh cmd/release-train/main.go
+  rm -rf "$fixture_repo/cmd/release-train"
+  cp -R "$root/cmd/release-train" "$fixture_repo/cmd/release-train"
+  git -C "$fixture_repo" add -A scripts/compile-changelog.sh cmd/release-train
+  if ! git -C "$fixture_repo" diff --cached --quiet; then
     git -C "$fixture_repo" commit -q -m 'test(release): use current release tools'
   fi
-  printf '%s\n' 'kind: added' 'area: release' 'change: candidate fixture' \
-    >"$fixture_repo/changelog.d/candidate-fixture.yaml"
-  git -C "$fixture_repo" add changelog.d/candidate-fixture.yaml
-  git -C "$fixture_repo" commit -q -m 'feat(release): add candidate fixture'
+  printf 'version: 99.98.96\nmain_sha: %s\n' "$(git -C "$fixture_repo" rev-parse HEAD)" \
+    >"$fixture_repo/.github/release-candidate.yml"
+  git -C "$fixture_repo" add .github/release-candidate.yml
+  git -C "$fixture_repo" commit -q -m 'chore(release): prepare v99.98.96'
+  printf '%s\n' 'candidate fixture' >"$fixture_repo/candidate-fixture.txt"
+  git -C "$fixture_repo" add candidate-fixture.txt
+  git -C "$fixture_repo" commit -q -m 'feat(release): add candidate fixture' -m 'Attn-Seed: seed-fixture'
   git -C "$fixture_repo" remote set-url origin "$fixture_origin"
   git -C "$fixture_repo" push -q -u origin main
 }
@@ -216,14 +227,16 @@ if grep -Fq -- '--draft' "$FAKE_GH_LOG"; then
 fi
 for value in "$main_sha" "$candidate_sha" \
   'https://github.com/example/attn/actions/runs/42/job/7' \
-  'changelog fragment' '--ref main' 'candidate_sha='; do
+  'compiled the commits since the last release' '--ref main' 'candidate_sha='; do
   grep -Fq -- "$value" "$FAKE_PR_BODY"
 done
-if grep -Fq 'candidate-fixture.yaml' "$FAKE_PR_BODY"; then
+if grep -Fq 'add candidate fixture' "$FAKE_PR_BODY"; then
   echo "candidate PR body repeated raw changelog inputs" >&2
   exit 1
 fi
-grep -Fq 'candidate-fixture.yaml' "$FAKE_CLAUDE_INPUT"
+grep -Fq '=== seed seed-fixture: Candidate fixture seed [harvested]' "$FAKE_CLAUDE_INPUT"
+grep -Fq 'feat(release): add candidate fixture' "$FAKE_CLAUDE_INPUT"
+grep -Fq -- "..$main_sha -->" <<<"$(git --git-dir="$fixture_origin" show "$candidate_ref:CHANGELOG.md")"
 [[ "$(<"$FAKE_CLAUDE_ARGC")" == "2" ]]
 if grep -Eq '(^| )(pr merge|workflow run release)' "$FAKE_GH_LOG"; then
   echo "candidate preparation crossed a merge or release boundary" >&2

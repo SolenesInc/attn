@@ -130,7 +130,7 @@ EOF
 ./attn automation apply --file $P/scheduled.yaml
 ```
 
-  `<schedule-id>` is the `id` it prints. The scheduler wakes every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run, and for one more minute until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: false`. Disable it when done.
+  `<schedule-id>` is the `id` it prints. The scheduler wakes every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run, and for up to two more minutes until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: false`. Disable it when done.
 - **A review request.** Make a local repository that the mock GitHub's `owner/repo` points at, holding the fixture so the review run's agent has something to say:
 
 ```bash
@@ -169,7 +169,7 @@ EOF
 ./attn automation apply --file $P/review.yaml
 ```
 
-  `<review-id>` is the `id` it prints. Run `wsctl refresh-prs`: it prints `PR refresh completed`. Re-read `./attn automation runs <review-id>` for up to 45 seconds until a run is `delivered`. `./attn agent list --json` gives its session's `directory`, and `git -C <directory> rev-parse HEAD` equals `git -C $G rev-parse HEAD`.
+  `<review-id>` is the `id` it prints. Run `wsctl refresh-prs`: it prints `PR refresh completed` and establishes the automation's initial observation. Existing review requests do not start runs. Withdraw the mock request with `curl -s -X POST "$ATTN_MOCK_GH_URL/__control/requested" -H 'content-type: application/json' -d '{"active":false}'`, then run `wsctl refresh-prs`. Request review again with the same command carrying `'{"active":true}'`, then run `wsctl refresh-prs`. Re-read `./attn automation runs <review-id>` for up to 45 seconds until a run is `delivered`. `./attn agent list --json` gives its session's `directory`, and `git -C <directory> rev-parse HEAD` equals `git -C $G rev-parse HEAD`.
 - **Run one pull request by hand.** A manual automation with a repository location takes a pull request URL. Write `$P/pull-request.yaml` like `review.yaml` with `name: Drive pull request` and `trigger: {type: manual}` in place of the review trigger, apply it, and run `./attn automation run <pull-request-id> --pr-url https://mock.github.local/owner/repo/pull/42`. It prints the run as JSON, and `./attn automation runs <pull-request-id>` shows it `delivered`.
 - **Clean up and delete.** Run `./attn automation cleanup <id>`: it prints `cleaned`, `kept_dirty` and `kept_active` lists. Click `[data-testid="automation-edit-<id>"]` natively, then `[data-testid="automation-form-delete"]` natively: it reads `Confirm delete`. Click it again: `./attn automation list` no longer lists `<id>`. Run `./attn automation delete <schedule-id>`: it prints `{"deleted": <schedule-id>}`. Do the same for `<review-id>` and `<pull-request-id>`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code; `./attn automation runs <id>` after each run; `./attn agent peek <session>`; `bridge automations_get_state` after each drawer action; `bridge get_state` after each ⌘⇧J; and `bridge capture_screenshot '{"path":"<P>/automations-drawer.png"}'` with the drawer open, where `<P>` is the folder's path written out. Put the way in in each file's name, such as `automations-drawer-run-now-state.json`.
@@ -201,7 +201,9 @@ EOF
 - The run's agent reads its fixture from `location.path`. For a review request the worktree is the folder, so a fixture has to be committed in the repository for the mock to say anything; without one the run still delivers, silently.
 - A run needs the user only while it owes a turn: its agent has stopped and the turn is not snoozed. ⌘⇧J skips a run that is still working and one the user snoozed.
 - Schedules fire on the minute tick; a run within seconds is not expected. `ATTN_AUTOMATION_SCHEDULE_INTERVAL`, set before the daemon starts, shortens the tick.
+- Allow for the tick and launch when waiting for another occurrence. A live baseline created consecutive occurrences 66 seconds apart; a one-minute deadline expired just before the second appeared. The recipe allows two minutes for each occurrence.
 - A review run fires on the next pull request refresh (`wsctl refresh-prs`), not when the mock GitHub changes. The mock lists `owner/repo#42` only after `/__control/head` names a commit.
+- The first GitHub observation after applying or enabling an automation records existing review requests without starting runs. Drive a new request after that observation, as the withdraw-and-request sequence above does.
 - Turning an automation off cancels its pending runs. A run that was already delivered keeps its session.
 - The drawer's "Run now" and `attn automation run` work only on manual triggers. A scheduled or review-request automation answers `automation <id> is provider-driven and cannot be run manually yet`. `--pr-url` also needs a `repository_worktree` location, and refuses with `--pr-url requires a repository_worktree automation` otherwise.
 - Working but wrong: a run reads `delivered` once its session starts, whatever the agent does next. A fixture that matches nothing in the opening leaves a delivered run sitting silent; prove a run by its agent's screen, not by its state.

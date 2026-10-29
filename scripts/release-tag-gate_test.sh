@@ -60,11 +60,13 @@ git clone -q "$root" "$repo"
 git -C "$repo" config user.name 'Release Tag Gate Test'
 git -C "$repo" config user.email 'release-tag-gate@example.com'
 git -C "$repo" switch -q -C main
-cp "$root/cmd/release-train/main.go" "$repo/cmd/release-train/main.go"
-git -C "$repo" add cmd/release-train/main.go
-git -C "$repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
+rm -rf "$repo/cmd/release-train"
+cp -R "$root/cmd/release-train" "$repo/cmd/release-train"
+git -C "$repo" add -A cmd/release-train
 git -C "$repo" commit -q --allow-empty -m 'release fixture baseline'
 baseline_sha="$(git -C "$repo" rev-parse HEAD)"
+marker="$(cd "$repo" && go run ./cmd/release-train notes range)"
+printf '\n## [2099-01-01]\n\nNo changes users will notice.\n\n%s\n' "$marker" >>"$repo/CHANGELOG.md"
 (cd "$repo" && go run ./cmd/release-train version set v99.98.97 >/dev/null)
 cat >"$repo/.github/release-candidate.yml" <<EOF
 version: 99.98.97

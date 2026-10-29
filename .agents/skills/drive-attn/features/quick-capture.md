@@ -44,16 +44,23 @@ default, and the panel is macOS only.
 Preconditions:
 
 - macOS. The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - A crew member, Fern, made as [crew.md](crew.md)'s preconditions say, with `./attn crew set fern --cwd $C --agent claude`, where `$C` holds this fixture as `$C/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "turns": [
+  {"includes": "attn agent attachment", "actions": [
+    {"type": "capture", "name": "capture", "pattern": "attn agent attachment (\\S+)"},
+    {"type": "capture", "name": "attachment", "pattern": "attn agent attachment \\S+ (\\S+)"},
+    {"type": "attn", "args": ["agent", "attachment", "{{capture}}", "{{attachment}}", "--out", "<P written out>/received.png"]},
+    {"type": "reply", "text": "got the capture"}]},
   {"includes": "sent through Quick Capture", "actions": [
-    {"type": "reply", "text": "got the capture"}]}
+    {"type": "capture", "name": "message", "pattern": "sent through Quick Capture[^\\n]*\\n([^\\n]+)"},
+    {"type": "exec", "cmd": "printf", "args": ["got the capture: %s\\n", "{{message}}"]}]}
 ]}
 ```
 
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-quick-capture.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
+- Replace `<P written out>` with the proof folder's absolute path. Fern starts asleep; if continuing the crew recipe, put the member to sleep before its next launch reads this fixture.
 - The panel is a window of its own, `capture`. `bridge native_key`, `native_text` and `native_mouse` reach it with `"window":"capture"` in their JSON. `bridge capture_state`, `capture_binding` and `capture_dismiss` read and drive it.
 - The repository's input driver (`app/scripts/real-app-harness/InputDriver.swift`) posts keys to the whole system, as the `quick-capture` scenario does to press the global shortcut. Add it to the env file as a function:
 
@@ -68,12 +75,12 @@ EOF
 - **Turn it on.** Press ⌘, (`ui.openSettings`), click `[data-testid="settings-nav-experimental"]` natively, then click `[role="switch"][aria-label="Quick Capture"]` natively. It reads `Disable`, and `./attn settings get quick_capture_enabled` prints `true`. Close Settings with Escape.
 - **Bind the shortcut.** Run `bridge capture_binding '{"binding":"Control+Alt+B"}'`. It answers `{"binding": "Control+Alt+B"}`, and `bridge capture_state` shows `binding: "Control+Alt+B"`. Run `bridge capture_binding '{"binding":"Shift+B"}'`: a binding without Command, Control or Option is refused with `Use Command, Control or Option with another key for a system-wide shortcut.`, and `bridge capture_state` still shows `Control+Alt+B`.
 - **Open with the global shortcut.** Press the bound shortcut while another app is in front. Run `input_driver frontmost`: it prints the app in front, not the instance's (`./attn instance resolve --field bundleId`). Run `input_driver global_key --key b --modifiers control,option`. `bridge capture_state '{"visible":true}'` returns with `visible: true` and `focused: true`, and `input_driver frontmost` prints the same app as before: the panel opens over it and leaves it in front.
-- **Open from the File menu.** File, Quick Capture opens the same panel. `bridge` cannot reach the menu bar, and no scenario drives this item; check it by hand and say so in the report.
+- **Open from the File menu.** Hide the panel with `bridge capture_dismiss`, then run `input_driver menu --bundle-id "$(./attn instance resolve --field bundleId)" --path "File>Quick Capture"`. `bridge capture_state '{"visible":true}'` returns with the same panel open. The input driver reaches the native menu through Accessibility.
 - **Write and pick a mailbox.** With the panel open, run `bridge native_text '{"window":"capture","text":"Check the drive notes."}'`. Run `bridge native_key '{"window":"capture","key":"2","modifiers":["command"]}'`: the roster lists the chief first, then the profile's members, so ⌘2 picks Fern. `bridge capture_state '{"mailbox":"fern"}'` returns with `mailbox: "fern"` and `text: "Check the drive notes."`.
-- **Send.** Run `bridge native_key '{"window":"capture","key":"Enter"}'`. `bridge capture_state` lists the message under `saved` with `mailbox: "fern"`. Fern was asleep, so attn wakes the member first: `./attn crew list` shows `awake`, and `./attn agent peek fern` shows the typed `Message from the user, sent through Quick Capture.` with `Check the drive notes.` and the reply `got the capture`.
-- **Recent messages.** Read `controls.recent` from `bridge capture_state`, then run `bridge native_mouse '{"window":"capture","action":"click","x":<x>,"y":<y>}'` with those values. `bridge capture_state '{"view":"recent"}'` returns `recentRows` with the message's text. Escape closes the history.
+- **Send.** Run `bridge native_key '{"window":"capture","key":"Enter"}'`. `bridge capture_state` lists the message under `saved` with `mailbox: "fern"`. Fern was asleep, so attn wakes the member first: `./attn crew list` shows `awake`, and `./attn agent peek fern` shows `got the capture: Check the drive notes.`. The fixture echoes the received message, including when it arrives in the wake opening instead of being echoed as terminal input.
+- **Recent messages.** Send hides the panel. Reopen it with `input_driver global_key --key b --modifiers control,option`, then wait with `bridge capture_state '{"visible":true}'`. Read `controls.recent` from `bridge capture_state`, then run `bridge native_mouse '{"window":"capture","action":"click","x":<x>,"y":<y>}'` with those values. `bridge capture_state '{"view":"recent"}'` returns `recentRows` with the message's text. Escape closes the history.
 - **Hide and keep the draft.** Type `bridge native_text '{"window":"capture","text":"Draft for later"}'`, then `bridge native_key '{"window":"capture","key":"Escape"}'`. `bridge capture_state '{"visible":false}'` returns. Open the panel again as above: `bridge capture_state` shows `text: "Draft for later"`. `bridge capture_dismiss` hides it from the harness when a step needs it closed.
-- **A file for the agent.** Put an image on the clipboard, as ⌃⇧⌘4 and a selection does. Run `osascript -e "set the clipboard to (read (POSIX file \"$PWD/docs/banner.png\") as «class PNGf»)"`, open the panel as above, then run `bridge native_key '{"window":"capture","key":"v","modifiers":["command"]}'`. `bridge capture_state '{"attachmentCount":1,"settled":true}'` returns with one file. Send it. The typed message carries a line `attn agent attachment <capture-id> <attachment-id> --out <path>`; an agent's fixture that runs that line saves the file, and the history marks the message retrieved. A file dropped on the panel attaches the same way, but the drive has no app to drag one from: drop one from Finder by hand and say so in the report.
+- **A file for the agent.** Put an image on the clipboard, as ⌃⇧⌘4 and a selection does. Run `osascript -e "set the clipboard to (read (POSIX file \"$PWD/docs/banner.png\") as «class PNGf»)"`, open the panel as above, then run `bridge native_key '{"window":"capture","key":"v","modifiers":["command"]}'`. `bridge capture_state '{"attachmentCount":1,"settled":true}'` returns with one file. Send resets the mailbox to chief, so select Fern again with `bridge native_key '{"window":"capture","key":"2","modifiers":["command"]}'` and check `bridge capture_state '{"mailbox":"fern"}'` before pressing Enter. The fixture runs the message's `attn agent attachment` command; `./attn agent peek fern` shows `Saved file to <P>/received.png`, and `file "$P/received.png"` identifies the PNG. Reopen the panel and its history to see the message marked retrieved. A file dropped on the panel attaches the same way, but the drive has no app to drag one from: drop one from Finder by hand and say so in the report.
 - **Delivery to the chief.** Make a chief as [crew.md](crew.md) does, open the panel, leave the mailbox on `chief` (⌘1) and send. Peek on the chief shows the typed message. Without a chief, the message waits for the next one.
 - **Proof.** In `$P`, keep `bridge capture_state` after each step (its `latencyMs` times each opening), `input_driver frontmost` before and after each opening, `./attn crew list --json` and `./attn agent peek fern` after the send, and `./attn settings get quick_capture_enabled`. Put the way in in each file's name, such as `quick-capture-shortcut-state.json`.
 
@@ -96,7 +103,10 @@ EOF
 ## Gotchas
 
 - Quick capture is off on a fresh instance. Until it is on, the shortcut does nothing and the File menu item is disabled. A named instance also starts with no shortcut, because only production defaults to ⌃⌥⌘Space: bind one before looking for the panel.
-- `bridge` reaches only the app's own windows: it cannot press the global shortcut, open the menu bar or drag a file in from another app. The File menu item and a dropped file have no live recipe; the `quick-capture` scenario drops files from its own fixture app.
+- `bridge` reaches only the app's own windows. The input driver presses the global shortcut and the File menu item. A dropped file still has no live recipe here; the `quick-capture` scenario drops files from its own fixture app.
+- Send hides the panel and resets its mailbox to chief. Reopen before reading history and select Fern again before a later send intended for the member.
+- The attachment turn must precede the generic Quick Capture reply in the fixture. The first matching turn wins; a reply alone never retrieves the file.
+- Mock `reply` text is literal. The fixture uses `exec` with `printf` to echo its captured message; that action expands captures in its arguments.
 - `input_driver global_key` posts to the whole system. While quick capture is off or no shortcut is bound, ⌃⌥B lands in the app in front, such as the terminal you drive from. Turn quick capture on and bind the shortcut first.
 - macOS refuses shortcuts the system already uses (`macOS already uses this system shortcut`), and a refused binding keeps the previous one.
 - `bridge capture_state` waits for the expectations you pass, such as `{"visible":true}` or `{"mailbox":"fern"}`, and fails when they never hold. Call it without them for a plain read.

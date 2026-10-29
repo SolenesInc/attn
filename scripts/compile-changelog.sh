@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Compile pending changelog fragments into a dated CHANGELOG.md section.
+# Compile the commits since the last release into a dated CHANGELOG.md section.
 #
-# Collects changelog.d/*.yaml (the raw facts each PR shipped), asks claude to
+# Renders those commits grouped by their Attn-Seed trailers, asks claude to
 # write the user-facing section per the style rules below, inserts it at the
-# top of CHANGELOG.md, and deletes the consumed fragments. The result is left
-# staged for review: read the section, fix the copy where it misses, then
-# commit and open a PR. See docs/making-a-release.md.
+# top of CHANGELOG.md with a marker naming the commits it covers, and deletes
+# changelog.d. The result is left staged for review: read the section, fix the
+# copy where it misses, then commit and open a PR. See docs/making-a-release.md.
 #
 # usage: compile-changelog.sh [--dry-run]
 #   --dry-run  print the prompt that would be sent and exit without changes
@@ -17,59 +17,49 @@ DRY_RUN=0
 
 cd "$(git rev-parse --show-toplevel)"
 
-shopt -s nullglob
-fragments=(changelog.d/*.yaml)
-shopt -u nullglob
-
-if (( ${#fragments[@]} == 0 )); then
-  echo "no pending fragments in changelog.d/; nothing to compile"
-  exit 0
-fi
-
 if [[ "$DRY_RUN" -eq 0 ]] && ! command -v claude >/dev/null 2>&1; then
   echo "error: claude CLI is required (https://claude.ai/code)" >&2
   exit 1
 fi
 
-echo "validating ${#fragments[@]} fragment(s)..."
-go run ./cmd/changelog-check
-
 TODAY="$(date +%Y-%m-%d)"
 
-# Include each fragment's introducing commit subject. A squash merge puts the PR
-# number there, which gives the release writer useful context.
-FACTS="$(go run ./cmd/release-train fragments render)"
-RECEIPT="$(go run ./cmd/release-train fragments receipt)"
+FACTS="$(go run ./cmd/release-train notes render)"
+MARKER="$(go run ./cmd/release-train notes range)"
+MARKER_PATTERN='^<!-- changelog-(fragments-sha256: [0-9a-f]{64}|commits: [0-9a-f]*\.\.[0-9a-f]+) -->$'
 
-# If the top section already carries today's date (a second compile in one
-# day), hand it to the writer to fold the new facts into.
 TOP_DATE="$(grep -m1 -o '^## \[[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\]' CHANGELOG.md | tr -d '#[] ' || true)"
 EXISTING_SECTION=""
-EXISTING_RECEIPTS=""
+EXISTING_MARKERS=""
 REPLACE_TOP=0
 if [[ "$TOP_DATE" == "$TODAY" ]]; then
   REPLACE_TOP=1
   EXISTING_SECTION="$(awk '/^## \[/{n++} n==1 && !/^---$/' CHANGELOG.md)"
-  EXISTING_RECEIPTS="$(printf '%s\n' "$EXISTING_SECTION" | \
-    grep -E '^<!-- changelog-fragments-sha256: [0-9a-f]{64} -->$' || true)"
-  EXISTING_SECTION="$(printf '%s\n' "$EXISTING_SECTION" | \
-    grep -Ev '^<!-- changelog-fragments-sha256: [0-9a-f]{64} -->$' || true)"
+  EXISTING_MARKERS="$(printf '%s\n' "$EXISTING_SECTION" | grep -E "$MARKER_PATTERN" || true)"
+  EXISTING_SECTION="$(printf '%s\n' "$EXISTING_SECTION" | grep -Ev "$MARKER_PATTERN" || true)"
 fi
 
 PROMPT="You are writing the changelog for attn, a macOS app that orchestrates
-coding agents. Below are raw changelog fragments, one per merged PR, written by
-the engineers who shipped each change. Compile them into one dated CHANGELOG.md
-section.
+coding agents. Below are the commits that landed since the last release. They
+are grouped by the seed (attn's unit of work) each commit names in its
+Attn-Seed trailer: a group opens with the seed's title, state, description and
+notes, then lists its commits. A seed that could not be read is marked unknown;
+judge it from its commits. Commits without a seed are listed last, each on its
+own. Some commits carry a release note their author wrote for users; prefer its
+wording. Compile all of it into one dated CHANGELOG.md section.
 
-Style rules — these matter more than fidelity to the fragment wording:
+Style rules — these matter more than fidelity to the commit wording:
 - Write for the app's user, not the codebase. Lead every bullet with a bold
   sentence stating the change in terms of what the user experiences, then
   explain in plain prose. Clarity beats technical correctness.
 - Category headers in this order, only when non-empty: ### Added, ### Changed,
-  ### Fixed, ### Removed. kind maps to the header; kind: internal fragments are
-  context for you but get no bullet.
-- Merge related fragments into one bullet when they tell one story.
-- Drop what is below the noise floor for a user reading release notes.
+  ### Fixed, ### Removed. Choose by what users experience; the commit type
+  (feat, fix, perf, ...) is a hint.
+- One bullet per change users would notice: usually one per seed, and one per
+  commit without a seed that users would notice. Merge bullets that tell one
+  story.
+- Leave out work users cannot observe: refactors, tests, CI, docs, tooling,
+  and release notes marked kind: internal.
 - Wrap lines at roughly 80 columns.
 
 Match the voice of these examples from the existing changelog:
@@ -83,9 +73,9 @@ Match the voice of these examples from the existing changelog:
 Output format: ONLY the markdown section, starting with the line
 ## [${TODAY}]
 and nothing after the last bullet. No preamble, no code fences.
-If no fragment merits a user-facing bullet, output exactly: EMPTY
+If no change merits a user-facing bullet, output exactly: EMPTY
 
-Fragments:
+Commits:
 
 ${FACTS}"
 
@@ -93,7 +83,7 @@ if [[ "$REPLACE_TOP" -eq 1 ]]; then
   PROMPT+="
 
 CHANGELOG.md already has a section for ${TODAY}. Fold its bullets and the new
-fragments into one merged section (rewriting bullets is fine):
+commits into one merged section (rewriting bullets is fine):
 
 ${EXISTING_SECTION}"
 fi
@@ -108,11 +98,11 @@ echo "writing section with claude..."
 SECTION="$(printf '%s' "$PROMPT" | claude --strict-mcp-config -p)"
 
 if [[ "$SECTION" == "EMPTY" ]]; then
-  echo "no user-facing changes in pending fragments; removing them without a new section"
-  rm -f "${fragments[@]}"
-  git add -A changelog.d
-  echo "done — review with 'git status', then commit"
-  exit 0
+  if [[ "$REPLACE_TOP" -eq 1 ]]; then
+    SECTION="$EXISTING_SECTION"
+  else
+    SECTION="## [${TODAY}]"$'\n\n'"No changes users will notice."
+  fi
 fi
 
 if [[ "$SECTION" != "## [${TODAY}]"* ]]; then
@@ -128,10 +118,10 @@ if [[ "$SECTION" != "## [${TODAY}]"* ]]; then
   SECTION="$NORMALIZED_SECTION"
 fi
 
-if [[ -n "$EXISTING_RECEIPTS" ]]; then
-  SECTION+=$'\n\n'"$EXISTING_RECEIPTS"
+if [[ -n "$EXISTING_MARKERS" ]]; then
+  SECTION+=$'\n\n'"$EXISTING_MARKERS"
 fi
-SECTION+=$'\n\n'"$RECEIPT"
+SECTION+=$'\n\n'"$MARKER"
 
 SECTION="$SECTION" REPLACE_TOP="$REPLACE_TOP" python3 - <<'PY'
 import os, re
@@ -156,10 +146,11 @@ with open("CHANGELOG.md", "w") as fh:
     fh.write(head + section + "\n\n---\n\n" + rest)
 PY
 
-rm -f "${fragments[@]}"
-git add -A changelog.d CHANGELOG.md
+git rm -rq --ignore-unmatch changelog.d
+rm -rf changelog.d
+git add CHANGELOG.md
 
 echo
-echo "compiled ${#fragments[@]} fragment(s) into CHANGELOG.md section [${TODAY}]"
+echo "compiled the commits since the last release into CHANGELOG.md section [${TODAY}]"
 echo "next: review the section (git diff --cached), fix copy where it misses,"
 echo "commit, and open a PR"

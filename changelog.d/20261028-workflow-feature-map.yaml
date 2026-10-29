@@ -1,0 +1,4 @@
+kind: added
+area: agents
+change: The attn-workflow skill adds a feature map process. Agents ask you which features your product has and what each is for, then build a `drive-<app>` skill in the repository that starts the product on an isolated instance and maps every way into each feature, for people and for agents, with a recipe that drives it, the contexts it behaves differently under and pointers to its tests.
+notes: Implementation and review read the feature files a change touches, update them with the change, and check every way in before calling the change done or approving it. A way in that one audience lacks shows as "None.", so one-way doors stand out. The process adapts pstack's create-verification-skill.

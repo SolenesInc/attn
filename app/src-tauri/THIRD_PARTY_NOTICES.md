@@ -35,8 +35,10 @@ The attn-workflow skill's technical writing reference
 embedded in the attn binary and installed into agent skill directories) copies
 pstack's `technical-writing` skill, adapted where it names other pstack skills.
 Its correction reference (`references/correction.md`) adapts pstack's `correct`
-skill. The principle files under `principles/` adapt pstack's `principle-*`
-skills, renamed and rewritten in attn's terms; the redesign signals in
+skill, and its feature map reference (`references/feature-map.md`) adapts the
+`create-verification-skill` skill and its feature-map example. The principle
+files under `principles/` adapt pstack's `principle-*` skills, renamed and
+rewritten in attn's terms; the redesign signals in
 `principles/attack-the-premise.md` also draw on pstack's `architect` skill. The
 structure checks in `references/design.md` and the design-twice, tradeoffs and
 alternatives guidance in `references/planning.md` adapt the `architect` skill, and

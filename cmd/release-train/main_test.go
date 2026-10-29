@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
@@ -26,7 +25,6 @@ func newTestRepository(t *testing.T) *testRepository {
 	repo.write("app/src-tauri/Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.11.1\"\n")
 	repo.write("app/src-tauri/Cargo.lock", "version = 4\n\n[[package]]\nname = \"app\"\nversion = \"0.11.1\"\n")
 	repo.write("CHANGELOG.md", "# Changelog\n\n## [2026-08-01]\n\n- Earlier release.\n")
-	repo.write("changelog.d/README.md", "# fragments\n")
 	repo.commit("baseline")
 	return repo
 }
@@ -53,19 +51,6 @@ func (repo *testRepository) write(path, content string) {
 	}
 }
 
-func (repo *testRepository) remove(path string) {
-	repo.t.Helper()
-	if err := os.Remove(filepath.Join(repo.root, path)); err != nil {
-		repo.t.Fatal(err)
-	}
-}
-
-func (repo *testRepository) exists(path string) bool {
-	repo.t.Helper()
-	_, err := os.Stat(filepath.Join(repo.root, path))
-	return err == nil
-}
-
 func (repo *testRepository) commit(subject string) string {
 	repo.t.Helper()
 	repo.git("add", "-A")
@@ -80,18 +65,17 @@ func (repo *testRepository) writeManifest(manifest candidateManifest) {
 
 func (repo *testRepository) prepareCandidate() (mainSHA, headSHA string) {
 	repo.t.Helper()
-	repo.write("changelog.d/accepted.yaml", "kind: fixed\narea: release\nchange: accepted change\n")
-	mainSHA = repo.commit("accepted change on main")
+	repo.write("accepted.txt", "accepted change\n")
+	mainSHA = repo.commit("fix(release): accepted change on main")
 	repo.git("switch", "-q", "-c", "release/v0.12.0")
-	receipt, err := fragmentReceipt(repo.root, mainSHA)
+	compiled, err := releaseRangeAt(repo.root, mainSHA)
 	if err != nil {
 		repo.t.Fatal(err)
 	}
 	if err := setVersions(repo.root, "0.12.0"); err != nil {
 		repo.t.Fatal(err)
 	}
-	repo.remove("changelog.d/accepted.yaml")
-	repo.write("CHANGELOG.md", "# Changelog\n\n## [2026-08-28]\n\n- Accepted change.\n\n"+receipt+"\n")
+	repo.write("CHANGELOG.md", "# Changelog\n\n## [2026-08-28]\n\n- Accepted change.\n\n"+compiled.marker()+"\n")
 	repo.writeManifest(candidateManifest{Version: "0.12.0", MainSHA: mainSHA})
 	headSHA = repo.commit("prepare release")
 	return mainSHA, headSHA
@@ -191,7 +175,7 @@ func TestCandidateValidationAllowsMainToMoveOn(t *testing.T) {
 	repo := newTestRepository(t)
 	_, headSHA := repo.prepareCandidate()
 	repo.git("switch", "-q", "main")
-	repo.write("changelog.d/later.yaml", "kind: fixed\narea: queue\nchange: later work\n")
+	repo.write("later.txt", "later work\n")
 	repo.commit("fix(queue): later work")
 	if err := validateCandidate(repo.root, validCandidateInput("main", headSHA)); err != nil {
 		t.Fatal(err)
@@ -257,26 +241,7 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 			wantErr: "non-release file",
 		},
 		{
-			name: "user-facing fragments dropped without changelog",
-			mutate: func(repo *testRepository, _, _ string) {
-				manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
-				if err != nil {
-					repo.t.Fatal(err)
-				}
-				data, err := readRepositoryFile(repo.root, manifest.MainSHA, "CHANGELOG.md")
-				if err != nil {
-					repo.t.Fatal(err)
-				}
-				repo.write("CHANGELOG.md", string(data))
-				repo.commit("drop release notes")
-			},
-			input: func(main, _ string) candidateValidation {
-				return validCandidateInput(main, "HEAD")
-			},
-			wantErr: "fragments were removed without updating CHANGELOG.md",
-		},
-		{
-			name: "unrelated changelog edit does not compile fragments",
+			name: "changelog does not record the compiled commits",
 			mutate: func(repo *testRepository, _, _ string) {
 				manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
 				if err != nil {
@@ -287,12 +252,12 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 					repo.t.Fatal(err)
 				}
 				repo.write("CHANGELOG.md", string(data)+"\nUnrelated cleanup.\n")
-				repo.commit("edit changelog without compiling fragments")
+				repo.commit("edit changelog without compiling the release")
 			},
 			input: func(main, _ string) candidateValidation {
 				return validCandidateInput(main, "HEAD")
 			},
-			wantErr: "does not contain the frozen fragment receipt",
+			wantErr: "does not record the compiled commits",
 		},
 	}
 	for _, tc := range cases {
@@ -307,23 +272,6 @@ func TestCandidateValidationRejectsUnsafeState(t *testing.T) {
 				t.Fatalf("expected %q, got %v", tc.wantErr, err)
 			}
 		})
-	}
-}
-
-func TestCandidateValidationAllowsInternalFragmentsWithoutChangelogUpdate(t *testing.T) {
-	repo := newTestRepository(t)
-	repo.write("changelog.d/internal.yaml", "kind: internal\narea: release\nchange: internal change\n")
-	mainSHA := repo.commit("internal change on main")
-	repo.git("switch", "-q", "-c", "release/v0.12.0")
-	if err := setVersions(repo.root, "0.12.0"); err != nil {
-		t.Fatal(err)
-	}
-	repo.remove("changelog.d/internal.yaml")
-	repo.writeManifest(candidateManifest{Version: "0.12.0", MainSHA: mainSHA})
-	headSHA := repo.commit("prepare internal release")
-
-	if err := validateCandidate(repo.root, validCandidateInput(mainSHA, headSHA)); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -354,18 +302,27 @@ func TestAcceptedMainValidatesOnlyTheReleaseCommit(t *testing.T) {
 	}
 }
 
-func TestAcceptedMainKeepsFragmentsThatLandedDuringTheRelease(t *testing.T) {
+func TestTheNextReleaseCompilesWhatLandedDuringThisOne(t *testing.T) {
 	repo := newTestRepository(t)
-	repo.prepareCandidate()
+	mainSHA, _ := repo.prepareCandidate()
 	repo.git("switch", "-q", "main")
-	repo.write("changelog.d/later.yaml", "kind: fixed\narea: queue\nchange: later work\n")
+	repo.write("later.txt", "later work\n")
 	repo.commit("fix(queue): later work")
 	releaseSHA := repo.squashRelease()
 	if _, err := validateAcceptedMain(repo.root, releaseSHA, defaultManifestPath); err != nil {
 		t.Fatal(err)
 	}
-	if !repo.exists("changelog.d/later.yaml") {
-		t.Fatal("release consumed a fragment it did not compile")
+	fakeAttn(t, nil)
+
+	if got, want := repo.releaseTrain("notes", "range"), "<!-- changelog-commits: "+mainSHA+".."+releaseSHA+" -->\n"; got != want {
+		t.Fatalf("next release range = %q, want %q", got, want)
+	}
+	rendered := repo.releaseTrain("notes", "render")
+	if !strings.HasPrefix(rendered, "1 commits since the last release") || !strings.Contains(rendered, "fix(queue): later work") {
+		t.Fatalf("next release notes do not hold exactly the work that landed during this one:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "accepted change on main") {
+		t.Fatalf("next release notes repeat this release's work:\n%s", rendered)
 	}
 }
 
@@ -393,13 +350,6 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 			wantErr: "expected 0.12.0",
 		},
 		{
-			name: "compiled fragment left behind",
-			mutate: func(repo *testRepository) {
-				repo.write("changelog.d/accepted.yaml", "kind: fixed\narea: release\nchange: accepted change\n")
-			},
-			wantErr: "still contains the changelog fragments it compiled: changelog.d/accepted.yaml",
-		},
-		{
 			name: "unrelated recorded main",
 			mutate: func(repo *testRepository) {
 				manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
@@ -413,7 +363,7 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 			wantErr: "recorded main is not an ancestor",
 		},
 		{
-			name: "user-facing fragments dropped without changelog",
+			name: "changelog does not record the compiled commits",
 			mutate: func(repo *testRepository) {
 				manifest, err := readManifest(filepath.Join(repo.root, defaultManifestPath))
 				if err != nil {
@@ -425,7 +375,7 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 				}
 				repo.write("CHANGELOG.md", string(data))
 			},
-			wantErr: "fragments were removed without updating CHANGELOG.md",
+			wantErr: "does not record the compiled commits",
 		},
 	}
 	for _, tc := range cases {
@@ -441,52 +391,5 @@ func TestAcceptedMainValidationRejectsUnsafeState(t *testing.T) {
 				t.Fatalf("expected %q, got %v", tc.wantErr, err)
 			}
 		})
-	}
-}
-
-func TestFragmentRenderingIsStableAndCarriesCommitSubjects(t *testing.T) {
-	repo := newTestRepository(t)
-	repo.write("changelog.d/z-last.yaml", "kind: fixed\narea: z\nchange: last\n")
-	repo.commit("fix(z): add the last fragment")
-	repo.write("changelog.d/a-first.yaml", "kind: added\narea: a\nchange: first\n")
-	repo.commit("feat(a): add the first fragment")
-
-	rendered, err := renderFragments(repo.root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first := strings.Index(rendered, "changelog.d/a-first.yaml")
-	last := strings.Index(rendered, "changelog.d/z-last.yaml")
-	if first < 0 || last < 0 || first > last {
-		t.Fatalf("fragments are not sorted:\n%s", rendered)
-	}
-	for _, subject := range []string{"feat(a): add the first fragment", "fix(z): add the last fragment"} {
-		if !strings.Contains(rendered, subject) {
-			t.Fatalf("rendered facts omit %q:\n%s", subject, rendered)
-		}
-	}
-}
-
-func TestFragmentReceiptBindsPathsAndBlobs(t *testing.T) {
-	repo := newTestRepository(t)
-	repo.write("changelog.d/b.yaml", "kind: fixed\narea: b\nchange: second\n")
-	repo.write("changelog.d/a.yaml", "kind: added\narea: a\nchange: first\n")
-	first := repo.commit("add receipt inputs")
-	receipt, err := fragmentReceipt(repo.root, first)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !regexp.MustCompile(`^<!-- changelog-fragments-sha256: [0-9a-f]{64} -->$`).MatchString(receipt) {
-		t.Fatalf("receipt = %q", receipt)
-	}
-
-	repo.write("changelog.d/a.yaml", "kind: added\narea: a\nchange: changed\n")
-	second := repo.commit("change one receipt input")
-	changed, err := fragmentReceipt(repo.root, second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if changed == receipt {
-		t.Fatal("fragment receipt did not change with a source blob")
 	}
 }

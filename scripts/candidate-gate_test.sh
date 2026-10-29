@@ -3,7 +3,6 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gate="$root/scripts/candidate-gate.sh"
-changelog_gate="$root/scripts/changelog-gate.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-candidate-gate-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
@@ -69,12 +68,9 @@ git clone -q "$root" "$repo"
 git -C "$repo" config user.name 'Candidate Gate Test'
 git -C "$repo" config user.email 'candidate-gate@example.com'
 git -C "$repo" switch -q -C main
-cp "$root/cmd/release-train/main.go" "$repo/cmd/release-train/main.go"
-git -C "$repo" add cmd/release-train/main.go
-git -C "$repo" rm -q --ignore-unmatch -- 'changelog.d/*.yaml'
-printf '%s\n' 'kind: internal' 'area: release' 'change: release fixture' \
-  >"$repo/changelog.d/release-fixture.yaml"
-git -C "$repo" add changelog.d
+rm -rf "$repo/cmd/release-train"
+cp -R "$root/cmd/release-train" "$repo/cmd/release-train"
+git -C "$repo" add cmd/release-train
 git -C "$repo" commit -q --allow-empty -m 'release baseline'
 main_sha="$(git -C "$repo" rev-parse HEAD)"
 git -C "$repo" update-ref refs/remotes/origin/main "$main_sha"
@@ -100,15 +96,14 @@ run_gate() (
 
 git -C "$repo" switch -q -c release/v99.98.97 "$main_sha"
 (cd "$repo" && go run ./cmd/release-train version set v99.98.97)
+marker="$(cd "$repo" && go run ./cmd/release-train notes range)"
+printf '\n## [2099-01-01]\n\nNo changes users will notice.\n\n%s\n' "$marker" >>"$repo/CHANGELOG.md"
 (cd "$repo" && go run ./cmd/release-train manifest write --version v99.98.97 --main "$main_sha")
-git -C "$repo" rm -q changelog.d/release-fixture.yaml
-git -C "$repo" add .github/release-candidate.yml app
+git -C "$repo" add .github/release-candidate.yml app CHANGELOG.md
 git -C "$repo" commit -q -m 'chore(release): prepare v99.98.97'
 export FAKE_CANDIDATES_PAGE_1=$'release/v99.98.97\thttps://github.com/example/attn/pull/1\n'
 run_gate origin/main HEAD release/v99.98.97 >"$work/release.out"
 grep -Fq 'CI App acceptance is green' "$work/release.out"
-(cd "$repo" && "$changelog_gate" main release/v99.98.97) >"$work/release-changelog.out"
-grep -Fq 'validated release candidate' "$work/release-changelog.out"
 
 expect_failure 'expected release/v99.98.97' run_gate origin/main HEAD release/v99.98.96
 
@@ -141,7 +136,7 @@ git -C "$repo" commit -q -m 'fix(release): mutate the candidate'
 expect_failure 'candidate changes non-release file' \
   run_gate origin/main HEAD release/v99.98.97
 
-changelog_job="$(sed -n '/^  changelog:/,/^  script-tests:/p' "$root/.github/workflows/ci.yml")"
-grep -Fq 'actions: read' <<<"$changelog_job"
+candidate_job="$(sed -n '/^  release-candidate:/,/^  script-tests:/p' "$root/.github/workflows/ci.yml")"
+grep -Fq 'actions: read' <<<"$candidate_job"
 
 echo "candidate gate: OK"

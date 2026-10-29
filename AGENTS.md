@@ -317,7 +317,7 @@ working on:
 - Landing, verifying before landing, review on main, or a red main =>
   docs/trunk-based-development.md
 - Pull requests, or waiting on their reviews => docs/pull-requests.md
-- Changelog fragments, releases, or hotfixes => docs/making-a-release.md
+- Release notes, releases, or hotfixes => docs/making-a-release.md
 - Installing, launching, or verifying instances => docs/instances.md
 - Checking a change live through every way into a feature => the drive-attn
   skill (.agents/skills/drive-attn) and its feature map
