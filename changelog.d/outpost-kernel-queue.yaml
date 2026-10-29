@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: Typing on an outpost stays responsive while the Notebook syncs over a slow connection.

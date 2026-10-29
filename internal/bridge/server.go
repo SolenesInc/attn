@@ -151,7 +151,11 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	if answer.Update == 1 {
 		return serveUpdate(ctx, transport, channels, home.Build, cfg.Update, activity)
 	}
-	conn := newConn(ctx, transport, channels, cfg.Handlers, control, decoder, home.Identity)
+	pacer, err := newBulkPacer(activity.Conn)
+	if err != nil {
+		return err
+	}
+	conn := newConn(ctx, pacer, transport, channels, cfg.Handlers, control, decoder, home.Identity)
 	onConn(conn)
 	<-conn.Done()
 	return nil

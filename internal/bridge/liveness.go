@@ -35,6 +35,7 @@ type Conn struct {
 	ctx          context.Context
 	outputOnce   sync.Once
 	output       *outputCredit
+	bulkPacer    *bulkPacer
 	heartbeatGap atomic.Int64
 	peer         Identity
 	transport    ssh.Conn
@@ -53,9 +54,9 @@ func (c *Conn) Done() <-chan struct{}    { return c.done }
 func (c *Conn) Err() error               { <-c.done; return c.err }
 func (c *Conn) Close() error             { c.cancel(); <-c.done; return nil }
 
-func newConn(ctx context.Context, transport ssh.Conn, channels <-chan ssh.NewChannel, handlers Handlers, channel ssh.Channel, decoder *json.Decoder, peer Identity, drains ...<-chan struct{}) *Conn {
+func newConn(ctx context.Context, pacer *bulkPacer, transport ssh.Conn, channels <-chan ssh.NewChannel, handlers Handlers, channel ssh.Channel, decoder *json.Decoder, peer Identity, drains ...<-chan struct{}) *Conn {
 	ctx, cancel := context.WithCancel(ctx)
-	c := &Conn{ctx: ctx, peer: peer, transport: transport, states: make(chan State, 1), done: make(chan struct{}), cancel: cancel}
+	c := &Conn{ctx: ctx, bulkPacer: pacer, peer: peer, transport: transport, states: make(chan State, 1), done: make(chan struct{}), cancel: cancel}
 	go func() {
 		defer close(c.done)
 		c.run(ctx, transport, channels, handlers, channel, decoder)
@@ -159,6 +160,7 @@ running:
 	}
 	pausepoint.At(pausepoint.BridgeConnectionClosed)
 	c.cancel()
+	c.bulkPacer.close()
 	_ = transport.Close()
 	workers.Wait()
 	_ = transport.Wait()

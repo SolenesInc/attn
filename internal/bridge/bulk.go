@@ -20,6 +20,7 @@ type BulkStream struct {
 	cancel        context.CancelFunc
 	credit        *outputCredit
 	flow          *outputFlow
+	pacer         *bulkPacer
 	writeMu       sync.Mutex
 	closeOnce     sync.Once
 	stop          func() bool
@@ -33,7 +34,7 @@ func (c *Conn) sender() *outputCredit {
 
 func (c *Conn) Bulk(ctx context.Context, channel ssh.Channel, requests <-chan *ssh.Request) *BulkStream {
 	ctx, cancel := context.WithCancel(ctx)
-	s := &BulkStream{Channel: channel, ctx: ctx, cancel: cancel, credit: c.sender(), flow: &outputFlow{window: BulkCredit, bulk: true}, local: c.transport.LocalAddr(), remote: c.transport.RemoteAddr()}
+	s := &BulkStream{Channel: channel, ctx: ctx, cancel: cancel, credit: c.sender(), flow: &outputFlow{window: BulkCredit, bulk: true}, pacer: c.bulkPacer, local: c.transport.LocalAddr(), remote: c.transport.RemoteAddr()}
 	s.stop = context.AfterFunc(ctx, func() { _ = channel.Close() })
 	go func() {
 		defer s.Close()
@@ -64,11 +65,11 @@ func (s *BulkStream) Write(data []byte) (int, error) {
 	defer s.writeMu.Unlock()
 	written := 0
 	for len(data) > 0 {
-		chunk := data[:min(len(data), outputChunkBytes)]
+		chunk := data[:min(len(data), bulkChunkBytes)]
 		if err := s.credit.reserve(s.ctx, s.flow, len(chunk)); err != nil {
 			return written, err
 		}
-		if err := s.credit.write(s.ctx, s.flow, chunk, s.Channel); err != nil {
+		if err := s.writeChunk(chunk); err != nil {
 			_ = s.Close()
 			return written, err
 		}
@@ -76,6 +77,17 @@ func (s *BulkStream) Write(data []byte) (int, error) {
 		data = data[len(chunk):]
 	}
 	return written, nil
+}
+
+func (s *BulkStream) writeChunk(chunk []byte) error {
+	if s.pacer != nil {
+		s.pacer.mu.Lock()
+		defer s.pacer.mu.Unlock()
+		if err := s.pacer.wait(s.ctx); err != nil {
+			return err
+		}
+	}
+	return s.credit.write(s.ctx, s.flow, chunk, s.Channel)
 }
 
 func (s *BulkStream) Close() error {
