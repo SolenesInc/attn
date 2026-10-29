@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: Defer the Notebook sync engine's startup work until it is used, reducing the cost of agent hook calls.
