@@ -615,8 +615,22 @@ func detectPresence() (sessionID string, present bool) {
 }
 
 func runPresence() {
+	fs := flag.NewFlagSet("presence", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	bareSessionID := fs.Bool("session-id", false, "print only the session id")
+	if err := parseFlags(fs, os.Args[2:]); err != nil || fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "usage: attn presence [--session-id]")
+		os.Exit(2)
+	}
 	warnIfDaemonVersionMismatch()
 	sessionID, present := detectPresence()
+	if *bareSessionID {
+		if sessionID == "" {
+			os.Exit(1)
+		}
+		fmt.Println(sessionID)
+		return
+	}
 	if !present {
 		fmt.Println("not running inside attn")
 		os.Exit(1)
@@ -636,7 +650,8 @@ func writeHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn <command>
 
 commands:
-  presence                          check whether the current shell runs inside attn
+  presence [--session-id]           check whether the current shell runs inside attn;
+                                    --session-id prints only its session id
   agent list                        name every session running here
   agent peek <session-or-member>    read a session without interrupting it
   agent msg <target> "text"            notify a live session, crew member or seed's tender

@@ -1,0 +1,3 @@
+kind: added
+area: cli
+change: "`attn presence --session-id` prints only the current session's id, for scripts and git hooks."
