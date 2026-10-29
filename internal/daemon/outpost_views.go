@@ -54,16 +54,9 @@ func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitor
 	}
 	result := protocol.ApplyMonitorViewResult{}
 	if outcome.Conversation != "" {
-		result.Switch = &protocol.SwitchOutcome{Conversation: outcome.Conversation, Kind: protocol.SwitchOutcomeKind(outcome.Kind), SessionID: protocol.Ptr(outcome.Session)}
+		result.Switch = &protocol.SwitchOutcome{Conversation: outcome.Conversation, Kind: protocol.SwitchOutcomeKind(outcome.Kind)}
 		if outcome.Reason != "" {
 			result.Switch.Reason = &outcome.Reason
-		}
-		if outcome.Cost != nil {
-			raw, err := json.Marshal(outcome.Cost)
-			if err != nil {
-				return result, err
-			}
-			result.Switch.Cost = protocol.Ptr(string(raw))
 		}
 	}
 	return result, nil
@@ -95,7 +88,7 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 				result, err = Call[protocol.ApplyMonitorViewResult](ctx, d.router(), protocol.ApplyMonitorViewMessage{Cmd: "apply_monitor_view", SessionID: id, Epoch: view.Epoch.V, View: string(raw)})
 			}
 			if err == nil && result.Switch != nil {
-				err = d.applyOutpostSwitch(monitor, *result.Switch)
+				d.applyOutpostSwitch(monitor, *result.Switch)
 			}
 			if err != nil {
 				failure = err
@@ -129,17 +122,9 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 	}
 }
 
-func (d *Daemon) applyOutpostSwitch(monitor *sessionmonitor.Monitor, reply protocol.SwitchOutcome) error {
-	outcome := sessionmonitor.SwitchOutcome{Conversation: reply.Conversation, Kind: sessionmonitor.SwitchOutcomeKind(reply.Kind), Session: protocol.Deref(reply.SessionID), Reason: protocol.Deref(reply.Reason)}
-	if reply.Cost != nil {
-		outcome.Cost = &sessioncost.Checkpoint{}
-		if err := json.Unmarshal([]byte(*reply.Cost), outcome.Cost); err != nil {
-			return err
-		}
-	}
-
+func (d *Daemon) applyOutpostSwitch(monitor *sessionmonitor.Monitor, reply protocol.SwitchOutcome) {
+	outcome := sessionmonitor.SwitchOutcome{Conversation: reply.Conversation, Kind: sessionmonitor.SwitchOutcomeKind(reply.Kind), Reason: protocol.Deref(reply.Reason)}
 	(monitorHost{daemon: d}).SwitchApplied(monitor, outcome)
-	return nil
 }
 
 func (d *Daemon) storedMonitorView(id protocol.SessionID) sessionmonitor.View {

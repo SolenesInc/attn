@@ -1276,10 +1276,8 @@ export interface ApplyMonitorViewResult {
 
 export interface Switch {
     conversation: string;
-    cost?:        string;
     kind:         SwitchOutcomeKind;
     reason?:      string;
-    session_id?:  string;
     [property: string]: any;
 }
 
@@ -11678,10 +11676,8 @@ export interface RuntimeElement {
 
 export interface SwitchOutcome {
     conversation: string;
-    cost?:        string;
     kind:         SwitchOutcomeKind;
     reason?:      string;
-    session_id?:  string;
     [property: string]: any;
 }
 
@@ -19620,10 +19616,8 @@ const typeMap: any = {
     ], "any"),
     "Switch": o([
         { json: "conversation", js: "conversation", typ: "" },
-        { json: "cost", js: "cost", typ: u(undefined, "") },
         { json: "kind", js: "kind", typ: r("SwitchOutcomeKind") },
         { json: "reason", js: "reason", typ: u(undefined, "") },
-        { json: "session_id", js: "session_id", typ: u(undefined, "") },
     ], "any"),
     "ApprovePRMessage": o([
         { json: "cmd", js: "cmd", typ: r("ApprovePRMessageCmd") },
@@ -26172,10 +26166,8 @@ const typeMap: any = {
     ], "any"),
     "SwitchOutcome": o([
         { json: "conversation", js: "conversation", typ: "" },
-        { json: "cost", js: "cost", typ: u(undefined, "") },
         { json: "kind", js: "kind", typ: r("SwitchOutcomeKind") },
         { json: "reason", js: "reason", typ: u(undefined, "") },
-        { json: "session_id", js: "session_id", typ: u(undefined, "") },
     ], "any"),
     "Task": o([
         { json: "attempts", js: "attempts", typ: 0 },

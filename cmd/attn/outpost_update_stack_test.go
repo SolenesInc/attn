@@ -163,6 +163,13 @@ func TestOutpostUpdateReturnsOnHomeBuildAndKeepsShell(t *testing.T) {
 				if done.Update.Phase != protocol.OutpostUpdatePhaseDone || done.State != protocol.OutpostStateConnected || !strings.Contains(protocol.Deref(done.Build), version) {
 					t.Fatalf("update outcome: %+v, update=%+v", done, done.Update)
 				}
+				if channel == "release" {
+					cached, err := filepath.Glob(filepath.Join(home.Dir, "outpost-builds", "*", runtime.GOARCH, "attn"))
+					if err != nil || len(cached) != 1 {
+						t.Fatalf("cached %s binaries after update to %s = %v (%v), want only the current build", runtime.GOARCH, version, cached, err)
+					}
+					t.Logf("%s cache after %s: %d binary", runtime.GOARCH, version, len(cached))
+				}
 				retained, err := os.ReadFile(otherRollback)
 				if err != nil || string(retained) != "another install's rollback" {
 					t.Fatalf("update changed another install's rollback: %q, %v", retained, err)

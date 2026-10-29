@@ -62,9 +62,6 @@ func (d *Daemon) resolveMonitorSwitch(session protocol.SessionID, proposed sessi
 			outcome.Kind = sessionmonitor.SwitchOpened
 		}
 	}
-	if cost, err := d.store.SessionCostCheckpoint(shown); err == nil {
-		outcome.Cost = &cost
-	}
 	return outcome
 }
 

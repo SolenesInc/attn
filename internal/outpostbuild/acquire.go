@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,7 +47,7 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (string, erro
 	}
 	path := filepath.Join(dir, "attn")
 	if info, err := os.Stat(path); err == nil && info.Size() > 0 {
-		return path, nil
+		return path, req.prune(key, arch)
 	}
 	staging, err := os.MkdirTemp(dir, ".build-*")
 	if err != nil {
@@ -130,7 +131,27 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (string, erro
 	if err := os.Rename(output, path); err != nil {
 		return "", err
 	}
-	return path, nil
+	return path, req.prune(key, arch)
+}
+
+func (req Request) prune(current, arch string) error {
+	builds, err := os.ReadDir(req.Cache)
+	if err != nil {
+		return fmt.Errorf("prune outpost build cache: %w", err)
+	}
+	for _, build := range builds {
+		if !build.IsDir() || build.Name() == current {
+			continue
+		}
+		dir := filepath.Join(req.Cache, build.Name())
+		if err := os.RemoveAll(filepath.Join(dir, arch)); err != nil {
+			return fmt.Errorf("prune outpost build cache %s for %s: %w", build.Name(), arch, err)
+		}
+		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) && !errors.Is(err, syscall.ENOTEMPTY) {
+			return fmt.Errorf("prune outpost build cache %s: %w", build.Name(), err)
+		}
+	}
+	return nil
 }
 
 func command(ctx context.Context, dir, name string, args ...string) ([]byte, error) {

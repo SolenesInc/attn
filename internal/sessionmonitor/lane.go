@@ -156,6 +156,8 @@ func (e *quietError) Unwrap() error { return ErrComposerDirty }
 
 var PlacingRetry = 3 * time.Second
 
+const MaxPlacedDeliveries = 65_536
+
 func RetryDelay(err error) (time.Duration, bool) {
 	var quiet *quietError
 	if errors.As(err, &quiet) {
@@ -239,6 +241,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	}
 	if err := allowedForPhase(delivery.Placement, m.state.State); err != nil {
 		return deferred(err)
+	}
+	if len(l.placed) >= MaxPlacedDeliveries {
+		return Attempt{Stage: Failed, Err: fmt.Errorf("session %s: max_placed_deliveries=%d, asked for %d; reload the agent to reset its input lane", m.session, MaxPlacedDeliveries, len(l.placed)+1)}, runRef{}
 	}
 
 	var attempt Attempt

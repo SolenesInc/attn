@@ -29,7 +29,6 @@ type SwitchOutcome struct {
 	Kind         SwitchOutcomeKind
 	Session      protocol.SessionID
 	Reason       string
-	Cost         *sessioncost.Checkpoint
 }
 
 type Policy struct {
