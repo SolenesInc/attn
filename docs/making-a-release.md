@@ -2,7 +2,7 @@
 
 ## Changelog fragments
 
-Each ordinary PR adds a uniquely named `changelog.d/*.yaml`:
+Each landing or ordinary PR adds a uniquely named `changelog.d/*.yaml`:
 
 ```yaml
 kind: fixed # added | changed | fixed | removed | internal

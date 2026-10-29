@@ -104,6 +104,12 @@ count.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
 
+## Landing
+
+- Land on `main` with `scripts/land.sh`; see [Landing](docs/landing.md).
+- Rebase onto `origin/main` at the start of every step and land each slice
+  that works. Commits held back on a branch turn into conflicts.
+
 ## PR posture
 
 ### Reviewer & author
@@ -300,7 +306,8 @@ working on:
 - The inbox: addresses, rings, wakes, seed updates or notices => docs/inbox.md
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/prompt-authoring.md
-- Branches, PRs, merges, or waiting on reviews => docs/pull-requests.md
+- Landing, rebasing, or the pre-push guard => docs/landing.md
+- Pull requests, or waiting on their reviews => docs/pull-requests.md
 - Changelog fragments, releases, or hotfixes => docs/making-a-release.md
 - Installing, launching, or verifying instances => docs/instances.md
 - Frontend code or shortcuts => app/AGENTS.md

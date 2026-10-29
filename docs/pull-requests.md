@@ -1,5 +1,9 @@
 # Pull requests
 
+Contributors working from a fork, and changes that need packaged-app CI before
+they land, go through a pull request. Everything else
+[lands on main](landing.md).
+
 Every PR branches from and targets `main`.
 
 ```bash
