@@ -9,9 +9,9 @@ import (
 )
 
 func runSeedGuide(args []string) {
-	if len(args) > 0 {
-		fmt.Fprintf(os.Stderr, "seed guide: takes no arguments\n")
-		os.Exit(2)
+	f := newSeedFlags("guide")
+	if len(f.parse("guide", args)) > 0 {
+		seedUsageError("guide", fmt.Errorf("takes no arguments"))
 	}
 	writeSeedGuide(os.Stdout)
 }

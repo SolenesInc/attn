@@ -43,8 +43,6 @@ func runSeed() {
 		runSeedReview(args)
 	case "edit":
 		runSeedEdit(args)
-	case "handover":
-		runSeedHandover(args)
 	case "send-to-chief":
 		runSeedSendToChief(args)
 	case "export":
@@ -72,213 +70,247 @@ func runSeed() {
 	default:
 		recordUsageError("seed", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "seed: unknown command %q\n", os.Args[2])
-		writeSeedHelp(os.Stderr)
+		fmt.Fprintln(os.Stderr, "usage: attn seed <command> (attn seed --help)")
 		os.Exit(2)
 	}
 }
 
+type seedVerb struct {
+	name     string
+	synopsis string
+	about    string
+	flags    []string
+}
+
+var seedVerbs = []seedVerb{
+	{`plant`, `plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
+if the seed gains children, that body is the plot's plan. --part-of
+plants it under a plot. --check defines what the seed must prove.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}},
+	{`plot`, `plot [-f <path>] [--json]`, `plant a whole plot in one move from a JSON payload (-f, or stdin):
+{"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}],
+"children": [{"title": …, "body": …, "checks": […],
+"blocks": ["<sibling step slug>"]}]}. Children are parallel by
+default; blocks names the siblings a child holds back. A shared
+check is proven by every child. Prints the plot's id and each
+child's id and step slug.`, []string{"f", "member", "json"}},
+	{`ls`, `ls [--stale [--window <duration>]] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
+--flat prints one list. --stale narrows to open seeds whose log has not moved
+for the window (default %s) — a query for your judgment, never a
+reaper.`, formatWindow(garden.DefaultStaleWindow)), []string{"stale", "window", "flat", "json"}},
+	{`search`, `search <words> [--limit <n>] [--json]`, `find seeds by keyword across your profile's garden, harvested and withered
+included: titles, bodies and every log entry. A seed matches when one
+of those carries every word, and the line that did is printed under it.
+Title matches come first. Search before you plant, so a duplicate is
+found instead of created.`, []string{"limit", "json"}},
+	{`ready`, `ready [--plot <plot> | --all] [--json]`, `what you can tend right now, oldest first: nothing open blocks it,
+nobody is holding it, and it is not a plot — a plot's work is its
+children. With no flags the scope is your profile's garden — unless this
+session was dispatched at a plot, and then that plot; --all steps back
+out to the garden.`, []string{"plot", "all", "json"}},
+	{`link`, `link <a> <blocks|part-of|discovered-from> <b> [--json]`, `relate two seeds. "a blocks b" keeps b out of ready until a closes;
+"a part-of b" puts a under b; b is then a plot. "a discovered-from b"
+records where work came from without ordering it. A structural cycle
+is refused, naming both seeds and the edge to remove.`, []string{"json"}},
+	{`unlink`, `unlink <a> <blocks|part-of|discovered-from> <b> [--json]`, `remove the edge. Every link has one.`, []string{"json"}},
+	{`show`, `show <id> [--json]`, `one seed: the freshest handoff left on it, its state, who tends it,
+every edge that touches it in both directions, its body, and the newest
+notes on its log.`, []string{"json"}},
+	{`review`, `review <start|show|cancel|retry|keep>`, `start an advisory Garden review, inspect its progressive results,
+cancel unfinished classification, retry one failed or changed item, or keep
+one seed growing and review it again after seven quiet days.
+The review never changes a seed's state.`, []string{}},
+	{`review start`, `review start [--json]`, `Start an advisory Garden review. The review never changes a seed's state.`, []string{"json"}},
+	{`review show`, `review show [<review-id>] [--json]`, `Inspect the review and its progressive results. With no id, show the latest review.`, []string{"json"}},
+	{`review cancel`, `review cancel <review-id> [--json]`, `Cancel unfinished classification.`, []string{"json"}},
+	{`review retry`, `review retry <review-id> <seed-id> [--json]`, `Retry one failed or changed review item.`, []string{"json"}},
+	{`review keep`, `review keep <review-id> <seed-id> [--json]`, `Keep a seed growing and review it again after seven quiet days.`, []string{"json"}},
+	{`watch`, `watch <id> [--json]`, `watch this seed and its descendants. Delegation starts the same watch.
+unwatch removes this seed's subscription; separate child or ancestor
+watches remain. show names the subscriptions that still cover a seed.`, []string{"json"}},
+	{`unwatch`, `unwatch <id> [--json]`, `Remove this seed's subscription. Separate child or ancestor watches remain.
+show names the subscriptions that still cover a seed.`, []string{"json"}},
+	{`edit`, `edit <id> -m <body> [--json]`, `replace the seed's markdown body without moving its state or claim.
+- reads stdin; empty or whitespace-only stdin is refused. An explicit -m '' clears the body.`, []string{"m", "json"}},
+	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
+saved folder, branch and placement problem are recorded automatically;
+-m adds an exception such as a special branch or directory.`, []string{"m", "json"}},
+	{`tend`, `tend <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `claim the seed and start growing it. One tender at a time: tending a
+seed somebody else still holds is refused, naming them, and takes
+--force to go through anyway. The freshest handoff prints on the
+claim, so picking a seed up primes you.`, []string{"m", "member", "force", "json"}},
+	{`park`, `park <id> [-m "<where you left it>"] [--member <name>] [--force] [--json]`, `pause the seed deliberately — it goes dormant and lets go of its
+tender. An optional comment lands on the log in the same move. Tending
+it again picks it back up.`, []string{"m", "member", "force", "json"}},
+	{`harvest`, `harvest <id> (-m "<what got done>" | --when-merged [<pr-url>] [--clear]) [--member <name>] [--force] [--json]`, `close the seed as done. The reason is the point of the record.
+--when-merged closes nothing now: attn harvests the seed itself, with
+its own reason, when the pull request merges. Reach for it only when
+the merge is the last step. With no url it takes this session's single
+open pull request; --when-merged --clear takes the arming back and
+leaves the state alone.`, []string{"m", "member", "force", "json", "when-merged", "clear"}},
+	{`wither`, `wither <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up.`, []string{"m", "member", "force", "json"}},
+	{`replant`, `replant <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
+is free. Reopens a closed seed, un-parks a dormant one, and hands back
+one being grown.`, []string{"m", "member", "force", "json"}},
+	{`note`, `note <id> -m "<what happened>" [--handoff] [--ring] [--json]`, `append to the seed's log — what happened and what you learned, for
+whoever tends it next. - reads stdin. --handoff addresses it to your
+successor on this seed: show renders the freshest one first and tend
+prints it on the claim, so it is read before any work.
+--ring tells the current tender and watchers to look; ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "member", "json"}},
+	{`check`, `check <add|edit|remove|restore|report|confirm|reject|uncheck|reopen>`, `Define, report, or judge what a seed must prove. Each move has its own --help.
+Checks never block a move. harvest lists the checks still open or rejected.`, []string{}},
+	{`check add`, `check add <id> <C#> "<statement>" [--shared]`, `Define a numbered statement (C1) that the body cites by id. On a plot,
+--shared makes every seed below it prove the check with its own report.
+Removed ids are never reused.`, []string{"m", "member", "ring", "json", "shared"}},
+	{`check edit`, `check edit <id> <C#> "<statement>"`, `Replace the check's statement.`, []string{"m", "member", "ring", "json"}},
+	{`check remove`, `check remove <id> <C#>`, `Remove a check. Its id stays reserved.`, []string{"m", "member", "ring", "json"}},
+	{`check restore`, `check restore <id> <C#>`, `Bring a removed check back with its result.`, []string{"m", "member", "ring", "json"}},
+	{`check report`, `check report <id> <C#> -m "<summary>" [--evidence <artifact|url>]... [--commit <rev>]`, `Record the proof for a check. --evidence is an artifact on the seed
+or an http(s) URL, and can repeat. A new report clears the verdict.
+If a check doesn't apply, report that too: say why and cite what
+shows it. The verdict decides.`, []string{"m", "member", "ring", "json", "evidence", "commit"}},
+	{`check confirm`, `check confirm <id> <C#> [-m "<how you verified it>"]`, `Confirm the check, with or without a report.`, []string{"m", "member", "ring", "json"}},
+	{`check reject`, `check reject <id> <C#> -m "<what would prove it>"`, `Reject the check. -m names what would prove it.`, []string{"m", "member", "ring", "json"}},
+	{`check uncheck`, `check uncheck <id> <C#> [-m "<why>"]`, `Clear the verdict and keep the report.`, []string{"m", "member", "ring", "json"}},
+	{`check reopen`, `check reopen <id> <C#> [-m "<why>"]`, `Clear the report and verdict.`, []string{"m", "member", "ring", "json"}},
+	{`attach`, `attach <id> (--path <file> (--move | --copy | --repo <repository>) | --notebook <id> | --url <url>)`, `put a local regular file in durable seed-owned storage. Move is the
+recommended choice and leaves one editable canonical file; Copy keeps
+an independent source snapshot. Git-tracked files must use Copy.
+Notebook, URL and repository references remain associations.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "move", "copy"}},
+	{`detach`, `detach <id> (--path <filename> (--to <destination> | --reference | --repo <repository>) | --notebook <id> | --url <url>)`, `move a managed artifact back out without overwriting. An old linked
+path association can be removed explicitly with --reference instead.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "to", "reference"}},
+	{`notes`, `notes <id> [--limit <n>] [--json]`, `the whole log, newest first. show renders the newest few and says
+how many more are here.`, []string{"limit", "json"}},
+	{`guide`, `guide`, `print the craft: writing a body, deliverable types and what "done" is
+for each, artifacts, and handoffs and steering.`, []string{}},
+	{`prime`, `prime`, `print the standing garden contract and this session's live garden
+position.`, []string{}},
+	{`export`, `export <id> [--out <path>] [--json]`, `write the seed's body to markdown, stamped as generated from the seed —
+the file to open, read and annotate. --out - writes to stdout; the
+default is <id>.md in the current directory. The seed stays the source:
+edit the seed and export again, never the file.`, []string{"out", "json"}},
+}
+
+type seedFlagDef struct {
+	name     string
+	argument string
+	about    string
+	register func(*seedFlags)
+}
+
+var seedFlagDefs = []seedFlagDef{
+	{`m`, `<body>`, `markdown, or - to read stdin; empty stdin is refused; edit -m '' clears the body`, func(f *seedFlags) { f.fs.StringVar(&f.message, "m", "", "") }},
+	{`part-of`, `<plot>`, `plant under a plot`, func(f *seedFlags) { f.fs.StringVar(&f.partOf, "part-of", "", "") }},
+	{`discovered-from`, `<seed>`, `record the seed this work came from`, func(f *seedFlags) { f.fs.StringVar(&f.discoveredFrom, "discovered-from", "", "") }},
+	{`clear`, ``, `remove the harvest condition (with --when-merged)`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
+	{`when-merged`, ``, `harvest the seed when its pull request merges`, func(f *seedFlags) { f.fs.BoolVar(&f.whenMerged, "when-merged", false, "") }},
+	{`plot`, `<plot>`, `scope a ready answer to one plot`, func(f *seedFlags) { f.fs.StringVar(&f.plot, "plot", "", "") }},
+	{`all`, ``, `the whole garden, overriding a dispatched session's plot`, func(f *seedFlags) { f.fs.BoolVar(&f.all, "all", false, "") }},
+	{`flat`, ``, `print a listing without nesting`, func(f *seedFlags) { f.fs.BoolVar(&f.flat, "flat", false, "") }},
+	{`stale`, ``, `only open seeds whose log has not moved`, func(f *seedFlags) { f.fs.BoolVar(&f.stale, "stale", false, "") }},
+	{`window`, `<d>`, `the stale window, like 72h or 14d (with --stale)`, func(f *seedFlags) { f.fs.StringVar(&f.window, "window", "", "") }},
+	{`f`, `<path>`, `the plot payload to read; - or omitted reads stdin`, func(f *seedFlags) { f.fs.StringVar(&f.file, "f", "", "") }},
+	{`handoff`, ``, `write a note to whoever tends the seed next`, func(f *seedFlags) { f.fs.BoolVar(&f.handoff, "handoff", false, "") }},
+	{`ring`, ``, `give the current tender and watchers a seed update after this note or check move lands, and print who gets it`, func(f *seedFlags) { f.fs.BoolVar(&f.ring, "ring", false, "") }},
+	{`check`, `"C1=<statement>"`, `a check the seed must prove; repeats`, func(f *seedFlags) { f.fs.Var(&f.checks, "check", "") }},
+	{`shared`, ``, `every seed below this plot proves the check`, func(f *seedFlags) { f.fs.BoolVar(&f.shared, "shared", false, "") }},
+	{`evidence`, `<artifact|url>`, `an artifact on the seed or an http(s) URL; repeats`, func(f *seedFlags) { f.fs.Var(&f.evidence, "evidence", "") }},
+	{`commit`, `<rev>`, `the commit the evidence came from, resolved with git rev-parse in the current directory`, func(f *seedFlags) { f.fs.StringVar(&f.commit, "commit", "", "") }},
+	{`path`, `<file>`, `local source, managed filename, or linked path`, func(f *seedFlags) { f.fs.StringVar(&f.path, "path", "", "") }},
+	{`repo`, `<name>`, `the repository that path lives in`, func(f *seedFlags) { f.fs.StringVar(&f.repo, "repo", "", "") }},
+	{`notebook`, `<id>`, `a Notebook document`, func(f *seedFlags) { f.fs.StringVar(&f.notebook, "notebook", "", "") }},
+	{`url`, `<url>`, `anything reachable by URL`, func(f *seedFlags) { f.fs.StringVar(&f.url, "url", "", "") }},
+	{`move`, ``, `transfer a local source into seed ownership`, func(f *seedFlags) { f.fs.BoolVar(&f.move, "move", false, "") }},
+	{`copy`, ``, `snapshot a local source into seed ownership`, func(f *seedFlags) { f.fs.BoolVar(&f.copy, "copy", false, "") }},
+	{`to`, `<path>`, `destination that receives a managed artifact`, func(f *seedFlags) { f.fs.StringVar(&f.to, "to", "", "") }},
+	{`reference`, ``, `remove an old linked path association`, func(f *seedFlags) { f.fs.BoolVar(&f.reference, "reference", false, "") }},
+	{`force`, ``, `act even though somebody else holds the seed; the log records it`, func(f *seedFlags) { f.fs.BoolVar(&f.force, "force", false, "") }},
+	{`member`, `<name>`, `the crew member asking, recorded as planter, tender or note author`, func(f *seedFlags) { f.fs.StringVar(&f.member, "member", "", "") }},
+	{`profile`, `<name|id>`, `required outside attn when several profiles exist`, func(f *seedFlags) { f.fs.StringVar(&f.profile, "profile", "", "") }},
+	{`session`, `<id>`, `the session asking (defaults to the current session)`, func(f *seedFlags) { f.fs.StringVar(&f.session, "session", "", "") }},
+	{`out`, `<path>`, `file to write; - writes to stdout`, func(f *seedFlags) { f.fs.StringVar(&f.out, "out", "", "") }},
+	{`limit`, `<n>`, fmt.Sprintf(`how many log entries to read (notes), or how many hits to answer with (search; default %d, at most %d)`, garden.DefaultSearchResults, garden.MaxSearchResults), func(f *seedFlags) { f.fs.IntVar(&f.limit, "limit", 0, "") }},
+	{`json`, ``, `print the result as JSON`, func(f *seedFlags) { f.fs.BoolVar(&f.json, "json", false, "") }},
+}
+
+func seedVerbNamed(name string) seedVerb {
+	for _, verb := range seedVerbs {
+		if verb.name == name {
+			return verb
+		}
+	}
+	panic("unknown seed verb: " + name)
+}
+
+func seedVerbHasFlag(verb seedVerb, name string) bool {
+	return name == "profile" || name == "session" || slices.Contains(verb.flags, name)
+}
+
+func writeSeedVerbEntry(w io.Writer, verb seedVerb, indent string) {
+	fmt.Fprintln(w, indent+verb.synopsis)
+	for _, line := range strings.Split(verb.about, "\n") {
+		fmt.Fprintln(w, indent+"      "+line)
+	}
+}
+
+func writeSeedVerbHelp(w io.Writer, name string) {
+	verb := seedVerbNamed(name)
+	writeSeedVerbEntry(w, verb, "")
+	fmt.Fprintln(w, "\nflags:")
+	for _, def := range seedFlagDefs {
+		if seedVerbHasFlag(verb, def.name) {
+			writeSeedFlagHelp(w, def, "")
+		}
+	}
+}
+
+func writeSeedFlagHelp(w io.Writer, def seedFlagDef, owners string) {
+	prefix := "--"
+	if len(def.name) == 1 {
+		prefix = "-"
+	}
+	label := strings.TrimSpace(prefix + def.name + " " + def.argument)
+	fmt.Fprintf(w, "  %-24s %s%s\n", label, def.about, owners)
+}
+
 func writeSeedHelp(w io.Writer) {
-	fmt.Fprintf(w, `usage: attn seed <command>
+	fmt.Fprint(w, `usage: attn seed <command>
 
 A seed is the unit of work: one document, one short id, one slug made of the
 title's key words, planted in the garden. Commands take the id; the slug is
 how the seed is spoken of.
 Anything worth handing off, parking, or attributing is a seed.
+Use attn seed <command> --help for one command's syntax and flags.
 
 commands:
-  plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]
-        plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
-        if the seed gains children, that body is the plot's plan. --part-of
-        plants it under a plot. --check defines what the seed must prove.
+`)
+	for _, verb := range seedVerbs {
+		writeSeedVerbEntry(w, verb, "  ")
+		fmt.Fprintln(w)
+	}
+	fmt.Fprintln(w, "flags:")
+	for _, def := range seedFlagDefs {
+		if def.name == "profile" || def.name == "session" {
+			writeSeedFlagHelp(w, def, " (every command)")
+			continue
+		}
+		var owners []string
+		for _, verb := range seedVerbs {
+			if seedVerbHasFlag(verb, def.name) {
+				owners = append(owners, verb.name)
+			}
+		}
+		writeSeedFlagHelp(w, def, " ("+strings.Join(owners, ", ")+")")
+	}
+}
 
-  plot [-f <path>] [--json]
-        plant a whole plot in one move from a JSON payload (-f, or stdin):
-        {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}],
-        "children": [{"title": …, "body": …, "checks": […],
-        "blocks": ["<sibling step slug>"]}]}. Children are parallel by
-        default; blocks names the siblings a child holds back. A shared
-        check is proven by every child. Prints the plot's id and each
-        child's id and step slug.
-
-  ls [--stale [--window <duration>]] [--flat] [--json]
-        the garden, newest first, with children nested under their plot.
-        --flat prints one list. --stale narrows to open seeds whose log has not moved
-        for the window (default %s) — a query for your judgment, never a
-        reaper.
-
-  search <words> [--limit <n>] [--json]
-        find seeds by keyword across your profile's garden, harvested and withered
-        included: titles, bodies and every log entry. A seed matches when one
-        of those carries every word, and the line that did is printed under it.
-        Title matches come first. Search before you plant, so a duplicate is
-        found instead of created.
-
-  ready [--plot <plot> | --all] [--json]
-        what you can tend right now, oldest first: nothing open blocks it,
-        nobody is holding it, and it is not a plot — a plot's work is its
-        children. With no flags the scope is your profile's garden — unless this
-        session was dispatched at a plot, and then that plot; --all steps back
-        out to the garden.
-
-  link <a> blocks <b> | link <a> part-of <b> | link <a> discovered-from <b>
-        relate two seeds. "a blocks b" keeps b out of ready until a closes;
-        "a part-of b" puts a under b; b is then a plot. "a discovered-from b"
-        records where work came from without ordering it. A structural cycle
-        is refused, naming both seeds and the edge to remove.
-
-  unlink <a> blocks <b> | unlink <a> part-of <b> | unlink <a> discovered-from <b>
-        remove the edge. Every link has one.
-
-  show <id> [--json]
-        one seed: the freshest handoff left on it, its state, who tends it,
-        every edge that touches it in both directions, its body, and the newest
-        notes on its log.
-
-  review start | show [<review-id>] | cancel <review-id> | retry <review-id> <seed-id> | keep <review-id> <seed-id> [--json]
-        start an advisory Garden review, inspect its progressive results,
-		cancel unfinished classification, retry one failed or changed item, or keep
-		one seed growing and review it again after seven quiet days.
-        The review never changes a seed's state.
-
-  watch <id> | unwatch <id>
-        watch this seed and its descendants. Delegation starts the same watch.
-        unwatch removes this seed's subscription; separate child or ancestor
-        watches remain. show names the subscriptions that still cover a seed.
-
-  edit <id> -m <body>
-        replace the seed's markdown body without moving its state or claim.
-        - reads stdin; an explicit empty -m clears the body.
-
-  send-to-chief <id> [-m "<optional guidance>"]
-        give this seed to the Chief to decide its next working context. The
-        saved folder, branch and placement problem are recorded automatically;
-        -m adds an exception such as a special branch or directory.
-
-  tend <id> [--member <name>] [--force]
-        claim the seed and start growing it. One tender at a time: tending a
-        seed somebody else still holds is refused, naming them, and takes
-        --force to go through anyway. The freshest handoff prints on the
-        claim, so picking a seed up primes you.
-
-  park <id> [-m "<where you left it>"] [--member <name>] [--force]
-        pause the seed deliberately — it goes dormant and lets go of its
-        tender. An optional comment lands on the log in the same move. Tending
-        it again picks it back up.
-
-  harvest <id> (-m "<what got done>" | --when-merged [<pr-url>] [--clear]) [--member <name>] [--force]
-        close the seed as done. The reason is the point of the record.
-        --when-merged closes nothing now: attn harvests the seed itself, with
-        its own reason, when the pull request merges. Reach for it only when
-        the merge is the last step. With no url it takes this session's single
-        open pull request; --when-merged --clear takes the arming back and
-        leaves the state alone.
-
-  wither <id> [-m "<why>"] [--member <name>] [--force]
-        close the seed as abandoned. Nobody is picking this up.
-
-  replant <id> [--member <name>] [--force]
-        put the seed back in the pool — planted, unclaimed, ready for whoever
-        is free. Reopens a closed seed, un-parks a dormant one, and hands back
-        one being grown.
-
-  note <id> -m "<what happened>" [--handoff] [--ring]
-        append to the seed's log — what happened and what you learned, for
-        whoever tends it next. - reads stdin. --handoff addresses it to your
-        successor on this seed: show renders the freshest one first and tend
-        prints it on the claim, so it is read before any work.
-        --ring tells the current tender and watchers to look; ordinary notes stay quiet.
-
-  check add <id> <C#> "<statement>" [--shared]
-  check edit <id> <C#> "<statement>"
-  check remove|restore <id> <C#>
-        define what this seed must prove. A check is a numbered statement
-        (C1) that the body cites by id. On a plot, --shared makes every seed
-        below it prove the check with its own report. Removed ids are never
-        reused. restore brings a check back with its result.
-
-  check report <id> <C#> -m "<summary>" [--evidence <artifact|url>]... [--commit <rev>]
-        record the proof for a check. --evidence is an artifact on the seed
-        or an http(s) URL, and can repeat. A new report clears the verdict.
-        If a check doesn't apply, report that too: say why and cite what
-        shows it. The verdict decides.
-
-  check confirm|reject|uncheck|reopen <id> <C#> [-m "<why>"]
-        judge the check, with or without a report. reject needs -m saying
-        what would prove it. uncheck clears the verdict. reopen clears the
-        report as well.
-
-        Every check verb takes --ring, --member, and --json. Checks never
-        block a move. harvest lists the checks still open or rejected.
-
-  attach <id> --path <file> (--move | --copy)
-        put a local regular file in durable seed-owned storage. Move is the
-        recommended choice and leaves one editable canonical file; Copy keeps
-        an independent source snapshot. Git-tracked files must use Copy.
-        Notebook, URL and repository references remain associations.
-
-  detach <id> --path <filename> --to <destination>
-        move a managed artifact back out without overwriting. An old linked
-        path association can be removed explicitly with --reference instead.
-
-  notes <id> [--limit <n>] [--json]
-        the whole log, newest first. show renders the newest few and says
-        how many more are here.
-
-  guide
-        print the craft: writing a body, deliverable types and what "done" is
-        for each, artifacts, and handoffs and steering.
-
-  prime
-        print the standing garden contract and this session's live garden
-        position.
-
-  export <id> [--out <path>] [--json]
-        write the seed's body to markdown, stamped as generated from the seed —
-        the file to open, read and annotate. --out - writes to stdout; the
-        default is <id>.md in the current directory. The seed stays the source:
-        edit the seed and export again, never the file.
-
-flags:
-  --part-of <plot>   plant under a plot (plant)
-  --discovered-from <seed>  record the seed this work came from (plant)
-  --clear             remove the harvest condition (harvest --when-merged)
-  --when-merged       harvest the seed when its pull request merges, instead
-                      of harvesting it now (harvest)
-  --plot <plot>      scope a ready answer to one plot
-  --flat             print a listing without nesting
-  --stale            only open seeds whose log has not moved (ls)
-  --window <d>       the stale window, like 72h or 14d (ls --stale)
-  -f <path>          the plot payload to read (plot; default stdin)
-  --handoff          write a note to whoever tends the seed next (note)
-  --ring             give the current tender and watchers a seed update after
-                     this note or check move lands, and print who gets it (note, check)
-  --check "C1=<s>"   a check the seed must prove; repeats (plant)
-  --shared           every seed below this plot proves the check (check add)
-  --evidence <e>     an artifact on the seed or an http(s) URL; repeats (check report)
-  --commit <rev>     the commit the evidence came from, resolved with git
-                     rev-parse in the current directory (check report)
-  --path <file>      local source, managed filename, or linked path
-  --repo <name>      the repository that path lives in (attach, detach)
-  --notebook <id>    a Notebook document (attach, detach)
-  --url <url>        anything reachable by URL (attach, detach)
-  --move             transfer a local source into seed ownership (attach)
-  --copy             snapshot a local source into seed ownership (attach)
-  --to <path>        destination that receives a managed artifact (detach)
-  --reference        remove an old linked path association (detach)
-  --force            act even though somebody else holds the seed; the log
-                     records it (tend, park, harvest, wither, replant)
-  --member <name>    the crew member asking, recorded as planter, tender or
-                     note author
-  --profile <name|id> required outside attn when several profiles exist
-  --session <id>     the session asking (defaults to the current session)
-  --limit <n>        how many log entries to read (notes), or how many hits to
-                     answer with (search; default %d, at most %d)
-  --json             print the result as JSON
-`, formatWindow(garden.DefaultStaleWindow), garden.DefaultSearchResults, garden.MaxSearchResults)
+func seedUsageError(verb string, err error) {
+	fmt.Fprintf(os.Stderr, "seed %s: %v\n", verb, err)
+	fmt.Fprintf(os.Stderr, "usage: attn seed %s (attn seed %s --help)\n", seedVerbNamed(verb).synopsis, verb)
+	os.Exit(2)
 }
 
 func (f *seedFlags) client() *client.Client {
-	return client.New(config.SocketPath()).WithGardenProfile(strings.TrimSpace(*f.profile), f.sessionID())
+	return client.New(config.SocketPath()).WithGardenProfile(strings.TrimSpace(f.profile), f.sessionID())
 }
 
 var seedPrimeText = hooks.GardenGuidance
@@ -317,7 +349,7 @@ func seedPrimeFromReady(ready *protocol.SeedReadyResult) string {
 func runSeedPrime(args []string) {
 	f := newSeedFlags("prime")
 	if positionals := f.parse("prime", args); len(positionals) != 0 {
-		seedFail("prime", fmt.Errorf("takes no arguments, got %q", positionals[0]))
+		seedUsageError("prime", fmt.Errorf("takes no arguments, got %q", positionals[0]))
 	}
 	ready, err := f.client().SeedReady(f.sessionID(), "", false)
 	if err != nil {
@@ -333,121 +365,87 @@ func seedFail(verb string, err error) {
 
 type seedFlags struct {
 	fs             *flag.FlagSet
-	profile        *string
-	session        *string
-	member         *string
-	json           *bool
-	all            *bool
-	flat           *bool
-	stale          *bool
-	window         *string
-	plot           *string
-	partOf         *string
-	discoveredFrom *string
-	file           *string
-	message        *string
-	out            *string
-	limit          *int
-	handoff        *bool
-	ring           *bool
-	path           *string
-	repo           *string
-	notebook       *string
-	url            *string
-	move           *bool
-	copy           *bool
-	to             *string
-	reference      *bool
-	clear          *bool
-	whenMerged     *bool
-	force          *bool
-	evidence       *repeatedFlag
-	checks         *repeatedFlag
-	commit         *string
-	shared         *bool
+	profile        string
+	session        string
+	member         string
+	json           bool
+	all            bool
+	flat           bool
+	stale          bool
+	window         string
+	plot           string
+	partOf         string
+	discoveredFrom string
+	file           string
+	message        string
+	out            string
+	limit          int
+	handoff        bool
+	ring           bool
+	path           string
+	repo           string
+	notebook       string
+	url            string
+	move           bool
+	copy           bool
+	to             string
+	reference      bool
+	clear          bool
+	whenMerged     bool
+	force          bool
+	evidence       repeatedFlag
+	checks         repeatedFlag
+	commit         string
+	shared         bool
 }
 
 func newSeedFlags(verb string) *seedFlags {
-	fs := flag.NewFlagSet("seed "+verb, flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	evidence, checks := &repeatedFlag{}, &repeatedFlag{}
-	fs.Var(evidence, "evidence", "an artifact on the seed or an http(s) URL that proves the check; repeats")
-	fs.Var(checks, "check", "a check the seed must prove, as C1=<statement>; repeats")
-	return &seedFlags{
-		evidence:       evidence,
-		checks:         checks,
-		commit:         fs.String("commit", "", "the commit the evidence came from"),
-		shared:         fs.Bool("shared", false, "every seed below this plot proves the check"),
-		fs:             fs,
-		profile:        fs.String("profile", "", "profile name or id outside an attn session"),
-		session:        fs.String("session", "", "session id (defaults to the current session)"),
-		member:         fs.String("member", "", "crew member planting this seed"),
-		json:           fs.Bool("json", false, "print the result as JSON"),
-		all:            fs.Bool("all", false, "the whole garden, overriding a dispatched session's plot"),
-		flat:           fs.Bool("flat", false, "print seeds as one list without nesting"),
-		stale:          fs.Bool("stale", false, "only open seeds whose log has not moved for the window"),
-		window:         fs.String("window", "", "the stale window, like 72h or 14d"),
-		plot:           fs.String("plot", "", "scope to one plot"),
-		partOf:         fs.String("part-of", "", "plant under this plot"),
-		discoveredFrom: fs.String("discovered-from", "", "record the seed this work came from"),
-		file:           fs.String("f", "", "the plot payload to read (- or empty reads stdin)"),
-		message:        fs.String("m", "", "the seed's body, as markdown (- reads stdin)"),
-		out:            fs.String("out", "", "file to write (- for stdout)"),
-		limit:          fs.Int("limit", 0, "how many log entries to read"),
-		handoff:        fs.Bool("handoff", false, "write this note to whoever tends the seed next"),
-		ring:           fs.Bool("ring", false, "ring the seed's current tender and watchers after this note lands"),
-		path:           fs.String("path", "", "a markdown document at this path"),
-		repo:           fs.String("repo", "", "the repository the path lives in"),
-		notebook:       fs.String("notebook", "", "a Notebook document, by its id"),
-		url:            fs.String("url", "", "anything reachable by URL"),
-		move:           fs.Bool("move", false, "move a local file into seed ownership"),
-		copy:           fs.Bool("copy", false, "copy a local file into seed ownership"),
-		to:             fs.String("to", "", "destination for a detached managed artifact"),
-		reference:      fs.Bool("reference", false, "operate on an old linked path association"),
-		clear:          fs.Bool("clear", false, "remove the harvest condition"),
-		whenMerged:     fs.Bool("when-merged", false, "harvest the seed when its pull request merges"),
-		force:          fs.Bool("force", false, "act even though somebody else still holds the seed"),
+	entry := seedVerbNamed(verb)
+	f := &seedFlags{fs: flag.NewFlagSet("seed "+verb, flag.ContinueOnError)}
+	f.fs.SetOutput(io.Discard)
+	for _, def := range seedFlagDefs {
+		if seedVerbHasFlag(entry, def.name) {
+			def.register(f)
+		}
 	}
+	return f
 }
 
 func (f *seedFlags) noteKind() string {
-	if *f.handoff {
+	if f.handoff {
 		return garden.NoteKindHandoff
 	}
 	return ""
 }
 
 func (f *seedFlags) text(verb string) string {
-	if *f.message != "-" {
-		return *f.message
+	if f.message != "-" {
+		return f.message
 	}
 	raw, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		seedFail(verb, fmt.Errorf("reading stdin: %w", err))
 	}
+	if strings.TrimSpace(string(raw)) == "" {
+		seedUsageError(verb, fmt.Errorf("-m - read nothing from stdin; pass -m '' to clear the body"))
+	}
 	return string(raw)
 }
 
 func (f *seedFlags) parse(verb string, args []string) []string {
-	var positionals []string
-	rest := args
-	for {
-		if err := parseFlags(f.fs, rest); err != nil {
-			fmt.Fprintf(os.Stderr, "seed %s: %v\n", verb, err)
-			writeSeedHelp(os.Stderr)
-			os.Exit(2)
-		}
-		rest = f.fs.Args()
-		if len(rest) == 0 {
-			return positionals
-		}
-		positionals = append(positionals, rest[0])
-		rest = rest[1:]
+	positionals, err := parseInterspersedFlagArgs(f.fs, args)
+	if errors.Is(err, flag.ErrHelp) {
+		writeSeedVerbHelp(os.Stdout, verb)
+		os.Exit(0)
 	}
+	if err != nil {
+		seedUsageError(verb, err)
+	}
+	return positionals
 }
 
 func (f *seedFlags) sessionID() protocol.SessionID {
-	if id := strings.TrimSpace(*f.session); id != "" {
+	if id := strings.TrimSpace(f.session); id != "" {
 		return protocol.SessionID(id)
 	}
 	return currentSessionOrExit()
@@ -464,7 +462,7 @@ func (f *seedFlags) wasSet(name string) bool {
 }
 
 func (f *seedFlags) staleWindowSeconds() int {
-	raw := strings.TrimSpace(*f.window)
+	raw := strings.TrimSpace(f.window)
 	if raw == "" {
 		return 0
 	}
@@ -499,9 +497,9 @@ func runSeedPlant(args []string) {
 	f := newSeedFlags("plant")
 	positionals := f.parse("plant", args)
 	if len(positionals) != 1 {
-		seedFail("plant", fmt.Errorf(`needs exactly one title, got %d: attn seed plant "what this is" [-m "the detail"]`, len(positionals)))
+		seedUsageError("plant", fmt.Errorf(`needs exactly one title, got %d: attn seed plant "what this is" [-m "the detail"]`, len(positionals)))
 	}
-	checks, err := parsePlantChecks(*f.checks)
+	checks, err := parsePlantChecks(f.checks)
 	if err != nil {
 		seedFail("plant", err)
 	}
@@ -510,14 +508,14 @@ func runSeedPlant(args []string) {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
 	}
 	msg.Body = nonEmpty(f.text("plant"))
-	msg.PartOf = nonEmpty(strings.TrimSpace(*f.partOf))
-	msg.DiscoveredFrom = nonEmpty(strings.TrimSpace(*f.discoveredFrom))
-	msg.Member = nonEmpty(strings.TrimSpace(*f.member))
+	msg.PartOf = nonEmpty(strings.TrimSpace(f.partOf))
+	msg.DiscoveredFrom = nonEmpty(strings.TrimSpace(f.discoveredFrom))
+	msg.Member = nonEmpty(strings.TrimSpace(f.member))
 	result, err := f.client().SeedPlantMessage(msg)
 	if err != nil {
 		seedFail("plant", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result.Seed)
 		return
 	}
@@ -539,13 +537,13 @@ func runSeedSearch(args []string) {
 	f := newSeedFlags("search")
 	query := strings.Join(f.parse("search", args), " ")
 	if strings.TrimSpace(query) == "" {
-		seedFail("search", fmt.Errorf("needs something to look for: `attn seed search <words>`"))
+		seedUsageError("search", fmt.Errorf("needs something to look for: `attn seed search <words>`"))
 	}
-	result, err := f.client().SeedSearch(f.sessionID(), query, *f.limit)
+	result, err := f.client().SeedSearch(f.sessionID(), query, f.limit)
 	if err != nil {
 		seedFail("search", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -583,25 +581,25 @@ func plural(n int, noun string) string {
 func runSeedList(args []string) {
 	f := newSeedFlags("ls")
 	if positionals := f.parse("ls", args); len(positionals) != 0 {
-		seedFail("ls", fmt.Errorf("takes no arguments, got %q; to read one seed use `attn seed show <id>`", positionals[0]))
+		seedUsageError("ls", fmt.Errorf("takes no arguments, got %q; to read one seed use `attn seed show <id>`", positionals[0]))
 	}
-	if !*f.stale && flagWasSet(f.fs, "window") {
+	if !f.stale && flagWasSet(f.fs, "window") {
 		seedFail("ls", fmt.Errorf("--window is the stale window; it only means something with --stale"))
 	}
-	result, err := f.client().SeedList(f.sessionID(), *f.stale, f.staleWindowSeconds())
+	result, err := f.client().SeedList(f.sessionID(), f.stale, f.staleWindowSeconds())
 	if err != nil {
 		seedFail("ls", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
-	if *f.stale {
+	if f.stale {
 		fmt.Printf("open seeds whose log has not moved for %s — no note, no move, no edge. This is a query, not a reaper: tend, note or park what still matters.\n\n",
 			staleWindowLabel(result.StaleWindowSeconds))
 	}
 	if len(result.Seeds) == 0 {
-		if *f.stale {
+		if f.stale {
 			fmt.Println("none — every open seed has moved inside the window")
 			return
 		}
@@ -610,7 +608,7 @@ func runSeedList(args []string) {
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
-	for _, row := range seedRows(result.Seeds, *f.flat) {
+	for _, row := range seedRows(result.Seeds, f.flat) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
 			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
 			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+checkTallySuffix(row.seed)+harvestWhenSuffix(row.seed))
@@ -623,26 +621,32 @@ func runSeedList(args []string) {
 }
 
 func runSeedReview(args []string) {
-	if len(args) == 0 {
-		seedFail("review", fmt.Errorf("needs start, show, cancel, retry, or keep"))
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		newSeedFlags("review").parse("review", args)
+		seedUsageError("review", fmt.Errorf("needs start, show, cancel, retry, or keep"))
 	}
 	verb := args[0]
-	f := newSeedFlags("review " + verb)
-	positionals, jsonOutput, err := parseSeedReviewArgs(args[1:], f)
-	if err != nil {
-		seedFail("review "+verb, err)
+	switch verb {
+	case "start", "show", "cancel", "retry", "keep":
+	default:
+		recordUsageError("seed review", usageErrorUnknownCommand)
+		seedUsageError("review", fmt.Errorf("unknown command %q; use start, show, cancel, retry, or keep", verb))
 	}
+	name := "review " + verb
+	f := newSeedFlags(name)
+	positionals := f.parse(name, args[1:])
+	var err error
 
 	var result *protocol.SeedReviewResult
 	switch verb {
 	case "start":
 		if len(positionals) != 0 {
-			seedFail("review start", fmt.Errorf("takes no arguments"))
+			seedUsageError("review start", fmt.Errorf("takes no arguments"))
 		}
 		result, err = f.client().SeedReviewStart()
 	case "show":
 		if len(positionals) > 1 {
-			seedFail("review show", fmt.Errorf("takes at most one review id"))
+			seedUsageError("review show", fmt.Errorf("takes at most one review id"))
 		}
 		reviewID := ""
 		if len(positionals) == 1 {
@@ -651,17 +655,17 @@ func runSeedReview(args []string) {
 		result, err = f.client().SeedReviewShow(reviewID)
 	case "cancel":
 		if len(positionals) != 1 {
-			seedFail("review cancel", fmt.Errorf("needs exactly one review id"))
+			seedUsageError("review cancel", fmt.Errorf("needs exactly one review id"))
 		}
 		result, err = f.client().SeedReviewCancel(positionals[0])
 	case "retry":
 		if len(positionals) != 2 {
-			seedFail("review retry", fmt.Errorf("needs a review id and seed id"))
+			seedUsageError("review retry", fmt.Errorf("needs a review id and seed id"))
 		}
 		result, err = f.client().SeedReviewRetry(positionals[0], positionals[1])
 	case "keep":
 		if len(positionals) != 2 {
-			seedFail("review keep", fmt.Errorf("needs a review id and seed id"))
+			seedUsageError("review keep", fmt.Errorf("needs a review id and seed id"))
 		}
 		shown, showErr := f.client().SeedReviewShow(positionals[0])
 		if showErr != nil {
@@ -682,14 +686,11 @@ func runSeedReview(args []string) {
 		result, err = f.client().SeedReviewKeep(positionals[1], protocol.SeedReviewActionContext{
 			ReviewID: positionals[0], EvidenceVersion: receipt.EvidenceVersion,
 		})
-	default:
-		recordUsageError("seed review", usageErrorUnknownCommand)
-		seedFail("review", fmt.Errorf("unknown command %q; use start, show, cancel, retry, or keep", verb))
 	}
 	if err != nil {
 		seedFail("review "+verb, err)
 	}
-	if jsonOutput {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -698,34 +699,6 @@ func runSeedReview(args []string) {
 		return
 	}
 	fprintSeedReview(os.Stdout, *result.Review, verb == "show")
-}
-
-func parseSeedReviewArgs(args []string, scope ...*seedFlags) ([]string, bool, error) {
-	positionals := make([]string, 0, len(args))
-	jsonOutput := false
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch {
-		case arg == "--json":
-			jsonOutput = true
-		case len(scope) > 0 && (arg == "--profile" || arg == "--session"):
-			if i+1 >= len(args) {
-				return nil, false, fmt.Errorf("%s needs a value", arg)
-			}
-			i++
-			if arg == "--profile" {
-				*scope[0].profile = args[i]
-			} else {
-				*scope[0].session = args[i]
-			}
-		case strings.HasPrefix(arg, "-"):
-			recordUsageError("seed review", usageErrorUnknownFlag)
-			return nil, false, fmt.Errorf("unknown flag %q", arg)
-		default:
-			positionals = append(positionals, arg)
-		}
-	}
-	return positionals, jsonOutput, nil
 }
 
 func fprintSeedReview(w io.Writer, review protocol.GardenReview, detailed bool) {
@@ -814,9 +787,9 @@ func pullRequestLabel(prID string) string {
 func runSeedPlot(args []string) {
 	f := newSeedFlags("plot")
 	if positionals := f.parse("plot", args); len(positionals) != 0 {
-		seedFail("plot", fmt.Errorf("takes no arguments, got %q; the plot is JSON on stdin or at -f <path>", positionals[0]))
+		seedUsageError("plot", fmt.Errorf("takes no arguments, got %q; the plot is JSON on stdin or at -f <path>", positionals[0]))
 	}
-	spec, err := garden.ParsePlotSpec(readPlotPayload(strings.TrimSpace(*f.file)))
+	spec, err := garden.ParsePlotSpec(readPlotPayload(strings.TrimSpace(f.file)))
 	if err != nil {
 		seedFail("plot", err)
 	}
@@ -831,11 +804,11 @@ func runSeedPlot(args []string) {
 		}
 		msg.Children = append(msg.Children, wire)
 	}
-	result, err := f.client().SeedPlot(f.sessionID(), strings.TrimSpace(*f.member), msg)
+	result, err := f.client().SeedPlot(f.sessionID(), strings.TrimSpace(f.member), msg)
 	if err != nil {
 		seedFail("plot", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -899,13 +872,13 @@ func runSeedShow(args []string) {
 	f := newSeedFlags("show")
 	positionals := f.parse("show", args)
 	if len(positionals) != 1 {
-		seedFail("show", fmt.Errorf("needs exactly one seed id, got %d: attn seed show s-7k3f9m", len(positionals)))
+		seedUsageError("show", fmt.Errorf("needs exactly one seed id, got %d: attn seed show s-7k3f9m", len(positionals)))
 	}
 	result, err := f.client().SeedShow(f.sessionID(), positionals[0])
 	if err != nil {
 		seedFail("show", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -916,31 +889,27 @@ func runSeedEdit(args []string) {
 	f := newSeedFlags("edit")
 	positionals := f.parse("edit", args)
 	if len(positionals) != 1 {
-		seedFail("edit", fmt.Errorf("needs exactly one seed id, got %d: attn seed edit s-7k3f9m -m -", len(positionals)))
+		seedUsageError("edit", fmt.Errorf("needs exactly one seed id, got %d: attn seed edit s-7k3f9m -m -", len(positionals)))
 	}
 	if !f.wasSet("m") {
-		seedFail("edit", fmt.Errorf("needs -m <body>; use -m - to read markdown from stdin, or -m '' to clear it"))
+		seedUsageError("edit", fmt.Errorf("needs -m <body>; use -m - to read markdown from stdin, or -m '' to clear it"))
 	}
 	result, err := f.client().SeedEdit(positionals[0], f.text("edit"))
 	if err != nil {
 		seedFail("edit", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result.Seed)
 		return
 	}
 	fmt.Printf("updated %s at revision %d\n", result.Seed.ID, result.Seed.Rev)
 }
 
-func runSeedHandover(args []string) {
-	seedFail("handover", errors.New("retired: use `attn delegate --seed <id> --handover --cwd <path>` with an explicit checkout choice inside Git"))
-}
-
 func runSeedSendToChief(args []string) {
 	f := newSeedFlags("send-to-chief")
 	positionals := f.parse("send-to-chief", args)
 	if len(positionals) != 1 {
-		seedFail("send-to-chief", fmt.Errorf(
+		seedUsageError("send-to-chief", fmt.Errorf(
 			"needs exactly one seed id, got %d: attn seed send-to-chief s-7k3f9m", len(positionals)))
 	}
 	seedID := strings.TrimSpace(positionals[0])
@@ -953,7 +922,7 @@ func runSeedSendToChief(args []string) {
 	if err != nil {
 		seedFail("send-to-chief", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -1074,14 +1043,14 @@ func runSeedLink(unlink bool, args []string) {
 	f := newSeedFlags(verb)
 	positionals := f.parse(verb, args)
 	if len(positionals) != 3 {
-		seedFail(verb, fmt.Errorf("reads as a sentence: `attn seed %s s-7k3f9m %s s-2p4qxv`, where the kind is %s",
+		seedUsageError(verb, fmt.Errorf("reads as a sentence: `attn seed %s s-7k3f9m %s s-2p4qxv`, where the kind is %s",
 			verb, garden.EdgeBlocks, strings.Join(garden.LinkableKinds, " or ")))
 	}
 	result, err := f.client().SeedLink(positionals[0], positionals[1], positionals[2], unlink)
 	if err != nil {
 		seedFail(verb, err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -1098,13 +1067,13 @@ func runSeedLink(unlink bool, args []string) {
 func runSeedReady(args []string) {
 	f := newSeedFlags("ready")
 	if positionals := f.parse("ready", args); len(positionals) != 0 {
-		seedFail("ready", fmt.Errorf("takes no arguments, got %q; scope it with --plot <plot> or --all", positionals[0]))
+		seedUsageError("ready", fmt.Errorf("takes no arguments, got %q; scope it with --plot <plot> or --all", positionals[0]))
 	}
-	result, err := f.client().SeedReady(f.sessionID(), strings.TrimSpace(*f.plot), *f.all)
+	result, err := f.client().SeedReady(f.sessionID(), strings.TrimSpace(f.plot), f.all)
 	if err != nil {
 		seedFail("ready", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -1228,13 +1197,13 @@ func runSeedTransition(verb string, args []string) {
 	f := newSeedFlags(verb)
 	seedID, opts, err := harvestWhenArgs(verb, f, f.parse(verb, args))
 	if err != nil {
-		seedFail(verb, err)
+		seedUsageError(verb, err)
 	}
-	result, err := f.client().SeedTransition(f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(*f.member), *f.force, opts)
+	result, err := f.client().SeedTransition(f.sessionID(), seedID, verb, f.text(verb), strings.TrimSpace(f.member), f.force, opts)
 	if err != nil {
 		seedFail(verb, err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -1243,19 +1212,19 @@ func runSeedTransition(verb string, args []string) {
 
 func harvestWhenArgs(verb string, f *seedFlags, positionals []string) (string, client.SeedTransitionOptions, error) {
 	var none client.SeedTransitionOptions
-	if !*f.whenMerged && !*f.clear {
+	if !f.whenMerged && !f.clear {
 		seedID, err := oneSeedID(verb, positionals, "")
 		return seedID, none, err
 	}
 	switch {
 	case verb != "harvest":
 		return "", none, fmt.Errorf("harvest-on-merge belongs to harvest: `attn seed harvest <id> --when-merged [pr-url]`")
-	case !*f.whenMerged:
+	case !f.whenMerged:
 		return "", none, fmt.Errorf("--clear disarms harvest-on-merge; say the whole thing: `attn seed harvest <id> --when-merged --clear`")
 	case f.wasSet("m"):
 		return "", none, fmt.Errorf("harvest --when-merged takes no -m: the reason is written when the pull request merges")
 	}
-	if *f.clear {
+	if f.clear {
 		seedID, err := oneSeedID(verb, positionals, " --when-merged --clear")
 		return seedID, client.SeedTransitionOptions{ClearHarvestWhen: true}, err
 	}
@@ -1350,13 +1319,13 @@ func runSeedNote(args []string) {
 	f := newSeedFlags("note")
 	positionals := f.parse("note", args)
 	if len(positionals) != 1 {
-		seedFail("note", fmt.Errorf(`needs exactly one seed id, got %d: attn seed note s-7k3f9m -m "what happened"`, len(positionals)))
+		seedUsageError("note", fmt.Errorf(`needs exactly one seed id, got %d: attn seed note s-7k3f9m -m "what happened"`, len(positionals)))
 	}
-	result, err := f.client().SeedNote(f.sessionID(), positionals[0], f.text("note"), strings.TrimSpace(*f.member), f.noteKind(), *f.ring, nil)
+	result, err := f.client().SeedNote(f.sessionID(), positionals[0], f.text("note"), strings.TrimSpace(f.member), f.noteKind(), f.ring, nil)
 	if err != nil {
 		seedFail("note", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result.Note)
 		return
 	}
@@ -1365,7 +1334,7 @@ func runSeedNote(args []string) {
 	} else {
 		fmt.Printf("noted on %s\n", result.Note.SeedID)
 	}
-	if *f.ring {
+	if f.ring {
 		fprintRang(os.Stdout, result.Note.SeedID, result.RingRecipients)
 	}
 	fprintCitedChecks(os.Stdout, result.Note.SeedID, result.CitedChecks)
@@ -1375,13 +1344,13 @@ func runSeedWatch(verb string, args []string) {
 	f := newSeedFlags(verb)
 	positionals := f.parse(verb, args)
 	if len(positionals) != 1 {
-		seedFail(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m", len(positionals), verb))
+		seedUsageError(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m", len(positionals), verb))
 	}
 	result, err := f.client().SeedWatch(f.sessionID(), positionals[0], verb == "unwatch")
 	if err != nil {
 		seedFail(verb, err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -1419,7 +1388,7 @@ func runSeedArtifact(verb string, args []string) {
 	f := newSeedFlags(verb)
 	positionals := f.parse(verb, args)
 	if len(positionals) != 1 {
-		seedFail(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m --path docs/plans/thing.md", len(positionals), verb))
+		seedUsageError(verb, fmt.Errorf("needs exactly one seed id, got %d: attn seed %s s-7k3f9m --path docs/plans/thing.md", len(positionals), verb))
 	}
 	seedID := positionals[0]
 	plan, handled, err := f.artifactTransferPlan(verb)
@@ -1431,7 +1400,7 @@ func runSeedArtifact(verb string, args []string) {
 		if err != nil {
 			seedFail(verb, err)
 		}
-		if *f.json {
+		if f.json {
 			writeJSON(result)
 			return
 		}
@@ -1442,12 +1411,12 @@ func runSeedArtifact(verb string, args []string) {
 		}
 		return
 	}
-	path := *f.path
-	repo := strings.TrimSpace(*f.repo)
-	if *f.reference && verb != "detach" {
+	path := f.path
+	repo := strings.TrimSpace(f.repo)
+	if f.reference && verb != "detach" {
 		seedFail(verb, fmt.Errorf("--reference only removes an existing linked path"))
 	}
-	if *f.reference && (path == "" || repo != "" || strings.TrimSpace(*f.notebook) != "" || strings.TrimSpace(*f.url) != "") {
+	if f.reference && (path == "" || repo != "" || strings.TrimSpace(f.notebook) != "" || strings.TrimSpace(f.url) != "") {
 		seedFail(verb, fmt.Errorf("--reference removes one old linked --path without --repo"))
 	}
 	artifact, err := f.artifact()
@@ -1458,11 +1427,11 @@ func runSeedArtifact(verb string, args []string) {
 	if verb == "detach" {
 		kind = garden.NoteKindDetach
 	}
-	result, err := f.client().SeedNote(f.sessionID(), seedID, f.text(verb), strings.TrimSpace(*f.member), kind, false, artifact)
+	result, err := f.client().SeedNote(f.sessionID(), seedID, f.text(verb), strings.TrimSpace(f.member), kind, false, artifact)
 	if err != nil {
 		seedFail(verb, err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result.Note)
 		return
 	}
@@ -1487,16 +1456,16 @@ type seedArtifactTransferPlan struct {
 }
 
 func (f *seedFlags) artifactTransferPlan(verb string) (*seedArtifactTransferPlan, bool, error) {
-	path := *f.path
-	repo := strings.TrimSpace(*f.repo)
-	to := *f.to
-	localFlags := *f.move || *f.copy || to != ""
-	managedAttach := verb == "attach" && path != "" && repo == "" && strings.TrimSpace(*f.notebook) == "" && strings.TrimSpace(*f.url) == "" && !*f.reference
-	managedDetach := verb == "detach" && path != "" && repo == "" && strings.TrimSpace(*f.notebook) == "" && strings.TrimSpace(*f.url) == "" && !*f.reference
+	path := f.path
+	repo := strings.TrimSpace(f.repo)
+	to := f.to
+	localFlags := f.move || f.copy || to != ""
+	managedAttach := verb == "attach" && path != "" && repo == "" && strings.TrimSpace(f.notebook) == "" && strings.TrimSpace(f.url) == "" && !f.reference
+	managedDetach := verb == "detach" && path != "" && repo == "" && strings.TrimSpace(f.notebook) == "" && strings.TrimSpace(f.url) == "" && !f.reference
 	if !managedAttach && !managedDetach && !localFlags {
 		return nil, false, nil
 	}
-	if f.wasSet("m") || strings.TrimSpace(*f.member) != "" {
+	if f.wasSet("m") || strings.TrimSpace(f.member) != "" {
 		return nil, true, fmt.Errorf("managed artifact transfers carry their own receipt; -m and --member apply to log associations")
 	}
 	plan := &seedArtifactTransferPlan{}
@@ -1505,14 +1474,14 @@ func (f *seedFlags) artifactTransferPlan(verb string) (*seedArtifactTransferPlan
 		if !managedAttach {
 			return nil, true, fmt.Errorf("--move and --copy apply only to a local --path without --repo")
 		}
-		if *f.move == *f.copy {
+		if f.move == f.copy {
 			return nil, true, fmt.Errorf("local attach requires exactly one of --move or --copy; --move is recommended")
 		}
 		if to != "" {
 			return nil, true, fmt.Errorf("--to belongs to detach")
 		}
 		plan.operation = "copy"
-		if *f.move {
+		if f.move {
 			plan.operation = "move"
 		}
 		var err error
@@ -1524,7 +1493,7 @@ func (f *seedFlags) artifactTransferPlan(verb string) (*seedArtifactTransferPlan
 		if !managedDetach {
 			return nil, true, fmt.Errorf("--to applies only to a managed --path without --repo")
 		}
-		if *f.move || *f.copy {
+		if f.move || f.copy {
 			return nil, true, fmt.Errorf("detach moves the artifact out; do not pass --move or --copy")
 		}
 		if to == "" {
@@ -1542,10 +1511,10 @@ func (f *seedFlags) artifactTransferPlan(verb string) (*seedArtifactTransferPlan
 }
 
 func (f *seedFlags) artifact() (*protocol.SeedArtifactReference, error) {
-	path := strings.TrimSpace(*f.path)
-	repo := strings.TrimSpace(*f.repo)
-	notebook := strings.TrimSpace(*f.notebook)
-	url := strings.TrimSpace(*f.url)
+	path := strings.TrimSpace(f.path)
+	repo := strings.TrimSpace(f.repo)
+	notebook := strings.TrimSpace(f.notebook)
+	url := strings.TrimSpace(f.url)
 	named := []string{}
 	for flag, value := range map[string]string{"--path": path, "--notebook": notebook, "--url": url} {
 		if value != "" {
@@ -1578,13 +1547,13 @@ func runSeedNotes(args []string) {
 	f := newSeedFlags("notes")
 	positionals := f.parse("notes", args)
 	if len(positionals) != 1 {
-		seedFail("notes", fmt.Errorf("needs exactly one seed id, got %d: attn seed notes s-7k3f9m", len(positionals)))
+		seedUsageError("notes", fmt.Errorf("needs exactly one seed id, got %d: attn seed notes s-7k3f9m", len(positionals)))
 	}
-	result, err := f.client().SeedNotes(f.sessionID(), positionals[0], *f.limit)
+	result, err := f.client().SeedNotes(f.sessionID(), positionals[0], f.limit)
 	if err != nil {
 		seedFail("notes", err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
@@ -1620,7 +1589,7 @@ func runSeedExport(args []string) {
 	f := newSeedFlags("export")
 	positionals := f.parse("export", args)
 	if len(positionals) != 1 {
-		seedFail("export", fmt.Errorf("needs exactly one seed id, got %d: attn seed export s-7k3f9m", len(positionals)))
+		seedUsageError("export", fmt.Errorf("needs exactly one seed id, got %d: attn seed export s-7k3f9m", len(positionals)))
 	}
 	result, err := f.client().SeedShow(f.sessionID(), positionals[0])
 	if err != nil {
@@ -1628,7 +1597,7 @@ func runSeedExport(args []string) {
 	}
 	rendered := garden.Export(gardenSeedFromWire(result.Seed)) + exportChecks(result.Seed)
 
-	out := strings.TrimSpace(*f.out)
+	out := strings.TrimSpace(f.out)
 	if out == "-" {
 		fmt.Print(rendered)
 		return
@@ -1643,7 +1612,7 @@ func runSeedExport(args []string) {
 	if err != nil {
 		absolute = out
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(struct {
 			SeedID string `json:"seed_id"`
 			Path   string `json:"path"`
