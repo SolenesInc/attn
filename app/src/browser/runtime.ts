@@ -273,21 +273,14 @@ async function executeAsyncScript(params: JsonObject): Promise<unknown> {
   });
 }
 
-async function waitFor(params: JsonObject): Promise<unknown> {
-  const timeout = numberParam(params, "timeout", 5_000);
+function waitFor(params: JsonObject): JsonObject {
   const state = typeof params.state === "string" ? params.state : "attached";
-  const deadline = Date.now() + timeout;
-  for (;;) {
-    const matches = locatorMatches(currentDocument(), params);
-    const candidate = matches[0];
-    const satisfied = state === "detached" ? !candidate
-      : state === "hidden" ? !candidate || !visible(candidate)
-      : state === "visible" ? !!candidate && visible(candidate)
-      : !!candidate;
-    if (satisfied) return candidate ? elementReference(candidate) : null;
-    if (Date.now() >= deadline) return error(`wait_for timed out waiting for ${state}`);
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-  }
+  const candidate = locatorMatches(currentDocument(), params)[0];
+  const ready = state === "detached" ? !candidate
+    : state === "hidden" ? !candidate || !visible(candidate)
+    : state === "visible" ? !!candidate && visible(candidate)
+    : !!candidate;
+  return { ready, value: ready && candidate ? elementReference(candidate) : null };
 }
 
 function snapshot(): JsonObject {

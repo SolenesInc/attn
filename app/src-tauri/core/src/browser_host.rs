@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -28,6 +29,7 @@ use crate::browser_alerts;
 const CONTROL_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_PAGE_ACTION_TIMEOUT: Duration = Duration::from_secs(120);
 const PAGE_ACTION_TIMEOUT_MARGIN: Duration = Duration::from_secs(2);
+const PAGE_ACTION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const BROWSER_DATA_STORE_ID: [u8; 16] = *b"attn-browser-v1!";
 #[cfg(target_os = "macos")]
 const BROWSER_CONTENT_WORLD_NAME: &str = "attn-browser-control";
@@ -637,7 +639,7 @@ async fn run_page_action(
         if Instant::now() >= deadline {
             return Err("timed out waiting for browser runtime action".to_string());
         }
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(PAGE_ACTION_POLL_INTERVAL);
         let encoded_id = serde_json::to_string(&result_id)
             .map_err(|error| format!("encode browser result id: {error}"))?;
         let Some(next) = evaluate_isolated_script_with_alert(
@@ -668,6 +670,59 @@ async fn run_page_action(
     }
     serde_json::to_string(envelope.get("value").unwrap_or(&Value::Null))
         .map_err(|error| format!("encode browser runtime result: {error}"))
+}
+
+async fn wait_for_element(
+    webview: tauri::Webview,
+    params: &Map<String, Value>,
+) -> Result<String, String> {
+    #[derive(Deserialize)]
+    struct Probe {
+        ready: bool,
+        value: Value,
+    }
+
+    let requested = params
+        .get("timeout")
+        .and_then(Value::as_f64)
+        .unwrap_or(5_000.0);
+    let timeout =
+        Duration::from_secs_f64(requested.max(0.0) / 1_000.0).min(page_action_timeout(params));
+    let deadline = Instant::now() + timeout;
+    let mut reported_pending = false;
+    loop {
+        let raw = run_page_action(webview.clone(), "wait_for", params).await?;
+        let probe: Option<Probe> = serde_json::from_str(&raw)
+            .map_err(|error| format!("decode browser wait probe: {error}"))?;
+        let Some(probe) = probe else {
+            return Ok(raw);
+        };
+        if probe.ready {
+            return serde_json::to_string(&probe.value)
+                .map_err(|error| format!("encode browser wait result: {error}"));
+        }
+        if !reported_pending && crate::instance::automation_enabled() {
+            let receipt = format!(
+                "[BrowserWait] pending {}\n",
+                json!({ "label": webview.label(), "params": params })
+            );
+            let _ = std::io::stderr().lock().write_all(receipt.as_bytes());
+            reported_pending = true;
+        }
+        if Instant::now() >= deadline {
+            let state = params
+                .get("state")
+                .and_then(Value::as_str)
+                .unwrap_or("attached");
+            return Err(format!(
+                "wait_for timed out waiting for {state} (timeoutMs={requested}, hostTimeoutMs={})",
+                timeout.as_millis()
+            ));
+        }
+        std::thread::sleep(
+            PAGE_ACTION_POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())),
+        );
+    }
 }
 
 async fn ensure_runtime(webview: tauri::Webview) -> Result<(), String> {
@@ -1402,7 +1457,11 @@ pub async fn browser_host_control(
         _ => {
             let alert_state = browser_alerts::state(&label);
             alert_state.request_capture();
-            let result = run_page_action(webview.clone(), &action, &params).await;
+            let result = if action == "wait_for" {
+                wait_for_element(webview.clone(), &params).await
+            } else {
+                run_page_action(webview.clone(), &action, &params).await
+            };
             alert_state.clear_capture_if_idle();
             result
         }

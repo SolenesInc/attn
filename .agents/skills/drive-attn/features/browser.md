@@ -105,6 +105,8 @@ Preconditions:
 
 ## Tests
 
+- Packaged CLI: `browser-wait-navigation` holds each local page response until a wait has observed an unsatisfied condition, then checks initial navigation, closing and reopening, later navigation, and zero-timeout results.
+
 - Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`.
 - Stack: `cmd/attn/agent_commands_stack_test.go`.
 - Scenario: `callouts`.
@@ -119,11 +121,10 @@ Preconditions:
 - With only the daemon, `attn browser open` places the tile and exits 0, and every other verb fails with `browser_control: no in-app browser host is connected`. Launch the app first.
 - Verbs before `open` fail with `no browser tile is open for that session`. Each desktop holds one browser tile; a second `open` navigates it instead of adding one.
 - `bridge dom_*` reads see the tile's header and address field but not the page; `bridge capture_screenshot` leaves the page out. Read the page with `attn browser snapshot` and capture it with `bridge capture_native_window_screenshot`.
-- Element references come from one page load. After navigation or reload, find the element again.
+- Element references come from one page load. After navigation or reload, find the element again. A read-only `wait` keeps checking the requested condition across navigation within its original timeout; it does not reuse an element reference from the old document.
 - A verb that follows `open` or a navigation can reach a page that has not loaded. Wait on something the new page shows (`attn browser wait --using css --value h1 --state visible`) before reading it. A text wait checks the first element with that text, which can be the page's `<title>`, so wait on text that only the body holds.
 - Going back can restore the page as it was left, edits included. Wait on an element that tells the pages apart, not on text the page changes itself.
 - `screenshot` and `pdf` write to the folder `attn` runs in, `attn-browser.png` or `attn-browser.pdf` by default, and replace a file of that name.
 - A recipe that points at a public site depends on the network; serve local pages instead.
 - `bridge capture_native_window_screenshot` needs macOS Screen Recording permission for the instance's app or your terminal; without it the capture fails.
 - Working but wrong: no key, palette command or sidebar control opens a browser tile, so a person without a shell has no way in, and closing the tile is a one-way door from the app.
-- A supplementary reopen followed by `attn browser wait --using css --value h1 --state visible --session web-agent` failed with `browser_control: timed out waiting for browser runtime action`, although the local server received the page request. The reload check could not continue from that state.

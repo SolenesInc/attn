@@ -386,6 +386,14 @@
         "seconds": 9.93,
         "runnerClass": "local macOS arm64",
         "note": "Green direct-scenario ATTN_VERDICT durationMs=9930, including launch and cleanup, on clean runtime commit 724b3bccb86b380294607bf72defcf22a3125d67. Covers parked native hover/actions, Settings selection, AppKit menu keys, terminal Alt-drag, rejected geometry and browser password input with real focus and secure input off. macOS only. Earlier concurrent cold verification took49714ms; its receipt remains on seed s-fvpn0q."
+      },
+      "browser-wait-navigation": {
+        "run": "browser-wait-navigation-2026-10-29T23-30-21-102Z",
+        "job": "Local packaged scenario, browserwait isolated instance",
+        "recordedAt": "2026-10-30",
+        "seconds": 21.311,
+        "runnerClass": "local macOS",
+        "note": "Green ATTN_VERDICT durationMs=21311, including cleanup. Holds HTTP responses until an unsuccessful wait probe, then covers initial navigation, close/reopen, later navigation and zero-timeout results. Remeasure on Linux CI."
       }
     }
   },
@@ -459,6 +467,7 @@
     "analytics-settings": 28.012,
     "outpost-update": 39.165,
     "notebook-sync": 34.495,
-    "focusless-native": 9.93
+    "focusless-native": 9.93,
+    "browser-wait-navigation": 21.311
   }
 }
