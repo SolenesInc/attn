@@ -53,8 +53,10 @@ func TestLedgerResumesAnOutpostAgentOnItsMachineWithItsConversationAndCost(t *te
 			}
 			mark := len(pair.App.Log())
 			outpost.Stop()
+			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
+			mark = pair.App.EventCount()
 			outpost.Start()
-			outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 			reopened, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id)})
 			if err != nil {
 				t.Fatal(err)
@@ -119,11 +121,13 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 		}
 		t.Logf("resume refused, ledger remains closed on %s: %v", pair.Host, err)
 	}
+	mark := pair.App.EventCount()
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
 	checkRefusal(false, "outpost", "unreachable")
-	mark := len(pair.App.Log())
+	mark = pair.App.EventCount()
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"), "true")
-	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 	if err := os.Rename(cwd, cwd+".saved"); err != nil {
 		t.Fatal(err)
 	}

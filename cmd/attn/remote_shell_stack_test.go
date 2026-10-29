@@ -322,8 +322,9 @@ func TestRemovingAnOutpostClosesItsTerminals(t *testing.T) {
 			app.TypeLine(id, "echo remove-$((1+1))")
 			app.AwaitScreen(id, "remove-2")
 			if !online {
+				mark := app.EventCount()
 				remote.Stop()
-				outpostState(app, "outpost", protocol.OutpostStateLost)
+				outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 			}
 			app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host})
 			testworld.Await(app, protocol.EventOutpostsUpdated, func(e protocol.OutpostsUpdatedMessage) bool { return len(e.Outposts) == 0 })
@@ -350,15 +351,19 @@ func TestRemovingAnOutpostClosesItsTerminals(t *testing.T) {
 	}
 }
 
-func outpostStateSince(p *testworld.Peer, name string, state protocol.OutpostState, mark int) {
+func outpostStateSince(p *testworld.Peer, name string, state protocol.OutpostState, mark int) protocol.OutpostInfo {
+	p.T.Helper()
+	var found protocol.OutpostInfo
 	testworld.AwaitSince(p, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, row := range m.Outposts {
 			if row.Name == name && row.State == state {
+				found = row
 				return true
 			}
 		}
 		return false
 	})
+	return found
 }
 
 func TestRemoteWaitLetsInputFinishTheShell(t *testing.T) {
