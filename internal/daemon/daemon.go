@@ -2664,7 +2664,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	defer stopReading()
 
 	reader := bufio.NewReader(conn)
-	data, err := readInitialSocketFrame(reader, maxInitialSocketFrameBytes)
+	data, err := readInitialSocketFrame(reader, protocol.MaxSocketFrameBytes)
 	if err != nil {
 		if errors.Is(err, os.ErrDeadlineExceeded) && d.stopping() {
 			err = errDaemonStopping
