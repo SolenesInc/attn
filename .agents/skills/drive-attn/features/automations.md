@@ -130,7 +130,7 @@ EOF
 ./attn automation apply --file $P/scheduled.yaml
 ```
 
-  `<schedule-id>` is the `id` it prints. The scheduler wakes every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run, and for one more minute until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: false`. Disable it when done.
+  `<schedule-id>` is the `id` it prints. The scheduler wakes every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run, and for up to two more minutes until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: false`. Disable it when done.
 - **A review request.** Make a local repository that the mock GitHub's `owner/repo` points at, holding the fixture so the review run's agent has something to say:
 
 ```bash
@@ -201,6 +201,7 @@ EOF
 - The run's agent reads its fixture from `location.path`. For a review request the worktree is the folder, so a fixture has to be committed in the repository for the mock to say anything; without one the run still delivers, silently.
 - A run needs the user only while it owes a turn: its agent has stopped and the turn is not snoozed. ⌘⇧J skips a run that is still working and one the user snoozed.
 - Schedules fire on the minute tick; a run within seconds is not expected. `ATTN_AUTOMATION_SCHEDULE_INTERVAL`, set before the daemon starts, shortens the tick.
+- Allow for the tick and launch when waiting for another occurrence. A live baseline created consecutive occurrences 66 seconds apart; a one-minute deadline expired just before the second appeared. The recipe allows two minutes for each occurrence.
 - A review run fires on the next pull request refresh (`wsctl refresh-prs`), not when the mock GitHub changes. The mock lists `owner/repo#42` only after `/__control/head` names a commit.
 - The first GitHub observation after applying or enabling an automation records existing review requests without starting runs. Drive a new request after that observation, as the withdraw-and-request sequence above does.
 - Turning an automation off cancels its pending runs. A run that was already delivered keeps its session.
