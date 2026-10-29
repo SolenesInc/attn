@@ -87,21 +87,10 @@ func (m *Monitor) ClassifyStop(transcriptPath string, stop StopClassification) {
 	label := m.Label()
 	m.logf("classifySessionState: starting for session=%s, transcript=%s", label, transcriptPath)
 	m.mu.Lock()
-	agent, directory, headlessTasks := m.agent, m.directory, m.policy.Headless
+	agent := m.agent
 	m.mu.Unlock()
 
 	m.recordClassifierStarted(classificationStartTime)
-	apply := func(decision classifyDecision) {
-		if decision.action != classifyApply {
-			m.logf("classifySessionState: session=%s no state applied reason=%s", label, decision.reason)
-			m.Trace(statetrace.Observation{Source: StateSourceClassifier, Reason: decision.reason, Outcome: statetrace.OutcomeSkipped})
-			m.concludeClassification(nil)
-			return
-		}
-		m.logf("classifySessionState: session=%s state=%s reason=%s", label, decision.state, decision.reason)
-		m.Trace(statetrace.Observation{Source: StateSourceClassifier, Detail: decision.reason, ObservedAt: classificationStartTime, Claim: decision.state, Outcome: statetrace.OutcomeObserved})
-		m.concludeClassification(classifierVerdictMutation(decision.state, classificationStartTime))
-	}
 
 	transcriptEnabled := true
 	classifierEnabled := true
@@ -113,7 +102,7 @@ func (m *Monitor) ClassifyStop(transcriptPath string, stop StopClassification) {
 
 	decision := classifyPreTranscript(transcriptEnabled, classifierEnabled, stop)
 	if decision.action != classifyReadTranscript {
-		apply(decision)
+		m.applyClassification(classificationStartTime, decision)
 		return
 	}
 
@@ -130,10 +119,23 @@ func (m *Monitor) ClassifyStop(transcriptPath string, stop StopClassification) {
 	if strings.TrimSpace(assistantTurnID) != "" && err == nil {
 		defer m.clearClassifyingTurn()
 	}
+	m.classifyLastMessage(classificationStartTime, lastMessage, err, stop, assistantTurnID)
+}
 
-	decision = classifyPostTranscript(lastMessage, err, stop)
+func (m *Monitor) ClassifyMessage(lastMessage string) {
+	if m == nil || !m.current() {
+		return
+	}
+	classificationStartTime := time.Now()
+	m.recordClassifierStarted(classificationStartTime)
+	m.classifyLastMessage(classificationStartTime, lastMessage, nil, StopClassification{}, "")
+}
+
+func (m *Monitor) classifyLastMessage(classificationStartTime time.Time, lastMessage string, err error, stop StopClassification, assistantTurnID string) {
+	label := m.Label()
+	decision := classifyPostTranscript(lastMessage, err, stop)
 	if decision.action != classifyRunClassifier {
-		apply(decision)
+		m.applyClassification(classificationStartTime, decision)
 		return
 	}
 	lastMessage = strings.TrimSpace(lastMessage)
@@ -149,6 +151,9 @@ func (m *Monitor) ClassifyStop(transcriptPath string, stop StopClassification) {
 		classifierInput = classifier.ComposeYieldInput(lastMessage, stop.RunningBackgroundTasks)
 	}
 
+	m.mu.Lock()
+	agent, directory, headlessTasks := m.agent, m.directory, m.policy.Headless
+	m.mu.Unlock()
 	m.logf("classifySessionState: calling classifier for session %s", label)
 	state, err := m.runClassifier(ClassifyRequest{Agent: agent, Directory: directory, Text: classifierInput, Timeout: 30 * time.Second}, headlessTasks)
 	if err != nil {
@@ -158,7 +163,20 @@ func (m *Monitor) ClassifyStop(transcriptPath string, stop StopClassification) {
 	if strings.TrimSpace(assistantTurnID) != "" {
 		m.setClassifiedTurnID(assistantTurnID)
 	}
-	apply(decision)
+	m.applyClassification(classificationStartTime, decision)
+}
+
+func (m *Monitor) applyClassification(classificationStartTime time.Time, decision classifyDecision) {
+	label := m.Label()
+	if decision.action != classifyApply {
+		m.logf("classifySessionState: session=%s no state applied reason=%s", label, decision.reason)
+		m.Trace(statetrace.Observation{Source: StateSourceClassifier, Reason: decision.reason, Outcome: statetrace.OutcomeSkipped})
+		m.concludeClassification(nil)
+		return
+	}
+	m.logf("classifySessionState: session=%s state=%s reason=%s", label, decision.state, decision.reason)
+	m.Trace(statetrace.Observation{Source: StateSourceClassifier, Detail: decision.reason, ObservedAt: classificationStartTime, Claim: decision.state, Outcome: statetrace.OutcomeObserved})
+	m.concludeClassification(classifierVerdictMutation(decision.state, classificationStartTime))
 }
 
 func (m *Monitor) runClassifier(request ClassifyRequest, headlessTasks bool) (string, error) {

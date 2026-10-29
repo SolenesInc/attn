@@ -697,3 +697,22 @@ two `SessionManager`s on one file that share nothing but the file:
 Pi has no link either, so two Pi terminals on one conversation are two
 sessions and the file forks, and both tiles warn until one process exits or
 moves to another conversation.
+
+## Nisse
+
+Read in the source at victorarias/nisse 062ef0b.
+
+- One server per Nisse home holds every conversation; clients reach it over
+  `NISSE_HOME/nisse.sock`. `nisse serve` refuses a home another server already
+  serves (`packages/nisse/src/main.ts`).
+- The TUI and `nisse exec` start a detached server when none answers. A server
+  exits 30 seconds after its last client leaves and its last run settles.
+- `nisse --conversation <id>` opens that conversation, and starts one with
+  that id when there is none. A prompt after the flags is sent once it opens.
+- `conversation/submit` is idempotent by its `requestId`: a retried submit is
+  one input.
+- `status/watch` opens with the busy conversation trees and then sends one
+  status per change of a tree (working, waiting on an approval, idle), with
+  how its root's run ended. Subagents are part of their root's tree.
+- `conversation/list` carries `ended` on each conversation that has run: how
+  its last run ended, the same as `status/watch` says.

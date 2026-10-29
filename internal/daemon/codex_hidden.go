@@ -157,13 +157,13 @@ func (st codexThreadStatus) programStatus() (string, bool) {
 	return "", false
 }
 
-type codexEvents struct {
+type linkEvents struct {
 	mu      sync.Mutex
 	queue   []func()
 	running bool
 }
 
-func (q *codexEvents) run(d *Daemon, f func()) {
+func (q *linkEvents) run(d *Daemon, f func()) {
 	q.mu.Lock()
 	q.queue = append(q.queue, f)
 	if q.running {
@@ -293,6 +293,13 @@ func (r *codexShared) archiveConversation(profile string, closed protocol.Sessio
 	}
 	if err != nil {
 		r.d.logf("shared Codex: conversation %s of closed session %s stays unarchived: %v", conversation, closed, err)
+	}
+}
+
+func (r *codexShared) sessionClosed(sessionID protocol.SessionID, profile, conversation string) {
+	archive := r.d.store.OtherOpenSessionHolding(conversation, "") == ""
+	if _, err := r.d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "committed", Profile: protocol.Ptr(profile), Conversation: protocol.Ptr(conversation), Archive: protocol.Ptr(archive)}); err != nil {
+		r.d.logf("machine close archive: %v", err)
 	}
 }
 

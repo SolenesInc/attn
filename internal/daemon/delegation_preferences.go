@@ -24,7 +24,7 @@ func (d *Daemon) delegationHarnesses() []protocol.Harness {
 	for _, name := range agentdriver.List() {
 		driver := agentdriver.Get(name)
 		caps := agentdriver.EffectiveCapabilities(driver)
-		if !caps.HasInitialPrompt {
+		if !caps.HasInitialPrompt || !d.agentOffered(name) {
 			continue
 		}
 		result = append(result, protocol.Harness{ID: name, Name: driver.DisplayName(), Available: d.isAgentExecutableAvailable(driver, ""), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin, Discovery: supportsModelDiscovery(driver)})

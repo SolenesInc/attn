@@ -98,10 +98,11 @@ func (d *Daemon) startSessionMonitorFrom(sessionID, previousID protocol.SessionI
 	}
 	terminal := d.primaryTerminal(sessionID)
 	conversation := d.store.GetSessionConversation(sessionID).NativeID
-	linked := d.store.SessionLink(sessionID) == codexLinkKind
+	link := d.linkOf(sessionID)
+	linked := link != nil
 	if linked {
 		if session := d.store.Get(sessionID); session != nil {
-			terminal = codexServerTerminal(session.ProfileID)
+			terminal = link.serverTerminal(session.ProfileID)
 		}
 	}
 	if terminal == "" {
@@ -303,6 +304,9 @@ func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) 
 	target := monitor.LinkTarget()
 	if target.Kind == codexLinkKind {
 		return codexMonitorLink{shared: h.daemon.codexShared(), monitor: monitor, target: target}
+	}
+	if target.Kind == nisseLinkKind {
+		return nisseSessionLink{link: h.daemon.nisse(), session: target.Session}
 	}
 	targetSession, _ := monitor.TitleTarget()
 	if driver, ok := h.daemon.ensurePluginRegistry().driver(targetSession.Agent); ok && driver.Capabilities["message_delivery"] && target.Driver.Plugin == driver.PluginName && target.Driver.Run != "" {

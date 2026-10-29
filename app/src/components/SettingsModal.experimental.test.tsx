@@ -90,3 +90,19 @@ describe('Experimental settings for crew v2', () => {
     ]);
   });
 });
+
+describe('Experimental settings for Nisse', () => {
+  it('starts off and saves the setting in both directions', async () => {
+    const daemon = await openSection('experimental');
+    const nisse = () => screen.getByRole('switch', { name: 'Nisse' });
+    expect(nisse()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(nisse()));
+    expect(nisse()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(nisse()));
+    expect(nisse()).toHaveAttribute('aria-checked', 'false');
+    expect(savedSettings(daemon)).toEqual([
+      ['nisse_enabled', 'true'],
+      ['nisse_enabled', 'false'],
+    ]);
+  });
+});

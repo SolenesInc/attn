@@ -17,6 +17,9 @@ func (d *Daemon) handleAgents(w http.ResponseWriter, r *http.Request) {
 func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
 	agents := make([]agentdriver.Descriptor, 0, len(agentdriver.List()))
 	for _, name := range agentdriver.List() {
+		if !d.agentOffered(name) {
+			continue
+		}
 		driver := agentdriver.Get(name)
 		caps := agentdriver.EffectiveCapabilities(driver)
 		executable, err := d.machineAgentExecutable(driver, "")

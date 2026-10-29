@@ -47,6 +47,7 @@ const (
 	SettingQueueShowHiddenSessions       = settingkeys.SettingQueueShowHiddenSessions
 	SettingQueueQuietNotifications       = settingkeys.SettingQueueQuietNotifications
 	SettingCodexSharedEnabled            = settingkeys.SettingCodexSharedEnabled
+	SettingNisseEnabled                  = settingkeys.SettingNisseEnabled
 	SettingSidebarHarnessLogosEnabled    = settingkeys.SettingSidebarHarnessLogosEnabled
 	SettingAutoApproveEnabled            = settingkeys.SettingAutoApproveEnabled
 	SettingOpenSentFilesEnabled          = settingkeys.SettingOpenSentFilesEnabled
@@ -145,6 +146,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingNewSessionLauncherEnabled), scope: daemonScope, experimental: true, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingDirectAgentLaunchEnabled), scope: daemonScope, experimental: true, description: "Launch agents directly: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingCodexSharedEnabled), scope: daemonScope, experimental: true, description: "Use the shared Codex app server: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
+	{key: string(SettingNisseEnabled), scope: daemonScope, experimental: true, description: "Offer Nisse as a harness: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingQueueShowHiddenSessions), scope: daemonScope, experimental: true, description: "Include hidden sessions in the queue: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingQueueQuietNotifications), scope: daemonScope, experimental: true, description: "Keep agents a notification woke out of the queue unless they open their turn: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
 	{key: string(SettingAsksEnabled), scope: daemonScope, experimental: true, description: "Enable agent asks: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},

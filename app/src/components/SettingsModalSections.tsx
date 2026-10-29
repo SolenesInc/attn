@@ -646,6 +646,7 @@ export function ExperimentalSettings({
   outpostsEnabled,
   newSessionLauncherEnabled,
   codexSharedEnabled,
+  nisseEnabled,
   queueShowHiddenSessions,
   queueQuietNotifications,
   directAgentLaunchEnabled,
@@ -662,6 +663,7 @@ export function ExperimentalSettings({
   | 'outpostsEnabled'
   | 'newSessionLauncherEnabled'
   | 'codexSharedEnabled'
+  | 'nisseEnabled'
   | 'queueShowHiddenSessions'
   | 'queueQuietNotifications'
   | 'directAgentLaunchEnabled'
@@ -772,6 +774,25 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('codex_shared_enabled', codexSharedEnabled ? 'false' : 'true')}
           >
             {codexSharedEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Nisse</p>
+            <p className="settings-row-copy" id="nisse-description">
+              Offer Nisse as a harness. attn runs the Nisse server and follows each session's state from it.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Nisse"
+            aria-checked={nisseEnabled}
+            aria-describedby="nisse-description"
+            className="settings-action"
+            onClick={() => onSetSetting('nisse_enabled', nisseEnabled ? 'false' : 'true')}
+          >
+            {nisseEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">
