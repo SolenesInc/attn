@@ -42,7 +42,7 @@ release again with the same version.
 
 ## Hotfix
 
-Fix forward: merge the fix to `main`, then release a patch version.
+Fix forward: land the fix on `main`, then release a patch version.
 
 ## After publishing
 

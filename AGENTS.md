@@ -106,7 +106,7 @@ count.
 
 ## Landing
 
-- Land on `main` with `scripts/land.sh`; see [Landing](docs/landing.md).
+- Land on `main` with `scripts/land.sh`.
 - Rebase onto `origin/main` at the start of every step and land each slice
   that works. Commits held back on a branch turn into conflicts.
 
