@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -619,19 +620,19 @@ func runPresence() {
 	fs := flag.NewFlagSet("presence", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	bareSessionID := fs.Bool("session-id", false, "print only the session id")
-	bareSeedID := fs.Bool("seed-id", false, "print only the id of the seed the session works on")
-	if err := parseFlags(fs, os.Args[2:]); err != nil || fs.NArg() != 0 || (*bareSessionID && *bareSeedID) {
-		fmt.Fprintln(os.Stderr, "usage: attn presence [--session-id | --seed-id]")
+	bareSeedIDs := fs.Bool("seed-ids", false, "print only the ids of the seeds the session works on")
+	if err := parseFlags(fs, os.Args[2:]); err != nil || fs.NArg() != 0 || (*bareSessionID && *bareSeedIDs) {
+		fmt.Fprintln(os.Stderr, "usage: attn presence [--session-id | --seed-ids]")
 		os.Exit(2)
 	}
 	warnIfDaemonVersionMismatch()
 	sessionID, present := detectPresence()
 	switch {
 	case *bareSessionID:
-		printOrExit(sessionID)
+		printLinesOrExit([]string{sessionID})
 		return
-	case *bareSeedID:
-		printOrExit(seedOfSessionOrExit(protocol.SessionID(sessionID)))
+	case *bareSeedIDs:
+		printLinesOrExit(seedsOfSessionOrExit(protocol.SessionID(sessionID)))
 		return
 	}
 	if !present {
@@ -645,49 +646,49 @@ func runPresence() {
 	fmt.Printf("running inside attn (session %s)\n", sessionID)
 }
 
-func printOrExit(id string) {
-	if id == "" {
+func printLinesOrExit(ids []string) {
+	ids = slices.DeleteFunc(ids, func(id string) bool { return id == "" })
+	if len(ids) == 0 {
 		os.Exit(1)
 	}
-	fmt.Println(id)
+	for _, id := range ids {
+		fmt.Println(id)
+	}
 }
 
-func seedOfSessionOrExit(sessionID protocol.SessionID) string {
+func seedsOfSessionOrExit(sessionID protocol.SessionID) []string {
 	if sessionID == "" {
-		return ""
+		return nil
 	}
-	seedID, err := seedOfSession(client.New(""), sessionID)
+	seedIDs, err := seedsOfSession(client.New(""), sessionID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "attn: resolve the session's seed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "attn: resolve the session's seeds: %v\n", err)
 		os.Exit(1)
 	}
-	return seedID
+	return seedIDs
 }
 
-func seedOfSession(c *client.Client, sessionID protocol.SessionID) (string, error) {
+func seedsOfSession(c *client.Client, sessionID protocol.SessionID) ([]string, error) {
 	listed, err := c.List("")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	var seedIDs []string
 	for _, session := range listed.Sessions {
 		if session.ID == sessionID && protocol.Deref(session.SeedID) != "" {
-			return protocol.Deref(session.SeedID), nil
+			seedIDs = append(seedIDs, protocol.Deref(session.SeedID))
 		}
 	}
 	seeds, err := c.SeedList(sessionID, false, 0)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	var tended []string
 	for _, seed := range seeds.Seeds {
-		if seed.TenderSession == sessionID && seed.Status == garden.StatusGrowing {
-			tended = append(tended, seed.ID)
+		if seed.TenderSession == sessionID && seed.Status == garden.StatusGrowing && !slices.Contains(seedIDs, seed.ID) {
+			seedIDs = append(seedIDs, seed.ID)
 		}
 	}
-	if len(tended) != 1 {
-		return "", nil
-	}
-	return tended[0], nil
+	return seedIDs, nil
 }
 
 func runHelp() {
@@ -698,7 +699,7 @@ func writeHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn <command>
 
 commands:
-  presence [--session-id|--seed-id]  check whether the shell runs inside attn, or print only its session or seed
+  presence [--session-id|--seed-ids] check whether the shell runs inside attn, or print only its session or seeds
   agent list                        name every session running here
   agent peek <session-or-member>    read a session without interrupting it
   agent msg <target> "text"            notify a live session, crew member or seed's tender
