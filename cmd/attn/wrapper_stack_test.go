@@ -13,17 +13,20 @@ func TestInsideASessionAttnReportsPresenceAndRefusesWhatItCannotLaunch(t *testin
 
 	for _, tc := range []struct {
 		name string
+		args []string
 		env  []string
 		code int
 		want string
 	}{
-		{name: "outside attn, whatever session id lingers", env: []string{"ATTN_SESSION_ID=stale-session"}, code: 1, want: "not running inside attn"},
-		{name: "inside attn without a session", env: []string{"ATTN_INSIDE_APP=1"}, want: "running inside attn"},
+		{name: "outside attn, whatever session id lingers", args: []string{"presence"}, env: []string{"ATTN_SESSION_ID=stale-session"}, code: 1, want: "not running inside attn"},
+		{name: "inside attn without a session", args: []string{"presence"}, env: []string{"ATTN_INSIDE_APP=1"}, want: "running inside attn"},
+		{name: "no session id outside attn", args: []string{"presence", "--session-id"}, env: []string{"ATTN_SESSION_ID=stale-session"}, code: 1},
+		{name: "no session id inside attn without a session", args: []string{"presence", "--session-id"}, env: []string{"ATTN_INSIDE_APP=1"}, code: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := s.Run(testworld.Invocation{Args: []string{"presence"}, Env: tc.env})
+			got := s.Run(testworld.Invocation{Args: tc.args, Env: tc.env})
 			if got.Code != tc.code || strings.TrimSpace(got.Stdout) != tc.want {
-				t.Errorf("attn presence exited %d printing %q, want %d and %q", got.Code, got.Stdout, tc.code, tc.want)
+				t.Errorf("attn %q exited %d printing %q, want %d and %q", tc.args, got.Code, got.Stdout, tc.code, tc.want)
 			}
 		})
 	}

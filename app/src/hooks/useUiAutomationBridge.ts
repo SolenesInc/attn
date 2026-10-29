@@ -1566,6 +1566,7 @@ const INACTIVE_AUTOMATION_FORM_STATE: AutomationFormAutomationState = {
     id: 0,
     trigger: 'manual',
     scheduleCron: '',
+    scheduleTimeZone: '',
     continuity: 'fresh',
     catchUp: '',
     repositoriesInclude: [],

@@ -1,0 +1,4 @@
+kind: fixed
+area: automations
+change: Saving a scheduled automation from the Automations form works; the schedule runs in the time zone of the machine it was written on.
+symptom: The daemon refused every scheduled automation saved from the form with "schedule.time_zone is required".

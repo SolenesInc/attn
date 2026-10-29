@@ -61,6 +61,10 @@ Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Never redirect `HOME` or resolve test config paths to production `~/.attn`.
   Use the [test isolation rules](#test-safety) when adding or changing tests
   that reach config paths.
+- `.githooks/prepare-commit-msg` adds an `Attn-Session:` trailer and one
+  `Attn-Seed:` per seed the session works on to commits made inside attn.
+  Where it does not run, add them from `attn presence --session-id` and
+  `--seed-ids`; outside attn, leave them out.
 
 ## Working rules
 
@@ -310,6 +314,8 @@ working on:
 - Pull requests, or waiting on their reviews => docs/pull-requests.md
 - Changelog fragments, releases, or hotfixes => docs/making-a-release.md
 - Installing, launching, or verifying instances => docs/instances.md
+- Checking a change live through every way into a feature => the drive-attn
+  skill (.agents/skills/drive-attn) and its feature map
 - Frontend code or shortcuts => app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence =>
   app/scripts/real-app-harness/AGENTS.md

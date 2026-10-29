@@ -33,6 +33,9 @@ func TestACommandCarryingItsTerminalsIDSpeaksAsTheSessionTheTerminalShows(t *tes
 	if got := fromTheAgent("presence"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "running inside attn (session "+session+")" {
 		t.Fatalf("presence: %+v", got)
 	}
+	if got := fromTheAgent("presence", "--session-id"); got.Code != 0 || got.Stdout != session+"\n" {
+		t.Fatalf("presence --session-id: %+v", got)
+	}
 	if got := s.Run(testworld.Invocation{Args: []string{"presence"}, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=" + carried}}); got.Code != 0 || strings.TrimSpace(got.Stdout) != "running inside attn (session "+session+")" {
 		t.Fatalf("legacy terminal spelling: %+v", got)
 	}

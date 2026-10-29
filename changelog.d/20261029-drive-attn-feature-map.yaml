@@ -1,0 +1,3 @@
+kind: internal
+area: agents
+change: Agents changing attn get a drive-attn skill with a feature map. Each of 38 features lists every way in for people and for agents, a recipe that drives it on a named instance, the contexts it behaves differently under and pointers to its tests.
