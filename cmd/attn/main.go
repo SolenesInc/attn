@@ -691,13 +691,28 @@ func runDelegate() {
 		return
 	}
 	if len(os.Args) >= 3 && os.Args[2] == "status" {
-		f := newSeedFlags("delegate status")
-		positionals := f.parse("delegate status", os.Args[3:])
+		fs := flag.NewFlagSet("delegate status", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		profile := fs.String("profile", "", "")
+		session := fs.String("session", "", "")
+		positionals, err := parseInterspersedFlagArgs(fs, os.Args[3:])
+		if errors.Is(err, flag.ErrHelp) {
+			writeDelegateHelp(os.Stdout)
+			return
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "delegate status: %v\n", err)
+			os.Exit(2)
+		}
 		if len(positionals) != 1 {
 			fmt.Fprintln(os.Stderr, "delegate status: usage: attn delegate status <request-or-operation-id> [--profile <name|id>]")
 			os.Exit(2)
 		}
-		result, err := f.client().DelegationStatus(positionals[0])
+		sessionID := protocol.SessionID(strings.TrimSpace(*session))
+		if sessionID == "" {
+			sessionID = currentSessionOrExit()
+		}
+		result, err := client.New("").WithGardenProfile(strings.TrimSpace(*profile), sessionID).DelegationStatus(positionals[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "delegate status: %v\n", err)
 			os.Exit(1)

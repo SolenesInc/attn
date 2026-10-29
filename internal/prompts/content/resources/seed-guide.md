@@ -1,4 +1,4 @@
-The garden holds the work. Syntax: `attn seed --help`.
+The garden holds the work. Syntax: `attn seed <verb> --help`. The catalog is `attn seed --help`.
 
 WRITING A BODY
 

@@ -23,29 +23,30 @@ func (r *repeatedFlag) Set(value string) error {
 }
 
 func runSeedCheck(args []string) {
-	if len(args) == 0 {
-		seedFail("check", fmt.Errorf("needs a move: %s", checkVerbList()))
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		newSeedFlags("check").parse("check", args)
+		seedUsageError("check", fmt.Errorf("needs a move: %s", checkVerbList()))
 	}
 	verb, err := garden.ParseCheckVerb(args[0])
 	if err != nil {
-		seedFail("check", err)
+		seedUsageError("check", err)
 	}
 	name := "check " + string(verb)
 	f := newSeedFlags(name)
 	positionals := f.parse(name, args[1:])
 	msg, err := seedCheckMessage(verb, f, positionals)
 	if err != nil {
-		seedFail(name, err)
+		seedUsageError(name, err)
 	}
 	result, err := f.client().SeedCheck(msg)
 	if err != nil {
 		seedFail(name, err)
 	}
-	if *f.json {
+	if f.json {
 		writeJSON(result)
 		return
 	}
-	fprintCheckMove(os.Stdout, result, *f.ring)
+	fprintCheckMove(os.Stdout, result, f.ring)
 }
 
 func checkVerbList() string {
@@ -57,21 +58,12 @@ func checkVerbList() string {
 }
 
 func seedCheckMessage(verb garden.CheckVerb, f *seedFlags, positionals []string) (protocol.SeedCheckMessage, error) {
-	usage := map[garden.CheckVerb]string{
-		garden.CheckVerbAdd:    `attn seed check add <id> <C#> "<statement>" [--shared]`,
-		garden.CheckVerbEdit:   `attn seed check edit <id> <C#> "<statement>"`,
-		garden.CheckVerbReport: `attn seed check report <id> <C#> -m "<summary>" [--evidence <artifact|url>]... [--commit <rev>]`,
-		garden.CheckVerbReject: `attn seed check reject <id> <C#> -m "<what would prove it>"`,
-	}[verb]
-	if usage == "" {
-		usage = fmt.Sprintf("attn seed check %s <id> <C#>", verb)
-	}
 	wantPositionals := 2
 	if verb == garden.CheckVerbAdd || verb == garden.CheckVerbEdit {
 		wantPositionals = 3
 	}
 	if len(positionals) != wantPositionals {
-		return protocol.SeedCheckMessage{}, fmt.Errorf("needs %d arguments, got %d: %s", wantPositionals, len(positionals), usage)
+		return protocol.SeedCheckMessage{}, fmt.Errorf("needs %d arguments, got %d", wantPositionals, len(positionals))
 	}
 	msg := protocol.SeedCheckMessage{SeedID: positionals[0], CheckID: strings.ToUpper(positionals[1]), Verb: string(verb)}
 	if sessionID := f.sessionID(); sessionID != "" {
@@ -80,39 +72,29 @@ func seedCheckMessage(verb garden.CheckVerb, f *seedFlags, positionals []string)
 	if wantPositionals == 3 {
 		msg.Text = protocol.Ptr(positionals[2])
 	}
-	if *f.shared {
-		if verb != garden.CheckVerbAdd {
-			return protocol.SeedCheckMessage{}, fmt.Errorf("--shared belongs to add: %s", `attn seed check add <id> <C#> "<statement>" --shared`)
-		}
+	if f.shared {
 		msg.Shared = protocol.Ptr(true)
 	}
 	if summary := strings.TrimSpace(f.text("check " + string(verb))); summary != "" {
 		msg.Summary = protocol.Ptr(summary)
 	}
-	if len(*f.evidence) > 0 || *f.commit != "" {
-		if verb != garden.CheckVerbReport {
-			return protocol.SeedCheckMessage{}, fmt.Errorf("--evidence and --commit belong to report: %s", usageFor(garden.CheckVerbReport))
-		}
-		msg.Evidence = *f.evidence
+	if len(f.evidence) > 0 || f.commit != "" {
+		msg.Evidence = f.evidence
 	}
-	if rev := strings.TrimSpace(*f.commit); rev != "" {
+	if rev := strings.TrimSpace(f.commit); rev != "" {
 		full, err := exec.Command("git", "rev-parse", "--verify", rev+"^{commit}").Output()
 		if err != nil {
 			return protocol.SeedCheckMessage{}, fmt.Errorf("--commit %q is not a commit in this directory's repository (git rev-parse): %w", rev, err)
 		}
 		msg.Commit = protocol.Ptr(strings.TrimSpace(string(full)))
 	}
-	if member := strings.TrimSpace(*f.member); member != "" {
+	if member := strings.TrimSpace(f.member); member != "" {
 		msg.Member = protocol.Ptr(member)
 	}
-	if *f.ring {
+	if f.ring {
 		msg.Ring = protocol.Ptr(true)
 	}
 	return msg, nil
-}
-
-func usageFor(verb garden.CheckVerb) string {
-	return fmt.Sprintf(`attn seed check %s <id> <C#> -m "<summary>" --evidence <artifact|url>`, verb)
 }
 
 func fprintCheckMove(w io.Writer, result *protocol.SeedCheckResult, rang bool) {
