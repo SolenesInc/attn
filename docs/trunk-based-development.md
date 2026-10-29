@@ -60,7 +60,7 @@ lists every way into a feature. Then land.
 Running the scenarios that cover an app-observable change locally, on a
 non-production instance, is optional, when the machine can take it. After
 landing, `main`'s CI runs the full scenario matrix, macOS included; if a
-landing breaks `main`, the sheriff reverts it and tells its session or seed.
+landing breaks `main`, the sheriff reverts it and tells its author.
 When no scenario covers an app-observable change, add one, or tell the user.
 
 The Acceptance soak workflow repeats chosen scenarios to hunt flaky ones; it is
@@ -78,17 +78,19 @@ session behind a commit.
 A scheduled review automation runs Codex over the commits `main` has gained
 since the `reviewed` branch, grouped by seed. For each finding it messages the
 session named by `Attn-Session:` while that session is live, and otherwise
-dispatches an agent on the commit's seed to fix it. Then it moves `reviewed`
-forward.
+dispatches an agent to fix it. Then it moves `reviewed` forward. The
+`review-main` skill is its procedure.
 
 ## When main is red
 
 CI runs on `main` after every landing; pushes that arrive during a run are
 batched into the next one. A red `main` opens the
-`Branch health: main acceptance` issue and starts the sheriff automation. It
-re-runs the failed jobs once, finds the commit that broke them, reverts it,
-and tells that commit's session or seed. Keep landing while `main` is red; a
-release waits for green.
+`Branch health: main acceptance` issue, and the sheriff automation, which
+watches `main`'s CI, re-runs the failed jobs once, finds the commit that broke
+them and reverts it. It tells that commit's session, or dispatches an agent to
+land the change again with a fix. A commit that adds a database migration is
+fixed forward instead. The `sheriff` skill is its procedure. Keep landing while
+`main` is red; a release waits for green.
 
 ## Releases
 
