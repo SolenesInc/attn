@@ -61,12 +61,9 @@ Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Never redirect `HOME` or resolve test config paths to production `~/.attn`.
   Use the [test isolation rules](#test-safety) when adding or changing tests
   that reach config paths.
-- Commits made inside attn carry an `Attn-Session:` trailer, and an
-  `Attn-Seed:` trailer when the session works on a seed, added by
-  `.githooks/prepare-commit-msg`. They let a reviewer reach the work and the
-  session behind a commit. Where the hook does not run, add them yourself from
-  `attn presence --session-id` and `attn presence --seed-id`. Outside attn,
-  leave them out.
+- `.githooks/prepare-commit-msg` adds `Attn-Session:` and `Attn-Seed:`
+  trailers to commits made inside attn. Where it does not run, add them from
+  `attn presence --session-id` and `--seed-id`; outside attn, leave them out.
 
 ## Working rules
 
