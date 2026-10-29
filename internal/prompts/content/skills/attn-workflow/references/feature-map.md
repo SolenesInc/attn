@@ -4,7 +4,7 @@ Principles this process relies on: [Prove it works](../principles/prove-it-works
 
 Use this process to build a feature map for a product: a skill in the repository that starts the product on an isolated instance, drives each feature through every way in, and keeps the evidence. With it, an agent checks a change the way the product is used, through every way in, without rediscovering how to drive it.
 
-Name the skill `drive-<app>` and put it in the skill folder the repository already uses, such as `.claude/skills/` or `.agents/skills/`. Do not name it `verify-<app>` or call it a verification skill: in [Derived things](derived-things.md) those words mean a check that keeps a derived thing current. Write the skill for an agent that reads it cold, mid-task, and has never seen the product.
+Name the skill `drive-<app>` and put it in the skill folder the repository already uses, such as `.claude/skills/` or `.agents/skills/`. The user may ask for a verification skill, as pstack calls it; build this one and name it `drive-<app>` anyway. In [Derived things](derived-things.md), `verify-<thing>` skills are checks that run when a pull request opens, read and report, and tools run every `verify-*` skill at that step, so a skill that launches the product does not belong among them. Write the skill for an agent that reads it cold, mid-task, and has never seen the product.
 
 ## Learn how the product runs
 
