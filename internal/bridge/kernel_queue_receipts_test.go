@@ -47,3 +47,7 @@ func TestKernelBulkThroughputReceipt(t *testing.T) {
 	elapsed := time.Since(start)
 	t.Logf("bytes_each_direction=%d credit=%d elapsed=%s MB_s_each_direction=%.3f", size, bridge.BulkCredit, elapsed, float64(size)/1e6/elapsed.Seconds())
 }
+
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) { clear(p); return len(p), nil }

@@ -80,7 +80,3 @@ func tcpPair(t *testing.T, w *pairWorld, wrap func(net.Conn, bool) (net.Conn, er
 	}
 	return client, <-w.server
 }
-
-type zeros struct{}
-
-func (zeros) Read(p []byte) (int, error) { clear(p); return len(p), nil }
