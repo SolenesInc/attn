@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"syscall"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/harness"
@@ -31,7 +33,11 @@ func currentSession(c *client.Client) (protocol.SessionID, error) {
 func currentSessionOrExit() protocol.SessionID {
 	sessionID, err := currentSession(client.New(""))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
+		if errors.Is(err, syscall.EPERM) {
+			fmt.Fprintf(os.Stderr, "attn: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
+		}
 		os.Exit(1)
 	}
 	return sessionID

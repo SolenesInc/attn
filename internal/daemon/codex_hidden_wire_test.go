@@ -135,6 +135,19 @@ func TestASharedCodexTerminalThatAgentsTakesBackToAnUnpromptedNewConversationSho
 	}
 }
 
+func TestASharedCodexSubagentsToolsResolveTheSessionThatStartedIt(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	parent, codex, _ := sharedCodexWaiting(t, w, app)
+	server := w.CodexServer()
+	subagent := server.SpawnSubagent(codex.ConversationID)
+
+	if got := strings.TrimSpace(server.RunTool(subagent, `"$ATTN_WRAPPER_PATH" presence`)); got != "running inside attn (session "+parent+")" {
+		t.Errorf("a tool of subagent %s reports %q, want session %s", subagent, got, parent)
+	}
+}
+
 func TestASharedCodexTerminalShowingASubagentKeepsTheSessionOfTheConversationThatStartedIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

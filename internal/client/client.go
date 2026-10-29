@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -1141,6 +1142,9 @@ func (c *Client) IsRunning() bool {
 
 func explainConnectError(sockPath string, cause error) error {
 	instance := config.InstanceLabel()
+	if errors.Is(cause, syscall.EPERM) {
+		return fmt.Errorf("the sandbox blocks attn's socket at %s (instance=%s): %w\n  run this command with escalated permissions; in Codex, allow its prefix in ~/.codex/rules/default.rules for future runs", config.CollapseHome(sockPath), instance, cause)
+	}
 	base := fmt.Sprintf("connect to daemon at %s (instance=%s): %v",
 		config.CollapseHome(sockPath), instance, cause)
 	if hint := crossInstanceHint(); hint != "" {

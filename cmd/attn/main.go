@@ -1858,6 +1858,9 @@ func hookClient(caller protocol.TerminalID) *client.Client {
 }
 
 func hookCaller(id protocol.TerminalID, input hookInput) protocol.TerminalID {
+	if os.Getenv("ATTN_TERMINAL_ID") != "" {
+		return id
+	}
 	profile, shared := os.LookupEnv(harness.CodexSharedProfileEnv)
 	if !shared {
 		return id

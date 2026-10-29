@@ -1,0 +1,3 @@
+kind: fixed
+area: codex
+change: Codex subagents keep their parent's attn session, and sandbox socket errors explain how to run the command.

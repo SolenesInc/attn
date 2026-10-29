@@ -24,7 +24,7 @@ func TestACommandCarryingItsTerminalsIDSpeaksAsTheSessionTheTerminalShows(t *tes
 	}
 	fromTheAgent := func(args ...string) testworld.Result {
 		t.Helper()
-		return s.Run(testworld.Invocation{Args: args, Terminal: carried})
+		return s.Run(testworld.Invocation{Args: args, Terminal: carried, Env: []string{"ATTN_CODEX_SHARED_PROFILE=outer-profile", "CODEX_THREAD_ID=outer-conversation"}})
 	}
 
 	if carried == session {
