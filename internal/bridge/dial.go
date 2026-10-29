@@ -49,7 +49,7 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	if err != nil {
 		return nil, seen, err
 	}
-	return newConn(ctx, ready.transport, ready.channels, cfg.Handlers, ready.control, ready.decoder, ready.peer, ready.drained), seen, nil
+	return newConn(ctx, ready.pacer, ready.transport, ready.channels, cfg.Handlers, ready.control, ready.decoder, ready.peer, ready.drained), seen, nil
 }
 
 type authenticatedPeer struct {
@@ -61,6 +61,7 @@ type authenticatedPeer struct {
 	target    *UpdateTarget
 	drained   <-chan struct{}
 	raw       net.Conn
+	pacer     *bulkPacer
 }
 
 func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer, *Pin, error) {
@@ -195,6 +196,13 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 	if err := raw.SetDeadline(time.Time{}); err != nil {
 		return nil, seen, err
 	}
+	var pacer *bulkPacer
+	if !cfg.update {
+		pacer, err = newBulkPacer(raw)
+		if err != nil {
+			return nil, seen, err
+		}
+	}
 	success = true
-	return &authenticatedPeer{transport: transport, channels: channels, control: control, decoder: decoder, peer: answer.Identity, target: answer.Target, drained: requestDrain, raw: raw}, seen, nil
+	return &authenticatedPeer{transport: transport, channels: channels, control: control, decoder: decoder, peer: answer.Identity, target: answer.Target, drained: requestDrain, raw: raw, pacer: pacer}, seen, nil
 }
