@@ -409,12 +409,16 @@ func userName() string {
 }
 
 func (l *nisseLink) sessionClosed(sessionID protocol.SessionID, _ string, conversation string) {
-	c := l.client()
-	if c == nil || conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
+	if conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(l.d.life.Context(), nisseCallLimit)
 	defer cancel()
+	c, err := nisse.Connect(ctx, nisse.Socket(l.home()), "attn", buildinfo.Version)
+	if err != nil {
+		return
+	}
+	defer c.Close()
 	if err := c.Call(ctx, "conversation/interrupt", map[string]any{"conversation": conversation}, nil); err != nil {
 		l.d.logf("nisse: interrupting conversation %s of closed session %s: %v", conversation, sessionID, err)
 	}
