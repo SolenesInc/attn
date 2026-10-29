@@ -78,7 +78,6 @@ Preconditions:
 - In the `8ed664831` run, the queue-bar pill reported native input delivered but opened no palette until the selected app was activated with `open -a`. Its keyboard entry still worked. Activate the app before judging the native click.
 - The row-menu step also failed to show its popover during replay, including after activation. Keep that attempt as a finding; the successful agent-palette key does not prove the row menu.
 - Live on `drive-3` at `b292a5aa5`: the open notifications popover covers `[aria-label="Hide Notifications"]`. A native click leaves `bridge notifications_get_state` at `present: true`, so the header's hide step fails. The palette's `Hide notifications` closes it before another independent check.
-
 - On a fresh instance with no session, the sidebar is collapsed: the rail, or the queue bar in queue flow. It expands by itself when the first session appears, and collapses again when the last one goes. Launch an agent before judging the expanded shapes.
 - The queue bar has no Home row, no Commands button and no header buttons. Go home with ⌘⇧H and open drawers from the palette or their keys while it shows.
 - `[aria-label="Commands"]` also names the palette's input and dialog. Click `button[aria-label="Commands"]`.
