@@ -8,43 +8,63 @@ review have passed. Contributors working from a fork use
 
 ## Landing
 
-```bash
-git fetch origin main
-git switch -c fix/example origin/main
-# commit
-scripts/land.sh
-```
+1. Start a local working branch from the latest `main`:
 
-- Rebase onto `origin/main` at the start of every step, and land each slice as
-  soon as it works. Unfinished work lands unwired, or behind an experimental
-  setting that is off by default, rather than waiting on a branch.
-- `scripts/land.sh` rebases onto `origin/main`, runs the checks for the paths
-  the landing changes, and pushes. When only protocol types or prompt catalogs
-  conflict, it regenerates them. When `main` moves before the push, it rebases
-  and pushes again. Any other conflict stops it: resolve it with
-  `git rebase origin/main`, then run it again.
-- `.githooks/pre-push` refuses a plain `git push` to `main`. Use
-  `git push --no-verify` only when `scripts/land.sh` cannot run, after running
-  its checks yourself.
+   ```bash
+   git fetch origin main && git switch -c work origin/main
+   ```
+
+   The working branch is private and short-lived. It is never a pull request
+   and is never pushed under its own name.
+2. Commit as usual. The commit hook adds the `Attn-Session:` and `Attn-Seed:`
+   trailers (see [Commits](#commits)).
+3. Check the change yourself on the surface it touches (see
+   [Verifying before landing](#verifying-before-landing)).
+4. Run `scripts/land.sh`.
+5. Everything after is automatic: `main`'s CI runs the full scenario matrix,
+   the sheriff reverts a landing that breaks `main`, the review automation
+   reviews the commits and messages their author or dispatches a fixer, and
+   release notes are written from the commits.
+
+Land each slice as soon as it works, and rebase onto `origin/main` at the start
+of every step. Unfinished work lands unwired, or behind an experimental setting
+that is off by default, rather than waiting on the working branch.
+
+### Pushing
+
+The only push is `scripts/land.sh` pushing to `main`
+(`git push origin HEAD:main`). `.githooks/pre-push` refuses a plain `git push`
+to `main`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
+after running its checks yourself.
+
+### What land.sh does
+
+`scripts/land.sh` rebases onto `origin/main`, runs the checks for the paths the
+landing changes, and pushes. When only protocol types or prompt catalogs
+conflict, it regenerates them.
+
+### When main moves
+
+When `main` moves during landing, `scripts/land.sh` rebases and pushes again
+without re-running its checks. Re-check only when the rebase stops on a real
+conflict in your code: resolve it with `git rebase origin/main`, check again,
+and run `scripts/land.sh` again. Combinations of changes are verified by
+`main`'s CI after landing, not before.
 
 ## Verifying before landing
 
-Run the change on the surface it touches. The drive-attn skill's feature map
-lists every way into a feature.
+Verify the change locally on the surface it touches: the CLI, the daemon over
+`wsctl`, a non-production instance, the app. The drive-attn skill's feature map
+lists every way into a feature. Then land.
 
-Lifecycle, protocol, PTY, background-runner, timing and other app-observable
-changes also need the packaged-app scenarios that cover them green on the
-change's own commit. Push the branch and run those scenarios there:
+Running the scenarios that cover an app-observable change locally, on a
+non-production instance, is optional, when the machine can take it. After
+landing, `main`'s CI runs the full scenario matrix, macOS included; if a
+landing breaks `main`, the sheriff reverts it and tells its session or seed.
+When no scenario covers an app-observable change, add one, or tell the user.
 
-```bash
-git push origin HEAD:refs/heads/fix/example
-gh workflow run acceptance-soak.yml --ref fix/example \
-  -f scenarios=<scenario-id,scenario-id> -f repeat=1
-```
-
-Land once that run is green. When no scenario covers the change, add one, or
-tell the user before landing. The full scenario matrix runs on `main` after
-every landing.
+The Acceptance soak workflow repeats chosen scenarios to hunt flaky ones; it is
+not a landing step.
 
 ## Commits
 
