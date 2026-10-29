@@ -45,8 +45,10 @@ New pi sessions run the checkout; driver changes (`src/`) need a daemon restart.
 ## Verification requirements
 
 Lifecycle, protocol, PTY, background-runner, timing, and other app-observable
-changes need green packaged-app CI on the PR head, with scenarios covering the
-change. Report missing coverage and ask before merging.
+changes need the packaged-app scenarios covering them green on the change's own
+commit before it lands or merges: on a pull request's head, or through
+[Acceptance soak](trunk-based-development.md#verifying-before-landing) for a
+landing. Report missing coverage and ask before landing or merging.
 
 CI runs the scenario matrix; run scenarios locally only to reproduce a CI
 failure or develop a scenario, in a non-production instance. Check the installed
