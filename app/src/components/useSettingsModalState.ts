@@ -177,6 +177,7 @@ export function useSettingsModalState({
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
   const calloutsEnabled = settings.callouts_enabled === 'true';
+  const crewV2Enabled = settings.crew_v2_enabled === 'true';
   const analyticsEnabled = settings['analytics.enabled'] === 'true';
   const asksEnabled = isAsksEnabled(settings);
   const actualAutoSettleArm = String(autoSettleSeconds(settings, AUTO_SETTLE_ARM_SETTING));
@@ -690,6 +691,7 @@ export function useSettingsModalState({
     autoSettleEnabled,
     asksEnabled,
     calloutsEnabled,
+    crewV2Enabled,
     analyticsEnabled,
     mutedRepos,
     mutedAuthors,

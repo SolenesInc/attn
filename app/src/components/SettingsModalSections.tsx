@@ -651,6 +651,7 @@ export function ExperimentalSettings({
   directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
+  crewV2Enabled,
   analyticsEnabled,
   ptyBackendMode,
   sharedPtyHostEnabled,
@@ -666,6 +667,7 @@ export function ExperimentalSettings({
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
+  | 'crewV2Enabled'
   | 'analyticsEnabled'
   | 'ptyBackendMode'
   | 'sharedPtyHostEnabled'
@@ -848,6 +850,20 @@ export function ExperimentalSettings({
             className="settings-action" data-testid="settings-callouts-toggle"
             onClick={() => onSetSetting('callouts_enabled', calloutsEnabled ? 'false' : 'true')}>
             {calloutsEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-row-card">
+          <div>
+            <p className="settings-row-title">Crew v2</p>
+            <p className="settings-row-copy" id="settings-crew-v2-description">
+              Crew members use the v2 operating model with harness memory off, starting at their next launch. Letters filed while it's on record their session so attn can keep its transcript.
+            </p>
+          </div>
+          <button type="button" role="switch" aria-label="Crew v2"
+            aria-checked={crewV2Enabled} aria-describedby="settings-crew-v2-description"
+            className="settings-action"
+            onClick={() => onSetSetting('crew_v2_enabled', crewV2Enabled ? 'false' : 'true')}>
+            {crewV2Enabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">
