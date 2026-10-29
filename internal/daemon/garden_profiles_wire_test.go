@@ -139,7 +139,11 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 				_, err := cross.SeedTransition("default-worker", b.Seed.ID, "tend", "", "", true, client.SeedTransitionOptions{})
 				return err
 			}},
-			{"edit", func() error { _, err := editSeedBody(t, cross, b.Seed.ID, "cross-profile edit"); return err }},
+			{"edit", func() error {
+				_, err := cross.SeedEdit(b.Seed.ID, "cross-profile edit", garden.BodySHA256(b.Seed.Body), "")
+				return err
+			}},
+			{"rollback", func() error { _, err := cross.SeedRollback(b.Seed.ID, nil); return err }},
 			{"link", func() error { _, err := cross.SeedLink(a.Seed.ID, "blocks", b.Seed.ID, false); return err }},
 			{"note", func() error {
 				_, err := cross.SeedNote("default-worker", b.Seed.ID, "cross-profile note", "", "", false, nil)
