@@ -30,7 +30,7 @@ func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage
 	if limit == 0 {
 		limit = garden.DefaultSearchResults
 	}
-	read, err := d.readGardenTo(0, protocol.Deref(msg.ProfileID))
+	read, err := d.readGarden(protocol.Deref(msg.ProfileID))
 	if err != nil {
 		d.sendGardenError(conn, "search", err)
 		return

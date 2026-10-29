@@ -192,15 +192,7 @@ type gardenRead struct {
 }
 
 func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
-	return d.readGardenTo(gardenSnapshotLimit, profileID...)
-}
-
-func (d *Daemon) readGardenTo(limit int, profileID ...string) (gardenRead, error) {
 	out := gardenRead{docs: map[string]docstore.Document{}, ready: map[string]bool{}}
-	page := limit
-	if page <= 0 {
-		page = docstore.MaxLimit
-	}
 	after := ""
 	for {
 		read, _, err := d.runDocQuery(docstore.Query{
@@ -208,7 +200,7 @@ func (d *Daemon) readGardenTo(limit int, profileID ...string) (gardenRead, error
 			Collection: garden.CollectionSeeds,
 			Filters:    gardenProfileFilters(firstProfile(profileID)),
 			Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
-			Limit:      page,
+			Limit:      docstore.MaxLimit,
 			After:      after,
 		})
 		if err != nil {
@@ -223,7 +215,7 @@ func (d *Daemon) readGardenTo(limit int, profileID ...string) (gardenRead, error
 			out.seeds = append(out.seeds, seed)
 			out.docs[seed.ID] = doc
 		}
-		if limit > 0 || len(read.Documents) < page {
+		if len(read.Documents) < docstore.MaxLimit {
 			break
 		}
 		after = read.Documents[len(read.Documents)-1].ID
@@ -386,7 +378,7 @@ func (d *Daemon) seedsForBroadcast(profileID ...string) []protocol.Seed {
 		}
 		return nil
 	}
-	return read.wire(read.seeds)
+	return read.wire(read.seeds[:min(len(read.seeds), gardenSnapshotLimit)])
 }
 
 func (d *Daemon) countSeedsForBroadcast(profileID ...string) int {
@@ -661,7 +653,7 @@ func (d *Daemon) handleSeedList(conn net.Conn, msg *protocol.SeedListMessage) {
 		result.Total = len(seeds)
 		result.StaleWindowSeconds = protocol.Ptr(int(window / time.Second))
 	}
-	result.Seeds = read.wire(seeds)
+	result.Seeds = read.wire(seeds[:min(len(seeds), gardenSnapshotLimit)])
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedListResult: result})
 }
 
@@ -895,7 +887,7 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 
 	const attempts = 3
 	for range attempts {
-		read, err := d.readGardenTo(0, protocol.Deref(msg.ProfileID))
+		read, err := d.readGarden(protocol.Deref(msg.ProfileID))
 		if err != nil {
 			d.sendGardenError(conn, verb, err)
 			return
@@ -1494,7 +1486,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			occurrences = append(occurrences, cleared)
 		}
 		if garden.Closed(next.Status) && !ask.SuppressNotification {
-			read, readErr := d.readGardenTo(0)
+			read, readErr := d.readGarden()
 			if readErr != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, readErr
 			}

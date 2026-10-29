@@ -52,7 +52,7 @@ type gardenReviewCapture struct {
 }
 
 func (d *Daemon) captureGardenReview(profileID ...string) (gardenReviewCapture, error) {
-	read, err := d.readGardenTo(0, profileID...)
+	read, err := d.readGarden(profileID...)
 	if err != nil {
 		return gardenReviewCapture{}, err
 	}
