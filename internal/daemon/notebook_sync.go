@@ -54,19 +54,24 @@ type notebookSyncSnapshot struct {
 }
 
 type notebookSyncRun struct {
-	streamErrors map[string]string
-	engine       *attnsync.Engine
-	folder       string
-	disk         notebookSyncDisk
-	peers        []string
-	cancel       context.CancelFunc
-	done         chan struct{}
-	ctx          context.Context
-	snapshots    map[string]notebookSyncSnapshot
-	remote       map[string]notebookSyncSnapshot
-	conflicts    map[string]struct{}
-	homeState    protocol.OutpostNotebook
-	progress     *time.Timer
+	streams   map[string]notebookSyncStream
+	engine    *attnsync.Engine
+	folder    string
+	disk      notebookSyncDisk
+	peers     []string
+	cancel    context.CancelFunc
+	done      chan struct{}
+	ctx       context.Context
+	snapshots map[string]notebookSyncSnapshot
+	remote    map[string]notebookSyncSnapshot
+	conflicts map[string]struct{}
+	homeState protocol.OutpostNotebook
+	progress  *time.Timer
+}
+
+type notebookSyncStream struct {
+	conn  *bridge.Conn
+	error string
 }
 
 type notebookSyncRuntime struct {
@@ -267,7 +272,7 @@ func (d *Daemon) startNotebookSync(home, root string, peers []string) error {
 		return err
 	}
 	ctx, cancel := context.WithCancel(d.life.Context())
-	run := &notebookSyncRun{engine: engine, folder: "notebook-" + home, disk: disk, peers: slices.Clone(peers), cancel: cancel, ctx: ctx, done: make(chan struct{}), snapshots: map[string]notebookSyncSnapshot{}, remote: map[string]notebookSyncSnapshot{}, conflicts: map[string]struct{}{}, streamErrors: map[string]string{}}
+	run := &notebookSyncRun{engine: engine, folder: "notebook-" + home, disk: disk, peers: slices.Clone(peers), cancel: cancel, ctx: ctx, done: make(chan struct{}), snapshots: map[string]notebookSyncSnapshot{}, remote: map[string]notebookSyncSnapshot{}, conflicts: map[string]struct{}{}, streams: map[string]notebookSyncStream{}}
 	d.notebookSync.mu.Lock()
 	d.notebookSync.run = run
 	d.notebookSync.mu.Unlock()
@@ -545,8 +550,8 @@ func (d *Daemon) notebookPeerStateLocked(peer, name string) (protocol.OutpostNot
 		info.PreviousRoot = protocol.Ptr(remote.PreviousRoot)
 	}
 	switch {
-	case run.streamErrors[peer] != "":
-		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr("Notebook stream: "+run.streamErrors[peer])
+	case run.streams[peer].error != "":
+		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr("Notebook stream: "+run.streams[peer].error)
 	case local.Error != "":
 		info.State, info.Error = protocol.OutpostNotebookStateError, protocol.Ptr("home: "+local.Error)
 	case remote.Error != "":
@@ -665,7 +670,7 @@ func (d *Daemon) sendNotebookSyncReports(conn *bridge.Conn) {
 		if run := d.notebookSync.run; run != nil {
 			report = run.snapshots[conn.Peer().DaemonID]
 			report.Root, report.PreviousRoot = run.disk.Root, run.disk.PreviousRoot
-			if reason := run.streamErrors[conn.Peer().DaemonID]; reason != "" {
+			if reason := run.streams[conn.Peer().DaemonID].error; reason != "" {
 				report.Error = reason
 			}
 		}
@@ -720,11 +725,11 @@ func (d *Daemon) serveNotebookSync(conn *bridge.Conn, incoming ssh.NewChannel) {
 	stop := context.AfterFunc(conn.Context(), cancel)
 	defer stop()
 	d.notebookSync.mu.Lock()
-	delete(run.streamErrors, conn.Peer().DaemonID)
+	run.streams[conn.Peer().DaemonID] = notebookSyncStream{conn: conn}
 	d.notebookSync.mu.Unlock()
 	stream := conn.Bulk(ctx, channel, requests)
 	if err := run.engine.ServeConn(ctx, stream, notebookDevice(conn.Peer().DaemonID)); err != nil && ctx.Err() == nil {
-		d.notebookStreamError(run, conn.Peer().DaemonID, err)
+		d.notebookStreamError(run, conn, err)
 	}
 }
 
@@ -740,14 +745,14 @@ func (d *Daemon) openNotebookSync(conn *bridge.Conn) {
 	defer stop()
 	d.notebookSync.mu.Lock()
 	delete(run.remote, conn.Peer().DaemonID)
-	delete(run.streamErrors, conn.Peer().DaemonID)
+	run.streams[conn.Peer().DaemonID] = notebookSyncStream{conn: conn}
 	d.notebookSync.mu.Unlock()
 	channel, requests, err := conn.Open(ctx, notebookChannel, nil)
 	if err == nil {
 		err = run.engine.ServeConn(ctx, conn.Bulk(ctx, channel, requests), notebookDevice(conn.Peer().DaemonID))
 	}
 	if err != nil && ctx.Err() == nil {
-		d.notebookStreamError(run, conn.Peer().DaemonID, err)
+		d.notebookStreamError(run, conn, err)
 	}
 }
 
@@ -804,7 +809,7 @@ func (d *Daemon) notebookSyncSettings() (string, string) {
 		return string(result), ""
 	}
 	snapshot := run.snapshots[run.disk.Home]
-	if reason := run.streamErrors[run.disk.Home]; reason != "" {
+	if reason := run.streams[run.disk.Home].error; reason != "" {
 		return "error", reason
 	}
 	if snapshot.Error != "" {
@@ -936,7 +941,7 @@ func (d *Daemon) forgetNotebookSyncPeer(peer string) {
 		delete(run.disk.Completed, peer)
 		delete(run.remote, peer)
 		delete(run.snapshots, peer)
-		delete(run.streamErrors, peer)
+		delete(run.streams, peer)
 		if err := d.saveNotebookSyncDisk(run.disk); err != nil {
 			d.logf("forget Notebook peer: %v", err)
 		}
@@ -1020,13 +1025,18 @@ func notebookConflictOriginal(path string) string {
 	return original
 }
 
-func (d *Daemon) notebookStreamError(run *notebookSyncRun, peer string, err error) {
+func (d *Daemon) notebookStreamError(run *notebookSyncRun, conn *bridge.Conn, err error) {
+	pausepoint.At(pausepoint.NotebookStreamError)
+	defer pausepoint.At(pausepoint.NotebookStreamErrorHandled)
 	r := &d.notebookSync
 	r.mu.Lock()
-	if r.run == run {
-		run.streamErrors[peer] = err.Error()
-		d.notebookSyncChangedLocked()
+	peer := conn.Peer().DaemonID
+	if r.run != run || run.streams[peer].conn != conn {
+		r.mu.Unlock()
+		return
 	}
+	run.streams[peer] = notebookSyncStream{conn: conn, error: err.Error()}
+	d.notebookSyncChangedLocked()
 	r.mu.Unlock()
 	d.logf("Notebook stream: %v", err)
 	d.refreshNotebookRows()

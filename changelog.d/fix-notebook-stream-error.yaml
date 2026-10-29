@@ -1,0 +1,3 @@
+kind: fixed
+area: outposts
+change: Reconnecting an outpost no longer leaves the Notebook showing a sync error from its previous connection.
