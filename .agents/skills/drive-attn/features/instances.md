@@ -78,6 +78,7 @@ Preconditions:
 
 ## Gotchas
 
+- In the collapsed desktop sidebar, the `drive-6` marker can render as `dr…` even though `dom_text` returns `drive-6`. The full name is not visible in that screenshot. Expand the sidebar for instance proof; the expanded marker shows `instance drive-6`.
 - Bare `make install`, `make run` and `make install-daemon` act on production, and need the user's approval. Always pass `INSTANCE=<name>`.
 - `attn instance clean` with no instance name is refused; the default instance, production, is cleaned only with `--force`. Never pass it.
 - `./attn` in a shell with no instance selected, or the `attn` on `PATH`, talks to production. Most verbs print `[attn instance=<name> socket=<socket> port=<port>]` on stderr while an instance is selected (`internal/config/banner.go`); no banner means none. `./attn instance` shows the selection.
