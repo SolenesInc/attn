@@ -13,6 +13,7 @@ function baseValues(overrides: Partial<AutomationFormValues> = {}): AutomationFo
     id: 1,
     trigger: 'manual',
     scheduleCron: '',
+    scheduleTimeZone: 'Europe/Berlin',
     continuity: 'fresh',
     catchUp: '',
     repositoriesInclude: [],
@@ -72,7 +73,7 @@ describe('round trip: formValuesToSpec -> JSON -> specToFormValues -> formValues
     expect((spec.location as Record<string, unknown>).type).toBe('directory');
   });
 
-  it('scheduled trigger round-trips, never carries time_zone, and omits empty executable/model keys when absent', () => {
+  it('scheduled trigger round-trips with its time_zone and omits empty executable/model keys when absent', () => {
     const values = baseValues({
       ...scheduledFixture,
       model: '',
@@ -85,7 +86,7 @@ describe('round trip: formValuesToSpec -> JSON -> specToFormValues -> formValues
     expect(respec).toEqual(spec);
 
     const schedule = (spec.trigger as Record<string, unknown>).schedule as Record<string, unknown>;
-    expect(schedule).not.toHaveProperty('time_zone');
+    expect(schedule.time_zone).toBe('Europe/Berlin');
     expect(spec.launch).not.toHaveProperty('model');
     expect(spec.launch).not.toHaveProperty('effort');
     expect(spec.launch).not.toHaveProperty('executable');

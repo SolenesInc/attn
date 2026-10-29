@@ -280,6 +280,22 @@ describe('App automation form', () => {
       expect(field('error-catchUp')).toHaveTextContent('Choose what happens to missed runs.');
       expect(daemon.sentOf('automation_apply')).toEqual([]);
     });
+
+    it('saves a schedule in the time zone of the machine it was written on', async () => {
+      const daemon = await openNew();
+      fireEvent.click(field('trigger-scheduled'));
+      fillManual();
+      type('cron', '0 9 * * *');
+      fireEvent.click(field('catchup-skip'));
+
+      await press(daemon, 'save');
+
+      const [{ spec }] = applied(daemon);
+      expect(spec.trigger.schedule).toEqual({
+        cron: '0 9 * * *',
+        time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+    });
   });
 
   describe('editing', () => {
