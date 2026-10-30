@@ -1613,6 +1613,9 @@ type AutomationProvenance struct {
 	// RunID corresponds to the JSON schema field "run_id".
 	RunID string `json:"run_id"`
 
+	// Superseded corresponds to the JSON schema field "superseded".
+	Superseded *bool `json:"superseded,omitempty,omitzero"`
+
 	// TriggerType corresponds to the JSON schema field "trigger_type".
 	TriggerType string `json:"trigger_type"`
 }

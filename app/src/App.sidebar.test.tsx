@@ -250,6 +250,38 @@ describe('App sidebar', () => {
     expect(screen.getByTestId('sidebar-session-run-a')).toBeInTheDocument();
   });
 
+  it('counts only the current singleton while keeping superseded questions reachable', async () => {
+    const automation: Automation = { run_id: 'current', definition_id: 1, definition_name: 'Sweep', trigger_type: 'scheduled' };
+    const previous = daemonSession('previous', { automation: { ...automation, run_id: 'old', superseded: true }, state: 'recoverable' });
+    const { daemon } = await launch({
+      settings: { queue_mode_enabled: 'true' },
+      sessions: [
+        previous,
+        daemonSession('older', { automation: { ...automation, run_id: 'older', superseded: true }, state: 'recoverable' }),
+        daemonSession('current', { automation }),
+      ],
+    });
+    const group = screen.getByTestId('sidebar-automation-1');
+    expect(group).toHaveAttribute('data-runs', '1');
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('sidebar-automation-header-1')));
+    expect(screen.getByTestId('sidebar-session-current')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-session-previous')).toBeNull();
+    expect(screen.queryByTestId('sidebar-session-older')).toBeNull();
+
+    await gesture(daemon, () => daemon.emit({ event: 'session_state_changed', session: { ...previous, turn_owed: true } }));
+    expect(group).toHaveAttribute('data-runs', '1');
+    expect(group).toHaveAttribute('data-needing', '1');
+    await gesture(daemon, () => pressShortcut('session.nextRun'));
+    expect(daemon.sentOf('desktop_show_session').slice(-1)[0]).toMatchObject({ session_id: 'previous' });
+
+    await gesture(daemon, () => daemon.emit({ event: 'session_state_changed', session: daemonSession('current', { automation: { ...automation, superseded: true } }) }));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' })));
+    expect(screen.getByTestId('queue-bar-runs')).toHaveAttribute('data-runs', '0');
+    expect(screen.getByTestId('queue-bar-runs')).toHaveAttribute('data-needing', '1');
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('queue-bar-runs')));
+    expect(daemon.sentOf('desktop_show_session').slice(-1)[0]).toMatchObject({ session_id: 'previous' });
+  });
+
   describe('desktops', () => {
     it('shows each desktop’s shortcut slot on its header, and not on its rows', async () => {
       await launch({

@@ -16,7 +16,7 @@ question.
 - `automation-schedule`: a `scheduled` trigger with a cron and a time zone, and `catch_up` of `skip` or `latest` after downtime.
 - `automation-guard`: a scheduled trigger's optional shell command. A run starts when its trimmed output is nonempty and new.
 - `automation-review-request`: a `github_review_requested` trigger that starts a run in a worktree at the pull request's head, one per pull request.
-- `automation-continuity`: `fresh` or `singleton` for schedules; review requests are always one per subject.
+- `automation-continuity`: `fresh` or `singleton` for schedules; review requests are always one per subject. A singleton reuses its session after name, schedule, guard and catch-up edits, and replants its seed after a harvest or wither. Changing the prompt, launch contract or location starts a replacement on the next occurrence.
 - `automation-runs`: each occurrence's run, its state (`pending`, `delivered`, `failed`, `cancelled`) and its session.
 - `next-run`: go to the next run that stopped and owes the user a turn.
 - `automation-enable`: turn an automation off and on; turning it off cancels its pending runs.
@@ -133,6 +133,7 @@ EOF
 ```
 
   `<schedule-id>` is the `id` it prints. The scheduler wakes every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run, and for up to two more minutes until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: false`. Disable it when done.
+- **Edit a singleton with previous sessions.** On an enabled schedule, rename it and change the guard or catch-up setting, keeping the same `id`. Its next run keeps the session. Have that agent harvest its seed; the next occurrence replants the seed and reuses the session. Change the prompt and apply again. `./attn automation show <schedule-id>` labels the last run's session as superseded until the next occurrence starts its replacement. `runs <schedule-id>` keeps all occurrences and marks the old session's `automation.superseded` as `true`. The drawer's run history labels it "Superseded session" and still opens it. In queue flow the automation group and queue bar count only the current session, including when the old sessions are recoverable. An old session that still owes a turn remains reachable through the next-run button, palette and ⌘⇧J. Editing does not stop its agent. Repeat the prompt edit to check that two previous sessions still leave one current run, then disable the schedule.
 - **A guarded schedule.** Use `scheduled.yaml` with `schedule: {cron: "@every 3s", time_zone: UTC}`, `continuity: singleton` and `guard: cat state.txt`. Before starting the daemon, set `ATTN_AUTOMATION_SCHEDULE_INTERVAL=1s` in the instance shell. Write `red` to `$R/state.txt`, validate and apply the definition, and capture `./attn automation show <guard-id>`, `list` and `runs <guard-id>` at each step. Wait on an `automations_changed` broadcast, then read `list` for the expected `guard_check`.
   - The first check reads `launched`. The run's opening names an occurrence input file containing `"guard_output":"red"`. Read it from the run's agent to prove the input arrived.
   - The next check reads `unchanged`, increases `checks_since_run`, and adds no run.
@@ -194,7 +195,7 @@ EOF
 - **Harnesses**: `launch.driver` picks claude, codex or a plugin driver, with `model`, `effort` and `executable`. The run's agent gets the same opening in every harness.
 - **Keyboard and native input**: ⌘⇧J and the palette reach runs; the drawer and the form are pointer-first, and their controls take Tab and Enter like any form.
 - **Compatibility across versions**: a definition carrying `enabled` is refused with `enabled is managed outside the spec; use 'attn automation enable' or 'attn automation disable'`, and one carrying `policy` with `policy has been removed; scheduled triggers take continuity and catch_up directly`. Unknown fields are refused by name.
-- **Flow**: in queue flow, runs stay out of the user's queue; the queue sidebar groups them under their automation, and the queue bar counts them and the ones needing the user. In desktop flow they sit on the launch desktop, marked ⚡.
+- **Flow**: in queue flow, runs stay out of the user's queue; the queue sidebar groups current sessions under their automation, and the queue bar counts them and outstanding turns. Superseded singleton sessions stay in run history, and their outstanding turns still join next-run navigation. In desktop flow sessions keep their tiles on the launch desktop, marked ⚡.
 
 ## Tests
 

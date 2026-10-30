@@ -130,6 +130,7 @@ model AutomationProvenance {
   definition_id: safeint;
   definition_name: string;
   trigger_type: string;
+  superseded?: boolean;
   pull_request?: PullRequestProvenance;
 }
 

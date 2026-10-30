@@ -2174,6 +2174,7 @@ export interface Automation {
     definition_name: string;
     pull_request?:   PullRequest;
     run_id:          string;
+    superseded?:     boolean;
     trigger_type:    string;
     [property: string]: any;
 }
@@ -2327,6 +2328,7 @@ export interface AutomationProvenance {
     definition_name: string;
     pull_request?:   PullRequest;
     run_id:          string;
+    superseded?:     boolean;
     trigger_type:    string;
     [property: string]: any;
 }
@@ -20331,6 +20333,7 @@ const typeMap: any = {
         { json: "definition_name", js: "definition_name", typ: "" },
         { json: "pull_request", js: "pull_request", typ: u(undefined, r("PullRequest")) },
         { json: "run_id", js: "run_id", typ: "" },
+        { json: "superseded", js: "superseded", typ: u(undefined, true) },
         { json: "trigger_type", js: "trigger_type", typ: "" },
     ], "any"),
     "PullRequest": o([
@@ -20424,6 +20427,7 @@ const typeMap: any = {
         { json: "definition_name", js: "definition_name", typ: "" },
         { json: "pull_request", js: "pull_request", typ: u(undefined, r("PullRequest")) },
         { json: "run_id", js: "run_id", typ: "" },
+        { json: "superseded", js: "superseded", typ: u(undefined, true) },
         { json: "trigger_type", js: "trigger_type", typ: "" },
     ], "any"),
     "AutomationRunMessage": o([

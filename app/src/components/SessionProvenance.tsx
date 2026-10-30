@@ -195,6 +195,9 @@ function automationLineParts(
       {shortDefinitionName(automation.definition_name)}
     </span>,
   ];
+  if (automation.superseded) {
+    parts.push(<span key="automation-superseded" className="session-provenance__definition">Superseded session</span>);
+  }
   if (target && pr) {
     parts.push(interactive ? (
       <button

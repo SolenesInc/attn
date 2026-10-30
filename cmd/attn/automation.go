@@ -149,6 +149,13 @@ func runAutomationCommand() {
 		result, err = c.AutomationDefinition(definitionID)
 		if err == nil && result.SpecYaml != nil {
 			fmt.Printf("# Profile: %s\n# Launch desktop: %s\n", protocol.Deref(result.Definition.ProfileName), launchDesktopText(result.Definition.LaunchDesktop))
+			if run := result.Definition.LastRun; run != nil && protocol.Deref(run.SessionID) != "" {
+				fmt.Printf("# Last run session: %s", protocol.Deref(run.SessionID))
+				if run.Automation != nil && protocol.Deref(run.Automation.Superseded) {
+					fmt.Print(" (superseded; the next occurrence starts a new session)")
+				}
+				fmt.Println()
+			}
 			if check := result.Definition.GuardCheck; check != nil {
 				fmt.Printf("# Guard: %s at %s", check.Outcome, check.CheckedAt)
 				if detail := protocol.Deref(check.Detail); detail != "" {

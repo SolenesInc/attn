@@ -297,8 +297,8 @@ function AsksPeek() {
 function RunsChip() {
   const { automationGroups, onWalkRuns } = useSidebarContext();
   const runs = runCount(automationGroups);
-  if (runs === 0) return null;
   const needingYou = runsNeedingYouCount(automationGroups);
+  if (runs === 0 && needingYou === 0) return null;
   const title = [
     `${automationGroups.length} automation${automationGroups.length === 1 ? '' : 's'}`,
     `${runs} run${runs === 1 ? '' : 's'}`,

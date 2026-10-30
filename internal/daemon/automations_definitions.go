@@ -138,6 +138,15 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 		d.publishArrangementChanged(definition.ProfileID)
 	}
 	d.broadcastAutomationsChanged(definition.ID)
+	records, err := d.store.ListLatestAutomationProvenanceRecords()
+	if err != nil {
+		return definition, err
+	}
+	for _, record := range records {
+		if record.DefinitionID == definition.ID {
+			d.broadcastSessionStateChanged(record.SessionID)
+		}
+	}
 	if definition.Enabled {
 		return definition, nil
 	}

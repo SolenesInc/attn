@@ -92,6 +92,19 @@ describe('App automations panel', () => {
     expect(screen.getByText('boom')).toBeInTheDocument();
   });
 
+  it('labels superseded singleton sessions in history and keeps them openable', async () => {
+    const daemon = await openAutomations({
+      definitions: [definition(1, 'Sweep', { trigger_type: 'scheduled' })],
+      runs: [run('old', { session_id: 's2', automation: {
+        definition_id: 1, definition_name: 'Sweep', run_id: 'old', trigger_type: 'scheduled', superseded: true,
+      } })],
+    });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-definition-select-1')));
+    expect(screen.getByTestId('automation-run-open-old')).toHaveTextContent('Superseded session');
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-run-open-old')));
+    expect(daemon.sentOf('desktop_show_session').slice(-1)[0]).toMatchObject({ session_id: 's2' });
+  });
+
   it('lists the definitions again when the daemon says automations changed', async () => {
     const scene: Scene = { definitions: [definition(1, 'PR reviewer')] };
     const daemon = await openAutomations(scene);

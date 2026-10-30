@@ -6,6 +6,7 @@ import { describeSessionPullRequest, sessionPullRequestRepositoryName } from './
 
 export function automationProvenanceDescription(provenance: AutomationProvenanceValue): string {
   const parts = [`Automation: ${provenance.definition_name}`];
+  if (provenance.superseded) parts.push('Superseded session');
   const pr = provenance.pull_request;
   if (pr) {
     parts.push(`${pr.repository}#${pr.number}`);

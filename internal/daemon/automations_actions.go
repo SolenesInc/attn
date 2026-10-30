@@ -93,10 +93,19 @@ func (d *Daemon) actionAutomationDefinitionGet(msg *protocol.AutomationDefinitio
 		result.Error = protocol.Ptr(err.Error())
 		return result
 	}
+	runs, err := d.store.ListAutomationRunsWithOccurrenceKeys(definition.ID, 1)
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+		return result
+	}
+	var lastRun *store.AutomationRunWithOccurrenceKey
+	if len(runs) > 0 {
+		lastRun = &runs[0]
+	}
 	result.Success = true
 	result.SpecYaml = protocol.Ptr(specYAML)
 	result.SpecJson = protocol.Ptr(definition.SpecJSON)
-	summary := d.buildAutomationDefinitionSummary(*definition, nil)
+	summary := d.buildAutomationDefinitionSummary(*definition, lastRun)
 	result.Definition = &summary
 	return result
 }

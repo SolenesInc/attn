@@ -22,6 +22,9 @@ func automationProvenance(record store.AutomationProvenanceRecord) (*protocol.Au
 		return provenance, fmt.Errorf("parse automation definition %d provenance: %w", record.DefinitionID, err)
 	}
 	provenance.TriggerType = spec.Trigger.Type
+	if spec.Trigger.Type == "scheduled" && spec.Trigger.Continuity == "singleton" && record.SingletonSessionID != record.SessionID {
+		provenance.Superseded = protocol.Ptr(true)
+	}
 	if record.Provider != "github" {
 		return provenance, nil
 	}

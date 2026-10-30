@@ -8,7 +8,7 @@ export interface AutomationRunSession {
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
   stateSince?: string;
-  automation?: { definition_id: number; definition_name: string };
+  automation?: { definition_id: number; definition_name: string; superseded?: boolean };
 }
 
 export interface AutomationRunGroup<S extends AutomationRunSession> {
@@ -75,8 +75,9 @@ export function automationRunGroups<S extends AutomationRunSession>(
   return [...groups.values()]
     .map((group) => {
       const runs = group.runs.sort(order);
-      return { ...group, runs, needingYou: runs.filter((run) => runNeedsYou(run, now)) };
+      return { ...group, runs: runs.filter((run) => !run.automation?.superseded), needingYou: runs.filter((run) => runNeedsYou(run, now)) };
     })
+    .filter((group) => group.runs.length > 0 || group.needingYou.length > 0)
     .sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
 }
 
