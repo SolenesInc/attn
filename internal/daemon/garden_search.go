@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 
@@ -54,42 +53,33 @@ func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage
 		Limit:    limit,
 		Searched: len(read.seeds),
 	}
+	quotes := map[string]map[string]docstore.TextQuote{}
+	ids := map[string][]string{}
+	schemas := map[string]docstore.CollectionSchema{}
 	for _, hit := range hits {
-		spans, err := d.store.TextSpans(hit.Quoted.Schema, hit.Quoted.ID, words)
+		key := docstore.Target(hit.Quoted.Schema.Namespace, hit.Quoted.Schema.Collection)
+		ids[key] = append(ids[key], hit.Quoted.ID)
+		schemas[key] = hit.Quoted.Schema
+	}
+	for key, schema := range schemas {
+		quotes[key], err = d.store.TextSpans(schema, ids[key], words)
 		if err != nil {
 			d.sendGardenError(conn, "search", err)
 			return
 		}
-		text := hit.Seed.Title
-		if hit.Where == garden.MatchBody {
-			text = hit.Seed.Body
+	}
+	for _, hit := range hits {
+		key := docstore.Target(hit.Quoted.Schema.Namespace, hit.Quoted.Schema.Collection)
+		quote, found := quotes[key][hit.Quoted.ID]
+		snippet := ""
+		if found {
+			snippet = garden.Snippet(quote.Text[hit.Quoted.Field], quote.Spans[hit.Quoted.Field])
 		}
-		if hit.Where == garden.MatchLog {
-			schema, err := d.collectionFor(hit.Quoted.Schema.Namespace, hit.Quoted.Schema.Collection)
-			if err != nil {
-				d.sendGardenError(conn, "search", err)
-				return
-			}
-			doc, found, err := d.store.GetDocument(*schema, hit.Quoted.ID)
-			if err != nil {
-				d.sendGardenError(conn, "search", err)
-				return
-			}
-			if found {
-				var note struct {
-					Body string `json:"body"`
-				}
-				if err := json.Unmarshal(doc.Body, &note); err != nil {
-					d.sendGardenError(conn, "search", err)
-					return
-				}
-				text = note.Body
-			}
-		}
+
 		result.Hits = append(result.Hits, protocol.SeedSearchHit{
 			Seed:       read.seed(hit.Seed, read.docs[hit.Seed.ID]),
 			Where:      hit.Where,
-			Snippet:    garden.Snippet(text, spans[hit.Quoted.Field]),
+			Snippet:    snippet,
 			LastActive: hit.LastActive.UTC().Format(docstore.TimeFormat),
 		})
 	}

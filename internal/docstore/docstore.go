@@ -63,6 +63,11 @@ type TextMatch struct {
 	Carries   [][]bool
 }
 
+type TextQuote struct {
+	Text  []string
+	Spans [][][2]int
+}
+
 type Filter struct {
 	Field string `json:"field"`
 	Op    Op     `json:"op"`

@@ -1,6 +1,7 @@
 package docstore
 
 import (
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -69,41 +70,59 @@ func Words(text string) []string {
 	return out
 }
 
-func IndexText(text string) string {
+type textAlias struct {
+	start, end int
+	original   [2]int
+}
+
+func indexedText(text string) (string, []textAlias) {
 	var out strings.Builder
-	out.WriteString(text)
-	for _, id := range identifiers(text) {
-		if len(id.parts) > 1 {
-			out.WriteByte('\n')
-			out.WriteString(strings.Join(id.parts, " "))
+	for _, r := range text {
+		if r == '_' || r >= 0x80 && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			for range len(string(r)) {
+				out.WriteByte(' ')
+			}
+		} else {
+			out.WriteRune(r)
 		}
 	}
-	return out.String()
+	var aliases []textAlias
+	for _, id := range identifiers(text) {
+		var words []string
+		wholeWords := strings.FieldsFunc(text[id.start:id.end], func(r rune) bool { return r == '_' })
+		for _, word := range wholeWords {
+			lower := strings.ToLower(word)
+			if lower != word && strings.IndexFunc(word, func(r rune) bool { return r >= 0x80 }) >= 0 {
+				words = append(words, lower)
+			}
+		}
+		if len(id.parts) > len(wholeWords) {
+			words = append(words, id.parts...)
+		}
+		if len(words) > 0 {
+			out.WriteByte('\n')
+			start := out.Len()
+			out.WriteString(strings.ToLower(strings.Join(words, " ")))
+			aliases = append(aliases, textAlias{start, out.Len(), [2]int{id.start, id.end}})
+		}
+	}
+	return out.String(), aliases
+}
+
+func IndexText(text string) string {
+	indexed, _ := indexedText(text)
+	return indexed
 }
 
 func OriginalSpans(text string, spans [][2]int) [][2]int {
-	type appended struct {
-		start, end int
-		original   [2]int
-	}
-	var lines []appended
-	at := len(text)
-	for _, id := range identifiers(text) {
-		if len(id.parts) > 1 {
-			end := at + 1 + len(strings.Join(id.parts, " "))
-			lines = append(lines, appended{at + 1, end, [2]int{id.start, id.end}})
-			at = end
-		}
-	}
+	_, aliases := indexedText(text)
 	out := make([][2]int, 0, len(spans))
 	seen := map[[2]int]bool{}
 	for _, span := range spans {
 		if span[0] >= len(text) {
-			for _, line := range lines {
-				if span[0] >= line.start && span[1] <= line.end {
-					span = line.original
-					break
-				}
+			i := sort.Search(len(aliases), func(i int) bool { return aliases[i].end >= span[1] })
+			if i < len(aliases) && span[0] >= aliases[i].start {
+				span = aliases[i].original
 			}
 		}
 		if span[0] < len(text) && !seen[span] {

@@ -85,6 +85,43 @@ func TestSeedSearchMatchesWordsAndIdentifiers(t *testing.T) {
 	})
 }
 
+func TestSeedSearchMatchesUnicodeWords(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		cli := w.Client().WithGardenProfile(app.SelectedProfile(), "")
+		for _, tc := range []struct{ text, query string }{
+			{"landmine—decision", "decision"},
+			{"say “quoted” here", "quoted"},
+			{"step →deploy", "deploy"},
+			{"C1–C3", "c3"},
+			{"⌘K", "k"},
+			{"attn’s", "s"},
+			{"Über alles", "über"},
+			{"Über alles", "Über"},
+			{"ÉlanÜber café 東京42", "élan über"},
+			{"İstanbul visible", "istanbul"},
+		} {
+			seed, err := cli.SeedPlant("", "Unicode regression", tc.text, "", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := gardenSearch(t, cli, "", tc.query, garden.MaxSearchResults)
+			found := false
+			for _, hit := range result.Hits {
+				if hit.Seed.ID == seed.Seed.ID {
+					found = true
+					if hit.Snippet != tc.text {
+						t.Errorf("query %q: quote %q, want original %q", tc.query, hit.Snippet, tc.text)
+					}
+				}
+			}
+			if !found {
+				t.Errorf("query %q missed %q: %+v", tc.query, tc.text, result)
+			}
+		}
+	})
+}
+
 func TestSeedSearchRanksCoverageAndKeepsClosedSeeds(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()

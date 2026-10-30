@@ -244,7 +244,7 @@ func putDocumentWith(q execQuerier, schema docstore.CollectionSchema, table, id 
 		return 0, fmt.Errorf("store: writing %s/%s/%s: %w", schema.Namespace, schema.Collection, id, err)
 	}
 	if len(schema.Text) > 0 {
-		if err := putTextIndex(q, table, schema, id, body, createdAt); err != nil {
+		if err := putTextIndex(q, table, schema, id, body, createdAt, rev); err != nil {
 			return 0, err
 		}
 	}

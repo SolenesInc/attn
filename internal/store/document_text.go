@@ -38,9 +38,11 @@ func createTextIndex(tx *sql.Tx, table string, schema docstore.CollectionSchema)
 	return rows.Err()
 }
 
-func putTextIndex(q execer, table string, schema docstore.CollectionSchema, id string, body []byte, createdAt string) error {
-	if _, err := q.Exec(`DELETE FROM `+table+`_text WHERE id = ?`, id); err != nil {
-		return err
+func putTextIndex(q execer, table string, schema docstore.CollectionSchema, id string, body []byte, createdAt string, rev int64) error {
+	if rev != docstore.FirstRev {
+		if _, err := q.Exec(`DELETE FROM `+table+`_text WHERE id = ?`, id); err != nil {
+			return err
+		}
 	}
 	return insertTextIndex(q, table, schema, id, body, createdAt)
 }
@@ -166,54 +168,70 @@ func textScores(info []byte, fields int) ([]float64, [][]bool) {
 	return scores, carries
 }
 
-func (s *Store) TextSpans(schema docstore.CollectionSchema, id string, words []string) ([][][2]int, error) {
+func (s *Store) TextSpans(schema docstore.CollectionSchema, ids []string, words []string) (map[string]docstore.TextQuote, error) {
 	stored, err := s.textCollection(schema)
 	if err != nil {
 		return nil, err
 	}
-	out := make([][][2]int, len(stored.Text))
-	if len(words) == 0 {
+	out := map[string]docstore.TextQuote{}
+	if len(words) == 0 || len(ids) == 0 {
 		return out, nil
 	}
 	table := stored.Table + `_text`
-	var offsets string
-	var body []byte
-	err = s.db.QueryRow(`SELECT offsets(`+table+`), d.body FROM `+table+` JOIN `+stored.Table+
-		` d ON d.id = `+table+`.id WHERE `+table+` MATCH ? AND `+table+`.docid = (SELECT docid FROM `+table+` WHERE id = ?)`, textExpression(words), id).Scan(&offsets, &body)
-	if err == sql.ErrNoRows {
-		return out, nil
+	args := []any{textExpression(words)}
+	for _, id := range ids {
+		args = append(args, id)
 	}
+	rows, err := s.db.Query(`SELECT `+table+`.id, offsets(`+table+`), d.body FROM `+table+` JOIN `+stored.Table+
+		` d ON d.id = `+table+`.id WHERE `+table+` MATCH ? AND `+table+`.id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, offsets string
+		var body []byte
+		if err := rows.Scan(&id, &offsets, &body); err != nil {
+			return nil, err
+		}
+		quote, err := textQuote(stored.Text, body, offsets)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = quote
+	}
+	return out, rows.Err()
+}
+
+func textQuote(fields []string, body []byte, offsets string) (docstore.TextQuote, error) {
+	out := docstore.TextQuote{Text: make([]string, len(fields)), Spans: make([][][2]int, len(fields))}
 	parts := strings.Fields(offsets)
 	for i := 0; i < len(parts); i += 4 {
 		col, err := strconv.Atoi(parts[i])
 		if err != nil {
-			return nil, err
+			return out, err
 		}
 		start, err := strconv.Atoi(parts[i+2])
 		if err != nil {
-			return nil, err
+			return out, err
 		}
 		size, err := strconv.Atoi(parts[i+3])
 		if err != nil {
-			return nil, err
+			return out, err
 		}
-		out[col-1] = append(out[col-1], [2]int{start, start + size})
+		out.Spans[col-1] = append(out.Spans[col-1], [2]int{start, start + size})
 	}
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(body, &object); err != nil {
-		return nil, err
+		return out, err
 	}
-	for i, field := range stored.Text {
-		var value string
+	for i, field := range fields {
 		if raw := object[field]; raw != nil {
-			if err := json.Unmarshal(raw, &value); err != nil {
-				return nil, err
+			if err := json.Unmarshal(raw, &out.Text[i]); err != nil {
+				return out, err
 			}
 		}
-		out[i] = docstore.OriginalSpans(value, out[i])
+		out.Spans[i] = docstore.OriginalSpans(out.Text[i], out.Spans[i])
 	}
 	return out, nil
 }
