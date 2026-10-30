@@ -3,6 +3,7 @@ package garden
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -124,27 +125,65 @@ type PlotChildSpec struct {
 	Title  string   `json:"title"`
 	Body   string   `json:"body,omitempty"`
 	Checks []Check  `json:"checks,omitempty"`
-	Blocks []string `json:"blocks,omitempty"`
+	After  []string `json:"after,omitempty"`
 }
 
 type PlotSpec struct {
-	Title    string          `json:"title"`
-	Body     string          `json:"body,omitempty"`
-	Checks   []Check         `json:"checks,omitempty"`
-	Children []PlotChildSpec `json:"children"`
+	Title          string          `json:"title"`
+	Body           string          `json:"body,omitempty"`
+	Checks         []Check         `json:"checks,omitempty"`
+	PartOf         string          `json:"part_of,omitempty"`
+	DiscoveredFrom string          `json:"discovered_from,omitempty"`
+	Children       []PlotChildSpec `json:"children"`
 }
 
+const plotPayloadShape = `{"title": …, "body": …, "part_of": "<plot>", "discovered_from": "<seed>", "children": [{"title": …, "after": ["<sibling slug>"]}]}`
+
 func ParsePlotSpec(raw []byte) (PlotSpec, error) {
+	if err := refuseBlocksInPlotPayload(raw); err != nil {
+		return PlotSpec{}, err
+	}
 	var spec PlotSpec
 	decoder := json.NewDecoder(strings.NewReader(string(raw)))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&spec); err != nil {
-		return PlotSpec{}, fmt.Errorf("this is not a plot payload: %w (the shape is {\"title\": …, \"body\": …, \"children\": [{\"title\": …, \"blocks\": [\"<sibling step slug>\"]}]})", err)
+		return PlotSpec{}, fmt.Errorf("this is not a plot payload: %w (the shape is %s)", err, plotPayloadShape)
 	}
 	if err := ValidatePlotSpec(spec); err != nil {
 		return PlotSpec{}, err
 	}
 	return spec, nil
+}
+
+func refuseBlocksInPlotPayload(raw []byte) error {
+	var probe struct {
+		Children []struct {
+			Title  string    `json:"title"`
+			Blocks *[]string `json:"blocks"`
+		} `json:"children"`
+	}
+	if json.Unmarshal(raw, &probe) != nil {
+		return nil
+	}
+	for i, child := range probe.Children {
+		if child.Blocks == nil {
+			continue
+		}
+		rewrite := "delete it"
+		if len(*child.Blocks) > 0 {
+			rewrite = fmt.Sprintf(`add "after": [%q] to %s`, StepSlug(child.Title), strings.Join(quoted(*child.Blocks), " and "))
+		}
+		return fmt.Errorf(`child %d (%q) has "blocks", which plot payloads do not take; a child names the siblings it waits for with "after". Here: %s`, i+1, child.Title, rewrite)
+	}
+	return nil
+}
+
+func quoted(values []string) []string {
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = strconv.Quote(value)
+	}
+	return out
 }
 
 func ValidatePlotSpec(spec PlotSpec) error {
@@ -164,19 +203,19 @@ func ValidatePlotSpec(spec PlotSpec) error {
 		}
 		slug := StepSlug(child.Title)
 		if prev, taken := slugs[slug]; taken {
-			return fmt.Errorf("children %d and %d both derive the step slug %q; blocks address siblings by slug, so retitle one", prev+1, i+1, slug)
+			return fmt.Errorf("children %d and %d both derive the step slug %q; after addresses siblings by slug, so retitle one", prev+1, i+1, slug)
 		}
 		slugs[slug] = i
 	}
 	for i, child := range spec.Children {
-		for _, target := range child.Blocks {
-			if _, known := slugs[StepSlug(target)]; !known {
-				return fmt.Errorf("child %d blocks %q, which is no sibling's title or step slug; the slugs here are %s", i+1, target, strings.Join(slugList(spec.Children), ", "))
+		for _, sibling := range child.After {
+			if _, known := slugs[StepSlug(sibling)]; !known {
+				return fmt.Errorf("child %d waits for %q, which is no sibling's title or step slug; the slugs here are %s", i+1, sibling, strings.Join(slugList(spec.Children), ", "))
 			}
 		}
 	}
-	if from, to, cyclic := blocksCycle(spec.Children, slugs); cyclic {
-		return fmt.Errorf("the blocks edges cycle through %q and %q, so neither child would ever be ready; sequence one way only", from, to)
+	if from, to, cyclic := afterCycle(spec.Children, slugs); cyclic {
+		return fmt.Errorf("%q and %q wait for each other through after, so neither child would ever be ready; sequence one way only", from, to)
 	}
 	return nil
 }
@@ -211,14 +250,14 @@ func slugList(children []PlotChildSpec) []string {
 	return out
 }
 
-func blocksCycle(children []PlotChildSpec, slugs map[string]int) (string, string, bool) {
+func afterCycle(children []PlotChildSpec, slugs map[string]int) (string, string, bool) {
 	const unseen, visiting, done = 0, 1, 2
 	state := make([]int, len(children))
 	var walk func(i int) (string, string, bool)
 	walk = func(i int) (string, string, bool) {
 		state[i] = visiting
-		for _, target := range children[i].Blocks {
-			j := slugs[StepSlug(target)]
+		for _, sibling := range children[i].After {
+			j := slugs[StepSlug(sibling)]
 			if state[j] == visiting {
 				return StepSlug(children[i].Title), StepSlug(children[j].Title), true
 			}

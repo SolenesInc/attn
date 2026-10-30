@@ -55,10 +55,15 @@ func (d *Daemon) startDelegationForeground(ctx context.Context, msg *protocol.De
 		return nil, err
 	}
 	msg.ProfileID = protocol.Ptr(profile.ID)
-	if seedID := protocol.Deref(msg.Assignment.SeedID); seedID != "" {
+	if ref := protocol.Deref(msg.Assignment.SeedID); ref != "" {
+		seedID, err := d.resolveSeedRef(ref, profile.ID)
+		if err != nil {
+			return nil, err
+		}
 		if err := d.requireSeedInProfile(seedID, profile.ID, false); err != nil {
 			return nil, err
 		}
+		msg.Assignment.SeedID = protocol.Ptr(seedID)
 	}
 	encoded, err := json.Marshal(msg)
 	if err != nil {

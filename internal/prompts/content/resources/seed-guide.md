@@ -56,8 +56,9 @@ A child's `show` lists the parent's headings and the item ids under each, and
 `attn seed show <plot> --section <heading|D3>` reads one, so name parent
 sections by heading and decisions or findings by id.
 
-Use `blocks` only when one child needs another's result. Otherwise leave them
-parallel. The children's states record progress, so the plan needs no checklist.
+Give a child `after` only when it needs a sibling's result. Otherwise leave
+the children parallel. The children's states record progress, so the plan needs
+no checklist.
 
 Write the parent for an implementer starting fresh and a user reviewing the
 direction: the goal, the decisions the user might change, what spikes and
@@ -82,20 +83,23 @@ The endpoint child records a contract that the app child needs before starting.
     {
       "title": "Daemon search endpoint",
       "body": "Add session search in internal/daemon. Read the parent plot's Search behavior, Decisions, Findings (F1) and Design sections for the SearchSessions contract, the ranking decision and its tie-break, and the protocol files, and trace the existing search in app/src to preserve its behavior. Follow repository protocol guidance. Test empty queries, matching, ordering and session changes (C1). Record the query and response contract on this seed for the app child. App integration belongs to that child.",
-      "checks": [{"id": "C1", "text": "The endpoint's tests pass for empty queries, matching, ordering and session changes. Test run on this seed."}],
-      "blocks": ["app-calls-endpoint"]
+      "checks": [{"id": "C1", "text": "The endpoint's tests pass for empty queries, matching, ordering and session changes. Test run on this seed."}]
     },
     {
       "title": "App calls the endpoint",
       "body": "Route session search in app/src through the daemon, then remove the obsolete client index. Read the parent plot's Search behavior and Design sections and the Daemon search endpoint seed's recorded API contract. Preserve keyboard selection and prevent stale results when queries overlap. Verify search, rapid query changes and keyboard navigation in the running app (C2).",
-      "checks": [{"id": "C2", "text": "In the running app, search, rapid query changes and keyboard navigation behave as before. Recording on this seed."}]
+      "checks": [{"id": "C2", "text": "In the running app, search, rapid query changes and keyboard navigation behave as before. Recording on this seed."}],
+      "after": ["daemon-search-endpoint"]
     }
   ]
 }
 ```
 
-The plot's C3 is shared, so each child proves it with its own report. Each child's `blocks` array names the siblings that wait for it. Use the sibling's
-slug or full title. Pass `-` instead of a file to read the payload from stdin.
+The plot's C3 is shared, so each child proves it with its own report. A
+child's `after` names the siblings it waits for, by slug or full title. To plant
+the plot inside another one, add `"part_of": "<plot>"`; to record the seed whose
+work turned it up, add `"discovered_from": "<seed>"`. Both take an id or a slug.
+Pass `-` instead of a file to read the payload from stdin.
 
     attn seed plant "..." --part-of <plot>   add another child
     attn open <plot>                        read the rendered plan

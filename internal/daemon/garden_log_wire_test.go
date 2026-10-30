@@ -127,12 +127,16 @@ func TestEverySeedChangeWritesOneLogEntryWithOneNoteAddedEvent(t *testing.T) {
 		t.Errorf("the planted child's log = %q, want it empty", notes)
 	}
 
-	fresh, err := cli.SeedPlot(protocol.SessionID(worker), "", protocol.SeedPlotMessage{Title: "a fresh plot", Children: []protocol.SeedPlotChild{
-		{Title: "first step", Blocks: []string{"second step"}}, {Title: "second step"},
-	}})
+	fresh, err := cli.SeedPlot(protocol.SessionID(worker), "", protocol.SeedPlotMessage{
+		Title: "a fresh plot", PartOf: protocol.Ptr(plot), DiscoveredFrom: protocol.Ptr(origin),
+		Children: []protocol.SeedPlotChild{{Title: "first step"}, {Title: "second step", After: []string{"first step"}}},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	log.expect("a plot payload placed under a plot and discovered from a seed",
+		wantEntry{plot, "link", fresh.Crown.ID + " joined this plot", worker},
+		wantEntry{origin, "link", fresh.Crown.ID + " was discovered here", worker})
 	for _, seed := range append([]protocol.Seed{fresh.Crown}, fresh.Children...) {
 		if notes := lifeNoteBodies(t, cli, seed.ID); len(notes) != 0 {
 			t.Errorf("%s, planted by one plot payload, logs %q; want the payload to start every log empty", seed.ID, notes)

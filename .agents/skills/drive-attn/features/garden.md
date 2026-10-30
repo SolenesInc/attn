@@ -10,7 +10,7 @@ checks.
 ## Sub-features
 
 - `seed-plant`: plant a seed with a markdown body and numbered checks.
-- `plot`: plant a plot and its children in one move; children run in parallel unless one blocks another. Harvest and wither refuse over open direct children; the last child close leaves a ringing plot note and names the plot, which keeps its state.
+- `plot`: plant a plot and its children in one move, with the plot's `part_of` and `discovered_from` and each child's `after` committed together; children run in parallel unless one waits for a sibling. A payload with `blocks` is refused, naming `after`. Harvest and wither refuse over open direct children; the last child close leaves a ringing plot note and names the plot, which keeps its state.
 - `seed-tend`: claim a seed; one tender at a time.
 - `seed-moves`: park, harvest, wither and replant; repeating a move keeps the state and rings nobody. A different closing reason becomes a note. Every move prints who it rang and writes one `move` entry on the log, carrying the reason or the park's comment; a repeated move writes none.
 - `harvest-when-merged`: arm a seed to harvest itself when its pull request merges, named by url or the session's single open one; clear it to take the arming back.
@@ -21,6 +21,7 @@ checks.
 - `seed-checks`: what a seed must prove: report, confirm, reject, uncheck and reopen.
 - `seed-watch`: follow a seed and its children; a ringing note or check move and every state move send current and covering plot tenders and watchers a seed update. A covering tender needs no watch; its coverage ends with the claim.
 - `seed-edges`: blocks, part-of and discovered-from links; a link or unlink writes a `link` entry on both seeds, and a harvest that frees a seed writes `ready: <blocker> harvested` on it. `ready` lists what nothing blocks.
+- `seed-slugs`: every `attn seed` verb, `attn delegate --seed` and `attn ask --seed` take a seed's slug where they take its id, within the caller's profile; `attn open` and `attn agent msg` take the id. A slug two seeds share is refused, listing each match's id, state and title.
 - `seed-artifacts`: files a seed owns, attached and detached.
 - `seed-search`: keyword search across the profile's garden, closed seeds included.
 - `garden-frame`: the garden as a drawer or fullscreen, with a list view and, fullscreen, a board view.
@@ -64,7 +65,7 @@ Preconditions:
 
 - The baseline instance. The steps that run `bridge` also need its app (`bridge --launch --wait-ready ping` answers) with What's new dismissed (`bridge dismiss_whats_new`); the rest need only the daemon.
 - The instance's notebook folder exists: `./attn journal append --entry "drive-attn setup"` prints `appended to journal/<date>.md`.
-- A proof folder, `P=$(mktemp -d /tmp/drive-attn-garden.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `plot.json`: `{"title":"Recipe plot","body":"Two steps.","children":[{"title":"Draft step","blocks":["check-step"]},{"title":"Check step"}]}`.
+- A proof folder, `P=$(mktemp -d /tmp/drive-attn-garden.XXXX) && echo "export P=$P" >> $DRIVE_ENV`, holding `plot.json`: `{"title":"Recipe plot","body":"Two steps.","children":[{"title":"Draft step"},{"title":"Check step","after":["draft-step"]}]}`.
 - An agent folder, `A=$(mktemp -d /tmp/drive-attn-garden-agent.XXXX) && echo "export A=$A" >> $DRIVE_ENV`, holding this fixture as `$A/.attn-mock-agent.json`:
 
 ```json
@@ -93,7 +94,9 @@ Preconditions:
 `<seed>`, `<plot>`, `<card>`, `<own>` and `<merge>` below are the ids the plant commands print; `<terminal>` is the agent's terminal id from `wsctl list`.
 
 - **Plant.** A person plants a seed with a check from their shell. Run `./attn seed plant "Garden drive" -m "Exercise the garden" --check "Shows in the garden"`. It prints `<seed>  garden-drive  Garden drive`, then `  C1  Shows in the garden`, and exits 0. Plant `"Garden drive followup"`: it lists the first seed under `similar open seeds` with its status, age and a wither hint for the new seed. Suggestions never stop planting; `plant --json` still prints the seed alone. `./attn seed show <seed>` shows `status planted` and C1 open.
-- **Plant a plot.** Run `./attn seed plot -f $P/plot.json`. It prints the plot, then `draft-step` and `check-step` with their ids, followed by up to 3 similar open seeds across all the titles, each naming the new seed it resembles (`like <id>`). `plot --json` includes `similar`. `./attn seed ready --plot <plot>` lists only `draft-step`, and `./attn seed ls` shows the plot with `1 ready · 1 blocked`.
+- **Plant a plot.** Run `./attn seed plot -f $P/plot.json`. It prints the plot, then `draft-step` and `check-step` with their ids, followed by up to 3 similar open seeds across all the titles, each naming the new seed it resembles (`like <id>`). `plot --json` includes `similar`. `./attn seed ready --plot <plot>` lists only `draft-step`, and `./attn seed ls` shows the plot with `1 ready · 1 blocked`. A payload whose child has `"blocks"` exits 1 with `has "blocks", which plot payloads do not take` and the `after` to write instead, and plants nothing.
+- **Nest a plot.** Run `./attn seed plant "Nest host"`, which prints `<host>`. Plot `{"title":"Inner plot","part_of":"nest-host","discovered_from":"garden-drive","children":[{"title":"Inner step"}]}` from stdin. `./attn seed show inner-plot` lists `part-of <host>` and `discovered-from <seed>`, `./attn seed show nest-host` lists `inner-plot` on its board, and `./attn seed notes nest-host --limit 1` reads `<inner-plot id> joined this plot`.
+- **Slugs.** `./attn seed show garden-drive`, `notes`, `note`, `link`, `ready --plot recipe-plot` and the other verbs act on the seed that slug names. Plant `"Twin note"` twice: `./attn seed show twin-note` exits 1 with `the slug twin-note names 2 seeds in this profile`, one row per match with its id, state and title. A slug of a seed in another profile resolves as unknown; that needs a second profile, which [profiles.md](profiles.md) sets up.
 - **Search, edit and link.** Run `./attn seed search drive`: it prints `2 seeds carry every word, 0 carry some — best first` and names `<seed>` with its status, last active age and the original line that matched. Word prefixes, stemming and identifier parts match; partial matches follow full matches, and closed seeds remain findable. `--json` exposes `matched`, `partial` and each hit's `last_active`; `--limit` raises the default of 10. `./attn seed edit <seed> -m "Exercise every way in"` prints `updated <seed> at revision 2`. `./attn seed link <seed> discovered-from <plot>` prints the edge and `./attn seed unlink <seed> discovered-from <plot>` removes it.
 - **Open with the shortcut.** Press ⌘⇧T. Run `bridge native_key '{"key":"t","modifiers":["command","shift"]}'`, then `bridge garden_get_state`. `present` is true, `frame` is `"dock"` (the drawer), and `seeds` lists `<seed>` and `<plot>` with `status: "planted"`.
 - **Fullscreen, then close.** Press ⌘⇧T again. `bridge garden_get_state` shows `frame: "full"` and `layout: "columns"`. Run `bridge native_key '{"key":"Escape"}'`: `present` is false.

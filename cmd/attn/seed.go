@@ -103,13 +103,16 @@ Planting always proceeds. If one is the same work, wither the new seed.
 --json prints the new seed alone.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}, false},
 	{`plot`, `plot [-f <path>] [--json]`, `plant a whole plot in one move from a JSON payload (-f, or stdin):
 {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}],
+"part_of": "<plot>", "discovered_from": "<seed>",
 "children": [{"title": …, "body": …, "checks": […],
-"blocks": ["<sibling step slug>"]}]}. Children are parallel by
-default; blocks names the siblings a child holds back. A shared
-check is proven by every child. Prints the plot's id and each
-child's id and step slug, then up to 3 similar open seeds across all
-planted titles, each naming the new seed it resembles. Planting always
-proceeds; wither a new seed if a suggestion is the same work.
+"after": ["<sibling step slug>"]}]}. Children are parallel by
+default; after names the siblings a child waits for. part_of and
+discovered_from are optional and take an id or a slug. A shared check is
+proven by every child. The plot, its children and their edges commit
+together. Prints the plot's id and each child's id and step slug, then
+up to 3 similar open seeds across all planted titles, each naming the
+new seed it resembles. Planting always proceeds; wither a new seed if a
+suggestion is the same work.
 --json prints the whole result, including similar seeds.`, []string{"f", "member", "json"}, false},
 	{`ls`, `ls [--plot <plot> | --stale [--window <duration>]] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
 --flat prints one list. --plot lists every child of one plot, oldest
@@ -334,8 +337,8 @@ func writeSeedHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn seed <command>
 
 A seed is the unit of work: one document, one short id, one slug made of the
-title's key words, planted in the garden. Commands take the id; the slug is
-how the seed is spoken of.
+title's key words, planted in the garden. Commands take the id or the slug; a
+slug two seeds share is refused, listing each match.
 Anything worth handing off, parking, or attributing is a seed.
 Use attn seed <command> --help for one command's syntax and flags.
 
@@ -912,8 +915,14 @@ func runSeedPlot(args []string) {
 	if spec.Body != "" {
 		msg.Body = protocol.Ptr(spec.Body)
 	}
+	if spec.PartOf != "" {
+		msg.PartOf = protocol.Ptr(spec.PartOf)
+	}
+	if spec.DiscoveredFrom != "" {
+		msg.DiscoveredFrom = protocol.Ptr(spec.DiscoveredFrom)
+	}
 	for _, child := range spec.Children {
-		wire := protocol.SeedPlotChild{Title: child.Title, Blocks: child.Blocks, Checks: checkDefinitionsToProtocol(child.Checks)}
+		wire := protocol.SeedPlotChild{Title: child.Title, After: child.After, Checks: checkDefinitionsToProtocol(child.Checks)}
 		if child.Body != "" {
 			wire.Body = protocol.Ptr(child.Body)
 		}
@@ -1114,6 +1123,13 @@ func runSeedEdit(args []string) {
 	id := positionals[0]
 	if !f.wasSet("m") {
 		seedUsageError("edit", fmt.Errorf("%s", garden.EditRecipe(id)))
+	}
+	if garden.ValidateID(id) != nil {
+		shown, err := f.client().SeedShow(f.sessionID(), id)
+		if err != nil {
+			seedFail("edit", err)
+		}
+		id = shown.Seed.ID
 	}
 	body, base, err := garden.ParseStamped(id, f.text("edit"))
 	if err != nil {

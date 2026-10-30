@@ -53,41 +53,105 @@ func (d *Daemon) seedsCollection() (*docstore.CollectionSchema, error) {
 	return d.collectionFor(garden.Namespace, garden.CollectionSeeds)
 }
 
-func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed, bornWith ...string) (docstore.Document, error) {
-	var doc docstore.Document
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var plantErr error
-		doc, plantErr = d.plantSeedProtected(protection, schema, seed, bornWith...)
-		return plantErr
-	})
-	return doc, err
-}
-
-func (d *Daemon) plantSeedProtected(_ foregroundCleanupProtection, schema docstore.CollectionSchema, seed garden.Seed, bornWith ...string) (docstore.Document, error) {
-	var profileErr error
-	seed.ProfileID, profileErr = d.seedBirthProfile(seed)
-	if profileErr != nil {
-		return docstore.Document{}, profileErr
-	}
-	seed = d.initializeSeedLifecycle(seed)
-	body, err := seed.Encode()
+func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (docstore.Document, error) {
+	docs, err := d.plantSeeds(schema, []garden.Seed{seed})
 	if err != nil {
 		return docstore.Document{}, err
 	}
-	expected := docstore.ExpectAbsent
-	fact := documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)
-	occurrences := make([]seedEvents.Occurrence, 0, len(seed.Edges)+3)
+	return docs[0], nil
+}
+
+func (d *Daemon) plantSeeds(schema docstore.CollectionSchema, seeds []garden.Seed) ([]docstore.Document, error) {
+	var docs []docstore.Document
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var plantErr error
+		docs, plantErr = d.plantSeedsProtected(protection, schema, seeds)
+		return plantErr
+	})
+	return docs, err
+}
+
+func (d *Daemon) plantSeedProtected(protection foregroundCleanupProtection, schema docstore.CollectionSchema, seed garden.Seed) (docstore.Document, error) {
+	docs, err := d.plantSeedsProtected(protection, schema, []garden.Seed{seed})
+	if err != nil {
+		return docstore.Document{}, err
+	}
+	return docs[0], nil
+}
+
+func (d *Daemon) plantSeedsProtected(_ foregroundCleanupProtection, schema docstore.CollectionSchema, seeds []garden.Seed) ([]docstore.Document, error) {
+	commits := make([]store.DocumentCommit, len(seeds))
+	born := make([]string, len(seeds))
+	var occurrences []seedEvents.Occurrence
+	for i, seed := range seeds {
+		var err error
+		seed.ProfileID, err = d.seedBirthProfile(seed)
+		if err != nil {
+			return nil, err
+		}
+		seed = d.initializeSeedLifecycle(seed)
+		seeds[i], born[i] = seed, seed.ID
+		body, err := seed.Encode()
+		if err != nil {
+			return nil, err
+		}
+		expected := docstore.ExpectAbsent
+		commits[i] = store.DocumentCommit{
+			Write: store.DocumentWrite{Schema: schema, ID: seed.ID, Body: body, Expected: &expected},
+			Fact:  documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false),
+		}
+		planted, err := seedPlantingOccurrences(seed)
+		if err != nil {
+			return nil, err
+		}
+		occurrences = append(occurrences, planted...)
+	}
+	planter := seeds[0].PlanterSession
+	log, err := d.seedChangeLog(seedChange{
+		author: garden.Tender{Session: planter, Member: d.resolveTenderMember("", planter)},
+		cause:  planter, born: born, events: plainSeedEvents(occurrences...),
+	})
+	if err != nil {
+		return nil, err
+	}
+	commits = append(commits, log.commits...)
+	written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, log.events, d.gardenTime())
+	if err != nil {
+		return nil, err
+	}
+	d.coalesceSnapshots(func() {
+		for i, commit := range commits {
+			d.announceCommittedWrite(commit.Fact, written[i].Seq)
+		}
+		announceGardenSeedEvents(d, eventSeqs)
+	})
+
+	docs := make([]docstore.Document, len(seeds))
+	for i, seed := range seeds {
+		d.queueConversationKeepIfReferenceMoved(garden.Seed{}, seed)
+		doc, found, err := d.store.GetDocument(schema, seed.ID)
+		if err != nil || !found {
+			docs[i] = docstore.Document{ID: seed.ID, Body: commits[i].Write.Body, Rev: written[i].Rev}
+			continue
+		}
+		docs[i] = *doc
+	}
+	return docs, nil
+}
+
+func seedPlantingOccurrences(seed garden.Seed) ([]seedEvents.Occurrence, error) {
+	occurrences := make([]seedEvents.Occurrence, 0, len(seed.Edges)+2)
 	planted, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Planted, seed.ID, seedEvents.CausePayload{
 		CausedBySessionID: seed.PlanterSession,
 	})
 	if err != nil {
-		return docstore.Document{}, err
+		return nil, err
 	}
 	occurrences = append(occurrences, planted)
 	if seed.Status == garden.StatusGrowing {
 		tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, seed.PlanterSession, string(seed.TenderSession))
 		if err != nil {
-			return docstore.Document{}, err
+			return nil, err
 		}
 		occurrences = append(occurrences, tended)
 	}
@@ -96,37 +160,11 @@ func (d *Daemon) plantSeedProtected(_ foregroundCleanupProtection, schema docsto
 			EdgeKind: edge.Kind, TargetSeedID: edge.To, CausedBySessionID: seed.PlanterSession,
 		})
 		if err != nil {
-			return docstore.Document{}, err
+			return nil, err
 		}
 		occurrences = append(occurrences, linked)
 	}
-	log, err := d.seedChangeLog(seedChange{
-		author: garden.Tender{Session: seed.PlanterSession, Member: d.resolveTenderMember("", seed.PlanterSession)},
-		cause:  seed.PlanterSession, born: append([]string{seed.ID}, bornWith...), events: plainSeedEvents(occurrences...),
-	})
-	if err != nil {
-		return docstore.Document{}, err
-	}
-	commits := append([]store.DocumentCommit{{
-		Write: store.DocumentWrite{Schema: schema, ID: seed.ID, Body: body, Expected: &expected}, Fact: fact,
-	}}, log.commits...)
-	written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, log.events, d.gardenTime())
-	if err != nil {
-		return docstore.Document{}, err
-	}
-	d.coalesceSnapshots(func() {
-		for i, commit := range commits {
-			d.announceCommittedWrite(commit.Fact, written[i].Seq)
-		}
-		announceGardenSeedEvents(d, eventSeqs)
-	})
-	d.queueConversationKeepIfReferenceMoved(garden.Seed{}, seed)
-
-	doc, found, err := d.store.GetDocument(schema, seed.ID)
-	if err != nil || !found {
-		return docstore.Document{ID: seed.ID, Body: body, Rev: written[0].Rev}, nil
-	}
-	return *doc, nil
+	return occurrences, nil
 }
 
 func (d *Daemon) readSeed(id string) (garden.Seed, docstore.Document, error) {
@@ -469,92 +507,72 @@ func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed
 func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 	spec := garden.PlotSpec{
 		Title: strings.TrimSpace(msg.Title), Body: protocol.Deref(msg.Body), Checks: checkDefinitionsFromProtocol(msg.Checks),
+		PartOf: protocol.Deref(msg.PartOf), DiscoveredFrom: protocol.Deref(msg.DiscoveredFrom),
 	}
 	for _, child := range msg.Children {
 		spec.Children = append(spec.Children, garden.PlotChildSpec{
 			Title:  strings.TrimSpace(child.Title),
 			Body:   protocol.Deref(child.Body),
 			Checks: checkDefinitionsFromProtocol(child.Checks),
-			Blocks: child.Blocks,
+			After:  child.After,
 		})
 	}
 	if err := garden.ValidatePlotSpec(spec); err != nil {
 		d.sendGardenError(conn, "plot", err)
 		return
 	}
+	checks := slices.Clone(spec.Checks)
+	for _, child := range spec.Children {
+		checks = append(checks, child.Checks...)
+	}
+	if spec.PartOf != "" && len(checks) > 0 {
+		d.checkIDsMu.Lock()
+		defer d.checkIDsMu.Unlock()
+		read, err := d.readGarden(protocol.Deref(msg.ProfileID))
+		if err != nil {
+			d.sendGardenError(conn, "plot", err)
+			return
+		}
+		if checkID, owner, used := read.plots.UsedCheckID(spec.PartOf, checks); used {
+			d.sendGardenError(conn, "plot", fmt.Errorf(
+				"%s is already used by %s in the plot this payload joins, and one id names one statement in a plot tree; number the payload's checks from %s up",
+				checkID, owner, read.plots.NextCheckID(spec.PartOf)))
+			return
+		}
+	}
 	schema, err := d.seedsCollection()
 	if err != nil {
 		d.sendGardenError(conn, "plot", err)
 		return
 	}
-	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	member := strings.TrimSpace(protocol.Deref(msg.Member))
-
-	titles := []string{spec.Title}
-	for _, child := range spec.Children {
-		titles = append(titles, child.Title)
+	seeds, err := d.plotSeeds(*schema, spec, protocol.Deref(msg.ProfileID), protocol.TrimID(protocol.Deref(msg.SourceSessionID)), strings.TrimSpace(protocol.Deref(msg.Member)))
+	if err != nil {
+		d.sendGardenError(conn, "plot", err)
+		return
 	}
-	var result protocol.SeedPlotResult
-	planted := []string{}
 
+	var result protocol.SeedPlotResult
 	var plotErr error
 	d.coalesceSnapshots(func() {
-		crown, crownDoc, err := d.mintAndPlant(*schema, garden.Seed{
-			ProfileID: protocol.Deref(msg.ProfileID), Title: spec.Title, Body: spec.Body, Status: garden.StatusPlanted,
-			StepSlug: garden.StepSlug(spec.Title), PlanterSession: sessionID, PlanterMember: member,
-			Edges: []garden.Edge{}, Vars: []garden.Var{}, Checks: spec.Checks,
-		})
+		docs, err := d.plantSeeds(*schema, seeds)
 		if err != nil {
 			plotErr = err
 			return
 		}
-		planted = append(planted, crown.ID)
-		ids := make(map[string]string, len(spec.Children))
-		plotIDs := []string{crown.ID}
-		childSeeds := make([]garden.Seed, 0, len(spec.Children))
-		for _, child := range spec.Children {
-			id, err := d.mintUnplantedSeedID(*schema)
-			if err != nil {
-				plotErr = err
-				return
-			}
-			ids[garden.StepSlug(child.Title)] = id
-			plotIDs = append(plotIDs, id)
-			childSeeds = append(childSeeds, garden.Seed{ID: id, Title: child.Title, Body: child.Body, Checks: child.Checks})
+		planted := make([]string, len(seeds))
+		titles := make([]string, len(seeds))
+		for i, seed := range seeds {
+			planted[i], titles[i] = seed.ID, seed.Title
 		}
-		docs := make([]docstore.Document, 0, len(spec.Children))
-		for i, child := range spec.Children {
-			seed := childSeeds[i]
-			seed.Edges = []garden.Edge{{Kind: garden.EdgePartOf, To: crown.ID}}
-			for _, target := range child.Blocks {
-				seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgeBlocks, To: ids[garden.StepSlug(strings.TrimSpace(target))]})
-			}
-			seed.ProfileID = protocol.Deref(msg.ProfileID)
-			seed.Status = garden.StatusPlanted
-			seed.StepSlug = garden.StepSlug(seed.Title)
-			seed.PlanterSession = sessionID
-			seed.PlanterMember = member
-			seed.Vars = []garden.Var{}
-			doc, err := d.plantSeed(*schema, seed, plotIDs...)
-			if err != nil {
-				plotErr = fmt.Errorf(
-					"planting %q failed after %s were planted: %w — the plot is partial, `attn seed ls` shows what landed",
-					seed.Title, strings.Join(planted, ", "), err)
-				return
-			}
-			planted = append(planted, seed.ID)
-			childSeeds[i] = seed
-			docs = append(docs, doc)
-		}
-		read := d.readGardenAround(crown)
-		hits, err := d.similarSeeds(read, titles, planted)
+		read := d.readGardenAround(seeds[0])
+		hits, err := d.similarSeeds(read, titles, append(slices.Clone(planted), spec.PartOf))
 		if err != nil {
-			d.logf("garden: similar seeds after planting plot %s: %v", crown.ID, err)
+			d.logf("garden: similar seeds after planting plot %s: %v", seeds[0].ID, err)
 		}
 		result.Similar = similarWire(read, hits, planted)
-		result.Crown = read.seed(crown, crownDoc)
-		for i, seed := range childSeeds {
-			result.Children = append(result.Children, read.seed(seed, docs[i]))
+		result.Crown = read.seed(seeds[0], docs[0])
+		for i := 1; i < len(seeds); i++ {
+			result.Children = append(result.Children, read.seed(seeds[i], docs[i]))
 		}
 	})
 	if plotErr != nil {
@@ -562,6 +580,44 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		return
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedPlotResult: &result})
+}
+
+func (d *Daemon) plotSeeds(schema docstore.CollectionSchema, spec garden.PlotSpec, profileID string, sessionID protocol.SessionID, member string) ([]garden.Seed, error) {
+	seeds := make([]garden.Seed, 1+len(spec.Children))
+	ids, err := d.mintSeedIDsInPlantingOrder(schema, len(seeds))
+	if err != nil {
+		return nil, err
+	}
+	bySlug := make(map[string]*garden.Seed, len(spec.Children))
+	for i, id := range ids {
+		title, body, checks := spec.Title, spec.Body, spec.Checks
+		if i > 0 {
+			child := spec.Children[i-1]
+			title, body, checks = child.Title, child.Body, child.Checks
+		}
+		seeds[i] = garden.Seed{
+			ID: id, ProfileID: profileID, Title: title, Body: body, Status: garden.StatusPlanted,
+			StepSlug: garden.StepSlug(title), PlanterSession: sessionID, PlanterMember: member,
+			Edges: []garden.Edge{}, Vars: []garden.Var{}, Checks: checks,
+		}
+		if i > 0 {
+			seeds[i].Edges = append(seeds[i].Edges, garden.Edge{Kind: garden.EdgePartOf, To: seeds[0].ID})
+			bySlug[seeds[i].StepSlug] = &seeds[i]
+		}
+	}
+	if spec.PartOf != "" {
+		seeds[0].Edges = append(seeds[0].Edges, garden.Edge{Kind: garden.EdgePartOf, To: spec.PartOf})
+	}
+	if spec.DiscoveredFrom != "" {
+		seeds[0].Edges = append(seeds[0].Edges, garden.Edge{Kind: garden.EdgeDiscoveredFrom, To: spec.DiscoveredFrom})
+	}
+	for i, child := range spec.Children {
+		for _, sibling := range child.After {
+			first := bySlug[garden.StepSlug(strings.TrimSpace(sibling))]
+			first.Edges = append(first.Edges, garden.Edge{Kind: garden.EdgeBlocks, To: seeds[i+1].ID})
+		}
+	}
+	return seeds, nil
 }
 
 func (d *Daemon) similarSeeds(read gardenRead, titles, excluded []string) ([]garden.SimilarHit, error) {
@@ -630,6 +686,19 @@ func (d *Daemon) mintAndPlantProtected(protection foregroundCleanupProtection, s
 
 func (d *Daemon) mintSeedID() (string, error) {
 	return garden.NewID()
+}
+
+func (d *Daemon) mintSeedIDsInPlantingOrder(schema docstore.CollectionSchema, n int) ([]string, error) {
+	ids := make([]string, n)
+	for i := range ids {
+		id, err := d.mintUnplantedSeedID(schema)
+		if err != nil {
+			return nil, err
+		}
+		ids[i] = id
+	}
+	slices.Sort(ids)
+	return ids, nil
 }
 
 func (d *Daemon) mintUnplantedSeedID(schema docstore.CollectionSchema) (string, error) {

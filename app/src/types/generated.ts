@@ -10292,7 +10292,7 @@ export interface SeedPlantResult {
 }
 
 export interface SeedPlotChild {
-    blocks?: string[];
+    after?:  string[];
     body?:   string;
     checks?: CheckObject[];
     title:   string;
@@ -10304,7 +10304,9 @@ export interface SeedPlotMessage {
     checks?:            CheckObject[];
     children:           ChildElement[];
     cmd:                SeedPlotMessageCmd;
+    discovered_from?:   string;
     member?:            string;
+    part_of?:           string;
     profile_id?:        string;
     source_session_id?: string;
     title:              string;
@@ -10312,7 +10314,7 @@ export interface SeedPlotMessage {
 }
 
 export interface ChildElement {
-    blocks?: string[];
+    after?:  string[];
     body?:   string;
     checks?: CheckObject[];
     title:   string;
@@ -25611,7 +25613,7 @@ const typeMap: any = {
         { json: "similar", js: "similar", typ: a(r("SimilarElement")) },
     ], "any"),
     "SeedPlotChild": o([
-        { json: "blocks", js: "blocks", typ: u(undefined, a("")) },
+        { json: "after", js: "after", typ: u(undefined, a("")) },
         { json: "body", js: "body", typ: u(undefined, "") },
         { json: "checks", js: "checks", typ: u(undefined, a(r("CheckObject"))) },
         { json: "title", js: "title", typ: "" },
@@ -25621,13 +25623,15 @@ const typeMap: any = {
         { json: "checks", js: "checks", typ: u(undefined, a(r("CheckObject"))) },
         { json: "children", js: "children", typ: a(r("ChildElement")) },
         { json: "cmd", js: "cmd", typ: r("SeedPlotMessageCmd") },
+        { json: "discovered_from", js: "discovered_from", typ: u(undefined, "") },
         { json: "member", js: "member", typ: u(undefined, "") },
+        { json: "part_of", js: "part_of", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
     ], "any"),
     "ChildElement": o([
-        { json: "blocks", js: "blocks", typ: u(undefined, a("")) },
+        { json: "after", js: "after", typ: u(undefined, a("")) },
         { json: "body", js: "body", typ: u(undefined, "") },
         { json: "checks", js: "checks", typ: u(undefined, a(r("CheckObject"))) },
         { json: "title", js: "title", typ: "" },

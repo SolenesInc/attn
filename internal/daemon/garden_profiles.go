@@ -109,12 +109,26 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 		return fmt.Errorf("source session belongs to profile %q; app belongs to profile %q", profile.Name, owner.Name)
 	}
 	archive := cmd == protocol.CmdSeedShow || cmd == protocol.CmdSeedNotes || cmd == protocol.CmdSeedDocumentGet || cmd == protocol.CmdSeedArtifactTarget
-	for _, id := range []string{scope.SeedID, scope.ToSeedID, scope.PartOf, scope.DiscoveredFrom, scope.Plot} {
-		if id != "" {
-			if err := d.requireSeedInProfile(id, profile.ID, archive); err != nil {
-				return err
-			}
+	resolved := map[string]string{"profile_id": profile.ID}
+	for _, ref := range []struct {
+		field string
+		id    *string
+	}{
+		{"seed_id", &scope.SeedID}, {"to_seed_id", &scope.ToSeedID}, {"part_of", &scope.PartOf},
+		{"discovered_from", &scope.DiscoveredFrom}, {"plot", &scope.Plot},
+	} {
+		if *ref.id == "" {
+			continue
 		}
+		id, err := d.resolveSeedRef(*ref.id, profile.ID)
+		if err != nil {
+			return err
+		}
+		if err := d.requireSeedInProfile(id, profile.ID, archive); err != nil {
+			return err
+		}
+		*ref.id = id
+		resolved[ref.field] = id
 	}
 	if scope.Member != "" {
 		member := d.resolveTenderMember(scope.Member, scope.SourceSessionID)
@@ -155,13 +169,43 @@ func (d *Daemon) scopeGardenRequest(cmd string, msg any, selected string) error 
 			return fmt.Errorf("garden review %s belongs to profile %q; caller belongs to profile %q", reviewID, owner.Name, profile.Name)
 		}
 	}
-	resolved, err := json.Marshal(struct {
-		ProfileID string `json:"profile_id"`
-	}{profile.ID})
+	rewritten, err := json.Marshal(resolved)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(resolved, msg)
+	return json.Unmarshal(rewritten, msg)
+}
+
+func (d *Daemon) resolveSeedRef(ref, profileID string) (string, error) {
+	ref = strings.TrimSpace(ref)
+	if garden.ValidateID(ref) == nil {
+		return ref, nil
+	}
+	read, _, err := d.runDocQuery(docstore.Query{
+		Namespace:  garden.Namespace,
+		Collection: garden.CollectionSeeds,
+		Filters:    append(gardenProfileFilters(profileID), docstore.Filter{Field: "step_slug", Op: docstore.OpEq, Value: ref}),
+		Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
+		Limit:      docstore.MaxLimit,
+	})
+	if err != nil {
+		return "", err
+	}
+	switch len(read.Documents) {
+	case 0:
+		return "", fmt.Errorf("%q is neither a seed id nor the slug of a seed in this profile: a seed id is %q followed by 6 characters, like s-7k3f9m; `attn seed search <words>` finds a seed by what it says", ref, "s-")
+	case 1:
+		return read.Documents[0].ID, nil
+	}
+	var matches strings.Builder
+	for _, doc := range read.Documents {
+		seed, err := garden.Decode(doc.Body)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(&matches, "\n  %s  %s  %s", seed.ID, seed.Status, seed.Title)
+	}
+	return "", fmt.Errorf("the slug %s names %d seeds in this profile, so name one by its id:%s", ref, len(read.Documents), matches.String())
 }
 
 func gardenProfileFilters(profileID string) []docstore.Filter {

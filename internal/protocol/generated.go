@@ -10139,8 +10139,8 @@ type SeedPlantResult struct {
 }
 
 type SeedPlotChild struct {
-	// Blocks corresponds to the JSON schema field "blocks".
-	Blocks []string `json:"blocks,omitempty,omitzero"`
+	// After corresponds to the JSON schema field "after".
+	After []string `json:"after,omitempty,omitzero"`
 
 	// Body corresponds to the JSON schema field "body".
 	Body *string `json:"body,omitempty,omitzero"`
@@ -10165,8 +10165,14 @@ type SeedPlotMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// DiscoveredFrom corresponds to the JSON schema field "discovered_from".
+	DiscoveredFrom *string `json:"discovered_from,omitempty,omitzero"`
+
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
+
+	// PartOf corresponds to the JSON schema field "part_of".
+	PartOf *string `json:"part_of,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`

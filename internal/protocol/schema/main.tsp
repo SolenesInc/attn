@@ -5676,9 +5676,9 @@ model SeedPlantResult {
   "similar": SeedSimilar[];
 }
 
-// Plant a whole plot in one move: the crown and its children, with the
-// children's sequencing edges. Validation is all-before-anything — a payload
-// that cannot be a plot is refused before one seed is written.
+// Plant a whole plot in one move: the crown, its children and every edge
+// between them, in one commit. A payload that cannot be a plot is refused
+// before one seed is written.
 @extension("x-on", #{ home: true })
 model SeedPlotMessage {
   "profile_id"?: string;
@@ -5690,16 +5690,20 @@ model SeedPlotMessage {
   "body"?: string;
   // The crown's checks; shared ones are proven by every child below it.
   "checks"?: SeedCheckDefinition[];
+  // The plot the crown joins, by id or slug.
+  "part_of"?: string;
+  // The seed whose work turned up this plot, by id or slug.
+  "discovered_from"?: string;
   "children": SeedPlotChild[];
 }
 
-// One child of a plot planting. `blocks` names sibling step slugs this child
-// holds back — children are parallel by default, only blocks edges sequence.
+// One child of a plot planting. `after` names the sibling step slugs or
+// titles this child waits for; children are parallel by default.
 model SeedPlotChild {
   "title": string;
   "body"?: string;
   "checks"?: SeedCheckDefinition[];
-  "blocks"?: string[];
+  "after"?: string[];
 }
 
 model SeedPlotResult {

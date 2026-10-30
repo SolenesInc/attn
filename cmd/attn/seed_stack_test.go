@@ -210,6 +210,12 @@ p.write_bytes(p.read_bytes().replace(b"Change this", b"Changed this"))
 	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != after {
 		t.Fatalf("named rollback body = %q", got)
 	}
+	stamp, _, _ := strings.Cut(garden.Stamp(seed.ID, after), "\n")
+	bySlug := s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.StepSlug, "-m", "-"}, Stdin: stamp + "\nEdited by slug.\n"})
+	requireStdout(t, bySlug, "updated "+seed.ID)
+	if got := showSeed(t, s, "", seed.ID).Seed.Body; got != "Edited by slug.\n" {
+		t.Fatalf("body edited by slug = %q", got)
+	}
 }
 
 func TestARollbackLosingARaceAsksToRetryTheRollback(t *testing.T) {
@@ -889,4 +895,81 @@ func TestPlantAndPlotPrintSimilarSeedsAndKeepPlantJSON(t *testing.T) {
 	if len(jsonPlot.Similar) != 3 || jsonPlot.Similar[0].Like != jsonPlot.Crown.ID {
 		t.Errorf("plot JSON: %+v", jsonPlot)
 	}
+}
+
+func TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	parent := plant(t, s, "Garden trellis")
+	origin := plant(t, s, "Survey the orchard")
+	similar := plant(t, s, "Prune the hedge rows")
+	payload := `{"title": "Prune the hedge", "part_of": "garden-trellis", "discovered_from": "survey-orchard",
+		"children": [{"title": "Sharpen shears"}, {"title": "Cut back"}, {"title": "Sweep up", "after": ["cut-back", "Sharpen shears"]}]}`
+	ran := s.Run(testworld.Invocation{Args: []string{"seed", "plot"}, Stdin: payload})
+	if ran.Code != 0 {
+		t.Fatalf("plot exited %d: %s", ran.Code, ran.Stderr)
+	}
+	crown := strings.Fields(ran.Stdout)[0]
+	requireLines(t, "plot", ran.Stdout, "cut-back", "sharpen-shears", "sweep-up", "\nsimilar open seeds\n", similar.ID, "like "+crown, "attn seed wither "+crown)
+
+	shown := showSeed(t, s, "", crown)
+	wantEdges := []protocol.SeedEdge{{Kind: garden.EdgePartOf, To: parent.ID}, {Kind: garden.EdgeDiscoveredFrom, To: origin.ID}}
+	if !slices.Equal(shown.Seed.Edges, wantEdges) {
+		t.Errorf("the crown's edges = %+v, want %+v", shown.Seed.Edges, wantEdges)
+	}
+	children := map[string]protocol.Seed{}
+	var listed protocol.SeedListResult
+	s.Attn("seed", "ls", "--plot", crown, "--json").JSON(t, &listed)
+	var order []string
+	for _, child := range listed.Seeds {
+		order = append(order, child.StepSlug)
+		children[child.StepSlug] = child
+	}
+	if want := []string{"sharpen-shears", "cut-back", "sweep-up"}; !slices.Equal(order, want) {
+		t.Errorf("ls --plot lists %v, want the payload's order %v", order, want)
+	}
+	sweep := children["sweep-up"].ID
+	for _, first := range []string{"cut-back", "sharpen-shears"} {
+		if !slices.Contains(children[first].Edges, protocol.SeedEdge{Kind: garden.EdgeBlocks, To: sweep}) {
+			t.Errorf("%s has edges %+v, want it to block sweep-up", first, children[first].Edges)
+		}
+	}
+	var ready protocol.SeedReadyResult
+	s.Attn("seed", "ready", "--plot", "prune-hedge", "--json").JSON(t, &ready)
+	if got, want := readyIDs(ready.Seeds), readyIDs([]protocol.Seed{children["cut-back"], children["sharpen-shears"]}); !slices.Equal(got, want) {
+		t.Errorf("ready in the new plot = %v, want the two children sweep-up waits for", got)
+	}
+
+	before := len(seedListIDs(t, s))
+	refused := s.Run(testworld.Invocation{Args: []string{"seed", "plot"}, Stdin: `{"title": "Old habit", "children": [{"title": "Dig", "blocks": ["Plant"]}, {"title": "Plant"}]}`})
+	if refused.Code == 0 || !strings.Contains(refused.Stderr, `"after"`) || !strings.Contains(refused.Stderr, `add "after": ["dig"] to "Plant"`) {
+		t.Errorf("a payload with blocks = exit %d, stderr %q; want a refusal naming after", refused.Code, refused.Stderr)
+	}
+	if after := len(seedListIDs(t, s)); after != before {
+		t.Errorf("the refused payload planted %d seeds", after-before)
+	}
+
+	for what, text := range map[string]string{"seed guide": seedAs(t, s, "", "guide"), "plot help": seedAs(t, s, "", "plot", "--help")} {
+		requireLines(t, what, text, `"after": [`, `"part_of"`, `"discovered_from"`)
+		if strings.Contains(text, `"blocks"`) {
+			t.Errorf("%s still shows blocks in a plot payload:\n%s", what, text)
+		}
+	}
+}
+
+func readyIDs(seeds []protocol.Seed) []string {
+	ids := make([]string, 0, len(seeds))
+	for _, seed := range seeds {
+		ids = append(ids, seed.ID)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func seedListIDs(t *testing.T, s *testworld.Stack) []string {
+	t.Helper()
+	var listed protocol.SeedListResult
+	s.Attn("seed", "ls", "--flat", "--json").JSON(t, &listed)
+	return readyIDs(listed.Seeds)
 }

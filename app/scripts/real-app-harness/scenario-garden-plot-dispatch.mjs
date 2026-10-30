@@ -30,9 +30,9 @@ const PLOT = {
   title: 'Walk a plot end to end',
   body: '# The plan\n\nThe crown body is the plan a delegate is primed with.',
   children: [
-    { title: 'First parallel step', body: 'Nothing holds this one.', blocks: ['sequenced-step'] },
+    { title: 'First parallel step', body: 'Nothing holds this one.' },
     { title: 'Second parallel step', body: 'Nothing holds this one either.' },
-    { title: 'The sequenced step' },
+    { title: 'The sequenced step', after: ['first-parallel-step'] },
   ],
 };
 

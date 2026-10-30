@@ -25,8 +25,8 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 			Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 			Children: []protocol.SeedPlotChild{
 				{Title: "first step"},
-				{Title: "second step"},
-				{Title: "third step", Blocks: []string{"second-step"}},
+				{Title: "second step", After: []string{"third-step"}},
+				{Title: "third step"},
 			},
 		})
 		if err != nil {
@@ -82,9 +82,22 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 			t.Errorf("planting under a crown that is not here = %v, want a refusal naming it", err)
 		}
 		if _, err := cli.SeedPlot("sess-a", "", protocol.SeedPlotMessage{
-			Title: "ship it", Children: []protocol.SeedPlotChild{{Title: "a", Blocks: []string{"nobody"}}},
+			Title: "ship it", Children: []protocol.SeedPlotChild{{Title: "a", After: []string{"nobody"}}},
 		}); err == nil || !strings.Contains(err.Error(), "nobody") {
-			t.Errorf("a plot with a dangling blocks = %v, want a refusal naming it", err)
+			t.Errorf("a plot waiting for no sibling = %v, want a refusal naming it", err)
+		}
+		if _, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+			Cmd: protocol.CmdSeedPlant, SourceSessionID: protocol.Ptr(protocol.SessionID("sess-a")), Title: "checked part", PartOf: protocol.Ptr(planted.Crown.ID),
+			Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C7"), Text: "It holds."}},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		total++
+		if _, err := cli.SeedPlot("sess-a", "", protocol.SeedPlotMessage{
+			Title: "a plot inside", PartOf: protocol.Ptr(planted.Crown.ID),
+			Children: []protocol.SeedPlotChild{{Title: "a", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C7"), Text: "Smooth."}}}},
+		}); err == nil || !strings.Contains(err.Error(), "C7 is already used") || !strings.Contains(err.Error(), "number the payload's checks from C8 up") {
+			t.Errorf("a plot reusing a check id of the plot it joins = %v, want a refusal naming C7 and the next free id", err)
 		}
 		if after := gardenPlotList(t, cli, false, 0).Total; after != total {
 			t.Errorf("the refusals left %d seeds, want %d", after, total)
@@ -98,8 +111,8 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	planter := spawnPanes(w, app, w.Path("planter"))[0].session
 	planted, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{
 		Title: "ship it", Children: []protocol.SeedPlotChild{
-			{Title: "a"}, {Title: "b", Blocks: []string{"a"}},
-			{Title: "c"}, {Title: "d", Blocks: []string{"c"}}, {Title: "e"}, {Title: "f"},
+			{Title: "a", After: []string{"b"}}, {Title: "b"},
+			{Title: "c", After: []string{"d"}}, {Title: "d"}, {Title: "e"}, {Title: "f"},
 		},
 	})
 	if err != nil {
@@ -142,7 +155,7 @@ func TestEveryResultCarriesThePlotProgressShowDoes(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	planter := protocol.SessionID(spawnPanes(w, app, w.Path("planter"))[0].session)
 	planted, err := cli.SeedPlot(planter, "", protocol.SeedPlotMessage{
-		Title: "wandering crown", Children: []protocol.SeedPlotChild{{Title: "a"}, {Title: "b", Blocks: []string{"a"}}},
+		Title: "wandering crown", Children: []protocol.SeedPlotChild{{Title: "a", After: []string{"b"}}, {Title: "b"}},
 	})
 	if err != nil {
 		t.Fatalf("plot: %v", err)
@@ -230,9 +243,9 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	planted, err := cli.SeedPlot(protocol.SessionID(planner), "", protocol.SeedPlotMessage{
 		Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 		Children: []protocol.SeedPlotChild{
-			{Title: "first step", Blocks: []string{"third-step"}},
+			{Title: "first step"},
 			{Title: "second step"},
-			{Title: "third step"},
+			{Title: "third step", After: []string{"first-step"}},
 		},
 	})
 	if err != nil {
@@ -254,7 +267,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 		t.Fatalf("after the refusal the sessions are %+v (%v), want only the planner", sessions, err)
 	}
 
-	delegated := gardenPlotDelegate(app, fakeagent.Codex, planner, "plot", planted.Crown.ID, cwd)
+	delegated := gardenPlotDelegate(app, fakeagent.Codex, planner, "plot", planted.Crown.StepSlug, cwd)
 	if !delegated.Success {
 		t.Fatalf("delegating at the crown: %s", protocol.Deref(delegated.Error))
 	}

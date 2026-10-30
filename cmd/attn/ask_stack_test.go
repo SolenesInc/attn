@@ -72,7 +72,7 @@ func TestAnAgentAsksAboutASeedItTends(t *testing.T) {
 	}
 
 	question := ":::question\nWhich store keeps the cache?\n- [ ] Postgres\n- [ ] Redis\n:::\n"
-	asked := inSession(question, "ask", "--seed", tended.ID)
+	asked := inSession(question, "ask", "--seed", tended.StepSlug)
 	line := regexp.MustCompile(`^Asked (a-[0-9a-z]{6}) about pick-cache-store: "Which store keeps the cache\?"\. The answer goes to whoever tends the seed by then, and the seed keeps it as a note: attn seed notes ` + tended.ID + `\n$`).FindStringSubmatch(asked.Stdout)
 	if asked.Code != 0 || line == nil {
 		t.Fatalf("attn ask --seed exited %d with stdout %q and stderr %q", asked.Code, asked.Stdout, asked.Stderr)

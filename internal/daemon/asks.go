@@ -87,7 +87,14 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	d.publishFact(FactAskOpened, id, nil)
 }
 
-func (d *Daemon) askAddressOf(session *protocol.Session, seedID string) (inbox.Address, error) {
+func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (inbox.Address, error) {
+	seedID := ref
+	if ref != "" {
+		var err error
+		if seedID, err = d.resolveSeedRef(ref, session.ProfileID); err != nil {
+			return inbox.Address{}, err
+		}
+	}
 	stake := d.openStake(session.ID)
 	if seedID == "" || seedID == stake {
 		if stake == "" {

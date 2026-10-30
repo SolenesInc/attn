@@ -42,9 +42,11 @@ Read those references before starting; related bodies are not included
 automatically in a delegation.
 
 `attn seed plot -f <payload.json>` plants a plot and its children in one move.
-The example in `attn seed guide` shows complete bodies and dependencies. Each
-child's `blocks` array names siblings that must wait for it, by slug or full
-title. Leave independent children parallel. Pass `-` to read from stdin.
+The example in `attn seed guide` shows complete bodies and dependencies. A
+child's `after` names the siblings it waits for, by slug or full title. Leave
+independent children parallel. `part_of` plants the plot inside another one and
+`discovered_from` records the seed whose work turned it up, each by id or slug.
+Pass `-` to read from stdin.
 
 ## Checks
 
@@ -67,8 +69,10 @@ ones still open or rejected. Add `--ring` when the other side must act now.
 
 ## Speaking of seeds
 
-Every verb prints a seed as `id  slug  title`. The id is for commands and for
-messages to other agents. To the user, say the slug: `mermaid-rendered-grid`
+Every verb prints a seed as `id  slug  title`. `attn seed`, `attn delegate
+--seed` and `attn ask --seed` take either the id or the slug; `attn open` and
+`attn agent msg` take the id. Give other agents the id: a slug two seeds share
+is refused, and the refusal lists each match. To the user, say the slug: `mermaid-rendered-grid`
 (`s-7k3f9m`) on first mention, then the slug alone. A person should never have
 to decode an id.
 
