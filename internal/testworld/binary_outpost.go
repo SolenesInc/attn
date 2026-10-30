@@ -39,7 +39,7 @@ func buildOutpostFixture(kind string) (string, error) {
 			return s + fmt.Sprintf("\nfunc init(){registerMigration(migration{version:%d,desc:\"future outpost schema\",sql:\"SELECT 1\"})}\n", store.LatestSchemaVersion()+1)
 		}
 	case "before-updates":
-		name = "internal/daemon/outpost_listen.go"
+		name = "internal/daemon/bridge_socket.go"
 		transform = func(s string) string { return strings.ReplaceAll(s, "d.outpostUpdateServer()", "nil") }
 	default:
 		return "", fmt.Errorf("unknown outpost binary fixture %q", kind)

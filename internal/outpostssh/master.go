@@ -12,6 +12,8 @@ import (
 
 type Client struct{ Destination, ControlPath, Instance string }
 
+const masterIDPrefixBytes = 12
+
 func For(destination, controlPath, instance string) *Client {
 	return &Client{destination, controlPath, instance}
 }
@@ -26,8 +28,8 @@ func (e *Error) Connectable() bool {
 	if e.ExitCode != 255 {
 		return false
 	}
-	for _, sample := range []string{"Permission denied", "Host key verification failed", "REMOTE HOST IDENTIFICATION HAS CHANGED", "Too many authentication failures", "No supported authentication methods available", "sign_and_send_pubkey: signing failed"} {
-		if strings.Contains(e.Stderr, sample) {
+	for _, sample := range []string{"permission denied", "host key verification failed", "remote host identification has changed", "too many authentication failures"} {
+		if strings.Contains(strings.ToLower(e.Stderr), sample) {
 			return true
 		}
 	}
@@ -44,7 +46,7 @@ func ControlPath(instance, id string) string {
 	if instance == "" {
 		instance = "default"
 	}
-	return filepath.Join(ControlRoot(), instance+"-"+strings.ReplaceAll(id, "-", "")[:12]+".sock")
+	return filepath.Join(ControlRoot(), instance+"-"+strings.ReplaceAll(id, "-", "")[:masterIDPrefixBytes]+".sock")
 }
 func (c *Client) options(batch bool) []string {
 	args := []string{"-o", "ControlPath=" + c.ControlPath, "-o", "RemoteCommand=none", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no"}
@@ -88,13 +90,15 @@ func ExitInstanceMasters(ctx context.Context, instance string) error {
 	if instance == "" {
 		instance = "default"
 	}
-	paths, err := filepath.Glob(filepath.Join(ControlRoot(), instance+"-*.sock"))
+	paths, err := filepath.Glob(filepath.Join(ControlRoot(), instance+"-"+strings.Repeat("?", masterIDPrefixBytes)+".sock"))
 	if err != nil {
 		return err
 	}
 	for _, path := range paths {
 		if err := For("unused", path, instance).ExitMaster(ctx); err != nil {
-			return fmt.Errorf("exit master %s: %w", path, err)
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("remove stale master %s: %w", path, err)
+			}
 		}
 	}
 	return nil

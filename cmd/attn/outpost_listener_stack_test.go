@@ -19,10 +19,6 @@ func bridgeAddress(t *testing.T) string {
 	return "machine-" + uuid.NewString()
 }
 
-func awaitOutpostListener(p *testworld.Peer, state string) {
-	testworld.Await[protocol.SettingsUpdatedMessage](p, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["outpost_state"] == state })
-}
-
 func TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal(t *testing.T) {
 	a := testworld.NewSSH(t)
 	s := testworld.NewStack(t)

@@ -57,7 +57,7 @@ async function startShell() {
   await attached;
   let screen = '';
   const ready = W.observer.waitForMessage(m => { if (m.event !== 'pty_output' || m.id !== echoTerminal) return false; screen += Buffer.from(m.data, 'base64').toString(); return screen.includes('echo_READY'); }, 'echo ready', 120_000);
-  W.observer.send({ cmd: 'pty_input', id: echoTerminal, data: `echo $$ > ${o.scratch}/shell.pid; stty raw -echo; python3 -u -c 'import os,sys; print("echo_"+"READY",flush=True); [os.write(1,b"<"+line+b">") for line in sys.stdin.buffer]'\r` });
+  W.observer.send({ cmd: 'pty_input', id: echoTerminal, data: `python3 -c 'import os; print(os.getppid())' > ${o.scratch}/shell.pid; stty raw -echo; python3 -u -c 'import os,sys; print("echo_"+"READY",flush=True); [os.write(1,b"<"+line+b">") for line in sys.stdin.buffer]'\r` });
   await ready;
   watchEcho();
   receipt('echo shell ready', { session: id, terminal: echoTerminal });
@@ -116,7 +116,7 @@ try {
     const lost = W.observer.waitForMessage(m => m.event === 'outposts_updated' && m.outposts.some(r => r.id === W.outpost.id && r.state === 'lost'), 'master exit lost');
     await W.run('ssh', ['-o', `ControlPath=${W.controlPath}`, '-o', 'BatchMode=yes', '-O', 'exit', o.ssh]);
     await lost;
-    await W.waitOutpost(r => r.id === W.outpost.id && r.state === 'connected', 'master reconnect');
+    await W.waitOutpost(r => r.id === W.outpost.id && r.state === 'connected' && r.state_since !== W.outpost.state_since, 'master reconnect');
     const afterDaemon = await remote(`cat ${quote(W.R.data + '/attn.pid')}`);
     const afterShell = await remote(`cat ${quote(o.scratch + '/shell.pid')}`);
     if (beforeDaemon !== afterDaemon || beforeShell !== afterShell) throw new Error('daemon or shell PID changed after master exit');
@@ -133,11 +133,11 @@ try {
     let end;
     while ((end = controlBuffer.indexOf('\n')) >= 0) {
       const line = controlBuffer.slice(0, end); controlBuffer = controlBuffer.slice(end + 1);
-      const token = Number(line.slice(1)), point = controlSent.get(token);
+      const token = Number(line.slice(1, 7)), point = controlSent.get(token);
       if (point) { controlSamples.push([point.epoch, performance.now() - point.mono]); controlSent.delete(token); }
     }
   });
-  W.controlSample = i => { controlSent.set(i, { epoch: Date.now()/1000, mono: performance.now() }); control.stdin.write(`C${String(i).padStart(6, '0')}\n`); };
+  W.controlSample = i => { controlSent.set(i, { epoch: Date.now()/1000, mono: performance.now() }); control.stdin.write(`C${String(i).padStart(6, '0')}${'x'.repeat(56)}\n`); };
   W.saveControl = () => fs.writeFileSync(path.join(o.out, 'control-echo.json'), JSON.stringify({routes:{mux:{samples:controlSamples, unanswered:controlSent.size}}}, null, 2));
   if (o.remoteNotebook) {
     await W.waitOutpost(r => r.id === W.outpost.id && r.notebook?.state === 'in_sync', 'empty baseline synced before reverse write');

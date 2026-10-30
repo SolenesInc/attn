@@ -3,7 +3,6 @@ package main_test
 import (
 	"net/url"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -128,8 +127,8 @@ func TestRemoteMonitorCommandsLeaveTheAppPumpFree(t *testing.T) {
 	} {
 		t.Logf("holding outpost for %s", step.name)
 		func() {
-			outpost.Signal(syscall.SIGSTOP)
-			defer outpost.Signal(syscall.SIGCONT)
+			resume := pair.SSH.Pause(pair.Destination)
+			defer resume()
 			app.Send(step.command)
 			app.Send(protocol.SessionMessagesGetMessage{Cmd: protocol.CmdSessionMessagesGet, SessionID: session, RequestID: step.name})
 			app.TypeLine(localID, step.name)
@@ -191,8 +190,8 @@ func TestRemoteDesktopClosesLeaveUnrelatedSnapshotsAndTypingFree(t *testing.T) {
 			app.Watch(localID)
 			otherApp := home.App()
 			func() {
-				outpost.Signal(syscall.SIGSTOP)
-				defer outpost.Signal(syscall.SIGCONT)
+				resume := pair.SSH.Pause(pair.Destination)
+				defer resume()
 				if kind == "tile" {
 					app.Send(protocol.DesktopCloseTileMessage{Cmd: protocol.CmdDesktopCloseTile, RequestID: "close", DesktopID: closing.ID, TileID: tile})
 				} else {
@@ -248,8 +247,8 @@ func TestShowingAHiddenRemoteSessionLeavesTheAppPumpAndArrangementsFree(t *testi
 	otherApp := home.App()
 	desktop := otherApp.Initial.Desktops[0]
 	func() {
-		outpost.Signal(syscall.SIGSTOP)
-		defer outpost.Signal(syscall.SIGCONT)
+		resume := pair.SSH.Pause(pair.Destination)
+		defer resume()
 		app.Send(protocol.DesktopShowSessionMessage{Cmd: protocol.CmdDesktopShowSession, RequestID: "show-hidden", SessionID: protocol.SessionID(id)})
 		setting := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "sidebar_harness_logos_enabled", Value: "true", RequestID: protocol.Ptr("local-setting")}, protocol.EventSettingsUpdated,
 			func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "local-setting" })

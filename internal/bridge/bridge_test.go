@@ -91,10 +91,6 @@ func (w *pairWorld) dialConfig(cfg bridge.DialConfig) (*bridge.Conn, *bridge.Pin
 	return bridge.Dial(w.ctx, cfg)
 }
 
-func (w *pairWorld) dialContext(ctx context.Context, _, _ string) (net.Conn, error) {
-	return w.network.Dial(ctx)
-}
-
 func state(t *testing.T, c *bridge.Conn, want bridge.State) {
 	t.Helper()
 	if got := <-c.States(); got != want {

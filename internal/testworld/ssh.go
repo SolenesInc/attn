@@ -17,11 +17,66 @@ import (
 )
 
 type SSH struct {
-	t         testing.TB
-	Dir       string
-	mu        sync.Mutex
-	routes    map[string]string
-	reachable map[string]string
+	t           testing.TB
+	Dir         string
+	mu          sync.Mutex
+	routes      map[string]string
+	reachable   map[string]string
+	machines    map[string]*sshMachine
+	nextMachine int
+}
+
+type sshMachine struct {
+	stack *Stack
+	stop  func()
+	link  *sshLink
+}
+type sshLink struct {
+	mu    sync.Mutex
+	ready chan struct{}
+}
+
+func newSSHLink() *sshLink {
+	ready := make(chan struct{})
+	close(ready)
+	return &sshLink{ready: ready}
+}
+func (l *sshLink) wait(ctx context.Context) error {
+	l.mu.Lock()
+	ready := l.ready
+	l.mu.Unlock()
+	select {
+	case <-ready:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+type sshLinkWriter struct {
+	ctx    context.Context
+	link   *sshLink
+	writer io.Writer
+}
+
+func (w sshLinkWriter) Write(p []byte) (int, error) {
+	if err := w.link.wait(w.ctx); err != nil {
+		return 0, err
+	}
+	return w.writer.Write(p)
+}
+func (s *SSH) Pause(destination string) func() {
+	s.mu.Lock()
+	machine := s.machines[destination]
+	s.mu.Unlock()
+	if machine == nil {
+		s.t.Fatalf("no SSH machine for %s", destination)
+	}
+	machine.link.mu.Lock()
+	ready := make(chan struct{})
+	machine.link.ready = ready
+	machine.link.mu.Unlock()
+	return sync.OnceFunc(func() { close(ready) })
 }
 
 func NewSSH(t testing.TB) *SSH {
@@ -31,7 +86,7 @@ func NewSSH(t testing.TB) *SSH {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	s := &SSH{t: t, Dir: dir, routes: map[string]string{}, reachable: map[string]string{}}
+	s := &SSH{t: t, Dir: dir, routes: map[string]string{}, reachable: map[string]string{}, machines: map[string]*sshMachine{}}
 	s.save()
 	t.Cleanup(func() {
 		paths, _ := filepath.Glob(filepath.Join(s.Dir, "masters", "*.sock"))
@@ -48,7 +103,10 @@ func NewSSH(t testing.TB) *SSH {
 }
 func (s *SSH) save() {
 	data, _ := json.Marshal(s.routes)
-	if err := os.WriteFile(filepath.Join(s.Dir, "routes.json"), data, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(s.Dir, "routes.json.next"), data, 0600); err != nil {
+		s.t.Fatal(err)
+	}
+	if err := os.Rename(filepath.Join(s.Dir, "routes.json.next"), filepath.Join(s.Dir, "routes.json")); err != nil {
 		s.t.Fatal(err)
 	}
 }
@@ -78,6 +136,12 @@ func (s *SSH) Route(destination string, remote *Stack) {
 	s.t.Helper()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if machine := s.machines[destination]; machine != nil {
+		if machine.stack == remote {
+			return
+		}
+		machine.stop()
+	}
 	root := filepath.Join(remote.Dir, "install")
 	if err := os.MkdirAll(filepath.Join(root, ".local", "bin"), 0700); err != nil {
 		s.t.Fatal(err)
@@ -108,8 +172,10 @@ func (s *SSH) Route(destination string, remote *Stack) {
 			path = strings.TrimPrefix(v, "PATH=")
 		}
 	}
-	env := append(remote.env(), "PATH="+bin+":"+path, "ATTN_HARNESS_OUTPOST_INSTALL_ROOT="+root)
-	socket := filepath.Join(s.Dir, fmt.Sprintf("machine-%d.sock", len(s.routes)))
+	machineEnv := []string{"PATH=" + bin + ":" + path, "ATTN_HARNESS_OUTPOST_INSTALL_ROOT=" + root}
+	link := newSSHLink()
+	socket := filepath.Join(s.Dir, fmt.Sprintf("machine-%d.sock", s.nextMachine))
+	s.nextMachine++
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
 	if err != nil {
 		s.t.Fatal(err)
@@ -143,8 +209,23 @@ func (s *SSH) Route(destination string, remote *Stack) {
 					_, _ = io.Copy(io.Discard, conn)
 					return
 				}
-				cmd := exec.CommandContext(ctx, "sh", "-c", req.Script)
-				cmd.Env = append(env, "ATTN_HARNESS_LIFELINE_FD=3")
+				requestCtx, requestCancel := context.WithCancel(ctx)
+				defer requestCancel()
+				link.mu.Lock()
+				ready := link.ready
+				link.mu.Unlock()
+				select {
+				case <-ready:
+				default:
+					result, _ := json.Marshal(struct {
+						Code   int
+						Stderr string
+					}{255, "ssh: connect to host machine port 22: No route to host"})
+					_ = os.WriteFile(req.ResultFile, result, 0600)
+					return
+				}
+				cmd := exec.CommandContext(requestCtx, "sh", "-c", req.Script)
+				cmd.Env = append(append(append(remote.env(), remote.pauses.env()...), machineEnv...), "ATTN_HARNESS_LIFELINE_FD=3")
 				cmd.ExtraFiles = []*os.File{lifeline}
 				ws, err := remote.wsListener.File()
 				if err != nil {
@@ -153,16 +234,27 @@ func (s *SSH) Route(destination string, remote *Stack) {
 				defer ws.Close()
 				cmd.ExtraFiles = append(cmd.ExtraFiles, ws)
 				cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=4")
-				input, err := conn.File()
+				input, inputWriter, err := os.Pipe()
 				if err != nil {
 					return
 				}
 				defer input.Close()
+				defer inputWriter.Close()
+				copied := make(chan struct{})
+				go func() {
+					defer close(copied)
+					_, _ = io.Copy(sshLinkWriter{requestCtx, link, inputWriter}, conn)
+					inputWriter.Close()
+				}()
 				cmd.Stdin = input
-				cmd.Stdout = conn
+				cmd.Stdout = sshLinkWriter{requestCtx, link, conn}
 				var stderr bytes.Buffer
 				cmd.Stderr = &stderr
 				err = cmd.Run()
+				requestCancel()
+				conn.CloseRead()
+				input.Close()
+				<-copied
 				code := 0
 				if err != nil {
 					code = -1
@@ -178,7 +270,7 @@ func (s *SSH) Route(destination string, remote *Stack) {
 			})
 		}
 	}()
-	s.t.Cleanup(func() {
+	stopMachine := sync.OnceFunc(func() {
 		holder.Close()
 		cancel()
 		listener.Close()
@@ -186,6 +278,8 @@ func (s *SSH) Route(destination string, remote *Stack) {
 		workers.Wait()
 		lifeline.Close()
 	})
+	s.t.Cleanup(stopMachine)
+	s.machines[destination] = &sshMachine{remote, stopMachine, link}
 	s.routes[destination] = socket
 	s.reachable[destination] = socket
 	s.save()

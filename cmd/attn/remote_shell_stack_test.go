@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -159,8 +158,8 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 		app.AwaitScreen(id, output)
 	}
 	echo("echo before-$((1+1))", "before-2")
-	remote.Signal(syscall.SIGSTOP)
-	defer remote.Signal(syscall.SIGCONT)
+	resume := a.Pause(address)
+	defer resume()
 	outpostState(app, "outpost", protocol.OutpostStateStalled)
 	outpostState(app, "outpost", protocol.OutpostStateLost)
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
@@ -193,7 +192,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 		t.Fatalf("offline attach: %+v", attach)
 	}
 	mark := len(app.Log())
-	remote.Signal(syscall.SIGCONT)
+	resume()
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	reattach()
 	echo("echo reconnected-$((2+2))", "reconnected-4")
@@ -353,10 +352,25 @@ func TestRemovingAnOutpostClosesItsTerminals(t *testing.T) {
 
 func outpostStateSince(p *testworld.Peer, name string, state protocol.OutpostState, mark int) protocol.OutpostInfo {
 	p.T.Helper()
+	var previous string
+	if state == protocol.OutpostStateConnected && mark > 0 {
+		rows := p.Initial.Outposts
+		for _, raw := range p.Log()[:mark] {
+			var update protocol.OutpostsUpdatedMessage
+			if json.Unmarshal(raw, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
+				rows = update.Outposts
+			}
+		}
+		for _, row := range rows {
+			if row.Name == name {
+				previous = row.StateSince
+			}
+		}
+	}
 	var found protocol.OutpostInfo
 	testworld.AwaitSince(p, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, row := range m.Outposts {
-			if row.Name == name && row.State == state {
+			if row.Name == name && row.State == state && (previous == "" || row.StateSince != previous) {
 				found = row
 				return true
 			}
@@ -461,8 +475,8 @@ func TestRemoteInputKeepsItsBytesAndProbesWithoutBlockingALocalTile(t *testing.T
 	local := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), home.Path("local"))
 	app.TypeLine(id, `stty raw -echo; python3 -u -c 'import sys,os,hashlib; print("raw-"+"ready",flush=True); line=sys.stdin.buffer.readline(); print("RESULT:"+hashlib.sha256(line.strip()).hexdigest()+":"+str(os.get_terminal_size().columns)+":"+str(os.get_terminal_size().lines),flush=True)'; stty sane`)
 	app.AwaitScreen(id, "raw-ready")
-	remote.Signal(syscall.SIGSTOP)
-	defer remote.Signal(syscall.SIGCONT)
+	resume := a.Pause(address)
+	defer resume()
 	var expected strings.Builder
 	send := func(i int, data string) {
 		trace := fmt.Sprintf("batch-%03d", i)
@@ -492,7 +506,7 @@ func TestRemoteInputKeepsItsBytesAndProbesWithoutBlockingALocalTile(t *testing.T
 			}
 		}
 	}
-	remote.Signal(syscall.SIGCONT)
+	resume()
 	app.AwaitScreen(id, fmt.Sprintf("RESULT:%x:93:31", sha256.Sum256([]byte(expected.String()))))
 	for i := 0; i <= 100; i++ {
 		probe := fmt.Sprintf("batch-%03d", i)
@@ -539,8 +553,8 @@ func TestRemoteTileActionsDoNotBlockALocalTile(t *testing.T) {
 			app.AwaitScreen(id, "remote-2")
 			app.TypeLine(local, "echo local-$((1+1))")
 			app.AwaitScreen(local, "local-2")
-			remote.Signal(syscall.SIGSTOP)
-			defer remote.Signal(syscall.SIGCONT)
+			resume := a.Pause(address)
+			defer resume()
 			outpostState(app, "outpost", protocol.OutpostStateStalled)
 			mark := len(app.Log())
 			switch command {
@@ -565,7 +579,7 @@ func TestRemoteTileActionsDoNotBlockALocalTile(t *testing.T) {
 					}
 				}
 			}
-			remote.Signal(syscall.SIGCONT)
+			resume()
 			switch command {
 			case protocol.CmdTerminalPointerActivity:
 				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, ProbeID: protocol.Ptr("after-pointer")})
@@ -604,8 +618,8 @@ func TestRemoteReloadDoesNotSendQueuedInputToTheReplacementShell(t *testing.T) {
 	terminal := protocol.TerminalID(app.Terminal(id))
 	app.TypeLine(id, "export GENERATION=old; echo old-env-$GENERATION")
 	app.AwaitScreen(id, "old-env-old")
-	remote.Signal(syscall.SIGSTOP)
-	defer remote.Signal(syscall.SIGCONT)
+	resume := a.Pause(address)
+	defer resume()
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: ":\r"})
 	outpostState(app, "outpost", protocol.OutpostStateStalled)
 	marker := remote.Path("shell", "before-reload")
@@ -615,7 +629,7 @@ func TestRemoteReloadDoesNotSendQueuedInputToTheReplacementShell(t *testing.T) {
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: fmt.Sprintf("printf '%%s' \"${GENERATION-missing}\" > %q\r", marker), ProbeID: protocol.Ptr("old-input")})
 	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 80, Rows: 24})
 	testworld.Request(app, protocol.SupportSnapshotMessage{Cmd: protocol.CmdSupportSnapshot, RequestID: "queued-before-resume", RuntimeIds: []protocol.TerminalID{terminal}}, protocol.EventSupportSnapshotResult, func(m protocol.SupportSnapshotResultMessage) bool { return m.RequestID == "queued-before-resume" })
-	remote.Signal(syscall.SIGCONT)
+	resume()
 	reload := testworld.Await(app, protocol.EventReloadSessionResult, func(m protocol.ReloadSessionResultMessage) bool { return string(m.ID) == id })
 	if !reload.Success {
 		t.Fatalf("reload: %s", protocol.Deref(reload.Error))

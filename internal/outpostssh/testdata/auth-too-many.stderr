@@ -1,2 +1,1 @@
-Received disconnect from 10.10.10.30 port 22:2: Too many authentication failures
-Disconnected from 10.10.10.30 port 22
+Received disconnect from 127.0.0.1 port 49292:2: too many authentication failures

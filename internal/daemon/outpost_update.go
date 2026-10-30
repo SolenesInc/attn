@@ -41,15 +41,11 @@ func (d *Daemon) handleUpdateOutpost(client *wsClient, id string) {
 	r.mu.Unlock()
 	if !d.life.Go("updateOutpost:"+row.ID, func() {
 		defer cancel()
-		err := d.pushOutpost(ctx, row, push)
-		phase, outcome := "done", "Updated to the home's build."
-		if err != nil {
-			phase, outcome = "failed", err.Error()
-		}
+		outcome := d.pushOutpost(ctx, row, push)
 		r.mu.Lock()
 		push.running = false
 		r.mu.Unlock()
-		d.setOutpostUpdate(row.ID, push, phase, outcome)
+		d.setOutpostUpdate(row.ID, push, "failed", outcome)
 	}) {
 		cancel()
 	}
@@ -70,8 +66,8 @@ func (d *Daemon) setOutpostUpdate(id string, push *outpostPush, phase, outcome s
 	}
 }
 
-func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpostPush) error {
-	return fmt.Errorf("Update needs the ssh install, which is not available in this build; install the home's build by hand at %s", d.outpostSSH(row).InstallPath())
+func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpostPush) string {
+	return fmt.Sprintf("Update needs the ssh install, which is not available in this build; install the home's build by hand at %s", d.outpostSSH(row).InstallPath())
 }
 
 func (d *Daemon) cancelOutpostUpdate(id string) {

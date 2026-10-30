@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 
 const exec = promisify(execFile);
-const repo = fileURLToPath(new URL('../../../..', import.meta.url));
+const repo = fileURLToPath(new URL('../../..', import.meta.url));
 export async function outpostSsh(root) {
   const bin = path.join(root, 'ssh-bin'); fs.mkdirSync(bin);
   const binary = path.join(bin, 'ssh');

@@ -22,7 +22,7 @@ node scripts/verify-ssh-outposts/transport.mjs \
   --mode idle --macBin /tmp/attn-mac --instance bridge-proof \
   --ssh ai-sandbox --scratch /tmp/bridge-proof \
   --out /tmp/bridge-idle-proof --notebook /tmp/bridge-idle-notebook \
-  --samples 10000
+  --samples 10001
 python3 scripts/verify-ssh-outposts/analyze.py /tmp/bridge-idle-proof
 ```
 
@@ -32,7 +32,8 @@ master in the same seconds. The sample interval comes from the route spike's
 measurement method. The sample count above covers five minutes.
 
 For a first sync, use `--mode bulk` and give `--notebook` a copy of a real
-Notebook. The harness records the first sync and typing until it finishes or
+Notebook, or generate the route spike’s measured file-size distribution with
+`python3 scripts/verify-ssh-outposts/gen-notebook.py --out /tmp/bridge-notebook`. The harness records the first sync and typing until it finishes or
 reaches `--capMs`. Keep the source Notebook read-only.
 
 `receipts.json` records actions and outcomes. `samples.json` holds every typing

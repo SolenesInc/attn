@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -162,8 +161,8 @@ func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {
 	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "frozen", Destination: address})
 	first := outpostState(p, "frozen", protocol.OutpostStateConnected)
 	mark := p.EventCount()
-	remote.Signal(syscall.SIGSTOP)
-	defer remote.Signal(syscall.SIGCONT)
+	resume := a.Pause(address)
+	defer resume()
 	stalled := outpostStateSince(p, "frozen", protocol.OutpostStateStalled, mark)
 	if stalled.LastError != nil {
 		t.Fatalf("stall invents an error: %+v", stalled)
@@ -173,7 +172,7 @@ func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {
 		t.Fatalf("loss omits threshold: %+v", lost)
 	}
 	mark = p.EventCount()
-	remote.Signal(syscall.SIGCONT)
+	resume()
 	again := outpostStateSince(p, "frozen", protocol.OutpostStateConnected, mark)
 	if again.LastError != nil || again.LastErrorAt != nil || protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) {
 		t.Fatalf("recovery: %+v", again)
@@ -226,8 +225,8 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			}
 			p.Close()
 			p = home.App()
-			replacement.Signal(syscall.SIGSTOP)
-			defer replacement.Signal(syscall.SIGCONT)
+			resume := a.Pause(address)
+			defer resume()
 			mark := p.EventCount()
 			p.Send(protocol.RepairOutpostMessage{Cmd: protocol.CmdRepairOutpost, ID: first.ID})
 			connecting := outpostStateSince(p, "replaced", protocol.OutpostStateConnecting, mark)
@@ -235,7 +234,7 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 				t.Fatalf("repair cleared the last error before success: before=%+v after=%+v", refused, connecting)
 			}
 			mark = p.EventCount()
-			replacement.Signal(syscall.SIGCONT)
+			resume()
 			repaired := outpostStateSince(p, "replaced", protocol.OutpostStateConnected, mark)
 			if protocol.Deref(repaired.DaemonID) != protocol.Deref(remote.Initial.DaemonInstanceID) {
 				t.Fatalf("repair kept old pin: %+v", repaired)

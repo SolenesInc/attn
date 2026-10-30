@@ -1,1 +1,1 @@
-victor@10.10.10.30: Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password).
+user@127.0.0.1: Permission denied (publickey).

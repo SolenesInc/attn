@@ -1,8 +1,8 @@
 package main_test
 
 import (
+	"encoding/json"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -12,10 +12,25 @@ import (
 
 func outpostReachSince(p *testworld.Peer, mark int, name string, reach protocol.OutpostReach) protocol.OutpostInfo {
 	p.T.Helper()
+	var previous string
+	if reach == protocol.OutpostReachReachable && mark > 0 {
+		rows := p.Initial.Outposts
+		for _, raw := range p.Log()[:mark] {
+			var update protocol.OutpostsUpdatedMessage
+			if json.Unmarshal(raw, &update) == nil && update.Event == protocol.EventOutpostsUpdated {
+				rows = update.Outposts
+			}
+		}
+		for _, row := range rows {
+			if row.Name == name {
+				previous = row.StateSince
+			}
+		}
+	}
 	var found protocol.OutpostInfo
 	testworld.AwaitSince(p, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, row := range m.Outposts {
-			if row.Name == name && row.Reach == reach {
+			if row.Name == name && row.Reach == reach && (previous == "" || row.StateSince != previous) {
 				found = row
 				return true
 			}
@@ -71,7 +86,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	app.AwaitScreen(id, "ready-2")
 
 	stalledLine := "echo stalled-$((3+4))\r"
-	remote.Signal(syscall.SIGSTOP)
+	resume := a.Pause(address)
 	if stalled := outpostState(app, "outpost", protocol.OutpostStateStalled); stalled.Reach != protocol.OutpostReachReachable {
 		t.Fatalf("stalled row: %+v", stalled)
 	}
@@ -83,7 +98,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark := len(app.Log())
-	remote.Signal(syscall.SIGCONT)
+	resume()
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
 	app.TypeLine(id, "echo after-stall-$((4+4))")
@@ -109,8 +124,8 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
 
-	remote.Signal(syscall.SIGSTOP)
-	defer remote.Signal(syscall.SIGCONT)
+	resume = a.Pause(address)
+	defer resume()
 	home.Stop()
 	home.Start()
 	app = home.App()
@@ -121,7 +136,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	typeRefused(t, app, terminal, "echo lost\r")
 	mark = len(app.Log())
-	remote.Signal(syscall.SIGCONT)
+	resume()
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
 	app.TypeLine(id, "echo back-$((5+5))")
