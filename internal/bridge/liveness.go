@@ -35,6 +35,8 @@ type Conn struct {
 	ctx          context.Context
 	outputOnce   sync.Once
 	output       *outputCredit
+	inputOnce    sync.Once
+	input        *inputSender
 	heartbeatGap atomic.Int64
 	peer         Identity
 	transport    ssh.Conn
