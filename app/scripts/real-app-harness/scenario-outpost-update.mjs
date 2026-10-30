@@ -92,7 +92,7 @@ async function stopRemote() {
   await exited;
 }
 
-async function update(selector, name, visibleBanner) {
+async function update(selector, name) {
   const done = receive(rows => rows.some(item => item.id === outpostId && item.update?.phase === 'failed'));
   await press(selector);
   const rows = await done;
@@ -126,7 +126,7 @@ try {
   fs.mkdirSync(data, { mode: 0o700 });
   outpostEnv = instanceCliEnv(instance, {
     ATTN_DATA_DIR: data, ATTN_HARNESS_DATA_DIR: data, ATTN_HARNESS_NOTEBOOK_ROOT: path.join(data, 'notebook'),
-    ATTN_WS_PORT: String(await port()), ATTN_DAEMON_READY_FD: '3', ATTN_AUTHORIZED_KEYS_PATH: `${key}.pub`,
+    ATTN_WS_PORT: String(await port()), ATTN_DAEMON_READY_FD: '3',
     ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off',
     ATTN_PTY_BACKEND: 'embedded', ATTN_CACHED_SHELL_ENV: '[]', INVOCATION_ID: 'scenario-supervisor',
   });
@@ -168,7 +168,7 @@ try {
     await wait('[data-testid="settings-modal"]', { absent: true });
     await wait(banner, { textIncludes: 'different build' });
     await shot('00-offer');
-    await update(`${banner} .banner-button`, '01-banner', true);
+    await update(`${banner} .banner-button`, '01-banner');
   });
   await runner.step('dismissal_and_row_update', async () => {
     await press('[aria-label="Dismiss outpost updates"]');
@@ -185,7 +185,7 @@ try {
     await client.request('dom_scroll_into_view', { selector: `${row} .settings-outpost-actions` });
     await wait(banner, { absent: true });
     await shot('02-dismissal-retained');
-    await update(`${row} .settings-outpost-actions button:first-child`, '03-row', false);
+    await update(`${row} .settings-outpost-actions button:first-child`, '03-row');
     await wait(banner, { absent: true });
     runner.assert(restartCount === 0, 'the interim Update refusal leaves the outpost running', { restartCount, phases });
     runner.writeJson('update-phases.json', { phases, restartCount });
