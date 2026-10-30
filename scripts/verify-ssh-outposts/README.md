@@ -3,11 +3,11 @@
 Use a fresh named instance on the Mac and the same instance on a Linux outpost.
 Keep production data and production outposts out of the run.
 
-Build matching Mac and Linux binaries. Put the Linux binary at
-`~/.local/share/attn-outpost-instances/<instance>/attn` on the outpost before
-running the check. The harness refuses existing instance data and Notebook
-folders. It removes the instances, the installed binary, and the remote scratch
-and Notebook folders when finished.
+Build the Mac binary from this repository. Add installs the matching Linux
+build on the outpost, so the instance must have no files there: the harness
+refuses an existing install path, instance data or Notebook folder. It removes
+the instances, the installed binary, and the remote scratch and Notebook folders
+when finished.
 
 Run the stack checks and record the host folders they must leave alone:
 
@@ -50,13 +50,12 @@ Compare an output controller with the preceding build in one sequence:
 
 ```sh
 python3 scripts/verify-ssh-outposts/compare-window.py \
-  --before-mac /tmp/attn-before-mac --before-linux /tmp/attn-before-linux \
-  --after-mac /tmp/attn-after-mac --after-linux /tmp/attn-after-linux \
+  --before-mac /tmp/attn-before-mac --after-mac /tmp/attn-after-mac \
   --instance bwin-proof --notebook /tmp/bridge-notebook \
   --out /tmp/bridge-window-comparison
 ```
 
 The comparison starts with idle, then runs three first-sync pairs in alternating
-order. Each run copies the source Notebook, installs its matching Linux binary,
-and cleans its instances. `comparison.json` reports changes from idle and the
+order. Each run copies the source Notebook, lets Add install the matching Linux
+build, and cleans its instances. `comparison.json` reports changes from idle and the
 throughput ratio. Each run keeps its raw receipts and analysis.

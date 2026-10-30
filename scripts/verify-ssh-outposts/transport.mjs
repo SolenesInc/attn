@@ -6,9 +6,8 @@ import { parseArgs } from 'node:util';
 import { world, quote } from './common.mjs';
 
 const { values: o } = parseArgs({ options: {
-  repo: { type: 'string' }, macBin: { type: 'string' }, linuxBin: { type: 'string' },
+  macBin: { type: 'string' },
   instance: { type: 'string', default: 'fc3c' }, ssh: { type: 'string', default: 'ai-sandbox' },
-  listen: { type: 'string', default: '127.0.0.1:19437' }, dial: { type: 'string' }, stage: { type: 'string' }, pidfile: { type: 'string' },
   networkFlow: { type: 'string', default: '100.77.31.56:2222' }, scratch: { type: 'string' }, out: { type: 'string' },
   remoteNotebook: { type: 'string' }, notebook: { type: 'string' }, mode: { type: 'string' }, samples: { type: 'string', default: '1000' }, capMs: { type: 'string', default: String(20 * 60_000) },
 } });

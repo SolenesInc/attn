@@ -6,10 +6,9 @@ import shutil
 import statistics
 import subprocess
 from pathlib import Path
-from shlex import quote
 
 p = argparse.ArgumentParser(description="Compare bridge output control over one ssh route, idle then three alternating pairs.")
-for name in ("before-mac", "before-linux", "after-mac", "after-linux", "notebook", "out"):
+for name in ("before-mac", "after-mac", "notebook", "out"):
     p.add_argument("--" + name, type=Path, required=True)
 p.add_argument("--ssh", default="ai-sandbox")
 p.add_argument("--instance", required=True)
@@ -20,13 +19,6 @@ a.out.mkdir(parents=True, exist_ok=False)
 root = Path(__file__).resolve().parent
 
 
-def remote(script):
-    return subprocess.run(["ssh", "-o", "BatchMode=yes", a.ssh, "bash", "-s"],
-                          input="set -euo pipefail\n" + script + "\n", text=True, capture_output=True, check=True).stdout.strip()
-
-
-remote_home = remote('printf "%s" "$HOME"')
-binary = f"{remote_home}/.local/share/attn-outpost-instances/{a.instance}/attn"
 analyses = {}
 cases = [("idle", "after", "idle")]
 for pair in range(1, 4):
@@ -35,14 +27,11 @@ for pair in range(1, 4):
 
 for label, version, mode in cases:
     mac = getattr(a, version + "_mac").resolve()
-    linux = getattr(a, version + "_linux").resolve()
     notebook = a.out / (label + "-notebook")
     if mode == "bulk":
         shutil.copytree(a.notebook, notebook)
     else:
         notebook.mkdir()
-    remote(f"test ! -e {quote(binary)}; mkdir -p {quote(str(Path(binary).parent))}")
-    subprocess.run(["scp", "-o", "BatchMode=yes", str(linux), f"{a.ssh}:{binary}"], check=True)
     command = ["node", str(root / "transport.mjs"), "--mode", mode, "--macBin", str(mac),
                "--instance", a.instance, "--ssh", a.ssh, "--scratch", f"/tmp/{a.instance}",
                "--out", str(a.out / label), "--notebook", str(notebook), "--samples", "1001"]
