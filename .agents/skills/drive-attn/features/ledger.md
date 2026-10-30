@@ -19,7 +19,7 @@ that conversation's session and the one it left goes to the ledger.
 - `transcript`: a session's conversation as timestamped, redacted events.
 - `session-question`: ask a question of a Codex session's conversation and get exact excerpts back.
 - `session-tree`: every live session under the session that dispatched it.
-- `conversation-switch`: /clear, /new, /resume or Codex /agents move a terminal to that conversation's session.
+- `conversation-move`: /clear, /new, /resume or Codex /agents move a terminal to that conversation's session.
 - `hidden-sessions`: live over a link with no tile showing them, marked hidden.
 - `kept-conversations`: attn's own copy of a Claude conversation its harness would delete: keep it forever, release it, or forget it.
 
@@ -42,7 +42,7 @@ that conversation's session and the one it left goes to the ledger.
 
 ### Triggers
 
-- When a harness moves to another conversation, with /clear, /new, /resume or Codex /agents, the terminal shows that conversation's session. A Claude session left behind closes into the ledger; under shared Codex it stays open and hidden (`internal/daemon/monitor_switch.go`, `internal/daemon/agent_conversation.go`).
+- When a harness moves to another conversation, with /clear, /new, /resume or Codex /agents, the terminal shows that conversation's session. A Claude session left behind closes into the ledger; under shared Codex it stays open and hidden (`internal/daemon/monitor_conversation.go`, `internal/daemon/agent_conversation.go`).
 - A keep pass decides which Claude conversations attn copies and when unpinned copies are deleted (`internal/daemon/conversation_keep.go`).
 
 ## Driving it
@@ -104,7 +104,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/session_ledger_wire_test.go`, `internal/daemon/session_ledger_ws_wire_test.go`, `internal/daemon/session_reopen_wire_test.go`, `internal/daemon/session_reopen_failure_wire_test.go`, `internal/daemon/session_close_wire_test.go`, `internal/daemon/session_close_metadata_wire_test.go`, `internal/daemon/session_recovery_wire_test.go`, `internal/daemon/rename_wire_test.go`, `internal/daemon/session_transcript_wire_test.go`, `internal/daemon/session_instructions_wire_test.go`, `internal/daemon/session_query_wire_test.go`, `internal/daemon/session_repository_wire_test.go`, `internal/daemon/sessions_filters_wire_test.go`, `internal/daemon/session_messages_wire_test.go`, `internal/daemon/conversation_wire_test.go`, `internal/daemon/conversation_keep_wire_test.go`, `internal/daemon/conversation_ledger_wire_test.go`, `internal/daemon/shared_conversation_wire_test.go`, `internal/daemon/spawn_resume_wire_test.go`, `internal/daemon/spawn_resume_picker_wire_test.go`, `scripts/verify-conversation-switches.sh`.
+- Wire: `internal/daemon/session_ledger_wire_test.go`, `internal/daemon/session_ledger_ws_wire_test.go`, `internal/daemon/session_reopen_wire_test.go`, `internal/daemon/session_reopen_failure_wire_test.go`, `internal/daemon/session_close_wire_test.go`, `internal/daemon/session_close_metadata_wire_test.go`, `internal/daemon/session_recovery_wire_test.go`, `internal/daemon/rename_wire_test.go`, `internal/daemon/session_transcript_wire_test.go`, `internal/daemon/session_instructions_wire_test.go`, `internal/daemon/session_query_wire_test.go`, `internal/daemon/session_repository_wire_test.go`, `internal/daemon/sessions_filters_wire_test.go`, `internal/daemon/session_messages_wire_test.go`, `internal/daemon/conversation_wire_test.go`, `internal/daemon/conversation_keep_wire_test.go`, `internal/daemon/conversation_ledger_wire_test.go`, `internal/daemon/shared_conversation_wire_test.go`, `internal/daemon/spawn_resume_wire_test.go`, `internal/daemon/spawn_resume_picker_wire_test.go`, `scripts/verify-conversation-moves.sh`.
 - Stack: `cmd/attn/session_ledger_stack_test.go`, `cmd/attn/session_recovery_stack_test.go`, `cmd/attn/session_recovered_evidence_stack_test.go`, `cmd/attn/session_transcript_stack_test.go`, `cmd/attn/session_tree_stack_test.go`, `cmd/attn/conversation_keep_stack_test.go`, `cmd/attn/crew_day_transcript_stack_test.go`, `cmd/attn/session_reopen_outpost_stack_test.go`, `internal/daemon/conversation_*_stack_test.go`, `app/e2e/session-restore-reconnect.spec.ts`, `scripts/verify-outpost-ledger-resume.sh`.
 - Scenario: `focusless-native` (parked macOS native input), `sessions-surface`, `conversations-surface`, `session-reopen`, `session-close-ledger`, `clear-opens-session`.
 - Kernel: `internal/store/session_ledger_test.go`, `internal/store/conversation_claim_test.go`.

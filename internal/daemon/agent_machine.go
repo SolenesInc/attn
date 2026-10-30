@@ -181,7 +181,7 @@ func (d *Daemon) agentStarted(sessionID protocol.SessionID, launch *AgentLaunch)
 		monitor.StartCost()
 	}
 	monitor.StartTranscriptWatcher("")
-	if pending, ok := d.consumePendingAgentConversation(sessionID); ok {
+	if pending, ok := d.consumeQueuedAgentConversation(sessionID); ok {
 		d.observeAgentConversation(pending)
 	}
 }

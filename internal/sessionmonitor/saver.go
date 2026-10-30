@@ -54,45 +54,45 @@ func (m *Monitor) publish(view View) bool {
 		return false
 	}
 	m.mu.Lock()
-	if view.PendingSwitch.V != m.pendingHeadLocked() {
+	if view.PendingConversation.V != m.pendingHeadLocked() {
 		m.mu.Unlock()
 		return true
 	}
-	if m.switchApplying {
+	if m.conversationApplying {
 		m.mu.Unlock()
 		return true
 	}
-	switching := view.PendingSwitch.V.NativeID != ""
-	m.switchApplying = switching
+	pending := view.PendingConversation.V.NativeID != ""
+	m.conversationApplying = pending
 	m.mu.Unlock()
-	if switching {
-		if m.registry.host.Go("applyMonitorSwitch", func() { m.applyHome(view, true) }) {
+	if pending {
+		if m.registry.host.Go("applyMonitorConversation", func() { m.applyHome(view, true) }) {
 			return true
 		}
 		m.mu.Lock()
-		m.switchApplying = false
+		m.conversationApplying = false
 		m.mu.Unlock()
 		return false
 	}
-	return m.applyHome(view, switching)
+	return m.applyHome(view, pending)
 }
 
-func (m *Monitor) applyHome(view View, switching bool) bool {
+func (m *Monitor) applyHome(view View, pending bool) bool {
 	outcome, applied := m.home.Applied(view)
 	m.react(view)
 	if applied && outcome.Conversation != "" {
-		m.registry.host.SwitchApplied(m, outcome)
+		m.registry.host.ConversationApplied(m, outcome)
 	}
-	if switching {
+	if pending {
 		m.mu.Lock()
-		m.switchApplying = false
+		m.conversationApplying = false
 		next := m.pendingHeadLocked()
 		newer := m.revision > view.Revision.V
 		if !applied {
 			m.retrySaveLocked()
 		}
 		m.mu.Unlock()
-		if applied && (newer || next != view.PendingSwitch.V) {
+		if applied && (newer || next != view.PendingConversation.V) {
 			m.Refresh()
 		}
 	}

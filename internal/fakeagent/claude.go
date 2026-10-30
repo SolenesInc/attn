@@ -233,7 +233,7 @@ func (c *claude) clear() error {
 	return c.hooks.run("SessionStart", "clear", c.hookInput("SessionStart", map[string]any{"source": "clear"}))
 }
 
-// resume switches to another conversation as real Claude's /resume does: SessionEnd, then SessionStart
+// resume moves to another conversation as real Claude's /resume does: SessionEnd, then SessionStart
 // carrying the conversation it resumed.
 func (c *claude) resume(conversation string) error {
 	transcript := filepath.Join(filepath.Dir(c.transcript), conversation+".jsonl")

@@ -9,9 +9,9 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestAnExitBeforeASwitchOutcomeEndsTheCommittedConversation(t *testing.T) {
+func TestAnExitBeforeAConversationOutcomeEndsTheCommittedConversation(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	outcome := s.PauseAt(pausepoint.ConversationSwitchOutcome)
+	outcome := s.PauseAt(pausepoint.ConversationOutcome)
 	exiting := s.PauseAt(pausepoint.PtyExitHandled)
 	s.Start()
 	app := s.App()

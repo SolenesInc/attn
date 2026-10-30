@@ -131,7 +131,7 @@ func turnStamp(at time.Time) string {
 type SessionRuntimeRecords struct {
 	Live                       bool
 	Agent                      string
-	PendingSwitch              string
+	PendingConversations       string
 	PullRequests               string
 	HomeDaemonID               string
 	ConversationNativeID       string
@@ -145,7 +145,7 @@ func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecor
 		return s.runtimeRecords[id]
 	}
 	var records SessionRuntimeRecords
-	if err := s.db.QueryRow(`SELECT pending_switch, pull_requests, home_daemon_id, agent, live, conversation_native_id, conversation_transcript_path FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingSwitch, &records.PullRequests, &records.HomeDaemonID, &records.Agent, &records.Live, &records.ConversationNativeID, &records.ConversationTranscriptPath); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := s.db.QueryRow(`SELECT pending_conversations, pull_requests, home_daemon_id, agent, live, conversation_native_id, conversation_transcript_path FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingConversations, &records.PullRequests, &records.HomeDaemonID, &records.Agent, &records.Live, &records.ConversationNativeID, &records.ConversationTranscriptPath); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.Printf("[store] session %s runtime records: %v", id, err)
 	}
 	return records
@@ -165,7 +165,7 @@ func (s *Store) HasSessionRuntime(id protocol.SessionID) bool {
 	return exists
 }
 
-func (s *Store) SaveSessionPendingSwitches(pending map[protocol.SessionID]string) error {
+func (s *Store) SaveSessionPendingConversations(pending map[protocol.SessionID]string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -174,7 +174,7 @@ func (s *Store) SaveSessionPendingSwitches(pending map[protocol.SessionID]string
 		}
 		for id, chain := range pending {
 			saved := s.runtimeRecords[id]
-			saved.PendingSwitch = chain
+			saved.PendingConversations = chain
 			s.runtimeRecords[id] = saved
 		}
 		return nil
@@ -185,28 +185,28 @@ func (s *Store) SaveSessionPendingSwitches(pending map[protocol.SessionID]string
 	}
 	defer tx.Rollback()
 	for id, chain := range pending {
-		if _, err := tx.Exec(`INSERT INTO session_runtime(session_id, pending_switch, home_daemon_id) VALUES (?, ?, COALESCE((SELECT copied_from FROM sessions WHERE id = ?), '')) ON CONFLICT(session_id) DO UPDATE SET pending_switch = excluded.pending_switch`, id, chain, id); err != nil {
+		if _, err := tx.Exec(`INSERT INTO session_runtime(session_id, pending_conversations, home_daemon_id) VALUES (?, ?, COALESCE((SELECT copied_from FROM sessions WHERE id = ?), '')) ON CONFLICT(session_id) DO UPDATE SET pending_conversations = excluded.pending_conversations`, id, chain, id); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
 }
 
-func (s *Store) PendingSessionSwitches() map[protocol.SessionID]string {
+func (s *Store) PendingSessionConversations() map[protocol.SessionID]string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	pending := make(map[protocol.SessionID]string)
 	if s.db == nil {
 		for id, records := range s.runtimeRecords {
-			if records.PendingSwitch != "" {
-				pending[id] = records.PendingSwitch
+			if records.PendingConversations != "" {
+				pending[id] = records.PendingConversations
 			}
 		}
 		return pending
 	}
-	rows, err := s.db.Query(`SELECT session_id, pending_switch FROM session_runtime WHERE pending_switch != ''`)
+	rows, err := s.db.Query(`SELECT session_id, pending_conversations FROM session_runtime WHERE pending_conversations != ''`)
 	if err != nil {
-		log.Printf("[store] pending switches: %v", err)
+		log.Printf("[store] pending conversations: %v", err)
 		return pending
 	}
 	defer rows.Close()
@@ -214,7 +214,7 @@ func (s *Store) PendingSessionSwitches() map[protocol.SessionID]string {
 		var id protocol.SessionID
 		var chain string
 		if err := rows.Scan(&id, &chain); err != nil {
-			log.Printf("[store] pending switch: %v", err)
+			log.Printf("[store] pending conversation: %v", err)
 			continue
 		}
 		pending[id] = chain

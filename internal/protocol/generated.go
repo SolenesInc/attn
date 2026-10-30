@@ -490,8 +490,8 @@ type ApplyMonitorViewMessage struct {
 }
 
 type ApplyMonitorViewResult struct {
-	// Switch corresponds to the JSON schema field "switch".
-	Switch *SwitchOutcome `json:"switch,omitempty,omitzero"`
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome *ConversationOutcome `json:"outcome,omitempty,omitzero"`
 }
 
 type ApprovePRMessage struct {
@@ -2547,6 +2547,25 @@ type ConnectOutpostInTerminalMessage struct {
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 }
+
+type ConversationOutcome struct {
+	// Conversation corresponds to the JSON schema field "conversation".
+	Conversation string `json:"conversation"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind ConversationOutcomeKind `json:"kind"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *string `json:"reason,omitempty,omitzero"`
+}
+
+type ConversationOutcomeKind string
+
+const ConversationOutcomeKindBound ConversationOutcomeKind = "bound"
+const ConversationOutcomeKindDropped ConversationOutcomeKind = "dropped"
+const ConversationOutcomeKindInPlace ConversationOutcomeKind = "in_place"
+const ConversationOutcomeKindOpened ConversationOutcomeKind = "opened"
+const ConversationOutcomeKindShows ConversationOutcomeKind = "shows"
 
 type ConversationReadinessMessage struct {
 	// Agent corresponds to the JSON schema field "agent".
@@ -12532,25 +12551,6 @@ type SupportSnapshotResultMessage struct {
 	// WarningCodes corresponds to the JSON schema field "warning_codes".
 	WarningCodes []string `json:"warning_codes"`
 }
-
-type SwitchOutcome struct {
-	// Conversation corresponds to the JSON schema field "conversation".
-	Conversation string `json:"conversation"`
-
-	// Kind corresponds to the JSON schema field "kind".
-	Kind SwitchOutcomeKind `json:"kind"`
-
-	// Reason corresponds to the JSON schema field "reason".
-	Reason *string `json:"reason,omitempty,omitzero"`
-}
-
-type SwitchOutcomeKind string
-
-const SwitchOutcomeKindBound SwitchOutcomeKind = "bound"
-const SwitchOutcomeKindDropped SwitchOutcomeKind = "dropped"
-const SwitchOutcomeKindInPlace SwitchOutcomeKind = "in_place"
-const SwitchOutcomeKindOpened SwitchOutcomeKind = "opened"
-const SwitchOutcomeKindShows SwitchOutcomeKind = "shows"
 
 type Task struct {
 	// Attempts corresponds to the JSON schema field "attempts".

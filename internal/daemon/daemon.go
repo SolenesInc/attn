@@ -1043,7 +1043,7 @@ func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[protocol.Sess
 		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
 		d.recoverLinkViews(context.Background())
 		d.restoreTranscriptWatchers()
-		d.replayPendingSwitches()
+		d.replayPendingConversations()
 		d.pruneRuntimesWithoutSession(context.Background())
 		return
 	}
@@ -1070,8 +1070,8 @@ func (d *Daemon) pruneRuntimesWithoutSession(ctx context.Context) {
 			continue
 		}
 		pending := false
-		for _, raw := range d.store.PendingSessionSwitches() {
-			for _, conversation := range decodePendingSwitch(raw) {
+		for _, raw := range d.store.PendingSessionConversations() {
+			for _, conversation := range decodePendingConversations(raw) {
 				pending = pending || conversation.Terminal == terminal
 			}
 		}
@@ -2193,7 +2193,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.logf("close session %s: %v", sessionID, err)
 		return err
 	}
-	if _, pending := d.sessionMonitor(sessionID).PendingSwitch(); !pending {
+	if _, pending := d.sessionMonitor(sessionID).PendingConversation(); !pending {
 		d.forgetMonitor(sessionID)
 	}
 	d.announceClosedAsks(closure.Asks)

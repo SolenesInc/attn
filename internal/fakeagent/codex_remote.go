@@ -347,7 +347,7 @@ func (c *codexRemote) submit(prompt string) error {
 		c.mu.Lock()
 		c.blank[started.Thread.ID] = true
 		c.mu.Unlock()
-		return c.switchTo(started.Thread.ID)
+		return c.moveTo(started.Thread.ID)
 	case strings.HasPrefix(command, "/agents "):
 		target := strings.TrimSpace(strings.TrimPrefix(command, "/agents "))
 		c.mu.Lock()
@@ -358,7 +358,7 @@ func (c *codexRemote) submit(prompt string) error {
 				return err
 			}
 		}
-		return c.switchTo(target)
+		return c.moveTo(target)
 	case strings.HasPrefix(command, "/multi-agents "):
 		target := strings.TrimSpace(strings.TrimPrefix(command, "/multi-agents "))
 		if err := c.request("thread/resume", map[string]any{"threadId": target, "excludeTurns": true}, nil); err != nil {
@@ -378,7 +378,7 @@ func (c *codexRemote) submit(prompt string) error {
 		if err := c.request("thread/resume", map[string]any{"threadId": target, "excludeTurns": true}, nil); err != nil {
 			return err
 		}
-		return c.switchTo(target)
+		return c.moveTo(target)
 	case strings.HasPrefix(command, "/rename "):
 		return c.request("thread/name/set", map[string]any{"threadId": c.current(), "name": strings.TrimSpace(strings.TrimPrefix(command, "/rename "))}, nil)
 	}
@@ -393,7 +393,7 @@ func (c *codexRemote) submit(prompt string) error {
 	return nil
 }
 
-func (c *codexRemote) switchTo(conversation string) error {
+func (c *codexRemote) moveTo(conversation string) error {
 	c.mu.Lock()
 	previous := c.conversation
 	c.conversation = conversation

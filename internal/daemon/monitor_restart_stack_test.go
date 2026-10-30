@@ -27,7 +27,7 @@ func waitingAgentStack(t *testing.T) (*testworld.Stack, string) {
 	return s, id
 }
 
-func TestAConversationSwitchSavedJustBeforeACrashIsDecidedAfterTheRestart(t *testing.T) {
+func TestAConversationMoveSavedJustBeforeACrashIsDecidedAfterTheRestart(t *testing.T) {
 	t.Parallel()
 	s, id := waitingAgentStack(t)
 	terminal := protocol.TerminalID(s.App().Terminal(id))
@@ -36,7 +36,7 @@ func TestAConversationSwitchSavedJustBeforeACrashIsDecidedAfterTheRestart(t *tes
 		t.Fatal(err)
 	}
 	s.Stop()
-	s.StartCrashingAt(sessionmonitor.CrashSwitchPending)
+	s.StartCrashingAt(sessionmonitor.CrashConversationPending)
 	_ = s.Client().ObserveAgentConversation(terminal, "a-cleared-conversation", transcript)
 	s.AwaitCrash()
 
@@ -47,7 +47,7 @@ func TestAConversationSwitchSavedJustBeforeACrashIsDecidedAfterTheRestart(t *tes
 		successor = awaitSuccessor(app, id)
 	}
 	if got := app.Terminal(string(successor.ID)); got != string(terminal) {
-		t.Fatalf("after the restart the switch opened %s in terminal %q, want the terminal %s the harness reported from", successor.ID, got, terminal)
+		t.Fatalf("after the restart the move opened %s in terminal %q, want the terminal %s the harness reported from", successor.ID, got, terminal)
 	}
 }
 

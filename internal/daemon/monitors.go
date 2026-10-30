@@ -193,11 +193,11 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		LastModelRequestAt: protocol.Timestamp(protocol.Deref(session.LastModelRequestAt)).Time(),
 		Turn: sessionmonitor.TurnStamps{OpenedAt: stamps.OpenedAt, SettledAt: stamps.SettledAt, SnoozedUntil: stamps.SnoozedUntil,
 			AgentAt: stamps.AgentAt, RequestedAt: stamps.RequestedAt},
-		Driver:        d.driverInputFromRecord(sessionID),
-		Conversation:  sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
-		LastSeen:      protocol.Timestamp(session.LastSeen).Time(),
-		PendingSwitch: decodePendingSwitch(records.PendingSwitch),
-		PullRequests:  decodePullRequests(records.PullRequests),
+		Driver:               d.driverInputFromRecord(sessionID),
+		Conversation:         sessionmonitor.ConversationObservation{NativeID: conversation.NativeID, TranscriptPath: conversation.TranscriptPath},
+		LastSeen:             protocol.Timestamp(session.LastSeen).Time(),
+		PendingConversations: decodePendingConversations(records.PendingConversations),
+		PullRequests:         decodePullRequests(records.PullRequests),
 	}
 	if cost, err := d.store.SessionCostCheckpoint(sessionID); err == nil {
 		launch.Cost = cost
@@ -348,7 +348,7 @@ func (d *Daemon) kickMonitorTerminals() {
 				copied := binding != nil && binding.copied
 				r.mu.Unlock()
 				if copied {
-					if _, pending := monitor.PendingSwitch(); pending {
+					if _, pending := monitor.PendingConversation(); pending {
 						continue
 					}
 					d.forgetMonitor(sessionID)

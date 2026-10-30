@@ -23,14 +23,14 @@ func (r *monitorIndex) bindingOf(h *monitorHome) (protocol.SessionID, *monitorBi
 	return "", nil
 }
 
-func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.SwitchOutcome, bool) {
+func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.ConversationOutcome, bool) {
 	if !h.apply(view, false) {
-		return sessionmonitor.SwitchOutcome{}, false
+		return sessionmonitor.ConversationOutcome{}, false
 	}
 	if h.daemon.monitors().copied(h.sessionID()) {
-		return sessionmonitor.SwitchOutcome{}, true
+		return sessionmonitor.ConversationOutcome{}, true
 	}
-	pending := view.PendingSwitch.V
+	pending := view.PendingConversation.V
 	if pending.NativeID != "" && pending.Terminal == "" {
 		pausepoint.At(pausepoint.ConversationReportReady)
 	}
@@ -38,16 +38,16 @@ func (h *monitorHome) Applied(view sessionmonitor.View) (sessionmonitor.SwitchOu
 		shown, _ := h.daemon.shownIn(pending.Terminal)
 		held := h.daemon.store.GetSessionConversation(shown).NativeID
 		if held != "" && held != pending.NativeID {
-			pausepoint.At(pausepoint.ConversationSwitchDecision)
+			pausepoint.At(pausepoint.ConversationDecision)
 		}
 	}
-	if current, _ := h.monitor.PendingSwitch(); current != pending {
-		return sessionmonitor.SwitchOutcome{}, true
+	if current, _ := h.monitor.PendingConversation(); current != pending {
+		return sessionmonitor.ConversationOutcome{}, true
 	}
-	outcome := h.daemon.resolveMonitorSwitch(h.sessionID(), pending, h.monitor)
-	if outcome.Kind == sessionmonitor.SwitchOpened || outcome.Kind == sessionmonitor.SwitchShows {
-		crashpoint.At("monitor-switch-applied")
-		pausepoint.At(pausepoint.ConversationSwitchOutcome)
+	outcome := h.daemon.resolveMonitorConversation(h.sessionID(), pending, h.monitor)
+	if outcome.Kind == sessionmonitor.OutcomeOpened || outcome.Kind == sessionmonitor.OutcomeShows {
+		crashpoint.At("monitor-conversation-applied")
+		pausepoint.At(pausepoint.ConversationOutcome)
 	}
 	return outcome, true
 }
@@ -207,7 +207,7 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 	}
 }
 
-func encodePendingSwitch(pending []sessionmonitor.Conversation) string {
+func encodePendingConversations(pending []sessionmonitor.Conversation) string {
 	if len(pending) == 0 || pending[0].NativeID == "" {
 		return ""
 	}
@@ -218,7 +218,7 @@ func encodePendingSwitch(pending []sessionmonitor.Conversation) string {
 	return string(encoded)
 }
 
-func decodePendingSwitch(raw string) []sessionmonitor.Conversation {
+func decodePendingConversations(raw string) []sessionmonitor.Conversation {
 	if raw == "" {
 		return nil
 	}
@@ -234,7 +234,7 @@ func decodePendingSwitch(raw string) []sessionmonitor.Conversation {
 }
 
 func (s storeSaver) MovePending(from, to protocol.SessionID, remaining, moved []sessionmonitor.Conversation) error {
-	pending := map[protocol.SessionID]string{from: encodePendingSwitch(remaining)}
-	pending[to] = encodePendingSwitch(moved)
-	return s.daemon.store.SaveSessionPendingSwitches(pending)
+	pending := map[protocol.SessionID]string{from: encodePendingConversations(remaining)}
+	pending[to] = encodePendingConversations(moved)
+	return s.daemon.store.SaveSessionPendingConversations(pending)
 }

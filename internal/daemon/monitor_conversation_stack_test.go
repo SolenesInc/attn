@@ -10,8 +10,8 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestSwitchesBeforeAnOutcomeEachGetASessionAndTheirOwnCost(t *testing.T) {
-	for _, point := range []string{pausepoint.ConversationSwitchDecision, pausepoint.ConversationSwitchOutcome} {
+func TestConversationMovesBeforeAnOutcomeEachGetASessionAndTheirOwnCost(t *testing.T) {
+	for _, point := range []string{pausepoint.ConversationDecision, pausepoint.ConversationOutcome} {
 		t.Run(point, func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 			outcome := s.PauseAt(point)
@@ -29,7 +29,7 @@ func TestSwitchesBeforeAnOutcomeEachGetASessionAndTheirOwnCost(t *testing.T) {
 			agent.Prompted()
 			outcome.Await()
 			var middle protocol.Session
-			if point == pausepoint.ConversationSwitchOutcome {
+			if point == pausepoint.ConversationOutcome {
 				middle = awaitSuccessor(app, first)
 			}
 			typeInto(app, terminal, "middle prompt\r")
@@ -60,7 +60,7 @@ func TestSwitchesBeforeAnOutcomeEachGetASessionAndTheirOwnCost(t *testing.T) {
 	}
 }
 
-func TestASwitchCommittedBeforeACrashReceivesItsOutcomeAfterRestart(t *testing.T) {
+func TestAConversationMoveCommittedBeforeACrashReceivesItsOutcomeAfterRestart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	initial := s.App()
@@ -71,7 +71,7 @@ func TestASwitchCommittedBeforeACrashReceivesItsOutcomeAfterRestart(t *testing.T
 	agent.Reply("Ready. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(initial, first, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
 	s.Stop()
-	s.StartCrashingAt("monitor-switch-applied")
+	s.StartCrashingAt("monitor-conversation-applied")
 	app := s.App()
 	app.TypeLine(first, "/clear")
 	agent.Prompted()
@@ -94,9 +94,9 @@ func TestASwitchCommittedBeforeACrashReceivesItsOutcomeAfterRestart(t *testing.T
 	awaitUsageTokens(recovered, string(next.ID), claudeTokens(reply))
 }
 
-func TestAReloadDropsTheSwitchOfTheRuntimeItReplaced(t *testing.T) {
+func TestAReloadDropsThePendingConversationOfTheRuntimeItReplaced(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	deciding := s.PauseAt(pausepoint.ConversationSwitchDecision)
+	deciding := s.PauseAt(pausepoint.ConversationDecision)
 	s.Start()
 	app := s.App()
 	first := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
@@ -120,7 +120,7 @@ func TestAReloadDropsTheSwitchOfTheRuntimeItReplaced(t *testing.T) {
 	recovered := s.App()
 	for _, session := range recovered.Initial.Sessions {
 		if protocol.Deref(session.Succeeds) == protocol.SessionID(first) {
-			t.Fatalf("reloaded runtime's switch replayed as %+v", session)
+			t.Fatalf("reloaded runtime's pending conversation replayed as %+v", session)
 		}
 	}
 	recovered.TypeLine(first, "after reload and restart")
@@ -130,9 +130,9 @@ func TestAReloadDropsTheSwitchOfTheRuntimeItReplaced(t *testing.T) {
 	}
 }
 
-func TestARefusedSwitchLeavesTheTerminalOnItsSession(t *testing.T) {
+func TestARefusedConversationMoveLeavesTheTerminalOnItsSession(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	deciding := s.PauseAt(pausepoint.ConversationSwitchDecision)
+	deciding := s.PauseAt(pausepoint.ConversationDecision)
 	exited := s.PauseAt(pausepoint.PtyExitHandled)
 	s.Start()
 	app := s.App()
@@ -156,11 +156,11 @@ func TestARefusedSwitchLeavesTheTerminalOnItsSession(t *testing.T) {
 	recovered := s.App()
 	for _, session := range recovered.Initial.Sessions {
 		if protocol.Deref(session.Succeeds) == protocol.SessionID(first) {
-			t.Fatalf("refused switch replayed as %+v", session)
+			t.Fatalf("refused move replayed as %+v", session)
 		}
 	}
 	if got := recovered.Terminal(first); got != terminal {
-		t.Fatalf("refused switch moved the terminal to %s, want %s", got, terminal)
+		t.Fatalf("refused move took the terminal to %s, want %s", got, terminal)
 	}
 }
 
@@ -199,7 +199,7 @@ func TestACandidatesTitleAndTurnSurviveItsOutcome(t *testing.T) {
 		t.Run(string(agentKind), func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(agentKind))
 			s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-			outcome := s.PauseAt(pausepoint.ConversationSwitchOutcome)
+			outcome := s.PauseAt(pausepoint.ConversationOutcome)
 			owed := s.PauseAt(pausepoint.ConversationCandidateTurn)
 			s.Start()
 			app := s.App()
@@ -257,7 +257,7 @@ func TestACandidatesTitleAndTurnSurviveItsOutcome(t *testing.T) {
 func TestACandidatesFailedTitleCanBeRetriedAfterRestart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-	outcome := s.PauseAt(pausepoint.ConversationSwitchOutcome)
+	outcome := s.PauseAt(pausepoint.ConversationOutcome)
 	s.Start()
 	app := s.App()
 	first := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("Original name") })
@@ -298,7 +298,7 @@ func TestACandidatesFailedTitleCanBeRetriedAfterRestart(t *testing.T) {
 
 func TestAResumedSharedConversationsRunSurvivesItsOutcome(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-	outcome := s.PauseEvery(pausepoint.ConversationSwitchOutcome)
+	outcome := s.PauseEvery(pausepoint.ConversationOutcome)
 	s.Start()
 	app := s.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
@@ -351,7 +351,7 @@ func TestAResumedSharedConversationsRunSurvivesItsOutcome(t *testing.T) {
 
 func TestReloadingOneSharedTerminalKeepsTheOthersPendingConversation(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-	deciding := s.PauseEvery(pausepoint.ConversationSwitchDecision)
+	deciding := s.PauseEvery(pausepoint.ConversationDecision)
 	s.Start()
 	app := s.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
@@ -390,7 +390,7 @@ func TestReloadingOneSharedTerminalKeepsTheOthersPendingConversation(t *testing.
 	t.Logf("daemon second_terminal_session=%s bound=%s conversation=%s", second, successor.ID, pending)
 }
 
-func TestAnEndedRuntimeCannotReplayItsPendingSwitchOverItsReplacement(t *testing.T) {
+func TestAnEndedRuntimeCannotReplayItsPendingConversationOverItsReplacement(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app := s.App()
@@ -401,7 +401,7 @@ func TestAnEndedRuntimeCannotReplayItsPendingSwitchOverItsReplacement(t *testing
 	agent.Reply("Ready. <!-- attn:state=waiting_input -->")
 	testworld.AwaitSession(app, first, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
 	s.Stop()
-	s.StartCrashingAt("monitor-switch-applied")
+	s.StartCrashingAt("monitor-conversation-applied")
 	app = s.App()
 	app.TypeLine(first, "/clear")
 	agent.Prompted()
@@ -425,7 +425,7 @@ func TestAnEndedRuntimeCannotReplayItsPendingSwitchOverItsReplacement(t *testing
 func TestInputFindsItsConversationWhenBindingFinishesDuringLookup(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-	outcome := s.PauseAt(pausepoint.ConversationSwitchOutcome)
+	outcome := s.PauseAt(pausepoint.ConversationOutcome)
 	lookup := s.PauseAt(pausepoint.ConversationInputLookup)
 	bound := s.PauseAt(pausepoint.ConversationCandidateBound)
 	s.Start()

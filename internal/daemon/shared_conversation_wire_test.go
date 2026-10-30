@@ -96,7 +96,7 @@ func TestASessionLaunchedOnAConversationAnotherLiveSessionRunsShowsItShared(t *t
 	awaitSharedWith(app, 0, second, first)
 }
 
-func switchPi(app *testworld.Peer, pi *fakeagent.Run, session, command string) {
+func movePi(app *testworld.Peer, pi *fakeagent.Run, session, command string) {
 	app.T.Helper()
 	app.TypeLine(session, command)
 	if got := pi.Prompted(); got != command {
@@ -114,7 +114,7 @@ func TestPiSessionsShowTheirConversationIsSharedWhileBothProcessesRunIt(t *testi
 	second := w.Spawn(app, fakeagent.Pi, cwd)
 	two := w.Launched(second)
 
-	switchPi(app, two, second, "/resume "+one.ConversationID)
+	movePi(app, two, second, "/resume "+one.ConversationID)
 	awaitSharedWith(app, 0, first, second)
 	awaitSharedWith(app, 0, second, first)
 
@@ -139,7 +139,7 @@ func TestPiSessionsStopSharingWhenOneMovesToANewConversation(t *testing.T) {
 	awaitSharedWith(app, 0, second, first)
 
 	moved := len(app.Log())
-	switchPi(app, two, second, "/new")
+	movePi(app, two, second, "/new")
 	awaitSharedWith(app, moved, first)
 	awaitSharedWith(app, moved, second)
 }

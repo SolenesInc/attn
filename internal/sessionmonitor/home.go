@@ -11,22 +11,22 @@ import (
 )
 
 type Home interface {
-	Applied(View) (SwitchOutcome, bool)
+	Applied(View) (ConversationOutcome, bool)
 }
 
-type SwitchOutcomeKind string
+type ConversationOutcomeKind string
 
 const (
-	SwitchBound   SwitchOutcomeKind = "bound"
-	SwitchOpened  SwitchOutcomeKind = "opened"
-	SwitchShows   SwitchOutcomeKind = "shows"
-	SwitchInPlace SwitchOutcomeKind = "in_place"
-	SwitchDropped SwitchOutcomeKind = "dropped"
+	OutcomeBound   ConversationOutcomeKind = "bound"
+	OutcomeOpened  ConversationOutcomeKind = "opened"
+	OutcomeShows   ConversationOutcomeKind = "shows"
+	OutcomeInPlace ConversationOutcomeKind = "in_place"
+	OutcomeDropped ConversationOutcomeKind = "dropped"
 )
 
-type SwitchOutcome struct {
+type ConversationOutcome struct {
 	Conversation string
-	Kind         SwitchOutcomeKind
+	Kind         ConversationOutcomeKind
 	Session      protocol.SessionID
 	Reason       string
 }
@@ -41,26 +41,26 @@ type Policy struct {
 }
 
 type Launch struct {
-	Known              bool
-	Agent              protocol.SessionAgent
-	Profile            string
-	Link               string
-	StartedAt          time.Time
-	Directory          string
-	Branch             attngit.BranchInfo
-	HarnessTitle       string
-	State              protocol.SessionState
-	StateSince         time.Time
-	StateUpdated       time.Time
-	LastModelRequestAt time.Time
-	Turn               TurnStamps
-	Driver             DriverMetadata
-	Cost               sessioncost.Checkpoint
-	Exit               *Exit
-	Conversation       ConversationObservation
-	LastSeen           time.Time
-	PendingSwitch      []Conversation
-	PullRequests       map[string]PullRequest
+	Known                bool
+	Agent                protocol.SessionAgent
+	Profile              string
+	Link                 string
+	StartedAt            time.Time
+	Directory            string
+	Branch               attngit.BranchInfo
+	HarnessTitle         string
+	State                protocol.SessionState
+	StateSince           time.Time
+	StateUpdated         time.Time
+	LastModelRequestAt   time.Time
+	Turn                 TurnStamps
+	Driver               DriverMetadata
+	Cost                 sessioncost.Checkpoint
+	Exit                 *Exit
+	Conversation         ConversationObservation
+	LastSeen             time.Time
+	PendingConversations []Conversation
+	PullRequests         map[string]PullRequest
 }
 
 func (m *Monitor) SetPolicy(policy Policy) {

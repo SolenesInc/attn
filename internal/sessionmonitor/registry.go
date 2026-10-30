@@ -43,7 +43,7 @@ type Host interface {
 	NoteKey(terminal harness.TerminalID, at time.Time)
 	LastKey(terminal harness.TerminalID) time.Time
 	EnqueueTitle(m *Monitor, conversation, source string) error
-	SwitchApplied(*Monitor, SwitchOutcome)
+	ConversationApplied(*Monitor, ConversationOutcome)
 }
 
 type ClassifyRequest struct {
@@ -62,76 +62,76 @@ type TerminalWatch struct {
 }
 
 type Monitor struct {
-	mu                  sync.Mutex
-	session             protocol.SessionID
-	stopped             bool
-	saveMu              sync.Mutex
-	saved               savedView
-	reacted             View
-	registry            *Registry
-	home                Home
-	label               string
-	initialized         bool
-	policy              Policy
-	agent               protocol.SessionAgent
-	profile             string
-	startedAt           time.Time
-	epoch               string
-	revision            uint64
-	state               StateView
-	driver              DriverMetadata
-	turn                TurnStamps
-	lastModelRequestAt  time.Time
-	firstReportAt       time.Time
-	wakeTimer           *time.Timer
-	watch               *TerminalWatch
-	conversationInput   Conversation
-	succeeds            Key
-	conversation        string
-	localConversation   string
-	directory           string
-	branch              attngit.BranchInfo
-	pullRequests        map[string]PullRequest
-	sentFiles           map[string]uint64
-	harnessTitle        string
-	terminalTitle       string
-	exit                *Exit
-	costInitialized     bool
-	cost                map[string]*sessioncost.Source
-	costTotals          map[string]sessioncost.SourceTotals
-	costOwners          map[string]costOwner
-	evidence            sessionstate.ConversationEvidence
-	resolveAt           time.Time
-	resolvePending      bool
-	dwell               dwellPending
-	reason              string
-	trace               *statetrace.Ring
-	classifiedTurn      string
-	classifyingTurn     string
-	forcedStop          time.Time
-	silence             *time.Timer
-	input               *lane
-	autoSettle          *autoSettleTimer
-	dismissal           autoSettleDismissal
-	activityAt          time.Time
-	transcriptWatch     *transcriptWatcher
-	pluginUsageWatch    *pluginUsageWatcher
-	finalUsage          []func()
-	usageRuns           int
-	usageIdle           chan struct{}
-	usageDraining       bool
-	pendingConversation *ConversationObservation
-	pendingSwitch       []pendingSwitch
-	pendingSession      protocol.SessionID
-	switchApplying      bool
-	pendingDirty        bool
-	titleAttempted      bool
-	titleInitialPrompt  *[sha256.Size]byte
-	driverLaunch        *driverLaunch
-	touchedAt           time.Time
-	views               atomic.Pointer[terminalViews]
-	link                string
-	windowRevision      uint64
+	mu                   sync.Mutex
+	session              protocol.SessionID
+	stopped              bool
+	saveMu               sync.Mutex
+	saved                savedView
+	reacted              View
+	registry             *Registry
+	home                 Home
+	label                string
+	initialized          bool
+	policy               Policy
+	agent                protocol.SessionAgent
+	profile              string
+	startedAt            time.Time
+	epoch                string
+	revision             uint64
+	state                StateView
+	driver               DriverMetadata
+	turn                 TurnStamps
+	lastModelRequestAt   time.Time
+	firstReportAt        time.Time
+	wakeTimer            *time.Timer
+	watch                *TerminalWatch
+	conversationInput    Conversation
+	succeeds             Key
+	conversation         string
+	localConversation    string
+	directory            string
+	branch               attngit.BranchInfo
+	pullRequests         map[string]PullRequest
+	sentFiles            map[string]uint64
+	harnessTitle         string
+	terminalTitle        string
+	exit                 *Exit
+	costInitialized      bool
+	cost                 map[string]*sessioncost.Source
+	costTotals           map[string]sessioncost.SourceTotals
+	costOwners           map[string]costOwner
+	evidence             sessionstate.ConversationEvidence
+	resolveAt            time.Time
+	resolvePending       bool
+	dwell                dwellPending
+	reason               string
+	trace                *statetrace.Ring
+	classifiedTurn       string
+	classifyingTurn      string
+	forcedStop           time.Time
+	silence              *time.Timer
+	input                *lane
+	autoSettle           *autoSettleTimer
+	dismissal            autoSettleDismissal
+	activityAt           time.Time
+	transcriptWatch      *transcriptWatcher
+	pluginUsageWatch     *pluginUsageWatcher
+	finalUsage           []func()
+	usageRuns            int
+	usageIdle            chan struct{}
+	usageDraining        bool
+	queuedConversation   *ConversationObservation
+	pendingConversations []pendingConversation
+	pendingSession       protocol.SessionID
+	conversationApplying bool
+	pendingDirty         bool
+	titleAttempted       bool
+	titleInitialPrompt   *[sha256.Size]byte
+	driverLaunch         *driverLaunch
+	touchedAt            time.Time
+	views                atomic.Pointer[terminalViews]
+	link                 string
+	windowRevision       uint64
 }
 
 type Evidence struct {
@@ -312,8 +312,8 @@ func (m *Monitor) initializeLocked(start Start) {
 	m.exit = launch.Exit
 	m.conversationInput = Conversation{ConversationObservation: launch.Conversation}
 	m.touchedAt = launch.LastSeen
-	for _, pending := range launch.PendingSwitch {
-		m.pendingSwitch = append(m.pendingSwitch, pendingSwitch{Conversation: pending})
+	for _, pending := range launch.PendingConversations {
+		m.pendingConversations = append(m.pendingConversations, pendingConversation{Conversation: pending})
 	}
 	m.pullRequests = launch.PullRequests
 	m.initialized = launch.Known

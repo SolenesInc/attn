@@ -40,23 +40,23 @@ func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitor
 	if !d.applyHomeView(msg.SessionID, view, origin.Host, origin.bridge) {
 		return protocol.ApplyMonitorViewResult{}, fmt.Errorf("monitor view was not applied")
 	}
-	proposed := view.PendingSwitch.V
+	proposed := view.PendingConversation.V
 	if proposed.Terminal != "" {
 		shown, _ := d.shownIn(proposed.Terminal)
 		if held := d.store.GetSessionConversation(shown).NativeID; held != "" && held != proposed.NativeID {
-			pausepoint.At(pausepoint.ConversationSwitchDecision)
+			pausepoint.At(pausepoint.ConversationDecision)
 		}
 	}
-	outcome := d.resolveMonitorSwitch(msg.SessionID, proposed, nil)
-	if outcome.Kind == sessionmonitor.SwitchOpened || outcome.Kind == sessionmonitor.SwitchShows {
-		crashpoint.At("monitor-switch-applied")
-		pausepoint.At(pausepoint.ConversationSwitchOutcome)
+	outcome := d.resolveMonitorConversation(msg.SessionID, proposed, nil)
+	if outcome.Kind == sessionmonitor.OutcomeOpened || outcome.Kind == sessionmonitor.OutcomeShows {
+		crashpoint.At("monitor-conversation-applied")
+		pausepoint.At(pausepoint.ConversationOutcome)
 	}
 	result := protocol.ApplyMonitorViewResult{}
 	if outcome.Conversation != "" {
-		result.Switch = &protocol.SwitchOutcome{Conversation: outcome.Conversation, Kind: protocol.SwitchOutcomeKind(outcome.Kind)}
+		result.Outcome = &protocol.ConversationOutcome{Conversation: outcome.Conversation, Kind: protocol.ConversationOutcomeKind(outcome.Kind)}
 		if outcome.Reason != "" {
-			result.Switch.Reason = &outcome.Reason
+			result.Outcome.Reason = &outcome.Reason
 		}
 	}
 	return result, nil
@@ -87,8 +87,8 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 			if err == nil {
 				result, err = Call[protocol.ApplyMonitorViewResult](ctx, d.router(), protocol.ApplyMonitorViewMessage{Cmd: "apply_monitor_view", SessionID: id, Epoch: view.Epoch.V, View: string(raw)})
 			}
-			if err == nil && result.Switch != nil {
-				d.applyOutpostSwitch(monitor, *result.Switch)
+			if err == nil && result.Outcome != nil {
+				d.applyOutpostConversation(monitor, *result.Outcome)
 			}
 			if err != nil {
 				failure = err
@@ -122,9 +122,9 @@ func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
 	}
 }
 
-func (d *Daemon) applyOutpostSwitch(monitor *sessionmonitor.Monitor, reply protocol.SwitchOutcome) {
-	outcome := sessionmonitor.SwitchOutcome{Conversation: reply.Conversation, Kind: sessionmonitor.SwitchOutcomeKind(reply.Kind), Reason: protocol.Deref(reply.Reason)}
-	(monitorHost{daemon: d}).SwitchApplied(monitor, outcome)
+func (d *Daemon) applyOutpostConversation(monitor *sessionmonitor.Monitor, reply protocol.ConversationOutcome) {
+	outcome := sessionmonitor.ConversationOutcome{Conversation: reply.Conversation, Kind: sessionmonitor.ConversationOutcomeKind(reply.Kind), Reason: protocol.Deref(reply.Reason)}
+	(monitorHost{daemon: d}).ConversationApplied(monitor, outcome)
 }
 
 func (d *Daemon) storedMonitorView(id protocol.SessionID) sessionmonitor.View {

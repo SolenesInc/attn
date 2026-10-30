@@ -8393,16 +8393,16 @@ model ApplyMonitorViewMessage {
 }
 
 model ApplyMonitorViewResult {
-  switch?: SwitchOutcome;
+  outcome?: ConversationOutcome;
 }
 
-model SwitchOutcome {
+model ConversationOutcome {
   conversation: string;
-  kind: SwitchOutcomeKind;
+  kind: ConversationOutcomeKind;
   reason?: string;
 }
 
-enum SwitchOutcomeKind { Bound: "bound", Opened: "opened", Shows: "shows", InPlace: "in_place", Dropped: "dropped" }
+enum ConversationOutcomeKind { Bound: "bound", Opened: "opened", Shows: "shows", InPlace: "in_place", Dropped: "dropped" }
 
 enum MonitorCommandKind { Settle: "settle", HandBack: "hand_back", Snooze: "snooze", Wake: "wake", CancelCountdown: "cancel_countdown", AgentTurn: "agent_turn" }
 enum SessionPlacePhase { PromptReady: "prompt_ready", WorkingOrPromptReady: "working_or_prompt_ready", TurnBoundary: "turn_boundary" }

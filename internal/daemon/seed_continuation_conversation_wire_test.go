@@ -8,7 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestASeedContinuationFollowsItsTendersConversationSwitchPastClose(t *testing.T) {
+func TestASeedContinuationFollowsItsTendersConversationMovePastClose(t *testing.T) {
 	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Pi} {
 		t.Run(string(harness), func(t *testing.T) {
 			w := newWorld(t, harness)
@@ -30,15 +30,15 @@ func TestASeedContinuationFollowsItsTendersConversationSwitchPastClose(t *testin
 				t.Fatal(err)
 			}
 			if got := continuationConversation(t, cli, seed); got != agent.ConversationID {
-				t.Fatalf("before the switch the seed resumes %q, want %q, the conversation its tender launched", got, agent.ConversationID)
+				t.Fatalf("before the move the seed resumes %q, want %q, the conversation its tender launched", got, agent.ConversationID)
 			}
 
-			switched := len(app.Log())
+			moved := len(app.Log())
 			app.TypeLine(tender, "/resume "+elsewhere.ConversationID)
 			agent.Prompted()
-			awaitSharedWith(app, switched, tender, other)
+			awaitSharedWith(app, moved, tender, other)
 			if got := continuationConversation(t, cli, seed); got != elsewhere.ConversationID {
-				t.Errorf("after the switch the seed resumes %q, want %q", got, elsewhere.ConversationID)
+				t.Errorf("after the move the seed resumes %q, want %q", got, elsewhere.ConversationID)
 			}
 
 			closePane(app, sessionPane{session: tender, desktop: workspace, pane: pane})

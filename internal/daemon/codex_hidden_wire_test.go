@@ -42,7 +42,7 @@ func TestNewInASharedCodexTerminalLeavesTheSessionItLeftOpenAndHidden(t *testing
 	}
 }
 
-func TestASharedCodexTerminalShowsTheSessionOfEachConversationItSwitchesToBeforeAnyPrompt(t *testing.T) {
+func TestASharedCodexTerminalShowsTheSessionOfEachConversationItMovesToBeforeAnyPrompt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
@@ -56,7 +56,7 @@ func TestASharedCodexTerminalShowsTheSessionOfEachConversationItSwitchesToBefore
 	taxCodex.Reply("Looked. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, tax, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	switchTo := func(command, previous string) string {
+	moveTo := func(command, previous string) string {
 		t.Helper()
 		mark := len(app.Log())
 		typeInto(app, terminal, command+"\r")
@@ -75,14 +75,14 @@ func TestASharedCodexTerminalShowsTheSessionOfEachConversationItSwitchesToBefore
 		})
 		return shown
 	}
-	if got := switchTo("/resume "+taxCodex.ConversationID, checkout); got != tax {
+	if got := moveTo("/resume "+taxCodex.ConversationID, checkout); got != tax {
 		t.Fatalf("after /resume of the conversation of %s, terminal %s shows session %s", tax, terminal, got)
 	}
 	if left := queriedSession(t, w.Client(), checkout); !protocol.Deref(left.Hidden) || left.State != protocol.SessionStateWaitingInput {
 		t.Errorf("the session the terminal left is %s (hidden=%v), want it hidden and still waiting on the user", left.State, protocol.Deref(left.Hidden))
 	}
 
-	fresh := switchTo("/new", tax)
+	fresh := moveTo("/new", tax)
 	if fresh == checkout || fresh == tax {
 		t.Fatalf("after /new, terminal %s shows session %s, want a new one", terminal, fresh)
 	}
@@ -90,7 +90,7 @@ func TestASharedCodexTerminalShowsTheSessionOfEachConversationItSwitchesToBefore
 		t.Errorf("the tile of %s shows session %s after the other terminal left it", tax, got)
 	}
 
-	if got := switchTo("/resume "+conversation, fresh); got != checkout {
+	if got := moveTo("/resume "+conversation, fresh); got != checkout {
 		t.Fatalf("after /resume of the conversation of %s, terminal %s shows session %s", checkout, terminal, got)
 	}
 	if back := queriedSession(t, w.Client(), checkout); protocol.Deref(back.Hidden) || back.State != protocol.SessionStateWaitingInput {

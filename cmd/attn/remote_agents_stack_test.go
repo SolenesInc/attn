@@ -161,8 +161,8 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 	}
 }
 
-func TestOutpostSwitchesKeepTheirHistoryWhileTheHomeOutcomeWaits(t *testing.T) {
-	for _, point := range []string{pausepoint.ConversationSwitchDecision, pausepoint.ConversationSwitchOutcome} {
+func TestOutpostConversationMovesKeepTheirHistoryWhileTheHomeOutcomeWaits(t *testing.T) {
+	for _, point := range []string{pausepoint.ConversationDecision, pausepoint.ConversationOutcome} {
 		t.Run(point, func(t *testing.T) {
 			home := testworld.NewStack(t)
 			outcome := home.PauseAt(point)
@@ -213,7 +213,7 @@ func TestOutpostSwitchesKeepTheirHistoryWhileTheHomeOutcomeWaits(t *testing.T) {
 	}
 }
 
-func TestAnOutpostConversationSwitchRebindsBeforeReload(t *testing.T) {
+func TestAnOutpostConversationMoveRebindsBeforeReload(t *testing.T) {
 	home := testworld.NewStack(t)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
@@ -416,7 +416,7 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 
 func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 	home := testworld.NewStack(t)
-	deciding := home.PauseAt(pausepoint.ConversationSwitchDecision)
+	deciding := home.PauseAt(pausepoint.ConversationDecision)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()
@@ -448,12 +448,12 @@ func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 	current := testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool {
 		return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens == 2*len(reply)
 	})
-	t.Logf("pending switch survived outpost restart: %s -> %s, tokens=%d", first, next.ID, current.Usage.TotalTokens)
+	t.Logf("pending conversation survived outpost restart: %s -> %s, tokens=%d", first, next.ID, current.Usage.TotalTokens)
 }
 
 func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T) {
 	home := testworld.NewStack(t)
-	outcome := home.PauseAt(pausepoint.ConversationSwitchOutcome)
+	outcome := home.PauseAt(pausepoint.ConversationOutcome)
 	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	bound := outpost.PauseAt(pausepoint.ConversationCandidateBound)
@@ -786,7 +786,7 @@ func TestLeavingEnrollmentBeforeRecoveryStopsTheOutpostsSharedCodex(t *testing.T
 	t.Logf("outpost-only shared server stopped after enrollment leave before PTY recovery (conversation %s)", agent.ConversationID)
 }
 
-func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.T) {
+func TestOutpostConversationHistorySurvivesConversationMovesWhileDisconnected(t *testing.T) {
 	for _, scenario := range []string{"clear", "resume-closed", "two-clears", "outpost-restart"} {
 		t.Run(scenario, func(t *testing.T) {
 			home := testworld.NewStack(t)
@@ -822,7 +822,7 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 			restarting := len(app.Log())
 			outpost.Stop()
 			outpostStateSince(app, "outpost", protocol.OutpostStateLost, restarting)
-			observed := outpost.PauseAt(pausepoint.ConversationSwitchObserved)
+			observed := outpost.PauseAt(pausepoint.ConversationObserved)
 			started := len(app.Log())
 			outpost.Start()
 			outpostStateSince(app, "outpost", protocol.OutpostStateConnected, started)
@@ -901,7 +901,7 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 			if scenario != "outpost-restart" {
 				opened, err := time.Parse(time.RFC3339Nano, protocol.Deref(ready.TurnOpenedAt))
 				if err != nil || opened.Before(pendingAt) || !opened.Before(reconnectedAt) {
-					t.Fatalf("turn opened %s, want between switch %s and reconnect %s: %v", protocol.Deref(ready.TurnOpenedAt), pendingAt, reconnectedAt, err)
+					t.Fatalf("turn opened %s, want between move %s and reconnect %s: %v", protocol.Deref(ready.TurnOpenedAt), pendingAt, reconnectedAt, err)
 				}
 			}
 			t.Logf("%s: offline conversation returns in terminal %s, host %s, tokens=%d, turn=%s", scenario, terminal, pair.Host, ready.Usage.TotalTokens, protocol.Deref(ready.TurnOpenedAt))
@@ -913,8 +913,8 @@ func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *test
 	home := testworld.NewStack(t)
 	started := home.PauseEvery(pausepoint.OutpostRecoveryStarted)
 	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
-	decision := home.PauseEvery(pausepoint.ConversationSwitchDecision)
-	outcome := home.PauseEvery(pausepoint.ConversationSwitchOutcome)
+	decision := home.PauseEvery(pausepoint.ConversationDecision)
+	outcome := home.PauseEvery(pausepoint.ConversationOutcome)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()
@@ -1020,11 +1020,11 @@ func TestAnOutpostConversationStaysRecoverableWhenItsWorkerIsGone(t *testing.T) 
 	}
 }
 
-func TestADroppedOutpostSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) {
+func TestADroppedOutpostConversationMoveKeepsItsInFlightDeliveryUsable(t *testing.T) {
 	home := testworld.NewStack(t)
 	owners := home.PauseEvery(pausepoint.ConversationOwnerResolved)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-	dropped := outpost.PauseAt(pausepoint.ConversationSwitchDropped)
+	dropped := outpost.PauseAt(pausepoint.ConversationDropped)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
@@ -1071,7 +1071,7 @@ func TestADroppedOutpostSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) {
 		request.RequestID, request.SessionID, request.Text = uuid.NewString(), protocol.SessionID(id), "continue "+id
 		placed = testworld.Request(delivery, request, protocol.EventSessionAnnotationsSubmitResult, func(m protocol.SessionAnnotationsSubmitResultMessage) bool { return m.RequestID == request.RequestID })
 		if placed.Status != "delivered" || server.Prompted(conversation) != request.Text {
-			t.Fatalf("delivery after dropped switch to %s: %+v", id, placed)
+			t.Fatalf("delivery after dropped move to %s: %+v", id, placed)
 		}
 	}
 	halt()
@@ -1093,13 +1093,13 @@ func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
 	for _, reload := range []bool{false, true} {
 		name := "control"
 		if reload {
-			name = "delayed-switch-after-reload"
+			name = "delayed-move-after-reload"
 		}
 		t.Run(name, func(t *testing.T) {
 			home := testworld.NewStack(t)
 			var deciding *testworld.Pause
 			if reload {
-				deciding = home.PauseAt(pausepoint.ConversationSwitchDecision)
+				deciding = home.PauseAt(pausepoint.ConversationDecision)
 			}
 			outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 			pair := testworld.PrepareOutpostPair(t, home, outpost)
@@ -1186,8 +1186,8 @@ func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
 			t.Logf("%s: next-prompt tokens=%d final tokens=%d native=%s terminal=%s", name, ready.Usage.TotalTokens, final.Usage.TotalTokens, conversation, terminal)
 		})
 	}
-	if len(totals) == 2 && totals["control"] != totals["delayed-switch-after-reload"] {
-		t.Fatalf("reload tokens=%d, control=%d", totals["delayed-switch-after-reload"], totals["control"])
+	if len(totals) == 2 && totals["control"] != totals["delayed-move-after-reload"] {
+		t.Fatalf("reload tokens=%d, control=%d", totals["delayed-move-after-reload"], totals["control"])
 	}
 }
 

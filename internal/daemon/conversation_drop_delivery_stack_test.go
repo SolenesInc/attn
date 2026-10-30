@@ -11,7 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestADroppedConversationSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) {
+func TestADroppedConversationMoveKeepsItsInFlightDeliveryUsable(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	owners := s.PauseEvery(pausepoint.ConversationOwnerResolved)
 	bound := s.PauseAt(pausepoint.ConversationCandidateBound)
@@ -65,7 +65,7 @@ func TestADroppedConversationSwitchKeepsItsInFlightDeliveryUsable(t *testing.T) 
 		t.Fatalf("in-flight prompt = %q, want %q", got, request.Text)
 	}
 	if sent := submitSessionAnnotationFeedback(deliveryApp, second, "also cover refunds"); sent.status != "delivered" {
-		t.Fatalf("delivery after the dropped switch = %+v, want delivered", sent)
+		t.Fatalf("delivery after the dropped move = %+v, want delivered", sent)
 	}
 	if got := server.Prompted(conversation); got != "also cover refunds" {
 		t.Fatalf("next prompt = %q, want also cover refunds", got)

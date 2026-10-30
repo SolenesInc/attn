@@ -170,10 +170,10 @@ func (p *piTerminal) initialPrompt() string { return p.prompt }
 
 func (p *piTerminal) submit(prompt string) error {
 	if strings.TrimSpace(prompt) == "/new" {
-		return p.switchTo(uuid.NewString())
+		return p.moveTo(uuid.NewString())
 	}
 	if conversation, ok := strings.CutPrefix(strings.TrimSpace(prompt), "/resume "); ok {
-		return p.switchTo(strings.TrimSpace(conversation))
+		return p.moveTo(strings.TrimSpace(conversation))
 	}
 	if err := p.record("user", prompt); err != nil {
 		return err
@@ -204,7 +204,7 @@ func (p *piTerminal) record(role, text string) error {
 	})
 }
 
-func (p *piTerminal) switchTo(conversation string) error {
+func (p *piTerminal) moveTo(conversation string) error {
 	p.conversation = conversation
 	if err := p.openSession(); err != nil {
 		return err

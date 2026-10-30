@@ -173,7 +173,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if plugin != nil {
 		defer plugin.abort()
 	}
-	d.monitors().registry.DropSwitches(msg.TerminalID)
+	d.monitors().registry.DropPendingConversations(msg.TerminalID)
 	opts.HostName = protocol.Deref(msg.HostName)
 	terminal, sessionID := msg.TerminalID, msg.SessionID
 	d.syncMonitorConversation(sessionID)
@@ -327,7 +327,7 @@ func (d *Daemon) killTerminal(ctx context.Context, msg protocol.TerminalKillMess
 }
 
 func (d *Daemon) removeTerminal(ctx context.Context, msg protocol.TerminalRemoveMessage) (struct{}, error) {
-	d.monitors().registry.DropSwitches(msg.TerminalID)
+	d.monitors().registry.DropPendingConversations(msg.TerminalID)
 	err := d.ptyBackend.Remove(ctx, msg.TerminalID)
 	if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
 		err = nil

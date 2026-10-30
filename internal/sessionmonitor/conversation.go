@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-type pendingSwitch struct {
+type pendingConversation struct {
 	Conversation
 	candidate *Monitor
 	terminal  harness.TerminalID
@@ -20,12 +20,12 @@ type pendingSwitch struct {
 }
 
 type ConversationReceipt struct {
-	done      chan struct{}
-	err       error
-	switching bool
+	done  chan struct{}
+	err   error
+	moves bool
 }
 
-func (r *ConversationReceipt) Switching() bool { return r != nil && r.switching }
+func (r *ConversationReceipt) Moves() bool { return r != nil && r.moves }
 
 func (r *ConversationReceipt) Wait(ctx context.Context) error {
 	if r == nil {
@@ -100,14 +100,14 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 		owner = m
 	}
 	owner.mu.Lock()
-	switching := terminal != "" && !inPlace
-	for _, pending := range owner.pendingSwitch {
+	moves := terminal != "" && !inPlace
+	for _, pending := range owner.pendingConversations {
 		if pending.terminal == inputTerminal && pending.NativeID == observation.NativeID && pending.receipt != nil {
-			switching = pending.receipt.switching
+			moves = pending.receipt.moves
 		}
 	}
-	receipt := &ConversationReceipt{done: make(chan struct{}), switching: switching}
-	owner.pendingSwitch = append(owner.pendingSwitch, pendingSwitch{Conversation: proposed, candidate: candidate, terminal: inputTerminal, receipt: receipt})
+	receipt := &ConversationReceipt{done: make(chan struct{}), moves: moves}
+	owner.pendingConversations = append(owner.pendingConversations, pendingConversation{Conversation: proposed, candidate: candidate, terminal: inputTerminal, receipt: receipt})
 	owner.pendingDirty = true
 	view := owner.viewLocked()
 	owner.mu.Unlock()
@@ -119,7 +119,7 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 	if !owner.save(view) || !owner.savePending() {
 		return nil, false
 	}
-	crashpoint.At(CrashSwitchPending)
+	crashpoint.At(CrashConversationPending)
 	return receipt, owner.publish(view)
 }
 
@@ -130,8 +130,8 @@ func (r *Registry) receiptLocked(terminal harness.TerminalID, native string) *Co
 	}
 	owner.mu.Lock()
 	defer owner.mu.Unlock()
-	for i := len(owner.pendingSwitch) - 1; i >= 0; i-- {
-		pending := owner.pendingSwitch[i]
+	for i := len(owner.pendingConversations) - 1; i >= 0; i-- {
+		pending := owner.pendingConversations[i]
 		if pending.terminal == terminal && pending.NativeID == native {
 			return pending.receipt
 		}
@@ -176,24 +176,24 @@ func (m *Monitor) candidate(proposed Conversation) *Monitor {
 	return candidate
 }
 
-const CrashSwitchPending = "monitor-switch-pending"
+const CrashConversationPending = "monitor-conversation-pending"
 
 func (m *Monitor) pendingHeadLocked() Conversation {
-	if len(m.pendingSwitch) == 0 {
+	if len(m.pendingConversations) == 0 {
 		return Conversation{}
 	}
-	return m.pendingSwitch[0].Conversation
+	return m.pendingConversations[0].Conversation
 }
 
 func (m *Monitor) pendingChainLocked() []Conversation {
 	var chain []Conversation
-	for _, pending := range m.pendingSwitch {
+	for _, pending := range m.pendingConversations {
 		chain = append(chain, pending.Conversation)
 	}
 	return chain
 }
 
-func (m *Monitor) PendingSwitch() (Conversation, bool) {
+func (m *Monitor) PendingConversation() (Conversation, bool) {
 	if m == nil {
 		return Conversation{}, false
 	}
@@ -218,10 +218,10 @@ func (m *Monitor) Candidate(conversation string) *Monitor {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.pendingSwitch) == 0 || m.pendingSwitch[0].NativeID != conversation {
+	if len(m.pendingConversations) == 0 || m.pendingConversations[0].NativeID != conversation {
 		return nil
 	}
-	return m.pendingSwitch[0].candidate
+	return m.pendingConversations[0].candidate
 }
 
 func (m *Monitor) RebuildCandidates() {
@@ -231,8 +231,8 @@ func (m *Monitor) RebuildCandidates() {
 	r := m.registry
 	r.mu.Lock()
 	m.mu.Lock()
-	for i := range m.pendingSwitch {
-		pending := &m.pendingSwitch[i]
+	for i := range m.pendingConversations {
+		pending := &m.pendingConversations[i]
 		if pending.candidate != nil {
 			continue
 		}
@@ -259,7 +259,7 @@ func (m *Monitor) RebuildCandidates() {
 		m.mu.Lock()
 		pending.candidate, pending.terminal = candidate, terminal
 		if pending.receipt == nil {
-			pending.receipt = &ConversationReceipt{done: make(chan struct{}), switching: proposed.Terminal != "" && !same}
+			pending.receipt = &ConversationReceipt{done: make(chan struct{}), moves: proposed.Terminal != "" && !same}
 		}
 		r.monitors[candidate] = struct{}{}
 		r.owners[terminal] = m
@@ -269,15 +269,15 @@ func (m *Monitor) RebuildCandidates() {
 	r.mu.Unlock()
 }
 
-func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) bool {
+func (m *Monitor) SettleConversation(nativeID string, bound *Monitor, reason string) bool {
 	if m == nil || bound == nil {
 		return false
 	}
 	m.mu.Lock()
 	further := false
-	if len(m.pendingSwitch) > 0 {
-		for _, pending := range m.pendingSwitch[1:] {
-			further = further || pending.terminal == m.pendingSwitch[0].terminal
+	if len(m.pendingConversations) > 0 {
+		for _, pending := range m.pendingConversations[1:] {
+			further = further || pending.terminal == m.pendingConversations[0].terminal
 		}
 	}
 	m.mu.Unlock()
@@ -299,14 +299,14 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 	r := m.registry
 	r.mu.Lock()
 	m.mu.Lock()
-	if len(m.pendingSwitch) == 0 || m.pendingSwitch[0].NativeID != nativeID {
+	if len(m.pendingConversations) == 0 || m.pendingConversations[0].NativeID != nativeID {
 		m.mu.Unlock()
 		r.mu.Unlock()
 		return false
 	}
-	head := m.pendingSwitch[0]
-	var tail, remaining []pendingSwitch
-	for _, pending := range m.pendingSwitch[1:] {
+	head := m.pendingConversations[0]
+	var tail, remaining []pendingConversation
+	for _, pending := range m.pendingConversations[1:] {
 		if pending.terminal == head.terminal {
 			tail = append(tail, pending)
 		} else {
@@ -316,12 +316,12 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 	if bound != m {
 		bound.mu.Lock()
 	}
-	target := append([]pendingSwitch(nil), bound.pendingSwitch...)
+	target := append([]pendingConversation(nil), bound.pendingConversations...)
 	if bound == m {
 		target = remaining
 	}
 	target = append(target, tail...)
-	conversations := func(entries []pendingSwitch) []Conversation {
+	conversations := func(entries []pendingConversation) []Conversation {
 		var result []Conversation
 		for _, entry := range entries {
 			result = append(result, entry.Conversation)
@@ -336,8 +336,8 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 		m.logf("monitor pending handoff: %v", err)
 		m.retrySaveLocked()
 	} else {
-		m.pendingSwitch = remaining
-		bound.pendingSwitch = target
+		m.pendingConversations = remaining
+		bound.pendingConversations = target
 		m.pendingDirty, bound.pendingDirty = false, false
 		m.pendingSession, bound.pendingSession = m.session, bound.session
 		if head.candidate == bound {
@@ -374,7 +374,7 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 	return true
 }
 
-func (r *Registry) DropSwitches(terminal harness.TerminalID) {
+func (r *Registry) DropPendingConversations(terminal harness.TerminalID) {
 	r.mu.Lock()
 	owner := r.owners[terminal]
 	delete(r.owners, terminal)
@@ -382,8 +382,8 @@ func (r *Registry) DropSwitches(terminal harness.TerminalID) {
 	var dropped []*Monitor
 	if owner != nil {
 		owner.mu.Lock()
-		var remaining []pendingSwitch
-		for _, pending := range owner.pendingSwitch {
+		var remaining []pendingConversation
+		for _, pending := range owner.pendingConversations {
 			if pending.terminal != terminal {
 				remaining = append(remaining, pending)
 				continue
@@ -394,7 +394,7 @@ func (r *Registry) DropSwitches(terminal harness.TerminalID) {
 				close(pending.receipt.done)
 			}
 		}
-		owner.pendingSwitch = remaining
+		owner.pendingConversations = remaining
 		owner.pendingDirty = true
 		owner.savePendingLocked()
 		owner.mu.Unlock()
@@ -415,7 +415,7 @@ func (m *Monitor) SetConversation(observation ConversationObservation) {
 		return
 	}
 	m.mu.Lock()
-	if len(m.pendingSwitch) == 0 {
+	if len(m.pendingConversations) == 0 {
 		m.conversationInput = Conversation{ConversationObservation: observation}
 	}
 	m.mu.Unlock()
@@ -430,18 +430,18 @@ func (m *Monitor) QueueConversationWhile(absent func() bool, observation Convers
 	if !absent() {
 		return false
 	}
-	m.pendingConversation = &observation
+	m.queuedConversation = &observation
 	return true
 }
 
-func (m *Monitor) TakePendingConversation() (ConversationObservation, bool) {
+func (m *Monitor) TakeQueuedConversation() (ConversationObservation, bool) {
 	if m == nil {
 		return ConversationObservation{}, false
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	observation := m.pendingConversation
-	m.pendingConversation = nil
+	observation := m.queuedConversation
+	m.queuedConversation = nil
 	if observation == nil {
 		return ConversationObservation{}, false
 	}
@@ -481,11 +481,11 @@ func (m *Monitor) AdoptDropped(candidate *Monitor) {
 	state, evidence, turn, lastModelRequestAt := candidate.state, candidate.evidence, candidate.turn, candidate.lastModelRequestAt
 	candidate.mu.Unlock()
 	m.mu.Lock()
-	if len(m.pendingSwitch) == 0 {
+	if len(m.pendingConversations) == 0 {
 		m.mu.Unlock()
 		return
 	}
-	conversation := m.pendingSwitch[0].Conversation
+	conversation := m.pendingConversations[0].Conversation
 	m.conversation, m.state, m.evidence = conversation.NativeID, state, evidence
 	m.conversationInput, m.turn, m.lastModelRequestAt = conversation, turn, lastModelRequestAt
 	m.input.observePhaseLocked(state.State)
@@ -553,7 +553,7 @@ func (r *Registry) discardUnbound(candidate *Monitor) {
 	for owner := range r.monitors {
 		owner.mu.Lock()
 		referenced := false
-		for _, pending := range owner.pendingSwitch {
+		for _, pending := range owner.pendingConversations {
 			referenced = referenced || pending.candidate == candidate
 		}
 		owner.mu.Unlock()
