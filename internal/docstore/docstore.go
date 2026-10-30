@@ -51,7 +51,21 @@ type CollectionSchema struct {
 	Namespace  string      `json:"namespace"`
 	Collection string      `json:"collection"`
 	Fields     []FieldSpec `json:"fields"`
+	Text       []string    `json:"-"`
 	Table      string      `json:"-"`
+}
+
+type TextMatch struct {
+	ID        string
+	Key       string
+	CreatedAt time.Time
+	Score     []float64
+	Carries   [][]bool
+}
+
+type TextQuote struct {
+	Text  []string
+	Spans [][][2]int
 }
 
 type Filter struct {
@@ -267,6 +281,14 @@ func (s CollectionSchema) Validate() error {
 		}
 		seen[f.Name] = true
 	}
+	clear(seen)
+	for _, name := range s.Text {
+		if !fieldNameRe.MatchString(name) || seen[name] {
+			return fmt.Errorf("docstore: %s/%s has an invalid or repeated text field %q", s.Namespace, s.Collection, name)
+		}
+		seen[name] = true
+	}
+
 	return nil
 }
 

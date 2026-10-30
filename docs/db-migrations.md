@@ -42,3 +42,4 @@ restore a backup taken before the upgrade with `attn db restore`.
 - Prefer `ALTER TABLE` to rebuilding a table. A rebuild copies columns from
   the live table rather than a hard-coded list.
 - Delete and recreate a dev database that ends up odd after switching branches.
+- A migration that rewrites document text or metadata held in a text index must rebuild that collection's index.

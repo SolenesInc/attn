@@ -368,8 +368,8 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 	t.Run("search names each hit and says what it trimmed", func(t *testing.T) {
 		hit := plant(t, s, "Find seeds by keyword", "-m", "Agents search the garden before planting, so duplicates get found")
 		requireStdout(t, s.Attn("seed", "search", "duplicates", "planting"),
-			"1 seed matches \"duplicates planting\"",
-			"\n"+hit.ID+"  "+hit.StepSlug+"  Find seeds by keyword\n  planted  body  Agents search the garden before planting")
+			"1 seed carries every word",
+			"\n"+hit.ID+"  "+hit.StepSlug+"  Find seeds by keyword\n  planted · ", "  body  Agents search the garden before planting")
 		if out := s.Attn("seed", "search", "duplicates").Stdout; strings.Contains(out, "max_results") {
 			t.Errorf("an untrimmed search talks about the cap:\n%s", out)
 		}
@@ -378,7 +378,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			plant(t, s, title)
 		}
 		requireStdout(t, s.Attn("seed", "search", "zanzibar", "--limit", "2"),
-			"3 seeds match \"zanzibar\"", "\nshowing 2 of 3 — max_results=2, asked for 3. Narrow the query, or `--limit <n>` up to 1000.\n")
+			"3 seeds carry every word, 0 carry some — best first", "\nshowing 2 of 3 — `--limit <n>` for more, up to 1000\n")
 
 		var garden protocol.SeedListResult
 		s.Attn("seed", "ls", "--json").JSON(t, &garden)

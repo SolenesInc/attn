@@ -191,15 +191,18 @@ func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 		t.Fatalf("open for seeding: %v", err)
 	}
 	base := time.Date(2026, 8, 3, 9, 0, 0, 0, time.UTC)
-	if _, err := s.DefineDocumentCollection(requestsDeclaration(), base); err != nil {
+	if _, err := defineLegacyDocumentCollection(s, requestsDeclaration(), base); err != nil {
 		t.Fatalf("seed declaration: %v", err)
 	}
-	schema := declOf(t, s, "test/approval-gate", "requests")
+	schema, _, err := legacyDocumentCollection(s, "test/approval-gate", "requests")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, doc := range []struct{ id, body string }{
 		{"r1", `{"status":"open","attempts":2}`},
 		{"r2", `{"status":"done","attempts":9}`},
 	} {
-		if _, err := s.PutDocument(schema, doc.id, []byte(doc.body), base, nil); err != nil {
+		if _, err := s.PutDocument(*schema, doc.id, []byte(doc.body), base, nil); err != nil {
 			t.Fatalf("seed %s: %v", doc.id, err)
 		}
 	}

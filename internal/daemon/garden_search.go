@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage) {
-	terms, err := garden.SearchTerms(msg.Query)
+	words, err := garden.SearchWords(msg.Query)
 	if err != nil {
 		d.sendGardenError(conn, "search", err)
 		return
@@ -23,7 +22,7 @@ func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage
 	}
 	if limit > garden.MaxSearchResults {
 		d.sendGardenError(conn, "search", fmt.Errorf(
-			"max_results=%d, asked for %d; that is past the whole garden, so no query needs it",
+			"max_results=%d, asked for %d; use a smaller limit or narrow the query",
 			garden.MaxSearchResults, limit))
 		return
 	}
@@ -35,61 +34,54 @@ func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage
 		d.sendGardenError(conn, "search", err)
 		return
 	}
-	logs, err := d.readGardenLogs()
+	seedRows, err := d.store.MatchText(garden.SeedsSchema(), words, "")
 	if err != nil {
 		d.sendGardenError(conn, "search", err)
 		return
 	}
-	subjects := make([]garden.SearchSubject, 0, len(read.seeds))
-	for _, seed := range read.seeds {
-		subjects = append(subjects, garden.SearchSubject{Seed: seed, Log: logs[seed.ID]})
+	noteRows, err := d.store.MatchText(garden.NotesSchema(), words, "seed")
+	if err != nil {
+		d.sendGardenError(conn, "search", err)
+		return
 	}
-	hits, matched := garden.Search(subjects, terms, limit)
+	ranked := garden.Rank(words, seedRows, noteRows, read.seeds)
+	hits := ranked.Hits[:min(limit, len(ranked.Hits))]
 	result := &protocol.SeedSearchResult{
 		Hits:     make([]protocol.SeedSearchHit, 0, len(hits)),
-		Matched:  matched,
+		Matched:  ranked.Matched,
+		Partial:  ranked.Partial,
 		Limit:    limit,
 		Searched: len(read.seeds),
 	}
+	quotes := map[string]map[string]docstore.TextQuote{}
+	ids := map[string][]string{}
+	schemas := map[string]docstore.CollectionSchema{}
 	for _, hit := range hits {
+		key := docstore.Target(hit.Quoted.Schema.Namespace, hit.Quoted.Schema.Collection)
+		ids[key] = append(ids[key], hit.Quoted.ID)
+		schemas[key] = hit.Quoted.Schema
+	}
+	for key, schema := range schemas {
+		quotes[key], err = d.store.TextSpans(schema, ids[key], words)
+		if err != nil {
+			d.sendGardenError(conn, "search", err)
+			return
+		}
+	}
+	for _, hit := range hits {
+		key := docstore.Target(hit.Quoted.Schema.Namespace, hit.Quoted.Schema.Collection)
+		quote, found := quotes[key][hit.Quoted.ID]
+		snippet := ""
+		if found {
+			snippet = garden.Snippet(quote.Text[hit.Quoted.Field], quote.Spans[hit.Quoted.Field])
+		}
+
 		result.Hits = append(result.Hits, protocol.SeedSearchHit{
-			Seed:    read.seed(hit.Seed, read.docs[hit.Seed.ID]),
-			Where:   hit.Where,
-			Snippet: hit.Snippet,
+			Seed:       read.seed(hit.Seed, read.docs[hit.Seed.ID]),
+			Where:      hit.Where,
+			Snippet:    snippet,
+			LastActive: hit.LastActive.UTC().Format(docstore.TimeFormat),
 		})
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedSearchResult: result})
-}
-
-func (d *Daemon) readGardenLogs() (map[string][]string, error) {
-	if d.store == nil {
-		return nil, errors.New("no database")
-	}
-	page := docstore.MaxLimit
-	logs := map[string][]string{}
-	after := ""
-	for {
-		read, _, err := d.runDocQuery(docstore.Query{
-			Namespace:  garden.Namespace,
-			Collection: garden.CollectionNotes,
-			Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
-			Limit:      page,
-			After:      after,
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, doc := range read.Documents {
-			note, err := garden.DecodeNote(doc.Body)
-			if err != nil {
-				d.logf("garden: note %s has an unreadable body: %v", doc.ID, err)
-				continue
-			}
-			logs[note.Seed] = append(logs[note.Seed], note.Body)
-		}
-		if len(read.Documents) < page {
-			return logs, nil
-		}
-		after = read.Documents[len(read.Documents)-1].ID
-	}
 }

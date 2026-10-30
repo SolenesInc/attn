@@ -58,7 +58,7 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer migrated.Close()
-			storedSchema, _, err = migrated.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+			storedSchema, _, err = legacyDocumentCollection(migrated, garden.Namespace, garden.CollectionSeeds)
 			if err != nil {
 				t.Fatal(err)
 			}

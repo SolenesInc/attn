@@ -17,10 +17,10 @@ func TestMigration126RecomputesStoredSlugs(t *testing.T) {
 	}
 	defer s.Close()
 
-	if _, err := s.DefineDocumentCollection(garden.SeedsSchema(), time.Now()); err != nil {
+	if _, err := defineLegacyDocumentCollection(s, garden.SeedsSchema(), time.Now()); err != nil {
 		t.Fatalf("define seeds: %v", err)
 	}
-	schema, _, err := s.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	schema, _, err := legacyDocumentCollection(s, garden.Namespace, garden.CollectionSeeds)
 	if err != nil {
 		t.Fatalf("read the seeds declaration: %v", err)
 	}

@@ -2,9 +2,11 @@ package garden
 
 import (
 	"fmt"
+	"sort"
 	"strings"
-	"unicode"
-	"unicode/utf8"
+	"time"
+
+	"github.com/victorarias/attn/internal/docstore"
 )
 
 const (
@@ -14,97 +16,163 @@ const (
 )
 
 const (
-	DefaultSearchResults = 25
+	DefaultSearchResults = 10
 	MaxSearchResults     = 1000
 	MaxSearchQueryChars  = MaxTitleChars
 	SnippetChars         = 160
 )
 
-type SearchSubject struct {
-	Seed Seed
-	Log  []string
+type SearchQuote struct {
+	Schema docstore.CollectionSchema
+	ID     string
+	Field  int
 }
 
 type SearchHit struct {
-	Seed    Seed
-	Where   string
-	Snippet string
+	Seed       Seed
+	Where      string
+	LastActive time.Time
+	Quoted     SearchQuote
 }
 
-func SearchTerms(query string) ([]string, error) {
+type Ranked struct {
+	Hits    []SearchHit
+	Matched int
+	Partial int
+}
+
+func SearchWords(query string) ([]string, error) {
 	trimmed := strings.TrimSpace(query)
-	if trimmed == "" {
-		return nil, fmt.Errorf("a search needs something to look for: `attn seed search <words>`")
-	}
 	if n := len([]rune(trimmed)); n > MaxSearchQueryChars {
 		return nil, fmt.Errorf("max_query_chars=%d, asked for %d; search takes the words that name the work, not a whole body", MaxSearchQueryChars, n)
 	}
-	return strings.Fields(strings.ToLower(trimmed)), nil
+	words := docstore.Words(trimmed)
+	if len(words) == 0 {
+		return nil, fmt.Errorf("a search needs words to look for: `attn seed search <words>`")
+	}
+	return words, nil
 }
 
-func Search(subjects []SearchSubject, terms []string, limit int) (hits []SearchHit, matched int) {
-	if len(terms) == 0 {
-		return nil, 0
+type rankedSeed struct {
+	hit            SearchHit
+	carries        []bool
+	titleAll       bool
+	coverage       int
+	quotedCoverage int
+	quotedAt       time.Time
+	bm25           float64
+	logScore       float64
+	rrf            float64
+	position       int
+}
+
+func Rank(words []string, seedRows, noteRows []docstore.TextMatch, seeds []Seed) Ranked {
+	byID := map[string]*rankedSeed{}
+	for _, seed := range seeds {
+		stateAt, _ := time.Parse(time.RFC3339Nano, seed.StateChangedAt)
+		byID[seed.ID] = &rankedSeed{hit: SearchHit{Seed: seed, LastActive: stateAt}, carries: make([]bool, len(words))}
 	}
-	if limit <= 0 {
-		limit = DefaultSearchResults
-	}
-	byWhere := map[string][]SearchHit{}
-	for _, subject := range subjects {
-		hit, ok := searchSubject(subject, terms)
-		if !ok {
+	for _, row := range seedRows {
+		r := byID[row.ID]
+		if r == nil {
 			continue
 		}
-		matched++
-		byWhere[hit.Where] = append(byWhere[hit.Where], hit)
-	}
-	hits = make([]SearchHit, 0, min(matched, limit))
-	for _, where := range []string{MatchTitle, MatchBody, MatchLog} {
-		for _, hit := range byWhere[where] {
-			if len(hits) == limit {
-				return hits, matched
+		if row.CreatedAt.After(r.hit.LastActive) {
+			r.hit.LastActive = row.CreatedAt
+		}
+		for field, carried := range row.Carries {
+			count := mergeCarried(r.carries, carried)
+			if field == 0 {
+				r.titleAll = count == len(words)
 			}
-			hits = append(hits, hit)
+			if count > r.quotedCoverage {
+				r.quotedCoverage = count
+				r.hit.Quoted = SearchQuote{SeedsSchema(), row.ID, field}
+				r.hit.Where = []string{MatchTitle, MatchBody}[field]
+			}
 		}
+		r.bm25 = 10*row.Score[0] + 3*row.Score[1]
 	}
-	return hits, matched
-}
-
-func searchSubject(subject SearchSubject, terms []string) (SearchHit, bool) {
-	fields := []struct {
-		where string
-		text  string
-	}{
-		{MatchTitle, subject.Seed.Title},
-		{MatchBody, subject.Seed.Body},
-	}
-	for _, entry := range subject.Log {
-		fields = append(fields, struct {
-			where string
-			text  string
-		}{MatchLog, entry})
-	}
-	for _, field := range fields {
-		if !carriesAll(field.text, terms) {
+	for _, row := range noteRows {
+		r := byID[row.Key]
+		if r == nil {
 			continue
 		}
-		return SearchHit{Seed: subject.Seed, Where: field.where, Snippet: Snippet(field.text, terms)}, true
-	}
-	return SearchHit{}, false
-}
-
-func carriesAll(text string, terms []string) bool {
-	lowered := strings.ToLower(text)
-	for _, term := range terms {
-		if !strings.Contains(lowered, term) {
-			return false
+		if row.CreatedAt.After(r.hit.LastActive) {
+			r.hit.LastActive = row.CreatedAt
+		}
+		r.logScore = max(r.logScore, row.Score[0])
+		count := mergeCarried(r.carries, row.Carries[0])
+		if count > r.quotedCoverage || count == r.quotedCoverage && r.hit.Where == MatchLog && row.CreatedAt.After(r.quotedAt) {
+			r.quotedCoverage, r.quotedAt = count, row.CreatedAt
+			r.hit.Quoted = SearchQuote{NotesSchema(), row.ID, 0}
+			r.hit.Where = MatchLog
 		}
 	}
-	return true
+	var rows []*rankedSeed
+	out := Ranked{Hits: []SearchHit{}}
+	for _, seed := range seeds {
+		r := byID[seed.ID]
+		for _, carried := range r.carries {
+			if carried {
+				r.coverage++
+			}
+		}
+		if r.coverage == 0 {
+			continue
+		}
+		if r.coverage == len(words) {
+			out.Matched++
+		} else {
+			out.Partial++
+		}
+		r.bm25 += r.logScore
+		rows = append(rows, r)
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].bm25 > rows[j].bm25 })
+	for i, row := range rows {
+		row.rrf = 1 / float64(10+i)
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].hit.LastActive.After(rows[j].hit.LastActive) })
+	for i, row := range rows {
+		row.rrf += 1 / float64(10+i)
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if a.titleAll != b.titleAll {
+			return a.titleAll
+		}
+		if a.coverage != b.coverage {
+			return a.coverage > b.coverage
+		}
+		return a.rrf > b.rrf
+	})
+	for i, row := range rows {
+		row.position = i
+		if !Closed(row.hit.Seed.Status) {
+			row.position -= 5
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].position < rows[j].position })
+	for _, row := range rows {
+		out.Hits = append(out.Hits, row.hit)
+	}
+	return out
 }
 
-func Snippet(text string, terms []string) string {
-	line, at := bestLine(text, terms)
+func mergeCarried(into, from []bool) int {
+	count := 0
+	for i, carried := range from {
+		if carried {
+			into[i] = true
+			count++
+		}
+	}
+	return count
+}
+
+func Snippet(text string, spans [][2]int) string {
+	line, at := bestLine(text, spans)
 	line, at = trimLine(line, at)
 	runes := []rune(line)
 	if len(runes) <= SnippetChars {
@@ -124,48 +192,25 @@ func Snippet(text string, terms []string) string {
 	return out
 }
 
-func bestLine(text string, terms []string) (string, int) {
-	bestCarried, bestLine, bestAt := 0, firstLineOf(text), 0
+func bestLine(text string, spans [][2]int) (string, int) {
+	best, _, _ := strings.Cut(text, "\n")
+	bestCount, bestAt, offset := 0, 0, 0
 	for line := range strings.Lines(text) {
-		carried, at := 0, -1
-		for _, term := range terms {
-			found := foldedIndex(line, term)
-			if found < 0 {
-				continue
-			}
-			carried++
-			if at < 0 || found < at {
-				at = found
+		count, first := 0, -1
+		for _, span := range spans {
+			if span[0] >= offset && span[0] < offset+len(line) {
+				count++
+				if first < 0 || span[0]-offset < first {
+					first = span[0] - offset
+				}
 			}
 		}
-		if carried > bestCarried {
-			bestCarried, bestLine, bestAt = carried, line, at
+		if count > bestCount {
+			bestCount, best, bestAt = count, strings.TrimRight(line, "\n"), first
 		}
-		if carried == len(terms) {
-			break
-		}
+		offset += len(line)
 	}
-	return strings.TrimRight(bestLine, "\n"), bestAt
-}
-
-func firstLineOf(text string) string {
-	line, _, _ := strings.Cut(text, "\n")
-	return line
-}
-
-func foldedIndex(text, loweredTerm string) int {
-	at := strings.Index(strings.ToLower(text), loweredTerm)
-	if at <= 0 {
-		return at
-	}
-	lowered := 0
-	for i, r := range text {
-		if lowered >= at {
-			return i
-		}
-		lowered += utf8.RuneLen(unicode.ToLower(r))
-	}
-	return len(text)
+	return best, bestAt
 }
 
 func trimLine(line string, at int) (string, int) {

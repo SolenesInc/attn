@@ -25,10 +25,10 @@ func TestAppsRetirementKeepsCoreStateAcrossUpgradeAndRestart(t *testing.T) {
 	appDoc := docstore.CollectionSchema{Namespace: "app/obsolete", Collection: "state"}
 	coreDoc := docstore.CollectionSchema{Namespace: "core/preserved", Collection: "state"}
 	for _, schema := range []docstore.CollectionSchema{appDoc, coreDoc} {
-		if _, err := s.DefineDocumentCollection(schema, now); err != nil {
+		if _, err := defineLegacyDocumentCollection(s, schema, now); err != nil {
 			t.Fatal(err)
 		}
-		stored, found, err := s.DocumentCollection(schema.Namespace, schema.Collection)
+		stored, found, err := legacyDocumentCollection(s, schema.Namespace, schema.Collection)
 		if err != nil || !found {
 			t.Fatalf("read declared collection: found=%t err=%v", found, err)
 		}
