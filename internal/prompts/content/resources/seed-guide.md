@@ -115,10 +115,12 @@ CHECKS
 A check is a numbered statement (C1) that a seed must prove, naming the
 evidence that proves it. attn keeps each check on the seed with its latest
 report and verdict, so define checks as data, not as bullets in the body:
-`checks` in plot JSON, `--check "C1=<statement>"` on plant, or `attn seed check
-add` later. The body cites checks by id and keeps what a check cannot hold,
-such as an exemption or where long evidence goes. Ids are unique across a plot
-tree and never reused: a removed check keeps its id, and restore brings it back.
+`checks` in plot JSON, `--check "<statement>"` on plant, or
+`attn seed check add <id> -m "<statement>"` later. Plant and add number each
+check with the next free id in the plot tree and print it; plot JSON names its
+ids. The body cites checks by id and keeps what a check cannot hold, such as an
+exemption or where long evidence goes. Ids are unique across a plot tree and
+never reused: a removed check keeps its id, and restore brings it back.
 
 On a plot, `"shared": true` puts a check on every seed below it that has no
 children; each proves it with its own report, and the plot rolls up how many

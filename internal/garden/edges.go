@@ -47,10 +47,12 @@ func Link(seeds []Seed, fromID, kind, toID string) (Seed, bool, error) {
 	}
 	if kind == EdgePartOf {
 		tree := NewPlotTree(seeds)
-		if checkID, owner, repeated := tree.UsedCheckID(to.ID, tree.checksUnder(from.ID)); repeated {
+		moving := tree.checksUnder(from.ID)
+		if checkID, owner, repeated := tree.UsedCheckID(to.ID, moving); repeated {
+			joined := max(highestCheckNumber(tree.checksUnder(tree.root(to.ID))), highestCheckNumber(moving)) + 1
 			return Seed{}, false, fmt.Errorf(
-				"%s and %s would both be in one plot tree with check %s, which %s already uses; one id names one statement in a plot tree, so they cannot share a plot",
-				from.ID, to.ID, checkID, owner)
+				"%s and %s would both be in one plot tree with check %s, which %s already uses; one id names one statement in a plot tree, so they cannot share a plot. The next free id across both is %s",
+				from.ID, to.ID, checkID, owner, checkIDNumbered(joined))
 		}
 	}
 	if kind == EdgeBlocks || kind == EdgePartOf {

@@ -9224,6 +9224,7 @@ export interface SeedArtifactTransferResultArtifact {
 }
 
 export interface SeedCheckResultObject {
+    check_id:         string;
     note:             Note;
     ring_recipients?: string[];
     seed:             SeedElement;
@@ -9915,7 +9916,7 @@ export interface SeedCheck {
 }
 
 export interface SeedCheckDefinition {
-    id:      string;
+    id?:     string;
     shared?: boolean;
     text:    string;
     [property: string]: any;
@@ -9931,7 +9932,7 @@ export interface SeedCheckEvidence {
 }
 
 export interface SeedCheckMessage {
-    check_id:           string;
+    check_id?:          string;
     cmd:                SeedCheckMessageCmd;
     commit?:            string;
     evidence?:          string[];
@@ -9963,6 +9964,7 @@ export interface SeedCheckReport {
 }
 
 export interface SeedCheckResult {
+    check_id:         string;
     note:             Note;
     ring_recipients?: string[];
     seed:             SeedElement;
@@ -9970,6 +9972,7 @@ export interface SeedCheckResult {
 }
 
 export interface SeedCheckResultMessage {
+    check_id?:  string;
     error?:     string;
     event:      SeedCheckResultMessageEvent;
     request_id: string;
@@ -10272,7 +10275,7 @@ export interface SeedPlantMessage {
 }
 
 export interface CheckObject {
-    id:      string;
+    id?:     string;
     shared?: boolean;
     text:    string;
     [property: string]: any;
@@ -24834,6 +24837,7 @@ const typeMap: any = {
         { json: "size", js: "size", typ: 0 },
     ], "any"),
     "SeedCheckResultObject": o([
+        { json: "check_id", js: "check_id", typ: "" },
         { json: "note", js: "note", typ: r("Note") },
         { json: "ring_recipients", js: "ring_recipients", typ: u(undefined, a("")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
@@ -25345,7 +25349,7 @@ const typeMap: any = {
         { json: "verdict", js: "verdict", typ: u(undefined, r("CheckVerdict")) },
     ], "any"),
     "SeedCheckDefinition": o([
-        { json: "id", js: "id", typ: "" },
+        { json: "id", js: "id", typ: u(undefined, "") },
         { json: "shared", js: "shared", typ: u(undefined, true) },
         { json: "text", js: "text", typ: "" },
     ], "any"),
@@ -25357,7 +25361,7 @@ const typeMap: any = {
         { json: "url", js: "url", typ: u(undefined, "") },
     ], "any"),
     "SeedCheckMessage": o([
-        { json: "check_id", js: "check_id", typ: "" },
+        { json: "check_id", js: "check_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("SeedCheckMessageCmd") },
         { json: "commit", js: "commit", typ: u(undefined, "") },
         { json: "evidence", js: "evidence", typ: u(undefined, a("")) },
@@ -25381,11 +25385,13 @@ const typeMap: any = {
         { json: "summary", js: "summary", typ: "" },
     ], "any"),
     "SeedCheckResult": o([
+        { json: "check_id", js: "check_id", typ: "" },
         { json: "note", js: "note", typ: r("Note") },
         { json: "ring_recipients", js: "ring_recipients", typ: u(undefined, a("")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
     ], "any"),
     "SeedCheckResultMessage": o([
+        { json: "check_id", js: "check_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("SeedCheckResultMessageEvent") },
         { json: "request_id", js: "request_id", typ: "" },
@@ -25596,7 +25602,7 @@ const typeMap: any = {
         { json: "title", js: "title", typ: "" },
     ], "any"),
     "CheckObject": o([
-        { json: "id", js: "id", typ: "" },
+        { json: "id", js: "id", typ: u(undefined, "") },
         { json: "shared", js: "shared", typ: u(undefined, true) },
         { json: "text", js: "text", typ: "" },
     ], "any"),

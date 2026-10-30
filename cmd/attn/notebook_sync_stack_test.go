@@ -182,7 +182,7 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 		t.Fatalf("outpost seed folder: %+v", shown.ArtifactDir)
 	}
 	requireStdout(t, outpost.Attn("seed", "show", seed.ID), notebookPath(outpost, "seeds", seed.ID))
-	requireStdout(t, outpost.Attn("seed", "check", "add", seed.ID, "C1", "Receipt arrived"))
+	requireStdout(t, outpost.Attn("seed", "check", "add", seed.ID, "C1", "-m", "Receipt arrived"))
 	requireStdout(t, outpost.Attn("seed", "check", "report", seed.ID, "C1", "-m", "Received", "--evidence", "copy.md"))
 	destination := filepath.Join(outpost.Dir, "detached.md")
 	outpost.Attn("seed", "detach", seed.ID, "--path", "move.md", "--to", destination, "--json").JSON(t, &attached)

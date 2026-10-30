@@ -5585,7 +5585,9 @@ model SeedCheckVerdict {
 
 // A check defined when a seed or plot is planted.
 model SeedCheckDefinition {
-  "id": string;
+  // Omitted on seed_plant: attn assigns the next free id in the plot tree. A
+  // seed_plot names every id.
+  "id"?: string;
   "text": string;
   // On a plot: every seed below it with no children of its own proves it.
   "shared"?: boolean;
@@ -5602,7 +5604,8 @@ model SeedCheckMessage {
   // Set by a WebSocket caller, as on seed_transition.
   "request_id"?: string;
   "seed_id": string;
-  "check_id": string;
+  // Omitted on add: attn assigns the next free id in the plot tree.
+  "check_id"?: string;
   // add | edit | remove | restore | report | confirm | reject | uncheck | reopen.
   "verb": string;
   // The statement, on add and edit.
@@ -5622,6 +5625,7 @@ model SeedCheckMessage {
 
 model SeedCheckResult {
   "seed": Seed;
+  "check_id": string;
   "note": SeedNote;
   // Present when the move rang: who the ring goes to, as session ids or
   // member names. Empty rings nobody.
@@ -5636,6 +5640,7 @@ model SeedCheckResultMessage {
   "success": boolean;
   "error"?: string;
   "seed"?: Seed;
+  "check_id"?: string;
 }
 
 // Plant a seed. Planting costs one line: the daemon already knows who is

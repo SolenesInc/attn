@@ -24,7 +24,7 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		oldBlocker, oldDependent := plantSeedAs(t, cli, "", "lay the old pipe"), plantSeedAs(t, cli, "", "run water through the old pipe")
 		edgeLink(t, cli, oldBlocker, "part-of", panel)
 		edgeLink(t, cli, oldDependent, "part-of", panel)
-		checkMoveOK(t, cli, protocol.SeedCheckMessage{SeedID: panel, CheckID: "C1", Verb: "add", Text: protocol.Ptr("The panel renders markdown."), Shared: protocol.Ptr(true)})
+		checkMoveOK(t, cli, protocol.SeedCheckMessage{SeedID: panel, CheckID: protocol.Ptr("C1"), Verb: "add", Text: protocol.Ptr("The panel renders markdown."), Shared: protocol.Ptr(true)})
 		lifeMove(t, cli, "tender", oldDependent, "tend", "", "")
 		w.advance(time.Minute)
 		for range docstore.MaxLimit {

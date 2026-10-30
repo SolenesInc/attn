@@ -9525,7 +9525,7 @@ type SeedCheck struct {
 
 type SeedCheckDefinition struct {
 	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
+	ID *string `json:"id,omitempty,omitzero"`
 
 	// Shared corresponds to the JSON schema field "shared".
 	Shared *bool `json:"shared,omitempty,omitzero"`
@@ -9553,7 +9553,7 @@ type SeedCheckEvidence struct {
 
 type SeedCheckMessage struct {
 	// CheckID corresponds to the JSON schema field "check_id".
-	CheckID string `json:"check_id"`
+	CheckID *string `json:"check_id,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -9616,6 +9616,9 @@ type SeedCheckReport struct {
 }
 
 type SeedCheckResult struct {
+	// CheckID corresponds to the JSON schema field "check_id".
+	CheckID string `json:"check_id"`
+
 	// Note corresponds to the JSON schema field "note".
 	Note SeedNote `json:"note"`
 
@@ -9627,6 +9630,9 @@ type SeedCheckResult struct {
 }
 
 type SeedCheckResultMessage struct {
+	// CheckID corresponds to the JSON schema field "check_id".
+	CheckID *string `json:"check_id,omitempty,omitzero"`
+
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
 

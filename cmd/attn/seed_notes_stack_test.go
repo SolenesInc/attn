@@ -24,7 +24,7 @@ func TestSeedNotesNarrowsToABookmarkAndAKind(t *testing.T) {
 		garden.NoteKindHandoff: func() { seedAs(t, s, "", "note", seed.ID, "-m", "for whoever is next", "--handoff") },
 		garden.NoteKindAttach:  func() { seedAs(t, s, "", "attach", seed.ID, "--url", "https://example.com/spec") },
 		garden.NoteKindDetach:  func() { seedAs(t, s, "", "detach", seed.ID, "--url", "https://example.com/spec") },
-		garden.NoteKindCheck:   func() { seedAs(t, s, "", "check", "add", seed.ID, "C1", "the entries narrow") },
+		garden.NoteKindCheck:   func() { seedAs(t, s, "", "check", "add", seed.ID, "C1", "-m", "the entries narrow") },
 		garden.NoteKindEdit: func() {
 			exported := seedAs(t, s, "", "export", seed.ID, "--out", "-")
 			s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-"}, Stdin: exported + "More.\n"})

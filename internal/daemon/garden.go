@@ -411,9 +411,6 @@ func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed
 		return protocol.Seed{}, gardenRead{}, err
 	}
 	checks := checkDefinitionsFromProtocol(msg.Checks)
-	if err := garden.ValidateCheckDefinitions(checks); err != nil {
-		return protocol.Seed{}, gardenRead{}, err
-	}
 	schema, err := d.seedsCollection()
 	if err != nil {
 		return protocol.Seed{}, gardenRead{}, err
@@ -430,18 +427,30 @@ func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed
 		PlanterMember:  d.resolveTenderMember(protocol.Deref(msg.Member), sessionID),
 		Edges:          []garden.Edge{},
 		Vars:           []garden.Var{},
-		Checks:         checks,
 	}
-	if plot := strings.TrimSpace(protocol.Deref(msg.PartOf)); plot != "" {
+	plot := strings.TrimSpace(protocol.Deref(msg.PartOf))
+	if plot != "" {
 		if _, _, err := d.readSeed(plot); err != nil {
 			return protocol.Seed{}, gardenRead{}, err
 		}
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: plot})
-		if len(checks) > 0 {
-			if err := d.refuseRepeatedCheckIDs(checks, plot, protocol.Deref(msg.ProfileID)); err != nil {
-				return protocol.Seed{}, gardenRead{}, err
-			}
+	}
+	if plot != "" && len(checks) > 0 {
+		d.checkIDsMu.Lock()
+		defer d.checkIDsMu.Unlock()
+		read, err := d.readGarden(protocol.Deref(msg.ProfileID))
+		if err != nil {
+			return protocol.Seed{}, gardenRead{}, err
 		}
+		if err := read.plots.RefuseUsedCheckIDs(plot, checks); err != nil {
+			return protocol.Seed{}, gardenRead{}, err
+		}
+		seed.Checks = read.plots.NumberChecks(plot, checks)
+	} else {
+		seed.Checks = garden.PlotTree{}.NumberChecks("", checks)
+	}
+	if err := garden.ValidateCheckDefinitions(seed.Checks); err != nil {
+		return protocol.Seed{}, gardenRead{}, err
 	}
 	if origin := strings.TrimSpace(protocol.Deref(msg.DiscoveredFrom)); origin != "" {
 		if _, _, err := d.readSeed(origin); err != nil {
@@ -938,6 +947,10 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 		return
 	}
 
+	if verb == "link" && kind == garden.EdgePartOf {
+		d.checkIDsMu.Lock()
+		defer d.checkIDsMu.Unlock()
+	}
 	const attempts = 3
 	for range attempts {
 		read, err := d.readGarden(protocol.Deref(msg.ProfileID))

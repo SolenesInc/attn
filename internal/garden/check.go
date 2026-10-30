@@ -317,6 +317,45 @@ func (t PlotTree) UsedCheckID(plotID string, checks []Check) (checkID, seedID st
 	return "", "", false
 }
 
+func (t PlotTree) NextCheckID(seedID string) string {
+	return checkIDNumbered(highestCheckNumber(t.checksUnder(t.root(seedID))) + 1)
+}
+
+func (t PlotTree) NumberChecks(plotID string, checks []Check) []Check {
+	next := max(highestCheckNumber(t.checksUnder(t.root(plotID))), highestCheckNumber(checks)) + 1
+	out := slices.Clone(checks)
+	for i := range out {
+		if out[i].ID == "" {
+			out[i].ID = checkIDNumbered(next)
+			next++
+		}
+	}
+	return out
+}
+
+func highestCheckNumber(checks []Check) uint64 {
+	var highest uint64
+	for _, check := range checks {
+		if n, err := strconv.ParseUint(strings.TrimPrefix(check.ID, "C"), 10, 32); err == nil {
+			highest = max(highest, n)
+		}
+	}
+	return highest
+}
+
+func checkIDNumbered(n uint64) string { return "C" + strconv.FormatUint(n, 10) }
+
+func usedCheckIDRefusal(checkID, owner, nextID string) error {
+	return fmt.Errorf("%s is already used by %s in this plot, and one id names one statement in a plot tree; the next free id is %s, or leave the id out and attn picks it", checkID, owner, nextID)
+}
+
+func (t PlotTree) RefuseUsedCheckIDs(plotID string, checks []Check) error {
+	if checkID, owner, used := t.UsedCheckID(plotID, checks); used {
+		return usedCheckIDRefusal(checkID, owner, t.NextCheckID(plotID))
+	}
+	return nil
+}
+
 func (t PlotTree) checksUnder(id string) []Check {
 	var out []Check
 	for _, seed := range t.InPlot(id) {
@@ -421,12 +460,12 @@ func applyDefinitionMove(tree PlotTree, next *Seed, checkID string, move CheckMo
 	case CheckVerbAdd:
 		if index >= 0 {
 			if next.Checks[index].Removed {
-				return "", "", fmt.Errorf("%s was removed from %s, and a removed id is never reused so what cites it keeps its meaning; bring it back with: attn seed check restore %s %s", checkID, next.ID, next.ID, checkID)
+				return "", "", fmt.Errorf("%s was removed from %s, and a removed id is never reused so what cites it keeps its meaning; bring it back with: attn seed check restore %s %s, or leave the id out and attn picks the next free one, %s", checkID, next.ID, next.ID, checkID, tree.NextCheckID(next.ID))
 			}
-			return "", "", fmt.Errorf("%s already defines %s; change its statement with: attn seed check edit %s %s \"…\"", next.ID, checkID, next.ID, checkID)
+			return "", "", fmt.Errorf("%s already defines %s; change its statement with: attn seed check edit %s %s -m \"…\", or leave the id out and attn picks the next free one, %s", next.ID, checkID, next.ID, checkID, tree.NextCheckID(next.ID))
 		}
-		if _, owner, used := tree.UsedCheckID(next.ID, []Check{{ID: checkID}}); used {
-			return "", "", fmt.Errorf("%s is already used by %s in this plot, and one id names one statement in a plot tree; pick another number", checkID, owner)
+		if err := tree.RefuseUsedCheckIDs(next.ID, []Check{{ID: checkID}}); err != nil {
+			return "", "", err
 		}
 		if err := validateCheckText(checkID, text); err != nil {
 			return "", "", err
@@ -558,7 +597,7 @@ func notEffective(seedID, checkID string, effective []EffectiveCheck) error {
 		}
 	}
 	if len(ids) == 0 {
-		return fmt.Errorf("%s has no check %s; it has no checks at all. Define one with: attn seed check add %s %s \"<statement>\"", seedID, checkID, seedID, checkID)
+		return fmt.Errorf("%s has no check %s; it has no checks at all. Define one with: attn seed check add %s -m \"<statement>\"", seedID, checkID, seedID)
 	}
 	return fmt.Errorf("%s has no check %s; its checks are %s", seedID, checkID, strings.Join(ids, ", "))
 }

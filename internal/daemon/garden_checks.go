@@ -16,6 +16,7 @@ import (
 
 type seedCheckOutcome struct {
 	seed           protocol.Seed
+	checkID        string
 	note           protocol.SeedNote
 	ringRecipients []string
 }
@@ -29,7 +30,7 @@ func (d *Daemon) handleSeedCheck(conn net.Conn, msg *protocol.SeedCheckMessage) 
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true,
 		SeedCheckResult: &protocol.SeedCheckResult{
-			Seed: outcome.seed, Note: outcome.note, RingRecipients: outcome.ringRecipients,
+			Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients,
 		},
 	})
 }
@@ -46,6 +47,7 @@ func (d *Daemon) handleSeedCheckWS(client *wsClient, msg *protocol.SeedCheckMess
 		return
 	}
 	result.Seed = &outcome.seed
+	result.CheckID = protocol.Ptr(outcome.checkID)
 	result.Success = true
 	d.sendToClient(client, result)
 }
@@ -66,7 +68,7 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	actor := garden.Tender{Session: sessionID, Member: d.resolveTenderMember(protocol.Deref(msg.Member), sessionID)}
 	move := garden.CheckMove{
-		Verb: verb, CheckID: msg.CheckID, Text: protocol.Deref(msg.Text), Shared: protocol.Deref(msg.Shared),
+		Verb: verb, CheckID: strings.TrimSpace(protocol.Deref(msg.CheckID)), Text: protocol.Deref(msg.Text), Shared: protocol.Deref(msg.Shared),
 		Summary: protocol.Deref(msg.Summary), Evidence: msg.Evidence, Commit: protocol.Deref(msg.Commit),
 		Actor: actor,
 	}
@@ -78,13 +80,21 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 		}
 	}
 
+	if verb == garden.CheckVerbAdd {
+		d.checkIDsMu.Lock()
+		defer d.checkIDsMu.Unlock()
+	}
 	const attempts = 3
 	for range attempts {
 		read, err := d.readGarden(protocol.Deref(msg.ProfileID))
 		if err != nil {
 			return seedCheckOutcome{}, err
 		}
-		next, note, err := garden.ApplyCheckMove(read.plots, seedID, move, artifacts, d.gardenTime())
+		attempt := move
+		if verb == garden.CheckVerbAdd && attempt.CheckID == "" {
+			attempt.CheckID = read.plots.NextCheckID(seedID)
+		}
+		next, note, err := garden.ApplyCheckMove(read.plots, seedID, attempt, artifacts, d.gardenTime())
 		if err != nil {
 			return seedCheckOutcome{}, err
 		}
@@ -105,26 +115,15 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 		if err != nil {
 			return seedCheckOutcome{}, err
 		}
-		outcome := seedCheckOutcome{seed: read.withSeed(next, written).seed(next, written), note: notes[0]}
+		outcome := seedCheckOutcome{seed: read.withSeed(next, written).seed(next, written), checkID: attempt.CheckID, note: notes[0]}
 		if ring {
 			outcome.ringRecipients = recipients
 		}
 		return outcome, nil
 	}
 	return seedCheckOutcome{}, fmt.Errorf(
-		"%s was rewritten under all %d attempts to move %s; read it again with `attn seed show %s` and decide from what it says now",
-		seedID, attempts, msg.CheckID, seedID)
-}
-
-func (d *Daemon) refuseRepeatedCheckIDs(checks []garden.Check, plotID, profileID string) error {
-	read, err := d.readGarden(profileID)
-	if err != nil {
-		return err
-	}
-	if checkID, owner, used := read.plots.UsedCheckID(plotID, checks); used {
-		return fmt.Errorf("%s is already used by %s in that plot, and one id names one statement in a plot tree; pick another number", checkID, owner)
-	}
-	return nil
+		"%s was rewritten under all %d attempts to %s a check; read it again with `attn seed show %s` and decide from what it says now",
+		seedID, attempts, verb, seedID)
 }
 
 func (g gardenRead) withSeed(next garden.Seed, doc docstore.Document) gardenRead {
@@ -399,7 +398,7 @@ func checkDefinitionsFromProtocol(wire []protocol.SeedCheckDefinition) []garden.
 	out := make([]garden.Check, 0, len(wire))
 	for _, check := range wire {
 		out = append(out, garden.Check{
-			ID: strings.TrimSpace(check.ID), Text: strings.TrimSpace(check.Text), Shared: protocol.Deref(check.Shared),
+			ID: strings.ToUpper(strings.TrimSpace(protocol.Deref(check.ID))), Text: strings.TrimSpace(check.Text), Shared: protocol.Deref(check.Shared),
 		})
 	}
 	return out

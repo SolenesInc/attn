@@ -58,25 +58,36 @@ func checkVerbList() string {
 }
 
 func seedCheckMessage(verb garden.CheckVerb, f *seedFlags, positionals []string) (protocol.SeedCheckMessage, error) {
-	wantPositionals := 2
-	if verb == garden.CheckVerbAdd || verb == garden.CheckVerbEdit {
-		wantPositionals = 3
+	defines := verb == garden.CheckVerbAdd || verb == garden.CheckVerbEdit
+	if len(positionals) == 0 {
+		return protocol.SeedCheckMessage{}, fmt.Errorf("needs the seed id")
 	}
-	if len(positionals) != wantPositionals {
-		return protocol.SeedCheckMessage{}, fmt.Errorf("needs %d arguments, got %d", wantPositionals, len(positionals))
+	msg := protocol.SeedCheckMessage{SeedID: positionals[0], Verb: string(verb)}
+	ids := positionals[1:]
+	if defines && len(ids) > 0 && garden.ValidateCheckID(strings.ToUpper(ids[len(ids)-1])) != nil {
+		return protocol.SeedCheckMessage{}, fmt.Errorf("%q is not a check id; the statement goes in -m", ids[len(ids)-1])
 	}
-	msg := protocol.SeedCheckMessage{SeedID: positionals[0], CheckID: strings.ToUpper(positionals[1]), Verb: string(verb)}
+	switch {
+	case len(ids) == 1:
+		msg.CheckID = protocol.Ptr(strings.ToUpper(ids[0]))
+	case len(ids) == 0 && verb == garden.CheckVerbAdd:
+	default:
+		return protocol.SeedCheckMessage{}, fmt.Errorf("needs the seed id and one check id, got %d arguments", len(positionals))
+	}
 	if sessionID := f.sessionID(); sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
 	}
-	if wantPositionals == 3 {
-		msg.Text = protocol.Ptr(positionals[2])
+	text := strings.TrimSpace(f.text("check " + string(verb)))
+	switch {
+	case defines && text == "":
+		return protocol.SeedCheckMessage{}, fmt.Errorf("needs the statement in -m: what this seed must prove")
+	case defines:
+		msg.Text = protocol.Ptr(text)
+	case text != "":
+		msg.Summary = protocol.Ptr(text)
 	}
 	if f.shared {
 		msg.Shared = protocol.Ptr(true)
-	}
-	if summary := strings.TrimSpace(f.text("check " + string(verb))); summary != "" {
-		msg.Summary = protocol.Ptr(summary)
 	}
 	if len(f.evidence) > 0 || f.commit != "" {
 		msg.Evidence = f.evidence
@@ -378,22 +389,25 @@ func wrapWords(text string, width int) []string {
 	}
 	return lines
 }
-func parsePlantChecks(raw []string) ([]protocol.SeedCheckDefinition, error) {
+
+func parsePlantChecks(raw []string) []protocol.SeedCheckDefinition {
 	out := make([]protocol.SeedCheckDefinition, 0, len(raw))
 	for _, entry := range raw {
-		id, text, ok := strings.Cut(entry, "=")
-		if !ok {
-			return nil, fmt.Errorf(`--check %q needs an id and a statement: --check "C1=<statement>"`, entry)
+		check := protocol.SeedCheckDefinition{Text: strings.TrimSpace(entry)}
+		if id, text, ok := strings.Cut(entry, "="); ok {
+			if id = strings.ToUpper(strings.TrimSpace(id)); garden.ValidateCheckID(id) == nil {
+				check = protocol.SeedCheckDefinition{ID: protocol.Ptr(id), Text: strings.TrimSpace(text)}
+			}
 		}
-		out = append(out, protocol.SeedCheckDefinition{ID: strings.ToUpper(strings.TrimSpace(id)), Text: strings.TrimSpace(text)})
+		out = append(out, check)
 	}
-	return out, nil
+	return out
 }
 
 func checkDefinitionsToProtocol(checks []garden.Check) []protocol.SeedCheckDefinition {
 	out := make([]protocol.SeedCheckDefinition, 0, len(checks))
 	for _, check := range checks {
-		wire := protocol.SeedCheckDefinition{ID: check.ID, Text: check.Text}
+		wire := protocol.SeedCheckDefinition{ID: protocol.Ptr(check.ID), Text: check.Text}
 		if check.Shared {
 			wire.Shared = protocol.Ptr(true)
 		}

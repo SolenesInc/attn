@@ -589,6 +589,17 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		child := plot.Children[0].ID
 		loose := plant(t, s, "Checked seed", "--check", "C2=It works.")
 		requireLines(t, "show", seedAs(t, s, "", "show", loose.ID), "\nchecks  0 of 1 confirmed · 1 open\n  C2  open\n      It works.\n")
+		requireLines(t, "add without an id", seedAs(t, s, "", "check", "add", loose.ID, "-m", "Handles empty input"),
+			"C3 added on "+loose.ID+" (checked-seed) · checks 0 of 2 confirmed · 2 open\n")
+		requireFailure(t, s.Attn("seed", "check", "add", loose.ID, "C2", "-m", "Takes a used id"), "seed check add: ", "already defines C2", "next free one, C4")
+		refused(t, s.Attn("seed", "check", "add", loose.ID, "C4", "A positional statement"), 2, `seed check add: "A positional statement" is not a check id; the statement goes in -m`)
+		refused(t, s.Attn("seed", "check", "edit", loose.ID, "C3", "A positional statement"), 2, `seed check edit: "A positional statement" is not a check id; the statement goes in -m`)
+		refused(t, s.Attn("seed", "check", "edit", loose.ID, "C3"), 2, "seed check edit: needs the statement in -m")
+		edited := s.Run(testworld.Invocation{Args: []string{"seed", "check", "edit", loose.ID, "C3", "-m", "-"}, Stdin: "Handles empty and blank input\n"})
+		requireLines(t, "edit from stdin", edited.Stdout, "C3 edited on "+loose.ID+" (checked-seed)")
+		requireLines(t, "show after edit", seedAs(t, s, "", "show", loose.ID), "\n  C3  open\n      Handles empty and blank input\n")
+		requireLines(t, "plant numbers its checks", seedAs(t, s, "", "plant", "Numbered seed", "--check", "Proves it", "--check", "C9=Proves more", "--check", "a = b holds"),
+			"  numbered-seed  Numbered seed\n  C10  Proves it\n  C9  Proves more\n  C11  a = b holds\n")
 
 		requireLines(t, "report", seedAs(t, s, "", "check", "report", child, "C1", "-m", "tests pass", "--evidence", "https://example.test/run/1"),
 			"C1 reported on "+child+" (checked-child) · checks 0 of 2 confirmed · 1 to judge · 1 open\n")

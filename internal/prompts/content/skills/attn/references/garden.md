@@ -50,8 +50,9 @@ title. Leave independent children parallel. Pass `-` to read from stdin.
 
 A check is a numbered statement (C1) a seed must prove, kept on the seed as
 data with its latest report and verdict. The body cites it by id. Define checks
-with `checks` in plot JSON, `--check "C1=<statement>"` on plant, or `attn seed
-check add` later. A plot check marked shared is proven by every seed below the
+with `checks` in plot JSON, `--check "<statement>"` on plant, or
+`attn seed check add <id> -m "<statement>"` later. Plant and add number each
+check with the next free id in the plot tree and print it. A plot check marked shared is proven by every seed below the
 plot that has no children, each with its own report. `attn seed show` lists a
 seed's checks, inherited ones included, as open, reported, confirmed or rejected.
 

@@ -270,6 +270,7 @@ type Daemon struct {
 	gardenMintNoteID       func() (string, error)
 	gardenNow              func() time.Time
 	gitHubPollingOffLogged bool
+	checkIDsMu             sync.Mutex
 	gardenWatchMu          sync.Mutex
 	// gardenBellsResolvedThrough is the last bus seq whose seed bells were resolved; gardenWatchMu guards it.
 	gardenBellsResolvedThrough int64

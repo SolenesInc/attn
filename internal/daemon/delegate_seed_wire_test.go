@@ -136,9 +136,9 @@ func TestADelegationOpeningNamesTheSeedsChecksOrSaysItHasNone(t *testing.T) {
 	cwd := registerDelegationCaller(t, w, cli, "caller")
 	plot, err := cli.SeedPlot("caller", "", protocol.SeedPlotMessage{
 		Title:  "search moves to the daemon",
-		Checks: []protocol.SeedCheckDefinition{{ID: "C5", Text: "Landed on main.", Shared: protocol.Ptr(true)}},
+		Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C5"), Text: "Landed on main.", Shared: protocol.Ptr(true)}},
 		Children: []protocol.SeedPlotChild{{Title: "daemon search endpoint", Body: protocol.Ptr("Serve search from the daemon."),
-			Checks: []protocol.SeedCheckDefinition{{ID: "C1", Text: "Wire tests cover the queries."}}}},
+			Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C1"), Text: "Wire tests cover the queries."}}}},
 	})
 	if err != nil {
 		t.Fatal(err)

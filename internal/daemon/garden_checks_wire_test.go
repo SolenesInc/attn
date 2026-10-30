@@ -2,9 +2,11 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
@@ -83,21 +85,21 @@ func TestEachCheckMoveChangesItsStateAndWritesOneCheckNote(t *testing.T) {
 			notesBefore := len(lifeNoteBodies(t, cli, step.move.SeedID))
 			moved, err := cli.SeedCheck(step.move)
 			if err != nil {
-				t.Fatalf("%s %s: %v", step.move.Verb, step.move.CheckID, err)
+				t.Fatalf("%s %s: %v", step.move.Verb, protocol.Deref(step.move.CheckID), err)
 			}
-			check := checkByID(moved.Seed.Checks, step.move.CheckID)
+			check := checkByID(moved.Seed.Checks, protocol.Deref(step.move.CheckID))
 			verdict := ""
 			if check.Verdict != nil {
 				verdict = map[bool]string{true: "confirmed", false: "rejected"}[check.Verdict.Confirmed]
 			}
 			if check.State != step.state || (check.Report != nil) != step.report || verdict != step.verdict {
 				t.Errorf("after %s %s: state %q, report %t, verdict %q; want %q, %t, %q",
-					step.move.Verb, step.move.CheckID, check.State, check.Report != nil, verdict, step.state, step.report, step.verdict)
+					step.move.Verb, protocol.Deref(step.move.CheckID), check.State, check.Report != nil, verdict, step.state, step.report, step.verdict)
 			}
 			bodies := lifeNoteBodies(t, cli, step.move.SeedID)
 			if len(bodies) != notesBefore+1 || !slices.Contains(bodies, step.note) || moved.Note.Kind != "check" || moved.Note.Body != step.note {
 				t.Errorf("after %s %s the log grew %d with %q (kind %s), want one check note %q",
-					step.move.Verb, step.move.CheckID, len(bodies)-notesBefore, moved.Note.Body, moved.Note.Kind, step.note)
+					step.move.Verb, protocol.Deref(step.move.CheckID), len(bodies)-notesBefore, moved.Note.Body, moved.Note.Kind, step.note)
 			}
 		}
 
@@ -151,12 +153,12 @@ func TestACheckIDNamesOneStatementInAPlotTree(t *testing.T) {
 
 		_, err = cli.SeedPlantMessage(protocol.SeedPlantMessage{
 			Title: "late child", PartOf: protocol.Ptr(plot.Crown.ID),
-			Checks: []protocol.SeedCheckDefinition{{ID: "C6", Text: "again"}},
+			Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C6"), Text: "again"}},
 		})
 		lifeRefusal(t, "planting into the plot with a used id", err, "C6", plot.Crown.ID)
 
 		loose, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
-			Title: "loose seed", Checks: []protocol.SeedCheckDefinition{{ID: "C2", Text: "repeats the app child"}},
+			Title: "loose seed", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C2"), Text: "repeats the app child"}},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -175,6 +177,164 @@ func TestACheckIDNamesOneStatementInAPlotTree(t *testing.T) {
 			t.Errorf("restored C2 = %+v, want it back with its report", check)
 		}
 	})
+}
+
+func TestAttnPicksTheNextFreeCheckIDInThePlotTree(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		sessions := spawnCheckSessions(w, app, "planner")
+		plot := checksPlot(t, cli, sessions["planner"])
+		daemonChild, appChild := plot.Children[0].ID, plot.Children[1].ID
+
+		added := checkMoveOK(t, cli, checkAdd(appChild, "", "Handles empty input"))
+		if added.CheckID != "C7" || added.Note.Body != "C7 added: Handles empty input" || checkByID(added.Seed.Checks, "C7").Text != "Handles empty input" {
+			t.Errorf("an add without an id = %s with note %q, want C7, one above the plot's C6", added.CheckID, added.Note.Body)
+		}
+		checkMoveOK(t, cli, checkMove(appChild, "C7", "remove", ""))
+		if again := checkMoveOK(t, cli, checkAdd(daemonChild, "", "Survives a restart")); again.CheckID != "C8" {
+			t.Errorf("an add after C7 was removed = %s, want C8: a removed id is never reused", again.CheckID)
+		}
+
+		_, err := cli.SeedCheck(checkAdd(daemonChild, "C2", "Takes a used id"))
+		lifeRefusal(t, "an explicit id another seed uses", err, "C2 is already used by "+appChild, "the next free id is C9", "leave the id out")
+		_, err = cli.SeedCheck(checkAdd(daemonChild, "C1", "Takes its own id"))
+		lifeRefusal(t, "an explicit id the seed itself uses", err, "already defines C1", "C9")
+		if explicit := checkMoveOK(t, cli, checkAdd(daemonChild, "C30", "Named by the caller")); explicit.CheckID != "C30" {
+			t.Errorf("an add with a free explicit id = %s, want C30", explicit.CheckID)
+		}
+
+		planted, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+			Title: "late child", PartOf: protocol.Ptr(plot.Crown.ID),
+			Checks: []protocol.SeedCheckDefinition{{Text: "Proves C"}, {ID: protocol.Ptr("C40"), Text: "Proves more"}, {Text: "Proves the rest"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := checkIDsFrom(planted.Seed.Checks); !slices.Equal(got, []string{"C41", "C40", "C42", "C5@" + plot.Crown.ID}) {
+			t.Errorf("a plant with checks without ids = %v, want C41 and C42 above the plot's highest and the plant's own C40", got)
+		}
+		_, err = cli.SeedPlantMessage(protocol.SeedPlantMessage{
+			Title: "repeating child", PartOf: protocol.Ptr(plot.Crown.ID),
+			Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C6"), Text: "again"}},
+		})
+		lifeRefusal(t, "a plant with a used id", err, "C6 is already used by "+plot.Crown.ID, "the next free id is C43")
+
+		loose, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+			Title: "loose seed", Checks: []protocol.SeedCheckDefinition{{Text: "First"}, {Text: "Second"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := checkIDsFrom(loose.Seed.Checks); !slices.Equal(got, []string{"C1", "C2"}) {
+			t.Errorf("a plant outside any plot numbers its checks %v, want C1 and C2", got)
+		}
+		_, err = cli.SeedLink(loose.Seed.ID, "part-of", plot.Crown.ID, false)
+		lifeRefusal(t, "a link whose checks collide", err, "check C1", "next free id across both is C43")
+	})
+}
+
+func TestSimultaneousIDIntroductionsNeverShareAnID(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		const rounds = 20
+		plot, err := cli.SeedPlot("", "", protocol.SeedPlotMessage{
+			Title:    "racing plot",
+			Children: []protocol.SeedPlotChild{{Title: "left"}, {Title: "right"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		left, right := plot.Children[0].ID, plot.Children[1].ID
+		var loose []string
+		for i := range rounds {
+			planted, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+				Title:  fmt.Sprintf("loose %d", i),
+				Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr(fmt.Sprintf("C%d", 900+i%2)), Text: "carried in"}},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			loose = append(loose, planted.Seed.ID)
+		}
+
+		var joinedMu sync.Mutex
+		members := []string{plot.Crown.ID, left, right}
+		joined := func(id string) {
+			joinedMu.Lock()
+			members = append(members, id)
+			joinedMu.Unlock()
+		}
+		var moves []func() error
+		for i := range rounds {
+			moves = append(moves,
+				func() error { _, err := cli.SeedCheck(checkAdd(left, "", "left adds")); return err },
+				func() error { _, err := cli.SeedCheck(checkAdd(right, "", "right adds")); return err },
+				func() error {
+					_, err := cli.SeedCheck(checkAdd(left, fmt.Sprintf("C%d", 500+i), "left names"))
+					return err
+				},
+				func() error {
+					_, err := cli.SeedCheck(checkAdd(right, fmt.Sprintf("C%d", 500+i), "right names"))
+					return err
+				},
+				func() error {
+					planted, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
+						Title: fmt.Sprintf("planted %d", i), PartOf: protocol.Ptr(plot.Crown.ID),
+						Checks: []protocol.SeedCheckDefinition{{Text: "planted in"}},
+					})
+					if err == nil {
+						joined(planted.Seed.ID)
+					}
+					return err
+				},
+				func() error {
+					_, err := cli.SeedLink(loose[i], "part-of", plot.Crown.ID, false)
+					if err == nil {
+						joined(loose[i])
+					}
+					return err
+				},
+			)
+		}
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for _, move := range moves {
+			wg.Go(func() {
+				<-start
+				if err := move(); err != nil && !strings.Contains(err.Error(), "one id names one statement in a plot tree") {
+					t.Errorf("a racing id introduction failed for another reason: %v", err)
+				}
+			})
+		}
+		close(start)
+		wg.Wait()
+
+		owners := map[string][]string{}
+		defined := 0
+		for _, id := range members {
+			seed := checksShow(t, cli, id)
+			for _, check := range seed.Checks {
+				if protocol.Deref(check.From) == "" {
+					owners[check.ID] = append(owners[check.ID], id)
+					defined++
+				}
+			}
+		}
+		for checkID, seeds := range owners {
+			if len(seeds) > 1 {
+				t.Errorf("%s is defined by %v in one plot tree", checkID, seeds)
+			}
+		}
+		if want := 3 * rounds; defined < want {
+			t.Errorf("the tree defines %d checks, want at least %d: every add without an id and every plant lands", defined, want)
+		}
+	})
+}
+
+func checkAdd(seedID, checkID, statement string) protocol.SeedCheckMessage {
+	msg := checkMove(seedID, checkID, "add", "")
+	msg.Text = protocol.Ptr(statement)
+	return msg
 }
 
 func TestEvidenceNamesASeedArtifactOrAURL(t *testing.T) {
@@ -400,12 +560,12 @@ func checksPlot(t *testing.T, cli *client.Client, planner string) *protocol.Seed
 	planted, err := cli.SeedPlot(protocol.SessionID(planner), "", protocol.SeedPlotMessage{
 		Title: "search moves to the daemon",
 		Checks: []protocol.SeedCheckDefinition{
-			{ID: "C5", Text: "The pull request is green on CI.", Shared: protocol.Ptr(true)},
-			{ID: "C6", Text: "Search behaves the same in the packaged app."},
+			{ID: protocol.Ptr("C5"), Text: "The pull request is green on CI.", Shared: protocol.Ptr(true)},
+			{ID: protocol.Ptr("C6"), Text: "Search behaves the same in the packaged app."},
 		},
 		Children: []protocol.SeedPlotChild{
-			{Title: "daemon search endpoint", Checks: []protocol.SeedCheckDefinition{{ID: "C1", Text: "Wire tests cover the queries."}}},
-			{Title: "app calls the endpoint", Checks: []protocol.SeedCheckDefinition{{ID: "C2", Text: "No stale results."}}},
+			{Title: "daemon search endpoint", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C1"), Text: "Wire tests cover the queries."}}},
+			{Title: "app calls the endpoint", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C2"), Text: "No stale results."}}},
 		},
 	})
 	if err != nil {
@@ -415,7 +575,10 @@ func checksPlot(t *testing.T, cli *client.Client, planner string) *protocol.Seed
 }
 
 func checkMove(seedID, checkID, verb, summary string) protocol.SeedCheckMessage {
-	msg := protocol.SeedCheckMessage{SeedID: seedID, CheckID: checkID, Verb: verb}
+	msg := protocol.SeedCheckMessage{SeedID: seedID, Verb: verb}
+	if checkID != "" {
+		msg.CheckID = protocol.Ptr(checkID)
+	}
 	if summary != "" {
 		msg.Summary = protocol.Ptr(summary)
 	}
@@ -426,7 +589,7 @@ func checkMoveOK(t *testing.T, cli *client.Client, msg protocol.SeedCheckMessage
 	t.Helper()
 	moved, err := cli.SeedCheck(msg)
 	if err != nil {
-		t.Fatalf("%s %s on %s: %v", msg.Verb, msg.CheckID, msg.SeedID, err)
+		t.Fatalf("%s %s on %s: %v", msg.Verb, protocol.Deref(msg.CheckID), msg.SeedID, err)
 	}
 	return moved
 }
@@ -473,13 +636,13 @@ func TestTheAppConfirmsACheckOverTheWebSocket(t *testing.T) {
 		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
 
 		confirmed := testworld.Request(app, protocol.SeedCheckMessage{
-			Cmd: protocol.CmdSeedCheck, RequestID: protocol.Ptr("confirm"), SeedID: seed, CheckID: "C1", Verb: "confirm",
+			Cmd: protocol.CmdSeedCheck, RequestID: protocol.Ptr("confirm"), SeedID: seed, CheckID: protocol.Ptr("C1"), Verb: "confirm",
 		}, protocol.EventSeedCheckResult, func(m protocol.SeedCheckResultMessage) bool { return m.RequestID == "confirm" })
 		if !confirmed.Success || confirmed.Seed == nil || checkByID(confirmed.Seed.Checks, "C1").State != "confirmed" {
 			t.Fatalf("the app's confirm = %+v (error %q), want C1 confirmed on the returned seed", confirmed.Seed, protocol.Deref(confirmed.Error))
 		}
 		refused := testworld.Request(app, protocol.SeedCheckMessage{
-			Cmd: protocol.CmdSeedCheck, RequestID: protocol.Ptr("reopen"), SeedID: seed, CheckID: "C5", Verb: "reopen",
+			Cmd: protocol.CmdSeedCheck, RequestID: protocol.Ptr("reopen"), SeedID: seed, CheckID: protocol.Ptr("C5"), Verb: "reopen",
 		}, protocol.EventSeedCheckResult, func(m protocol.SeedCheckResultMessage) bool { return m.RequestID == "reopen" })
 		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "already open") {
 			t.Errorf("the app's reopen of an open check = success %t, error %q; want a refusal naming its state", refused.Success, protocol.Deref(refused.Error))
@@ -496,7 +659,7 @@ func TestAnInheritedResultAnswersOnlyThePlotThatDefinedIt(t *testing.T) {
 		checkMoveOK(t, cli, checkMove(leaf, "C5", "confirm", "seen it"))
 
 		other, err := cli.SeedPlantMessage(protocol.SeedPlantMessage{
-			Title: "another plot", Checks: []protocol.SeedCheckDefinition{{ID: "C5", Text: "A different statement.", Shared: protocol.Ptr(true)}},
+			Title: "another plot", Checks: []protocol.SeedCheckDefinition{{ID: protocol.Ptr("C5"), Text: "A different statement.", Shared: protocol.Ptr(true)}},
 		})
 		if err != nil {
 			t.Fatal(err)

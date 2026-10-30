@@ -94,9 +94,10 @@ or the chief. The log records standing and forced moves and whose claim ended.
 Everyone else needs --force. A call without a live session has no standing.`
 
 var seedVerbs = []seedVerb{
-	{`plant`, `plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
+	{`plant`, `plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "[C#=]<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
 if the seed gains children, that body is the plot's plan. --part-of
-plants it under a plot. --check defines what the seed must prove.
+plants it under a plot. --check defines what the seed must prove;
+attn numbers it unless C#= names the id, and prints each id.
 Lists up to 3 similar open seeds in your profile, leaving out that plot.
 Planting always proceeds. If one is the same work, wither the new seed.
 --json prints the new seed alone.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}, false},
@@ -205,10 +206,11 @@ bury it.
 ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "member", "json"}, false},
 	{`check`, `check <add|edit|remove|restore|report|confirm|reject|uncheck|reopen>`, `Define, report, or judge what a seed must prove. Each move has its own --help.
 Checks never block a move. harvest lists the checks still open or rejected.`, []string{}, false},
-	{`check add`, `check add <id> <C#> "<statement>" [--shared]`, `Define a numbered statement (C1) that the body cites by id. On a plot,
---shared makes every seed below it prove the check with its own report.
-Removed ids are never reused.`, []string{"m", "member", "ring", "json", "shared"}, false},
-	{`check edit`, `check edit <id> <C#> "<statement>"`, `Replace the check's statement.`, []string{"m", "member", "ring", "json"}, false},
+	{`check add`, `check add <id> [<C#>] -m "<statement>" [--shared]`, `Define a statement the seed must prove and print its id, which the body
+cites. attn picks the next free id in the plot tree; <C#> names one
+instead. On a plot, --shared makes every seed below it prove the check
+with its own report. Removed ids are never reused.`, []string{"m", "member", "ring", "json", "shared"}, false},
+	{`check edit`, `check edit <id> <C#> -m "<statement>"`, `Replace the check's statement.`, []string{"m", "member", "ring", "json"}, false},
 	{`check remove`, `check remove <id> <C#>`, `Remove a check. Its id stays reserved.`, []string{"m", "member", "ring", "json"}, false},
 	{`check restore`, `check restore <id> <C#>`, `Bring a removed check back with its result.`, []string{"m", "member", "ring", "json"}, false},
 	{`check report`, `check report <id> <C#> -m "<summary>" [--evidence <artifact|url>]... [--commit <rev>]`, `Record the proof for a check. --evidence is an artifact on the seed
@@ -264,7 +266,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`f`, `<path>`, `the plot payload to read; - or omitted reads stdin`, func(f *seedFlags) { f.fs.StringVar(&f.file, "f", "", "") }},
 	{`handoff`, ``, `write a note to whoever tends the seed next`, func(f *seedFlags) { f.fs.BoolVar(&f.handoff, "handoff", false, "") }},
 	{`ring`, ``, `give the current tender and watchers a seed update after this note or check move lands, and print who gets it`, func(f *seedFlags) { f.fs.BoolVar(&f.ring, "ring", false, "") }},
-	{`check`, `"C1=<statement>"`, `a check the seed must prove; repeats`, func(f *seedFlags) { f.fs.Var(&f.checks, "check", "") }},
+	{`check`, `"[C#=]<statement>"`, `a check the seed must prove; attn picks the id unless C#= names it; repeats`, func(f *seedFlags) { f.fs.Var(&f.checks, "check", "") }},
 	{`shared`, ``, `every seed below this plot proves the check`, func(f *seedFlags) { f.fs.BoolVar(&f.shared, "shared", false, "") }},
 	{`evidence`, `<artifact|url>`, `an artifact on the seed or an http(s) URL; repeats`, func(f *seedFlags) { f.fs.Var(&f.evidence, "evidence", "") }},
 	{`commit`, `<rev>`, `the commit the evidence came from, resolved with git rev-parse in the current directory`, func(f *seedFlags) { f.fs.StringVar(&f.commit, "commit", "", "") }},
@@ -582,11 +584,7 @@ func runSeedPlant(args []string) {
 	if len(positionals) != 1 {
 		seedUsageError("plant", fmt.Errorf(`needs exactly one title, got %d: attn seed plant "what this is" [-m "the detail"]`, len(positionals)))
 	}
-	checks, err := parsePlantChecks(f.checks)
-	if err != nil {
-		seedFail("plant", err)
-	}
-	msg := protocol.SeedPlantMessage{Title: positionals[0], Checks: checks}
+	msg := protocol.SeedPlantMessage{Title: positionals[0], Checks: parsePlantChecks(f.checks)}
 	if sessionID := f.sessionID(); sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
 	}
@@ -603,6 +601,11 @@ func runSeedPlant(args []string) {
 		return
 	}
 	fmt.Println(seedLine(result.Seed))
+	for _, check := range result.Seed.Checks {
+		if protocol.Deref(check.From) == "" {
+			fmt.Printf("  %s  %s\n", check.ID, check.Text)
+		}
+	}
 	fprintSeedSimilar(os.Stdout, result.Similar, false)
 }
 
