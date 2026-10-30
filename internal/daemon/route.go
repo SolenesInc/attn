@@ -58,6 +58,34 @@ func Call[R any](ctx context.Context, r *Router, msg protocol.Placed) (R, error)
 	return answer, nil
 }
 
+func (r *Router) Send(msg protocol.Placed, answered func(error)) {
+	release, ok := r.daemon.life.Hold("terminalSend")
+	if !ok {
+		answered(errDaemonStopping)
+		return
+	}
+	answer := func(err error) {
+		defer release()
+		answered(err)
+	}
+	conn, err := r.bridge(msg)
+	if err != nil {
+		answer(err)
+		return
+	}
+	if conn != nil {
+		conn.Send(msg, func(err error) { answer(terminalBridgeError(err)) })
+		return
+	}
+	part, ok := r.here[msg.CommandName()]
+	if !ok {
+		answer(fmt.Errorf("no machine part runs %s", msg.CommandName()))
+		return
+	}
+	_, err = part.run(context.Background(), msg)
+	answer(err)
+}
+
 type Origin struct {
 	Host, Name string
 	Caller     protocol.SessionID

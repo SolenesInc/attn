@@ -798,9 +798,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		return
 	}
 
-	if cmd != protocol.CmdPtyInput {
-		client.terminalOrder.breakInputBatch()
-	}
 	switch cmd {
 	case protocol.CmdProfileCreate:
 		d.handleProfileCreate(client, msg.(*protocol.ProfileCreateMessage))
@@ -1237,17 +1234,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		image := msg.(*protocol.GetKittyImageMessage)
 		d.inTerminalOrder(client, image.ID, func() { d.handleGetKittyImage(client, image) })
 	case protocol.CmdPtyInput:
-		input := msg.(*protocol.PtyInputMessage)
-		if d.sessionHost(d.terminals().owner(input.ID)) != "" {
-			d.queueRemoteInput(client, input)
-		} else {
-			d.inTerminalOrder(client, input.ID, func() { d.handlePtyInput(client, input) })
-		}
+		d.handlePtyInput(client, msg.(*protocol.PtyInputMessage))
 	case protocol.CmdSupportSnapshot:
 		d.handleSupportSnapshot(client, msg.(*protocol.SupportSnapshotMessage))
 	case protocol.CmdTerminalPointerActivity:
 		pointer := msg.(*protocol.TerminalPointerActivityMessage)
-		d.inTerminalOrder(client, pointer.ID, func() { d.handleTerminalPointerActivity(pointer) })
+		d.handleTerminalPointerActivity(client, pointer)
 	case protocol.CmdBusStatusGet:
 		d.handleBusStatusGet(client, msg.(*protocol.BusStatusGetMessage))
 	case protocol.CmdBusSetConsumerEnabled:
@@ -1276,7 +1268,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAutoModeLegacyDismissWS(client, msg.(*protocol.AutoModeLegacyDismissMessage))
 	case protocol.CmdPtyResize:
 		resize := msg.(*protocol.PtyResizeMessage)
-		d.inTerminalOrder(client, resize.ID, func() { d.handlePtyResize(client, resize) })
+		d.handlePtyResize(client, resize)
 	case protocol.CmdKillSession:
 		kill := msg.(*protocol.KillSessionMessage)
 		if d.sessionHost(kill.ID) != "" {

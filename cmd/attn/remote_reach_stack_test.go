@@ -2,9 +2,11 @@ package main_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -90,22 +92,44 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	if stalled := outpostState(app, "outpost", protocol.OutpostStateStalled); stalled.Reach != protocol.OutpostReachReachable {
 		t.Fatalf("stalled row: %+v", stalled)
 	}
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\x15", Source: protocol.Ptr("response")})
-	for _, key := range stalledLine {
-		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: string(key)})
-	}
-	awaitInputRefusals(t, app, terminal, len(stalledLine))
-	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
-	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark := len(app.Log())
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\x15", Source: protocol.Ptr("response")})
+	for i, key := range stalledLine {
+		probe := fmt.Sprintf("stalled-%d", i)
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: string(key), ProbeID: &probe, TraceID: &probe})
+	}
+	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
+	for i := range stalledLine {
+		probe := fmt.Sprintf("stalled-%d", i)
+		result := testworld.Await(app, protocol.EventPtyInputProbeResult, func(m protocol.PtyInputProbeResultMessage) bool { return m.ProbeID == probe })
+		if result.Success || protocol.Deref(result.Error) != bridge.ErrUnanswered.Error() {
+			t.Fatalf("unanswered key %s: %+v", probe, result)
+		}
+	}
+	for _, frame := range app.Log()[mark:] {
+		var refused protocol.CommandErrorMessage
+		if json.Unmarshal(frame, &refused) == nil && refused.Event == protocol.EventCommandError && protocol.Deref(refused.Cmd) == protocol.CmdPtyInput {
+			t.Fatalf("unanswered key flashed its tile: %+v", refused)
+		}
+	}
+	snapshot := testworld.Request(app, protocol.SupportSnapshotMessage{Cmd: protocol.CmdSupportSnapshot, RequestID: "unanswered-input", RuntimeIds: []protocol.TerminalID{terminal}}, protocol.EventSupportSnapshotResult, func(m protocol.SupportSnapshotResultMessage) bool { return m.RequestID == "unanswered-input" })
+	traces := map[string]protocol.SupportInputTrace{}
+	for _, trace := range snapshot.InputTraces {
+		traces[trace.TraceID] = trace
+	}
+	for i := range stalledLine {
+		probe := fmt.Sprintf("stalled-%d", i)
+		if trace := traces[probe]; trace.WriteResult != "failed" || protocol.Deref(trace.ErrorClass) != "bridge_unanswered" {
+			t.Fatalf("unanswered key trace %s: %+v", probe, trace)
+		}
+	}
+	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
+	mark = len(app.Log())
 	resume()
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
 	app.TypeLine(id, "echo after-stall-$((4+4))")
 	app.AwaitScreen(id, "after-stall-8")
-	if strings.Contains(string(app.Screen(id)), "stalled-7") {
-		t.Fatalf("keys refused at lost ran later:\n%s", app.Screen(id))
-	}
 
 	mark = len(app.Log())
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
@@ -144,10 +168,10 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	reattach(app)
 	app.TypeLine(id, "echo back-$((5+5))")
 	app.AwaitScreen(id, "back-10")
-	for _, refused := range []string{"stalled-7", "echo off", "echo connecting", "echo lost"} {
+	for _, refused := range []string{"echo off", "echo connecting", "echo lost"} {
 		if strings.Contains(string(app.Screen(id)), refused) {
 			t.Fatalf("refused input %q reached the shell:\n%s", refused, app.Screen(id))
 		}
 	}
-	t.Log("stall then lost, Outposts off, and connecting after a frozen home restart: every refused key named its terminal; none reached the shell")
+	t.Log("keys sent while stalled ended unanswered without a refusal; keys refused with Outposts off, connecting or lost named their terminal and never reached the shell")
 }

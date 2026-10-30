@@ -62,6 +62,7 @@ const (
 	NotebookStreamError        = "notebook-stream-error"
 	NotebookStreamErrorHandled = "notebook-stream-error-handled"
 	BridgeConnectionClosed     = "bridge-connection-closed"
+	RemoteInputAnswered        = "remote-input-answered"
 	OutpostRecoveryReported    = "outpost-recovery-reported"
 	OutpostRecoveryStarted     = "outpost-recovery-started"
 	OutpostRecoveryApplied     = "outpost-recovery-applied"

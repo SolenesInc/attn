@@ -251,14 +251,16 @@ safe prompt, including the usual protection for a recently typed draft.
 While the home is still connecting to an outpost, its terminals don't look
 offline, but typing is not sent yet. This happens after the home starts, when
 you turn Outposts on, and when you add or re-pair an outpost. A stalled
-connection still sends typing. If it then turns lost, the keys still on their
-way fail. The tile says how many keys may not have been sent, and clears that
-message when a key you type goes out again. Some of those keys may already
-have left the home and reach the outpost when it comes back, so look at the
-shell before you retype.
+connection still sends typing, without waiting for earlier keys to be answered.
+If the connection ends before a key's answer arrives, attn cannot tell whether
+that key ran. It does not flash the tile for that key. Keys handed to the
+bridge may reach the outpost when it comes back, so look at the shell before
+you retype.
 
-Every key that is not sent flashes its tile red. attn never retries a key it
-could not send.
+A key flashes its tile red only when attn refuses it before handing it to the
+bridge, or the outpost answers with an error. The tile says how many keys may
+not have been sent, and clears that message when a key you type goes out again.
+attn never retries a key.
 
 A tile that stays open keeps its last screen. If you switch desktops or
 restart the app while the terminal is offline, its tile shows an empty

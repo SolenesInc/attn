@@ -12,8 +12,7 @@ import (
 
 const bridgeCall = "call"
 
-func (d *Daemon) callBridgeHandler(host string) func(*bridge.Conn, ssh.NewChannel) {
-	order := &terminalOrder{}
+func (d *Daemon) callBridgeHandler(host string, order *terminalOrder) func(*bridge.Conn, ssh.NewChannel) {
 	return func(conn *bridge.Conn, incoming ssh.NewChannel) {
 		var header struct {
 			Cmd string `json:"cmd"`
@@ -63,6 +62,44 @@ func (d *Daemon) callBridgeHandler(host string) func(*bridge.Conn, ssh.NewChanne
 				order.runQueued(terminal)
 			}
 		} else if !d.life.Go("bridgeTerminal", execute) {
+			_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
+		}
+	}
+}
+
+func (d *Daemon) inputBridgeHandler(order *terminalOrder) func(*bridge.Conn, ssh.NewChannel) {
+	return func(_ *bridge.Conn, incoming ssh.NewChannel) {
+		if !d.life.Go("bridgeInput", func() {
+			bridge.ServeInput(incoming, func(raw json.RawMessage, answer func(error)) {
+				var header struct {
+					Cmd string `json:"cmd"`
+				}
+				if err := json.Unmarshal(raw, &header); err != nil {
+					answer(err)
+					return
+				}
+				part, ok := d.router().here[header.Cmd]
+				if !ok {
+					answer(fmt.Errorf("no machine part runs %s", header.Cmd))
+					return
+				}
+				msg, err := part.decode(raw)
+				if err != nil {
+					answer(err)
+					return
+				}
+				terminal := protocol.TerminalID(msg.Locate())
+				if !order.queue(terminal, func() {
+					_, err := part.run(context.Background(), msg)
+					answer(err)
+				}) {
+					return
+				}
+				if !d.life.Go("bridgeTerminalOrder", func() { order.runQueued(terminal) }) {
+					order.runQueued(terminal)
+				}
+			})
+		}) {
 			_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
 		}
 	}

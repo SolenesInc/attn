@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -83,6 +84,8 @@ func supportErrorClass(err error) string {
 	switch {
 	case err == nil:
 		return ""
+	case errors.Is(err, bridge.ErrUnanswered):
+		return "bridge_unanswered"
 	case errors.Is(err, pty.ErrSessionNotFound), errors.Is(err, os.ErrNotExist):
 		return "session_not_found"
 	case errors.Is(err, context.DeadlineExceeded):

@@ -460,6 +460,27 @@ func TestReconnectDeliversACloseCommittedWhileTheBridgeBreaks(t *testing.T) {
 	}
 }
 
+func TestRemoteInputEchoesWhileAnEarlierAnswerIsHeld(t *testing.T) {
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, remote)
+	answered := home.PauseAt(pausepoint.RemoteInputAnswered)
+	for _, s := range []*testworld.Stack{remote, home} {
+		s.Vars = append(s.Vars, "SHELL=/bin/bash")
+		s.Start()
+	}
+	pair.Connect()
+	app := pair.App
+	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
+	terminal := protocol.TerminalID(app.Terminal(id))
+	app.Watch(id)
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "a"})
+	answered.Await()
+	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "b"})
+	app.AwaitScreen(id, "ab")
+	answered.Release()
+	t.Log("the second key echoed while the home held the first key's answer")
+}
+
 func TestRemoteInputKeepsItsBytesAndProbesWithoutBlockingALocalTile(t *testing.T) {
 	a := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)

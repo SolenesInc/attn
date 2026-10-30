@@ -62,6 +62,7 @@ func (d *Daemon) sendOutpostCopyBatch(ctx context.Context, host string, conn *br
 }
 
 func (d *Daemon) outpostHandlers() bridge.Handlers {
+	order := &terminalOrder{}
 	return bridge.Handlers{
 		notebookChannel: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("notebookStream", func() {
@@ -72,7 +73,8 @@ func (d *Daemon) outpostHandlers() bridge.Handlers {
 				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
 			}
 		},
-		bridgeCall: d.callBridgeHandler(""),
+		bridgeCall:          d.callBridgeHandler("", order),
+		bridge.InputChannel: d.inputBridgeHandler(order),
 		bridgeCallRecovery: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("reportOutpostMachine", func() {
 				bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) {

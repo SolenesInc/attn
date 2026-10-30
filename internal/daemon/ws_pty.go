@@ -14,9 +14,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -87,26 +89,20 @@ func (c *wsClient) streamsTo(terminal protocol.TerminalID) bool {
 }
 
 type terminalCommand struct {
-	run    func()
-	inputs []*protocol.PtyInputMessage
+	run  func()
+	send func(answered func())
 }
 
 type terminalOrder struct {
-	mu        sync.Mutex
-	queued    map[protocol.TerminalID][]*terminalCommand
-	lastInput *terminalCommand
-}
-
-func (o *terminalOrder) breakInputBatch() {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.lastInput = nil
+	mu         sync.Mutex
+	answers    sync.Cond
+	queued     map[protocol.TerminalID][]*terminalCommand
+	unanswered map[protocol.TerminalID]int
 }
 
 func (o *terminalOrder) queueBehindRunning(terminal protocol.TerminalID, command func()) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.lastInput = nil
 	queue, running := o.queued[terminal]
 	if running {
 		o.queued[terminal] = append(queue, &terminalCommand{run: command})
@@ -114,36 +110,20 @@ func (o *terminalOrder) queueBehindRunning(terminal protocol.TerminalID, command
 	return running
 }
 
-func (o *terminalOrder) queue(terminal protocol.TerminalID, command func()) (startRunning bool) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	if o.queued == nil {
-		o.queued = make(map[protocol.TerminalID][]*terminalCommand)
-	}
-	o.lastInput = nil
-	queue, running := o.queued[terminal]
-	o.queued[terminal] = append(queue, &terminalCommand{run: command})
-	return !running
+func (o *terminalOrder) queue(terminal protocol.TerminalID, command func()) bool {
+	return o.enqueue(terminal, &terminalCommand{run: command})
 }
 
-func (o *terminalOrder) queueInput(msg *protocol.PtyInputMessage, write func([]*protocol.PtyInputMessage)) bool {
+func (o *terminalOrder) enqueue(terminal protocol.TerminalID, command *terminalCommand) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.queued == nil {
 		o.queued = make(map[protocol.TerminalID][]*terminalCommand)
+		o.unanswered = make(map[protocol.TerminalID]int)
+		o.answers.L = &o.mu
 	}
-	queue, running := o.queued[msg.ID]
-	if len(queue) > 0 {
-		last := queue[len(queue)-1]
-		if last == o.lastInput && strings.TrimSpace(protocol.Deref(last.inputs[0].Source)) == strings.TrimSpace(protocol.Deref(msg.Source)) {
-			last.inputs = append(last.inputs, msg)
-			return false
-		}
-	}
-	command := &terminalCommand{inputs: []*protocol.PtyInputMessage{msg}}
-	command.run = func() { write(command.inputs) }
-	o.lastInput = command
-	o.queued[msg.ID] = append(queue, command)
+	queue, running := o.queued[terminal]
+	o.queued[terminal] = append(queue, command)
 	return !running
 }
 
@@ -157,12 +137,37 @@ func (o *terminalOrder) runQueued(terminal protocol.TerminalID) {
 			return
 		}
 		next := queue[0]
-		if o.lastInput == next {
-			o.lastInput = nil
-		}
+		queue[0] = nil
 		o.queued[terminal] = queue[1:]
-		o.mu.Unlock()
-		next.run()
+		if next.send != nil {
+			o.unanswered[terminal]++
+			o.mu.Unlock()
+			next.send(func() {
+				o.mu.Lock()
+				defer o.mu.Unlock()
+				o.unanswered[terminal]--
+				if o.unanswered[terminal] == 0 {
+					delete(o.unanswered, terminal)
+					o.answers.Broadcast()
+				}
+			})
+		} else {
+			for o.unanswered[terminal] > 0 {
+				o.answers.Wait()
+			}
+			o.mu.Unlock()
+			next.run()
+		}
+	}
+}
+
+func (d *Daemon) sendInTerminalOrder(client *wsClient, terminal protocol.TerminalID, send func(answered func())) {
+	if d.sessionHost(d.terminals().owner(terminal)) == "" {
+		d.inTerminalOrder(client, terminal, func() { send(func() {}) })
+		return
+	}
+	if client.terminalOrder.enqueue(terminal, &terminalCommand{send: send}) {
+		d.runTerminalOrder(client, terminal)
 	}
 }
 
@@ -704,56 +709,47 @@ func (d *Daemon) sendPTYDesync(client *wsClient, terminalID protocol.TerminalID,
 }
 
 func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage) {
-	d.handlePtyInputs(client, []*protocol.PtyInputMessage{msg})
-}
-
-func (d *Daemon) queueRemoteInput(client *wsClient, msg *protocol.PtyInputMessage) {
-	if client.terminalOrder.queueInput(msg, func(inputs []*protocol.PtyInputMessage) { d.handlePtyInputs(client, inputs) }) {
-		d.runTerminalOrder(client, msg.ID)
-	}
-}
-
-func (d *Daemon) handlePtyInputs(client *wsClient, inputs []*protocol.PtyInputMessage) {
-	receivedAt := time.Now()
-	first := inputs[0]
-	source := strings.TrimSpace(protocol.Deref(first.Source))
-	data := first.Data
-	if len(inputs) > 1 {
-		var joined strings.Builder
-		for _, msg := range inputs {
-			joined.WriteString(msg.Data)
+	d.sendInTerminalOrder(client, msg.ID, func(answered func()) {
+		receivedAt := time.Now()
+		source := strings.TrimSpace(protocol.Deref(msg.Source))
+		if d.debugLogging {
+			d.logf("pty_input: id=%s bytes=%d preview=%q source=%s", msg.ID, len(msg.Data), previewBinaryForLog([]byte(msg.Data)), source)
 		}
-		data = joined.String()
-	}
-	if d.debugLogging {
-		d.logf("pty_input: id=%s bytes=%d preview=%q source=%s", first.ID, len(data), previewBinaryForLog([]byte(data)), source)
-	}
-	_, writeErr := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: first.ID, Data: data, Source: source})
+		write := protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: msg.ID, Data: msg.Data, Source: source}
+		d.router().Send(write, func(err error) {
+			answered()
+			pausepoint.At(pausepoint.RemoteInputAnswered)
+			d.ptyInputAnswered(client, msg, receivedAt, err)
+		})
+	})
+}
+
+func (d *Daemon) ptyInputAnswered(client *wsClient, msg *protocol.PtyInputMessage, receivedAt time.Time, writeErr error) {
 	elapsed := time.Since(receivedAt)
-	for _, msg := range inputs {
-		d.recordSupportInputTrace(msg, receivedAt, elapsed, writeErr)
+	d.recordSupportInputTrace(msg, receivedAt, elapsed, writeErr)
+	if writeErr != nil {
+		if !errors.Is(writeErr, bridge.ErrUnanswered) && d.sessionHost(d.terminals().owner(msg.ID)) != "" && sessionmonitor.IsUserKeystrokeSource(strings.TrimSpace(protocol.Deref(msg.Source))) {
+			d.sendTerminalRefusal(client, protocol.CmdPtyInput, msg.ID, writeErr)
+		}
+		if shouldLogPtyCommandError(writeErr) {
+			d.logf("pty_input failed for %s: %v", msg.ID, writeErr)
+		}
+	} else if d.debugLogging {
+		d.logf("pty_input ok: id=%s bytes=%d", msg.ID, len(msg.Data))
+	}
+	if probeID := strings.TrimSpace(protocol.Deref(msg.ProbeID)); probeID != "" && client != nil {
+		result := &protocol.PtyInputProbeResultMessage{Event: protocol.EventPtyInputProbeResult, ID: msg.ID, ProbeID: probeID, Success: writeErr == nil, WriteDurationUs: int(elapsed.Microseconds())}
 		if writeErr != nil {
-			if d.sessionHost(d.terminals().owner(msg.ID)) != "" && sessionmonitor.IsUserKeystrokeSource(strings.TrimSpace(protocol.Deref(msg.Source))) {
-				d.sendTerminalRefusal(client, protocol.CmdPtyInput, msg.ID, writeErr)
-			}
-			if shouldLogPtyCommandError(writeErr) {
-				d.logf("pty_input failed for %s: %v", msg.ID, writeErr)
-			}
-		} else if d.debugLogging {
-			d.logf("pty_input ok: id=%s bytes=%d", msg.ID, len(msg.Data))
+			result.Error = protocol.Ptr(writeErr.Error())
 		}
-		if probeID := strings.TrimSpace(protocol.Deref(msg.ProbeID)); probeID != "" && client != nil {
-			result := &protocol.PtyInputProbeResultMessage{Event: protocol.EventPtyInputProbeResult, ID: msg.ID, ProbeID: probeID, Success: writeErr == nil, WriteDurationUs: int(elapsed.Microseconds())}
-			if writeErr != nil {
-				result.Error = protocol.Ptr(writeErr.Error())
-			}
-			d.sendToClient(client, result)
-		}
+		d.sendToClient(client, result)
 	}
 }
 
-func (d *Daemon) handleTerminalPointerActivity(msg *protocol.TerminalPointerActivityMessage) {
-	_, _ = Call[struct{}](context.Background(), d.router(), *msg)
+func (d *Daemon) handleTerminalPointerActivity(client *wsClient, msg *protocol.TerminalPointerActivityMessage) {
+	d.sendInTerminalOrder(client, msg.ID, func(answered func()) {
+		d.router().Send(*msg, func(error) { answered() })
+	})
 }
 
 type ptyGeometry struct {
@@ -786,12 +782,17 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		d.sendCommandError(client, protocol.CmdPtyResize, fmt.Sprintf("invalid terminal size cols=%d rows=%d (expected 1..%d)", msg.Cols, msg.Rows, maxPTYDimValue))
 		return
 	}
-	if _, err := Call[struct{}](context.Background(), d.router(), *msg); err != nil && shouldLogPtyCommandError(err) {
-		d.logf("pty_resize failed for %s: %v", msg.ID, err)
-		if d.sessionHost(d.terminals().owner(msg.ID)) != "" {
-			d.sendTerminalRefusal(client, protocol.CmdPtyResize, msg.ID, err)
-		}
-	}
+	d.sendInTerminalOrder(client, msg.ID, func(answered func()) {
+		d.router().Send(*msg, func(err error) {
+			answered()
+			if err != nil && shouldLogPtyCommandError(err) {
+				d.logf("pty_resize failed for %s: %v", msg.ID, err)
+				if !errors.Is(err, bridge.ErrUnanswered) && d.sessionHost(d.terminals().owner(msg.ID)) != "" {
+					d.sendTerminalRefusal(client, protocol.CmdPtyResize, msg.ID, err)
+				}
+			}
+		})
+	})
 }
 
 var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
