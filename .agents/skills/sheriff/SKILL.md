@@ -24,9 +24,13 @@ Unless that run failed, end in one line.
   `gh run view <id> --log-failed` to them, and run the failing test at each
   candidate when several fit.
 - Revert only the culprit, in a throwaway worktree off `origin/main`, and land
-  the revert with `scripts/land.sh`. Name the run and failure in its message.
+  the revert with `scripts/land.sh`. Check it with the failing test and the
+  affected surface. Name the run and failure in its message.
 - Tell the author the failure, the run, the revert, and how to land again:
-  `git revert <revert-sha>`, fix, `scripts/land.sh`.
+  `git revert <revert-sha>`, fix, run targeted tests, check the affected surface,
+  then `scripts/land.sh`. Include that verification scope in dispatched fixers'
+  briefs too: the full Go and frontend suites run in CI on `main`. Do not run
+  or request `make test`, `make lint`, or `make test-frontend` before landing.
   - Its `Attn-Session:` is live: `attn agent msg <session> "<message>"`.
   - Otherwise: `attn delegate --brief-file <file> --cwd <this clone>
     --new-worktree --branch reland-<short-sha> --from origin/main`, then

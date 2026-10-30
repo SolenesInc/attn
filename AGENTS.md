@@ -115,6 +115,8 @@ on `main` after they land, and releases ship only reviewed, green commits.
 [Trunk-based development](docs/trunk-based-development.md) is the process.
 
 - Land with `scripts/land.sh`.
+- Run targeted tests and check the affected surface before landing. `land.sh`
+  runs a fast gate; the full Go and frontend suites run in CI on `main`.
 - Rebase onto `origin/main` at the start of every step and land each slice
   that works. Commits held back on a branch turn into conflicts.
 
@@ -150,19 +152,29 @@ on `main` after they land, and releases ship only reviewed, green commits.
 
 ## Commands and verification
 
-- `make test`: Go tests (`make test-v` verbose, `make test-watch` on file
-  changes)
-- `make test-frontend` (`pnpm --dir app test:ui` for the Vitest UI)
+- `go test -run TestName ./pkg`: Targeted Go tests
+- `pnpm --dir app exec vitest run src/path/to/file.test.tsx`: One frontend test file
+- `scripts/land.sh`: Fast compile, typecheck, lint, generated-file and script
+  checks selected by changed paths, then push to `main`
+- `make test`: Full Go suite (`make test-v` verbose, `make test-watch` on file
+  changes), for CI or diagnosing a suite-wide failure
+- `make test-frontend`: Full frontend suite (`pnpm --dir app test:ui` for the Vitest UI)
 - `make test-e2e`: Browser tests (`pnpm --dir app e2e:headed` to watch them)
 - `make test-scripts`: Shell script tests
 - `pnpm --dir app run dev`: Runs the frontend/app dev server
 - `make lint`: Overall linter
 
+Before landing or reporting done, run targeted tests for what you changed and
+check the affected surface. Do not run `make test`, `make lint`,
+`make test-frontend`, or another full suite as a landing step. CI on `main`
+runs the full suites after landing.
+
 `make test` skips the Go suite when only `docs/`, root Markdown and `app/src`
 changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares
 against another branch.
 
-Run the whole `internal/daemon` package through `make test`, which shards it;
+When diagnosing a failure that needs the whole `internal/daemon` package,
+use `make test`, which shards it;
 a plain `go test ./internal/daemon` takes about 11 minutes on a busy Mac, past
 `go test`'s default 10-minute `-timeout`. Targeted `go test -run` runs need no
 sharding. Never filter `go test` output with `grep` or `tail`: a timeout's

@@ -90,13 +90,29 @@ Rebase yourself with git rebase origin/main, then run scripts/land.sh again."
 }
 
 run_checks() {
-  local changed targets=()
+  local changed file dir packages targets=()
   changed="$(git diff --name-only origin/main...HEAD)"
   touches() { grep -qE "$1" <<<"$changed"; }
-  touches '\.go$|^go\.(mod|sum)$' && targets+=(test lint-go)
+  if touches '\.go$|^go\.(mod|sum)$'; then
+    packages='./...'
+    if ! touches '^go\.(mod|sum)$'; then
+      packages="$(while IFS= read -r file; do
+        case "$file" in
+          *.go)
+            dir="$(dirname "$file")"
+            if compgen -G "$dir/*.go" >/dev/null; then
+              printf './%s\n' "$dir"
+            fi
+            ;;
+        esac
+      done <<<"$changed" | sort -u | paste -sd ' ' -)"
+      packages="${packages:-./...}"
+    fi
+    targets+=(check-go "GO_PACKAGES=$packages")
+  fi
   touches '^internal/protocol/schema/' && targets+=(check-types)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
-  touches '^app/' && targets+=(lint-frontend test-frontend)
+  touches '^app/' && targets+=(check-frontend)
   touches '^scripts/' && targets+=(test-scripts)
   if [ "${#targets[@]}" -gt 0 ]; then
     make "${targets[@]}"

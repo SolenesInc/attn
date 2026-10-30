@@ -4,6 +4,13 @@ Tests guard the promises attn makes. To check your own work, run it: the
 daemon over `wsctl`, the CLI, a non-production instance, a throwaway test. Keep
 those scratch checks out of commits.
 
+Before landing, run targeted tests for the behavior you changed, such as
+`go test -run TestName ./pkg` or one file with `pnpm --dir app exec vitest run`.
+Then check the affected surface and land with `scripts/land.sh`, which runs a
+fast gate. The full Go and frontend suites run in CI on `main`. Do not run
+`make test`, `make lint`, `make test-frontend`, or another full suite as a
+pre-landing check. See [Trunk-based development](trunk-based-development.md).
+
 ## Promises
 
 A promise is behavior that someone outside the code relies on: the user, the

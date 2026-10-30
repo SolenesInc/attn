@@ -223,8 +223,15 @@ test-frontend: $(APP_NODE_MODULES)
 
 lint: lint-go lint-frontend
 
+GO_PACKAGES ?= ./...
+
+.PHONY: check-go check-frontend
+check-go: lint-go
+	go test -exec=true -vet=off ./...
+	go vet $(GO_PACKAGES)
+
 lint-go: $(NATIVE_VT_DEP)
-	go tool staticcheck ./...
+	go tool staticcheck $(GO_PACKAGES)
 	go run ./scripts/lifetimelint
 	@deps=$$(go list -deps ./cmd/...) || exit 1; \
 	if printf '%s\n' "$$deps" | grep -E '/internal/(testworld|fakeagent)$$'; then \
@@ -238,6 +245,9 @@ lint-go: $(NATIVE_VT_DEP)
 lint-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run lint
 	app/node_modules/.bin/oxlint --deny-warnings cmd/prompt-editor/web cmd/prompt-editor/test
+
+check-frontend: lint-frontend
+	cd app && pnpm exec tsc --noEmit
 
 test-e2e: $(APP_NODE_MODULES)
 	cd app && pnpm run e2e

@@ -21,7 +21,7 @@ review have passed. Contributors working from a fork use
 3. Check the change yourself on the surface it touches (see
    [Verifying before landing](#verifying-before-landing)).
 4. Run `scripts/land.sh`.
-5. Everything after is automatic: `main`'s CI runs the full scenario matrix,
+5. Everything after is automatic: `main`'s CI runs the full test suites and scenario matrix,
    the sheriff reverts a landing that breaks `main`, the review automation
    reviews the commits and messages their author or dispatches a fixer, and
    release notes are written from the commits.
@@ -39,9 +39,19 @@ after running its checks yourself.
 
 ### What land.sh does
 
-`scripts/land.sh` rebases onto `origin/main`, runs the checks for the paths the
-landing changes, and pushes. When only protocol types or prompt catalogs
-conflict, it regenerates them.
+`scripts/land.sh` rebases onto `origin/main`, runs a fast gate for the paths the
+landing changes, and pushes:
+
+- Go: compile all packages and tests without running tests, run vet and
+  staticcheck on changed packages, and check daemon lifetimes and import
+  boundaries. A module change checks all packages.
+- Protocol schema or prompt inputs: check that generated types or catalogs
+  are current.
+- `app/`: typecheck and lint, without Vitest.
+- `scripts/`: run the shell script tests.
+
+When only protocol types or prompt catalogs conflict, it regenerates them.
+The full Go and frontend suites run in CI on `main`, never in the landing gate.
 
 ### When main moves
 
@@ -53,9 +63,15 @@ and run `scripts/land.sh` again. Combinations of changes are verified by
 
 ## Verifying before landing
 
-Verify the change locally on the surface it touches: the CLI, the daemon over
-`wsctl`, a non-production instance, the app. The drive-attn skill's feature map
-lists every way into a feature. Then land.
+Run targeted tests for the behavior you changed: `go test -run TestName ./pkg`
+or `pnpm --dir app exec vitest run src/path/to/file.test.tsx`. Verify the change
+on the surface it touches: the CLI, the daemon over `wsctl`, a non-production
+instance, the app. The drive-attn skill's feature map lists every way into a
+feature. Then land with `scripts/land.sh`.
+
+Do not run `make test`, `make lint`, `make test-frontend`, or another full suite
+as a pre-landing check. Targeted tests and the fast gate are local work; CI
+runs the full suites on `main` after landing.
 
 Running the scenarios that cover an app-observable change locally, on a
 non-production instance, is optional, when the machine can take it. After
