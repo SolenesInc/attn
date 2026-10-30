@@ -60,7 +60,7 @@ func (c *Client) options(batch bool) []string {
 }
 func (c *Client) masterCommand(batch bool) []string {
 	args := append([]string{"ssh"}, c.options(batch)...)
-	return append(args, "-o", "ControlMaster=yes", "-o", "ControlPersist=yes", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3", "-N", "-T", "-a", "-x", c.Destination)
+	return append(args, "-o", "ControlMaster=yes", "-o", "ControlPersist=yes", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", "-N", "-T", "-a", "-x", c.Destination)
 }
 func (c *Client) MasterCommand() []string { return c.masterCommand(false) }
 func (c *Client) control(ctx context.Context, action string) error {

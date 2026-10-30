@@ -313,7 +313,7 @@ func TestSSHUnpairedAddFinishesAfterAuthentication(t *testing.T) {
 			if restart {
 				home.Stop()
 			} else {
-				home.AwaitTimer(bridge.LostAfter)
+				home.AwaitTimer(bridge.RefusedRetryInterval)
 			}
 			ssh.Restore("first-auth")
 			ssh.StartMaster(home, refused.ID, "first-auth")
@@ -322,7 +322,7 @@ func TestSSHUnpairedAddFinishesAfterAuthentication(t *testing.T) {
 				app = home.App()
 			}
 			if !restart {
-				home.Advance(bridge.LostAfter)
+				home.Advance(bridge.RefusedRetryInterval)
 			}
 			result := testworld.AwaitSince(app, 0, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 				return len(m.Outposts) == 1 && (m.Outposts[0].State == protocol.OutpostStateConnected || m.Outposts[0].State == protocol.OutpostStateRefused && protocol.Deref(m.Outposts[0].LastError) != protocol.Deref(refused.LastError))

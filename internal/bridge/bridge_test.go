@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -103,6 +104,19 @@ func TestBridgeLiveness(t *testing.T) {
 		t.Run(fmt.Sprintf("recover=%v", recovery), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				w := pair(t)
+				received := make(chan string, 1)
+				w.cfg.Handlers = bridge.Handlers{bridge.InputChannel: func(_ *bridge.Conn, incoming ssh.NewChannel) {
+					w.workers.Go(func() {
+						bridge.ServeInput(incoming, func(data json.RawMessage, answer func(error)) {
+							var key string
+							if err := json.Unmarshal(data, &key); err != nil {
+								t.Error(err)
+							}
+							received <- key
+							answer(nil)
+						})
+					})
+				}}
 				w.start()
 				client, pin, err := w.dial(home, nil)
 				if err != nil {
@@ -125,18 +139,41 @@ func TestBridgeLiveness(t *testing.T) {
 				state(t, client, bridge.StateStalled)
 				state(t, server, bridge.StateStalled)
 				if recovery {
-					time.Sleep(2 * time.Second)
+					answered := make(chan error, 1)
+					client.Send("key during silence", func(err error) { answered <- err })
+					time.Sleep(12 * time.Second)
+					synctest.Wait()
+					select {
+					case err := <-answered:
+						t.Fatalf("input answered before the route returned: %v", err)
+					default:
+					}
 					w.network.Cut(false)
 					time.Sleep(bridge.HeartbeatInterval)
 					synctest.Wait()
 					state(t, client, bridge.StateConnected)
 					state(t, server, bridge.StateConnected)
+					if err := <-answered; err != nil {
+						t.Fatalf("input after 15s silence: %v", err)
+					}
+					if key := <-received; key != "key during silence" {
+						t.Fatalf("outpost received %q", key)
+					}
 				} else {
-					time.Sleep(7 * time.Second)
+					time.Sleep(56 * time.Second)
+					synctest.Wait()
+					for _, peer := range []*bridge.Conn{client, server} {
+						select {
+						case got := <-peer.States():
+							t.Fatalf("state changed at 59s: %s", got)
+						default:
+						}
+					}
+					time.Sleep(time.Second)
 					synctest.Wait()
 					state(t, client, bridge.StateLost)
 					state(t, server, bridge.StateLost)
-					if !strings.Contains(client.Err().Error(), "10s") {
+					if !strings.Contains(client.Err().Error(), "1m0s") {
 						t.Fatal(client.Err())
 					}
 				}

@@ -5,13 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/outpostssh"
 )
 
@@ -80,6 +84,19 @@ func TestSSHCommandProcess(t *testing.T) {
 		}
 	}
 	last := args[len(args)-1]
+	if socket := os.Getenv("ATTN_SSH_STDERR_HOLDER"); socket != "" && strings.Contains(last, "_bridge") {
+		control, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: socket, Net: "unix"})
+		if err != nil {
+			panic(err)
+		}
+		if _, _, err := control.WriteMsgUnix([]byte{1}, syscall.UnixRights(int(os.Stderr.Fd())), nil); err != nil {
+			panic(err)
+		}
+		if _, err := io.Copy(io.Discard, os.Stdin); err != nil {
+			panic(err)
+		}
+		os.Exit(0)
+	}
 	if strings.Contains(last, "uname -sm") {
 		_, _ = io.WriteString(os.Stdout, "Linux x86_64\n{\"version\":\"test\",\"sourceFingerprint\":\"git:test\",\"protocolVersion\":\"test\"}\nb false\n")
 	} else if strings.Contains(last, "_bridge") {
@@ -136,7 +153,7 @@ func TestSSHCommands(t *testing.T) {
 	}
 	rows := commands()
 	common := []string{"-o", "ControlPath=" + client.ControlPath, "-o", "RemoteCommand=none", "-o", "ClearAllForwardings=yes", "-o", "PermitLocalCommand=no", "-o", "BatchMode=yes"}
-	master := append(append([]string{}, common...), "-o", "ControlMaster=yes", "-o", "ControlPersist=yes", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=3", "-N", "-T", "-a", "-x", "user@machine")
+	master := append(append([]string{}, common...), "-o", "ControlMaster=yes", "-o", "ControlPersist=yes", "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", "-N", "-T", "-a", "-x", "user@machine")
 	if !reflect.DeepEqual(rows[0], append(append([]string{}, common...), "-O", "check", "user@machine")) || !reflect.DeepEqual(rows[1], master) || !reflect.DeepEqual(rows[len(rows)-1], append(append([]string{}, common...), "-O", "exit", "user@machine")) {
 		t.Fatalf("master commands: %q", rows)
 	}
@@ -175,10 +192,85 @@ func TestSSHFailures(t *testing.T) {
 			if !errors.As(err, &failure) || failure.ExitCode != 255 || failure.Stderr != string(sample) {
 				t.Fatalf("failure: %v", err)
 			}
+			conn, err := client.Bridge(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = io.ReadAll(conn)
+			conn.Close()
+			if !errors.As(err, &failure) || failure.ExitCode != 255 || failure.Stderr != string(sample) {
+				t.Fatalf("bridge failure: %v", err)
+			}
 			want := strings.HasPrefix(filepath.Base(path), "auth-") || strings.HasPrefix(filepath.Base(path), "host-")
 			if failure.Connectable() != want {
 				t.Fatalf("connectable=%v want=%v: %s", failure.Connectable(), want, sample)
 			}
 		})
+	}
+}
+
+func TestBridgeCloseDoesNotWaitForOtherStderrHolders(t *testing.T) {
+	client, _ := commandWorld(t)
+	dir, err := os.MkdirTemp("", "ssh-fd-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "holder.sock")
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	t.Setenv("ATTN_SSH_STDERR_HOLDER", socket)
+	conn, err := client.Bridge(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	control, err := listener.AcceptUnix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer control.Close()
+	oob := make([]byte, syscall.CmsgSpace(4))
+	_, size, _, _, err := control.ReadMsgUnix([]byte{0}, oob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages, err := syscall.ParseSocketControlMessage(oob[:size])
+	if err != nil || len(messages) != 1 {
+		t.Fatalf("stderr descriptor messages=%v: %v", messages, err)
+	}
+	fds, err := syscall.ParseUnixRights(&messages[0])
+	if err != nil || len(fds) != 1 {
+		t.Fatalf("stderr descriptors=%v: %v", fds, err)
+	}
+	held := os.NewFile(uintptr(fds[0]), "external SSH stderr holder")
+	t.Cleanup(func() { held.Close(); conn.Close() })
+	if err := conn.(interface{ CloseWrite() error }).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(control); err != nil {
+		t.Fatal(err)
+	}
+	t.Log("SSH command exited; independent stderr writer remains open")
+	finished := make(chan error, 1)
+	started := time.Now()
+	go func() { finished <- conn.Close() }()
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	select {
+	case err := <-finished:
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Bridge.Close returned in %s while independent stderr writer remains open", time.Since(started))
+	case <-guard.C:
+		t.Errorf("Bridge.Close did not return within existing HangGuard=%s while independent stderr writer remained open", fakeagent.HangGuard)
+		held.Close()
+		if err := <-finished; err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("Bridge.Close returned after independent stderr writer release, elapsed %s", time.Since(started))
 	}
 }

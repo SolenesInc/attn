@@ -99,7 +99,7 @@ func (d *Daemon) reconcileRemoteTerminals(ctx context.Context, session protocol.
 		if slices.Contains(running, terminal) || len(d.terminalsOf(session)) <= 1 {
 			continue
 		}
-		probeCtx, cancel := context.WithTimeout(ctx, bridge.LostAfter)
+		probeCtx, cancel := context.WithTimeout(ctx, bridge.AnswerWithin)
 		snapshot, err := Call[protocol.GetScreenSnapshotResultMessage](probeCtx, d.router(), protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal})
 		cancel()
 		if err != nil && !errors.Is(err, pty.ErrSessionNotFound) {

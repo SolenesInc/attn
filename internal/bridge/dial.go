@@ -37,13 +37,13 @@ type DialConfig struct {
 
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	handshakeCtx, cancel := context.WithCancelCause(ctx)
-	deadline := stepclock.AfterFunc(LostAfter, func() { cancel(context.DeadlineExceeded) })
+	deadline := stepclock.AfterFunc(AnswerWithin, func() { cancel(context.DeadlineExceeded) })
 	defer deadline.Stop()
 	defer cancel(context.Canceled)
 	ready, seen, err := handshake(handshakeCtx, cfg)
 	var refusal *Refusal
 	if err != nil && !errors.As(err, &refusal) && errors.Is(context.Cause(handshakeCtx), context.DeadlineExceeded) {
-		err = fmt.Errorf("bridge to %s: no answer within %s: %w", cfg.Conn.RemoteAddr().String(), LostAfter, context.DeadlineExceeded)
+		err = fmt.Errorf("bridge to %s: no answer within %s: %w", cfg.Conn.RemoteAddr().String(), AnswerWithin, context.DeadlineExceeded)
 	}
 	if err != nil {
 		return nil, seen, err
@@ -68,7 +68,7 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 			_ = raw.Close()
 		}
 	}()
-	if err := raw.SetDeadline(time.Now().Add(LostAfter)); err != nil {
+	if err := raw.SetDeadline(time.Now().Add(AnswerWithin)); err != nil {
 		return nil, nil, err
 	}
 	stopRaw := context.AfterFunc(handshakeCtx, func() { _ = raw.Close() })

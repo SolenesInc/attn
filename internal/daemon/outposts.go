@@ -222,7 +222,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		case <-ctx.Done():
 			return
 		case code := <-run.commandExit:
-			if code != 0 && !waitOutpostRetry(ctx, bridge.LostAfter) {
+			if code != 0 && !waitOutpostRetry(ctx, bridge.RefusedRetryInterval) {
 				return
 			}
 			if code == 0 {
@@ -285,10 +285,10 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			build := ""
 			var sshError *outpostssh.Error
 			if errors.As(err, &sshError) && sshError.Connectable() {
-				state, delay = bridge.StateRefused, bridge.LostAfter
+				state, delay = bridge.StateRefused, bridge.RefusedRetryInterval
 			}
 			if errors.As(err, &refusal) {
-				state, delay = bridge.StateRefused, bridge.LostAfter
+				state, delay = bridge.StateRefused, bridge.RefusedRetryInterval
 				if refusal.Peer != nil {
 					build = refusal.Peer.Build.String()
 				} else if refusal.Reason == "build" || refusal.Reason == "install" {

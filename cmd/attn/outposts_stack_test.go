@@ -178,7 +178,7 @@ func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {
 	}
 	home.Advance(bridge.LostAfter - bridge.StallAfter)
 	lost := outpostStateSince(p, "frozen", protocol.OutpostStateLost, mark)
-	if !strings.Contains(protocol.Deref(lost.LastError), "10s") {
+	if !strings.Contains(protocol.Deref(lost.LastError), "1m0s") {
 		t.Fatalf("loss omits threshold: %+v", lost)
 	}
 	mark = p.EventCount()

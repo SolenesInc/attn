@@ -88,7 +88,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		duplicate := run != nil && errors.As(run.lastError, &refusal) && refusal.Reason == "duplicate"
 		r.mu.Unlock()
 		if !duplicate {
-			ctx, cancel := context.WithTimeout(d.life.Context(), bridge.LostAfter)
+			ctx, cancel := context.WithTimeout(d.life.Context(), bridge.AnswerWithin)
 			if err := remote.Remove(ctx); err != nil {
 				instance := config.InstanceLabel()
 				path := remote.InstallPath()

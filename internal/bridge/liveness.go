@@ -14,10 +14,12 @@ import (
 )
 
 const (
-	HeartbeatInterval = 500 * time.Millisecond
-	StallAfter        = 3 * time.Second
-	LostAfter         = 10 * time.Second
-	ReconnectInterval = 2 * time.Second
+	HeartbeatInterval    = 500 * time.Millisecond
+	StallAfter           = 3 * time.Second
+	LostAfter            = 60 * time.Second
+	AnswerWithin         = 10 * time.Second
+	RefusedRetryInterval = 10 * time.Second
+	ReconnectInterval    = 2 * time.Second
 )
 
 var errNoFrames = fmt.Errorf("no frame for %s", LostAfter)

@@ -263,8 +263,8 @@ func TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges(t *testing.T) {
 		link    outpostLink
 		failing []string
 	}{
-		{name: "accepts and never speaks SSH", link: linkUp, failing: []string{"", "no frame for 10s"}},
-		{name: "resets every connection", link: linkResets, failing: []string{"", "no frame for 10s", "connection reset by peer"}},
+		{name: "accepts and never speaks SSH", link: linkUp, failing: []string{"", "no frame for 1m0s"}},
+		{name: "resets every connection", link: linkResets, failing: []string{"", "no frame for 1m0s", "connection reset by peer"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			prepared := prepareWorld(t)
@@ -281,8 +281,22 @@ func TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges(t *testing.T) {
 				mark := len(app.Log())
 				far.network.Cut(true)
 				far.link.Store(int32(tc.link))
-				w.advance(time.Minute)
+				w.advance(3 * time.Second)
 				got := outpostUpdates(app, mark)
+				if len(got) != 1 || got[0].State != protocol.OutpostStateStalled || got[0].Reach != protocol.OutpostReachReachable {
+					t.Fatalf("after 3s silence: %s", describeOutposts(got))
+				}
+				w.advance(56 * time.Second)
+				if got := outpostUpdates(app, mark); len(got) != 1 {
+					t.Fatalf("changed reach before 60s: %s", describeOutposts(got))
+				}
+				w.advance(time.Second)
+				got = outpostUpdates(app, mark)
+				if len(got) < 2 || got[1].State != protocol.OutpostStateLost || got[1].Reach != protocol.OutpostReachUnreachable {
+					t.Fatalf("after 60s silence: %s", describeOutposts(got))
+				}
+				w.advance(time.Minute)
+				got = outpostUpdates(app, mark)
 				if len(got) != len(tc.failing) {
 					t.Fatalf("a minute unreachable published %d outpost updates, want %d:\n%s", len(got), len(tc.failing), describeOutposts(got))
 				}

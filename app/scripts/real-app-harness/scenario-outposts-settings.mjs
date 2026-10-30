@@ -332,7 +332,7 @@ try {
     await stalled;
     await wait(`${tile(splitPane.paneId)}[data-offline]`, { absent: true });
     await shot('03-stalled-shell');
-    await homeClock.advance('7s');
+    await homeClock.advance('57s');
     await lost;
     await homeClock.awaitTimer('10s');
     await homeClock.advance('10s');

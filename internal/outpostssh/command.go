@@ -99,6 +99,7 @@ type pipeConn struct {
 	reader, writer *os.File
 	cmd            *exec.Cmd
 	stderr         bytes.Buffer
+	stderrReader   io.ReadCloser
 	done           chan struct{}
 	err            error
 	once           sync.Once
@@ -122,7 +123,14 @@ func (c *Client) Bridge(ctx context.Context) (net.Conn, error) {
 	p := &pipeConn{destination: c.Destination, reader: reader, writer: writer, cmd: cmd, done: make(chan struct{})}
 	cmd.Stdin = in
 	cmd.Stdout = out
-	cmd.Stderr = &p.stderr
+	p.stderrReader, err = cmd.StderrPipe()
+	if err != nil {
+		in.Close()
+		out.Close()
+		reader.Close()
+		writer.Close()
+		return nil, err
+	}
 	err = cmd.Start()
 	in.Close()
 	out.Close()
@@ -131,7 +139,7 @@ func (c *Client) Bridge(ctx context.Context) (net.Conn, error) {
 		writer.Close()
 		return nil, err
 	}
-	go func() { p.err = cmd.Wait(); close(p.done) }()
+	go func() { _, _ = io.Copy(&p.stderr, p.stderrReader); p.err = cmd.Wait(); close(p.done) }()
 	return p, nil
 }
 func (p *pipeConn) Read(b []byte) (int, error) {
@@ -146,7 +154,7 @@ func (p *pipeConn) Read(b []byte) (int, error) {
 }
 func (p *pipeConn) Write(b []byte) (int, error) { return p.writer.Write(b) }
 func (p *pipeConn) Close() error {
-	p.once.Do(func() { p.reader.Close(); p.writer.Close(); _ = p.cmd.Process.Kill(); <-p.done })
+	p.once.Do(func() { p.reader.Close(); p.writer.Close(); p.stderrReader.Close(); _ = p.cmd.Process.Kill(); <-p.done })
 	return nil
 }
 func (p *pipeConn) CloseWrite() error { return p.writer.Close() }

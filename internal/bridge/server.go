@@ -56,7 +56,7 @@ func Serve(ctx context.Context, listener net.Listener, cfg ServerConfig, onConn 
 }
 
 func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConfig, onConn func(*Conn)) error {
-	if err := raw.SetDeadline(time.Now().Add(LostAfter)); err != nil {
+	if err := raw.SetDeadline(time.Now().Add(AnswerWithin)); err != nil {
 		return err
 	}
 	sshConfig := &ssh.ServerConfig{NoClientAuth: true}
