@@ -105,7 +105,10 @@ A fake agent binary behaves like the real harness from the outside: same
 hooks, transcript files, and terminal output. Tests control time instead of
 waiting for it, with `synctest` in Go and Vitest fake timers in the app. To
 simulate a network failure, wrap the client's `net.Conn` inside the bubble. No
-test sleeps or polls.
+test sleeps or polls: `make lint-go` fails a `time.Sleep`, `time.Tick`,
+`time.NewTicker` or bare `<-time.After` in Go test code outside a
+`synctest.Test` body, and
+`scripts/testtimelint` lists the few allowed ones with their reasons.
 
 #### Writing a daemon wire test
 
