@@ -301,9 +301,8 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 				}
 				d.updateOutpost(row.ID, run, state, build, err)
 			})
-			if state == bridge.StateLost {
-				retryDelay = min(retryDelay*2, maxOutpostRetryDelay)
-			}
+			delay = max(delay, retryDelay)
+			retryDelay = min(delay*2, maxOutpostRetryDelay)
 			if !waitOutpostRetry(ctx, delay) {
 				return
 			}
