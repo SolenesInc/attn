@@ -33,6 +33,8 @@ type outpostDial struct {
 	notebookRoot   string
 }
 
+const maxOutpostRetryDelay = 128 * time.Second
+
 type outpostRemote interface {
 	EnsureMaster(context.Context) error
 	ExitMaster(context.Context) error
@@ -228,6 +230,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			}
 		}
 	}
+	retryDelay := bridge.ReconnectInterval
 	for ctx.Err() == nil {
 		var pin *bridge.Pin
 		if row.HostKey != "" {
@@ -277,7 +280,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			}
 		}
 		if err != nil {
-			state, delay := bridge.StateLost, bridge.ReconnectInterval
+			state, delay := bridge.StateLost, retryDelay
 			var refusal *bridge.Refusal
 			build := ""
 			var sshError *outpostssh.Error
@@ -298,11 +301,15 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 				}
 				d.updateOutpost(row.ID, run, state, build, err)
 			})
+			if state == bridge.StateLost {
+				retryDelay = min(retryDelay*2, maxOutpostRetryDelay)
+			}
 			if !waitOutpostRetry(ctx, delay) {
 				return
 			}
 			continue
 		}
+		retryDelay = bridge.ReconnectInterval
 		d.bridgeOutpost(ctx, row.ID, run, conn, push)
 	}
 }

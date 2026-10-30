@@ -144,6 +144,95 @@ func outpostUpdates(app *testworld.Peer, from int) []protocol.OutpostInfo {
 	return rows
 }
 
+func TestLostOutpostRedialsBackOffAndStartFreshAfterRecoveryOrAnExplicitRetry(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		far := startFarOutpost(t, w, nil)
+		far.link.Store(int32(linkRefused))
+		attempts := make(chan time.Time, 1)
+		w.daemon.UseBridgeDialer(func(ctx context.Context, network, address string) (net.Conn, error) {
+			select {
+			case attempts <- time.Now():
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			return far.dial(ctx, network, address)
+		})
+		app := w.App()
+		setSetting(t, app, "outposts_enabled", "true")
+		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Destination: outpostAddress.String()})
+		row := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateLost
+		}).Outposts[0]
+		var last time.Time
+		takeAttempt := func(want time.Time) {
+			t.Helper()
+			select {
+			case at := <-attempts:
+				if !at.Equal(want) {
+					t.Fatalf("redial at %s, want %s", at, want)
+				}
+				last = at
+			default:
+				t.Fatalf("no redial at %s", want)
+			}
+		}
+		noAttempt := func() {
+			t.Helper()
+			select {
+			case at := <-attempts:
+				t.Fatalf("unexpected redial after %s", at.Sub(last))
+			default:
+			}
+		}
+		w.advance(0)
+		takeAttempt(time.Now())
+		waits := func(seconds ...int) {
+			t.Helper()
+			for _, seconds := range seconds {
+				delay := time.Duration(seconds) * time.Second
+				want := last.Add(delay)
+				w.advance(delay - time.Nanosecond)
+				noAttempt()
+				w.advance(time.Nanosecond)
+				takeAttempt(want)
+			}
+		}
+		waits(2, 4, 8, 16, 32, 64, 128, 128)
+
+		far.link.Store(int32(linkUp))
+		mark := app.EventCount()
+		waits(128)
+		testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected
+		})
+		far.link.Store(int32(linkRefused))
+		far.network.Cut(true)
+		mark = app.EventCount()
+		w.advance(bridge.LostAfter)
+		testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateLost
+		})
+		takeAttempt(time.Now())
+		waits(2, 4, 8)
+
+		now := time.Now()
+		app.Send(protocol.RepairOutpostMessage{Cmd: protocol.CmdRepairOutpost, ID: row.ID})
+		w.advance(0)
+		takeAttempt(now)
+		waits(2, 4, 8)
+
+		setSetting(t, app, "outposts_enabled", "false")
+		w.advance(128 * time.Second)
+		noAttempt()
+		now = time.Now()
+		setSetting(t, app, "outposts_enabled", "true")
+		w.advance(0)
+		takeAttempt(now)
+		waits(2, 4, 8)
+		t.Log("lost waits 2, 4, 8, 16, 32, 64, 128, 128 seconds; connection, Re-pair and Outposts on reset them")
+	})
+}
+
 func TestAnUnreachableOutpostPublishesOnlyWhenItsFailureChanges(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
