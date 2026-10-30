@@ -15,7 +15,7 @@ describe('outpost build updates', () => {
     const view = await renderApp({ initialState: { ...initial, outposts: [old, { ...old, id: 'current', name: 'Current', build: homeBuild }] } });
     const daemon = view.daemon;
     daemon.on('update_outpost', () => {});
-    expect(banner()).toHaveTextContent('different build');
+    expect(banner()).toHaveTextContent("need your home's build");
     await gesture(daemon, () => fireEvent.click(within(banner()!).getByRole('button', { name: 'Update outposts' })));
     expect(daemon.sentOf('update_outpost')).toEqual([{ cmd: 'update_outpost', id: 'studio' }]);
     for (const [phase, text] of [['building', 'Building'], ['sending', 'Sending'], ['verifying', 'Verifying'], ['restarting', 'Restarting']] as const) {
@@ -36,7 +36,7 @@ describe('outpost build updates', () => {
     const restarted = await restartApp(view, { initialState: initial });
     expect(banner()).toBeNull();
     await gesture(restarted.daemon, () => restarted.daemon.emit({ event: 'initial_state', ...initial, home_build: '0.13.0 (source git:next, protocol current)' }));
-    expect(banner()).toHaveTextContent('different build');
+    expect(banner()).toHaveTextContent("need your home's build");
   });
 
   it('updates from a row, disables it during the push and keeps a refusal readable', async () => {
@@ -47,10 +47,19 @@ describe('outpost build updates', () => {
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'downloading' } }] }));
     expect(row.getByRole('status')).toHaveTextContent('Downloading');
     expect(row.getByRole('button', { name: 'Updating…' })).toBeDisabled();
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'failed', outcome: 'Outpost is not running under systemd.' } }] }));
-    expect(row.getByRole('status')).toHaveTextContent('not running under systemd');
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...old, update: { phase: 'failed', outcome: 'Outpost has pty_shared_host_enabled on.' } }] }));
+    expect(row.getByRole('status')).toHaveTextContent('pty_shared_host_enabled');
     expect(row.getByRole('button', { name: 'Update to home build' })).toBeEnabled();
     expect(daemon.sentOf('update_outpost')).toHaveLength(1);
+  });
+
+  it('offers both update paths after a failed first install with no known build', async () => {
+    const missing: Outpost = { ...old, build: undefined, last_error: 'nothing installed', update: { phase: 'failed', outcome: 'upload failed' } };
+    const daemon = await openSection('outposts', { ...initial, outposts: [missing] }, scripted => scripted.on('update_outpost', () => {}));
+    const row = within(screen.getByRole('listitem', { name: 'Studio' }));
+    await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Update to home build' })));
+    await gesture(daemon, () => fireEvent.click(within(banner()!).getByRole('button', { name: 'Update outposts' })));
+    expect(daemon.sentOf('update_outpost')).toEqual([{ cmd: 'update_outpost', id: 'studio' }, { cmd: 'update_outpost', id: 'studio' }]);
   });
 
   it('stays hidden with no known mismatch or with Outposts off', async () => {

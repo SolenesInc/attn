@@ -49,11 +49,17 @@ func (d *Daemon) configureOutposts() {
 	r.actions.Lock()
 	defer r.actions.Unlock()
 	r.mu.Lock()
-	old := r.dialers
 	for _, push := range r.pushes {
 		push.cancel()
 	}
+	pushes := r.pushes
 	r.pushes = nil
+	r.mu.Unlock()
+	for _, push := range pushes {
+		<-push.done
+	}
+	r.mu.Lock()
+	old := r.dialers
 	r.mu.Unlock()
 	for _, run := range old {
 		run.cancel()
@@ -196,7 +202,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		}
 		var buildRefusal *bridge.Refusal
 		canPin := err == nil || errors.As(err, &buildRefusal) && buildRefusal.Reason == "build"
-		if canPin && pin == nil {
+		if canPin && pin == nil && seen != nil {
 			pinError := d.store.PinOutpost(row.ID, seen.HostKey, seen.DaemonID)
 			if pinError != nil {
 				err = pinError
@@ -343,7 +349,10 @@ func (d *Daemon) openOutpostPipe(ctx context.Context, row store.Outpost) (net.Co
 		return nil, &bridge.Refusal{Reason: "platform", Detail: err.Error()}
 	}
 	if probe.Build == nil {
-		return nil, &bridge.Refusal{Reason: "build", Detail: "nothing installed; install the home's build by hand at " + remote.InstallPath()}
+		return nil, &bridge.Refusal{Reason: "build", Detail: "nothing installed; choose Update in Settings → Outposts at the home to install at " + remote.InstallPath()}
+	}
+	if *probe.Build != d.bridgeIdentity().Build {
+		return nil, &bridge.Refusal{Peer: &bridge.Identity{Build: *probe.Build}, Reason: "build", Detail: fmt.Sprintf("outpost runs build %s; home runs %s; choose Update in Settings → Outposts at the home", *probe.Build, d.bridgeIdentity().Build)}
 	}
 	return remote.Bridge(ctx)
 }

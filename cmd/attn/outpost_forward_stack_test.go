@@ -252,29 +252,15 @@ func TestOutpostRefusesAnotherInstanceBeforeEnrollment(t *testing.T) {
 		Conn: bridgeSocket(t, outpost),
 		Self: bridge.Identity{DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "another home", Instance: "another-instance", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}},
 	}
-	for _, update := range []bool{false, true} {
-		cfg.Conn = bridgeSocket(t, outpost)
-		var refused error
-		if update {
-			conn, _, err := bridge.DialUpdate(context.Background(), cfg)
-			refused = err
-			if conn != nil {
-				_ = conn.Close()
-			}
-		} else {
-			conn, _, err := bridge.Dial(context.Background(), cfg)
-			refused = err
-			if conn != nil {
-				_ = conn.Close()
-			}
-		}
-		if refused == nil || !strings.Contains(refused.Error(), "another-instance") || !strings.Contains(refused.Error(), "default") {
-			t.Fatalf("instance refusal for update=%v: %v", update, refused)
-		}
-		t.Logf("update=%v: %v", update, refused)
-		status, err := enrollment.Load(outpost.Dir)
-		if err != nil || !status.IsHome() {
-			t.Fatalf("refused instance enrolled the outpost: %+v %v", status, err)
-		}
+	conn, _, refused := bridge.Dial(context.Background(), cfg)
+	if conn != nil {
+		_ = conn.Close()
+	}
+	if refused == nil || !strings.Contains(refused.Error(), "another-instance") || !strings.Contains(refused.Error(), "default") {
+		t.Fatalf("instance refusal: %v", refused)
+	}
+	status, err := enrollment.Load(outpost.Dir)
+	if err != nil || !status.IsHome() {
+		t.Fatalf("refused instance enrolled the outpost: %+v %v", status, err)
 	}
 }

@@ -3,6 +3,10 @@ import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import type { OutpostInfo } from '../types/generated';
 import { readDismissedOutpostBuild, persistDismissedOutpostBuild } from '../utils/outpostBannerDismissals';
 
+export function outpostNeedsUpdate(row: OutpostInfo, homeBuild: string): boolean {
+  return !!homeBuild && (row.build ? row.build !== homeBuild : row.state === 'refused');
+}
+
 export function outpostIsUpdating(row: OutpostInfo): boolean {
   return !!row.update && row.update.phase !== 'done' && row.update.phase !== 'failed';
 }
@@ -24,14 +28,14 @@ export function OutpostUpdateBanner() {
   const api = useOptionalDaemonApi();
   const [dismissed, setDismissed] = useState(readDismissedOutpostBuild);
   if (!api || !api.homeBuild || api.settings.outposts_enabled !== 'true' || dismissed === api.homeBuild) return null;
-  const different = api.outposts.filter(row => row.build && row.build !== api.homeBuild);
+  const different = api.outposts.filter(row => outpostNeedsUpdate(row, api.homeBuild));
   const updated = api.outposts.filter(row => row.update);
   if (!different.length && !updated.length) return null;
   const busy = updated.some(outpostIsUpdating);
   return (
     <div className="update-banner" role="region" aria-label="Outpost updates">
       <span>
-        {different.length ? 'Outposts run a different build from your home.' : 'Outposts are on your home’s build.'}
+        {different.length ? "Outposts need your home's build." : 'Outposts are on your home’s build.'}
         {updated.map(row => <span key={row.id} className="banner-note"> {row.name}: {outpostUpdateText(row)}</span>)}
         {api.outpostCommandError && <span className="banner-note"> {api.outpostCommandError}</span>}
       </span>

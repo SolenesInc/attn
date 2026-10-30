@@ -32,7 +32,11 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		if err != nil {
 			return fmt.Errorf("add outpost %s (%s): %w", name, address, err)
 		}
-		d.startOutpostDial(row)
+		if d.outposts.dial != nil {
+			d.startOutpostDial(row)
+		} else {
+			d.startOutpostInstall(row, true)
+		}
 		d.publishFact(FactOutpostChanged, row.ID, nil)
 		return nil
 	}
@@ -75,7 +79,16 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	d.cancelOutpostUpdate(id)
 	d.stopOutpostDial(id)
 	if action == "remove" {
-		if exitErr := d.outpostSSH(*row).ExitMaster(d.life.Context()); exitErr != nil {
+		remote := d.outpostSSH(*row)
+		if d.outposts.dial == nil {
+			if remoteErr := remote.EnsureMaster(d.life.Context()); remoteErr == nil {
+				if remoteErr = remote.Remove(d.life.Context()); remoteErr != nil {
+					d.startOutpostDial(*row)
+					return fmt.Errorf("remove outpost %s: %w", row.Name, remoteErr)
+				}
+			}
+		}
+		if exitErr := remote.ExitMaster(d.life.Context()); exitErr != nil {
 			d.logf("stop removed outpost master: %v", exitErr)
 		}
 		err = d.store.DeleteOutpost(id)

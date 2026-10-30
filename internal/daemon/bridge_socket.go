@@ -29,7 +29,6 @@ type outpostRuntime struct {
 	lastError  string
 	errorKind  string
 	listen     func(string, string) (net.Listener, error)
-	updating   bool
 }
 
 func (d *Daemon) bridgeIdentity() bridge.Identity {
@@ -60,7 +59,6 @@ func (d *Daemon) startBridgeSocket() error {
 		Self: d.bridgeIdentity(), HostKeyPath: filepath.Join(d.dataRoot, "bridge_host_key"),
 		Logf:     d.logf,
 		Handlers: d.outpostHandlers(),
-		Update:   d.outpostUpdateServer(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
 			before := d.settingValues()
 			r.mu.Lock()

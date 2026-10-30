@@ -157,23 +157,13 @@ func (s *SSH) Route(destination string, remote *Stack) {
 	if err := os.MkdirAll(filepath.Join(root, ".local", "bin"), 0700); err != nil {
 		s.t.Fatal(err)
 	}
-	data, err := os.ReadFile(remote.binary)
-	if err != nil {
-		s.t.Fatal(err)
-	}
-	target := filepath.Join(root, ".local", "bin", "attn")
-	if err = os.WriteFile(target+".next", data, 0700); err != nil {
-		s.t.Fatal(err)
-	}
-	if err = os.Rename(target+".next", target); err != nil {
-		s.t.Fatal(err)
-	}
+	s.InstallBinary(remote, remote.binary)
 	bin := filepath.Join(remote.Dir, "machine-bin")
-	if err = os.MkdirAll(bin, 0700); err != nil {
+	if err := os.MkdirAll(bin, 0700); err != nil {
 		s.t.Fatal(err)
 	}
 	for name, body := range map[string]string{"uname": "echo Linux x86_64", "busctl": "echo b false"} {
-		if err = os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
 			s.t.Fatal(err)
 		}
 	}
@@ -529,5 +519,32 @@ func (s *SSH) ExitMaster(home *Stack, host string) {
 	cmd.Env = home.env()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		home.T.Fatalf("exit fake master: %v: %s", err, out)
+	}
+}
+
+func (s *SSH) InstallPath(remote *Stack) string {
+	return filepath.Join(remote.Dir, "install", ".local", "bin", "attn")
+}
+func (s *SSH) InstallBinary(remote *Stack, binary string) {
+	s.t.Helper()
+	data, err := os.ReadFile(binary)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	target := s.InstallPath(remote)
+	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+		s.t.Fatal(err)
+	}
+	if err := os.WriteFile(target+".next", data, 0700); err != nil {
+		s.t.Fatal(err)
+	}
+	if err := os.Rename(target+".next", target); err != nil {
+		s.t.Fatal(err)
+	}
+}
+func (s *SSH) MachineCommand(remote *Stack, name, body string) {
+	s.t.Helper()
+	if err := os.WriteFile(filepath.Join(remote.Dir, "machine-bin", name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
+		s.t.Fatal(err)
 	}
 }

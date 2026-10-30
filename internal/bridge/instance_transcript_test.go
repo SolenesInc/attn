@@ -4,47 +4,36 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
+	"github.com/victorarias/attn/internal/bridge"
 	"strings"
 	"sync"
 	"testing"
 
-	"github.com/victorarias/attn/internal/bridge"
 	"golang.org/x/crypto/ssh"
 )
 
-func TestUpdateRequiresTheOutpostsInstance(t *testing.T) {
-	for _, tc := range []struct {
-		name, version, instance, reason string
-	}{
-		{"legacy", "1", "", "install this build by hand once"},
-		{"missing", "2", "", "install this build by hand once"},
-		{"mismatch", "2", `,"instance":"default"`, `home instance "router-check" cannot use outpost instance "default"`},
-		{"matching", "2", `,"instance":"router-check"`, ""},
+func TestBridgeHelloTranscript(t *testing.T) {
+	for _, tc := range []struct{ name, version, instance, reason string }{
+		{"legacy", "1", "", "choose Update"},
+		{"missing-instance", "2", "", "choose Update"},
+		{"other-instance", "2", `,"instance":"other"`, `home instance "default" cannot use outpost instance "other"`},
+		{"matching", "2", `,"instance":"default"`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := pair(t)
-			answer := `{"bridge":` + tc.version + `,"daemon_id":"d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","build":{"version":"test","source_fingerprint":"unknown","protocol_version":"test"},"update":1,"target":{"platform":"linux/amd64","executable":"/home/user/.local/bin/attn"}` + tc.instance + `}`
+			answer := `{"bridge":` + tc.version + `,"daemon_id":"d-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","name":"outpost","build":{"version":"test","source_fingerprint":"unknown","protocol_version":"test"}` + tc.instance + `}`
 			observed := frozenOutpost(t, w, answer)
-			self := home
-			self.Instance = "router-check"
-			conn, _, err := bridge.DialUpdate(w.ctx, bridge.DialConfig{Conn: dialPipe(t, w), Self: self})
+			conn, _, err := bridge.Dial(w.ctx, bridge.DialConfig{Conn: dialPipe(t, w), Self: home})
 			if conn != nil {
-				path := filepath.Join(t.TempDir(), "payload")
-				if writeErr := os.WriteFile(path, []byte("hello"), 0600); writeErr != nil {
-					t.Fatal(writeErr)
-				}
-				_ = conn.Send(w.ctx, home.Build, path, func(string) {})
-				_ = conn.Close()
+				conn.Close()
 			}
-			channels := <-observed
+			<-observed
 			if tc.reason == "" {
-				if err != nil || len(channels) != 1 || channels[0] != "attn-update" {
-					t.Fatalf("matching instance: err=%v channels=%v", err, channels)
+				if err != nil {
+					t.Fatal(err)
 				}
-			} else if err == nil || !strings.Contains(err.Error(), tc.reason) || len(channels) != 0 {
-				t.Fatalf("instance refusal: err=%v channels=%v, want %q and no update channel", err, channels, tc.reason)
+			} else if err == nil || !strings.Contains(err.Error(), tc.reason) {
+				t.Fatalf("refusal=%v, want %s", err, tc.reason)
 			}
 		})
 	}
@@ -96,6 +85,10 @@ func frozenOutpost(t *testing.T, w *pairWorld, answer string) <-chan []string {
 			if err := json.NewDecoder(control).Decode(&greeting); err != nil {
 				t.Error(err)
 				return
+			}
+			const expected = `{"bridge":2,"daemon_id":"d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"home","instance":"default","build":{"version":"test","source_fingerprint":"unknown","protocol_version":"test"}}`
+			if string(greeting) != expected {
+				t.Errorf("hello transcript = %s, want %s", greeting, expected)
 			}
 			if _, err := fmt.Fprintln(control, answer); err != nil {
 				t.Error(err)

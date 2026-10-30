@@ -96,21 +96,6 @@ func TestLegacyBridgeAddressRequiresAddByDestination(t *testing.T) {
 	t.Log(expected)
 }
 
-func TestOutpostUpdateNamesTheManualInstall(t *testing.T) {
-	home, remote := testworld.NewStack(t), testworld.NewStack(t)
-	pair := testworld.PrepareOutpostPair(t, home, remote)
-	pair.Start()
-	pair.App.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: pair.Host})
-	result := testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-		return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseFailed
-	})
-	outcome := protocol.Deref(result.Outposts[0].Update.Outcome)
-	if !strings.Contains(outcome, "Update needs the ssh install, which is not available in this build; install the home's build by hand at ") {
-		t.Fatal(outcome)
-	}
-	t.Log(outcome)
-}
-
 func TestBridgeExitsWhenDaemonClosesWhileStdinStaysOpen(t *testing.T) {
 	remote := testworld.NewStack(t)
 	remote.Start()

@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
@@ -231,6 +230,8 @@ func main() {
 		runBrowser()
 	case "help", "-h", "--help":
 		runHelp()
+	case "_outpost-install":
+		runOutpostInstall()
 	case "_bridge":
 		runBridge()
 	case "_hook-stop":
@@ -538,16 +539,9 @@ func runDaemon() {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}
-	select {
-	case <-d.RestartRequested():
-		d.Stop()
-		<-startResult
-		os.Exit(bridge.UpdateRestartStatus)
-	case err := <-startResult:
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
-			os.Exit(1)
-		}
+	if err := <-startResult; err != nil {
+		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
+		os.Exit(1)
 	}
 }
 

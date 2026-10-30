@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
-import { outpostIsUpdating, outpostUpdateText } from './OutpostUpdateBanner';
+import { outpostNeedsUpdate, outpostIsUpdating, outpostUpdateText } from './OutpostUpdateBanner';
 import type { OutpostInfo, OutpostNotebook } from '../types/generated';
 
 const stateTone: Record<OutpostInfo['state'], string> = {
@@ -100,7 +100,7 @@ export function OutpostsSettings() {
                     {row.notebook && <NotebookSyncStatus notebook={row.notebook} />}
                     {row.update && <p className="settings-description" role="status">{outpostUpdateText(row)}</p>}
                     <div className="settings-outpost-actions">
-                      {row.build && homeBuild && row.build !== homeBuild && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : 'Update to home build'}</button>}
+                      {outpostNeedsUpdate(row, homeBuild) && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : 'Update to home build'}</button>}
                       <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
                       <button
                         ref={removing === row.id ? removeButton : undefined}

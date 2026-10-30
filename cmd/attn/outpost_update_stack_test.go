@@ -2,199 +2,238 @@ package main_test
 
 import (
 	"crypto/sha256"
-	"net/http"
-	"net/http/httptest"
+	"encoding/json"
+	"fmt"
+	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestOutpostUpdateRefusalsLeaveTheBinaryUntouched(t *testing.T) {
-	t.Skip("s-jtk5b0 (one-install-path-over-ssh) restores Update coverage; this slice intentionally refuses Update")
-	for _, test := range []struct{ name, reason string }{
-		{"unknown-channel", `channel "unknown"`},
-		{"not-systemd", "not running under systemd"},
-		{"shared-pty-host", "pty_shared_host_enabled"},
-		{"staged-build", "staged build"},
-		{"newer-schema", "contains migration"},
-		{"before-updates", "install this build by hand once"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			a := testworld.NewSSH(t)
+func awaitOutpostInstall(app *testworld.Peer) protocol.OutpostInfo {
+	result := testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && (m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseDone || m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseFailed)
+	})
+	return result.Outposts[0]
+}
+
+func TestSSHAddInstallsFromNothingAndUpdateRetriesFailure(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "fresh", true: "retry"}[fail], func(t *testing.T) {
+			ssh := testworld.NewSSH(t)
 			remote, home := testworld.NewStack(t), testworld.NewStack(t)
-			old := testworld.AttnBinaryAt(t, "before-update")
-			if test.name == "newer-schema" || test.name == "before-updates" {
-				old = testworld.AttnOutpostFixture(t, test.name)
-			}
-			remote.RunFrom(old)
-			remote.SuperviseUpdates()
-			if test.name == "shared-pty-host" {
-				remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "outpost-update"))
-			}
-			if test.name == "not-systemd" {
-				remote.Vars = append(remote.Vars, "INVOCATION_ID=")
-			}
-			next := testworld.AttnUpdateBinary(t, "after-update", "source", "")
-			if test.name == "unknown-channel" {
-				next = testworld.AttnBinaryAt(t, "after-update")
-			}
-			home.RunFrom(next)
-			asset := next
-			if test.name == "staged-build" {
-				asset = old
-			}
-			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+asset)
-			for _, s := range []*testworld.Stack{remote, home} {
-				a.Use(s.World)
-				s.Start()
-			}
-			if test.name == "shared-pty-host" {
-				requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
-			}
-			address := bridgeAddress(t)
-			a.Route(address, remote)
-			app := enableOutposts(t, home)
-			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
-			row := outpostState(app, "outpost", protocol.OutpostStateRefused)
-			if row.DaemonID == nil || row.HostKeyFingerprint == nil {
-				t.Fatalf("first build refusal did not pin outpost: %+v", row)
-			}
-			binaryPath := filepath.Join(remote.Dir, "bin", "attn-daemon")
-			before, err := os.ReadFile(binaryPath)
-			if err != nil {
+			ssh.Use(home.World)
+			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+testworld.AttnBinary(t))
+			ssh.Route("fresh-outpost", remote)
+			if err := os.Remove(ssh.InstallPath(remote)); err != nil {
 				t.Fatal(err)
 			}
-			app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: row.ID})
-			result := testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-				return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseFailed
-			})
-			outcome := protocol.Deref(result.Outposts[0].Update.Outcome)
-			if !strings.Contains(outcome, test.reason) {
-				t.Fatalf("refusal %q omits %q", outcome, test.reason)
+			if fail {
+				ssh.MachineCommand(remote, "chmod", "echo install-denied >&2; exit 1")
 			}
-			after, err := os.ReadFile(binaryPath)
-			if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
-				t.Fatalf("refused update replaced the binary: %v", err)
+			home.Start()
+			app := enableOutposts(t, home)
+			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "fresh-outpost"})
+			row := awaitOutpostInstall(app)
+			if fail {
+				if row.Update.Phase != protocol.OutpostUpdatePhaseFailed || !strings.Contains(protocol.Deref(row.Update.Outcome), "install-denied") {
+					t.Fatalf("first install: %+v", row.Update)
+				}
+				row = outpostState(app, "outpost", protocol.OutpostStateRefused)
+				if !strings.Contains(protocol.Deref(row.LastError), "nothing installed") {
+					t.Fatalf("missing install refusal: %+v", row)
+				}
+				ssh.MachineCommand(remote, "chmod", `exec /bin/chmod "$@"`)
+				app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: row.ID})
+				row = awaitOutpostInstall(app)
 			}
-			requireStdout(t, remote.Attn("settings", "get", "outpost_state"), "off")
-			t.Logf("%s: %s; original binary and running outpost preserved", test.name, outcome)
+			if row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected {
+				t.Fatalf("install: %+v %+v", row, row.Update)
+			}
+			t.Logf("%s: connected from no binary; build=%s", t.Name(), protocol.Deref(row.Build))
 		})
 	}
 }
 
-func TestOutpostUpdateReturnsOnHomeBuildAndKeepsShell(t *testing.T) {
-	t.Skip("s-jtk5b0 (one-install-path-over-ssh) restores Update coverage; this slice intentionally refuses Update")
-	for _, channel := range []string{"source", "release"} {
-		t.Run(channel, func(t *testing.T) {
-			if channel == "release" && runtime.GOOS != "linux" {
-				t.Skip("release assets target Linux; the Linux stack run covers this strategy")
-			}
-			a := testworld.NewSSH(t)
+func TestSSHUpdateKeepsShellAndReconnectNeverInstalls(t *testing.T) {
+	ssh := testworld.NewSSH(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	old := testworld.AttnUpdateBinary(t, "before-update", "source", "")
+	remote.RunFrom(old)
+	home.RunFrom(old)
+	ssh.Use(home.World)
+	ssh.Route("update-outpost", remote)
+	home.Start()
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "update-outpost"})
+	row := awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone {
+		t.Fatal(row.Update)
+	}
+	host := row.ID
+	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
+	pidPath := filepath.Join(remote.Dir, "shell.pid")
+	app.TypeLine(shell, "echo $$ > "+pidPath+"; echo survived-$((1+1))")
+	app.AwaitScreen(shell, "survived-2")
+	before, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := testworld.AttnUpdateBinary(t, "after-update", "source", "")
+	home.Stop()
+	home.RunFrom(next)
+	home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+next)
+	home.Start()
+	app = home.App()
+	row = outpostStateOnConnect(app, "outpost", protocol.OutpostStateRefused)
+	installed, err := os.ReadFile(ssh.InstallPath(remote))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldBytes, err := os.ReadFile(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sha256.Sum256(installed) != sha256.Sum256(oldBytes) {
+		t.Fatal("reconnect changed install path")
+	}
+	if !strings.Contains(protocol.Deref(row.LastError), "before-update") {
+		t.Fatalf("refusal omits found build: %+v", row)
+	}
+	app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
+	row = awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone || row.State != protocol.OutpostStateConnected || !strings.Contains(protocol.Deref(row.Build), "after-update") {
+		t.Fatalf("update: %+v %+v", row, row.Update)
+	}
+	previous, err := os.ReadFile(ssh.InstallPath(remote) + ".previous")
+	if err != nil || sha256.Sum256(previous) != sha256.Sum256(oldBytes) {
+		t.Fatalf("previous binary: %v", err)
+	}
+	app.TypeLine(shell, "echo $$ > "+pidPath+"; echo still-$((2+2))")
+	app.AwaitScreen(shell, "still-4")
+	after, err := os.ReadFile(pidPath)
+	if err != nil || string(before) != string(after) {
+		t.Fatalf("shell PID changed %s -> %s: %v", before, after, err)
+	}
+	t.Logf("Update connected on %s; shell PID %s survived", protocol.Deref(row.Build), strings.TrimSpace(string(after)))
+	app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host})
+	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	if _, err := os.Stat(ssh.InstallPath(remote)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(ssh.InstallPath(remote) + ".previous"); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := remote.DialUnix()
+	if err == nil {
+		conn.Close()
+		t.Fatal("Remove left the remote daemon socket live")
+	}
+	t.Log("Remove stopped the remote instance and retained both binaries and its data")
+}
+
+func TestSSHInstallRefusalsKeepTheBinary(t *testing.T) {
+	for _, tc := range []struct{ name, reason string }{
+		{"platform", "Linux amd64 or arm64"}, {"logind", "KillUserProcesses is on"}, {"staged-build", "staged build"}, {"newer-schema", "contains migration"}, {"shared-pty-host", "pty_shared_host_enabled"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ssh := testworld.NewSSH(t)
 			remote, home := testworld.NewStack(t), testworld.NewStack(t)
-			old := testworld.AttnBinaryAt(t, "before-update")
-			remote.RunFrom(old)
-			home.RunFrom(old)
-			remote.SuperviseUpdates()
-			var asset atomic.Value
-			type releaseAsset struct{ path, binary string }
-			asset.Store(releaseAsset{})
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				selected := asset.Load().(releaseAsset)
-				if r.URL.Path != selected.path {
-					http.NotFound(w, r)
-					return
-				}
-				http.ServeFile(w, r, selected.binary)
-			}))
-			defer server.Close()
-			for _, s := range []*testworld.Stack{remote, home} {
-				a.Use(s.World)
-				s.Vars = append(s.Vars, "SHELL=/bin/bash")
-				s.Start()
+			old := testworld.AttnUpdateBinary(t, "before-update", "source", "")
+			if tc.name == "newer-schema" {
+				old = testworld.AttnOutpostFixture(t, "newer-schema")
 			}
-			address := bridgeAddress(t)
-			a.Route(address, remote)
-			app := enableOutposts(t, home)
-			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
-			host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
-			shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
-			pidPath := filepath.Join(remote.Dir, "shell.pid")
-			app.TypeLine(shell, "echo $$ > "+pidPath+"; echo survived-$((1+1))")
-			app.AwaitScreen(shell, "survived-2")
-			before, err := os.ReadFile(pidPath)
+			remote.RunFrom(old)
+			if tc.name == "shared-pty-host" {
+				remote.Vars = append(remote.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "outpost-install"))
+				remote.Start()
+				requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
+			} else if tc.name == "newer-schema" {
+				remote.Start()
+			}
+			ssh.Use(home.World)
+			ssh.Route("refused-outpost", remote)
+			asset := testworld.AttnBinary(t)
+			if tc.name == "staged-build" {
+				asset = old
+			}
+			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+asset)
+			if tc.name == "platform" {
+				ssh.MachineCommand(remote, "uname", "echo Darwin arm64")
+			}
+			if tc.name == "logind" {
+				ssh.MachineCommand(remote, "busctl", "echo b true")
+			}
+			before, err := os.ReadFile(ssh.InstallPath(remote))
 			if err != nil {
 				t.Fatal(err)
 			}
-			otherRollback := filepath.Join(remote.Dir, "bin", "attn.previous")
-			if err := os.WriteFile(otherRollback, []byte("another install's rollback"), 0600); err != nil {
-				t.Fatal(err)
+			home.Start()
+			app := enableOutposts(t, home)
+			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "refused-outpost"})
+			row := awaitOutpostInstall(app)
+			if row.Update.Phase != protocol.OutpostUpdatePhaseFailed || !strings.Contains(protocol.Deref(row.Update.Outcome), tc.reason) {
+				t.Fatalf("Add refusal: %+v", row.Update)
 			}
-			previousBinary := old
-			versions := []string{"after-update"}
-			if channel == "release" {
-				versions = append(versions, "after-update-next")
+			app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: row.ID})
+			row = awaitOutpostInstall(app)
+			if row.Update.Phase != protocol.OutpostUpdatePhaseFailed || !strings.Contains(protocol.Deref(row.Update.Outcome), tc.reason) {
+				t.Fatalf("Update refusal: %+v", row.Update)
 			}
-			for _, version := range versions {
-				next := testworld.AttnUpdateBinary(t, version, channel, server.URL)
-				asset.Store(releaseAsset{path: "/v" + version + "/attn-linux-" + runtime.GOARCH, binary: next})
-				home.Stop()
-				home.RunFrom(next)
-				home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+next)
-				home.Start()
-				app = home.App()
-				outpostStateOnConnect(app, "outpost", protocol.OutpostStateRefused)
-				app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
-				var done protocol.OutpostInfo
-				testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-					for _, row := range m.Outposts {
-						if row.ID == host && row.Update != nil && (row.Update.Phase == protocol.OutpostUpdatePhaseDone || row.Update.Phase == protocol.OutpostUpdatePhaseFailed) {
-							done = row
-							return true
-						}
-					}
-					return false
-				})
-				if done.Update.Phase != protocol.OutpostUpdatePhaseDone || done.State != protocol.OutpostStateConnected || !strings.Contains(protocol.Deref(done.Build), version) {
-					t.Fatalf("update outcome: %+v, update=%+v", done, done.Update)
-				}
-				if channel == "release" {
-					cached, err := filepath.Glob(filepath.Join(home.Dir, "outpost-builds", "*", runtime.GOARCH, "attn"))
-					if err != nil || len(cached) != 1 {
-						t.Fatalf("cached %s binaries after update to %s = %v (%v), want only the current build", runtime.GOARCH, version, cached, err)
-					}
-					t.Logf("%s cache after %s: %d binary", runtime.GOARCH, version, len(cached))
-				}
-				retained, err := os.ReadFile(otherRollback)
-				if err != nil || string(retained) != "another install's rollback" {
-					t.Fatalf("update changed another install's rollback: %q, %v", retained, err)
-				}
-				previous, err := os.ReadFile(filepath.Join(remote.Dir, "bin", "attn-daemon.previous"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				wantPrevious, err := os.ReadFile(previousBinary)
-				if err != nil || sha256.Sum256(previous) != sha256.Sum256(wantPrevious) {
-					t.Fatalf("previous binary was not retained: %v", err)
-				}
-				previousBinary = next
-				app.AwaitScreen(shell, "survived-2")
-				app.TypeLine(shell, "echo $$ > "+pidPath+"; echo still-$((2+2))")
-				app.AwaitScreen(shell, "still-4")
-				after, err := os.ReadFile(pidPath)
-				if err != nil || string(before) != string(after) {
-					t.Fatalf("shell PID changed: %s -> %s (%v)", before, after, err)
-				}
-				testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-				t.Logf("%s update: connected on %s; shell pid=%s, screen and idle state survived", channel, protocol.Deref(done.Build), strings.TrimSpace(string(after)))
+			after, err := os.ReadFile(ssh.InstallPath(remote))
+			if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
+				t.Fatalf("refusal changed binary: %v", err)
 			}
+			t.Log(protocol.Deref(row.Update.Outcome))
 		})
 	}
+}
+
+func TestSSHStagedInstallRefusesANamedInstanceAtDefaultPath(t *testing.T) {
+	s := testworld.NewStack(t)
+	binary := testworld.AttnBinary(t)
+	data, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(s.Dir, "install")
+	target := filepath.Join(root, ".local", "bin", "attn")
+	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, []byte("preserve default"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	staged := filepath.Join(filepath.Dir(target), ".attn-install-test")
+	if err := os.WriteFile(staged, data, 0700); err != nil {
+		t.Fatal(err)
+	}
+	build := s.Run(testworld.Invocation{Args: []string{"--build-info-json"}})
+	var info struct {
+		Version     string `json:"version"`
+		Fingerprint string `json:"sourceFingerprint"`
+		Protocol    string `json:"protocolVersion"`
+	}
+	if err := json.Unmarshal([]byte(build.Stdout), &info); err != nil {
+		t.Fatal(err)
+	}
+	expected, _ := json.Marshal(bridge.Build{Version: info.Version, SourceFingerprint: info.Fingerprint, ProtocolVersion: info.Protocol})
+	result := s.Run(testworld.Invocation{Binary: staged, Args: []string{"_outpost-install", "--size", fmt.Sprint(len(data)), "--sha256", fmt.Sprintf("%x", sha256.Sum256(data)), "--build", string(expected), "--target", target}, Env: []string{"ATTN_INSTANCE=install-check", "ATTN_HARNESS_OUTPOST_INSTALL_ROOT=" + root}})
+	if result.Code == 0 || !strings.Contains(result.Stderr, "refuses default install path") {
+		t.Fatalf("named install refusal: %+v", result)
+	}
+	after, err := os.ReadFile(target)
+	if err != nil || string(after) != "preserve default" {
+		t.Fatalf("default changed: %q %v", after, err)
+	}
+	if _, err := os.Stat(staged); !os.IsNotExist(err) {
+		t.Fatalf("failed staged binary left behind: %v", err)
+	}
+	t.Log(strings.TrimSpace(result.Stderr))
 }

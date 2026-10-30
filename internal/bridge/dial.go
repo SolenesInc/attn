@@ -32,7 +32,6 @@ type DialConfig struct {
 	Self         Identity
 	CheckHostKey func(string) *Refusal
 	Handlers     Handlers
-	update       bool
 }
 
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
@@ -55,16 +54,11 @@ type authenticatedPeer struct {
 	control   ssh.Channel
 	decoder   *json.Decoder
 	peer      Identity
-	target    *UpdateTarget
 	drained   <-chan struct{}
-	raw       net.Conn
 }
 
 func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer, *Pin, error) {
 	raw := cfg.Conn
-	if cfg.update {
-		raw = &updateActivityConn{Conn: raw}
-	}
 	success := false
 	defer func() {
 		if !success {
@@ -116,9 +110,6 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 	}
 	go ssh.DiscardRequests(channelRequests)
 	greeting := greeting(cfg.Self)
-	if cfg.update {
-		greeting.Update = 1
-	}
 	if err := json.NewEncoder(control).Encode(greeting); err != nil {
 		return nil, seen, err
 	}
@@ -126,7 +117,7 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 	var answer hello
 	err = decoder.Decode(&answer)
 	if errors.Is(err, io.EOF) {
-		err = fmt.Errorf("outpost at %s closed before its bridge hello; if it runs an older build, install this build by hand once: %w", cfg.Conn.RemoteAddr().String(), err)
+		err = fmt.Errorf("outpost at %s closed before its bridge hello; if it runs an older build, choose Update in Settings → Outposts at the home: %w", cfg.Conn.RemoteAddr().String(), err)
 	}
 	if err == nil {
 		err = answer.check()
@@ -138,14 +129,9 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 		} else if answer.Refused != nil {
 			answer.Refused.Peer = &answer.Identity
 			err = answer.Refused
-			if cfg.update && answer.Refused.Reason == "build" {
-				err = fmt.Errorf("outpost build %s predates updates from the home; install this build by hand once: %w", answer.Build, err)
-			}
 		} else if refusal := instanceRefusal(cfg.Self, answer.Identity); refusal != nil {
 			err = refusal
-		} else if cfg.update && (answer.Update != 1 || answer.Target == nil) {
-			err = fmt.Errorf("outpost build %s predates updates from the home; install this build by hand once", answer.Build)
-		} else if refusal := buildRefusal(cfg.Self, answer.Identity); !cfg.update && refusal != nil {
+		} else if refusal := buildRefusal(cfg.Self, answer.Identity); refusal != nil {
 			err = refusal
 		}
 	}
@@ -162,5 +148,5 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 		return nil, seen, err
 	}
 	success = true
-	return &authenticatedPeer{transport: transport, channels: channels, control: control, decoder: decoder, peer: answer.Identity, target: answer.Target, drained: requestDrain, raw: raw}, seen, nil
+	return &authenticatedPeer{transport: transport, channels: channels, control: control, decoder: decoder, peer: answer.Identity, drained: requestDrain}, seen, nil
 }

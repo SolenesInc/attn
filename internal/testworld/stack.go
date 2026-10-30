@@ -25,7 +25,6 @@ import (
 type Stack struct {
 	*World
 	binary        string
-	supervised    bool
 	daemon        *os.Process
 	exited        chan error
 	allowFallback bool
@@ -170,14 +169,6 @@ func (s *Stack) launch(vars ...string) {
 	}
 	defer stderr.Close()
 	cmd := exec.Command(s.binary, "daemon")
-	if s.supervised {
-		testBinary, err := os.Executable()
-		if err != nil {
-			s.T.Fatal(err)
-		}
-		cmd = exec.Command(testBinary)
-		vars = append(vars, "ATTN_TESTWORLD_SUPERVISE="+s.binary)
-	}
 	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3", "GOTRACEBACK=all")
 	cmd.ExtraFiles = []*os.File{signal}
 	file, err := s.wsListener.File()
