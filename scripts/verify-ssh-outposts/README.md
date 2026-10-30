@@ -27,8 +27,8 @@ python3 scripts/verify-ssh-outposts/analyze.py /tmp/bridge-idle-proof
 ```
 
 The idle check first exits attn's master and verifies that the daemon and shell
-keep their PIDs. It then samples typing echo and a plain echo through the same
-master in the same seconds. The sample interval comes from the route spike's
+keep their PIDs. It then samples typing echo and plain echoes through the same
+master and a separate ssh connection in the same seconds. The sample interval comes from the route spike's
 measurement method. The sample count above covers five minutes.
 
 For a first sync, use `--mode bulk` and give `--notebook` a copy of a real
@@ -37,6 +37,21 @@ Notebook, or generate the route spike’s measured file-size distribution with
 reaches `--capMs`. Keep the source Notebook read-only.
 
 `receipts.json` records actions and outcomes. `samples.json` holds every typing
-sample and Notebook update. `control-echo.json` holds the same-master echo
+sample and Notebook update. `control-echo.json` holds both control routes' echo
 samples. `analyze.py` reports raw echo, per-call R, same-seconds control echo,
 unanswered keys, and sync throughput using the spike's estimator.
+
+Compare an output controller with the preceding build in one sequence:
+
+```sh
+python3 scripts/verify-ssh-outposts/compare-window.py \
+  --before-mac /tmp/attn-before-mac --before-linux /tmp/attn-before-linux \
+  --after-mac /tmp/attn-after-mac --after-linux /tmp/attn-after-linux \
+  --instance bwin-proof --notebook /tmp/bridge-notebook \
+  --out /tmp/bridge-window-comparison
+```
+
+The comparison starts with idle, then runs three first-sync pairs in alternating
+order. Each run copies the source Notebook, installs its matching Linux binary,
+and cleans its instances. `comparison.json` reports changes from idle and the
+throughput ratio. Each run keeps its raw receipts and analysis.

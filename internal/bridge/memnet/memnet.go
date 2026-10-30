@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,12 +17,17 @@ func Rate(bytesPerSecond float64) Option {
 	return func(l *Listener) { l.rate = bytesPerSecond }
 }
 
+func Delay(oneWay time.Duration) Option {
+	return func(l *Listener) { l.delay.Store(int64(oneWay)) }
+}
+
 type Listener struct {
 	conns  chan net.Conn
 	closed chan struct{}
 	once   sync.Once
 	cut    gate
 	rate   float64
+	delay  atomic.Int64
 }
 
 func Listen(options ...Option) *Listener {
@@ -47,8 +53,11 @@ func (l *Listener) Addr() net.Addr { return addr{} }
 // Cut holds every byte in flight on every connection until Cut(false).
 func (l *Listener) Cut(held bool) { l.cut.store(held) }
 
+func (l *Listener) SetDelay(oneWay time.Duration) { l.delay.Store(int64(oneWay)) }
+
 func (l *Listener) Dial(ctx context.Context) (net.Conn, error) {
 	a, b := newStream(l.rate), newStream(l.rate)
+	a.delay, b.delay = &l.delay, &l.delay
 	client := &conn{read: a, write: b, gate: &l.cut, closed: make(chan struct{})}
 	server := &conn{read: b, write: a, gate: &l.cut, closed: make(chan struct{})}
 	select {
@@ -111,6 +120,7 @@ type stream struct {
 	busyUntil time.Time
 	closed    bool
 	changed   chan struct{}
+	delay     *atomic.Int64
 }
 
 func newStream(rate float64) *stream { return &stream{rate: rate, changed: make(chan struct{})} }
@@ -127,6 +137,12 @@ func (s *stream) push(data []byte) {
 		}
 		due = due.Add(time.Duration(float64(len(data)) / s.rate * float64(time.Second)))
 		s.busyUntil = due
+	}
+	if s.delay != nil {
+		due = due.Add(time.Duration(s.delay.Load()))
+	}
+	if len(s.chunks) > 0 && s.chunks[len(s.chunks)-1].due.After(due) {
+		due = s.chunks[len(s.chunks)-1].due
 	}
 	s.chunks = append(s.chunks, chunk{data: append([]byte(nil), data...), due: due})
 	s.signal()

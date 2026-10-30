@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"io"
+	"time"
 )
 
 const TerminalOutputCredit = 1024 << 10
@@ -14,6 +15,7 @@ type outputFlow struct {
 	bulk                 bool
 	served               uint64
 	outstanding, pending int
+	sent                 []outputSend
 }
 type outputReservation struct {
 	ctx    context.Context
@@ -89,6 +91,11 @@ func (c *outputCredit) closeFlow(flow *outputFlow) {
 
 func (c *outputCredit) run() {
 	available := BridgeOutputCredit
+	var path outputPath
+	timer := time.NewTimer(0)
+	timer.Stop()
+	defer timer.Stop()
+	var paced <-chan time.Time
 	accounts := map[*outputFlow]bool{}
 	var waiting []*outputReservation
 	apply := func(change any) {
@@ -111,6 +118,7 @@ func (c *outputCredit) run() {
 			waiting = append(waiting, change)
 		case outputReturn:
 			if account := change.flow; accounts[account] && change.bytes > 0 && change.bytes <= account.outstanding {
+				path.returned(account, change.bytes, time.Now())
 				account.outstanding -= change.bytes
 				available += change.bytes
 			}
@@ -127,6 +135,8 @@ func (c *outputCredit) run() {
 			apply(change)
 		case <-c.done:
 			return
+		case <-paced:
+			paced = nil
 		}
 		for {
 			select {
@@ -148,6 +158,7 @@ func (c *outputCredit) run() {
 			}
 		choose:
 			selected := -1
+			var resume time.Duration
 			for i := 0; i < len(waiting); {
 				request := waiting[i]
 				account := request.flow
@@ -166,12 +177,23 @@ func (c *outputCredit) run() {
 					i++
 					continue
 				}
+				if !request.charge && path.rate > 0 {
+					if delay := time.Until(path.next); delay > 0 {
+						resume = delay
+						i++
+						continue
+					}
+				}
 				if (!request.charge || request.bytes > 0 || account.outstanding == 0) && (selected < 0 || (waiting[selected].flow.bulk && !account.bulk) || (waiting[selected].flow.bulk == account.bulk && request.finish < waiting[selected].finish)) {
 					selected = i
 				}
 				i++
 			}
 			if selected < 0 {
+				if resume > 0 {
+					timer.Reset(resume)
+					paced = timer.C
+				}
 				break
 			}
 			request := waiting[selected]
@@ -185,6 +207,9 @@ func (c *outputCredit) run() {
 			available -= charge
 			account.outstanding += charge
 			account.served = request.finish
+			if !request.charge {
+				path.sent(account, request.bytes, time.Now())
+			}
 			select {
 			case request.ready <- struct{}{}:
 			case <-request.ctx.Done():

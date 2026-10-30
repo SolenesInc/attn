@@ -124,21 +124,29 @@ try {
     W.observer.send({cmd:'attach_session',id:echoTerminal}); await attached;
     receipt('master exit recovery', { daemon_pid: afterDaemon, shell_pid: afterShell });
   }
-  const control = spawn('ssh', ['-o', `ControlPath=${W.controlPath}`, '-o', 'ControlMaster=no', '-o', 'BatchMode=yes', '-T', o.ssh, "sh -c 'exec cat'"], { env: W.baseEnv, stdio: ['pipe', 'pipe', 'pipe'] });
-  W.children.push(control);
-  const controlSent = new Map(), controlSamples = [];
-  let controlBuffer = '';
-  control.stdout.on('data', data => {
-    controlBuffer += data.toString();
-    let end;
-    while ((end = controlBuffer.indexOf('\n')) >= 0) {
-      const line = controlBuffer.slice(0, end); controlBuffer = controlBuffer.slice(end + 1);
-      const token = Number(line.slice(1, 7)), point = controlSent.get(token);
-      if (point) { controlSamples.push([point.epoch, performance.now() - point.mono]); controlSent.delete(token); }
+  const controls = Object.fromEntries(Object.entries({ mux: W.controlPath, separate: 'none' }).map(([name, controlPath]) => {
+    const child = spawn('ssh', ['-o', `ControlPath=${controlPath}`, '-o', 'ControlMaster=no', '-o', 'BatchMode=yes', '-T', o.ssh, "sh -c 'exec cat'"], { env: W.baseEnv, stdio: ['pipe', 'pipe', 'pipe'] });
+    W.children.push(child);
+    const sent = new Map(), samples = [];
+    let buffer = '';
+    child.stdout.on('data', data => {
+      buffer += data.toString();
+      let end;
+      while ((end = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+        const token = Number(line.slice(1, 7)), point = sent.get(token);
+        if (point) { samples.push([point.epoch, performance.now() - point.mono]); sent.delete(token); }
+      }
+    });
+    return [name, { child, sent, samples }];
+  }));
+  W.controlSample = i => {
+    for (const control of Object.values(controls)) {
+      control.sent.set(i, { epoch: Date.now()/1000, mono: performance.now() });
+      control.child.stdin.write(`C${String(i).padStart(6, '0')}${'x'.repeat(56)}\n`);
     }
-  });
-  W.controlSample = i => { controlSent.set(i, { epoch: Date.now()/1000, mono: performance.now() }); control.stdin.write(`C${String(i).padStart(6, '0')}${'x'.repeat(56)}\n`); };
-  W.saveControl = () => fs.writeFileSync(path.join(o.out, 'control-echo.json'), JSON.stringify({routes:{mux:{samples:controlSamples, unanswered:controlSent.size}}}, null, 2));
+  };
+  W.saveControl = () => fs.writeFileSync(path.join(o.out, 'control-echo.json'), JSON.stringify({ routes: Object.fromEntries(Object.entries(controls).map(([name, control]) => [name, { samples: control.samples, unanswered: control.sent.size }])) }, null, 2));
   if (o.remoteNotebook) {
     await W.waitOutpost(r => r.id === W.outpost.id && r.notebook?.state === 'in_sync', 'empty baseline synced before reverse write');
     receipt('reverse Notebook written after pairing', { source: o.remoteNotebook, output: await remote(`cp -a ${quote(o.remoteNotebook + '/.')} ${quote(W.R.notebook + '/')}`) });
