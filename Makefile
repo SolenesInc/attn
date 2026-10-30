@@ -6,7 +6,7 @@
 # `make install-dev` = install only.
 .DEFAULT_GOAL := run
 
-export GOFLAGS := $(GOFLAGS) -trimpath
+export GOFLAGS := $(shell go env GOFLAGS) -trimpath
 
 BINARY_NAME=attn
 # Prod bundle. Referenced by the parse-time guard message and `sign-app`; every

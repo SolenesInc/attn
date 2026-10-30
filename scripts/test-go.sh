@@ -28,9 +28,10 @@ if ! [[ "$test_gomaxprocs" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 export GOMAXPROCS="$test_gomaxprocs"
-export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"
 
 go_bin="$(command -v go)"
+GOFLAGS="$("$go_bin" env GOFLAGS) -trimpath"
+export GOFLAGS
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/attn-go-test.XXXXXX")"
 # shellcheck disable=SC2329 # invoked indirectly by trap
 cleanup() {
