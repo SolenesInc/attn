@@ -235,8 +235,12 @@ func runBusStatus(args []string) {
 const busProducerLines = 15
 
 func writeBusStatus(w io.Writer, s bus.Status, now time.Time) {
-	fmt.Fprintf(w, "log: seq %d..%d, %d event(s) holding %s",
-		s.Earliest, s.Head, s.Rows, humanBytes(s.Bytes))
+	if s.Rows == 0 {
+		fmt.Fprintf(w, "log: seq %d, empty; retention %s", s.Head, humanAge(s.RetentionWindow))
+	} else {
+		fmt.Fprintf(w, "log: seq %d..%d, %d event(s) holding %s",
+			s.Earliest, s.Head, s.Rows, humanBytes(s.Bytes))
+	}
 	if !s.OldestAt.IsZero() {
 		fmt.Fprintf(w, "; oldest %s old, retention %s",
 			humanAge(now.Sub(s.OldestAt)), humanAge(s.RetentionWindow))

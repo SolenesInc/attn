@@ -109,6 +109,22 @@ func TestASinceReadOlderThanTheEventLogIsAFullRead(t *testing.T) {
 		lost := sinceNote(t, cli, seed, "saved after the bookmark, then trimmed from the event log", false)
 
 		w.advance(2*bus.DefaultTrimInterval + time.Minute)
+		emptied := sinceShow(t, cli, "", seed, &old)
+		if emptied.Since.Expired == nil || !slices.ContainsFunc(emptied.Notes, noteWithID(lost.ID)) {
+			t.Fatalf("a since-read from %d after retention emptied the event log answered %+v with notes %+v, want the full read with the trimmed note", old, emptied.Since, emptied.Notes)
+		}
+		if emptied.Bookmark <= old {
+			t.Errorf("the emptied log printed bookmark %d, want the head past %d", emptied.Bookmark, old)
+		}
+		emptiedNotes, err := cli.SeedNotes("", seed, client.SeedNotesQuery{Since: &old})
+		if err != nil {
+			t.Fatalf("notes --since %d on the emptied log: %v", old, err)
+		}
+		if emptiedNotes.Expired == nil || emptiedNotes.Bookmark != emptied.Bookmark || !slices.ContainsFunc(emptiedNotes.Notes, noteWithID(lost.ID)) {
+			t.Errorf("notes --since %d on the emptied log answered expired %+v, bookmark %d, notes %+v; want the full read at bookmark %d", old, emptiedNotes.Expired, emptiedNotes.Bookmark, emptiedNotes.Notes, emptied.Bookmark)
+		}
+		requireSince(t, "a bookmark at the emptied log's head", sinceShow(t, cli, "", seed, &emptied.Bookmark).Since, emptied.Bookmark)
+
 		late := sinceNote(t, cli, seed, "after the bookmark aged out", false)
 
 		shown := sinceShow(t, cli, "", seed, &old)

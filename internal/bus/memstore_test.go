@@ -55,7 +55,7 @@ func (m *memStore) Bounds() (int64, int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.events) == 0 {
-		return 0, 0, nil
+		return m.nextSeq + 1, m.nextSeq, nil
 	}
 	return m.events[0].Seq, m.events[len(m.events)-1].Seq, nil
 }

@@ -532,7 +532,7 @@ type QueryRead struct {
 
 func readAsOfSeq(q rowQuerier) (int64, error) {
 	var seq int64
-	if err := q.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM bus_events`).Scan(&seq); err != nil {
+	if err := q.QueryRow(`SELECT ` + busHeadSQL).Scan(&seq); err != nil {
 		return 0, fmt.Errorf("store: reading the log position of this answer: %w", err)
 	}
 	return seq, nil

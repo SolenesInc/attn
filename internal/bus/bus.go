@@ -52,6 +52,8 @@ type Consumer struct {
 type Store interface {
 	Append(e Event, now time.Time) (int64, error)
 	Since(cursor int64, limit int) ([]Event, error)
+	// Bounds reports head as the last seq ever assigned, and earliest as
+	// head+1 when retention has removed every event.
 	Bounds() (earliest, head int64, err error)
 	GetConsumer(name string) (Consumer, bool, error)
 	SaveConsumer(c Consumer, now time.Time) error
@@ -631,7 +633,7 @@ func (b *Bus) drainEnabled(d *durable) error {
 			return false, fmt.Errorf("reading log bounds: %w", err)
 		}
 		var gap *Gap
-		if earliest != 0 && d.position() < earliest-1 {
+		if d.position() < earliest-1 {
 			gap = &Gap{
 				Cursor: d.position(), Earliest: earliest, Head: head,
 				Missed: earliest - 1 - d.position(),

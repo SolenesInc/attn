@@ -23,7 +23,7 @@ func (d *Daemon) takeGardenBookmark() (gardenBookmark, error) {
 }
 
 func (b gardenBookmark) expired(after int64) bool {
-	return b.earliest > 0 && after < b.earliest-1
+	return after < b.earliest-1
 }
 
 func (d *Daemon) expiredSince(mark gardenBookmark) *protocol.SeedSinceExpired {

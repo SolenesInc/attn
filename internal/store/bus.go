@@ -308,13 +308,17 @@ func (s *Store) BusBounds() (earliest, head int64, err error) {
 	if s.db == nil {
 		return 0, 0, nil
 	}
-	var lo, hi sql.NullInt64
-	// One subquery per bound reads each end of the primary key; MIN and MAX in one SELECT scan every row.
-	if err := s.db.QueryRow(`SELECT (SELECT MIN(seq) FROM bus_events), (SELECT MAX(seq) FROM bus_events)`).Scan(&lo, &hi); err != nil {
+	var lo sql.NullInt64
+	if err := s.db.QueryRow(`SELECT (SELECT MIN(seq) FROM bus_events), `+busHeadSQL).Scan(&lo, &head); err != nil {
 		return 0, 0, err
 	}
-	return lo.Int64, hi.Int64, nil
+	if !lo.Valid {
+		return head + 1, head, nil
+	}
+	return lo.Int64, head, nil
 }
+
+const busHeadSQL = `COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'bus_events'), 0)`
 
 func (s *Store) GetBusConsumer(name string) (BusConsumer, bool, error) {
 	s.mu.RLock()
