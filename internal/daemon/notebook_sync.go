@@ -678,7 +678,7 @@ func (d *Daemon) sendNotebookSyncReports(conn *bridge.Conn) {
 		encoded, err := json.Marshal(report)
 		if err == nil {
 			var state protocol.OutpostNotebook
-			state, err = Call[protocol.OutpostNotebook](conn.Context(), d.router(), protocol.NotebookSyncReportMessage{Cmd: protocol.CmdNotebookSyncReport, Report: string(encoded)})
+			err = conn.Call(conn.Context(), bridgeCall, protocol.NotebookSyncReportMessage{Cmd: protocol.CmdNotebookSyncReport, Report: string(encoded)}, &state)
 			pausepoint.At(pausepoint.NotebookReportSent)
 			if err == nil {
 				d.notebookSync.mu.Lock()

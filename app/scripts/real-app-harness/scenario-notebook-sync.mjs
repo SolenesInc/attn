@@ -150,7 +150,7 @@ try {
 
     await client.request('set_setting', { key: 'outposts_enabled', value: 'false' });
     fs.unlinkSync(path.join(outpostRoot, '.attn', 'notebook-sync'));
-    const failed = receive(notebook => notebook?.state === 'error');
+    const failed = receive(notebook => notebook?.state === 'error' && notebook.error?.includes('folder marker missing'));
 
     await client.request('set_setting', { key: 'outposts_enabled', value: 'true' });
     const row = await failed;
