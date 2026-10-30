@@ -16,7 +16,7 @@ attn delegate --brief-file question.md --role pathfinder --cwd /notes
 
 This example assumes `/notes` is outside Git. `--brief "…"` works for short assignments.
 
-For work already in a seed, read its current body and notes, then dispatch using the seed. Update the body first if the assignment has changed; do not supply a second brief.
+For work already in a seed, read it with `attn seed show`, then dispatch using the seed. Update the body first if the assignment has changed; do not supply a second brief.
 
 ```sh
 attn seed show s-example

@@ -8,7 +8,7 @@ Garden words have Jira-style equivalents: seed = ticket, ready = todo, plot = ep
 
 Track work that outlives this turn in seeds, not in markdown TODO lists or your harness's todo tool, which end with the session: a bug you found, a follow-up you are not doing now, a piece you split off. Search before you plant: `attn seed search <words>` ranks stemmed word-prefix matches across titles, bodies and logs, including identifier parts and closed seeds, so you find work that already exists instead of planting it twice. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone. Harvest a seed when the outcome and required verification in its body are complete.
 
-A delegation assigns its seed to the new agent as their stake: the seed they tend and report to. A new delegation stores its brief as the seed body. A delegation at an existing seed uses that body's assignment. The opening identifies the seed; the agent reads its current body and notes. Handover saves the next-step note and transfers ownership before starting a new agent, leaving the previous session running. `attn seed ready` without flags shows your stake's plot. When a session delegates more work, a new brief becomes a child only when the resolved source has a stake. Every other garden verb uses the seed id you provide.
+A delegation assigns its seed to the new agent as their stake: the seed they tend and report to. A new delegation stores its brief as the seed body. A delegation at an existing seed uses that body's assignment. The opening identifies the seed; the agent reads it with `attn seed show`. Handover saves the next-step note and transfers ownership before starting a new agent, leaving the previous session running. `attn seed ready` without flags shows your stake's plot. When a session delegates more work, a new brief becomes a child only when the resolved source has a stake. Every other garden verb uses the seed id you provide.
 
 The loop:
 
@@ -62,9 +62,13 @@ with `attn seed rollback s-7k3f9m`, or a named one with
 
 Keeping up:
 
-When attn sends an update notification, run the suggested command to read it. Reading acknowledges the update and maintains awareness; it does not authorize or require acting on the update. Only act or interrupt the user when attention is genuinely needed.
+Every change to a seed writes an entry in its log: notes, handoffs, moves, links, edits, checks, attachments and answers. `show` prints a bookmark under its header, and a `notes` or `--since` read ends with one. Keep the bookmark from your last read and read since it, instead of reading the whole seed again.
 
-    attn seed notes <id>             the whole log, newest first
+When attn sends an update notification, run the read it names. Reading acknowledges the update and maintains awareness; it does not authorize or require acting on the update. Only act or interrupt the user when attention is genuinely needed.
+
+    attn seed show <id> --since <N>  only the entries saved after bookmark N, on the seed and every seed below it
+    attn seed notes <id>             the whole log, newest first; takes --since <N>, and --kind <kind> for one kind
+                                     of entry, such as handoff or answer
     attn seed watch <id>             watch this seed and its descendants; unwatch removes this subscription
     attn seed attach <id> --path <file> (--move | --copy)    bring a local file into durable seed ownership, replacing one of the same name; Move is recommended
     attn seed detach <id> --path <filename> --to <destination>    move an owned file back out without overwriting

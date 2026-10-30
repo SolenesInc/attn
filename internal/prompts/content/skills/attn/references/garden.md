@@ -72,6 +72,23 @@ messages to other agents. To the user, say the slug: `mermaid-rendered-grid`
 (`s-7k3f9m`) on first mention, then the slug alone. A person should never have
 to decode an id.
 
+## Reading what changed
+
+Every change to a seed writes an entry in its log: notes, handoffs, moves,
+links, edits, checks, attachments and answers. `attn seed show <id>` prints a
+bookmark under its header, `bookmark  attn seed show <id> --since <N>`, then
+the newest entries. `attn seed notes <id>` lists the whole log and ends with its
+own bookmark line; `--kind <kind>` keeps one kind, such as `handoff` or
+`answer`. Run a bookmark later to get only the entries saved after N, on the
+seed and every seed below it, each labeled with its seed; that read ends with a
+new bookmark. Keep the bookmark from your last read and read since it, instead
+of reading the whole seed again. When a bookmark is older than the event log
+keeps, the read says so and gives the full seed instead.
+
+On a plot, `show` lists the open children as a board and folds the closed ones
+into one line. `attn seed ls --plot <plot>` lists every child, closed ones
+included.
+
 ## Moving a seed another agent tends
 
 A live claim yields to its tender, sessions above it in the delegation chain,
@@ -135,9 +152,12 @@ show <id>` and `unwatch` name those subscriptions and the commands to remove
 them. `watch` restores a subscription; a new delegation starts it again.
 Restarting or resuming the same delegation does not restore a removed watch.
 
-A bell carries the seed and what moved. Read it with `attn seed show` or
-`notes` to reset the bell for the next meaningful move. Updates already read
-or handed to an agent cannot be recalled.
+A bell carries the seed, what moved and the read that shows it:
+`attn seed show <id> --since <N>`, where N is the bookmark just before the
+first change the bell covers. Later changes join the unread bell, and the same
+read returns them too. Any `show` or `notes` of the seed resets the bell for
+the next meaningful move. Updates already read or handed to an agent cannot be
+recalled.
 
 ## Artifacts
 

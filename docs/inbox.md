@@ -81,11 +81,16 @@ delegation, a handover or a seed sent to the chief.
 | harvest-when set or cleared | yes |
 | unblocked: the last blocker closed | yes |
 | automation work ready | yes |
-| plant, body edit, artifact change, edge link or unlink, resume identity | no |
+| plant, body edit, artifact change, edge link or unlink | no |
 
-A seed update names the seed and the kind of event. For a check move it names
-the move and who made it instead: "s-x moved: check C4 rejected by c9b177e1".
-The agent reads the seed for the details.
+A seed update names the seed, the kind of event, and the read that shows what
+changed: "s-x moved: parked — read what changed with `attn seed show s-x
+--since 2711491`". The number is the bookmark just before the event, so that
+read returns the event's log entries and those of every later event on the
+seed or the seeds below it. For a check move the update names the move and who
+made it instead of the kind: "s-x moved: check C4 rejected by c9b177e1 — …".
+An update stored before updates kept a bookmark ends "read it with `attn seed
+show s-x`" instead.
 
 A lifecycle move, ringing note or check move replies with who gets its seed
 update: current and covering tenders and the watchers, without the session that
@@ -141,9 +146,10 @@ depends on its kind.
 Seed updates merge. They use the seed as the key, so an address has at most
 one unread update per seed. A later event on that seed leaves the unread update
 as it is: same attempts, no new ring. The update keeps the first event's kind,
-or its check move, unless the later event is `unblocked`. So once a seed update
-has used its 3 attempts, later events on that seed stay silent until the agent
-reads it; the seed's log still has every one of them.
+or its check move, unless the later event is `unblocked`. It keeps the first
+event's bookmark, so its read returns the later events too. Once a
+seed update has used its 3 attempts, later events on that seed stay silent
+until the agent reads it; the seed's log still has every one of them.
 
 Other keyed items are replaced. The new item takes the old one's place and gets
 fresh attempts.

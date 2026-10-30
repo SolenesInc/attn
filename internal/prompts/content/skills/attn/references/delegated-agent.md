@@ -4,7 +4,7 @@ Follow the task and its authorization boundaries. Start further Attn delegations
 
 ## Start from the seed
 
-Your opening names the seed you tend. Read its current body and notes with `attn seed show <seed-id>` before starting, and again after a resume, since the brief may have changed while you were away. Read any handoff note for the next step and its authorization. Follow the references needed for your task; parent and sibling bodies require separate reads. `show` lists the parent plot's outline, and `attn seed show <parent> --section <heading|id>` reads one part of it. You do not inherit the delegator's conversation.
+Your opening names the seed you tend. Read it with `attn seed show <seed-id>` before starting: under its header are a bookmark and the newest log entries, with a pointer to the freshest handoff when that is older than those. After a resume, read what changed while you were away with `attn seed show <seed-id> --since <bookmark>`, or the whole seed when you no longer have the bookmark. An `edit` entry means the brief changed, so read the body again. Follow any handoff for the next step and its authorization. Follow the references needed for your task; parent and sibling bodies require separate reads. `show` lists the parent plot's outline, and `attn seed show <parent> --section <heading|id>` reads one part of it. You do not inherit the delegator's conversation.
 
 ## Report useful updates
 

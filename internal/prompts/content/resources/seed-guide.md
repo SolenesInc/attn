@@ -4,7 +4,7 @@ WRITING A BODY
 
 A seed body is a prompt for the agent who will do the work. A new delegation
 stores its brief as the body. A delegation at an existing seed names that seed;
-the agent reads its current body and notes. Handover adds a short next-step note
+the agent reads it with `attn seed show`. Handover adds a short next-step note
 and transfers ownership before the successor starts.
 Write every body, including plot children, for someone without this conversation.
 Do this even when you plan to do the work yourself.
@@ -225,6 +225,8 @@ HANDOFFS AND STEERING
                                             newest entries, or points at it when it is older
     attn agent msg <seed-id> "…"            reaches its current or next tender;
                                             waits when none is reachable
+    attn seed show <id> --since <N>         only what was saved after bookmark N;
+                                            show and notes print the bookmark to use next
 
 Leave a handoff whenever you park a seed, or stop mid-thread and do not
 intend to continue: outcome, evidence, next action. Long reasoning goes in an
