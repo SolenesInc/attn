@@ -25,6 +25,31 @@ const notebookEvents = [];
 let output = '';
 let echoTerminal = null;
 let nettop = null;
+const inputTraces = new Map();
+const inputProbes = new Map();
+const traceReads = [];
+const inputAcks = [];
+const inputTraceErrors = [];
+let traceCapacity = 0;
+let traceTotal = 0;
+
+async function readInputTraces() {
+  const requestId = crypto.randomUUID();
+  const reply = W.observer.waitForMessage(m => m.event === 'support_snapshot_result' && m.request_id === requestId && m, 'input call trace');
+  W.observer.send({ cmd: 'support_snapshot', request_id: requestId, runtime_ids: [] });
+  const snapshot = await reply;
+  const unseen = snapshot.trace_total - traceTotal;
+  if (unseen > snapshot.trace_capacity) throw new Error(`trace_capacity=${snapshot.trace_capacity}, unseen_traces=${unseen}; input call measurement lost traces`);
+  traceCapacity = snapshot.trace_capacity;
+  traceTotal = Math.max(traceTotal, snapshot.trace_total);
+  for (const trace of snapshot.input_traces) {
+    if (trace.runtime_id === echoTerminal && trace.trace_id.startsWith('c12-input-')) inputTraces.set(trace.trace_id, trace);
+  }
+}
+function inputTraceError(error) {
+  inputTraceErrors.push(String(error?.stack ?? error));
+  receipt('input trace failed', { error: String(error) });
+}
 
 const stats = list => {
   const v = [...list].sort((x, y) => x - y); const n = v.length;
@@ -73,12 +98,23 @@ async function sampleUntil(stop) {
     const i = seq++;
     sent.set(i, performance.now());
     W.controlSample(i);
-    W.observer.send({ cmd: 'pty_input', id: echoTerminal, data: `E${String(i).padStart(6, '0')}\n` });
+    const traceId = `c12-input-${i}`;
+    inputAcks.push(W.observer.waitForMessage(m => m.event === 'pty_input_probe_result' && m.id === echoTerminal && m.probe_id === traceId && m, `input call ${i}`).then(probe => {
+      if (!probe.success) throw new Error(`input call ${i}: ${probe.error}`);
+      inputProbes.set(traceId, probe);
+      if (inputProbes.size % Math.floor(traceCapacity / 2) === 0) traceReads.push(readInputTraces().catch(inputTraceError));
+    }).catch(inputTraceError));
+    W.observer.send({ cmd: 'pty_input', id: echoTerminal, data: `E${String(i).padStart(6, '0')}\n`, trace_id: traceId, probe_id: traceId });
     next += 30;
     await new Promise(r => setTimeout(r, Math.max(0, next - performance.now())));
   }
   const drained = performance.now();
   while (sent.size && performance.now() - drained < 15_000) await new Promise(r => setTimeout(r, 50));
+  await Promise.all(inputAcks);
+  await Promise.all(traceReads);
+  await readInputTraces();
+  if (inputTraceErrors.length) throw new Error(inputTraceErrors.join('\n'));
+  if (inputTraces.size !== seq) throw new Error(`trace_capacity=${traceCapacity}, captured_inputs=${inputTraces.size}, sent_inputs=${seq}`);
   if (stopping) throw new Error('measurement stopped by SIGTERM');
   return { unanswered: sent.size };
 }
@@ -156,6 +192,7 @@ try {
     receipt('reverse Notebook written after pairing', { source: o.remoteNotebook, output: await remote(`cp -a ${quote(o.remoteNotebook + '/.')} ${quote(W.R.notebook + '/')}`) });
   }
   const synced = () => W.observer.outposts.find(r => r.id === W.outpost.id)?.notebook?.state === 'in_sync';
+  await readInputTraces();
   let window;
   if (o.mode === 'idle') {
     await W.waitOutpost(r => r.id === W.outpost.id && r.notebook?.state === 'in_sync', 'first sync of the tiny Notebook');
@@ -195,6 +232,7 @@ try {
   receipt('result', { outcome: 'driver error', error: String(error?.stack ?? error), notebookEvents });
   process.exitCode = 1;
 } finally {
+  fs.writeFileSync(path.join(o.out, 'input-traces.json'), JSON.stringify({ trace_capacity: traceCapacity, trace_total: traceTotal, sent_inputs: seq, traces: [...inputTraces.values()], probes: [...inputProbes.values()], errors: inputTraceErrors }, null, 1));
   if (nettop && nettop.exitCode === null) nettop.kill('SIGTERM');
   await W.cleanup();
 }

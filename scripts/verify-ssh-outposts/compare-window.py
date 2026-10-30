@@ -65,7 +65,7 @@ for pair in range(1, 4):
     excess = {
         "mux": after["control_same_seconds"]["mux"]["p50_ms"] - idle["control_same_seconds"]["mux"]["p50_ms"],
         "separate": after["control_same_seconds"]["separate"]["p50_ms"] - idle["control_same_seconds"]["separate"]["p50_ms"],
-        "per_call_R": after["per_call_R"]["p50_ms"] - idle["per_call_R"]["p50_ms"],
+        "per_call_R": after["per_call_R_direct"]["p50_ms"] - idle["per_call_R_direct"]["p50_ms"],
         "raw_echo": after["raw_echo"]["p50_ms"] - idle["raw_echo"]["p50_ms"],
     }
     for name, bound in {"mux": 10, "separate": 10, "per_call_R": 25, "raw_echo": 45}.items():

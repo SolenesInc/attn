@@ -38,8 +38,13 @@ reaches `--capMs`. Keep the source Notebook read-only.
 
 `receipts.json` records actions and outcomes. `samples.json` holds every typing
 sample and Notebook update. `control-echo.json` holds both control routes' echo
-samples. `analyze.py` reports raw echo, per-call R, same-seconds control echo,
-unanswered keys, and sync throughput using the spike's estimator.
+samples. `input-traces.json` holds the daemon's input-write durations. Per-call
+R uses one duration per input batch; the echo-based multikey estimate remains
+a diagnostic. `analyze.py` reports both, raw echo, same-seconds control echo,
+unanswered keys, and sync throughput.
+
+The driver PID is in `receipts.json`. SIGTERM stops sampling and cleans both
+instances.
 
 Compare an output controller with the preceding build in one sequence:
 

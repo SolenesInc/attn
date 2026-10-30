@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Summarize one ssh-route spike case (s-z5w2rz). Same method as A21's analyze-echo.py (s-1a6en6), plus p90,
-per-route controls, Notebook MB/s and per-process CPU.
+"""Summarize one outpost measurement.
 
 Window: the driver's measurement window (bulk: sampling start to in_sync; idle: the keystroke run).
-Per-call R: echoes whose arrivals fall within 8 ms form a batch; R is the minimum latency of a batch with at
-least 2 keys (A21's decomposition: the serialized input queue joins pending keys into the next call).
+Direct per-call R: the daemon's input-write duration, grouped by runtime, receive time and duration.
+Each input in one write batch shares those values. Trace ids join writes to the measurement window.
+The legacy echo estimator keeps the minimum latency of each multikey batch arriving within 8 ms.
 Control: each route's samples sent within the same epoch seconds.
 MB/s: outpost Notebook bytes / (in_sync - sampling start), as A21's direct receipt computed 17.42 MB/s; also
 from the first positive need_bytes event.
@@ -38,6 +38,22 @@ end = (s['t0_epoch_ms'] + (w['to_ms'] or max(x[1] for x in pts))) / 1000
 c = json.loads((a.case / 'control-echo.json').read_text())
 controls = {name: {**quant([x[1] for x in route['samples'] if start <= x[0] <= end]), 'unanswered': route['unanswered']} for name, route in c['routes'].items()}
 
+direct_r = None
+trace_path = a.case / 'input-traces.json'
+if trace_path.exists():
+    traces = json.loads(trace_path.read_text())
+    probes = {x['probe_id']: x for x in traces['probes']}
+    ids = {f"c12-input-{x['i']}" for x in s['samples'] if x['t_ms'] >= w['from_ms'] and (w['to_ms'] is None or x['t_ms'] <= w['to_ms'])}
+    calls = {}
+    for trace in traces['traces']:
+        probe = probes[trace['trace_id']]
+        if not probe['success'] or probe['write_duration_us'] != trace['write_duration_us']:
+            raise ValueError(f"input duration mismatch for {trace['trace_id']}")
+        if trace['trace_id'] in ids:
+            key = (trace['runtime_id'], trace['received_at_unix_ms'], trace['write_duration_us'])
+            calls[key] = trace['write_duration_us'] / 1000
+    direct_r = quant(list(calls.values()))
+
 files_bytes = r['notebook_files']['outpost_files_and_bytes'].split('\n')
 nb_bytes = int(files_bytes[1]) if len(files_bytes) > 1 else None
 sync = None
@@ -64,5 +80,6 @@ cpu = {label: {'pid': v['pid'], 'mean_pct': round(sum(v['pct']) / len(v['pct']),
 
 result = {'case': a.case.name, 'mode': r['mode'], 'window': w, 'window_epoch_s': [start, end], 'raw_echo': quant([x[2] for x in pts]), 'bridge_unanswered': r['unanswered'],
           'batch_count': len(batches), 'multikey_batches': sum(len(b) > 1 for b in batches), 'per_call_R': quant([min(x[2] for x in b) for b in batches if len(b) > 1]),
+          'per_call_R_direct': direct_r,
           'control_same_seconds': controls, 'notebook_sync': sync, 'cpu': cpu, 'heartbeat_gaps': r['heartbeat_gaps'], 'notebook_files': r['notebook_files'], 'connected_ms': r.get('connected_ms')}
 print(json.dumps(result, indent=2))
