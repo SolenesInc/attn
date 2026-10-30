@@ -46,9 +46,9 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		edgeLink(t, cli, closing, "blocks", oldDependent)
 		seeds := docstore.MaxLimit + 7
 
-		result := gardenSearch(t, cli, "", "markdown renderer", 0)
+		result := gardenSearch(t, cli, "", "renderer landing", 0)
 		if result.Matched != 1 || len(result.Hits) != 1 || result.Hits[0].Seed.ID != panel || result.Hits[0].Where != garden.MatchLog {
-			t.Errorf("search got %d hits of %d matched, want the oldest seed matched by its oldest note", len(result.Hits), result.Matched)
+			t.Errorf("search got %+v, want the oldest seed matched by its oldest note", result)
 		}
 		if result.Searched != seeds {
 			t.Errorf("search says it read %d seeds, want all %d", result.Searched, seeds)
