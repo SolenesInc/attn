@@ -725,3 +725,44 @@ func TestAMergePersistedBeforeACrashHarvestsItsSeedOnRestart(t *testing.T) {
 			got.Status, protocol.Deref(got.Reason))
 	}
 }
+
+func TestPlantAndPlotPrintSimilarSeedsAndKeepPlantJSON(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	original := plant(t, s, "Callout wire races disconnect")
+	planted := s.Attn("seed", "plant", "Callouts wire races disconnect")
+	if planted.Code != 0 {
+		t.Fatal(planted.Stderr)
+	}
+	id := strings.Fields(planted.Stdout)[0]
+	for _, want := range []string{"similar open seeds", original.ID, "attn seed wither " + id + ` -m "duplicate of <id>"`} {
+		if !strings.Contains(planted.Stdout, want) {
+			t.Errorf("plant missing %q: %s", want, planted.Stdout)
+		}
+	}
+	var object map[string]any
+	s.Attn("seed", "plant", "Callout wire races disconnect", "--json").JSON(t, &object)
+	if object["id"] == nil || object["title"] != original.Title || object["seed"] != nil || object["similar"] != nil {
+		t.Errorf("plant --json changed its shape: %+v", object)
+	}
+	unrelated := s.Attn("seed", "plant", "zygomorphicquasar")
+	if unrelated.Code != 0 || strings.Contains(unrelated.Stdout, "similar") {
+		t.Errorf("unrelated plant: %+v", unrelated)
+	}
+	payload := `{"title":"Callout wire races disconnect","children":[{"title":"quartz archive"}]}`
+	plot := s.Run(testworld.Invocation{Args: []string{"seed", "plot"}, Stdin: payload})
+	if plot.Code != 0 {
+		t.Fatal(plot.Stderr)
+	}
+	crown := strings.Fields(plot.Stdout)[0]
+	for _, want := range []string{"similar open seeds", original.ID, "like " + crown, "attn seed wither " + crown} {
+		if !strings.Contains(plot.Stdout, want) {
+			t.Errorf("plot missing %q: %s", want, plot.Stdout)
+		}
+	}
+	jsonPlot := plantPlot(t, s, payload)
+	if len(jsonPlot.Similar) != 3 || jsonPlot.Similar[0].Like != jsonPlot.Crown.ID {
+		t.Errorf("plot JSON: %+v", jsonPlot)
+	}
+}

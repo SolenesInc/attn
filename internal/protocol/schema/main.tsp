@@ -5648,8 +5648,15 @@ model SeedPlantMessage {
   "checks"?: SeedCheckDefinition[];
 }
 
+model SeedSimilar {
+  "seed": Seed;
+  "last_active": string;
+  "like": string;
+}
+
 model SeedPlantResult {
   "seed": Seed;
+  "similar": SeedSimilar[];
 }
 
 // Plant a whole plot in one move: the crown and its children, with the
@@ -5681,6 +5688,7 @@ model SeedPlotChild {
 model SeedPlotResult {
   "crown": Seed;
   "children": Seed[];
+  "similar": SeedSimilar[];
 }
 
 // List the garden, newest first. One space, no scope: plots group, `show`

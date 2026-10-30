@@ -10028,6 +10028,9 @@ type SeedPlantMessage struct {
 type SeedPlantResult struct {
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
+
+	// Similar corresponds to the JSON schema field "similar".
+	Similar []SeedSimilar `json:"similar"`
 }
 
 type SeedPlotChild struct {
@@ -10102,6 +10105,9 @@ type SeedPlotResult struct {
 
 	// Crown corresponds to the JSON schema field "crown".
 	Crown Seed `json:"crown"`
+
+	// Similar corresponds to the JSON schema field "similar".
+	Similar []SeedSimilar `json:"similar"`
 }
 
 type SeedReadyMessage struct {
@@ -10570,6 +10576,17 @@ type SeedShowResult struct {
 
 	// WatchingVia corresponds to the JSON schema field "watching_via".
 	WatchingVia []string `json:"watching_via"`
+}
+
+type SeedSimilar struct {
+	// LastActive corresponds to the JSON schema field "last_active".
+	LastActive string `json:"last_active"`
+
+	// Like corresponds to the JSON schema field "like".
+	Like string `json:"like"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
 }
 
 type SeedTransitionMessage struct {

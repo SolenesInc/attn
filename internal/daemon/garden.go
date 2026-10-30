@@ -421,6 +421,11 @@ func (d *Daemon) sendGardenError(conn net.Conn, verb string, err error) {
 }
 
 func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) {
+	read, hits, err := d.similarSeeds(protocol.Deref(msg.ProfileID), []string{msg.Title}, strings.TrimSpace(protocol.Deref(msg.PartOf)))
+	if err != nil {
+		d.sendGardenError(conn, "plant", err)
+		return
+	}
 	seed, err := d.plantSeedRequest(msg)
 	if err != nil {
 		d.sendGardenError(conn, "plant", err)
@@ -428,7 +433,7 @@ func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) 
 	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok:              true,
-		SeedPlantResult: &protocol.SeedPlantResult{Seed: seed},
+		SeedPlantResult: &protocol.SeedPlantResult{Seed: seed, Similar: similarWire(read, hits, []string{seed.ID})},
 	})
 }
 
@@ -508,6 +513,15 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	member := strings.TrimSpace(protocol.Deref(msg.Member))
 
+	titles := []string{spec.Title}
+	for _, child := range spec.Children {
+		titles = append(titles, child.Title)
+	}
+	similarRead, hits, err := d.similarSeeds(protocol.Deref(msg.ProfileID), titles, "")
+	if err != nil {
+		d.sendGardenError(conn, "plot", err)
+		return
+	}
 	var result protocol.SeedPlotResult
 	planted := []string{}
 
@@ -568,7 +582,35 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		d.sendGardenError(conn, "plot", plotErr)
 		return
 	}
+	result.Similar = similarWire(similarRead, hits, planted)
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedPlotResult: &result})
+}
+
+func (d *Daemon) similarSeeds(profile string, titles []string, parent string) (gardenRead, []garden.SimilarHit, error) {
+	read, err := d.readGarden(profile)
+	if err != nil {
+		return gardenRead{}, nil, err
+	}
+	rows := make([][]docstore.TextMatch, len(titles))
+	for i, title := range titles {
+		rows[i], err = d.store.MatchText(garden.SeedsSchema(), docstore.Words(title), "")
+		if err != nil {
+			return gardenRead{}, nil, err
+		}
+	}
+	return read, garden.Similar(rows, read.seeds, parent), nil
+}
+
+func similarWire(read gardenRead, hits []garden.SimilarHit, planted []string) []protocol.SeedSimilar {
+	out := make([]protocol.SeedSimilar, 0, len(hits))
+	for _, hit := range hits {
+		out = append(out, protocol.SeedSimilar{
+			Seed:       read.seed(hit.Seed, read.docs[hit.Seed.ID]),
+			LastActive: hit.LastActive.UTC().Format(docstore.TimeFormat),
+			Like:       planted[hit.TitleIndex],
+		})
+	}
+	return out
 }
 
 func (d *Daemon) mintAndPlant(schema docstore.CollectionSchema, seed garden.Seed) (garden.Seed, docstore.Document, error) {

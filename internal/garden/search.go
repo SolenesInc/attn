@@ -160,6 +160,61 @@ func Rank(words []string, seedRows, noteRows []docstore.TextMatch, seeds []Seed)
 	return out
 }
 
+type SimilarHit struct {
+	Seed       Seed
+	LastActive time.Time
+	TitleIndex int
+}
+
+func Similar(titleRows [][]docstore.TextMatch, seeds []Seed, parent string) []SimilarHit {
+	open := map[string]Seed{}
+	for _, seed := range seeds {
+		if !Closed(seed.Status) && seed.ID != parent {
+			open[seed.ID] = seed
+		}
+	}
+	lists := make([][]docstore.TextMatch, len(titleRows))
+	for i, rows := range titleRows {
+		for _, row := range rows {
+			if _, ok := open[row.ID]; ok {
+				lists[i] = append(lists[i], row)
+			}
+		}
+		sort.SliceStable(lists[i], func(a, b int) bool {
+			x, y := lists[i][a], lists[i][b]
+			return 10*x.Score[0]+x.Score[1] > 10*y.Score[0]+y.Score[1]
+		})
+	}
+	out := []SimilarHit{}
+	seen := map[string]bool{}
+	for rank := 0; ; rank++ {
+		any := false
+		for title, rows := range lists {
+			if rank >= len(rows) {
+				continue
+			}
+			any = true
+			row := rows[rank]
+			if seen[row.ID] {
+				continue
+			}
+			seen[row.ID] = true
+			seed := open[row.ID]
+			stateAt, _ := time.Parse(time.RFC3339Nano, seed.StateChangedAt)
+			if row.CreatedAt.After(stateAt) {
+				stateAt = row.CreatedAt
+			}
+			out = append(out, SimilarHit{Seed: seed, LastActive: stateAt, TitleIndex: title})
+			if len(out) == 3 {
+				return out
+			}
+		}
+		if !any {
+			return out
+		}
+	}
+}
+
 func mergeCarried(into, from []bool) int {
 	count := 0
 	for i, carried := range from {
