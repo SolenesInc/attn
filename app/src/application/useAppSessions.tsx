@@ -3,7 +3,7 @@ import type { TerminalReach } from '../components/SessionTerminalDesktop/useGhos
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useEffect, useMemo } from 'react';
 import { useProfilesStore } from '../store/profiles';
-import { sessionIsOffline, useSessionStore } from '../store/sessions';
+import { sessionIsOffline, sessionOutpostNotice, useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import { normalizeSessionState } from '../types/sessionState';
 import { sessionAttentionFields } from '../navigation/sessionNavigation';
@@ -35,6 +35,7 @@ export function useAppSessions({
       title: daemonSession?.title,
       host,
       hostName: outpost?.name ?? host,
+      outpostNotice: sessionOutpostNotice(host, outpost),
       reach,
       ...sessionAttentionFields(daemonSession),
       offline: sessionIsOffline({ host }, outposts),

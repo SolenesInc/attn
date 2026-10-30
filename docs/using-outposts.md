@@ -248,10 +248,13 @@ Messages and rings to an offline agent queue durably at the home. The sender
 gets a receipt naming the outpost. When it reconnects, delivery resumes at a
 safe prompt, including the usual protection for a recently typed draft.
 
-While the home is still connecting to an outpost, its terminals don't look
-offline, but typing is not sent yet. This happens after the home starts, when
-you turn Outposts on, and when you add or re-pair an outpost. A stalled
-connection still sends typing, without waiting for earlier keys to be answered.
+While the home is connecting to an outpost, each tile says "Connecting to
+<name> · typing is not sent". This happens after the home starts, when you
+turn Outposts on, and when you add or re-pair an outpost. Its sidebar, queue
+and home screen rows keep their usual appearance.
+
+A stalled outpost's tiles say "<name> not responding". The connection stays
+open and still sends typing, without waiting for earlier keys to be answered.
 If the connection ends before a key's answer arrives, attn cannot tell whether
 that key ran. It does not flash the tile for that key. Keys handed to the
 bridge may reach the outpost when it comes back, so look at the shell before
@@ -274,7 +277,7 @@ returns, the tile attaches and shows the current screen.
 | connecting | The home is dialing the outpost. |
 | connected | Both attns hear each other. |
 | stalled | Nothing heard for 3 seconds, usually a network hiccup. It returns to connected on its own. |
-| lost | Nothing heard for 10 seconds, or the connection dropped. attn keeps reconnecting. |
+| lost | Nothing heard for 60 seconds, or the connection dropped. attn keeps reconnecting. |
 | refused | attn won't connect until you act. The error says why. |
 
 The last error stays on the outpost's row until it connects again. On the

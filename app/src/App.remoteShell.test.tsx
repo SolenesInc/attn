@@ -113,24 +113,28 @@ describe('Remote shells in the app', () => {
     expect(flash()).not.toBeNull();
   });
 
-  it('leaves a stalled shell online and sends its typing', async () => {
+  it('names a stalled shell without taking it offline, sends typing, and clears the notice on recovery', async () => {
     const { daemon } = await setup({ ...outpost, state: 'stalled' });
     await openSession(daemon, 'remote');
     expect(tile()).not.toHaveAttribute('data-offline', 'true');
-    expect(within(tile()).queryByRole('status')).toBeNull();
+    expect(screen.getByTestId('sidebar-session-remote')).not.toHaveAttribute('data-offline', 'true');
+    expect(within(tile()).getByRole('status')).toHaveTextContent('studio not responding');
     await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
     expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'remote', data: 'x' })]);
     expect(flash()).toBeNull();
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
+    expect(within(tile()).queryByRole('status')).toBeNull();
   });
 
-  it('refuses typing with a flash and no strip while connecting, then attaches once reachable', async () => {
+  it('says typing is not sent while connecting, then clears the notice and attaches once reachable', async () => {
     const { daemon } = await setup(connecting);
     await openSession(daemon, 'remote');
     expect(tile()).not.toHaveAttribute('data-offline', 'true');
-    expect(within(tile()).queryByRole('status')).toBeNull();
+    expect(screen.getByTestId('sidebar-session-remote')).not.toHaveAttribute('data-offline', 'true');
+    expect(within(tile()).getByRole('status')).toHaveTextContent('Connecting to studio · typing is not sent');
     await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'x', code: 'KeyX' }));
     expect(flash()).not.toBeNull();
-    expect(within(tile()).queryByRole('status')).toBeNull();
+    expect(within(tile()).getByRole('status')).toHaveTextContent('Connecting to studio · typing is not sent');
     expect(daemon.sentOf('attach_session')).toEqual([]);
     expect(daemon.sentOf('pty_resize')).toEqual([]);
     daemon.on('unregister', ({ cmd }) => ({ event: 'command_error', cmd, success: false, error: 'studio is unreachable; this needs it now' }));
@@ -139,6 +143,7 @@ describe('Remote shells in the app', () => {
     expect(screen.getByText('Could not close that session: studio is unreachable; this needs it now')).toBeInTheDocument();
     expect(tile()).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [outpost] }));
+    expect(within(tile()).queryByRole('status')).toBeNull();
     expect(daemon.sentOf('attach_session').map(({ id }) => id)).toEqual(['remote']);
     await gesture(daemon, () => fireEvent.keyDown(terminalInput(), { key: 'z', code: 'KeyZ' }));
     expect(daemon.sentOf('pty_input')).toEqual([expect.objectContaining({ id: 'remote', data: 'z' })]);

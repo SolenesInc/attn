@@ -315,6 +315,28 @@ try {
     created.splice(created.indexOf(opened.session_id), 1);
     await wait('[data-testid="queue-waiting-card"][data-waiting="2"]');
   });
+  await runner.step('stalled_agent_notice_and_recovery', async () => {
+    await client.request('select_session', { sessionId: remoteAgent });
+    await waitForPaneAttached(client, remoteAgent, remoteAgentPane.paneId);
+    await waitForPaneText(client, remoteAgent, remoteAgentPane.paneId, value => value.includes('REMOTE_READY'), 'remote agent before silence');
+    const stalled = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'stalled'));
+    outpost.kill('SIGSTOP');
+    await homeClock.advance('3s');
+    await stalled;
+    const notice = `${tile(remoteAgentPane.paneId)} .desktop-pane-offline-strip`;
+    await wait(notice, { textIncludes: 'Studio not responding' });
+    await wait(`${tile(remoteAgentPane.paneId)}[data-offline]`, { absent: true });
+    const bounds = await client.request('dom_bounds', { selector: notice });
+    runner.assert(bounds.animations.every(animation => animation.state !== 'running'), 'the stalled agent notice is static', bounds);
+    await shot('03-stalled-agent');
+    await measureCpu('stalled-idle');
+    runner.assert(observer.outposts.some(row => row.name === 'Studio' && row.state === 'stalled'), 'the agent notice stays stalled throughout its CPU sample');
+    const recovered = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'connected'));
+    outpost.kill('SIGCONT');
+    await recovered;
+    await wait(notice, { absent: true });
+    await shot('03-stalled-agent-recovered');
+  });
   await runner.step('frozen_outpost_and_recovery', async () => {
     await client.request('click_pane', splitPane);
     await waitForPaneAttached(client, split.id, splitPane.paneId);
@@ -331,6 +353,10 @@ try {
     await homeClock.advance('3s');
     await stalled;
     await wait(`${tile(splitPane.paneId)}[data-offline]`, { absent: true });
+    const stalledNotice = `${tile(splitPane.paneId)} .desktop-pane-offline-strip`;
+    await wait(stalledNotice, { textIncludes: 'Studio not responding' });
+    const stalledBounds = await client.request('dom_bounds', { selector: stalledNotice });
+    runner.assert(stalledBounds.animations.every(animation => animation.state !== 'running'), 'the stalled shell notice is static', stalledBounds);
     await shot('03-stalled-shell');
     await homeClock.advance('57s');
     await lost;
@@ -400,6 +426,49 @@ try {
     await wait('[data-testid="queue-waiting-card"][data-waiting="2"]');
     runner.writeJson('remote-agent.json', { session: observer.getSession(remoteAgent), pane: remoteAgentPane });
     await shot('05-recovered-shell');
+    await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
+    await press('[data-testid="settings-nav-outposts"]');
+    await wait(`${studio} .settings-pill`, { textIncludes: 'connected' });
+  });
+  await runner.step('connecting_tiles_refuse_input_until_repaired', async () => {
+    const connecting = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'connecting'));
+    const releaseRequests = ssh.holdRequests(address);
+    runner.registerCleanup('release_connecting_requests', releaseRequests);
+    const started = Date.now();
+    await press(`${studio} button:first-child`);
+    await connecting;
+    await driver.pressKey('Escape');
+    for (const [name, pane] of [['shell', splitPane], ['agent', remoteAgentPane]]) {
+      await client.request('click_pane', pane);
+      const notice = `${tile(pane.paneId)} .desktop-pane-offline-strip`;
+      await wait(notice, { textIncludes: 'Connecting to Studio · typing is not sent' });
+      await wait(`${tile(pane.paneId)}[data-offline]`, { absent: true });
+      const bounds = await client.request('dom_bounds', { selector: notice });
+      runner.assert(bounds.animations.every(animation => animation.state !== 'running'), `the connecting ${name} notice is static`, bounds);
+      await waitForPaneInputFocus(client, pane.sessionId, pane.paneId);
+      const before = await client.request('read_pane_text', pane);
+      const refused = wait(`${tile(pane.paneId)} .desktop-pane-refusal`);
+      await driver.typeText('C13_CONNECTING_REFUSED');
+      await refused;
+      const after = await client.request('read_pane_text', pane);
+      runner.assert(before.text === after.text, `connecting ${name} typing is refused without changing its screen`, { before, after });
+      await wait(`${tile(pane.paneId)} .desktop-pane-refusal`, { absent: true });
+      await shot(`05-connecting-${name}`);
+    }
+    await measureCpu('connecting-idle');
+    runner.assert(observer.outposts.some(row => row.name === 'Studio' && row.state === 'connecting'), 'both connecting notices remain during the CPU sample');
+    const recovered = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'connected' && !row.last_error));
+    releaseRequests();
+    runner.writeJson('connecting-duration.json', { durationMs: Date.now() - started });
+    await recovered;
+    for (const [name, pane, marker] of [['shell', splitPane, 'C13_RECOVERED'], ['agent', remoteAgentPane, 'REMOTE_READY']]) {
+      await client.request('click_pane', pane);
+      await wait(`${tile(pane.paneId)} .desktop-pane-offline-strip`, { absent: true });
+      await waitForPaneAttached(client, pane.sessionId, pane.paneId);
+      const screen = await waitForPaneText(client, pane.sessionId, pane.paneId, value => value.includes(marker), `${name} current screen after Re-pair`);
+      runner.assert(!screen.text.includes('C13_CONNECTING_REFUSED'), `connecting ${name} typing is never replayed`, screen);
+      await shot(`05-connecting-${name}-recovered`);
+    }
     await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
     await press('[data-testid="settings-nav-outposts"]');
     await wait(`${studio} .settings-pill`, { textIncludes: 'connected' });

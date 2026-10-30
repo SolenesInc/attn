@@ -195,7 +195,7 @@ home                    the main daemon the user's app connects to
    │  ├─ connecting    the home is dialing the outpost
    │  ├─ connected     heartbeats arrive (every 0.5 s)
    │  ├─ stalled       no heartbeat for 3 s on an open connection; usually clears
-   │  ├─ lost          no heartbeat for 10 s, or no connection; the home redials
+   │  ├─ lost          no heartbeat for 60 s, or no connection; the home redials
    │  └─ refused       ssh refused authentication or a host key, or attn
    │                   refused the outpost's identity or build
    └─ outpost (1)     a remote daemon paired to that home

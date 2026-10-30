@@ -60,6 +60,7 @@ export interface SessionTerminalDesktopProps {
     cwd: string;
     host?: string;
     hostName?: string;
+    outpostNotice?: string;
     offline?: boolean;
     reach?: import('./useGhosttyPaneRuntime').TerminalReach;
     state?: UISessionState;

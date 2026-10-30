@@ -85,10 +85,10 @@ A kind names where the test enters and what it may fake. Fake nothing else.
   external services, clock, network; the browser and Tauri host for the app.
 - **Stack** enters through the CLI, the protocol, or a browser page, across
   processes. Real: daemon, PTY workers and host, CLI, frontend. Faked: agent
-  binaries, external services such as GitHub; the PTY in the browser suite.
+  binaries, external services such as GitHub, clock; the PTY in the browser suite.
 - **Scenario** enters through native input and observes the screen, the
   protocol, and the CLI. Real: everything attn ships, packaged as shipped.
-  Faked: agent binaries, external services such as GitHub.
+  Faked: agent binaries, external services such as GitHub, clock.
 
 ### Wire
 
@@ -230,6 +230,16 @@ returns `testworld.Main(m)`.
   such as a long-running watch or a request the test answers as the app.
   Await its output with `AwaitStdout` or `AwaitStderr`, or its result with
   `Wait`. The stack interrupts it at cleanup.
+- `s.Advance(d)` moves that daemon's bridge stall, loss, retry and dial-answer
+  timers. Every stack uses this stepped clock. A test waiting for stall,
+  silence-triggered loss or a retry without advancing fails at the hang guard.
+  Heartbeats and kernel socket deadlines keep real time, so a dial may still
+  fail without an advance. Await the connected or stalled row before advancing
+  its liveness timers.
+- `s.AwaitTimer(d)` waits for a timer registration or reset after the last
+  `Advance` or `AwaitTimer`. Use it before advancing an asynchronous dial or
+  retry: its connecting, lost or refused row can arrive before its timer is
+  ready. A failure names the requested duration and the durations seen.
 
 If the daemon misses its ready guard or `s.Run` exceeds its hang guard, the
 stack sends SIGQUIT to capture all goroutines before terminating the process.

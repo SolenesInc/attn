@@ -101,6 +101,16 @@ export function sessionIsOffline(session: { host?: string }, outposts: readonly 
   return Boolean(session.host && (outposts.find((row) => row.id === session.host)?.reach ?? 'unreachable') === 'unreachable');
 }
 
+export function sessionOutpostNotice(host: string | undefined, outpost: OutpostInfo | undefined): string | undefined {
+  if (!host) return undefined;
+  const name = outpost?.name ?? host;
+  const reach = outpost?.reach ?? 'unreachable';
+  if (reach === 'unreachable') return `${name} unreachable · typing is not sent`;
+  if (reach === 'connecting') return `Connecting to ${name} · typing is not sent`;
+  if (reach === 'reachable' && outpost?.state === 'stalled') return `${name} not responding`;
+  return undefined;
+}
+
 const MIN_STABLE_COLS = 20;
 const MIN_STABLE_ROWS = 8;
 

@@ -118,6 +118,7 @@ export function AppDesktops() {
             cwd: entry.cwd,
             host: entry.host,
             hostName: entry.hostName,
+            outpostNotice: entry.outpostNotice,
             offline: entry.offline,
             reach: entry.reach,
             state: entry.state,

@@ -13,7 +13,7 @@ export async function outpostSsh(root) {
   const binary = path.join(bin, 'ssh');
   await exec('go', ['build', '-o', binary, './scripts/testssh'], { cwd: repo });
   const routesFile = path.join(root, 'ssh-routes.json');
-  const routes = {}, servers = [], children = new Set(), connections = new Set();
+  const routes = {}, servers = [], children = new Set(), connections = new Set(), heldRequests = new Map();
   const controlRoot = path.join(root, 'masters');
   fs.mkdirSync(controlRoot);
   const env = { PATH: `${bin}:${process.env.PATH}`, ATTN_TESTWORLD_SSH_ROUTES: routesFile, ATTN_TESTWORLD_SSH_CONTROL_ROOT: controlRoot };
@@ -38,21 +38,39 @@ export async function outpostSsh(root) {
           conn.off('data', request);
           const { Script: script, ResultFile: resultFile, Lifeline: lifeline } = JSON.parse(pending.subarray(0, end));
           if (lifeline) { conn.once('end', () => conn.end()); return; }
-          const child = spawn('sh', ['-c', script], { env: { ...remoteEnv, PATH: `${machineBin}:${remoteEnv.PATH}`, ATTN_HARNESS_OUTPOST_INSTALL_ROOT: installRoot }, stdio: ['pipe', 'pipe', 'pipe'] });
-          children.add(child); child.once('exit', () => children.delete(child));
-          let stderr = '';
-          child.stderr.on('data', data => { stderr += data.toString(); });
-          child.once('close', code => { fs.writeFileSync(resultFile, JSON.stringify({Code: code ?? 255, Stderr: stderr})); conn.end(); });
-          child.stdin.on('error', () => {}); conn.on('error', () => {});
-          child.stdout.pipe(conn, {end: false}); conn.pipe(child.stdin);
-          if (pending.length > end + 1) child.stdin.write(pending.subarray(end + 1));
-          conn.once('close', () => { child.stdin.end(); });
+          const execute = () => {
+            if (conn.destroyed) return;
+            const child = spawn('sh', ['-c', script], { env: { ...remoteEnv, PATH: `${machineBin}:${remoteEnv.PATH}`, ATTN_HARNESS_OUTPOST_INSTALL_ROOT: installRoot }, stdio: ['pipe', 'pipe', 'pipe'] });
+            children.add(child); child.once('exit', () => children.delete(child));
+            let stderr = '';
+            child.stderr.on('data', data => { stderr += data.toString(); });
+            child.once('close', code => { fs.writeFileSync(resultFile, JSON.stringify({Code: code ?? 255, Stderr: stderr})); conn.end(); });
+            child.stdin.on('error', () => {}); conn.on('error', () => {});
+            child.stdout.pipe(conn, {end: false});
+            if (pending.length > end + 1) child.stdin.write(pending.subarray(end + 1));
+            conn.pipe(child.stdin);
+            conn.once('close', () => { child.stdin.end(); });
+            conn.resume();
+          };
+          const held = heldRequests.get(destination);
+          if (held) {
+            conn.pause();
+            held.push(execute);
+          } else execute();
         };
         conn.on('data', request);
       });
       server.listen(socket); await once(server, 'listening'); servers.push(server);
       routes[destination] = socket; save();
       return target;
+    },
+    holdRequests(destination) {
+      const held = [];
+      heldRequests.set(destination, held);
+      return () => {
+        heldRequests.delete(destination);
+        for (const execute of held.splice(0)) execute();
+      };
     },
     requireConfirmation(destination) {
       routes[destination] = `prompt:${routes[destination]}`; save();

@@ -29,7 +29,23 @@ function setup(outpost = offline, remote: Partial<DaemonSession> = {}, script?: 
   });
 }
 
-describe('Agents on an unreachable outpost', () => {
+describe('Remote agents in the app', () => {
+  it.each([
+    { state: OutpostState.Stalled, reach: OutpostReach.Reachable, notice: 'studio not responding' },
+    { state: OutpostState.Connecting, reach: OutpostReach.Connecting, notice: 'Connecting to studio · typing is not sent' },
+  ])('shows a $state notice in an agent tile and clears it on recovery', async ({ state, reach, notice }) => {
+    const { daemon } = await setup(host);
+    await openSession(daemon, 'remote');
+    const tile = () => document.querySelector<HTMLElement>('[data-pane-id="pane-remote"]')!;
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...host, state, reach }] }));
+    expect(within(tile()).getByText(notice)).toBeInTheDocument();
+    expect(tile()).not.toHaveAttribute('data-offline', 'true');
+    expect(screen.getByTestId('queue-turn-remote')).not.toHaveAttribute('data-offline', 'true');
+    expect(screen.getByTestId('queue-waiting-card')).toHaveAttribute('data-waiting', '2');
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [host] }));
+    expect(within(tile()).queryByText(notice)).toBeNull();
+  });
+
   it('keeps Home turns in the same band through loss and reconnect, counting only reachable turns', async () => {
     const { daemon } = await setup(host);
     const turns = () => within(screen.getByTestId('session-group-turns'));
