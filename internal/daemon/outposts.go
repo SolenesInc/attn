@@ -241,9 +241,6 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			}
 		}
 		if err != nil {
-			if push != nil {
-				d.finishOutpostPush(row.ID, push, err)
-			}
 			state, delay := bridge.StateLost, bridge.ReconnectInterval
 			var refusal *bridge.Refusal
 			build := ""
@@ -259,7 +256,12 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 					build = "nothing installed"
 				}
 			}
-			d.updateOutpost(row.ID, run, state, build, err)
+			d.coalesceSnapshots(func() {
+				if push != nil {
+					d.finishOutpostPush(row.ID, push, err)
+				}
+				d.updateOutpost(row.ID, run, state, build, err)
+			})
 			if !waitOutpostRetry(ctx, delay) {
 				return
 			}

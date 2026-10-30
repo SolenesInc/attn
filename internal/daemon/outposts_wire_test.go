@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -234,4 +235,66 @@ func describeOutposts(rows []protocol.OutpostInfo) string {
 		lines = append(lines, string(row.State)+" "+protocol.Deref(row.LastError))
 	}
 	return strings.Join(lines, "\n")
+}
+
+type refusingInstallSSH struct {
+	*outpostssh.Client
+	probes, installs int
+}
+
+func (r *refusingInstallSSH) EnsureMaster(context.Context) error { return nil }
+func (r *refusingInstallSSH) ExitMaster(context.Context) error   { return nil }
+func (r *refusingInstallSSH) Remove(context.Context) error       { return nil }
+func (r *refusingInstallSSH) Probe(context.Context) (outpostssh.Probe, error) {
+	r.probes++
+	return outpostssh.Probe{Platform: "linux/amd64", Build: &bridge.Build{Version: "earlier", SourceFingerprint: "git:earlier", ProtocolVersion: protocol.ProtocolVersion}}, nil
+}
+func (r *refusingInstallSSH) Install(_ context.Context, _ string, _ bridge.Build, phase func(string)) error {
+	r.installs++
+	phase("verifying")
+	return fmt.Errorf("pty_shared_host_enabled is on")
+}
+func (r *refusingInstallSSH) Bridge(context.Context) (net.Conn, error) {
+	return nil, fmt.Errorf("cannot bridge a refused install")
+}
+
+func TestAnUnpairedOutpostDoesNotRepeatARefusedInstall(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		t.Setenv("ATTN_HARNESS_DATA_DIR", w.Dir)
+		t.Setenv("ATTN_HARNESS_OUTPOST_BINARY", "fixture-build")
+		ssh := &refusingInstallSSH{Client: outpostssh.For("fixture", "unused", "default")}
+		w.daemon.UseOutpostSSH(ssh)
+		app := w.App()
+		setSetting(t, app, "outposts_enabled", "true")
+		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "fixture"})
+		var row protocol.OutpostInfo
+		testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			if len(m.Outposts) != 1 {
+				return false
+			}
+			row = m.Outposts[0]
+			return row.State == protocol.OutpostStateRefused && row.Update != nil && row.Update.Phase == protocol.OutpostUpdatePhaseFailed
+		})
+		if !strings.Contains(protocol.Deref(row.Update.Outcome), "pty_shared_host_enabled") {
+			t.Fatalf("refusal reason lost: %+v", row.Update)
+		}
+		for range 3 {
+			w.advance(bridge.LostAfter)
+		}
+		if ssh.installs != 1 || ssh.probes < 4 {
+			t.Fatalf("after retries: installs=%d probes=%d, want one install and continued probes", ssh.installs, ssh.probes)
+		}
+		mark := app.EventCount()
+		app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: row.ID})
+		testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].Update != nil && m.Outposts[0].Update.Phase == protocol.OutpostUpdatePhaseFailed
+		})
+		for range 3 {
+			w.advance(bridge.LostAfter)
+		}
+		if ssh.installs != 2 || ssh.probes < 8 {
+			t.Fatalf("explicit Update and later retries: installs=%d probes=%d, want two installs and continued probes", ssh.installs, ssh.probes)
+		}
+		t.Logf("Add refused once, probes continued across retries, and explicit Update attempted once more: installs=%d probes=%d", ssh.installs, ssh.probes)
+	})
 }

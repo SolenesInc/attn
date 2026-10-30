@@ -46,8 +46,7 @@ func TestSSHAddInstallsFromNothingAndUpdateRetriesFailure(t *testing.T) {
 				if row.Update.Phase != protocol.OutpostUpdatePhaseFailed || !strings.Contains(protocol.Deref(row.Update.Outcome), "install-denied") {
 					t.Fatalf("first install: %+v", row.Update)
 				}
-				row = outpostState(app, "outpost", protocol.OutpostStateRefused)
-				if !strings.Contains(protocol.Deref(row.LastError), "nothing installed") {
+				if row.State != protocol.OutpostStateRefused || !strings.Contains(protocol.Deref(row.LastError), "nothing installed") {
 					t.Fatalf("missing install refusal: %+v", row)
 				}
 				ssh.MachineCommand(remote, "chmod", `exec /bin/chmod "$@"`)

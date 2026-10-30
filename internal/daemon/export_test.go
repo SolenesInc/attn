@@ -64,6 +64,10 @@ func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
 	w.d.recentFileStat = stat
 }
 
+func (w *WireDaemon) UseOutpostSSH(remote outpostRemote) {
+	w.d.outposts.remote = func(store.Outpost) outpostRemote { return remote }
+}
+
 const BridgeCallRecovery = bridgeCallRecovery
 
 func (w *WireDaemon) UseBridgeDialer(dial func(ctx context.Context, network, address string) (net.Conn, error)) {
