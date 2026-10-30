@@ -67,6 +67,18 @@ func (c *Client) SeedList(sessionID protocol.SessionID, stale bool, staleWindowS
 	if staleWindowSeconds > 0 {
 		msg.StaleWindowSeconds = protocol.Ptr(staleWindowSeconds)
 	}
+	return c.seedList(msg)
+}
+
+func (c *Client) SeedListPlot(sessionID protocol.SessionID, plotID string) (*protocol.SeedListResult, error) {
+	msg := protocol.SeedListMessage{Cmd: protocol.CmdSeedList, Plot: protocol.Ptr(plotID)}
+	if sessionID != "" {
+		msg.SourceSessionID = protocol.Ptr(sessionID)
+	}
+	return c.seedList(msg)
+}
+
+func (c *Client) seedList(msg protocol.SeedListMessage) (*protocol.SeedListResult, error) {
 	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err

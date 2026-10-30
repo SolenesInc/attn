@@ -89,7 +89,7 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 			}
 			foreign := "--flat"
 			if verb == "ls" {
-				foreign = "--plot"
+				foreign = "--all"
 			}
 			ran := s.Attn(append(slices.Clone(args), foreign)...)
 			lines := strings.Split(strings.TrimSuffix(ran.Stderr, "\n"), "\n")
@@ -103,7 +103,7 @@ func TestSeedHelpAndFlagsBelongToEachVerb(t *testing.T) {
 	}
 	for _, args := range [][]string{
 		{"plant", "Wrong file flag", "-f", "brief.md"},
-		{"ls", "--plot", "s-missing"},
+		{"ls", "--plot", "s-missing", "--stale"},
 		{"edit"},
 		{"check", "report"},
 		{"review", "cancel"},
@@ -324,7 +324,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		}
 	})
 
-	t.Run("show puts the freshest handoff first and tend primes with it", func(t *testing.T) {
+	t.Run("show leads with news and points at an older handoff; tend primes with it", func(t *testing.T) {
 		carried := plant(t, s, "Carry this", "-m", "the plan")
 		requireLines(t, "note", seedAs(t, s, "", "note", carried.ID, "-m", "ordinary progress"), "noted on "+carried.ID)
 		requireLines(t, "handoff", seedAs(t, s, "", "note", carried.ID, "-m", "first line\nsecond line\n", "--handoff", "--member", "keel"),
@@ -336,11 +336,10 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		}
 
 		shown := seedAs(t, s, "", "show", carried.ID)
-		if !strings.HasPrefix(shown, "handoff — Keel, ") || !strings.Contains(shown, "\n  first line\n  second line\n\n"+carried.ID+" ") {
-			t.Errorf("show does not open with the indented handoff:\n%s", shown)
-		}
-		if strings.Count(shown, "first line") != 1 || !strings.Contains(shown, "ordinary progress") || !strings.Contains(shown, "\nthe plan\n") {
-			t.Errorf("show repeats the handoff or drops the rest of the seed:\n%s", shown)
+		requireOrder(t, "show", shown, carried.ID+"  Carry this\n", "\nbookmark  attn seed show "+carried.ID+" --since ",
+			"  Keel  handoff\nfirst line\nsecond line\n", "ordinary progress", "\nthe plan\n")
+		if strings.Count(shown, "first line") != 1 || strings.Contains(shown, "--kind handoff") {
+			t.Errorf("show repeats a handoff that is among the newest entries:\n%s", shown)
 		}
 		notes := seedAs(t, s, "", "notes", carried.ID)
 		if !regexp.MustCompile(`(?m)^\S+ \S+  Keel  handoff$`).MatchString(notes) || !regexp.MustCompile(`(?m)^\S+ \S+  -$`).MatchString(notes) {
@@ -350,7 +349,12 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		for _, progress := range []string{"one", "two", "three", "four", "five"} {
 			seedAs(t, s, "", "note", carried.ID, "-m", "progress "+progress)
 		}
-		requireLines(t, "show", seedAs(t, s, "", "show", carried.ID), "handoff — Keel, ", "progress five", "\n2 more — `attn seed notes "+carried.ID+"`\n")
+		shown = seedAs(t, s, "", "show", carried.ID)
+		requireOrder(t, "show", shown, "\nbookmark  ", "progress five", "progress one", "\n2 more — `attn seed notes "+carried.ID+"`\n",
+			" old, 5 entries back — attn seed notes "+carried.ID+" --kind handoff\n", "\nthe plan\n")
+		if !regexp.MustCompile(`\nhandoff  \d+s old, `).MatchString(shown) || strings.Contains(shown, "first line") {
+			t.Errorf("show prints a handoff older than its newest entries instead of pointing at it:\n%s", shown)
+		}
 
 		tended := seedAs(t, s, "", "tend", carried.ID, "--member", "alder")
 		if !strings.HasPrefix(tended, carried.ID+" ("+carried.StepSlug+") is growing, tended by Alder\n") || !strings.Contains(tended, "handoff — Keel, ") ||

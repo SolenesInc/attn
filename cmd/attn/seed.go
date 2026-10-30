@@ -109,10 +109,11 @@ child's id and step slug, then up to 3 similar open seeds across all
 planted titles, each naming the new seed it resembles. Planting always
 proceeds; wither a new seed if a suggestion is the same work.
 --json prints the whole result, including similar seeds.`, []string{"f", "member", "json"}, false},
-	{`ls`, `ls [--stale [--window <duration>]] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
---flat prints one list. --stale narrows to open seeds whose log has not moved
-for the window (default %s) — a query for your judgment, never a
-reaper.`, formatWindow(garden.DefaultStaleWindow)), []string{"stale", "window", "flat", "json"}, true},
+	{`ls`, `ls [--plot <plot> | --stale [--window <duration>]] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
+--flat prints one list. --plot lists every child of one plot, oldest
+first, harvested and withered included. --stale narrows to open seeds
+whose log has not moved for the window (default %s) — a query for
+your judgment, never a reaper.`, formatWindow(garden.DefaultStaleWindow)), []string{"plot", "stale", "window", "flat", "json"}, true},
 	{`search`, `search <words> [--limit <n>] [--json]`, `find seeds by words across your profile's garden, harvested and withered
 included: titles, bodies and log entries. Words match as stemmed prefixes;
 identifier parts match too. Seeds carrying some words also appear.
@@ -130,11 +131,15 @@ out to the garden.`, []string{"plot", "all", "json"}, true},
 records where work came from without ordering it. A structural cycle
 is refused, naming both seeds and the edge to remove.`, []string{"json"}, false},
 	{`unlink`, `unlink <a> <blocks|part-of|discovered-from> <b> [--json]`, `remove the edge. Every link has one.`, []string{"json"}, false},
-	{`show`, `show <id> [--since <bookmark>] [--json]`, `one seed: the freshest handoff left on it, its state, who tends it,
-every edge that touches it in both directions, its body, and the newest
-notes on its log. The last line is a bookmark. --since <bookmark> prints
-only the log entries saved after it, on this seed and every seed below
-it, newest first and labeled by seed, then a new bookmark.`, []string{"since", "json"}, true},
+	{`show`, `show <id> [--since <bookmark>] [--json]`, `one seed, news first: its state, who tends it and a bookmark; the newest
+entries on its log, and where the freshest handoff is when it is older
+than those; every edge that touches it, with seeds discovered from it
+folded to a count and the open ones; a plot's open children as a board,
+each with what it waits for, its checks and its newest entry, closed
+children folded into one line; checks and artifacts; the body last.
+--since <bookmark> prints only the log entries saved after it, on this
+seed and every seed below it, newest first and labeled by seed, then a
+new bookmark.`, []string{"since", "json"}, true},
 	{`review`, `review <start|show|cancel|retry|keep>`, `start an advisory Garden review, inspect its progressive results,
 cancel unfinished classification, retry one failed or changed item, or keep
 one seed growing and review it again after seven quiet days.
@@ -190,8 +195,9 @@ one being grown. Replanting an already planted seed changes nothing
 and rings nobody. Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
 	{`note`, `note <id> -m "<what happened>" [--handoff] [--ring] [--json]`, `append to the seed's log — what happened and what you learned, for
 whoever tends it next. - reads stdin. --handoff addresses it to your
-successor on this seed: show renders the freshest one first and tend
-prints it on the claim, so it is read before any work.
+successor on this seed: tend prints the freshest one on the claim, so
+it is read before any work, and show points at it once newer entries
+bury it.
 --ring tells current and covering plot tenders and watchers to look;
 ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "member", "json"}, false},
 	{`check`, `check <add|edit|remove|restore|report|confirm|reject|uncheck|reopen>`, `Define, report, or judge what a seed must prove. Each move has its own --help.
@@ -244,7 +250,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`discovered-from`, `<seed>`, `record the seed this work came from`, func(f *seedFlags) { f.fs.StringVar(&f.discoveredFrom, "discovered-from", "", "") }},
 	{`clear`, ``, `remove the harvest condition (with --when-merged)`, func(f *seedFlags) { f.fs.BoolVar(&f.clear, "clear", false, "") }},
 	{`when-merged`, ``, `harvest the seed when its pull request merges`, func(f *seedFlags) { f.fs.BoolVar(&f.whenMerged, "when-merged", false, "") }},
-	{`plot`, `<plot>`, `scope a ready answer to one plot`, func(f *seedFlags) { f.fs.StringVar(&f.plot, "plot", "", "") }},
+	{`plot`, `<plot>`, `a plot: ready keeps to it, ls lists all its children`, func(f *seedFlags) { f.fs.StringVar(&f.plot, "plot", "", "") }},
 	{`all`, ``, `the whole garden, overriding a dispatched session's plot`, func(f *seedFlags) { f.fs.BoolVar(&f.all, "all", false, "") }},
 	{`flat`, ``, `print a listing without nesting`, func(f *seedFlags) { f.fs.BoolVar(&f.flat, "flat", false, "") }},
 	{`stale`, ``, `only open seeds whose log has not moved`, func(f *seedFlags) { f.fs.BoolVar(&f.stale, "stale", false, "") }},
@@ -666,12 +672,26 @@ func runSeedList(args []string) {
 	if !f.stale && flagWasSet(f.fs, "window") {
 		seedFail("ls", fmt.Errorf("--window is the stale window; it only means something with --stale"))
 	}
-	result, err := f.client().SeedList(f.sessionID(), f.stale, f.staleWindowSeconds())
+	plotID := strings.TrimSpace(f.plot)
+	if plotID != "" && f.stale {
+		seedUsageError("ls", fmt.Errorf("--plot lists every child of the plot and --stale narrows the whole garden; pass one of them"))
+	}
+	var result *protocol.SeedListResult
+	var err error
+	if plotID != "" {
+		result, err = f.client().SeedListPlot(f.sessionID(), plotID)
+	} else {
+		result, err = f.client().SeedList(f.sessionID(), f.stale, f.staleWindowSeconds())
+	}
 	if err != nil {
 		seedFail("ls", err)
 	}
 	if f.json {
 		writeJSON(result)
+		return
+	}
+	if plotID != "" && len(result.Seeds) == 0 {
+		fmt.Printf("%s has no children — `attn seed plant \"<title>\" --part-of %s` adds one\n", plotID, plotID)
 		return
 	}
 	if f.stale {
@@ -688,7 +708,7 @@ func runSeedList(args []string) {
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
-	for _, row := range seedRows(result.Seeds, f.flat) {
+	for _, row := range seedRows(result.Seeds, f.flat || plotID != "") {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
 			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(crew.HolderName(row.seed.TenderMember, row.seed.TenderSession)),
 			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, plotProgressSuffix(row.seed)+checkTallySuffix(row.seed)+harvestWhenSuffix(row.seed))
@@ -1003,9 +1023,7 @@ func runSeedShow(args []string) {
 	if since := result.Since; since != nil {
 		fprintExpiredBookmark(os.Stdout, since.After, *since.Expired)
 	}
-	fprintSeedShow(os.Stdout, result)
-	fmt.Println()
-	bookmark.fprint(os.Stdout)
+	fprintSeedShow(os.Stdout, result, bookmark)
 }
 
 func (f *seedFlags) bookmark(verb string) (int, bool) {
@@ -1166,10 +1184,126 @@ func fprintArtifactReferences(w io.Writer, artifacts []protocol.SeedArtifactRefe
 	}
 }
 
-func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
-	fprintHandoff(w, result.Handoff)
-	fprintSeed(w, result.Seed, result.Watching)
-	fprintSeedChecks(w, result.Seed)
+func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult, bookmark seedBookmarkCommand) {
+	seed := result.Seed
+	fprintSeedHeader(w, seed, result.Watching)
+	bookmark.fprint(w)
+	if len(result.Notes) > 0 {
+		fmt.Fprintln(w)
+		fprintNotes(w, result.Notes, seed.ID, result.NotesTotal-len(result.Notes))
+	}
+	fprintHandoffPointer(w, result)
+	fprintShowRelations(w, result.Relations)
+	fprintBoard(w, seed.ID, result.Board, result.ClosedChildren)
+	fprintSeedChecks(w, seed)
+	fprintSeedHoldings(w, result)
+	if body := strings.TrimRight(seed.Body, "\n"); body != "" {
+		fmt.Fprintf(w, "\n%s\n", body)
+	}
+}
+
+func fprintHandoffPointer(w io.Writer, result *protocol.SeedShowResult) {
+	handoff := result.Handoff
+	if handoff == nil || slices.ContainsFunc(result.Notes, func(note protocol.SeedNote) bool { return note.ID == handoff.ID }) {
+		return
+	}
+	back := ""
+	switch newer := result.HandoffNewer; {
+	case newer == nil:
+	case *newer == 1:
+		back = ", 1 entry back"
+	default:
+		back = fmt.Sprintf(", %d entries back", *newer)
+	}
+	fmt.Fprintf(w, "\nhandoff  %s old%s — attn seed notes %s --kind handoff\n", seedLastActive(handoff.CreatedAt), back, result.Seed.ID)
+}
+
+func fprintShowRelations(w io.Writer, relations []protocol.SeedRelation) {
+	var edges []protocol.SeedRelation
+	var discovered, openDiscovered []string
+	for _, relation := range relations {
+		switch relation.Label {
+		case "has-part":
+		case "discovered":
+			discovered = append(discovered, relation.SeedID)
+			if !closedSeedStatus(relation.Status) {
+				openDiscovered = append(openDiscovered, relation.SeedID)
+			}
+		default:
+			edges = append(edges, relation)
+		}
+	}
+	if len(edges) == 0 && len(discovered) == 0 {
+		return
+	}
+	fmt.Fprintln(w)
+	fprintRelations(w, edges)
+	if len(discovered) > 0 {
+		line := "discovered  " + plural(len(discovered), "seed")
+		if len(openDiscovered) > 0 {
+			line += ", open: " + strings.Join(openDiscovered, " ")
+		}
+		fmt.Fprintln(w, line)
+	}
+}
+
+func fprintBoard(out io.Writer, plotID string, board []protocol.SeedBoardRow, closed *protocol.SeedClosedCount) {
+	if closed == nil {
+		return
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "board  %d open\n", len(board))
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	for _, row := range board {
+		child := row.Seed
+		status := child.Status
+		if p := child.PlotProgress; p != nil {
+			status += fmt.Sprintf(" · %d/%d done", p.Done, p.Total)
+		}
+		waits := "-"
+		if len(row.WaitsFor) > 0 {
+			waits = "waits for " + strings.Join(row.WaitsFor, " ")
+		}
+		newest := "no entries"
+		if note := row.Newest; note != nil {
+			newest = fmt.Sprintf("%s  %s%s  %s", shortStamp(note.CreatedAt),
+				orDash(boardHolder(note.AuthorMember, note.AuthorSession)), noteKindSuffix(note.Kind), clipLine(firstLine(note.Body), 80))
+		}
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\t%s\t%s\n", child.ID, child.StepSlug, status,
+			orDash(boardHolder(child.TenderMember, child.TenderSession)), waits,
+			orDash(strings.Trim(strings.TrimSpace(checkTallySuffix(child)), "[]")), newest)
+	}
+	w.Flush()
+	var folded []string
+	if closed.Harvested > 0 {
+		folded = append(folded, fmt.Sprintf("%d harvested", closed.Harvested))
+	}
+	if closed.Withered > 0 {
+		folded = append(folded, fmt.Sprintf("%d withered", closed.Withered))
+	}
+	if len(folded) > 0 {
+		fmt.Fprintf(out, "  and %s — attn seed ls --plot %s\n", strings.Join(folded, ", "), plotID)
+	}
+}
+
+func boardHolder(member string, session protocol.SessionID) string {
+	holder := crew.HolderName(member, session)
+	if member == "" && len(holder) > 8 {
+		return holder[:8]
+	}
+	return holder
+}
+
+func clipLine(line string, limit int) string {
+	runes := []rune(line)
+	if len(runes) <= limit {
+		return line
+	}
+	return string(runes[:limit-1]) + "…"
+}
+
+func fprintSeedHoldings(w io.Writer, result *protocol.SeedShowResult) {
+	fmt.Fprintln(w)
 	if result.ArtifactDir != nil {
 		fmt.Fprintf(w, "artifact folder  %s\n", *result.ArtifactDir)
 	}
@@ -1189,22 +1323,11 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult) {
 		}
 	}
 	fprintSeedWatchCoverage(w, result.WatchingVia)
-	if len(result.Relations) > 0 {
-		fmt.Fprintln(w)
-		fprintRelations(w, result.Relations)
-	}
 	if len(result.Artifacts) > 0 {
-		fmt.Fprintln(w)
 		fprintArtifacts(w, result.Artifacts)
 	}
 	if len(result.References) > 0 {
-		fmt.Fprintln(w)
 		fprintArtifactReferences(w, result.References)
-	}
-	entries := withoutNote(result.Notes, result.Handoff)
-	if len(entries) > 0 {
-		fmt.Fprintln(w)
-		fprintNotes(w, entries, result.Seed.ID, result.NotesTotal-len(result.Notes))
 	}
 }
 
@@ -1218,19 +1341,6 @@ func fprintHandoff(w io.Writer, handoff *protocol.SeedNote) {
 		fmt.Fprintf(w, "  %s\n", line)
 	}
 	fmt.Fprintln(w)
-}
-
-func withoutNote(notes []protocol.SeedNote, drop *protocol.SeedNote) []protocol.SeedNote {
-	if drop == nil {
-		return notes
-	}
-	out := make([]protocol.SeedNote, 0, len(notes))
-	for _, note := range notes {
-		if note.ID != drop.ID {
-			out = append(out, note)
-		}
-	}
-	return out
 }
 
 func fprintRelations(out io.Writer, relations []protocol.SeedRelation) {
@@ -1351,7 +1461,7 @@ func readyScopeName(result *protocol.SeedReadyResult) string {
 	return "in the garden"
 }
 
-func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
+func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "%s\t%s\n", seed.ID, seed.Title)
 	fmt.Fprintf(w, "slug\t%s\n", seed.StepSlug)
@@ -1390,13 +1500,10 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")
 	}
-	if len(watching) > 0 && watching[0] {
+	if watching {
 		fmt.Fprintf(w, "watching\tyes\n")
 	}
 	w.Flush()
-	if body := strings.TrimRight(seed.Body, "\n"); body != "" {
-		fmt.Printf("\n%s\n", body)
-	}
 }
 
 func orDash(value string) string {

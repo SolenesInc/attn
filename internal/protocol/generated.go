@@ -9486,6 +9486,17 @@ type SeedArtifactTransferResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type SeedBoardRow struct {
+	// Newest corresponds to the JSON schema field "newest".
+	Newest *SeedNote `json:"newest,omitempty,omitzero"`
+
+	// Seed corresponds to the JSON schema field "seed".
+	Seed Seed `json:"seed"`
+
+	// WaitsFor corresponds to the JSON schema field "waits_for".
+	WaitsFor []string `json:"waits_for"`
+}
+
 type SeedCheck struct {
 	// From corresponds to the JSON schema field "from".
 	From *string `json:"from,omitempty,omitzero"`
@@ -9660,6 +9671,14 @@ type SeedCheckVerdict struct {
 
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
+}
+
+type SeedClosedCount struct {
+	// Harvested corresponds to the JSON schema field "harvested".
+	Harvested int `json:"harvested"`
+
+	// Withered corresponds to the JSON schema field "withered".
+	Withered int `json:"withered"`
 }
 
 type SeedContinuation struct {
@@ -9899,6 +9918,9 @@ type SeedLinkResult struct {
 type SeedListMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Plot corresponds to the JSON schema field "plot".
+	Plot *string `json:"plot,omitempty,omitzero"`
 
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID *string `json:"profile_id,omitempty,omitzero"`
@@ -10610,11 +10632,20 @@ type SeedShowResult struct {
 	// Artifacts corresponds to the JSON schema field "artifacts".
 	Artifacts []SeedArtifact `json:"artifacts"`
 
+	// Board corresponds to the JSON schema field "board".
+	Board []SeedBoardRow `json:"board,omitempty,omitzero"`
+
 	// Bookmark corresponds to the JSON schema field "bookmark".
 	Bookmark int `json:"bookmark"`
 
+	// ClosedChildren corresponds to the JSON schema field "closed_children".
+	ClosedChildren *SeedClosedCount `json:"closed_children,omitempty,omitzero"`
+
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *SeedNote `json:"handoff,omitempty,omitzero"`
+
+	// HandoffNewer corresponds to the JSON schema field "handoff_newer".
+	HandoffNewer *int `json:"handoff_newer,omitempty,omitzero"`
 
 	// Notes corresponds to the JSON schema field "notes".
 	Notes []SeedNote `json:"notes"`

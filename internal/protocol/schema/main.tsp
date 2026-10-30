@@ -5710,6 +5710,8 @@ model SeedListMessage {
   "stale"?: boolean;
   // Overrides the stale window; 0 or absent takes the daemon's default.
   "stale_window_seconds"?: int32;
+  // Only the direct children of this plot, closed ones included.
+  "plot"?: string;
 }
 
 model SeedListResult {
@@ -5794,11 +5796,17 @@ model SeedShowResult {
   // `edges` carry only what it points at, and "what blocks me" is the half a
   // tender actually needs.
   "relations": SeedRelation[];
-  // The freshest handoff on this seed, absent when nobody left one. It rides
-  // beside `notes` rather than being found in them: a handoff is written to
-  // whoever tends the seed next, so it is rendered before the seed itself and
-  // not left to be recognised in a log.
+  // The freshest handoff on this seed, absent when nobody left one. `tend`
+  // prints it in full; show points at it when it is older than `notes`.
   "handoff"?: SeedNote;
+  // How many log entries were saved after `handoff`.
+  "handoff_newer"?: int32;
+  // A plot's open direct children, oldest first. Absent on a seed with no
+  // children.
+  "board"?: SeedBoardRow[];
+  // How many of a plot's direct children are closed; `seed_list` with `plot`
+  // lists them.
+  "closed_children"?: SeedClosedCount;
   // Direct visible regular files in the seed-owned artifact directory. The
   // filesystem is canonical; this is enumerated at read time.
   "artifacts": SeedArtifact[];
@@ -5821,6 +5829,19 @@ model SeedSince {
 model SeedSinceExpired {
   "earliest": safeint;
   "retention_seconds": safeint;
+}
+
+model SeedBoardRow {
+  "seed": Seed;
+  // The open seeds that block this child.
+  "waits_for": string[];
+  // The child's newest log entry, absent when its log is empty.
+  "newest"?: SeedNote;
+}
+
+model SeedClosedCount {
+  "harvested": int32;
+  "withered": int32;
 }
 
 // Replace one seed's markdown body without moving its lifecycle or claim.
@@ -6151,8 +6172,8 @@ model SeedNote {
   "id": string;
   "seed_id": string;
   // note, handoff, attach, detach or check. A handoff is written to whoever
-  // tends the seed next, and the freshest one is put in front of them by show
-  // and tend; attach and detach are the only kinds that carry an artifact.
+  // tends the seed next, and tend prints the freshest one on the claim;
+  // attach and detach are the only kinds that carry an artifact.
   // Only seed_check writes check.
   "kind": string;
   "body": string;

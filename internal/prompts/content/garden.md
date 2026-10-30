@@ -15,7 +15,8 @@ The loop:
     attn seed ready                  what you can pick up now: open, not parked, not blocked, nobody holding it
                                      inside your plot when you report to one. A plot itself is never ready; only its children can be
     attn seed ready --all            the same across your profile's garden; use it to look past your plot
-    attn seed show <id>              body, state, tender, edges, children, freshest handoff
+    attn seed show <id>              news first: state, tender and a bookmark, the newest entries, edges, a plot's open
+                                     children as a board, checks, then the body
     attn seed tend <id>              claim it; one tender at a time, a held seed refuses you by name
     attn seed note <id> -m "…"       what happened and what you learned, tending it or not; --handoff addresses the next tender
                                      --ring tells watchers to look
@@ -44,6 +45,7 @@ Plans:
     attn seed link <a> part-of <b>   a joins b's plot; a seed sits in one plot at a time
     attn seed link <a> discovered-from <b>    a was discovered while working on b; the link records that origin but never orders or blocks anything
     attn seed ls [--flat]            everything planted and who holds it, children nested under their plot; --flat for one list
+    attn seed ls --plot <plot>       every child of one plot, harvested and withered included
 
 Export the body, edit the file with any tool, then submit it:
 

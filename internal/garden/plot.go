@@ -56,6 +56,10 @@ func (t PlotTree) descendants(crownID string) []Seed {
 	return out
 }
 
+func (t PlotTree) Children(plotID string) []Seed {
+	return t.children[plotID]
+}
+
 func (t PlotTree) InPlot(crownID string) []Seed {
 	inside := map[string]bool{crownID: true}
 	for _, seed := range t.descendants(crownID) {

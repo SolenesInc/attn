@@ -680,6 +680,19 @@ func (d *Daemon) handleSeedList(conn net.Conn, msg *protocol.SeedListMessage) {
 	}
 	result := &protocol.SeedListResult{Total: d.countSeeds(protocol.Deref(msg.ProfileID))}
 	seeds := read.seeds
+	if plotID := strings.TrimSpace(protocol.Deref(msg.Plot)); plotID != "" {
+		if protocol.Deref(msg.Stale) {
+			d.sendGardenError(conn, "ls", errors.New("--plot lists every child of the plot and --stale narrows the whole garden; pass one of them"))
+			return
+		}
+		plot, _, err := d.readSeed(plotID)
+		if err != nil {
+			d.sendGardenError(conn, "ls", err)
+			return
+		}
+		seeds = plotChildren(read, plot.ID)
+		result.Total = len(seeds)
+	}
 	if protocol.Deref(msg.Stale) {
 		window := garden.DefaultStaleWindow
 		if s := protocol.Deref(msg.StaleWindowSeconds); s > 0 {
@@ -781,22 +794,27 @@ func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protoco
 		d.sendGardenError(conn, "show", err)
 		return
 	}
+	handoff, handoffNewer := d.handoffAndNewer(seed.ID)
+	board, closed := d.seedBoard(read, seed.ID)
 	d.consumeSeedBell(sessionID, seed.ID)
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true,
 		SeedShowResult: &protocol.SeedShowResult{
-			Seed:        wire,
-			Bookmark:    int(mark.head),
-			Since:       since,
-			Watching:    len(coverage) > 0,
-			WatchingVia: coverage,
-			Notes:       notes,
-			NotesTotal:  total,
-			Relations:   gardenRelations(read, seed.ID),
-			Handoff:     d.gardenHandoff(seed.ID),
-			ArtifactDir: protocol.Ptr(artifactDir),
-			Artifacts:   artifacts,
-			References:  d.seedArtifactReferences(seed.ID),
+			Seed:           wire,
+			Bookmark:       int(mark.head),
+			Since:          since,
+			Watching:       len(coverage) > 0,
+			WatchingVia:    coverage,
+			Notes:          notes,
+			NotesTotal:     total,
+			Relations:      gardenRelations(read, seed.ID),
+			Handoff:        handoff,
+			HandoffNewer:   handoffNewer,
+			Board:          board,
+			ClosedChildren: closed,
+			ArtifactDir:    protocol.Ptr(artifactDir),
+			Artifacts:      artifacts,
+			References:     d.seedArtifactReferences(seed.ID),
 		},
 	})
 }
@@ -851,6 +869,41 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 	}
 	result.Success = true
 	d.sendToClient(client, result)
+}
+
+func plotChildren(read gardenRead, plotID string) []garden.Seed {
+	children := slices.Clone(read.plots.Children(plotID))
+	slices.Reverse(children)
+	return children
+}
+
+func (d *Daemon) seedBoard(read gardenRead, plotID string) ([]protocol.SeedBoardRow, *protocol.SeedClosedCount) {
+	children := plotChildren(read, plotID)
+	if len(children) == 0 {
+		return nil, nil
+	}
+	board := []protocol.SeedBoardRow{}
+	closed := &protocol.SeedClosedCount{}
+	for _, child := range children {
+		switch child.Status {
+		case garden.StatusHarvested:
+			closed.Harvested++
+			continue
+		case garden.StatusWithered:
+			closed.Withered++
+			continue
+		}
+		row := protocol.SeedBoardRow{Seed: read.seed(child, read.docs[child.ID]), WaitsFor: garden.Blockers(read.seeds, child.ID)}
+		newest, _, err := d.readNotes(child.ID, "", 1)
+		if err != nil {
+			d.logf("garden: reading the newest entry of %s: %v", child.ID, err)
+		}
+		if len(newest) > 0 {
+			row.Newest = &newest[0]
+		}
+		board = append(board, row)
+	}
+	return board, closed
 }
 
 func gardenRelations(read gardenRead, id string) []protocol.SeedRelation {
@@ -2062,9 +2115,9 @@ func (d *Daemon) readNotesDomain(seedID string) ([]garden.Note, error) {
 	}
 }
 
-func (d *Daemon) freshestHandoff(seedID string) (*protocol.SeedNote, error) {
+func (d *Daemon) freshestHandoff(seedID string) (*protocol.SeedNote, time.Time, error) {
 	if d.store == nil {
-		return nil, errors.New("no database")
+		return nil, time.Time{}, errors.New("no database")
 	}
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  garden.Namespace,
@@ -2077,27 +2130,50 @@ func (d *Daemon) freshestHandoff(seedID string) (*protocol.SeedNote, error) {
 		Limit: 1,
 	})
 	if err != nil {
-		return nil, err
+		return nil, time.Time{}, err
 	}
 	if len(read.Documents) == 0 {
-		return nil, nil
+		return nil, time.Time{}, nil
 	}
 	doc := read.Documents[0]
 	note, err := garden.DecodeNote(doc.Body)
 	if err != nil {
-		return nil, fmt.Errorf("note %s has an unreadable body: %w", doc.ID, err)
+		return nil, time.Time{}, fmt.Errorf("note %s has an unreadable body: %w", doc.ID, err)
 	}
 	wire := noteToProtocol(note, doc)
-	return &wire, nil
+	return &wire, doc.CreatedAt, nil
 }
 
 func (d *Daemon) gardenHandoff(seedID string) *protocol.SeedNote {
-	handoff, err := d.freshestHandoff(seedID)
+	handoff, _, err := d.freshestHandoff(seedID)
 	if err != nil {
 		d.logf("garden: reading the freshest handoff on %s: %v", seedID, err)
 		return nil
 	}
 	return handoff
+}
+
+func (d *Daemon) handoffAndNewer(seedID string) (*protocol.SeedNote, *int) {
+	handoff, at, err := d.freshestHandoff(seedID)
+	if err != nil {
+		d.logf("garden: reading the freshest handoff on %s: %v", seedID, err)
+		return nil, nil
+	}
+	if handoff == nil {
+		return nil, nil
+	}
+	newer, found, err := d.store.CountQuery(docstore.Query{
+		Namespace: garden.Namespace, Collection: garden.CollectionNotes,
+		Filters: []docstore.Filter{
+			{Field: "seed", Op: docstore.OpEq, Value: seedID},
+			{Field: docstore.FieldCreatedAt, Op: docstore.OpGt, Value: at},
+		},
+	})
+	if err != nil || !found {
+		d.logf("garden: counting the entries after the handoff on %s: %v", seedID, err)
+		return handoff, nil
+	}
+	return handoff, protocol.Ptr(newer.Count)
 }
 
 func noteToProtocol(note garden.Note, doc docstore.Document) protocol.SeedNote {

@@ -211,8 +211,9 @@ the transfer succeeds.
 
 HANDOFFS AND STEERING
 
-    attn seed note <id> -m "…" --handoff   for the next tender; attn seed show prints
-                                            it first, attn seed tend prints it on the claim
+    attn seed note <id> -m "…" --handoff   for the next tender; attn seed tend prints it
+                                            on the claim; attn seed show lists it among the
+                                            newest entries, or points at it when it is older
     attn agent msg <seed-id> "…"            reaches its current or next tender;
                                             waits when none is reachable
 
