@@ -261,7 +261,6 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		want string
 		code int
 	}{
-		{[]string{"seed", "harvest", "s-7k3f9m", "--when-merged", "-m", "done"}, "takes no -m", 2},
 		{[]string{"seed", "harvest", "s-7k3f9m", "--when-merged", "s-2p4qxv"}, `"s-2p4qxv" is not a pull request url`, 2},
 		{[]string{"seed", "harvest", "s-7k3f9m", "--clear"}, "`attn seed harvest <id> --when-merged --clear`", 2},
 		{[]string{"seed", "park", "s-7k3f9m", "--when-merged"}, "flag provided but not defined: -when-merged", 2},
@@ -445,7 +444,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		seedAs(t, s, "", "link", pipe.ID, "blocks", wall.ID)
 		seedAs(t, s, "", "tend", wall.ID, "--member", "trellis")
 		laid := seedAs(t, s, "", "harvest", pipe.ID, "-m", "laid")
-		requireLines(t, "harvest", laid, "this unblocked 2 seed(s):\n", "`attn seed tend <id>` claims one\n")
+		requireLines(t, "harvest", laid, "this unblocked 2 seed(s):\n", "`attn seed tend <id>` claims one\n", "rang trellis\n")
 		_, freed := lineOf(t, laid, "  "+water.ID)
 		requireLines(t, "the free seed", freed, water.StepSlug, "Run water through it")
 		_, held := lineOf(t, laid, "  "+wall.ID)
@@ -609,6 +608,41 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			"C5 rejected on "+child+" (checked-child)", "\nrang checkwatcher\n", "\n"+child+" stays harvested: a check never reopens a seed\n")
 		requireLines(t, "rung note", seedAs(t, s, "", "note", loose.ID, "-m", "look", "--ring"), "\nrang nobody: nobody else tends or watches "+loose.ID+"\n")
 	})
+}
+
+func TestSeedMovesExplainRetriesRefusalsAndRings(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Start()
+	register(t, s, "worker", "worker")
+	register(t, s, "watcher", "watcher")
+	seed := plant(t, s, "Keep both receipts")
+	seedAs(t, s, "watcher", "watch", seed.ID)
+	requireLines(t, "tend audience", seedAs(t, s, "worker", "tend", seed.ID), "rang watcher\n")
+	refused := s.Run(testworld.Invocation{Args: []string{"seed", "harvest", seed.ID, "-m", "take it"}, Session: "watcher"})
+	if refused.Code != 1 || strings.Count(refused.Stderr, "\n") != 1 || !strings.Contains(refused.Stderr, "worker") || !strings.Contains(refused.Stderr, "--force") {
+		t.Fatalf("claim refusal must fit on one line with the next command: %+v", refused)
+	}
+	requireLines(t, "harvest audience", seedAs(t, s, "worker", "harvest", seed.ID, "-m", "first receipt"), "rang watcher\n")
+	requireLines(t, "repeated harvest", seedAs(t, s, "watcher", "harvest", seed.ID, "-m", "second receipt"), "was already harvested at", "first receipt", "your reason is on its log", "rang nobody: the seed did not move")
+	for _, verb := range []string{"tend", "park", "wither"} {
+		refused := s.Attn("seed", verb, seed.ID)
+		if refused.Code != 1 || strings.Count(refused.Stderr, "\n") != 1 || !strings.Contains(refused.Stderr, "harvested") || !strings.Contains(refused.Stderr, "attn seed replant "+seed.ID) {
+			t.Fatalf("closed-state refusal must fit on one line with replant: %+v", refused)
+		}
+	}
+	requireLines(t, "replant audience", seedAs(t, s, "", "replant", seed.ID), "rang watcher\n")
+	requireLines(t, "wither audience", seedAs(t, s, "", "wither", seed.ID), "rang watcher\n")
+	refused = s.Attn("seed", "harvest", seed.ID, "-m", "done")
+	if refused.Code != 1 || strings.Count(refused.Stderr, "\n") != 1 || !strings.Contains(refused.Stderr, "withered") || !strings.Contains(refused.Stderr, "attn seed replant "+seed.ID) {
+		t.Fatalf("cross-closed refusal: %+v", refused)
+	}
+	loose := plant(t, s, "No audience")
+	requireLines(t, "empty audience", seedAs(t, s, "", "park", loose.ID), "rang nobody")
+	armed := plant(t, s, "Wait with a receipt")
+	out := seedAs(t, s, "worker", "harvest", armed.ID, "--when-merged", "https://github.com/victorarias/attn/pull/118", "-m", "verified before merge")
+	requireLines(t, "arming", out, "harvests when victorarias/attn#118 merges with your reason: verified before merge", "this command merges nothing", "rang nobody")
+	requireLines(t, "stored arming reason", seedAs(t, s, "worker", "show", armed.ID), "harvest reason", "verified before merge")
 }
 
 func TestAMoveCrashedAfterStagingFinishesWhenRetried(t *testing.T) {

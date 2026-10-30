@@ -76,15 +76,16 @@ to decode an id.
 When the only thing left on a seed is a pull request merging, say so once and
 let attn close it:
 
-    attn seed harvest <id> --when-merged [<pr-url>]
+    attn seed harvest <id> --when-merged [<pr-url>] -m "<outcome and verification>"
     attn seed harvest <id> --when-merged --clear
 
 With no url it takes this session's single open pull request, and names them
 when there is more than one. A seed you were growing goes dormant and lets go
 of your claim; every surface then reads `harvests when owner/repo#n merges`.
-attn harvests it as the member `attn`, with the reason `PR #n merged: <title>`,
-when the merge lands. A pull request closed without merging clears the arming
-and rings instead, leaving the seed where it was.
+The command merges nothing. When the merge lands, attn harvests the seed as the
+member `attn`, with your reason. Without `-m`, it uses `PR #n merged: <title>`.
+A pull request closed without merging clears the arming and rings instead,
+leaving the seed where it was.
 
 Reach for it only when the merge is genuinely the last step. Review notes to
 answer, docs to write or evidence to attach are work, and work belongs to a
@@ -92,9 +93,13 @@ tender.
 
 ## Rings and watches
 
-Lifecycle moves ring the seed's current tender and watching sessions. Harvesting
-or withering a blocker also rings the tender and watchers of each seed it set
-free. Notes stay quiet unless you add `--ring`. A successful action never rings
+Repeating a move to the same state succeeds without rewriting the seed or
+ringing anyone. A different reason goes on its log as a quiet note. Moving
+between harvested and withered requires `attn seed replant <id>` first.
+
+Lifecycle moves ring the seed's current tender and watching sessions and print
+who they rang. Harvesting or withering a blocker also rings the tender and
+watchers of each seed it set free. Notes stay quiet unless you add `--ring`. A successful action never rings
 the session that caused it. Automation acceptance is quiet; its bell waits until
 the work is ready or the attempt needs attention. `attn seed watch <id>`
 subscribes this session to the seed and its descendants, including children

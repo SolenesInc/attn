@@ -30,6 +30,15 @@ A check that does not apply gets a report saying why and citing what shows it. W
 attn seed harvest <seed-id> -m "<outcome and verification>"
 ```
 
+When only someone else's pull request merge remains, release the claim and
+keep the outcome and verification as the eventual harvest reason:
+
+```sh
+attn seed harvest <seed-id> --when-merged <pr-url> -m "<outcome and verification>"
+```
+
+This command merges nothing. Keep tending while review, docs, or verification remain.
+
 Harvest only when the assigned outcome and required verification are complete. Harvest names the checks still open or rejected. A plan awaiting a user decision remains open. Finishing a plan does not finish a seed whose assigned outcome includes implementation. If the assignment should be abandoned, record why and wither it; a temporary blocker is not abandonment.
 
 Use `attn seed guide` for body structure, artifacts and completion rules. The user should understand the outcome and next step from your final response without having to inspect the seed.

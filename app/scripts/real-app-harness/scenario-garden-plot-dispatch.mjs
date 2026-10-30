@@ -303,6 +303,23 @@ async function main() {
       await pace();
     });
 
+    await runner.step('a_repeated_harvest_keeps_the_plot_and_captures_the_receipt', async () => {
+      const [first] = children;
+      const repeated = await runInPane(client, pane,
+        `attn seed harvest ${first} -m "second close receipt" --session ${pane.sessionId}`, 'the seed did not move');
+      runner.assert(saw(repeated, 'was already harvested') && saw(repeated, 'the first parallel step is done'),
+        'the retry succeeds with the original closing reason', { repeated });
+      runner.assert(saw(repeated, 'your reason is on its log'),
+        'the retry explains where the second receipt went', { repeated });
+      const row = (await client.request('garden_get_state', {})).seeds.find((seed) => seed.id === crown);
+      runner.assert(row?.plot.startsWith('1/3'), 'the retry keeps the rendered plot count', { row });
+      const drill = await readDrill(client, first, (state) => state.notes.some((note) => note.body === 'second close receipt'));
+      runner.assert(drill.notes.some((note) => note.body === 'second close receipt'),
+        'the seed page shows the second receipt', { drill });
+      await client.request('garden_climb_to', { depth: 0 });
+      runner.writeText('repeated-harvest.txt', repeated + '\n');
+    });
+
     await runner.step('two_delegates_share_one_plot', async () => {
       const [, parallel, sequenced] = children;
       const known = new Set(observer.sessionsById.keys());

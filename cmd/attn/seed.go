@@ -154,20 +154,27 @@ saved folder, branch and placement problem are recorded automatically;
 	{`tend`, `tend <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `claim the seed and start growing it. One tender at a time: tending a
 seed somebody else still holds is refused, naming them, and takes
 --force to go through anyway. The freshest handoff prints on the
-claim, so picking a seed up primes you.`, []string{"m", "member", "force", "json"}, false},
+claim, so picking a seed up primes you. Tending your own claim again
+changes nothing and rings nobody.`, []string{"m", "member", "force", "json"}, false},
 	{`park`, `park <id> [-m "<where you left it>"] [--member <name>] [--force] [--json]`, `pause the seed deliberately — it goes dormant and lets go of its
 tender. An optional comment lands on the log in the same move. Tending
-it again picks it back up.`, []string{"m", "member", "force", "json"}, false},
-	{`harvest`, `harvest <id> (-m "<what got done>" | --when-merged [<pr-url>] [--clear]) [--member <name>] [--force] [--json]`, `close the seed as done. The reason is the point of the record.
---when-merged closes nothing now: attn harvests the seed itself, with
-its own reason, when the pull request merges. Reach for it only when
-the merge is the last step. With no url it takes this session's single
-open pull request; --when-merged --clear takes the arming back and
-leaves the state alone.`, []string{"m", "member", "force", "json", "when-merged", "clear"}, false},
-	{`wither`, `wither <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up.`, []string{"m", "member", "force", "json"}, false},
+it again picks it back up. Parking it again keeps the state and adds
+only the optional comment. Moves print who they rang.`, []string{"m", "member", "force", "json"}, false},
+	{`harvest`, `harvest <id> [-m "<what got done>"] [--when-merged [<pr-url>] [--clear]] [--member <name>] [--force] [--json]`, `close the seed as done, with a required -m reason. Repeating a harvest
+succeeds with the earlier reason; a different reason goes on its log.
+A withered seed must be replanted first. Moves print who they rang.
+--when-merged releases your claim and harvests the seed with your -m
+reason when the pull request merges. Without -m it uses "PR #N merged:
+<title>". This command merges nothing. Use it only when the merge is
+the last step. With no url it takes this session's single open pull
+request; --when-merged --clear takes the arming back.`, []string{"m", "member", "force", "json", "when-merged", "clear"}, false},
+	{`wither`, `wither <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up. Repeating it
+keeps the earlier reason and adds a different reason to the log. A
+harvested seed must be replanted first. Moves print who they rang.`, []string{"m", "member", "force", "json"}, false},
 	{`replant`, `replant <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
 is free. Reopens a closed seed, un-parks a dormant one, and hands back
-one being grown.`, []string{"m", "member", "force", "json"}, false},
+one being grown. Replanting an already planted seed changes nothing
+and rings nobody. Moves print who they rang.`, []string{"m", "member", "force", "json"}, false},
 	{`note`, `note <id> -m "<what happened>" [--handoff] [--ring] [--json]`, `append to the seed's log — what happened and what you learned, for
 whoever tends it next. - reads stdin. --handoff addresses it to your
 successor on this seed: show renders the freshest one first and tend
@@ -827,7 +834,11 @@ func harvestWhenLine(condition *protocol.SeedHarvestCondition) string {
 	if condition == nil {
 		return ""
 	}
-	return "harvests when " + pullRequestLabel(condition.PullRequest) + " merges"
+	line := "harvests when " + pullRequestLabel(condition.PullRequest) + " merges"
+	if reason := protocol.Deref(condition.Reason); reason != "" {
+		line += " with your reason: " + reason
+	}
+	return line
 }
 
 func pullRequestLabel(prID string) string {
@@ -1271,6 +1282,9 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	}
 	if condition := seed.HarvestWhen; condition != nil {
 		fmt.Fprintf(w, "harvests when\t%s merges\n", pullRequestLabel(condition.PullRequest))
+		if reason := protocol.Deref(condition.Reason); reason != "" {
+			fmt.Fprintf(w, "harvest reason\t%s\n", reason)
+		}
 		checkedAt := strings.TrimSpace(protocol.Deref(condition.CheckedAt))
 		if checkedAt == "" {
 			checkedAt = "not yet"
@@ -1326,10 +1340,11 @@ func harvestWhenArgs(verb string, f *seedFlags, positionals []string) (string, c
 		return "", none, fmt.Errorf("harvest-on-merge belongs to harvest: `attn seed harvest <id> --when-merged [pr-url]`")
 	case !f.whenMerged:
 		return "", none, fmt.Errorf("--clear disarms harvest-on-merge; say the whole thing: `attn seed harvest <id> --when-merged --clear`")
-	case f.wasSet("m"):
-		return "", none, fmt.Errorf("harvest --when-merged takes no -m: the reason is written when the pull request merges")
 	}
 	if f.clear {
+		if f.wasSet("m") {
+			return "", none, fmt.Errorf("--clear takes no reason; put it on the log with `attn seed note <id> -m \"…\"`")
+		}
 		seedID, err := oneSeedID(verb, positionals, " --when-merged --clear")
 		return seedID, client.SeedTransitionOptions{ClearHarvestWhen: true}, err
 	}
@@ -1351,9 +1366,21 @@ func oneSeedID(verb string, positionals []string, tail string) (string, error) {
 }
 
 func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleared ...bool) {
-	fmt.Fprintln(w, transitionLine(result.Seed))
+	if result.Moved != nil && !*result.Moved {
+		line := fmt.Sprintf("%s was already %s at %s", seedHandle(result.Seed), result.Seed.Status, shortStamp(result.Seed.StateChangedAt))
+		if reason := protocol.Deref(result.Seed.Reason); reason != "" {
+			line += " — " + reason
+		}
+		fmt.Fprintln(w, line)
+	} else {
+		fmt.Fprintln(w, transitionLine(result.Seed))
+	}
+	if result.Noted != nil {
+		fmt.Fprintf(w, "your reason is on its log: attn seed notes %s\n", result.Seed.ID)
+	}
 	if line := harvestWhenLine(result.Seed.HarvestWhen); line != "" {
 		fmt.Fprintln(w, line)
+		fmt.Fprintln(w, "this command merges nothing")
 	} else if len(cleared) > 0 && cleared[0] {
 		fmt.Fprintln(w, "harvest-on-merge cleared")
 	}
@@ -1364,6 +1391,11 @@ func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleare
 		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n", open)
 	}
 	fprintUnblocked(w, result.Unblocked)
+	if result.Moved != nil && !*result.Moved {
+		fmt.Fprintln(w, "rang nobody: the seed did not move")
+	} else {
+		fprintRang(w, result.Seed.ID, result.RingRecipients)
+	}
 	if result.Handoff != nil {
 		fmt.Fprintln(w)
 		fprintHandoff(w, result.Handoff)

@@ -173,26 +173,35 @@ func (d *Daemon) seedParties(seedID string, cause protocol.SessionID) ([]string,
 	if err != nil {
 		return nil, err
 	}
-	event, err := gardenSeedEventModel.Encode(occurrence)
-	if err != nil {
-		return nil, err
-	}
-	recipients, err := d.gardenSeedEventRecipients(event.Name, event.Subject, event.Payload)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(recipients.addresses))
-	for _, address := range recipients.addresses {
-		parsed, err := inbox.ParseAddress(address)
+	return d.seedOccurrenceRecipients(occurrence)
+}
+
+func (d *Daemon) seedOccurrenceRecipients(occurrences ...seedEvents.Occurrence) ([]string, error) {
+	var out []string
+	for _, occurrence := range occurrences {
+		event, err := gardenSeedEventModel.Encode(occurrence)
 		if err != nil {
 			return nil, err
 		}
-		if member := parsed.MemberID(); member != "" {
-			out = append(out, member)
-		} else {
-			out = append(out, string(parsed.SessionID()))
+		recipients, err := d.gardenSeedEventRecipients(event.Name, event.Subject, event.Payload)
+		if err != nil {
+			return nil, err
+		}
+		for _, address := range recipients.addresses {
+			parsed, err := inbox.ParseAddress(address)
+			if err != nil {
+				return nil, err
+			}
+			name := parsed.MemberID()
+			if name == "" {
+				name = string(parsed.SessionID())
+			}
+			if !slices.Contains(out, name) {
+				out = append(out, name)
+			}
 		}
 	}
+	slices.Sort(out)
 	return out, nil
 }
 

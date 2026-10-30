@@ -155,16 +155,23 @@ Adapt the assignment and its completion check to the work:
                whose result is options for the user to choose between.
 
 Harvest when the outcome and required verification in the body are complete.
+Repeating a move to the same state succeeds without rewriting it or ringing
+anyone. A different reason is kept as a quiet note. To change a harvested seed
+to withered, or a withered seed to harvested, replant it first. Moves print who
+they rang.
+
 When the only thing left is a pull request merging, say so once and let attn
 close it:
 
-    attn seed harvest <id> --when-merged [<pr-url>]   with no url, this session's
-                                                      single open pull request
+    attn seed harvest <id> --when-merged [<pr-url>] -m "<outcome and verification>"
+                                                  with no url, this session's
+                                                  single open pull request
     attn seed harvest <id> --when-merged --clear      take the arming back
 
 A seed you were growing goes dormant and lets go of your claim; either way it
-points at the pull request and harvests itself, with its own reason, when the
-merge lands. A pull request closed without merging clears the arming instead.
+points at the pull request and harvests itself with your reason when the merge
+lands. Without -m, the reason is "PR #N merged: <title>". The command merges
+nothing. A pull request closed without merging clears the arming instead.
 Reach for it only when the merge is genuinely the last step: review notes to
 answer, docs to write, or evidence to attach are work, and work belongs to a
 tender.

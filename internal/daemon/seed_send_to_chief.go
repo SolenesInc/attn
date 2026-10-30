@@ -110,12 +110,13 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	}
 	unclaimed := seed
 	unclaimed.TenderSession, unclaimed.TenderMember = "", ""
-	next, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
+	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
 		Actor: garden.Tender{Session: chiefSessionID},
 	}, d.sessionActive)
 	if err != nil {
 		return nil, err
 	}
+	next := outcome.Seed
 	if next.Status != seed.Status {
 		next.StateChangedAt = formatGardenTime(d.gardenTime())
 	}

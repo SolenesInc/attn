@@ -9808,6 +9808,9 @@ type SeedHarvestCondition struct {
 	// PullRequest corresponds to the JSON schema field "pull_request".
 	PullRequest string `json:"pull_request"`
 
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *string `json:"reason,omitempty,omitzero"`
+
 	// SetAt corresponds to the JSON schema field "set_at".
 	SetAt string `json:"set_at"`
 
@@ -10633,6 +10636,15 @@ type SeedTransitionMessage struct {
 type SeedTransitionResult struct {
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *SeedNote `json:"handoff,omitempty,omitzero"`
+
+	// Moved corresponds to the JSON schema field "moved".
+	Moved *bool `json:"moved,omitempty,omitzero"`
+
+	// Noted corresponds to the JSON schema field "noted".
+	Noted *SeedNote `json:"noted,omitempty,omitzero"`
+
+	// RingRecipients corresponds to the JSON schema field "ring_recipients".
+	RingRecipients []string `json:"ring_recipients,omitempty,omitzero"`
 
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`

@@ -130,8 +130,8 @@ func TestArmingRefusalsNameTheirReason(t *testing.T) {
 	shipper := spawnPanes(w, app, w.Path("shipper"))[0].session
 	url := github.open(71, "Ship it")
 	seed := plantSeedAs(t, cli, shipper, "never armed")
-	harvested := plantSeedAs(t, cli, shipper, "over already")
-	lifeMove(t, cli, shipper, harvested, "harvest", "shipped it", "")
+	withered := plantSeedAs(t, cli, shipper, "abandoned")
+	lifeMove(t, cli, shipper, withered, "wither", "not needed", "")
 
 	for _, refusal := range []struct {
 		name    string
@@ -142,8 +142,8 @@ func TestArmingRefusalsNameTheirReason(t *testing.T) {
 		want    string
 	}{
 		{"arming without a session", "", seed, "", client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}, "needs a session to track the pull request"},
-		{"arming a harvested seed", shipper, harvested, "", client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}, "waits on nothing"},
-		{"arming with a reason", shipper, seed, "done enough", client.SeedTransitionOptions{WhenMerged: true}, "the merge writes the reason"},
+		{"arming a withered seed", shipper, withered, "", client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}, "waits on nothing"},
+		{"arming with an oversized reason", shipper, seed, strings.Repeat("x", garden.MaxReasonChars+1), client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}, "limit is 400"},
 		{"clearing a seed that waits on nothing", shipper, seed, "", client.SeedTransitionOptions{WhenMerged: true, ClearHarvestWhen: true}, "has no harvest condition"},
 	} {
 		_, err := cli.SeedTransition(protocol.SessionID(refusal.session), refusal.seed, "harvest", refusal.reason, "", false, refusal.opts)
@@ -308,6 +308,78 @@ func TestArmingASeedSomebodyElseHoldsTakesForce(t *testing.T) {
 func harvestArm(t *testing.T, cli *client.Client, session, seedID, url string) *protocol.SeedTransitionResult {
 	t.Helper()
 	return harvestArmAs(t, cli, session, "", seedID, url)
+}
+
+func TestRepeatedSeedMovesKeepTheStateAndDoNotRing(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "worker", "watcher")
+		for _, verb := range []string{"tend", "park", "harvest", "wither", "replant"} {
+			seed := plantSeedAs(t, cli, "worker", verb+" twice")
+			reason := ""
+			if verb == "harvest" || verb == "wither" {
+				reason = "finished"
+			}
+			before := lifeMove(t, cli, "worker", seed, verb, reason, "")
+			gardenNudgeWatch(t, cli, "watcher", seed, false)
+			w.advance(0)
+			again, err := cli.SeedTransition("worker", seed, verb, reason, "", false, client.SeedTransitionOptions{})
+			if err != nil {
+				t.Fatalf("repeat %s: %v", verb, err)
+			}
+			if again.Seed.Rev != before.Rev || again.Seed.StateChangedAt != before.StateChangedAt || protocol.Deref(again.Moved) || len(again.RingRecipients) != 0 {
+				t.Errorf("repeat %s changed the seed: before %+v, after %+v", verb, before, again.Seed)
+			}
+			w.advance(0)
+			gardenNudgeInboxIsEmpty(t, cli, "watcher", "after repeated "+verb)
+			if got := lifeNoteBodies(t, cli, seed); len(got) != 0 {
+				t.Errorf("repeat %s added notes: %q", verb, got)
+			}
+		}
+		seed := plantSeedAs(t, cli, "worker", "retain the second closer's reason")
+		before := lifeMove(t, cli, "worker", seed, "harvest", "original result", "")
+		gardenNudgeWatch(t, cli, "watcher", seed, false)
+		again, err := cli.SeedTransition("watcher", seed, "harvest", "second receipt", "", false, client.SeedTransitionOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if again.Seed.Rev != before.Rev || protocol.Deref(again.Seed.Reason) != "original result" {
+			t.Fatalf("second close replaced the original: %+v", again.Seed)
+		}
+		shown := lifeShow(t, cli, seed)
+		if again.Noted == nil || len(shown.Notes) != 1 || shown.Notes[0].ID != again.Noted.ID || shown.Notes[0].Body != "second receipt" || shown.Notes[0].AuthorSession != "watcher" {
+			t.Fatalf("second close's note: %+v", shown.Notes)
+		}
+	})
+}
+
+func TestHarvestOnMergeKeepsTheClosersReason(t *testing.T) {
+	github := newHarvestGitHub(t)
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "shipper")
+		for _, alreadyMerged := range []bool{false, true} {
+			url := github.open(71, "Ship the change")
+			if alreadyMerged {
+				url = github.merge(71, "Ship the change")
+			}
+			seed := plantSeedAs(t, cli, "shipper", "keep the receipt")
+			_, err := cli.SeedTransition("shipper", seed, "harvest", "verified the change", "", false,
+				client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url})
+			if err != nil {
+				t.Fatalf("arm with a reason: %v", err)
+			}
+			github.merge(71, "Ship the change")
+			w.advance(protocol.HeatHotInterval)
+			before := lifeShow(t, cli, seed).Seed
+			if before.Status != "harvested" || protocol.Deref(before.Reason) != "verified the change" {
+				t.Fatalf("merge discarded the reason: %+v", before)
+			}
+			if again := harvestArm(t, cli, "shipper", seed, url); again.Seed.Rev != before.Rev {
+				t.Fatalf("arming a harvested seed rewrote it: %+v", again)
+			}
+		}
+	})
 }
 
 func harvestArmAs(t *testing.T, cli *client.Client, session, member, seedID, url string) *protocol.SeedTransitionResult {

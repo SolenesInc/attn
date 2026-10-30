@@ -21,8 +21,9 @@ The loop:
                                      --ring tells watchers to look
     attn seed check report <id> <C#> -m "…" --evidence <artifact|url>    the proof for one of the seed's checks; `attn seed check --help` lists the other check moves
     attn seed harvest <id> -m "…"    done; the reason is required and fits in 400 characters, the long version goes in a note
-    attn seed harvest <id> --when-merged [pr-url]    only when a merge is all that is left: the seed lets go and harvests itself when that pull request merges
-                                     with no url it takes this session's single open pull request; --when-merged --clear takes the arming back
+    attn seed harvest <id> --when-merged [pr-url] [-m "<outcome and verification>"]    only when a merge is all that is left: the seed lets go and harvests itself when that pull request merges
+                                     with no url it takes this session's single open pull request; -m keeps your reason for the harvest; this command merges nothing
+                                     --when-merged --clear takes the arming back
     attn seed wither <id> [-m "…"]   abandoned, nobody will pick it up
     attn seed park <id>              put down, claim released; tend it again to resume
     attn seed replant <id>           a harvested or withered seed back to planted
@@ -32,7 +33,7 @@ The loop:
 
 `attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who holds the seed. If a live session or crew member holds it, the command refuses it by naming the holder. `--force` performs the move anyway, and the log records who forced it. A seed whose session ended is not held. `--member <name>` on any of these commands acts as a crew member instead of this session, and a member's claim never expires.
 
-Harvest and wither print the seeds the close set free — the ones it was the last blocker of — and ring whoever holds one.
+Repeating a move to the same state succeeds without rewriting the seed or ringing anyone. A different reason is kept as a quiet note. Harvest on a withered seed, or wither on a harvested seed, requires `attn seed replant <id>` first. Every move prints who it rang. Harvest and wither also print the seeds the close set free and ring whoever tends one.
 
 Plans:
 

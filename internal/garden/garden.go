@@ -70,6 +70,7 @@ type Seed struct {
 }
 
 type HarvestCondition struct {
+	Reason       string             `json:"reason,omitempty"`
 	PullRequest  string             `json:"pull_request"`
 	URL          string             `json:"url"`
 	SetAt        string             `json:"set_at"`
@@ -84,6 +85,7 @@ func ValidateHarvestCondition(c HarvestCondition) error {
 	if strings.TrimSpace(c.URL) == "" {
 		return fmt.Errorf("a harvest condition needs the pull request url, so the seed can point at what it waits on")
 	}
+
 	return nil
 }
 

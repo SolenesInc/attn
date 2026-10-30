@@ -116,12 +116,13 @@ func (d *Daemon) bindSeedHandoverProtected(
 
 	unclaimed := seed
 	unclaimed.TenderSession, unclaimed.TenderMember = "", ""
-	next, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
+	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
 		Actor: garden.Tender{Session: sessionID},
 	}, func(protocol.SessionID) bool { return false })
 	if err != nil {
 		return nil, err
 	}
+	next := outcome.Seed
 	if next.Status != seed.Status {
 		next.StateChangedAt = formatGardenTime(d.gardenTime())
 	}

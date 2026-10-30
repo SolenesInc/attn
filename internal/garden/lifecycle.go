@@ -73,7 +73,6 @@ type move struct {
 	claims      bool
 	needsReason bool
 	keepsReason bool
-	resume      string
 }
 
 var moves = map[Verb]move{
@@ -81,30 +80,25 @@ var moves = map[Verb]move{
 		to:     StatusGrowing,
 		from:   []string{StatusPlanted, StatusDormant, StatusGrowing},
 		claims: true,
-		resume: "attn seed park",
 	},
 	VerbPark: {
-		to:     StatusDormant,
-		from:   []string{StatusPlanted, StatusGrowing},
-		resume: "attn seed tend",
+		to:   StatusDormant,
+		from: []string{StatusPlanted, StatusGrowing},
 	},
 	VerbHarvest: {
 		to:          StatusHarvested,
 		from:        []string{StatusPlanted, StatusGrowing, StatusDormant},
 		needsReason: true,
 		keepsReason: true,
-		resume:      "attn seed replant",
 	},
 	VerbWither: {
 		to:          StatusWithered,
 		from:        []string{StatusPlanted, StatusGrowing, StatusDormant},
 		keepsReason: true,
-		resume:      "attn seed replant",
 	},
 	VerbReplant: {
-		from:   []string{StatusHarvested, StatusWithered, StatusDormant, StatusGrowing},
-		to:     StatusPlanted,
-		resume: "attn seed tend",
+		from: []string{StatusHarvested, StatusWithered, StatusDormant, StatusGrowing},
+		to:   StatusPlanted,
 	},
 }
 
@@ -124,36 +118,40 @@ func ParseVerb(raw string) (Verb, error) {
 	return "", fmt.Errorf("%q is not something a seed does; the moves are %s", raw, strings.Join(names, ", "))
 }
 
-func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protocol.SessionID) bool) (Seed, error) {
+type Outcome struct {
+	Seed  Seed
+	Moved bool
+}
+
+func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protocol.SessionID) bool) (Outcome, error) {
 	rule, ok := moves[verb]
 	if !ok {
-		return Seed{}, fmt.Errorf("%q is not something a seed does", verb)
+		return Outcome{}, fmt.Errorf("%q is not something a seed does", verb)
 	}
 	reason := strings.TrimSpace(ask.Reason)
 
-	if !slices.Contains(rule.from, seed.Status) {
-		return Seed{}, refuseState(seed, verb, rule)
+	if seed.Status != rule.to && !slices.Contains(rule.from, seed.Status) {
+		return Outcome{}, refuseState(seed, verb)
 	}
 	if rule.claims && !ask.Actor.Named() {
-		return Seed{}, fmt.Errorf(
+		return Outcome{}, fmt.Errorf(
 			"tending %s records who holds it and this call named nobody; run it from an attn session, or pass --member <name>", seed.ID)
 	}
 	if held := seed.Tender(); held.Holds(sessionLive) && !held.Is(ask.Actor) && !ask.Force {
-		return Seed{}, refuseTakeover(seed, verb, held)
+		return Outcome{}, refuseTakeover(seed, verb, held)
+	}
+	if err := ValidateReason(reason, seed.ID); err != nil {
+		return Outcome{}, err
+	}
+
+	if seed.Status == rule.to && (!rule.claims || seed.Tender() == ask.Actor) {
+		return Outcome{Seed: seed}, nil
 	}
 	if rule.needsReason && reason == "" {
-		return Seed{}, fmt.Errorf(
-			"harvesting %s records what got done: attn seed harvest %s -m \"what got done\"", seed.ID, seed.ID)
+		return Outcome{}, fmt.Errorf("harvesting %s records what got done: attn seed harvest %s -m \"what got done\"", seed.ID, seed.ID)
 	}
 	if reason != "" && !rule.keepsReason {
-		return Seed{}, fmt.Errorf(
-			"%s records no reason — harvest and wither are the moves that close a seed with one. Put it on the log instead: attn seed note %s -m \"…\"",
-			verb, seed.ID)
-	}
-	if n := utf8.RuneCountInString(reason); n > MaxReasonChars {
-		return Seed{}, fmt.Errorf(
-			"that reason is %d characters and the limit is %d; the detail belongs on the log (`attn seed note %s -m …`)",
-			n, MaxReasonChars, seed.ID)
+		return Outcome{}, fmt.Errorf("%s records no reason; put it on the log instead: attn seed note %s -m \"…\"", verb, seed.ID)
 	}
 
 	next := seed
@@ -175,7 +173,7 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protoc
 	if Closed(next.Status) {
 		next.HarvestWhen = nil
 	}
-	return next, nil
+	return Outcome{Seed: next, Moved: true}, nil
 }
 
 func (s Seed) Tender() Tender {
@@ -188,15 +186,12 @@ func (d Dispatch) Dispatcher() Tender {
 
 func refuseTakeover(seed Seed, verb Verb, held Tender) error {
 	return fmt.Errorf(
-		"%s is being tended by %s, and `attn seed %s` takes it from them.\n"+
-			"Pass --force to act anyway; the log will record it. Or say what you need on the log: attn seed note %s -m \"…\"",
+		"%s is being tended by %s, and `attn seed %s` takes it from them; pass --force to act anyway; the log will record it. Or say what you need on the log: attn seed note %s -m \"…\"",
 		seed.ID, held.DisplayName(), verb, seed.ID)
 }
 
-func refuseState(seed Seed, verb Verb, rule move) error {
+func refuseState(seed Seed, verb Verb) error {
 	switch {
-	case seed.Status == rule.to:
-		return fmt.Errorf("%s is already %s; `%s %s` is the way out of it", seed.ID, seed.Status, rule.resume, seed.ID)
 	case Closed(seed.Status):
 		return fmt.Errorf(
 			"%s is %s, and a closed seed reopens before it moves again: `attn seed replant %s`, then %s it",
@@ -253,6 +248,13 @@ const (
 	MaxReasonChars = 400
 	ShowNotes      = 5
 )
+
+func ValidateReason(reason, seedID string) error {
+	if n := utf8.RuneCountInString(strings.TrimSpace(reason)); n > MaxReasonChars {
+		return fmt.Errorf("that reason is %d characters and the limit is %d; the detail belongs on the log (`attn seed note %s -m …`)", n, MaxReasonChars, seedID)
+	}
+	return nil
+}
 
 func TrimReason(reason string) string {
 	reason = strings.TrimSpace(reason)

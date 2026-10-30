@@ -41,7 +41,7 @@ func TestTransitionMatrix(t *testing.T) {
 		{name: "planted/park", seed: seedIn(StatusPlanted, Tender{}), verb: VerbPark, want: StatusDormant},
 		{name: "planted/harvest", seed: seedIn(StatusPlanted, Tender{}), verb: VerbHarvest, want: StatusHarvested},
 		{name: "planted/wither", seed: seedIn(StatusPlanted, Tender{}), verb: VerbWither, want: StatusWithered},
-		{name: "planted/replant", seed: seedIn(StatusPlanted, Tender{}), verb: VerbReplant, refuse: "already planted"},
+		{name: "planted/replant", seed: seedIn(StatusPlanted, Tender{}), verb: VerbReplant, want: StatusPlanted},
 
 		{name: "growing by me/tend", seed: seedIn(StatusGrowing, mine), verb: VerbTend, want: StatusGrowing},
 		{name: "growing by me/park", seed: seedIn(StatusGrowing, mine), verb: VerbPark, want: StatusDormant},
@@ -66,21 +66,21 @@ func TestTransitionMatrix(t *testing.T) {
 		{name: "force with nobody to take from", seed: seedIn(StatusPlanted, Tender{}), verb: VerbPark, force: true, want: StatusDormant},
 
 		{name: "dormant/tend", seed: seedIn(StatusDormant, Tender{}), verb: VerbTend, want: StatusGrowing},
-		{name: "dormant/park", seed: seedIn(StatusDormant, Tender{}), verb: VerbPark, refuse: "already dormant"},
+		{name: "dormant/park", seed: seedIn(StatusDormant, Tender{}), verb: VerbPark, want: StatusDormant},
 		{name: "dormant/harvest", seed: seedIn(StatusDormant, Tender{}), verb: VerbHarvest, want: StatusHarvested},
 		{name: "dormant/wither", seed: seedIn(StatusDormant, Tender{}), verb: VerbWither, want: StatusWithered},
 		{name: "dormant/replant", seed: seedIn(StatusDormant, Tender{}), verb: VerbReplant, want: StatusPlanted},
 
 		{name: "harvested/tend", seed: seedIn(StatusHarvested, Tender{}), verb: VerbTend, refuse: "reopens before it moves"},
 		{name: "harvested/park", seed: seedIn(StatusHarvested, Tender{}), verb: VerbPark, refuse: "reopens before it moves"},
-		{name: "harvested/harvest", seed: seedIn(StatusHarvested, Tender{}), verb: VerbHarvest, refuse: "already harvested"},
+		{name: "harvested/harvest", seed: seedIn(StatusHarvested, Tender{}), verb: VerbHarvest, want: StatusHarvested},
 		{name: "harvested/wither", seed: seedIn(StatusHarvested, Tender{}), verb: VerbWither, refuse: "reopens before it moves"},
 		{name: "harvested/replant", seed: seedIn(StatusHarvested, Tender{}), verb: VerbReplant, want: StatusPlanted},
 
 		{name: "withered/tend", seed: seedIn(StatusWithered, Tender{}), verb: VerbTend, refuse: "reopens before it moves"},
 		{name: "withered/park", seed: seedIn(StatusWithered, Tender{}), verb: VerbPark, refuse: "reopens before it moves"},
 		{name: "withered/harvest", seed: seedIn(StatusWithered, Tender{}), verb: VerbHarvest, refuse: "reopens before it moves"},
-		{name: "withered/wither", seed: seedIn(StatusWithered, Tender{}), verb: VerbWither, refuse: "already withered"},
+		{name: "withered/wither", seed: seedIn(StatusWithered, Tender{}), verb: VerbWither, want: StatusWithered},
 		{name: "withered/replant", seed: seedIn(StatusWithered, Tender{}), verb: VerbReplant, want: StatusPlanted},
 	}
 
@@ -91,7 +91,8 @@ func TestTransitionMatrix(t *testing.T) {
 			if tc.verb == VerbHarvest || tc.verb == VerbWither {
 				reason = "because"
 			}
-			next, err := Transition(tc.seed, tc.verb, Ask{Actor: mine, Reason: reason, Force: tc.force}, alive)
+			outcome, err := Transition(tc.seed, tc.verb, Ask{Actor: mine, Reason: reason, Force: tc.force}, alive)
+			next := outcome.Seed
 			if !reflect.DeepEqual(tc.seed, before) {
 				t.Fatalf("the input seed was mutated: %+v", tc.seed)
 			}
@@ -181,7 +182,7 @@ func TestTransitionClaimsAndReasons(t *testing.T) {
 			if tc.sessionGone {
 				live = gone
 			}
-			next, err := Transition(tc.seed, tc.verb, tc.ask, live)
+			outcome, err := Transition(tc.seed, tc.verb, tc.ask, live)
 			if tc.refuse != nil {
 				if err == nil {
 					t.Fatalf("%s was allowed, want a refusal", tc.verb)
@@ -196,6 +197,7 @@ func TestTransitionClaimsAndReasons(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", tc.verb, err)
 			}
+			next := outcome.Seed
 			if next.Tender() != tc.tender {
 				t.Errorf("tender = %+v, want %+v", next.Tender(), tc.tender)
 			}

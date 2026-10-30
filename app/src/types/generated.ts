@@ -5460,6 +5460,7 @@ export interface EdgeElement {
 export interface HarvestWhen {
     checked_at?:     string;
     pull_request:    string;
+    reason?:         string;
     set_at:          string;
     set_by_member?:  string;
     set_by_session?: string;
@@ -9345,9 +9346,12 @@ export interface RelationElement {
 }
 
 export interface SeedTransitionResultObject {
-    handoff?:   Note;
-    seed:       SeedElement;
-    unblocked?: SeedElement[];
+    handoff?:         Note;
+    moved?:           boolean;
+    noted?:           Note;
+    ring_recipients?: string[];
+    seed:             SeedElement;
+    unblocked?:       SeedElement[];
     [property: string]: any;
 }
 
@@ -10024,6 +10028,7 @@ export interface SeedHandoverRequest {
 export interface SeedHarvestCondition {
     checked_at?:     string;
     pull_request:    string;
+    reason?:         string;
     set_at:          string;
     set_by_member?:  string;
     set_by_session?: string;
@@ -10567,9 +10572,12 @@ export interface WhenMerged {
 }
 
 export interface SeedTransitionResult {
-    handoff?:   Note;
-    seed:       SeedElement;
-    unblocked?: SeedElement[];
+    handoff?:         Note;
+    moved?:           boolean;
+    noted?:           Note;
+    ring_recipients?: string[];
+    seed:             SeedElement;
+    unblocked?:       SeedElement[];
     [property: string]: any;
 }
 
@@ -22322,6 +22330,7 @@ const typeMap: any = {
     "HarvestWhen": o([
         { json: "checked_at", js: "checked_at", typ: u(undefined, "") },
         { json: "pull_request", js: "pull_request", typ: "" },
+        { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "set_at", js: "set_at", typ: "" },
         { json: "set_by_member", js: "set_by_member", typ: u(undefined, "") },
         { json: "set_by_session", js: "set_by_session", typ: u(undefined, "") },
@@ -24753,6 +24762,9 @@ const typeMap: any = {
     ], "any"),
     "SeedTransitionResultObject": o([
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
+        { json: "moved", js: "moved", typ: u(undefined, true) },
+        { json: "noted", js: "noted", typ: u(undefined, r("Note")) },
+        { json: "ring_recipients", js: "ring_recipients", typ: u(undefined, a("")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "unblocked", js: "unblocked", typ: u(undefined, a(r("SeedElement"))) },
     ], "any"),
@@ -25245,6 +25257,7 @@ const typeMap: any = {
     "SeedHarvestCondition": o([
         { json: "checked_at", js: "checked_at", typ: u(undefined, "") },
         { json: "pull_request", js: "pull_request", typ: "" },
+        { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "set_at", js: "set_at", typ: "" },
         { json: "set_by_member", js: "set_by_member", typ: u(undefined, "") },
         { json: "set_by_session", js: "set_by_session", typ: u(undefined, "") },
@@ -25595,6 +25608,9 @@ const typeMap: any = {
     ], "any"),
     "SeedTransitionResult": o([
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
+        { json: "moved", js: "moved", typ: u(undefined, true) },
+        { json: "noted", js: "noted", typ: u(undefined, r("Note")) },
+        { json: "ring_recipients", js: "ring_recipients", typ: u(undefined, a("")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "unblocked", js: "unblocked", typ: u(undefined, a(r("SeedElement"))) },
     ], "any"),

@@ -5358,6 +5358,7 @@ model Seed {
 // What a seed waits on before it harvests itself. The daemon settles it when the
 // pull request merges; a pull request closed without merging clears it instead.
 model SeedHarvestCondition {
+  "reason"?: string;
   // host:owner/repo#number, the session pull request id.
   "pull_request": string;
   "url": string;
@@ -6086,6 +6087,9 @@ model SeedTransitionResultMessage {
 }
 
 model SeedTransitionResult {
+  "moved"?: boolean;
+  "ring_recipients"?: string[];
+  "noted"?: SeedNote;
   "seed": Seed;
   // The freshest handoff, carried on `tend` alone: tending is the pickup, so it
   // is the one move whose answer has to prime the tender. The other four are

@@ -21,7 +21,7 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 	}
 	ask, sessionID := d.seedTransitionAsk(msg)
 	if harvestWhenRequested(msg) {
-		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, protocol.SessionID(sessionID))
+		seed, doc, _, err := d.applyHarvestWhenRequest(msg, verb, ask, protocol.SessionID(sessionID))
 		if err != nil {
 			fail(err)
 			return

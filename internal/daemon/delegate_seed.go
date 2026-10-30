@@ -72,10 +72,11 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		return "", profileErr
 	}
 	before := seed
-	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(protocol.SessionID) bool { return false })
+	outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(protocol.SessionID) bool { return false })
 	if err != nil {
 		return "", err
 	}
+	seed = outcome.Seed
 	if createSeed || seed.Status != before.Status {
 		seed.StateChangedAt = formatGardenTime(d.gardenTime())
 	}

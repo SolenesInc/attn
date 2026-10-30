@@ -327,6 +327,7 @@ func seedToProtocol(seed garden.Seed, doc docstore.Document, ready bool) protoco
 			PullRequest: seed.HarvestWhen.PullRequest,
 			URL:         seed.HarvestWhen.URL,
 			SetAt:       seed.HarvestWhen.SetAt,
+			Reason:      protocol.Ptr(seed.HarvestWhen.Reason),
 		}
 		if seed.HarvestWhen.SetBySession != "" {
 			condition.SetBySession = protocol.Ptr(seed.HarvestWhen.SetBySession)
@@ -1307,29 +1308,33 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	}
 	ask, sessionID := d.seedTransitionAsk(msg)
 	if harvestWhenRequested(msg) {
-		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, protocol.SessionID(sessionID))
+		seed, doc, details, err := d.applyHarvestWhenRequest(msg, verb, ask, protocol.SessionID(sessionID))
 		if err != nil {
 			d.sendGardenError(conn, string(verb), err)
 			return
 		}
-		result := &protocol.SeedTransitionResult{Seed: d.seedWire(seed, doc)}
-		if garden.Closed(seed.Status) {
+		result := &protocol.SeedTransitionResult{Seed: d.seedWire(seed, doc),
+			Moved: protocol.Ptr(details.Moved), Noted: details.Noted, RingRecipients: details.RingRecipients}
+		if details.Moved && garden.Closed(seed.Status) {
 			_, result.Unblocked = d.seedUnblocked(seed.ID)
 		}
 		d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedTransitionResult: result})
 		return
 	}
-	seed, doc, _, err := d.applySeedTransitionDetailed(
+	seed, doc, details, err := d.applySeedTransitionDetailed(
 		msg.SeedID, verb, ask, protocol.Deref(msg.Comment))
 	if err != nil {
 		d.sendGardenError(conn, string(verb), err)
 		return
 	}
-	result := &protocol.SeedTransitionResult{Seed: d.seedWire(seed, doc)}
+	result := &protocol.SeedTransitionResult{
+		Seed: d.seedWire(seed, doc), Moved: protocol.Ptr(details.Moved),
+		Noted: details.Noted, RingRecipients: details.RingRecipients,
+	}
 	if verb == garden.VerbTend {
 		result.Handoff = d.gardenHandoff(seed.ID)
 	}
-	if garden.Closed(seed.Status) {
+	if details.Moved && garden.Closed(seed.Status) {
 		_, result.Unblocked = d.seedUnblocked(seed.ID)
 	}
 
@@ -1360,26 +1365,29 @@ func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask
 	return seed, doc, err
 }
 
-type seedTransitionNotes struct {
-	Audit   *protocol.SeedNote
-	Comment *protocol.SeedNote
+type seedTransitionDetails struct {
+	Moved          bool
+	Noted          *protocol.SeedNote
+	RingRecipients []string
+	Audit          *protocol.SeedNote
+	Comment        *protocol.SeedNote
 }
 
 func (d *Daemon) applySeedTransitionDetailed(
 	id string, verb garden.Verb, ask garden.Ask, comment string,
-) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	return d.applySeedTransitionDetailedAtRevision(id, verb, ask, comment, 0)
 }
 
 func (d *Daemon) applySeedTransitionDetailedAtRevision(
 	id string, verb garden.Verb, ask garden.Ask, comment string, expectedRev int64,
-) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, d.sessionActive, expectedRev)
 }
 
 func (d *Daemon) applySeedTransitionDetailedAs(
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool,
-) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	return d.applySeedTransitionDetailedAsAtRevision(id, verb, ask, comment, sessionLive, 0)
 }
 
@@ -1387,10 +1395,10 @@ var errSeedRevisionMoved = errors.New("")
 
 func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool, expectedRev int64,
-) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	var seed garden.Seed
 	var doc docstore.Document
-	var notes seedTransitionNotes
+	var notes seedTransitionDetails
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
 		seed, doc, notes, err = d.applySeedTransitionDetailedAsAtRevisionProtected(protection, id, verb, ask, comment, sessionLive, expectedRev)
@@ -1402,20 +1410,20 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	protection foregroundCleanupProtection,
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(protocol.SessionID) bool, expectedRev int64,
-) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
+) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	comment = strings.TrimSpace(comment)
 	if comment != "" && verb != garden.VerbPark {
-		return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 			"a lifecycle comment belongs to Park; use `attn seed note %s -m \"…\"` for %s", id, verb)
 	}
 	if comment != "" {
 		if err := garden.ValidateNote(comment); err != nil {
-			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 	}
 	schema, err := d.seedsCollection()
 	if err != nil {
-		return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 	}
 	d.lockGardenRoles()
 	defer d.unlockGardenRoles()
@@ -1423,32 +1431,51 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 	for range attempts {
 		seed, doc, err := d.readSeed(id)
 		if err != nil {
-			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 		if expectedRev > 0 && doc.Rev != expectedRev {
-			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 				"%s changed since you reviewed it; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 		var displaced *garden.Tender
 		if held := seed.Tender(); ask.Force && held.Holds(sessionLive) && !held.Is(ask.Actor) {
 			displaced = &held
 		}
-		next, err := garden.Transition(seed, verb, ask, sessionLive)
+		outcome, err := garden.Transition(seed, verb, ask, sessionLive)
 		if err != nil {
-			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
+		if !outcome.Moved {
+			details := seedTransitionDetails{}
+			if reason := strings.TrimSpace(ask.Reason); reason != "" && reason != seed.Reason {
+				note, err := d.appendSeedNote(seed.ID, reason, ask.Actor.Session, ask.Actor.Member, "", nil, false, ask.CauseSession)
+				if err != nil {
+					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+				}
+				details.Noted = &note
+			}
+			if comment != "" {
+				note, err := d.appendSeedNote(seed.ID, comment, ask.Actor.Session, ask.Actor.Member, "", nil, false, ask.CauseSession)
+				if err != nil {
+					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+				}
+				details.Comment = &note
+			}
+			return seed, doc, details, nil
+		}
+		next := outcome.Seed
 		if next.Status != seed.Status {
 			next.StateChangedAt = formatGardenTime(d.gardenTime())
 		}
 		if verb == garden.VerbTend && protocol.TrimID(ask.Actor.Session) != "" {
 			execution, executionErr := d.ensureGardenExecution(ask.Actor.Session)
 			if executionErr != nil {
-				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, executionErr
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, executionErr
 			}
 			next.LastExecutionID = execution.SessionID
 		}
 		var written docstore.Document
-		notes := seedTransitionNotes{}
+		notes := seedTransitionDetails{Moved: true}
 		if d.beforeSeedMoveWrite != nil {
 			d.beforeSeedMoveWrite(id)
 		}
@@ -1462,7 +1489,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		}
 		lifecycle, err := lifecycleOccurrence(verb, next.ID, cause, string(ask.DirectlyNotifiedSession))
 		if err != nil {
-			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 		occurrences := []seedEvents.Occurrence{lifecycle}
 		if seed.HarvestWhen != nil && next.HarvestWhen == nil {
@@ -1473,14 +1500,14 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 				},
 			)
 			if eventErr != nil {
-				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, eventErr
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, eventErr
 			}
 			occurrences = append(occurrences, cleared)
 		}
 		if garden.Closed(next.Status) && !ask.SuppressNotification {
 			read, readErr := d.readGarden()
 			if readErr != nil {
-				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, readErr
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, readErr
 			}
 			for i := range read.seeds {
 				if read.seeds[i].ID == next.ID {
@@ -1494,7 +1521,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 					seedEvents.UnblockedPayload{BlockerSeedID: next.ID, CausedBySessionID: cause},
 				)
 				if eventErr != nil {
-					return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, eventErr
+					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, eventErr
 				}
 				occurrences = append(occurrences, unblocked)
 			}
@@ -1536,20 +1563,26 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 				d.closeAsksTo(inbox.ToSeed(next.ID))
 			}
 			if err := d.discardAllIneligibleGardenSeedBellsLocked(); err != nil {
-				return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 					"%s succeeded, but stale pending Garden updates could not be cleared: %w", verb, err)
+			}
+			if !ask.SuppressNotification {
+				notes.RingRecipients, err = d.seedOccurrenceRecipients(occurrences...)
+				if err != nil {
+					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+				}
 			}
 			return next, written, notes, nil
 		}
 		if !docstore.IsConflict(err) {
-			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 		if expectedRev > 0 {
-			return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 				"%s changed while the reviewed action was being applied; refresh the garden%w", id, errSeedRevisionMoved)
 		}
 	}
-	return garden.Seed{}, docstore.Document{}, seedTransitionNotes{}, fmt.Errorf(
+	return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 		"%s was rewritten under all %d attempts to %s it; read it again with `attn seed show %s` and decide from what it says now",
 		id, attempts, verb, id)
 }
