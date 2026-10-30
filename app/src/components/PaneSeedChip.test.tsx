@@ -150,10 +150,12 @@ describe('seed lifecycle and context', () => {
     expect(within(chip()).getByText('Unknown')).toBeVisible();
   });
 
-  it('loads a real note only when opened, filters artifact activity, and keeps the outcome', async () => {
+  it('loads a real note only when opened, filters artifact, move and link activity, and keeps the outcome', async () => {
     const value = daemonSeed('s-work11', { title: 'Garden icons', status: 'harvested', reason: 'All five states are legible.' });
     const doc = documentFor(value);
     doc.notes.push({ ...doc.notes[0], id: 'n-2', kind: 'attach', body: 'attached screenshot', created_at: '2099-01-01T00:00:00Z' });
+    doc.notes.push({ ...doc.notes[0], id: 'n-3', kind: 'move', body: 'harvested: All five states are legible.', created_at: '2099-01-01T00:00:01Z' });
+    doc.notes.push({ ...doc.notes[0], id: 'n-4', kind: 'link', body: 'now blocks s-next11', created_at: '2099-01-01T00:00:02Z' });
     const daemon = await openAgent([value], { seed_id: value.id });
     daemon.on('seed_document_get', () => documentResult(doc));
     await daemon.idle();
@@ -163,6 +165,8 @@ describe('seed lifecycle and context', () => {
     expect(screen.getByText('Leaves look good at header size.')).toBeVisible();
     expect(screen.getByText('All five states are legible.')).toBeVisible();
     expect(screen.queryByText('attached screenshot')).not.toBeInTheDocument();
+    expect(screen.queryByText('now blocks s-next11')).not.toBeInTheDocument();
+    expect(screen.queryByText('harvested: All five states are legible.')).not.toBeInTheDocument();
     expect(daemon.sentOf('seed_document_get').map((command) => command.seed_id)).toEqual([value.id]);
     fireEvent.keyDown(screen.getByRole('dialog', { name: 'Seed context' }), { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Seed context' })).not.toBeInTheDocument();

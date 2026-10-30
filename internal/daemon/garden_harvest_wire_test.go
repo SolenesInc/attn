@@ -48,7 +48,7 @@ func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
 		if at, err := time.Parse(time.RFC3339Nano, condition.SetAt); err != nil || !at.Equal(armedAt) {
 			t.Errorf("the condition was set at %q, want %s", condition.SetAt, armedAt.UTC().Format(time.RFC3339Nano))
 		}
-		if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "harvests when acme/shop#71 merges") {
+		if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "parked; harvests when acme/shop#71 merges") {
 			t.Errorf("the log = %q, want it to say what the seed waits on", notes)
 		}
 		if pulls := harvestSessionPullRequests(t, cli, "shipper"); !slices.Equal(pulls, []string{url}) {
@@ -202,7 +202,7 @@ func TestAMergedPullRequestHarvestsTheSeedArmedOnIt(t *testing.T) {
 		if n := utf8.RuneCountInString(reason); n > garden.MaxReasonChars || n < garden.MaxReasonChars-2 || !strings.HasPrefix(reason, "PR #71 merged: a very long") || !strings.HasSuffix(reason, "…") {
 			t.Errorf("the harvest reason is %d characters: %q, want the merge trimmed to fit %d with an ellipsis", n, reason, garden.MaxReasonChars)
 		}
-		if notes := lifeNoteBodies(t, cli, armed); !slices.Contains(notes, "attn forced `attn seed harvest "+armed+"`; holder held the seed.") {
+		if notes := lifeNoteBodies(t, cli, armed); !slices.Contains(notes, "harvested: "+reason+" — attn forced `attn seed harvest "+armed+"`; holder held the seed.") {
 			t.Errorf("the log = %q, want the forced harvest over the holder recorded", notes)
 		}
 		if status := lifeShow(t, cli, untouched).Seed.Status; status != "planted" {
@@ -302,7 +302,7 @@ func TestArmingASeedSomebodyElseHoldsTakesForce(t *testing.T) {
 	if forced.Seed.Status != "dormant" {
 		t.Errorf("a forced arm left the seed %s, want it dormant", forced.Seed.Status)
 	}
-	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "Trellis forced `attn seed park "+seed+"`; "+holder+" held the seed.") {
+	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "parked; harvests when acme/shop#71 merges — Trellis forced `attn seed park "+seed+"`; "+holder+" held the seed.") {
 		t.Errorf("the log = %q, want the takeover recorded", notes)
 	}
 }
@@ -323,6 +323,7 @@ func TestRepeatedSeedMovesKeepTheStateAndDoNotRing(t *testing.T) {
 				reason = "finished"
 			}
 			before := lifeMove(t, cli, "worker", seed, verb, reason, "")
+			logged := lifeNoteBodies(t, cli, seed)
 			gardenNudgeWatch(t, cli, "watcher", seed, false)
 			w.advance(0)
 			again, err := cli.SeedTransition("worker", seed, verb, reason, "", false, client.SeedTransitionOptions{})
@@ -334,8 +335,8 @@ func TestRepeatedSeedMovesKeepTheStateAndDoNotRing(t *testing.T) {
 			}
 			w.advance(0)
 			gardenNudgeInboxIsEmpty(t, cli, "watcher", "after repeated "+verb)
-			if got := lifeNoteBodies(t, cli, seed); len(got) != 0 {
-				t.Errorf("repeat %s added notes: %q", verb, got)
+			if got := lifeNoteBodies(t, cli, seed); !slices.Equal(got, logged) {
+				t.Errorf("repeat %s changed the log from %q to %q", verb, logged, got)
 			}
 		}
 		seed := plantSeedAs(t, cli, "worker", "retain the second closer's reason")
@@ -349,7 +350,9 @@ func TestRepeatedSeedMovesKeepTheStateAndDoNotRing(t *testing.T) {
 			t.Fatalf("second close replaced the original: %+v", again.Seed)
 		}
 		shown := lifeShow(t, cli, seed)
-		if again.Noted == nil || len(shown.Notes) != 1 || shown.Notes[0].ID != again.Noted.ID || shown.Notes[0].Body != "second receipt" || shown.Notes[0].AuthorSession != "watcher" {
+		if again.Noted == nil || len(shown.Notes) != 2 || !slices.ContainsFunc(shown.Notes, func(note protocol.SeedNote) bool {
+			return note.ID == again.Noted.ID && note.Body == "second receipt" && note.AuthorSession == "watcher"
+		}) {
 			t.Fatalf("second close's note: %+v", shown.Notes)
 		}
 	})

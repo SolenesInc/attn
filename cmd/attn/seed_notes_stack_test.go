@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -12,7 +13,7 @@ import (
 
 func TestSeedNotesNarrowsToABookmarkAndAKind(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	seed := plant(t, s, "A seed with every kind of entry", "-m", "# Work\n")
 	plot := plant(t, s, "A plot above it")
@@ -27,6 +28,26 @@ func TestSeedNotesNarrowsToABookmarkAndAKind(t *testing.T) {
 		garden.NoteKindEdit: func() {
 			exported := seedAs(t, s, "", "export", seed.ID, "--out", "-")
 			s.Run(testworld.Invocation{Args: []string{"seed", "edit", seed.ID, "-m", "-"}, Stdin: exported + "More.\n"})
+		},
+		garden.NoteKindMove: func() { seedAs(t, s, "", "park", seed.ID) },
+		garden.NoteKindLink: func() { seedAs(t, s, "", "link", seed.ID, "discovered-from", plot.ID) },
+		garden.NoteKindAnswer: func() {
+			app := s.App()
+			testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "asks_enabled", Value: "true", RequestID: protocol.Ptr("asks-on")},
+				protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "asks-on" })
+			asker := s.Spawn(app, fakeagent.Claude, s.Path("asker"))
+			s.Launched(asker)
+			seedAs(t, s, asker, "tend", seed.ID)
+			asked, err := s.Client().AskOpen(protocol.SessionID(asker), seed.ID, ":::question\nWhich store?\n- [ ] Postgres\n- [ ] Redis\n:::\n", "", s.Path("asker"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			answered := testworld.Request(app, protocol.AskAnswerMessage{
+				Cmd: protocol.CmdAskAnswer, RequestID: "answer", AskID: asked.ID, Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}},
+			}, protocol.EventAskAnswerResult, func(r protocol.AskAnswerResultMessage) bool { return r.RequestID == "answer" })
+			if !answered.Success {
+				t.Fatalf("answering: %s", protocol.Deref(answered.Error))
+			}
 		},
 	}
 	for _, kind := range garden.EntryKinds {

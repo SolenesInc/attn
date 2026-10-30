@@ -169,6 +169,7 @@ type compiledEvent struct {
 	def      *definition
 	fields   map[string]field
 	decision Decision
+	entry    *EntryRule
 }
 
 type Model struct{ compiled *compiledModel }
@@ -180,7 +181,7 @@ type compiledModel struct {
 	bells     map[string]BellDef
 }
 
-func Build(catalog EventCatalog, policies PolicySet, retainedBells ...BellDef) (*Model, error) {
+func Build(catalog EventCatalog, policies PolicySet, entries EntryRules, retainedBells ...BellDef) (*Model, error) {
 	model := &Model{compiled: &compiledModel{
 		byName:   map[string]*compiledEvent{},
 		byHandle: map[*definition]*compiledEvent{},
@@ -229,6 +230,9 @@ func Build(catalog EventCatalog, policies PolicySet, retainedBells ...BellDef) (
 		if !seen[def] {
 			return nil, fmt.Errorf("%s: missing explicit bell policy", def.name)
 		}
+	}
+	if err := model.bindEntryRules(catalog, entries); err != nil {
+		return nil, err
 	}
 	model.compiled.validated = true
 	return model, nil

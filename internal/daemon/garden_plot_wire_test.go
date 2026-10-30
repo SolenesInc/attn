@@ -338,13 +338,13 @@ func TestTheLastChildCloseCapturesAndRingsItsPlotOnce(t *testing.T) {
 		}
 		gardenNudgeOneBell(t, cli, "tender", first, "harvested")
 		gardenNudgeOneBell(t, cli, "watcher", first, "harvested")
-		if notes := lifeNoteBodies(t, cli, plot); len(notes) != 0 {
+		if notes := lifeEntryBodies(t, cli, plot, garden.NoteKindNote); len(notes) != 0 {
 			t.Fatalf("first close wrote plot notes: %q", notes)
 		}
 		restore := w.RefuseDatabaseCommits()
 		_, err := cli.SeedTransition("closer", last, "wither", "done", "", false, client.SeedTransitionOptions{})
 		restore()
-		if err == nil || lifeShow(t, cli, last).Seed.Status != "planted" || len(lifeNoteBodies(t, cli, plot)) != 0 {
+		if err == nil || lifeShow(t, cli, last).Seed.Status != "planted" || len(lifeEntryBodies(t, cli, plot, garden.NoteKindNote)) != 0 {
 			t.Fatalf("failed close changed the child or captured completion: %v", err)
 		}
 		result := gardenNudgeMove(t, cli, "closer", last, "wither")
@@ -361,19 +361,19 @@ func TestTheLastChildCloseCapturesAndRingsItsPlotOnce(t *testing.T) {
 		if after.Rev != before.Rev || after.Status != "growing" || after.TenderSession != "tender" {
 			t.Fatalf("last child changed the plot's state or claim: %+v", after)
 		}
-		if notes := lifeNoteBodies(t, cli, plot); len(notes) != 1 || !strings.Contains(notes[0], "All child seeds") {
+		if notes := lifeEntryBodies(t, cli, plot, garden.NoteKindNote); len(notes) != 1 || !strings.Contains(notes[0], "All child seeds") {
 			t.Fatalf("plot log: %q", notes)
 		}
 		if repeat := gardenNudgeMove(t, cli, "closer", last, "wither"); repeat.PlotEmptied != nil || protocol.Deref(repeat.Moved) {
 			t.Fatalf("repeated close announced completion: %+v", repeat)
 		}
-		if notes := lifeNoteBodies(t, cli, plot); len(notes) != 1 {
+		if notes := lifeEntryBodies(t, cli, plot, garden.NoteKindNote); len(notes) != 1 {
 			t.Fatalf("retry duplicated the plot note: %q", notes)
 		}
 		gardenNudgeInboxIsEmpty(t, cli, "tender", "after retry")
 		gardenNudgeMove(t, cli, "closer", last, "replant")
 		gardenNudgeMove(t, cli, "closer", last, "harvest")
-		if notes := lifeNoteBodies(t, cli, plot); len(notes) != 2 {
+		if notes := lifeEntryBodies(t, cli, plot, garden.NoteKindNote); len(notes) != 2 {
 			t.Fatalf("a new empty transition should have its own note: %q", notes)
 		}
 	})
@@ -408,7 +408,7 @@ func TestConcurrentChildClosesCaptureOneEmptyPlot(t *testing.T) {
 				emptied++
 			}
 		}
-		if notes := lifeNoteBodies(t, cli, plot); emptied != 1 || len(notes) != 1 {
+		if notes := lifeEntryBodies(t, cli, plot, garden.NoteKindNote); emptied != 1 || len(notes) != 1 {
 			t.Fatalf("empty responses=%d; plot notes=%q", emptied, notes)
 		}
 	})

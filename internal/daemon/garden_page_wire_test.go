@@ -74,8 +74,8 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 			t.Errorf("ready includes old blocker=%v and new dependent=%v, want true and false", slices.Contains(ready, oldBlocker), slices.Contains(ready, newBlocked))
 		}
 		stale := gardenPlotList(t, cli, true, int(time.Minute/time.Second))
-		if !slices.Contains(lifeSeedIDs(stale.Seeds), oldDependent) {
-			t.Errorf("stale lists %d seeds, none for the old open seed %s", len(stale.Seeds), oldDependent)
+		if !slices.Contains(lifeSeedIDs(stale.Seeds), abandoned) || slices.Contains(lifeSeedIDs(stale.Seeds), oldDependent) {
+			t.Errorf("stale lists %d seeds, want the old open seed %s and not %s, which just gained a blocker", len(stale.Seeds), abandoned, oldDependent)
 		}
 		listed := gardenPlotList(t, cli, false, 0)
 		if len(listed.Seeds) != docstore.MaxLimit || listed.Total != seeds {

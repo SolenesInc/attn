@@ -42,10 +42,12 @@ function useSeedContextDocument(seedId: string, seed?: Seed) {
   return { document, unavailable: failed || !fetchDocument };
 }
 
+const SEED_ACTIVITY_KINDS = new Set(['attach', 'detach', 'move', 'link']);
+
 function latestSeedNote(document: SeedDocument | null) {
   let latest: SeedDocument['notes'][number] | undefined;
   for (const note of document?.notes ?? []) {
-    if (note.kind === 'attach' || note.kind === 'detach' || !note.body.trim()) continue;
+    if (SEED_ACTIVITY_KINDS.has(note.kind) || !note.body.trim()) continue;
     if (!latest || Date.parse(note.created_at) > Date.parse(latest.created_at)) latest = note;
   }
   return latest;

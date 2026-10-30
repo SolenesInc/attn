@@ -376,8 +376,8 @@ location: {type: directory, path: %q}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if seed.Seed.Status != "withered" || len(seed.Notes) != 1 || !strings.Contains(seed.Notes[0].Body, "no such file or directory") {
-		t.Errorf("the run's seed is %s with notes %+v, want it withered with one note naming the failure", seed.Seed.Status, seed.Notes)
+	if seed.Seed.Status != "withered" || len(seed.Notes) != 1 || seed.Notes[0].Kind != "move" || !strings.Contains(seed.Notes[0].Body, "withered: Automation delivery failed") || !strings.Contains(seed.Notes[0].Body, "no such file or directory") {
+		t.Errorf("the run's seed is %s with notes %+v, want it withered with one entry naming the failure", seed.Seed.Status, seed.Notes)
 	}
 
 	if _, err := cli.AutomationRun(2, "first", ""); err == nil || !strings.Contains(err.Error(), "limit is") {

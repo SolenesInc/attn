@@ -189,29 +189,32 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 			return fmt.Errorf("record automation outcome: ensure seed: %w", ensureErr)
 		}
 	}
-	notes, err := d.readNotesDomain(run.SeedID)
-	if err != nil {
-		return fmt.Errorf("record automation outcome: read notes: %w", err)
-	}
-	seen := false
-	for _, note := range notes {
-		seen = seen || note.Body == body
-	}
-	if !seen {
-		var causedBySessionID protocol.SessionID
-		if !continuation {
-			causedBySessionID = run.SessionID
-		}
-		if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil, true, causedBySessionID); err != nil {
-			return fmt.Errorf("record automation outcome: append note: %w", err)
-		}
-	}
-	if continuation {
-		return nil
-	}
 	seed, _, err := d.readSeed(run.SeedID)
-	if err != nil || garden.Closed(seed.Status) {
+	if err != nil {
 		return err
+	}
+	withers := !continuation && !garden.Closed(seed.Status)
+	if !withers || garden.TrimReason(body) != strings.TrimSpace(body) {
+		notes, err := d.readNotesDomain(run.SeedID)
+		if err != nil {
+			return fmt.Errorf("record automation outcome: read notes: %w", err)
+		}
+		seen := false
+		for _, note := range notes {
+			seen = seen || note.Body == body
+		}
+		if !seen {
+			var causedBySessionID protocol.SessionID
+			if !continuation {
+				causedBySessionID = run.SessionID
+			}
+			if _, err := d.appendSeedNote(run.SeedID, body, run.SessionID, "", garden.NoteKindNote, nil, true, causedBySessionID); err != nil {
+				return fmt.Errorf("record automation outcome: append note: %w", err)
+			}
+		}
+	}
+	if !withers {
+		return nil
 	}
 	_, _, err = d.applySeedTransition(run.SeedID, garden.VerbWither, garden.Ask{Actor: garden.Tender{Session: run.SessionID}, Reason: garden.TrimReason(body)})
 	return err
@@ -269,12 +272,12 @@ func (d *Daemon) finalizeAutomationRun(run *store.AutomationRun, result automati
 	if err != nil {
 		return err
 	}
-	events, err := encodeGardenSeedEvents(ready)
+	log, err := d.seedChangeLog(seedChange{events: plainSeedEvents(ready)})
 	if err != nil {
 		return err
 	}
 	seq, inserted, err := d.store.MarkAutomationRunDeliveredWithEvent(
-		run.ID, string(result.Resolved), events[0], time.Now(),
+		run.ID, string(result.Resolved), log.events[0], time.Now(),
 	)
 	if err != nil {
 		return err

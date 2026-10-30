@@ -298,12 +298,12 @@ func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
 	if err != nil {
 		return err
 	}
-	encoded, err := encodeGardenSeedEvents(occurrence)
+	log, err := d.seedChangeLog(seedChange{events: plainSeedEvents(occurrence)})
 	if err != nil {
 		return err
 	}
 	seq, changed, err := d.store.AppendGardenSeedArtifactObservation(
-		checksum, encoded[0], time.Now(),
+		checksum, log.events[0], time.Now(),
 	)
 	if err != nil {
 		return err
@@ -560,12 +560,12 @@ func (d *Daemon) observeSeedArtifactTransfer(msg *protocol.SeedArtifactTransferM
 	if err != nil {
 		return nil, fmt.Errorf("artifact transfer %s is complete but its Garden observation is pending; retry the same command: %w", receipt.ID, err)
 	}
-	encoded, err := encodeGardenSeedEvents(changedEvent)
+	log, err := d.seedChangeLog(seedChange{events: plainSeedEvents(changedEvent)})
 	if err != nil {
 		return nil, err
 	}
 	seq, inserted, err := d.store.AppendGardenSeedArtifactTransferObservation(
-		receipt.eventSource(), receipt.ReplacesEventSource, checksum, encoded[0], time.Now(),
+		receipt.eventSource(), receipt.ReplacesEventSource, checksum, log.events[0], time.Now(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("artifact transfer %s is complete but its Garden event is pending; retry the same command: %w", receipt.ID, err)

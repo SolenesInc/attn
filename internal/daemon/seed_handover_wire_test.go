@@ -55,8 +55,12 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 		t.Errorf("the successor was prompted %q, want a pointer to attn seed show %s without the seed's body or handoff", prompt, seed)
 	}
 	seedHandoverHeldBy(t, cli, seed, string(successor.SessionID), 1)
-	if notes := lifeShow(t, cli, seed).Notes; notes[0].Kind != "handoff" || notes[0].Body != "Continue from the failing test." {
-		t.Errorf("the seed's log leads with %+v, want the handoff", notes[0])
+	if notes := lifeShow(t, cli, seed).Notes; !slices.ContainsFunc(notes, func(note protocol.SeedNote) bool {
+		return note.Kind == "handoff" && note.Body == "Continue from the failing test."
+	}) || !slices.ContainsFunc(notes, func(note protocol.SeedNote) bool {
+		return note.Kind == "move" && note.Body == "tended: handed over to "+string(successor.SessionID)
+	}) {
+		t.Errorf("the seed's log = %+v, want the handoff and the move to the successor", notes)
 	}
 	if held := lifeShow(t, cli, sibling).Seed.TenderSession; held != predecessor.SessionID {
 		t.Errorf("the handover moved %s, which %s also tended, to %q", sibling, predecessor.SessionID, held)
@@ -138,8 +142,8 @@ func TestAHandoverWithoutAPreviousExecutionStartsWhereItWasAsked(t *testing.T) {
 		t.Errorf("the successor works in %s, want the submitted %s", successor.Directory, placed)
 	}
 	seedHandoverHeldBy(t, cli, seed, string(successor.SessionID), 0)
-	if notes := lifeShow(t, cli, seed).NotesTotal; notes != 0 {
-		t.Errorf("the handover of an unplaced seed wrote %d notes, want none", notes)
+	if notes := lifeShow(t, cli, seed).Notes; len(notes) != 1 || notes[0].Kind != "move" {
+		t.Errorf("the handover of an unplaced seed wrote %+v, want only its move", notes)
 	}
 }
 

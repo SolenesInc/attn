@@ -9,7 +9,6 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
-	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -135,10 +134,14 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 		return nil, err
 	}
 	d.lockGardenRoles()
-	written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []seedMoveNote{{Note: garden.Note{
-		Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
-		AuthorSession: cause,
-	}}})
+	written, _, err := d.writeSeedChange(*schema, next, doc.Rev, seedChange{
+		author: garden.Tender{Session: cause, Member: d.resolveTenderMember("", cause)}, cause: cause,
+		events: []seedEvent{{occurrence: tended, detail: "sent to the chief"}},
+		entries: []seedMoveNote{{Note: garden.Note{
+			Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
+			AuthorSession: cause,
+		}}},
+	})
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}

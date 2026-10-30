@@ -100,7 +100,7 @@ func TestGardenPushCarriesASeedWrittenTogetherWithANote(t *testing.T) {
 	if changed.Seeds[0].HarvestWhen == nil {
 		t.Fatalf("the change after arming carries %+v, want the armed seed waiting on its pull request", changed.Seeds[0])
 	}
-	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "harvests when acme/shop#72 merges") {
+	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "parked; harvests when acme/shop#72 merges") {
 		t.Errorf("the log = %q, want the arming note committed with the seed", notes)
 	}
 }

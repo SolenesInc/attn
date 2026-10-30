@@ -128,14 +128,21 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	if err != nil {
 		return "", err
 	}
-	occurrences = append(occurrences, tended)
-	events, err := encodeGardenSeedEvents(occurrences...)
+	change := seedChange{
+		author: garden.Tender{Session: plannerSessionID, Member: dispatch.DispatcherMember}, cause: plannerSessionID,
+		events: append(plainSeedEvents(occurrences...), seedEvent{occurrence: tended, detail: "delegated to " + string(sessionID)}),
+	}
+	if createSeed {
+		change.born = []string{seed.ID}
+	}
+	log, err := d.seedChangeLog(change)
 	if err != nil {
 		return "", err
 	}
+	commits = append(commits, log.commits...)
 	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
-		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
+		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, log.events, d.gardenTime(),
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()

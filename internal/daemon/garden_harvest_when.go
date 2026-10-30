@@ -126,7 +126,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 		next := seed
 		next.HarvestWhen = &condition
-		occurrences := []seedEvents.Occurrence{}
+		change := seedChange{author: ask.Actor, cause: sessionID}
 		var outcome garden.Outcome
 		if seed.Status == garden.StatusGrowing {
 			outcome, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}, nil)
@@ -139,7 +139,7 @@ func (d *Daemon) armHarvestWhenMerged(
 			if eventErr != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, eventErr
 			}
-			occurrences = append(occurrences, parked)
+			change.events = append(change.events, seedEvent{occurrence: parked})
 		}
 		configured, eventErr := seedEvents.Occur(
 			gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenConfigured, seed.ID,
@@ -148,16 +148,13 @@ func (d *Daemon) armHarvestWhenMerged(
 		if eventErr != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, eventErr
 		}
-		occurrences = append(occurrences, configured)
-
-		notes := make([]seedMoveNote, 0, 3)
+		armedDetail := harvestWhenArmedNote(rec)
 		if outcome.Displaced != nil {
-			notes = append(notes, seedMoveNote{Note: d.harvestWhenNote(
-				seed.ID, d.seedMoveAuditBody(seed, garden.VerbPark, ask.Actor, *outcome.Displaced, outcome.By), ask.Actor)})
+			armedDetail = joinEntryDetail(armedDetail, d.seedMoveAuditBody(seed, garden.VerbPark, ask.Actor, *outcome.Displaced, outcome.By))
 		}
-		notes = append(notes, seedMoveNote{Note: d.harvestWhenNote(seed.ID, harvestWhenArmedNote(rec), ask.Actor)})
+		change.events = append(change.events, seedEvent{occurrence: configured, detail: armedDetail})
 		if attachment, ok := d.harvestWhenAttachment(seed.ID, rec, ask.Actor); ok {
-			notes = append(notes, seedMoveNote{Note: attachment})
+			change.entries = append(change.entries, seedMoveNote{Note: attachment})
 		}
 
 		d.lockGardenRoles()
@@ -169,7 +166,7 @@ func (d *Daemon) armHarvestWhenMerged(
 			d.unlockGardenRoles()
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
-		written, writtenNotes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes)
+		written, writtenNotes, err := d.writeSeedChange(*schema, next, doc.Rev, change)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
@@ -182,8 +179,12 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 		settled, doc, details, err := d.settleFreshlyArmed(next, written, sessionID)
 		details.Moved = true
-		if outcome.Displaced != nil && len(writtenNotes) > 0 {
-			details.Audit = &writtenNotes[0]
+		if outcome.Displaced != nil {
+			for i := range writtenNotes {
+				if writtenNotes[i].Kind == garden.NoteKindMove {
+					details.Audit = &writtenNotes[i]
+				}
+			}
 		}
 		if err == nil {
 			var recipients []string
@@ -312,8 +313,9 @@ func (d *Daemon) clearHarvestWhen(
 			return garden.Seed{}, docstore.Document{}, eventErr
 		}
 		d.lockGardenRoles()
-		written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{cleared},
-			[]seedMoveNote{{Note: d.harvestWhenNote(seed.ID, noteBody, actor)}})
+		written, _, err := d.writeSeedChange(*schema, next, doc.Rev, seedChange{
+			author: actor, cause: cause, events: []seedEvent{{occurrence: cleared, detail: noteBody}},
+		})
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}

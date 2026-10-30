@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -44,8 +45,10 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 			t.Errorf("after the send the seed is tended by %q in execution %q, want chief in %q",
 				got.TenderSession, protocol.Deref(got.LastExecutionID), protocol.Deref(tended.LastExecutionID))
 		}
-		if len(shown.Notes) == 0 || !strings.Contains(shown.Notes[0].Body, "Sent to Chief") || !strings.Contains(shown.Notes[0].Body, "feature/special") {
-			t.Errorf("the seed's log leads with %+v, want a Sent to Chief note carrying the guidance", shown.Notes)
+		if !slices.ContainsFunc(shown.Notes, func(note protocol.SeedNote) bool {
+			return strings.Contains(note.Body, "Sent to Chief") && strings.Contains(note.Body, "feature/special")
+		}) {
+			t.Errorf("the seed's log = %+v, want a Sent to Chief note carrying the guidance", shown.Notes)
 		}
 
 		w.advance(0)

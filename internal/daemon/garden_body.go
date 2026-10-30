@@ -133,10 +133,6 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 	if err != nil {
 		return nil, err
 	}
-	noteSchema, err := d.notesCollection()
-	if err != nil {
-		return nil, err
-	}
 	const attempts = 3
 	for range attempts {
 		seed, doc, err := d.readSeed(msg.SeedID)
@@ -163,31 +159,26 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 		if err != nil {
 			return nil, err
 		}
-		noteID, err := d.mintNoteID()
+		author := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
+		detail := fmt.Sprintf("body v%d: %d → %d bytes", version.Version, previousBytes, len(msg.Body))
+		if text := strings.Join(strings.Fields(protocol.Deref(msg.Note)), " "); text != "" {
+			detail += " — " + text
+		}
+		edited, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.BodyEdited, seed.ID, seedEvents.CausePayload{CausedBySessionID: author})
 		if err != nil {
 			return nil, err
 		}
-		note := garden.Note{
-			ID: noteID, Seed: seed.ID, Kind: garden.NoteKindEdit,
-			Body:          fmt.Sprintf("body v%d: %d → %d bytes", version.Version, previousBytes, len(msg.Body)),
-			AuthorSession: protocol.TrimID(protocol.Deref(msg.SourceSessionID)),
-		}
-		note.AuthorMember = d.resolveTenderMember("", note.AuthorSession)
-		if text := strings.Join(strings.Fields(protocol.Deref(msg.Note)), " "); text != "" {
-			note.Body += " — " + text
-		}
-		if err := garden.ValidateNote(note.Body); err != nil {
-			return nil, err
-		}
-		noteBody, err := note.Encode()
+		log, err := d.seedChangeLog(seedChange{
+			author: garden.Tender{Session: author, Member: d.resolveTenderMember("", author)}, cause: author,
+			events: []seedEvent{{occurrence: edited, detail: detail}},
+		})
 		if err != nil {
 			return nil, err
 		}
 		absent := docstore.ExpectAbsent
-		commits := []store.DocumentCommit{
+		commits := append([]store.DocumentCommit{
 			{Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &doc.Rev}, Fact: documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)},
-			{Write: store.DocumentWrite{Schema: *noteSchema, ID: note.ID, Body: noteBody, Expected: &absent}, Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, note.ID, false)},
-		}
+		}, log.commits...)
 		for _, saved := range versions {
 			body, err := saved.Encode()
 			if err != nil {
@@ -198,16 +189,8 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 				Fact:  documentChangedFact(garden.Namespace, garden.CollectionBodyVersions, saved.ID(), false),
 			})
 		}
-		occurrence, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.BodyEdited, seed.ID, seedEvents.CausePayload{CausedBySessionID: note.AuthorSession})
-		if err != nil {
-			return nil, err
-		}
-		events, err := encodeGardenSeedEvents(occurrence)
-		if err != nil {
-			return nil, err
-		}
 		now := d.gardenTime()
-		written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, events, now)
+		written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, log.events, now)
 		if docstore.IsConflict(err) {
 			continue
 		}

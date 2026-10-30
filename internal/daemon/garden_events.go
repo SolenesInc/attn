@@ -28,20 +28,6 @@ func mustBuildGardenSeedEvents() (*events.Model, events.Vocabulary) {
 	return model, vocabulary
 }
 
-func encodeGardenSeedEvents(occurrences ...events.Occurrence) ([]store.BusEvent, error) {
-	encoded := make([]store.BusEvent, len(occurrences))
-	for i, occurrence := range occurrences {
-		event, err := gardenSeedEventModel.Encode(occurrence)
-		if err != nil {
-			return nil, err
-		}
-		encoded[i] = store.BusEvent{
-			Name: event.Name, Subject: event.Subject, Payload: string(event.Payload), Source: "garden",
-		}
-	}
-	return encoded, nil
-}
-
 func announceGardenSeedEvents(d *Daemon, seqs []int64) {
 	if len(seqs) == 0 || d == nil {
 		return

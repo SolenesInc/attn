@@ -238,12 +238,8 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 }
 
 func (d *Daemon) noteAnswer(askID, seedID string, reply protocol.AskReply, answer inbox.Item) error {
-	schema, err := d.notesCollection()
-	if err != nil {
-		return err
-	}
-	note := garden.Note{Seed: seedID, Kind: garden.NoteKindNote, Body: answer.Text}
-	_, _, err = d.mintAndWriteNote(*schema, note, false, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
+	note := garden.Note{Seed: seedID, Kind: garden.NoteKindAnswer, Body: answer.Text}
+	_, _, err := d.mintAndWriteNote(note, false, "", func(write store.DocumentWrite, fact store.BusEvent, events []store.BusEvent, now time.Time) (store.DocumentWriteResult, []int64, error) {
 		return d.store.AnswerAskWithNote(askID, reply, answer, write, fact, events, now)
 	})
 	return err

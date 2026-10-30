@@ -462,13 +462,20 @@ func automationSeedNotesMentioning(t *testing.T, cli *client.Client, seed, text 
 	if err != nil {
 		t.Fatal(err)
 	}
-	count := 0
+	written, withered := 0, 0
 	for _, note := range notes.Notes {
-		if strings.Contains(note.Body, text) {
-			count++
+		switch {
+		case !strings.Contains(note.Body, text):
+		case note.Kind == "move":
+			withered++
+		default:
+			written++
 		}
 	}
-	return count
+	if written == 0 {
+		return withered
+	}
+	return written
 }
 
 func automationReviewOverride(clone string) string {

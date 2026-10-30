@@ -3,24 +3,22 @@ package events
 import "github.com/victorarias/attn/internal/protocol"
 
 const (
-	NamePlanted                  = "garden.seed.planted"
-	NameTended                   = "garden.seed.tended"
-	NameParked                   = "garden.seed.parked"
-	NameHarvested                = "garden.seed.harvested"
-	NameWithered                 = "garden.seed.withered"
-	NameReplanted                = "garden.seed.replanted"
-	NameBodyEdited               = "garden.seed.body.edited"
-	NameNoteAdded                = "garden.seed.note.added"
-	NameArtifactChanged          = "garden.seed.artifact.changed"
-	NameResumeIdentityConfigured = "garden.seed.resume_identity.configured"
-	NameResumeIdentityCleared    = "garden.seed.resume_identity.cleared"
-	NameEdgeLinked               = "garden.seed.edge.linked"
-	NameEdgeUnlinked             = "garden.seed.edge.unlinked"
-	NameHarvestWhenConfigured    = "garden.seed.harvest_when.configured"
-	NameHarvestWhenCleared       = "garden.seed.harvest_when.cleared"
-	NameUnblocked                = "garden.seed.unblocked"
-	NameWorkReady                = "garden.seed.work.ready"
-	BellSeedActivity             = "seed activity"
+	NamePlanted               = "garden.seed.planted"
+	NameTended                = "garden.seed.tended"
+	NameParked                = "garden.seed.parked"
+	NameHarvested             = "garden.seed.harvested"
+	NameWithered              = "garden.seed.withered"
+	NameReplanted             = "garden.seed.replanted"
+	NameBodyEdited            = "garden.seed.body.edited"
+	NameNoteAdded             = "garden.seed.note.added"
+	NameArtifactChanged       = "garden.seed.artifact.changed"
+	NameEdgeLinked            = "garden.seed.edge.linked"
+	NameEdgeUnlinked          = "garden.seed.edge.unlinked"
+	NameHarvestWhenConfigured = "garden.seed.harvest_when.configured"
+	NameHarvestWhenCleared    = "garden.seed.harvest_when.cleared"
+	NameUnblocked             = "garden.seed.unblocked"
+	NameWorkReady             = "garden.seed.work.ready"
+	BellSeedActivity          = "seed activity"
 )
 
 type CausePayload struct {
@@ -61,26 +59,25 @@ type WorkReadyPayload struct {
 }
 
 type Vocabulary struct {
-	Planted                  EventType[CausePayload]
-	Tended                   EventType[LifecyclePayload]
-	Parked                   EventType[LifecyclePayload]
-	Harvested                EventType[LifecyclePayload]
-	Withered                 EventType[LifecyclePayload]
-	Replanted                EventType[LifecyclePayload]
-	BodyEdited               EventType[CausePayload]
-	NoteAdded                EventType[NoteAddedPayload]
-	ArtifactChanged          EventType[CausePayload]
-	ResumeIdentityConfigured EventType[CausePayload]
-	ResumeIdentityCleared    EventType[CausePayload]
-	EdgeLinked               EventType[EdgePayload]
-	EdgeUnlinked             EventType[EdgePayload]
-	HarvestWhenConfigured    EventType[HarvestWhenPayload]
-	HarvestWhenCleared       EventType[HarvestWhenPayload]
-	Unblocked                EventType[UnblockedPayload]
-	WorkReady                EventType[WorkReadyPayload]
-	Events                   EventCatalog
-	Rules                    PolicySet
-	SeedActivity             BellDef
+	Planted               EventType[CausePayload]
+	Tended                EventType[LifecyclePayload]
+	Parked                EventType[LifecyclePayload]
+	Harvested             EventType[LifecyclePayload]
+	Withered              EventType[LifecyclePayload]
+	Replanted             EventType[LifecyclePayload]
+	BodyEdited            EventType[CausePayload]
+	NoteAdded             EventType[NoteAddedPayload]
+	ArtifactChanged       EventType[CausePayload]
+	EdgeLinked            EventType[EdgePayload]
+	EdgeUnlinked          EventType[EdgePayload]
+	HarvestWhenConfigured EventType[HarvestWhenPayload]
+	HarvestWhenCleared    EventType[HarvestWhenPayload]
+	Unblocked             EventType[UnblockedPayload]
+	WorkReady             EventType[WorkReadyPayload]
+	Events                EventCatalog
+	Rules                 PolicySet
+	Entries               EntryRules
+	SeedActivity          BellDef
 }
 
 func Declarations() Vocabulary {
@@ -95,29 +92,26 @@ func Declarations() Vocabulary {
 		KeepPendingWhile(RecipientStillBelongsTo(seedParties))
 
 	v := Vocabulary{
-		Planted:                  Event[CausePayload](NamePlanted),
-		Tended:                   Event[LifecyclePayload](NameTended),
-		Parked:                   Event[LifecyclePayload](NameParked),
-		Harvested:                Event[LifecyclePayload](NameHarvested),
-		Withered:                 Event[LifecyclePayload](NameWithered),
-		Replanted:                Event[LifecyclePayload](NameReplanted),
-		BodyEdited:               Event[CausePayload](NameBodyEdited),
-		NoteAdded:                Event[NoteAddedPayload](NameNoteAdded),
-		ArtifactChanged:          Event[CausePayload](NameArtifactChanged),
-		ResumeIdentityConfigured: Event[CausePayload](NameResumeIdentityConfigured),
-		ResumeIdentityCleared:    Event[CausePayload](NameResumeIdentityCleared),
-		EdgeLinked:               Event[EdgePayload](NameEdgeLinked),
-		EdgeUnlinked:             Event[EdgePayload](NameEdgeUnlinked),
-		HarvestWhenConfigured:    Event[HarvestWhenPayload](NameHarvestWhenConfigured),
-		HarvestWhenCleared:       Event[HarvestWhenPayload](NameHarvestWhenCleared),
-		Unblocked:                Event[UnblockedPayload](NameUnblocked),
-		WorkReady:                Event[WorkReadyPayload](NameWorkReady),
-		SeedActivity:             seedActivity,
+		Planted:               Event[CausePayload](NamePlanted),
+		Tended:                Event[LifecyclePayload](NameTended),
+		Parked:                Event[LifecyclePayload](NameParked),
+		Harvested:             Event[LifecyclePayload](NameHarvested),
+		Withered:              Event[LifecyclePayload](NameWithered),
+		Replanted:             Event[LifecyclePayload](NameReplanted),
+		BodyEdited:            Event[CausePayload](NameBodyEdited),
+		NoteAdded:             Event[NoteAddedPayload](NameNoteAdded),
+		ArtifactChanged:       Event[CausePayload](NameArtifactChanged),
+		EdgeLinked:            Event[EdgePayload](NameEdgeLinked),
+		EdgeUnlinked:          Event[EdgePayload](NameEdgeUnlinked),
+		HarvestWhenConfigured: Event[HarvestWhenPayload](NameHarvestWhenConfigured),
+		HarvestWhenCleared:    Event[HarvestWhenPayload](NameHarvestWhenCleared),
+		Unblocked:             Event[UnblockedPayload](NameUnblocked),
+		WorkReady:             Event[WorkReadyPayload](NameWorkReady),
+		SeedActivity:          seedActivity,
 	}
 	v.Events = Catalog(
 		v.Planted, v.Tended, v.Parked, v.Harvested, v.Withered, v.Replanted,
 		v.BodyEdited, v.NoteAdded, v.ArtifactChanged,
-		v.ResumeIdentityConfigured, v.ResumeIdentityCleared,
 		v.EdgeLinked, v.EdgeUnlinked,
 		v.HarvestWhenConfigured, v.HarvestWhenCleared,
 		v.Unblocked, v.WorkReady,
@@ -134,8 +128,6 @@ func Declarations() Vocabulary {
 		On(v.BodyEdited, Quiet()),
 		On(v.NoteAdded, Choose(attentionRequested, Ring(seedActivity), Quiet())),
 		On(v.ArtifactChanged, Quiet()),
-		On(v.ResumeIdentityConfigured, Quiet()),
-		On(v.ResumeIdentityCleared, Quiet()),
 		On(v.EdgeLinked, Quiet()),
 		On(v.EdgeUnlinked, Quiet()),
 		On(v.HarvestWhenConfigured, Ring(seedActivity)),
@@ -143,11 +135,28 @@ func Declarations() Vocabulary {
 		On(v.Unblocked, Ring(seedActivity)),
 		On(v.WorkReady, Ring(seedActivity)),
 	)
+	v.Entries = Entries(
+		NoEntry(v.Planted, "a new seed's log starts with its first change; the edges it is planted with log on their other ends"),
+		Move(v.Tended, "tended"),
+		Move(v.Parked, "parked"),
+		Move(v.Harvested, "harvested"),
+		Move(v.Withered, "withered"),
+		Move(v.Replanted, "replanted"),
+		Edit(v.BodyEdited),
+		NoEntry(v.NoteAdded, "the note it names is the entry"),
+		NoEntry(v.ArtifactChanged, "the artifact folder watcher fires it for every file change; attach and detach write their own entries"),
+		Link(v.EdgeLinked, true),
+		Link(v.EdgeUnlinked, false),
+		Move(v.HarvestWhenConfigured, ""),
+		Move(v.HarvestWhenCleared, ""),
+		Move(v.Unblocked, "ready"),
+		NoEntry(v.WorkReady, "an automation run started work and the seed did not change; the run's outcome note records what it did"),
+	)
 	return v
 }
 
 func BuildGardenModel() (*Model, Vocabulary, error) {
 	vocabulary := Declarations()
-	model, err := Build(vocabulary.Events, vocabulary.Rules)
+	model, err := Build(vocabulary.Events, vocabulary.Rules, vocabulary.Entries)
 	return model, vocabulary, err
 }

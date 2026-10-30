@@ -194,8 +194,10 @@ func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 				t.Errorf("the forced wither left %s tended by %q, want it withered and released", forced.Seed.Status, forced.Seed.TenderSession)
 			}
 			notes := lifeNoteBodies(t, cli, seed)
-			if len(notes) != 1 || !strings.Contains(notes[0], second+" forced") || !strings.Contains(notes[0], first+" held") {
-				t.Errorf("the log after a forced %s = %q, want one note naming who forced and who held", verb, notes)
+			if len(notes) != 2 || !slices.ContainsFunc(notes, func(note string) bool {
+				return strings.HasPrefix(note, verb) && strings.Contains(note, second+" forced") && strings.Contains(note, first+" held")
+			}) {
+				t.Errorf("the log after a forced %s = %q, want its move entry naming who forced and who held", verb, notes)
 			}
 		})
 	}
@@ -407,8 +409,10 @@ func TestParkingASeedKeepsItsExecutionAndItsComment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(notes.Notes) != 1 || notes.Notes[0].Body != "Waiting for the upstream API." || string(notes.Notes[0].AuthorSession) != worker {
-		t.Errorf("the log after parking = %+v, want the comment by the parker", notes.Notes)
+	if len(notes.Notes) != 2 || !slices.ContainsFunc(notes.Notes, func(note protocol.SeedNote) bool {
+		return note.Kind == garden.NoteKindMove && note.Body == "parked: Waiting for the upstream API." && string(note.AuthorSession) == worker
+	}) {
+		t.Errorf("the log after parking = %+v, want one park entry with the parker's comment", notes.Notes)
 	}
 }
 
@@ -544,6 +548,19 @@ func lifeNoteBodies(t *testing.T, cli *client.Client, seedID string) []string {
 		t.Fatalf("notes of %s: %v", seedID, err)
 	}
 	bodies := make([]string, 0, len(notes.Notes))
+	for _, note := range notes.Notes {
+		bodies = append(bodies, note.Body)
+	}
+	return bodies
+}
+
+func lifeEntryBodies(t *testing.T, cli *client.Client, seedID, kind string) []string {
+	t.Helper()
+	notes, err := cli.SeedNotes("", seedID, client.SeedNotesQuery{Kind: kind})
+	if err != nil {
+		t.Fatalf("%s entries of %s: %v", kind, seedID, err)
+	}
+	bodies := []string{}
 	for _, note := range notes.Notes {
 		bodies = append(bodies, note.Body)
 	}

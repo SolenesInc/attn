@@ -42,8 +42,8 @@ func TestAPlotsShowIsABoardOfItsOpenChildren(t *testing.T) {
 		}
 	}
 	for _, closed := range []string{buy.ID, mural.ID, hinge.ID} {
-		if strings.Contains(shown, closed) {
-			t.Errorf("show of the plot names %s, which is closed or not a direct child:\n%s", closed, shown)
+		if regexp.MustCompile(`(?m)^\s*(\S+\s+)?` + closed + `\s`).MatchString(shown) {
+			t.Errorf("show of the plot gives %s, which is closed or not a direct child, a row:\n%s", closed, shown)
 		}
 	}
 	if strings.Contains(shown, "has-part") {

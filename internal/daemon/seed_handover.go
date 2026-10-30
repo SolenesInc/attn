@@ -7,7 +7,6 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
-	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -141,7 +140,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 		Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &seedExpected},
 		Fact:  documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false),
 	}
-	noteCommit, note, err := d.handoffNoteCommit(seed.ID, msg)
+	handoff, err := d.handoffNote(seed.ID, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -150,20 +149,14 @@ func (d *Daemon) bindSeedHandoverProtected(
 	if err != nil {
 		return nil, err
 	}
-	occurrences := []seedEvents.Occurrence{tended}
-	if noteCommit != nil {
-		noted, eventErr := seedEvents.Occur(
-			gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, seed.ID,
-			seedEvents.NoteAddedPayload{
-				NoteID: note.ID, AttentionRequested: false, CausedBySessionID: cause,
-			},
-		)
-		if eventErr != nil {
-			return nil, eventErr
-		}
-		occurrences = append(occurrences, noted)
+	change := seedChange{
+		author: garden.Tender{Session: cause, Member: d.resolveTenderMember("", cause)}, cause: cause,
+		events: []seedEvent{{occurrence: tended, detail: "handed over to " + string(sessionID)}},
 	}
-	events, err := encodeGardenSeedEvents(occurrences...)
+	if handoff != nil {
+		change.entries = []seedMoveNote{{Note: *handoff, CausedBySessionID: cause}}
+	}
+	log, err := d.seedChangeLog(change)
 	if err != nil {
 		return nil, err
 	}
@@ -172,13 +165,11 @@ func (d *Daemon) bindSeedHandoverProtected(
 	if err != nil {
 		return nil, err
 	}
-	commits := append([]store.DocumentCommit{seedCommit}, dispatches.commits...)
-	if noteCommit != nil {
-		commits = append(commits, *noteCommit)
-	}
+	commits := append(append([]store.DocumentCommit{seedCommit}, dispatches.commits...), log.commits...)
+	now := d.gardenTime()
 	d.lockGardenRoles()
 	written, eventSeqs, err := d.store.CommitGardenDispatchWritesWithEvents(
-		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, events, d.gardenTime(),
+		commits, store.GardenSeedWatch{WatcherSessionID: sessionID, SeedID: seed.ID}, log.events, now,
 	)
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
@@ -204,22 +195,10 @@ func (d *Daemon) bindSeedHandoverProtected(
 		d.logf("Garden review: settle %s after Handover: %v", seed.ID, err)
 	}
 
-	if noteCommit == nil {
+	if handoff == nil {
 		return nil, nil
 	}
-	noteSchema, err := d.notesCollection()
-	if err != nil {
-		return nil, err
-	}
-	noteDoc, found, err := d.store.GetDocument(*noteSchema, note.ID)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, fmt.Errorf("handoff note %s was committed but cannot be read", note.ID)
-	}
-	wire := noteToProtocol(note, *noteDoc)
-
+	wire := log.wireEntries(now)[0]
 	return &wire, nil
 }
 
@@ -303,37 +282,13 @@ func (d *Daemon) handoverDispatchCommits(
 	return out, nil
 }
 
-func (d *Daemon) handoffNoteCommit(seedID string, msg *resolvedDelegationLaunch) (*store.DocumentCommit, garden.Note, error) {
-	var note garden.Note
+func (d *Daemon) handoffNote(seedID string, msg *resolvedDelegationLaunch) (*garden.Note, error) {
 	handoff := strings.TrimSpace(protocol.Deref(msg.Handover.Handoff))
 	if handoff == "" {
-		return nil, note, nil
+		return nil, nil
 	}
-	if err := garden.ValidateNote(handoff); err != nil {
-		return nil, note, err
-	}
-	noteSchema, err := d.notesCollection()
-	if err != nil {
-		return nil, note, err
-	}
-	note.ID = strings.TrimSpace(protocol.Deref(msg.Handover.NoteID))
-	if note.ID == "" {
-		note.ID, err = d.mintNoteID()
-		if err != nil {
-			return nil, note, err
-		}
-	}
-	note.Seed = seedID
-	note.Kind = garden.NoteKindHandoff
-	note.Body = handoff
-	note.AuthorSession = protocol.SessionID(strings.TrimSpace(string(protocol.Deref(msg.SourceSessionID))))
-	noteBody, err := note.Encode()
-	if err != nil {
-		return nil, note, err
-	}
-	noteExpected := docstore.ExpectAbsent
-	return &store.DocumentCommit{
-		Write: store.DocumentWrite{Schema: *noteSchema, ID: note.ID, Body: noteBody, Expected: &noteExpected},
-		Fact:  documentChangedFact(garden.Namespace, garden.CollectionNotes, note.ID, false),
-	}, note, nil
+	return &garden.Note{
+		ID: strings.TrimSpace(protocol.Deref(msg.Handover.NoteID)), Seed: seedID, Kind: garden.NoteKindHandoff, Body: handoff,
+		AuthorSession: protocol.SessionID(strings.TrimSpace(string(protocol.Deref(msg.SourceSessionID)))),
+	}, nil
 }

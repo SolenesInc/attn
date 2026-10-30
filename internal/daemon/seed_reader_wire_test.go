@@ -44,8 +44,12 @@ func TestTheSeedDocumentShowsBodyChildrenLogAndWhetherItsTenderHolds(t *testing.
 	if children := lifeSeedIDs(doc.Children); !slices.Equal(children, []string{child.Seed.ID}) {
 		t.Errorf("the document children = %v, want only the immediate child %s", children, child.Seed.ID)
 	}
-	if doc.NotesTotal != 1 || len(doc.Notes) != 1 || doc.Notes[0].Body != "reader log entry" {
-		t.Errorf("the document log = %+v of %d, want the one note", doc.Notes, doc.NotesTotal)
+	if doc.NotesTotal != len(doc.Notes) || !slices.ContainsFunc(doc.Notes, func(note protocol.SeedNote) bool {
+		return note.Kind == "note" && note.Body == "reader log entry"
+	}) || !slices.ContainsFunc(doc.Notes, func(note protocol.SeedNote) bool {
+		return note.Kind == "link" && note.Body == child.Seed.ID+" joined this plot"
+	}) {
+		t.Errorf("the document log = %+v of %d, want the note and the child joining", doc.Notes, doc.NotesTotal)
 	}
 	if !doc.TenderHolds || string(doc.Seed.TenderSession) != tender.session {
 		t.Errorf("while %s is live the document reads tender %q holding=%t, want it holding", tender.session, doc.Seed.TenderSession, doc.TenderHolds)
