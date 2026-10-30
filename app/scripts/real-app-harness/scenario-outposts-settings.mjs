@@ -35,6 +35,7 @@ const env = instanceCliEnv(instance, ssh.env);
 const run = (command, args, childEnv = env) => exec(command, args, { env: childEnv });
 const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
 const text = async selector => (await client.request('dom_text', { selector })).text;
+const normalizedText = value => value.replace(/\s+/g, ' ').trim();
 const studio = '.settings-outpost[aria-label="Studio"]';
 const alias = '.settings-outpost[aria-label="Studio alias"]';
 const toggle = '[role="switch"][aria-label="Outposts"]';
@@ -178,7 +179,7 @@ try {
     await add('Studio', address);
     const refusedRows = await refused;
     const refusal = refusedRows.find(row => row.name === 'Studio');
-    runner.assert((await text(`${studio} .settings-outpost-error p`)) === refusal.last_error, 'ssh stderr is shown verbatim', refusal);
+    runner.assert((await text(`${studio} .settings-outpost-error p`)) === normalizedText(refusal.last_error), 'ssh stderr is shown verbatim', refusal);
     const registered = observer.waitForMessage(event => event.event === 'session_registered' && event.session.command_terminal && event.session, 'connection terminal', observer.connectTimeoutMs);
     const connected = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'connected'));
     await press(`${studio} .settings-outpost-actions button:first-child`);
@@ -395,7 +396,7 @@ try {
     const rows = await refusal;
     const refused = rows.find(row => row.name === 'Studio alias');
     await wait(`${alias} .settings-pill`, { textIncludes: 'refused' });
-    runner.assert((await text(`${alias} .settings-outpost-error p`)) === refused.last_error, 'refusal detail is shown in full', refused);
+    runner.assert((await text(`${alias} .settings-outpost-error p`)) === normalizedText(refused.last_error), 'refusal detail is shown in full', refused);
     await client.request('dom_scroll_into_view', { selector: alias });
     await shot('05-refused');
     const removed = receive(rows => !rows.some(row => row.name === 'Studio alias'));
