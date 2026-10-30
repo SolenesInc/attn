@@ -30,6 +30,8 @@ type outputPath struct {
 	rate         float64
 	next         time.Time
 	ackAt        time.Time
+	lastAckAt    time.Time
+	learning     *outputFlow
 	sendAt       time.Time
 	ackBytes     int
 	phaseAt      time.Time
@@ -45,12 +47,12 @@ func (p *outputPath) sent(flow *outputFlow, n int, now time.Time) {
 	flow.sent = append(flow.sent, outputSend{n, now})
 	if p.rate > 0 {
 		gain := 1.0
-		if len(p.delays) > 0 && p.delays[0].delay > 0 {
+		if len(p.rates) > 0 {
 			if !now.Before(p.phaseAt) && (p.phase != 1 || p.drained) {
 				p.phase = (p.phase + 1) % outputProbeRounds
 				p.phaseStarted, p.drained = now, false
 				p.drainDelay = 0
-				p.phaseAt = now.Add(p.delays[0].delay + time.Duration(float64(p.frame)/p.rate*float64(time.Second)))
+				p.phaseAt = now.Add(p.delays[0].delay + time.Duration(float64(p.frame)/p.rates[0].rate*float64(time.Second)))
 			}
 			switch p.phase {
 			case 0:
@@ -94,6 +96,10 @@ func (p *outputPath) returned(flow *outputFlow, n int, now time.Time) {
 		return
 	}
 	p.latest = sent
+	if first.After(p.lastAckAt) {
+		p.ackAt = time.Time{}
+	}
+	p.lastAckAt = now
 	p.frame = max(p.frame, frame)
 	p.ackBytes += acknowledged
 	oldRate := p.rate
@@ -107,7 +113,7 @@ func (p *outputPath) returned(flow *outputFlow, n int, now time.Time) {
 		return
 	}
 	if p.phase == 1 && !first.Before(p.phaseStarted) {
-		p.drained = p.drainDelay > 0 && delay >= p.drainDelay
+		p.drained = p.drained || (p.drainDelay > 0 && delay >= p.drainDelay)
 		p.drainDelay = delay
 	}
 	for len(p.delays) > 0 && now.Sub(p.delays[0].at) > outputPathHistory {
@@ -119,9 +125,14 @@ func (p *outputPath) returned(flow *outputFlow, n int, now time.Time) {
 	p.delays = append(p.delays, outputDelay{now, delay})
 	base := p.delays[0].delay
 	if p.ackAt.IsZero() {
-		p.rate = float64(p.ackBytes) / delay.Seconds()
+		if len(p.rates) == 0 {
+			p.rate = float64(p.ackBytes) / delay.Seconds()
+			p.learning = flow
+		}
 		p.ackAt, p.sendAt, p.ackBytes = now, sent, 0
-		p.phaseAt = now
+		if p.phaseAt.IsZero() {
+			p.phaseAt = now
+		}
 		return
 	}
 	if elapsed := max(now.Sub(p.ackAt), sent.Sub(p.sendAt)); elapsed >= base {
@@ -133,6 +144,7 @@ func (p *outputPath) returned(flow *outputFlow, n int, now time.Time) {
 			p.rates = p.rates[:len(p.rates)-1]
 		}
 		p.rates = append(p.rates, outputRate{now, rate})
+		p.learning = nil
 		p.ackAt, p.sendAt, p.ackBytes = now, sent, 0
 	}
 	if len(p.rates) > 0 {

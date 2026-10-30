@@ -121,11 +121,17 @@ func (c *outputCredit) run() {
 				path.returned(account, change.bytes, time.Now())
 				account.outstanding -= change.bytes
 				available += change.bytes
+				if account.outstanding == 0 && path.learning == account {
+					path = outputPath{}
+				}
 			}
 		case *outputFlow:
 			if account := change; accounts[account] {
 				available += account.outstanding
 				delete(accounts, change)
+				if path.learning == account {
+					path = outputPath{}
+				}
 			}
 		}
 	}

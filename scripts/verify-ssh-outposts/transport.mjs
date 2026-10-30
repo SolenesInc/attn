@@ -15,6 +15,9 @@ const { values: o } = parseArgs({ options: {
 if (!['idle', 'bulk'].includes(o.mode)) throw new Error('--mode idle|bulk');
 const W = await world(o);
 const { receipt, remote, attn } = W;
+receipt('driver started', { pid: process.pid });
+let stopping = false;
+process.once('SIGTERM', () => { stopping = true; });
 
 const samples = [];
 const sent = new Map();
@@ -66,7 +69,7 @@ async function startShell() {
 let seq = 0;
 async function sampleUntil(stop) {
   let next = performance.now();
-  while (!stop()) {
+  while (!stop() && !stopping) {
     const i = seq++;
     sent.set(i, performance.now());
     W.controlSample(i);
@@ -76,6 +79,7 @@ async function sampleUntil(stop) {
   }
   const drained = performance.now();
   while (sent.size && performance.now() - drained < 15_000) await new Promise(r => setTimeout(r, 50));
+  if (stopping) throw new Error('measurement stopped by SIGTERM');
   return { unanswered: sent.size };
 }
 async function heartbeatGaps() {

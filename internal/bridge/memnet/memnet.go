@@ -21,6 +21,10 @@ func Delay(oneWay time.Duration) Option {
 	return func(l *Listener) { l.delay.Store(int64(oneWay)) }
 }
 
+func Batch(interval time.Duration) Option {
+	return func(l *Listener) { l.batch = interval }
+}
+
 type Listener struct {
 	conns  chan net.Conn
 	closed chan struct{}
@@ -28,6 +32,7 @@ type Listener struct {
 	cut    gate
 	rate   float64
 	delay  atomic.Int64
+	batch  time.Duration
 }
 
 func Listen(options ...Option) *Listener {
@@ -58,6 +63,7 @@ func (l *Listener) SetDelay(oneWay time.Duration) { l.delay.Store(int64(oneWay))
 func (l *Listener) Dial(ctx context.Context) (net.Conn, error) {
 	a, b := newStream(l.rate), newStream(l.rate)
 	a.delay, b.delay = &l.delay, &l.delay
+	a.batch, b.batch = l.batch, l.batch
 	client := &conn{read: a, write: b, gate: &l.cut, closed: make(chan struct{})}
 	server := &conn{read: b, write: a, gate: &l.cut, closed: make(chan struct{})}
 	select {
@@ -121,9 +127,13 @@ type stream struct {
 	closed    bool
 	changed   chan struct{}
 	delay     *atomic.Int64
+	batch     time.Duration
+	origin    time.Time
 }
 
-func newStream(rate float64) *stream { return &stream{rate: rate, changed: make(chan struct{})} }
+func newStream(rate float64) *stream {
+	return &stream{rate: rate, changed: make(chan struct{}), origin: time.Now()}
+}
 
 func (s *stream) signal() { close(s.changed); s.changed = make(chan struct{}) }
 func (s *stream) close()  { s.mu.Lock(); defer s.mu.Unlock(); s.closed = true; s.signal() }
@@ -140,6 +150,9 @@ func (s *stream) push(data []byte) {
 	}
 	if s.delay != nil {
 		due = due.Add(time.Duration(s.delay.Load()))
+	}
+	if s.batch > 0 {
+		due = s.origin.Add((due.Sub(s.origin) + s.batch - 1) / s.batch * s.batch)
 	}
 	if len(s.chunks) > 0 && s.chunks[len(s.chunks)-1].due.After(due) {
 		due = s.chunks[len(s.chunks)-1].due
