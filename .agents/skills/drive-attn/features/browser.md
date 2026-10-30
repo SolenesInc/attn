@@ -105,7 +105,7 @@ Preconditions:
 
 ## Tests
 
-- Packaged CLI: `browser-wait-navigation` checks immediate open/wait, close/reopen/wait and zero-timeout results. It also starts a wait on a loaded page, observes its unsatisfied condition, then navigates to another local page to prove the pending wait survives document replacement.
+- Packaged CLI: `browser-wait-navigation` checks immediate open/wait, close/reopen/wait and zero-timeout results. It also checks `command wait_for` immediately after navigation, starts a wait on a loaded page and navigates after its unsatisfied condition, and verifies that an asynchronous action executes once while later actions retain its element reference.
 
 - Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`.
 - Stack: `cmd/attn/agent_commands_stack_test.go`.

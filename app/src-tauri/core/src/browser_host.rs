@@ -568,6 +568,7 @@ fn page_action_script(
     action: &str,
     params: &Map<String, Value>,
     result_id: &str,
+    install_runtime: bool,
 ) -> Result<String, String> {
     let action =
         serde_json::to_string(action).map_err(|error| format!("encode browser action: {error}"))?;
@@ -575,10 +576,18 @@ fn page_action_script(
         serde_json::to_string(params).map_err(|error| format!("encode browser params: {error}"))?;
     let result_id = serde_json::to_string(result_id)
         .map_err(|error| format!("encode browser result id: {error}"))?;
+    let initialization = if install_runtime {
+        format!(
+            "if (!window.__attnBrowser) {{ {} }}\nif (!window.__attnBrowser) throw new Error('attn browser runtime failed to install');",
+            browser_runtime_js()
+        )
+    } else {
+        "if (!window.__attnBrowser) return JSON.stringify({ missing_runtime: true });".to_string()
+    };
     Ok(format!(
         r#"(() => {{
   try {{
-    if (!window.__attnBrowser) throw new Error('attn browser runtime is unavailable');
+    {initialization}
     const value = window.__attnBrowser.execute({action}, {params});
     if (value && typeof value.then === 'function') {{
       window.__attnBrowserResults ||= {{}};
@@ -614,28 +623,37 @@ async fn run_page_action(
     action: &str,
     params: &Map<String, Value>,
 ) -> Result<String, String> {
-    ensure_runtime(webview.clone()).await?;
     let alert_state = browser_alerts::state(webview.label());
     let result_id = format!(
         "attn-result-{}",
         NEXT_RUNTIME_RESULT_ID.fetch_add(1, Ordering::Relaxed)
     );
-    let Some(mut raw) = evaluate_isolated_script_with_alert(
+    let Some(raw) = evaluate_isolated_script_with_alert(
         webview.clone(),
-        page_action_script(action, params, &result_id)?,
+        page_action_script(action, params, &result_id, false)?,
         Some(alert_state.clone()),
     )
     .await?
     else {
         return Ok("null".to_string());
     };
-    let deadline = Instant::now() + page_action_timeout(params);
-    let envelope = loop {
-        let envelope: Value = serde_json::from_str(&raw)
+    let mut envelope: Value = serde_json::from_str(&raw)
+        .map_err(|error| format!("decode browser runtime result: {error}"))?;
+    if envelope.get("missing_runtime").and_then(Value::as_bool) == Some(true) {
+        let Some(installed) = evaluate_isolated_script_with_alert(
+            webview.clone(),
+            page_action_script(action, params, &result_id, true)?,
+            Some(alert_state.clone()),
+        )
+        .await?
+        else {
+            return Ok("null".to_string());
+        };
+        envelope = serde_json::from_str(&installed)
             .map_err(|error| format!("decode browser runtime result: {error}"))?;
-        if envelope.get("pending").and_then(Value::as_str).is_none() {
-            break envelope;
-        }
+    }
+    let deadline = Instant::now() + page_action_timeout(params);
+    while envelope.get("pending").and_then(Value::as_str).is_some() {
         if Instant::now() >= deadline {
             return Err("timed out waiting for browser runtime action".to_string());
         }
@@ -659,8 +677,9 @@ async fn run_page_action(
         else {
             return Ok("null".to_string());
         };
-        raw = next;
-    };
+        envelope = serde_json::from_str(&next)
+            .map_err(|error| format!("decode browser runtime result: {error}"))?;
+    }
     if envelope.get("success").and_then(Value::as_bool) != Some(true) {
         return Err(envelope
             .get("error")
@@ -723,50 +742,6 @@ async fn wait_for_element(
             PAGE_ACTION_POLL_INTERVAL.min(deadline.saturating_duration_since(Instant::now())),
         );
     }
-}
-
-async fn ensure_runtime(webview: tauri::Webview) -> Result<(), String> {
-    let installed = evaluate_isolated_script(
-        webview.clone(),
-        "JSON.stringify(Boolean(window.__attnBrowser))".to_string(),
-    )
-    .await?;
-    if installed == "true" {
-        return Ok(());
-    }
-    let bundle = browser_runtime_js();
-    let script = format!(
-        r#"(() => {{
-  try {{
-    {bundle}
-    return JSON.stringify({{ success: Boolean(window.__attnBrowser) }});
-  }} catch (error) {{
-    return JSON.stringify({{ success: false, error: `${{String(error?.message || error)}}\n${{String(error?.stack || '')}}` }});
-  }}
-}})()"#
-    );
-    let raw = evaluate_isolated_script(webview, script).await?;
-    let result: Value = serde_json::from_str(&raw)
-        .map_err(|error| format!("decode browser runtime installation result: {error}"))?;
-    if result.get("success").and_then(Value::as_bool) == Some(true) {
-        Ok(())
-    } else {
-        Err(result
-            .get("error")
-            .and_then(Value::as_str)
-            .unwrap_or("attn browser runtime failed to install")
-            .to_string())
-    }
-}
-
-#[cfg(target_os = "macos")]
-async fn evaluate_isolated_script(
-    webview: tauri::Webview,
-    script: String,
-) -> Result<String, String> {
-    evaluate_isolated_script_with_alert(webview, script, None)
-        .await?
-        .ok_or_else(|| "browser alert interrupted internal script".to_string())
 }
 
 #[cfg(target_os = "macos")]
@@ -838,14 +813,6 @@ async fn evaluate_isolated_script_with_alert(
     })
     .await
     .map_err(|error| format!("join isolated browser script result: {error}"))?
-}
-
-#[cfg(not(target_os = "macos"))]
-async fn evaluate_isolated_script(
-    webview: tauri::Webview,
-    script: String,
-) -> Result<String, String> {
-    evaluate_script(webview, script).await
 }
 
 #[cfg(not(target_os = "macos"))]

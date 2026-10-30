@@ -106,6 +106,13 @@ try {
     await client.request('dom_wait', { selector, absent: true, timeoutMs: observer.connectTimeoutMs });
     await openAndWait('reopened');
   });
+  await runner.step('command_wait_after_navigation', async () => {
+    const id = 'command';
+    await cli('browser', 'open', `http://127.0.0.1:${server.address().port}/${id}`, '--session', sessionId);
+    await assertPage(id, await cli('browser', 'command', 'wait_for', '--params', JSON.stringify({
+      using: 'css', value: `#${id}`, state: 'visible',
+    }), '--session', sessionId));
+  });
   await runner.step('navigation_replaces_a_pending_wait', async () => {
     const id = 'navigated';
     const pending = observePendingWait(`#${id}`);
@@ -134,6 +141,23 @@ try {
     } catch (error) {
       runner.assert(error.code === 1 && error.stderr.includes('timeoutMs=0'), 'an absent element fails the zero-timeout wait', { stderr: error.stderr });
     }
+  });
+  await runner.step('actions_execute_once_and_keep_element_references', async () => {
+    const element = JSON.parse(await cli('browser', 'find', '--using', 'css', '--value', '#navigated', '--session', sessionId));
+    const result = JSON.parse(await cli('browser', 'command', 'execute_async_script', '--params', JSON.stringify({
+      script: `
+        const element = arguments[0];
+        const done = arguments[1];
+        element.dataset.actions = String(Number(element.dataset.actions || 0) + 1);
+        queueMicrotask(() => done(element.dataset.actions));
+      `,
+      args: [element],
+    }), '--session', sessionId));
+    runner.assert(result === '1', 'an asynchronous action executes once', { result });
+    const actions = JSON.parse(await cli('browser', 'command', 'get_element_attribute', '--params', JSON.stringify({
+      element, name: 'data-actions',
+    }), '--session', sessionId));
+    runner.assert(actions === '1', 'later actions retain the element reference and observe one effect', { actions });
   });
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
 } catch (error) {
