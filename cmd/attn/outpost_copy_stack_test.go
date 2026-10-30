@@ -200,7 +200,8 @@ func TestReconnectRestoresTheCopyAfterAnOutpostLeaves(t *testing.T) {
 	}
 	p.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host})
 	testworld.Await(p, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
-	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
+	remote.AwaitStopped()
+	remote.Start()
 	if copied := sessionsOn(t, remote, ""); len(copied) != 0 {
 		t.Fatalf("leave after Remove kept copied shells: %v", copied)
 	}

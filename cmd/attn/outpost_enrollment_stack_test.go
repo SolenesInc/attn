@@ -23,9 +23,9 @@ func TestLeavingAnOutpostRoutesSocketCommandsLocally(t *testing.T) {
 			requireStdout(t, outpost.Attn("seed", "ls"), "Home garden before leave")
 
 			mark := pair.App.EventCount()
-			pair.App.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
+			requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
 			testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-				return len(m.Outposts) == 0
+				return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateLost
 			})
 			var loaded *testworld.Pause
 			var ready func()

@@ -83,11 +83,14 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	}
 	p.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: first.ID})
 	testworld.Await[protocol.OutpostsUpdatedMessage](p, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
-	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
+	remote.AwaitStopped()
+	requireStdout(t, remote.Attn("enrollment", "status"), "home")
+	remote.Start()
 	q.Send(protocol.RepairOutpostMessage{Cmd: protocol.CmdRepairOutpost, ID: refused.ID})
 	outpostState(q, "same outpost", protocol.OutpostStateConnected)
 	q.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: refused.ID})
 	testworld.Await[protocol.OutpostsUpdatedMessage](q, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	remote.AwaitStopped()
 	second.Stop()
 	second.Start()
 	if got := second.App().Initial.Outposts; len(got) != 0 {
@@ -128,24 +131,26 @@ func TestOutpostsDisabledCommandsAndRetainedRows(t *testing.T) {
 	}
 }
 
-func TestOutpostsDifferentBuildIsRefused(t *testing.T) {
-	a := testworld.NewSSH(t)
+func TestOutpostsAddInstallsOverAnotherBuild(t *testing.T) {
+	ssh := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
-	remote.RunFrom(testworld.AttnBinaryAt(t, "other"))
-	for _, s := range []*testworld.Stack{remote, home} {
-		a.Use(s.World)
-		s.Start()
+	old := testworld.AttnUpdateBinary(t, "before-add", "source", "")
+	next := testworld.AttnUpdateBinary(t, "after-add", "source", "")
+	remote.RunFrom(old)
+	home.RunFrom(next)
+	home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+next)
+	ssh.Use(home.World)
+	remote.Start()
+	ssh.Route("other-build", remote)
+	home.Start()
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "other-build"})
+	row := outpostState(app, "outpost", protocol.OutpostStateConnected)
+	if !strings.Contains(protocol.Deref(row.Build), "after-add") {
+		t.Fatalf("Add retained old build: %+v", row)
 	}
-	address := bridgeAddress(t)
-	a.Route(address, remote)
-	p := enableOutposts(t, home)
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "other build", Destination: address})
-	row := outpostState(p, "other build", protocol.OutpostStateRefused)
-	for _, word := range []string{"other", "dev", protocol.Deref(p.Initial.DaemonInstanceID)} {
-		if !strings.Contains(protocol.Deref(row.LastError), word) {
-			t.Fatalf("refusal omits %q: %+v", word, row)
-		}
-	}
+	remote.AwaitStopped()
+	t.Log("Add replaced an older build and restarted its daemon onto the home build")
 }
 
 func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {

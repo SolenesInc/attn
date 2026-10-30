@@ -315,7 +315,6 @@ func TestRemovingAnOutpostClosesItsTerminals(t *testing.T) {
 			app := enableOutposts(t, home)
 			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
 			host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
-			remoteApp := remote.App()
 			id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(host) })
 			terminal := protocol.TerminalID(app.Terminal(id))
 			app.TypeLine(id, "echo remove-$((1+1))")
@@ -323,6 +322,8 @@ func TestRemovingAnOutpostClosesItsTerminals(t *testing.T) {
 			if !online {
 				mark := app.EventCount()
 				remote.Stop()
+				a.Fail(address, "ssh: connect to host machine port 22: No route to host")
+				a.ExitMaster(home, host)
 				outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 			}
 			app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host})
@@ -336,11 +337,13 @@ func TestRemovingAnOutpostClosesItsTerminals(t *testing.T) {
 					t.Fatalf("removed outpost still has a live row: %+v", s)
 				}
 			}
-			if !online {
+			if online {
+				remote.AwaitStopped()
+			} else {
 				requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
-				remote.Start()
-				remoteApp = remote.App()
 			}
+			remote.Start()
+			remoteApp := remote.App()
 			result := testworld.Request(remoteApp, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 			if result.Success && protocol.Deref(result.Running) {
 				t.Fatalf("removed terminal still runs: %+v", result)
@@ -596,6 +599,7 @@ func TestRemoteTileActionsDoNotBlockALocalTile(t *testing.T) {
 				}
 			case protocol.CmdRemoveOutpost:
 				testworld.AwaitSince(app, mark, protocol.EventOutpostsUpdated, func(r protocol.OutpostsUpdatedMessage) bool { return len(r.Outposts) == 0 })
+				remote.AwaitStopped()
 			}
 		})
 	}

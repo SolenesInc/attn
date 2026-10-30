@@ -165,6 +165,7 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	mark = len(pair.App.Log())
 	pair.App.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: pair.Host})
 	testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	outpost.AwaitStopped()
 	checkRefusal(false, "outpost", pair.Host, "does not exist")
 }
 
