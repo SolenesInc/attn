@@ -39,7 +39,8 @@ screen in its tile and offers Resume; a clean quit closes the session.
 
 ### Agents
 
-- `attn agent reload <session>... | --all` and `attn agent close <session-or-seed> -m "<reason>"`, both with `--source-session` and `--json` (`cmd/attn/agent_reload.go`, `cmd/attn/agent.go`). A session may reload or close itself and the agents below it in its delegation chain; the chief may act on any agent of its profile.
+- `attn agent reload <session>... | --all` and `attn agent close <session-or-seed> -m "<reason>"`, both with `--source-session` and `--json` (`cmd/attn/agent_reload.go`, `cmd/attn/agent.go`). `attn agent close --self -m "<reason>"` closes the caller without its id; combining `--self` with a target is a usage error. A session may reload or close itself and the agents below it in its delegation chain; the chief may act on any agent of its profile.
+- `attn --help` lists `agent close` and `agent reload`; `attn session --help` points from reopening to `attn agent close`. An unknown close target points at `--self`.
 - Starting another agent is delegation ([delegation.md](delegation.md)); opening a shell beside itself is `attn terminal open` ([terminals.md](terminals.md)).
 - Prompts: the attn skill's reference on other sessions, which names `agent reload` and `agent close` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).
 
@@ -64,6 +65,10 @@ Preconditions:
   {"includes": "reload", "actions": [
     {"type": "capture", "name": "target", "pattern": "reload (\\S+)"},
     {"type": "attn", "args": ["agent", "reload", "{{target}}"]}]},
+  {"includes": "reject-self-target", "actions": [
+    {"type": "attn", "args": ["agent", "close", "launch-agent", "--self", "-m", "x"]}]},
+  {"includes": "close yourself", "actions": [
+    {"type": "attn", "args": ["agent", "close", "--self", "-m", "done by the mock agent"]}]},
   {"includes": "close", "actions": [
     {"type": "capture", "name": "target", "pattern": "close (\\S+)"},
     {"type": "attn", "args": ["agent", "close", "{{target}}", "-m", "done by the mock agent"]}]}
@@ -81,7 +86,8 @@ Preconditions:
 - **Prepare reload proof.** Before each reload below, change the fixture banner: run `jq --arg banner "Claude Code mock agent (<label>)" '.banner = $banner' "$A/.attn-mock-agent.json" > "$A/next.json" && mv "$A/next.json" "$A/.attn-mock-agent.json"`, replacing `<label>` with `palette reload`, `row reload` or `self reload` for that action. The running process keeps its old banner until it restarts.
 - **Reload from the palette and the row menu.** Select it with `bridge select_session '{"sessionId":"launch-agent"}'`, open the palette, type `Reload this agent` and press Enter. Re-read `./attn agent peek launch-agent` until it shows the mock's splash with the banner `Claude Code mock agent (palette reload)` and `• hello back` again, replayed from the conversation; `./attn agent list` still has one row for it. Click `[data-testid="sidebar-session-launch-agent"]` natively to focus its row. Move over `[data-testid="session-actions-launch-agent"]` with `bridge native_mouse` (`action: "move"`), click it natively, wait for `.session-actions-popover`, then `.session-actions-popover [role="menuitem"]:nth-last-child(2)` ("Reload session"): peek shows the replay with the `row reload` banner.
 - **An agent reloads itself.** Run `wsctl input --id <terminal> --text "reload launch-agent" --enter`. Re-read `./attn agent peek launch-agent` until it shows the splash, `• hello back` and the `self reload` banner. Read the result from peek and `agent list`, not from the agent's screen, then read the terminal id again before the next prompt.
-- **An agent closes itself.** Run `wsctl input --id <terminal> --text "close launch-agent" --enter`. `./attn agent list` no longer lists `launch-agent`, and `./attn session show launch-agent` shows `state      closed` and `because    done by the mock agent`.
+- **Find close and reject a target with self.** Run `./attn --help`, `./attn session --help` and `./attn agent close --help`: the first lists close and reload, the second names `attn agent close` beside reopen, and the third shows both close forms. Run `wsctl input --id <terminal> --text "close missing-session" --enter`; peek shows an error naming `--self`. Send `"reject-self-target"` the same way; peek shows exit 2 with both forms and `--self cannot be used with a target`, leaving the session open.
+- **An agent closes itself.** Run `wsctl input --id <terminal> --text "close yourself" --enter`. `./attn agent list` no longer lists `launch-agent`, and `./attn session show launch-agent` shows `state      closed` and `because    done by the mock agent`. Repeat with a Codex fixture agent. The stack regression also checks the close note on a seed the caller tended and the `--source-session` override.
 - **Close with ⌘W.** Select `<picked>` for setup, then run `bridge native_key '{"key":"w","modifiers":["command"]}'`. `./attn agent list` drops its row, and `./attn session list --closed` lists `<picked>` as `closed`.
 - **Close from the sidebar.** Click `[data-testid="sidebar-session-<picked2>"]` natively to focus its row. Move over `[data-testid="session-actions-<picked2>"]` with `bridge native_mouse` (`action: "move"`), click it natively, wait for `.session-actions-popover`, then `.session-actions-popover [role="menuitem"]:last-child` ("Close session"). The row leaves the sidebar and `./attn agent list`.
 - **Stopped tile and Resume.** Select `<link>` for setup and run `wsctl kill-session --id <link>`. `./attn agent peek <link>` shows `process exited with code` and `screen at exit`, `./attn agent list` shows it `idle`, and `bridge dom_text '{"selector":".desktop-agent-stopped"}'` starts with `Agent stopped. Resume to continue this conversation.` Click `.desktop-agent-stopped button:first-of-type` ("Resume") natively. `bridge dom_wait '{"selector":".desktop-agent-stopped","absent":true,"timeoutMs":15000}'` matches and peek shows the agent running again.

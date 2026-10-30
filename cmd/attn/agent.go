@@ -423,28 +423,35 @@ type agentCloseArgs struct {
 }
 
 func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) (agentCloseArgs, error) {
-	const usage = `usage: attn agent close <session-or-seed> -m "reason" [--source-session <id>]`
-	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		return agentCloseArgs{}, errors.New(usage)
+	const usage = `usage: attn agent close <session-or-seed> -m "reason" [--source-session <id>] [--json]
+       attn agent close --self -m "reason" [--source-session <id>] [--json]`
+	var target string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		target = strings.TrimSpace(args[0])
+		args = args[1:]
 	}
 	fs := flag.NewFlagSet("agent close", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	reason := fs.String("m", "", "why this session is done")
 	source := fs.String("source-session", "", "closing session id (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
-	if err := parseFlags(fs, args[1:]); err != nil {
+	self := fs.Bool("self", false, "close the calling session")
+	if err := parseFlags(fs, args); err != nil {
 		return agentCloseArgs{}, err
+	}
+	if *self && (target != "" || fs.NArg() != 0) {
+		return agentCloseArgs{}, errors.New(usage + "; --self cannot be used with a target")
 	}
 	if fs.NArg() != 0 {
 		return agentCloseArgs{}, errors.New(usage + "; quote the reason as one argument")
 	}
 	parsed := agentCloseArgs{
-		target: strings.TrimSpace(args[0]),
+		target: target,
 		reason: strings.TrimSpace(*reason),
 		source: protocol.SessionID(strings.TrimSpace(*source)),
 		json:   *jsonOut,
 	}
-	if parsed.target == "" {
+	if parsed.target == "" && !*self {
 		return agentCloseArgs{}, errors.New(usage)
 	}
 	if parsed.reason == "" {
@@ -457,6 +464,9 @@ func parseAgentCloseArgs(args []string, envSessionID func() protocol.SessionID) 
 	if parsed.source == "" {
 		return agentCloseArgs{}, errors.New(
 			"no caller: this shell is not an attn session, so pass --source-session <id> (`attn agent list` names the sessions)")
+	}
+	if *self {
+		parsed.target = string(parsed.source)
 	}
 	return parsed, nil
 }
@@ -494,6 +504,8 @@ func agentCloseErrorMessage(parsed agentCloseArgs, err error) string {
 		code = strings.TrimSpace(strings.TrimPrefix(message, "daemon error: "))
 	}
 	switch code {
+	case "session_not_found":
+		return fmt.Sprintf("no session matches %q; `attn agent list` names sessions; to close yourself, use `attn agent close --self -m \"reason\"`", parsed.target)
 	case "sender_session_not_found":
 		return fmt.Sprintf("the caller %q is not a session on this daemon", parsed.source)
 	case "sender_ambiguous_session":
@@ -735,6 +747,7 @@ commands:
         A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
   close <session-or-seed> -m "reason" [--source-session <id>] [--json]
+  close --self -m "reason" [--source-session <id>] [--json]
         close a session for good. A session may close itself and agents below it
         in its delegation chain, including delegates of delegates; a profile's chief of staff may close any agent of that
         profile. The reason is required: the session row stays in the ledger,
@@ -742,6 +755,7 @@ commands:
         what you have to say first. A seed id closes whoever tends it, and the
         seed keeps its tender with a note about the close.
         The caller defaults to this session (resolved from this terminal).
+        --self closes the caller without its id and cannot take a target.
   reload <session-id>... [--source-session <id>] [--json]
   reload --all [--source-session <id>] [--json]
         interrupt and reload agents in place, as "Reload this agent" does.

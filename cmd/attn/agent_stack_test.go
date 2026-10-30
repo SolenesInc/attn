@@ -236,3 +236,60 @@ func TestAgentMessagesCarryTheSenderAndTheDaemonsVerdict(t *testing.T) {
 		t.Errorf("a close whose --source-session overrides the environment = %+v", selfClosed)
 	}
 }
+
+func TestAgentSelfCloseKeepsItsReasonAndSeedNote(t *testing.T) {
+	t.Parallel()
+	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		t.Run(string(harness), func(t *testing.T) {
+			s := testworld.NewStack(t, testworld.WithAgents(harness))
+			s.Start()
+			app := s.App()
+			session := s.Spawn(app, harness, s.Path("shop"), labelled("builder"))
+			s.Launched(session)
+			fromAgent := func(args ...string) testworld.Result {
+				return s.Run(testworld.Invocation{Args: args, Terminal: app.Terminal(session)})
+			}
+			var seed protocol.Seed
+			fromAgent("seed", "plant", "Finish the wrap-up", "--json").JSON(t, &seed)
+			if tend := fromAgent("seed", "tend", seed.ID); tend.Code != 0 {
+				t.Fatalf("tend: %+v", tend)
+			}
+			const other = "other-1111-2222"
+			register(t, s, other, "other")
+			for _, args := range [][]string{
+				{"agent", "close", other, "--self", "-m", "done"},
+				{"agent", "close", "--self", other, "-m", "done"},
+				{"agent", "close", "--self", "-m", "done", other},
+			} {
+				refused := fromAgent(args...)
+				if refused.Code != 2 || !strings.Contains(refused.Stderr, "--self") || !strings.Contains(refused.Stderr, "<session-or-seed>") {
+					t.Fatalf("--self with a target: %+v", refused)
+				}
+			}
+			missing := fromAgent("agent", "close", "unknown-id", "-m", "x")
+			requireFailure(t, missing, "agent close: ", "--self")
+			closed := fromAgent("agent", "close", "--self", "-m", "done")
+			if closed.Code != 0 {
+				t.Fatalf("self-close: %+v", closed)
+			}
+			entry := testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+				return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == session
+			}).SessionLedgerEntry
+			if protocol.Deref(entry.CloseReason) != "done" || string(protocol.Deref(entry.ClosedBy)) != session {
+				t.Fatalf("closed ledger row: %+v", entry)
+			}
+			requireLines(t, "ledger", s.Attn("session", "show", session).Stdout, "state      closed", "because    done")
+			notes := s.Attn("seed", "notes", seed.ID)
+			requireLines(t, "seed close note", notes.Stdout, "closed by itself", "Reason: done")
+			if shown := s.Attn("session", "show", other); strings.Contains(shown.Stdout, "state      closed") {
+				t.Fatalf("--self closed another session: %+v", shown)
+			}
+			var overridden protocol.AgentCloseResult
+			s.Run(testworld.Invocation{Args: []string{"agent", "close", "--self", "-m", "override done", "--source-session", other, "--json"}}).JSON(t, &overridden)
+			if string(overridden.TargetSessionID) != other || overridden.Rule != protocol.AgentCloseRuleSelf {
+				t.Fatalf("--source-session self-close: %+v", overridden)
+			}
+			t.Logf("%s: --self refused a target, closed the caller, kept reason done in the ledger and noted it on %s; --source-session resolved self", harness, seed.ID)
+		})
+	}
+}

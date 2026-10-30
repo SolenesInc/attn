@@ -358,5 +358,7 @@ commands:
         that recreate a worktree or fetch a branch write to the repository and
         only ever run when named here.
         Sessions whose profile was deleted cannot reopen.
+        To close a session, use attn agent close <id> -m "reason", or
+        attn agent close --self -m "reason" to close yourself.
 `)
 }
