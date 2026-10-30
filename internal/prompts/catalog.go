@@ -6,7 +6,11 @@ func Definitions() []Recipient {
 	s := session
 	s.Events = append(s.Events, gardenReadyEvent(), gardenRowEvent())
 	s.Events = append(s.Events, feedbackEvents()...)
-	s.Events = append(s.Events, On("garden-update", "inbox_content", "A watched seed moved; returned by the durable inbox.", template("session.garden-update", "content/session/garden-update.md", seedID, TextField("change", "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."))))
+	change := TextField("change", "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\".")
+	after := TextField("after", "The save number just before the first event the bell covers; blank for a bell stored before bells kept one.")
+	s.Events = append(s.Events, On("garden-update", "inbox_content", "A watched seed moved; returned by the durable inbox.", Choose(Present(after),
+		template("session.garden-update", "content/session/garden-update.md", seedID, change, after),
+		template("session.garden-update-whole", "content/session/garden-update-whole.md", seedID, change))))
 	recipients := append(append([]Recipient{s}, lifecycleRecipients()...), originRecipients()...)
 	recipients = append(recipients, delegationPreferencesRecipient(), gardenAdvisorRecipient(), piEnvironmentRecipient(), piSecurityRecipient(), piGuardianRecipient(), activityRecipient(), skillRecipient(), workflowSkillRecipient(), resourceRecipient(), annotationLabelRecipient(), evidenceRecipient(), askRecipient())
 	recipients = append(recipients, annotationRecipients()...)

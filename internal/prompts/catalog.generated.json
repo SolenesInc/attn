@@ -870,31 +870,84 @@
           "delivery": "inbox_content",
           "description": "A watched seed moved; returned by the durable inbox.",
           "body": {
-            "kind": "text",
-            "id": "session.garden-update",
-            "source": "content/session/garden-update.md",
-            "bindings": [
+            "kind": "choose",
+            "condition": {
+              "field": {
+                "name": "after",
+                "kind": "text",
+                "description": "The save number just before the first event the bell covers; blank for a bell stored before bells kept one."
+              },
+              "test": "present"
+            },
+            "children": [
               {
-                "name": "seed_id",
-                "node": {
-                  "kind": "input",
-                  "field": {
+                "kind": "text",
+                "id": "session.garden-update",
+                "source": "content/session/garden-update.md",
+                "bindings": [
+                  {
                     "name": "seed_id",
-                    "kind": "text",
-                    "description": "The session's stake, if it has one."
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "The session's stake, if it has one."
+                      }
+                    }
+                  },
+                  {
+                    "name": "change",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "change",
+                        "kind": "text",
+                        "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                      }
+                    }
+                  },
+                  {
+                    "name": "after",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "after",
+                        "kind": "text",
+                        "description": "The save number just before the first event the bell covers; blank for a bell stored before bells kept one."
+                      }
+                    }
                   }
-                }
+                ]
               },
               {
-                "name": "change",
-                "node": {
-                  "kind": "input",
-                  "field": {
+                "kind": "text",
+                "id": "session.garden-update-whole",
+                "source": "content/session/garden-update-whole.md",
+                "bindings": [
+                  {
+                    "name": "seed_id",
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "seed_id",
+                        "kind": "text",
+                        "description": "The session's stake, if it has one."
+                      }
+                    }
+                  },
+                  {
                     "name": "change",
-                    "kind": "text",
-                    "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                    "node": {
+                      "kind": "input",
+                      "field": {
+                        "name": "change",
+                        "kind": "text",
+                        "description": "What moved: the Garden event kind, or the check move a check note records, such as \"check C4 rejected by c9b177e1\"."
+                      }
+                    }
                   }
-                }
+                ]
               }
             ]
           }
@@ -6155,5 +6208,5 @@
       ]
     }
   ],
-  "definitions_hash": "95383d8f3129f540921ac42af321e0cb5d98521d453d745d13eca6d88f5553e1"
+  "definitions_hash": "276be35fdacedea89908ae78c1a85a246cbf023f66bfa1108c919cdfb580836d"
 }

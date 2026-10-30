@@ -74,5 +74,6 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 		}
 	}
 	out["garden-update"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}}})
+	out["garden-update/since"] = mailboxItemContent(store.InboxDelivery{Item: store.InboxItem{Item: inbox.Item{Kind: inbox.SeedUpdate, Source: "s-example", Hint: "note"}, AfterSeq: 2711491}})
 	prompttest.Equal(t, "daemon", out)
 }

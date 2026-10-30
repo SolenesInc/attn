@@ -163,7 +163,7 @@ func (s *Store) HandleGardenSeedEvent(
 			if err := putInbox(tx, inbox.Item{ID: delivery.ItemID, To: delivery.To, Kind: inbox.SeedUpdate, Source: seedID, Key: seedID, Hint: eventName, Text: text}, now); err != nil {
 				return nil, false, err
 			}
-			if _, err := tx.Exec("UPDATE inbox_items SET bell_name=? WHERE id=?", bellName, delivery.ItemID); err != nil {
+			if _, err := tx.Exec("UPDATE inbox_items SET bell_name=?, after_seq=? WHERE id=?", bellName, eventSeq-1, delivery.ItemID); err != nil {
 				return nil, false, err
 			}
 			created = append(created, delivery.To.String())

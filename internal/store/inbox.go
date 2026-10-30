@@ -20,6 +20,7 @@ type InboxItem struct {
 	ReadBy      string
 	CreatedAt   string
 	BellName    string
+	AfterSeq    int64
 }
 
 type InboxDelivery struct {
@@ -44,7 +45,7 @@ func scanInboxItem(row *sql.Row) (InboxItem, bool, error) {
 	err := row.Scan(
 		&item.ID, &address, &kind, &item.Source,
 		&item.Key, &item.Hint, &item.Text, &item.CreatedAt,
-		&item.NotifiedAt, &item.ReadAt, &item.ReadBy, &item.Attempts, &item.AttemptedAt, &item.BellName,
+		&item.NotifiedAt, &item.ReadAt, &item.ReadBy, &item.Attempts, &item.AttemptedAt, &item.BellName, &item.AfterSeq,
 	)
 	if err == sql.ErrNoRows {
 		return InboxItem{}, false, nil
@@ -63,7 +64,7 @@ func scanInboxItem(row *sql.Row) (InboxItem, bool, error) {
 func inboxItemByID(queryer inboxItemQueryer, id string) (InboxItem, bool, error) {
 	return scanInboxItem(queryer.QueryRow(`
 		SELECT id, address, kind, source_id, coalesce_key,
-		       hint, text, created_at, notified_at, read_at, read_by, attempts, attempted_at, bell_name
+		       hint, text, created_at, notified_at, read_at, read_by, attempts, attempted_at, bell_name, after_seq
 		FROM inbox_items WHERE id = ?
 	`, id))
 }
@@ -83,7 +84,7 @@ func scanInboxDelivery(row inboxDeliveryScanner) (InboxDelivery, error) {
 		&delivery.Item.ID, &address, &kind,
 		&delivery.Item.Source, &delivery.Item.Key, &delivery.Item.Hint,
 		&delivery.Item.Text, &delivery.Item.CreatedAt, &delivery.Item.NotifiedAt,
-		&delivery.Item.ReadAt, &delivery.Item.ReadBy, &delivery.Item.Attempts, &delivery.Item.AttemptedAt, &delivery.Item.BellName, &peerID, &peerSender, &body, &at,
+		&delivery.Item.ReadAt, &delivery.Item.ReadBy, &delivery.Item.Attempts, &delivery.Item.AttemptedAt, &delivery.Item.BellName, &delivery.Item.AfterSeq, &peerID, &peerSender, &body, &at,
 	); err != nil {
 		return InboxDelivery{}, err
 	}
@@ -121,7 +122,7 @@ func (s *Store) UnreadInboxDeliveries(to inbox.Address) ([]InboxDelivery, error)
 
 	rows, err := s.db.Query(`
 		SELECT i.id, i.address, i.kind, i.source_id, i.coalesce_key,
-		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name,
+		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name, i.after_seq,
 		       COALESCE(p.id, ''), COALESCE(p.sender_session_id, ''),
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i
@@ -157,7 +158,7 @@ func (s *Store) ReadInbox(addresses []inbox.Address, readBy protocol.SessionID, 
 	defer tx.Rollback()
 	rows, err := tx.Query(`
 		SELECT i.id, i.address, i.kind, i.source_id, i.coalesce_key,
-		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name,
+		       i.hint, i.text, i.created_at, i.notified_at, i.read_at, i.read_by, i.attempts, i.attempted_at, i.bell_name, i.after_seq,
 		       COALESCE(p.id, ''), COALESCE(p.sender_session_id, ''),
 		       COALESCE(p.body, ''), COALESCE(p.created_at, '')
 		FROM inbox_items i

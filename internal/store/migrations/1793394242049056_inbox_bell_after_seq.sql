@@ -1,0 +1,1 @@
+ALTER TABLE inbox_items ADD COLUMN after_seq INTEGER NOT NULL DEFAULT 0;

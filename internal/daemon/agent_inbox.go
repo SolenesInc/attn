@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -143,7 +144,11 @@ func mailboxItemContent(delivery store.InboxDelivery) string {
 		if change == "" {
 			change = delivery.Item.Hint
 		}
-		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "change": change})
+		after := ""
+		if delivery.Item.AfterSeq > 0 {
+			after = strconv.FormatInt(delivery.Item.AfterSeq, 10)
+		}
+		return prompts.RenderText("session", "garden-update", prompts.Values{"seed_id": delivery.Item.Source, "change": change, "after": after})
 	case inbox.PeerMessage:
 		if delivery.Peer != nil {
 			return delivery.Peer.Body
