@@ -1,7 +1,19 @@
 use serde_json::Value;
 use tauri::{AppHandle, Runtime};
 
-pub const ACTIONS: [&str; 3] = ["native_key", "native_text", "native_mouse"];
+pub const ACTIONS: [&str; 4] = [
+    "native_key",
+    "native_text",
+    "native_mouse",
+    "native_input_state",
+];
+
+#[cfg(target_os = "macos")]
+pub fn install_harness_window<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    platform::install_harness_window(window)
+}
 
 const DEFAULT_WINDOW_LABEL: &str = "main";
 
@@ -284,15 +296,16 @@ pub fn text_strokes(text: &str) -> Result<Vec<KeyStroke>, String> {
 
 fn relative_point(payload: &Value, x_field: &str, y_field: &str) -> Result<(f64, f64), String> {
     let read = |field: &str| {
-        payload
+        let value = payload
             .get(field)
             .and_then(Value::as_f64)
-            .ok_or_else(|| format!("{field} must be a number between 0 and 1"))
+            .ok_or_else(|| format!("{field} must be a number between 0 and 1"))?;
+        if !(0.0..1.0).contains(&value) {
+            return Err(format!("{field} must be >= 0 and < 1, got {value}; scroll the target into the viewport before native input"));
+        }
+        Ok(value)
     };
-    Ok((
-        read(x_field)?.clamp(0.0, 1.0),
-        read(y_field)?.clamp(0.0, 1.0),
-    ))
+    Ok((read(x_field)?, read(y_field)?))
 }
 
 pub fn parse_mouse(payload: &Value) -> Result<MouseRequest, String> {
@@ -354,6 +367,7 @@ pub fn inject<R: Runtime>(
 ) -> Result<Value, String> {
     let label = window_label(payload);
     match action {
+        "native_input_state" => platform::input_state(app, &label),
         "native_key" => {
             let modifiers = parse_modifiers(payload.get("modifiers"))?;
             let stroke = match (
@@ -367,14 +381,19 @@ pub fn inject<R: Runtime>(
                 )?,
                 (None, None) => return Err("native_key needs key or keyCode".to_string()),
             };
-            platform::send_keys(app, &label, &[stroke])
+            platform::send_keys(app, &label, &[stroke], payload.get("window").is_some())
         }
         "native_text" => {
             let text = payload
                 .get("text")
                 .and_then(Value::as_str)
                 .ok_or_else(|| "native_text needs text".to_string())?;
-            platform::send_keys(app, &label, &text_strokes(text)?)
+            platform::send_keys(
+                app,
+                &label,
+                &text_strokes(text)?,
+                payload.get("window").is_some(),
+            )
         }
         "native_mouse" => platform::send_mouse(app, &label, &parse_mouse(payload)?),
         other => Err(format!("{other} is not a native input action")),
@@ -384,22 +403,126 @@ pub fn inject<R: Runtime>(
 #[cfg(target_os = "macos")]
 mod platform {
     use super::{KeyStroke, Modifiers, MouseButton, MouseGesture, MouseRequest};
-    use objc2::rc::Retained;
-    use objc2::runtime::NSObjectProtocol;
-    use objc2::MainThreadMarker;
+    use block2::RcBlock;
+    use objc2::rc::{Retained, Weak};
+    use objc2::runtime::{AnyClass, Imp, Method, NSObjectProtocol, Sel};
+    use objc2::{ClassType, MainThreadMarker};
     use objc2_app_kit::{
         NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSMenu, NSView, NSWindow,
+        NSWorkspace,
     };
     use objc2_foundation::{NSPoint, NSProcessInfo, NSString};
     use objc2_web_kit::WKWebView;
     use serde_json::Value;
-    use std::sync::mpsc;
+    use std::cell::{Cell, RefCell};
+    use std::sync::{mpsc, OnceLock};
     use std::time::Duration;
     use tauri::{AppHandle, Manager, Runtime};
 
-    const BUTTON_HOLD: Duration = Duration::from_millis(20);
-    const DRAG_STEP: Duration = Duration::from_millis(16);
     const MAIN_THREAD_TIMEOUT: Duration = Duration::from_secs(5);
+
+    thread_local! {
+        static INJECTED_BUTTONS: Cell<Option<usize>> = const { Cell::new(None) };
+        static HARNESS_WINDOW: RefCell<Weak<NSWindow>> = RefCell::new(Weak::default());
+    }
+    static PRESSED_BUTTONS_IMPLEMENTATION: OnceLock<Imp> = OnceLock::new();
+    type KeyWindowGetter = unsafe extern "C-unwind" fn(&NSApplication, Sel) -> *mut NSWindow;
+    static KEY_WINDOW_GETTER: OnceLock<KeyWindowGetter> = OnceLock::new();
+
+    unsafe extern "C-unwind" fn harness_key_window(
+        application: &NSApplication,
+        selector: Sel,
+    ) -> *mut NSWindow {
+        let original = unsafe { KEY_WINDOW_GETTER.get().unwrap()(application, selector) };
+        if !original.is_null() {
+            return original;
+        }
+        HARNESS_WINDOW
+            .with(|window| window.borrow().load())
+            .map_or(std::ptr::null_mut(), Retained::autorelease_ptr)
+    }
+
+    pub fn install_harness_window<R: Runtime>(
+        window: &tauri::WebviewWindow<R>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mtm = MainThreadMarker::new().expect("harness window setup runs on the main thread");
+        let native: Retained<NSWindow> = unsafe { Retained::retain(window.ns_window()?.cast()) }
+            .ok_or("the harness window has no native window")?;
+        let application = NSApplication::sharedApplication(mtm);
+        let class = application.class();
+        let selector = objc2::sel!(keyWindow);
+        let method = class
+            .instance_method(selector)
+            .ok_or("NSApplication.keyWindow is unavailable")?;
+        let getter: KeyWindowGetter = unsafe { std::mem::transmute(method.implementation()) };
+        KEY_WINDOW_GETTER
+            .set(getter)
+            .map_err(|_| "the harness key window is already installed")?;
+        HARNESS_WINDOW.with(|window| *window.borrow_mut() = Weak::from_retained(&native));
+        let installed = unsafe {
+            objc2::ffi::class_addMethod(
+                std::ptr::from_ref(class).cast_mut(),
+                selector,
+                std::mem::transmute::<KeyWindowGetter, Imp>(harness_key_window),
+                c"@@:".as_ptr(),
+            )
+        };
+        if !installed.as_bool() {
+            return Err("could not install the harness key window".into());
+        }
+        Ok(())
+    }
+
+    unsafe extern "C-unwind" fn injected_buttons(class: &AnyClass, selector: Sel) -> usize {
+        INJECTED_BUTTONS
+            .with(|buttons| buttons.get())
+            .unwrap_or_else(|| {
+                let original: unsafe extern "C-unwind" fn(&AnyClass, Sel) -> usize =
+                    unsafe { std::mem::transmute(*PRESSED_BUTTONS_IMPLEMENTATION.get().unwrap()) };
+                unsafe { original(class, selector) }
+            })
+    }
+
+    struct MouseButtonState {
+        method: &'static Method,
+        implementation: Imp,
+        previous: Option<usize>,
+    }
+
+    impl MouseButtonState {
+        fn for_event(kind: NSEventType) -> Self {
+            let buttons = match kind {
+                NSEventType::LeftMouseDown | NSEventType::LeftMouseDragged => 1,
+                NSEventType::RightMouseDown | NSEventType::RightMouseDragged => 2,
+                _ => 0,
+            };
+            let method = NSEvent::class()
+                .class_method(objc2::sel!(pressedMouseButtons))
+                .unwrap();
+            PRESSED_BUTTONS_IMPLEMENTATION.get_or_init(|| method.implementation());
+            let previous = INJECTED_BUTTONS.with(|state| state.replace(Some(buttons)));
+            let implementation = unsafe {
+                method.set_implementation(std::mem::transmute::<
+                    unsafe extern "C-unwind" fn(&AnyClass, Sel) -> usize,
+                    Imp,
+                >(injected_buttons))
+            };
+            Self {
+                method,
+                implementation,
+                previous,
+            }
+        }
+    }
+
+    impl Drop for MouseButtonState {
+        fn drop(&mut self) {
+            unsafe {
+                self.method.set_implementation(self.implementation);
+            }
+            INJECTED_BUTTONS.with(|state| state.set(self.previous));
+        }
+    }
 
     struct Target {
         view: Retained<NSView>,
@@ -448,6 +571,49 @@ mod platform {
             flags |= NSEventModifierFlags::Control;
         }
         flags
+    }
+
+    pub fn input_state<R: Runtime>(app: &AppHandle<R>, label: &str) -> Result<Value, String> {
+        on_webview(app, label, |target| {
+            let application = NSApplication::sharedApplication(target.mtm);
+            let frontmost = NSWorkspace::sharedWorkspace().frontmostApplication();
+            let rect = target.view.visibleRect();
+            let frame = target.window.frame();
+            let pointer = NSEvent::mouseLocation();
+            let down = mouse_event(
+                target,
+                NSEventType::LeftMouseDown,
+                NSPoint::new(100.0, 100.0),
+                Modifiers::default(),
+                1,
+            )?;
+            let ignores_mouse_move: bool =
+                unsafe { objc2::msg_send![&target.view, _ignoresMouseMoveEvents] };
+            let ignores_non_wheel: bool =
+                unsafe { objc2::msg_send![&target.view, _ignoresNonWheelEvents] };
+            let actual_key_window = KEY_WINDOW_GETTER
+                .get()
+                .map(|getter| unsafe { getter(&application, objc2::sel!(keyWindow)) });
+            let secure_input: bool =
+                unsafe { objc2::msg_send![&target.view, _secureEventInputEnabledForTesting] };
+            Ok(serde_json::json!({
+                "appActive": application.isActive(),
+                "appPid": NSProcessInfo::processInfo().processIdentifier(),
+                "webviewIsFirstResponder": target.window.firstResponder().is_some_and(|responder| Retained::as_ptr(&responder).cast::<NSView>() == Retained::as_ptr(&target.view)),
+                "frontmostPid": frontmost.as_ref().map(|app| app.processIdentifier()),
+                "windowKey": target.window.isKeyWindow(),
+                "windowCanBecomeKey": target.window.canBecomeKeyWindow(),
+                "actualApplicationKeyWindow": actual_key_window.map(|window| !window.is_null()),
+                "secureInput": secure_input,
+                "acceptsFirstMouse": target.view.acceptsFirstMouse(Some(&down)),
+                "ignoresMouseMoveEvents": ignores_mouse_move,
+                "ignoresNonWheelEvents": ignores_non_wheel,
+                "firstResponder": target.window.firstResponder().map(|view| view.class().name().to_string_lossy().to_string()),
+                "pointer": {"x": pointer.x, "y": pointer.y},
+                "frame": {"x":frame.origin.x,"y":frame.origin.y,"width":frame.size.width,"height":frame.size.height},
+                "visibleRect": {"x":rect.origin.x,"y":rect.origin.y,"width":rect.size.width,"height":rect.size.height},
+            }))
+        })
     }
 
     fn uptime() -> f64 {
@@ -555,12 +721,27 @@ mod platform {
         app: &AppHandle<R>,
         label: &str,
         strokes: &[KeyStroke],
+        explicit_target: bool,
     ) -> Result<Value, String> {
         let mut handled = Vec::with_capacity(strokes.len());
         for stroke in strokes {
             let stroke = stroke.clone();
             handled.push(on_webview(app, label, move |target| {
-                send_key(target, &stroke)
+                let view = if explicit_target {
+                    None
+                } else {
+                    target
+                        .window
+                        .firstResponder()
+                        .and_then(|responder| responder.downcast::<WKWebView>().ok())
+                        .map(|view| view.into_super())
+                };
+                let focused = Target {
+                    view: view.unwrap_or_else(|| target.view.clone()),
+                    window: target.window.clone(),
+                    mtm: target.mtm,
+                };
+                send_key(&focused, &stroke)
             })?);
         }
         Ok(serde_json::json!({ "delivered": strokes.len(), "handledBy": handled }))
@@ -610,12 +791,69 @@ mod platform {
     ) -> Result<(), String> {
         let point = window_point(target, relative);
         let event = mouse_event(target, kind, point, modifiers, click_count)?;
+        let application = NSApplication::sharedApplication(target.mtm);
+        let previous = application.currentEvent();
+        let _buttons = MouseButtonState::for_event(kind);
+        unsafe {
+            let _: () = objc2::msg_send![&application, _setCurrentEvent: &*event];
+        }
         if kind == NSEventType::MouseMoved {
-            target.view.mouseMoved(&event);
+            unsafe {
+                let _: () = objc2::msg_send![&target.view, _simulateMouseMove: &*event];
+            }
         } else {
-            target.window.sendEvent(&event);
+            match kind {
+                NSEventType::LeftMouseDown => {
+                    make_webview_first_responder(target);
+                    target.view.mouseDown(&event);
+                }
+                NSEventType::LeftMouseUp => target.view.mouseUp(&event),
+                NSEventType::LeftMouseDragged => target.view.mouseDragged(&event),
+                NSEventType::RightMouseDown => {
+                    make_webview_first_responder(target);
+                    target.view.rightMouseDown(&event);
+                }
+                NSEventType::RightMouseUp => target.view.rightMouseUp(&event),
+                _ => unreachable!(),
+            }
+        }
+        unsafe {
+            let _: () = objc2::msg_send![&application, _setCurrentEvent: previous.as_deref()];
         }
         Ok(())
+    }
+
+    fn mouse_target(target: &Target, origin: (f64, f64)) -> Result<Target, String> {
+        let point = window_point(target, origin);
+        let layout = target.window.contentLayoutRect();
+        if point.x < layout.origin.x
+            || point.y < layout.origin.y
+            || point.x >= layout.origin.x + layout.size.width
+            || point.y >= layout.origin.y + layout.size.height
+        {
+            return Err(format!("native mouse point x={}, y={} is outside web content {:?}; scroll the target into the viewport before native input", origin.0, origin.1, layout));
+        }
+        let content = target
+            .window
+            .contentView()
+            .ok_or("the window has no content view")?;
+        let local = unsafe { content.superview() }
+            .map_or(point, |view| view.convertPoint_fromView(point, None));
+        let mut hit = content.hitTest(local);
+        while let Some(view) = hit {
+            if view.downcast_ref::<WKWebView>().is_some() {
+                return Ok(Target {
+                    view,
+                    window: target.window.clone(),
+                    mtm: target.mtm,
+                });
+            }
+            hit = unsafe { view.superview() };
+        }
+        Err(format!(
+            "native mouse point x={}, y={} does not hit a webview",
+            origin.0, origin.1
+        ))
     }
 
     fn one<R: Runtime>(
@@ -623,11 +861,39 @@ mod platform {
         label: &str,
         kind: NSEventType,
         relative: (f64, f64),
+        origin: (f64, f64),
         modifiers: Modifiers,
         click_count: i64,
     ) -> Result<(), String> {
+        let (sender, receiver) = mpsc::channel();
         on_webview(app, label, move |target| {
-            send_mouse_event(target, kind, relative, modifiers, click_count)
+            let target = mouse_target(target, origin)?;
+            if !target
+                .view
+                .respondsToSelector(objc2::sel!(_simulateMouseMove:))
+                || !target
+                    .view
+                    .respondsToSelector(objc2::sel!(_doAfterProcessingAllPendingMouseEvents:))
+            {
+                return Err("WebKit native mouse simulation is unavailable".into());
+            }
+            send_mouse_event(&target, kind, relative, modifiers, click_count)?;
+            let completed = RcBlock::new(move || {
+                let _ = sender.send(());
+            });
+            unsafe {
+                let _: () = objc2::msg_send![&target.view, _doAfterProcessingAllPendingMouseEvents: &*completed];
+            }
+            Ok(())
+        })?;
+        receiver.recv_timeout(MAIN_THREAD_TIMEOUT).map_err(|_| {
+            format!(
+                "WebKit native mouse processing exceeded timeoutMs={} for event {} at x={}, y={}",
+                MAIN_THREAD_TIMEOUT.as_millis(),
+                kind.0,
+                relative.0,
+                relative.1
+            )
         })
     }
 
@@ -640,7 +906,7 @@ mod platform {
         let mut delivered = 0usize;
         match request.gesture {
             MouseGesture::Move { to } => {
-                one(app, label, NSEventType::MouseMoved, to, modifiers, 0)?;
+                one(app, label, NSEventType::MouseMoved, to, to, modifiers, 0)?;
                 delivered += 1;
             }
             MouseGesture::Click {
@@ -652,24 +918,33 @@ mod platform {
                     MouseButton::Left => (NSEventType::LeftMouseDown, NSEventType::LeftMouseUp),
                     MouseButton::Right => (NSEventType::RightMouseDown, NSEventType::RightMouseUp),
                 };
-                one(app, label, NSEventType::MouseMoved, at, modifiers, 0)?;
-                std::thread::sleep(BUTTON_HOLD);
+                one(app, label, NSEventType::MouseMoved, at, at, modifiers, 0)?;
                 for count in 1..=click_count {
-                    one(app, label, down, at, modifiers, count)?;
-                    std::thread::sleep(BUTTON_HOLD);
-                    one(app, label, up, at, modifiers, count)?;
+                    one(app, label, down, at, at, modifiers, count)?;
+                    one(app, label, up, at, at, modifiers, count)?;
                     delivered += 2;
-                    if count < click_count {
-                        std::thread::sleep(BUTTON_HOLD);
-                    }
                 }
                 delivered += 1;
             }
             MouseGesture::Drag { from, to, steps } => {
-                one(app, label, NSEventType::MouseMoved, from, modifiers, 0)?;
-                std::thread::sleep(BUTTON_HOLD);
-                one(app, label, NSEventType::LeftMouseDown, from, modifiers, 1)?;
-                std::thread::sleep(Duration::from_millis(50));
+                one(
+                    app,
+                    label,
+                    NSEventType::MouseMoved,
+                    from,
+                    from,
+                    modifiers,
+                    0,
+                )?;
+                one(
+                    app,
+                    label,
+                    NSEventType::LeftMouseDown,
+                    from,
+                    from,
+                    modifiers,
+                    1,
+                )?;
                 for step in 1..=steps {
                     let t = step as f64 / steps as f64;
                     let point = (from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t);
@@ -678,13 +953,12 @@ mod platform {
                         label,
                         NSEventType::LeftMouseDragged,
                         point,
+                        from,
                         modifiers,
                         1,
                     )?;
-                    std::thread::sleep(DRAG_STEP);
                 }
-                std::thread::sleep(Duration::from_millis(50));
-                one(app, label, NSEventType::LeftMouseUp, to, modifiers, 1)?;
+                one(app, label, NSEventType::LeftMouseUp, to, from, modifiers, 1)?;
                 delivered += steps + 3;
             }
         }
@@ -698,10 +972,15 @@ mod platform {
     use serde_json::Value;
     use tauri::{AppHandle, Runtime};
 
+    pub fn input_state<R: Runtime>(_app: &AppHandle<R>, _label: &str) -> Result<Value, String> {
+        Err("native input state is only supported on macOS".into())
+    }
+
     pub fn send_keys<R: Runtime>(
         _app: &AppHandle<R>,
         _label: &str,
         _strokes: &[KeyStroke],
+        _explicit_target: bool,
     ) -> Result<Value, String> {
         Err("native input injection is only supported on macOS".into())
     }
@@ -833,12 +1112,12 @@ mod tests {
     }
 
     #[test]
-    fn mouse_requests_clamp_and_default() {
-        let click = parse_mouse(&json!({ "action": "click", "x": 1.5, "y": -1 })).unwrap();
+    fn mouse_requests_decode_gestures() {
+        let click = parse_mouse(&json!({ "action": "click", "x": 0.5, "y": 0.2 })).unwrap();
         assert_eq!(
             click.gesture,
             MouseGesture::Click {
-                at: (1.0, 0.0),
+                at: (0.5, 0.2),
                 button: MouseButton::Left,
                 click_count: 1
             }

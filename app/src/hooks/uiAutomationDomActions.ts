@@ -45,6 +45,26 @@ export const APP_BUILD_IDENTITY = {
 
 export const NOT_A_DOM_ACTION = Symbol('not a DOM automation action');
 
+const nativePointerEvents: Record<string, unknown>[] = [];
+let observingNativePointer = false;
+
+function observeNativePointer(event: MouseEvent) {
+  if (!event.isTrusted) return;
+  const target = event.target instanceof Element ? event.target : null;
+  nativePointerEvents.push({
+    type: event.type, trusted: event.isTrusted, buttons: event.buttons, button: event.button,
+    x: event.clientX, y: event.clientY, alt: event.altKey, meta: event.metaKey,
+    target: target ? {
+      tag: target.tagName, className: target.getAttribute('class'),
+      testId: target.getAttribute('data-testid'), ariaLabel: target.getAttribute('aria-label'),
+    } : null,
+    hover: Array.from(document.querySelectorAll(':hover')).map(element => ({
+      tag: element.tagName, className: element.getAttribute('class'),
+      testId: element.getAttribute('data-testid'),
+    })),
+  });
+}
+
 export function rectSnapshot(element: Element | null) {
   if (!(element instanceof HTMLElement)) {
     return null;
@@ -317,6 +337,23 @@ export async function runDomAutomationAction(
         })),
       };
     }
+    case 'native_pointer_trace_start': {
+      nativePointerEvents.length = 0;
+      if (!observingNativePointer) {
+        for (const type of ['mousemove', 'mousedown', 'mouseup', 'click']) {
+          document.addEventListener(type, observeNativePointer as EventListener, true);
+        }
+        observingNativePointer = true;
+      }
+      return { observing: true };
+    }
+    case 'native_pointer_trace_read': {
+      for (const type of ['mousemove', 'mousedown', 'mouseup', 'click']) {
+        document.removeEventListener(type, observeNativePointer as EventListener, true);
+      }
+      observingNativePointer = false;
+      return { events: nativePointerEvents.splice(0) };
+    }
     case 'ui_diagnostics':
       return supportUiDiagnosticsSnapshot();
     case 'dom_wait':
@@ -344,7 +381,9 @@ export async function runDomAutomationAction(
     case 'dom_bounds': {
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_bounds requires selector');
-      const element = document.querySelector(selector);
+      const element = typeof payload.textIncludes === 'string'
+        ? Array.from(document.querySelectorAll(selector)).find(element => element.textContent?.includes(payload.textIncludes as string))
+        : document.querySelector(selector);
       if (!(element instanceof HTMLElement)) {
         throw new Error(`dom_bounds selector not found in DOM: ${selector}`);
       }

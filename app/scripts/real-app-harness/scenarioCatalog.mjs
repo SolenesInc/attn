@@ -1,5 +1,12 @@
 export const scenarioCatalog = [
   {
+    id: 'focusless-native',
+    runnerId: 'FOCUSLESS-NATIVE',
+    label: 'Parked native hover, clicks, keys and drags leave macOS focus elsewhere',
+    command: ['node', 'scripts/real-app-harness/scenario-focusless-native.mjs'],
+    skipOn: { linux: 'The parked AppKit harness and in-process native input are macOS-only' },
+  },
+  {
     id: 'agent-reload',
     runnerId: 'AGENT-RELOAD',
     label: 'CLI reload keeps the agent tile and native keyboard input working',

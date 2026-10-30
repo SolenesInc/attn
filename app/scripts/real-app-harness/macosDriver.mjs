@@ -21,6 +21,7 @@ const CODESIGN_IDENTITY_SCRIPT = path.resolve(SCRIPT_DIR, '..', '..', '..', 'scr
 let inputDriverReady = null;
 
 function delay(ms) {
+  if (ms === 0) return Promise.resolve();
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -286,6 +287,7 @@ export class MacOSDriver {
         y: relativeY,
         toX: toRelativeX,
         toY: toRelativeY,
+        modifiers: modifierNames(opts.modifiers),
         ...(opts.steps !== undefined ? { steps: opts.steps } : {}),
       }, opts);
     } else {

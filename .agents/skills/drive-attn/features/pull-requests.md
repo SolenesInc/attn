@@ -104,7 +104,6 @@ Preconditions:
 
 ## Gotchas
 
-- On a parked macOS window, `bridge native_mouse` with `"action":"move"` can leave the home-screen card outside `:hover`. A native click can then reveal its actions without running one, even when a trusted mouseup receipt matches the button. In that run, author mute stayed unchanged and its Settings list never appeared. Keep that way unverified; a DOM click may set up the muted author for a separate native Unmute check, but does not prove native author mute.
 - The drawer stays in the page while closed, hidden. `.attention-drawer-panel` is always present; wait on `.attention-drawer[aria-hidden="false"]` or `"true"` to tell open from closed.
 - The mock GitHub answers no GraphQL. A watch on the baseline always reads HEALTH `delayed`, and its ready, failed-checks and feedback notices cannot be driven live; the wire tests cover them.
 - `pr wait-ready` runs the user's own `gh` against real GitHub and never reaches the mock. On the baseline only its usage refusals are drivable.

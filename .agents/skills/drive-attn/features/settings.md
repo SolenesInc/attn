@@ -89,7 +89,7 @@ Preconditions:
 
 - Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`, `internal/daemon/tailscale_wire_test.go`.
 - Stack: `cmd/attn/settings_stack_test.go`, `cmd/attn/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
-- Scenario: `agent-settings`.
+- Scenario: `focusless-native` (parked macOS native input), `agent-settings`.
 - App: `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`.
 
 ## Gotchas

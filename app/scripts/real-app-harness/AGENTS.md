@@ -7,6 +7,8 @@ and run commands from the repository root.
 
 - Scenarios share one display and run serially:
   `pnpm --dir app run real-app:serial-matrix`. A second run waits for the lock.
+  On a shared Mac, use `--no-fresh-world` or invoke a focus-free scenario
+  directly: the default fresh-world cleanup selects worker PIDs by pattern.
 - The instance comes from `ATTN_HARNESS_INSTANCE`, then `ATTN_INSTANCE`, then `dev`.
   Production needs an empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and
   explicit approval.
@@ -29,8 +31,10 @@ and run commands from the repository root.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
   On macOS it sends input without taking focus or moving the pointer, except
   `menu` and scrolling; on Linux, `xdotool` focuses the window and moves the
-  pointer. A scenario that needs real focus calls `driver.activateApp()` and
-  says why.
+  pointer. Shared-Mac runs keep the parked launch and never use activation,
+  `menu`, scrolling or physical input; see the
+  [drive-attn launch rules](../../../.agents/skills/drive-attn/SKILL.md#launch).
+  Scenarios requiring real focus or system input run on a dedicated display.
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
   and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
   before launch; no fixture means a silent agent. Real providers need
