@@ -68,18 +68,6 @@ describe("browser runtime", () => {
     expect(buttonRef[ELEMENT_KEY]).toMatch(/^attn-element-/);
   });
 
-  it("waits for dynamic content", async () => {
-    window.setTimeout(() => {
-      document.body.innerHTML = "<p>Ready</p>";
-    }, 10);
-
-    const result = await runtime().execute("wait_for", {
-      using: "text", value: "Ready", state: "attached", timeout: 500,
-    }) as Record<string, string>;
-
-    expect(result[ELEMENT_KEY]).toMatch(/^attn-element-/);
-  });
-
   it("edits controls in a same-origin frame", async () => {
     const frame = document.createElement("iframe");
     document.body.append(frame);

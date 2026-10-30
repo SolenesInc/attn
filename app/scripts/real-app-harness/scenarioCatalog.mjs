@@ -1,5 +1,11 @@
 export const scenarioCatalog = [
   {
+    id: 'browser-wait-navigation',
+    runnerId: 'BROWSER-WAIT-NAVIGATION',
+    label: 'Browser waits survive initial navigation, tile reopening and later navigation',
+    command: ['node', 'scripts/real-app-harness/scenario-browser-wait-navigation.mjs'],
+  },
+  {
     id: 'focusless-native',
     runnerId: 'FOCUSLESS-NATIVE',
     label: 'Parked native hover, clicks, keys and drags leave macOS focus elsewhere',
