@@ -26,11 +26,14 @@ func (d *Daemon) settleHarvestConditions() (harvested, cleared int) {
 		}
 		switch row.State {
 		case sessionPullRequestMerged:
-			if _, _, err := d.fulfilHarvestWhen(seed, row, seed.HarvestWhen); err != nil {
+			if settled, _, _, err := d.fulfilHarvestWhen(seed, row, seed.HarvestWhen); err != nil {
 				d.logf("harvest-on-merge: harvesting %s on %s: %v", seed.ID, row.PRID, err)
 				continue
+			} else if garden.Closed(settled.Status) {
+				harvested++
+			} else {
+				cleared++
 			}
-			harvested++
 		case sessionPullRequestClosed:
 			note := harvestWhenClosedNote(row)
 			if _, _, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen, note, garden.Tender{Member: crew.DaemonID}); err != nil {

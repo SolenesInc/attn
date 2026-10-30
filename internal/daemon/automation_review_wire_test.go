@@ -572,3 +572,30 @@ func sscanfAutomationPull(path string, number *int) bool {
 	n, _ := fmt.Sscanf(path, "/repos/acme/shop/pulls/%d%s", number, &rest)
 	return n == 1
 }
+
+func TestAFailedAutomationContinuationCannotQuietlyCloseAPlotOverOpenWork(t *testing.T) {
+	r := newAutomationReviewWorld(t)
+	r.github.request(42, r.head, false)
+	r.refresh()
+	first := r.awaitNewRun(1, "delivered")
+	session, seed := protocol.Deref(first.SessionID), protocol.Deref(first.SeedID)
+	reviewer := r.w.Launched(string(session))
+	reviewer.Prompted()
+	reviewer.Reply("Reviewed.")
+	gardenNudgeMove(t, r.cli, string(session), seed, "harvest")
+	r.stop(reviewer)
+	child := gardenNudgePlant(t, r.cli, "", "follow-up review", seed)
+	worktree := testworld.AwaitSession(r.app, string(session), func(s protocol.Session) bool { return s.Directory != "" }).Directory
+	if err := os.Rename(worktree, filepath.Join(r.w.Dir, "removed-worktree")); err != nil {
+		t.Fatal(err)
+	}
+	r.rerequest(42)
+	failed := r.awaitNewRun(1, "failed", first)
+	if message := protocol.Deref(failed.LastError); !strings.Contains(message, "worktree is missing") || !strings.Contains(message, child+" planted") {
+		t.Fatalf("failed continuation did not report the refused quiet close: %s", message)
+	}
+	shown, err := r.cli.SeedShow("", seed)
+	if err != nil || shown.Seed.Status != "growing" {
+		t.Fatalf("quiet restore closed a plot over its child: %+v, %v", shown, err)
+	}
+}

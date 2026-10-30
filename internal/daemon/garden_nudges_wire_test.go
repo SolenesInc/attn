@@ -372,3 +372,81 @@ func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
 		}
 	})
 }
+
+func TestAPlotTenderHearsDescendantsOnlyWhileHoldingTheClaim(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "planter", "tender")
+		plot, child, leaf := gardenNudgePlot(t, cli, "planter")
+		gardenNudgeMove(t, cli, "tender", plot, "tend")
+		if shown, err := cli.SeedShow("tender", plot); err != nil || shown.Watching {
+			t.Fatalf("tending created a watch: %+v, %v", shown, err)
+		}
+		gardenNudgeMove(t, cli, "planter", leaf, "harvest")
+		items := readInbox(t, cli, "tender", 0).Items
+		if len(items) != 2 || !strings.Contains(inboxContents(items), leaf+" moved: harvested") || !strings.Contains(inboxContents(items), child+" moved: note.added") {
+			t.Fatalf("covering tender missed grandchild completion: %q", inboxContents(items))
+		}
+		gardenNudgeNote(t, cli, "planter", leaf, "look at the proof", true)
+		gardenNudgeOneBell(t, cli, "tender", leaf, "note.added")
+		gardenNudgeWatch(t, cli, "tender", plot, false)
+		gardenNudgeNote(t, cli, "planter", child, "overlap has one recipient", true)
+		gardenNudgeOneBell(t, cli, "tender", child, "note.added")
+		gardenNudgeWatch(t, cli, "tender", plot, true)
+		gardenNudgeNote(t, cli, "planter", leaf, "queued before park", true)
+		gardenNudgeMove(t, cli, "tender", plot, "park")
+		gardenNudgeInboxIsEmpty(t, cli, "tender", "after parking withdrew its queued descendant update")
+		gardenNudgeNote(t, cli, "planter", child, "after the claim ended", true)
+		gardenNudgeInboxIsEmpty(t, cli, "tender", "after a later descendant note")
+	})
+}
+
+func TestAMemberTendingAPlotHearsItsGrandchildren(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		cli := w.Client()
+		registerSessions(t, w, cli, "planter")
+		plot, _, leaf := gardenNudgePlot(t, cli, "planter")
+		gardenNudgeMove(t, cli, day.id, plot, "tend")
+		readInbox(t, cli, day.id, 0)
+		gardenNudgeNote(t, cli, "planter", leaf, "proof for the member", true)
+		items := readInbox(t, cli, day.id, 0).Items
+		if len(items) != 1 || items[0].Address != "member:trellis" || !strings.Contains(items[0].Content, leaf+" moved: note.added") {
+			t.Fatalf("covering member inbox: %+v", items)
+		}
+		gardenNudgeNote(t, cli, "planter", leaf, "pending member proof", true)
+		gardenNudgeMove(t, cli, day.id, plot, "park")
+		gardenNudgeInboxIsEmpty(t, cli, day.id, "after the member parked the plot")
+	})
+}
+
+func TestAPlotDelegateGetsOneUpdateForItsWatchAndClaim(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		parent := w.bubbleClaude(t, app, "parent").id
+		plot := plantDelegationSeed(t, cli, parent, "Coordinate both children")
+		first := gardenNudgePlant(t, cli, parent, "first", plot)
+		gardenNudgePlant(t, cli, parent, "still open", plot)
+		request := delegateAtSeed(parent, w.Path("parent"), plot)
+		request.Agent = protocol.Ptr("claude")
+		request.RequestID = "covering-" + plot
+		started := make(chan struct{})
+		w.terms.OnNextSpawn(func(*testworld.Terminal) { close(started) })
+		accepted, err := cli.StartDelegation(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		<-started
+		worker := w.bootBubbleClaude(t, string(accepted.SessionID))
+		worker.reply("Ready. <!-- attn:state=idle -->")
+		if _, err := cli.Delegate(request); err != nil {
+			t.Fatal(err)
+		}
+		shown, err := cli.SeedShow(accepted.SessionID, plot)
+		if err != nil || !shown.Watching || shown.Seed.TenderSession != accepted.SessionID {
+			t.Fatalf("delegation has no overlapping watch and claim: %+v, %v", shown, err)
+		}
+		gardenNudgeMove(t, cli, parent, first, "harvest")
+		gardenNudgeOneBell(t, cli, worker.id, first, "harvested")
+	})
+}

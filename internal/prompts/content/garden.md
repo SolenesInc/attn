@@ -33,7 +33,7 @@ The loop:
 
 `attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` check who tends the seed. A live claim yields to its tender, sessions above it in the delegation chain, or the profile's chief. A crew member's named claim yields only to that member or the chief. Acting through the chain or as chief records who moved it and whose claim ended; the delegate hears it through its delegation watch. Everyone else needs `--force`, which also records the move. A call without a live session has no standing. A seed whose session ended is unclaimed. `--member <name>` acts as a crew member instead of this session; a named claim never expires.
 
-Repeating a move to the same state succeeds without rewriting the seed or ringing anyone. A different reason is kept as a quiet note. Harvest on a withered seed, or wither on a harvested seed, requires `attn seed replant <id>` first. Every move prints who it rang. Harvest and wither also print the seeds the close set free and ring whoever tends one.
+Repeating a move to the same state succeeds without rewriting the seed or ringing anyone. A different reason is kept as a quiet note. Harvest on a withered seed, or wither on a harvested seed, requires `attn seed replant <id>` first. Every move prints who it rang. Harvest and wither also print the seeds the close set free and ring whoever tends one. Harvest and wither refuse while any direct child is planted, growing or dormant, even with --force or --when-merged. Replant hands back a plot when your part is done; otherwise close its children or move follow-ups out first. The last child closing leaves a ringing note on the plot and names it in the output; the plot keeps its state.
 
 Plans:
 
@@ -69,7 +69,7 @@ When attn sends an update notification, run the suggested command to read it. Re
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere
     attn seed export <id> [--out <path>]    the raw body with its first-line stamp
 
-A new delegation starts an ordinary watch on its seed. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not.
+Tending a plot makes you a party to updates from every seed under it, without a watch; ending the claim stops that coverage and withdraws unread updates unless a watch still covers them. A new delegation starts an ordinary watch on its seed. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not.
 
 Use attn agent msg for attn-managed sessions; keep Claude's SendMessage for follow-ups to the native subagents this session spawned.
 

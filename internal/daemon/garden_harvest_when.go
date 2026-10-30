@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/crew"
@@ -69,6 +70,13 @@ func (d *Daemon) armHarvestWhenMerged(
 	if err := garden.ValidateReason(ask.Reason, seed.ID); err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 	}
+	read, err := d.readGarden(seed.ProfileID)
+	if err != nil {
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+	}
+	if err := garden.CheckPlotClose(seed, garden.OpenChildren(read.seeds, seed.ID)); err != nil {
+		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+	}
 	rec, err := d.harvestWhenPullRequest(seed.ID, url, sessionID)
 	if err != nil {
 		return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
@@ -121,7 +129,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		occurrences := []seedEvents.Occurrence{}
 		var outcome garden.Outcome
 		if seed.Status == garden.StatusGrowing {
-			outcome, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive})
+			outcome, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}, nil)
 			if err != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 			}
@@ -142,18 +150,26 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 		occurrences = append(occurrences, configured)
 
-		notes := make([]garden.Note, 0, 3)
+		notes := make([]seedMoveNote, 0, 3)
 		if outcome.Displaced != nil {
-			notes = append(notes, d.harvestWhenNote(
-				seed.ID, d.seedMoveAuditBody(seed, garden.VerbPark, ask.Actor, *outcome.Displaced, outcome.By), ask.Actor))
+			notes = append(notes, seedMoveNote{Note: d.harvestWhenNote(
+				seed.ID, d.seedMoveAuditBody(seed, garden.VerbPark, ask.Actor, *outcome.Displaced, outcome.By), ask.Actor)})
 		}
-		notes = append(notes, d.harvestWhenNote(seed.ID, harvestWhenArmedNote(rec), ask.Actor))
+		notes = append(notes, seedMoveNote{Note: d.harvestWhenNote(seed.ID, harvestWhenArmedNote(rec), ask.Actor)})
 		if attachment, ok := d.harvestWhenAttachment(seed.ID, rec, ask.Actor); ok {
-			notes = append(notes, attachment)
+			notes = append(notes, seedMoveNote{Note: attachment})
 		}
 
 		d.lockGardenRoles()
-		written, writtenNotes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes, false)
+		read, err := d.readGarden(seed.ProfileID)
+		if err == nil {
+			err = garden.CheckPlotClose(seed, garden.OpenChildren(read.seeds, seed.ID))
+		}
+		if err != nil {
+			d.unlockGardenRoles()
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+		}
+		written, writtenNotes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
@@ -164,13 +180,17 @@ func (d *Daemon) armHarvestWhenMerged(
 			}
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
-		settled, doc, err := d.settleFreshlyArmed(next, written, sessionID)
-		details := seedTransitionDetails{Moved: true}
+		settled, doc, details, err := d.settleFreshlyArmed(next, written, sessionID)
+		details.Moved = true
 		if outcome.Displaced != nil && len(writtenNotes) > 0 {
 			details.Audit = &writtenNotes[0]
 		}
 		if err == nil {
-			details.RingRecipients, err = d.seedParties(settled.ID, sessionID)
+			var recipients []string
+			recipients, err = d.seedParties(settled.ID, sessionID)
+			details.RingRecipients = append(details.RingRecipients, recipients...)
+			slices.Sort(details.RingRecipients)
+			details.RingRecipients = slices.Compact(details.RingRecipients)
 		}
 		return settled, doc, details, err
 	}
@@ -181,10 +201,10 @@ func (d *Daemon) armHarvestWhenMerged(
 
 func (d *Daemon) settleFreshlyArmed(
 	seed garden.Seed, written docstore.Document, sessionID protocol.SessionID,
-) (garden.Seed, docstore.Document, error) {
+) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	rec, ok := d.store.SessionPullRequestByID(seed.HarvestWhen.PullRequest)
 	if !ok {
-		return seed, written, nil
+		return seed, written, seedTransitionDetails{}, nil
 	}
 	switch rec.State {
 	case sessionPullRequestMerged:
@@ -193,11 +213,11 @@ func (d *Daemon) settleFreshlyArmed(
 		cleared, doc, err := d.clearHarvestWhen(seed.ID, seed.HarvestWhen,
 			harvestWhenClosedNote(rec), garden.Tender{Member: harvestWhenActor}, string(sessionID))
 		if err != nil {
-			return garden.Seed{}, docstore.Document{}, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
-		return cleared, doc, nil
+		return cleared, doc, seedTransitionDetails{}, nil
 	}
-	return seed, written, nil
+	return seed, written, seedTransitionDetails{}, nil
 }
 
 func sameHarvestCondition(current, observed *garden.HarvestCondition) bool {
@@ -222,13 +242,14 @@ func (d *Daemon) observedHarvestCondition(seedID string, observed *garden.Harves
 
 func (d *Daemon) fulfilHarvestWhen(
 	seed garden.Seed, rec store.SessionPullRequestRecord, observed *garden.HarvestCondition, excludedSessions ...string,
-) (garden.Seed, docstore.Document, error) {
+) (garden.Seed, docstore.Document, seedTransitionDetails, error) {
 	ask := garden.Ask{
 		Actor: garden.Tender{Member: harvestWhenActor}, Force: true,
 		CauseSession: protocol.SessionID(firstString(excludedSessions)),
 	}
 	var harvested garden.Seed
 	var doc docstore.Document
+	var details seedTransitionDetails
 	const attempts = 3
 	for attempt := range attempts {
 		current, read, err := d.readSeed(seed.ID)
@@ -236,24 +257,30 @@ func (d *Daemon) fulfilHarvestWhen(
 			current, read, err = d.observedHarvestCondition(seed.ID, observed)
 		}
 		if err != nil {
-			return garden.Seed{}, docstore.Document{}, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 		ask.Reason = harvestWhenMergedReason(rec)
 		if current.HarvestWhen != nil && current.HarvestWhen.Reason != "" {
 			ask.Reason = current.HarvestWhen.Reason
 		}
-		harvested, doc, _, err = d.applySeedTransitionDetailedAsAtRevision(
+		harvested, doc, details, err = d.applySeedTransitionDetailedAsAtRevision(
 			current.ID, garden.VerbHarvest, ask, "", d.sessionActive, read.Rev)
+		var openChildren *garden.OpenChildrenError
+		if errors.As(err, &openChildren) {
+			cleared, written, clearErr := d.clearHarvestWhen(current.ID, current.HarvestWhen,
+				"Harvest-on-merge cleared: "+openChildren.Error(), ask.Actor, excludedSessions...)
+			return cleared, written, seedTransitionDetails{}, clearErr
+		}
 		if errors.Is(err, errSeedRevisionMoved) && attempt+1 < attempts {
 			continue
 		}
 		if err != nil {
-			return garden.Seed{}, docstore.Document{}, err
+			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
 		break
 	}
 
-	return harvested, doc, nil
+	return harvested, doc, details, nil
 }
 
 func (d *Daemon) clearHarvestWhen(
@@ -286,7 +313,7 @@ func (d *Daemon) clearHarvestWhen(
 		}
 		d.lockGardenRoles()
 		written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{cleared},
-			[]garden.Note{d.harvestWhenNote(seed.ID, noteBody, actor)}, false)
+			[]seedMoveNote{{Note: d.harvestWhenNote(seed.ID, noteBody, actor)}})
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}

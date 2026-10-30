@@ -209,7 +209,7 @@ func (t PlotTree) ancestors(id string) []Seed {
 	seen := map[string]bool{id: true}
 	seed, ok := t.byID[id]
 	for ok {
-		parent, hasParent := parentOf(seed)
+		parent, hasParent := ParentOf(seed)
 		if !hasParent || seen[parent] {
 			break
 		}

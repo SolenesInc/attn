@@ -418,7 +418,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		}
 	})
 
-	t.Run("closing a seed names what it freed and what it stranded", func(t *testing.T) {
+	t.Run("closing a plot refuses open children and announces its last close", func(t *testing.T) {
 		house := plantPlot(t, s, `{"title": "Paint the house", "children": [{"title": "Scrape the walls"}, {"title": "Prime the walls"}, {"title": "Paint the walls"}]}`)
 		scrape, prime, paint := house.Children[0], house.Children[1], house.Children[2]
 		scraped := seedAs(t, s, "", "harvest", scrape.ID, "-m", "scraped")
@@ -426,14 +426,24 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		seedAs(t, s, "", "wither", prime.ID, "-m", "the paint primes itself")
 		seedAs(t, s, "", "tend", paint.ID, "--member", "alder")
 		tendedPlot := seedAs(t, s, "", "tend", house.Crown.ID, "--member", "alder")
-		closed := seedAs(t, s, "", "harvest", house.Crown.ID, "-m", "good enough", "--member", "alder")
-		requireLines(t, "harvest", closed, house.Crown.ID+" ("+house.Crown.StepSlug+") is harvested — good enough\n",
-			"its plot still holds 1 open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n")
+		for _, verb := range []string{"harvest", "wither"} {
+			refused := s.Attn("seed", verb, house.Crown.ID, "-m", "my part is done", "--member", "alder", "--force")
+			if refused.Code != 1 || strings.Count(refused.Stderr, "\n") != 1 || !strings.Contains(refused.Stderr, paint.ID+" growing") || !strings.Contains(refused.Stderr, "attn seed replant "+house.Crown.ID) {
+				t.Fatalf("%s plot refusal = %+v", verb, refused)
+			}
+		}
+		seedAs(t, s, "", "replant", house.Crown.ID, "--member", "alder")
+		finished := seedAs(t, s, "", "harvest", paint.ID, "-m", "painted", "--member", "alder")
+		requireLines(t, "last child", finished, house.Crown.ID+" ("+house.Crown.StepSlug+") has no open child seeds left and stays open: close it or plan its next step\n")
+		requireLines(t, "plot note", seedAs(t, s, "", "notes", house.Crown.ID), "All child seeds under "+house.Crown.ID+" are closed; the last, "+paint.ID)
+		closed := seedAs(t, s, "", "harvest", house.Crown.ID, "-m", "finished")
+		requireLines(t, "harvest", closed, house.Crown.ID+" ("+house.Crown.StepSlug+") is harvested — finished\n")
 
 		shed := plantPlot(t, s, `{"title": "Build the shed", "children": [{"title": "Pour the slab"}]}`)
 		poured := seedAs(t, s, "", "harvest", shed.Children[0].ID, "-m", "poured")
+		requireLines(t, "shed completion", poured, "has no open child seeds left and stays open")
 		built := seedAs(t, s, "", "harvest", shed.Crown.ID, "-m", "built")
-		for _, out := range []string{scraped, tendedPlot, poured, built} {
+		for _, out := range []string{scraped, tendedPlot, built} {
 			if strings.Contains(out, "open seed") || strings.Contains(out, "unblocked") {
 				t.Errorf("a close with nothing stranded or freed warned:\n%s", out)
 			}

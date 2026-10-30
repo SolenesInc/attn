@@ -143,6 +143,7 @@ The review never changes a seed's state.`, []string{}, false},
 	{`review retry`, `review retry <review-id> <seed-id> [--json]`, `Retry one failed or changed review item.`, []string{"json"}, false},
 	{`review keep`, `review keep <review-id> <seed-id> [--json]`, `Keep a seed growing and review it again after seven quiet days.`, []string{"json"}, false},
 	{`watch`, `watch <id> [--json]`, `watch this seed and its descendants. Delegation starts the same watch.
+Tending a plot already covers its descendants until the claim ends.
 unwatch removes this seed's subscription; separate child or ancestor
 watches remain. show names the subscriptions that still cover a seed.`, []string{"json"}, false},
 	{`unwatch`, `unwatch <id> [--json]`, `Remove this seed's subscription. Separate child or ancestor watches remain.
@@ -166,7 +167,10 @@ it again picks it back up. Parking it again keeps the state and adds
 only the optional comment. Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
 	{`harvest`, `harvest <id> [-m "<what got done>"] [--when-merged [<pr-url>] [--clear]] [--member <name>] [--force] [--json]`, `close the seed as done, with a required -m reason. Repeating a harvest
 succeeds with the earlier reason; a different reason goes on its log.
-A withered seed must be replanted first. Moves print who they rang.
+A withered seed must be replanted first. A plot refuses while any direct
+child is open, including with --force or --when-merged; replant hands it
+back if your part is done. Closing the last child leaves a ringing note
+on the plot, names it here and keeps the plot's state. Moves print who they rang.
 --when-merged releases your claim and harvests the seed with your -m
 reason when the pull request merges. Without -m it uses "PR #N merged:
 <title>". This command merges nothing. Use it only when the merge is
@@ -174,7 +178,10 @@ the last step. With no url it takes this session's single open pull
 request; --when-merged --clear takes the arming back.` + seedMoveAuthority, []string{"m", "member", "force", "json", "when-merged", "clear"}, false},
 	{`wither`, `wither <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up. Repeating it
 keeps the earlier reason and adds a different reason to the log. A
-harvested seed must be replanted first. Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
+harvested seed must be replanted first. A plot refuses while any direct
+child is open, even with --force; replant hands it back if your part is done.
+Closing its last child leaves a ringing note on the plot and names it here.
+Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
 	{`replant`, `replant <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
 is free. Reopens a closed seed, un-parks a dormant one, and hands back
 one being grown. Replanting an already planted seed changes nothing
@@ -183,7 +190,8 @@ and rings nobody. Moves print who they rang.` + seedMoveAuthority, []string{"m",
 whoever tends it next. - reads stdin. --handoff addresses it to your
 successor on this seed: show renders the freshest one first and tend
 prints it on the claim, so it is read before any work.
---ring tells the current tender and watchers to look; ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "member", "json"}, false},
+--ring tells current and covering plot tenders and watchers to look;
+ordinary notes stay quiet.`, []string{"m", "handoff", "ring", "member", "json"}, false},
 	{`check`, `check <add|edit|remove|restore|report|confirm|reject|uncheck|reopen>`, `Define, report, or judge what a seed must prove. Each move has its own --help.
 Checks never block a move. harvest lists the checks still open or rejected.`, []string{}, false},
 	{`check add`, `check add <id> <C#> "<statement>" [--shared]`, `Define a numbered statement (C1) that the body cites by id. On a plot,
@@ -1394,8 +1402,12 @@ func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleare
 	if unsettled := unsettledChecks(result.Seed.Checks); unsettled != "" && closedSeedStatus(result.Seed.Status) {
 		fmt.Fprintf(w, "checks: %s Checks never block a move; the tally stays on the seed.\n", unsettled)
 	}
-	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(result.Seed.Status) {
-		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n", open)
+	if plot := result.PlotEmptied; plot != nil {
+		if closedSeedStatus(plot.Status) {
+			fmt.Fprintf(w, "%s has no open child seeds left and stays %s\n", seedHandle(*plot), plot.Status)
+		} else {
+			fmt.Fprintf(w, "%s has no open child seeds left and stays open: close it or plan its next step\n", seedHandle(*plot))
+		}
 	}
 	fprintUnblocked(w, result.Unblocked)
 	if result.Moved != nil && !*result.Moved {
@@ -1434,18 +1446,6 @@ func fprintUnblocked(out io.Writer, seeds []protocol.Seed) {
 
 func closedSeedStatus(status string) bool {
 	return status == "harvested" || status == "withered"
-}
-
-func openPlotSeeds(seed protocol.Seed) int {
-	p := seed.PlotProgress
-	if p == nil {
-		return 0
-	}
-	open := p.Total - p.Done - p.Withered
-	if open < 0 {
-		return 0
-	}
-	return open
 }
 
 func transitionLine(seed protocol.Seed) string {

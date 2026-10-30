@@ -72,7 +72,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		return "", profileErr
 	}
 	before := seed
-	outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }})
+	outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }}, nil)
 	if err != nil {
 		return "", err
 	}

@@ -320,6 +320,20 @@ async function main() {
       runner.writeText('repeated-harvest.txt', repeated + '\n');
     });
 
+    await runner.step('a_plot_refuses_to_close_over_its_open_children', async () => {
+      const [, parallel, sequenced] = children;
+      const refused = await runInPane(client, pane,
+        `attn seed harvest ${crown} -m "the plan is ready" --force --session ${pane.sessionId}`,
+        'a plot closes after them');
+      runner.assert(saw(refused, parallel) && saw(refused, sequenced) &&
+        saw(refused, `attn seed replant ${crown}`),
+      'the refusal names the remaining work and the command that hands it back', { refused });
+      const drill = await readDrill(client, crown, (state) => state.meta.includes('growing'));
+      runner.assert(drill.meta.includes('growing'), 'the refusal keeps the plot open', { drill });
+      runner.writeText('plot-close-refused.txt', refused + '\n');
+      await client.request('garden_climb_to', { depth: 0 });
+    });
+
     await runner.step('two_delegates_share_one_plot', async () => {
       const [, parallel, sequenced] = children;
       const known = new Set(observer.sessionsById.keys());
@@ -480,6 +494,25 @@ async function main() {
           { selector: '.garden-panel' })).pngBase64, 'base64'));
       runner.writeText('artifacts.json', JSON.stringify({ drill, tile, afterTile, afterDrill }, null, 2) + '\n');
       await pace();
+    });
+
+    await runner.step('the_last_child_close_captures_the_plot_completion', async () => {
+      const [, parallel, sequenced] = children;
+      await client.request('select_session', { sessionId: pane.sessionId });
+      await waitForPaneShellReady(client, pane.sessionId, pane.paneId);
+      await runInPane(client, pane,
+        `attn seed harvest ${parallel} -m "parallel work is done" --session ${pane.sessionId}`, 'is harvested');
+      const closed = await runInPane(client, pane,
+        `attn seed harvest ${sequenced} -m "sequenced work is done" --session ${pane.sessionId}`,
+        'has no open child seeds left and stays open');
+      runner.assert(saw(closed, crown), 'the closer is told which plot emptied', { closed });
+      await client.request('garden_climb_to', { depth: 0 });
+      const drill = await readDrill(client, crown,
+        (state) => state.notes.some((note) => note.body.startsWith('All child seeds')));
+      runner.assert(drill.meta.includes('growing') &&
+        drill.notes.filter((note) => note.body.startsWith('All child seeds')).length === 1,
+      'the plot stays open and shows its single completion note', { drill });
+      runner.writeText('plot-completion.txt', closed + '\n' + JSON.stringify(drill, null, 2));
     });
 
     const summary = await runner.finishSuccess({ crown, children, delegated, second, strayID });

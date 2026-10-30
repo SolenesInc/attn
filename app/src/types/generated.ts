@@ -9350,6 +9350,7 @@ export interface SeedTransitionResultObject {
     handoff?:         Note;
     moved?:           boolean;
     noted?:           Note;
+    plot_emptied?:    SeedElement;
     ring_recipients?: string[];
     seed:             SeedElement;
     unblocked?:       SeedElement[];
@@ -10577,6 +10578,7 @@ export interface SeedTransitionResult {
     handoff?:         Note;
     moved?:           boolean;
     noted?:           Note;
+    plot_emptied?:    SeedElement;
     ring_recipients?: string[];
     seed:             SeedElement;
     unblocked?:       SeedElement[];
@@ -24767,6 +24769,7 @@ const typeMap: any = {
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "moved", js: "moved", typ: u(undefined, true) },
         { json: "noted", js: "noted", typ: u(undefined, r("Note")) },
+        { json: "plot_emptied", js: "plot_emptied", typ: u(undefined, r("SeedElement")) },
         { json: "ring_recipients", js: "ring_recipients", typ: u(undefined, a("")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "unblocked", js: "unblocked", typ: u(undefined, a(r("SeedElement"))) },
@@ -25614,6 +25617,7 @@ const typeMap: any = {
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "moved", js: "moved", typ: u(undefined, true) },
         { json: "noted", js: "noted", typ: u(undefined, r("Note")) },
+        { json: "plot_emptied", js: "plot_emptied", typ: u(undefined, r("SeedElement")) },
         { json: "ring_recipients", js: "ring_recipients", typ: u(undefined, a("")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "unblocked", js: "unblocked", typ: u(undefined, a(r("SeedElement"))) },

@@ -96,7 +96,7 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 		var written docstore.Document
 		var notes []protocol.SeedNote
 		if err == nil {
-			written, notes, err = d.writeSeedMoveWithNotes(*schema, next, read.docs[seedID].Rev, nil, []garden.Note{note}, ring)
+			written, notes, err = d.writeSeedMoveWithNotes(*schema, next, read.docs[seedID].Rev, nil, []seedMoveNote{{Note: note, AttentionRequested: ring, CausedBySessionID: sessionID}})
 		}
 		d.unlockGardenRoles()
 		if docstore.IsConflict(err) {

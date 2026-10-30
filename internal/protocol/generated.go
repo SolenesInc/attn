@@ -10646,6 +10646,9 @@ type SeedTransitionResult struct {
 	// Noted corresponds to the JSON schema field "noted".
 	Noted *SeedNote `json:"noted,omitempty,omitzero"`
 
+	// PlotEmptied corresponds to the JSON schema field "plot_emptied".
+	PlotEmptied *Seed `json:"plot_emptied,omitempty,omitzero"`
+
 	// RingRecipients corresponds to the JSON schema field "ring_recipients".
 	RingRecipients []string `json:"ring_recipients,omitempty,omitzero"`
 

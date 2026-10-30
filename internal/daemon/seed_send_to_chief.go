@@ -112,7 +112,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	unclaimed.TenderSession, unclaimed.TenderMember = "", ""
 	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
 		Actor: garden.Tender{Session: chiefSessionID},
-	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive})
+	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -135,10 +135,10 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 		return nil, err
 	}
 	d.lockGardenRoles()
-	written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []garden.Note{{
+	written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, []seedEvents.Occurrence{tended}, []seedMoveNote{{Note: garden.Note{
 		Seed: next.ID, Kind: garden.NoteKindNote, Body: noteBody,
 		AuthorSession: cause,
-	}}, false)
+	}}})
 	if err == nil {
 		err = d.discardAllIneligibleGardenSeedBellsLocked()
 	}

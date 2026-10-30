@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
@@ -482,4 +484,81 @@ func (g *harvestGitHub) fail(number int, failing bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.failing[number] = failing
+}
+
+func TestPlotsRefuseClosingBeforeAnyChildMoves(t *testing.T) {
+	github := newHarvestGitHub(t)
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		registerSessions(t, w, cli, "owner")
+		plot := gardenNudgePlant(t, cli, "owner", "Finish the children first", "")
+		first := gardenNudgePlant(t, cli, "owner", "First open child", plot)
+		second := gardenNudgePlant(t, cli, "owner", "Second open child", plot)
+		lifeMove(t, cli, "owner", second, "park", "", "")
+		before := lifeShow(t, cli, plot).Seed
+		assertRefusal := func(err error) {
+			t.Helper()
+			if err == nil {
+				t.Fatal("closed a plot over open children")
+			}
+			for _, want := range []string{first, second, "attn seed replant " + plot} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("plot refusal %q lacks %q", err, want)
+				}
+			}
+			if strings.Contains(err.Error(), "\n") {
+				t.Errorf("multiline plot refusal: %v", err)
+			}
+			if got := lifeShow(t, cli, plot).Seed; got.Rev != before.Rev || got.Status != before.Status {
+				t.Fatalf("refusal changed plot: %+v", got)
+			}
+		}
+		for _, verb := range []string{"harvest", "wither"} {
+			for _, force := range []bool{false, true} {
+				_, err := cli.SeedTransition("owner", plot, verb, "my part is done", "", force, client.SeedTransitionOptions{})
+				assertRefusal(err)
+				result := testworld.Request(app, protocol.SeedTransitionMessage{Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr(verb + strconv.FormatBool(force)), SourceSessionID: protocol.Ptr(protocol.SessionID("owner")), SeedID: plot, Verb: verb, Reason: protocol.Ptr("my part is done"), Force: protocol.Ptr(force)}, protocol.EventSeedTransitionResult, func(m protocol.SeedTransitionResultMessage) bool {
+					return m.RequestID == verb+strconv.FormatBool(force)
+				})
+				if result.Success {
+					t.Fatal("the app closed a plot over open children")
+				}
+				assertRefusal(fmt.Errorf("%s", protocol.Deref(result.Error)))
+			}
+		}
+		_, err := cli.SeedTransition("owner", plot, "harvest", "verified", "", true, client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: github.open(81, "Close when ready")})
+		assertRefusal(err)
+		if got := lifeShow(t, cli, plot).Seed; got.HarvestWhen != nil {
+			t.Fatalf("refused arming left a condition: %+v", got.HarvestWhen)
+		}
+		if tracked := harvestSessionPullRequests(t, cli, "owner"); len(tracked) != 0 {
+			t.Fatalf("refused arming tracked a pull request: %v", tracked)
+		}
+	})
+}
+
+func TestAMergeLeavesAPlotOpenWhenNewChildrenNeedWork(t *testing.T) {
+	github := newHarvestGitHub(t)
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "closer")
+		plot := gardenNudgePlant(t, cli, "closer", "armed before the next step", "")
+		gardenNudgeMove(t, cli, "closer", plot, "tend")
+		harvestArm(t, cli, "closer", plot, github.open(82, "Finish the original work"))
+		child := gardenNudgePlant(t, cli, "closer", "new work before merge", plot)
+		github.merge(82, "Finish the original work")
+		w.advance(protocol.HeatHotInterval)
+		shown := lifeShow(t, cli, plot).Seed
+		if shown.Status != "dormant" || shown.HarvestWhen != nil {
+			t.Fatalf("merge closed the plot or left an impossible condition armed: %+v", shown)
+		}
+		notes := strings.Join(lifeNoteBodies(t, cli, plot), "\n")
+		if !strings.Contains(notes, "Harvest-on-merge cleared:") || !strings.Contains(notes, child+" planted") {
+			t.Fatalf("the plot did not explain why it stayed open: %s", notes)
+		}
+		w.advance(protocol.HeatHotInterval)
+		if after := strings.Join(lifeNoteBodies(t, cli, plot), "\n"); after != notes {
+			t.Fatalf("later refresh repeated the refusal note: %s", after)
+		}
+	})
 }

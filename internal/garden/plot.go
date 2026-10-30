@@ -28,7 +28,7 @@ type PlotTree struct {
 func NewPlotTree(seeds []Seed) PlotTree {
 	children := map[string][]Seed{}
 	for _, seed := range seeds {
-		if parent, ok := parentOf(seed); ok {
+		if parent, ok := ParentOf(seed); ok {
 			children[parent] = append(children[parent], seed)
 		}
 	}
@@ -235,4 +235,34 @@ func blocksCycle(children []PlotChildSpec, slugs map[string]int) (string, string
 		}
 	}
 	return "", "", false
+}
+
+func OpenChildren(seeds []Seed, plotID string) []Seed {
+	var children []Seed
+	for _, seed := range seeds {
+		if parent, ok := ParentOf(seed); ok && parent == plotID && !Closed(seed.Status) {
+			children = append(children, seed)
+		}
+	}
+	return children
+}
+
+type OpenChildrenError struct {
+	PlotID   string
+	Children []Seed
+}
+
+func (e *OpenChildrenError) Error() string {
+	children := make([]string, len(e.Children))
+	for i, child := range e.Children {
+		children[i] = child.ID + " " + child.Status
+	}
+	return fmt.Sprintf("%s has %d open child seeds (%s); a plot closes after them: `attn seed replant %s` hands it back if your part is done, or close or move those seeds first", e.PlotID, len(children), strings.Join(children, ", "), e.PlotID)
+}
+
+func CheckPlotClose(seed Seed, openChildren []Seed) error {
+	if len(openChildren) > 0 {
+		return &OpenChildrenError{PlotID: seed.ID, Children: openChildren}
+	}
+	return nil
 }

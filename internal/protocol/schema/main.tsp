@@ -6087,6 +6087,7 @@ model SeedTransitionResultMessage {
 }
 
 model SeedTransitionResult {
+  "plot_emptied"?: Seed;
   "audit"?: SeedNote;
   "moved"?: boolean;
   "ring_recipients"?: string[];

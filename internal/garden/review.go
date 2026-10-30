@@ -170,7 +170,7 @@ func ReviewCandidates(observations []ReviewObservation, window time.Duration, no
 		seed := observation.Seed
 		bySeed[seed.ID] = observation
 		seeds = append(seeds, seed)
-		if parent, ok := parentOf(seed); ok {
+		if parent, ok := ParentOf(seed); ok {
 			children[parent] = append(children[parent], seed.ID)
 		}
 	}

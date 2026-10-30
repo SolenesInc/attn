@@ -10,13 +10,13 @@ checks.
 ## Sub-features
 
 - `seed-plant`: plant a seed with a markdown body and numbered checks.
-- `plot`: plant a plot and its children in one move; children run in parallel unless one blocks another.
+- `plot`: plant a plot and its children in one move; children run in parallel unless one blocks another. Harvest and wither refuse over open direct children; the last child close leaves a ringing plot note and names the plot, which keeps its state.
 - `seed-tend`: claim a seed; one tender at a time.
 - `seed-moves`: park, harvest, wither and replant; repeating a move keeps the state and rings nobody. A different closing reason becomes a note. Every move prints who it rang, and a park's comment lands on the log.
 - `harvest-when-merged`: arm a seed to harvest itself when its pull request merges, named by url or the session's single open one; clear it to take the arming back.
 - `seed-notes`: the seed's log; a handoff note primes the next tender.
 - `seed-checks`: what a seed must prove: report, confirm, reject, uncheck and reopen.
-- `seed-watch`: follow a seed and its children; a ringing note or check move and every state move send the tender and watchers a seed update.
+- `seed-watch`: follow a seed and its children; a ringing note or check move and every state move send current and covering plot tenders and watchers a seed update. A covering tender needs no watch; its coverage ends with the claim.
 - `seed-edges`: blocks, part-of and discovered-from links; `ready` lists what nothing blocks.
 - `seed-artifacts`: files a seed owns, attached and detached.
 - `seed-search`: keyword search across the profile's garden, closed seeds included.
@@ -109,6 +109,8 @@ Preconditions:
 - **Harvest when merged.** Plant `<merge>` with `./attn seed plant "Merge drive"`, then run `wsctl input --id <terminal> --text "merge <merge>" --enter`. Peek shows `harvests when northwind/atlas#412 merges`, and so does `./attn seed show <merge>`. Merge it on the mock GitHub: `curl -s -X POST "$ATTN_MOCK_GH_URL/__control/seed" -H 'content-type: application/json' -d '{"prs":[{"repo":"northwind/atlas","number":412,"title":"Cache the tile layout","state":"closed","merged":true}]}'`. Within one pull request refresh (30 seconds), `./attn seed show <merge>` shows `status harvested` and `reason verified by the mock agent`, while `./attn seed show <own>` still shows `status planted`.
 - **The agent harvests.** Run `wsctl input --id <terminal> --text "harvest <seed>" --enter`. Peek shows `<seed> (garden-drive) is harvested`, `./attn seed ls` shows it `harvested`, and `bridge garden_board_get_state` lists it under `closed`.
 - **Repeat the harvest.** After the agent harvests `<seed>`, run `./attn seed harvest <seed> -m "second receipt"`. It exits 0, prints the earlier reason, says the new reason is on the log, and says `rang nobody: the seed did not move`. `./attn seed notes <seed>` shows `second receipt`, and `./attn seed show <seed> --json` keeps the seed's revision from the first harvest.
+- **Close a plot.** With two open children under `<plot>`, run `./attn seed harvest <plot> -m "my part is done" --force` and `./attn seed wither <plot> --force`. Both exit 1 on one line naming each child and `attn seed replant <plot>`; `show` keeps the plot's revision and state. Arming `harvest --when-merged <pr-url>` refuses the same way. Replant the plot to release its claim, then close the children. The first close has no plot line. The last names `<plot>` with `has no open child seeds left and stays open`; `notes <plot>` contains one completion note. A repeated child close adds none. A closed legacy plot keeps its closed state.
+- **Covering tender.** Tend `<plot>` through a mock agent, without a watch. Ring a note on a grandchild through another session and have the tender read its inbox: one update names the grandchild. Add a watch on the plot and repeat: it still gets one update. Remove the watch, queue another update, then park the plot: the pending update disappears and later descendant moves do not reach it. A crew member tending the plot gets these updates at its member address.
 - **Moves from the shell.** `./attn seed replant <seed>` prints `is planted`, `./attn seed park <seed> -m "later"` prints `is dormant`, and `./attn seed wither <seed> -m "drive done"` prints `is withered`. `./attn seed notes <seed> --limit 3` lists the newest entries.
 - **Export.** Run `./attn seed export <seed> --out -`. It prints the title, the body and the checks as markdown.
 - **Review.** Run `./attn seed review start`. On the baseline it prints the review id with `complete` and `0 seeds`, then `no seeds needed review when this run started`. The "Review garden" button in the garden starts the same review.

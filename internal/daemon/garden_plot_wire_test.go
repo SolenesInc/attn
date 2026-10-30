@@ -322,3 +322,94 @@ func gardenPlotDelegate(app *testworld.Peer, agent fakeagent.Harness, source, re
 		Assignment:      protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(crown)},
 	}, protocol.EventDelegateResult, func(m protocol.DelegateResultMessage) bool { return protocol.Deref(m.RequestID) == requestID })
 }
+
+func TestTheLastChildCloseCapturesAndRingsItsPlotOnce(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "closer", "tender", "watcher")
+		plot := gardenNudgePlant(t, cli, "closer", "finish the plot", "")
+		first := gardenNudgePlant(t, cli, "closer", "first step", plot)
+		last := gardenNudgePlant(t, cli, "closer", "last step", plot)
+		gardenNudgeMove(t, cli, "tender", plot, "tend")
+		gardenNudgeWatch(t, cli, "watcher", plot, false)
+		before := lifeShow(t, cli, plot).Seed
+		if result := gardenNudgeMove(t, cli, "closer", first, "harvest"); result.PlotEmptied != nil {
+			t.Fatalf("first close announced an empty plot: %+v", result.PlotEmptied)
+		}
+		gardenNudgeOneBell(t, cli, "tender", first, "harvested")
+		gardenNudgeOneBell(t, cli, "watcher", first, "harvested")
+		if notes := lifeNoteBodies(t, cli, plot); len(notes) != 0 {
+			t.Fatalf("first close wrote plot notes: %q", notes)
+		}
+		restore := w.RefuseDatabaseCommits()
+		_, err := cli.SeedTransition("closer", last, "wither", "done", "", false, client.SeedTransitionOptions{})
+		restore()
+		if err == nil || lifeShow(t, cli, last).Seed.Status != "planted" || len(lifeNoteBodies(t, cli, plot)) != 0 {
+			t.Fatalf("failed close changed the child or captured completion: %v", err)
+		}
+		result := gardenNudgeMove(t, cli, "closer", last, "wither")
+		if result.PlotEmptied == nil || result.PlotEmptied.ID != plot || result.PlotEmptied.Status != "growing" || !slices.Equal(result.RingRecipients, []string{"tender", "watcher"}) {
+			t.Fatalf("last close result: %+v", result)
+		}
+		for _, who := range []string{"tender", "watcher"} {
+			items := readInbox(t, cli, who, 0).Items
+			if len(items) != 2 || !strings.Contains(inboxContents(items), plot+" moved: note.added") || !strings.Contains(inboxContents(items), last+" moved: withered") {
+				t.Errorf("%s received %q, want child and plot updates", who, inboxContents(items))
+			}
+		}
+		after := lifeShow(t, cli, plot).Seed
+		if after.Rev != before.Rev || after.Status != "growing" || after.TenderSession != "tender" {
+			t.Fatalf("last child changed the plot's state or claim: %+v", after)
+		}
+		if notes := lifeNoteBodies(t, cli, plot); len(notes) != 1 || !strings.Contains(notes[0], "All child seeds") {
+			t.Fatalf("plot log: %q", notes)
+		}
+		if repeat := gardenNudgeMove(t, cli, "closer", last, "wither"); repeat.PlotEmptied != nil || protocol.Deref(repeat.Moved) {
+			t.Fatalf("repeated close announced completion: %+v", repeat)
+		}
+		if notes := lifeNoteBodies(t, cli, plot); len(notes) != 1 {
+			t.Fatalf("retry duplicated the plot note: %q", notes)
+		}
+		gardenNudgeInboxIsEmpty(t, cli, "tender", "after retry")
+		gardenNudgeMove(t, cli, "closer", last, "replant")
+		gardenNudgeMove(t, cli, "closer", last, "harvest")
+		if notes := lifeNoteBodies(t, cli, plot); len(notes) != 2 {
+			t.Fatalf("a new empty transition should have its own note: %q", notes)
+		}
+	})
+}
+
+func TestConcurrentChildClosesCaptureOneEmptyPlot(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli, other := w.Client(), w.Client()
+		registerSessions(t, w, cli, "closer")
+		plot := gardenNudgePlant(t, cli, "closer", "concurrent completion", "")
+		first := gardenNudgePlant(t, cli, "closer", "first", plot)
+		last := gardenNudgePlant(t, cli, "closer", "last", plot)
+		type response struct {
+			result *protocol.SeedTransitionResult
+			err    error
+		}
+		answers := make(chan response, 2)
+		for i, seed := range []string{first, last} {
+			connection := []*client.Client{cli, other}[i]
+			go func() {
+				result, err := connection.SeedTransition("closer", seed, "harvest", "done", "", false, client.SeedTransitionOptions{})
+				answers <- response{result, err}
+			}()
+		}
+		emptied := 0
+		for range 2 {
+			answer := <-answers
+			if answer.err != nil {
+				t.Fatal(answer.err)
+			}
+			if answer.result.PlotEmptied != nil {
+				emptied++
+			}
+		}
+		if notes := lifeNoteBodies(t, cli, plot); emptied != 1 || len(notes) != 1 {
+			t.Fatalf("empty responses=%d; plot notes=%q", emptied, notes)
+		}
+	})
+}

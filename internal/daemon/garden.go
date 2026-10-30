@@ -1314,7 +1314,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 			return
 		}
 		result := &protocol.SeedTransitionResult{Seed: d.seedWire(seed, doc),
-			Moved: protocol.Ptr(details.Moved), Noted: details.Noted, Audit: details.Audit, RingRecipients: details.RingRecipients}
+			Moved: protocol.Ptr(details.Moved), Noted: details.Noted, Audit: details.Audit, PlotEmptied: details.PlotEmptied, RingRecipients: details.RingRecipients}
 		if details.Moved && garden.Closed(seed.Status) {
 			_, result.Unblocked = d.seedUnblocked(seed.ID)
 		}
@@ -1329,7 +1329,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	}
 	result := &protocol.SeedTransitionResult{
 		Seed: d.seedWire(seed, doc), Moved: protocol.Ptr(details.Moved),
-		Noted: details.Noted, Audit: details.Audit, RingRecipients: details.RingRecipients,
+		Noted: details.Noted, Audit: details.Audit, PlotEmptied: details.PlotEmptied, RingRecipients: details.RingRecipients,
 	}
 	if verb == garden.VerbTend {
 		result.Handoff = d.gardenHandoff(seed.ID)
@@ -1366,6 +1366,7 @@ func (d *Daemon) applySeedTransition(id string, verb garden.Verb, ask garden.Ask
 }
 
 type seedTransitionDetails struct {
+	PlotEmptied    *protocol.Seed
 	Moved          bool
 	Noted          *protocol.SeedNote
 	RingRecipients []string
@@ -1437,7 +1438,16 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 				"%s changed since you reviewed it; refresh the garden%w", id, errSeedRevisionMoved)
 		}
-		outcome, err := garden.Transition(seed, verb, ask, gardenStanding{daemon: d, profileID: seed.ProfileID, live: sessionLive})
+		var read gardenRead
+		var children []garden.Seed
+		if verb == garden.VerbHarvest || verb == garden.VerbWither {
+			read, err = d.readGarden(seed.ProfileID)
+			if err != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+			}
+			children = garden.OpenChildren(read.seeds, seed.ID)
+		}
+		outcome, err := garden.Transition(seed, verb, ask, gardenStanding{daemon: d, profileID: seed.ProfileID, live: sessionLive}, children)
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
@@ -1500,50 +1510,64 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 			occurrences = append(occurrences, cleared)
 		}
-		if garden.Closed(next.Status) && !ask.SuppressNotification {
-			read, readErr := d.readGarden()
-			if readErr != nil {
-				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, readErr
-			}
-			for i := range read.seeds {
-				if read.seeds[i].ID == next.ID {
-					read.seeds[i] = next
-					break
+		var plot *garden.Seed
+		if garden.Closed(next.Status) {
+			read = read.withSeed(next, doc)
+			if parent, ok := garden.ParentOf(next); ok && len(garden.OpenChildren(read.seeds, parent)) == 0 {
+				for _, candidate := range read.seeds {
+					if candidate.ID == parent {
+						plot = &candidate
+						break
+					}
 				}
 			}
-			for _, freed := range garden.Unblocks(read.seeds, next.ID) {
-				unblocked, eventErr := seedEvents.Occur(
-					gardenSeedEventModel, gardenSeedEventVocabulary.Unblocked, freed.ID,
-					seedEvents.UnblockedPayload{BlockerSeedID: next.ID, CausedBySessionID: cause},
-				)
-				if eventErr != nil {
-					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, eventErr
+			if !ask.SuppressNotification {
+				for _, freed := range garden.Unblocks(read.seeds, next.ID) {
+					unblocked, eventErr := seedEvents.Occur(
+						gardenSeedEventModel, gardenSeedEventVocabulary.Unblocked, freed.ID,
+						seedEvents.UnblockedPayload{BlockerSeedID: next.ID, CausedBySessionID: cause},
+					)
+					if eventErr != nil {
+						return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, eventErr
+					}
+					occurrences = append(occurrences, unblocked)
 				}
-				occurrences = append(occurrences, unblocked)
 			}
 		}
-		if outcome.Displaced == nil && comment == "" {
+		if outcome.Displaced == nil && comment == "" && plot == nil {
 			written, err = d.writeSeedWithEventsProtected(protection, *schema, next, doc.Rev, occurrences...)
 		} else {
-			var entries []garden.Note
+			var entries []seedMoveNote
 			auditIndex, commentIndex := -1, -1
 			if outcome.Displaced != nil {
 				auditIndex = len(entries)
-				entries = append(entries, garden.Note{
+				entries = append(entries, seedMoveNote{Note: garden.Note{
 					Seed: next.ID, Kind: garden.NoteKindNote,
 					Body:          d.seedMoveAuditBody(next, verb, ask.Actor, *outcome.Displaced, outcome.By),
 					AuthorSession: ask.Actor.Session, AuthorMember: ask.Actor.Member,
-				})
+				}})
 			}
 			if comment != "" {
 				commentIndex = len(entries)
-				entries = append(entries, garden.Note{
+				entries = append(entries, seedMoveNote{Note: garden.Note{
 					Seed: next.ID, Kind: garden.NoteKindNote, Body: comment,
 					AuthorSession: ask.Actor.Session, AuthorMember: ask.Actor.Member,
+				}})
+			}
+			if plot != nil {
+				closer := ask.Actor.DisplayName()
+				if closer == "" {
+					closer = "the attn app"
+				}
+				entries = append(entries, seedMoveNote{
+					Note: garden.Note{Seed: plot.ID, Kind: garden.NoteKindNote,
+						Body:          fmt.Sprintf("All child seeds under %s are closed; the last, %s, was %s by %s. The plot stays %s; close it or plan its next step.", plot.ID, next.ID, next.Status, closer, plot.Status),
+						AuthorSession: ask.Actor.Session, AuthorMember: ask.Actor.Member},
+					AttentionRequested: true, CausedBySessionID: cause,
 				})
 			}
 			var writtenNotes []protocol.SeedNote
-			written, writtenNotes, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, occurrences, entries, false)
+			written, writtenNotes, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, occurrences, entries)
 			if err == nil {
 				if auditIndex >= 0 {
 					notes.Audit = &writtenNotes[auditIndex]
@@ -1554,6 +1578,10 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 		}
 		if err == nil {
+			if plot != nil {
+				wire := read.seed(*plot, read.docs[plot.ID])
+				notes.PlotEmptied = &wire
+			}
 			d.queueConversationKeepIfReferenceMoved(seed, next)
 			if garden.Closed(next.Status) {
 				d.closeAsksTo(inbox.ToSeed(next.ID))
@@ -1562,11 +1590,18 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 					"%s succeeded, but stale pending Garden updates could not be cleared: %w", verb, err)
 			}
-			if !ask.SuppressNotification {
-				notes.RingRecipients, err = d.seedOccurrenceRecipients(occurrences...)
+			notes.RingRecipients, err = d.seedOccurrenceRecipients(occurrences...)
+			if err != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+			}
+			if plot != nil {
+				recipients, err := d.seedParties(plot.ID, cause)
 				if err != nil {
 					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 				}
+				notes.RingRecipients = append(notes.RingRecipients, recipients...)
+				slices.Sort(notes.RingRecipients)
+				notes.RingRecipients = slices.Compact(notes.RingRecipients)
 			}
 			return next, written, notes, nil
 		}
@@ -1592,19 +1627,24 @@ func forcedSeedMoveBody(seedID string, verb garden.Verb, actor, displaced garden
 		forcedBy, verb, seedID, displaced.DisplayName())
 }
 
+type seedMoveNote struct {
+	garden.Note
+	AttentionRequested bool
+	CausedBySessionID  protocol.SessionID
+}
+
 func (d *Daemon) writeSeedMoveWithNotes(
 	seedSchema docstore.CollectionSchema,
 	seed garden.Seed,
 	expected int64,
 	occurrences []seedEvents.Occurrence,
-	notes []garden.Note,
-	ring bool,
+	notes []seedMoveNote,
 ) (docstore.Document, []protocol.SeedNote, error) {
 	var written docstore.Document
 	var wireNotes []protocol.SeedNote
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		written, wireNotes, err = d.writeSeedMoveWithNotesProtected(protection, seedSchema, seed, expected, occurrences, notes, ring)
+		written, wireNotes, err = d.writeSeedMoveWithNotesProtected(protection, seedSchema, seed, expected, occurrences, notes)
 		return err
 	})
 	return written, wireNotes, err
@@ -1616,8 +1656,7 @@ func (d *Daemon) writeSeedMoveWithNotesProtected(
 	seed garden.Seed,
 	expected int64,
 	occurrences []seedEvents.Occurrence,
-	notes []garden.Note,
-	ring bool,
+	notes []seedMoveNote,
 ) (docstore.Document, []protocol.SeedNote, error) {
 	noteSchema, err := d.notesCollection()
 	if err != nil {
@@ -1647,16 +1686,16 @@ func (d *Daemon) writeSeedMoveWithNotesProtected(
 			if err != nil {
 				return docstore.Document{}, nil, err
 			}
-			noteBodies[i], err = notes[i].Encode()
+			noteBodies[i], err = notes[i].Note.Encode()
 			if err != nil {
 				return docstore.Document{}, nil, err
 			}
 			noteExpected := docstore.ExpectAbsent
 			noteFacts[i] = documentChangedFact(garden.Namespace, garden.CollectionNotes, notes[i].ID, false)
 			noteAdded, eventErr := seedEvents.Occur(
-				gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, seed.ID,
+				gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, notes[i].Seed,
 				seedEvents.NoteAddedPayload{
-					NoteID: notes[i].ID, AttentionRequested: ring, CausedBySessionID: notes[i].AuthorSession,
+					NoteID: notes[i].ID, AttentionRequested: notes[i].AttentionRequested, CausedBySessionID: notes[i].CausedBySessionID,
 				},
 			)
 			if eventErr != nil {
@@ -1706,7 +1745,7 @@ func (d *Daemon) writeSeedMoveWithNotesProtected(
 					ID: notes[i].ID, Body: noteBodies[i], Rev: written[i+1].Rev, CreatedAt: now, UpdatedAt: now,
 				}
 			}
-			wireNotes[i] = noteToProtocol(notes[i], *noteDoc)
+			wireNotes[i] = noteToProtocol(notes[i].Note, *noteDoc)
 		}
 		return *seedDoc, wireNotes, nil
 	}

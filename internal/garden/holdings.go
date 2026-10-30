@@ -33,7 +33,7 @@ func PlotsOf(seeds []Seed, held []Seed) []Seed {
 	seen := make(map[string]bool, len(held))
 	out := []Seed{}
 	for _, seed := range held {
-		parent, ok := parentOf(seed)
+		parent, ok := ParentOf(seed)
 		if !ok || seen[parent] {
 			continue
 		}

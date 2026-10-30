@@ -18,6 +18,7 @@ type Role uint8
 const (
 	CurrentTender Role = iota + 1
 	CoveringWatchers
+	CoveringTenders
 )
 
 type AudienceDef struct {
@@ -339,7 +340,7 @@ func roleSet(audience AudienceDef) (map[Role]bool, error) {
 	}
 	seen := map[Role]bool{}
 	for _, role := range audience.roles {
-		if role != CurrentTender && role != CoveringWatchers {
+		if role != CurrentTender && role != CoveringWatchers && role != CoveringTenders {
 			return nil, fmt.Errorf("audience %q: unsupported role %d", audience.name, role)
 		}
 		if seen[role] {

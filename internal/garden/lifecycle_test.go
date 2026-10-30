@@ -96,7 +96,7 @@ func TestTransitionMatrix(t *testing.T) {
 			if tc.verb == VerbHarvest || tc.verb == VerbWither {
 				reason = "because"
 			}
-			outcome, err := Transition(tc.seed, tc.verb, Ask{Actor: mine, Reason: reason, Force: tc.force}, testStanding{alive})
+			outcome, err := Transition(tc.seed, tc.verb, Ask{Actor: mine, Reason: reason, Force: tc.force}, testStanding{alive}, nil)
 			next := outcome.Seed
 			if !reflect.DeepEqual(tc.seed, before) {
 				t.Fatalf("the input seed was mutated: %+v", tc.seed)
@@ -187,7 +187,7 @@ func TestTransitionClaimsAndReasons(t *testing.T) {
 			if tc.sessionGone {
 				live = gone
 			}
-			outcome, err := Transition(tc.seed, tc.verb, tc.ask, testStanding{live})
+			outcome, err := Transition(tc.seed, tc.verb, tc.ask, testStanding{live}, nil)
 			if tc.refuse != nil {
 				if err == nil {
 					t.Fatalf("%s was allowed, want a refusal", tc.verb)

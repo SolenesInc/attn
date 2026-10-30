@@ -109,7 +109,7 @@ func TestALiveSeedClaimRefusesOthersUntilForcedOrParked(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, err := cli.SeedTransition(protocol.SessionID(second), seed, "tend", "", "alder", false, client.SeedTransitionOptions{})
-		lifeRefusal(t, "a second tend", err, seed, "Trellis", "attn seed note")
+		lifeRefusal(t, "a second tend", err, seed, "Trellis", "delegation chain", "--force")
 		if still := lifeShow(t, cli, seed).Seed; still.TenderSession != "" || still.TenderMember != "trellis" {
 			t.Fatalf("the refused claim changed the tender: %+v", still)
 		}

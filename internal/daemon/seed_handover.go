@@ -118,7 +118,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 	unclaimed.TenderSession, unclaimed.TenderMember = "", ""
 	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
 		Actor: garden.Tender{Session: sessionID},
-	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }})
+	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }}, nil)
 	if err != nil {
 		return nil, err
 	}

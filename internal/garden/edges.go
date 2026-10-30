@@ -39,7 +39,7 @@ func Link(seeds []Seed, fromID, kind, toID string) (Seed, bool, error) {
 		return from, false, nil
 	}
 	if kind == EdgePartOf {
-		if parent, ok := parentOf(from); ok {
+		if parent, ok := ParentOf(from); ok {
 			return Seed{}, false, fmt.Errorf(
 				"%s is already part of %s, and a seed sits in one plot: `attn seed unlink %s part-of %s` first, then link it to %s",
 				from.ID, parent, from.ID, parent, to.ID)
@@ -258,7 +258,7 @@ func PlotHeaders(seeds []Seed, selected map[string]bool) []Seed {
 		seed, ok := index[id]
 		seen := map[string]bool{}
 		for ok {
-			parent, hasParent := parentOf(seed)
+			parent, hasParent := ParentOf(seed)
 			if !hasParent || seen[parent] {
 				break
 			}
@@ -288,7 +288,7 @@ func Tree(seeds []Seed) []TreeRow {
 	roots := make([]Seed, 0, len(seeds))
 	present := byID(seeds)
 	for _, seed := range seeds {
-		parent, ok := parentOf(seed)
+		parent, ok := ParentOf(seed)
 		if _, inScope := present[parent]; ok && inScope {
 			children[parent] = append(children[parent], seed)
 			continue
@@ -317,7 +317,7 @@ func Tree(seeds []Seed) []TreeRow {
 	return rows
 }
 
-func parentOf(seed Seed) (string, bool) {
+func ParentOf(seed Seed) (string, bool) {
 	for _, edge := range seed.Edges {
 		if edge.Kind == EdgePartOf {
 			return edge.To, true
@@ -332,7 +332,7 @@ func underTemplate(index map[string]Seed, seed Seed) bool {
 		if seed.Template {
 			return true
 		}
-		parent, ok := parentOf(seed)
+		parent, ok := ParentOf(seed)
 		if !ok || seen[parent] {
 			return false
 		}
@@ -362,7 +362,7 @@ func blockedIDs(seeds []Seed) map[string]bool {
 func parentIDs(seeds []Seed) map[string]bool {
 	parents := map[string]bool{}
 	for _, seed := range seeds {
-		if parent, ok := parentOf(seed); ok {
+		if parent, ok := ParentOf(seed); ok {
 			parents[parent] = true
 		}
 	}

@@ -66,16 +66,17 @@ with the reason, when:
 
 ### Seed updates
 
-Some Garden events put a seed update in the inbox of the seed's tender and of
-every session that watches the seed or a seed it is part of. Two sessions get
-no update, at any of their addresses: the session that caused the event, and
+Some Garden events put a seed update in the inbox of the seed's tender, the
+tenders of every plot above it, and every session that watches the seed or a
+seed it is part of. A plot's tender needs no watch; the claim provides coverage
+until it ends. Two sessions get no update, at any of their addresses: the session that caused the event, and
 the session that attn told about it directly, such as the new tender of a
 delegation, a handover or a seed sent to the chief.
 
 | Event | Seed update |
 |---|---|
 | tend, park, harvest, wither, replant | yes, unless the move asks to stay quiet (automation acceptance does) |
-| note | only with `--ring`, or when the note is an automation run's outcome or a delegate that exited before its first turn |
+| note | only with `--ring`, or when the note is an automation run's outcome or a delegate that exited before its first turn, or when a plot's last open child closes |
 | check move (add, edit, remove, restore, report, confirm, reject, uncheck, reopen) | only with `--ring` |
 | harvest-when set or cleared | yes |
 | unblocked: the last blocker closed | yes |
@@ -86,9 +87,9 @@ A seed update names the seed and the kind of event. For a check move it names
 the move and who made it instead: "s-x moved: check C4 rejected by c9b177e1".
 The agent reads the seed for the details.
 
-A ringing note or check move replies with who gets its seed update: the tender
-and the watchers, without the session that caused it. With nobody left, the
-reply says so, so a ring on a closed seed with no watcher is not silent. A
+A lifecycle move, ringing note or check move replies with who gets its seed
+update: current and covering tenders and the watchers, without the session that
+caused it. With nobody left, the reply says so, so a ring on a closed seed with no watcher is not silent. A
 recipient who already has an unread update on that seed gets the move merged
 into it, and no new ring (see [Coalescing](#coalescing)). The reply names the
 audience when the move commits; the update goes to the audience at delivery,
@@ -96,8 +97,8 @@ so the two differ only when a tender or watch changes in between.
 
 `attn seed show` and `attn seed notes` mark the reader's unread update for that
 seed as read. attn withdraws a recipient's unread update for a seed when they
-stop being its tender or a watcher, or when the session it is addressed to
-closes. A new tender does not get updates from before they tended the seed.
+stop being a current or covering tender or a watcher, or when the addressed
+session closes. A new tender does not get updates from before they tended the seed.
 
 ### User messages
 
@@ -307,8 +308,8 @@ the two messages.
 
 **The tender changes.** A seed has an unread update for its tender, and then
 another session tends it. attn withdraws the old tender's update, unless the
-old tender also watches the seed. The new tender gets no update for the earlier
-event. A message sent to the seed's id goes to the new tender.
+old tender also tends a plot above it or watches the seed. The new tender gets
+no update for the earlier event. A message sent to the seed's id goes to the new tender.
 
 **The wake limit is used up.** A message for an asleep member arrives after the
 member's 8th wake in 12 hours. The sender's receipt names `crew.wake_limit`.

@@ -81,6 +81,14 @@ A delegate hears it through its delegation watch. Everyone else needs
 `--force`, which the log also records. A call without a live session has no
 standing. Claims whose sessions ended no longer need an override.
 
+## Closing a plot
+
+Harvest and wither refuse while any direct child is planted, growing or dormant,
+even with `--force` or `--when-merged`. The refusal names each open child.
+Replant hands the plot back if your part is done; otherwise close its children
+or move follow-ups out first. Closing the last open child leaves a ringing note
+on the plot and names it in the output. The plot keeps its state.
+
 ## Harvesting on a merge
 
 When the only thing left on a seed is a pull request merging, say so once and
@@ -95,7 +103,8 @@ of your claim; every surface then reads `harvests when owner/repo#n merges`.
 The command merges nothing. When the merge lands, attn harvests the seed as the
 member `attn`, with your reason. Without `-m`, it uses `PR #n merged: <title>`.
 A pull request closed without merging clears the arming and rings instead,
-leaving the seed where it was.
+leaving the seed where it was. A merge also clears the arming and explains why
+when the seed has gained open children.
 
 Reach for it only when the merge is genuinely the last step. Review notes to
 answer, docs to write or evidence to attach are work, and work belongs to a
@@ -107,17 +116,20 @@ Repeating a move to the same state succeeds without rewriting the seed or
 ringing anyone. A different reason goes on its log as a quiet note. Moving
 between harvested and withered requires `attn seed replant <id>` first.
 
-Lifecycle moves ring the seed's current tender and watching sessions and print
-who they rang. Harvesting or withering a blocker also rings the tender and
-watchers of each seed it set free. Notes stay quiet unless you add `--ring`. A successful action never rings
-the session that caused it. Automation acceptance is quiet; its bell waits until
+A plot's tender hears updates from every seed under it, including grandchildren,
+without a watch. Ending the claim ends that coverage and withdraws unread
+updates unless a watch still covers them. Lifecycle moves ring current and
+covering tenders and watching sessions, and print who they rang. Harvesting or
+withering a blocker also rings the parties of each seed it set free. Notes stay
+quiet unless you add `--ring`. A successful action never rings the session that
+caused it. Automation acceptance is quiet; its bell waits until
 the work is ready or the attempt needs attention. `attn seed watch <id>`
 subscribes this session to the seed and its descendants, including children
 planted later. A new delegation starts the same watch on the seed it binds.
 
 `attn seed unwatch <id>` removes that subscription and drops a queued update only
-when the session is neither the tender nor covered by another watch. Separate
-child watches remain. An ancestor watch can still cover the seed; `attn seed
+when the session is neither a current or covering tender nor covered by another
+watch. Separate child watches remain. An ancestor watch can still cover the seed; `attn seed
 show <id>` and `unwatch` name those subscriptions and the commands to remove
 them. `watch` restores a subscription; a new delegation starts it again.
 Restarting or resuming the same delegation does not restore a removed watch.

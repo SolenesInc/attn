@@ -160,6 +160,13 @@ anyone. A different reason is kept as a quiet note. To change a harvested seed
 to withered, or a withered seed to harvested, replant it first. Moves print who
 they rang.
 
+A plot closes after its direct children. Harvest and wither refuse while any
+child is planted, growing or dormant, including with --force or --when-merged.
+Replant hands back a plot when your part is done; otherwise close its children
+or move follow-ups out first. The last child closing leaves a ringing note on
+the plot and names it in the output; the plot keeps its state. A plot's tender
+hears its descendants' updates without a watch, until the claim ends.
+
 When the only thing left is a pull request merging, say so once and let attn
 close it:
 

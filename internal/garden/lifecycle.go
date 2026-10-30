@@ -138,7 +138,7 @@ type Outcome struct {
 	Moved     bool
 }
 
-func Transition(seed Seed, verb Verb, ask Ask, standing Standing) (Outcome, error) {
+func Transition(seed Seed, verb Verb, ask Ask, standing Standing, openChildren []Seed) (Outcome, error) {
 	rule, ok := moves[verb]
 	if !ok {
 		return Outcome{}, fmt.Errorf("%q is not something a seed does", verb)
@@ -147,6 +147,11 @@ func Transition(seed Seed, verb Verb, ask Ask, standing Standing) (Outcome, erro
 
 	if seed.Status != rule.to && !slices.Contains(rule.from, seed.Status) {
 		return Outcome{}, refuseState(seed, verb)
+	}
+	if Closed(rule.to) && seed.Status != rule.to {
+		if err := CheckPlotClose(seed, openChildren); err != nil {
+			return Outcome{}, err
+		}
 	}
 	if rule.claims && !ask.Actor.Named() {
 		return Outcome{}, fmt.Errorf(

@@ -319,6 +319,24 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 		return nil, fmt.Errorf("seed %s is absent from the Garden role snapshot", seedID)
 	}
 	switch role {
+	case events.CoveringTenders:
+		var addresses []string
+		seen := map[string]bool{seedID: true}
+		for at := r.subscriptions.parents[seedID]; at != ""; at = r.subscriptions.parents[at] {
+			if seen[at] {
+				return nil, fmt.Errorf("garden seed ancestry cycle reaches %s while resolving %s", at, seedID)
+			}
+			seen[at] = true
+			if !r.subscriptions.seeds[at].Tender().Holds(r.daemon.sessionActive) {
+				continue
+			}
+			tenders, err := r.ResolveSeedRole(at, events.CurrentTender)
+			if err != nil {
+				return nil, err
+			}
+			addresses = append(addresses, tenders...)
+		}
+		return addresses, nil
 	case events.CurrentTender:
 		seed, exists := r.subscriptions.seeds[seedID]
 		if !exists {

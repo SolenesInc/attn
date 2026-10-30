@@ -86,7 +86,8 @@ type Vocabulary struct {
 func Declarations() Vocabulary {
 	seedParties := Audience("seed parties").
 		Includes(CurrentTender).
-		Includes(CoveringWatchers)
+		Includes(CoveringWatchers).
+		Includes(CoveringTenders)
 	seedActivity := Bell(BellSeedActivity).
 		Notify(seedParties).
 		Except(SessionThatCausedTheEvent).
