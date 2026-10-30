@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -70,6 +71,7 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	outpostStateSince(p, "outpost", protocol.OutpostStateLost, mark)
 	mark = p.EventCount()
 	remote.Start()
+	home.Advance(bridge.ReconnectInterval)
 	again := outpostStateSince(p, "outpost", protocol.OutpostStateConnected, mark)
 	if protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) || protocol.Deref(again.HostKeyFingerprint) != protocol.Deref(first.HostKeyFingerprint) {
 		t.Fatalf("restart changed pins: %+v -> %+v", first, again)
@@ -169,16 +171,19 @@ func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {
 	mark := p.EventCount()
 	resume := a.Pause(address)
 	defer resume()
+	home.Advance(bridge.StallAfter)
 	stalled := outpostStateSince(p, "frozen", protocol.OutpostStateStalled, mark)
 	if stalled.LastError != nil {
 		t.Fatalf("stall invents an error: %+v", stalled)
 	}
+	home.Advance(bridge.LostAfter - bridge.StallAfter)
 	lost := outpostStateSince(p, "frozen", protocol.OutpostStateLost, mark)
 	if !strings.Contains(protocol.Deref(lost.LastError), "10s") {
 		t.Fatalf("loss omits threshold: %+v", lost)
 	}
 	mark = p.EventCount()
 	resume()
+	home.Advance(bridge.ReconnectInterval)
 	again := outpostStateSince(p, "frozen", protocol.OutpostStateConnected, mark)
 	if again.LastError != nil || again.LastErrorAt != nil || protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) {
 		t.Fatalf("recovery: %+v", again)
@@ -217,6 +222,7 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			replacement.Start()
 			remote := replacement.App()
 			a.Route(address, replacement)
+			home.Advance(bridge.ReconnectInterval)
 			refused := outpostState(p, "replaced", protocol.OutpostStateRefused)
 			words := []string{address, protocol.Deref(first.DaemonID), "re-pair it in Settings → Outposts"}
 			if sameKey {

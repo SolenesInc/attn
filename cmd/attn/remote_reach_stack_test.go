@@ -89,6 +89,7 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 
 	stalledLine := "echo stalled-$((3+4))\r"
 	resume := a.Pause(address)
+	home.Advance(bridge.StallAfter)
 	if stalled := outpostState(app, "outpost", protocol.OutpostStateStalled); stalled.Reach != protocol.OutpostReachReachable {
 		t.Fatalf("stalled row: %+v", stalled)
 	}
@@ -98,6 +99,8 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 		probe := fmt.Sprintf("stalled-%d", i)
 		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: string(key), ProbeID: &probe, TraceID: &probe})
 	}
+	testworld.Request(app, protocol.SupportSnapshotMessage{Cmd: protocol.CmdSupportSnapshot, RequestID: "before-loss", RuntimeIds: []protocol.TerminalID{terminal}}, protocol.EventSupportSnapshotResult, func(m protocol.SupportSnapshotResultMessage) bool { return m.RequestID == "before-loss" })
+	home.Advance(bridge.LostAfter - bridge.StallAfter)
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	for i := range stalledLine {
 		probe := fmt.Sprintf("stalled-%d", i)
@@ -126,9 +129,10 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark = len(app.Log())
 	resume()
+	home.Advance(bridge.ReconnectInterval)
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
-	app.TypeLine(id, "echo after-stall-$((4+4))")
+	app.TypeLine(id, "\x15echo after-stall-$((4+4))")
 	app.AwaitScreen(id, "after-stall-8")
 
 	mark = len(app.Log())
@@ -162,8 +166,10 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	typeRefused(t, app, terminal, "echo lost\r")
 	mark = len(app.Log())
+	home.AwaitTimer(bridge.ReconnectInterval)
 	a.Restore(address)
 	resume()
+	home.Advance(bridge.ReconnectInterval)
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)
 	app.TypeLine(id, "echo back-$((5+5))")

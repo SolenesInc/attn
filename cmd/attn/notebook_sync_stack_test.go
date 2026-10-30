@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -212,7 +213,9 @@ func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 			pending.Await()
 			closed.Release()
 			writeNotebookFile(t, home, "replacement.md", "synced by the replacement stream")
+			home.AwaitTimer(bridge.ReconnectInterval)
 			pair.Reconnect()
+			home.Advance(bridge.ReconnectInterval)
 			awaitNotebookFile(t, remoteApp, outpost, "replacement.md", "synced by the replacement stream", false)
 			pair.App = home.App()
 			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)

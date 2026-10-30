@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -56,6 +57,7 @@ func TestLedgerResumesAnOutpostAgentOnItsMachineWithItsConversationAndCost(t *te
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
 			mark = pair.App.EventCount()
 			outpost.Start()
+			home.Advance(bridge.ReconnectInterval)
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 			reopened, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id)})
 			if err != nil {

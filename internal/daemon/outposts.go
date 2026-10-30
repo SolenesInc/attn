@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -382,12 +383,12 @@ func (d *Daemon) syncOutpost(ctx context.Context, id string, conn *bridge.Conn) 
 }
 
 func waitOutpostRetry(ctx context.Context, delay time.Duration) bool {
-	timer := time.NewTimer(delay)
+	timer := stepclock.NewTimer(delay)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
 		return false
-	case <-timer.C:
+	case <-timer.C():
 		return true
 	}
 }

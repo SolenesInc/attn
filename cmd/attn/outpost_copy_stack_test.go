@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -104,6 +105,7 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	staged := remote.PauseAt(pausepoint.CopyBatchStaged)
 	remote.Start()
 	resume()
+	home.Advance(bridge.ReconnectInterval)
 	priority(true)
 	staged.Await()
 	pair.Disconnect()
@@ -145,6 +147,7 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	remote.Stop()
 	remote.Start()
 	resume()
+	home.Advance(bridge.ReconnectInterval)
 	staged.Await()
 	staged.Release()
 	awaitCopy()
@@ -194,6 +197,7 @@ func TestReconnectRestoresTheCopyAfterAnOutpostLeaves(t *testing.T) {
 		t.Fatalf("a home leaving enrollment dropped its own shell: %v", kept)
 	}
 	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
+	home.Advance(bridge.ReconnectInterval)
 	awaitCopy()
 	if copied := sessionsOn(t, remote, ""); len(copied) != 1 {
 		t.Fatalf("re-pairing did not restore the home's shell: %v", copied)

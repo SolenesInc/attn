@@ -29,6 +29,7 @@ type Stack struct {
 	exited        chan error
 	allowFallback bool
 	pauses        *pauses
+	clock         *stackClock
 	wsListener    *net.TCPListener
 }
 
@@ -59,6 +60,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	binary := AttnBinary(t)
 	world := prepareIn(t, worldDir(t), binary, setup.harnesses, !setup.withoutAgentKit)
 	s := &Stack{World: world, binary: binary}
+	s.clock = s.listenForClock()
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1")})
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +76,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	}
 	s.DialUnix = func() (net.Conn, error) { return net.Dial("unix", s.Socket) }
 	s.Vars = append(s.Vars,
+		s.clock.env(),
 		"ATTN_WS_PORT="+port,
 		"ATTN_PTY_SKIP_STARTUP_PROBE=1",
 		"ATTN_MOCK_GH_URL=http://127.0.0.1:1",
@@ -81,6 +84,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	)
 	t.Cleanup(s.reap)
 	t.Cleanup(s.Stop)
+	s.pauses = s.listenForPauses()
 	return s
 }
 

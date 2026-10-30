@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/pausepoint"
+	"github.com/victorarias/attn/internal/stepclock"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -123,8 +124,8 @@ func (c *Conn) run(ctx context.Context, transport ssh.Conn, channels <-chan ssh.
 			}
 		}
 	})
-	stall := time.NewTimer(StallAfter)
-	lost := time.NewTimer(LostAfter)
+	stall := stepclock.NewTimer(StallAfter)
+	lost := stepclock.NewTimer(LostAfter)
 	defer stall.Stop()
 	defer lost.Stop()
 	c.publish(StateConnected)
@@ -151,10 +152,10 @@ running:
 				stalled = false
 				c.publish(StateConnected)
 			}
-		case <-stall.C:
+		case <-stall.C():
 			stalled = true
 			c.publish(StateStalled)
-		case <-lost.C:
+		case <-lost.C():
 			c.err = fmt.Errorf("bridge to %s lost: %w", c.peer.DaemonID, errNoFrames)
 			break running
 		}

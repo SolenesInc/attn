@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -31,6 +32,7 @@ func TestSSHBridgeStartsDaemonAndRecoversAfterMasterExit(t *testing.T) {
 	mark := pair.App.EventCount()
 	pair.SSH.ExitMaster(home, pair.Host)
 	outpostStateSince(pair.App, "outpost", protocol.OutpostStateLost, mark)
+	home.Advance(bridge.ReconnectInterval)
 	testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, r := range m.Outposts {
 			if r.ID == pair.Host && r.State == protocol.OutpostStateConnected && r.StateSince != beforeSince {

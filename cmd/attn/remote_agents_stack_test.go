@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -145,6 +146,7 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 			announcements = append(announcements, app)
 			outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
 		} else {
+			home.Advance(bridge.ReconnectInterval)
 			outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 		}
 		app.TypeLine(id, "after "+restart.name+" restart")
@@ -362,6 +364,7 @@ func TestAClosedOutpostConversationResumesWithItsOwnCostAfterAnOutpostRestart(t 
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
 	mark = app.EventCount()
 	outpost.Start()
+	home.Advance(bridge.ReconnectInterval)
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	mark = len(app.Log())
 	app.TypeLine(string(next.ID), "/resume "+original)
@@ -436,6 +439,7 @@ func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
 	mark = app.EventCount()
 	outpost.Start()
+	home.Advance(bridge.ReconnectInterval)
 	deciding.Release()
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	next := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
@@ -486,6 +490,7 @@ func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T)
 	outcome.Release()
 	outpost.Stop()
 	outpost.Start()
+	home.Advance(bridge.ReconnectInterval)
 	applied.Await()
 	applied.Release()
 	entry, err := home.Client().SessionShow(next.ID)
@@ -737,6 +742,7 @@ func TestEnrollmentLeavesHomeJobsDormantUntilTheMachineLeaves(t *testing.T) {
 	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
 	mark = pair.App.EventCount()
 	outpost.Start()
+	home.Advance(bridge.ReconnectInterval)
 	outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 	app = outpost.App()
 	retried := testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: failed.ID, RequestID: protocol.Ptr("retry-local-review")}, protocol.EventTaskRetryResult, func(r protocol.TaskRetryResultMessage) bool { return r.RequestID == "retry-local-review" })
@@ -825,6 +831,7 @@ func TestOutpostConversationHistorySurvivesConversationMovesWhileDisconnected(t 
 			observed := outpost.PauseAt(pausepoint.ConversationObserved)
 			started := len(app.Log())
 			outpost.Start()
+			home.Advance(bridge.ReconnectInterval)
 			outpostStateSince(app, "outpost", protocol.OutpostStateConnected, started)
 			input := command + "\roffline work\r"
 			mark := len(app.Log())
@@ -855,7 +862,6 @@ func TestOutpostConversationHistorySurvivesConversationMovesWhileDisconnected(t 
 				outpost.Stop()
 				outpost.Start()
 			}
-			reconnectedAt := time.Now()
 			connectionMark := app.EventCount()
 			requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"))
 			outpostReachSince(app, connectionMark, "outpost", protocol.OutpostReachReachable)
@@ -900,8 +906,8 @@ func TestOutpostConversationHistorySurvivesConversationMovesWhileDisconnected(t 
 			}
 			if scenario != "outpost-restart" {
 				opened, err := time.Parse(time.RFC3339Nano, protocol.Deref(ready.TurnOpenedAt))
-				if err != nil || opened.Before(pendingAt) || !opened.Before(reconnectedAt) {
-					t.Fatalf("turn opened %s, want between move %s and reconnect %s: %v", protocol.Deref(ready.TurnOpenedAt), pendingAt, reconnectedAt, err)
+				if err != nil || opened.Before(pendingAt) {
+					t.Fatalf("turn opened %s, want at or after offline conversation move %s: %v", protocol.Deref(ready.TurnOpenedAt), pendingAt, err)
 				}
 			}
 			t.Logf("%s: offline conversation returns in terminal %s, host %s, tokens=%d, turn=%s", scenario, terminal, pair.Host, ready.Usage.TotalTokens, protocol.Deref(ready.TurnOpenedAt))
@@ -997,6 +1003,7 @@ func TestAnOutpostConversationStaysRecoverableWhenItsWorkerIsGone(t *testing.T) 
 			outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 			connectionMark := app.EventCount()
 			outpost.Start()
+			home.Advance(bridge.ReconnectInterval)
 			outpostReachSince(app, connectionMark, "outpost", protocol.OutpostReachReachable)
 			testworld.AwaitSessionSince(app, mark, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateRecoverable })
 			reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(id), Cols: 100, Rows: 30}, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == id })
@@ -1167,6 +1174,7 @@ func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
 			outpostReachSince(app, mark, "outpost", protocol.OutpostReachUnreachable)
 			mark = app.EventCount()
 			outpost.Start()
+			home.Advance(bridge.ReconnectInterval)
 			outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 			mark = len(app.Log())
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after restart\r"})

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -160,7 +161,9 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	echo("echo before-$((1+1))", "before-2")
 	resume := a.Pause(address)
 	defer resume()
+	home.Advance(bridge.StallAfter)
 	outpostState(app, "outpost", protocol.OutpostStateStalled)
+	home.Advance(bridge.LostAfter - bridge.StallAfter)
 	outpostState(app, "outpost", protocol.OutpostStateLost)
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	for _, command := range []any{
@@ -193,6 +196,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	}
 	mark := len(app.Log())
 	resume()
+	home.Advance(bridge.ReconnectInterval)
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	reattach()
 	echo("echo reconnected-$((2+2))", "reconnected-4")
@@ -202,6 +206,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark = len(app.Log())
 	remote.Start()
+	home.Advance(bridge.ReconnectInterval)
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	reattach()
 	echo("echo outpost-restart-$((3+3))", "outpost-restart-6")
@@ -216,6 +221,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	killWorker(t, remote.Dir, string(terminal))
 	mark = len(app.Log())
 	remote.Start()
+	home.Advance(bridge.ReconnectInterval)
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateRecoverable })
 
@@ -224,6 +230,7 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 	mark = len(app.Log())
 	remote.Start()
+	home.Advance(bridge.ReconnectInterval)
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	sessions, err := home.Client().Query("")
 	if err != nil {
@@ -270,6 +277,7 @@ func TestRemoteOutputResumesAfterAWorkerUpgradeWithoutDroppingTheBridge(t *testi
 	app.Send(protocol.DetachSessionMessage{Cmd: protocol.CmdDetachSession, ID: terminal})
 	mark = len(app.Log())
 	remote.StartBinaryHeldAt(current, upgrade)
+	home.Advance(bridge.ReconnectInterval)
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	attached := testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	if !attached.Success {
@@ -451,6 +459,7 @@ func TestReconnectDeliversACloseCommittedWhileTheBridgeBreaks(t *testing.T) {
 	prepared.Release()
 	testworld.Await(app, protocol.EventSessionUnregistered, func(m protocol.WebSocketEvent) bool { return m.Session != nil && string(m.Session.ID) == id })
 	remote.Start()
+	home.Advance(bridge.ReconnectInterval)
 	applied.Await()
 	applied.Release()
 	peer := remote.App()
@@ -509,6 +518,7 @@ func TestRemoteInputKeepsItsBytesAndProbesWithoutBlockingALocalTile(t *testing.T
 	first := "token-000,"
 	expected.WriteString(first)
 	send(0, first)
+	home.Advance(bridge.StallAfter)
 	outpostState(app, "outpost", protocol.OutpostStateStalled)
 	mark := len(app.Log())
 	for i := 1; i < 100; i++ {
@@ -579,6 +589,7 @@ func TestRemoteTileActionsDoNotBlockALocalTile(t *testing.T) {
 			app.AwaitScreen(local, "local-2")
 			resume := a.Pause(address)
 			defer resume()
+			home.Advance(bridge.StallAfter)
 			outpostState(app, "outpost", protocol.OutpostStateStalled)
 			mark := len(app.Log())
 			switch command {
@@ -646,6 +657,7 @@ func TestRemoteReloadDoesNotSendQueuedInputToTheReplacementShell(t *testing.T) {
 	resume := a.Pause(address)
 	defer resume()
 	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: ":\r"})
+	home.Advance(bridge.StallAfter)
 	outpostState(app, "outpost", protocol.OutpostStateStalled)
 	marker := remote.Path("shell", "before-reload")
 	for i := range 20 {

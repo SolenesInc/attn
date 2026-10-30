@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -313,6 +312,8 @@ func TestSSHUnpairedAddFinishesAfterAuthentication(t *testing.T) {
 			}
 			if restart {
 				home.Stop()
+			} else {
+				home.AwaitTimer(bridge.LostAfter)
 			}
 			ssh.Restore("first-auth")
 			ssh.StartMaster(home, refused.ID, "first-auth")
@@ -320,9 +321,10 @@ func TestSSHUnpairedAddFinishesAfterAuthentication(t *testing.T) {
 				home.Start()
 				app = home.App()
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), bridge.LostAfter+fakeagent.HangGuard)
-			defer cancel()
-			result := testworld.AwaitSinceContext(ctx, app, 0, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			if !restart {
+				home.Advance(bridge.LostAfter)
+			}
+			result := testworld.AwaitSince(app, 0, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 				return len(m.Outposts) == 1 && (m.Outposts[0].State == protocol.OutpostStateConnected || m.Outposts[0].State == protocol.OutpostStateRefused && protocol.Deref(m.Outposts[0].LastError) != protocol.Deref(refused.LastError))
 			}).Outposts[0]
 			if result.State != protocol.OutpostStateConnected {

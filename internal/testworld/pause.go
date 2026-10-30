@@ -51,9 +51,6 @@ func (s *Stack) arm(name, armed string) *Pause {
 	if s.daemon != nil {
 		s.T.Fatalf("PauseAt(%q): arm pause points before Start; the daemon and its workers read them once", name)
 	}
-	if s.pauses == nil {
-		s.pauses = s.listenForPauses()
-	}
 	p := &Pause{t: s.T, name: name, held: make(chan pausedAt, 8)}
 	s.pauses.mu.Lock()
 	s.pauses.points[name] = p

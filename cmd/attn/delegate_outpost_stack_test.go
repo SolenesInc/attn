@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
@@ -140,6 +141,7 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 			announcements = append(announcements, pair.App)
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 		} else {
+			home.Advance(bridge.ReconnectInterval)
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 		}
 		exchangePrompt("after " + restart.name + " restart")
@@ -213,6 +215,7 @@ func TestADelegationWritesItsOutpostFailureNoteOnceAcrossReconnectAndRestarts(t 
 			pair.App = home.App()
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 		} else {
+			home.Advance(bridge.ReconnectInterval)
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
 		}
 		checkNote("after " + restarted.name + " restart")
@@ -422,7 +425,9 @@ func TestAnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart(t *testing.T) 
 				t.Logf("removed target ends the wait: %s", strings.TrimSpace(failed.Stderr))
 				return
 			}
+			home.AwaitTimer(bridge.ReconnectInterval)
 			pair.Reconnect()
+			home.Advance(bridge.ReconnectInterval)
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 			boot()
 			completed := retry.Wait()

@@ -11,6 +11,7 @@ import { promisify } from 'node:util';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
+import { stepClock } from './stepClock.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
@@ -24,8 +25,10 @@ if (!instance) throw new Error('Outposts settings verification requires a named 
 const runner = createScenarioRunner(options, { scenarioId: 'OutpostsSettings', tier: 'local', prefix: 'outposts-settings', allowRealAgents: false });
 const root = fs.mkdtempSync(path.join(os.platform() === 'darwin' ? '/private/tmp' : os.tmpdir(), 'attn-bridge-'));
 const ssh = await outpostSsh(root);
-const client = new UiAutomationClient({ ...options, launchEnv: ssh.env });
 const observer = new DaemonObserver(options);
+const homeClock = await stepClock(path.join(root, 'home-clock.sock'), observer.connectTimeoutMs);
+const outpostClock = await stepClock(path.join(root, 'outpost-clock.sock'), observer.connectTimeoutMs);
+const client = new UiAutomationClient({ ...options, launchEnv: { ...ssh.env, ...homeClock.env } });
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const binary = appDaemonInTree(options.appPath);
 const exec = promisify(execFile);
@@ -114,6 +117,10 @@ async function add(name, address) {
   await driver.pressEnter();
 }
 runner.registerCleanup('remove_scratch', () => fs.rmSync(root, { recursive: true, force: true }));
+runner.registerCleanup('close_clocks', async () => {
+  await homeClock.close();
+  await outpostClock.close();
+});
 runner.registerCleanup('stop_children', async () => {
   for (const child of [...children].reverse()) {
     if (child.exitCode !== null || child.signalCode !== null) continue;
@@ -123,6 +130,7 @@ runner.registerCleanup('stop_children', async () => {
     await exited;
   }
 });
+runner.registerCleanup('stop_home_daemon', () => run(binary, ['daemon', 'stop']));
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('close_ssh', () => ssh.close());
@@ -135,6 +143,7 @@ try {
     if (fs.existsSync(source)) fs.copyFileSync(source, path.join(runner.runDir, 'outpost-daemon.log'));
   });
   const outpostEnv = instanceCliEnv(instance, {
+    ...outpostClock.env,
     ATTN_DATA_DIR: outpostData,
     ATTN_HARNESS_DATA_DIR: outpostData,
     ATTN_HARNESS_NOTEBOOK_ROOT: path.join(outpostData, 'notebook'), ATTN_WS_PORT: String(await port()), ATTN_DAEMON_READY_FD: '3',
@@ -151,6 +160,7 @@ try {
   await ssh.route(address, outpostEnv, binary);
   ssh.requireConfirmation(address);
   await ssh.route('scenario-outpost-alias', outpostEnv, binary);
+  await client.quitApp();
   await run(binary, ['daemon', 'stop']);
   await launchFreshAppAndConnect(client, observer);
   await removeScenarioOutposts();
@@ -318,10 +328,15 @@ try {
     const stalled = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'stalled'));
     const lost = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'lost'));
     outpost.kill('SIGSTOP');
+    await homeClock.advance('3s');
     await stalled;
     await wait(`${tile(splitPane.paneId)}[data-offline]`, { absent: true });
     await shot('03-stalled-shell');
+    await homeClock.advance('7s');
     await lost;
+    await homeClock.awaitTimer('10s');
+    await homeClock.advance('10s');
+    await homeClock.awaitTimer('2s');
     await wait(`${tile(splitPane.paneId)}[data-offline="true"] .desktop-pane-offline-strip`, { textIncludes: 'Studio unreachable · typing is not sent' });
     const offline = await client.request('read_pane_text', splitPane);
     runner.assert(JSON.stringify(before.size) === JSON.stringify(offline.size) && before.text === offline.text, 'going offline preserves the screen and terminal size', { before, offline });
@@ -371,6 +386,7 @@ try {
     await fs.promises.writeFile(fifo, 'C13_SCREEN_CURRENT\n');
     const recovered = receive(rows => rows.some(row => row.name === 'Studio' && row.state === 'connected' && !row.last_error));
     outpost.kill('SIGCONT');
+    await homeClock.advance('2s');
     await recovered;
     await wait(`${tile(splitPane.paneId)} .desktop-pane-offline-strip`, { absent: true });
     await waitForPaneText(client, split.id, splitPane.paneId, value => value.includes('C13_SCREEN_CURRENT'), 'current outpost screen after reconnect');
