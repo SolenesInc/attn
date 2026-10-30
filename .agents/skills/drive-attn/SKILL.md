@@ -203,27 +203,27 @@ Every run ends here, finished or abandoned, before you report, hand off or
 move on. For each instance you started:
 
 ```bash
-. /tmp/drive-attn-<name>.env && ./attn instance clean <name>
-. /tmp/drive-attn-<name>.env && pnpm --dir app run real-app:mock-github stop
-rm /tmp/drive-attn-<name>.env
+.agents/skills/drive-attn/scripts/clean.sh <name>
 ```
+
+It sources the env file, runs `./attn instance clean <name>`, stops the
+instance's mock GitHub, and removes the scratch tool home, `$ATTN_TOOL_HOME`,
+and then the env file. It stops at the first command that fails and keeps
+the env file, so you can run it again. Close a terminal that sourced the env
+file.
 
 `clean` quits the app, stops the daemon, reaps its workers, shared PTY hosts
 and plugin drivers, and removes the app and the data folder. It refuses the
 default (production) instance; never pass it `--force`. If it reports a live
-app, run `./attn instance stop-app` and clean again. If it reports anything
-else it could not stop, leave the process alone and bring `clean`'s output
-to the user; never stop it by PID or name, and never delete a data folder by
-hand. `./attn instance` then shows `(no daemon socket)` and
-`(not installed)`.
+app, run `./attn instance stop-app` in the instance shell and run `clean.sh`
+again. If it reports anything else it could not stop, leave the process
+alone and bring `clean`'s output to the user; never stop it by PID or name,
+and never delete a data folder by hand.
 
-Remove the env file only once both commands succeed, and close a terminal
-that sourced it. `clean` leaves the instance's notebook folder,
-`~/attn-notebook-<name>`, with whatever the run wrote to the notebook or
-attached to seeds, and a later instance with the same name starts with it.
-The scratch tool home, `$ATTN_TOOL_HOME`, stays under `/tmp` too. Proof in
-your own folder or on your stake survives; check that it is still there
-after cleaning.
+`clean` leaves the instance's notebook folder, `~/attn-notebook-<name>`,
+with whatever the run wrote to the notebook or attached to seeds, and a
+later instance with the same name starts with it. Proof in your own folder
+or on your stake survives; check that it is still there after cleaning.
 
 ## The feature map
 
