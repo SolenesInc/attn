@@ -754,6 +754,44 @@ func TestAMoveCrashedAfterInstallingMovesTheSourceAsItIsAtTheRetry(t *testing.T)
 	}
 }
 
+func TestAMoveCrashedAfterInstallingAndThenReplacedInstallsItsSourceWhenRetried(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	folder := seedArtifactsFolderOf(t, s)
+	s.StartCrashingAt("seed-artifact-installed")
+	seed := plant(t, s, "Durable files")
+	source := filepath.Join(t.TempDir(), "recover.bin")
+	if err := os.WriteFile(source, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.Attn("seed", "attach", seed.ID, "--path", source, "--move")
+	s.AwaitCrash()
+
+	s.Start()
+	replacement := filepath.Join(t.TempDir(), "recover.bin")
+	if err := os.WriteFile(replacement, []byte("replacement"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	seedAs(t, s, "", "attach", seed.ID, "--path", replacement, "--copy")
+	out := seedAs(t, s, "", "attach", seed.ID, "--path", source, "--move")
+	destination := filepath.Join(s.Dir, "notebook", "seeds", seed.ID, "recover.bin")
+	if got, err := os.ReadFile(destination); err != nil || string(got) != "original" {
+		t.Errorf("after the retried move the seed's recover.bin holds %q (%v), want the moved source's bytes", got, err)
+	}
+	if !strings.Contains(out, "replaced the seed's earlier recover.bin") {
+		t.Errorf("the retried move printed %q, want it to say it replaced recover.bin", out)
+	}
+	if _, err := os.Lstat(source); !os.IsNotExist(err) {
+		t.Errorf("the source survived the retried move: %v", err)
+	}
+	if got, err := os.ReadFile(replacement); err != nil || string(got) != "replacement" {
+		t.Errorf("the copied replacement holds %q (%v), want it untouched", got, err)
+	}
+	if entries := folder(seed.ID); !slices.Equal(entries, []string{"recover.bin"}) {
+		t.Errorf("after the retried move the seed's folder holds %q, want only the artifact", entries)
+	}
+}
+
 func TestAReplacingAttachCrashedAtEachStepKeepsTheOldOrTheNewFile(t *testing.T) {
 	t.Parallel()
 	for _, point := range []string{"seed-artifact-staged", "seed-artifact-installed"} {

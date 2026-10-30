@@ -637,7 +637,7 @@ func transferSuperseded(receipt *seedArtifactTransferReceipt) bool {
 	if !fileHolds(receipt.Source, receipt.Hash) {
 		return true
 	}
-	return receipt.State == seedTransferComplete && !fileHolds(receipt.Destination, receipt.Hash)
+	return receipt.State != seedTransferStaged && !fileHolds(receipt.Destination, receipt.Hash)
 }
 
 func fileHolds(path, hash string) bool {
