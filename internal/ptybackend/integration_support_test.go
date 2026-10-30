@@ -3,6 +3,7 @@ package ptybackend
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/victorarias/attn/internal/procwait"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,21 +20,15 @@ func pidExists(pid int) bool {
 }
 
 func waitForPIDsGone(timeout time.Duration, pids ...int) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		alive := false
-		for _, pid := range pids {
-			if pidExists(pid) {
-				alive = true
-				break
-			}
+	for _, pid := range pids {
+		if pid <= 0 {
+			continue
 		}
-		if !alive {
-			return true
+		if exited, err := procwait.Exited(pid, timeout); err != nil || !exited {
+			return false
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
-	return false
+	return true
 }
 
 func buildAttnBinary(t *testing.T) string {

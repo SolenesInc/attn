@@ -127,7 +127,7 @@ func pluginDataDirForSocket(socketPath, pluginName string) string {
 }
 
 func (d *Daemon) reapStrandedPluginRuntimes() {
-	results := plugins.ReapRuntimeProcesses(filepath.Dir(d.socketPath))
+	results := plugins.ReapRuntimeProcesses(nil, filepath.Dir(d.socketPath))
 	if len(results) == 0 {
 		return
 	}

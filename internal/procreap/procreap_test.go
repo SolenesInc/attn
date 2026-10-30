@@ -1,6 +1,8 @@
 package procreap
 
 import (
+	"context"
+	"github.com/victorarias/attn/internal/stepclock"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,7 +26,7 @@ func writeScript(t *testing.T, body string) string {
 
 func orphan(t *testing.T, dir, id, body string) Entry {
 	t.Helper()
-	readyFile := filepath.Join(t.TempDir(), "ready")
+	readyFile := readyFifo(t)
 	script := writeScript(t, "READY_FILE="+readyFile+"\n"+body)
 	cmd := exec.Command(script)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -36,17 +38,7 @@ func orphan(t *testing.T, dir, id, body string) Entry {
 	t.Cleanup(func() {
 		_ = syscall.Kill(-pid, syscall.SIGKILL)
 	})
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(readyFile); err == nil {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	if _, err := os.Stat(readyFile); err != nil {
-		t.Fatalf("orphan never reported ready: %v", err)
-	}
+	awaitReady(t, readyFile)
 
 	entry := NewEntry(id, pid, pid, []string{script})
 	if err := WriteEntry(filepath.Join(dir, id+".json"), entry); err != nil {
@@ -58,7 +50,7 @@ func orphan(t *testing.T, dir, id, body string) Entry {
 func TestReapLeavesARecycledPIDAlone(t *testing.T) {
 	dir := t.TempDir()
 	entry := orphan(t, dir, "e1", `
-touch "$READY_FILE"
+: > "$READY_FILE"
 while true; do sleep 0.05; done
 `)
 	entry.ProcessStartTime = "not-this-process"
@@ -66,7 +58,7 @@ while true; do sleep 0.05; done
 		t.Fatalf("rewrite registry: %v", err)
 	}
 
-	results := ReapDir(dir, testGrace)
+	results := ReapDir(stepclock.New(), dir, testGrace)
 	if len(results) != 1 || results[0].Outcome != ReapUnidentified {
 		t.Fatalf("expected %s, got %+v", ReapUnidentified, results)
 	}
@@ -78,7 +70,7 @@ while true; do sleep 0.05; done
 func TestReapRefusesAnEntryWithNoStartTime(t *testing.T) {
 	dir := t.TempDir()
 	entry := orphan(t, dir, "e1", `
-touch "$READY_FILE"
+: > "$READY_FILE"
 while true; do sleep 0.05; done
 `)
 	entry.ProcessStartTime = ""
@@ -86,7 +78,7 @@ while true; do sleep 0.05; done
 		t.Fatalf("rewrite registry: %v", err)
 	}
 
-	results := ReapDir(dir, testGrace)
+	results := ReapDir(stepclock.New(), dir, testGrace)
 	if len(results) != 1 || results[0].Outcome != ReapUnidentified {
 		t.Fatalf("expected %s, got %+v", ReapUnidentified, results)
 	}
@@ -108,7 +100,7 @@ func TestReapReportsADeadEntryAsAlreadyGone(t *testing.T) {
 		t.Fatalf("write registry: %v", err)
 	}
 
-	results := ReapDir(dir, testGrace)
+	results := ReapDir(stepclock.New(), dir, testGrace)
 	if len(results) != 1 || results[0].Outcome != ReapAlreadyGone {
 		t.Fatalf("expected %s, got %+v", ReapAlreadyGone, results)
 	}
@@ -123,7 +115,7 @@ func TestReapReportsAnUnreadableRecord(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	results := ReapDir(dir, testGrace)
+	results := ReapDir(stepclock.New(), dir, testGrace)
 	if len(results) != 2 {
 		t.Fatalf("expected both records reported, got %+v", results)
 	}
@@ -146,40 +138,33 @@ sleep 300 &
 echo $! > `+childPIDFile+`
 set +m
 trap 'kill $(cat `+childPIDFile+`) 2>/dev/null; exit 0' TERM
-touch "$READY_FILE"
+: > "$READY_FILE"
 while true; do sleep 0.05; done
 `)
-	deadline := time.Now().Add(5 * time.Second)
 	var childPID int
-	for time.Now().Before(deadline) {
-		if raw, err := os.ReadFile(childPIDFile); err == nil {
-			if pid, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil && pid > 0 {
-				childPID = pid
-				break
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
+	if raw, err := os.ReadFile(childPIDFile); err == nil {
+		childPID, _ = strconv.Atoi(strings.TrimSpace(string(raw)))
 	}
 	if childPID <= 0 {
 		t.Fatal("orphan never reported its detached child pid")
 	}
 	t.Cleanup(func() { _ = syscall.Kill(childPID, syscall.SIGKILL) })
 
-	results := ReapDir(dir, testGrace)
+	results := ReapDir(stepclock.New(), dir, testGrace)
 	if len(results) != 1 || results[0].Outcome != ReapTerminated {
 		t.Fatalf("expected %s, got %+v", ReapTerminated, results)
 	}
-	if !waitForGone(childPID, 5*time.Second) {
+	if !waitForGone(nil, childPID, 5*time.Second) {
 		t.Fatalf("detached child %d survived the cooperative reap", childPID)
 	}
 }
 
 func TestReapNeverGroupSignalsASharedGroupEntry(t *testing.T) {
 	dir := t.TempDir()
-	readyFile := filepath.Join(t.TempDir(), "ready")
+	readyFile := readyFifo(t)
 	script := writeScript(t, "READY_FILE="+readyFile+`
 trap '' TERM
-touch "$READY_FILE"
+: > "$READY_FILE"
 while true; do sleep 0.05; done
 `)
 	cmd := exec.Command(script)
@@ -189,13 +174,7 @@ while true; do sleep 0.05; done
 	pid := cmd.Process.Pid
 	go func() { _ = cmd.Wait() }()
 	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(readyFile); err == nil {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	awaitReady(t, readyFile)
 
 	pgid, err := syscall.Getpgid(pid)
 	if err != nil {
@@ -209,11 +188,54 @@ while true; do sleep 0.05; done
 		t.Fatalf("write registry: %v", err)
 	}
 
-	results := ReapDir(dir, testGrace)
+	clock := stepclock.New()
+	reaped := make(chan []ReapResult, 1)
+	go func() { reaped <- ReapDir(clock, dir, testGrace) }()
+	awaitGrace(t, clock)
+	clock.Advance(testGrace)
+	results := <-reaped
 	if len(results) != 1 || results[0].Outcome != ReapKilled {
 		t.Fatalf("expected %s, got %+v", ReapKilled, results)
 	}
 	if ProcessAlive(pid) {
 		t.Fatalf("pid %d still alive after reap", pid)
+	}
+}
+
+func readyFifo(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "ready")
+	if err := syscall.Mkfifo(path, 0o600); err != nil {
+		t.Fatalf("make ready pipe: %v", err)
+	}
+	return path
+}
+
+func awaitReady(t *testing.T, fifo string) {
+	t.Helper()
+	opened := make(chan error, 1)
+	go func() {
+		f, err := os.Open(fifo)
+		if err == nil {
+			_ = f.Close()
+		}
+		opened <- err
+	}()
+	select {
+	case err := <-opened:
+		if err != nil {
+			t.Fatalf("open ready pipe: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the process never reported ready within 10s")
+	}
+}
+
+func awaitGrace(t *testing.T, clock *stepclock.Clock) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if pending, ok := clock.AwaitTimer(ctx, testGrace); !ok {
+		t.Fatalf("the reap never started its %s grace within 10s; timers pending: %v", testGrace, pending)
 	}
 }

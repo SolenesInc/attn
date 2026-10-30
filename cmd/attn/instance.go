@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/stepclock"
 	"io"
 	"os"
 	"os/exec"
@@ -408,7 +409,7 @@ func cleanInstance(w io.Writer, r instanceResolved) error {
 		}
 	}
 
-	reportProcReap(w, "plugins", "plugin", plugins.ReapRuntimeProcesses(r.DataDir))
+	reportProcReap(w, "plugins", "plugin", plugins.ReapRuntimeProcesses(stepclock.Process(), r.DataDir))
 
 	if err := refuseRelaunchedApp(r); err != nil {
 		return err

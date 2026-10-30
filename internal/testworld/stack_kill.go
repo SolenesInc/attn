@@ -1,12 +1,11 @@
 package testworld
 
 import (
+	"github.com/victorarias/attn/internal/procwait"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
@@ -36,13 +35,12 @@ func (s *Stack) Reboot() {
 			_ = syscall.Kill(pid, syscall.SIGKILL)
 		}
 	}
-	deadline := time.Now().Add(fakeagent.HangGuard)
 	for _, pid := range pids {
-		for pid > 0 && procreap.ProcessAlive(pid) {
-			if time.Now().After(deadline) {
-				s.T.Fatalf("process %d survived the reboot", pid)
-			}
-			time.Sleep(10 * time.Millisecond)
+		if pid <= 0 {
+			continue
+		}
+		if exited, err := procwait.Exited(pid, fakeagent.HangGuard); err != nil || !exited {
+			s.T.Fatalf("process %d survived the reboot for %s: %v", pid, fakeagent.HangGuard, err)
 		}
 	}
 	s.kit.AwaitExited()

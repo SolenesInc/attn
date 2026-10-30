@@ -79,9 +79,7 @@ func holdDaemonLockForever(pidPath, content string) {
 		os.Exit(1)
 	}
 	fmt.Println("locked")
-	for {
-		time.Sleep(time.Hour)
-	}
+	select {}
 }
 
 func alive(p *os.Process) bool {

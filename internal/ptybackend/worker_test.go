@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/victorarias/attn/internal/procwait"
 	"net"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -442,6 +444,14 @@ func TestWorkerBackend_SessionLikelyAlive_MalformedRegistryReturnsError(t *testi
 func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
 	root := newWorkerBackendTestRoot(t)
 	pidFile := filepath.Join(root, "worker.pid")
+	if err := syscall.Mkfifo(pidFile, 0o600); err != nil {
+		t.Fatalf("Mkfifo(pid file) error: %v", err)
+	}
+	reported := make(chan string, 1)
+	go func() {
+		data, _ := os.ReadFile(pidFile)
+		reported <- strings.TrimSpace(string(data))
+	}()
 	scriptPath := filepath.Join(root, "fake-worker.sh")
 	script := "#!/bin/sh\n" +
 		"echo $$ > \"$ATTN_TEST_PID_FILE\"\n" +
@@ -473,27 +483,17 @@ func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
 	}()
 
 	var pid int
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		select {
-		case err := <-spawnDone:
-			cancel()
-			t.Fatalf("Spawn() returned before worker started (pid file missing): %v", err)
-		default:
-		}
-		data, readErr := os.ReadFile(pidFile)
-		if readErr != nil {
-			time.Sleep(25 * time.Millisecond)
-			continue
-		}
-		parsedPID, parseErr := strconv.Atoi(strings.TrimSpace(string(data)))
+	select {
+	case err := <-spawnDone:
+		cancel()
+		t.Fatalf("Spawn() returned before worker started (pid file missing): %v", err)
+	case line := <-reported:
+		parsedPID, parseErr := strconv.Atoi(line)
 		if parseErr != nil {
-			t.Fatalf("Atoi(pid file) error: %v", parseErr)
+			t.Fatalf("Atoi(pid file %q) error: %v", line, parseErr)
 		}
 		pid = parsedPID
-		break
-	}
-	if pid == 0 {
+	case <-time.After(5 * time.Second):
 		t.Fatalf("timed out waiting for fake worker pid file at %s", pidFile)
 	}
 
@@ -507,14 +507,9 @@ func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
 		t.Fatal("Spawn() did not return after context cancellation")
 	}
 
-	deadline = time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if !pidAlive(pid) {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
+	if exited, err := procwait.Exited(pid, 5*time.Second); err != nil || !exited {
+		t.Fatalf("worker pid %d still alive after spawn failure cleanup: %v", pid, err)
 	}
-	t.Fatalf("worker pid %d still alive after spawn failure cleanup", pid)
 }
 
 func startFakeWorkerRPCServer(

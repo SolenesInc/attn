@@ -297,7 +297,7 @@ func (s *Stack) reap() {
 			s.T.Errorf("PTY worker for session %s (pid %d) %s: %v", r.SessionID, r.WorkerPID, r.Outcome, r.Err)
 		}
 	}
-	reaped := append(ptyhost.ReapDataDir(s.Dir), plugins.ReapRuntimeProcesses(s.Dir)...)
+	reaped := append(ptyhost.ReapDataDir(s.Dir), plugins.ReapRuntimeProcesses(stepclock.Process(), s.Dir)...)
 	for _, r := range reaped {
 		if r.Outcome != procreap.ReapTerminated && r.Outcome != procreap.ReapAlreadyGone {
 			s.T.Errorf("process %s (pid %d) %s: %v", r.ID, r.PID, r.Outcome, r.Err)

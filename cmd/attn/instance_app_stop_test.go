@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -31,8 +32,7 @@ func TestInstanceAppStopHelperProcess(t *testing.T) {
 		t.Fatalf("helper: write ready file: %v", err)
 	}
 	if relaunch == "" {
-		time.Sleep(time.Hour)
-		return
+		select {}
 	}
 	<-term
 	path, pid, _ := strings.Cut(relaunch, "|")
@@ -44,6 +44,9 @@ func TestInstanceAppStopHelperProcess(t *testing.T) {
 func spawnStubbornApp(t *testing.T, extraEnv ...string) int {
 	t.Helper()
 	readyPath := filepath.Join(t.TempDir(), "helper-ready")
+	if err := syscall.Mkfifo(readyPath, 0o600); err != nil {
+		t.Fatalf("make helper ready pipe: %v", err)
+	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestInstanceAppStopHelperProcess$")
 	cmd.Env = append(os.Environ(), "ATTN_APP_STOP_HELPER_READY="+readyPath)
 	cmd.Env = append(cmd.Env, extraEnv...)
@@ -59,16 +62,22 @@ func spawnStubbornApp(t *testing.T, extraEnv ...string) int {
 		_ = cmd.Process.Kill()
 		<-done
 	})
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		if _, err := os.Stat(readyPath); err == nil {
-			return cmd.Process.Pid
+	ready := make(chan error, 1)
+	go func() {
+		_, err := os.ReadFile(readyPath)
+		ready <- err
+	}()
+	select {
+	case err := <-ready:
+		if err != nil {
+			t.Fatalf("read stubborn app helper readiness: %v", err)
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("stubborn app helper never wrote %s", readyPath)
-		}
-		time.Sleep(10 * time.Millisecond)
+	case <-done:
+		t.Fatalf("stubborn app helper exited before writing %s", readyPath)
+	case <-time.After(fakeagent.HangGuard):
+		t.Fatalf("stubborn app helper never wrote %s within %s", readyPath, fakeagent.HangGuard)
 	}
+	return cmd.Process.Pid
 }
 
 func spawnForeignProcess(t *testing.T) int {

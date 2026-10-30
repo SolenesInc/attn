@@ -20,21 +20,11 @@ var allowed = map[string]string{
 	"internal/daemon/exit_screen_wire_test.go TestAnExitReleasesItsRuntimeAtOnceAndReportsTheExitOnceStorageReturns": "runs inBubbleWithAgents, so the sleep moves the synctest clock",
 	"internal/jobs/stores_test.go TestDueJobsRunByPriorityThenByScheduleWithinASecond":                               "runs in onTheJobDatabase's synctest bubble",
 	"internal/jobs/stores_test.go TestRetentionTrimsCompletedJobsBySubSecondAgeAndKeepsDeadOnes":                     "runs in onTheJobDatabase's synctest bubble",
-	"cmd/attn/daemon_stop_stack_test.go holdDaemonLockForever":                                                       "a helper process that holds a lock until it is killed; nothing waits on the sleep",
-	"cmd/attn/instance_app_stop_test.go TestInstanceAppStopHelperProcess":                                            "a helper process standing in for the app until it is signalled; nothing waits on the sleep",
 	"internal/fakeagent/codex_remote.go (*codexRemote).stayConnected":                                                "the fake Codex's own reconnect backoff, which the real Codex has too",
 	"internal/fakeagent/nisse.go (*nisseTUI).begin":                                                                  "real-time poll for the Nisse server socket; replace with a signal",
-	"cmd/attn/instance_app_stop_test.go spawnStubbornApp":                                                            "real-time poll for the helper's ready file; replace with a signal",
-	"internal/procreap/procreap_test.go orphan":                                                                      "real-time poll for a ready file; replace with a signal",
-	"internal/procreap/procreap_test.go TestReapCooperativeTeardownReachesTheDetachedChild":                          "real-time poll for a child pid file; replace with a signal",
-	"internal/procreap/procreap_test.go TestReapNeverGroupSignalsASharedGroupEntry":                                  "real-time poll for a ready file; replace with a signal",
-	"internal/ptybackend/integration_support_test.go waitForPIDsGone":                                                "real-time poll for processes to exit; replace with a signal",
 	"internal/ptybackend/shared_host_integration_test.go waitForSessionIDs":                                          "real-time poll of the shared host; replace with a signal",
 	"internal/ptybackend/shared_host_integration_test.go waitForSessionExit":                                         "real-time poll of the shared host; replace with a signal",
-	"internal/ptybackend/worker_test.go TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess":                        "real-time poll for a worker pid file and its exit; replace with a signal",
-	"internal/supervise/supervise_test.go waitFor":                                                                   "real-time poll for a goroutine to react to the fake clock; replace with a signal",
 	"internal/ptybackend/shared_host_perf_test.go TestSharedHostResourceExperiment":                                  "measures idle CPU over a real two-second window; runs only with ATTN_RESOURCE_PROBE",
-	"internal/testworld/stack_kill.go (*Stack).Reboot":                                                               "real-time poll for SIGKILLed processes to be gone; replace with a signal",
 }
 
 func main() {

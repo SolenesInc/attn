@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/stepclock"
 	"os"
 	"path/filepath"
 	"sort"
@@ -98,7 +99,7 @@ type ReapResult struct {
 	Err     error
 }
 
-func ReapDir(dir string, grace time.Duration) []ReapResult {
+func ReapDir(clock *stepclock.Clock, dir string, grace time.Duration) []ReapResult {
 	paths, err := filepath.Glob(filepath.Join(dir, "*.json"))
 	if err != nil {
 		return nil
@@ -117,14 +118,14 @@ func ReapDir(dir string, grace time.Duration) []ReapResult {
 			})
 			continue
 		}
-		result := reapEntry(entry, grace)
+		result := reapEntry(clock, entry, grace)
 		result.Path = path
 		results = append(results, result)
 	}
 	return results
 }
 
-func reapEntry(entry Entry, grace time.Duration) ReapResult {
+func reapEntry(clock *stepclock.Clock, entry Entry, grace time.Duration) ReapResult {
 	res := ReapResult{ID: entry.ID, PID: entry.PID}
 	leadsGroup := entry.PGID == entry.PID && entry.PID > 0
 
@@ -156,7 +157,7 @@ func reapEntry(entry Entry, grace time.Duration) ReapResult {
 		res.Err = fmt.Errorf("SIGTERM pid %d: %w", entry.PID, err)
 		return res
 	}
-	if waitForGone(entry.PID, grace) {
+	if waitForGone(clock, entry.PID, grace) {
 		res.Outcome = ReapTerminated
 		if leadsGroup {
 			sweepGroup(entry.PGID)
@@ -168,7 +169,7 @@ func reapEntry(entry Entry, grace time.Duration) ReapResult {
 		_ = syscall.Kill(-entry.PGID, syscall.SIGKILL)
 	}
 	_ = syscall.Kill(entry.PID, syscall.SIGKILL)
-	if waitForGone(entry.PID, grace) {
+	if waitForGone(clock, entry.PID, grace) {
 		res.Outcome = ReapKilled
 		if leadsGroup {
 			sweepGroup(entry.PGID)
@@ -199,13 +200,17 @@ func ProcessAlive(pid int) bool {
 	return pid > 0 && syscall.Kill(pid, 0) == nil && !isZombie(pid)
 }
 
-func waitForGone(pid int, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if !ProcessAlive(pid) {
-			return true
+func waitForGone(clock *stepclock.Clock, pid int, timeout time.Duration) bool {
+	deadline := clock.NewTimer(timeout)
+	defer deadline.Stop()
+	poll := time.NewTicker(20 * time.Millisecond)
+	defer poll.Stop()
+	for ProcessAlive(pid) {
+		select {
+		case <-deadline.C():
+			return !ProcessAlive(pid)
+		case <-poll.C:
 		}
-		time.Sleep(20 * time.Millisecond)
 	}
-	return !ProcessAlive(pid)
+	return true
 }

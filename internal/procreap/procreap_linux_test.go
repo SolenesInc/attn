@@ -2,6 +2,7 @@ package procreap
 
 import (
 	"bufio"
+	"github.com/victorarias/attn/internal/stepclock"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -48,11 +49,11 @@ func TestReapSweepsTheGroupOfALeaderThatExitedUncollected(t *testing.T) {
 		t.Fatalf("write registry: %v", err)
 	}
 
-	results := ReapDir(dir, testGrace)
+	results := ReapDir(stepclock.New(), dir, testGrace)
 	if len(results) != 1 || results[0].Outcome != ReapAlreadyGone {
 		t.Fatalf("expected %s, got %+v", ReapAlreadyGone, results)
 	}
-	if !waitForGone(child, testGrace) {
+	if !waitForGone(nil, child, testGrace) {
 		t.Fatalf("child %d of the exited leader survived the reap", child)
 	}
 }

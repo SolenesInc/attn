@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"github.com/victorarias/attn/internal/stepclock"
 	"path/filepath"
 	"time"
 
@@ -13,6 +14,6 @@ func RuntimeRegistryDir(dataDir string) string {
 
 const runtimeTerminationGrace = 3 * time.Second
 
-func ReapRuntimeProcesses(dataDir string) []procreap.ReapResult {
-	return procreap.ReapDir(RuntimeRegistryDir(dataDir), runtimeTerminationGrace)
+func ReapRuntimeProcesses(clock *stepclock.Clock, dataDir string) []procreap.ReapResult {
+	return procreap.ReapDir(clock, RuntimeRegistryDir(dataDir), runtimeTerminationGrace)
 }
