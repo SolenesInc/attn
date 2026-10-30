@@ -15,6 +15,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const PANEL_TIMEOUT_MS = 30_000;
 const FORM_TIMEOUT_MS = 30_000;
+const SCHEDULE_TICK_INTERVAL = '1s';
 const SCHEDULE_CHECK_TIMEOUT_MS = 120_000;
 
 function parseArgs(argv) {
@@ -224,7 +225,7 @@ async function main() {
     });
 
     await runner.step('restart_isolated_daemon', async () => {
-      daemonEnv = instanceEnv(instance);
+      daemonEnv = instanceEnv(instance, { ATTN_AUTOMATION_SCHEDULE_INTERVAL: SCHEDULE_TICK_INTERVAL });
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
@@ -584,6 +585,7 @@ async function main() {
       runner.writeJson('guard-form-sentence.json', sentence);
       await nativeClick('[data-testid="automation-form-save"]');
       await client.request('dom_wait', { selector: '[data-testid="automation-form"]', absent: true, timeoutMs: FORM_TIMEOUT_MS });
+      const savedAt = performance.now();
       const saved = (runJSON(binary, ['automation', 'list'], daemonEnv) || []).find((row) => row.name === guardName);
       runner.assert(saved?.id > 0, 'the form creates a scheduled automation with a native guard entry and save', saved);
       const guardID = saved.id;
@@ -593,25 +595,38 @@ async function main() {
       await nativeClick('[data-testid="automation-form-cancel"]');
 
       const selector = `[data-testid="automation-guard-check-${guardID}"]`;
+      const emptyWaitStartedAt = performance.now();
       await client.request('dom_wait', {
         selector, textIncludes: 'Guard: empty', timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS,
       }, { timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS + FORM_TIMEOUT_MS });
+      const emptyWaitMs = performance.now() - emptyWaitStartedAt;
+      const firstCheckAfterSaveMs = performance.now() - savedAt;
       const empty = await client.request('dom_text', { selector });
       runner.writeJson('guard-empty-line.json', empty);
       runner.writeJson('guard-empty-definition.json', findListRow(binary, guardID, daemonEnv));
-      runner.log('guard_empty_line', empty);
+      runner.log('guard_empty_line', { ...empty, emptyWaitMs, firstCheckAfterSaveMs });
 
+      const failedWaitStartedAt = performance.now();
       fs.writeFileSync(guardFile, 'echo broken >&2; exit 17\n');
       await client.request('dom_wait', {
         selector, textIncludes: 'Guard: failed', timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS,
       }, { timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS + FORM_TIMEOUT_MS });
+      const failedWaitMs = performance.now() - failedWaitStartedAt;
       const failed = await client.request('dom_text', { selector });
       await client.request('dom_wait', { selector: `[data-testid="automation-failure-badge-${guardID}"]`, textIncludes: 'Failed', timeoutMs: PANEL_TIMEOUT_MS });
       const detail = await client.request('dom_text', { selector: `[data-definition-id="${guardID}"] .automations-panel__guard-error` });
       runner.assert(detail.text.includes('exit 17: broken'), 'a failed guard shows its exit code and stderr in the drawer', detail);
       runner.writeJson('guard-failed-line.json', failed);
       runner.writeJson('guard-failed-definition.json', findListRow(binary, guardID, daemonEnv));
-      runner.log('guard_failed_line', { ...failed, detail });
+      runner.log('guard_failed_line', { ...failed, detail, failedWaitMs });
+      runner.writeJson('guard-check-timing.json', {
+        tickInterval: SCHEDULE_TICK_INTERVAL,
+        cron: '* * * * *',
+        waitLimitMs: SCHEDULE_CHECK_TIMEOUT_MS,
+        emptyWaitMs,
+        firstCheckAfterSaveMs,
+        failedWaitMs,
+      });
       const runs = runJSON(binary, ['automation', 'runs', guardID], daemonEnv) || [];
       runner.assert(runs.length === 0, 'empty and failed checks create no run', runs);
       run(binary, ['automation', 'disable', guardID], daemonEnv);

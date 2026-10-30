@@ -94,12 +94,12 @@
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "automation-form": {
-        "run": "automation-form-2026-10-30T04-10-35-618Z",
+        "run": "automation-form-2026-10-30T05-01-56-313Z",
         "job": "Local packaged scenario, guardapp isolated instance",
         "recordedAt": "2026-10-30",
-        "seconds": 242.46,
+        "seconds": 184.939,
         "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=242460 after adding native guard entry, save and reload, then real scheduled empty and failed checks. The locked display delayed launch and the pre-existing optional screenshot timed out. The previous 240s scenario limit is below this measured run; 600s leaves room for both minute ticks. Guard proof uses rendered text and CLI receipts. Remeasure on Linux CI."
+        "note": "Green ATTN_VERDICT durationMs=184939 with a 1s scheduler tick and five-field minute cron. guard-check-timing.json measured save to first check at 55084.865ms and script change to failed check at 58885.410ms. The 120s check wait is over twice the larger measurement; the 600s scenario guard leaves room for both scheduled checks. The locked display delayed launch and the pre-existing optional screenshot timed out. Guard proof uses native input, rendered text and CLI receipts. Remeasure on Linux CI."
       },
       "automation-scheduled-cleanup": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
@@ -404,7 +404,7 @@
     "agent-queue": 132.293,
     "agent-settings": 33.006,
     "autoclose-on-exit": 72.591,
-    "automation-form": 242.46,
+    "automation-form": 184.939,
     "automation-lifecycle": 71.804,
     "automation-scheduled-cleanup": 40.6,
     "automation-surface": 32.99,
