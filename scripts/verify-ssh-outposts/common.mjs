@@ -12,7 +12,7 @@ export async function world(o) {
   fs.mkdirSync(o.out, { recursive: true });
   const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('ATTN_') && key !== 'CODEX_THREAD_ID'));
   const env = { ...baseEnv, ATTN_INSTANCE: o.instance, ATTN_HARNESS_INSTANCE: o.instance, ATTN_HARNESS_BIN: o.macBin,
-    ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off' };
+    ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off', ATTN_PTY_BACKEND: 'worker' };
   for (const key of Object.keys(process.env)) if (key.startsWith('ATTN_')) delete process.env[key];
   Object.assign(process.env, env);
   const { DaemonObserver } = await import('../../app/scripts/real-app-harness/daemonObserver.mjs');
@@ -36,13 +36,12 @@ export async function world(o) {
     const remoteHome = await remote('printf "%s" "$HOME"');
     W.R.binary = `${remoteHome}/.local/share/attn-outpost-instances/${o.instance}/attn`;
     W.rcli = (...args) => remote(`ATTN_INSTANCE=${quote(o.instance)} ${quote(W.R.binary)} ${args.map(quote).join(' ')}`);
-    const record = JSON.parse(await W.rcli('instance', 'resolve', '--json'));
-    W.R.data = record.dataDir;
+    W.R.data = `${remoteHome}/.attn-${o.instance}`;
     W.R.notebook = `${remoteHome}/attn-notebook-${o.instance}`;
     W.R.root = o.scratch;
-    await remote(`test ! -e ${quote(W.R.data)}; test ! -e ${quote(W.R.notebook)}; mkdir -p ${quote(W.R.root)}`);
+    await remote(`test ! -e ${quote(W.R.binary)}; test ! -e ${quote(W.R.data)}; test ! -e ${quote(W.R.notebook)}; mkdir -p ${quote(W.R.root)}`);
     W.remoteReady = true;
-    receipt('outpost binary placed by hand', { ...W.R, build: JSON.parse(await W.rcli('--build-info-json')) });
+    receipt('fresh outpost paths', { ...W.R });
   };
   W.startHome = async notebookRoot => {
     const resolved = JSON.parse((await attn('instance', 'resolve', '--json')).stdout);
@@ -78,7 +77,7 @@ export async function world(o) {
       fs.writeFileSync(path.join(o.out, 'outpost-daemon.log'), await remote(`cat ${quote(W.R.data + '/daemon.log')} || true`));
       await W.rcli('enrollment', 'leave');
       await W.rcli('instance', 'clean', o.instance);
-      await remote(`rm -f ${quote(W.R.binary)}; rmdir ${quote(path.dirname(W.R.binary))}; rm -rf ${quote(W.R.root)} ${quote(W.R.notebook)}`);
+      await remote(`rm -f ${quote(W.R.binary)} ${quote(W.R.binary + '.previous')}; rmdir ${quote(path.dirname(W.R.binary))}; rm -rf ${quote(W.R.root)} ${quote(W.R.notebook)}`);
       receipt('outpost removed', { data: W.R.data, binary: W.R.binary });
     }
     if (W.home) receipt('home cleaned', { output: (await attn('instance', 'clean', o.instance)).stdout });

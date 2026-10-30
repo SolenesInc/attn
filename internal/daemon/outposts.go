@@ -234,6 +234,8 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 				state, delay = bridge.StateRefused, bridge.LostAfter
 				if refusal.Peer != nil {
 					build = refusal.Peer.Build.String()
+				} else if refusal.Reason == "build" {
+					build = "nothing installed"
 				}
 			}
 			d.updateOutpost(row.ID, run, state, build, err)

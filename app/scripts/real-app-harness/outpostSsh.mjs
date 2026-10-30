@@ -51,6 +51,7 @@ export async function outpostSsh(root) {
       });
       server.listen(socket); await once(server, 'listening'); servers.push(server);
       routes[destination] = socket; save();
+      return target;
     },
     async close() {
       if (fs.existsSync(controlRoot)) for (const entry of fs.readdirSync(controlRoot)) {

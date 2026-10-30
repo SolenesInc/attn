@@ -122,6 +122,27 @@ func TestSSHUpdateKeepsShellAndReconnectNeverInstalls(t *testing.T) {
 		t.Fatalf("shell PID changed %s -> %s: %v", before, after, err)
 	}
 	t.Logf("Update connected on %s; shell PID %s survived", protocol.Deref(row.Build), strings.TrimSpace(string(after)))
+	home.Stop()
+	if err := os.Remove(ssh.InstallPath(remote)); err != nil {
+		t.Fatal(err)
+	}
+	home.Start()
+	app = home.App()
+	row = outpostStateOnConnect(app, "outpost", protocol.OutpostStateRefused)
+	if protocol.Deref(row.Build) != "nothing installed" {
+		t.Fatalf("missing path kept stale build: %+v", row)
+	}
+	app.Send(protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: host})
+	row = awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone {
+		t.Fatalf("reinstall: %+v", row.Update)
+	}
+	retained, err := os.ReadFile(ssh.InstallPath(remote) + ".previous")
+	if err != nil || sha256.Sum256(retained) != sha256.Sum256(oldBytes) {
+		t.Fatalf("reinstall lost previous build: %v", err)
+	}
+	t.Log("a missing install path replaced the stale build label; Update restored it and kept the existing rollback")
+
 	app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host})
 	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	if _, err := os.Stat(ssh.InstallPath(remote)); err != nil {

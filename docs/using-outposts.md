@@ -17,12 +17,14 @@ An outpost is a Linux amd64 or arm64 machine that you can reach with your own
 `user@host`, or `ssh://host:2222`. Your OpenSSH configuration chooses the route,
 keys and known hosts.
 
-This build still needs the matching Linux binary placed by hand. Build it from
-the home's checkout with `make build-linux-amd64 OUTPUT=/tmp/attn-outpost`, or
-`build-linux-arm64`. Copy it to the outpost and install it at:
+Add installs your home's Linux build at:
 
 - Default instance: `~/.local/bin/attn`.
 - Named instance: `~/.local/share/attn-outpost-instances/<instance>/attn`.
+
+The outpost needs `sh`, `uname`, `cat`, `mkdir`, `mv`, `chmod`, and `busctl`.
+First run `ssh <destination>` in your terminal and answer any authentication
+or host-key prompts. attn's background commands never prompt.
 
 The home and outpost use the same [instance](instances.md) name. A named home
 starts only its same-named instance on the outpost.
@@ -59,10 +61,17 @@ the home to be reachable.
 
 ## Update outposts
 
-Update is unavailable in this build while SSH installation is being added.
-Its error names the install path. Place the home's matching Linux binary at
-that path by hand. Use `install` to replace a running binary, then let the
-home reconnect. attn starts the matching build and recovers its running shells.
+When an outpost runs another build, choose **Update to home build** on its
+row or **Update outposts** in the banner. Update also retries a failed first
+install when nothing is installed yet.
+
+The home builds or downloads its matching Linux binary, sends it over ssh,
+verifies it, and reconnects. Running shells keep their processes. The old
+binary stays at `<install path>.previous`. Installation refuses if the
+outpost has `pty_shared_host_enabled` on or its database needs a newer build.
+
+A reconnect never installs a build. If the installed build differs or is
+missing, the row says why and offers Update.
 
 Keep the data folders, because they hold the pairing identities and work.
 If a build migrated the database, an older build may need a backup restored
@@ -269,7 +278,7 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 | Refused because | What to do |
 | --- | --- |
 | the two use different instance names | Start an outpost with the same instance name as the home. |
-| the two run different builds | Install the home's matching binary at the path described above. |
+| the two run different builds | Choose **Update to home build** on the row or **Update outposts** in the banner. |
 | the outpost changed host key or daemon id | It was reinstalled or its data folder replaced. If you expect that, **Re-pair** it. |
 | the outpost is paired to another home | Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
 | ssh refuses authentication or a host key | Run `ssh <destination>` in your terminal and follow ssh's message. attn never prompts from the daemon. |
@@ -277,13 +286,16 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 
 ## Remove an outpost
 
-**Remove** closes the outpost's terminals across all profiles, then forgets
-the outpost and its identity. When the outpost has terminals, the row asks you to
-confirm with **Remove and close N terminals**, or **Cancel**. When the outpost has
-none, removal happens immediately. If the outpost is unreachable or still
-connecting, the row asks **Remove and forget N terminals** instead and says
-that its shells keep running on the outpost: Remove closes their tiles at the
-home only. Run `attn enrollment leave` on the outpost to stop those shells.
+**Remove** closes the outpost's terminals across all profiles. Over ssh, it
+releases enrollment and stops the daemon for the home's instance, then exits
+that outpost's ssh master and forgets the row. It keeps the binary,
+`attn.previous`, data folder, and Notebook folder on the outpost.
+
+With terminals, the row asks **Remove and close N terminals**, or **Cancel**.
+With none, removal happens immediately. If ssh cannot reach the outpost,
+**Remove and forget N terminals** closes only their tiles at the home.
+Run the outpost's binary with the matching `ATTN_INSTANCE`, followed by
+`enrollment leave` and `daemon stop`, to stop what remains there.
 
 Turning Outposts off disconnects every outpost and keeps the list for next
 time. Their terminals show offline until you turn Outposts on again.
@@ -297,10 +309,12 @@ daemons, bridge processes and terminal workers. Run the focused lifecycle check:
 go test ./cmd/attn -run TestSSH -v
 ```
 
-For the user's real ssh route, use `scripts/verify-ssh-outposts/transport.mjs`.
-It requires a named Mac instance and the same-named Linux binary already at
-its install path. It adds the destination, checks daemon and shell survival
-through a master exit, and records typing echo beside a plain echo on the
-same master. Its receipt and sample files support the latency analysis.
-Use `--mode bulk` with a copied Notebook to measure a first sync. The harness
-removes the instances and scratch files it starts.
+For a fresh Add, Update, and Remove on the user's ssh route, run
+`scripts/verify-ssh-outposts/install.mjs --help`. It starts from no files for
+its named instance, records upload time, verifies a shell survives Update,
+and checks that Remove keeps the instance's files and stops its daemon.
+
+`scripts/verify-ssh-outposts/transport.mjs` measures typing echo beside a plain
+echo on the same master. Add installs the matching binary. Use `--mode bulk`
+with a copied Notebook to measure a first sync. The harness removes the
+instances and scratch files it starts.

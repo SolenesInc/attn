@@ -107,12 +107,16 @@ func installOutpostBinary(args []string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	previous := *target + ".previous"
-	if err := os.Remove(previous); err != nil && !os.IsNotExist(err) {
+	if _, err := os.Stat(*target); err == nil {
+		previous := *target + ".previous"
+		if err := os.Remove(previous); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Link(*target, previous); err != nil {
+			return fmt.Errorf("keep previous binary: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
 		return err
-	}
-	if err := os.Link(*target, previous); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("keep previous binary: %w", err)
 	}
 	if err := os.Rename(staged, *target); err != nil {
 		return fmt.Errorf("replace outpost binary: %w", err)
