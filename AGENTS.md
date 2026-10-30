@@ -110,18 +110,16 @@ count.
 
 ## Trunk-based development
 
-attn is developed trunk-based: changes land straight on `main`, review happens
-on `main` after they land, and releases ship only reviewed, green commits.
-[Trunk-based development](docs/trunk-based-development.md) is the process.
+attn is developed trunk-based: changes land straight on `main`, are reviewed
+before landing and again on `main`, and releases ship only reviewed, green
+commits.
+[Trunk-based development](docs/trunk-based-development.md) explains the
+system.
 
-- Land with `scripts/land.sh`. Your work is done when it pushes. Report the
-  checks with the landed commits, and harvest.
+- Land with the `land-on-main` skill: check, review, then `scripts/land.sh`.
+  Your work is done when it pushes.
 - An Orchestrator reviews its Builders after landing. Corrections are new
   landings.
-- Run targeted tests and check the affected surface before landing. `land.sh`
-  runs a fast gate; the full Go and frontend suites run in CI on `main`.
-- Rebase onto `origin/main` at the start of every step and land each slice
-  that works. Commits held back on a branch turn into conflicts.
 
 ## PR posture
 
@@ -169,8 +167,8 @@ on `main` after they land, and releases ship only reviewed, green commits.
 
 Before landing or reporting done, run targeted tests for what you changed and
 check the affected surface. Do not run `make test`, `make lint`,
-`make test-frontend`, or another full suite as a landing step. CI on `main`
-runs the full suites after landing.
+`make test-frontend`, or another full suite locally: CI on `main` runs the full
+suites after landing.
 
 `make test` skips the Go suite when only `docs/`, root Markdown and `app/src`
 changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares
@@ -329,7 +327,8 @@ working on:
 - The inbox: addresses, rings, wakes, seed updates or notices => docs/inbox.md
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
   CLI help => docs/prompt-authoring.md
-- Landing, verifying before landing, review on main, or a red main =>
+- Landing a change => the land-on-main skill (.agents/skills/land-on-main)
+- Review on main, a red main, or why attn lands this way =>
   docs/trunk-based-development.md
 - Pull requests, or waiting on their reviews => docs/pull-requests.md
 - Release notes, releases, or hotfixes => docs/making-a-release.md

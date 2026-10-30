@@ -1,42 +1,23 @@
 # Trunk-based development
 
 attn is developed trunk-based. Maintainers and their agents commit straight to
-`main`; no pull request stands between a change and `main`. Review happens on
-`main` after a change lands, and a release ships only commits that both CI and
-review have passed. Contributors working from a fork use
+`main`; no pull request stands between a change and `main`. A change is
+reviewed before it lands, scaled to its risk, and again on `main` afterwards. A
+release ships only commits that both CI and review on `main` have passed. Contributors working from a fork use
 [pull requests](pull-requests.md).
 
 ## Landing
 
-1. Start a local working branch from the latest `main`:
+A landing is one push of finished commits to `main` through `scripts/land.sh`.
+Work lands in slices, each as soon as it works, so no branch sits waiting and
+turns into conflicts. Unfinished work lands unwired, or behind an experimental
+setting that is off by default. The `land-on-main` skill is the
+procedure, from the working branch to the report after the push.
 
-   ```bash
-   git fetch origin main && git switch -c work origin/main
-   ```
-
-   The working branch is private and short-lived. It is never a pull request
-   and is never pushed under its own name.
-2. Commit as usual. The commit hook adds the `Attn-Session:` and `Attn-Seed:`
-   trailers (see [Commits](#commits)).
-3. Check the change yourself on the surface it touches (see
-   [Verifying before landing](#verifying-before-landing)).
-4. Run `scripts/land.sh`. Your work is done when it pushes. Report the checks
-   with the landed commits, and harvest the seed.
-5. Everything after is automatic: `main`'s CI runs the full test suites and scenario matrix,
-   the sheriff gets `main` green again when a landing breaks it, the review automation
-   reviews the commits and messages their author or dispatches a fixer, and
-   release notes are written from the commits.
-
-Land each slice as soon as it works, and rebase onto `origin/main` at the start
-of every step. Unfinished work lands unwired, or behind an experimental setting
-that is off by default, rather than waiting on the working branch.
-
-### Pushing
-
-The only push is `scripts/land.sh` pushing to `main`
-(`git push origin HEAD:main`). `.githooks/pre-push` refuses a plain `git push`
-to `main`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
-after running its checks yourself.
+After the push, everything is automatic: `main`'s CI runs the full test suites
+and scenario matrix, the sheriff gets `main` green again when a landing breaks
+it, the review automation reviews the commits and messages their author or
+dispatches a fixer, and release notes are written from the commits.
 
 ### What land.sh does
 
@@ -52,34 +33,19 @@ landing changes, and pushes:
 - `scripts/`: run the shell script tests.
 
 When only protocol types or prompt catalogs conflict, it regenerates them.
-The full Go and frontend suites run in CI on `main`, never in the landing gate.
-
-### When main moves
-
-When `main` moves during landing, `scripts/land.sh` rebases and pushes again
-without re-running its checks. Re-check only when the rebase stops on a real
-conflict in your code: resolve it with `git rebase origin/main`, check again,
-and run `scripts/land.sh` again. Combinations of changes are verified by
-`main`'s CI after landing, not before.
+When `main` moves during landing, it rebases and pushes again without
+re-running its checks.
 
 ## Verifying before landing
 
-Run targeted tests for the behavior you changed:
-`./scripts/test-go.sh --packages -run TestName ./pkg`
-or `pnpm --dir app exec vitest run src/path/to/file.test.tsx`. Verify the change
-on the surface it touches: the CLI, the daemon over `wsctl`, a non-production
-instance, the app. The drive-attn skill's feature map lists every way into a
-feature. Then land with `scripts/land.sh`.
+Checks before landing are fast and local: targeted tests, the change on the
+surface it touches, and a review scaled to the change's risk. The full Go and
+frontend suites and the scenario matrix, macOS included, run in CI on `main`
+after landing, and so do the combinations of changes that landed together.
 
-Do not run `make test`, `make lint`, `make test-frontend`, or another full suite
-as a pre-landing check. Targeted tests and the fast gate are local work; CI
-runs the full suites on `main` after landing.
-
-Running the scenarios that cover an app-observable change locally, on a
-non-production instance, is optional, when the machine can take it. After
-landing, `main`'s CI runs the full scenario matrix, macOS included; if a
-landing breaks `main`, the sheriff dispatches a fix or a revert.
-When no scenario covers an app-observable change, add one, or tell the user.
+Review before landing catches a defect while its author still holds the
+context, before other slices build on it. Review on `main` still reads every
+commit afterwards, with the slices of a plan side by side.
 
 The Acceptance soak workflow repeats chosen scenarios to hunt flaky ones; it is
 not a landing step.
@@ -94,9 +60,10 @@ session behind a commit.
 ## Review on main
 
 A scheduled review automation runs Codex over the commits `main` has gained
-since the `reviewed` branch, grouped by seed. For each finding it messages the
-session named by `Attn-Session:` while that session is live, and otherwise
-dispatches an agent to fix it. Then it moves `reviewed` forward. The
+since the `reviewed` branch, grouped by seed, and judges each seed's commits
+against its plan. For each finding it messages the session named by
+`Attn-Session:` while that session is live, and otherwise dispatches an agent
+to fix it. Then it moves `reviewed` forward. The
 `review-main` skill is its procedure.
 
 When an Orchestrator coordinates Builders, it reviews their work after landing.

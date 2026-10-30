@@ -72,11 +72,8 @@ Use `--role pathfinder` to investigate. Link the delegation's seed with
 failing jobs and tests with their log lines, the culprit commit and its
 trailers, and the path you chose and why. A Builder's brief also says:
 
-- Run the failing test and other targeted tests, and check the affected
-  surface. Do not run `make test`, `make lint` or `make test-frontend`: the
-  full suites run in CI on `main`.
-- Land with `scripts/land.sh` and stop there. Do not watch CI: the automation
-  checks `main` again.
+- Run the failing test, and land with the `land-on-main` skill. Stop when it
+  pushes. Do not watch CI: the automation checks `main` again.
 - For a revert: revert only the culprit, name the run and the failure in the
   commit message, and put the revert's landed SHA in the harvest message.
 
@@ -89,7 +86,7 @@ When you dispatch a revert, give the reverted work an owner before you end:
 - If the culprit's `Attn-Session:` is live, tell it with
   `attn agent msg <session> "<message>"`: the failure, the run, the revert's
   seed, and how to land again once the revert lands: `git revert <revert-sha>`,
-  fix, run targeted tests, check the affected surface, then `scripts/land.sh`.
+  fix, then land with the `land-on-main` skill.
 - Otherwise plant a seed to land the work again, with the same facts in its
   body:
   `attn seed plant "Land <culprit subject> again" -m "<body>" --discovered-from <seed>`

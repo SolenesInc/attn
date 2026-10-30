@@ -24,10 +24,8 @@ large: it splits into units, and each unit gets a context of its own.
    claim, its `file:line` and finding.md, to confirm or refute it at
    `<head>`. Send only confirmed findings.
 4. Send one message per commit: sha, each finding, what a fix needs, and to
-   run targeted tests, check the affected surface, then land the fix with
-   `scripts/land.sh`. Include that verification scope in dispatched fixers'
-   briefs too: the full Go and frontend suites run in CI on `main`, not before
-   landing. Do not ask for `make test`, `make lint`, or `make test-frontend`.
+   land the fix with the `land-on-main` skill. Dispatched fixers' briefs say
+   the same.
    - Its `Attn-Session:` is live: `attn agent msg <session> "<message>"`.
    - Otherwise: `attn delegate --brief-file <file> --cwd <this clone>
      --new-worktree --branch fix-<short-sha> --from origin/main`, then
