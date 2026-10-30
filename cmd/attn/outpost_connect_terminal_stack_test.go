@@ -16,7 +16,7 @@ func TestSSHConnectInATerminalSurvivesHomeRestartAndConnectsAfterAnAnswer(t *tes
 	pair.SSH.Route(pair.Destination, remote)
 	pair.SSH.RequireConfirmation(pair.Destination)
 	home.Start()
-	logSSHFailure(t, home, pair.SSH)
+	logSSHFailure(t, home, remote, pair.SSH)
 	app := enableOutposts(t, home)
 	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: pair.Destination})
 	row := outpostState(app, "outpost", protocol.OutpostStateRefused)
@@ -97,7 +97,7 @@ func TestSSHConnectionTerminalFailureCanBeRetried(t *testing.T) {
 	pair.SSH.RequireConfirmation(pair.Destination)
 	t.Cleanup(func() { remote.Attn("daemon", "stop") })
 	home.Start()
-	logSSHFailure(t, home, pair.SSH)
+	logSSHFailure(t, home, remote, pair.SSH)
 	app := enableOutposts(t, home)
 	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: pair.Destination})
 	row := outpostState(app, "outpost", protocol.OutpostStateRefused)
@@ -205,7 +205,7 @@ func TestSSHConnectionTerminalMayExitBeforeItsTileIsOpened(t *testing.T) {
 	}
 }
 
-func logSSHFailure(t *testing.T, home *testworld.Stack, ssh *testworld.SSH) {
+func logSSHFailure(t *testing.T, home, remote *testworld.Stack, ssh *testworld.SSH) {
 	t.Helper()
 	t.Cleanup(func() {
 		if !t.Failed() {
@@ -216,5 +216,6 @@ func logSSHFailure(t *testing.T, home *testworld.Stack, ssh *testworld.SSH) {
 			t.Logf("ssh %s err=%v:\n%s", name, err, data)
 		}
 		t.Logf("current outpost snapshot: %+v", home.App().Initial.Outposts)
+		remote.LogDaemonTail()
 	})
 }
