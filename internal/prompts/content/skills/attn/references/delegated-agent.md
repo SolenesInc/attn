@@ -37,7 +37,7 @@ keep the outcome and verification as the eventual harvest reason:
 attn seed harvest <seed-id> --when-merged <pr-url> -m "<outcome and verification>"
 ```
 
-This command merges nothing. Keep tending while review, docs, or verification remain.
+This command merges nothing. Keep tending while work remains: review notes to answer, docs to write, or verification to finish. Follow the [Delivery](../../attn-workflow/references/delivery.md) reference in `attn-workflow` for the repository's flow and stopping point.
 
 Harvest only when the assigned outcome and required verification are complete. Harvest names the checks still open or rejected. A plan awaiting a user decision remains open. Finishing a plan does not finish a seed whose assigned outcome includes implementation. If the assignment should be abandoned, record why and wither it; a temporary blocker is not abandonment.
 

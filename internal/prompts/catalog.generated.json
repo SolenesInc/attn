@@ -4254,6 +4254,18 @@
           }
         },
         {
+          "id": "delivery",
+          "delivery": "reference",
+          "description": "Loaded on demand through the installed attn-workflow skill.",
+          "body": {
+            "kind": "text",
+            "id": "attn-workflow-skill.delivery",
+            "source": "content/skills/attn-workflow/references/delivery.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "derived-things",
           "delivery": "reference",
           "description": "Loaded on demand through the installed attn-workflow skill.",

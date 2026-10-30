@@ -31,7 +31,7 @@ Then browse the relevant subtree (`ls`/`grep` under `<root>/knowledge/...` or
   curated log of what was done across attn, kept for the user's
   recall and reviews, not a raw dump. Entries carry `type: journal`.
 - **The knowledge base** — `<root>/knowledge/`, distilled, timeless notes worth
-  keeping: decisions, gotchas, domain knowledge that outlived a single PR. It is
+  keeping: decisions, gotchas, domain knowledge that outlived a single change. It is
   organized **PARA-style**: `projects/` (bounded efforts, roughly one per
   plot or epic), `areas/` (ongoing responsibilities and subsystems),
   `resources/` (reference material), `archive/` (inactive items). As a project

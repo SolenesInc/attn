@@ -30,8 +30,7 @@ Go down a level only when the level above cannot keep it current:
 2. **Check it mechanically.** A test or lint compares it with the source and
    names the mismatch.
 3. **Check it with an agent when the source changes.** Write a verification
-   skill that runs at a step agents already take, such as opening a pull
-   request or editing the file. `verify-docs`, `verify-tests` and `glossary`
+   skill that runs at a step agents already take, such as delivering a change or editing the file. `verify-docs`, `verify-tests` and `glossary`
    are examples.
 4. **Check it on a schedule.** When no single change causes the drift, an
    automation audits it regularly.
@@ -42,7 +41,7 @@ it rather than ask agents to remember it.
 ## Write a verification skill
 
 - **Trigger.** Name it `verify-<thing>`, and say in its description which
-  change runs it: "Use as part of opening a PR whose changes edit …", or "Use
+  change runs it: "Use before landing or opening a pull request whose changes edit …", or "Use
   when editing …".
 - **Scope.** List what it covers and where the source of truth lives. Point at
   the source's own rules instead of repeating them.

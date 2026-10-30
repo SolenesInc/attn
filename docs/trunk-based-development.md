@@ -20,7 +20,8 @@ review have passed. Contributors working from a fork use
    trailers (see [Commits](#commits)).
 3. Check the change yourself on the surface it touches (see
    [Verifying before landing](#verifying-before-landing)).
-4. Run `scripts/land.sh`.
+4. Run `scripts/land.sh`. Your work is done when it pushes. Report the checks
+   with the landed commits, and harvest the seed.
 5. Everything after is automatic: `main`'s CI runs the full test suites and scenario matrix,
    the sheriff reverts a landing that breaks `main`, the review automation
    reviews the commits and messages their author or dispatches a fixer, and
@@ -97,6 +98,10 @@ since the `reviewed` branch, grouped by seed. For each finding it messages the
 session named by `Attn-Session:` while that session is live, and otherwise
 dispatches an agent to fix it. Then it moves `reviewed` forward. The
 `review-main` skill is its procedure.
+
+When an Orchestrator coordinates Builders, it reviews their work after landing.
+A rejected seed check rings the Builder through its delegation watch, even
+after harvest. Corrections are new landings.
 
 ## When main is red
 

@@ -1,6 +1,6 @@
 ---
 name: verify-docs
-description: Use as part of opening a PR whose changes edit docs, agent guidance, skills, product prompts or CLI help.
+description: Use before landing or opening a pull request whose changes edit docs, agent guidance, skills, product prompts or CLI help.
 ---
 
 # Verify docs

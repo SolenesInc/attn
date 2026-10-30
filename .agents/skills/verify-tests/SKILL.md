@@ -1,6 +1,6 @@
 ---
 name: verify-tests
-description: Use as part of opening a PR whose changes add, change or delete tests.
+description: Use before landing or opening a pull request whose changes add, change or delete tests.
 ---
 
 # Verify tests

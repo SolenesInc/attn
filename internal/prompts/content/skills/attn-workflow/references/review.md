@@ -2,15 +2,15 @@
 
 Principles this process relies on: [Prove it works](../principles/prove-it-works.md), [Test behavior, not implementation](../principles/test-behavior-not-implementation.md), [Minimize reader load](../principles/minimize-reader-load.md), [Refactor first](../principles/refactor-first.md), [Match rigor to consequences](../principles/match-rigor-to-consequences.md), [Attack the premise](../principles/attack-the-premise.md), [Encode lessons in structure](../principles/encode-lessons-in-structure.md), [Smallest change](../principles/smallest-change.md), [Subtract before you add](../principles/subtract-before-you-add.md), [Parse, don't validate](../principles/parse-dont-validate.md), [Migrate callers, then delete the old way](../principles/migrate-callers-then-delete-the-old-way.md), [Derived things must earn their place](../principles/derived-things-must-earn-their-place.md). Read them before you start; [the skill's index](../SKILL.md#principles) lists the rest.
 
-Assess a change against its intended outcome and return findings that help decide whether it is ready. Inspect the implementation and the evidence that it works. Review a diff, a pull request or the running product: a plan with no code behind it draws invented risks, so settle its open questions with a spike or prototype instead, as [Discuss](discuss.md) describes.
+Assess a change against its intended outcome and return findings that help decide whether it is ready. Inspect the implementation and the evidence that it works. Review a diff, a pull request, landed commits, or the running product: a plan with no code behind it draws invented risks, so settle its open questions with a spike or prototype instead, as [Discuss](discuss.md) describes.
 
 ## Establish the review context
 
-For a PR, read its description and linked requirements or design context. Establish what the change is intended to do. If important intent is missing, identify the gap and ask a focused question while continuing checks that do not depend on it.
+For a pull request or landed commits, read the description or commit messages and the linked requirements, seed, or design context. Establish what the change is intended to do. If important intent is missing, identify the gap and ask a focused question while continuing checks that do not depend on it.
 
 For changes against a plan, read the agreed plan, its decisions, and the seed notes that record how and why the plan changed. Check that the implementation covers the requirements. Examine departures from the plan, including its findings, and explain their consequences; a departure may be justified by what implementation revealed.
 
-Identify the revision under review. Read relevant repository guidance and inspect the surrounding code to understand how the changed paths fit the system.
+Identify the revision under review and use [Delivery](delivery.md)'s timing and evidence rules for the repository's flow. Read relevant repository guidance and inspect the surrounding code to understand how the changed paths fit the system.
 
 ## Inspect and exercise the change
 

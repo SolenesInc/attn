@@ -18,4 +18,4 @@ attn seed check report <seed-id> <C#> -m "<summary>" --evidence <artifact|url> -
 
 A check that does not apply still gets a report: say why and cite what shows it, and the verdict decides. A later run is a new report. It replaces the earlier one and clears its verdict, so the seed always shows which evidence is current; leave the earlier artifacts attached, since the plan and notes may cite them. When the brief numbers checks that are not on the seed, report each one in a note with its evidence.
 
-Return a reviewable change with the revision, each check with the current evidence that proves it, how to rerun the checks, and remaining limits. Make the result readable in the conversation and durable in the seed. Follow the task's authorization for delivery steps.
+Return a reviewable change with the revision, each check with the current evidence that proves it, how to rerun the checks, and remaining limits. Make the result readable in the conversation and durable in the seed. Deliver as [Delivery](delivery.md) describes, within the task's authorization.

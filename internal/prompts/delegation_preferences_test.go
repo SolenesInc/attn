@@ -71,14 +71,14 @@ func TestDelegationGuidanceOwnsReviewAndPausesBeforeDispatch(t *testing.T) {
 			t.Errorf("composed role catalog is missing %q", expected)
 		}
 	}
-	for _, expected := range []string{"present the pull-request boundaries and ordering", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution", "dispatch without reviewing"} {
+	for _, expected := range []string{"present the delivery units and their order", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution", "dispatch without reviewing"} {
 		if !strings.Contains(pathfinder.Instructions, expected) {
 			t.Errorf("pathfinder checkpoint is missing %q: %s", expected, pathfinder.Instructions)
 		}
 	}
 
 	planning := RenderText("attn-workflow-skill", "planning", nil)
-	for _, expected := range []string{"proposed pull-request boundaries and ordering", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution", "dispatch without reviewing"} {
+	for _, expected := range []string{"its delivery units and their order", "review or adjust the plan, or dispatch", "wait for their answer", "earlier request included execution", "dispatch without reviewing"} {
 		if !strings.Contains(planning, expected) {
 			t.Errorf("planning guidance is missing %q", expected)
 		}

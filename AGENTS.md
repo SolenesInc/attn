@@ -114,7 +114,10 @@ attn is developed trunk-based: changes land straight on `main`, review happens
 on `main` after they land, and releases ship only reviewed, green commits.
 [Trunk-based development](docs/trunk-based-development.md) is the process.
 
-- Land with `scripts/land.sh`.
+- Land with `scripts/land.sh`. Your work is done when it pushes. Report the
+  checks with the landed commits, and harvest.
+- An Orchestrator reviews its Builders after landing. Corrections are new
+  landings.
 - Run targeted tests and check the affected surface before landing. `land.sh`
   runs a fast gate; the full Go and frontend suites run in CI on `main`.
 - Rebase onto `origin/main` at the start of every step and land each slice

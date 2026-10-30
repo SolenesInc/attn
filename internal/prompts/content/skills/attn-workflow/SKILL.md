@@ -20,11 +20,13 @@ Match the task to one process in the table, read its reference and the principle
 | Implement an agreed brief or plan and address review findings | [Implementation](references/implementation.md) |
 | Change structure or shape while preserving behavior | [Refactoring](references/refactoring.md) |
 | Find what makes something slow, large or busy when it should be idle, and make it measurably better, once or against a target | [Perf](references/perf.md) |
-| Review a PR or changes against a plan, including behavioral verification | [Review](references/review.md) |
+| Review changes against a plan, a pull request, or landed commits, including behavioral verification | [Review](references/review.md) |
 | Build a feature map of a product, with every way into each feature, as a skill that drives it live on an isolated instance (also called a verification skill) | [Feature map](references/feature-map.md) |
 | Decide whether a derived thing, such as a doc, a comment or a generated file, should exist, and build what keeps it current | [Derived things](references/derived-things.md) |
 | Make a kind of mistake that keeps coming back impossible to repeat in the repository | [Correction](references/correction.md) |
 | Delegate agreed work, advise implementers, and judge completion | [Orchestration](references/orchestration.md) |
+
+Work ends at delivery, within the task's authorization. Read [Delivery](references/delivery.md) for the repository's flow and stopping point.
 
 When the user asks you to work as one of these roles in the current conversation, take the role yourself, with the user present:
 
@@ -66,7 +68,7 @@ Verification:
 - [Test behavior, not implementation](principles/test-behavior-not-implementation.md): writing, keeping, or reviewing a test. It fails when behavior breaks and passes when only internals change.
 - [Explain the number](principles/explain-the-number.md): before trusting or reporting a measured number. Name its limiter and rule out what else it measures.
 - [Build the lever](principles/build-the-lever.md): any work that is not trivial, including work fanned out to other agents. Write the script that does or proves it.
-- [Sequence verifiable units](principles/sequence-verifiable-units.md): multi-step work, and the order of commits and pull requests. Small units, each checked before the next, proof before the change.
+- [Sequence verifiable units](principles/sequence-verifiable-units.md): multi-step work, and the order of commits and delivery steps. Small units, each checked before the next, proof before the change.
 - [Attack the premise](principles/attack-the-premise.md): two fixes sharing one assumption failed the same check, or fixes keep arriving in one shape. Test the assumption before a third fix.
 
 Working with the user and other agents:
