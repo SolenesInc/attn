@@ -19,6 +19,7 @@ Recommended: Postgres
 const paced = process.env.ATTN_E2E_PACE === '1';
 
 function pause(page: Page, ms: number) {
+  // oxlint-disable-next-line no-restricted-properties -- ATTN_E2E_PACE paces a recording for people watching it; no assertion waits on it
   return paced ? page.waitForTimeout(ms) : Promise.resolve();
 }
 

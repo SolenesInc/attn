@@ -35,5 +35,21 @@
     "oxc/no-accumulating-spread": "error",
     "anti-slop/no-array-filter-map": "off",
     "anti-slop/require-readable-spacing": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "app/e2e/**"
+      ],
+      "rules": {
+        "no-restricted-properties": [
+          "error",
+          {
+            "property": "waitForTimeout",
+            "message": "A fixed pause makes a spec slow and lets it pass by luck. Wait on what the page shows (expect, expect.poll, page.waitForFunction), or install page.clock and runFor the timers the behavior depends on."
+          }
+        ]
+      }
+    }
+  ]
 }
