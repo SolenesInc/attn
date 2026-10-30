@@ -500,20 +500,56 @@ func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T)
 }
 
 func TestClosingAnOutpostAgentDrainsItsFinalCostAndLeavesItsTranscriptReadable(t *testing.T) {
-	for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-		t.Run(string(harness), func(t *testing.T) {
+	for _, scenario := range []struct {
+		name                 string
+		harness              fakeagent.Harness
+		beforeTranscriptCopy bool
+	}{
+		{name: "claude", harness: fakeagent.Claude},
+		{name: "codex", harness: fakeagent.Codex},
+		{name: "claude-before-transcript-copy", harness: fakeagent.Claude, beforeTranscriptCopy: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			harness := scenario.harness
 			home := testworld.NewStack(t)
 			outpost := testworld.NewStack(t, testworld.WithAgents(harness))
 			pair := testworld.PrepareOutpostPair(t, home, outpost)
+			var copied *testworld.Pause
+			if scenario.beforeTranscriptCopy {
+				copied = outpost.PauseAt(pausepoint.CopyBatchApplied)
+			}
 			pair.Start()
+			if copied != nil {
+				requireStdout(t, home.Attn("settings", "set", "queue_quiet_notifications", "true"), "queue_quiet_notifications = true")
+				copied.Await()
+				defer copied.Release()
+			}
 			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 			outpost.SetCodexFolderTrust(outpost.Path("agent"), "trusted")
 			id := home.Spawn(pair.App, harness, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
 			agent := outpost.LaunchedCarrying(pair.App.Terminal(id))
+			if scenario.beforeTranscriptCopy {
+				for {
+					window := testworld.Request(pair.App, protocol.SessionMessagesGetMessage{
+						Cmd: protocol.CmdSessionMessagesGet, RequestID: "before-first-prompt", SessionID: protocol.SessionID(id),
+					}, protocol.EventSessionMessagesGetResult, func(r protocol.SessionMessagesGetResultMessage) bool { return r.RequestID == "before-first-prompt" })
+					if window.Status != protocol.SessionMessageWindowStatusDiscovering {
+						if window.Status != protocol.SessionMessageWindowStatusUnavailable {
+							t.Fatalf("message window before first prompt: %+v", window)
+						}
+						break
+					}
+					testworld.Await(pair.App, protocol.EventSessionMessagesChanged, func(e protocol.SessionMessagesChangedMessage) bool { return string(e.SessionID) == id })
+				}
+			}
 			pair.App.TypeLine(id, "final work")
 			agent.Prompted()
 			reply := "Final remote answer. <!-- attn:state=waiting_input -->"
-			agent.ReplyUnheard(reply)
+			if scenario.beforeTranscriptCopy {
+				agent.Stream(reply)
+			} else {
+				agent.ReplyUnheard(reply)
+			}
 			if err := home.Client().Unregister(protocol.SessionID(id)); err != nil {
 				t.Fatal(err)
 			}

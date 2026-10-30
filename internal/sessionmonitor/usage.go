@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -208,10 +207,15 @@ func isUsageCursorError(err error) bool {
 		errors.Is(err, transcript.ErrInvalidCursor)
 }
 
-func (m *Monitor) FinishAndSettleUsage(agent protocol.SessionAgent, path string) func() {
+func (m *Monitor) FinishAndSettleUsage() func() {
 	release, tracker := m.finishUsage()
-	if tracker == nil && m != nil && path != "" {
-		tracker = newUsageTracker(&transcriptWatcher{monitor: m, agent: agent}, path)
+	if tracker == nil && m != nil {
+		m.mu.Lock()
+		agent, path := m.agent, m.conversationInput.TranscriptPath
+		m.mu.Unlock()
+		if path != "" {
+			tracker = newUsageTracker(&transcriptWatcher{monitor: m, agent: agent}, path)
+		}
 	}
 	if tracker != nil {
 		tracker.Reconcile()

@@ -41,12 +41,7 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 			return result, nil
 		}
 		monitor.FenceInput()
-		session := d.store.Get(msg.SessionID)
-		if session != nil {
-			monitor.FinishAndSettleUsage(session.Agent, d.store.GetSessionConversation(session.ID).TranscriptPath)
-		} else {
-			monitor.FinishUsage()
-		}
+		monitor.FinishAndSettleUsage()
 		view := monitor.Snapshot()
 		if !monitor.Publish(view) {
 			return result, fmt.Errorf("final monitor view for %s was not saved", msg.SessionID)

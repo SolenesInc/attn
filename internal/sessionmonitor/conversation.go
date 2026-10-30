@@ -69,10 +69,7 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 		return current.ProposeConversation(observation, proposal, terminal)
 	}
 	if !inPlace && boundAtStart && !linked {
-		m.mu.Lock()
-		agent, path := m.agent, m.conversationInput.TranscriptPath
-		m.mu.Unlock()
-		m.FinishAndSettleUsage(agent, path)()
+		m.FinishAndSettleUsage()()
 	}
 	proposed := Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal}
 	candidate := m
@@ -82,10 +79,7 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 	r.mu.Lock()
 	if !inPlace && !linked && !boundAtStart && m.Session() != "" {
 		r.mu.Unlock()
-		m.mu.Lock()
-		agent, path := m.agent, m.conversationInput.TranscriptPath
-		m.mu.Unlock()
-		m.FinishAndSettleUsage(agent, path)()
+		m.FinishAndSettleUsage()()
 		r.mu.Lock()
 	}
 	current = r.currentInTerminalLocked(inputTerminal, m)
@@ -288,10 +282,10 @@ func (m *Monitor) SettleSwitch(nativeID string, bound *Monitor, reason string) b
 	}
 	m.mu.Unlock()
 	bound.mu.Lock()
-	linked, agent, path := bound.watch.linked, bound.agent, bound.conversationInput.TranscriptPath
+	linked := bound.watch.linked
 	bound.mu.Unlock()
 	if further && !linked {
-		bound.FinishAndSettleUsage(agent, path)()
+		bound.FinishAndSettleUsage()()
 	}
 	bound.mu.Lock()
 	final := bound.viewLocked()
