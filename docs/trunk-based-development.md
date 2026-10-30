@@ -23,7 +23,7 @@ review have passed. Contributors working from a fork use
 4. Run `scripts/land.sh`. Your work is done when it pushes. Report the checks
    with the landed commits, and harvest the seed.
 5. Everything after is automatic: `main`'s CI runs the full test suites and scenario matrix,
-   the sheriff reverts a landing that breaks `main`, the review automation
+   the sheriff gets `main` green again when a landing breaks it, the review automation
    reviews the commits and messages their author or dispatches a fixer, and
    release notes are written from the commits.
 
@@ -78,7 +78,7 @@ runs the full suites on `main` after landing.
 Running the scenarios that cover an app-observable change locally, on a
 non-production instance, is optional, when the machine can take it. After
 landing, `main`'s CI runs the full scenario matrix, macOS included; if a
-landing breaks `main`, the sheriff reverts it and tells its author.
+landing breaks `main`, the sheriff dispatches a fix or a revert.
 When no scenario covers an app-observable change, add one, or tell the user.
 
 The Acceptance soak workflow repeats chosen scenarios to hunt flaky ones; it is
@@ -107,12 +107,14 @@ after harvest. Corrections are new landings.
 
 CI runs on `main` after every landing; pushes that arrive during a run are
 batched into the next one. A red `main` opens the
-`Branch health: main acceptance` issue, and the sheriff automation, which
-watches `main`'s CI, re-runs the failed jobs once, finds the commit that broke
-them and reverts it. It tells that commit's session, or dispatches an agent to
-land the change again with a fix. A commit that adds a database migration is
-fixed forward instead. The `sheriff` skill is its procedure. Keep landing while
-`main` is red; a release waits for green.
+`Branch health: main acceptance` issue. The sheriff automation watches `main`'s
+CI and counts a run as red when any job in it failed, even when the run itself
+concluded `cancelled`. It re-runs the failed jobs once, finds the commit that
+broke them, and delegates an agent to fix forward when the fix is small and
+clear, or to revert the commit when the revert is clean. Every revert gets an
+owner: the commit's live session, or a seed to land the change again that the
+chief receives. When neither path is clearly right, the sheriff asks the user. The `sheriff` skill is its procedure. Keep landing while `main` is
+red; a release waits for green.
 
 ## Releases
 
