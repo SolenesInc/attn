@@ -121,9 +121,12 @@ what an orchestrator wants: `attn agent close s-7k3f9m -m "its report landed"`.
 
 This is an immediate kill, not a request. There is no goodbye turn and nothing
 queued for that session will be read, so read what you needed first — the seed
-log, the last message, the diff — and close after. Closing yourself is allowed
-and ends your session mid-command; everything you meant to write must already
-be written.
+log, the last message, the diff — and close after. Close yourself with
+`attn agent close --self -m "reason"`; you don't need your id. It ends your
+session mid-command, so everything you meant to write must already be written.
+When you ask another agent to close itself, name that command. When the user
+asks you to wrap up or whether they can close you, follow
+[wrap-up.md](wrap-up.md) first.
 
 ## Receiving a message
 
