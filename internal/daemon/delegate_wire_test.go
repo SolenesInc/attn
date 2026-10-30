@@ -209,6 +209,15 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	if protocol.Deref(result.DesktopID) != chiefDesktop.ID {
 		t.Errorf("the chief's delegate landed on desktop %q; want the chief's own %s", protocol.Deref(result.DesktopID), chiefDesktop.ID)
 	}
+
+	registerSessions(t, w, cli, "next")
+	if transfer := setChiefOfStaff(app, "next", true); !transfer.Success {
+		t.Fatalf("making next the chief: %s", protocol.Deref(transfer.Error))
+	}
+	w.restart()
+	if marked := sessionOfDelegate(t, w, string(result.SessionID)); !protocol.Deref(marked.DelegatedFromChief) {
+		t.Errorf("after the role moved on and the daemon restarted, the chief's delegate reads as %+v; want it still delegated_from_chief", marked)
+	}
 }
 
 func TestADelegationNamesItsSeedAndSessionFromItsBrief(t *testing.T) {

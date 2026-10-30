@@ -597,7 +597,7 @@ func editSeedBody(t *testing.T, cli *client.Client, id, body string) (*protocol.
 	return cli.SeedEdit(id, body, garden.BodySHA256(shown.Seed.Body), "")
 }
 
-func TestSeedMovesUseTheAgentCloseStandingAndTellTheDelegate(t *testing.T) {
+func TestSeedMovesFollowTheChainAndChiefStandingOfAgentCloseAndTellTheDelegate(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		parent := w.bubbleClaude(t, app, "parent").id

@@ -768,6 +768,36 @@ func TestAPullRequestWatchCreatedBeforeTheChiefRoleStaysVisibleAndStoppable(t *t
 	})
 }
 
+func TestAPullRequestTheChiefWatchesReportsToTheNextChief(t *testing.T) {
+	gh := serveRefreshedPullRequest(t)
+	gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		registerSessions(t, w, cli, "chief", "next")
+		if result := setChiefOfStaff(app, "chief", true); !result.Success {
+			t.Fatalf("making chief the chief: %s", protocol.Deref(result.Error))
+		}
+		watchPullRequestOn(t, cli, "chief", protocol.PullRequestWatchModeGreen)
+		w.advance(protocol.HeatHotInterval)
+		readInbox(t, cli, "chief", 0)
+
+		if result := setChiefOfStaff(app, "next", true); !result.Success {
+			t.Fatalf("making next the chief: %s", protocol.Deref(result.Error))
+		}
+		if pr := onlyPullRequest(t, cli, "next"); !protocol.Deref(pr.Watching) {
+			t.Errorf("the next chief shows %+v, want the previous chief's watch", pr)
+		}
+		gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = false })
+		w.advance(protocol.HeatHotInterval)
+		if items := readInbox(t, cli, "next", 0).Items; len(items) != 1 || !strings.Contains(items[0].Content, "ready") {
+			t.Errorf("the next chief's inbox = %q, want one note that the pull request is ready", inboxContents(items))
+		}
+		if items := readInbox(t, cli, "chief", 0).Items; len(items) != 0 {
+			t.Errorf("the previous chief's inbox = %q, want nothing once the role moved on", inboxContents(items))
+		}
+	})
+}
+
 func TestANextDayWatchModeChangeClearsThePreviousReadiness(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gate := make(chan struct{})

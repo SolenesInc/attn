@@ -55,6 +55,32 @@ func TestAReloadRelaunchesWithTheContextWindowCapTheSessionIsDue(t *testing.T) {
 	}
 }
 
+func TestAChiefStartsWithTheChiefContextWindowCap(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "")
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	asChief := func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) }
+
+	first := w.Spawn(app, fakeagent.Claude, w.Path("first"), asChief)
+	if got := compactWindow(w.Launched(first)); got != "128000" {
+		t.Errorf("with no chief cap configured a new chief starts with window %q, want the default 128000", got)
+	}
+	if result := setChiefOfStaff(app, first, false); !result.Success {
+		t.Fatalf("unsetting the first chief: %s", protocol.Deref(result.Error))
+	}
+	w.Launched(first)
+
+	setSetting(t, app, "chief_context_window_cap", "160000")
+	second := w.Spawn(app, fakeagent.Claude, w.Path("second"), asChief)
+	if got := compactWindow(w.Launched(second)); got != "160000" {
+		t.Errorf("a new chief starts with window %q, want the configured chief cap 160000", got)
+	}
+	worker := w.Spawn(app, fakeagent.Claude, w.Path("worker"))
+	if got := compactWindow(w.Launched(worker)); got != "" {
+		t.Errorf("with only a chief cap configured a new worker starts with window %q, want none", got)
+	}
+}
+
 func TestAReloadWhoseAgentCannotStartShowsTheSessionExited(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()

@@ -94,7 +94,7 @@ func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 	})
 }
 
-func TestSessionsTheQueueSkipsNeverOweATurn(t *testing.T) {
+func TestShellsAndTheChiefNeverOweATurn(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	queued := w.Spawn(app, fakeagent.Claude, w.Path("api"))

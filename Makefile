@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-chief test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -195,6 +195,11 @@ $(APP_NODE_MODULES): app/package.json app/pnpm-lock.yaml
 
 test-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run test
+
+# Today's Chief of Staff: every Go and frontend test whose name mentions the chief
+test-chief: $(NATIVE_VT_DEP) $(APP_NODE_MODULES)
+	./scripts/test-go.sh --packages -run '[Cc]hief' -count=1 ./internal/... ./cmd/attn/...
+	cd app && pnpm run test -t '[Cc]hief'
 
 lint: lint-go lint-frontend
 

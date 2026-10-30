@@ -407,6 +407,34 @@ func TestAnAgentWithdrawsItsOwnAskOnly(t *testing.T) {
 	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
 }
 
+func TestAChiefsAskIsTheChiefsAndMovesToTheNextChief(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "asks_enabled", "true")
+	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	w.Launched(chief)
+	next := w.Spawn(app, fakeagent.Claude, w.Path("next"))
+	w.Launched(next)
+
+	asked, err := cli.AskOpen(protocol.SessionID(chief), "", cacheAsk, "", w.Path("chief"))
+	if err != nil {
+		t.Fatalf("the chief's ask: %v", err)
+	}
+	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool {
+		return len(m.Asks) == 1 && m.Asks[0].ID == asked.ID && protocol.Deref(m.Asks[0].Chief)
+	})
+
+	if transfer := setChiefOfStaff(app, next, true); !transfer.Success {
+		t.Fatalf("making next the chief: %s", protocol.Deref(transfer.Error))
+	}
+	if listed, err := cli.AskList(protocol.SessionID(next)); err != nil || len(listed.Asks) != 1 || listed.Asks[0].ID != asked.ID {
+		t.Fatalf("the next chief lists %+v (%v); want the ask the previous chief filed", listed, err)
+	}
+	if listed, err := cli.AskList(protocol.SessionID(chief)); err != nil || len(listed.Asks) != 0 {
+		t.Fatalf("the previous chief still lists %+v (%v); want none once the role moved on", listed, err)
+	}
+}
+
 func TestAnAskFollowsItsAddresseeNotTheSessionThatFiledIt(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
