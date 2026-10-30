@@ -62,6 +62,7 @@ func (c *codexRemote) begin(term *terminal) error {
 	if err := offerCodexUpdate(c.cfg, term, args.values["-c"]); err != nil {
 		return err
 	}
+	term.print(">_ OpenAI Codex (v" + c.version + ")")
 	c.model = args.value("--model", "-m")
 	c.overrides = codexPermissionOverride(args)
 	c.prompt = strings.Join(args.afterDashes, " ")
@@ -97,7 +98,10 @@ func (c *codexRemote) begin(term *terminal) error {
 		c.resumed = true
 		err = call(client, "thread/resume", map[string]any{"threadId": args.positionals[1], "excludeTurns": true}, &shown)
 	} else {
-		err = call(client, "thread/start", c.threadStart(), &shown)
+		if err = call(client, "thread/start", c.threadStart(), &shown); err != nil {
+			term.print("thread/start failed during TUI bootstrap: " + codexReplyError(err))
+			os.Exit(1)
+		}
 	}
 	if err != nil {
 		client.Close()
@@ -114,6 +118,18 @@ func (c *codexRemote) begin(term *terminal) error {
 	c.showPending()
 	go c.stayConnected(client)
 	return nil
+}
+
+func codexReplyError(err error) string {
+	var refused *codexshared.RPCError
+	var reply struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	if !errors.As(err, &refused) || json.Unmarshal(refused.Reply, &reply) != nil {
+		return err.Error()
+	}
+	return fmt.Sprintf("%s (code %d)", reply.Message, reply.Code)
 }
 
 func (c *codexRemote) threadStart() map[string]any {

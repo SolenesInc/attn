@@ -84,13 +84,11 @@ func (d *Daemon) exitScreenOrBare(sessionID protocol.SessionID, exit sessionmoni
 }
 
 func (d *Daemon) awaitDelegatedLaunch(sessionID protocol.SessionID, watch *launchWatch) launchOutcome {
-	defer d.forgetLaunchWatch(sessionID, watch)
-	select {
-	case <-watch.done:
-		return watch.outcome
-	default:
-	}
 	if !d.delegationWaitsForFirstTurn {
+		defer d.forgetLaunchWatch(sessionID, watch)
+		if watch.settled() {
+			return watch.outcome
+		}
 		return launchOutcome{}
 	}
 	wait := delegationFirstTurnTimeout
@@ -99,20 +97,31 @@ func (d *Daemon) awaitDelegatedLaunch(sessionID protocol.SessionID, watch *launc
 	}
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
+	if outcome, settled := d.awaitLaunch(sessionID, watch, timer.C); settled {
+		return outcome
+	}
+	d.logf("delegation first turn unconfirmed: session=%s no harness report within %s", sessionID, delegationFirstTurnTimeout)
+	return launchOutcome{unconfirmed: fmt.Sprintf(
+		"no turn reported by the agent within %s; the session is up, `attn agent peek %s` shows its pane",
+		delegationFirstTurnTimeout, shortSessionID(sessionID))}
+}
+
+func (d *Daemon) awaitLaunch(sessionID protocol.SessionID, watch *launchWatch, giveUp <-chan time.Time) (launchOutcome, bool) {
+	defer d.forgetLaunchWatch(sessionID, watch)
+	if watch.settled() {
+		return watch.outcome, true
+	}
 	select {
 	case <-watch.done:
-		return watch.outcome
-	case <-timer.C:
-		d.logf("delegation first turn unconfirmed: session=%s no harness report within %s", sessionID, delegationFirstTurnTimeout)
-		return launchOutcome{unconfirmed: fmt.Sprintf(
-			"no turn reported by the agent within %s; the session is up, `attn agent peek %s` shows its pane",
-			delegationFirstTurnTimeout, shortSessionID(sessionID))}
+		return watch.outcome, true
+	case <-giveUp:
+		return launchOutcome{}, false
 	case <-d.life.Done():
-		return launchOutcome{interrupted: true}
+		return launchOutcome{interrupted: true}, true
 	}
 }
 
-func delegationExitError(agent string, sessionID protocol.SessionID, exit *store.SessionExitScreen) error {
+func launchExitError(agent string, sessionID protocol.SessionID, exit *store.SessionExitScreen) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s exited with %s before its first turn (session %s)", agent, describeExit(exit), sessionID)
 	if exit.ExitCode != 0 || exit.ExitSignal != "" {
@@ -143,10 +152,7 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID string, agent string, sessionID 
 	if exit.ExitCode != 0 || exit.ExitSignal != "" {
 		fmt.Fprintf(&b, " `attn agent peek %s` shows the screen it left.", shortSessionID(sessionID))
 	}
-	if text := strings.TrimRight(exit.Text, "\n"); text != "" {
-		if len(text) > seedNoteExitScreenMaxBytes {
-			text = "[first " + fmt.Sprint(len(text)-seedNoteExitScreenMaxBytes) + " bytes omitted]\n" + text[len(text)-seedNoteExitScreenMaxBytes:]
-		}
+	if text := exitScreenTail(exit.Text); text != "" {
 		b.WriteString("\n\nScreen at exit:\n\n")
 		for _, line := range strings.Split(text, "\n") {
 			b.WriteString("    " + line + "\n")
@@ -156,6 +162,14 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID string, agent string, sessionID 
 		d.logf("delegation exit not noted on %s: %v", seedID, err)
 		return
 	}
+}
+
+func exitScreenTail(text string) string {
+	text = strings.TrimRight(text, "\n")
+	if len(text) > seedNoteExitScreenMaxBytes {
+		text = "[first " + fmt.Sprint(len(text)-seedNoteExitScreenMaxBytes) + " bytes omitted]\n" + text[len(text)-seedNoteExitScreenMaxBytes:]
+	}
+	return text
 }
 
 func (d *Daemon) watchRecoveredLaunches() {

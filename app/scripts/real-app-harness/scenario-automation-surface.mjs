@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { createCodexProbe } from './codexProbe.mjs';
 import { currentHarnessInstance, dataDirForInstance, resolveHarnessResources, instanceCliEnv as instanceEnv } from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -101,16 +102,6 @@ function createFixture(root) {
   return fs.realpathSync(dir);
 }
 
-function createCodexProbe(root) {
-  const log = path.join(root, 'codex-invocations.jsonl');
-  const executable = path.join(root, 'codex-probe.mjs');
-  fs.writeFileSync(
-    executable,
-    `#!/usr/bin/env node\nimport fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({argv: process.argv.slice(2), at: new Date().toISOString()}) + '\\n');\nsetInterval(() => {}, 1000);\n`,
-    { mode: 0o700 },
-  );
-  return { executable, log };
-}
 
 const API_VERSION = 'attn.dev/automations/v1alpha1';
 
@@ -219,6 +210,7 @@ async function main() {
   let probe = null;
   let manualApplied = false;
   let scheduledApplied = false;
+  let failingID = 0;
   let firstRunId = '';
   let manualSessionID = '';
   let manualSeedID = '';
@@ -396,6 +388,39 @@ async function main() {
       }, 'manual definition to render enabled again after broadcast', TOGGLE_TIMEOUT_MS);
     });
 
+    await runner.step('leg3b_codex_that_exits_before_its_first_turn_stays_pending_then_fails', async () => {
+      const release = path.join(runner.sessionDir, 'codex-exits.release');
+      execFileSync('mkfifo', [release]);
+      const exiting = path.join(runner.sessionDir, 'codex-exits');
+      fs.writeFileSync(exiting, `#!/bin/sh\necho "thread/start failed during TUI bootstrap: harness refusal (code -32603)"\nread line < '${release}'\nexit 1\n`, { mode: 0o700 });
+      const definitionFile = path.join(runner.sessionDir, 'codex-exits.yml');
+      fs.writeFileSync(definitionFile, `api_version: ${API_VERSION}\nname: Codex launch failure proof\ntrigger:\n  type: manual\nprompt: |\n  Codex launch failure proof.\nlaunch:\n  driver: codex\n  executable: ${JSON.stringify(exiting)}\nlocation:\n  type: directory\n  path: ${JSON.stringify(fixturePath)}\n`);
+      failingID = runJSON(binary, ['automation', 'apply', '--file', definitionFile], daemonEnv).id;
+      await client.request('automations_open_panel');
+      await poll(async () => findDefinitionRow(await client.request('automations_get_state'), failingID), `definition ${failingID} to appear in the panel`, PANEL_APPEAR_TIMEOUT_MS);
+      await client.request('automations_select_definition', { definitionId: failingID });
+      await client.request('automations_run_now', { definitionId: failingID });
+      const pending = await poll(async () => {
+        const current = await client.request('automations_get_state');
+        return currentRuns(current).length === 1 ? current : null;
+      }, 'the failing launch to show a run', PANEL_APPEAR_TIMEOUT_MS);
+      runner.assert(currentRuns(pending)[0].state === 'pending', 'a Codex that has not started its first turn shows its run pending, not delivered', currentRuns(pending));
+      await captureScreenshotData(path.join(runner.runDir, 'codex-launch-pending.png'), { client });
+      fs.writeFileSync(release, 'exit\n');
+      const failed = await poll(async () => {
+        const current = await client.request('automations_get_state');
+        return currentRuns(current)[0]?.state === 'failed' ? current : null;
+      }, 'the failing launch to show its failure', RUN_ERROR_TIMEOUT_MS);
+      const failedRun = currentRuns(failed)[0];
+      runner.assert(failedRun.lastError.includes('before its first turn') && failedRun.lastError.includes('harness refusal'), 'the failed run shows the exit and the screen Codex left', failedRun);
+      runner.assert(findDefinitionRow(failed, failingID).failed === true, 'the automation shows its failure badge', findDefinitionRow(failed, failingID));
+      await captureScreenshotData(path.join(runner.runDir, 'codex-launch-failed.png'), { client });
+      const failingSession = runJSON(binary, ['automation', 'runs', failingID], daemonEnv)[0].session_id;
+      await cleanupSessionViaAppClose(client, observer, failingSession, RESTART_READY_TIMEOUT_MS);
+      run(binary, ['automation', 'delete', failingID], daemonEnv);
+      failingID = 0;
+    });
+
     await runner.step('leg4_restart_preserves_list_and_navigation', async () => {
       await client.quitApp();
       await observer.close();
@@ -473,6 +498,7 @@ async function main() {
     if (daemonEnv) {
       if (manualApplied) { try { disableDefinition(binary, manualID, daemonEnv); } catch {} }
       if (scheduledApplied) { try { disableDefinition(binary, scheduledID, daemonEnv); } catch {} }
+      if (failingID) { try { run(binary, ['automation', 'delete', failingID], daemonEnv); } catch {} }
     }
     const teardownSessionIDs = new Set(manualSessionID ? [manualSessionID] : []);
     if (manualApplied && daemonEnv) {

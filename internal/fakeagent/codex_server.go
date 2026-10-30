@@ -57,22 +57,22 @@ func (r codexRefusal) Error() string { return string(r) }
 var codexRefusedWhileDraining = map[string]bool{"turn/start": true, "turn/steer": true, "thread/start": true, "thread/resume": true, "thread/fork": true, "thread/archive": true}
 
 type codexAppServer struct {
-	cfg       config
-	version   string
-	control   *rpcPeer
-	listener  net.Listener
-	draining  bool
-	hooks     hookSet
-	toolEnv   []string
-	mu        sync.Mutex
-	threads   map[string]*codexServerThread
-	conns     map[*codexServerConn]bool
-	nextID    int
-	prompts   map[string]chan string
-	named     chan struct{}
-	archived  chan struct{}
-	listed    chan struct{}
-	turnReply *codexTurnReply
+	cfg      config
+	version  string
+	control  *rpcPeer
+	listener net.Listener
+	draining bool
+	hooks    hookSet
+	toolEnv  []string
+	mu       sync.Mutex
+	threads  map[string]*codexServerThread
+	conns    map[*codexServerConn]bool
+	nextID   int
+	prompts  map[string]chan string
+	named    chan struct{}
+	archived chan struct{}
+	listed   chan struct{}
+	held     map[string]*codexHeldReply
 }
 
 type codexServerConn struct {
@@ -154,6 +154,7 @@ func runCodexAppServer(cfg config) int {
 		named:    make(chan struct{}),
 		archived: make(chan struct{}),
 		listed:   make(chan struct{}),
+		held:     map[string]*codexHeldReply{},
 	}
 	control, err := dialControl(cfg, s.handleKit)
 	if err != nil {
@@ -260,7 +261,12 @@ func (s *codexAppServer) serve(w http.ResponseWriter, req *http.Request) {
 		}
 		result, after, err := s.handle(conn, m)
 		if !conn.terminal && (m.Method == "turn/start" || m.Method == "turn/steer") {
-			s.awaitTurnReply()
+			s.awaitHeldReply(heldTurnReply)
+		}
+		if m.Method == "thread/inject_items" && err == nil {
+			if refusal := s.awaitHeldReply(heldInjectReply); refusal != "" {
+				err = codexRefusal(refusal)
+			}
 		}
 		reply := codexshared.Message{ID: m.ID}
 		if err != nil {
@@ -999,22 +1005,12 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		return nil, err
 	}
 	switch method {
-	case methodHoldTurnReply:
-		s.mu.Lock()
-		s.turnReply = &codexTurnReply{arrived: make(chan struct{}), release: make(chan struct{})}
-		s.mu.Unlock()
-		return struct{}{}, nil
-	case methodAwaitTurnReply:
-		s.mu.Lock()
-		held := s.turnReply
-		s.mu.Unlock()
-		<-held.arrived
-		return struct{}{}, nil
-	case methodReleaseTurnReply:
-		s.mu.Lock()
-		close(s.turnReply.release)
-		s.turnReply = nil
-		s.mu.Unlock()
+	case methodHoldReply, methodAwaitReply, methodReleaseReply:
+		var held heldReplyParams
+		if err := json.Unmarshal(raw, &held); err != nil {
+			return nil, err
+		}
+		s.handleHeldReply(method, held)
 		return struct{}{}, nil
 	case methodPrompted:
 		select {

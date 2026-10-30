@@ -629,7 +629,7 @@ func (d *Daemon) confirmDelegatedLaunch(operationID string, sessionID protocol.S
 	if outcome.exit != nil {
 		seedID, _ := d.gardenDispatchCrown(sessionID)
 		d.noteDelegatedExitOnSeed(seedID, agent, sessionID, outcome.exit)
-		return delegationExitError(agent, sessionID, outcome.exit)
+		return launchExitError(agent, sessionID, outcome.exit)
 	}
 	if outcome.unconfirmed != "" {
 		result.FirstTurnUnconfirmed = protocol.Ptr(outcome.unconfirmed)

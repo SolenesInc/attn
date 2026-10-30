@@ -7,16 +7,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import WebSocket from 'ws';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect, queryDaemonDb } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { createCodexProbe } from './codexProbe.mjs';
 import {
   currentHarnessInstance,
   dataDirForInstance,
-  harnessClientHello,
   resolveHarnessResources,
   instanceCliEnv as instanceEnv,
-  readFrontendProtocolVersion,
 } from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -109,16 +107,6 @@ async function waitForScheduleAnchor(dbPath, definitionID) {
 }
 
 
-function createCodexProbe(root) {
-  const log = path.join(root, 'codex-invocations.jsonl');
-  const executable = path.join(root, 'codex-probe.mjs');
-  fs.writeFileSync(
-    executable,
-    `#!/usr/bin/env node\nimport fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({argv: process.argv.slice(2), at: new Date().toISOString()}) + '\\n');\nsetInterval(() => {}, 1000);\n`,
-    { mode: 0o700 },
-  );
-  return { executable, log };
-}
 
 
 const API_VERSION = 'attn.dev/automations/v1alpha1';
@@ -243,31 +231,12 @@ async function setRequested(mockURL, active) {
   if (!response.ok) throw new Error(`mock control returned ${response.status}`);
 }
 
-async function wsRequest(wsURL, message, event, timeoutMs = 30_000) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsURL);
-    const timer = setTimeout(() => { ws.close(); reject(new Error(`timed out waiting for ${event}`)); }, timeoutMs);
-    let ready = false;
-    ws.once('open', () => ws.send(JSON.stringify({
-      ...harnessClientHello('harness-automation-lifecycle', {
-        version: `protocol-${readFrontendProtocolVersion()}`,
-      }),
-    })));
-    ws.on('message', (raw) => {
-      const value = JSON.parse(raw.toString());
-      if (!ready && value.event === 'initial_state') {
-        ready = true;
-        ws.send(JSON.stringify(message));
-        return;
-      }
-      if (event ? value.event !== event : value.ok !== true) return;
-      clearTimeout(timer);
-      ws.close();
-      if (value.success === false) reject(new Error(value.error || `${event} failed`));
-      else resolve(value);
-    });
-    ws.once('error', (error) => { clearTimeout(timer); reject(error); });
-  });
+async function refreshPRs(observer) {
+  const result = observer.waitForMessage((data) => (data.event === 'refresh_prs_result' ? data : null), 'refresh_prs_result', 30_000);
+  observer.send({ cmd: 'refresh_prs' });
+  const data = await result;
+  if (data.success === false) throw new Error(data.error || 'refresh_prs failed');
+  return data;
 }
 
 function worktreeListShows(repo, absolutePath) {
@@ -513,11 +482,11 @@ async function main() {
       cleanupID = runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv).id;
       cleanupApplied = true;
 
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       await setRequested(mock.url, false);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       await setRequested(mock.url, true);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       const cleanRun = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || []).filter((row) => row.state === 'delivered');
         return rows.length >= 1 ? rows[0] : null;
@@ -532,9 +501,9 @@ async function main() {
       runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv);
 
       await setRequested(mock.url, false);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       await setRequested(mock.url, true);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
 
       const dirtyRun = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || [])
@@ -554,9 +523,9 @@ async function main() {
       runJSON(binary, ['automation', 'apply', '--file', cleanupDefinitionFile], daemonEnv);
 
       await setRequested(mock.url, false);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       await setRequested(mock.url, true);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
 
       const activeRun = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || [])
@@ -614,7 +583,7 @@ async function main() {
 
     await runner.step('disk_full_launch_stops_retrying_and_fails_visibly', async () => {
       await setRequested(mock.url, false);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       const attempts = path.join(runner.sessionDir, 'disk-full-attempts');
       const filter = path.join(runner.sessionDir, 'disk-full-filter');
       fs.writeFileSync(filter, `#!/bin/sh\nprintf 'attempt\\n' >> '${attempts.replaceAll("'", "'\\''")}'\nprintf 'No space left on device\\n' >&2\nexit 1\n`, { mode: 0o700 });
@@ -626,9 +595,9 @@ async function main() {
       const diskFullDefinitionFile = path.join(runner.sessionDir, 'definition-disk-full.yml');
       fs.writeFileSync(diskFullDefinitionFile, cleanupLifecycleDefinitionYAML({ id: 0, executable: probe.executable, repoPath: cleanupFixture.repo, prompt: 'Disk-full launch proof.', name: 'Disk-full launch proof' }));
       diskFullDefinitionID = runJSON(binary, ['automation', 'apply', '--file', diskFullDefinitionFile], daemonEnv).id;
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       await setRequested(mock.url, true);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       const failed = await poll(() => {
         const rows = runJSON(binary, ['automation', 'runs', diskFullDefinitionID], daemonEnv) || [];
         return rows[0]?.state === 'failed' ? rows[0] : null;
@@ -643,17 +612,17 @@ async function main() {
       runner.assert(ui.runs.find((row) => row.id === failed.id)?.lastError.includes('No space left on device'), 'run history shows the disk-full cause', ui);
       await client.request('dom_click', { selector: '.automations-panel__close' });
       for (let refresh = 0; refresh < 3; refresh++) {
-        await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+        await refreshPRs(observer);
       }
       git(['config', 'filter.storage.smudge', 'cat']);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       const stopped = runJSON(binary, ['automation', 'runs', diskFullDefinitionID], daemonEnv);
       runner.assert(stopped.length === 1 && stopped[0].state === 'failed', 'polls keep the failed launch stopped after storage recovers', stopped);
       runner.assert(fs.readFileSync(attempts, 'utf8') === 'attempt\n', 'the failed checkout was attempted only once');
       await setRequested(mock.url, false);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       await setRequested(mock.url, true);
-      await wsRequest(options.wsUrl, { cmd: 'refresh_prs' }, 'refresh_prs_result');
+      await refreshPRs(observer);
       const recovered = await poll(() => {
         const rows = runJSON(binary, ['automation', 'runs', diskFullDefinitionID], daemonEnv) || [];
         const fresh = rows.find((row) => row.id !== failed.id);

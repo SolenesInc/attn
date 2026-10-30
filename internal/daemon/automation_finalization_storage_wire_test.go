@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -10,12 +11,12 @@ import (
 )
 
 func TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
+	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path("check"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	applyAutomation(t, cli, manualAutomation(w, "Check the code."))
+	applyAutomation(t, cli, strings.Replace(manualAutomation(w, "Check the code."), "driver: codex", "driver: claude", 1))
 	awaitAutomationChanged(app, 1)
 	boot := w.HoldNextBoot()
 	defer boot()

@@ -112,6 +112,7 @@ bridge --launch --wait-ready ping
 - The shared mock view does not reconnect after a server restart. On the baseline, idle restart can leave no running server, so the following `restart --now` refuses; a fresh shared terminal lets that command run independently, but the post-restart conversation check still cannot be verified with this mock. The recipe keeps that assertion as a failed way in.
 - CLI status pads its labels. Match each label and value with any spacing.
 - A new tile switched before its first prompt leaves no hidden session behind. Send a prompt before `/new`.
+- A new conversation is written with `thread/inject_items` before its tile shows it. `attn debug daemon-log --grep 'shared Codex materialize'` gives each write's `elapsed`, its `deadline` and `outcome` (`ok`, `local_deadline`, `server_error`, `disconnected` or `no_connection`). A write that misses the deadline refuses the conversation, and the terminal's Codex exits with `thread/start failed during TUI bootstrap`.
 - The app-server holds a conversation for about a minute after no terminal shows it; a plain Codex's `/resume` of it fails with `already has an active writer` until then.
 - `attn codex restart --now` stops turns waiting on an approval or a question at once. Use it only when that is what the step proves.
 - Working but wrong: the banner's single button changes meaning with the stage (Install, Restart now, Retry, Reload tiles), so a selector on `.banner-button` must be read with the banner's text.

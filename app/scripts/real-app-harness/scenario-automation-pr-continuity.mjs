@@ -11,6 +11,7 @@ import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './co
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { codexInvocations, createCodexProbe } from './codexProbe.mjs';
 import {
   currentHarnessInstance,
   dataDirForInstance,
@@ -119,12 +120,6 @@ function seedCodexRollout(targetHome) {
   throw new Error('no existing Codex rollout found under ~/.codex/sessions');
 }
 
-function createCodexProbe(root) {
-  const log = path.join(root, 'codex-invocations.jsonl');
-  const executable = path.join(root, 'codex-probe.mjs');
-  fs.writeFileSync(executable, `#!/usr/bin/env node\nimport fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({argv: process.argv.slice(2), at: new Date().toISOString()}) + '\\n');\nsetInterval(() => {}, 1000);\n`, { mode: 0o700 });
-  return { executable, log };
-}
 
 async function startMock(sha) {
   const child = spawn(process.execPath, [path.join(REPO_ROOT, 'scripts/mock-github.mjs')], {
@@ -221,10 +216,6 @@ async function poll(fn, description, timeoutMs = 30_000) {
   throw new Error(`timed out waiting for ${description}; last=${JSON.stringify(last)}`);
 }
 
-function invocations(log) {
-  if (!fs.existsSync(log)) return [];
-  return fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
-}
 
 async function captureDOM(client, selector, target) {
   const screenshot = await client.request('capture_screenshot_data', { selector });
@@ -308,7 +299,7 @@ async function main() {
       seedID = runRow.seed_id;
       worktree = observer.getSession(sessionID)?.directory || path.join(dataDirForInstance(instance), 'automation', 'worktrees', sessionID, 'repo');
       runner.assert(observer.getSession(sessionID)?.seed_id === seedID, 'the run and reviewer session point at the same seed');
-      const firstLaunch = await poll(() => invocations(probe.log).length >= 1 ? invocations(probe.log)[0] : null, 'first Codex launch');
+      const firstLaunch = await poll(() => codexInvocations(probe.log).length >= 1 ? codexInvocations(probe.log)[0] : null, 'first Codex launch');
       const prompt = firstLaunch.argv.at(-1) || '';
       runner.assert(
         prompt.includes('Repository: mock.github.local/owner/repo')
@@ -329,7 +320,7 @@ async function main() {
       secondarySessionID = secondaryRun.session_id;
       secondarySeedID = secondaryRun.seed_id;
       secondaryWorktree = observer.getSession(secondarySessionID)?.directory || path.join(dataDirForInstance(instance), 'automation', 'worktrees', secondarySessionID, 'repo');
-      await poll(() => invocations(probe.log).length >= 2 ? invocations(probe.log) : null, 'two independent Codex launches');
+      await poll(() => codexInvocations(probe.log).length >= 2 ? codexInvocations(probe.log) : null, 'two independent Codex launches');
       runner.assert(fs.existsSync(worktree), 'initial exact-SHA worktree exists', { worktree });
       runner.assert(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).trim() === fixture.sha, 'initial worktree is pinned to provider SHA');
       runner.assert(secondarySessionID !== sessionID && secondarySeedID !== seedID, 'the two definitions own independent reviewer bindings');
@@ -352,7 +343,7 @@ async function main() {
       }, 'secondary changed-head continuation', 45_000);
       runner.assert(row.session_id === sessionID && row.seed_id === seedID, 'changed head reuses the live reviewer session and seed', row);
       runner.assert(secondaryRow.session_id === secondarySessionID && secondaryRow.seed_id === secondarySeedID, 'changed head independently reuses the second reviewer binding', secondaryRow);
-      runner.assert(invocations(probe.log).length === 2, 'changed head does not spawn another live reviewer for either definition', invocations(probe.log));
+      runner.assert(codexInvocations(probe.log).length === 2, 'changed head does not spawn another live reviewer for either definition', codexInvocations(probe.log));
       runner.assert(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).trim() === fixture.sha, 'changed head does not move the reviewer-owned checkout');
       runner.assert(fs.readFileSync(path.join(worktree, 'review-notes.txt'), 'utf8').includes('preserve me'), 'dirty reviewer evidence survives changed-head delivery');
       runner.assert(fs.readFileSync(path.join(secondaryWorktree, 'review-notes.txt'), 'utf8').includes('second reviewer'), 'dirty evidence survives for the second reviewer');
@@ -425,7 +416,7 @@ async function main() {
         const rows = runJSON(binary, ['automation', 'runs', definitionID], daemonEnv) || [];
         return rows.length >= 3 && rows[0].state === 'delivered' ? rows[0] : null;
       }, 'delivered continuation', 45_000);
-      const calls = await poll(() => invocations(probe.log).length >= 3 ? invocations(probe.log) : null, 'Codex resume launch');
+      const calls = await poll(() => codexInvocations(probe.log).length >= 3 ? codexInvocations(probe.log) : null, 'Codex resume launch');
       const resumed = calls[2].argv;
       runner.assert(row.session_id === sessionID && row.seed_id === seedID, 'continuation reuses the same session and seed', row);
       runner.assert(resumed.includes('resume') && resumed.includes(seed.id), 'Codex receives the copied rollout id', { argv: resumed, rollout: seed.id });
@@ -457,7 +448,7 @@ async function main() {
         return rows.length >= 4 && rows[0].state === 'delivered' ? rows[0] : null;
       }, 'post-restart delivered continuation', 45_000);
       runner.assert(row.session_id === sessionID && row.seed_id === seedID, 'post-restart continuation reuses the same session and seed', row);
-      const calls = await poll(() => invocations(probe.log).length >= 4 ? invocations(probe.log) : null, 'post-restart Codex resume launch');
+      const calls = await poll(() => codexInvocations(probe.log).length >= 4 ? codexInvocations(probe.log) : null, 'post-restart Codex resume launch');
       runner.assert(calls[3].argv.includes('resume'), 'post-restart launch resumes rather than starting fresh', { argv: calls[3].argv });
       runner.assert(fs.readFileSync(path.join(worktree, 'review-notes.txt'), 'utf8').includes('preserve me'), 'reviewer work survives the daemon restart');
     });

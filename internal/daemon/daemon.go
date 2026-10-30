@@ -118,6 +118,7 @@ type Daemon struct {
 	automationMu               sync.Mutex
 	automationLaunchFailures   sync.Map
 	automationLaunchResults    sync.Map
+	automationLaunchWaits      sync.Map
 	automationObservationMu    sync.Mutex
 	automationObservationLocks map[string]*sync.Mutex
 	automationRepoMu           sync.Mutex

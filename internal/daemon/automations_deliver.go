@@ -17,6 +17,7 @@ import (
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
+	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	attngit "github.com/victorarias/attn/internal/git"
@@ -24,6 +25,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
+
+const crashAfterAutomationLaunchConfirmed = "automation-launch-confirmed"
 
 type retryableAutomationDeliveryError struct{ cause error }
 
@@ -226,6 +229,9 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if cause, stopped := d.automationLaunchFailures.Load(run.ID); stopped {
 		return cause.(error)
 	}
+	if _, confirming := d.automationLaunchWaits.Load(run.ID); confirming {
+		return nil
+	}
 	definition, err := d.store.GetAutomationDefinition(run.DefinitionID)
 	if err != nil {
 		return err
@@ -259,10 +265,56 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	if err := d.validateAutomationContinuation(req); err != nil {
 		return err
 	}
-	result, err := d.materializeAutomationRun(ctx, req)
+	result, launch, err := d.materializeAutomationRun(ctx, req)
 	if err != nil {
 		return err
 	}
+	if launch != nil {
+		return d.confirmAutomationLaunch(run, req.Launch.Agent, result, launch)
+	}
+	d.automationLaunchResults.Store(run.ID, result)
+	return d.finalizeAutomationRun(run, result)
+}
+
+func (d *Daemon) confirmAutomationLaunch(run *store.AutomationRun, agent string, result automation.DeliveryResult, launch *launchWatch) error {
+	if launch.settled() {
+		outcome, _ := d.awaitLaunch(result.SessionID, launch, nil)
+		return d.settleAutomationLaunch(run, agent, result, outcome)
+	}
+	d.automationLaunchWaits.Store(run.ID, struct{}{})
+	confirming := d.life.Go("automation launch confirmation", func() {
+		outcome, _ := d.awaitLaunch(result.SessionID, launch, nil)
+		d.automationMu.Lock()
+		defer d.automationMu.Unlock()
+		d.automationLaunchWaits.Delete(run.ID)
+		if outcome.interrupted {
+			return
+		}
+		current, err := d.store.GetAutomationRun(run.ID)
+		if err != nil || current == nil || current.State != store.AutomationRunStatePending {
+			return
+		}
+		if err := d.settleAutomationLaunch(current, agent, result, outcome); err != nil {
+			if _, err := d.handleAutomationDeliveryError(current, err); err != nil {
+				d.logf("automation launch confirmation run %s: %v", run.ID, err)
+			}
+		}
+	})
+	if !confirming {
+		d.automationLaunchWaits.Delete(run.ID)
+		d.forgetLaunchWatch(result.SessionID, launch)
+		return &retryableAutomationDeliveryError{cause: errors.New("the daemon stopped before the agent's first turn")}
+	}
+	return nil
+}
+
+func (d *Daemon) settleAutomationLaunch(run *store.AutomationRun, agent string, result automation.DeliveryResult, outcome launchOutcome) error {
+	if outcome.exit != nil {
+		exit := *outcome.exit
+		exit.Text = exitScreenTail(exit.Text)
+		return launchExitError(agent, result.SessionID, &exit)
+	}
+	crashpoint.At(crashAfterAutomationLaunchConfirmed)
 	d.automationLaunchResults.Store(run.ID, result)
 	return d.finalizeAutomationRun(run, result)
 }
@@ -290,38 +342,42 @@ func (d *Daemon) finalizeAutomationRun(run *store.AutomationRun, result automati
 	return nil
 }
 
-func (d *Daemon) materializeAutomationRun(ctx context.Context, req automation.WorkRequest) (automation.DeliveryResult, error) {
+func (d *Daemon) materializeAutomationRun(ctx context.Context, req automation.WorkRequest) (automation.DeliveryResult, *launchWatch, error) {
 	continuation, restoreSeed, err := d.ensureAutomationSeed(req)
 	if err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("ensure seed: %w", err)
+		return automation.DeliveryResult{}, nil, fmt.Errorf("ensure seed: %w", err)
 	}
-	result, err := d.launchAutomationRun(ctx, req, continuation)
+	result, launch, err := d.launchAutomationRun(ctx, req, continuation)
 	if err != nil && restoreSeed != nil {
-		return automation.DeliveryResult{}, errors.Join(err, restoreSeed())
+		return automation.DeliveryResult{}, nil, errors.Join(err, restoreSeed())
 	}
-	return result, err
+	return result, launch, err
 }
 
-func (d *Daemon) launchAutomationRun(ctx context.Context, req automation.WorkRequest, continuation bool) (automation.DeliveryResult, error) {
+func (d *Daemon) launchAutomationRun(ctx context.Context, req automation.WorkRequest, continuation bool) (automation.DeliveryResult, *launchWatch, error) {
 	if continuation {
 		if err := d.ensureAutomationOccurrenceNote(req); err != nil {
-			return automation.DeliveryResult{}, fmt.Errorf("record occurrence: %w", err)
+			return automation.DeliveryResult{}, nil, fmt.Errorf("record occurrence: %w", err)
 		}
 	}
 	location, err := d.prepareAutomationLocation(ctx, req)
 	if err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("prepare location: %w", err)
+		return automation.DeliveryResult{}, nil, fmt.Errorf("prepare location: %w", err)
 	}
 	if err := d.bindAutomationSeedLocation(req, location); err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("bind seed location: %w", err)
+		return automation.DeliveryResult{}, nil, fmt.Errorf("bind seed location: %w", err)
 	}
-	if err := d.ensureAutomationSession(ctx, req, location.Directory); err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("ensure session: %w", err)
+	launch, err := d.ensureAutomationSession(ctx, req, location.Directory)
+	if err != nil {
+		return automation.DeliveryResult{}, nil, fmt.Errorf("ensure session: %w", err)
 	}
 	if err := d.verifyAutomationDelivery(ctx, req, location.Directory); err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("verify delivery: %w", err)
+		if launch != nil {
+			d.forgetLaunchWatch(req.IDs.SessionID, launch)
+		}
+		return automation.DeliveryResult{}, nil, fmt.Errorf("verify delivery: %w", err)
 	}
-	return automation.DeliveryResult{SeedID: req.IDs.SeedID, SessionID: req.IDs.SessionID, ProfileID: req.IDs.ProfileID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, nil
+	return automation.DeliveryResult{SeedID: req.IDs.SeedID, SessionID: req.IDs.SessionID, ProfileID: req.IDs.ProfileID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, launch, nil
 }
 
 func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) error {
@@ -669,33 +725,68 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 func (d *Daemon) bindAutomationSeedLocation(req automation.WorkRequest, location automation.PreparedLocation) error {
 	return d.recordGardenDispatch(req.IDs.SessionID, req.IDs.SeedID, "", location.Directory, req.Launch.Agent, false)
 }
-func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) error {
+func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) (*launchWatch, error) {
 	if err := req.Launch.Validate(); err != nil {
-		return fmt.Errorf("invalid unattended launch contract: %w", err)
+		return nil, fmt.Errorf("invalid unattended launch contract: %w", err)
 	}
 	continuationRun, err := d.automationContinuationOrigin(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if existing := d.store.SessionLedgerEntry(req.IDs.SessionID); existing != nil {
 		if filepath.Clean(existing.Directory) != filepath.Clean(directory) || existing.Agent != req.Launch.Agent {
-			return fmt.Errorf("persisted session does not match automation snapshot")
+			return nil, fmt.Errorf("persisted session does not match automation snapshot")
 		}
 	}
 	inputPath, err := d.ensureAutomationOccurrenceInput(req)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	opening := continuationRun == nil || canStartWithdrawnUndeliveredReviewer(continuationRun)
+	if opening && req.Launch.Agent == string(protocol.SessionAgentCodex) {
+		return d.ensureConfirmedAutomationSession(req, directory, inputPath)
 	}
 	if d.automationSessionIsLive(req.IDs.SessionID) {
-		return d.verifyUnattendedLaunch(req)
+		return nil, d.verifyUnattendedLaunch(req)
 	}
-	if continuationRun != nil {
-		if canStartWithdrawnUndeliveredReviewer(continuationRun) {
-			return d.startAutomationSession(req, directory, inputPath)
+	if !opening {
+		return nil, d.continueAutomationSession(ctx, req, directory)
+	}
+	return nil, d.startAutomationSession(req, directory, inputPath, nil)
+}
+
+func (d *Daemon) ensureConfirmedAutomationSession(req automation.WorkRequest, directory, inputPath string) (*launchWatch, error) {
+	sessionID := req.IDs.SessionID
+	run, err := d.store.GetAutomationRun(req.RunID)
+	if err != nil || run == nil {
+		return nil, errors.Join(errors.New("automation run missing"), err)
+	}
+	launch := d.watchLaunch(sessionID)
+	exit := d.store.GetSessionExitScreen(sessionID)
+	switch {
+	case d.automationSessionIsLive(sessionID):
+		if d.launchReported(sessionID) {
+			d.noteLaunchStarted(sessionID)
+		} else {
+			d.passGateBeforeFirstTurn(req, launch)
 		}
-		return d.continueAutomationSession(ctx, req, directory)
+	case exit != nil && !protocol.Timestamp(exit.ExitedAt).Time().Before(run.CreatedAt):
+		if d.launchReported(sessionID) {
+			d.noteLaunchStarted(sessionID)
+		} else {
+			d.resolveLaunchWatch(sessionID, launchOutcome{exit: exit})
+		}
+	default:
+		if err := d.startAutomationSession(req, directory, inputPath, launch); err != nil {
+			d.forgetLaunchWatch(sessionID, launch)
+			return nil, err
+		}
 	}
-	return d.startAutomationSession(req, directory, inputPath)
+	return launch, nil
+}
+
+func (d *Daemon) launchReported(sessionID protocol.SessionID) bool {
+	return !d.sessionMonitor(sessionID).Snapshot().FirstReportAt.V.IsZero() || strings.TrimSpace(d.store.GetResumeSessionID(sessionID)) != ""
 }
 
 func (d *Daemon) continueAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) error {
@@ -758,7 +849,7 @@ func automationSessionLabel(req automation.WorkRequest, directory string) string
 	return label
 }
 
-func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string) error {
+func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string, launch *launchWatch) error {
 	label, prompt, err := d.automationSessionLaunch(req, directory, inputPath)
 	if err != nil {
 		return err
@@ -768,7 +859,9 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 	if rejection != nil {
 		return rejection.reason()
 	}
-	if err := d.verifyUnattendedLaunch(req); err != nil {
+	if launch != nil {
+		d.passGateBeforeFirstTurn(req, launch)
+	} else if err := d.verifyUnattendedLaunch(req); err != nil {
 		return err
 	}
 	d.announceBackgroundLaunch("automation", strconv.Itoa(req.DefinitionID), req.IDs.SessionID, "automation")
@@ -795,10 +888,16 @@ func (d *Daemon) automationContinuationOrigin(req automation.WorkRequest) (*stor
 	return origin, nil
 }
 func (d *Daemon) verifyUnattendedLaunch(req automation.WorkRequest) error {
-	if err := d.passUnattendedLaunchGate(req); err != nil {
+	if err := d.passUnattendedLaunchGate(req, nil); err != nil {
 		return &retryableAutomationDeliveryError{cause: err}
 	}
 	return nil
+}
+
+func (d *Daemon) passGateBeforeFirstTurn(req automation.WorkRequest, launch *launchWatch) {
+	if err := d.passUnattendedLaunchGate(req, launch); err != nil {
+		d.logf("automation launch of session %s: %v; its first turn or exit decides the run", req.IDs.SessionID, err)
+	}
 }
 func (d *Daemon) ensureAutomationOccurrenceInput(req automation.WorkRequest) (string, error) {
 	if filepath.Base(req.RunID) != req.RunID || strings.TrimSpace(req.RunID) == "" {
@@ -906,7 +1005,7 @@ func stripANSIForPromptMatch(data []byte) string {
 	return string(out)
 }
 
-func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
+func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest, launch *launchWatch) error {
 	if req.Launch.Agent != string(protocol.SessionAgentCodex) {
 		return nil
 	}
@@ -917,6 +1016,9 @@ func (d *Daemon) passUnattendedLaunchGate(req automation.WorkRequest) error {
 	deadline := time.Now().Add(10 * time.Second)
 	acknowledged := false
 	for time.Now().Before(deadline) && !d.stopping() {
+		if launch != nil && launch.settled() {
+			return nil
+		}
 		info, err := snapshots.ScreenSnapshot(context.Background(), d.primaryTerminal(req.IDs.SessionID))
 		if err == nil {
 			var payload []byte

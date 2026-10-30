@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp, queryDaemonDb } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+import { codexInvocations, createCodexProbe } from './codexProbe.mjs';
 import { currentHarnessInstance, dataDirForInstance, resolveHarnessResources, instanceCliEnv as instanceEnv } from './harnessInstance.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
@@ -151,21 +152,7 @@ function worktreeListShows(repo, absolutePath) {
   return out.includes(absolutePath);
 }
 
-function createCodexProbe(root) {
-  const log = path.join(root, 'codex-invocations.jsonl');
-  const executable = path.join(root, 'codex-probe.mjs');
-  fs.writeFileSync(
-    executable,
-    `#!/usr/bin/env node\nimport fs from 'node:fs';\nfs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({argv: process.argv.slice(2), at: new Date().toISOString()}) + '\\n');\nsetInterval(() => {}, 1000);\n`,
-    { mode: 0o700 },
-  );
-  return { executable, log };
-}
 
-function invocations(log) {
-  if (!fs.existsSync(log)) return [];
-  return fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
-}
 
 const API_VERSION = 'attn.dev/automations/v1alpha1';
 
@@ -439,9 +426,9 @@ async function main() {
       runner.assert(Boolean(stormGuardSeed), 'storm-guard run owns a synthetic seed', { stormGuardSessionID, stormGuardSeed });
       stormGuardSeedID = stormGuardSeed.id;
 
-      await poll(() => (invocations(probe.log).length >= 1 ? invocations(probe.log) : null), 'storm-guard probe launch');
-      runner.assert(invocations(probe.log).length === 1, 'exactly one process spawn backs the single catch-up run (no replay storm)', {
-        invocations: invocations(probe.log),
+      await poll(() => (codexInvocations(probe.log).length >= 1 ? codexInvocations(probe.log) : null), 'storm-guard probe launch');
+      runner.assert(codexInvocations(probe.log).length === 1, 'exactly one process spawn backs the single catch-up run (no replay storm)', {
+        invocations: codexInvocations(probe.log),
       });
     });
 

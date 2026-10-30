@@ -722,7 +722,7 @@ func (r *codexShared) prepare(v *codexView, m *codexshared.Message) (func(*codex
 		}
 		if !opened {
 			r.d.mirrorLabel(r.holder(v.profile, thread.ID))
-		} else if err := r.materialize(v.profile, thread.ID); err != nil {
+		} else if err := r.materialize(v.terminal, v.profile, thread.ID); err != nil {
 			r.d.logf("shared Codex: refused conversation %s, which could not be written: %v", thread.ID, err)
 			reply.Result = nil
 			reply.Error, _ = json.Marshal(map[string]any{"code": -32603, "message": "attn could not write the new conversation to disk: " + err.Error()})
@@ -832,7 +832,7 @@ func (r *codexShared) instructions(sessionID protocol.SessionID, profile string,
 	return launch.Content
 }
 
-func (r *codexShared) materialize(profile, conversation string) error {
+func (r *codexShared) materialize(terminal protocol.TerminalID, profile, conversation string) error {
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()
@@ -841,11 +841,13 @@ func (r *codexShared) materialize(profile, conversation string) error {
 		client = s.client()
 	}
 	if client == nil {
+		r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items outcome=no_connection", terminal, profile, conversation)
 		return errors.New("no connection to its app-server")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), codexServerCallLimit)
 	defer cancel()
 	note := prompts.RenderText("session", "codex-opened", nil)
+	started := time.Now()
 	_, err := client.Call(ctx, "thread/inject_items", map[string]any{
 		"threadId": conversation,
 		"items": []any{map[string]any{
@@ -853,7 +855,23 @@ func (r *codexShared) materialize(profile, conversation string) error {
 			"content": []any{map[string]any{"type": "input_text", "text": note}},
 		}},
 	})
+	r.d.logf("shared Codex materialize: terminal=%s profile=%s conversation=%s op=thread/inject_items elapsed=%s deadline=%s outcome=%s",
+		terminal, profile, conversation, time.Since(started).Round(time.Millisecond), codexServerCallLimit, codexCallOutcome(err))
 	return err
+}
+
+func codexCallOutcome(err error) string {
+	var refused *codexshared.RPCError
+	switch {
+	case err == nil:
+		return "ok"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "local_deadline"
+	case errors.As(err, &refused):
+		return "server_error"
+	default:
+		return "disconnected"
+	}
 }
 
 func (r *codexShared) show(v *codexView, conversation string, opened bool) {
