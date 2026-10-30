@@ -133,9 +133,12 @@ func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.
 		t.Fatalf("initial_state outposts after a home restart with the outpost frozen: %+v", initial.Outposts)
 	}
 	typeRefused(t, app, terminal, "echo connecting\r")
+	a.Fail(address, "ssh: connect to host machine port 22: No route to host")
+	a.ExitMaster(home, host)
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	typeRefused(t, app, terminal, "echo lost\r")
 	mark = len(app.Log())
+	a.Restore(address)
 	resume()
 	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	reattach(app)

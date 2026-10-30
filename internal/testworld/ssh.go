@@ -32,22 +32,33 @@ type sshMachine struct {
 	link  *sshLink
 }
 type sshLink struct {
-	mu    sync.Mutex
-	ready chan struct{}
+	mu   sync.Mutex
+	gate *sshGate
+}
+type sshGate struct {
+	done   chan struct{}
+	err    error
+	finish func(error)
 }
 
+func newSSHGate() *sshGate {
+	gate := &sshGate{done: make(chan struct{})}
+	var once sync.Once
+	gate.finish = func(err error) { once.Do(func() { gate.err = err; close(gate.done) }) }
+	return gate
+}
 func newSSHLink() *sshLink {
-	ready := make(chan struct{})
-	close(ready)
-	return &sshLink{ready: ready}
+	gate := newSSHGate()
+	gate.finish(nil)
+	return &sshLink{gate: gate}
 }
 func (l *sshLink) wait(ctx context.Context) error {
 	l.mu.Lock()
-	ready := l.ready
+	gate := l.gate
 	l.mu.Unlock()
 	select {
-	case <-ready:
-		return nil
+	case <-gate.done:
+		return gate.err
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -73,10 +84,10 @@ func (s *SSH) Pause(destination string) func() {
 		s.t.Fatalf("no SSH machine for %s", destination)
 	}
 	machine.link.mu.Lock()
-	ready := make(chan struct{})
-	machine.link.ready = ready
+	gate := newSSHGate()
+	machine.link.gate = gate
 	machine.link.mu.Unlock()
-	return sync.OnceFunc(func() { close(ready) })
+	return func() { gate.finish(nil) }
 }
 
 func NewSSH(t testing.TB) *SSH {
@@ -211,16 +222,11 @@ func (s *SSH) Route(destination string, remote *Stack) {
 				}
 				requestCtx, requestCancel := context.WithCancel(ctx)
 				defer requestCancel()
-				link.mu.Lock()
-				ready := link.ready
-				link.mu.Unlock()
-				select {
-				case <-ready:
-				default:
+				if err := link.wait(requestCtx); err != nil {
 					result, _ := json.Marshal(struct {
 						Code   int
 						Stderr string
-					}{255, "ssh: connect to host machine port 22: No route to host"})
+					}{255, err.Error()})
 					_ = os.WriteFile(req.ResultFile, result, 0600)
 					return
 				}
@@ -288,12 +294,23 @@ func (s *SSH) Route(destination string, remote *Stack) {
 func (s *SSH) Restore(destination string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if machine := s.machines[destination]; machine != nil {
+		machine.link.mu.Lock()
+		machine.link.gate = newSSHLink().gate
+		machine.link.mu.Unlock()
+	}
 	s.routes[destination] = s.reachable[destination]
 	s.save()
 }
 func (s *SSH) Fail(destination, stderr string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if machine := s.machines[destination]; machine != nil {
+		machine.link.mu.Lock()
+		gate := machine.link.gate
+		machine.link.mu.Unlock()
+		gate.finish(fmt.Errorf("%s", stderr))
+	}
 	s.routes[destination] = "error:" + stderr
 	s.save()
 }
