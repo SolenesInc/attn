@@ -14,8 +14,9 @@ Production stays out of every run: never point a daemon, app, recipe,
 harness or test at `~/.attn` or the production app. A feature that needs
 realistic data copies it out read-only. The `attn` on `PATH` is only for your
 own garden work on your stake, from your own session, as
-[Evidence](#evidence) shows and `AGENTS.md` allows. Kill only a PID you
-started or one the automation manifest names, never by name or pattern.
+[Evidence](#evidence) shows and `AGENTS.md` allows. Never stop a process
+yourself, by PID or by name: `attn instance clean` stops everything an
+instance runs, and every run ends with it, as [Cleanup](#cleanup) says.
 
 ## Launch
 
@@ -42,6 +43,9 @@ feature map, leave it out.
 
 Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`: `dev` is
 shared with other work and installs the attn skill into your harness homes.
+Keep a list of every name you start: [Cleanup](#cleanup) cleans each one,
+including when you abandon the run.
+
 The env file selects the instance with `attn instance-env <name>`, which
 clears inherited routing, and moves to this checkout. Its `unset` line drops
 the identity of the session you run in, so the instance does not mistake
@@ -195,22 +199,31 @@ Recording permission for the instance's app or your terminal.
 
 ## Cleanup
 
+Every run ends here, finished or abandoned, before you report, hand off or
+move on. For each instance you started:
+
 ```bash
 . /tmp/drive-attn-<name>.env && ./attn instance clean <name>
 . /tmp/drive-attn-<name>.env && pnpm --dir app run real-app:mock-github stop
 rm /tmp/drive-attn-<name>.env
 ```
 
-`clean` stops the daemon, quits the app, reaps its workers, and removes the
-app and the data folder. If it reports a live app, run
-`./attn instance stop-app` and clean again; for an unconfirmed PID, follow
-`docs/instances.md`. Never delete a data folder by hand. Remove the env file
-only once both commands succeed, and close a terminal that sourced it.
-`clean` leaves the instance's notebook folder, `~/attn-notebook-<name>`,
-with whatever the run wrote to the notebook or attached to seeds, and a
-later instance with the same name starts with it. The scratch tool home,
-`$ATTN_TOOL_HOME`, stays under `/tmp` too. Proof in your own folder or on
-your stake survives; check that it is still there after cleaning.
+`clean` quits the app, stops the daemon, reaps its workers, shared PTY hosts
+and plugin drivers, and removes the app and the data folder. It refuses the
+default (production) instance; never pass it `--force`. If it reports a live
+app, run `./attn instance stop-app` and clean again. If it reports anything
+else it could not stop, leave the process alone and bring `clean`'s output
+to the user; never stop it by PID or name, and never delete a data folder by
+hand. `./attn instance` then shows `(no daemon socket)` and
+`(not installed)`.
+
+Remove the env file only once both commands succeed, and close a terminal
+that sourced it. `clean` leaves the instance's notebook folder,
+`~/attn-notebook-<name>`, with whatever the run wrote to the notebook or
+attached to seeds, and a later instance with the same name starts with it.
+The scratch tool home, `$ATTN_TOOL_HOME`, stays under `/tmp` too. Proof in
+your own folder or on your stake survives; check that it is still there
+after cleaning.
 
 ## The feature map
 

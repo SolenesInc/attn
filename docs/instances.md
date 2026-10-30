@@ -62,11 +62,16 @@ Before running scenarios, read the [harness guide](../app/scripts/real-app-harne
 
 ## Clean up
 
-When you move on, run `attn instance clean <name>` for instances you created.
+When you move on, run `attn instance clean <name>` for instances you created,
+including runs you abandon. It stops the instance's app, daemon, workers and
+plugin drivers, and removes its data. It takes the instance from its argument
+alone, never from routing variables, and refuses the default (production)
+instance without `--force`.
 Never delete a data directory by hand; cleanup needs its worker registry.
-If clean reports a live app, quit it and rerun. If it reports an unconfirmed
-PID, check it with `ps -p <pid>`, kill it only if it is a stale attn worker,
-then rerun.
+If clean reports a live app, quit it and rerun. If it reports a process it
+could not confirm or stop, leave that process alone: an agent brings clean's
+output to the user, and a person checks it with `ps -p <pid>`, stops it only
+if it is a stale attn worker, then reruns clean.
 Worker removal waits for the worker's child to exit. When a worker cannot be
 removed, clean exits non-zero and keeps the instance data and worker registry
 for diagnosis.

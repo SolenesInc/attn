@@ -45,6 +45,9 @@ Running the scenarios that cover an app-observable change locally, on a
 non-production instance, is optional, when the machine can take it. When no
 scenario covers the change, add one or tell the user.
 
+Before you land, clean every instance the check started, as the drive-attn
+skill's Cleanup says.
+
 ## Review
 
 Review the slice before it lands, scaled to its risk:
