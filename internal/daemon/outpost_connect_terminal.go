@@ -31,31 +31,10 @@ func (d *Daemon) connectOutpostInTerminal(client *wsClient, id string) (placemen
 	r := &d.outposts
 	r.actions.Lock()
 	defer r.actions.Unlock()
-	if !d.outpostsEnabled() {
-		return placementOutcome{}, fmt.Errorf("outposts_enabled is off; turn Outposts on before connecting in a terminal")
-	}
-	rows, err := d.store.ListOutposts()
+	row, commandSession, connectable, err := d.outpostCommandTarget(id)
 	if err != nil {
 		return placementOutcome{}, err
 	}
-	var row store.Outpost
-	for _, saved := range rows {
-		if saved.ID == id {
-			row = saved
-			break
-		}
-	}
-	if row.ID == "" {
-		return placementOutcome{}, fmt.Errorf("outpost %q does not exist", id)
-	}
-	r.mu.Lock()
-	run := r.dialers[id]
-	var commandSession protocol.SessionID
-	connectable := run != nil && run.connectable
-	if run != nil {
-		commandSession = run.commandSession
-	}
-	r.mu.Unlock()
 	if commandSession != "" {
 		session := d.store.Get(commandSession)
 		if session == nil || session.ProfileID != client.selectedProfile() {
@@ -77,28 +56,76 @@ func (d *Daemon) connectOutpostInTerminal(client *wsClient, id string) (placemen
 		d.publishArrangementChanged(session.ProfileID)
 		return placementOutcome{session: commandSession, desktopID: desktop.DesktopID, paneID: desktop.PaneID}, nil
 	}
+	return d.launchOutpostCommand(row, connectable, &protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(uuid.NewString()), ProfileID: client.selectedProfile(),
+		Agent: protocol.AgentShellValue, Label: protocol.Ptr("Connect to " + row.Name), Cwd: "~", Cols: 80, Rows: 24,
+	}, internalSpawnPolicy{userStarted: true, launchPlacement: &launchPlacement{direction: layouttree.DirectionVertical}})
+}
+
+func (d *Daemon) retryOutpostCommand(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) error {
+	r := &d.outposts
+	r.actions.Lock()
+	defer r.actions.Unlock()
+	row, commandSession, connectable, err := d.outpostCommandTarget(policy.command.OutpostID)
+	if err != nil {
+		return err
+	}
+	if commandSession == msg.ID {
+		return fmt.Errorf("ssh in this terminal is still finishing; try again in a moment")
+	}
+	if commandSession != "" {
+		return fmt.Errorf("outpost %s already has another connection terminal open; answer ssh there", row.Name)
+	}
+	_, err = d.launchOutpostCommand(row, connectable, msg, policy)
+	return err
+}
+
+func (d *Daemon) outpostCommandTarget(id string) (store.Outpost, protocol.SessionID, bool, error) {
+	if !d.outpostsEnabled() {
+		return store.Outpost{}, "", false, fmt.Errorf("outposts_enabled is off; turn Outposts on before connecting in a terminal")
+	}
+	rows, err := d.store.ListOutposts()
+	if err != nil {
+		return store.Outpost{}, "", false, err
+	}
+	var row store.Outpost
+	for _, saved := range rows {
+		if saved.ID == id {
+			row = saved
+			break
+		}
+	}
+	if row.ID == "" {
+		return store.Outpost{}, "", false, fmt.Errorf("outpost %q does not exist", id)
+	}
+	r := &d.outposts
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	run := r.dialers[id]
+	if run == nil {
+		return row, "", false, nil
+	}
+	return row, run.commandSession, run.connectable, nil
+}
+
+func (d *Daemon) launchOutpostCommand(row store.Outpost, connectable bool, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, error) {
 	if !connectable {
 		return placementOutcome{}, fmt.Errorf("outpost %s has no ssh refusal to answer in a terminal", row.Name)
 	}
 	argv := d.outpostSSH(row).MasterCommand()
+	var err error
 	argv[0], err = exec.LookPath(argv[0])
 	if err != nil {
 		return placementOutcome{}, err
 	}
-	d.stopOutpostDial(id)
-	session := protocol.SessionID(uuid.NewString())
-	placed, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: session, ProfileID: client.selectedProfile(),
-		Agent: protocol.AgentShellValue, Label: protocol.Ptr("Connect to " + row.Name), Cwd: "~", Cols: 80, Rows: 24,
-	}, internalSpawnPolicy{userStarted: true,
-		launchPlacement: &launchPlacement{direction: layouttree.DirectionVertical},
-		command:         &store.TerminalCommand{Argv: argv, OutpostID: id},
-	})
+	policy.command = &store.TerminalCommand{Argv: argv, OutpostID: row.ID}
+	d.stopOutpostDial(row.ID)
+	placed, rejection := d.runSpawnPipelineReporting(msg, policy)
 	d.startOutpostDial(row)
 	if rejection != nil {
 		return placementOutcome{}, rejection.reason()
 	}
-	d.publishFact(FactOutpostChanged, id, nil)
+	d.publishFact(FactOutpostChanged, row.ID, nil)
 	return placed, nil
 }
 

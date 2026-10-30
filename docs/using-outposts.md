@@ -301,6 +301,9 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 The row shows ssh's error verbatim. **Connect in a terminal** opens a focused
 terminal beside your active tile on the home. Background connection attempts
 pause while you answer. The terminal stays open so you can read the result.
+If ssh failed, **Resume** on that terminal runs ssh again in the same tile.
+Once the outpost connects, there is nothing left to answer, and **Resume**
+says so.
 
 ## Remove an outpost
 

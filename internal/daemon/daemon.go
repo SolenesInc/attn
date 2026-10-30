@@ -1786,6 +1786,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmonitor.Exit) {
 	d.noteLaunchExited(sessionID, exit)
 	d.releaseExitedCrewBinding(sessionID)
+	commandTerminal := d.finishCommandTerminal(sessionID, exit)
 	d.publishFact(FactSessionPTYExited, string(sessionID), ptyExit{
 		Terminal: string(exit.Terminal),
 		ExitCode: exit.Code,
@@ -1794,7 +1795,7 @@ func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmoni
 	d.sessionMonitor(sessionID).RecordExitPublished(exit)
 	pausepoint.At(pausepoint.SessionExitObserved)
 	d.broadcastSessionStateChanged(sessionID)
-	if d.finishCommandTerminal(sessionID, exit) {
+	if commandTerminal {
 		return
 	}
 	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped {

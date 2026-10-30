@@ -144,6 +144,62 @@ func TestSSHConnectionTerminalFailureCanBeRetried(t *testing.T) {
 	t.Log("no -> exit 255 keeps refusal and tile; another attempt accepts yes and connects")
 }
 
+func TestSSHConnectionTerminalResumeAsksAgainInItsTile(t *testing.T) {
+	home, remote := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, remote)
+	pair.SSH.Route(pair.Destination, remote)
+	pair.SSH.RequireConfirmation(pair.Destination)
+	t.Cleanup(func() { remote.Attn("daemon", "stop") })
+	home.Start()
+	logSSHFailure(t, home, remote, pair.SSH)
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: pair.Destination})
+	row := outpostState(app, "outpost", protocol.OutpostStateRefused)
+	app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID, RequestID: "connect-outpost"})
+	opened := testworld.Await(app, protocol.EventSessionRegistered, func(m protocol.SessionRegisteredMessage) bool { return m.Session.Label == "Connect to outpost" }).Session
+	tile := testworld.Await(app, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == "connect-outpost" })
+	app.AwaitScreen(string(opened.ID), "Are you sure you want to continue connecting (yes/no)?")
+	app.TypeLine(string(opened.ID), "no")
+	testworld.Await(app, protocol.EventSessionExited, func(m protocol.SessionExitedMessage) bool { return m.SessionID == opened.ID && m.ExitCode == 255 })
+	resume := func() protocol.ReloadSessionResultMessage {
+		return testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: opened.ID, Cols: 80, Rows: 24}, protocol.EventReloadSessionResult, func(m protocol.ReloadSessionResultMessage) bool { return m.ID == opened.ID })
+	}
+	connectionTerminal := func() protocol.Session {
+		for _, session := range home.App().Initial.Sessions {
+			if session.ID == opened.ID {
+				return session
+			}
+		}
+		t.Fatal("connection tile disappeared")
+		return protocol.Session{}
+	}
+
+	if result := resume(); !result.Success {
+		t.Fatalf("resume exited connection terminal: %s", protocol.Deref(result.Error))
+	}
+	if session := connectionTerminal(); session.Agent != protocol.AgentShellValue || !protocol.Deref(session.CommandTerminal) || session.Label != "Connect to outpost" {
+		t.Fatalf("resume changed the connection terminal: %+v", session)
+	}
+	app.AwaitScreen(string(opened.ID), "Are you sure you want to continue connecting (yes/no)?")
+	app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID, RequestID: "reuse-outpost"})
+	reused := testworld.Await(app, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == "reuse-outpost" })
+	if !reused.Success || protocol.Deref(reused.PaneID) != protocol.Deref(tile.PaneID) {
+		t.Fatalf("resumed terminal does not hold the outpost's connection: %+v -> %+v", tile, reused)
+	}
+	app.TypeLine(string(opened.ID), "yes")
+	testworld.Await(app, protocol.EventSessionExited, func(m protocol.SessionExitedMessage) bool { return m.SessionID == opened.ID && m.ExitCode == 0 })
+	outpostState(app, "outpost", protocol.OutpostStateConnected)
+
+	if result := resume(); result.Success || !strings.Contains(protocol.Deref(result.Error), "has no ssh refusal to answer") {
+		t.Fatalf("resume after connecting: %+v", result)
+	}
+	if session := connectionTerminal(); !protocol.Deref(session.CommandTerminal) {
+		t.Fatalf("refused resume changed the connection terminal: %+v", session)
+	}
+	assertConnectionTerminalAbsentFromLedger(t, app, opened.ID)
+	t.Log("no -> exit 255; Resume reruns ssh in the same tile, which holds the outpost's connection; yes -> connected; Resume after connecting says why it cannot")
+}
+
 func TestSSHConnectionTerminalIsCancelledByOffAndRemove(t *testing.T) {
 	for _, action := range []string{"off", "remove"} {
 		t.Run(action, func(t *testing.T) {

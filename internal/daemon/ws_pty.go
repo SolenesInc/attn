@@ -383,7 +383,18 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 		unattendedLaunch:      launch,
 		approvalRoute:         intent.ApprovalRoute,
 		preserveApprovalRoute: true,
+		command:               intent.Command,
 	}
+}
+
+func (d *Daemon) runStoredIntentSpawn(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) error {
+	if policy.command != nil {
+		return d.retryOutpostCommand(msg, policy)
+	}
+	if rejection := d.runSpawnPipeline(msg, policy); rejection != nil {
+		return rejection.reason()
+	}
+	return nil
 }
 
 func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) error {
@@ -400,10 +411,7 @@ func (d *Daemon) reviveSessionForAttach(msg *protocol.AttachSessionMessage) erro
 		return errors.New("no stored launch intent")
 	}
 	spawnMsg, policy := buildStoredIntentSpawn(session, intent, int(*msg.Cols), int(*msg.Rows))
-	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
-		return rejection.reason()
-	}
-	return nil
+	return d.runStoredIntentSpawn(spawnMsg, policy)
 }
 
 func (d *Daemon) handleAttachSession(client *wsClient, msg *protocol.AttachSessionMessage) {

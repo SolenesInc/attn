@@ -238,10 +238,7 @@ func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows
 	if err != nil || resume == nil {
 		return err
 	}
-	if rejection := d.runSpawnPipeline(resume.msg, resume.policy); rejection != nil {
-		return rejection.reason()
-	}
-	return nil
+	return d.runStoredIntentSpawn(resume.msg, resume.policy)
 }
 
 type storedIntentResume struct {
