@@ -2,6 +2,7 @@ package stepclock
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -125,7 +126,7 @@ func (h *Hub) apply(p *peer, fields []string) bool {
 }
 
 // Advance moves every connected process's clock by d and returns once each has fired its due timers or exited.
-func (h *Hub) Advance(d time.Duration, guard <-chan time.Time) error {
+func (h *Hub) Advance(ctx context.Context, d time.Duration) error {
 	h.stepping.Lock()
 	defer h.stepping.Unlock()
 	h.mu.Lock()
@@ -142,16 +143,16 @@ func (h *Hub) Advance(d time.Duration, guard <-chan time.Time) error {
 			select {
 			case <-p.done:
 				continue
-			default:
+			case <-ctx.Done():
+				return fmt.Errorf("advance process %d by %s: %w", p.pid, d, err)
 			}
-			return fmt.Errorf("advance process %d by %s: %w", p.pid, d, err)
 		}
 	}
 	for _, p := range peers {
 		select {
 		case <-p.advanced:
 		case <-p.done:
-		case <-guard:
+		case <-ctx.Done():
 			return fmt.Errorf("process %d did not advance by %s", p.pid, d)
 		}
 	}
@@ -159,11 +160,11 @@ func (h *Hub) Advance(d time.Duration, guard <-chan time.Time) error {
 }
 
 // AwaitTimer waits until any process has a timer of duration d pending, armed or reset after the last Advance or AwaitTimer.
-// When guard closes first it returns false with the durations of the timers pending then.
-func (h *Hub) AwaitTimer(d time.Duration, guard <-chan time.Time) ([]time.Duration, bool) {
+// When ctx ends first it returns false with the durations of the timers pending then.
+func (h *Hub) AwaitTimer(ctx context.Context, d time.Duration) ([]time.Duration, bool) {
 	h.stepping.Lock()
 	defer h.stepping.Unlock()
-	return h.pending.await(&h.mu, d, guard)
+	return h.pending.await(ctx, &h.mu, d)
 }
 
 func (h *Hub) Close() {

@@ -993,16 +993,19 @@ func (s *Session) killWithEscalation(clock *stepclock.Clock, sig syscall.Signal,
 		return nil
 	}
 
-	deadline := clock.NewTimer(waitTimeout)
-	defer deadline.Stop()
-
+	var hup stepclock.Timer
 	if sig == syscall.SIGTERM {
 		grace := sigtermToHUPGrace
 		if half := waitTimeout / 2; grace > half {
 			grace = half
 		}
-		hup := clock.NewTimer(grace)
+		hup = clock.NewTimer(grace)
 		defer hup.Stop()
+	}
+	deadline := clock.NewTimer(waitTimeout)
+	defer deadline.Stop()
+
+	if hup != nil {
 		select {
 		case <-s.exited:
 			return nil

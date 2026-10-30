@@ -213,9 +213,9 @@ func (w *world) awaitTimer(d time.Duration) {
 	if w.bubbled {
 		w.T.Fatal("awaitTimer reads the stepped clock, which a world inBubble does not have")
 	}
-	guard := time.NewTimer(fakeagent.HangGuard)
-	defer guard.Stop()
-	if seen, ok := w.clock.AwaitTimer(d, guard.C); !ok {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	if seen, ok := w.clock.AwaitTimer(ctx, d); !ok {
 		w.T.Fatalf("awaitTimer(%s): no such timer armed within %s; saw timer durations %v", d, fakeagent.HangGuard, seen)
 	}
 }

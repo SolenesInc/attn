@@ -234,8 +234,9 @@ returns `testworld.Main(m)`.
   `Wait`. The stack interrupts it at cleanup.
 - `s.Advance(d)` moves the stepped clock of that daemon and of every PTY worker
   it started: the bridge's stall, loss, retry and dial-answer timers, and a
-  terminal's kill escalation. Every stack uses this stepped clock. A test
-  waiting for one of those timers without advancing fails at the hang guard.
+  terminal's kill escalation. Every stack uses this stepped clock; the shared
+  PTY host, which is not Go, keeps real time. A test waiting for one of those
+  timers without advancing fails at the hang guard.
   Heartbeats and kernel socket deadlines keep real time, so a dial may still
   fail without an advance. Await the connected or stalled row before advancing
   its liveness timers.

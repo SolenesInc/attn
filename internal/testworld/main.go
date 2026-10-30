@@ -16,9 +16,9 @@ import (
 var processDir string
 
 func Main(m *testing.M, env ...string) int {
-	stepclock.Process()
 	fakessh.Main()
 	fakeagent.Main()
+	stepclock.Process()
 	dir, err := os.MkdirTemp("", "attn-test-process-*")
 	if err != nil {
 		panic("testworld.Main: " + err.Error())

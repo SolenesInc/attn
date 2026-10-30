@@ -2,6 +2,7 @@ package stepclock
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -164,9 +165,9 @@ func (c *Clock) Advance(d time.Duration) {
 }
 
 // AwaitTimer waits until a timer of duration d, armed or reset after the last Advance or AwaitTimer, is pending.
-// When guard closes first it returns false with the durations of the timers pending then.
-func (c *Clock) AwaitTimer(d time.Duration, guard <-chan time.Time) ([]time.Duration, bool) {
-	return c.pending.await(&c.mu, d, guard)
+// When ctx ends first it returns false with the durations of the timers pending then.
+func (c *Clock) AwaitTimer(ctx context.Context, d time.Duration) ([]time.Duration, bool) {
+	return c.pending.await(ctx, &c.mu, d)
 }
 
 // pending tracks armed timers by key, so a waiter can tell a timer armed after its mark from an older one.
@@ -213,7 +214,7 @@ func (p *pending[K]) notify() {
 	p.changed = make(chan struct{})
 }
 
-func (p *pending[K]) await(mu *sync.Mutex, d time.Duration, guard <-chan time.Time) ([]time.Duration, bool) {
+func (p *pending[K]) await(ctx context.Context, mu *sync.Mutex, d time.Duration) ([]time.Duration, bool) {
 	for {
 		mu.Lock()
 		var durations []time.Duration
@@ -229,7 +230,7 @@ func (p *pending[K]) await(mu *sync.Mutex, d time.Duration, guard <-chan time.Ti
 		mu.Unlock()
 		select {
 		case <-changed:
-		case <-guard:
+		case <-ctx.Done():
 			return durations, false
 		}
 	}

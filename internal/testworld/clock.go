@@ -1,6 +1,7 @@
 package testworld
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,9 +69,9 @@ func advanceHub(t testing.TB, hub *stepclock.Hub, d time.Duration) {
 	if d < 0 {
 		t.Fatalf("Advance duration %s is negative", d)
 	}
-	guard := time.NewTimer(fakeagent.HangGuard)
-	defer guard.Stop()
-	if err := hub.Advance(d, guard.C); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	if err := hub.Advance(ctx, d); err != nil {
 		t.Fatalf("Advance(%s): %v within %s", d, err, fakeagent.HangGuard)
 	}
 }
@@ -80,9 +81,9 @@ func awaitHubTimer(t testing.TB, hub *stepclock.Hub, d time.Duration) {
 	if d < 0 {
 		t.Fatalf("AwaitTimer duration %s is negative", d)
 	}
-	guard := time.NewTimer(fakeagent.HangGuard)
-	defer guard.Stop()
-	if pending, ok := hub.AwaitTimer(d, guard.C); !ok {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	if pending, ok := hub.AwaitTimer(ctx, d); !ok {
 		t.Fatalf("AwaitTimer(%s): no such timer armed within %s; timers pending: %v", d, fakeagent.HangGuard, pending)
 	}
 }
