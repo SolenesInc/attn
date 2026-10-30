@@ -243,6 +243,42 @@ func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 	}
 }
 
+func TestNotebookMarkerErrorReachesHomeBeforeOutpostBridgeRegistration(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	writeNotebookFile(t, home, "index.md", "kept through reconnect")
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	home.Stop()
+	outpost.Stop()
+	if err := os.Remove(notebookPath(outpost, ".attn", "notebook-sync")); err != nil {
+		t.Fatal(err)
+	}
+	accept := outpost.PauseAt(pausepoint.OutpostBridgeAccept)
+	reported := outpost.PauseAt(pausepoint.NotebookReportSent)
+	outpost.Start()
+	remoteApp := outpost.App()
+	if reason, _ := remoteApp.Initial.Settings["notebook_sync_last_error"].(string); !strings.Contains(reason, "folder marker missing") {
+		testworld.Await(remoteApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+			reason, _ := m.Settings["notebook_sync_last_error"].(string)
+			return strings.Contains(reason, "folder marker missing")
+		})
+	}
+	home.Start()
+	accept.Await()
+	reported.Await()
+	rows := home.App().Initial.Outposts
+	if len(rows) != 1 || rows[0].Notebook == nil || rows[0].Notebook.State != protocol.OutpostNotebookStateError || !strings.Contains(protocol.Deref(rows[0].Notebook.Error), "folder marker missing") {
+		t.Fatalf("first report did not expose marker error before bridge registration: %+v", rows)
+	}
+	t.Logf("before outpost bridge registration, home row reports %s", protocol.Deref(rows[0].Notebook.Error))
+	reported.Release()
+	accept.Release()
+	if _, err := os.Stat(notebookPath(outpost, ".attn", "notebook-sync")); !os.IsNotExist(err) {
+		t.Fatalf("missing marker was recreated: %v", err)
+	}
+}
+
 func TestNotebookConflictsAndMissingMarkerAreVisibleAfterReconnect(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	writeNotebookFile(t, home, "conflict.md", "baseline")

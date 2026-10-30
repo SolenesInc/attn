@@ -57,6 +57,8 @@ const (
 	CopyBatchStaged            = "copy-batch-staged"
 	CopyBatchApplied           = "copy-batch-applied"
 	NotebookStreamOpen         = "notebook-stream-open"
+	NotebookReportSent         = "notebook-report-sent"
+	OutpostBridgeAccept        = "outpost-bridge-accept"
 	NotebookStreamError        = "notebook-stream-error"
 	NotebookStreamErrorHandled = "notebook-stream-error-handled"
 	BridgeConnectionClosed     = "bridge-connection-closed"

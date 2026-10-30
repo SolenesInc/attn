@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/enrollment"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -133,6 +134,7 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 }
 
 func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
+	pausepoint.At(pausepoint.OutpostBridgeAccept)
 	r := &d.outpost
 	r.mu.Lock()
 	if r.listener != run {
