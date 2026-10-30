@@ -166,10 +166,14 @@ type SimilarHit struct {
 	TitleIndex int
 }
 
-func Similar(titleRows [][]docstore.TextMatch, seeds []Seed, parent string) []SimilarHit {
+func Similar(titleRows [][]docstore.TextMatch, seeds []Seed, excludedIDs []string) []SimilarHit {
+	excluded := map[string]bool{}
+	for _, id := range excludedIDs {
+		excluded[id] = true
+	}
 	open := map[string]Seed{}
 	for _, seed := range seeds {
-		if !Closed(seed.Status) && seed.ID != parent {
+		if !Closed(seed.Status) && !excluded[seed.ID] {
 			open[seed.ID] = seed
 		}
 	}
