@@ -14,7 +14,7 @@ claim to a fresh agent while the previous one keeps running.
 - `delegate-seed`: start a delegate on an existing seed nobody active tends.
 - `handover`: a new session takes over a seed and its claim, with a note; the previous agent keeps running.
 - `roles`: the user's roles, their alternatives and the fallback, kept in revisions with history and rollback.
-- `workflow-skill`: "Add Attn roles" adds attn's own roles and installs the attn-workflow skill they use beside the attn skill.
+- `workflow-skill`: "Add Attn roles" adds attn's own roles and installs the attn-workflow skill they use beside the attn skill. While workflow skills are enabled, daemon startup, executable-setting saves, delegation-preference saves and role launches refresh them. Preference saves include the app, CLI commits and rollback; settings reads leave skill files alone.
 - `delegate-placement`: the delegate opens beside the dispatcher, or on a named desktop, without changing what the user sees.
 - `delegate-checkout`: the machine, folder and Git checkout the delegate works in.
 - `delegation-status`: a stable request id to check or retry a delegation whose answer was lost.

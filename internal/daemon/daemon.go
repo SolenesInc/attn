@@ -645,6 +645,7 @@ func (d *Daemon) Start() error {
 	}
 	d.applyHeadlessContextWindowCap()
 	d.applyHeadlessTasksMode()
+	d.ensureAvailableAgentSkills()
 	pausepoint.At(pausepoint.DaemonEnrollmentLoaded)
 	if err := d.recoverQuickCaptureAssets(); err != nil {
 		d.logf("quick capture asset recovery incomplete: %v", err)

@@ -75,6 +75,7 @@ func (d *Daemon) settingChanged(key, value string) {
 
 	if harness, ok := isAgentExecutableSettingKey(key); ok {
 		d.invalidateHarnessModels(harness)
+		d.ensureAvailableAgentSkills()
 	}
 	if isSessionCostPriceSetting(key) {
 		d.publishSessionCostReprices()
@@ -173,10 +174,6 @@ func isAgentExecutableSettingKey(key string) (agent string, ok bool) {
 	return agent, true
 }
 
-func canonicalExecutableSettingKey(agent string) string {
-	return executableSettingKey(agent)
-}
-
 func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	stored := d.settingValues()
 	settings := make(map[string]interface{}, len(stored)+8)
@@ -189,20 +186,8 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		if driver == nil || !d.agentOffered(name) {
 			continue
 		}
-		execKey := canonicalExecutableSettingKey(name)
-		configured := strings.TrimSpace(stored[execKey])
-		if configured == "" {
-			configured = strings.TrimSpace(stored[executableSettingKey(name)])
-		}
-		available := d.isAgentExecutableAvailable(driver, configured)
+		available := d.isAgentExecutableAvailable(driver, "")
 		settings[availabilitySettingKey(name)] = strconv.FormatBool(available)
-		if available {
-			if synced, err := agentdriver.EnsureAttnSkillInstalled(name); err != nil {
-				d.logf("failed to ensure %s attn skill: %v", name, err)
-			} else if !synced {
-				d.logf("skipping user-global %s attn skill sync for instance %q", name, config.InstanceLabel())
-			}
-		}
 
 		caps := agentdriver.EffectiveCapabilities(driver)
 		settings[capabilitySettingKey(name, "hooks")] = strconv.FormatBool(caps.HasHooks)
@@ -219,19 +204,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		settings[availabilitySettingKey(driver.Agent)] = "true"
 		for capability, enabled := range driver.Capabilities {
 			settings[capabilitySettingKey(driver.Agent, capability)] = strconv.FormatBool(enabled)
-		}
-	}
-	if cfg, err := d.store.GetDelegationPreferences(); err == nil && cfg.WorkflowSkillEnabled {
-		var harnesses []string
-		for _, harness := range d.delegationHarnesses() {
-			if harness.Available {
-				harnesses = append(harnesses, harness.ID)
-			}
-		}
-		if _, synced, err := agentdriver.EnsureWorkflowSkillsInstalled(harnesses); err != nil {
-			d.logf("failed to ensure attn-workflow skill: %v", err)
-		} else if !synced {
-			d.logf("skipping user-global attn-workflow skill sync for instance %q", config.InstanceLabel())
 		}
 	}
 

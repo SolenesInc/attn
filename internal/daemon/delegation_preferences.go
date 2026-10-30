@@ -115,6 +115,9 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 		result.ExpandedRoles = append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...)
 		result.Harnesses = d.delegationHarnesses()
 		result.Templates = prompts.DelegationRoleTemplates()
+		if !protocol.Deref(msg.InstallWorkflowSkill) {
+			d.ensureEnabledWorkflowSkills()
+		}
 		d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
 	}
 	d.sendToClient(client, result)
@@ -146,6 +149,7 @@ func (d *Daemon) handleDelegationPreferencesCommit(conn net.Conn, msg *protocol.
 		d.replyDelegationPreferencesError(conn, err)
 		return
 	}
+	d.ensureEnabledWorkflowSkills()
 	d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
 	d.replyDelegationPreferencesRevision(conn, saved)
 }
@@ -173,6 +177,7 @@ func (d *Daemon) handleDelegationPreferencesRollback(conn net.Conn, msg *protoco
 		d.replyDelegationPreferencesError(conn, err)
 		return
 	}
+	d.ensureEnabledWorkflowSkills()
 	d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
 	d.replyDelegationPreferencesRevision(conn, restored)
 }
