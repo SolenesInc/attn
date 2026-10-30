@@ -2,12 +2,14 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"syscall"
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -80,13 +82,20 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	d.stopOutpostDial(id)
 	if action == "remove" {
 		remote := d.outpostSSH(*row)
-		ctx, cancel := context.WithTimeout(d.life.Context(), bridge.LostAfter)
-		if err := remote.Remove(ctx); err != nil {
-			instance := config.InstanceLabel()
-			path := remote.InstallPath()
-			removeError = fmt.Errorf("removed %s from this home, but could not stop it over ssh: %v; its daemon and shells may still be running; on %s run ATTN_INSTANCE=%s %s enrollment leave && ATTN_INSTANCE=%s %s daemon stop", row.Name, err, row.Destination, instance, path, instance, path)
+		r.mu.Lock()
+		run := r.dialers[id]
+		var refusal *bridge.Refusal
+		duplicate := run != nil && errors.As(run.lastError, &refusal) && refusal.Reason == "duplicate"
+		r.mu.Unlock()
+		if !duplicate {
+			ctx, cancel := context.WithTimeout(d.life.Context(), bridge.LostAfter)
+			if err := remote.Remove(ctx); err != nil {
+				instance := config.InstanceLabel()
+				path := remote.InstallPath()
+				removeError = fmt.Errorf("removed %s from this home, but could not stop it over ssh: %v; its daemon and shells may still be running; on %s run ATTN_INSTANCE=%s %s enrollment leave && ATTN_INSTANCE=%s %s daemon stop", row.Name, err, row.Destination, instance, path, instance, path)
+			}
+			cancel()
 		}
-		cancel()
 		if exitErr := remote.ExitMaster(d.life.Context()); exitErr != nil {
 			d.logf("stop removed outpost master: %v", exitErr)
 		}
@@ -156,8 +165,13 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 			if run.build != "" {
 				info.Build = protocol.Ptr(run.build)
 			}
-			if run.lastError != "" {
-				info.LastError = protocol.Ptr(run.lastError)
+			if run.lastError != nil {
+				detail := run.lastError.Error()
+				var sshError *outpostssh.Error
+				if errors.As(run.lastError, &sshError) {
+					detail = sshError.Stderr
+				}
+				info.LastError = protocol.Ptr(detail)
 				info.LastErrorAt = protocol.Ptr(run.lastErrorAt)
 			}
 		}

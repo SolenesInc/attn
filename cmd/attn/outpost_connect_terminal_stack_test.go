@@ -129,8 +129,16 @@ func TestSSHConnectionTerminalFailureCanBeRetried(t *testing.T) {
 	if next.ID == first.ID {
 		t.Fatal("retry reused exited terminal")
 	}
+	resume := pair.SSH.Pause(pair.Destination)
+	defer resume()
+	mark := app.EventCount()
 	app.TypeLine(string(next.ID), "yes")
-	outpostState(app, "outpost", protocol.OutpostStateConnected)
+	connecting := outpostStateSince(app, "outpost", protocol.OutpostStateConnecting, mark)
+	if protocol.Deref(connecting.LastError) != protocol.Deref(row.LastError) || protocol.Deref(connecting.LastErrorAt) != protocol.Deref(row.LastErrorAt) {
+		t.Fatalf("connection cleared the last error before success: before=%+v after=%+v", row, connecting)
+	}
+	resume()
+	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	assertConnectionTerminalAbsentFromLedger(t, app, first.ID)
 	assertConnectionTerminalAbsentFromLedger(t, app, next.ID)
 	t.Log("no -> exit 255 keeps refusal and tile; another attempt accepts yes and connects")

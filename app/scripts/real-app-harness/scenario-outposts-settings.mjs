@@ -22,7 +22,7 @@ const options = parseCommonArgs(process.argv.slice(2));
 const instance = currentHarnessInstance();
 if (!instance) throw new Error('Outposts settings verification requires a named instance');
 const runner = createScenarioRunner(options, { scenarioId: 'OutpostsSettings', tier: 'local', prefix: 'outposts-settings', allowRealAgents: false });
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-bridge-'));
+const root = fs.mkdtempSync(path.join(os.platform() === 'darwin' ? '/private/tmp' : os.tmpdir(), 'attn-bridge-'));
 const ssh = await outpostSsh(root);
 const client = new UiAutomationClient({ ...options, launchEnv: ssh.env });
 const observer = new DaemonObserver(options);
@@ -155,9 +155,6 @@ try {
   await launchFreshAppAndConnect(client, observer);
   await removeScenarioOutposts();
   runner.registerCleanup('remove_scenario_outposts', removeScenarioOutposts);
-  const window = await client.request('get_window_bounds');
-  await client.request('set_window_bounds', { logicalBounds: { ...window.logicalBounds, x: 0, y: 0, width: 1200, height: 800 } });
-  await driver.activateApp();
   const previous = observer.getSetting('outposts_enabled');
   runner.registerCleanup('restore_switch', () => client.request('set_setting', { key: 'outposts_enabled', value: previous }));
   await client.request('set_setting', { key: 'outposts_enabled', value: 'false' });

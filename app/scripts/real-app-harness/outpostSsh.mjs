@@ -15,7 +15,8 @@ export async function outpostSsh(root) {
   const routesFile = path.join(root, 'ssh-routes.json');
   const routes = {}, servers = [], children = new Set(), connections = new Set();
   const controlRoot = path.join(root, 'masters');
-  const env = { PATH: `${bin}:${process.env.PATH}`, ATTN_TESTWORLD_SSH_ROUTES: routesFile, ATTN_HARNESS_CONTROL_ROOT: controlRoot, ATTN_HARNESS_DATA_DIR: root };
+  fs.mkdirSync(controlRoot);
+  const env = { PATH: `${bin}:${process.env.PATH}`, ATTN_TESTWORLD_SSH_ROUTES: routesFile, ATTN_TESTWORLD_SSH_CONTROL_ROOT: controlRoot };
   const save = () => { fs.writeFileSync(`${routesFile}.next`, JSON.stringify(routes)); fs.renameSync(`${routesFile}.next`, routesFile); };
   save();
   return {

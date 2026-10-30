@@ -186,19 +186,26 @@ try {
   await runner.step('missing_build_offers_row_update', async () => {
     await press('[aria-label="Dismiss outpost updates"]');
     await wait(banner, { absent: true });
-    fs.unlinkSync(target);
-    await client.request('dispatch_shortcut', {
-      shortcutId: 'ui.openSettings',
+    await client.request('set_setting', {
+      key: 'outposts_enabled',
+      value: 'false',
     });
-    await press('[data-testid="settings-nav-outposts"]');
+    fs.unlinkSync(target);
     const refused = receive(
       (r) =>
         r.id === outpostId &&
         r.state === 'refused' &&
         r.build === 'nothing installed',
     );
-    await press(`${row} .settings-outpost-actions button:nth-last-child(2)`);
+    await client.request('set_setting', {
+      key: 'outposts_enabled',
+      value: 'true',
+    });
     await refused;
+    await client.request('dispatch_shortcut', {
+      shortcutId: 'ui.openSettings',
+    });
+    await press('[data-testid="settings-nav-outposts"]');
     await wait(`${row} .settings-outpost-actions button:first-child`, {
       textIncludes: 'Update to home build',
     });

@@ -25,9 +25,8 @@ type outpostDial struct {
 	state          bridge.State
 	since          string
 	build          string
-	lastError      string
+	lastError      error
 	lastErrorAt    string
-	errorKind      string
 	connectable    bool
 	notebook       *protocol.OutpostNotebook
 	notebookRoot   string
@@ -114,14 +113,14 @@ func (d *Daemon) startOutpostDial(row store.Outpost) {
 	if r.dialers == nil {
 		r.dialers = make(map[string]*outpostDial)
 	}
+	commands, lookupErr := d.store.UnfinishedOutpostTerminals(row.ID)
 	if previous := r.dialers[row.ID]; previous != nil {
-		run.build, run.lastError, run.lastErrorAt, run.errorKind = previous.build, previous.lastError, previous.lastErrorAt, previous.errorKind
+		run.build, run.lastError, run.lastErrorAt = previous.build, previous.lastError, previous.lastErrorAt
 		run.connectable = previous.connectable
-		if previous.state == bridge.StateRefused {
+		if len(commands) > 0 && previous.state == bridge.StateRefused {
 			run.state, run.since = previous.state, previous.since
 		}
 	}
-	commands, lookupErr := d.store.UnfinishedOutpostTerminals(row.ID)
 	if len(commands) > 0 {
 		run.commandSession = commands[0]
 		run.commandExit = make(chan int, 1)
@@ -172,19 +171,16 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 		run.build = build
 		changed = true
 	}
-	if state == bridge.StateConnected && run.lastError != "" {
-		run.lastError, run.lastErrorAt, run.errorKind = "", "", ""
+	if state == bridge.StateConnected && run.lastError != nil {
+		run.lastError, run.lastErrorAt = nil, ""
 		changed = true
 	}
 	if err != nil {
-		run.lastError = err.Error()
-		if sshError != nil {
-			run.lastError = sshError.Stderr
-		}
-		if kind := bridge.ErrorKind(err); kind != run.errorKind {
-			run.errorKind, run.lastErrorAt = kind, time.Now().UTC().Format(time.RFC3339Nano)
+		if bridge.ErrorKind(err) != bridge.ErrorKind(run.lastError) {
+			run.lastErrorAt = time.Now().UTC().Format(time.RFC3339Nano)
 			changed = true
 		}
+		run.lastError = err
 	}
 	if changed {
 		r.notifyChangedLocked()
@@ -227,6 +223,9 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		case code := <-run.commandExit:
 			if code != 0 && !waitOutpostRetry(ctx, bridge.LostAfter) {
 				return
+			}
+			if code == 0 {
+				d.updateOutpost(row.ID, run, bridge.StateConnecting, "", nil)
 			}
 		}
 	}
@@ -400,7 +399,7 @@ func (d *Daemon) outpostConflict(id, hostKey, daemonID string) *bridge.Refusal {
 	}
 	for _, row := range rows {
 		if row.ID != id && (hostKey != "" && row.HostKey == hostKey || daemonID != "" && row.DaemonID == daemonID) {
-			return &bridge.Refusal{Reason: "identity", Detail: fmt.Sprintf("same outpost as %s (%s), daemon %s; remove one of these outpost rows", row.Name, row.Destination, row.DaemonID)}
+			return &bridge.Refusal{Reason: "duplicate", Detail: fmt.Sprintf("same outpost as %s (%s), daemon %s; remove one of these outpost rows", row.Name, row.Destination, row.DaemonID)}
 		}
 	}
 	return nil

@@ -11,7 +11,7 @@ import { promisify } from 'node:util';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 
@@ -42,6 +42,14 @@ const rows = [];
 const selector = '.settings-outpost[aria-label="Studio"]';
 const wait = (extra) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
 const receive = (predicate) => observer.waitForMessage(message => message.event === 'outposts_updated' && message.outposts.find(row => row.name === 'Studio' && predicate(row.notebook)), 'Notebook state', observer.connectTimeoutMs);
+registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ outpost: selector, navigation: '[data-testid="settings-nav-outposts"]' }) });
+async function showOutposts() {
+  const selector = '[data-testid="settings-nav-outposts"]';
+  await client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs });
+  await client.request('dom_focus', { selector });
+  await driver.pressEnter();
+  await client.request('dom_wait', { selector: `${selector}.active`, timeoutMs: observer.connectTimeoutMs });
+}
 const shot = async name => {
   await client.request('dom_scroll_into_view', { selector: `${selector} .settings-outpost-notebook` });
   return driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
@@ -90,25 +98,22 @@ try {
   const previousRoot = observer.getSetting('notebook.root');
   await run(binary, ['settings', 'set', 'notebook.root', homeRoot]);
   runner.registerCleanup('restore_home_root', async () => {
-    await client.request('set_setting', { key: 'outposts_enabled', value: 'true' });
+    await run(binary, ['settings', 'set', 'outposts_enabled', 'true']);
     const owned = observer.outposts.find(row => row.destination === destination);
     if (owned) {
       const removed = observer.waitForMessage(message => message.event === 'outposts_updated' && !message.outposts.some(row => row.id === owned.id), 'removed scenario outpost');
       observer.send({ cmd: 'remove_outpost', id: owned.id });
       await removed;
     }
-    await client.request('set_setting', { key: 'outposts_enabled', value: 'false' });
+    await run(binary, ['settings', 'set', 'outposts_enabled', 'false']);
     await run(binary, ['settings', 'set', 'notebook.root', previousRoot]);
   });
-  const bounds = await client.request('get_window_bounds');
-  await client.request('set_window_bounds', { logicalBounds: { ...bounds.logicalBounds, x: 0, y: 0, width: 1200, height: 800 } });
   observer.ws.on('message', raw => {
     try { const message = JSON.parse(raw.toString()); if (message.event === 'outposts_updated') rows.push(message); } catch {}
   });
   await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
-  await client.request('set_setting', { key: 'outposts_enabled', value: 'true' });
-  await client.request('dom_focus', { selector: '[data-testid="settings-nav-outposts"]' });
-  await driver.pressEnter();
+  await run(binary, ['settings', 'set', 'outposts_enabled', 'true']);
+  await showOutposts();
   await runner.step('first_sync_and_saved_previous_folder', async () => {
     const first = receive(notebook => notebook?.state === 'first_sync' && notebook.need_items > 0 && notebook.previous_root).then(row => { outpost.kill('SIGSTOP'); return row; });
     observer.send({ cmd: 'add_outpost', name: 'Studio', destination });
@@ -125,14 +130,15 @@ try {
     await shot('02-in-sync');
   });
   await runner.step('conflicting_offline_edits_keep_both_versions', async () => {
-    await client.request('set_setting', { key: 'outposts_enabled', value: 'false' });
+    await run(binary, ['settings', 'set', 'outposts_enabled', 'false']);
+    await client.request('dom_wait', { selector: '[data-testid="settings-nav-outposts"]', absent: true, timeoutMs: observer.connectTimeoutMs });
 
     fs.writeFileSync(path.join(homeRoot, 'conflict.md'), 'home edit');
     fs.writeFileSync(path.join(outpostRoot, 'conflict.md'), 'outpost edit');
     const conflicted = receive(notebook => notebook?.conflicts === 1);
 
-    await client.request('set_setting', { key: 'outposts_enabled', value: 'true' });
-    await client.request('dom_focus', { selector: '[data-testid="settings-nav-outposts"]' }); await driver.pressEnter();
+    await run(binary, ['settings', 'set', 'outposts_enabled', 'true']);
+    await showOutposts();
     await conflicted;
     await wait({ textIncludes: '1 conflict copy' });
     const copies = fs.readdirSync(homeRoot).filter(name => name.includes('.sync-conflict-'));
@@ -148,11 +154,13 @@ try {
     await cleared;
     await wait({ textIncludes: 'Notebook: in sync' });
 
-    await client.request('set_setting', { key: 'outposts_enabled', value: 'false' });
+    await run(binary, ['settings', 'set', 'outposts_enabled', 'false']);
+    await client.request('dom_wait', { selector: '[data-testid="settings-nav-outposts"]', absent: true, timeoutMs: observer.connectTimeoutMs });
     fs.unlinkSync(path.join(outpostRoot, '.attn', 'notebook-sync'));
     const failed = receive(notebook => notebook?.state === 'error' && notebook.error?.includes('folder marker missing'));
 
-    await client.request('set_setting', { key: 'outposts_enabled', value: 'true' });
+    await run(binary, ['settings', 'set', 'outposts_enabled', 'true']);
+    await showOutposts();
     const row = await failed;
     runner.assert(row.notebook.error.includes('folder marker missing'), 'sync error names the cause', row);
     await wait({ textIncludes: 'folder marker missing' });

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -260,6 +261,9 @@ func TestOutpostsAddressAliasDoesNotReplaceTheWorkingBridge(t *testing.T) {
 	p := enableOutposts(t, home)
 	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "original", Destination: address})
 	first := outpostState(p, "original", protocol.OutpostStateConnected)
+	shell := home.Spawn(p, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &first.ID })
+	p.TypeLine(shell, "alias_token=kept; echo alias-ready-$((1+1))")
+	p.AwaitScreen(shell, "alias-ready-2")
 	a.Route("alias", remote)
 	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "alias", Destination: "alias"})
 	refused := outpostState(p, "alias", protocol.OutpostStateRefused)
@@ -269,6 +273,19 @@ func TestOutpostsAddressAliasDoesNotReplaceTheWorkingBridge(t *testing.T) {
 	for _, row := range home.App().Initial.Outposts {
 		if row.ID == first.ID && (row.State != protocol.OutpostStateConnected || row.StateSince != first.StateSince) {
 			t.Fatalf("alias replaced the working bridge: before=%+v after=%+v", first, row)
+		}
+	}
+	mark := p.EventCount()
+	p.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: refused.ID})
+	testworld.AwaitSince[protocol.OutpostsUpdatedMessage](p, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+		return len(m.Outposts) == 1 && m.Outposts[0].ID == first.ID
+	})
+	requireStdout(t, remote.Attn("enrollment", "status"), protocol.Deref(p.Initial.DaemonInstanceID))
+	p.TypeLine(shell, "echo alias-survived-$alias_token")
+	p.AwaitScreen(shell, "alias-survived-kept")
+	for _, row := range home.App().Initial.Outposts {
+		if row.ID == first.ID && (row.State != protocol.OutpostStateConnected || row.StateSince != first.StateSince) {
+			t.Fatalf("removing the alias interrupted the working bridge: before=%+v after=%+v", first, row)
 		}
 	}
 }
