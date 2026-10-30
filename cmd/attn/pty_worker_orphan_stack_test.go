@@ -16,7 +16,7 @@ import (
 func TestAWorkerWhoseDaemonNeverReturnsEndsItsProgramAfterTheOrphanTTL(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
-	s.StartWith("ATTN_WORKER_ORPHAN_TTL=1s")
+	s.Start()
 	app := s.App()
 	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 	held := filepath.Join(s.Dir, "held")
@@ -35,6 +35,13 @@ func TestAWorkerWhoseDaemonNeverReturnsEndsItsProgramAfterTheOrphanTTL(t *testin
 	app.TypeLine(shell, "exec 3>"+held+"; echo held-$((6*7))")
 	app.AwaitScreen(shell, "held-42")
 	s.Stop()
+	s.AwaitTimer(orphanedWorkerTTL)
+	select {
+	case <-gone:
+		t.Fatalf("the shell ended before its worker's %s orphan TTL", orphanedWorkerTTL)
+	default:
+	}
+	s.Advance(orphanedWorkerTTL)
 
 	select {
 	case err := <-gone:
@@ -42,6 +49,8 @@ func TestAWorkerWhoseDaemonNeverReturnsEndsItsProgramAfterTheOrphanTTL(t *testin
 			t.Fatal(err)
 		}
 	case <-time.After(2 * fakeagent.HangGuard):
-		t.Fatalf("the shell still runs %s after its daemon stopped, want its worker gone after the 1s orphan TTL", 2*fakeagent.HangGuard)
+		t.Fatalf("the shell still runs %s after its worker's %s orphan TTL passed", 2*fakeagent.HangGuard, orphanedWorkerTTL)
 	}
 }
+
+const orphanedWorkerTTL = 12 * time.Hour

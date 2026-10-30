@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/stepclock"
 	"net"
 	"os"
 	"path/filepath"
@@ -61,11 +62,9 @@ func attachBlocksToWire(blocks []pty.AttachBlockData) []AttachBlock {
 	return out
 }
 
-var exitedSessionCleanupTTL = 45 * time.Second
+const exitedSessionCleanupTTL = 45 * time.Second
 
-var orphanedWorkerTTL = 12 * time.Hour
-
-const orphanTTLEnvVar = "ATTN_WORKER_ORPHAN_TTL"
+const orphanedWorkerTTL = 12 * time.Hour
 
 const orphanActivitySubscriberID = "worker-orphan-activity"
 
@@ -149,10 +148,10 @@ type Runtime struct {
 	lifecycleMu sync.Mutex
 	authedConns int
 	exited      bool
-	cleanupTTL  *time.Timer
+	cleanupTTL  stepclock.Timer
 
-	orphanTTL      time.Duration
-	orphanTimer    *time.Timer
+	clock          *stepclock.Clock
+	orphanTimer    stepclock.Timer
 	lastOutputNano atomic.Int64
 
 	connSeq atomic.Uint64
@@ -204,14 +203,7 @@ func Run(ctx context.Context, cfg Config) error {
 		stopCh:    make(chan struct{}),
 		logf:      logf,
 		watchConn: make(map[*connCtx]struct{}),
-		orphanTTL: orphanedWorkerTTL,
-	}
-	if v := strings.TrimSpace(os.Getenv(orphanTTLEnvVar)); v != "" {
-		if d, err := time.ParseDuration(v); err == nil && d >= 0 {
-			rt.orphanTTL = d
-		} else {
-			logf("worker orphan ttl: ignoring invalid %s=%q: %v", orphanTTLEnvVar, v, err)
-		}
+		clock:     stepclock.Process(),
 	}
 	return rt.run(ctx)
 }
@@ -538,7 +530,7 @@ func (r *Runtime) noteConnClosed() {
 }
 
 func (r *Runtime) noteOutputActivity() {
-	r.lastOutputNano.Store(time.Now().UnixNano())
+	r.lastOutputNano.Store(r.clock.Now().UnixNano())
 }
 
 func (r *Runtime) armOrphanWatch() {
@@ -555,10 +547,10 @@ func (r *Runtime) stopOrphanTimerLocked() {
 }
 
 func (r *Runtime) maybeScheduleOrphanLocked() {
-	if r.orphanTTL <= 0 || r.exited || r.authedConns != 0 || r.orphanTimer != nil {
+	if r.exited || r.authedConns != 0 || r.orphanTimer != nil {
 		return
 	}
-	r.orphanTimer = time.AfterFunc(r.orphanTTL, r.orphanDeadlineFired)
+	r.orphanTimer = r.clock.AfterFunc(orphanedWorkerTTL, r.orphanDeadlineFired)
 }
 
 func (r *Runtime) orphanDeadlineFired() {
@@ -568,15 +560,15 @@ func (r *Runtime) orphanDeadlineFired() {
 		r.lifecycleMu.Unlock()
 		return
 	}
-	idle := time.Since(time.Unix(0, r.lastOutputNano.Load()))
-	if idle < r.orphanTTL {
-		r.orphanTimer = time.AfterFunc(r.orphanTTL-idle, r.orphanDeadlineFired)
+	idle := r.clock.Now().Sub(time.Unix(0, r.lastOutputNano.Load()))
+	if idle < orphanedWorkerTTL {
+		r.orphanTimer = r.clock.AfterFunc(orphanedWorkerTTL-idle, r.orphanDeadlineFired)
 		r.lifecycleMu.Unlock()
 		return
 	}
 	r.lifecycleMu.Unlock()
 	if r.logf != nil {
-		r.logf("worker orphaned: session=%s no daemon connection and no output for %s; stopping", r.cfg.SessionID, r.orphanTTL)
+		r.logf("worker orphaned: session=%s no daemon connection and no output for %s; stopping", r.cfg.SessionID, orphanedWorkerTTL)
 	}
 	r.requestStop()
 }
@@ -585,7 +577,7 @@ func (r *Runtime) maybeScheduleCleanupLocked() {
 	if !r.exited || r.authedConns != 0 || r.cleanupTTL != nil {
 		return
 	}
-	r.cleanupTTL = time.AfterFunc(exitedSessionCleanupTTL, func() {
+	r.cleanupTTL = r.clock.AfterFunc(exitedSessionCleanupTTL, func() {
 		r.lifecycleMu.Lock()
 		r.cleanupTTL = nil
 		shouldStop := r.exited && r.authedConns == 0
