@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/daemon"
@@ -41,6 +42,7 @@ func TestAttnPressesEnterOnItsPasteOnlyAfterTheHarnessHadTimeToTakeIt(t *testing
 		app, cli := w.App(), w.Client()
 		recipient := w.bubbleClaude(t, app, "shop")
 		registerSessions(t, w, cli, "sender")
+		synctest.Wait()
 		sendAgentMessage(t, cli, "sender", recipient.id, "the migration landed")
 
 		inputs := recipient.term.Inputs()
