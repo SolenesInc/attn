@@ -161,6 +161,7 @@ nap                     ends the member's session and starts a new one from
 ```text
 automation              a prompt that attn starts on its own
 ├─ trigger (1)          a schedule or an event, like a PR review request
+│  └─ guard (at most 1) a shell command that decides whether a due tick starts a run
 ├─ launch desktop (1)   the desktop where its sessions start
 ├─ continuity (1)       which session takes the next occurrence:
 │                       a new one each time, one per subject, or one only

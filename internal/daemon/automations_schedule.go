@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
@@ -31,12 +32,12 @@ func automationScheduleInterval() time.Duration {
 	return defaultAutomationScheduleInterval
 }
 
-func (d *Daemon) automationScheduleHandler(_ context.Context, _ *jobs.Job) (any, error) {
-	d.observeDueSchedules(time.Now())
+func (d *Daemon) automationScheduleHandler(ctx context.Context, _ *jobs.Job) (any, error) {
+	d.observeDueSchedules(ctx, time.Now())
 	return nil, nil
 }
 
-func (d *Daemon) observeDueSchedules(now time.Time) {
+func (d *Daemon) observeDueSchedules(ctx context.Context, now time.Time) {
 	if d.isRecovering() {
 		return
 	}
@@ -56,6 +57,7 @@ func (d *Daemon) observeDueSchedules(now time.Time) {
 		d.logf("automation schedule observation list definitions: %v", err)
 		return
 	}
+	var due []*dueAutomationSchedule
 	for i := range definitions {
 		definition := definitions[i]
 		if !definition.Enabled {
@@ -69,30 +71,113 @@ func (d *Daemon) observeDueSchedules(now time.Time) {
 		if spec.Trigger.Type != "scheduled" {
 			continue
 		}
-		d.observeDueSchedule(definition, spec, now)
+		if item := d.dueAutomationSchedule(definition, spec, now); item != nil {
+			due = append(due, item)
+		}
+	}
+	var checks sync.WaitGroup
+	var env []string
+	for _, item := range due {
+		if item.spec.Trigger.Guard == "" {
+			continue
+		}
+		if env == nil {
+			env = d.loginShellEnvironment()
+		}
+		checks.Add(1)
+		if !d.life.Go("automationGuard", func() {
+			defer checks.Done()
+			item.result = automation.RunGuard(ctx, item.spec.Location.Path, env, item.spec.Trigger.Guard)
+			item.checked = true
+		}) {
+			checks.Done()
+		}
+	}
+	checks.Wait()
+	for _, item := range due {
+		if item.spec.Trigger.Guard != "" {
+			if !item.checked {
+				continue
+			}
+			launch, err := d.recordAutomationGuardDecision(item, now)
+			if err != nil {
+				d.logf("automation guard check %d: %v", item.definition.ID, err)
+				continue
+			}
+			if !launch {
+				d.advanceAutomationSchedule(item.definition.ID, now)
+				continue
+			}
+		}
+		if err := d.claimAndDeliverScheduledRun(item.definition, item.spec, item.intended, now, item.result.Output); err != nil {
+			continue
+		}
+		d.advanceAutomationSchedule(item.definition.ID, now)
 	}
 }
 
-func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec automation.DefinitionSpec, now time.Time) {
+type dueAutomationSchedule struct {
+	definition store.AutomationDefinition
+	spec       automation.DefinitionSpec
+	intended   time.Time
+	result     automation.GuardResult
+	checked    bool
+}
+
+func (d *Daemon) recordAutomationGuardDecision(item *dueAutomationSchedule, now time.Time) (bool, error) {
+	previous, err := d.store.GetAutomationGuardCheck(item.definition.ID)
+	if err != nil {
+		return false, err
+	}
+	handled := ""
+	if previous != nil && previous.Guard == item.spec.Trigger.Guard && (previous.HandledRunState == store.AutomationRunStatePending || previous.HandledRunState == store.AutomationRunStateDelivered) {
+		handled = previous.HandledOutput
+	}
+	outcome := ""
+	switch {
+	case item.result.Failure != "":
+		outcome = "failed"
+		d.logf("automation guard %d failed: %s", item.definition.ID, item.result.Failure)
+	case item.result.Output == "":
+		outcome = "empty"
+	case item.result.Output == handled:
+		outcome = "unchanged"
+	default:
+		return true, nil
+	}
+	if err := d.store.RecordAutomationGuardSkip(item.definition.ID, item.spec.Trigger.Guard, outcome, item.result.Failure, now); err != nil {
+		return false, err
+	}
+	d.broadcastAutomationsChanged(item.definition.ID)
+	return false, nil
+}
+
+func (d *Daemon) advanceAutomationSchedule(definitionID int, now time.Time) {
+	if err := d.store.SetAutomationScheduleCursor(definitionID, now); err != nil {
+		d.logf("automation schedule observation advance %d: %v", definitionID, err)
+	}
+}
+
+func (d *Daemon) dueAutomationSchedule(definition store.AutomationDefinition, spec automation.DefinitionSpec, now time.Time) *dueAutomationSchedule {
 	if spec.Trigger.Schedule == nil {
 		d.logf("automation schedule observation %d: scheduled trigger has no schedule", definition.ID)
-		return
+		return nil
 	}
 	compiled, err := automation.CompileSchedule(*spec.Trigger.Schedule)
 	if err != nil {
 		d.logf("automation schedule observation compile %d: %v", definition.ID, err)
-		return
+		return nil
 	}
 	cursor, ok, err := d.store.GetAutomationScheduleCursor(definition.ID)
 	if err != nil {
 		d.logf("automation schedule observation cursor %d: %v", definition.ID, err)
-		return
+		return nil
 	}
 	if !ok {
 		if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
 			d.logf("automation schedule observation anchor %d: %v", definition.ID, err)
 		}
-		return
+		return nil
 	}
 	instants, ok := compiled.DueInstants(cursor, now, scheduleDueInstantCap)
 	if !ok {
@@ -100,30 +185,29 @@ func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec 
 		if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
 			d.logf("automation schedule observation advance %d: %v", definition.ID, err)
 		}
-		return
+		return nil
 	}
 	if len(instants) == 0 {
-		return
+		return nil
 	}
 	intended := instants[len(instants)-1]
 	fire := true
 	if spec.Trigger.CatchUp == "skip" {
 		fire = now.Sub(intended) <= scheduleSkipGrace
 	}
-	if fire {
-		if claimErr := d.claimAndDeliverScheduledRun(definition, spec, intended, now); claimErr != nil {
-			return
-		}
+	if !fire {
+		d.advanceAutomationSchedule(definition.ID, now)
+		return nil
 	}
-	if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
-		d.logf("automation schedule observation advance %d: %v", definition.ID, err)
-	}
+	return &dueAutomationSchedule{definition: definition, spec: spec, intended: intended}
 }
 
-func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefinition, spec automation.DefinitionSpec, intended, observedAt time.Time) error {
+func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefinition, spec automation.DefinitionSpec, intended, observedAt time.Time, guardOutput string) error {
 	observationLock := d.automationObservationLock(definition.ID, "schedule", 0)
 	observationLock.Lock()
-	payload, err := json.Marshal(automation.NewScheduledInput(intended, observedAt))
+	input := automation.NewScheduledInput(intended, observedAt)
+	input.GuardOutput = guardOutput
+	payload, err := json.Marshal(input)
 	if err != nil {
 		observationLock.Unlock()
 		d.logf("automation schedule observation payload %d: %v", definition.ID, err)
@@ -151,7 +235,11 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 		observationLock.Unlock()
 		return claimErr
 	}
-	run, _, claimErr := d.store.ClaimScheduledAutomationRun(definition.ID, automation.ScheduledOccurrenceKey(intended), continuityKey, definition.Revision, string(payload), string(snapshotJSON), observedAt, reservation)
+	var guardCheck *store.AutomationGuardCheck
+	if spec.Trigger.Guard != "" {
+		guardCheck = &store.AutomationGuardCheck{Guard: spec.Trigger.Guard, HandledOutput: guardOutput}
+	}
+	run, _, claimErr := d.store.ClaimScheduledAutomationRun(definition.ID, automation.ScheduledOccurrenceKey(intended), continuityKey, definition.Revision, string(payload), string(snapshotJSON), observedAt, reservation, guardCheck)
 	observationLock.Unlock()
 	if claimErr != nil {
 		d.logf("automation schedule observation claim %d: %v", definition.ID, claimErr)

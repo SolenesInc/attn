@@ -284,6 +284,21 @@ func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition
 		d.logf("automation definition summary parse %d: %v", def.ID, err)
 		return summary
 	}
+	if spec.Trigger.Guard != "" {
+		check, err := d.store.GetAutomationGuardCheck(def.ID)
+		if err != nil {
+			d.logf("automation guard summary %d: %v", def.ID, err)
+		} else if check != nil {
+			summary.GuardCheck = &protocol.AutomationGuardCheck{
+				CheckedAt:      string(protocol.NewTimestamp(check.CheckedAt)),
+				Outcome:        check.Outcome,
+				ChecksSinceRun: check.ChecksSinceRun,
+			}
+			if check.Detail != "" {
+				summary.GuardCheck.Detail = protocol.Ptr(check.Detail)
+			}
+		}
+	}
 	summary.TriggerType = spec.Trigger.Type
 	if spec.Trigger.Schedule != nil {
 		summary.ScheduleCron = protocol.Ptr(spec.Trigger.Schedule.Cron)

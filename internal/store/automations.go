@@ -649,7 +649,7 @@ func (s *Store) ClaimManualAutomationRun(definitionID int, requestID, subjectKey
 	return run, true, e
 }
 
-func (s *Store) ClaimScheduledAutomationRun(definitionID int, occurrenceKey, continuityKey string, expectedRevision int, payloadJSON, snapshotJSON string, observedAt time.Time, reservation AutomationRunReservation) (*AutomationRun, bool, error) {
+func (s *Store) ClaimScheduledAutomationRun(definitionID int, occurrenceKey, continuityKey string, expectedRevision int, payloadJSON, snapshotJSON string, observedAt time.Time, reservation AutomationRunReservation, guardCheck *AutomationGuardCheck) (*AutomationRun, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -699,6 +699,9 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID int, occurrenceKey, con
 		return nil, false, err
 	}
 	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
+		return nil, false, err
+	}
+	if err = recordAutomationGuardLaunchTx(tx, definitionID, guardCheck, ids.RunID, observedAt); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {

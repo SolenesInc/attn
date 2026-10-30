@@ -4500,6 +4500,14 @@ model AutomationDefinitionSummary {
   schedule_time_zone?: string;
   updated_at: string;
   last_run?: AutomationRunSummary;
+  guard_check?: AutomationGuardCheck;
+}
+
+model AutomationGuardCheck {
+  checked_at: string;
+  outcome: string;
+  detail?: string;
+  checks_since_run: int32;
 }
 
 model AutomationRunSummary {

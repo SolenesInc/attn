@@ -1487,6 +1487,9 @@ type AutomationDefinitionSummary struct {
 	// Enabled corresponds to the JSON schema field "enabled".
 	Enabled bool `json:"enabled"`
 
+	// GuardCheck corresponds to the JSON schema field "guard_check".
+	GuardCheck *AutomationGuardCheck `json:"guard_check,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID int `json:"id"`
 
@@ -1581,6 +1584,20 @@ type AutomationDeleteResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type AutomationGuardCheck struct {
+	// CheckedAt corresponds to the JSON schema field "checked_at".
+	CheckedAt string `json:"checked_at"`
+
+	// ChecksSinceRun corresponds to the JSON schema field "checks_since_run".
+	ChecksSinceRun int `json:"checks_since_run"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome string `json:"outcome"`
 }
 
 type AutomationProvenance struct {

@@ -62,9 +62,10 @@ func ScheduledOccurrenceKey(intended time.Time) string {
 }
 
 type ScheduledInput struct {
-	Provider   string `json:"provider"`
-	IntendedAt string `json:"intended_at"`
-	ObservedAt string `json:"observed_at"`
+	GuardOutput string `json:"guard_output,omitempty"`
+	Provider    string `json:"provider"`
+	IntendedAt  string `json:"intended_at"`
+	ObservedAt  string `json:"observed_at"`
 }
 
 func NewScheduledInput(intended, observed time.Time) ScheduledInput {

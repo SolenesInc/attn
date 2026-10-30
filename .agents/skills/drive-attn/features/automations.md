@@ -14,6 +14,7 @@ question.
 - `automation-define`: a definition in YAML (`attn.dev/automations/v1alpha1`), validated, applied and shown again; or the same in the app's form.
 - `automation-manual`: a `manual` trigger, run from the CLI or the drawer's run button.
 - `automation-schedule`: a `scheduled` trigger with a cron and a time zone, and `catch_up` of `skip` or `latest` after downtime.
+- `automation-guard`: a scheduled trigger's optional shell command. A run starts when its trimmed output is nonempty and new.
 - `automation-review-request`: a `github_review_requested` trigger that starts a run in a worktree at the pull request's head, one per pull request.
 - `automation-continuity`: `fresh` or `singleton` for schedules; review requests are always one per subject.
 - `automation-runs`: each occurrence's run, its state (`pending`, `delivered`, `failed`, `cancelled`) and its session.
@@ -42,7 +43,7 @@ question.
 
 ### Triggers
 
-- A schedule comes due: the scheduler checks every minute and starts the occurrence's run (`internal/daemon/automations_schedule.go`).
+- A schedule comes due: the scheduler checks every minute. With `trigger.guard`, it runs the command in the automation's folder first and starts a run only for new output (`internal/daemon/automations_schedule.go`).
 - A pull request asks the user for review on GitHub: the next pull request refresh starts a run, and a changed head or a withdrawn request settles it (`internal/daemon/automations_github.go`).
 - A run's outcome and its work becoming ready are seed updates for whoever watches its seed ([garden.md](garden.md), [inbox.md](inbox.md)).
 
@@ -131,6 +132,13 @@ EOF
 ```
 
   `<schedule-id>` is the `id` it prints. The scheduler wakes every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run, and for up to two more minutes until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: false`. Disable it when done.
+- **A guarded schedule.** Use `scheduled.yaml` with `schedule: {cron: "@every 3s", time_zone: UTC}`, `continuity: singleton` and `guard: cat state.txt`. Before starting the daemon, set `ATTN_AUTOMATION_SCHEDULE_INTERVAL=1s` in the instance shell. Write `red` to `$R/state.txt`, validate and apply the definition, and capture `./attn automation show <guard-id>`, `list` and `runs <guard-id>` at each step. Wait on an `automations_changed` broadcast, then read `list` for the expected `guard_check`.
+  - The first check reads `launched`. The run's opening names an occurrence input file containing `"guard_output":"red"`. Read it from the run's agent to prove the input arrived.
+  - The next check reads `unchanged`, increases `checks_since_run`, and adds no run.
+  - Empty `state.txt`. The next check reads `empty` and adds no run. Write `red` again. It launches again on the same singleton session.
+  - Write `blue`. The next check launches with `guard_output` of `blue`.
+  - Change the guard to `echo broken >&2; exit 17` and apply it with the same `id`. The next check reads `failed` with `exit 17: broken` and adds no run.
+  - Change the guard to `sleep 120`. After its check, `show` reads `guard timed out after 60s`, and `list` agrees. Disable the automation when done.
 - **A review request.** Make a local repository that the mock GitHub's `owner/repo` points at, holding the fixture so the review run's agent has something to say:
 
 ```bash
@@ -205,5 +213,9 @@ EOF
 - A review run fires on the next pull request refresh (`wsctl refresh-prs`), not when the mock GitHub changes. The mock lists `owner/repo#42` only after `/__control/head` names a commit.
 - The first GitHub observation after applying or enabling an automation records existing review requests without starting runs. Drive a new request after that observation, as the withdraw-and-request sequence above does.
 - Turning an automation off cancels its pending runs. A run that was already delivered keeps its session.
+- Guards run through `/bin/sh -c` with the login-shell environment. A pipeline reports the last command's exit status. Capture first, as in `refs=$(git ls-remote origin refs/heads/main) && printf '%s\n' "$refs" | awk '…'`, so a failed first command reads `failed` instead of `empty`.
+- A guard fails at 60 seconds or more than 65536 stdout bytes. `show` and `list` name the limit. Failure detail keeps the last 2048 stderr bytes. These tripwires allow commands measured at 1.09–2.01 seconds and outputs of 15–41 bytes.
+- Empty guard output forgets the handled output. A failed check keeps it. A failed or cancelled run, or a changed guard command, lets the same output launch again. Disable and enable keep the latest check.
+- Skipped checks have no run. `checks_since_run` counts checks since the last launch and resets when a new run is claimed.
 - The drawer's "Run now" and `attn automation run` work only on manual triggers. A scheduled or review-request automation answers `automation <id> is provider-driven and cannot be run manually yet`. `--pr-url` also needs a `repository_worktree` location, and refuses with `--pr-url requires a repository_worktree automation` otherwise.
 - Working but wrong: a run reads `delivered` once its session starts, whatever the agent does next. A fixture that matches nothing in the opening leaves a delivered run sitting silent; prove a run by its agent's screen, not by its state.

@@ -515,3 +515,28 @@ func TestParsePullRequestURL(t *testing.T) {
 		}
 	}
 }
+
+func TestOnlyScheduledTriggersAcceptGuard(t *testing.T) {
+	for _, trigger := range []string{"manual", "github_review_requested", "scheduled"} {
+		t.Run(trigger, func(t *testing.T) {
+			spec := DefinitionSpec{
+				APIVersion: APIVersion, Name: "Guarded", Prompt: "Inspect.",
+				Trigger:  TriggerSpec{Type: trigger, Guard: "printf changed"},
+				Launch:   LaunchSpec{Driver: "codex"},
+				Location: LocationSpec{Type: "directory", Path: t.TempDir()},
+			}
+			if trigger == "scheduled" {
+				spec.Trigger.Schedule = &ScheduleSpec{Cron: "0 3 * * *", TimeZone: "UTC"}
+				spec.Trigger.CatchUp = "latest"
+			}
+			err := ValidateDefinition(&spec)
+			if trigger == "scheduled" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || err.Error() != trigger+" trigger cannot configure guard" {
+				t.Fatalf("guard validation = %v, want the trigger named in the refusal", err)
+			}
+		})
+	}
+}

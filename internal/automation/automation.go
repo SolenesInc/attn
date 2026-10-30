@@ -31,6 +31,7 @@ type DefinitionSpec struct {
 	Location   LocationSpec `yaml:"location" json:"location"`
 }
 type TriggerSpec struct {
+	Guard        string               `yaml:"guard,omitempty" json:"guard,omitempty"`
 	Type         string               `yaml:"type" json:"type"`
 	Repositories RepositoryFilterSpec `yaml:"repositories,omitempty" json:"repositories,omitempty"`
 	Schedule     *ScheduleSpec        `yaml:"schedule,omitempty" json:"schedule,omitempty"`
@@ -133,6 +134,9 @@ func ValidateDefinition(s *DefinitionSpec) error {
 	}
 	if strings.TrimSpace(s.Name) == "" {
 		return errors.New("name is required")
+	}
+	if s.Trigger.Guard != "" && s.Trigger.Type != "scheduled" {
+		return fmt.Errorf("%s trigger cannot configure guard", s.Trigger.Type)
 	}
 	switch s.Trigger.Type {
 	case "manual":

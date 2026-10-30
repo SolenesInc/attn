@@ -149,6 +149,15 @@ func runAutomationCommand() {
 		result, err = c.AutomationDefinition(definitionID)
 		if err == nil && result.SpecYaml != nil {
 			fmt.Printf("# Profile: %s\n# Launch desktop: %s\n", protocol.Deref(result.Definition.ProfileName), launchDesktopText(result.Definition.LaunchDesktop))
+			if check := result.Definition.GuardCheck; check != nil {
+				fmt.Printf("# Guard: %s at %s", check.Outcome, check.CheckedAt)
+				if detail := protocol.Deref(check.Detail); detail != "" {
+					fmt.Printf(": %s", strings.ReplaceAll(detail, "\n", "\n# "))
+				} else {
+					fmt.Printf(" (%d checks since the last run)", check.ChecksSinceRun)
+				}
+				fmt.Println()
+			}
 			fmt.Print(*result.SpecYaml)
 		}
 	case "run":
