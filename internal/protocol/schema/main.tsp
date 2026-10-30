@@ -5701,40 +5701,40 @@ model SeedListResult {
   "stale_window_seconds"?: int32;
 }
 
-// Find seeds by keyword. Search reads titles, bodies and every log entry
-// across the whole garden, closed seeds included: "was this already done or
-// abandoned" is as much the question as "is someone on it".
+// Find seeds by stemmed word prefixes across titles, bodies and log entries,
+// including harvested and withered seeds. Identifier parts are words too.
 @extension("x-on", #{ home: true })
 model SeedSearchMessage {
   "profile_id"?: string;
-
   "cmd": "seed_search";
   "source_session_id"?: SessionID;
-  // Whitespace-separated terms. A seed matches when one field — its title, its
-  // body, or one log entry — carries every term, so a snippet can show why.
+  // Words are lowercased, split at identifier boundaries, and deduplicated.
+  // A seed carrying some of the words is a partial match.
   "query": string;
-  // How many hits to answer with; 0 or absent takes the daemon's default.
+  // How many hits to answer with; 0 or absent takes the default of 10.
   "limit"?: int32;
 }
 
-// One matching seed and the text that matched.
 model SeedSearchHit {
   "seed": Seed;
-  // title | body | log — the field that carried every term.
+  // title | body | log: the field carrying the most query words.
   "where": string;
-  // The matching line, elided around the match when it runs long.
+  // The original line with the most matching spans, elided when it runs long.
   "snippet": string;
+  // Newest of planting, state change and matching log entries.
+  "last_active": string;
 }
 
 model SeedSearchResult {
-  // Title matches first, then body, then log; newest first inside each.
+  // All-title matches, then coverage, then fused relevance and recency ranks.
+  // Open seeds move ahead of up to five closed seeds in that order.
   "hits": SeedSearchHit[];
-  // How many seeds matched. Equal to hits's length until the cap trims it, and
-  // then the receipt that says the answer ended early.
+  // Seeds carrying every query word, across any of their text fields.
   "matched": int32;
-  // The cap that was applied, so the output can name the number it hit.
+  // Seeds carrying some, but not every, query word.
+  "partial": int32;
   "limit": int32;
-  // How many seeds were read to answer, the denominator of an empty answer.
+  // Number of seeds in the selected profile, including closed seeds.
   "searched": int32;
 }
 

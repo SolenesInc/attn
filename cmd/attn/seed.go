@@ -101,11 +101,13 @@ child's id and step slug.`, []string{"f", "member", "json"}, false},
 --flat prints one list. --stale narrows to open seeds whose log has not moved
 for the window (default %s) — a query for your judgment, never a
 reaper.`, formatWindow(garden.DefaultStaleWindow)), []string{"stale", "window", "flat", "json"}, true},
-	{`search`, `search <words> [--limit <n>] [--json]`, `find seeds by keyword across your profile's garden, harvested and withered
-included: titles, bodies and every log entry. A seed matches when one
-of those carries every word, and the line that did is printed under it.
-Title matches come first. Search before you plant, so a duplicate is
-found instead of created.`, []string{"limit", "json"}, true},
+	{`search`, `search <words> [--limit <n>] [--json]`, `find seeds by words across your profile's garden, harvested and withered
+included: titles, bodies and log entries. Words match as stemmed prefixes;
+identifier parts match too. Seeds carrying some words also appear.
+Ranks by title coverage, word coverage, relevance and recency, with a boost
+for open seeds. Prints status, last active and an original matching line.
+Shows the best 10 by default; --limit asks for more, up to 1000.
+Search before you plant, so a duplicate is found instead of created.`, []string{"limit", "json"}, true},
 	{`ready`, `ready [--plot <plot> | --all] [--json]`, `what you can tend right now, oldest first: nothing open blocks it,
 nobody is holding it, and it is not a plot — a plot's work is its
 children. With no flags the scope is your profile's garden — unless this
@@ -585,24 +587,34 @@ func runSeedSearch(args []string) {
 }
 
 func fprintSeedSearch(out io.Writer, query string, result *protocol.SeedSearchResult) {
-	if result.Matched == 0 {
-		fmt.Fprintf(out, "no seed matches %q — searched %s: titles, bodies and every log entry\n",
-			query, plural(result.Searched, "seed"))
+	total := result.Matched + result.Partial
+	if total == 0 {
+		fmt.Fprintf(out, "no seed matches %q — searched %s: titles, bodies and every log entry\n", query, plural(result.Searched, "seed"))
 		return
 	}
-	verb := "match"
-	if result.Matched == 1 {
-		verb = "matches"
-	}
-	fmt.Fprintf(out, "%s %s %q — title matches first, then body, then log\n\n",
-		plural(result.Matched, "seed"), verb, query)
+	fmt.Fprintf(out, "%s %s every word, %d carry some — best first\n\n",
+		plural(result.Matched, "seed"), carriesVerb(result.Matched), result.Partial)
 	for _, hit := range result.Hits {
-		fmt.Fprintf(out, "%s\n  %s  %s  %s\n", seedLine(hit.Seed), hit.Seed.Status, hit.Where, hit.Snippet)
+		fmt.Fprintf(out, "%s\n  %s · %s  %s  %s\n", seedLine(hit.Seed), hit.Seed.Status, seedLastActive(hit.LastActive), hit.Where, hit.Snippet)
 	}
-	if result.Matched > len(result.Hits) {
-		fmt.Fprintf(out, "\nshowing %d of %d — max_results=%d, asked for %d. Narrow the query, or `--limit <n>` up to %d.\n",
-			len(result.Hits), result.Matched, result.Limit, result.Matched, garden.MaxSearchResults)
+	if total > len(result.Hits) {
+		fmt.Fprintf(out, "\nshowing %d of %d — `--limit <n>` for more, up to %d\n", len(result.Hits), total, garden.MaxSearchResults)
 	}
+}
+
+func carriesVerb(n int) string {
+	if n == 1 {
+		return "carries"
+	}
+	return "carry"
+}
+
+func seedLastActive(value string) string {
+	at, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return value
+	}
+	return humanAge(max(0, time.Since(at)))
 }
 
 func plural(n int, noun string) string {

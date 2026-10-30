@@ -16,11 +16,11 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 	t.Helper()
 	now := time.Now()
 	for _, schema := range []docstore.CollectionSchema{garden.SeedsSchema(), garden.DispatchesSchema()} {
-		if _, err := s.DefineDocumentCollection(schema, now); err != nil {
+		if _, err := defineLegacyDocumentCollection(s, schema, now); err != nil {
 			t.Fatal(err)
 		}
 	}
-	seedsSchema, _, err := s.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	seedsSchema, _, err := legacyDocumentCollection(s, garden.Namespace, garden.CollectionSeeds)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func seedSubscriptionHistory(t *testing.T, s *Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dispatchSchema, _, err := s.DocumentCollection(garden.Namespace, garden.CollectionDispatches)
+	dispatchSchema, _, err := legacyDocumentCollection(s, garden.Namespace, garden.CollectionDispatches)
 	if err != nil {
 		t.Fatal(err)
 	}

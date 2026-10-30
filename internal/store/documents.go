@@ -34,6 +34,10 @@ func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now t
 	if err != nil {
 		return false, fmt.Errorf("store: encoding fields for %s/%s: %w", schema.Namespace, schema.Collection, err)
 	}
+	textFields, err := json.Marshal(schema.Text)
+	if err != nil {
+		return false, err
+	}
 	ts := now.UTC().Format(docstore.TimeFormat)
 
 	tx, err := s.db.Begin()
@@ -42,15 +46,15 @@ func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now t
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	existing, table, found, err := readCollectionTx(tx, schema.Namespace, schema.Collection)
+	existing, table, found, err := readCollectionWithText(tx, schema.Namespace, schema.Collection)
 	if err != nil {
 		return false, err
 	}
 
 	if !found {
 		res, err := tx.Exec(
-			`INSERT INTO document_collections (namespace, collection, fields_json, updated_at) VALUES (?, ?, ?, ?)`,
-			schema.Namespace, schema.Collection, string(fields), ts)
+			`INSERT INTO document_collections (namespace, collection, fields_json, text_json, updated_at) VALUES (?, ?, ?, ?, ?)`,
+			schema.Namespace, schema.Collection, string(fields), string(textFields), ts)
 		if err != nil {
 			return false, fmt.Errorf("store: defining %s/%s: %w", schema.Namespace, schema.Collection, err)
 		}
@@ -73,6 +77,23 @@ func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now t
 		}
 	}
 
+	if !slices.Equal(existing.Text, schema.Text) || len(schema.Text) > 0 && !slices.Equal(existing.Fields, schema.Fields) {
+		if len(existing.Text) > 0 {
+			if _, err := tx.Exec(`DROP TABLE ` + table + `_text`); err != nil {
+				return false, err
+			}
+		}
+		if len(schema.Text) > 0 {
+			if err := createTextIndex(tx, table, schema); err != nil {
+				return false, err
+			}
+		}
+		if _, err := tx.Exec(`UPDATE document_collections SET text_json = ?, updated_at = ? WHERE namespace = ? AND collection = ?`,
+			string(textFields), ts, schema.Namespace, schema.Collection); err != nil {
+			return false, err
+		}
+	}
+
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("store: committing declaration of %s/%s: %w", schema.Namespace, schema.Collection, err)
 	}
@@ -83,7 +104,7 @@ func (s *Store) DocumentCollection(namespace, collection string) (*docstore.Coll
 	if s.db == nil {
 		return nil, false, fmt.Errorf("store: no database")
 	}
-	schema, table, found, err := readCollection(s.db, namespace, collection)
+	schema, table, found, err := readCollectionWithText(s.db, namespace, collection)
 	if err != nil || !found {
 		return nil, false, err
 	}
@@ -96,7 +117,7 @@ func (s *Store) ListDocumentCollections() ([]docstore.CollectionSchema, error) {
 		return nil, fmt.Errorf("store: no database")
 	}
 	rows, err := s.db.Query(
-		`SELECT id, namespace, collection, fields_json FROM document_collections ORDER BY namespace, collection`)
+		`SELECT id, namespace, collection, fields_json, text_json FROM document_collections ORDER BY namespace, collection`)
 	if err != nil {
 		return nil, fmt.Errorf("store: listing document collections: %w", err)
 	}
@@ -104,15 +125,18 @@ func (s *Store) ListDocumentCollections() ([]docstore.CollectionSchema, error) {
 	var out []docstore.CollectionSchema
 	for rows.Next() {
 		var (
-			id     int64
-			schema docstore.CollectionSchema
-			fields string
+			id                 int64
+			schema             docstore.CollectionSchema
+			fields, textFields string
 		)
-		if err := rows.Scan(&id, &schema.Namespace, &schema.Collection, &fields); err != nil {
+		if err := rows.Scan(&id, &schema.Namespace, &schema.Collection, &fields, &textFields); err != nil {
 			return nil, fmt.Errorf("store: scanning document collection: %w", err)
 		}
 		if err := json.Unmarshal([]byte(fields), &schema.Fields); err != nil {
 			return nil, fmt.Errorf("store: decoding fields for %s/%s: %w", schema.Namespace, schema.Collection, err)
+		}
+		if err := json.Unmarshal([]byte(textFields), &schema.Text); err != nil {
+			return nil, err
 		}
 		schema.Table = docstore.TableName(id)
 		out = append(out, schema)
@@ -130,7 +154,7 @@ func (s *Store) DeleteDocumentCollection(namespace, collection string) (int, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	_, table, found, err := readCollectionTx(tx, namespace, collection)
+	schema, table, found, err := readCollectionWithText(tx, namespace, collection)
 	if err != nil {
 		return 0, err
 	}
@@ -141,6 +165,11 @@ func (s *Store) DeleteDocumentCollection(namespace, collection string) (int, err
 	var n int
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
 		return 0, fmt.Errorf("store: counting %s/%s: %w", namespace, collection, err)
+	}
+	if len(schema.Text) > 0 {
+		if _, err := tx.Exec(`DROP TABLE ` + table + `_text`); err != nil {
+			return 0, err
+		}
 	}
 	if _, err := tx.Exec(`DROP TABLE ` + table); err != nil {
 		return 0, fmt.Errorf("store: dropping storage for %s/%s: %w", namespace, collection, err)
@@ -160,10 +189,19 @@ func (s *Store) PutDocument(schema docstore.CollectionSchema, id string, body []
 	if err != nil {
 		return 0, err
 	}
-	return putDocumentWith(s.db, schema, table, id, body, now, expected)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rev, err := putDocumentWith(tx, schema, table, id, body, now, expected)
+	if err != nil {
+		return 0, err
+	}
+	return rev, tx.Commit()
 }
 
-func putDocumentWith(q rowQuerier, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
+func putDocumentWith(q execQuerier, schema docstore.CollectionSchema, table, id string, body []byte, now time.Time, expected *int64) (int64, error) {
 	if err := checkSeedProfileWrite(q, schema, table, id, body); err != nil {
 		return 0, err
 	}
@@ -181,28 +219,34 @@ func putDocumentWith(q rowQuerier, schema docstore.CollectionSchema, table, id s
 		          body=excluded.body,
 		          rev=` + table + `.rev + 1,
 		          updated_at=excluded.updated_at
-		        RETURNING rev`
+		        RETURNING rev, created_at`
 		args = []any{id, string(body), docstore.FirstRev, ts, ts}
 	case *expected == docstore.ExpectAbsent:
 		stmt = `INSERT INTO ` + table + ` (id, body, rev, created_at, updated_at)
 		        VALUES (?, ?, ?, ?, ?)
 		        ON CONFLICT(id) DO NOTHING
-		        RETURNING rev`
+		        RETURNING rev, created_at`
 		args = []any{id, string(body), docstore.FirstRev, ts, ts}
 	default:
 		stmt = `UPDATE ` + table + ` SET body = ?, rev = rev + 1, updated_at = ?
 		        WHERE id = ? AND rev = ?
-		        RETURNING rev`
+		        RETURNING rev, created_at`
 		args = []any{string(body), ts, id, *expected}
 	}
 
 	var rev int64
-	err := q.QueryRow(stmt, args...).Scan(&rev)
+	var createdAt string
+	err := q.QueryRow(stmt, args...).Scan(&rev, &createdAt)
 	if err == sql.ErrNoRows && expected != nil {
 		return 0, documentConflictWith(q, schema, table, id, *expected)
 	}
 	if err != nil {
 		return 0, fmt.Errorf("store: writing %s/%s/%s: %w", schema.Namespace, schema.Collection, id, err)
+	}
+	if len(schema.Text) > 0 {
+		if err := putTextIndex(q, table, schema, id, body, createdAt); err != nil {
+			return 0, err
+		}
 	}
 	return rev, nil
 }
@@ -232,7 +276,16 @@ func (s *Store) DeleteDocument(schema docstore.CollectionSchema, id string, expe
 	if err != nil {
 		return false, err
 	}
-	return deleteDocumentWith(s.db, schema, table, id, expected)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	found, err := deleteDocumentWith(tx, schema, table, id, expected)
+	if err != nil {
+		return false, err
+	}
+	return found, tx.Commit()
 }
 
 func deleteDocumentWith(x execQuerier, schema docstore.CollectionSchema, table, id string, expected *int64) (bool, error) {
@@ -257,6 +310,11 @@ func deleteDocumentWith(x execQuerier, schema docstore.CollectionSchema, table, 
 	}
 	if n == 0 && expected != nil {
 		return false, documentConflictWith(x, schema, table, id, *expected)
+	}
+	if n > 0 && len(schema.Text) > 0 {
+		if _, err := x.Exec(`DELETE FROM `+table+`_text WHERE id = ?`, id); err != nil {
+			return false, err
+		}
 	}
 	return n > 0, nil
 }
@@ -783,6 +841,21 @@ func readCollection(q rowQuerier, namespace, collection string) (docstore.Collec
 	table := docstore.TableName(id)
 	schema.Table = table
 	return schema, table, true, nil
+}
+
+func readCollectionWithText(q rowQuerier, namespace, collection string) (docstore.CollectionSchema, string, bool, error) {
+	schema, table, found, err := readCollection(q, namespace, collection)
+	if err != nil || !found {
+		return schema, table, found, err
+	}
+	var text string
+	if err := q.QueryRow(`SELECT text_json FROM document_collections WHERE namespace = ? AND collection = ?`, namespace, collection).Scan(&text); err != nil {
+		return schema, table, found, err
+	}
+	if err := json.Unmarshal([]byte(text), &schema.Text); err != nil {
+		return schema, table, found, err
+	}
+	return schema, table, found, nil
 }
 
 func readCollectionTx(tx *sql.Tx, namespace, collection string) (docstore.CollectionSchema, string, bool, error) {

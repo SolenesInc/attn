@@ -1171,10 +1171,10 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := s.DefineDocumentCollection(garden.DispatchesSchema(), now); err != nil {
+	if _, err := defineLegacyDocumentCollection(s, garden.DispatchesSchema(), now); err != nil {
 		t.Fatal(err)
 	}
-	dispatches, found, err := s.DocumentCollection(garden.Namespace, garden.CollectionDispatches)
+	dispatches, found, err := legacyDocumentCollection(s, garden.Namespace, garden.CollectionDispatches)
 	if err != nil || !found {
 		t.Fatalf("load dispatch collection: found=%v err=%v", found, err)
 	}

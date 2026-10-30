@@ -19,10 +19,10 @@ func TestCrewRestartRemovalPreservesMemberAndOrdinaryInbox(t *testing.T) {
 		"restart_requests": `{"request_id":"restart"}`,
 	} {
 		schema := docstore.CollectionSchema{Namespace: "core/crew", Collection: collection}
-		if _, err := s.DefineDocumentCollection(schema, time.Now()); err != nil {
+		if _, err := defineLegacyDocumentCollection(s, schema, time.Now()); err != nil {
 			t.Fatal(err)
 		}
-		stored, _, err := s.DocumentCollection(schema.Namespace, schema.Collection)
+		stored, _, err := legacyDocumentCollection(s, schema.Namespace, schema.Collection)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -35,7 +35,7 @@ func TestCrewRestartRemovalPreservesMemberAndOrdinaryInbox(t *testing.T) {
 		('sleep','session:day','notice','','sleep','now')`); err != nil {
 		t.Fatal(err)
 	}
-	requests, _, err := s.DocumentCollection("core/crew", "restart_requests")
+	requests, _, err := legacyDocumentCollection(s, "core/crew", "restart_requests")
 	if err != nil {
 		t.Fatal(err)
 	}

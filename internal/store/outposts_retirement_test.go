@@ -26,10 +26,10 @@ func TestOutpostsRetirementKeepsSessionsAndRetiresRemoteDispatches(t *testing.T)
 		}
 	}
 	schema := docstore.CollectionSchema{Namespace: "core/garden", Collection: "dispatches"}
-	if _, err := s.DefineDocumentCollection(schema, time.Now()); err != nil {
+	if _, err := defineLegacyDocumentCollection(s, schema, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	dispatches, _, err := s.DocumentCollection(schema.Namespace, schema.Collection)
+	dispatches, _, err := legacyDocumentCollection(s, schema.Namespace, schema.Collection)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,10 +20,10 @@ func TestCrewPathsUpgradePreservesMembersWithoutMachinePaths(t *testing.T) {
 			}
 			t.Cleanup(func() { _ = s.Close() })
 			schema := crew.MembersSchema()
-			if _, err := s.DefineDocumentCollection(schema, time.Now()); err != nil {
+			if _, err := defineLegacyDocumentCollection(s, schema, time.Now()); err != nil {
 				t.Fatal(err)
 			}
-			declared, _, err := s.DocumentCollection(schema.Namespace, schema.Collection)
+			declared, _, err := legacyDocumentCollection(s, schema.Namespace, schema.Collection)
 			if err != nil {
 				t.Fatal(err)
 			}

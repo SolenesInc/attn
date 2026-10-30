@@ -91,6 +91,7 @@ func SeedsSchema() docstore.CollectionSchema {
 	return docstore.CollectionSchema{
 		Namespace:  Namespace,
 		Collection: CollectionSeeds,
+		Text:       []string{"title", "body"},
 		Fields: []docstore.FieldSpec{
 			{Name: "profile_id", Type: docstore.FieldString},
 			{Name: "status", Type: docstore.FieldString},
@@ -107,6 +108,7 @@ func NotesSchema() docstore.CollectionSchema {
 	return docstore.CollectionSchema{
 		Namespace:  Namespace,
 		Collection: CollectionNotes,
+		Text:       []string{"body"},
 		Fields: []docstore.FieldSpec{
 			{Name: "seed", Type: docstore.FieldString},
 			{Name: "kind", Type: docstore.FieldString},

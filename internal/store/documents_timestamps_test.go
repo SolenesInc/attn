@@ -64,12 +64,15 @@ func TestMigration91RewritesStampsThatDoNotSort(t *testing.T) {
 	defer s.Close()
 
 	base := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
-	if _, err := s.DefineDocumentCollection(requestsDeclaration(), base); err != nil {
+	if _, err := defineLegacyDocumentCollection(s, requestsDeclaration(), base); err != nil {
 		t.Fatalf("define: %v", err)
 	}
-	schema := declOf(t, s, "test/approval-gate", "requests")
+	schema, _, err := legacyDocumentCollection(s, "test/approval-gate", "requests")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, r := range raggedSeconds {
-		if _, err := s.PutDocument(schema, r.id, []byte(`{"status":"pending"}`), base.Add(r.offset), nil); err != nil {
+		if _, err := s.PutDocument(*schema, r.id, []byte(`{"status":"pending"}`), base.Add(r.offset), nil); err != nil {
 			t.Fatalf("put %s: %v", r.id, err)
 		}
 	}

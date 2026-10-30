@@ -9271,14 +9271,16 @@ export interface SeedSearchResultObject {
     hits:     HitElement[];
     limit:    number;
     matched:  number;
+    partial:  number;
     searched: number;
     [property: string]: any;
 }
 
 export interface HitElement {
-    seed:    SeedElement;
-    snippet: string;
-    where:   string;
+    last_active: string;
+    seed:        SeedElement;
+    snippet:     string;
+    where:       string;
     [property: string]: any;
 }
 
@@ -10398,9 +10400,10 @@ export interface SeedRollbackResult {
 }
 
 export interface SeedSearchHit {
-    seed:    SeedElement;
-    snippet: string;
-    where:   string;
+    last_active: string;
+    seed:        SeedElement;
+    snippet:     string;
+    where:       string;
     [property: string]: any;
 }
 
@@ -10421,6 +10424,7 @@ export interface SeedSearchResult {
     hits:     HitElement[];
     limit:    number;
     matched:  number;
+    partial:  number;
     searched: number;
     [property: string]: any;
 }
@@ -24638,9 +24642,11 @@ const typeMap: any = {
         { json: "hits", js: "hits", typ: a(r("HitElement")) },
         { json: "limit", js: "limit", typ: 0 },
         { json: "matched", js: "matched", typ: 0 },
+        { json: "partial", js: "partial", typ: 0 },
         { json: "searched", js: "searched", typ: 0 },
     ], "any"),
     "HitElement": o([
+        { json: "last_active", js: "last_active", typ: "" },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "snippet", js: "snippet", typ: "" },
         { json: "where", js: "where", typ: "" },
@@ -25419,6 +25425,7 @@ const typeMap: any = {
         { json: "seed", js: "seed", typ: r("SeedElement") },
     ], "any"),
     "SeedSearchHit": o([
+        { json: "last_active", js: "last_active", typ: "" },
         { json: "seed", js: "seed", typ: r("SeedElement") },
         { json: "snippet", js: "snippet", typ: "" },
         { json: "where", js: "where", typ: "" },
@@ -25434,6 +25441,7 @@ const typeMap: any = {
         { json: "hits", js: "hits", typ: a(r("HitElement")) },
         { json: "limit", js: "limit", typ: 0 },
         { json: "matched", js: "matched", typ: 0 },
+        { json: "partial", js: "partial", typ: 0 },
         { json: "searched", js: "searched", typ: 0 },
     ], "any"),
     "SeedSendToChiefMessage": o([

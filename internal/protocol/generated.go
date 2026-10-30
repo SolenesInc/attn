@@ -10383,6 +10383,9 @@ type SeedRollbackResult struct {
 }
 
 type SeedSearchHit struct {
+	// LastActive corresponds to the JSON schema field "last_active".
+	LastActive string `json:"last_active"`
+
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
 
@@ -10419,6 +10422,9 @@ type SeedSearchResult struct {
 
 	// Matched corresponds to the JSON schema field "matched".
 	Matched int `json:"matched"`
+
+	// Partial corresponds to the JSON schema field "partial".
+	Partial int `json:"partial"`
 
 	// Searched corresponds to the JSON schema field "searched".
 	Searched int `json:"searched"`
