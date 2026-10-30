@@ -14,6 +14,9 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
+
+	"github.com/victorarias/attn/internal/fakeagent"
 )
 
 type SSH struct {
@@ -27,6 +30,7 @@ type SSH struct {
 }
 
 type sshMachine struct {
+	drain func()
 	stack *Stack
 	stop  func()
 	link  *sshLink
@@ -36,13 +40,15 @@ type sshLink struct {
 	gate *sshGate
 }
 type sshGate struct {
-	done   chan struct{}
-	err    error
-	finish func(error)
+	entered chan struct{}
+	enter   sync.Once
+	done    chan struct{}
+	err     error
+	finish  func(error)
 }
 
 func newSSHGate() *sshGate {
-	gate := &sshGate{done: make(chan struct{})}
+	gate := &sshGate{done: make(chan struct{}), entered: make(chan struct{})}
 	var once sync.Once
 	gate.finish = func(err error) { once.Do(func() { gate.err = err; close(gate.done) }) }
 	return gate
@@ -56,6 +62,7 @@ func (l *sshLink) wait(ctx context.Context) error {
 	l.mu.Lock()
 	gate := l.gate
 	l.mu.Unlock()
+	gate.enter.Do(func() { close(gate.entered) })
 	select {
 	case <-gate.done:
 		return gate.err
@@ -275,7 +282,7 @@ func (s *SSH) Route(destination string, remote *Stack) {
 		lifeline.Close()
 	})
 	s.t.Cleanup(stopMachine)
-	s.machines[destination] = &sshMachine{remote, stopMachine, link}
+	s.machines[destination] = &sshMachine{stack: remote, stop: stopMachine, link: link, drain: workers.Wait}
 	s.routes[destination] = socket
 	s.reachable[destination] = socket
 	s.save()
@@ -546,5 +553,42 @@ func (s *SSH) MachineCommand(remote *Stack, name, body string) {
 	s.t.Helper()
 	if err := os.WriteFile(filepath.Join(remote.Dir, "machine-bin", name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
 		s.t.Fatal(err)
+	}
+}
+
+func (s *SSH) StartMaster(home *Stack, host, destination string) {
+	s.t.Helper()
+	path := filepath.Join(s.Dir, "masters", "default-"+strings.ReplaceAll(host, "-", "")[:12]+".sock")
+	result := home.Run(Invocation{Binary: filepath.Join(home.Dir, "ssh-bin", "ssh"), Args: []string{"-o", "ControlPath=" + path, "-o", "ControlMaster=yes", "-N", "-T", destination}})
+	if result.Code != 0 {
+		s.t.Fatalf("start fake master: %+v", result)
+	}
+}
+
+func (s *SSH) AwaitPausedRequest(destination string) {
+	s.t.Helper()
+	s.mu.Lock()
+	machine := s.machines[destination]
+	s.mu.Unlock()
+	machine.link.mu.Lock()
+	entered := machine.link.gate.entered
+	machine.link.mu.Unlock()
+	select {
+	case <-entered:
+	case <-time.After(fakeagent.HangGuard):
+		s.t.Fatalf("no request reached paused SSH machine %s within %s", destination, fakeagent.HangGuard)
+	}
+}
+func (s *SSH) Drain(destination string) {
+	s.t.Helper()
+	s.mu.Lock()
+	machine := s.machines[destination]
+	s.mu.Unlock()
+	done := make(chan struct{})
+	go func() { machine.drain(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(fakeagent.HangGuard):
+		s.t.Fatalf("SSH machine %s did not drain within %s", destination, fakeagent.HangGuard)
 	}
 }

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,10 +37,24 @@ func (d *Daemon) handleUpdateOutpost(client *wsClient, id string) {
 		d.sendCommandError(client, protocol.CmdUpdateOutpost, err.Error())
 		return
 	}
-	d.startOutpostInstall(row, false)
+	r.mu.Lock()
+	busy := r.pushes[row.ID] != nil && r.pushes[row.ID].running
+	r.mu.Unlock()
+	if busy {
+		return
+	}
+	if row.HostKey == "" {
+		d.stopOutpostDial(row.ID)
+		row, err = d.resolveOutpost(row.ID)
+		if err != nil {
+			d.sendCommandError(client, protocol.CmdUpdateOutpost, err.Error())
+			return
+		}
+	}
+	d.startOutpostInstall(row)
 }
 
-func (d *Daemon) startOutpostInstall(row store.Outpost, add bool) {
+func (d *Daemon) startOutpostInstall(row store.Outpost) {
 	r := &d.outposts
 	r.mu.Lock()
 	if r.pushes == nil {
@@ -54,21 +69,8 @@ func (d *Daemon) startOutpostInstall(row store.Outpost, add bool) {
 	r.pushes[row.ID] = push
 	r.mu.Unlock()
 	if !d.life.Go("installOutpost:"+row.ID, func() {
-		defer close(push.done)
 		defer cancel()
-		err := d.pushOutpost(ctx, row, push, add)
-		r.mu.Lock()
-		push.running = false
-		current := r.pushes[row.ID] == push
-		r.mu.Unlock()
-		if !current || ctx.Err() != nil {
-			return
-		}
-		phase, outcome := "done", ""
-		if err != nil {
-			phase, outcome = "failed", err.Error()
-		}
-		d.setOutpostUpdate(row.ID, push, phase, outcome)
+		d.finishOutpostPush(row.ID, push, d.pushOutpost(ctx, row, push))
 	}) {
 		cancel()
 		close(push.done)
@@ -90,27 +92,78 @@ func (d *Daemon) setOutpostUpdate(id string, push *outpostPush, phase, outcome s
 	}
 }
 
-func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpostPush, add bool) error {
-	remote := d.outpostSSH(row)
-	err := remote.EnsureMaster(ctx)
-	var probe outpostssh.Probe
-	if err == nil {
-		probe, err = remote.Probe(ctx)
+func (d *Daemon) beginOutpostAdd(row store.Outpost, cancel context.CancelFunc) *outpostPush {
+	r := &d.outposts
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.pushes == nil {
+		r.pushes = make(map[string]*outpostPush)
 	}
-	self := d.bridgeIdentity().Build
-	if err == nil && (!add || probe.Build == nil || *probe.Build != self) {
-		err = d.installOutpost(ctx, remote, probe, func(phase string) { d.setOutpostUpdate(row.ID, push, phase, "") })
+	if current := r.pushes[row.ID]; current != nil && current.running {
+		return nil
 	}
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
+	push := &outpostPush{cancel: cancel, done: make(chan struct{}), running: true}
+	r.pushes[row.ID] = push
+	return push
+}
+
+func (d *Daemon) finishOutpostPush(id string, push *outpostPush, err error) {
+	r := &d.outposts
+	r.mu.Lock()
+	push.running = false
+	r.mu.Unlock()
+	phase, outcome := "done", ""
 	if err != nil {
-		if add {
-			d.startOutpostDial(row)
+		phase, outcome = "failed", err.Error()
+	}
+	d.setOutpostUpdate(id, push, phase, outcome)
+	close(push.done)
+}
+
+func (d *Daemon) prepareOutpost(ctx context.Context, row store.Outpost, push *outpostPush, force bool) (outpostRemote, error) {
+	remote := d.outpostSSH(row)
+	if err := remote.EnsureMaster(ctx); err != nil {
+		return nil, err
+	}
+	probe, err := remote.Probe(ctx)
+	if err != nil {
+		var sshError *outpostssh.Error
+		if errors.As(err, &sshError) {
+			return nil, err
 		}
+		return nil, &bridge.Refusal{Reason: "platform", Detail: err.Error()}
+	}
+	different := probe.Build == nil || *probe.Build != d.bridgeIdentity().Build
+	if push != nil && (force || different) {
+		if err := d.installOutpost(ctx, remote, probe, func(phase string) { d.setOutpostUpdate(row.ID, push, phase, "") }); err != nil {
+			found := "nothing installed"
+			var peer *bridge.Identity
+			if probe.Build != nil {
+				found = probe.Build.String()
+				peer = &bridge.Identity{Build: *probe.Build}
+			}
+			return nil, &bridge.Refusal{Peer: peer, Reason: "install", Detail: fmt.Sprintf("%s; install failed: %v", found, err)}
+		}
+	} else if different {
+		if probe.Build == nil {
+			return nil, &bridge.Refusal{Reason: "build", Detail: "nothing installed; choose Update in Settings → Outposts at the home to install at " + remote.InstallPath()}
+		}
+		return nil, &bridge.Refusal{Peer: &bridge.Identity{Build: *probe.Build}, Reason: "build", Detail: fmt.Sprintf("outpost runs build %s; home runs %s; choose Update in Settings → Outposts at the home", *probe.Build, d.bridgeIdentity().Build)}
+	}
+	if push != nil {
+		d.setOutpostUpdate(row.ID, push, "restarting", "")
+	}
+	return remote, nil
+}
+
+func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpostPush) error {
+	if _, err := d.prepareOutpost(ctx, row, push, true); err != nil {
 		return err
 	}
-	d.setOutpostUpdate(row.ID, push, "restarting", "")
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	self := d.bridgeIdentity().Build
 	d.stopOutpostDial(row.ID)
 	d.startOutpostDial(row)
 	deadline, cancel := context.WithTimeout(ctx, time.Minute)

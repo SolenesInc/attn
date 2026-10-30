@@ -299,3 +299,27 @@ func (s *Stack) reap() {
 		}
 	}
 }
+
+func (s *Stack) AwaitStopped() {
+	s.T.Helper()
+	if s.daemon == nil {
+		s.T.Fatal("AwaitStopped: the stack's daemon is not running")
+	}
+	select {
+	case err := <-s.exited:
+		s.ClosePeers()
+		s.daemon, s.exited = nil, nil
+		var exited *exec.ExitError
+		if err != nil {
+			if !errors.As(err, &exited) {
+				s.T.Fatalf("daemon exited unexpectedly: %v", err)
+			}
+			status, ok := exited.Sys().(syscall.WaitStatus)
+			if !ok || !status.Signaled() || status.Signal() != syscall.SIGTERM {
+				s.T.Fatalf("daemon exited unexpectedly: %v", err)
+			}
+		}
+	case <-time.After(fakeagent.HangGuard):
+		s.T.Fatalf("daemon did not stop within %s", fakeagent.HangGuard)
+	}
+}

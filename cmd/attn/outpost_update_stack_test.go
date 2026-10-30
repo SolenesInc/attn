@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -290,4 +291,72 @@ func TestSSHRemoveForgetsAfterRemoteStopFailure(t *testing.T) {
 	if rows := home.App().Initial.Outposts; len(rows) != 0 {
 		t.Fatalf("removed row returned: %+v", rows)
 	}
+}
+
+func TestSSHUnpairedAddFinishesAfterAuthentication(t *testing.T) {
+	for _, restart := range []bool{false, true} {
+		t.Run(fmt.Sprintf("restart=%v", restart), func(t *testing.T) {
+			ssh := testworld.NewSSH(t)
+			remote, home := testworld.NewStack(t), testworld.NewStack(t)
+			ssh.Use(home.World)
+			ssh.Route("first-auth", remote)
+			if err := os.Remove(ssh.InstallPath(remote)); err != nil {
+				t.Fatal(err)
+			}
+			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+testworld.AttnBinary(t))
+			ssh.Fail("first-auth", "Host key verification failed.")
+			home.Start()
+			app := enableOutposts(t, home)
+			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "first-auth"})
+			refused := outpostState(app, "outpost", protocol.OutpostStateRefused)
+			if refused.HostKeyFingerprint != nil || refused.DaemonID != nil {
+				t.Fatalf("failed ssh pinned a row: %+v", refused)
+			}
+			if restart {
+				home.Stop()
+			}
+			ssh.Restore("first-auth")
+			ssh.StartMaster(home, refused.ID, "first-auth")
+			if restart {
+				home.Start()
+				app = home.App()
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), bridge.LostAfter+fakeagent.HangGuard)
+			defer cancel()
+			result := testworld.AwaitSinceContext(ctx, app, 0, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+				return len(m.Outposts) == 1 && (m.Outposts[0].State == protocol.OutpostStateConnected || m.Outposts[0].State == protocol.OutpostStateRefused && protocol.Deref(m.Outposts[0].LastError) != protocol.Deref(refused.LastError))
+			}).Outposts[0]
+			if result.State != protocol.OutpostStateConnected {
+				t.Fatalf("answering ssh did not finish Add: %+v", result)
+			}
+			if _, err := os.Stat(ssh.InstallPath(remote)); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("restart=%v: ssh refusal -> master created out of band -> installed and paired, no Update", restart)
+		})
+	}
+}
+
+func TestSSHDisablingOutpostsCancelsUnpairedAdd(t *testing.T) {
+	ssh := testworld.NewSSH(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	ssh.Use(home.World)
+	ssh.Route("held-add", remote)
+	if err := os.Remove(ssh.InstallPath(remote)); err != nil {
+		t.Fatal(err)
+	}
+	home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+testworld.AttnBinary(t))
+	release := ssh.Pause("held-add")
+	defer release()
+	home.Start()
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "held-add"})
+	ssh.AwaitPausedRequest("held-add")
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"), "false")
+	release()
+	ssh.Drain("held-add")
+	if _, err := os.Stat(ssh.InstallPath(remote)); !os.IsNotExist(err) {
+		t.Fatalf("disabled Add installed a binary: %v", err)
+	}
+	t.Log("Outposts off cancelled the pending unpaired Add; the external requests drained and no binary was installed")
 }

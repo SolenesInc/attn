@@ -34,7 +34,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		if err != nil {
 			return fmt.Errorf("add outpost %s (%s): %w", name, address, err)
 		}
-		d.startOutpostInstall(row, true)
+		d.startOutpostDial(row)
 		d.publishFact(FactOutpostChanged, row.ID, nil)
 		return nil
 	}

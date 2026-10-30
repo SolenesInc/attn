@@ -198,7 +198,11 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			pin = &bridge.Pin{HostKey: row.HostKey, DaemonID: row.DaemonID}
 		}
 
-		pipe, err := d.openOutpostPipe(ctx, row)
+		var push *outpostPush
+		if row.HostKey == "" {
+			push = d.beginOutpostAdd(row, run.cancel)
+		}
+		pipe, err := d.openOutpostPipe(ctx, row, push)
 		var conn *bridge.Conn
 		var seen *bridge.Pin
 		if err == nil {
@@ -206,6 +210,9 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		}
 
 		if ctx.Err() != nil {
+			if push != nil {
+				d.finishOutpostPush(row.ID, push, ctx.Err())
+			}
 			if conn != nil {
 				_ = conn.Close()
 			}
@@ -234,6 +241,9 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			}
 		}
 		if err != nil {
+			if push != nil {
+				d.finishOutpostPush(row.ID, push, err)
+			}
 			state, delay := bridge.StateLost, bridge.ReconnectInterval
 			var refusal *bridge.Refusal
 			build := ""
@@ -245,7 +255,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 				state, delay = bridge.StateRefused, bridge.LostAfter
 				if refusal.Peer != nil {
 					build = refusal.Peer.Build.String()
-				} else if refusal.Reason == "build" {
+				} else if refusal.Reason == "build" || refusal.Reason == "install" {
 					build = "nothing installed"
 				}
 			}
@@ -255,11 +265,20 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			}
 			continue
 		}
-		d.bridgeOutpost(ctx, row.ID, run, conn)
+		d.bridgeOutpost(ctx, row.ID, run, conn, push)
 	}
 }
 
-func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial, conn *bridge.Conn) {
+func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial, conn *bridge.Conn, push *outpostPush) {
+	defer func() {
+		if push != nil {
+			err := conn.Err()
+			if err == nil {
+				err = fmt.Errorf("bridge closed before first pairing completed")
+			}
+			d.finishOutpostPush(id, push, err)
+		}
+	}()
 	defer func() { d.logf("outpost %s bridge closed: largest heartbeat gap %s", id, conn.MaxHeartbeatGap()) }()
 	defer conn.Close()
 	if !d.setOutpostConn(id, run, conn) {
@@ -286,6 +305,10 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 			err = conn.Err()
 		}
 		d.updateOutpost(id, run, state, conn.Peer().Build.String(), err)
+		if state == bridge.StateConnected && push != nil {
+			d.finishOutpostPush(id, push, nil)
+			push = nil
+		}
 	}
 }
 
@@ -345,24 +368,10 @@ func (d *Daemon) outpostSSH(row store.Outpost) outpostRemote {
 	}
 	return outpostssh.For(row.Destination, outpostssh.ControlPath(config.InstanceLabel(), row.ID), config.InstanceLabel())
 }
-func (d *Daemon) openOutpostPipe(ctx context.Context, row store.Outpost) (net.Conn, error) {
-	remote := d.outpostSSH(row)
-	if err := remote.EnsureMaster(ctx); err != nil {
-		return nil, err
-	}
-	probe, err := remote.Probe(ctx)
+func (d *Daemon) openOutpostPipe(ctx context.Context, row store.Outpost, push *outpostPush) (net.Conn, error) {
+	remote, err := d.prepareOutpost(ctx, row, push, false)
 	if err != nil {
-		var sshError *outpostssh.Error
-		if errors.As(err, &sshError) {
-			return nil, err
-		}
-		return nil, &bridge.Refusal{Reason: "platform", Detail: err.Error()}
-	}
-	if probe.Build == nil {
-		return nil, &bridge.Refusal{Reason: "build", Detail: "nothing installed; choose Update in Settings → Outposts at the home to install at " + remote.InstallPath()}
-	}
-	if *probe.Build != d.bridgeIdentity().Build {
-		return nil, &bridge.Refusal{Peer: &bridge.Identity{Build: *probe.Build}, Reason: "build", Detail: fmt.Sprintf("outpost runs build %s; home runs %s; choose Update in Settings → Outposts at the home", *probe.Build, d.bridgeIdentity().Build)}
+		return nil, err
 	}
 	return remote.Bridge(ctx)
 }
