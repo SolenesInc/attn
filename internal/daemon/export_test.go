@@ -29,6 +29,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	d := New(socketPath)
 	d.outpost.listen = func(string, string) (net.Listener, error) { return memnet.Listen(), nil }
 	d.notebookSyncWatch = nativeWatch
+	d.clock = clock
 	if gardenClock != nil {
 		d.gardenNow = gardenClock
 	}
@@ -38,7 +39,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManagerWithClock(d.logf, clock))
 	}
 	if terminals != nil || !nativeWatch {
-		d.notebookWatch = func(string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
+		d.notebookWatch = func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
 	}
 	d.listener = unix
 	d.httpListener = ws

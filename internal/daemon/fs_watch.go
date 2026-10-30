@@ -62,7 +62,7 @@ func (d *Daemon) addFsWatchRef(client *wsClient, root string) error {
 		if len(d.fsWatchers) >= maxFsWatchers {
 			return fmt.Errorf("too many watched roots")
 		}
-		w, err := notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, func(paths []string) {
+		w, err := notebook.NewWatcher(d.clock, root, fsdoc.CleanPath, func(paths []string) {
 			d.broadcastFsChanged(root, originExternal, paths...)
 		})
 		if err != nil {

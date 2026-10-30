@@ -2,7 +2,6 @@ package daemon_test
 
 import (
 	"context"
-	"github.com/victorarias/attn/internal/stepclock"
 	"net"
 	"os"
 	"strconv"
@@ -14,7 +13,9 @@ import (
 
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -205,6 +206,29 @@ func (w *world) advance(d time.Duration) {
 	}
 	w.elapse(d)
 	synctest.Wait()
+}
+
+// closeWatchWindows closes each folder-watch window as soon as it opens, for the rest of the test.
+func (w *world) closeWatchWindows() {
+	w.T.Helper()
+	if w.bubbled {
+		w.T.Fatal("a world inBubble cannot watch folders")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := w.clock.AwaitTimer(ctx, notebook.WatchDebounce); !ok {
+				return
+			}
+			w.clock.Advance(notebook.WatchDebounce)
+		}
+	}()
+	w.T.Cleanup(func() {
+		cancel()
+		<-done
+	})
 }
 
 // awaitTimer waits for the daemon of a world outside a bubble to arm a timer of d after the last advance or awaitTimer.

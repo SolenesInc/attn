@@ -63,6 +63,7 @@ func awaitNotebookFile(t *testing.T, peer *testworld.Peer, stack *testworld.Stac
 	if matches() {
 		return
 	}
+	defer stack.CloseWatchWindows()()
 	testworld.Await(peer, protocol.EventFsChanged, func(_ protocol.FsChangedMessage) bool { return matches() })
 }
 

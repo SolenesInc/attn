@@ -49,6 +49,7 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/settingkeys"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -218,7 +219,8 @@ type Daemon struct {
 	notebookMu          sync.Mutex
 	notebookStore       *notebook.Store
 	notebookWatcherMu   sync.Mutex
-	notebookWatch       func(string, func([]string)) (*notebook.Watcher, error)
+	notebookWatch       func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error)
+	clock               *stepclock.Clock
 	notebookWatcher     *notebook.Watcher
 	notebookWatchedRoot string
 	fsMu                sync.Mutex
@@ -509,6 +511,7 @@ func New(socketPath string) *Daemon {
 		recentFileStat:      os.Stat,
 		notebookSyncWatch:   true,
 		notebookWatch:       openNotebookWatch,
+		clock:               stepclock.Process(),
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
 		pidPath:             pidPath,
@@ -546,6 +549,7 @@ func NewForTesting(socketPath string) *Daemon {
 		recentFileStat:      os.Stat,
 		notebookSyncWatch:   true,
 		notebookWatch:       openNotebookWatch,
+		clock:               stepclock.Process(),
 		recentFilePruneGate: make(chan struct{}, 1),
 		socketPath:          socketPath,
 		pidPath:             pidPath,

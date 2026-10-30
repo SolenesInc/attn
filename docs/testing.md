@@ -215,10 +215,12 @@ Timers:
 - A world from `inBubble` cannot run agents or watch folders. Its notebook at
   `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
 - A world outside a bubble gives its daemon a stepped clock instead. Timers on
-  it, such as a terminal's kill escalation, fire only when the test calls
-  `w.advance(d)`; `w.awaitTimer(d)` first waits until a timer of `d` is armed.
-  A test that waits for such a timer without advancing fails at the hang
-  guard.
+  it, such as a terminal's kill escalation and a folder watch's window, fire
+  only when the test calls `w.advance(d)`; `w.awaitTimer(d)` first waits until
+  a timer of `d` is armed. A test that waits for such a timer without
+  advancing fails at the hang guard.
+- A test about outside edits to watched folders calls `w.closeWatchWindows()`,
+  which closes each folder watch's window as soon as it opens.
 - `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
   terminal's `Stall(alive, err)` makes its worker stop answering until the
   test calls the returned function: recovery waits out its deadline and counts
@@ -261,10 +263,11 @@ returns `testworld.Main(m)`.
   Await its output with `AwaitStdout` or `AwaitStderr`, or its result with
   `Wait`. The stack interrupts it at cleanup.
 - `s.Advance(d)` moves the stepped clock of that daemon and of every PTY worker
-  it started: the bridge's stall, loss, retry and dial-answer timers, and a
-  terminal's kill escalation. Every stack uses this stepped clock; the shared
-  PTY host, which is not Go, keeps real time. A test waiting for one of those
-  timers without advancing fails at the hang guard.
+  it started: the bridge's stall, loss, retry and dial-answer timers, a
+  terminal's kill escalation and a folder watch's window. Every stack uses
+  this stepped clock; the shared PTY host, which is not Go, keeps real time.
+  A test waiting for one of those timers without advancing fails at the hang
+  guard.
   Heartbeats and kernel socket deadlines keep real time, so a dial may still
   fail without an advance. Await the connected or stalled row before advancing
   its liveness timers.
@@ -273,6 +276,10 @@ returns `testworld.Main(m)`.
   Use it before advancing an asynchronous dial, retry or kill: its row or
   close can arrive before its timer is armed. A failure names the requested
   duration and the timers pending.
+- `s.CloseWatchWindows()` closes each folder watch's window as soon as it
+  opens, until the test calls the returned function. Each close moves the
+  whole clock, the bridge's timers included, so keep it to one wait for a
+  watched change.
 - A test that starts PTY workers without a stack steps them with
   `testworld.StepChildren(t)`, whose `Advance` and `AwaitTimer` work the same
   way. The test process itself keeps real time.

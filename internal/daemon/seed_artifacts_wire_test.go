@@ -273,6 +273,7 @@ func TestASeedFolderServesOnlyTypedSafeFilesToItsDocument(t *testing.T) {
 
 func TestEditsMadeDirectlyInASeedFolderReachTheGarden(t *testing.T) {
 	w := newWorld(t)
+	w.closeWatchWindows()
 	cli := w.Client()
 	root := seedArtifactsNotebook(t, w)
 	seed := plantSeedAs(t, cli, "", "Durable files")

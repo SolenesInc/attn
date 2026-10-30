@@ -9,9 +9,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
-const DefaultWatchDebounce = 400 * time.Millisecond
+const WatchDebounce = 400 * time.Millisecond
 
 const selfWriteTTL = 3 * time.Second
 
@@ -28,7 +30,7 @@ type treeBackend interface {
 
 type Watcher struct {
 	root      string
-	debounce  time.Duration
+	clock     *stepclock.Clock
 	cleanPath func(string) (string, error)
 	onChange  func(paths []string)
 
@@ -50,11 +52,7 @@ type SelfWrite struct {
 	Hash string
 }
 
-func NewWatcher(root string, debounce time.Duration, onChange func(paths []string)) (*Watcher, error) {
-	return NewWatcherWithCleaner(root, debounce, CleanPath, onChange)
-}
-
-func NewWatcherWithCleaner(root string, debounce time.Duration, cleanPath func(string) (string, error), onChange func(paths []string)) (*Watcher, error) {
+func NewWatcher(clock *stepclock.Clock, root string, cleanPath func(string) (string, error), onChange func(paths []string)) (*Watcher, error) {
 	clean := filepath.Clean(root)
 	if info, err := os.Stat(clean); err != nil {
 		return nil, fmt.Errorf("notebook watcher: %w", err)
@@ -67,7 +65,7 @@ func NewWatcherWithCleaner(root string, debounce time.Duration, cleanPath func(s
 	}
 	w := &Watcher{
 		root:       clean,
-		debounce:   debounce,
+		clock:      clock,
 		cleanPath:  cleanPath,
 		onChange:   onChange,
 		backend:    backend,
@@ -84,7 +82,7 @@ func (w *Watcher) NoteSelfWrite(writes ...SelfWrite) {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	exp := time.Now().Add(selfWriteTTL)
+	exp := w.clock.Now().Add(selfWriteTTL)
 	for _, sw := range writes {
 		clean, err := w.cleanPath(sw.Rel)
 		if err != nil {
@@ -109,7 +107,13 @@ func (w *Watcher) Close() error {
 func (w *Watcher) loop() {
 	defer close(w.loopDone)
 	pending := make(map[string]struct{})
-	var timerC <-chan time.Time
+	var debounce stepclock.Timer
+	var debounced <-chan time.Time
+	defer func() {
+		if debounce != nil {
+			debounce.Stop()
+		}
+	}()
 	for {
 		select {
 		case ev, ok := <-w.backend.events():
@@ -117,11 +121,12 @@ func (w *Watcher) loop() {
 				return
 			}
 			w.handleEvent(ev, pending)
-			if len(pending) > 0 && timerC == nil {
-				timerC = time.After(w.debounce)
+			if len(pending) > 0 && debounced == nil {
+				debounce = w.clock.NewTimer(WatchDebounce)
+				debounced = debounce.C()
 			}
-		case <-timerC:
-			timerC = nil
+		case <-debounced:
+			debounced = nil
 			w.flush(pending)
 		}
 	}
@@ -169,31 +174,25 @@ func (w *Watcher) flush(pending map[string]struct{}) {
 
 func (w *Watcher) dropSelfWrites(rels []string) []string {
 	w.mu.Lock()
-	now := time.Now()
+	now := w.clock.Now()
 	for k, rec := range w.selfWrites {
 		if now.After(rec.expiry) {
 			delete(w.selfWrites, k)
 		}
 	}
-	out := make([]string, 0, len(rels))
-	type recheck struct{ rel, hash string }
-	var pending []recheck
+	written := make(map[string]string)
 	for _, rel := range rels {
-		if rec, ok := w.selfWrites[rel]; ok && !now.After(rec.expiry) {
-			delete(w.selfWrites, rel)
-			if rec.hash == "" {
-				continue
-			}
-			pending = append(pending, recheck{rel: rel, hash: rec.hash})
+		if rec, ok := w.selfWrites[rel]; ok {
+			written[rel] = rec.hash
+		}
+	}
+	w.mu.Unlock()
+	out := make([]string, 0, len(rels))
+	for _, rel := range rels {
+		if hash, ok := written[rel]; ok && w.diskHash(rel) == hash {
 			continue
 		}
 		out = append(out, rel)
-	}
-	w.mu.Unlock()
-	for _, rc := range pending {
-		if w.diskHash(rc.rel) != rc.hash {
-			out = append(out, rc.rel)
-		}
 	}
 	return out
 }

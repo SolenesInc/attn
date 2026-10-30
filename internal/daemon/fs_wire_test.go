@@ -138,7 +138,9 @@ func fsWriteFile(t *testing.T, path string, content []byte) {
 func newFsWorld(t *testing.T) *world {
 	t.Helper()
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", "fs-browser-host-token")
-	return newWorld(t)
+	w := newWorld(t)
+	w.closeWatchWindows()
+	return w
 }
 
 func fsRemotePeer(w *world) *testworld.Peer {

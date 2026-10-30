@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/stepclock"
 )
 
@@ -32,6 +33,31 @@ func (s *Stack) Advance(d time.Duration) {
 func (s *Stack) AwaitTimer(d time.Duration) {
 	s.T.Helper()
 	awaitHubTimer(s.T, s.clock, d)
+}
+
+// CloseWatchWindows closes each of the daemon's folder-watch windows as soon as it opens, until stop is called.
+// Every window it closes moves the whole stepped clock, so keep it to the wait for a watched change.
+func (s *Stack) CloseWatchWindows() (stop func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := s.clock.AwaitTimer(ctx, notebook.WatchDebounce); !ok {
+				return
+			}
+			guard, cancelGuard := context.WithTimeout(ctx, fakeagent.HangGuard)
+			err := s.clock.Advance(guard, notebook.WatchDebounce)
+			cancelGuard()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 // ChildClock is the stepped clock of the processes a test starts itself, such as PTY workers.

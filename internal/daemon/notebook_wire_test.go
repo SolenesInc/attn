@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -126,6 +127,7 @@ func TestNotebookWritesAreCompareAndSwapWithNormalizedPaths(t *testing.T) {
 
 func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 	w := newWorld(t)
+	w.closeWatchWindows()
 	app := w.App()
 	root := fsNotebookRoot(t, w)
 	fsWriteFile(t, filepath.Join(root, "gone.md"), []byte(notebookNote("about to go")))
@@ -154,6 +156,32 @@ func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 		if heard["own.md"] {
 			t.Fatalf("attn's own write was reported as external: %v", external.Paths)
 		}
+	}
+}
+
+func TestNotebookKeepsItsOwnWriteQuietWhenItsEventsSpanTwoWatchWindows(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	root := fsNotebookRoot(t, w)
+	notebookAskList(app, "")
+
+	own := notebookNote("attn wrote this")
+	notebookAskWrite(app, "own.md", own, "")
+	w.awaitTimer(notebook.WatchDebounce)
+	w.advance(notebook.WatchDebounce)
+
+	fsWriteFile(t, filepath.Join(root, ".own.md.tmp"), []byte(own))
+	if err := os.Rename(filepath.Join(root, ".own.md.tmp"), filepath.Join(root, "own.md")); err != nil {
+		t.Fatal(err)
+	}
+	fsWriteFile(t, filepath.Join(root, "ext.md"), []byte(notebookNote("edited externally")))
+	w.closeWatchWindows()
+	for heard := false; !heard; {
+		external := fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool { return m.Root == root && m.Origin == "external" })
+		if slices.Contains(external.Paths, "own.md") {
+			t.Fatalf("a later event of attn's own write was reported as external: %v", external.Paths)
+		}
+		heard = slices.Contains(external.Paths, "ext.md")
 	}
 }
 

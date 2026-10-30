@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 const originAgent = "agent"
@@ -37,8 +38,8 @@ func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
 	return store, nil
 }
 
-func openNotebookWatch(root string, changed func([]string)) (*notebook.Watcher, error) {
-	return notebook.NewWatcherWithCleaner(root, notebook.DefaultWatchDebounce, fsdoc.CleanPath, changed)
+func openNotebookWatch(clock *stepclock.Clock, root string, changed func([]string)) (*notebook.Watcher, error) {
+	return notebook.NewWatcher(clock, root, fsdoc.CleanPath, changed)
 }
 
 func (d *Daemon) ensureNotebookWatcher(root string) {
@@ -60,7 +61,7 @@ func (d *Daemon) ensureNotebookWatcher(root string) {
 		d.notebookWatcher = nil
 		d.notebookWatchedRoot = ""
 	}
-	w, err := d.notebookWatch(root, func(paths []string) {
+	w, err := d.notebookWatch(d.clock, root, func(paths []string) {
 		d.broadcastFsChanged(root, originExternal, paths...)
 		d.notebookFilesChanged()
 		if !d.enrollmentStatus().IsHome() {
@@ -132,20 +133,20 @@ func (d *Daemon) ensureNotebookScaffold() (root string, created bool, err error)
 	if err != nil {
 		return "", false, err
 	}
-	createdPaths, scaffoldErr := store.EnsureScaffold()
-	if len(createdPaths) > 0 {
-		writes := make([]notebook.SelfWrite, len(createdPaths))
-		for i, p := range createdPaths {
-			writes[i] = notebook.SelfWrite{Rel: p}
+	scaffolded, scaffoldErr := store.EnsureScaffold()
+	if len(scaffolded) > 0 {
+		createdPaths := make([]string, len(scaffolded))
+		for i, write := range scaffolded {
+			createdPaths[i] = write.Rel
 		}
-		d.noteNotebookSelfWrite(writes...)
+		d.noteNotebookSelfWrite(scaffolded...)
 		d.broadcastFsChanged(store.Root(), originAgent, createdPaths...)
 		d.ensureNotebookWatcher(store.Root())
 	}
 	if scaffoldErr != nil {
 		return "", false, scaffoldErr
 	}
-	return store.Root(), len(createdPaths) > 0, nil
+	return store.Root(), len(scaffolded) > 0, nil
 }
 
 func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideMessage) {

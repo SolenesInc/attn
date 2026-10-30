@@ -28,7 +28,7 @@ func NewStore(root string) *Store {
 
 func (s *Store) Root() string { return s.root }
 
-func (s *Store) EnsureScaffold() (createdPaths []string, err error) {
+func (s *Store) EnsureScaffold() (created []SelfWrite, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,19 +50,19 @@ func (s *Store) EnsureScaffold() (createdPaths []string, err error) {
 	for _, f := range scaffoldFiles() {
 		abs := filepath.Join(s.root, filepath.FromSlash(f.relPath))
 		if err := s.checkWithinResolvedRoot(abs); err != nil {
-			return createdPaths, err
+			return created, err
 		}
 		if _, statErr := os.Stat(abs); statErr == nil {
 			continue
 		} else if !os.IsNotExist(statErr) {
-			return createdPaths, statErr
+			return created, statErr
 		}
 		if err := writeAtomic(abs, []byte(f.content)); err != nil {
-			return createdPaths, err
+			return created, err
 		}
-		createdPaths = append(createdPaths, f.relPath)
+		created = append(created, SelfWrite{Rel: f.relPath, Hash: Hash([]byte(f.content))})
 	}
-	return createdPaths, nil
+	return created, nil
 }
 
 func (s *Store) Read(p string) (content []byte, hash string, err error) {
