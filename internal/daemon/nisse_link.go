@@ -32,7 +32,7 @@ const (
 	nisseCallLimit                           = 5 * time.Second
 )
 
-var nisseServerEnv = []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "BUN_GC_TIMER_DISABLE=1"}
+var nisseServerEnv = []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "ATTN_CODEX_SHARED_PROFILE=", "CODEX_THREAD_ID=", "BUN_GC_TIMER_DISABLE=1"}
 
 type nisseLink struct {
 	d        *Daemon

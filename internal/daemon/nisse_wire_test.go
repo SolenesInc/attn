@@ -244,11 +244,26 @@ func TestANisseConversationOpenInAnotherProfileIsRefusedThere(t *testing.T) {
 }
 
 func TestACommandANisseAgentRunsActsAsItsSession(t *testing.T) {
-	w := newWorld(t, fakeagent.Nisse)
-	app := w.App()
-	session, nisse, server := nisseSession(t, w, app)
-	if got := strings.TrimSpace(server.RunTool(nisse.ConversationID, `"$ATTN_WRAPPER_PATH" presence`)); got != "running inside attn (session "+session+")" {
-		t.Errorf("attn presence from the Nisse agent = %q, want session %s", got, session)
+	for _, outerCodex := range []bool{false, true} {
+		name := "current environment"
+		if outerCodex {
+			name = "outer shared Codex"
+		}
+		t.Run(name, func(t *testing.T) {
+			if outerCodex {
+				t.Setenv("ATTN_CODEX_SHARED_PROFILE", "outer-profile")
+				t.Setenv("CODEX_THREAD_ID", "outer-conversation")
+			}
+			w := newWorld(t, fakeagent.Nisse)
+			app := w.App()
+			session, nisse, server := nisseSession(t, w, app)
+			got := strings.TrimSpace(server.RunTool(nisse.ConversationID, `"$ATTN_WRAPPER_PATH" presence`))
+			t.Logf("attn presence from the Nisse agent: %s", got)
+			if got != "running inside attn (session "+session+")" {
+				t.Errorf("attn presence from the Nisse agent = %q, want session %s", got, session)
+			}
+			server.RunTool(nisse.ConversationID, `"$ATTN_WRAPPER_PATH" _hook-state idle`)
+		})
 	}
 }
 

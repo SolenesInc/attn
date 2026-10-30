@@ -1923,8 +1923,8 @@ func hookCaller(id protocol.TerminalID, input hookInput) protocol.TerminalID {
 	if os.Getenv("ATTN_TERMINAL_ID") != "" {
 		return id
 	}
-	profile, shared := os.LookupEnv(harness.CodexSharedProfileEnv)
-	if !shared {
+	profile := os.Getenv(harness.CodexSharedProfileEnv)
+	if profile == "" {
 		return id
 	}
 	return harness.CodexThreadTerminal(profile, input.SessionID)

@@ -47,7 +47,7 @@ func TerminalFromEnv() TerminalID {
 	if id := os.Getenv("ATTN_TERMINAL_ID"); id != "" {
 		return TerminalID(id)
 	}
-	if profile, shared := os.LookupEnv(CodexSharedProfileEnv); shared {
+	if profile := os.Getenv(CodexSharedProfileEnv); profile != "" {
 		return CodexThreadTerminal(profile, os.Getenv("CODEX_THREAD_ID"))
 	}
 	if conversation := os.Getenv("NISSE_ROOT_CONVERSATION"); conversation != "" {
