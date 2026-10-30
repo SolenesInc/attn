@@ -318,6 +318,13 @@ func (s *SSH) RequireConfirmation(destination string) {
 	s.save()
 }
 
+func (s *SSH) RequireAgent(socket string) {
+	s.t.Helper()
+	if err := os.WriteFile(filepath.Join(s.Dir, "agent-socket"), []byte(socket), 0600); err != nil {
+		s.t.Fatal(err)
+	}
+}
+
 func (s *SSH) MasterAttempts() int {
 	s.t.Helper()
 	data, err := os.ReadFile(filepath.Join(s.Dir, "calls.jsonl"))

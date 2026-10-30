@@ -120,6 +120,9 @@ func Main() {
 		fail("ssh: Could not resolve hostname " + destination + ": nodename nor servname provided, or not known")
 	}
 	if master {
+		if agent, err := os.ReadFile(filepath.Join(filepath.Dir(os.Getenv("ATTN_TESTWORLD_SSH_ROUTES")), "agent-socket")); err == nil && os.Getenv("SSH_AUTH_SOCK") != string(agent) {
+			fail(destination + ": Permission denied (publickey).")
+		}
 		binary, _ := os.Executable()
 		ready, signal, _ := os.Pipe()
 		cmd := exec.Command(binary)

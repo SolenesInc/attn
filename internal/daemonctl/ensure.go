@@ -250,13 +250,7 @@ func spawnDaemon(binaryPath string) (daemonProcess, error) {
 	}
 	cmd := exec.Command(binaryPath, "daemon")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	var env []string
-	for _, pair := range os.Environ() {
-		if !strings.HasPrefix(pair, "SSH_") {
-			env = append(env, pair)
-		}
-	}
-	cmd.Env = append(env,
+	cmd.Env = append(os.Environ(),
 		"ATTN_WRAPPER_PATH="+binaryPath,
 		fmt.Sprintf("%s=%d", readyFDEnv, 3),
 	)

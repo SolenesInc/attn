@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,36 +12,37 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestSSHBridgeStartsDaemonAndRecoversAfterMasterExit(t *testing.T) {
+func TestSSHBridgeDetachesTheOutpostFromItsSessionAndReconnectsThroughTheHomeAgent(t *testing.T) {
 	home, remote := testworld.NewStack(t), testworld.NewStack(t)
-	remote.Vars = append(remote.Vars, "SSH_CONNECTION=the-starting-ssh-session")
+	agent := filepath.Join(home.Dir, "caller-agent.sock")
+	home.Vars = append(home.Vars, "SSH_AUTH_SOCK="+agent)
+	remote.Vars = append(remote.Vars, "SSH_CONNECTION=the-starting-ssh-session", "SSH_AUTH_SOCK=/the-starting-ssh-session/agent")
 	pair := testworld.PrepareOutpostPair(t, home, remote)
-	home.Start()
-	pair.Connect()
+	pair.SSH.RequireAgent(agent)
+	if got := home.Attn("daemon", "ensure"); got.Code != 0 || !strings.Contains(got.Stdout, `"started"`) {
+		t.Fatalf("attn daemon ensure: %+v", got)
+	}
 	t.Cleanup(func() {
-		result := remote.Attn("daemon", "stop")
-		if result.Code != 0 {
-			t.Errorf("stop detached daemon: %+v", result)
+		for _, s := range []*testworld.Stack{home, remote} {
+			if result := s.Attn("daemon", "stop"); result.Code != 0 {
+				t.Errorf("stop daemon started by ensure: %+v", result)
+			}
 		}
 	})
+	pair.Connect()
 	id := home.Spawn(pair.App, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &pair.Host })
-	pair.App.TypeLine(id, "printf 'daemon-ssh-env-%s\\n' \"${SSH_CONNECTION-unset}\"")
-	pair.App.AwaitScreen(id, "daemon-ssh-env-unset")
+	pair.App.TypeLine(id, "printf 'daemon-ssh-env-%s-%s\\n' \"${SSH_CONNECTION-unset}\" \"${SSH_AUTH_SOCK-unset}\"")
+	pair.App.AwaitScreen(id, "daemon-ssh-env-unset-unset")
 	pair.App.TypeLine(id, "printf 'before-master-exit-%s\\n' $$")
 	pair.App.AwaitScreen(id, "before-master-exit-")
-	beforeSince := home.App().Initial.Outposts[0].StateSince
 	mark := pair.App.EventCount()
 	pair.SSH.ExitMaster(home, pair.Host)
 	outpostStateSince(pair.App, "outpost", protocol.OutpostStateLost, mark)
 	home.Advance(bridge.ReconnectInterval)
-	testworld.AwaitSince(pair.App, mark, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-		for _, r := range m.Outposts {
-			if r.ID == pair.Host && r.State == protocol.OutpostStateConnected && r.StateSince != beforeSince {
-				return true
-			}
-		}
-		return false
-	})
+	outpostStateSince(pair.App, "outpost", protocol.OutpostStateConnected, mark)
+	if attempts := pair.SSH.MasterAttempts(); attempts != 2 {
+		t.Fatalf("batch master attempts = %d, want one for Add and one for reconnect", attempts)
+	}
 	terminal := protocol.TerminalID(pair.App.Terminal(id))
 	result := testworld.Request(pair.App, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal}, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
 	if !result.Success {
@@ -48,8 +50,9 @@ func TestSSHBridgeStartsDaemonAndRecoversAfterMasterExit(t *testing.T) {
 	}
 	pair.App.TypeLine(id, "printf 'after-master-exit-%s\\n' $$")
 	pair.App.AwaitScreen(id, "after-master-exit-")
-	t.Log("Add by destination started the remote daemon; a shell took typing before and after the master's exit; lost -> connected")
+	t.Logf("attn daemon ensure kept SSH_AUTH_SOCK=%s for Add and reconnect; _bridge started the outpost daemon without SSH_*; its shell took typing before and after the master's exit", agent)
 }
+
 func TestSSHFailuresRefusedAndLost(t *testing.T) {
 	for _, tc := range []struct {
 		name, stderr string

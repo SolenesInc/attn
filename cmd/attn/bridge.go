@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemonctl"
@@ -34,6 +35,7 @@ func relayBridge(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	detachFromSSHSession()
 	if _, err = daemonctl.Ensure(ctx, binary); err != nil {
 		return err
 	}
@@ -55,4 +57,12 @@ func relayBridge(ctx context.Context) error {
 	default:
 	}
 	return err
+}
+
+func detachFromSSHSession() {
+	for _, pair := range os.Environ() {
+		if key, _, _ := strings.Cut(pair, "="); strings.HasPrefix(key, "SSH_") {
+			_ = os.Unsetenv(key)
+		}
+	}
 }
