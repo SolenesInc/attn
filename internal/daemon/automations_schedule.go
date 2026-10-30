@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/store"
@@ -232,6 +233,11 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 	continuity, _ := automation.ResolvedTriggerPolicy(spec)
 	if continuity == "singleton" {
 		continuityKey = "singleton"
+		if err := d.releaseUnresumableSingleton(definition.ID, effective.Launch.Agent); err != nil {
+			observationLock.Unlock()
+			d.logf("automation schedule observation release %d: %v", definition.ID, err)
+			return err
+		}
 	}
 	reservation, claimErr := d.newAutomationRunReservation(&definition)
 	if claimErr != nil {
@@ -262,4 +268,19 @@ func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefiniti
 		d.logf("automation schedule observation deliver %d: %v", definition.ID, loadErr)
 	}
 	return nil
+}
+
+func (d *Daemon) releaseUnresumableSingleton(definitionID int, agent string) error {
+	binding, err := d.store.GetActiveAutomationContinuityBinding(definitionID, "singleton")
+	if err != nil || binding == nil {
+		return err
+	}
+	origin, err := d.store.GetAutomationRun(binding.OriginRunID)
+	if err != nil || origin == nil || origin.State != store.AutomationRunStateDelivered {
+		return err
+	}
+	if d.automationSessionIsLive(binding.SessionID) || d.conversationReady(agentdriver.Get(agent), strings.TrimSpace(d.store.GetResumeSessionID(binding.SessionID))) {
+		return nil
+	}
+	return d.store.ReleaseAutomationContinuityBindings(definitionID, store.AutomationBindingReleasedUnresumable, time.Now())
 }

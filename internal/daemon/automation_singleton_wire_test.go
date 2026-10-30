@@ -121,7 +121,7 @@ func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T
 	}
 }
 
-func TestClosingASingletonsUnresumableSessionStartsAFreshOneOnTheNextRun(t *testing.T) {
+func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL", "100ms")
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
@@ -129,23 +129,23 @@ func TestClosingASingletonsUnresumableSessionStartsAFreshOneOnTheNextRun(t *test
 		t.Fatal(err)
 	}
 	id := applyAutomation(t, cli, strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "*/2 * * * *", "@every 1s", 1)).ID
-	awaitRun := func(state string, earlier ...string) protocol.AutomationRunSummary {
+	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
 		t.Helper()
 		for {
-			if runs := automationRuns(t, cli, id); len(runs) > 0 && runs[0].State == state && !slices.Contains(earlier, runs[0].ID) {
+			if runs := automationRuns(t, cli, id); len(runs) > 0 && runs[0].State == "delivered" && !slices.Contains(earlier, runs[0].ID) {
+				setAutomationEnabled(t, cli, id, false)
 				return runs[0]
 			}
 			awaitAutomationChanged(app, id)
 		}
 	}
-	first := awaitRun("delivered")
-	session := protocol.Deref(first.SessionID)
-	agent := w.Launched(string(session))
+	first := awaitDelivered()
+	lost := protocol.Deref(first.SessionID)
+	agent := w.Launched(string(lost))
 	agent.Prompted()
 	agent.Reply("Swept. <!-- attn:state=idle -->")
-	setAutomationEnabled(t, cli, id, false)
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: session})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == session })
+	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: lost})
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.SessionID) == lost })
 	transcripts, err := filepath.Glob(filepath.Join(w.Dir, "toolhome", ".claude", "projects", "*", agent.ConversationID+".jsonl"))
 	if err != nil || len(transcripts) != 1 {
 		t.Fatalf("the singleton's transcript: %v %v", transcripts, err)
@@ -155,29 +155,32 @@ func TestClosingASingletonsUnresumableSessionStartsAFreshOneOnTheNextRun(t *test
 	}
 
 	setAutomationEnabled(t, cli, id, true)
-	refused := awaitRun("failed", first.ID)
-	if want := "close session " + string(session) + " to start a fresh one on the next run"; !strings.Contains(protocol.Deref(refused.LastError), want) {
-		t.Fatalf("the unresumable singleton failed with %q, want it to say %q", protocol.Deref(refused.LastError), want)
+	fresh := awaitDelivered(first.ID)
+	session := protocol.Deref(fresh.SessionID)
+	if session == lost || protocol.Deref(fresh.SeedID) == protocol.Deref(first.SeedID) {
+		t.Fatalf("without a transcript the singleton ran on %s/%s, want a session and seed of its own", session, protocol.Deref(fresh.SeedID))
 	}
-
-	closeFromApp(app, string(session))
-	shown, err := cli.AutomationDefinition(id)
-	if err != nil || shown.Definition.LastRun.Automation == nil || !protocol.Deref(shown.Definition.LastRun.Automation.Superseded) {
-		t.Fatalf("after its session closed, show reads the last run as %+v (%v), want it superseded", shown.Definition.LastRun, err)
+	replacement := w.Launched(string(session))
+	if replacement.Resumed || !strings.Contains(replacement.Prompted(), "Sweep.") {
+		t.Fatalf("the replacement started as %+v, want a fresh conversation on the prompt", replacement)
 	}
-	var fresh protocol.AutomationRunSummary
-	for fresh.ID == "" {
-		awaitAutomationChanged(app, id)
-		if runs := automationRuns(t, cli, id); runs[0].State == "delivered" && runs[0].ID != first.ID {
-			fresh = runs[0]
+	for _, run := range automationRuns(t, cli, id) {
+		if run.Automation == nil || protocol.Deref(run.Automation.Superseded) != (run.ID == first.ID) {
+			t.Fatalf("run history disagrees about the current session: %+v", run)
 		}
 	}
-	setAutomationEnabled(t, cli, id, false)
-	if protocol.Deref(fresh.SessionID) == session || protocol.Deref(fresh.SeedID) == protocol.Deref(first.SeedID) {
-		t.Fatalf("after its session closed the singleton ran on %s/%s, want a session and seed of its own", protocol.Deref(fresh.SessionID), protocol.Deref(fresh.SeedID))
+
+	replacement.Reply("Swept. <!-- attn:state=idle -->")
+	closeFromApp(app, string(session))
+	shown, err := cli.AutomationDefinition(id)
+	if err != nil || shown.Definition.LastRun.Automation == nil || protocol.Deref(shown.Definition.LastRun.Automation.Superseded) {
+		t.Fatalf("after its session closed, show reads the last run as %+v (%v), want it current", shown.Definition.LastRun, err)
 	}
-	if again := w.Launched(string(protocol.Deref(fresh.SessionID))); again.Resumed || !strings.Contains(again.Prompted(), "Sweep.") {
-		t.Fatalf("the replacement started as %+v, want a fresh conversation on the prompt", again)
+	setAutomationEnabled(t, cli, id, true)
+	reopened := awaitDelivered(first.ID, fresh.ID)
+	resumed := w.Launched(string(session))
+	if protocol.Deref(reopened.SessionID) != session || protocol.Deref(reopened.SeedID) != protocol.Deref(fresh.SeedID) || !resumed.Resumed || resumed.ConversationID != replacement.ConversationID {
+		t.Fatalf("after closing its session the singleton ran on %s/%s as %+v, want session %s resumed on its conversation %s", protocol.Deref(reopened.SessionID), protocol.Deref(reopened.SeedID), resumed, session, replacement.ConversationID)
 	}
-	t.Logf("%s refused with %q; after closing it the next run launched %s fresh", session, protocol.Deref(refused.LastError), protocol.Deref(fresh.SessionID))
+	t.Logf("%s lost its transcript and the next run launched %s fresh; closing %s and running again resumed conversation %s", lost, session, session, replacement.ConversationID)
 }
