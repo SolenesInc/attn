@@ -28,6 +28,7 @@ if ! [[ "$test_gomaxprocs" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 export GOMAXPROCS="$test_gomaxprocs"
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"
 
 go_bin="$(command -v go)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/attn-go-test.XXXXXX")"
@@ -42,8 +43,8 @@ trap cleanup EXIT
 # packages and subprocesses before any package-level setup executes. Keep the
 # outer path stable so Go can reuse successful test results; TestMain still
 # replaces it with a fresh per-process directory whenever tests actually run.
-runner_hash="$(shasum -a 256 "$root/scripts/test-go.sh" "$root/scripts/lib/test-git.sh" | shasum -a 256 | awk '{ print $1 }')"
-cache_namespace="$(printf '%s\n%s\n%s\n' "$root" "$($go_bin env GOVERSION)" "$runner_hash" | shasum -a 256 | awk '{ print $1 }')"
+runner_hash="$(cd "$root" && shasum -a 256 scripts/test-go.sh scripts/lib/test-git.sh | shasum -a 256 | awk '{ print $1 }')"
+cache_namespace="$(printf '%s\n%s\n' "$($go_bin env GOVERSION)" "$runner_hash" | shasum -a 256 | awk '{ print $1 }')"
 test_cache_root="${TMPDIR:-/tmp}/attn-go-test-cache/$cache_namespace"
 mkdir -p "$test_cache_root/data"
 export ATTN_DATA_DIR="$test_cache_root/data"
@@ -66,6 +67,12 @@ if [ ! -L "$test_bin_dir/git" ] || [ "$(readlink "$test_bin_dir/git")" != "$test
   exit 2
 fi
 export PATH="$test_bin_dir:$PATH"
+
+if [ "${1:-}" = "--packages" ]; then
+  shift
+  "$go_bin" test "$@"
+  exit
+fi
 
 short_mode=false
 for arg in "$@"; do

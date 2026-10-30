@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -39,11 +38,10 @@ func waitForPIDsGone(timeout time.Duration, pids ...int) bool {
 
 func buildAttnBinary(t *testing.T) string {
 	t.Helper()
-	_, currentFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
 	}
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
 	binary := filepath.Join(t.TempDir(), "attn-test-bin")
 	cmd := exec.Command("go", "build", "-o", binary, "./cmd/attn")
 	cmd.Dir = repoRoot

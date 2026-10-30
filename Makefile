@@ -6,6 +6,8 @@
 # `make install-dev` = install only.
 .DEFAULT_GOAL := run
 
+export GOFLAGS := $(GOFLAGS) -trimpath
+
 BINARY_NAME=attn
 # Prod bundle. Referenced by the parse-time guard message and `sign-app`; every
 # other instance's app path / bundle id / port is derived at build+install time

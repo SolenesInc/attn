@@ -5,11 +5,19 @@ daemon over `wsctl`, the CLI, a non-production instance, a throwaway test. Keep
 those scratch checks out of commits.
 
 Before landing, run targeted tests for the behavior you changed, such as
-`go test -run TestName ./pkg` or one file with `pnpm --dir app exec vitest run`.
+`./scripts/test-go.sh --packages -run TestName ./pkg` or one file with
+`pnpm --dir app exec vitest run`.
 Then check the affected surface and land with `scripts/land.sh`, which runs a
 fast gate. The full Go and frontend suites run in CI on `main`. Do not run
 `make test`, `make lint`, `make test-frontend`, or another full suite as a
 pre-landing check. See [Trunk-based development](trunk-based-development.md).
+
+`--packages` passes the remaining arguments to `go test` without running the
+full suite. The runner and Makefile use `-trimpath` so unchanged packages can
+reuse build artifacts across worktrees. The runner gives targeted and full
+test runs the same isolated outer data directory; each package's `TestMain`
+still creates a fresh directory when tests run. Go can reuse successful test
+results when their flags, environment, and file inputs also match.
 
 ## Promises
 

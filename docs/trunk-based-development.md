@@ -63,7 +63,8 @@ and run `scripts/land.sh` again. Combinations of changes are verified by
 
 ## Verifying before landing
 
-Run targeted tests for the behavior you changed: `go test -run TestName ./pkg`
+Run targeted tests for the behavior you changed:
+`./scripts/test-go.sh --packages -run TestName ./pkg`
 or `pnpm --dir app exec vitest run src/path/to/file.test.tsx`. Verify the change
 on the surface it touches: the CLI, the daemon over `wsctl`, a non-production
 instance, the app. The drive-attn skill's feature map lists every way into a

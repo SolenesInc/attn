@@ -152,7 +152,7 @@ on `main` after they land, and releases ship only reviewed, green commits.
 
 ## Commands and verification
 
-- `go test -run TestName ./pkg`: Targeted Go tests
+- `./scripts/test-go.sh --packages -run TestName ./pkg`: Targeted Go tests
 - `pnpm --dir app exec vitest run src/path/to/file.test.tsx`: One frontend test file
 - `scripts/land.sh`: Fast compile, typecheck, lint, generated-file and script
   checks selected by changed paths, then push to `main`
