@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"context"
+	"github.com/victorarias/attn/internal/stepclock"
 	"net"
 	"os"
 	"strconv"
@@ -25,6 +26,7 @@ type world struct {
 	daemon      *daemon.WireDaemon
 	terms       *testworld.Terminals
 	gardenClock func() time.Time
+	clock       *stepclock.Clock
 }
 
 func newWorld(t testing.TB, agents ...fakeagent.Harness) *world {
@@ -89,7 +91,10 @@ func (w *world) start() {
 	if w.terms != nil {
 		terminals = w.terms
 	}
-	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, !w.bubbled, w.gardenClock)
+	if !w.bubbled && w.clock == nil {
+		w.clock = stepclock.New()
+	}
+	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, !w.bubbled, w.clock, w.gardenClock)
 	if err != nil {
 		w.T.Fatalf("start daemon: %v", err)
 	}
@@ -131,13 +136,32 @@ func (w *world) stop() {
 		synctest.Wait()
 	}
 	w.ClosePeers()
-	if err := w.daemon.Stop(); err != nil {
+	if err := w.stopDaemon(); err != nil {
 		w.T.Errorf("stop daemon: %v", err)
 	}
 	w.daemon = nil
 	if w.T.Failed() {
 		w.LogDaemonTail()
 	}
+}
+
+func (w *world) stopDaemon() error {
+	if w.bubbled {
+		return w.daemon.Stop()
+	}
+	stopped := make(chan error, 1)
+	d := w.daemon
+	go func() { stopped <- d.Stop() }()
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	select {
+	case err := <-stopped:
+		return err
+	case <-guard.C:
+	}
+	w.T.Errorf("the daemon did not stop within %s; a timer on its stepped clock may hold it, so the world advances a day to finish", fakeagent.HangGuard)
+	w.clock.Advance(24 * time.Hour)
+	return <-stopped
 }
 
 func (w *world) restart() {
@@ -174,8 +198,26 @@ func (w *world) beginStop(t *testing.T) (finish func()) {
 }
 
 func (w *world) advance(d time.Duration) {
+	w.T.Helper()
+	if !w.bubbled {
+		w.clock.Advance(d)
+		return
+	}
 	w.elapse(d)
 	synctest.Wait()
+}
+
+// awaitTimer waits for the daemon of a world outside a bubble to arm a timer of d after the last advance or awaitTimer.
+func (w *world) awaitTimer(d time.Duration) {
+	w.T.Helper()
+	if w.bubbled {
+		w.T.Fatal("awaitTimer reads the stepped clock, which a world inBubble does not have")
+	}
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	if seen, ok := w.clock.AwaitTimer(d, guard.C); !ok {
+		w.T.Fatalf("awaitTimer(%s): no such timer armed within %s; saw timer durations %v", d, fakeagent.HangGuard, seen)
+	}
 }
 
 // elapse moves the fake clock without draining work held by an external process.

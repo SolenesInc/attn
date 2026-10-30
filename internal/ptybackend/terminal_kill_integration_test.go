@@ -88,7 +88,13 @@ func TestTerminalKillReachesEveryProcessGroup(t *testing.T) {
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), ptyworker.TeardownRPCTimeout)
 				defer cancel()
-				if err := backend.Kill(ctx, id, syscall.SIGTERM); err != nil {
+				killed := make(chan error, 1)
+				go func() { killed <- backend.Kill(ctx, id, syscall.SIGTERM) }()
+				if kind == "worker" {
+					awaitTimer(t, resistantChildKillAfter)
+					advance(t, resistantChildKillAfter)
+				}
+				if err := <-killed; err != nil {
 					t.Fatal(err)
 				}
 				if err := backend.Remove(ctx, id); err != nil {

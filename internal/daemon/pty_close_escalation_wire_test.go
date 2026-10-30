@@ -51,23 +51,44 @@ func TestClosingAPaneEndsItsProcessWhateverSignalsItIgnores(t *testing.T) {
 		app.TypeLine(string(result.ID), `exec bash -c '`+traps+`; echo held-$((6*7)); while :; do read line; done' 3>`+held)
 		app.AwaitScreen(string(result.ID), "held-42")
 	}
-	for name, session := range sessions {
-		closed := closeFromApp(app, session)
+	const resistant = "ignores both SIGTERM and SIGHUP"
+	closeSession := func(name string) {
+		t.Helper()
+		closed := closeFromApp(app, sessions[name])
 		if !closed.Accepted {
 			t.Fatalf("closing the session that %s failed: %s", name, protocol.Deref(closed.Error))
 		}
 	}
-	for name, done := range gone {
+	awaitGone := func(name string) {
+		t.Helper()
 		select {
-		case end := <-done:
+		case end := <-gone[name]:
 			if end.err != nil {
 				t.Errorf("watching the program that %s: %v", name, end.err)
 			}
 			if clean := name == "exits cleanly on SIGHUP"; clean != (string(end.said) == "cleanly\n") {
 				t.Errorf("the program that %s said %q on its way out, want a clean exit only from the one that heeds SIGHUP", name, end.said)
 			}
-		case <-time.After(2 * fakeagent.HangGuard):
-			t.Errorf("the program that %s still runs %s after its pane closed", name, 2*fakeagent.HangGuard)
+		case <-time.After(fakeagent.HangGuard):
+			t.Fatalf("the program that %s still runs %s after its pane closed", name, fakeagent.HangGuard)
+		}
+	}
+
+	closeSession(resistant)
+	w.awaitTimer(shellCloseGrace)
+	select {
+	case <-gone[resistant]:
+		t.Fatalf("the program that %s ended before its %s close grace", resistant, shellCloseGrace)
+	default:
+	}
+	w.advance(shellCloseGrace)
+	awaitGone(resistant)
+	for name := range sessions {
+		if name != resistant {
+			closeSession(name)
+			awaitGone(name)
 		}
 	}
 }
+
+const shellCloseGrace = 500 * time.Millisecond

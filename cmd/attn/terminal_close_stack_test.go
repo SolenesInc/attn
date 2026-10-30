@@ -66,18 +66,16 @@ func TestTerminalCloseStopsEveryShellPromptly(t *testing.T) {
 				held := openHeldPipe(t, fifo)
 				app.TypeLine(id, "trap '' HUP TERM; printf 'close-%s\\n' ready")
 				app.AwaitScreen(id, "close-ready")
-				started := time.Now()
 				got := home.Run(testworld.Invocation{Session: caller, Args: []string{"terminal", "close", id}})
 				if got.Code != 0 {
 					t.Fatalf("close: %+v", got)
 				}
+				machine.AwaitTimer(shellCloseGrace)
+				machine.Advance(shellCloseGrace)
 				awaitPipeReleased(t, held, name)
-				elapsed := time.Since(started)
-				if elapsed >= time.Second {
-					t.Fatalf("%s %s close took %s, limit=1s; healthy close measured <=145ms, inherited-HUP close has 500ms grace", name, placement, elapsed)
-				}
-				t.Logf("%s %s close released the shell descriptor in %s", name, placement, elapsed)
 			})
 		}
 	}
 }
+
+const shellCloseGrace = 500 * time.Millisecond

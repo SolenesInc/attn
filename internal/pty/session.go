@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/stepclock"
 	"io"
 	"math"
 	"os"
@@ -954,11 +955,11 @@ const sighupRepeat = 500 * time.Millisecond
 
 const shellCloseGrace = 500 * time.Millisecond
 
-func (s *Session) kill(sig syscall.Signal, waitTimeout time.Duration, logf LogFunc) error {
-	return s.killWithEscalation(sig, waitTimeout, nil, logf)
+func (s *Session) kill(clock *stepclock.Clock, sig syscall.Signal, waitTimeout time.Duration, logf LogFunc) error {
+	return s.killWithEscalation(clock, sig, waitTimeout, nil, logf)
 }
 
-func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal), logf LogFunc) (result error) {
+func (s *Session) killWithEscalation(clock *stepclock.Clock, sig syscall.Signal, waitTimeout time.Duration, onEscalate func(syscall.Signal), logf LogFunc) (result error) {
 	s.exitMu.RLock()
 	running := s.running
 	s.exitMu.RUnlock()
@@ -992,40 +993,47 @@ func (s *Session) killWithEscalation(sig syscall.Signal, waitTimeout time.Durati
 		return nil
 	}
 
-	deadline := time.Now().Add(waitTimeout)
+	deadline := clock.NewTimer(waitTimeout)
+	defer deadline.Stop()
 
 	if sig == syscall.SIGTERM {
 		grace := sigtermToHUPGrace
 		if half := waitTimeout / 2; grace > half {
 			grace = half
 		}
+		hup := clock.NewTimer(grace)
+		defer hup.Stop()
 		select {
 		case <-s.exited:
 			return nil
-		case <-time.After(grace):
+		case <-hup.C():
 			if onEscalate != nil {
 				onEscalate(syscall.SIGHUP)
 			}
 			_ = s.signalProcesses(syscall.SIGHUP)
 		}
+		sig = syscall.SIGHUP
 	}
 
-	sent := sig
-	if sig == syscall.SIGTERM {
-		sent = syscall.SIGHUP
-	}
-	for remaining := time.Until(deadline); remaining > 0; remaining = time.Until(deadline) {
-		wait := remaining
-		if sent == syscall.SIGHUP && wait > sighupRepeat {
-			wait = sighupRepeat
+	if sig == syscall.SIGHUP {
+		repeat := clock.NewTimer(sighupRepeat)
+		defer repeat.Stop()
+		for escalated := false; !escalated; {
+			select {
+			case <-s.exited:
+				return nil
+			case <-deadline.C():
+				escalated = true
+			case <-repeat.C():
+				_ = s.signalProcesses(syscall.SIGHUP)
+				repeat.Reset(sighupRepeat)
+			}
 		}
+	} else {
 		select {
 		case <-s.exited:
 			return nil
-		case <-time.After(wait):
-		}
-		if sent == syscall.SIGHUP {
-			_ = s.signalProcesses(syscall.SIGHUP)
+		case <-deadline.C():
 		}
 	}
 	if onEscalate != nil {

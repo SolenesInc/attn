@@ -95,6 +95,8 @@ func TestAnAcceptedRemovalFinishesAfterItsClientTimesOut(t *testing.T) {
 		t.Fatalf("remove did not time out: %v", err)
 	}
 	_ = conn.Close()
+	awaitTimer(t, resistantChildKillAfter)
+	advance(t, resistantChildKillAfter)
 	fds := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
 	if n, err := unix.Poll(fds, int(ptyworker.TeardownRPCTimeout/time.Millisecond)); err != nil || n != 1 {
 		t.Fatalf("worker %d did not exit after the client timed out: events=%d, %v", entry.WorkerPID, n, err)

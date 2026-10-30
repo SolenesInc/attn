@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/procreap"
@@ -140,10 +141,21 @@ func TestWorkerRemovalWaitsForResistantChild(t *testing.T) {
 	if err := <-ready; err != nil {
 		t.Fatal(err)
 	}
-	if err := backend.Remove(context.Background(), id); err != nil {
+	removed := make(chan error, 1)
+	go func() { removed <- backend.Remove(context.Background(), id) }()
+	awaitTimer(t, resistantChildKillAfter)
+	select {
+	case err := <-removed:
+		t.Fatalf("removal finished before the child's %s kill deadline: %v", resistantChildKillAfter, err)
+	default:
+	}
+	advance(t, resistantChildKillAfter)
+	if err := <-removed; err != nil {
 		t.Fatal(err)
 	}
 	if procreap.ProcessAlive(info.PID) {
 		t.Fatalf("child %d survived completed removal", info.PID)
 	}
 }
+
+const resistantChildKillAfter = 10 * time.Second

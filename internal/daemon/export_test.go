@@ -13,8 +13,10 @@ import (
 	"github.com/victorarias/attn/internal/bridge/memnet"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/outpostssh"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -23,15 +25,17 @@ type WireDaemon struct {
 	stopped chan error
 }
 
-func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, nativeWatch bool, gardenClock ...func() time.Time) (*WireDaemon, error) {
+func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, nativeWatch bool, clock *stepclock.Clock, gardenClock func() time.Time) (*WireDaemon, error) {
 	d := New(socketPath)
 	d.outpost.listen = func(string, string) (net.Listener, error) { return memnet.Listen(), nil }
 	d.notebookSyncWatch = nativeWatch
-	if len(gardenClock) > 0 {
-		d.gardenNow = gardenClock[0]
+	if gardenClock != nil {
+		d.gardenNow = gardenClock
 	}
 	if terminals != nil {
 		d.ptyBackend = terminals
+	} else {
+		d.ptyBackend = ptybackend.NewEmbedded(pty.NewManagerWithClock(d.logf, clock))
 	}
 	if terminals != nil || !nativeWatch {
 		d.notebookWatch = func(string, func([]string)) (*notebook.Watcher, error) { return nil, nil }

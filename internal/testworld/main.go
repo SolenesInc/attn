@@ -9,12 +9,14 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/fakessh"
+	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
 var processDir string
 
 func Main(m *testing.M, env ...string) int {
+	stepclock.Process()
 	fakessh.Main()
 	fakeagent.Main()
 	dir, err := os.MkdirTemp("", "attn-test-process-*")

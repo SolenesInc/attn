@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/procreap"
@@ -184,6 +185,7 @@ func TestInstanceCleanWaitsForWorkerChildResistingTermination(t *testing.T) {
 	if err := os.MkdirAll(r.AppLocalData, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	clock := testworld.StepChildren(t)
 	backend, err := ptybackend.NewWorker(ptybackend.WorkerBackendConfig{DataRoot: r.DataDir, DaemonInstanceID: "d-clean", BinaryPath: testworld.AttnBinary(t)})
 	if err != nil {
 		t.Fatal(err)
@@ -231,13 +233,19 @@ func TestInstanceCleanWaitsForWorkerChildResistingTermination(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := cleanInstance(&out, r); err != nil {
+	cleaned := make(chan error, 1)
+	go func() { cleaned <- cleanInstance(&out, r) }()
+	clock.AwaitTimer(resistantChildKillAfter)
+	clock.Advance(resistantChildKillAfter)
+	if err := <-cleaned; err != nil {
 		t.Fatalf("clean instance: %v\n%s", err, out.String())
 	}
 	if procreap.ProcessAlive(info.PID) {
 		t.Fatalf("child %d survived instance cleanup", info.PID)
 	}
 }
+
+const resistantChildKillAfter = 10 * time.Second
 
 func TestInstanceCleanPreservesDataWhileADeadWorkersChildRuns(t *testing.T) {
 	r := stoppedInstance(t)

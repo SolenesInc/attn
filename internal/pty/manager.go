@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/victorarias/attn/internal/stepclock"
 	"os"
 	"os/exec"
 	"os/user"
@@ -119,6 +120,7 @@ type Manager struct {
 	sessions      map[string]*Session
 	pendingSpawns map[string]struct{}
 	logf          LogFunc
+	clock         *stepclock.Clock
 	onExit        func(ExitInfo)
 	onState       func(sessionID string, obs Observation)
 	onTitle       func(sessionID, title string)
@@ -127,6 +129,10 @@ type Manager struct {
 }
 
 func NewManager(logf LogFunc) *Manager {
+	return NewManagerWithClock(logf, stepclock.Process())
+}
+
+func NewManagerWithClock(logf LogFunc, clock *stepclock.Clock) *Manager {
 	if logf == nil {
 		logf = func(string, ...interface{}) {}
 	}
@@ -134,6 +140,7 @@ func NewManager(logf LogFunc) *Manager {
 		sessions:      make(map[string]*Session),
 		pendingSpawns: make(map[string]struct{}),
 		logf:          logf,
+		clock:         clock,
 	}
 }
 
@@ -462,7 +469,7 @@ func (m *Manager) KillWithEscalation(sessionID string, sig syscall.Signal, onEsc
 	if err != nil {
 		return err
 	}
-	return session.killWithEscalation(sig, defaultKillTimeout, onEscalate, m.logf)
+	return session.killWithEscalation(m.clock, sig, defaultKillTimeout, onEscalate, m.logf)
 }
 
 func (m *Manager) SessionInfo(sessionID string) (SessionInfo, error) {
@@ -512,7 +519,7 @@ func (m *Manager) Shutdown() {
 	m.mu.RUnlock()
 
 	for _, session := range sessions {
-		_ = session.kill(syscall.SIGTERM, defaultKillTimeout, m.logf)
+		_ = session.kill(m.clock, syscall.SIGTERM, defaultKillTimeout, m.logf)
 	}
 }
 

@@ -186,6 +186,11 @@ Timers:
   under `synctest`, and move the clock with `w.advance(d)`.
 - A world from `inBubble` cannot run agents or watch folders. Its notebook at
   `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
+- A world outside a bubble gives its daemon a stepped clock instead. Timers on
+  it, such as a terminal's kill escalation, fire only when the test calls
+  `w.advance(d)`; `w.awaitTimer(d)` first waits until a timer of `d` is armed.
+  A test that waits for such a timer without advancing fails at the hang
+  guard.
 - `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
   terminal's `Stall(alive, err)` makes its worker stop answering until the
   test calls the returned function: recovery waits out its deadline and counts
@@ -227,16 +232,21 @@ returns `testworld.Main(m)`.
   such as a long-running watch or a request the test answers as the app.
   Await its output with `AwaitStdout` or `AwaitStderr`, or its result with
   `Wait`. The stack interrupts it at cleanup.
-- `s.Advance(d)` moves that daemon's bridge stall, loss, retry and dial-answer
-  timers. Every stack uses this stepped clock. A test waiting for stall,
-  silence-triggered loss or a retry without advancing fails at the hang guard.
+- `s.Advance(d)` moves the stepped clock of that daemon and of every PTY worker
+  it started: the bridge's stall, loss, retry and dial-answer timers, and a
+  terminal's kill escalation. Every stack uses this stepped clock. A test
+  waiting for one of those timers without advancing fails at the hang guard.
   Heartbeats and kernel socket deadlines keep real time, so a dial may still
   fail without an advance. Await the connected or stalled row before advancing
   its liveness timers.
-- `s.AwaitTimer(d)` waits for a timer registration or reset after the last
-  `Advance` or `AwaitTimer`. Use it before advancing an asynchronous dial or
-  retry: its connecting, lost or refused row can arrive before its timer is
-  ready. A failure names the requested duration and the durations seen.
+- `s.AwaitTimer(d)` waits until a timer of `d`, armed or reset after the last
+  `Advance` or `AwaitTimer`, is pending in the daemon or one of its workers.
+  Use it before advancing an asynchronous dial, retry or kill: its row or
+  close can arrive before its timer is armed. A failure names the requested
+  duration and the timers pending.
+- A test that starts PTY workers without a stack steps them with
+  `testworld.StepChildren(t)`, whose `Advance` and `AwaitTimer` work the same
+  way. The test process itself keeps real time.
 
 If the daemon misses its ready guard or `s.Run` exceeds its hang guard, the
 stack sends SIGQUIT to capture all goroutines before terminating the process.

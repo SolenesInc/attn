@@ -24,55 +24,71 @@ func (t realTimer) C() <-chan time.Time        { return t.timer.C }
 func (t realTimer) Reset(d time.Duration) bool { return t.timer.Reset(d) }
 func (t realTimer) Stop() bool                 { return t.timer.Stop() }
 
-var load = sync.OnceValue(func() *clock {
+// A nil *Clock reads real time.
+type Clock struct {
+	mu      sync.Mutex
+	now     time.Time
+	pending pending[*timer]
+	report  func(event string)
+}
+
+func New() *Clock {
+	return &Clock{now: time.Now(), pending: newPending[*timer]()}
+}
+
+var process = sync.OnceValue(func() *Clock {
 	socket := os.Getenv(EnvSocket)
 	if socket == "" {
 		return nil
 	}
-	return &clock{socket: socket, now: time.Now(), timers: make(map[*timer]struct{})}
+	c := New()
+	c.serve(socket)
+	return c
 })
 
-func NewTimer(d time.Duration) Timer {
-	if c := load(); c != nil {
-		return c.newTimer(d, nil)
+// Process is the clock ATTN_STEP_CLOCK_SOCK selects: stepped by the hub listening there, or real time when unset.
+func Process() *Clock { return process() }
+
+func NewTimer(d time.Duration) Timer { return Process().NewTimer(d) }
+
+func AfterFunc(d time.Duration, f func()) Timer { return Process().AfterFunc(d, f) }
+
+func (c *Clock) NewTimer(d time.Duration) Timer {
+	if c == nil {
+		return realTimer{time.NewTimer(d)}
 	}
-	return realTimer{time.NewTimer(d)}
+	return c.newTimer(d, nil)
 }
 
-func AfterFunc(d time.Duration, f func()) Timer {
-	if c := load(); c != nil {
-		return c.newTimer(d, f)
+func (c *Clock) AfterFunc(d time.Duration, f func()) Timer {
+	if c == nil {
+		return realTimer{time.AfterFunc(d, f)}
 	}
-	return realTimer{time.AfterFunc(d, f)}
+	return c.newTimer(d, f)
 }
 
-type clock struct {
-	socket   string
-	start    sync.Once
-	mu       sync.Mutex
-	now      time.Time
-	timers   map[*timer]struct{}
-	revision uint64
-	observed uint64
-	changed  chan struct{}
+func (c *Clock) Now() time.Time {
+	if c == nil {
+		return time.Now()
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
 }
 
 type timer struct {
-	clock    *clock
+	clock    *Clock
 	deadline time.Time
-	duration time.Duration
-	revision uint64
 	channel  chan time.Time
 	callback func()
 }
 
-func (c *clock) newTimer(d time.Duration, f func()) *timer {
+func (c *Clock) newTimer(d time.Duration, f func()) *timer {
 	t := &timer{clock: c, callback: f}
 	if f == nil {
 		t.channel = make(chan time.Time, 1)
 	}
 	t.Reset(d)
-	c.start.Do(func() { go c.serve() })
 	return t
 }
 
@@ -83,15 +99,12 @@ func (t *timer) Reset(d time.Duration) bool {
 	c.mu.Lock()
 	active := t.stopLocked()
 	t.deadline = c.now.Add(d)
-	t.duration = d
-	c.revision++
-	t.revision = c.revision
 	if d > 0 {
-		c.timers[t] = struct{}{}
+		c.pending.arm(t, d)
+		c.reportLocked("armed %p %s", t, d)
 	} else if t.callback == nil {
 		t.channel <- c.now
 	}
-	c.notifyLocked()
 	c.mu.Unlock()
 	if d <= 0 && t.callback != nil {
 		go t.callback()
@@ -106,8 +119,10 @@ func (t *timer) Stop() bool {
 }
 
 func (t *timer) stopLocked() bool {
-	_, active := t.clock.timers[t]
-	delete(t.clock.timers, t)
+	active := t.clock.pending.disarm(t)
+	if active {
+		t.clock.reportLocked("disarmed %p", t)
+	}
 	select {
 	case <-t.channel:
 		active = true
@@ -116,16 +131,24 @@ func (t *timer) stopLocked() bool {
 	return active
 }
 
-func (c *clock) advance(d time.Duration) {
+func (c *Clock) reportLocked(format string, args ...any) {
+	if c.report != nil {
+		c.report(fmt.Sprintf(format, args...))
+	}
+}
+
+// Advance fires every timer due by now+d and returns once their callbacks have run.
+func (c *Clock) Advance(d time.Duration) {
 	c.mu.Lock()
-	c.observed = c.revision
+	c.pending.mark()
 	c.now = c.now.Add(d)
 	var callbacks []func()
-	for t := range c.timers {
+	for _, t := range c.pending.armed() {
 		if t.deadline.After(c.now) {
 			continue
 		}
-		delete(c.timers, t)
+		c.pending.disarm(t)
+		c.reportLocked("disarmed %p", t)
 		if t.callback != nil {
 			callbacks = append(callbacks, t.callback)
 		} else {
@@ -140,75 +163,107 @@ func (c *clock) advance(d time.Duration) {
 	running.Wait()
 }
 
-func (c *clock) notifyLocked() {
-	if c.changed != nil {
-		close(c.changed)
-		c.changed = nil
-	}
+// AwaitTimer waits until a timer of duration d, armed or reset after the last Advance or AwaitTimer, is pending.
+// When guard closes first it returns false with the durations of the timers pending then.
+func (c *Clock) AwaitTimer(d time.Duration, guard <-chan time.Time) ([]time.Duration, bool) {
+	return c.pending.await(&c.mu, d, guard)
 }
 
-func (c *clock) awaitTimer(conn net.Conn, d time.Duration) error {
-	seen := make(map[time.Duration]bool)
+// pending tracks armed timers by key, so a waiter can tell a timer armed after its mark from an older one.
+type pending[K comparable] struct {
+	timers   map[K]armedTimer
+	revision uint64
+	marked   uint64
+	changed  chan struct{}
+}
+
+type armedTimer struct {
+	duration time.Duration
+	revision uint64
+}
+
+func newPending[K comparable]() pending[K] {
+	return pending[K]{timers: make(map[K]armedTimer), changed: make(chan struct{})}
+}
+
+func (p *pending[K]) arm(key K, d time.Duration) {
+	p.revision++
+	p.timers[key] = armedTimer{duration: d, revision: p.revision}
+	p.notify()
+}
+
+func (p *pending[K]) disarm(key K) bool {
+	_, ok := p.timers[key]
+	delete(p.timers, key)
+	return ok
+}
+
+func (p *pending[K]) armed() []K {
+	keys := make([]K, 0, len(p.timers))
+	for key := range p.timers {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func (p *pending[K]) mark() { p.marked = p.revision }
+
+func (p *pending[K]) notify() {
+	close(p.changed)
+	p.changed = make(chan struct{})
+}
+
+func (p *pending[K]) await(mu *sync.Mutex, d time.Duration, guard <-chan time.Time) ([]time.Duration, bool) {
 	for {
-		c.mu.Lock()
-		found := false
-		var fresh []time.Duration
-		for t := range c.timers {
-			if t.revision <= c.observed {
-				continue
+		mu.Lock()
+		var durations []time.Duration
+		for _, t := range p.timers {
+			if t.duration == d && t.revision > p.marked {
+				p.mark()
+				mu.Unlock()
+				return nil, true
 			}
-			found = found || t.duration == d
-			if !seen[t.duration] {
-				seen[t.duration] = true
-				fresh = append(fresh, t.duration)
-			}
+			durations = append(durations, t.duration)
 		}
-		if found {
-			c.observed = c.revision
-		} else if c.changed == nil {
-			c.changed = make(chan struct{})
+		changed := p.changed
+		mu.Unlock()
+		select {
+		case <-changed:
+		case <-guard:
+			return durations, false
 		}
-		changed := c.changed
-		c.mu.Unlock()
-		for _, duration := range fresh {
-			if _, err := fmt.Fprintf(conn, "seen %s\n", duration); err != nil {
-				return err
-			}
-		}
-		if found {
-			return nil
-		}
-		<-changed
 	}
 }
 
-func (c *clock) serve() {
-	conn, err := net.Dial("unix", c.socket)
+func (c *Clock) serve(socket string) {
+	conn, err := net.Dial("unix", socket)
 	if err != nil {
-		panic(fmt.Sprintf("stepclock connect %s: %v", c.socket, err))
+		panic(fmt.Sprintf("stepclock connect %s: %v", socket, err))
 	}
-	defer conn.Close()
-	if _, err := fmt.Fprintf(conn, "ready %d\n", os.Getpid()); err != nil {
-		panic(fmt.Sprintf("stepclock ready: %v", err))
-	}
-	reader := bufio.NewReader(conn)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			panic(fmt.Sprintf("stepclock read: %v", err))
-		}
-		command, value, _ := strings.Cut(strings.TrimSpace(line), " ")
-		d, err := time.ParseDuration(value)
-		if (command != "advance" && command != "await") || err != nil || d < 0 {
-			panic(fmt.Sprintf("stepclock invalid command %q", strings.TrimSpace(line)))
-		}
-		if command == "advance" {
-			c.advance(d)
-		} else if err := c.awaitTimer(conn, d); err != nil {
-			panic(fmt.Sprintf("stepclock await timer %s: %v", d, err))
-		}
-		if _, err := fmt.Fprintln(conn, "ok"); err != nil {
-			panic(fmt.Sprintf("stepclock acknowledge %s %s: %v", command, d, err))
+	var writing sync.Mutex
+	send := func(line string) {
+		writing.Lock()
+		defer writing.Unlock()
+		if _, err := fmt.Fprintln(conn, line); err != nil {
+			panic(fmt.Sprintf("stepclock send %q: %v", line, err))
 		}
 	}
+	send(fmt.Sprintf("ready %d", os.Getpid()))
+	c.report = send
+	go func() {
+		reader := bufio.NewReader(conn)
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				panic(fmt.Sprintf("stepclock read: %v", err))
+			}
+			command, value, _ := strings.Cut(strings.TrimSpace(line), " ")
+			d, err := time.ParseDuration(value)
+			if command != "advance" || err != nil || d < 0 {
+				panic(fmt.Sprintf("stepclock invalid command %q", strings.TrimSpace(line)))
+			}
+			c.Advance(d)
+			send("advanced " + d.String())
+		}
+	}()
 }
