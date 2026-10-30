@@ -99,11 +99,14 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	awaitCopy()
 	before := sessionsOn(t, remote, "")
 
+	resume := pair.SSH.Pause(pair.Destination)
 	remote.Stop()
 	staged := remote.PauseAt(pausepoint.CopyBatchStaged)
 	remote.Start()
+	resume()
 	priority(true)
 	staged.Await()
+	pair.Disconnect()
 	remote.Kill()
 	staged.Release()
 	home.Stop()
@@ -112,6 +115,7 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	if got := sessionsOn(t, remote, ""); !reflect.DeepEqual(got, before) {
 		t.Fatalf("outpost killed mid-batch and restarted: copy %v, want the previous whole copy %v", got, before)
 	}
+	pair.Reconnect()
 	home.Start()
 	p = home.App()
 	outpostStateOnConnect(p, "outpost", protocol.OutpostStateConnected)
@@ -137,8 +141,10 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 		closeRemote(spawnRemote(fmt.Sprintf("closed shell %d", i), "closed"))
 	}
 	awaitCopy()
+	resume = pair.SSH.Pause(pair.Destination)
 	remote.Stop()
 	remote.Start()
+	resume()
 	staged.Await()
 	staged.Release()
 	awaitCopy()
@@ -146,6 +152,7 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 		t.Fatalf("after a reconnect with 31 closed shells the outpost holds %v, want only the open shell %s", copied, kept)
 	}
 
+	pair.Disconnect()
 	remote.Stop()
 	p.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: host})
 	testworld.Await[protocol.OutpostsUpdatedMessage](p, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
