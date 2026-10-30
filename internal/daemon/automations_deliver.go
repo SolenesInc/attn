@@ -383,13 +383,14 @@ func (d *Daemon) automationSessionIsLive(sessionID protocol.SessionID) bool {
 	return d.sessionLive(context.Background(), sessionID)
 }
 func (d *Daemon) automationResumeSessionID(req automation.WorkRequest) (string, error) {
+	closeToStartFresh := fmt.Sprintf("close session %s to start a fresh one on the next run", req.IDs.SessionID)
 	resumeID := strings.TrimSpace(d.store.GetResumeSessionID(req.IDs.SessionID))
 	if resumeID == "" {
-		return "", errors.New("reviewer continuity cannot resume the stopped session without a recorded transcript")
+		return "", fmt.Errorf("automation continuity cannot resume the stopped session without a recorded transcript; %s", closeToStartFresh)
 	}
 	driver := agentdriver.Get(req.Launch.Agent)
 	if !d.conversationReady(driver, resumeID) {
-		return "", errors.New("reviewer continuity transcript is unavailable; refusing an unattended fresh session")
+		return "", fmt.Errorf("automation continuity transcript is unavailable; %s", closeToStartFresh)
 	}
 	return resumeID, nil
 }

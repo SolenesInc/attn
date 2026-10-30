@@ -156,6 +156,9 @@ func runAutomationCommand() {
 				}
 				fmt.Println()
 			}
+			if run := result.Definition.LastRun; run != nil && run.State == "failed" {
+				fmt.Printf("# Last run failed: %s\n", strings.ReplaceAll(protocol.Deref(run.LastError), "\n", "\n# "))
+			}
 			if check := result.Definition.GuardCheck; check != nil {
 				fmt.Printf("# Guard: %s at %s", check.Outcome, check.CheckedAt)
 				if detail := protocol.Deref(check.Detail); detail != "" {

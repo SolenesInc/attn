@@ -45,6 +45,7 @@ const (
 	AutomationBindingReleasedTicketSwept       = "ticket_swept"
 	AutomationBindingReleasedDefinitionDeleted = "definition_deleted"
 	AutomationBindingReleasedLaunchFailed      = "launch_failed"
+	AutomationBindingReleasedSessionEnded      = "session_ended"
 )
 
 type AutomationDefinition struct {
@@ -89,9 +90,14 @@ type AutomationOccurrence struct {
 	ObservedAt, CreatedAt                                time.Time
 }
 
+const automationBindingSessionEnded = `COALESCE(
+	(SELECT closed_at<>'' FROM sessions WHERE sessions.id=automation_continuity_bindings.session_id),
+	EXISTS(SELECT 1 FROM automation_runs WHERE automation_runs.session_id=automation_continuity_bindings.session_id AND automation_runs.state='delivered')
+)`
+
 const automationSingletonSessionColumn = `COALESCE((
 	SELECT session_id FROM automation_continuity_bindings
-	WHERE definition_id=r.definition_id AND continuity_key='singleton' AND status='active'
+	WHERE definition_id=r.definition_id AND continuity_key='singleton' AND status='active' AND NOT ` + automationBindingSessionEnded + `
 ), '')`
 
 type AutomationProvenanceRecord struct {
@@ -479,16 +485,23 @@ func pendingAutomationRunInThreadTx(tx *sql.Tx, definitionID int, provider, subj
 
 func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID int, continuityKey, profileID string, ids *AutomationRunReservation, now time.Time) error {
 	var bound AutomationRunReservation
-
+	var ended bool
 	err := tx.QueryRow(
-		`SELECT seed_id,session_id FROM automation_continuity_bindings WHERE definition_id=? AND continuity_key=? AND status=?`,
+		`SELECT seed_id,session_id,`+automationBindingSessionEnded+` FROM automation_continuity_bindings WHERE definition_id=? AND continuity_key=? AND status=?`,
 		definitionID, continuityKey, AutomationBindingStatusActive,
-	).Scan(&bound.SeedID, &bound.SessionID)
+	).Scan(&bound.SeedID, &bound.SessionID, &ended)
 	nowRaw := formatStoredTime(now)
 	switch {
-	case err == nil:
+	case err == nil && !ended:
 		ids.SeedID, ids.SessionID = bound.SeedID, bound.SessionID
 		return nil
+	case err == nil:
+		if _, err := tx.Exec(
+			`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE definition_id=? AND continuity_key=? AND status=?`,
+			AutomationBindingStatusReleased, AutomationBindingReleasedSessionEnded, nowRaw, nowRaw, definitionID, continuityKey, AutomationBindingStatusActive,
+		); err != nil {
+			return err
+		}
 	case err != sql.ErrNoRows:
 		return err
 	}
