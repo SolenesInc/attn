@@ -23,7 +23,7 @@ func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage
 	}
 	if limit > garden.MaxSearchResults {
 		d.sendGardenError(conn, "search", fmt.Errorf(
-			"max_results=%d, asked for %d; that is past the whole garden, so no query needs it",
+			"max_results=%d, asked for %d; use a smaller limit or narrow the query",
 			garden.MaxSearchResults, limit))
 		return
 	}
