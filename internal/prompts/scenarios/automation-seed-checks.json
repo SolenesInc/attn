@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "automation-seed-checks",
+  "description": "An automation whose stake has checks.",
+  "recipient": "automation",
+  "event": "opening",
+  "values": {
+    "brief": "Check the queue.",
+    "input_path": "/tmp/occurrence.json",
+    "seed_id": "s-example",
+    "seed_title": "Nightly queue check",
+    "check_ids": "C1",
+    "local_review": "false",
+    "has_target": "false"
+  }
+}

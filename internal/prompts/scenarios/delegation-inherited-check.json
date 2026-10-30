@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "delegation-inherited-check",
+  "description": "Delegated leaf with its own check and the plot's shared check.",
+  "recipient": "delegation",
+  "event": "opening",
+  "values": {
+    "seed_id": "s-example",
+    "seed_title": "Review the queue change",
+    "check_ids": "C3 and the plot's shared C1"
+  }
+}

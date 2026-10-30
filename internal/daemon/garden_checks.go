@@ -145,6 +145,37 @@ func (g gardenRead) withSeed(next garden.Seed, doc docstore.Document) gardenRead
 	return out
 }
 
+func (d *Daemon) seedCheckIDs(profileID, seedID string) (string, error) {
+	if seedID == "" {
+		return "", nil
+	}
+	read, err := d.readGarden(profileID)
+	if err != nil {
+		return "", fmt.Errorf("read the checks of %s: %w", seedID, err)
+	}
+	var own, shared []string
+	for _, check := range read.plots.EffectiveChecks(seedID) {
+		switch {
+		case check.Removed:
+		case check.From != "":
+			shared = append(shared, check.ID)
+		default:
+			own = append(own, check.ID)
+		}
+	}
+	if len(shared) > 0 {
+		own = append(own, "the plot's shared "+joinAnd(shared))
+	}
+	return joinAnd(own), nil
+}
+
+func joinAnd(items []string) string {
+	if len(items) <= 1 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
+}
+
 func (d *Daemon) seedArtifactNames(seedID string) ([]string, error) {
 	managed, err := d.seedArtifacts(seedID)
 	if err != nil {

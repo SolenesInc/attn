@@ -39,7 +39,7 @@ question.
 ### Agents
 
 - `attn automation` (`cmd/attn/automation.go`): `validate --file`, `apply --file` with `--launch-desktop` and `--desktop-name`, `list`, `show <id>`, `run <id>` with `--input-file`, `--pr-url` or `--request-id`, `runs <id>`, `enable <id>`, `disable <id>`, `delete <id>`, `cleanup <id>`, and `set <id> --launch-desktop`; `--profile` on each. The launch desktop is in [desktops.md](desktops.md).
-- Prompts: a run's opening, which carries the delegation identity, the automation's prompt, the seed it reports to, and for a pull request its identity and the untrusted-data rules (`internal/prompts/content/delegation/identity.md`, `internal/prompts/content/automation/target.md`, `data.md`, `local-review.md`).
+- Prompts: a run's opening, which carries the delegation identity, the automation's prompt, the seed it reports to with that seed's checks or the sentence saying it has none, and for a pull request its identity and the untrusted-data rules (`internal/prompts/content/delegation/identity.md`, `seed.md`, `seed-checks.md`, `seed-no-checks.md`, `internal/prompts/content/automation/target.md`, `data.md`, `local-review.md`).
 
 ### Triggers
 

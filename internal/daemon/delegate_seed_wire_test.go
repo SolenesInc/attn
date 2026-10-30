@@ -130,6 +130,50 @@ func TestDelegatingAtASeedHandsItToTheDelegate(t *testing.T) {
 	}
 }
 
+func TestADelegationOpeningNamesTheSeedsChecksOrSaysItHasNone(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	cli := w.Client()
+	cwd := registerDelegationCaller(t, w, cli, "caller")
+	plot, err := cli.SeedPlot("caller", "", protocol.SeedPlotMessage{
+		Title:  "search moves to the daemon",
+		Checks: []protocol.SeedCheckDefinition{{ID: "C5", Text: "Landed on main.", Shared: protocol.Ptr(true)}},
+		Children: []protocol.SeedPlotChild{{Title: "daemon search endpoint", Body: protocol.Ptr("Serve search from the daemon."),
+			Checks: []protocol.SeedCheckDefinition{{ID: "C1", Text: "Wire tests cover the queries."}}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := plot.Children[0].ID
+	for _, id := range []string{"C3", "C4"} {
+		add := checkMove(leaf, id, "add", "")
+		add.Text = protocol.Ptr("Covers " + id + ".")
+		checkMoveOK(t, cli, add)
+	}
+	checkMoveOK(t, cli, checkMove(leaf, "C4", "remove", ""))
+
+	request := delegateAtSeed("caller", cwd, leaf)
+	request.Label = protocol.Ptr("leaf")
+	withChecks, err := cli.Delegate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := w.Launched(string(withChecks.SessionID)).Prompted()
+	if !strings.Contains(prompt, "Report C1, C3 and the plot's shared C5 with `attn seed check report`") || strings.Contains(prompt, "C4") {
+		t.Errorf("the delegate on a seed with checks was prompted %q; want C1, C3 and the shared C5 named, the removed C4 left out", prompt)
+	}
+
+	request = delegateFrom("caller", cwd, "Tidy the README", fakeagent.Codex)
+	request.Label = protocol.Ptr("readme")
+	without, err := cli.Delegate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt = w.Launched(string(without.SessionID)).Prompted()
+	if !strings.Contains(prompt, "The seed has no checks, so record how you verified the outcome in a note.") || strings.Contains(prompt, "check report") {
+		t.Errorf("the delegate on a seed without checks was prompted %q; want the no-checks sentence and no check reporting", prompt)
+	}
+}
+
 func TestASeedBeingDelegatedRefusesOtherClaimsWhileItsDelegateBoots(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

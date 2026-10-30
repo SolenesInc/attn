@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "handover-checks",
+  "description": "Handover of a seed with its own and inherited checks.",
+  "recipient": "delegation",
+  "event": "handover",
+  "values": {
+    "seed_id": "s-example",
+    "seed_title": "Review the queue change",
+    "check_ids": "C3, C4 and the plot's shared C1"
+  }
+}

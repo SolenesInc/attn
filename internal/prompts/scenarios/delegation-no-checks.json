@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "id": "delegation-no-checks",
+  "description": "Delegated seed without checks.",
+  "recipient": "delegation",
+  "event": "opening",
+  "values": {
+    "seed_id": "s-example",
+    "seed_title": "Review the queue change",
+    "check_ids": ""
+  }
+}

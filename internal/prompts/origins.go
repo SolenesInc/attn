@@ -1,14 +1,18 @@
 package prompts
 
 var (
-	brief            = TextField("brief", "Configured task or delegation brief.")
-	seedTitle        = TextField("seed_title", "Title of the session's stake.")
-	seedID           = TextField("seed_id", "The session's stake, if it has one.")
-	localReview      = FlagField("local_review", "The automation permits only a local review.")
-	hasTarget        = FlagField("has_target", "A local review has structured pull request identity.")
-	inputPath        = TextField("input_path", "Path to untrusted occurrence data.")
-	leafIdentity     = Use("delegation.identity", "content/delegation/identity.md")
-	seedContract     = Use("delegation.seed", "content/delegation/seed.md", Bind("seed_id", Input(seedID)), Bind("seed_title", Input(seedTitle)))
+	brief        = TextField("brief", "Configured task or delegation brief.")
+	seedTitle    = TextField("seed_title", "Title of the session's stake.")
+	seedID       = TextField("seed_id", "The session's stake, if it has one.")
+	checkIDs     = TextField("check_ids", "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none.")
+	localReview  = FlagField("local_review", "The automation permits only a local review.")
+	hasTarget    = FlagField("has_target", "A local review has structured pull request identity.")
+	inputPath    = TextField("input_path", "Path to untrusted occurrence data.")
+	leafIdentity = Use("delegation.identity", "content/delegation/identity.md")
+	seedContract = Use("delegation.seed", "content/delegation/seed.md", Bind("seed_id", Input(seedID)), Bind("seed_title", Input(seedTitle)),
+		Bind("completion", Choose(Present(checkIDs),
+			Use("delegation.seed-checks", "content/delegation/seed-checks.md", Bind("check_ids", Input(checkIDs))),
+			Use("delegation.seed-no-checks", "content/delegation/seed-no-checks.md"))))
 	automationTarget = template("automation.target", "content/automation/target.md",
 		TextField("definition", "Quoted automation name."),
 		TextField("repository", "Repository identity."), TextField("number", "Pull request number."),

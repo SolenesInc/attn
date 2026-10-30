@@ -739,7 +739,11 @@ func (d *Daemon) automationSessionLaunch(req automation.WorkRequest, directory, 
 	if definition, err := d.store.GetAutomationDefinition(req.DefinitionID); err == nil && definition != nil {
 		definitionName = definition.Name
 	}
-	prompt := automationSessionPrompt(req.Prompt, inputPath, req.IDs.SeedID, seed.Title, definitionName, pullRequestTarget, pullRequestErr == nil)
+	checkIDs, err := d.seedCheckIDs(req.IDs.ProfileID, req.IDs.SeedID)
+	if err != nil {
+		return "", "", err
+	}
+	prompt := automationSessionPrompt(req.Prompt, inputPath, req.IDs.SeedID, seed.Title, checkIDs, definitionName, pullRequestTarget, pullRequestErr == nil)
 	return automationSessionLabel(req, directory), prompt, nil
 }
 
@@ -836,12 +840,13 @@ func (d *Daemon) ensureAutomationOccurrenceInput(req automation.WorkRequest) (st
 	}
 	return path, nil
 }
-func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, definitionName string, pullRequest *automation.PullRequestInput, localOnlyReview bool) string {
+func automationSessionPrompt(configuredPrompt, inputPath, seedID, seedTitle, checkIDs, definitionName string, pullRequest *automation.PullRequestInput, localOnlyReview bool) string {
 	values := prompts.Values{
 		"brief":        configuredPrompt,
 		"input_path":   inputPath,
 		"seed_id":      seedID,
 		"seed_title":   seedTitle,
+		"check_ids":    checkIDs,
 		"local_review": fmt.Sprint(localOnlyReview),
 		"has_target":   fmt.Sprint(pullRequest != nil && localOnlyReview),
 	}

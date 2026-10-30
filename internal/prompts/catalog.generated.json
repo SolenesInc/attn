@@ -2021,6 +2021,45 @@
                               "description": "Title of the session's stake."
                             }
                           }
+                        },
+                        {
+                          "name": "completion",
+                          "node": {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "check_ids",
+                                "kind": "text",
+                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "delegation.seed-checks",
+                                "source": "content/delegation/seed-checks.md",
+                                "bindings": [
+                                  {
+                                    "name": "check_ids",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "check_ids",
+                                        "kind": "text",
+                                        "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "kind": "text",
+                                "id": "delegation.seed-no-checks",
+                                "source": "content/delegation/seed-no-checks.md"
+                              }
+                            ]
+                          }
                         }
                       ]
                     }
@@ -2059,6 +2098,45 @@
                     "kind": "text",
                     "description": "Title of the session's stake."
                   }
+                }
+              },
+              {
+                "name": "completion",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "check_ids",
+                      "kind": "text",
+                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "delegation.seed-checks",
+                      "source": "content/delegation/seed-checks.md",
+                      "bindings": [
+                        {
+                          "name": "check_ids",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "check_ids",
+                              "kind": "text",
+                              "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "delegation.seed-no-checks",
+                      "source": "content/delegation/seed-no-checks.md"
+                    }
+                  ]
                 }
               }
             ]
@@ -2112,6 +2190,45 @@
                               "description": "Title of the session's stake."
                             }
                           }
+                        },
+                        {
+                          "name": "completion",
+                          "node": {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "check_ids",
+                                "kind": "text",
+                                "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                              },
+                              "test": "present"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "delegation.seed-checks",
+                                "source": "content/delegation/seed-checks.md",
+                                "bindings": [
+                                  {
+                                    "name": "check_ids",
+                                    "node": {
+                                      "kind": "input",
+                                      "field": {
+                                        "name": "check_ids",
+                                        "kind": "text",
+                                        "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "kind": "text",
+                                "id": "delegation.seed-no-checks",
+                                "source": "content/delegation/seed-no-checks.md"
+                              }
+                            ]
+                          }
                         }
                       ]
                     }
@@ -2150,6 +2267,45 @@
                     "kind": "text",
                     "description": "Title of the session's stake."
                   }
+                }
+              },
+              {
+                "name": "completion",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "check_ids",
+                      "kind": "text",
+                      "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "delegation.seed-checks",
+                      "source": "content/delegation/seed-checks.md",
+                      "bindings": [
+                        {
+                          "name": "check_ids",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "check_ids",
+                              "kind": "text",
+                              "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "delegation.seed-no-checks",
+                      "source": "content/delegation/seed-no-checks.md"
+                    }
+                  ]
                 }
               }
             ]
@@ -2297,6 +2453,45 @@
                                           "kind": "text",
                                           "description": "Title of the session's stake."
                                         }
+                                      }
+                                    },
+                                    {
+                                      "name": "completion",
+                                      "node": {
+                                        "kind": "choose",
+                                        "condition": {
+                                          "field": {
+                                            "name": "check_ids",
+                                            "kind": "text",
+                                            "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                          },
+                                          "test": "present"
+                                        },
+                                        "children": [
+                                          {
+                                            "kind": "text",
+                                            "id": "delegation.seed-checks",
+                                            "source": "content/delegation/seed-checks.md",
+                                            "bindings": [
+                                              {
+                                                "name": "check_ids",
+                                                "node": {
+                                                  "kind": "input",
+                                                  "field": {
+                                                    "name": "check_ids",
+                                                    "kind": "text",
+                                                    "description": "The stake's checks, such as \"C3, C4 and the plot's shared C1\"; blank when it has none."
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "kind": "text",
+                                            "id": "delegation.seed-no-checks",
+                                            "source": "content/delegation/seed-no-checks.md"
+                                          }
+                                        ]
                                       }
                                     }
                                   ]
@@ -5960,5 +6155,5 @@
       ]
     }
   ],
-  "definitions_hash": "cc37d9a8a28a250bbd8eccb221c026aaf48c9c580b75cb9c0611bbc220f39bc7"
+  "definitions_hash": "95383d8f3129f540921ac42af321e0cb5d98521d453d745d13eca6d88f5553e1"
 }

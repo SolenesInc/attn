@@ -10,6 +10,7 @@
     "seed_id": "s-example",
     "seed_title": "Nightly queue check",
     "local_review": "false",
-    "has_target": "false"
+    "has_target": "false",
+    "check_ids": ""
   }
 }

@@ -1,11 +1,12 @@
 {
   "version": 1,
   "id": "delegation",
-  "description": "Delegated review with a stake.",
+  "description": "Delegated review of a seed with its own checks.",
   "recipient": "delegation",
   "event": "opening",
   "values": {
     "seed_id": "s-example",
-    "seed_title": "Review the queue change"
+    "seed_title": "Review the queue change",
+    "check_ids": "C3 and C4"
   }
 }

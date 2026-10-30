@@ -240,7 +240,10 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 }
 
 func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID protocol.SessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID, seedTitle string, guidance string) (placementOutcome, error) {
-	initialPrompt := delegatedSeedPrompt(seedID, seedTitle)
+	initialPrompt, err := d.delegatedSeedPrompt(profileID, seedID, seedTitle)
+	if err != nil {
+		return placementOutcome{}, err
+	}
 	if guidance != "" {
 		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
 	}
@@ -653,8 +656,12 @@ func (d *Daemon) completedDelegationResult(session *protocol.Session, worktreeCr
 	return result
 }
 
-func delegatedSeedPrompt(seedID, seedTitle string) string {
-	return prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": seedID, "seed_title": seedTitle})
+func (d *Daemon) delegatedSeedPrompt(profileID, seedID, seedTitle string) (string, error) {
+	checkIDs, err := d.seedCheckIDs(profileID, seedID)
+	if err != nil {
+		return "", err
+	}
+	return prompts.RenderText("delegation", "brief", prompts.Values{"seed_id": seedID, "seed_title": seedTitle, "check_ids": checkIDs}), nil
 }
 
 func (d *Daemon) handleDelegate(ctx context.Context, conn net.Conn, msg *protocol.DelegateMessage) {
