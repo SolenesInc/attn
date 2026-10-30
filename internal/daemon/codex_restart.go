@@ -99,6 +99,7 @@ func (r *codexShared) forget(s *codexServer) {
 }
 
 func (r *codexShared) stop(s *codexServer, grace time.Duration) {
+	defer r.forget(s)
 	exited := s.exitSignal()
 	ctx := context.Background()
 	provider, ok := r.d.ptyBackend.(ptybackend.SessionInfoProvider)
@@ -330,7 +331,6 @@ func (r *codexShared) swap(s *codexServer, binary, installed string, now bool) (
 	}
 	previous := s.versionRunning()
 	r.stop(s, codexRestartGrace)
-	r.forget(s)
 	if r.d.life.Ended() {
 		return nil
 	}
