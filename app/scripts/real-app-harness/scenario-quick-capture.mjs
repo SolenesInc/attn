@@ -412,6 +412,18 @@ try {
     await key('a', ['command']);
     await driver.runInputDriver(['global_text', '--text', before.text]);
   });
+  await runner.step('panel_surface_drags_the_panel', async () => {
+    const editor = (await state()).controls.editor;
+    await driver.clickWindow(editor.x, editor.y, { windowTitle: 'Quick Capture' });
+    const before = await captureStack();
+    await driver.dragWindow(0.5, 0.02, 0.7, 0.25, { windowTitle: 'Quick Capture' });
+    const after = await captureStack();
+    const moved = { x: after.x - before.x, y: after.y - before.y };
+    const pointer = { x: before.width * 0.2, y: before.height * 0.23 };
+    runner.writeJson('panel-drag.json', { before, after, moved, pointer });
+    assert.ok(Math.abs(moved.x - pointer.x) <= 2 && Math.abs(moved.y - pointer.y) <= 2, `Dragging the panel's top edge moves it with the pointer: moved ${JSON.stringify(moved)}, pointer ${JSON.stringify(pointer)}`);
+    assert.equal((await state()).focused, true, 'Dragging keeps the message field focused');
+  });
   await runner.step('newline_draft_and_focus_return', async () => {
     await key('enter', ['shift']);
     await driver.runInputDriver(['global_text', '--text', 'with screenshot']);

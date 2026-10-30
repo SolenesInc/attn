@@ -302,7 +302,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
 
   function openPicker() { if (uncertain || submitting) return; setPick(Math.max(0, roster.findIndex(item => item.id === mailbox))); setRecent(false); setPicker(!picker); }
   const receipt = submitting ? 'Saving…' : resolving ? 'Checking submission…' : uncertain ? 'Submission unconfirmed' : !host.connected ? 'Connecting…' : saved.length ? `Saved for ${label(saved[saved.length - 1].mailbox)}` : '';
-  return <main className="capture" data-mailbox={automationEnabled ? mailbox : undefined} data-font-scale={automationEnabled ? fontScale : undefined} style={{ '--ui-scale': fontScale } as CSSProperties} onKeyDown={event => {
+  return <main className="capture" data-tauri-drag-region={recent ? undefined : 'deep'} data-mailbox={automationEnabled ? mailbox : undefined} data-font-scale={automationEnabled ? fontScale : undefined} style={{ '--ui-scale': fontScale } as CSSProperties} onKeyDown={event => {
     if (event.nativeEvent.isComposing || composing.current || event.keyCode === 229) return;
     if (event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey && /^[1-4]$/.test(event.key)) {
       event.preventDefault(); if (uncertain || submitting) return; if (roster[Number(event.key) - 1]) setMailbox(roster[Number(event.key) - 1].id); setPicker(false);
@@ -318,7 +318,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   }} onPointerDown={event => {
     if (picker && !(event.target as Element).closest('.capture-menu, .capture-mailbox')) setPicker(false);
   }}>
-    {!recent && <header className="capture-top" data-tauri-drag-region>
+    {!recent && <header className="capture-top">
       <button aria-label="Recent messages" className="capture-recent-toggle" aria-pressed={recent} onClick={() => {
         if (!recent && editor.current) messageSelection.current = { start: editor.current.selectionStart, end: editor.current.selectionEnd, direction: editor.current.selectionDirection };
         settleEntrances(); setRecent(!recent); setPicker(false);
@@ -339,13 +339,13 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       }} />
       {files.length > 0 && <div className="capture-files">{files.map(file => <QuickCaptureAttachmentPreview key={file.id} file={file} onSettled={onSettled} onMotion={onMotion} onRemove={removeFile} disabled={uncertain || submitting} />)}</div>}
     </>}
-    {(host.connectionError || error || historyError || host.shortcutError) && <p role="alert" className="capture-error">{host.connectionError || error || historyError || host.shortcutError}</p>}
+    {(host.connectionError || error || historyError || host.shortcutError) && <p role="alert" className="capture-error" data-tauri-drag-region="false">{host.connectionError || error || historyError || host.shortcutError}</p>}
     {!recent && <footer className="capture-footer">
       {receipt && <span className="capture-receipt" aria-live="polite"><i />{receipt}</span>}
       <span className="capture-keys"><kbd>⇧↵</kbd> new line</span>
       <button className="send-button" disabled={!restored || submitting || resolving || files.some(file => !file.ready) || (!text.trim() && !files.length)} onClick={() => void send()}>{uncertain ? 'Retry' : 'Send'} <kbd>↵</kbd></button>
     </footer>}
-    {picker && <div ref={mailboxMenu} className="capture-menu" role="listbox" aria-label="Send to" tabIndex={-1} aria-activedescendant={`mailbox-${pick}`} onKeyDown={event => {
+    {picker && <div ref={mailboxMenu} className="capture-menu" data-tauri-drag-region="false" role="listbox" aria-label="Send to" tabIndex={-1} aria-activedescendant={`mailbox-${pick}`} onKeyDown={event => {
       if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(event.key)) {
         event.preventDefault(); event.stopPropagation();
         if (event.key === 'ArrowDown') setPick((pick + 1) % roster.length);

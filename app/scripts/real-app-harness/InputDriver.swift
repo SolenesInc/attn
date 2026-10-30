@@ -885,6 +885,8 @@ func dragWindow(
           let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: to, mouseButton: .left) else {
         throw DriverError.eventCreationFailed("Failed to create mouse events.")
     }
+    down.setIntegerValueField(.mouseEventClickState, value: 1)
+    up.setIntegerValueField(.mouseEventClickState, value: 1)
     move.post(tap: .cghidEventTap)
     Thread.sleep(forTimeInterval: 0.02)
     down.post(tap: .cghidEventTap)
@@ -895,6 +897,7 @@ func dragWindow(
         guard let dragEvent = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: p, mouseButton: .left) else {
             throw DriverError.eventCreationFailed("Failed to create drag event.")
         }
+        dragEvent.setIntegerValueField(.mouseEventClickState, value: 1)
         dragEvent.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: 0.016)
     }
