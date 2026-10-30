@@ -73,8 +73,9 @@ Run each reviewer as an independent reader whose only context is the diff
 names. Use your runtime's native subagents in parallel when it has them;
 otherwise run each as its own fresh pass. Reviewers report; they do not edit.
 
-Run reviewers one model step below your own, at your reasoning level. Any
-model not listed runs its own reviewers.
+Run reviewers one model step below your own, at one reasoning level above
+yours, or at the highest when you are already there. Any model not listed runs
+its own reviewers at your reasoning level.
 
 | You | Reviewers |
 |---|---|
