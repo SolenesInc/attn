@@ -5,32 +5,36 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestPlantSuggestsSimilarOpenSeedsInItsProfile(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		home := app.SelectedProfile()
-		registerSessions(t, w, cli, "planter")
-		parent := plantSeedAs(t, cli, "planter", "Callout wire test races app disconnect")
-		original, err := cli.SeedPlant("planter", "Callout wire test races app disconnect", "", parent, "", "")
+		planter := w.Spawn(app, fakeagent.Claude, w.Path("planter"))
+		defer closeSessions(t, app, planter)
+		parent := plantSeedAs(t, cli, planter, "Callout wire test races app disconnect")
+		original, err := cli.SeedPlant(protocol.SessionID(planter), "Callout wire test races app disconnect", "", parent, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, verb := range []string{"harvest", "wither"} {
-			closed := plantSeedAs(t, cli, "planter", "Callout wire test races app disconnect")
-			lifeMove(t, cli, "planter", closed, verb, "closed", "")
+			closed := plantSeedAs(t, cli, planter, "Callout wire test races app disconnect")
+			lifeMove(t, cli, planter, closed, verb, "closed", "")
 		}
 		for _, title := range []string{"Callout wire test", "Callout disconnect", "Callout app"} {
-			plantSeedAs(t, cli, "planter", title)
+			plantSeedAs(t, cli, planter, title)
 		}
 		side := createProfile(app, "Side")
 		selectProfile(app, side.ID)
-		registerSessions(t, w, cli, "other")
-		foreign := plantSeedAs(t, cli, "other", "Callout wire test races app disconnect")
+		sideApp := w.AppOn(side.ID)
+		other := w.Spawn(sideApp, fakeagent.Claude, w.Path("other"))
+		defer closeSessions(t, sideApp, other)
+		foreign := plantSeedAs(t, cli, other, "Callout wire test races app disconnect")
 		selectProfile(app, home)
-		planted, err := cli.SeedPlant("planter", "Callouts wire test races the app disconnect", "", parent, "", "")
+		planted, err := cli.SeedPlant(protocol.SessionID(planter), "Callouts wire test races the app disconnect", "", parent, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -46,7 +50,7 @@ func TestPlantSuggestsSimilarOpenSeedsInItsProfile(t *testing.T) {
 			}
 		}
 		for _, title := range []string{"zygomorphicquasar", "!!!"} {
-			unrelated, err := cli.SeedPlant("planter", title, "", "", "", "")
+			unrelated, err := cli.SeedPlant(protocol.SessionID(planter), title, "", "", "", "")
 			if err != nil || len(unrelated.Similar) != 0 {
 				t.Fatalf("no matches: %+v, %v", unrelated, err)
 			}
@@ -55,14 +59,15 @@ func TestPlantSuggestsSimilarOpenSeedsInItsProfile(t *testing.T) {
 }
 
 func TestPlotMergesSimilarSeedsByBestRankAndTitleOrder(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "planter")
-		first := plantSeedAs(t, cli, "planter", "quartz archive")
-		second := plantSeedAs(t, cli, "planter", "cobalt worker")
-		third := plantSeedAs(t, cli, "planter", "zephyr browser")
-		fourth := plantSeedAs(t, cli, "planter", "quartz")
-		planted, err := cli.SeedPlot("planter", "", protocol.SeedPlotMessage{
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		planter := w.Spawn(app, fakeagent.Claude, w.Path("planter"))
+		defer closeSessions(t, app, planter)
+		first := plantSeedAs(t, cli, planter, "quartz archive")
+		second := plantSeedAs(t, cli, planter, "cobalt worker")
+		third := plantSeedAs(t, cli, planter, "zephyr browser")
+		fourth := plantSeedAs(t, cli, planter, "quartz")
+		planted, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{
 			Title: "quartz archive", Children: []protocol.SeedPlotChild{
 				{Title: "cobalt worker"}, {Title: "zephyr browser"}, {Title: "quartz archive followup"},
 			},
@@ -92,7 +97,7 @@ func TestPlotMergesSimilarSeedsByBestRankAndTitleOrder(t *testing.T) {
 				t.Errorf("plot suggests its own seed %s", id)
 			}
 		}
-		dedup, err := cli.SeedPlot("planter", "", protocol.SeedPlotMessage{Title: "cobalt worker", Children: []protocol.SeedPlotChild{{Title: "cobalt worker followup"}}})
+		dedup, err := cli.SeedPlot(protocol.SessionID(planter), "", protocol.SeedPlotMessage{Title: "cobalt worker", Children: []protocol.SeedPlotChild{{Title: "cobalt worker followup"}}})
 		if err != nil {
 			t.Fatal(err)
 		}
