@@ -3,17 +3,7 @@
 package ghosttyvt
 
 /*
-// Per-platform archive + headers (download-first; see the build script). The
-// four macOS frameworks are darwin-only over-linking Ghostty's build pulls in;
-// the Linux targets link only the self-contained .a (its C/C++ runtime deps
-// from simdutf/highway are statically baked in) plus libc/libm/libpthread.
-#cgo darwin,arm64 CFLAGS: -I${SRCDIR}/../../third_party/ghostty-vt/darwin_arm64/include
-#cgo darwin,arm64 LDFLAGS: ${SRCDIR}/../../third_party/ghostty-vt/darwin_arm64/lib/libghostty-vt.a
 #cgo darwin,arm64 LDFLAGS: -framework CoreFoundation -framework CoreText -framework CoreGraphics -framework Foundation
-#cgo linux,amd64 CFLAGS: -I${SRCDIR}/../../third_party/ghostty-vt/linux_amd64/include
-#cgo linux,amd64 LDFLAGS: ${SRCDIR}/../../third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a
-#cgo linux,arm64 CFLAGS: -I${SRCDIR}/../../third_party/ghostty-vt/linux_arm64/include
-#cgo linux,arm64 LDFLAGS: ${SRCDIR}/../../third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a
 #cgo linux LDFLAGS: -lm -lpthread
 #include <stdlib.h>
 #include <string.h>

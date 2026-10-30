@@ -56,11 +56,76 @@ vt_zig_target() {
   esac
 }
 
-# Per-platform install locations. The archive+headers for each target live in
-# their own subdir so multiple tuples can coexist in one checkout (e.g. a Mac
-# cross-building a Linux daemon). The #cgo directives point at these paths.
 vt_output_dir_for() { printf '%s/third_party/ghostty-vt/%s' "$vt_repo_dir" "$1"; }
 vt_lib_for()        { printf '%s/lib/libghostty-vt.a' "$(vt_output_dir_for "$1")"; }
+
+vt_cache_root() {
+  local base="${XDG_CACHE_HOME:-}"
+  if [[ -z "$base" ]]; then
+    if [[ "$(uname -s)" == Darwin ]]; then
+      base="$HOME/Library/Caches"
+    else
+      base="$HOME/.cache"
+    fi
+  fi
+  printf '%s/attn/native-vt' "$base"
+}
+
+vt_cache_artifact() (
+  local platform="$1" identity="$2" source_dir="$3" parent cached staging
+  parent="$(vt_cache_root)/$platform"
+  mkdir -p "$parent"
+  parent="$(cd "$parent" && pwd -P)"
+  cached="$parent/$identity"
+  if [[ ! -d "$cached" ]]; then
+    staging="$(mktemp -d "$parent/.publish.XXXXXX")"
+    trap 'rm -rf "$staging"' EXIT
+    mkdir "$staging/$identity"
+    cp -R "$source_dir/lib" "$source_dir/include" "$staging/$identity/"
+    if [[ -f "$source_dir/LICENSE" ]]; then
+      cp "$source_dir/LICENSE" "$staging/$identity/LICENSE"
+    fi
+    mv -n "$staging/$identity" "$parent/"
+  fi
+  if [[ ! -f "$cached/lib/libghostty-vt.a" || ! -d "$cached/include" ]]; then
+    echo "error: native VT artifact is incomplete: $cached" >&2
+    return 1
+  fi
+  printf '%s' "$cached"
+)
+
+vt_use_artifact() {
+  local platform="$1" cached="$2" output generated pending quoted
+  output="$(vt_output_dir_for "$platform")"
+  mkdir -p "$(dirname "$output")"
+  if [[ ! -L "$output" || "$(readlink "$output")" != "$cached" ]]; then
+    rm -f "$output.source-key"
+    rm -rf "$output"
+    ln -s "$cached" "$output"
+  fi
+  generated="$vt_repo_dir/internal/ghosttyvt/native_paths_generated_$platform.go"
+  pending="$(mktemp "$generated.XXXXXX")"
+  quoted="${cached//\\/\\\\}"
+  quoted="${quoted//\"/\\\"}"
+  printf 'package ghosttyvt\n\n/*\n#cgo CFLAGS: "-I%s/include"\n#cgo LDFLAGS: "%s/lib/libghostty-vt.a"\n*/\nimport "C"\n' "$quoted" "$quoted" > "$pending"
+  if ! cmp -s "$pending" "$generated"; then
+    mv "$pending" "$generated"
+  else
+    rm "$pending"
+  fi
+}
+
+vt_artifact_digest() {
+  (
+    cd "$1" || exit
+    {
+      find lib include -type f
+      if [[ -f LICENSE ]]; then printf '%s\n' LICENSE; fi
+    } | LC_ALL=C sort | while IFS= read -r path; do
+      shasum -a 256 "$path"
+    done | shasum -a 256 | awk '{ print $1 }'
+  )
+}
 
 # The ghostty commit from the pin file (first non-comment, non-blank line).
 vt_commit() {
@@ -98,24 +163,41 @@ vt_lock_field() {
   grep -E "^${field}=" "$vt_lock_file" | head -n1 | cut -d= -f2- | tr -d '[:space:]'
 }
 
-# Build the archive + headers for one platform from pinned source into its
-# per-platform output dir. Requires zig 0.16.x and network access to clone
-# ghostty. This is the maintainer path and the consumer fallback; ordinary
-# contributors never reach it (they download a prebuilt).
-vt_build_from_source() {
-  local platform="${1:-$(vt_default_platform)}"
-  local goos ztarget outdir sdkroot workdir zig zig_version
-  goos="$(vt_platform_goos "$platform")"
-  ztarget="$(vt_zig_target "$platform")"
-  outdir="$(vt_output_dir_for "$platform")"
-
-  zig="${ZIG:-}"
+vt_zig() {
+  local zig="${ZIG:-}"
   if [[ -z "$zig" ]] && command -v asdf >/dev/null 2>&1; then
     zig="$(asdf which zig 2>/dev/null || true)"
   fi
   if [[ -z "$zig" ]]; then
     zig="$(command -v zig || true)"
   fi
+  printf '%s' "$zig"
+}
+
+vt_source_key() {
+  local platform="$1" zig
+  zig="$(vt_zig)"
+  {
+    vt_commit
+    printf '\n%s\n%s\n%s\n' "$platform" "$zig" "${SDKROOT:-}"
+    "$zig" version
+    if [[ "$platform" == darwin_* ]]; then xcrun --show-sdk-version; fi
+    cd "$vt_repo_dir" || exit
+    shasum -a 256 scripts/build-libghostty-vt.sh scripts/lib/libghostty-vt.sh .tool-versions
+  } | shasum -a 256 | awk '{ print $1 }'
+}
+
+# Build the archive + headers for one platform from pinned source into its
+# per-platform output dir. Requires zig 0.16.x and network access to clone
+# ghostty. This is the maintainer path and the consumer fallback; ordinary
+# contributors never reach it (they download a prebuilt).
+vt_build_from_source() {
+  local platform="${1:-$(vt_default_platform)}"
+  local goos ztarget sdkroot workdir zig zig_version
+  goos="$(vt_platform_goos "$platform")"
+  ztarget="$(vt_zig_target "$platform")"
+
+  zig="$(vt_zig)"
   if [[ -z "$zig" ]]; then
     echo "error: zig not found on PATH; need zig 0.16.x to build libghostty-vt from source" >&2
     echo "       (consumers normally download a prebuilt asset — this path only runs when" >&2
@@ -159,27 +241,28 @@ vt_build_from_source() {
       --prefix "$workdir/prefix"
   )
 
-  echo "==> [$platform] installing to $outdir"
-  rm -rf "$outdir"
-  mkdir -p "$outdir/lib" "$outdir/include"
-  cp "$workdir/prefix/lib/libghostty-vt.a" "$outdir/lib/"
-  cp -R "$workdir/prefix/include/ghostty" "$outdir/include/"
-  # Ghostty is MIT-licensed; carry its LICENSE so redistributed prebuilts keep
-  # attribution.
-  [[ -f "$workdir/ghostty/LICENSE" ]] && cp "$workdir/ghostty/LICENSE" "$outdir/LICENSE"
-
-  vt_key > "$outdir/.built-key"
-  chmod -R u+w "$outdir"
+  local artifact identity cached
+  artifact="$workdir/artifact"
+  mkdir "$artifact"
+  cp -R "$workdir/prefix/lib" "$workdir/prefix/include" "$artifact/"
+  if [[ -f "$workdir/ghostty/LICENSE" ]]; then
+    cp "$workdir/ghostty/LICENSE" "$artifact/LICENSE"
+  fi
+  identity="$(vt_artifact_digest "$artifact")"
+  cached="$(vt_cache_artifact "$platform" "$identity" "$artifact")"
+  vt_use_artifact "$platform" "$cached"
+  vt_source_key "$platform" > "$(vt_output_dir_for "$platform").source-key"
 }
 
 # Pack one platform's installed archive + headers + LICENSE into a tarball whose
 # members are rooted at ghostty-vt/<platform>/ (so a consumer extracts it
 # straight into third_party/).
 vt_pack() {
-  local dest="$1" platform="$2"
-  local outdir
+  local dest="$1" platform="$2" outdir
+  local members=("ghostty-vt/$platform/lib" "ghostty-vt/$platform/include")
   outdir="$(vt_output_dir_for "$platform")"
-  tar -C "$vt_repo_dir/third_party" -czf "$dest" \
-    "ghostty-vt/$platform/lib" "ghostty-vt/$platform/include" \
-    $([[ -f "$outdir/LICENSE" ]] && echo "ghostty-vt/$platform/LICENSE")
+  if [[ -f "$outdir/LICENSE" ]]; then
+    members+=("ghostty-vt/$platform/LICENSE")
+  fi
+  tar -C "$vt_repo_dir/third_party" -czf "$dest" "${members[@]}"
 }

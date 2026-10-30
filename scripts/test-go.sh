@@ -69,6 +69,12 @@ if [ ! -L "$test_bin_dir/git" ] || [ "$(readlink "$test_bin_dir/git")" != "$test
 fi
 export PATH="$test_bin_dir:$PATH"
 
+if [ "$("$go_bin" env CGO_ENABLED)" = 1 ]; then
+  case "$("$go_bin" env GOOS)_$("$go_bin" env GOARCH)" in
+    darwin_arm64|linux_amd64|linux_arm64) "$root/scripts/build-libghostty-vt.sh" ;;
+  esac
+fi
+
 if [ "${1:-}" = "--packages" ]; then
   shift
   "$go_bin" test "$@"

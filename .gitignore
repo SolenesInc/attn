@@ -55,3 +55,5 @@ app/src-tauri/*.gen.conf.json
 # Local prompt editor drafts and reviews
 .prompt-editor/
 /cmd/attn-ingest/attn-ingest
+
+/internal/ghosttyvt/native_paths_generated_*.go

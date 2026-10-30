@@ -69,24 +69,6 @@ ZIG ?= $(shell if command -v asdf >/dev/null 2>&1; then asdf which zig 2>/dev/nu
 # fallback; callers may override this with a pinned identity or fingerprint.
 MACOS_CODESIGN_IDENTITY ?=
 
-# Native VT library (libghostty-vt) for the server-authoritative terminal.
-# It links via cgo (internal/ghosttyvt) on darwin/arm64 AND the two Linux tuples
-# — the daemon runs headless on Linux, so the worker's restore path serializes
-# there too; every other target compiles the pure-Go stub and needs nothing
-# here. The per-platform archive lives under gitignored
-# third_party/ghostty-vt/<goos>_<goarch>/ (scripts/build-libghostty-vt.sh is the
-# source of truth), so a fresh checkout has no archive and the first cgo link
-# would fail. `build` therefore depends on the archive target for the platform it
-# is building for: the download-first script fetches a prebuilt (or, when the
-# pin/patch was edited locally, builds from source with zig 0.16.x), and is a
-# no-op once present.
-#
-# The target platform honors GOOS/GOARCH however they arrive — environment
-# (`GOOS=linux GOARCH=amd64 make build`) or make override (`make build
-# GOOS=linux`) — so a cross build resolves the Linux archive. `$(GOOS)` is
-# populated by make from either origin; `go env` supplies the host default when
-# neither is set. (A bare `$(shell go env GOOS)` would miss the make-override
-# form, since go env only reads the environment.)
 VT_GOOS := $(or $(GOOS),$(shell go env GOOS))
 VT_GOARCH := $(or $(GOARCH),$(shell go env GOARCH))
 VT_PLATFORM := $(VT_GOOS)_$(VT_GOARCH)
@@ -100,16 +82,7 @@ else
 NATIVE_VT_DEP := $(NATIVE_VT_LIB)
 endif
 
-# Rebuild the native archive when its pin, build script, or carried patch
-# changes (or it is absent). The patch is listed via $(wildcard) so a fresh
-# checkout without it still resolves the rule; once present, editing it forces a
-# rebuild (the script applies it, so a stale archive would miss the change). The
-# script is download-first: it fetches a prebuilt asset keyed by pin+patch and
-# verified against ghostty-vt-native.lock, and only builds from source (zig) when
-# the pin was edited locally. The lock is a prerequisite so a republished
-# asset (new sha) forces everyone to re-fetch. GHOSTTY_VT_GOOS/GOARCH pin the
-# script to the same target the archive path resolves, so it installs into
-# third_party/ghostty-vt/$(VT_PLATFORM)/.
+.PHONY: $(NATIVE_VT_LIBS)
 $(NATIVE_VT_LIBS): ghostty-vt.pin scripts/build-libghostty-vt.sh scripts/lib/libghostty-vt.sh $(wildcard ghostty-vt-native.lock)
 	@target='$@'; platform=$${target#third_party/ghostty-vt/}; platform=$${platform%%/*}; \
 		goos=$${platform%%_*}; goarch=$${platform##*_}; \

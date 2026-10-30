@@ -11,16 +11,23 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Resolve native cache path
+      id: native-path
+      working-directory: ${{ github.workspace }}
+      shell: bash
+      run: |
+        source scripts/lib/libghostty-vt.sh
+        echo "cache=$(vt_cache_root)" >> "$GITHUB_OUTPUT"
+
     # actions/cache saves post-job only on success, and these jobs go red often.
     - name: Restore native libghostty-vt
       id: native
       uses: actions/cache/restore@v4
       with:
-        path: third_party/ghostty-vt
-        key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
+        path: ${{ steps.native-path.outputs.cache }}
+        key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-shared-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
 
-    - name: Fetch native libghostty-vt
-      if: steps.native.outputs.cache-hit != 'true'
+    - name: Ensure native libghostty-vt
       shell: bash
       working-directory: ${{ github.workspace }}
       run: ./scripts/build-libghostty-vt.sh
@@ -30,8 +37,8 @@ runs:
       if: steps.native.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: third_party/ghostty-vt
-        key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
+        path: ${{ steps.native-path.outputs.cache }}
+        key: ${{ runner.os }}-${{ runner.arch }}-libghostty-vt-shared-${{ hashFiles('ghostty-vt.pin', 'ghostty-vt-native.lock') }}
 
     # The generated file alone: its siblings in that directory are checked in.
     - name: Restore browser ghostty-vt.wasm

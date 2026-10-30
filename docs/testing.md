@@ -19,6 +19,10 @@ test runs the same isolated outer data directory; each package's `TestMain`
 still creates a fresh directory when tests run. Go can reuse successful test
 results when their flags, environment, and file inputs also match.
 
+The runner and Makefile also share the pinned native VT artifact between
+worktrees. Before using Go commands directly, run
+`./scripts/build-libghostty-vt.sh` to prepare it for this checkout.
+
 ## Promises
 
 A promise is behavior that someone outside the code relies on: the user, the
