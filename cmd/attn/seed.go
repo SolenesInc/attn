@@ -459,15 +459,15 @@ func (f *seedFlags) parse(verb string, args []string) []string {
 
 func (f *seedFlags) scope() (string, protocol.SessionID) {
 	profile := strings.TrimSpace(f.profile)
-	if f.verb.readOnly && profile != "" {
-		return profile, ""
-	}
 	if id := strings.TrimSpace(f.session); id != "" {
 		return profile, protocol.SessionID(id)
 	}
 	session, err := currentSession(client.New(config.SocketPath()))
 	if errors.Is(err, errNoCurrentSession) {
 		if f.verb.readOnly {
+			if profile != "" {
+				return profile, ""
+			}
 			if profile, ok := currentCodexProfile(); ok {
 				return profile, ""
 			}

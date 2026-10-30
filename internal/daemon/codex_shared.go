@@ -482,12 +482,12 @@ func (s *codexServer) trackLocked(m codexshared.Message) ([]string, string) {
 	if s.held == nil {
 		s.held = make(map[string]codexThreadStatus)
 	}
-	if p.Thread.Parent != "" && p.Thread.ID != "" {
-		s.adoptLocked(p.Thread.ID, p.Thread.Parent)
-	}
 	switch {
 	case m.Method == "thread/started" && !p.Thread.Ephemeral && p.Thread.ID != "":
 		s.held[p.Thread.ID] = p.Thread.Status
+		if p.Thread.Parent != "" {
+			s.adoptLocked(p.Thread.ID, p.Thread.Parent)
+		}
 	case m.Method == "thread/status/changed" && p.Status.Type != "notLoaded" && p.ThreadID != "":
 		_, known := s.held[p.ThreadID]
 		s.held[p.ThreadID] = p.Status
@@ -1059,6 +1059,9 @@ func (r *codexShared) readLoaded(s *codexServer, client *codexshared.Client, loa
 }
 
 func (s *codexServer) adoptLocked(subagent, parent string) {
+	if _, loaded := s.held[subagent]; !loaded {
+		return
+	}
 	if s.parents == nil {
 		s.parents = make(map[string]string)
 	}

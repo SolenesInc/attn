@@ -1,0 +1,3 @@
+kind: fixed
+area: agents
+change: Closed shared Codex subagents no longer retain parent routing. Seed reads keep their session and dispatched plot when --profile is given, and refuse a different profile by name.

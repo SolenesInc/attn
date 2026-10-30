@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -1044,5 +1045,31 @@ func TestNewInASharedCodexTerminalKeepsTheSessionsContextCap(t *testing.T) {
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
 	if limit := w.CodexServer().CompactLimit(codex.ConversationID); limit != "300000" {
 		t.Errorf("the conversation /new started loaded with compact limit %q, want the session's 300000", limit)
+	}
+}
+
+func TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	parent, codex, _ := sharedCodexWaiting(t, w, app)
+	server := w.CodexServer()
+	child := server.SpawnSubagent(codex.ConversationID)
+	terminal := protocol.TerminalID(harness.CodexThreadTerminal(app.SelectedProfile(), child))
+	if _, caller, err := cli.QueryAs(terminal); err != nil || string(caller) != parent {
+		t.Fatalf("loaded subagent caller = %s, %v; want %s", caller, err, parent)
+	}
+	server.CloseThread(child)
+	server.Work(codex.ConversationID)
+	testworld.AwaitSession(app, parent, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	for _, hook := range []bool{false, true} {
+		if hook {
+			if err := cli.UpdateStateFromHookEvidence(terminal, "working", "", "PreToolUse", ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, caller, err := cli.QueryAs(terminal); err != nil || caller != "" {
+			t.Errorf("closed subagent caller after late hook=%t: %s, %v; want no session", hook, caller, err)
+		}
 	}
 }

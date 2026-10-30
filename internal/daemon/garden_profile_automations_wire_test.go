@@ -174,7 +174,7 @@ func TestAnotherProfilesAutomationIsUnknownToAProfile(t *testing.T) {
 				t.Errorf("chosen profile %s: %+v, %v", profile, definitions, err)
 			}
 		}
-		if _, err := cli.WithGardenProfile(side.ID, "home-agent").AutomationDefinition(sweep); err == nil || !strings.Contains(err.Error(), "not found") {
+		if _, err := cli.WithGardenProfile(side.ID, "home-agent").AutomationDefinition(sweep); err == nil || !strings.Contains(err.Error(), "Default") || !strings.Contains(err.Error(), "Side") {
 			t.Errorf("explicit profile overrode source session: %v", err)
 		}
 		if _, err := cli.WithGardenProfile(side.ID, "missing-session").AutomationDefinition(sweep); err == nil {

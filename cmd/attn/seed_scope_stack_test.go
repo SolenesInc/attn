@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -63,7 +64,7 @@ func TestSharedCodexSeedReadsUseTheirProfileWithoutACurrentSession(t *testing.T)
 	}
 }
 
-func TestAnExplicitProfileOverridesASharedCodexSeedReadAndASessionRecoversWrites(t *testing.T) {
+func TestAnExplicitProfileSelectsUnresolvedCodexReadsAndASessionRecoversWrites(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
@@ -71,23 +72,21 @@ func TestAnExplicitProfileOverridesASharedCodexSeedReadAndASessionRecoversWrites
 	home := app.SelectedProfile()
 	shareCodex(t, app)
 	parent := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
-	codex := s.Launched(parent)
+	s.Launched(parent)
 	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
 	if !created.Success {
 		t.Fatalf("create Side: %+v", created)
 	}
 	first := plant(t, s, "Home task", "--profile", home)
 	second := plant(t, s, "Side task", "--profile", created.Profile.ID)
-	for _, conversation := range []string{codex.ConversationID, "unresolved-conversation"} {
-		env := []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_CODEX_SHARED_PROFILE=" + home, "CODEX_THREAD_ID=" + conversation}
-		got := s.Run(testworld.Invocation{Args: []string{"seed", "show", second.ID, "--profile", "Side"}, Env: env})
-		if got.Code != 0 || !strings.Contains(got.Stdout, "Side task") {
-			t.Errorf("explicit profile from %s: %+v", conversation, got)
-		}
-	}
-	got := s.Run(testworld.Invocation{Args: []string{"seed", "show", second.ID, "--profile", "Side", "--session", parent}})
+	env := []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_CODEX_SHARED_PROFILE=" + home, "CODEX_THREAD_ID=unresolved-conversation"}
+	got := s.Run(testworld.Invocation{Args: []string{"seed", "show", second.ID, "--profile", "Side"}, Env: env})
 	if got.Code != 0 || !strings.Contains(got.Stdout, "Side task") {
-		t.Errorf("explicit profile and session: %+v", got)
+		t.Errorf("explicit profile without a resolved session: %+v", got)
+	}
+	got = s.Run(testworld.Invocation{Args: []string{"seed", "show", second.ID, "--profile", "Side", "--session", parent}})
+	if got.Code != 1 || !strings.Contains(got.Stderr, "Side") || !strings.Contains(got.Stderr, "Default") {
+		t.Errorf("explicit profile and session: %+v; want both profile names in the refusal", got)
 	}
 	got = s.Run(testworld.Invocation{Args: []string{"seed", "note", first.ID, "-m", "Recovered writer", "--session", parent}, Env: []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_CODEX_SHARED_PROFILE=" + home, "CODEX_THREAD_ID=unresolved-conversation"}})
 	if got.Code != 0 {
@@ -99,5 +98,70 @@ func TestAnExplicitProfileOverridesASharedCodexSeedReadAndASessionRecoversWrites
 	}
 	if len(notes.Notes) != 1 || notes.Notes[0].Body != "Recovered writer" || string(notes.Notes[0].AuthorSession) != parent {
 		t.Errorf("recovered write: %+v", notes.Notes)
+	}
+}
+
+func TestSeedProfilesCannotOverrideAResolvedSessionOrLoseItsPlot(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Start()
+	app := s.App()
+	home := app.SelectedProfile()
+	shareCodex(t, app)
+	plot := plantPlot(t, s, `{"title":"Assigned plot","body":"Complete the assigned steps.","children":[{"title":"Assigned step","body":"Complete this step."},{"title":"Next step","body":"Complete the next step."}]}`)
+	loose := plant(t, s, "Outside the plot")
+	cwd := s.Path("shop")
+	if err := os.MkdirAll(cwd, 0755); err != nil {
+		t.Fatal(err)
+	}
+	s.SetCodexFolderTrust(cwd, "trusted")
+	request := protocol.DelegateMessage{
+		Cmd: protocol.CmdDelegate, RequestID: "assigned", Cwd: cwd, Agent: protocol.Ptr("codex"),
+		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(plot.Crown.ID)},
+	}
+	assigned, err := s.Client().Delegate(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codex := s.Launched(string(assigned.SessionID))
+	codex.Prompted()
+	codex.Reply("Ready to work on the plot. <!-- attn:state=idle -->")
+	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success {
+		t.Fatalf("create Side: %+v", created)
+	}
+	side := plant(t, s, "Side task", "--profile", "Side")
+	for _, invocation := range []testworld.Invocation{
+		{Session: string(assigned.SessionID)},
+		{Env: []string{"ATTN_INSIDE_APP=1", "ATTN_TERMINAL_ID=", "ATTN_CODEX_SHARED_PROFILE=" + home, "CODEX_THREAD_ID=" + codex.ConversationID}},
+	} {
+		for _, verb := range []string{"show", "note"} {
+			invocation.Args = []string{"seed", verb, side.ID, "--profile", "Side"}
+			if verb == "note" {
+				invocation.Args = append(invocation.Args, "-m", "wrong profile")
+			}
+			got := s.Run(invocation)
+			if got.Code != 1 || !strings.Contains(got.Stderr, "Side") || !strings.Contains(got.Stderr, "Default") {
+				t.Errorf("%s with another profile: %+v; want both profile names in the refusal", verb, got)
+			}
+		}
+		for _, profile := range []string{home, "Default"} {
+			invocation.Args = []string{"seed", "show", plot.Children[0].ID, "--profile", profile}
+			got := s.Run(invocation)
+			if got.Code != 0 || !strings.Contains(got.Stdout, "Assigned step") {
+				t.Errorf("own profile: %+v", got)
+			}
+			for _, verb := range []string{"ready", "prime"} {
+				invocation.Args = []string{"seed", verb, "--profile", profile}
+				got := s.Run(invocation)
+				if got.Code != 0 || !strings.Contains(got.Stdout, "Next step") || strings.Contains(got.Stdout, loose.Title) {
+					t.Errorf("%s lost the dispatched plot: %+v", verb, got)
+				}
+			}
+		}
+	}
+	got := s.Attn("seed", "show", side.ID, "--profile", "Side")
+	if got.Code != 0 || !strings.Contains(got.Stdout, side.Title) {
+		t.Errorf("outside a session: %+v", got)
 	}
 }
