@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -95,7 +96,7 @@ func TestADelegationFailsNamingTheScreenWhenItsAgentExitsBeforeItsFirstTurn(t *t
 		if exit, _ := peekExit(t, cli, string(delegate.ID), "is ambiguous across providers"); exit.Code != 1 {
 			t.Errorf("peek of the %s delegate shows exit %+v, want code 1", agent, exit)
 		}
-		notes, err := cli.SeedNotes("", protocol.Deref(delegate.SeedID), 5)
+		notes, err := cli.SeedNotes("", protocol.Deref(delegate.SeedID), client.SeedNotesQuery{Limit: 5})
 		if err != nil || len(notes.Notes) == 0 || !strings.Contains(notes.Notes[0].Body, "exited with code 1 before starting its first turn") ||
 			!strings.Contains(notes.Notes[0].Body, "is ambiguous across providers") {
 			t.Errorf("the %s delegate's seed notes are %+v, %v; want the exit explained", agent, notes, err)

@@ -251,6 +251,16 @@ const (
 
 var NoteKinds = []string{NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach}
 
+var EntryKinds = []string{NoteKindNote, NoteKindHandoff, NoteKindAttach, NoteKindDetach, NoteKindCheck, NoteKindEdit}
+
+func ParseEntryKind(raw string) (string, error) {
+	kind := strings.TrimSpace(strings.ToLower(raw))
+	if slices.Contains(EntryKinds, kind) {
+		return kind, nil
+	}
+	return "", fmt.Errorf("%q is not a kind of log entry; the kinds are %s", raw, strings.Join(EntryKinds, ", "))
+}
+
 func CarriesArtifact(kind string) bool {
 	return kind == NoteKindAttach || kind == NoteKindDetach
 }

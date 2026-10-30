@@ -426,7 +426,7 @@ func TestRemovingASeedsWorktreeNotesItOnTheSeed(t *testing.T) {
 		{finished, "feat/finished", "attn removed the worktree"},
 		{open, "feat/open", "attn deleted the worktree"},
 	} {
-		notes, err := cli.SeedNotes("", row.delegated.SeedID, 20)
+		notes, err := cli.SeedNotes("", row.delegated.SeedID, client.SeedNotesQuery{Limit: 20})
 		if err != nil {
 			t.Fatal(err)
 		}

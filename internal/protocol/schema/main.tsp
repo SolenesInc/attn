@@ -5769,10 +5769,17 @@ model SeedShowMessage {
   // bell for this reader and reports its effective watch coverage.
   "source_session_id"?: SessionID;
   "seed_id": string;
+  // A bookmark from an earlier read. The result's `since` then holds the log
+  // entries saved after it on this seed and every seed below it.
+  "since"?: safeint;
 }
 
 model SeedShowResult {
   "seed": Seed;
+  // The event log head, taken before any document was read. Passing it as
+  // `since` on the next read returns what was saved after this one.
+  "bookmark": safeint;
+  "since"?: SeedSince;
   // At least one subscription covers this seed (directly or through an ancestor).
   "watching": boolean;
   // Direct subscription seed ids covering this seed; each can be unwatched.
@@ -5799,6 +5806,21 @@ model SeedShowResult {
   // Explicit external associations projected as attach-minus-detach over the
   // whole log. These remain references until a user brings one into the seed.
   "references": SeedArtifactReference[];
+}
+
+// The log entries saved in (after, bookmark] on a seed and every seed below
+// it, newest first, each labeled by its seed_id and seq.
+model SeedSince {
+  "after": safeint;
+  "entries": SeedNote[];
+  // Set when `after` is older than the event log keeps: entries is empty and
+  // the rest of the result is a full read.
+  "expired"?: SeedSinceExpired;
+}
+
+model SeedSinceExpired {
+  "earliest": safeint;
+  "retention_seconds": safeint;
 }
 
 // Replace one seed's markdown body without moving its lifecycle or claim.
@@ -6138,6 +6160,8 @@ model SeedNote {
   "author_member": string;
   "created_at": string;
   "artifact"?: SeedArtifactReference;
+  // The save number that recorded the entry; set on entries a since-read returns.
+  "seq"?: safeint;
 }
 
 @extension("x-on", #{ home: true })
@@ -6192,12 +6216,21 @@ model SeedNotesMessage {
   // Reading the log consumes this session's pending bell for the seed.
   "source_session_id"?: SessionID;
   "seed_id": string;
+  // Applies to a full read; a since-read returns every entry it finds.
   "limit"?: int32;
+  // A bookmark from an earlier read: list the entries saved after it on this
+  // seed and every seed below it.
+  "since"?: safeint;
+  // Only entries of this kind. An unknown kind is refused, listing the kinds.
+  "kind"?: string;
 }
 
 model SeedNotesResult {
   "notes": SeedNote[];
   "total": int32;
+  "bookmark": safeint;
+  // Set when `since` is older than the event log keeps; notes is then a full read.
+  "expired"?: SeedSinceExpired;
 }
 
 // Add or remove one session's ordinary watch on a seed. The watch survives

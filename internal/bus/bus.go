@@ -221,6 +221,10 @@ func (b *Bus) publish(ev Event, payload any) (int64, error) {
 	return seq, nil
 }
 
+func (b *Bus) Retention() time.Duration {
+	return b.retention
+}
+
 func (b *Bus) Announce() {
 	if b.store == nil {
 		return

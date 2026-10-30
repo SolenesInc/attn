@@ -220,7 +220,7 @@ func TestASeedLogReadsNewestFirstAndSaysWhatItWithheld(t *testing.T) {
 	if newest := shown.Notes[0]; newest.Body != "seventh" || newest.AuthorMember != "trellis" || string(newest.AuthorSession) != writer {
 		t.Errorf("the log leads with %+v, want the newest note and who wrote it", newest)
 	}
-	all, err := cli.SeedNotes("", seed, 0)
+	all, err := cli.SeedNotes("", seed, client.SeedNotesQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +403,7 @@ func TestParkingASeedKeepsItsExecutionAndItsComment(t *testing.T) {
 	if parked.Status != "dormant" || parked.TenderSession != "" || protocol.Deref(parked.LastExecutionID) != execution {
 		t.Errorf("the parked seed = %+v, want dormant, unclaimed, execution %s", parked, execution)
 	}
-	notes, err := cli.SeedNotes("", seed, 0)
+	notes, err := cli.SeedNotes("", seed, client.SeedNotesQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -539,7 +539,7 @@ func lifeShow(t *testing.T, cli *client.Client, seedID string) *protocol.SeedSho
 
 func lifeNoteBodies(t *testing.T, cli *client.Client, seedID string) []string {
 	t.Helper()
-	notes, err := cli.SeedNotes("", seedID, 0)
+	notes, err := cli.SeedNotes("", seedID, client.SeedNotesQuery{})
 	if err != nil {
 		t.Fatalf("notes of %s: %v", seedID, err)
 	}

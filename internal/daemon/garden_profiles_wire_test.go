@@ -131,7 +131,10 @@ func TestGardenBelongsToTheCallingProfile(t *testing.T) {
 			name string
 			run  func() error
 		}{
-			{"notes", func() error { _, err := cross.SeedNotes("default-worker", b.Seed.ID, 0); return err }},
+			{"notes", func() error {
+				_, err := cross.SeedNotes("default-worker", b.Seed.ID, client.SeedNotesQuery{})
+				return err
+			}},
 			{"open", func() error { return cross.OpenSeed(b.Seed.ID, "default-worker") }},
 			{"watch", func() error { _, err := cross.SeedWatch("default-worker", b.Seed.ID, false); return err }},
 			{"show", func() error { _, err := cross.SeedShow("default-worker", b.Seed.ID); return err }},

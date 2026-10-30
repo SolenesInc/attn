@@ -9929,6 +9929,9 @@ type SeedNote struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
+
+	// Seq corresponds to the JSON schema field "seq".
+	Seq *int `json:"seq,omitempty,omitzero"`
 }
 
 type SeedNoteMessage struct {
@@ -9995,6 +9998,9 @@ type SeedNotesMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Kind corresponds to the JSON schema field "kind".
+	Kind *string `json:"kind,omitempty,omitzero"`
+
 	// Limit corresponds to the JSON schema field "limit".
 	Limit *int `json:"limit,omitempty,omitzero"`
 
@@ -10004,11 +10010,20 @@ type SeedNotesMessage struct {
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
 
+	// Since corresponds to the JSON schema field "since".
+	Since *int `json:"since,omitempty,omitzero"`
+
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type SeedNotesResult struct {
+	// Bookmark corresponds to the JSON schema field "bookmark".
+	Bookmark int `json:"bookmark"`
+
+	// Expired corresponds to the JSON schema field "expired".
+	Expired *SeedSinceExpired `json:"expired,omitempty,omitzero"`
+
 	// Notes corresponds to the JSON schema field "notes".
 	Notes []SeedNote `json:"notes"`
 
@@ -10562,6 +10577,9 @@ type SeedShowMessage struct {
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
 
+	// Since corresponds to the JSON schema field "since".
+	Since *int `json:"since,omitempty,omitzero"`
+
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
@@ -10572,6 +10590,9 @@ type SeedShowResult struct {
 
 	// Artifacts corresponds to the JSON schema field "artifacts".
 	Artifacts []SeedArtifact `json:"artifacts"`
+
+	// Bookmark corresponds to the JSON schema field "bookmark".
+	Bookmark int `json:"bookmark"`
 
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *SeedNote `json:"handoff,omitempty,omitzero"`
@@ -10591,6 +10612,9 @@ type SeedShowResult struct {
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
 
+	// Since corresponds to the JSON schema field "since".
+	Since *SeedSince `json:"since,omitempty,omitzero"`
+
 	// Watching corresponds to the JSON schema field "watching".
 	Watching bool `json:"watching"`
 
@@ -10607,6 +10631,25 @@ type SeedSimilar struct {
 
 	// Seed corresponds to the JSON schema field "seed".
 	Seed Seed `json:"seed"`
+}
+
+type SeedSince struct {
+	// After corresponds to the JSON schema field "after".
+	After int `json:"after"`
+
+	// Entries corresponds to the JSON schema field "entries".
+	Entries []SeedNote `json:"entries"`
+
+	// Expired corresponds to the JSON schema field "expired".
+	Expired *SeedSinceExpired `json:"expired,omitempty,omitzero"`
+}
+
+type SeedSinceExpired struct {
+	// Earliest corresponds to the JSON schema field "earliest".
+	Earliest int `json:"earliest"`
+
+	// RetentionSeconds corresponds to the JSON schema field "retention_seconds".
+	RetentionSeconds int `json:"retention_seconds"`
 }
 
 type SeedTransitionMessage struct {

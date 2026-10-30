@@ -100,7 +100,7 @@ func TestUnreadBellsRingByChoiceAndCoalesceUntilTheSeedIsRead(t *testing.T) {
 
 		gardenNudgeNote(t, cli, "worker", seed, "before the notes", true)
 		w.advance(0)
-		if _, err := cli.SeedNotes("watcher", seed, 0); err != nil {
+		if _, err := cli.SeedNotes("watcher", seed, client.SeedNotesQuery{}); err != nil {
 			t.Fatalf("seed notes from the watcher: %v", err)
 		}
 		gardenNudgeInboxIsEmpty(t, cli, "watcher", "after it read the notes")

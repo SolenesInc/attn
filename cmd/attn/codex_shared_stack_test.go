@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -76,7 +77,7 @@ func TestASharedCodexSubagentCanReadAndWriteSeedsBeforeAndAfterADaemonRestart(t 
 		}
 		server.RunTool(subagent, `"$ATTN_WRAPPER_PATH" seed note `+seed.ID+` -m "`+stage+`"`)
 	}
-	notes, err := s.Client().SeedNotes("", seed.ID, 0)
+	notes, err := s.Client().SeedNotes("", seed.ID, client.SeedNotesQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}

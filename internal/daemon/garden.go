@@ -737,16 +737,33 @@ func (d *Daemon) newestNoteAt(seedID string) (time.Time, error) {
 }
 
 func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protocol.SeedShowMessage) {
+	mark, err := d.takeGardenBookmark()
+	if err != nil {
+		d.sendGardenError(conn, "show", err)
+		return
+	}
 	seed, doc, err := d.readSeed(msg.SeedID)
 	if err != nil {
 		d.sendGardenError(conn, "show", err)
 		return
 	}
-	notes, total, err := d.readNotes(seed.ID, garden.ShowNotes)
+	notes, total, err := d.readNotes(seed.ID, "", garden.ShowNotes)
 	if err != nil {
 		d.logf("garden: reading the log of %s: %v", seed.ID, err)
 	}
-	read := d.readGardenAround(seed)
+	read, err := d.readGarden(seed.ProfileID)
+	if err != nil {
+		d.sendGardenError(conn, "show", err)
+		return
+	}
+	var since *protocol.SeedSince
+	if msg.Since != nil {
+		since, err = d.seedSince(read, seed.ID, int64(*msg.Since), mark)
+		if err != nil {
+			d.sendGardenError(conn, "show", err)
+			return
+		}
+	}
 	wire := d.seedDetailsWire(read, seed, doc)
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	coverage, err := d.seedWatchCoverage(sessionID, seed.ID)
@@ -769,6 +786,8 @@ func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protoco
 		Ok: true,
 		SeedShowResult: &protocol.SeedShowResult{
 			Seed:        wire,
+			Bookmark:    int(mark.head),
+			Since:       since,
 			Watching:    len(coverage) > 0,
 			WatchingVia: coverage,
 			Notes:       notes,
@@ -810,7 +829,7 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 			}
 		}
 	}
-	notes, notesTotal, err := d.readNotes(seed.ID, docstore.MaxLimit)
+	notes, notesTotal, err := d.readNotes(seed.ID, "", docstore.MaxLimit)
 	if err != nil {
 		fail(err)
 		return
@@ -1920,36 +1939,69 @@ func (d *Daemon) mintNoteID() (string, error) {
 }
 
 func (d *Daemon) handleSeedNotes(conn net.Conn, msg *protocol.SeedNotesMessage) {
-	seed, _, err := d.readSeed(msg.SeedID)
+	result, err := d.seedNotes(msg)
 	if err != nil {
 		d.sendGardenError(conn, "notes", err)
 		return
+	}
+	d.consumeSeedBell(protocol.Deref(msg.SourceSessionID), msg.SeedID)
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedNotesResult: result})
+}
+
+func (d *Daemon) seedNotes(msg *protocol.SeedNotesMessage) (*protocol.SeedNotesResult, error) {
+	mark, err := d.takeGardenBookmark()
+	if err != nil {
+		return nil, err
+	}
+	seed, _, err := d.readSeed(msg.SeedID)
+	if err != nil {
+		return nil, err
+	}
+	kind := ""
+	if msg.Kind != nil {
+		if kind, err = garden.ParseEntryKind(*msg.Kind); err != nil {
+			return nil, err
+		}
+	}
+	if msg.Since != nil && !mark.expired(int64(*msg.Since)) {
+		read, err := d.readGarden(seed.ProfileID)
+		if err != nil {
+			return nil, err
+		}
+		entries, err := d.readEntriesSince(read, seed.ID, int64(*msg.Since), mark)
+		if err != nil {
+			return nil, err
+		}
+		entries = entriesOfKind(entries, kind)
+		return &protocol.SeedNotesResult{Notes: entries, Total: len(entries), Bookmark: int(mark.head)}, nil
 	}
 	limit := gardenSnapshotLimit
 	if msg.Limit != nil && *msg.Limit > 0 {
 		limit = *msg.Limit
 	}
-	notes, total, err := d.readNotes(seed.ID, limit)
+	notes, total, err := d.readNotes(seed.ID, kind, limit)
 	if err != nil {
-		d.sendGardenError(conn, "notes", err)
-		return
+		return nil, err
 	}
-	d.consumeSeedBell(protocol.Deref(msg.SourceSessionID), seed.ID)
-	d.sendGardenResponse(conn, protocol.Response{
-		Ok:              true,
-		SeedNotesResult: &protocol.SeedNotesResult{Notes: notes, Total: total},
-	})
+	result := &protocol.SeedNotesResult{Notes: notes, Total: total, Bookmark: int(mark.head)}
+	if msg.Since != nil {
+		result.Expired = d.expiredSince(mark)
+	}
+	return result, nil
 }
 
-func (d *Daemon) readNotes(seedID string, limit int) ([]protocol.SeedNote, int, error) {
+func (d *Daemon) readNotes(seedID, kind string, limit int) ([]protocol.SeedNote, int, error) {
 	if d.store == nil {
 		return nil, 0, errors.New("no database")
 	}
-	filter := docstore.Filter{Field: "seed", Op: docstore.OpEq, Value: seedID}
+	filters := []docstore.Filter{{Field: "seed", Op: docstore.OpEq, Value: seedID}}
+	if kind != "" {
+		filters = append(filters, docstore.Filter{Field: "kind", Op: docstore.OpEq, Value: kind})
+	}
 	read, _, err := d.runDocQuery(docstore.Query{
 		Namespace:  garden.Namespace,
 		Collection: garden.CollectionNotes,
-		Filters:    []docstore.Filter{filter},
+		Filters:    filters,
 		Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
 		Limit:      limit,
 	})
@@ -1968,7 +2020,7 @@ func (d *Daemon) readNotes(seedID string, limit int) ([]protocol.SeedNote, int, 
 	total := len(notes)
 	counted, found, err := d.store.CountQuery(docstore.Query{
 		Namespace: garden.Namespace, Collection: garden.CollectionNotes,
-		Filters: []docstore.Filter{filter},
+		Filters: filters,
 	})
 	if err == nil && found {
 		total = counted.Count

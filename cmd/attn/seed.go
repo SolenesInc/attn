@@ -130,9 +130,11 @@ out to the garden.`, []string{"plot", "all", "json"}, true},
 records where work came from without ordering it. A structural cycle
 is refused, naming both seeds and the edge to remove.`, []string{"json"}, false},
 	{`unlink`, `unlink <a> <blocks|part-of|discovered-from> <b> [--json]`, `remove the edge. Every link has one.`, []string{"json"}, false},
-	{`show`, `show <id> [--json]`, `one seed: the freshest handoff left on it, its state, who tends it,
+	{`show`, `show <id> [--since <bookmark>] [--json]`, `one seed: the freshest handoff left on it, its state, who tends it,
 every edge that touches it in both directions, its body, and the newest
-notes on its log.`, []string{"json"}, true},
+notes on its log. The last line is a bookmark. --since <bookmark> prints
+only the log entries saved after it, on this seed and every seed below
+it, newest first and labeled by seed, then a new bookmark.`, []string{"since", "json"}, true},
 	{`review`, `review <start|show|cancel|retry|keep>`, `start an advisory Garden review, inspect its progressive results,
 cancel unfinished classification, retry one failed or changed item, or keep
 one seed growing and review it again after seven quiet days.
@@ -214,8 +216,10 @@ an independent source snapshot. Git-tracked files must use Copy.
 Notebook, URL and repository references remain associations.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "move", "copy"}, false},
 	{`detach`, `detach <id> (--path <filename> (--to <destination> | --reference | --repo <repository>) | --notebook <id> | --url <url>)`, `move a managed artifact back out without overwriting. An old linked
 path association can be removed explicitly with --reference instead.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "to", "reference"}, false},
-	{`notes`, `notes <id> [--limit <n>] [--json]`, `the whole log, newest first. show renders the newest few and says
-how many more are here.`, []string{"limit", "json"}, true},
+	{`notes`, `notes <id> [--since <bookmark>] [--kind <kind>] [--limit <n>] [--json]`, `the whole log, newest first. show renders the newest few and says
+how many more are here. The last line is a bookmark. --since <bookmark>
+lists every entry saved after it, on this seed and every seed below it,
+labeled by seed. --kind keeps one kind of entry.`, []string{"since", "kind", "limit", "json"}, true},
 	{`guide`, `guide`, `print the craft: writing a body, deliverable types and what "done" is
 for each, artifacts, and handoffs and steering.`, []string{}, false},
 	{`prime`, `prime`, `print the standing garden contract and this session's live garden
@@ -266,6 +270,8 @@ var seedFlagDefs = []seedFlagDef{
 	{`session`, `<id>`, `the session asking (defaults to the current session)`, func(f *seedFlags) { f.fs.StringVar(&f.session, "session", "", "") }},
 	{`out`, `<path>`, `file to write; - writes to stdout`, func(f *seedFlags) { f.fs.StringVar(&f.out, "out", "", "") }},
 	{`limit`, `<n>`, fmt.Sprintf(`how many log entries to read (notes), or how many hits to answer with (search; default %d, at most %d)`, garden.DefaultSearchResults, garden.MaxSearchResults), func(f *seedFlags) { f.fs.IntVar(&f.limit, "limit", 0, "") }},
+	{`since`, `<bookmark>`, `only the log entries saved after the bookmark an earlier read printed, on this seed and every seed below it`, func(f *seedFlags) { f.fs.IntVar(&f.since, "since", 0, "") }},
+	{`kind`, `<kind>`, `only log entries of this kind: ` + strings.Join(garden.EntryKinds, ", "), func(f *seedFlags) { f.fs.StringVar(&f.kind, "kind", "", "") }},
 	{`json`, ``, `print the result as JSON`, func(f *seedFlags) { f.fs.BoolVar(&f.json, "json", false, "") }},
 }
 
@@ -420,6 +426,8 @@ type seedFlags struct {
 	editNote       string
 	out            string
 	limit          int
+	since          int
+	kind           string
 	handoff        bool
 	ring           bool
 	path           string
@@ -972,7 +980,13 @@ func runSeedShow(args []string) {
 	if len(positionals) != 1 {
 		seedUsageError("show", fmt.Errorf("needs exactly one seed id, got %d: attn seed show s-7k3f9m", len(positionals)))
 	}
-	result, err := f.client().SeedShow(f.sessionID(), positionals[0])
+	var result *protocol.SeedShowResult
+	var err error
+	if since, ok := f.bookmark("show"); ok {
+		result, err = f.client().SeedShowSince(f.sessionID(), positionals[0], since)
+	} else {
+		result, err = f.client().SeedShow(f.sessionID(), positionals[0])
+	}
 	if err != nil {
 		seedFail("show", err)
 	}
@@ -980,7 +994,75 @@ func runSeedShow(args []string) {
 		writeJSON(result)
 		return
 	}
+	bookmark := seedBookmarkCommand{verb: "show", seedID: result.Seed.ID, at: result.Bookmark}
+	if since := result.Since; since != nil && since.Expired == nil {
+		fprintSince(os.Stdout, since.After, since.Entries)
+		bookmark.fprint(os.Stdout)
+		return
+	}
+	if since := result.Since; since != nil {
+		fprintExpiredBookmark(os.Stdout, since.After, *since.Expired)
+	}
 	fprintSeedShow(os.Stdout, result)
+	fmt.Println()
+	bookmark.fprint(os.Stdout)
+}
+
+func (f *seedFlags) bookmark(verb string) (int, bool) {
+	if !f.wasSet("since") {
+		return 0, false
+	}
+	if f.since < 0 {
+		seedUsageError(verb, fmt.Errorf("--since %d is not a bookmark; pass the number a read printed on its bookmark line", f.since))
+	}
+	return f.since, true
+}
+
+type seedBookmarkCommand struct {
+	verb   string
+	seedID string
+	at     int
+	kind   string
+}
+
+func (b seedBookmarkCommand) fprint(w io.Writer) {
+	kind := ""
+	if b.kind != "" {
+		kind = " --kind " + b.kind
+	}
+	fmt.Fprintf(w, "bookmark  attn seed %s %s%s --since %d\n", b.verb, b.seedID, kind, b.at)
+}
+
+func fprintSince(w io.Writer, after int, entries []protocol.SeedNote) {
+	if len(entries) == 0 {
+		fmt.Fprintf(w, "since %d: nothing new\n", after)
+		return
+	}
+	seeds := map[string]bool{}
+	for _, entry := range entries {
+		seeds[entry.SeedID] = true
+	}
+	count := "1 new entry"
+	if len(entries) > 1 {
+		count = fmt.Sprintf("%d new entries", len(entries))
+	}
+	if len(seeds) > 1 {
+		count += fmt.Sprintf(" on %d seeds", len(seeds))
+	}
+	fmt.Fprintf(w, "since %d: %s\n", after, count)
+	for _, entry := range entries {
+		lines := strings.Split(strings.TrimRight(entry.Body, "\n"), "\n")
+		fmt.Fprintf(w, "  %s  %s  %s  %s  %s\n", shortStamp(entry.CreatedAt),
+			orDash(crew.HolderName(entry.AuthorMember, entry.AuthorSession)), entry.SeedID, entry.Kind, lines[0])
+		for _, line := range lines[1:] {
+			fmt.Fprintf(w, "    %s\n", line)
+		}
+	}
+}
+
+func fprintExpiredBookmark(w io.Writer, after int, expired protocol.SeedSinceExpired) {
+	fmt.Fprintf(w, "bookmark %d is older than the event log keeps (save %d onward, %s retention), so this is the full read\n\n",
+		after, expired.Earliest, formatWindow(time.Duration(expired.RetentionSeconds)*time.Second))
 }
 
 func runSeedEdit(args []string) {
@@ -1693,7 +1775,11 @@ func runSeedNotes(args []string) {
 	if len(positionals) != 1 {
 		seedUsageError("notes", fmt.Errorf("needs exactly one seed id, got %d: attn seed notes s-7k3f9m", len(positionals)))
 	}
-	result, err := f.client().SeedNotes(f.sessionID(), positionals[0], f.limit)
+	query := client.SeedNotesQuery{Limit: f.limit, Kind: strings.TrimSpace(f.kind)}
+	if since, ok := f.bookmark("notes"); ok {
+		query.Since = &since
+	}
+	result, err := f.client().SeedNotes(f.sessionID(), positionals[0], query)
 	if err != nil {
 		seedFail("notes", err)
 	}
@@ -1701,11 +1787,25 @@ func runSeedNotes(args []string) {
 		writeJSON(result)
 		return
 	}
-	if len(result.Notes) == 0 {
-		fmt.Printf("nothing on this seed's log yet — `attn seed note %s -m \"what happened\"` starts it\n", positionals[0])
+	bookmark := seedBookmarkCommand{verb: "notes", seedID: positionals[0], at: result.Bookmark, kind: query.Kind}
+	switch {
+	case query.Since != nil && result.Expired == nil:
+		fprintSince(os.Stdout, *query.Since, result.Notes)
+		bookmark.fprint(os.Stdout)
 		return
+	case result.Expired != nil:
+		fprintExpiredBookmark(os.Stdout, *query.Since, *result.Expired)
 	}
-	fprintNotes(os.Stdout, result.Notes, positionals[0], result.Total-len(result.Notes))
+	switch {
+	case len(result.Notes) > 0:
+		fprintNotes(os.Stdout, result.Notes, positionals[0], result.Total-len(result.Notes))
+	case query.Kind != "":
+		fmt.Printf("no %s entries on this seed's log\n", query.Kind)
+	default:
+		fmt.Printf("nothing on this seed's log yet — `attn seed note %s -m \"what happened\"` starts it\n", positionals[0])
+	}
+	fmt.Println()
+	bookmark.fprint(os.Stdout)
 }
 
 func fprintNotes(w io.Writer, notes []protocol.SeedNote, seedID string, withheld int) {

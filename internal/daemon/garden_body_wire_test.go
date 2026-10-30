@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/garden"
 )
 
@@ -71,7 +72,7 @@ func TestSeedBodyEditsRefuseLostWritesAndKeepRollbackHistory(t *testing.T) {
 	if _, err := cli.SeedRollback(id, new(99)); err == nil {
 		t.Fatal("accepted a nonexistent body version")
 	}
-	notes, err := cli.SeedNotes("", id, 0)
+	notes, err := cli.SeedNotes("", id, client.SeedNotesQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +125,7 @@ func TestASeedCanStartEmptyButEditsAndRollbackCannotClearIt(t *testing.T) {
 	if shown := lifeShow(t, cli, id).Seed; shown.Body != edited.Seed.Body || shown.Rev != edited.Seed.Rev {
 		t.Fatalf("refused rollback changed the seed: %+v", shown)
 	}
-	notes, err := cli.SeedNotes("", id, 0)
+	notes, err := cli.SeedNotes("", id, client.SeedNotesQuery{})
 	if err != nil || notes.Total != 1 {
 		t.Fatalf("refused rollback changed the log: %+v, %v", notes, err)
 	}
@@ -147,7 +148,7 @@ func TestCrewBodyEditsAndRollbacksNameTheirMember(t *testing.T) {
 	if _, err := cli.SeedRollback(id, nil); err != nil {
 		t.Fatal(err)
 	}
-	notes, err := cli.SeedNotes("editor", id, 0)
+	notes, err := cli.SeedNotes("editor", id, client.SeedNotesQuery{})
 	if err != nil || notes.Total != 2 {
 		t.Fatalf("edit log: %+v, %v", notes, err)
 	}

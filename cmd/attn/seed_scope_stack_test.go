@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -92,7 +93,7 @@ func TestAnExplicitProfileSelectsUnresolvedCodexReadsAndASessionRecoversWrites(t
 	if got.Code != 0 {
 		t.Fatalf("explicit session: %+v", got)
 	}
-	notes, err := s.Client().WithGardenProfile(home, "").SeedNotes("", first.ID, 0)
+	notes, err := s.Client().WithGardenProfile(home, "").SeedNotes("", first.ID, client.SeedNotesQuery{})
 	if err != nil {
 		t.Fatal(err)
 	}

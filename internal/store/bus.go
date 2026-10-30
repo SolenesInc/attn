@@ -258,6 +258,31 @@ func (s *Store) BusEventsNamedBetween(after, through int64, pattern string, limi
 	return scanBusEvents(rows)
 }
 
+// BusEventsAbout returns events named name whose subject is in subjects, with after < seq <= through, in seq order.
+func (s *Store) BusEventsAbout(name string, subjects []string, after, through int64) ([]BusEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.db == nil || len(subjects) == 0 {
+		return nil, nil
+	}
+	args := make([]any, 0, len(subjects)+3)
+	for _, subject := range subjects {
+		args = append(args, subject)
+	}
+	args = append(args, after, through, name)
+	rows, err := s.db.Query(`
+		SELECT seq, name, subject, payload, source, created_at
+		FROM bus_events
+		WHERE subject IN (?`+strings.Repeat(",?", len(subjects)-1)+`) AND seq > ? AND seq <= ? AND name = ?
+		ORDER BY seq ASC
+	`, args...)
+	if err != nil {
+		return nil, err
+	}
+	return scanBusEvents(rows)
+}
+
 func scanBusEvents(rows *sql.Rows) ([]BusEvent, error) {
 	defer rows.Close()
 

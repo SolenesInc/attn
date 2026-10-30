@@ -458,7 +458,7 @@ func automationRunState(runs []protocol.AutomationRunSummary, id string) string 
 
 func automationSeedNotesMentioning(t *testing.T, cli *client.Client, seed, text string) int {
 	t.Helper()
-	notes, err := cli.SeedNotes("", seed, 200)
+	notes, err := cli.SeedNotes("", seed, client.SeedNotesQuery{Limit: 200})
 	if err != nil {
 		t.Fatal(err)
 	}

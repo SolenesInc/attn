@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -570,7 +571,7 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	if got := successor.Prompted(); !strings.HasSuffix(got, inboxDoorbell) || strings.Contains(got, "Answer: Postgres") {
 		t.Fatalf("the next ring typed %q, want the doorbell alone and not the answer again", got)
 	}
-	notes, err := cli.SeedNotes("", seed, 2)
+	notes, err := cli.SeedNotes("", seed, client.SeedNotesQuery{Limit: 2})
 	if err != nil || len(notes.Notes) != 2 {
 		t.Fatalf("the seed's notes are %+v, %v; want the answer before the newest note", notes, err)
 	}

@@ -78,7 +78,15 @@ func (c *Client) SeedList(sessionID protocol.SessionID, stale bool, staleWindowS
 }
 
 func (c *Client) SeedShow(sessionID protocol.SessionID, seedID string) (*protocol.SeedShowResult, error) {
-	msg := protocol.SeedShowMessage{Cmd: protocol.CmdSeedShow, SeedID: seedID}
+	return c.seedShow(sessionID, protocol.SeedShowMessage{Cmd: protocol.CmdSeedShow, SeedID: seedID})
+}
+
+// SeedShowSince shows the seed with the log entries saved after bookmark on it and every seed below it.
+func (c *Client) SeedShowSince(sessionID protocol.SessionID, seedID string, bookmark int) (*protocol.SeedShowResult, error) {
+	return c.seedShow(sessionID, protocol.SeedShowMessage{Cmd: protocol.CmdSeedShow, SeedID: seedID, Since: protocol.Ptr(bookmark)})
+}
+
+func (c *Client) seedShow(sessionID protocol.SessionID, msg protocol.SeedShowMessage) (*protocol.SeedShowResult, error) {
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
 	}
@@ -350,13 +358,22 @@ func (c *Client) SeedReady(sessionID protocol.SessionID, plot string, all bool) 
 	return resp.SeedReadyResult, nil
 }
 
-func (c *Client) SeedNotes(sessionID protocol.SessionID, seedID string, limit int) (*protocol.SeedNotesResult, error) {
-	msg := protocol.SeedNotesMessage{Cmd: protocol.CmdSeedNotes, SeedID: seedID}
+type SeedNotesQuery struct {
+	Limit int
+	Since *int
+	Kind  string
+}
+
+func (c *Client) SeedNotes(sessionID protocol.SessionID, seedID string, query SeedNotesQuery) (*protocol.SeedNotesResult, error) {
+	msg := protocol.SeedNotesMessage{Cmd: protocol.CmdSeedNotes, SeedID: seedID, Since: query.Since}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
 	}
-	if limit > 0 {
-		msg.Limit = protocol.Ptr(limit)
+	if query.Limit > 0 {
+		msg.Limit = protocol.Ptr(query.Limit)
+	}
+	if query.Kind != "" {
+		msg.Kind = protocol.Ptr(query.Kind)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
