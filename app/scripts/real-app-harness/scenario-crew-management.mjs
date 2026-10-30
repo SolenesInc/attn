@@ -203,7 +203,7 @@ runner.registerCleanup('archive_crew_files', () => {
   }
 });
 runner.registerCleanup('settle_seeds', () => {
-  for (const id of plantedSeeds) runAttn(['seed', 'wither', id, '--force', '-m', 'Harness fixture cleanup']);
+  for (const id of [...plantedSeeds].reverse()) runAttn(['seed', 'wither', id, '--force', '-m', 'Harness fixture cleanup']);
 });
 const tendBetweenDays = async (seed) => {
   const read = waitForFileSignal(claimReadReceipt, 'the member reads its claim update');

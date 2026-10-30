@@ -313,6 +313,9 @@ async function main() {
         'the retry explains where the second receipt went', { repeated });
       const row = (await client.request('garden_get_state', {})).seeds.find((seed) => seed.id === crown);
       runner.assert(row?.plot.startsWith('1/3'), 'the retry keeps the rendered plot count', { row });
+      const found = await client.request('garden_search', { query: `${first} is:any` });
+      runner.assert(found.seeds.some((seed) => seed.id === first),
+        'searching closed work finds the harvested child', { found, first });
       const drill = await readDrill(client, first, (state) => state.notes.some((note) => note.body === 'second close receipt'));
       runner.assert(drill.notes.some((note) => note.body === 'second close receipt'),
         'the seed page shows the second receipt', { drill });
