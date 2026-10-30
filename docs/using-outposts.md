@@ -192,7 +192,7 @@ clear the count. Received deletions and replacements go to
 keeps the latest received replacement at each path.
 
 From an outpost shell, `attn seed attach <seed> --path <file> --move` or `--copy` reads
-that outpost's file. `attn seed detach <seed> --path <filename> --to <destination>`
+that outpost's file and replaces the seed's file of the same name, if it has one. `attn seed detach <seed> --path <filename> --to <destination>`
 writes its destination on that outpost. Each command waits for the matching
 change at the home before returning, so a following check report can name the
 artifact as evidence. A sync failure names what is left. After fixing it, retry

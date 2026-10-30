@@ -66,7 +66,7 @@ When attn sends an update notification, run the suggested command to read it. Re
 
     attn seed notes <id>             the whole log, newest first
     attn seed watch <id>             watch this seed and its descendants; unwatch removes this subscription
-    attn seed attach <id> --path <file> (--move | --copy)    bring a local file into durable seed ownership; Move is recommended
+    attn seed attach <id> --path <file> (--move | --copy)    bring a local file into durable seed ownership, replacing one of the same name; Move is recommended
     attn seed detach <id> --path <filename> --to <destination>    move an owned file back out without overwriting
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere
     attn seed export <id> [--out <path>]    the raw body with its first-line stamp

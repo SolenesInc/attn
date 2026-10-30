@@ -597,6 +597,24 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			"\n  C1  reported\n      Wire tests pass.\n      report  tests pass\n              https://example.test/run/1 · ",
 			"\n  C5  open · shared from "+plot.Crown.ID+"\n",
 			"\n  report with: attn seed check report "+child+" <C#> -m \"<summary>\" --evidence <artifact|url>\n")
+		if err := os.MkdirAll(filepath.Join(s.Dir, "notebook"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		evidence := filepath.Join(t.TempDir(), "out.txt")
+		if err := os.WriteFile(evidence, []byte("first run"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		seedAs(t, s, "", "attach", loose.ID, "--path", evidence, "--copy")
+		seedAs(t, s, "", "check", "report", loose.ID, "C2", "-m", "it ran", "--evidence", "out.txt")
+		if err := os.WriteFile(evidence, []byte("second run"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		requireLines(t, "replacing attach", seedAs(t, s, "", "attach", loose.ID, "--path", evidence, "--copy"), "\nreplaced the seed's earlier out.txt\n")
+		requireLines(t, "show after the replace", seedAs(t, s, "", "show", loose.ID), "\n      report  it ran\n              out.txt (changed since this report) · ")
+		seedAs(t, s, "", "check", "report", loose.ID, "C2", "-m", "it ran again", "--evidence", "out.txt")
+		if shown := seedAs(t, s, "", "show", loose.ID); strings.Contains(shown, "changed since this report") {
+			t.Errorf("show after a new report still marks the evidence:\n%s", shown)
+		}
 		requireLines(t, "plot show", seedAs(t, s, "", "show", plot.Crown.ID),
 			"\nplot checks  0 of 2 confirmed · 1 to judge · 1 open\n", "\n  shared by every seed below\n  C5  0 of 1 confirmed\n", "      open       "+child+"\n")
 		_, row := lineOf(t, seedAs(t, s, "", "ls"), plot.Crown.ID)
@@ -689,7 +707,7 @@ func TestAMoveCrashedAfterStagingFinishesWhenRetried(t *testing.T) {
 	}
 }
 
-func TestAMoveCrashedAfterInstallingKeepsASourceReplacedBeforeTheRetry(t *testing.T) {
+func TestAMoveCrashedAfterInstallingMovesTheSourceAsItIsAtTheRetry(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	folder := seedArtifactsFolderOf(t, s)
@@ -706,15 +724,62 @@ func TestAMoveCrashedAfterInstallingKeepsASourceReplacedBeforeTheRetry(t *testin
 	}
 
 	s.Start()
-	requireFailure(t, s.Attn("seed", "attach", seed.ID, "--path", source, "--move"), "seed attach: ", "newer source was not removed", source)
+	seedAs(t, s, "", "attach", seed.ID, "--path", source, "--move")
 	destination := filepath.Join(s.Dir, "notebook", "seeds", seed.ID, "recover.bin")
-	for path, body := range map[string]string{source: "newer", destination: "old"} {
-		if got, err := os.ReadFile(path); err != nil || string(got) != body {
-			t.Errorf("%s holds %q (%v), want %q", path, got, err, body)
-		}
+	if got, err := os.ReadFile(destination); err != nil || string(got) != "newer" {
+		t.Errorf("the seed's copy holds %q (%v), want the source as it was at the retry", got, err)
+	}
+	if _, err := os.Lstat(source); !os.IsNotExist(err) {
+		t.Errorf("the source survived the retried move: %v", err)
 	}
 	if entries := folder(seed.ID); !slices.Equal(entries, []string{"recover.bin"}) {
-		t.Errorf("after the refused retry the seed's folder holds %q, want only the artifact", entries)
+		t.Errorf("after the retried move the seed's folder holds %q, want only the artifact", entries)
+	}
+}
+
+func TestAReplacingAttachCrashedAtEachStepKeepsTheOldOrTheNewFile(t *testing.T) {
+	t.Parallel()
+	for _, point := range []string{"seed-artifact-staged", "seed-artifact-installed"} {
+		t.Run(point, func(t *testing.T) {
+			t.Parallel()
+			s := testworld.NewStack(t)
+			folder := seedArtifactsFolderOf(t, s)
+			s.Start()
+			seed := plant(t, s, "Durable files")
+			old := filepath.Join(t.TempDir(), "out.txt")
+			if err := os.WriteFile(old, []byte("old"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			seedAs(t, s, "", "attach", seed.ID, "--path", old, "--copy")
+			s.Stop()
+
+			s.StartCrashingAt(point)
+			replacement := filepath.Join(t.TempDir(), "out.txt")
+			if err := os.WriteFile(replacement, []byte("new"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			s.Attn("seed", "attach", seed.ID, "--path", replacement, "--move")
+			s.AwaitCrash()
+			destination := filepath.Join(s.Dir, "notebook", "seeds", seed.ID, "out.txt")
+			if got, err := os.ReadFile(destination); err != nil || (string(got) != "old" && string(got) != "new") {
+				t.Errorf("after the crash the seed's out.txt holds %q (%v), want the old or the new file", got, err)
+			}
+
+			s.Start()
+			out := seedAs(t, s, "", "attach", seed.ID, "--path", replacement, "--move")
+			if got, err := os.ReadFile(destination); err != nil || string(got) != "new" {
+				t.Errorf("after the retry the seed's out.txt holds %q (%v), want the new file", got, err)
+			}
+			if !strings.Contains(out, "replaced the seed's earlier out.txt") {
+				t.Errorf("the retried attach printed %q, want it to say it replaced out.txt", out)
+			}
+			if _, err := os.Lstat(replacement); !os.IsNotExist(err) {
+				t.Errorf("the moved source survived the retry: %v", err)
+			}
+			if entries := folder(seed.ID); !slices.Equal(entries, []string{"out.txt"}) {
+				t.Errorf("after the retry the seed's folder holds %q, want only out.txt", entries)
+			}
+		})
 	}
 }
 

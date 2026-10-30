@@ -131,8 +131,9 @@ without `shared` is the plot's own.
 
 Whoever does the work reports each check as they prove it, with evidence
 attached to the seed or an http(s) URL. A later run is a new report: it
-replaces the last one and clears its verdict, and earlier artifacts stay
-attached. A check that does not apply gets a report saying why and citing what
+replaces the last one and clears its verdict. Attach the new evidence under
+the same name to replace the old file; `attn seed show` marks a report whose
+cited file changed after it, until the next report. A check that does not apply gets a report saying why and citing what
 shows it. Whoever judges the work confirms or rejects each report, and may
 confirm a check with no report that they verified themselves. Checks never
 block a move; harvest names the ones still open or rejected.
@@ -196,8 +197,11 @@ Bring a local file into durable seed ownership with an explicit Move or Copy:
     attn seed detach <id> --path <filename> --to <destination>
 
 Move is recommended: the seed owns the one canonical editable file. Copy leaves
-the source alone. A tracked Git file must use Copy. Transfers never overwrite,
-and the seed-owned file survives the source worktree, session and seed closing.
+the source alone. A tracked Git file must use Copy. Attaching a name the seed
+already has replaces that file, from the same source or another one, and the
+old bytes are not kept; re-attaching an unchanged file changes nothing. Detach
+never overwrites its destination. The seed-owned file survives the source
+worktree, session and seed closing.
 Direct visible regular files under the seed's artifact directory are membership,
 so ordinary filesystem edits and renames appear in the Garden.
 

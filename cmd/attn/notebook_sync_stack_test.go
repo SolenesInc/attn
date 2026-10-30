@@ -169,6 +169,14 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 		}
 		t.Logf("%s source=%s destination=%s; home received content before command returned", operation, source, attached.DestinationPath)
 	}
+	changed := filepath.Join(outpost.Dir, "copy.md")
+	if err := os.WriteFile(changed, []byte("copy from outpost, changed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	outpost.Attn("seed", "attach", seed.ID, "--path", changed, "--copy", "--json").JSON(t, &attached)
+	if data, err := os.ReadFile(notebookPath(home, "seeds", seed.ID, "copy.md")); !protocol.Deref(attached.Replaced) || err != nil || string(data) != "copy from outpost, changed" {
+		t.Fatalf("re-copying the changed source = replaced %t, home holds %q (%v); want the home's file replaced before the command returned", protocol.Deref(attached.Replaced), data, err)
+	}
 	shown := showSeed(t, outpost, "", seed.ID)
 	if protocol.Deref(shown.ArtifactDir) != notebookPath(outpost, "seeds", seed.ID) {
 		t.Fatalf("outpost seed folder: %+v", shown.ArtifactDir)
@@ -188,7 +196,7 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitNotebookFile(t, pair.App, home, filepath.Join("seeds", seed.ID, "copy.md"), "", true)
-	t.Log("detach wrote outpost destination; home removed source before return; check report accepted copy.md; seed show printed outpost artifact folder; external unlink of a copied artifact reached home")
+	t.Log("detach wrote outpost destination; home removed source before return; re-copying a changed source replaced the home's file before return; check report accepted copy.md; seed show printed outpost artifact folder; external unlink of a copied artifact reached home")
 }
 
 func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {

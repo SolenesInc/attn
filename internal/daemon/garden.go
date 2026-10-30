@@ -758,6 +758,7 @@ func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protoco
 		d.sendGardenError(conn, "show", fmt.Errorf("read seed artifacts: %w", err))
 		return
 	}
+	markEvidenceChangedSinceReport(wire.Checks, artifacts)
 	artifactDir, err := d.callerSeedArtifactDir(ctx, seed.ID)
 	if err != nil {
 		d.sendGardenError(conn, "show", err)
@@ -828,6 +829,7 @@ func (d *Daemon) handleSeedDocumentGet(client *wsClient, msg *protocol.SeedDocum
 		fail(fmt.Errorf("read seed artifacts: %w", err))
 		return
 	}
+	markEvidenceChangedSinceReport(wireSeed.Checks, artifacts)
 	result.Document = &protocol.SeedDocument{
 		Seed:        wireSeed,
 		TenderHolds: seed.Tender().Holds(d.sessionActive),

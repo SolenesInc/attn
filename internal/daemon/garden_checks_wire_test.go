@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -200,6 +201,49 @@ func TestEvidenceNamesASeedArtifactOrAURL(t *testing.T) {
 			protocol.Deref(got.Evidence[1].URL) != "https://github.com/victorarias/attn/pull/1" || protocol.Deref(got.Commit) != "da2b3b9c0ffee" {
 			t.Errorf("the report = %+v, want the artifact, the URL and the commit as cited", got)
 		}
+	})
+}
+
+func TestEvidenceReplacedAfterItsReportIsMarkedUntilANewReport(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		seedArtifactsNotebook(t, w)
+		sessions := spawnCheckSessions(w, app, "planner")
+		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
+		source := seedArtifactsWrite(t, t.TempDir(), "out.txt", []byte("first run"))
+		seedArtifactsTransfer(t, cli, seed, "copy", source, "", "")
+		const pr = "https://github.com/victorarias/attn/pull/1"
+		report := checkMove(seed, "C1", "report", "proof")
+		report.Evidence = []string{"out.txt", pr}
+		checkMoveOK(t, cli, report)
+		marks := func(when string, stampedSize int, want bool) {
+			t.Helper()
+			document := seedReaderDocument(app, seed)
+			if !document.Success {
+				t.Fatalf("%s the seed document read failed: %s", when, protocol.Deref(document.Error))
+			}
+			for reply, seed := range map[string]protocol.Seed{"show": lifeShow(t, cli, seed).Seed, "seed document": document.Document.Seed} {
+				evidence := checkByID(seed.Checks, "C1").Report.Evidence
+				artifact, url := evidence[0], evidence[1]
+				if protocol.Deref(artifact.Size) != stampedSize || protocol.Deref(artifact.ModifiedAt) == "" {
+					t.Errorf("%s the %s reply stamps out.txt with %d bytes at %q, want %d bytes and a time", when, reply, protocol.Deref(artifact.Size), protocol.Deref(artifact.ModifiedAt), stampedSize)
+				}
+				if got := protocol.Deref(artifact.ChangedSinceReport); got != want {
+					t.Errorf("%s the %s reply marks out.txt changed=%t, want %t", when, reply, got, want)
+				}
+				if url.Size != nil || url.ModifiedAt != nil || url.ChangedSinceReport != nil {
+					t.Errorf("%s the %s reply stamps the URL evidence %+v, want no stamp", when, reply, url)
+				}
+			}
+		}
+		marks("right after the report", len("first run"), false)
+
+		seedArtifactsWrite(t, filepath.Dir(source), "out.txt", []byte("second run, longer"))
+		seedArtifactsTransfer(t, cli, seed, "copy", source, "", "")
+		marks("after the file is replaced", len("first run"), true)
+
+		checkMoveOK(t, cli, report)
+		marks("after a new report", len("second run, longer"), false)
 	})
 }
 

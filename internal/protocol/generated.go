@@ -9462,6 +9462,9 @@ type SeedArtifactTransferResult struct {
 	// RelativeTarget corresponds to the JSON schema field "relative_target".
 	RelativeTarget string `json:"relative_target"`
 
+	// Replaced corresponds to the JSON schema field "replaced".
+	Replaced *bool `json:"replaced,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID string `json:"seed_id"`
 
@@ -9534,6 +9537,15 @@ type SeedCheckDefinition struct {
 type SeedCheckEvidence struct {
 	// Artifact corresponds to the JSON schema field "artifact".
 	Artifact *string `json:"artifact,omitempty,omitzero"`
+
+	// ChangedSinceReport corresponds to the JSON schema field "changed_since_report".
+	ChangedSinceReport *bool `json:"changed_since_report,omitempty,omitzero"`
+
+	// ModifiedAt corresponds to the JSON schema field "modified_at".
+	ModifiedAt *string `json:"modified_at,omitempty,omitzero"`
+
+	// Size corresponds to the JSON schema field "size".
+	Size *int `json:"size,omitempty,omitzero"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL *string `json:"url,omitempty,omitzero"`

@@ -213,6 +213,7 @@ Removed ids are never reused.`, []string{"m", "member", "ring", "json", "shared"
 	{`check restore`, `check restore <id> <C#>`, `Bring a removed check back with its result.`, []string{"m", "member", "ring", "json"}, false},
 	{`check report`, `check report <id> <C#> -m "<summary>" [--evidence <artifact|url>]... [--commit <rev>]`, `Record the proof for a check. --evidence is an artifact on the seed
 or an http(s) URL, and can repeat. A new report clears the verdict.
+show marks cited evidence replaced after the report.
 If a check doesn't apply, report that too: say why and cite what
 shows it. The verdict decides.`, []string{"m", "member", "ring", "json", "evidence", "commit"}, false},
 	{`check confirm`, `check confirm <id> <C#> [-m "<how you verified it>"]`, `Confirm the check, with or without a report.`, []string{"m", "member", "ring", "json"}, false},
@@ -221,8 +222,10 @@ shows it. The verdict decides.`, []string{"m", "member", "ring", "json", "eviden
 	{`check reopen`, `check reopen <id> <C#> [-m "<why>"]`, `Clear the report and verdict.`, []string{"m", "member", "ring", "json"}, false},
 	{`attach`, `attach <id> (--path <file> (--move | --copy | --repo <repository>) | --notebook <id> | --url <url>)`, `put a local regular file in durable seed-owned storage. Move is the
 recommended choice and leaves one editable canonical file; Copy keeps
-an independent source snapshot. Git-tracked files must use Copy.
-Notebook, URL and repository references remain associations.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "move", "copy"}, false},
+an independent source snapshot. Git-tracked files must use Copy. A
+file the seed already has by that name is replaced; re-attaching an
+unchanged file changes nothing. Notebook, URL and repository
+references remain associations.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "move", "copy"}, false},
 	{`detach`, `detach <id> (--path <filename> (--to <destination> | --reference | --repo <repository>) | --notebook <id> | --url <url>)`, `move a managed artifact back out without overwriting. An old linked
 path association can be removed explicitly with --reference instead.`, []string{"path", "repo", "notebook", "url", "m", "member", "json", "to", "reference"}, false},
 	{`notes`, `notes <id> [--since <bookmark>] [--kind <kind>] [--limit <n>] [--json]`, `the whole log, newest first. show renders the newest few and says
@@ -1775,6 +1778,9 @@ func runSeedArtifact(verb string, args []string) {
 		}
 		fmt.Printf("%s %s\n", plan.operation, result.SourcePath)
 		fmt.Printf("to %s\n", result.DestinationPath)
+		if protocol.Deref(result.Replaced) {
+			fmt.Printf("replaced the seed's earlier %s\n", filepath.Base(result.DestinationPath))
+		}
 		if plan.operation != "detach" {
 			fmt.Printf("markdown target %s\n", result.RelativeTarget)
 		}

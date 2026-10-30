@@ -141,8 +141,9 @@ or handed to an agent cannot be recalled.
 ## Artifacts
 
 Bring a local file into durable seed ownership with an explicit Move or Copy.
-Move is recommended; tracked Git files must use Copy. Detaching moves the owned
-file back out and never overwrites:
+Move is recommended; tracked Git files must use Copy. A name the seed already
+has is replaced, and `attn seed show` marks check evidence replaced after its
+report. Detaching moves the owned file back out and never overwrites:
 
     attn seed attach <id> --path <file> --move
     attn seed attach <id> --path <file> --copy

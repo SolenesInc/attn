@@ -104,7 +104,63 @@ func TestMovingAGitTrackedFileIntoASeedIsRefusedBeforeAnythingIsStored(t *testin
 	}
 }
 
-func TestSeedArtifactTransfersNeverClobberOrFollowLinks(t *testing.T) {
+func TestAttachingANameTheSeedHoldsReplacesItsFile(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	root := seedArtifactsNotebook(t, w)
+	seed := plantSeedAs(t, cli, "", "Durable files")
+	folder := filepath.Join(root, "seeds", seed)
+	holds := func(when, want string) {
+		t.Helper()
+		if got, err := os.ReadFile(filepath.Join(folder, "out.txt")); err != nil || string(got) != want {
+			t.Errorf("%s the seed's out.txt holds %q (%v), want %q", when, got, err, want)
+		}
+		entries, err := os.ReadDir(folder)
+		if err != nil || len(entries) != 1 {
+			t.Errorf("%s the seed's folder holds %v (%v), want only out.txt", when, entries, err)
+		}
+	}
+	transfer := func(operation, source string) *protocol.SeedArtifactTransferResult {
+		t.Helper()
+		return seedArtifactsTransfer(t, cli, seed, operation, source, "", "")
+	}
+
+	first := seedArtifactsWrite(t, filepath.Join(t.TempDir(), "a"), "out.txt", []byte("first"))
+	if fresh := transfer("copy", first); fresh.Recovered || protocol.Deref(fresh.Replaced) {
+		t.Errorf("the first copy = %+v, want neither recovered nor replaced", fresh)
+	}
+	seedArtifactsWrite(t, filepath.Dir(first), "out.txt", []byte("first, changed"))
+	if changed := transfer("copy", first); changed.Recovered || !protocol.Deref(changed.Replaced) {
+		t.Errorf("copying the changed source = %+v, want it replaced", changed)
+	}
+	holds("after copying the changed source", "first, changed")
+	if again := transfer("copy", first); !again.Recovered || protocol.Deref(again.Replaced) {
+		t.Errorf("copying the unchanged source again = %+v, want a recovered no-op", again)
+	}
+
+	other := seedArtifactsWrite(t, filepath.Join(t.TempDir(), "b"), "out.txt", []byte("from another source"))
+	if replaced := transfer("copy", other); !protocol.Deref(replaced.Replaced) {
+		t.Errorf("copying another source with the same name = %+v, want it replaced", replaced)
+	}
+	holds("after copying another source", "from another source")
+	transfer("copy", first)
+	holds("after copying the first source back over it", "first, changed")
+
+	moved := seedArtifactsWrite(t, filepath.Join(t.TempDir(), "c"), "out.txt", []byte("moved"))
+	if replaced := transfer("move", moved); !protocol.Deref(replaced.Replaced) {
+		t.Errorf("moving another source with the same name = %+v, want it replaced", replaced)
+	}
+	holds("after the move", "moved")
+	seedArtifactsWrite(t, filepath.Dir(moved), "out.txt", []byte("moved again"))
+	transfer("move", moved)
+	holds("after moving a new file from the same path", "moved again")
+	if _, err := os.Lstat(moved); !os.IsNotExist(err) {
+		t.Errorf("the moved source survived: %v", err)
+	}
+	seedArtifactsListed(t, cli, seed, "after the replacements", "out.txt")
+}
+
+func TestSeedArtifactTransfersNeverClobberOutsideOrFollowLinks(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
 	root := seedArtifactsNotebook(t, w)
@@ -130,7 +186,6 @@ func TestSeedArtifactTransfersNeverClobberOrFollowLinks(t *testing.T) {
 
 	first := seedArtifactsWrite(t, filepath.Join(t.TempDir(), "a"), "same.bin", []byte("first"))
 	seedArtifactsTransfer(t, cli, seed, "copy", first, "", "")
-	second := seedArtifactsWrite(t, filepath.Join(t.TempDir(), "b"), "same.bin", []byte("second"))
 	occupied := seedArtifactsWrite(t, t.TempDir(), "same.bin", []byte("outside"))
 	link := filepath.Join(t.TempDir(), "linked.bin")
 	if err := os.Symlink(real, link); err != nil {
@@ -141,7 +196,6 @@ func TestSeedArtifactTransfersNeverClobberOrFollowLinks(t *testing.T) {
 		operation, source, filename, destination string
 		want                                     string
 	}{
-		{"a copy onto a name the seed holds", "copy", second, "", "", "already exists"},
 		{"a detach onto an existing file", "detach", "", "same.bin", occupied, "already exists"},
 		{"a copy of a link", "copy", link, "", "", "not a regular file"},
 		{"a copy under an escaping name", "copy", real, "../escape.bin", "", "not a direct visible artifact filename"},
@@ -149,7 +203,7 @@ func TestSeedArtifactTransfersNeverClobberOrFollowLinks(t *testing.T) {
 		_, err := cli.SeedArtifactTransfer("", seed, refusal.operation, refusal.source, refusal.filename, refusal.destination, nil)
 		lifeRefusal(t, refusal.name, err, refusal.want)
 	}
-	for path, body := range map[string]string{filepath.Join(folder, "same.bin"): "first", occupied: "outside", second: "second"} {
+	for path, body := range map[string]string{filepath.Join(folder, "same.bin"): "first", occupied: "outside"} {
 		if got, err := os.ReadFile(path); err != nil || string(got) != body {
 			t.Errorf("after the refusals %s holds %q (%v), want %q", path, got, err, body)
 		}
@@ -175,12 +229,18 @@ func TestBringingALegacyAttachmentIntoASeedDropsItsReferenceOnlyOnSuccess(t *tes
 		t.Errorf("after the bring the seed still references %+v", references)
 	}
 
-	colliding := seedArtifactsWrite(t, t.TempDir(), "legacy.md", []byte("new"))
-	seedArtifactsAttach(t, cli, seed, colliding)
-	_, err := cli.SeedArtifactTransfer("", seed, "copy", colliding, "", "", seedArtifactsMarkdown(colliding))
-	lifeRefusal(t, "bringing a second legacy.md in", err, "already exists")
-	if references := lifeShow(t, cli, seed).References; len(references) != 1 || protocol.Deref(references[0].Path) != colliding {
-		t.Errorf("after the failed bring the seed references %+v, want %s kept", references, colliding)
+	linked := seedArtifactsWrite(t, t.TempDir(), "linked.md", []byte("new"))
+	seedArtifactsAttach(t, cli, seed, linked)
+	if err := os.Remove(linked); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(brought, linked); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cli.SeedArtifactTransfer("", seed, "copy", linked, "", "", seedArtifactsMarkdown(linked))
+	lifeRefusal(t, "bringing a linked file in", err, "not a regular file")
+	if references := lifeShow(t, cli, seed).References; len(references) != 1 || protocol.Deref(references[0].Path) != linked {
+		t.Errorf("after the failed bring the seed references %+v, want %s kept", references, linked)
 	}
 }
 

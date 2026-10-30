@@ -190,6 +190,10 @@ button.seed-check__evidence:hover {
   text-decoration: underline;
 }
 
+.seed-check__changed {
+  color: var(--color-warning);
+}
+
 .seed-check__verdict {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);

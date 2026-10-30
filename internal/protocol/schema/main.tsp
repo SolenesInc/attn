@@ -5567,6 +5567,12 @@ model SeedCheckReport {
 model SeedCheckEvidence {
   "artifact"?: string;
   "url"?: string;
+  // A managed artifact's size and modification time when it was reported.
+  "size"?: safeint;
+  "modified_at"?: string;
+  // On show and seed document replies: the managed artifact no longer matches
+  // its stamp, or is gone.
+  "changed_since_report"?: boolean;
 }
 
 model SeedCheckVerdict {
@@ -5977,6 +5983,9 @@ model SeedArtifactTransferResult {
   "artifact"?: SeedArtifact;
   // True when a durable receipt let this call finish an interrupted transfer.
   "recovered": boolean;
+  // True when the seed already had a file by this name and this transfer
+  // replaced it.
+  "replaced"?: boolean;
 }
 
 model SeedArtifactTransferResultMessage {

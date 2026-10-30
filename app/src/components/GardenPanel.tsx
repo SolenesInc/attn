@@ -1276,7 +1276,7 @@ export function GardenPanel({
 
       <SeedChecks
         className="garden-section"
-        seed={here}
+        seed={documentIsCurrent && seedDoc ? seedDoc.seed : here}
         artifacts={artifacts}
         references={references}
         seedById={(id) => index.byID.get(id)}

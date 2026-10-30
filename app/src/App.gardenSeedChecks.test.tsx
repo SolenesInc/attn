@@ -134,6 +134,26 @@ describe('App garden seed checks', () => {
     expect(openUrl).toHaveBeenCalledWith(PR_736);
   });
 
+  it('marks artifact evidence the daemon says changed since its report, and clears it after a new report', async () => {
+    const stamped = { artifact: 'verify-migration.tar.gz', size: 12, modified_at: AT };
+    const reported = withCheck(leaf(), { ...C8, report: { ...C8.report!, evidence: [stamped, { url: PR_736 }] } });
+    const garden = await openGarden([reported, monitorPlot(), done, table]);
+    const replaced = { filename: 'verify-migration.tar.gz', relative_target: 'verify-migration.tar.gz', size: 40, modified_at: '2026-10-20T08:00:00Z' };
+    const marked = withCheck(reported, { ...C8, report: { ...C8.report!, evidence: [{ ...stamped, changed_since_report: true }, { url: PR_736 }] } });
+    garden.documents['s-leaf11'] = { seed: { ...marked, rev: reported.rev }, artifacts: [replaced] };
+    await openRow(garden.daemon, 'The monitor plot');
+    await openRow(garden.daemon, 'View and home reactions');
+
+    expect(checkRow('C8')).toHaveTextContent('verify-migration.tar.gz (changed since this report) · PR 736');
+
+    const rereported = withCheck(reported, { ...C8, state: 'reported', verdict: undefined, report: { ...C8.report!, evidence: [{ ...stamped, size: 40, modified_at: replaced.modified_at }] } });
+    garden.documents['s-leaf11'] = { seed: rereported, artifacts: [replaced] };
+    await gesture(garden.daemon, () => garden.push([rereported, monitorPlot(), done, table]));
+
+    expect(checkRow('C8')).toHaveTextContent('verify-migration.tar.gz · @da2b3b9');
+    expect(checkRow('C8')).not.toHaveTextContent('changed since this report');
+  });
+
   it('confirms open and reported checks and unchecks a confirmed one, showing each result once the push lands', async () => {
     const garden = await openLeaf();
 

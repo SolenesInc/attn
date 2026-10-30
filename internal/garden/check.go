@@ -34,8 +34,10 @@ type CheckReport struct {
 }
 
 type CheckEvidence struct {
-	Artifact string `json:"artifact,omitempty"`
-	URL      string `json:"url,omitempty"`
+	Artifact   string `json:"artifact,omitempty"`
+	URL        string `json:"url,omitempty"`
+	Size       int64  `json:"size,omitempty"`
+	ModifiedAt string `json:"modified_at,omitempty"`
 }
 
 type CheckVerdict struct {
@@ -323,24 +325,28 @@ func (t PlotTree) checksUnder(id string) []Check {
 	return out
 }
 
-func ParseCheckEvidence(raw string, artifacts []string) (CheckEvidence, error) {
+func ParseCheckEvidence(raw string, artifacts []CheckEvidence) (CheckEvidence, error) {
 	raw = strings.TrimSpace(raw)
-	if slices.Contains(artifacts, raw) {
-		return CheckEvidence{Artifact: raw}, nil
+	names := make([]string, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		if artifact.Artifact == raw {
+			return artifact, nil
+		}
+		names = append(names, artifact.Artifact)
 	}
 	if parsed, err := url.Parse(raw); err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != "" {
 		return CheckEvidence{URL: raw}, nil
 	}
 	inventory := "it has none yet"
-	if len(artifacts) > 0 {
-		inventory = "its artifacts are " + strings.Join(artifacts, ", ")
+	if len(names) > 0 {
+		inventory = "its artifacts are " + strings.Join(names, ", ")
 	}
 	return CheckEvidence{}, fmt.Errorf(
 		"evidence %q is neither an artifact on this seed nor an http(s) URL; %s. Attach the file first: attn seed attach <id> --path <file> --move",
 		raw, inventory)
 }
 
-func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []string, now time.Time) (Seed, Note, error) {
+func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckEvidence, now time.Time) (Seed, Note, error) {
 	seed, ok := tree.byID[id]
 	if !ok {
 		return Seed{}, Note{}, fmt.Errorf("no seed %s is planted here; `attn seed ls` lists the garden", id)
@@ -464,7 +470,7 @@ func applyDefinitionMove(tree PlotTree, next *Seed, checkID string, move CheckMo
 	return "", "", fmt.Errorf("%q is not a definition move", move.Verb)
 }
 
-func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove, artifacts []string, at string) (string, string, CheckResult, error) {
+func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove, artifacts []CheckEvidence, at string) (string, string, CheckResult, error) {
 	summary := strings.TrimSpace(move.Summary)
 	actorSession := protocol.TrimID(move.Actor.Session)
 	actorMember := strings.TrimSpace(move.Actor.Member)

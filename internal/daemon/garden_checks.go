@@ -71,9 +71,9 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 		Actor: actor,
 	}
 	ring := protocol.Deref(msg.Ring)
-	var artifacts []string
+	var artifacts []garden.CheckEvidence
 	if verb == garden.CheckVerbReport && len(move.Evidence) > 0 {
-		if artifacts, err = d.seedArtifactNames(seedID); err != nil {
+		if artifacts, err = d.citableSeedArtifacts(seedID); err != nil {
 			return seedCheckOutcome{}, err
 		}
 	}
@@ -176,23 +176,45 @@ func joinAnd(items []string) string {
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
-func (d *Daemon) seedArtifactNames(seedID string) ([]string, error) {
+func (d *Daemon) citableSeedArtifacts(seedID string) ([]garden.CheckEvidence, error) {
 	managed, err := d.seedArtifacts(seedID)
 	if err != nil {
 		return nil, fmt.Errorf("read seed artifacts: %w", err)
 	}
-	names := make([]string, 0, len(managed))
+	citable := make([]garden.CheckEvidence, 0, len(managed))
 	for _, artifact := range managed {
-		names = append(names, artifact.Filename)
+		citable = append(citable, garden.CheckEvidence{Artifact: artifact.Filename, Size: int64(artifact.Size), ModifiedAt: artifact.ModifiedAt})
 	}
 	notes, err := d.readNotesDomain(seedID)
 	if err != nil {
 		return nil, err
 	}
 	for _, reference := range garden.CurrentArtifacts(notes) {
-		names = append(names, reference.Label())
+		citable = append(citable, garden.CheckEvidence{Artifact: reference.Label()})
 	}
-	return names, nil
+	return citable, nil
+}
+
+func markEvidenceChangedSinceReport(checks []protocol.SeedCheck, artifacts []protocol.SeedArtifact) {
+	current := make(map[string]protocol.SeedArtifact, len(artifacts))
+	for _, artifact := range artifacts {
+		current[artifact.Filename] = artifact
+	}
+	for _, check := range checks {
+		if check.Report == nil {
+			continue
+		}
+		for i, evidence := range check.Report.Evidence {
+			if evidence.ModifiedAt == nil {
+				continue
+			}
+			artifact, present := current[protocol.Deref(evidence.Artifact)]
+			changed := !present || artifact.Size != protocol.Deref(evidence.Size) || artifact.ModifiedAt != *evidence.ModifiedAt
+			if changed {
+				check.Report.Evidence[i].ChangedSinceReport = protocol.Ptr(true)
+			}
+		}
+	}
 }
 
 const ringAudienceProbeNoteID = "n-probe"
@@ -334,6 +356,10 @@ func checkReportToProtocol(report *garden.CheckReport) *protocol.SeedCheckReport
 		}
 		if evidence.URL != "" {
 			cited.URL = protocol.Ptr(evidence.URL)
+		}
+		if evidence.ModifiedAt != "" {
+			cited.Size = protocol.Ptr(int(evidence.Size))
+			cited.ModifiedAt = protocol.Ptr(evidence.ModifiedAt)
 		}
 		wire.Evidence = append(wire.Evidence, cited)
 	}

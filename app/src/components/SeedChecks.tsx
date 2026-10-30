@@ -227,6 +227,9 @@ export function SeedChecks({
                     ) : (
                       <span className="seed-check__evidence">{evidenceLabel(evidence)}</span>
                     )}
+                    {evidence.changed_since_report && (
+                      <span className="seed-check__changed"> (changed since this report)</span>
+                    )}
                   </span>
                 ))}
                 {report.commit && <span className="seed-check__meta" title={report.commit}> · @{shortCommit(report.commit)}</span>}

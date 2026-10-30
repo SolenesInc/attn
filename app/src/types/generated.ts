@@ -5429,8 +5429,11 @@ export interface Report {
 }
 
 export interface EvidenceObject {
-    artifact?: string;
-    url?:      string;
+    artifact?:             string;
+    changed_since_report?: boolean;
+    modified_at?:          string;
+    size?:                 number;
+    url?:                  string;
     [property: string]: any;
 }
 
@@ -9206,6 +9209,7 @@ export interface SeedArtifactTransferResultObject {
     operation_id:     string;
     recovered:        boolean;
     relative_target:  string;
+    replaced?:        boolean;
     seed_id:          string;
     source_path:      string;
     [property: string]: any;
@@ -9873,6 +9877,7 @@ export interface SeedArtifactTransferResult {
     operation_id:     string;
     recovered:        boolean;
     relative_target:  string;
+    replaced?:        boolean;
     seed_id:          string;
     source_path:      string;
     [property: string]: any;
@@ -9917,8 +9922,11 @@ export interface SeedCheckDefinition {
 }
 
 export interface SeedCheckEvidence {
-    artifact?: string;
-    url?:      string;
+    artifact?:             string;
+    changed_since_report?: boolean;
+    modified_at?:          string;
+    size?:                 number;
+    url?:                  string;
     [property: string]: any;
 }
 
@@ -22464,6 +22472,9 @@ const typeMap: any = {
     ], "any"),
     "EvidenceObject": o([
         { json: "artifact", js: "artifact", typ: u(undefined, "") },
+        { json: "changed_since_report", js: "changed_since_report", typ: u(undefined, true) },
+        { json: "modified_at", js: "modified_at", typ: u(undefined, "") },
+        { json: "size", js: "size", typ: u(undefined, 0) },
         { json: "url", js: "url", typ: u(undefined, "") },
     ], "any"),
     "CheckVerdict": o([
@@ -24812,6 +24823,7 @@ const typeMap: any = {
         { json: "operation_id", js: "operation_id", typ: "" },
         { json: "recovered", js: "recovered", typ: true },
         { json: "relative_target", js: "relative_target", typ: "" },
+        { json: "replaced", js: "replaced", typ: u(undefined, true) },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_path", js: "source_path", typ: "" },
     ], "any"),
@@ -25307,6 +25319,7 @@ const typeMap: any = {
         { json: "operation_id", js: "operation_id", typ: "" },
         { json: "recovered", js: "recovered", typ: true },
         { json: "relative_target", js: "relative_target", typ: "" },
+        { json: "replaced", js: "replaced", typ: u(undefined, true) },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_path", js: "source_path", typ: "" },
     ], "any"),
@@ -25338,6 +25351,9 @@ const typeMap: any = {
     ], "any"),
     "SeedCheckEvidence": o([
         { json: "artifact", js: "artifact", typ: u(undefined, "") },
+        { json: "changed_since_report", js: "changed_since_report", typ: u(undefined, true) },
+        { json: "modified_at", js: "modified_at", typ: u(undefined, "") },
+        { json: "size", js: "size", typ: u(undefined, 0) },
         { json: "url", js: "url", typ: u(undefined, "") },
     ], "any"),
     "SeedCheckMessage": o([

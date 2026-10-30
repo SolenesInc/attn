@@ -55,6 +55,7 @@ type seedArtifactTransferReceipt struct {
 	Stage               string                    `json:"stage,omitempty"`
 	State               string                    `json:"state"`
 	Legacy              *garden.ArtifactReference `json:"legacy,omitempty"`
+	Replaces            bool                      `json:"replaces,omitempty"`
 	UpdatedAt           time.Time                 `json:"updated_at"`
 }
 
@@ -480,10 +481,11 @@ func (d *Daemon) transferSeedArtifact(msg *protocol.SeedArtifactTransferMessage)
 		}
 		dir = notebook.SeedArtifactsDir(root, seedID)
 		destination = filepath.Join(dir, filename)
-		recovering, receiptErr := recoverableSeedArtifactTransferReceiptExists(root, seedID, operation, source, destination)
+		resumable, _, receiptErr := resumableSeedArtifactTransfer(root, seedID, operation, source, destination)
 		if receiptErr != nil {
 			return nil, receiptErr
 		}
+		recovering := resumable != nil
 		if !recovering {
 			if err := validateSeedArtifactSource(source); err != nil {
 				return nil, err
@@ -519,7 +521,7 @@ func (d *Daemon) transferSeedArtifact(msg *protocol.SeedArtifactTransferMessage)
 
 	d.seedArtifactMu.Lock()
 	defer d.seedArtifactMu.Unlock()
-	receipt, recovered, err := d.runSeedArtifactTransfer(root, seedID, operation, source, destination, filename, legacy)
+	receipt, outcome, err := d.runSeedArtifactTransfer(root, seedID, operation, source, destination, filename, legacy)
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +531,11 @@ func (d *Daemon) transferSeedArtifact(msg *protocol.SeedArtifactTransferMessage)
 	}
 	result := &protocol.SeedArtifactTransferResult{
 		OperationID: receipt.ID, SeedID: seedID, Operation: operation, SourcePath: source,
-		DestinationPath: destination, RelativeTarget: seedArtifactRelativeTarget(filename), Recovered: recovered,
+		DestinationPath: destination, RelativeTarget: seedArtifactRelativeTarget(filename),
+		Recovered: outcome.recovered,
+	}
+	if outcome.replaced {
+		result.Replaced = protocol.Ptr(true)
 	}
 	if operation != "detach" {
 		result.Artifact = &artifact
@@ -600,89 +606,126 @@ func transferReceiptID(seedID, operation, source, destination string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func recoverableSeedArtifactTransferReceiptExists(root, seedID, operation, source, destination string) (bool, error) {
+func resumableSeedArtifactTransfer(root, seedID, operation, source, destination string) (resumable, superseded *seedArtifactTransferReceipt, err error) {
 	id := transferReceiptID(seedID, operation, source, destination)
 	receipt, found, err := readSeedTransferReceipt(root, id)
 	if err != nil || !found {
-		return found, err
+		return nil, nil, err
 	}
 	if receipt.SeedID != seedID || receipt.Operation != operation || receipt.Source != source || receipt.Destination != destination {
-		return false, fmt.Errorf("transfer receipt %s does not match this operation", id)
+		return nil, nil, fmt.Errorf("transfer receipt %s does not match this operation", id)
 	}
-	if receipt.State == seedTransferComplete && completedTransferDestinationMissing(receipt) {
-		return false, nil
+	if transferSuperseded(receipt) {
+		return nil, receipt, nil
 	}
-	return true, nil
+	return receipt, nil, nil
 }
 
-func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destination, filename string, legacy *garden.ArtifactReference) (*seedArtifactTransferReceipt, bool, error) {
-	id := transferReceiptID(seedID, operation, source, destination)
-	receipt, found, err := readSeedTransferReceipt(root, id)
-	if err != nil {
-		return nil, false, err
+func transferSuperseded(receipt *seedArtifactTransferReceipt) bool {
+	if receipt.State == seedTransferComplete && completedTransferDestinationMissing(receipt) {
+		return true
 	}
-	if found && (receipt.SeedID != seedID || receipt.Operation != operation || receipt.Source != source || receipt.Destination != destination) {
-		return nil, true, fmt.Errorf("transfer receipt %s does not match this operation", id)
+	if receipt.Operation == "detach" {
+		return false
 	}
-	replacesEventSource := ""
-	if found && receipt.State == seedTransferComplete && completedTransferDestinationMissing(receipt) {
-		replacesEventSource = receipt.eventSource()
-		found = false
+	if _, err := os.Lstat(receipt.Source); os.IsNotExist(err) {
+		return false
 	}
-	if !found {
-		if _, err := os.Lstat(destination); err == nil {
-			return nil, false, fmt.Errorf("destination %q already exists; choose another path", destination)
-		} else if !os.IsNotExist(err) {
-			return nil, false, err
-		}
-		staged, err := stageSeedArtifact(source, filepath.Dir(destination))
-		if err != nil {
-			return nil, false, err
-		}
-		receipt = &seedArtifactTransferReceipt{
-			Version: seedArtifactTransferVersion, ID: id, EventSource: uuid.NewString(), ReplacesEventSource: replacesEventSource, SeedID: seedID,
-			Operation: operation, Source: source, Destination: destination,
-			Filename: filename, Hash: staged.hash, Size: staged.size,
-			ModTimeNS: staged.modTimeNS, Device: staged.device, Inode: staged.inode,
-			Stage: staged.path, State: seedTransferStaged, Legacy: legacy,
-		}
-		if err := writeSeedTransferReceipt(root, receipt); err != nil {
-			_ = os.Remove(staged.path)
-			return nil, false, err
-		}
-		crashpoint.At(crashAfterSeedArtifactStaged)
+	if receipt.State == seedTransferComplete && receipt.Operation == "move" {
+		return true
 	}
+	if !fileHolds(receipt.Source, receipt.Hash) {
+		return true
+	}
+	return receipt.State == seedTransferComplete && !fileHolds(receipt.Destination, receipt.Hash)
+}
 
-	if receipt.State == seedTransferComplete {
-		if err := verifyCompletedTransferSource(receipt); err != nil {
-			return nil, true, err
+func fileHolds(path, hash string) bool {
+	got, err := hashRegularFile(path)
+	return err == nil && got == hash
+}
+
+type seedArtifactTransferOutcome struct {
+	recovered bool
+	replaced  bool
+}
+
+func (d *Daemon) runSeedArtifactTransfer(root, seedID, operation, source, destination, filename string, legacy *garden.ArtifactReference) (*seedArtifactTransferReceipt, seedArtifactTransferOutcome, error) {
+	receipt, superseded, err := resumableSeedArtifactTransfer(root, seedID, operation, source, destination)
+	if err != nil {
+		return nil, seedArtifactTransferOutcome{}, err
+	}
+	resumed := receipt != nil
+	if resumed && receipt.State == seedTransferComplete {
+		if err := verifyCompletedDetach(receipt); err != nil {
+			return nil, seedArtifactTransferOutcome{}, err
 		}
-		return receipt, true, nil
+		return receipt, seedArtifactTransferOutcome{recovered: true}, nil
+	}
+	if !resumed {
+		if receipt, err = stageSeedArtifactTransfer(root, seedID, operation, source, destination, filename, superseded, legacy); err != nil {
+			return nil, seedArtifactTransferOutcome{}, err
+		}
 	}
 	if receipt.State == seedTransferStaged {
 		if err := installSeedArtifactStage(receipt); err != nil {
-			return nil, found, err
+			return nil, seedArtifactTransferOutcome{}, err
 		}
 		receipt.State = seedTransferInstalled
 		receipt.Stage = ""
 		if err := writeSeedTransferReceipt(root, receipt); err != nil {
-			return nil, found, err
+			return nil, seedArtifactTransferOutcome{}, err
 		}
 		crashpoint.At(crashAfterSeedArtifactInstalled)
 	}
 	if receipt.State != seedTransferInstalled {
-		return nil, found, fmt.Errorf("transfer receipt %s has unknown state %q", id, receipt.State)
+		return nil, seedArtifactTransferOutcome{}, fmt.Errorf("transfer receipt %s has unknown state %q", receipt.ID, receipt.State)
 	}
 	if operation != "copy" {
 		if err := removeUnchangedTransferSource(receipt); err != nil {
-			return nil, found, err
+			return nil, seedArtifactTransferOutcome{}, err
 		}
 	}
 	receipt.State = seedTransferComplete
 	if err := writeSeedTransferReceipt(root, receipt); err != nil {
-		return nil, found, err
+		return nil, seedArtifactTransferOutcome{}, err
 	}
-	return receipt, found, nil
+	return receipt, seedArtifactTransferOutcome{recovered: resumed, replaced: receipt.Replaces}, nil
+}
+
+func stageSeedArtifactTransfer(root, seedID, operation, source, destination, filename string, superseded *seedArtifactTransferReceipt, legacy *garden.ArtifactReference) (*seedArtifactTransferReceipt, error) {
+	if operation == "detach" {
+		if _, err := os.Lstat(destination); err == nil {
+			return nil, fmt.Errorf("destination %q already exists; choose another path", destination)
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+	replacesEventSource := ""
+	if superseded != nil {
+		replacesEventSource = superseded.eventSource()
+	}
+	_, statErr := os.Lstat(destination)
+	staged, err := stageSeedArtifact(source, filepath.Dir(destination))
+	if err != nil {
+		return nil, err
+	}
+	receipt := &seedArtifactTransferReceipt{
+		Version: seedArtifactTransferVersion, ID: transferReceiptID(seedID, operation, source, destination), EventSource: uuid.NewString(), ReplacesEventSource: replacesEventSource, SeedID: seedID,
+		Operation: operation, Source: source, Destination: destination,
+		Filename: filename, Hash: staged.hash, Size: staged.size,
+		ModTimeNS: staged.modTimeNS, Device: staged.device, Inode: staged.inode,
+		Stage: staged.path, State: seedTransferStaged, Legacy: legacy, Replaces: statErr == nil,
+	}
+	if err := writeSeedTransferReceipt(root, receipt); err != nil {
+		_ = os.Remove(staged.path)
+		return nil, err
+	}
+	if superseded != nil && superseded.Stage != "" {
+		_ = os.Remove(superseded.Stage)
+	}
+	crashpoint.At(crashAfterSeedArtifactStaged)
+	return receipt, nil
 }
 
 func stageSeedArtifact(source, destinationDir string) (stagedSeedArtifact, error) {
@@ -760,12 +803,11 @@ func installSeedArtifactStage(receipt *seedArtifactTransferReceipt) error {
 	if receipt.Stage == "" {
 		return errors.New("staged transfer has no staging file")
 	}
-	if err := renameSeedArtifactStage(receipt.Stage, receipt.Destination); err != nil {
+	if err := installStagedFile(receipt.Operation, receipt.Stage, receipt.Destination); err != nil {
 		if !errors.Is(err, os.ErrExist) && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("install artifact without replacement: %w", err)
+			return fmt.Errorf("install artifact: %w", err)
 		}
-		hash, hashErr := hashRegularFile(receipt.Destination)
-		if hashErr != nil || hash != receipt.Hash {
+		if !fileHolds(receipt.Destination, receipt.Hash) {
 			return fmt.Errorf("destination %q already exists; choose another path", receipt.Destination)
 		}
 	}
@@ -776,6 +818,13 @@ func installSeedArtifactStage(receipt *seedArtifactTransferReceipt) error {
 		return fmt.Errorf("remove artifact staging file: %w", err)
 	}
 	return nil
+}
+
+func installStagedFile(operation, stage, destination string) error {
+	if operation == "detach" {
+		return renameWithoutReplacing(stage, destination)
+	}
+	return os.Rename(stage, destination)
 }
 
 func removeUnchangedTransferSource(receipt *seedArtifactTransferReceipt) error {
@@ -804,25 +853,17 @@ func removeUnchangedTransferSource(receipt *seedArtifactTransferReceipt) error {
 	return nil
 }
 
-func verifyCompletedTransferSource(receipt *seedArtifactTransferReceipt) error {
-	destinationHash, err := hashRegularFile(receipt.Destination)
-	if err != nil || destinationHash != receipt.Hash {
-		return fmt.Errorf("completed transfer destination %q is missing or changed", receipt.Destination)
+func verifyCompletedDetach(receipt *seedArtifactTransferReceipt) error {
+	if receipt.Operation != "detach" {
+		return nil
 	}
-	if receipt.Operation != "copy" {
-		if _, err := os.Lstat(receipt.Source); os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("transfer already completed at %q, but a file now exists again at source %q", receipt.Destination, receipt.Source)
+	if !fileHolds(receipt.Destination, receipt.Hash) {
+		return fmt.Errorf("completed transfer destination %q is missing or changed", receipt.Destination)
 	}
 	if _, err := os.Lstat(receipt.Source); os.IsNotExist(err) {
 		return nil
 	}
-	hash, err := hashRegularFile(receipt.Source)
-	if err != nil || hash != receipt.Hash {
-		return fmt.Errorf("artifact already exists at %q from an earlier copy; choose another filename for the changed source", receipt.Destination)
-	}
-	return nil
+	return fmt.Errorf("transfer already completed at %q, but a file now exists again at source %q", receipt.Destination, receipt.Source)
 }
 
 func completedTransferDestinationMissing(receipt *seedArtifactTransferReceipt) bool {

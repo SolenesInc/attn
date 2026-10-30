@@ -302,7 +302,11 @@ func reportProvenance(report protocol.SeedCheckReport) string {
 func evidenceList(evidence []protocol.SeedCheckEvidence) string {
 	labels := make([]string, 0, len(evidence))
 	for _, cited := range evidence {
-		labels = append(labels, protocol.Deref(cited.Artifact)+protocol.Deref(cited.URL))
+		label := protocol.Deref(cited.Artifact) + protocol.Deref(cited.URL)
+		if protocol.Deref(cited.ChangedSinceReport) {
+			label += " (changed since this report)"
+		}
+		labels = append(labels, label)
 	}
 	return strings.Join(labels, ", ")
 }
