@@ -27,6 +27,8 @@ image = { version = "0.25", default-features = false, features = ["png", "tiff"]
 # this plugin hand that argv to the already-running app instead.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+webkit2gtk = { version = "2.0", features = ["v2_40"] }
+javascriptcore-rs = "1.1"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 # Same requirement and default features the plugin declares, so the fence shares
 # its resolved zbus instead of building a second one.

@@ -860,12 +860,44 @@ async fn evaluate_isolated_script_with_alert(
 #[cfg(not(target_os = "macos"))]
 async fn evaluate_script(webview: tauri::Webview, script: String) -> Result<String, String> {
     let (tx, rx) = mpsc::channel::<Result<String, String>>();
+    let complete = move |raw: Result<String, String>| {
+        let result = raw.and_then(|raw| {
+            serde_json::from_str::<String>(&raw)
+                .map_err(|error| format!("browser script returned an invalid result: {error}"))
+        });
+        let _ = tx.send(result);
+    };
+    #[cfg(target_os = "linux")]
     webview
-        .eval_with_callback(script, move |raw| {
-            let result = serde_json::from_str::<String>(&raw)
-                .map_err(|error| format!("browser script returned an invalid result: {error}"));
-            let _ = tx.send(result);
+        .with_webview(move |platform| {
+            use javascriptcore::ValueExt;
+            use webkit2gtk::WebViewExt;
+
+            platform.inner().evaluate_javascript(
+                &script,
+                None,
+                None,
+                None::<&gtk::gio::Cancellable>,
+                move |result| {
+                    complete(
+                        result
+                            .map_err(|error| format!("evaluate browser script: {error}"))
+                            .and_then(|value| {
+                                value
+                                    .to_json(0)
+                                    .map(|value| value.to_string())
+                                    .ok_or_else(|| {
+                                        "browser script returned no JSON result".to_string()
+                                    })
+                            }),
+                    );
+                },
+            );
         })
+        .map_err(|error| format!("evaluate browser script: {error}"))?;
+    #[cfg(not(target_os = "linux"))]
+    webview
+        .eval_with_callback(script, move |raw| complete(Ok(raw)))
         .map_err(|error| format!("evaluate browser script: {error}"))?;
 
     tauri::async_runtime::spawn_blocking(move || {

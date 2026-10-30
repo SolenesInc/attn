@@ -388,12 +388,12 @@
         "note": "Green direct-scenario ATTN_VERDICT durationMs=9930, including launch and cleanup, on clean runtime commit 724b3bccb86b380294607bf72defcf22a3125d67. Covers parked native hover/actions, Settings selection, AppKit menu keys, terminal Alt-drag, rejected geometry and browser password input with real focus and secure input off. macOS only. Earlier concurrent cold verification took49714ms; its receipt remains on seed s-fvpn0q."
       },
       "browser-wait-navigation": {
-        "run": "browser-wait-navigation-2026-10-29T23-30-21-102Z",
-        "job": "Local packaged scenario, browserwait isolated instance",
+        "run": "browser-wait-navigation-2026-10-30T00-10-00-504Z",
+        "job": "Local packaged scenario, bwait917 isolated SSH Linux instance",
         "recordedAt": "2026-10-30",
-        "seconds": 21.311,
-        "runnerClass": "local macOS",
-        "note": "Green ATTN_VERDICT durationMs=21311, including cleanup. Holds HTTP responses until an unsuccessful wait probe, then covers initial navigation, close/reopen, later navigation and zero-timeout results. Remeasure on Linux CI."
+        "seconds": 7.48,
+        "runnerClass": "dedicated SSH Linux x86_64 runner",
+        "note": "Green ATTN_VERDICT durationMs=7480, including cleanup. Immediate initial/reopened open-wait checks; old-page false probe gates later navigation; zero-timeout results. Native WebKitGTK evaluation preserves early script completion. Remeasure on hosted CI."
       }
     }
   },
@@ -468,6 +468,6 @@
     "outpost-update": 39.165,
     "notebook-sync": 34.495,
     "focusless-native": 9.93,
-    "browser-wait-navigation": 21.311
+    "browser-wait-navigation": 7.48
   }
 }

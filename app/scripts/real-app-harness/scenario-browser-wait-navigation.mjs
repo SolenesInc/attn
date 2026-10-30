@@ -16,12 +16,10 @@ const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const exec = promisify(execFile);
 const receipts = [];
-const pages = new Map();
 const server = http.createServer((request, response) => {
   const id = request.url.slice(1);
-  const page = pages.get(id);
-  if (!page) { response.writeHead(404).end(); return; }
-  page.requested(response);
+  response.setHeader('content-type', 'text/html');
+  response.end(`<title>${id}</title><h1 id="${id}">${id}</h1>`);
 });
 const observePendingWait = selector => {
   const logPath = client.launch.logPath;
@@ -68,10 +66,16 @@ const observePendingWait = selector => {
   return { result, close };
 };
 const cli = async (...args) => {
-  const result = await exec(appDaemonInTree(options.appPath), args, { env: instanceCliEnv(currentHarnessInstance()) });
-  receipts.push({ args, ...result });
-  runner.writeJson('cli.json', receipts);
-  return result.stdout;
+  try {
+    const result = await exec(appDaemonInTree(options.appPath), args, { env: instanceCliEnv(currentHarnessInstance()) });
+    receipts.push({ args, ...result });
+    return result.stdout;
+  } catch (error) {
+    receipts.push({ args, stdout: error.stdout, stderr: error.stderr, code: error.code });
+    throw error;
+  } finally {
+    runner.writeJson('cli.json', receipts);
+  }
 };
 runner.registerCleanup('close_page_server', () => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
 runner.registerCleanup('quit_app', () => client.quitApp());
@@ -84,36 +88,43 @@ try {
   await observer.setCurrentDesktop(desktop.id);
   const { sessionId } = await client.request('create_session', { cwd: runner.sessionDir, agent: 'claude', label: 'Browser wait navigation' });
   await client.request('select_session', { sessionId });
-  const openAndWait = async id => {
-    const requested = new Promise(resolve => { pages.set(id, { requested: resolve }); });
-    const pending = observePendingWait(`#${id}`);
-    try {
-      await cli('browser', 'open', `http://127.0.0.1:${server.address().port}/${id}`, '--session', sessionId);
-      const release = await requested;
-      const waiting = cli('browser', 'wait', '--using', 'css', '--value', `#${id}`, '--state', 'visible', '--session', sessionId).then(stdout => ({ stdout }), error => ({ error }));
-      const { error, receipt } = await pending.result;
-      if (error) throw error;
-      runner.log('wait_pending_before_document_replacement', receipt);
-      release.setHeader('content-type', 'text/html');
-      release.end(`<title>${id}</title><h1 id="${id}">${id}</h1>`);
-      const outcome = await waiting;
-      if (outcome.error) throw outcome.error;
-      const result = JSON.parse(outcome.stdout);
-      runner.assert(Boolean(result['element-6066-11e4-a52e-4f735466cecf']), 'wait returns the new document element', { id, result });
-      const snapshot = JSON.parse(await cli('browser', 'snapshot', '--session', sessionId));
-      runner.assert(snapshot.title === id && snapshot.text === id, 'the wait observed the requested document', { snapshot });
-    } finally {
-      pending.close();
-    }
+  const assertPage = async (id, stdout) => {
+    const result = JSON.parse(stdout);
+    runner.assert(Boolean(result['element-6066-11e4-a52e-4f735466cecf']), 'wait returns the new document element', { id, result });
+    const snapshot = JSON.parse(await cli('browser', 'snapshot', '--session', sessionId));
+    runner.assert(snapshot.title === id && snapshot.text === id, 'the wait observed the requested document', { snapshot });
   };
-  await runner.step('wait_during_initial_navigation', () => openAndWait('initial'));
-  await runner.step('wait_after_close_and_reopen', async () => {
+  const waitForPage = id => cli('browser', 'wait', '--using', 'css', '--value', `#${id}`, '--state', 'visible', '--session', sessionId);
+  const openAndWait = async id => {
+    await cli('browser', 'open', `http://127.0.0.1:${server.address().port}/${id}`, '--session', sessionId);
+    await assertPage(id, await waitForPage(id));
+  };
+  await runner.step('initial_open_then_wait', () => openAndWait('initial'));
+  await runner.step('reopen_then_wait', async () => {
     const selector = `[data-session-terminal-desktop="${desktop.id}"] [data-tile-kind="browser"]`;
     await client.request('dom_click', { selector: `${selector} [aria-label="Close tile"]` });
     await client.request('dom_wait', { selector, absent: true, timeoutMs: observer.connectTimeoutMs });
     await openAndWait('reopened');
   });
-  await runner.step('wait_during_existing_tile_navigation', () => openAndWait('navigated'));
+  await runner.step('navigation_replaces_a_pending_wait', async () => {
+    const id = 'navigated';
+    const pending = observePendingWait(`#${id}`);
+    const waiting = waitForPage(id).then(stdout => ({ stdout }), error => ({ error }));
+    try {
+      const { error, receipt } = await Promise.race([
+        pending.result,
+        waiting.then(outcome => ({ error: outcome.error || new Error('The wait completed before navigation started') })),
+      ]);
+      if (error) throw error;
+      runner.log('wait_pending_before_document_replacement', receipt);
+      await cli('browser', 'open', `http://127.0.0.1:${server.address().port}/${id}`, '--session', sessionId);
+      const outcome = await waiting;
+      if (outcome.error) throw outcome.error;
+      await assertPage(id, outcome.stdout);
+    } finally {
+      pending.close();
+    }
+  });
   await runner.step('zero_timeout_checks_once', async () => {
     const found = JSON.parse(await cli('browser', 'wait', '--using', 'css', '--value', '#navigated', '--timeout', '0', '--session', sessionId));
     runner.assert(Boolean(found['element-6066-11e4-a52e-4f735466cecf']), 'an existing element satisfies a zero-timeout wait');

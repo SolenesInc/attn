@@ -74,6 +74,7 @@ dependencies = [
  "global-hotkey",
  "gtk",
  "image",
+ "javascriptcore-rs",
  "libc",
  "objc2",
  "objc2-app-kit",
@@ -90,6 +91,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
+ "webkit2gtk",
  "zbus",
 ]
 
