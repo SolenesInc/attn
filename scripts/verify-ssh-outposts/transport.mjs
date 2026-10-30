@@ -23,6 +23,7 @@ const sent = new Map();
 const notebookEvents = [];
 let output = '';
 let echoTerminal = null;
+let echoesDrained = null;
 let nettop = null;
 const inputTraces = new Map();
 const inputProbes = new Map();
@@ -69,6 +70,7 @@ function watchEcho() {
     }
     const last = output.lastIndexOf('>');
     if (last >= 0) output = output.slice(last + 1);
+    if (!sent.size) echoesDrained?.();
     return false;
   }, 'echo output', 3_600_000).catch(() => {});
 }
@@ -90,6 +92,17 @@ async function startShell() {
   receipt('echo shell ready', { session: id, terminal: echoTerminal });
   return id;
 }
+function drainEchoes() {
+  receipt('sampling stopped', { sent_inputs: seq, outstanding: sent.size });
+  return new Promise((resolve, reject) => {
+    const guard = setTimeout(() => {
+      echoesDrained = null;
+      reject(new Error(`echo_drain_ms=15000, unanswered=${sent.size}, tokens=${[...sent.keys()].join(',')}`));
+    }, 15_000);
+    echoesDrained = () => { clearTimeout(guard); echoesDrained = null; resolve(); };
+    if (!sent.size) echoesDrained();
+  });
+}
 let seq = 0;
 async function sampleUntil(stop) {
   let next = performance.now();
@@ -107,15 +120,13 @@ async function sampleUntil(stop) {
     next += 30;
     await new Promise(r => setTimeout(r, Math.max(0, next - performance.now())));
   }
-  const drained = performance.now();
-  while (sent.size && performance.now() - drained < 15_000) await new Promise(r => setTimeout(r, 50));
+  if (stopping) throw new Error('measurement stopped by SIGTERM');
+  await drainEchoes();
   await Promise.all(inputAcks);
   await Promise.all(traceReads);
   await readInputTraces();
   if (inputTraceErrors.length) throw new Error(inputTraceErrors.join('\n'));
   if (inputTraces.size !== seq) throw new Error(`trace_capacity=${traceCapacity}, captured_inputs=${inputTraces.size}, sent_inputs=${seq}`);
-  if (stopping) throw new Error('measurement stopped by SIGTERM');
-  return { unanswered: sent.size };
 }
 async function heartbeatGaps() {
   const closed = W.waitOutpost(r => r.id === W.outpost.id && r.reach !== 'reachable', 'bridge closed by outposts_enabled=false', 60_000);
