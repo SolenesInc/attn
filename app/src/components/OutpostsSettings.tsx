@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { openThenShow } from '../application/openThenShow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { outpostNeedsUpdate, outpostIsUpdating, outpostUpdateText } from './OutpostUpdateBanner';
@@ -33,6 +34,7 @@ export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => voi
   const { outposts, outpostCommandError, sendAddOutpost, sendRepairOutpost, sendConnectOutpostInTerminal, sendRemoveOutpost, sendUpdateOutpost, homeBuild, isConnected } = useDaemonApi();
   const sessions = useDaemonStore((state) => state.daemonSessions);
   const removeButton = useRef<HTMLButtonElement>(null);
+  const [terminalError, setTerminalError] = useState('');
   const [removing, setRemoving] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [destination, setDestination] = useState('');
@@ -46,6 +48,16 @@ export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => voi
     }
     setSubmitted(null);
   }, [outposts, submitted, name, destination]);
+
+  async function connectInTerminal(id: string) {
+    setTerminalError('');
+    try {
+      await openThenShow(() => sendConnectOutpostInTerminal(id));
+      onOpenTerminal();
+    } catch (error) {
+      setTerminalError(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   function add(event: FormEvent) {
     event.preventDefault();
@@ -72,7 +84,7 @@ export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => voi
           <div><button type="submit" className="settings-action" disabled={!isConnected || !destination.trim()}>Add outpost</button></div>
         </form>
       </section>
-      {outpostCommandError && <div className="settings-warning" role="alert">{outpostCommandError}</div>}
+      {(terminalError || outpostCommandError) && <div className="settings-warning" role="alert">{terminalError || outpostCommandError}</div>}
       {!isConnected && <p className="settings-warning" role="status">Connect to the home daemon to change outposts.</p>}
       <section className="settings-block">
         <div className="settings-block-intro">
@@ -100,7 +112,7 @@ export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => voi
                     {row.notebook && <NotebookSyncStatus notebook={row.notebook} />}
                     {row.update && <p className="settings-description" role="status">{outpostUpdateText(row)}</p>}
                     <div className="settings-outpost-actions">
-                      {row.state === 'refused' && row.connectable && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => { if (sendConnectOutpostInTerminal(row.id)) onOpenTerminal(); }}>Connect in a terminal</button>}
+                      {row.state === 'refused' && row.connectable && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => void connectInTerminal(row.id)}>Connect in a terminal</button>}
                       {outpostNeedsUpdate(row, homeBuild) && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : 'Update to home build'}</button>}
                       <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
                       <button

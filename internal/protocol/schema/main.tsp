@@ -1809,7 +1809,7 @@ model AddOutpostMessage { cmd: "add_outpost"; name: string; destination: string;
 model RemoveOutpostMessage { cmd: "remove_outpost"; id: string; }
 model RepairOutpostMessage { cmd: "repair_outpost"; id: string; }
 @extension("x-on", #{ home: true })
-model ConnectOutpostInTerminalMessage { cmd: "connect_outpost_in_terminal"; id: string; }
+model ConnectOutpostInTerminalMessage { cmd: "connect_outpost_in_terminal"; id: string; request_id: string; }
 @extension("x-on", #{ home: true })
 model UpdateOutpostMessage { cmd: "update_outpost"; id: string; }
 

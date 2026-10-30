@@ -167,6 +167,7 @@ try {
       if (observer.getSession(sessionId)) await client.request('close_session', { sessionId });
     }
   });
+  await client.request('dispatch_shortcut', { shortcutId: 'session.goToDashboard' });
   await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
   await runner.step('keyboard_opt_in_and_add', async () => {
     await wait('[data-testid="settings-nav-outposts"]', { absent: true });

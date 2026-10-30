@@ -2543,6 +2543,9 @@ type ConnectOutpostInTerminalMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
 }
 
 type ConversationReadinessMessage struct {

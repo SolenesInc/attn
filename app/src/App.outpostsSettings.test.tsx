@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { EventMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import { openSection, openSettings, savedSettings } from './test/settings';
-import { daemonSession, soloDesktop } from './test/daemonFixtures';
+import { openSession } from './test/appFixtures';
+import { daemonSession, defaultProfile, soloDesktop, splitDesktop } from './test/daemonFixtures';
 import { initialState } from './test/scriptedDaemon';
 
 type Outpost = EventMessage<'outposts_updated'>['outposts'][number];
@@ -98,11 +99,11 @@ describe('Outposts settings', () => {
     expect(screen.queryByRole('listitem', { name: 'studio' })).toBeNull();
   });
 
-  it('offers a keyboard button only for an ssh refusal and opens its terminal from settings', async () => {
+  it('offers a keyboard button only for an ssh refusal and shows a failed open in settings', async () => {
     const error = 'Host key verification failed.\nPlease contact your system administrator.\n';
     const refused: Outpost = { ...connected, state: 'refused', reach: 'unreachable', connectable: true, last_error: error };
     const daemon = await openSection('outposts', { settings: enabled, outposts: [refused] }, scripted => {
-      scripted.on('connect_outpost_in_terminal', () => {});
+      scripted.on('connect_outpost_in_terminal', command => ({ event: 'profile_action_result', request_id: command.request_id, action: command.cmd, success: false, error: 'Connection terminal unavailable' }));
     });
     expect(screen.getByText(error, { exact: true, normalizer: text => text })).toBeInTheDocument();
     const button = screen.getByRole('button', { name: 'Connect in a terminal' });
@@ -110,13 +111,47 @@ describe('Outposts settings', () => {
     expect(button).toHaveFocus();
     expect(button).not.toHaveAttribute('tabindex', '-1');
     await gesture(daemon, () => fireEvent.click(button));
-    expect(daemon.sentOf('connect_outpost_in_terminal')).toEqual([{ cmd: 'connect_outpost_in_terminal', id: connected.id }]);
-    expect(screen.queryByTestId('settings-modal')).toBeNull();
-    await openSettings(daemon);
+    expect(daemon.sentOf('connect_outpost_in_terminal')).toMatchObject([{ cmd: 'connect_outpost_in_terminal', id: connected.id }]);
+    expect(screen.getByRole('alert')).toHaveTextContent('Connection terminal unavailable');
+    expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...refused, connectable: false }] }));
     expect(screen.queryByRole('button', { name: 'Connect in a terminal' })).toBeNull();
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...refused, state: 'lost' }] }));
     expect(screen.queryByRole('button', { name: 'Connect in a terminal' })).toBeNull();
+  });
+
+  it.each([
+    ['dashboard', false], ['session', false], ['dashboard', true], ['session', true],
+  ] as const)('shows and focuses the returned connection tile from %s, reused=%s', async (origin, reuse) => {
+    const anchor = daemonSession('anchor', { agent: 'shell', state: 'idle' });
+    const terminal = daemonSession('connection', { agent: 'shell', command_terminal: true, state: 'idle' });
+    const before = splitDesktop('desktop-anchor', reuse ? ['anchor', 'connection'] : ['anchor']);
+    const after = splitDesktop('desktop-anchor', ['anchor', 'connection'], { active_pane_id: 'pane-connection', revision: 2 });
+    const { daemon } = await renderApp({ initialState: {
+      settings: { ...enabled, queue_mode_enabled: 'false' },
+      sessions: reuse ? [anchor, terminal] : [anchor], desktops: [before],
+      outposts: [{ ...connected, state: 'refused', reach: 'unreachable', connectable: true }],
+    } });
+    daemon.on('connect_outpost_in_terminal', () => {});
+    if (origin === 'session') await openSession(daemon, anchor.id);
+    await openSettings(daemon);
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-outposts')));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Connect in a terminal' })));
+    const command = daemon.sentOf('connect_outpost_in_terminal')[0];
+    expect(command).toMatchObject({ id: connected.id });
+    expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    await gesture(daemon, () => {
+      if (!reuse) daemon.emit({ event: 'session_registered', session: terminal });
+      daemon.arrangement.replace(after);
+      daemon.arrangement.show(after.id, 'pane-connection');
+      daemon.emit({ event: 'profile_arrangement_changed', request_id: command.request_id, profile: defaultProfile(after.id), desktops: [after] });
+      daemon.emit({ event: 'profile_action_result', request_id: command.request_id, action: command.cmd, success: true, desktops: [after], pane_id: 'pane-connection' });
+    });
+    expect(screen.queryByTestId('settings-modal')).toBeNull();
+    const pane = document.querySelector<HTMLElement>('[data-session-visible="1"] [data-pane-id="pane-connection"]');
+    expect(pane).not.toBeNull();
+    expect(within(pane!).getByRole('textbox', { name: 'Terminal input' })).toHaveFocus();
+    expect(daemon.sentOf('desktop_show_leaf')).toMatchObject([{ desktop_id: after.id, leaf_id: 'pane-connection' }]);
   });
 
   it.each(['true', 'false'])('keeps a connection terminal out of the queue and home in queue flow %s', async (queue) => {

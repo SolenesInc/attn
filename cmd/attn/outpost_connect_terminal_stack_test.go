@@ -23,12 +23,21 @@ func TestSSHConnectInATerminalSurvivesHomeRestartAndConnectsAfterAnAnswer(t *tes
 	if !protocol.Deref(row.Connectable) || protocol.Deref(row.LastError) != "Host key verification failed.\n" {
 		t.Fatalf("refusal: %+v", row)
 	}
-	app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID})
+	app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID, RequestID: "connect-outpost"})
 	opened := testworld.Await(app, protocol.EventSessionRegistered, func(m protocol.SessionRegisteredMessage) bool { return m.Session.Label == "Connect to outpost" }).Session
 	if opened.Agent != protocol.AgentShellValue || opened.Host != nil || !protocol.Deref(opened.CommandTerminal) {
 		t.Fatalf("connection terminal must be a home shell: %+v", opened)
 	}
 	app.AwaitScreen(string(opened.ID), "Are you sure you want to continue connecting (yes/no)?")
+	result := testworld.Await(app, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == "connect-outpost" })
+	if !result.Success || protocol.Deref(result.PaneID) == "" || len(result.Desktops) != 1 {
+		t.Fatalf("connection tile result: %+v", result)
+	}
+	app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID, RequestID: "reuse-outpost"})
+	reused := testworld.Await(app, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == "reuse-outpost" })
+	if !reused.Success || protocol.Deref(reused.PaneID) != protocol.Deref(result.PaneID) || len(reused.Desktops) != 1 || reused.Desktops[0].ID != result.Desktops[0].ID {
+		t.Fatalf("reuse returned another tile: %+v -> %+v", result, reused)
+	}
 	assertConnectionTerminalAbsentFromLedger(t, app, opened.ID)
 	before := pair.SSH.MasterAttempts()
 	home.Stop()
@@ -55,9 +64,9 @@ func TestSSHConnectInATerminalSurvivesHomeRestartAndConnectsAfterAnAnswer(t *tes
 		t.Fatal("successful connection terminal disappeared before the user closed it")
 	}
 	assertConnectionTerminalAbsentFromLedger(t, app, opened.ID)
-	result := testworld.Request(app, protocol.SessionListMessage{Cmd: protocol.CmdSessionList, All: protocol.Ptr(true), RequestID: protocol.Ptr("all-shells")}, protocol.EventSessionListResult, func(m protocol.SessionListResultMessage) bool { return m.RequestID == "all-shells" })
-	if !result.Success {
-		t.Fatalf("ledger: %+v", result)
+	resultList := testworld.Request(app, protocol.SessionListMessage{Cmd: protocol.CmdSessionList, All: protocol.Ptr(true), RequestID: protocol.Ptr("all-shells")}, protocol.EventSessionListResult, func(m protocol.SessionListResultMessage) bool { return m.RequestID == "all-shells" })
+	if !resultList.Success {
+		t.Fatalf("ledger: %+v", resultList)
 	}
 	for _, desktop := range fresh.Initial.Desktops {
 		for _, pane := range desktop.Panes {
@@ -103,7 +112,7 @@ func TestSSHConnectionTerminalFailureCanBeRetried(t *testing.T) {
 	row := outpostState(app, "outpost", protocol.OutpostStateRefused)
 	open := func() protocol.Session {
 		mark := app.EventCount()
-		app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID})
+		app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID, RequestID: "connect-outpost"})
 		opened := testworld.AwaitSince(app, mark, protocol.EventSessionRegistered, func(m protocol.SessionRegisteredMessage) bool { return m.Session.Label == "Connect to outpost" }).Session
 		app.AwaitScreen(string(opened.ID), "Are you sure you want to continue connecting (yes/no)?")
 		return opened
@@ -137,7 +146,7 @@ func TestSSHConnectionTerminalIsCancelledByOffAndRemove(t *testing.T) {
 			app := enableOutposts(t, home)
 			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: pair.Destination})
 			row := outpostState(app, "outpost", protocol.OutpostStateRefused)
-			app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID})
+			app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID, RequestID: "connect-outpost"})
 			opened := testworld.Await(app, protocol.EventSessionRegistered, func(m protocol.SessionRegisteredMessage) bool { return m.Session.Label == "Connect to outpost" }).Session
 			app.AwaitScreen(string(opened.ID), "Are you sure you want to continue connecting (yes/no)?")
 			if action == "off" {
@@ -179,7 +188,7 @@ func TestSSHConnectionTerminalMayExitBeforeItsTileIsOpened(t *testing.T) {
 			if success {
 				pair.SSH.Restore(pair.Destination)
 			}
-			app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID})
+			app.Send(protocol.ConnectOutpostInTerminalMessage{Cmd: protocol.CmdConnectOutpostInTerminal, ID: row.ID, RequestID: "connect-outpost"})
 			opened := testworld.Await(app, protocol.EventSessionRegistered, func(m protocol.SessionRegisteredMessage) bool { return m.Session.Label == "Connect to outpost" }).Session
 			exited := testworld.Await(app, protocol.EventSessionExited, func(m protocol.SessionExitedMessage) bool { return m.SessionID == opened.ID })
 			want := 255

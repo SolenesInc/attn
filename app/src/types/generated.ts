@@ -3089,8 +3089,9 @@ export interface CommandUsage {
 }
 
 export interface ConnectOutpostInTerminalMessage {
-    cmd: ConnectOutpostInTerminalMessageCmd;
-    id:  string;
+    cmd:        ConnectOutpostInTerminalMessageCmd;
+    id:         string;
+    request_id: string;
     [property: string]: any;
 }
 
@@ -20902,6 +20903,7 @@ const typeMap: any = {
     "ConnectOutpostInTerminalMessage": o([
         { json: "cmd", js: "cmd", typ: r("ConnectOutpostInTerminalMessageCmd") },
         { json: "id", js: "id", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
     "ConversationReadinessMessage": o([
         { json: "agent", js: "agent", typ: "" },

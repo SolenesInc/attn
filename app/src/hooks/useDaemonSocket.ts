@@ -3301,7 +3301,9 @@ export function useDaemonSocket({
   }, []);
   const sendUpdateOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'update_outpost', id }), [sendOutpostCommand]);
   const sendAddOutpost = useCallback((name: string, destination: string) => sendOutpostCommand({ cmd: 'add_outpost', name, destination }), [sendOutpostCommand]);
-  const sendConnectOutpostInTerminal = useCallback((id: string) => sendOutpostCommand({ cmd: 'connect_outpost_in_terminal', id }), [sendOutpostCommand]);
+  const sendConnectOutpostInTerminal = useCallback((id: string) =>
+    sendRequest<ProfileActionResult>('connect_outpost_in_terminal', { id }, 'The daemon did not open the connection terminal')
+      .then(result => ({ desktopId: result.desktops?.[0]?.id, tileId: result.pane_id })), [sendRequest]);
   const sendRepairOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'repair_outpost', id }), [sendOutpostCommand]);
   const sendRemoveOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'remove_outpost', id }), [sendOutpostCommand]);
 
