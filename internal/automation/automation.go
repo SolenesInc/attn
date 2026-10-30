@@ -31,10 +31,10 @@ type DefinitionSpec struct {
 	Location   LocationSpec `yaml:"location" json:"location"`
 }
 type TriggerSpec struct {
-	Guard        string               `yaml:"guard,omitempty" json:"guard,omitempty"`
 	Type         string               `yaml:"type" json:"type"`
 	Repositories RepositoryFilterSpec `yaml:"repositories,omitempty" json:"repositories,omitempty"`
 	Schedule     *ScheduleSpec        `yaml:"schedule,omitempty" json:"schedule,omitempty"`
+	Guard        string               `yaml:"guard,omitempty" json:"guard,omitempty"`
 	Continuity   string               `yaml:"continuity,omitempty" json:"continuity,omitempty"`
 	CatchUp      string               `yaml:"catch_up,omitempty" json:"catch_up,omitempty"`
 }

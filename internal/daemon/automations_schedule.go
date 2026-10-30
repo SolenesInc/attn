@@ -94,6 +94,9 @@ func (d *Daemon) observeDueSchedules(ctx context.Context, now time.Time) {
 		}
 	}
 	checks.Wait()
+	if ctx.Err() != nil {
+		return
+	}
 	for _, item := range due {
 		if item.spec.Trigger.Guard != "" {
 			if !item.checked {
