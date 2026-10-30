@@ -9,12 +9,13 @@ import { currentHarnessInstance, resolveHarnessResources, instanceCliEnv as inst
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const PANEL_TIMEOUT_MS = 30_000;
 const FORM_TIMEOUT_MS = 30_000;
+const SCHEDULE_CHECK_TIMEOUT_MS = 120_000;
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -191,6 +192,17 @@ async function main() {
 
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
+  const nativeClick = async (selector) => {
+    await client.request('dom_scroll_into_view', { selector });
+    const { bounds } = await client.request('dom_bounds', { selector });
+    const { logicalBounds: window } = await client.request('get_window_bounds');
+    const { viewport } = await client.request('dom_focus_state');
+    await driver.clickWindow(
+      (Math.max(0, window.width - viewport.innerWidth) / 2 + bounds.x + bounds.width / 2) / window.width,
+      (Math.max(0, window.height - viewport.innerHeight) + bounds.y + bounds.height / 2) / window.height,
+    );
+  };
 
   const suffix = Date.now().toString(36);
   let primaryID = 0;
@@ -545,6 +557,66 @@ async function main() {
 
       runner.assert(showFailsWithDaemonError(binary, deleteID, daemonEnv), 'the definition is gone after the confirmed delete', deleteID);
       createdDefinitions.delete(deleteID);
+    });
+
+    await runner.step('scheduled_guard_in_form_and_drawer', async () => {
+      const guard = 'sh guard.sh';
+      const guardName = `Automation guard proof ${suffix}`;
+      const guardFile = path.join(fixturePath, 'guard.sh');
+      fs.writeFileSync(guardFile, 'exit 0\n');
+      await openForm(client);
+      await client.request('automation_form_set_values', { values: {
+        name: guardName,
+        trigger: 'scheduled',
+        scheduleCron: '* * * * *',
+        continuity: 'singleton',
+        catchUp: 'skip',
+        directoryPath: fixturePath,
+        prompt: 'Work only when the guard prints something new.',
+      } });
+      await nativeClick('[data-testid="automation-form-guard"]');
+      await driver.typeText(guard);
+      const sentence = await client.request('dom_wait', {
+        selector: '[data-testid="automation-form-sentence"]',
+        textIncludes: `only when ${guard} prints something new`,
+        timeoutMs: FORM_TIMEOUT_MS,
+      });
+      runner.writeJson('guard-form-sentence.json', sentence);
+      await nativeClick('[data-testid="automation-form-save"]');
+      await client.request('dom_wait', { selector: '[data-testid="automation-form"]', absent: true, timeoutMs: FORM_TIMEOUT_MS });
+      const saved = (runJSON(binary, ['automation', 'list'], daemonEnv) || []).find((row) => row.name === guardName);
+      runner.assert(saved?.id > 0, 'the form creates a scheduled automation with a native guard entry and save', saved);
+      const guardID = saved.id;
+      createdDefinitions.add(guardID);
+      const reopened = await openForm(client, { definitionId: guardID });
+      runner.assert(reopened.values.guard === guard, 'the saved guard reloads into the form', reopened);
+      await nativeClick('[data-testid="automation-form-cancel"]');
+
+      const selector = `[data-testid="automation-guard-check-${guardID}"]`;
+      await client.request('dom_wait', {
+        selector, textIncludes: 'Guard: empty', timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS,
+      }, { timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS + FORM_TIMEOUT_MS });
+      const empty = await client.request('dom_text', { selector });
+      runner.writeJson('guard-empty-line.json', empty);
+      runner.writeJson('guard-empty-definition.json', findListRow(binary, guardID, daemonEnv));
+      runner.log('guard_empty_line', empty);
+
+      fs.writeFileSync(guardFile, 'echo broken >&2; exit 17\n');
+      await client.request('dom_wait', {
+        selector, textIncludes: 'Guard: failed', timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS,
+      }, { timeoutMs: SCHEDULE_CHECK_TIMEOUT_MS + FORM_TIMEOUT_MS });
+      const failed = await client.request('dom_text', { selector });
+      await client.request('dom_wait', { selector: `[data-testid="automation-failure-badge-${guardID}"]`, textIncludes: 'Failed', timeoutMs: PANEL_TIMEOUT_MS });
+      const detail = await client.request('dom_text', { selector: `[data-definition-id="${guardID}"] .automations-panel__guard-error` });
+      runner.assert(detail.text.includes('exit 17: broken'), 'a failed guard shows its exit code and stderr in the drawer', detail);
+      runner.writeJson('guard-failed-line.json', failed);
+      runner.writeJson('guard-failed-definition.json', findListRow(binary, guardID, daemonEnv));
+      runner.log('guard_failed_line', { ...failed, detail });
+      const runs = runJSON(binary, ['automation', 'runs', guardID], daemonEnv) || [];
+      runner.assert(runs.length === 0, 'empty and failed checks create no run', runs);
+      run(binary, ['automation', 'disable', guardID], daemonEnv);
+      run(binary, ['automation', 'delete', guardID], daemonEnv);
+      createdDefinitions.delete(guardID);
     });
 
     await runner.finishSuccess({ instance, primaryID, githubID, toggleID, deleteID, leg3Revision, appBuild, protocolVersion });

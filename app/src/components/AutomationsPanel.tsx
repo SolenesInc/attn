@@ -5,6 +5,7 @@ import { useAutomationsStore, selectDefinitionById } from '../store/automations'
 import { AutomationActionTimeoutError } from '../hooks/useDaemonSocket';
 import { AutomationForm, automationFormKey } from './automations/AutomationForm';
 import { SessionProvenance } from './SessionProvenance';
+import { longAgo } from './Analytics/analyticsFormat';
 import './AutomationsPanel.css';
 
 export interface AutomationsPanelProps {
@@ -278,7 +279,8 @@ export function AutomationsPanel({
         <ul className="automations-panel__list" data-testid="automations-panel-list">
           {definitions.map((definition) => {
             const latestRun = definition.last_run;
-            const failed = latestRun?.state === 'failed';
+            const guardCheck = definition.guard_check;
+            const failed = latestRun?.state === 'failed' || guardCheck?.outcome === 'failed';
             const selected = definition.id === selectedDefinitionId;
             return (
               <li
@@ -355,7 +357,19 @@ export function AutomationsPanel({
                     {runErrors[definition.id]}
                   </p>
                 )}
-                {failed && latestRun?.last_error && (
+                {guardCheck && (
+                  <p className="automations-panel__guard-check" data-testid={`automation-guard-check-${definition.id}`}>
+                    Guard: {guardCheck.outcome} · checked{' '}
+                    <time dateTime={guardCheck.checked_at} title={new Date(guardCheck.checked_at).toLocaleString()}>
+                      {longAgo(guardCheck.checked_at, Date.now())}
+                    </time>
+                    {' · '}{guardCheck.checks_since_run} {guardCheck.checks_since_run === 1 ? 'check' : 'checks'} since the last run
+                  </p>
+                )}
+                {guardCheck?.outcome === 'failed' && guardCheck.detail && (
+                  <p className="automations-panel__guard-error">{guardCheck.detail}</p>
+                )}
+                {latestRun?.state === 'failed' && latestRun.last_error && (
                   <p className="automations-panel__last-error">{latestRun.last_error}</p>
                 )}
               </li>

@@ -344,9 +344,9 @@ export const scenarioCatalog = [
   {
     id: 'automation-form',
     runnerId: 'AUTOMATION-FORM',
-    label: 'Automation form: validation, automatic IDs, edits, schedules and persistence',
+    label: 'Automation form: validation, automatic IDs, edits, guarded schedules and persistence',
     command: ['pnpm', 'run', 'real-app:scenario-automation-form'],
-    timeoutMs: 240_000,
+    timeoutMs: 600_000,
   },
   {
     id: 'automation-surface',

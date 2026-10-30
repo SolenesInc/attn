@@ -14,6 +14,7 @@ function baseValues(overrides: Partial<AutomationFormValues> = {}): AutomationFo
     trigger: 'manual',
     scheduleCron: '',
     scheduleTimeZone: 'Europe/Berlin',
+    guard: '',
     continuity: 'fresh',
     catchUp: '',
     repositoriesInclude: [],

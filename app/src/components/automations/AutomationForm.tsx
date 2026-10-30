@@ -71,6 +71,7 @@ function makeCreateDefaults(): AutomationFormValues {
     trigger: 'manual',
     scheduleCron: '',
     scheduleTimeZone: localTimeZone(),
+    guard: '',
     continuity: 'fresh',
     catchUp: '',
     repositoriesInclude: [],
@@ -421,6 +422,23 @@ function AutomationTriggerFields({
                 {fieldError('scheduleCron')}
               </p>
             )}
+          </div>
+
+          <div className="automation-form__field">
+            <label className="automation-form__label" htmlFor="automation-form-guard">
+              Guard (optional)
+            </label>
+            <input
+              id="automation-form-guard"
+              className="automation-form__input"
+              data-testid="automation-form-guard"
+              aria-describedby="automation-form-guard-help"
+              placeholder="git rev-parse HEAD"
+              {...regField('guard')}
+            />
+            <p className="automation-form__hint" id="automation-form-guard-help">
+              Runs in the folder before each scheduled run. The agent starts only when the command prints something new.
+            </p>
           </div>
 
           <div className="automation-form__field">

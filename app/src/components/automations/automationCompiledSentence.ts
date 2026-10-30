@@ -71,12 +71,20 @@ export function compiledSentenceSegments(values: AutomationFormValues, modelName
           : values.catchUp === 'skip'
             ? 'missed runs are skipped'
             : "missed-run behavior not chosen yet";
+      const guard: SentenceSegment[] = values.guard.trim()
+        ? [
+          { text: ' only when ' },
+          { text: values.guard.trim(), emphasis: 'mono' },
+          { text: ' prints something new' },
+        ]
+        : [];
       return [
         { text: capitalize(phrase), emphasis: 'accent' },
         { text: ' (local time) → ' },
         ...agentSegments(values, modelName),
         { text: ' works in ' },
         { text: values.directoryPath || '…', emphasis: 'mono' },
+        ...guard,
         { text: ` — ${continuityText}, ${catchUpText}, unattended.` },
       ];
     }

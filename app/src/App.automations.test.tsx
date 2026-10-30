@@ -104,6 +104,39 @@ describe('App automations panel', () => {
     expect(screen.getByText('Nightly sweep')).toBeInTheDocument();
   });
 
+  it('shows the latest guard check and surfaces a failed check without a failed run', async () => {
+    vi.setSystemTime(new Date('2026-01-01T00:03:00Z'));
+    const scene: Scene = { definitions: [definition(1, 'Guarded review', {
+      trigger_type: 'scheduled',
+      guard_check: { outcome: 'unchanged', checked_at: AT, checks_since_run: 14 },
+      last_run: run('r1'),
+    }), definition(2, 'Unguarded')] };
+    const daemon = await openAutomations(scene);
+    const listed = daemon.sentOf('automation_definitions_get').length;
+
+    expect(screen.getByTestId('automation-guard-check-1')).toHaveTextContent('Guard: unchanged · checked 3 min ago · 14 checks since the last run');
+    expect(screen.queryByTestId('automation-guard-check-2')).toBeNull();
+    expect(screen.queryByTestId('automation-failure-badge-1')).toBeNull();
+
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    expect(screen.getByTestId('automation-guard-check-1')).toHaveTextContent('checked 3 min ago');
+    expect(daemon.sentOf('automation_definitions_get')).toHaveLength(listed);
+    await changed(daemon);
+    expect(screen.getByTestId('automation-guard-check-1')).toHaveTextContent('checked 4 min ago');
+
+    scene.definitions = [definition(1, 'Guarded review', {
+      trigger_type: 'scheduled',
+      guard_check: { outcome: 'failed', checked_at: '2026-01-01T00:04:00Z', checks_since_run: 15, detail: 'exit 17: network unavailable' },
+      last_run: run('r1'),
+    })];
+    await changed(daemon);
+
+    expect(screen.getByTestId('automation-guard-check-1')).toHaveTextContent('Guard: failed · checked just now · 15 checks since the last run');
+    expect(screen.getByTestId('automation-failure-badge-1')).toHaveTextContent('Failed');
+    expect(screen.getByText('exit 17: network unavailable')).toBeInTheDocument();
+    expect(daemon.sentOf('automation_definitions_get')).toHaveLength(listed + 2);
+  });
+
   it('shows a newly delivered run of the selected definition without reselecting it', async () => {
     const scene: Scene = { definitions: [definition(1, 'PR reviewer')], runs: [run('r1', { state: 'pending' })] };
     const daemon = await openAutomations(scene);

@@ -197,6 +197,21 @@
   white-space: nowrap;
 }
 
+.automations-panel__guard-check,
+.automations-panel__guard-error {
+  color: var(--color-text-tertiary);
+  flex-basis: 100%;
+  font-size: var(--font-size-xs);
+  margin: 0;
+}
+
+.automations-panel__guard-error {
+  color: var(--color-error);
+  font-family: var(--font-mono, 'DejaVu Sans Mono', monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .automations-panel__runs {
   border-top: 1px solid var(--color-border);
   padding-top: 12px;

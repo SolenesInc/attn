@@ -32,6 +32,7 @@ export interface AutomationFormValues {
   trigger: AutomationTrigger;
   scheduleCron: string;
   scheduleTimeZone: string;
+  guard: string;
   continuity: 'fresh' | 'singleton';
   catchUp: '' | 'skip' | 'latest'; // '' = not chosen yet; schema rejects on scheduled
   repositoriesInclude: AutomationRepositoryEntry[];
@@ -140,6 +141,7 @@ const baseFormSchema = z.object({
   trigger: z.enum(['manual', 'scheduled', 'github_review_requested']),
   scheduleCron: z.string(),
   scheduleTimeZone: z.string(),
+  guard: z.string(),
   continuity: z.enum(['fresh', 'singleton']),
   catchUp: z.enum(['', 'skip', 'latest']),
   repositoriesInclude: z.array(z.object({ id: z.string(), repository: z.string() })),
@@ -230,6 +232,7 @@ function buildTrigger(values: AutomationFormValues): Record<string, unknown> {
       return {
         type: 'scheduled',
         schedule: { cron: values.scheduleCron.trim(), time_zone: values.scheduleTimeZone },
+        ...(values.guard.trim() ? { guard: values.guard.trim() } : {}),
         continuity: values.continuity,
         catch_up: values.catchUp,
       };
@@ -331,6 +334,7 @@ export function specToFormValues(specJson: string): AutomationFormValues {
   let directoryPath = '';
   let scheduleCron = '';
   let scheduleTimeZone = localTimeZone();
+  let guard = '';
   let continuity: 'fresh' | 'singleton' = 'fresh';
   let catchUp: '' | 'skip' | 'latest' = '';
   let repositoriesInclude: AutomationRepositoryEntry[] = [];
@@ -355,6 +359,7 @@ export function specToFormValues(specJson: string): AutomationFormValues {
       const schedule = asRecord(trigger.schedule);
       scheduleCron = asString(schedule.cron);
       scheduleTimeZone = asString(schedule.time_zone) || scheduleTimeZone;
+      guard = asString(trigger.guard);
       continuity = trigger.continuity === 'singleton' ? 'singleton' : 'fresh';
       catchUp = trigger.catch_up === 'skip' || trigger.catch_up === 'latest' ? trigger.catch_up : '';
       break;
@@ -382,6 +387,7 @@ export function specToFormValues(specJson: string): AutomationFormValues {
     trigger: triggerType as AutomationTrigger,
     scheduleCron,
     scheduleTimeZone,
+    guard,
     continuity,
     catchUp,
     repositoriesInclude,

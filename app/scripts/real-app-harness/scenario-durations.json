@@ -94,12 +94,12 @@
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "automation-form": {
-        "run": "automation-form-2026-10-09T06-00-18-956Z",
-        "job": "Local packaged serial matrix, model-picker isolated instance",
-        "recordedAt": "2026-10-09",
-        "seconds": 67.473,
+        "run": "automation-form-2026-10-30T04-10-35-618Z",
+        "job": "Local packaged scenario, guardapp isolated instance",
+        "recordedAt": "2026-10-30",
+        "seconds": 242.46,
         "runnerClass": "local macOS",
-        "note": "Green scenario at cc51c08ae after the discovered picker migration. Matrix elapsed 67.473s; ATTN_VERDICT durationMs=66722, including cleanup. Remeasure on Linux CI; this local display was locked and optional native evidence captures reported errors."
+        "note": "Green ATTN_VERDICT durationMs=242460 after adding native guard entry, save and reload, then real scheduled empty and failed checks. The locked display delayed launch and the pre-existing optional screenshot timed out. The previous 240s scenario limit is below this measured run; 600s leaves room for both minute ticks. Guard proof uses rendered text and CLI receipts. Remeasure on Linux CI."
       },
       "automation-scheduled-cleanup": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
@@ -404,7 +404,7 @@
     "agent-queue": 132.293,
     "agent-settings": 33.006,
     "autoclose-on-exit": 72.591,
-    "automation-form": 67.473,
+    "automation-form": 242.46,
     "automation-lifecycle": 71.804,
     "automation-scheduled-cleanup": 40.6,
     "automation-surface": 32.99,

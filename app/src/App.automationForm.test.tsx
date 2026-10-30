@@ -192,6 +192,49 @@ describe('App automation form', () => {
   });
 
   describe('creating', () => {
+    it('saves a scheduled guard and names it in the plain-words sentence', async () => {
+      const daemon = await openNew();
+      expect(screen.queryByLabelText('Guard (optional)')).toBeNull();
+      fireEvent.click(field('trigger-scheduled'));
+      fillManual();
+      type('cron', '0 9 * * *');
+      fireEvent.click(field('catchup-skip'));
+      type('guard', 'git rev-parse HEAD');
+
+      expect(field('sentence')).toHaveTextContent('only when git rev-parse HEAD prints something new');
+      expect(within(field('sentence')).getByText('git rev-parse HEAD')).toHaveClass('automation-form__sentence-mono');
+      await press(daemon, 'save');
+
+      expect(applied(daemon)).toEqual([{
+        spec: expect.objectContaining({ trigger: {
+          type: 'scheduled',
+          schedule: { cron: '0 9 * * *', time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+          guard: 'git rev-parse HEAD',
+          continuity: 'fresh',
+          catch_up: 'skip',
+        } }),
+        expected_id: 0,
+        expected_revision: 0,
+      }]);
+    });
+
+    it.each(['manual', 'github'] as const)('hides and omits the guard when switching to %s', async (trigger) => {
+      const daemon = await openNew();
+      fireEvent.click(field('trigger-scheduled'));
+      type('guard', 'git rev-parse HEAD');
+      fireEvent.click(field(`trigger-${trigger}`));
+      type('name', 'My automation');
+      type('prompt', 'Do the work');
+      if (trigger === 'manual') type('directory-path', '/tmp/work');
+
+      expect(screen.queryByLabelText('Guard (optional)')).toBeNull();
+      expect(field('sentence')).not.toHaveTextContent('git rev-parse HEAD');
+      await press(daemon, 'save');
+
+      expect(applied(daemon)).toHaveLength(1);
+      expect(applied(daemon)[0].spec.trigger).not.toHaveProperty('guard');
+    });
+
     it('starts with the harness defaults and commits a discovered route only after a model choice', async () => {
       const daemon = await openNew();
       expect(field('route')).toHaveTextContent('Codex default');
@@ -299,6 +342,28 @@ describe('App automation form', () => {
   });
 
   describe('editing', () => {
+    it('reads a scheduled guard and lets the user remove it', async () => {
+      const spec = { ...manualSpec(), trigger: {
+        type: 'scheduled',
+        schedule: { cron: '0 9 * * *', time_zone: 'UTC' },
+        guard: 'git rev-parse HEAD',
+        continuity: 'singleton',
+        catch_up: 'latest',
+      } };
+      const daemon = await openEdit({ definitions: [definition(1, { trigger_type: 'scheduled' })], spec });
+
+      expect(field('guard')).toHaveValue('git rev-parse HEAD');
+      expect(field('sentence')).toHaveTextContent('only when git rev-parse HEAD prints something new');
+      type('guard', '');
+      await press(daemon, 'save');
+
+      expect(applied(daemon)).toHaveLength(1);
+      expect(applied(daemon)[0].spec.trigger).toEqual({
+        type: 'scheduled', schedule: { cron: '0 9 * * *', time_zone: 'UTC' },
+        continuity: 'singleton', catch_up: 'latest',
+      });
+    });
+
     it('keeps unreported stored model and effort values visible and saves them unchanged', async () => {
       const spec = { ...manualSpec(), launch: { driver: 'codex', model: 'retired-model', effort: 'future-effort' } };
       const daemon = await openEdit({ definitions: [definition(1)], spec });
