@@ -2,6 +2,7 @@ import { test, expect, waitForMockPtyBanner } from './fixtures';
 
 const OSC = ']133;';
 const BEL = '';
+const PAST_DEFERRED_COPY_MS = 1_000;
 
 // A captured fish 4.x interactive lifecycle: prompt-start (A), input-start (B),
 // pre-exec (C), command-end with the exit code (D).
@@ -137,6 +138,7 @@ test.describe('Ghostty terminal command blocks', () => {
 
   test('clicking outside any block does not arm cmd+c', async ({ page, context, daemon }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.clock.install();
     const terminal = await openTerminalSession(page, daemon, 's-block-miss');
     const rows = await writeBlockStream(page, terminal, 's-block-miss');
     await page.evaluate(() => navigator.clipboard.writeText('clipboard-sentinel'));
@@ -145,7 +147,7 @@ test.describe('Ghostty terminal command blocks', () => {
     expect(bounds).not.toBeNull();
     await terminal.click({ position: { x: 30, y: rows.outputRowY + bounds!.height / 2 } });
     await page.keyboard.press('Meta+c');
-    await page.waitForTimeout(300);
+    await page.clock.runFor(PAST_DEFERRED_COPY_MS);
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('clipboard-sentinel');
   });
 

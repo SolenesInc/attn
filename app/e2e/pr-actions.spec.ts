@@ -23,9 +23,7 @@ test.describe('PR Actions', () => {
     const approveButton = prCard.locator('[data-testid="approve-button"]');
     await approveButton.click();
 
-    await page.waitForTimeout(1000);
-
-    expect(mockGitHub.hasApproveRequest('test/repo', 42)).toBe(true);
+    await expect.poll(() => mockGitHub.hasApproveRequest('test/repo', 42)).toBe(true);
   });
 
   test('merge PR via UI', async ({ page, mockGitHub, startDaemonWithPRs }) => {
@@ -52,9 +50,7 @@ test.describe('PR Actions', () => {
     await expect(confirmButton).toBeVisible();
     await confirmButton.click();
 
-    await page.waitForTimeout(1000);
-
-    expect(mockGitHub.hasMergeRequest('test/repo', 43)).toBe(true);
+    await expect.poll(() => mockGitHub.hasMergeRequest('test/repo', 43)).toBe(true);
   });
 
   test('mute PR via UI', async ({ page, mockGitHub, startDaemonWithPRs }) => {
@@ -109,11 +105,8 @@ test.describe('PR Actions', () => {
     const approveButton = firstPR.locator('[data-testid="approve-button"]');
     await approveButton.click();
 
-    await page.waitForTimeout(1000);
-
+    await expect.poll(() => mockGitHub.hasApproveRequest('test/repo', 50)).toBe(true);
     await expect(secondPR).toBeVisible();
-
-    expect(mockGitHub.hasApproveRequest('test/repo', 50)).toBe(true);
     expect(mockGitHub.hasApproveRequest('test/repo', 51)).toBe(false);
   });
 

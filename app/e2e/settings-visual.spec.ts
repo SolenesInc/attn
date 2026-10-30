@@ -28,25 +28,27 @@ test.describe('Settings visual harness', () => {
 
       const body = page.getByTestId('settings-body');
       for (const section of sections) {
-        await modal.getByTestId(`settings-nav-${section}`).click();
+        const navItem = modal.getByTestId(`settings-nav-${section}`);
+        await navItem.click();
+        await expect(navItem).toHaveClass(/\bactive\b/);
         await body.evaluate((node) => {
           node.scrollTop = 0;
         });
-        await page.waitForTimeout(80);
 
         const sectionPath = testInfo.outputPath(`settings-modal-${viewport.name}-${section}.png`);
-        await modal.screenshot({ path: sectionPath });
+        await modal.screenshot({ path: sectionPath, animations: 'disabled' });
         expect(fs.existsSync(sectionPath)).toBe(true);
       }
 
-      await modal.getByTestId('settings-nav-agents').click();
+      const agentsNavItem = modal.getByTestId('settings-nav-agents');
+      await agentsNavItem.click();
+      await expect(agentsNavItem).toHaveClass(/\bactive\b/);
       await body.evaluate((node) => {
         node.scrollTop = node.scrollHeight;
       });
-      await page.waitForTimeout(80);
 
       const bottomPath = testInfo.outputPath(`settings-modal-${viewport.name}-agents-bottom.png`);
-      await modal.screenshot({ path: bottomPath });
+      await modal.screenshot({ path: bottomPath, animations: 'disabled' });
       expect(fs.existsSync(bottomPath)).toBe(true);
     });
   }

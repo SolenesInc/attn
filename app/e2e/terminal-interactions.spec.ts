@@ -1,5 +1,8 @@
 import { test, expect, waitForMockPtyBanner } from './fixtures';
 
+const PAST_SEED_PREVIEW_CLOSE_DELAY_MS = 1_000;
+const SPINNER_FRAME_INTERVAL_MS = 120;
+
 async function createSession(
   page: import('@playwright/test').Page,
   daemon: { injectSession: (session: { id: string; label: string; state: string; directory?: string }) => Promise<void> },
@@ -82,11 +85,13 @@ async function installFileLinkProbe(
       __OPENED_TERMINAL_PATHS?: string[];
       __OPENED_TERMINAL_URLS?: string[];
       __FS_EXISTING_PATHS?: string[];
+      __FS_EXISTS_QUERIES?: string[];
       __TAURI_INTERNALS__?: { invoke: (command: string, args?: { url?: string; path?: string }) => Promise<unknown> };
     };
     probeWindow.__OPENED_TERMINAL_PATHS = [];
     probeWindow.__OPENED_TERMINAL_URLS = [];
     probeWindow.__FS_EXISTING_PATHS = paths;
+    probeWindow.__FS_EXISTS_QUERIES = [];
     probeWindow.__TAURI_INTERNALS__ = {
       invoke: async (command, args) => {
         if (command === 'plugin:opener|open_url' && args?.url) {
@@ -98,6 +103,7 @@ async function installFileLinkProbe(
           return undefined;
         }
         if (command === 'plugin:fs|exists') {
+          probeWindow.__FS_EXISTS_QUERIES?.push(args?.path ?? '');
           return (probeWindow.__FS_EXISTING_PATHS ?? []).includes(args?.path ?? '');
         }
         if (command === 'plugin:path|resolve_directory') {
@@ -179,6 +185,7 @@ async function openTerminalSession(
 
 test.describe('Ghostty terminal interactions', () => {
   test('marks and previews known seed ids before opening one as a tile', async ({ page, daemon }) => {
+    await page.clock.install();
     const sessionId = 's-seed-link';
     const terminal = await openTerminalSession(page, daemon, sessionId);
     const planted = await daemon.plantSeed(
@@ -210,7 +217,7 @@ test.describe('Ghostty terminal interactions', () => {
     await expect(preview).toBeVisible();
     await expect(preview).toContainText('Make seed IDs navigable from terminals');
     await preview.hover();
-    await page.waitForTimeout(220);
+    await page.clock.runFor(PAST_SEED_PREVIEW_CLOSE_DELAY_MS);
     await expect(preview).toBeVisible();
 
     await terminal.click({ position: seedPosition });
@@ -482,6 +489,7 @@ test.describe('Ghostty terminal interactions', () => {
   });
 
   test('hovered file link survives unrelated terminal writes (streaming TUI redraws)', async ({ page, daemon }) => {
+    await page.clock.install();
     await installFileLinkProbe(page, ['/tmp/test/terminal-links/src/main.go']);
     const terminal = await openTerminalSession(page, daemon, 's-file-link-stream');
     await writeTerminalOutput(page, 's-file-link-stream', '[2J[Hsrc/main.go:12:3 compiled');
@@ -496,26 +504,28 @@ test.describe('Ghostty terminal interactions', () => {
     await page.keyboard.down('Meta');
     await expect(terminal).toHaveCSS('cursor', 'pointer');
 
-    const renderCountBefore = await page.evaluate((sessionId) => {
+    const renderCount = () => page.evaluate((sessionId) => {
       const snapshots = window.__ATTN_TERMINAL_PERF_DUMP?.() ?? [];
       return snapshots.find((snapshot) => snapshot.sessionId === sessionId)?.renderCount ?? null;
     }, 's-file-link-stream');
+    const renderCountBefore = await renderCount();
     expect(renderCountBefore).not.toBeNull();
 
     for (let i = 0; i < 5; i += 1) {
+      const renderCountBeforeFrame = await renderCount();
       await writeTerminalOutput(
         page,
         's-file-link-stream',
         `[s[3;1Hspinner-frame-${i}[u`,
       );
-      await page.waitForTimeout(120);
+      await page.waitForFunction(({ sessionId, before }) => {
+        const snapshots = window.__ATTN_TERMINAL_PERF_DUMP?.() ?? [];
+        return (snapshots.find((snapshot) => snapshot.sessionId === sessionId)?.renderCount ?? 0) > before;
+      }, { sessionId: 's-file-link-stream', before: renderCountBeforeFrame! }, { polling: 'raf' });
+      await page.clock.runFor(SPINNER_FRAME_INTERVAL_MS);
     }
 
-    const renderCountAfter = await page.evaluate((sessionId) => {
-      const snapshots = window.__ATTN_TERMINAL_PERF_DUMP?.() ?? [];
-      return snapshots.find((snapshot) => snapshot.sessionId === sessionId)?.renderCount ?? null;
-    }, 's-file-link-stream');
-    expect(renderCountAfter).not.toBeNull();
+    const renderCountAfter = await renderCount();
     // Revalidation runs inside the output paint: it must not add a paint per packet
     // on top of the animation-frame-coalesced renderer.
     expect(renderCountAfter! - renderCountBefore!).toBeLessThanOrEqual(6);
@@ -566,8 +576,11 @@ test.describe('Ghostty terminal interactions', () => {
       .toContain('missing/file.go');
 
     await terminal.hover({ position: { x: 55, y: 8 } });
+    await page.waitForFunction(
+      (path) => ((window as Window & { __FS_EXISTS_QUERIES?: string[] }).__FS_EXISTS_QUERIES ?? []).includes(path),
+      '/tmp/test/terminal-links/missing/file.go',
+    );
     await page.keyboard.down('Meta');
-    await page.waitForTimeout(400);
     await expect(terminal).toHaveCSS('cursor', 'text');
     await terminal.click({ position: { x: 55, y: 8 } });
     await page.keyboard.up('Meta');

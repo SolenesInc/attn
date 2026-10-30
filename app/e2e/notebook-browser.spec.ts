@@ -79,12 +79,18 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.waitForSelector('.cm-content');
 
     const scrollTop = () => page.locator('.cm-scroller').evaluate((el) => (el as HTMLElement).scrollTop);
+    const openNoteReads = () => page.evaluate(() => window.__HARNESS__.getCalls('readFile').length);
+    const settleAfterChange = async (readsBefore: number) => {
+      await page.waitForFunction((before) => window.__HARNESS__.getCalls('readFile').length > before, readsBefore);
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    };
     await page.locator('.cm-scroller').evaluate((el) => { (el as HTMLElement).scrollTop = 300; });
     const parked = await scrollTop();
     expect(parked).toBeGreaterThan(150);
 
+    const readsBeforeUnrelated = await openNoteReads();
     await page.evaluate(() => window.__NB_HARNESS__!.fsChanged('journal/2026-06-20.md', '# touched\n', 'h-x'));
-    await page.waitForTimeout(150);
+    await settleAfterChange(readsBeforeUnrelated);
     expect(Math.abs((await scrollTop()) - parked)).toBeLessThanOrEqual(4);
 
     await page.evaluate(() => {
@@ -99,11 +105,12 @@ test.describe('NotebookBrowser (fs surface)', () => {
     await page.locator('.cm-scroller').evaluate((el) => { (el as HTMLElement).scrollTop = 300; });
     const reparked = await scrollTop();
     expect(reparked).toBeGreaterThan(150);
+    const readsBeforeSecondEdit = await openNoteReads();
     await page.evaluate(() => {
       const current = window.__NB_HARNESS__!.getContent('knowledge/index.md');
       window.__NB_HARNESS__!.fsChanged('knowledge/index.md', `${current}\nA second agent edit.\n`, 'h-appended-2');
     });
-    await page.waitForTimeout(200);
+    await settleAfterChange(readsBeforeSecondEdit);
     expect(Math.abs((await scrollTop()) - reparked)).toBeLessThanOrEqual(4);
   });
 

@@ -138,6 +138,7 @@ export function NotebookBrowserHarness({ onReady, setTriggerRerender }: HarnessP
 
   const listDir = useCallback(async (path: string): Promise<FsEntry[]> => TREE[path] ?? [], []);
   const readFile = useCallback(async (path: string): Promise<FsReadResult> => {
+    window.__HARNESS__.recordCall('readFile', [path]);
     const override = overridesRef.current[path];
     if (override) return { path, content: override.content, hash: override.hash };
     return { path, content: CONTENT[path] ?? `# ${path}\n\nSample body.`, hash: 'h1' };

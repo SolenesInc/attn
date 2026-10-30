@@ -3,6 +3,7 @@ import { test, expect } from './fixtures';
 const ESC = '';
 const BSU = `${ESC}[?2026h`;
 const ESU = `${ESC}[?2026l`;
+const PAST_SPLIT_SETTLE_MS = 1_500;
 
 // Mirrors `PaintSample` in app/src/utils/terminalDiagnosticsLog.ts.
 interface RenderTraceEntry {
@@ -64,6 +65,7 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
     (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = [];
   });
   await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.clock.install();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
 
@@ -86,19 +88,12 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
   await terminal.click({ position: { x: 80, y: 8 } });
   await splitWithPeer(page, daemon, agentId);
 
-  await expect
-    .poll(async () => {
-      const size = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
-      if (!size || !sizeBefore) return 'no-size';
-      return size.rows !== sizeBefore.rows || size.cols !== sizeBefore.cols ? 'resized' : 'same';
-    })
-    .toBe('resized');
+  await expectResizedFrom(page, agentId, sizeBefore);
 
   const sizeAfter = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
 
   await emit(page, agentId, fullFrame('NEW', Math.max(10, (sizeAfter?.rows ?? 24) - 1), Math.max(20, (sizeAfter?.cols ?? 80))));
-
-  await page.waitForTimeout(800);
+  await settleAfterOutput(page, agentId, 'NEW line 0');
 
   const trace = await readTrace(page, agentId);
   const tail = trace.slice(-12);
@@ -181,6 +176,32 @@ async function waitForPaneReady(
     .not.toBeNull();
 }
 
+async function expectResizedFrom(
+  page: import('@playwright/test').Page,
+  sessionId: string,
+  sizeBefore: { rows: number; cols: number } | null,
+) {
+  await expect
+    .poll(async () => {
+      const size = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, sessionId);
+      if (!size || !sizeBefore) return 'no-size';
+      return size.rows !== sizeBefore.rows || size.cols !== sizeBefore.cols ? 'resized' : 'same';
+    })
+    .toBe('resized');
+}
+
+async function settleAfterOutput(
+  page: import('@playwright/test').Page,
+  sessionId: string,
+  marker: string,
+) {
+  await page.waitForFunction(
+    ({ sid, text }) => (window.__TEST_GET_SESSION_PANE_TEXT?.(sid) ?? '').includes(text),
+    { sid: sessionId, text: marker },
+  );
+  await page.clock.runFor(PAST_SPLIT_SETTLE_MS);
+}
+
 function chunks(value: string, size: number): string[] {
   const out: string[] = [];
   for (let i = 0; i < value.length; i += size) out.push(value.slice(i, i + size));
@@ -211,6 +232,7 @@ test('agent stays painted when split races a chunked redraw', async ({ page, dae
     (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = [];
   });
   await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.clock.install();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
 
@@ -230,8 +252,7 @@ test('agent stays painted when split races a chunked redraw', async ({ page, dae
   for (const chunk of chunks(redraw, 180)) {
     await emit(page, agentId, chunk);
   }
-
-  await page.waitForTimeout(1200);
+  await settleAfterOutput(page, agentId, 'NEW line 0');
   const trace = await readTrace(page, agentId);
   dumpTail('CHUNKED RACE', trace);
   const draw = lastRealDraw(trace);
@@ -250,6 +271,7 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
     (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = [];
   });
   await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.clock.install();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
 
@@ -265,10 +287,11 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
   await page.evaluate(() => { (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = []; });
   await emit(page, agentId, `${BSU}${ESC}[?25l${ESC}[H${ESC}[21C${ESC}[40B`);
 
+  const sizeBeforeSplit = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
   await splitWithPeer(page, daemon, agentId);
-  await page.waitForTimeout(300);
+  await expectResizedFrom(page, agentId, sizeBeforeSplit);
   await emit(page, agentId, fullFrame('NEW', 44, 75));
-  await page.waitForTimeout(1000);
+  await settleAfterOutput(page, agentId, 'NEW line 0');
 
   const trace = await readTrace(page, agentId);
   dumpTail('SCROLLED-UP SPLIT', trace);
@@ -276,11 +299,16 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
   console.log('last real draw:', JSON.stringify(draw));
   await terminal.screenshot({ path: 'test-results/split-paint-scrolled.png' }).catch(() => {});
   console.log('offset on last draw:', draw?.offset, 'force:', draw?.force, 'quads:', draw?.quads);
+  const finalSize = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
+  expect(draw, 'expected at least one agent draw after the split redraw').toBeTruthy();
+  expect(draw!.quads ?? 0, `agent drew ${draw?.quads} quads, model had ${draw?.modelPrintable}`).toBeGreaterThan(50);
+  expect({ cols: draw!.cols, rows: draw!.rows }, 'last draw must be at the final geometry (a later resize would have cleared the canvas)').toEqual({ cols: finalSize?.cols, rows: finalSize?.rows });
 });
 
 test('hidden split desktop defers paints until return after a window resize', async ({ page, daemon }) => {
   await daemon.start();
   await page.setViewportSize({ width: 1400, height: 900 });
+  await page.clock.install();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
 
@@ -293,22 +321,18 @@ test('hidden split desktop defers paints until return after a window resize', as
 
   const sizeBeforeSplit = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
   await splitWithPeer(page, daemon, agentId);
-  await expect
-    .poll(async () => {
-      const size = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
-      if (!size || !sizeBeforeSplit) return 'no-size';
-      return size.rows !== sizeBeforeSplit.rows || size.cols !== sizeBeforeSplit.cols ? 'resized' : 'same';
-    })
-    .toBe('resized');
+  await expectResizedFrom(page, agentId, sizeBeforeSplit);
   const agentPane = page.locator(`[data-pane-session-id="${agentId}"][data-pane-kind="agent"]`);
   await terminal.click({ position: { x: 80, y: 8 } });
   await expect(agentPane).toHaveClass(/\bactive\b/);
-  await page.waitForTimeout(100);
 
   await page.keyboard.press('Meta+Shift+h');
   await expect(page.locator('.dashboard')).toBeVisible();
   await page.setViewportSize({ width: 900, height: 650 });
-  await page.waitForTimeout(100);
+  await expect(
+    page.locator(`[data-pane-session-id="${agentId}-peer"]`),
+    'the narrower window suspends the peer the user did not leave on',
+  ).toHaveAttribute('data-pane-suspended', 'true');
   await expect(
     agentPane,
     'the pane the user left on must stay a live terminal when the narrower window suspends its peer',
@@ -322,10 +346,7 @@ test('hidden split desktop defers paints until return after a window resize', as
       if (terminal) window.__TEST_EMIT_PTY_DATA?.(terminal, payload);
     }
   }, { id: agentId, payloads: chunks(hiddenFrame, 32) });
-  await expect
-    .poll(async () => page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_TEXT?.(sid) ?? '', agentId))
-    .toContain('HIDDEN line 0');
-  await page.waitForTimeout(100);
+  await settleAfterOutput(page, agentId, 'HIDDEN line 0');
   expect((await readTrace(page, agentId)).length).toBe(paintsBeforeBurst);
 
   await page.locator(`[data-testid="session-${agentId}"]`).click();

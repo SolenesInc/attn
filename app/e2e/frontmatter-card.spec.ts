@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const PAST_FOCUS_SETTLE_MS = 1_000;
+
 // In a real browser: the card is a CodeMirror block widget and CM cannot mount under
 // happy-dom.
 
@@ -60,6 +62,7 @@ test.describe('FrontmatterCard', () => {
   });
 
   test('focusing the body never expands frontmatter under the pointer click', async ({ page }) => {
+    await page.clock.install();
     await page.goto('/test-harness/?component=FrontmatterCard');
     await page.waitForFunction(() => window.__HARNESS__?.ready === true);
     await page.waitForSelector('.cm-md-frontmatter');
@@ -76,7 +79,7 @@ test.describe('FrontmatterCard', () => {
     });
 
     await page.locator('.cm-line', { hasText: 'Context rail' }).click();
-    await page.waitForTimeout(50);
+    await page.clock.runFor(PAST_FOCUS_SETTLE_MS);
 
     await expect(page.locator('.cm-md-frontmatter')).toBeVisible();
     expect(await page.evaluate(
