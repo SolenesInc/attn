@@ -1,6 +1,6 @@
 ---
 name: attn
-description: "Operate attn capabilities from an agent, including user-steered delegations and the user's delegation roles, the garden, the Notebook, markdown, moving and controlling terminals across desktops, and the in-app browser. Use when the user explicitly asks for an attn capability or delegation, or when acting as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
+description: "Operate attn capabilities from an agent. Use when the user asks you to delegate work or change their delegation roles, work in the garden, read or write the Notebook, show them a markdown document, control or move terminals across desktops, use the in-app browser, wrap up, or close yourself, or asks whether they can close you; and when you act as attn's chief of staff. Do not use merely because a task could benefit from delegation, parallel agents, or a background terminal."
 ---
 
 # attn
@@ -59,6 +59,8 @@ For delegation mechanics and configured role selection, read [references/delegat
   send one a message, snooze its turn, reload it, or close one you are done with — and know what a message
   you receive may ask of you:**
   read [references/converse-and-observe.md](references/converse-and-observe.md).
+- **Wrap up before the user closes you, or close yourself:** read
+  [references/wrap-up.md](references/wrap-up.md).
 - **Plant, tend, or report on work in the garden — seeds and plots, what makes
   a good seed body, artifacts:** read [references/garden.md](references/garden.md).
 - **Read or maintain the durable Notebook (journal + knowledge base), esp. as

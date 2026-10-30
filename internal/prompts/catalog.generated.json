@@ -3667,6 +3667,18 @@
             "verbatim": true,
             "keep_final_newline": true
           }
+        },
+        {
+          "id": "wrap-up",
+          "delivery": "reference",
+          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.wrap-up",
+            "source": "content/skills/attn/references/wrap-up.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
         }
       ]
     },
