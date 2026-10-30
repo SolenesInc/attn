@@ -26,6 +26,7 @@ const (
 	stopTimeout    = 5 * time.Second
 	readyFDEnv     = "ATTN_DAEMON_READY_FD"
 	startupTimeout = 60 * time.Second
+	healthTimeout  = time.Second
 )
 
 var errDaemonAlreadyRunning = errors.New("daemon already running")
@@ -93,7 +94,19 @@ func ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 	}
 
 	health, err := fetchHealth(ctx)
-	if err == nil && daemonMatchesCurrentBinary(health) {
+	if err != nil {
+		pidBytes, pidErr := os.ReadFile(config.PIDPath())
+		pid := strings.TrimSpace(string(pidBytes))
+		if pidErr != nil {
+			pid = fmt.Sprintf("unavailable (%v)", pidErr)
+		}
+		command := "attn"
+		if instance := config.InstanceLabel(); instance != "default" {
+			command = "ATTN_INSTANCE=" + instance + " attn"
+		}
+		return EnsureResult{}, fmt.Errorf("daemon pid %s did not answer health (health_timeout=%s); left running; retry, or restart with `%s daemon stop` then `%s daemon ensure` in the same environment: %w", pid, healthTimeout, command, command, err)
+	}
+	if daemonMatchesCurrentBinary(health) {
 		if !daemonIsReady(health) {
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
@@ -116,7 +129,7 @@ func ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 		return EnsureResult{Status: "already_running"}, nil
 	}
 
-	reason := mismatchReason(err, health)
+	reason := mismatchReason(health)
 	if err := stopRunningDaemon(ctx); err != nil {
 		return EnsureResult{}, err
 	}
@@ -207,10 +220,7 @@ func instanceMatchesCurrent(health healthResponse) bool {
 	return reported == expected
 }
 
-func mismatchReason(healthErr error, health healthResponse) string {
-	if healthErr != nil {
-		return "health_unavailable"
-	}
+func mismatchReason(health healthResponse) string {
 	if !instanceMatchesCurrent(health) {
 		return "instance_mismatch"
 	}
@@ -516,7 +526,7 @@ func fetchHealth(ctx context.Context) (healthResponse, error) {
 	if host == "" || host == "0.0.0.0" {
 		host = "127.0.0.1"
 	}
-	client := &http.Client{Timeout: 1 * time.Second}
+	client := &http.Client{Timeout: healthTimeout}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+net.JoinHostPort(host, config.WSPort())+"/health", nil)
 	if err != nil {
 		return healthResponse{}, err

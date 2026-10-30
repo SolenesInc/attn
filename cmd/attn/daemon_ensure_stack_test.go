@@ -2,13 +2,90 @@ package main_test
 
 import (
 	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
+	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func TestDaemonEnsureLeavesAPausedDaemonAndItsShellRunning(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.Vars = append(s.Vars, "ATTN_INSTANCE=ensure-paused", "SHELL=/bin/bash")
+	s.StartWith("ATTN_PTY_BACKEND=embedded")
+	app := s.App()
+	shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shell"))
+	app.TypeLine(shell, "kept=before; printf '__ready_%s\\n' \"$kept\"")
+	app.AwaitScreen(shell, "__ready_before")
+	pidPath := filepath.Join(s.Dir, "attn.pid")
+	pid, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Signal(syscall.SIGSTOP)
+	t.Cleanup(func() { s.Signal(syscall.SIGCONT) })
+	for _, args := range [][]string{{"daemon", "ensure"}, {"_bridge"}} {
+		got := s.Attn(args...)
+		limit := regexp.MustCompile(`health_timeout=([0-9.]+[a-z]+)`).FindStringSubmatch(got.Stderr)
+		if got.Code != 1 || !strings.Contains(got.Stderr, "pid "+strings.TrimSpace(string(pid))) || len(limit) != 2 ||
+			!strings.Contains(got.Stderr, "ATTN_INSTANCE=ensure-paused attn daemon stop") || !strings.Contains(got.Stderr, "attn daemon ensure") {
+			t.Fatalf("attn %v over a paused daemon: %+v; want refusal naming its PID, health timeout, and instance restart commands", args, got)
+		}
+		if wait, err := time.ParseDuration(limit[1]); err != nil || wait <= 0 {
+			t.Fatalf("health timeout %q must name a positive duration: %v", limit[1], err)
+		}
+		t.Logf("attn %v: %s", args, strings.TrimSpace(got.Stderr))
+	}
+	s.Signal(syscall.SIGCONT)
+	if got := s.Attn("daemon", "ensure"); got.Code != 0 || !strings.Contains(got.Stdout, `"already_running"`) {
+		t.Fatalf("ensure after SIGCONT: %+v", got)
+	}
+	if after, err := os.ReadFile(pidPath); err != nil || string(after) != string(pid) {
+		t.Fatalf("daemon PID after SIGCONT = %q, %v; want %q", after, err, pid)
+	}
+	app.TypeLine(shell, "printf '__survived_%s\\n' \"$kept\"")
+	app.AwaitScreen(shell, "__survived_before")
+	t.Logf("daemon pid %s and its embedded shell survived both Ensure callers", strings.TrimSpace(string(pid)))
+}
+
+func TestDaemonEnsureReplacesAConfirmedDifferentBuild(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	s.StartBinary(testworld.AttnUpdateBinary(t, "ensure-before", "stable", ""))
+	pidPath := filepath.Join(s.Dir, "attn.pid")
+	before, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := testworld.AttnUpdateBinary(t, "ensure-after", "stable", "")
+	got := s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "ensure"}})
+	t.Cleanup(func() { s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "stop"}}) })
+	var result struct {
+		Status string `json:"status"`
+		Reason string `json:"reason"`
+	}
+	got.JSON(t, &result)
+	if got.Code != 0 || result.Status != "restarted" || result.Reason != "source_fingerprint_mismatch" {
+		t.Fatalf("ensure from a different build: %+v", got)
+	}
+	s.AwaitStopped()
+	after, err := os.ReadFile(pidPath)
+	if err != nil || string(after) == string(before) {
+		t.Fatalf("replacement PID = %q, %v; want a new PID instead of %q", after, err, before)
+	}
+	if got := s.Run(testworld.Invocation{Binary: next, Args: []string{"daemon", "ensure"}}); got.Code != 0 || !strings.Contains(got.Stdout, `"already_running"`) {
+		t.Fatalf("ensure from the replacement build: %+v", got)
+	}
+	t.Logf("confirmed build mismatch replaced pid %s with pid %s", strings.TrimSpace(string(before)), strings.TrimSpace(string(after)))
+}
 
 func TestDaemonEnsureStartsOneDaemonForRacingCallersAndSaysWhyOneCannotStart(t *testing.T) {
 	t.Parallel()

@@ -16,7 +16,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 - `instance-status`: `attn instance` shows the selection, its resources and what is running; `attn instance list` shows every instance on the machine.
 - `instance-resolve`: `attn instance resolve` prints an instance's resources as JSON, or one `--field`; tooling reads paths from it.
 - `instance-install`: `make install INSTANCE=<name>` builds and installs an instance's app, `make install-daemon INSTANCE=<name>` swaps only its daemon, `make run INSTANCE=<name>` installs and opens it, and `make dev` does all of it for `dev`.
-- `daemon-lifecycle`: `attn daemon ensure` starts the instance's daemon, or restarts one that does not match the binary; `attn daemon stop` stops it.
+- `daemon-lifecycle`: `attn daemon ensure` starts the instance's daemon, or replaces one whose health reply identifies a different build or instance. If health is unavailable, it leaves the daemon running and reports its PID, health timeout and restart commands. `attn daemon stop` stops it.
 - `instance-clean`: `attn instance clean <name>` stops the app, daemon and workers and removes the app, its local data and the data folder; `attn instance stop-app` only quits the app.
 - `build-identity`: `attn version` names the build and its source fingerprint; the app refuses a daemon of another instance.
 - `instance-marker`: a non-production app names its instance in the sidebar: `instance <name>` while expanded, `<name>` while collapsed or on the queue bar.
