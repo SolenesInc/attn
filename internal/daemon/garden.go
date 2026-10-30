@@ -428,8 +428,7 @@ func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) 
 	}
 	hits, err := d.similarSeeds(read, []string{msg.Title}, []string{seed.ID, strings.TrimSpace(protocol.Deref(msg.PartOf))})
 	if err != nil {
-		d.sendGardenError(conn, "plant", err)
-		return
+		d.logf("garden: similar seeds after planting %s: %v", seed.ID, err)
 	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok:              true,
@@ -571,8 +570,7 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		read := d.readGardenAround(crown)
 		hits, err := d.similarSeeds(read, titles, planted)
 		if err != nil {
-			plotErr = err
-			return
+			d.logf("garden: similar seeds after planting plot %s: %v", crown.ID, err)
 		}
 		result.Similar = similarWire(read, hits, planted)
 		result.Crown = read.seed(crown, crownDoc)
