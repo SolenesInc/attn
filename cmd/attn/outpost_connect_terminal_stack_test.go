@@ -3,6 +3,7 @@ package main_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -156,6 +157,11 @@ func TestSSHConnectionTerminalIsCancelledByOffAndRemove(t *testing.T) {
 			} else {
 				app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
 				testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+				warning := testworld.Await(app, protocol.EventCommandError, func(m protocol.CommandErrorMessage) bool { return protocol.Deref(m.Cmd) == protocol.CmdRemoveOutpost })
+				if !strings.Contains(warning.Error, "may still be running") {
+					t.Fatalf("missing remote-stop warning while authentication is unanswered: %+v", warning)
+				}
+				t.Log(warning.Error)
 			}
 			testworld.Await(app, protocol.EventSessionUnregistered, func(m protocol.SessionUnregisteredMessage) bool { return m.Session.ID == opened.ID })
 			for _, session := range home.App().Initial.Sessions {
