@@ -139,4 +139,13 @@ Its status names that host. Removing the outpost fails the waiting operation.
 
 Launch failures leave transferred ownership and created worktrees/branches in place. Read the error's resource paths and current state, then explicitly reuse or remove the checkout. Attn does not restore the old owner or clean up the worktree automatically. An unknown outcome is not evidence that nothing started.
 
-When the delegate's work is complete and you no longer need its session, read the seed and use the close rules in `attn`'s conversation reference. A close is immediate; it is separate from harvesting the assignment.
+When the delegate's work is complete, you can harvest its seed without
+`--force`, even while its session is live. Tend, park, wither and replant use
+the same delegation-chain rule. The profile's chief can also act on another
+session's seed; a crew member's named claim yields only to that member or
+the chief. The log records the move and whose claim ended, and the delegate's
+watch delivers its seed update. Everyone else still needs `--force`.
+
+When you no longer need the delegate's session, read the seed and use the
+close rules in attn's conversation reference. Closing a session is immediate
+and separate from harvesting its assignment.

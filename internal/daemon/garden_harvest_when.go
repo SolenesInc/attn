@@ -119,12 +119,9 @@ func (d *Daemon) armHarvestWhenMerged(
 		next := seed
 		next.HarvestWhen = &condition
 		occurrences := []seedEvents.Occurrence{}
-		var displaced *garden.Tender
+		var outcome garden.Outcome
 		if seed.Status == garden.StatusGrowing {
-			if held := seed.Tender(); ask.Force && held.Holds(d.sessionActive) && !held.Is(ask.Actor) {
-				displaced = &held
-			}
-			outcome, err := garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, d.sessionActive)
+			outcome, err = garden.Transition(next, garden.VerbPark, garden.Ask{Actor: ask.Actor, Force: ask.Force}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive})
 			if err != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 			}
@@ -146,9 +143,9 @@ func (d *Daemon) armHarvestWhenMerged(
 		occurrences = append(occurrences, configured)
 
 		notes := make([]garden.Note, 0, 3)
-		if displaced != nil {
+		if outcome.Displaced != nil {
 			notes = append(notes, d.harvestWhenNote(
-				seed.ID, forcedSeedMoveBody(seed.ID, garden.VerbPark, ask.Actor, *displaced), ask.Actor))
+				seed.ID, d.seedMoveAuditBody(seed, garden.VerbPark, ask.Actor, *outcome.Displaced, outcome.By), ask.Actor))
 		}
 		notes = append(notes, d.harvestWhenNote(seed.ID, harvestWhenArmedNote(rec), ask.Actor))
 		if attachment, ok := d.harvestWhenAttachment(seed.ID, rec, ask.Actor); ok {
@@ -156,7 +153,7 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 
 		d.lockGardenRoles()
-		written, _, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes, false)
+		written, writtenNotes, err := d.writeSeedMoveWithNotes(*schema, next, doc.Rev, occurrences, notes, false)
 		if err == nil {
 			err = d.discardAllIneligibleGardenSeedBellsLocked()
 		}
@@ -169,6 +166,9 @@ func (d *Daemon) armHarvestWhenMerged(
 		}
 		settled, doc, err := d.settleFreshlyArmed(next, written, sessionID)
 		details := seedTransitionDetails{Moved: true}
+		if outcome.Displaced != nil && len(writtenNotes) > 0 {
+			details.Audit = &writtenNotes[0]
+		}
 		if err == nil {
 			details.RingRecipients, err = d.seedParties(settled.ID, sessionID)
 		}

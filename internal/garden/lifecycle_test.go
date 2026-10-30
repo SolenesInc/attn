@@ -16,6 +16,11 @@ const (
 
 func alive(protocol.SessionID) bool { return true }
 
+type testStanding struct{ live func(protocol.SessionID) bool }
+
+func (s testStanding) Live(id protocol.SessionID) bool { return s.live(id) }
+func (testStanding) Oversees(Tender, Tender) bool      { return false }
+
 func gone(protocol.SessionID) bool { return false }
 
 func seedIn(status string, tender Tender) Seed {
@@ -49,11 +54,11 @@ func TestTransitionMatrix(t *testing.T) {
 		{name: "growing by me/wither", seed: seedIn(StatusGrowing, mine), verb: VerbWither, want: StatusWithered},
 		{name: "growing by me/replant", seed: seedIn(StatusGrowing, mine), verb: VerbReplant, want: StatusPlanted},
 
-		{name: "growing by another/tend", seed: seedIn(StatusGrowing, held), verb: VerbTend, refuse: "takes it from them"},
-		{name: "growing by another/park", seed: seedIn(StatusGrowing, held), verb: VerbPark, refuse: "takes it from them"},
-		{name: "growing by another/harvest", seed: seedIn(StatusGrowing, held), verb: VerbHarvest, refuse: "takes it from them"},
-		{name: "growing by another/wither", seed: seedIn(StatusGrowing, held), verb: VerbWither, refuse: "takes it from them"},
-		{name: "growing by another/replant", seed: seedIn(StatusGrowing, held), verb: VerbReplant, refuse: "takes it from them"},
+		{name: "growing by another/tend", seed: seedIn(StatusGrowing, held), verb: VerbTend, refuse: "--force acts anyway"},
+		{name: "growing by another/park", seed: seedIn(StatusGrowing, held), verb: VerbPark, refuse: "--force acts anyway"},
+		{name: "growing by another/harvest", seed: seedIn(StatusGrowing, held), verb: VerbHarvest, refuse: "--force acts anyway"},
+		{name: "growing by another/wither", seed: seedIn(StatusGrowing, held), verb: VerbWither, refuse: "--force acts anyway"},
+		{name: "growing by another/replant", seed: seedIn(StatusGrowing, held), verb: VerbReplant, refuse: "--force acts anyway"},
 
 		{name: "growing by another/tend names them", seed: seedIn(StatusGrowing, held), verb: VerbTend, refuse: "tended by Alder"},
 
@@ -91,7 +96,7 @@ func TestTransitionMatrix(t *testing.T) {
 			if tc.verb == VerbHarvest || tc.verb == VerbWither {
 				reason = "because"
 			}
-			outcome, err := Transition(tc.seed, tc.verb, Ask{Actor: mine, Reason: reason, Force: tc.force}, alive)
+			outcome, err := Transition(tc.seed, tc.verb, Ask{Actor: mine, Reason: reason, Force: tc.force}, testStanding{alive})
 			next := outcome.Seed
 			if !reflect.DeepEqual(tc.seed, before) {
 				t.Fatalf("the input seed was mutated: %+v", tc.seed)
@@ -160,7 +165,7 @@ func TestTransitionClaimsAndReasons(t *testing.T) {
 		{name: "the reason limit counts characters, not bytes", seed: seedIn(StatusPlanted, Tender{}), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: strings.Repeat("🌱", MaxReasonChars)}, reason: strings.Repeat("🌱", MaxReasonChars)},
 		{name: "one character past the limit is refused", seed: seedIn(StatusPlanted, Tender{}), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: strings.Repeat("🌱", MaxReasonChars+1)}, refuse: []string{"401 characters"}},
 		{name: "a tend that names nobody asks for a member", seed: seedIn(StatusPlanted, Tender{}), verb: VerbTend, ask: Ask{}, refuse: []string{"--member"}},
-		{name: "a live claim names its member and the way forward", seed: seedIn(StatusGrowing, held), verb: VerbTend, ask: Ask{Actor: mine}, refuse: []string{"s-7k3f9m", "Alder", "attn seed note"}},
+		{name: "a live claim names its member and the way forward", seed: seedIn(StatusGrowing, held), verb: VerbTend, ask: Ask{Actor: mine}, refuse: []string{"s-7k3f9m", "Alder", "--force"}},
 		{name: "a live claim without a member names its session", seed: seedIn(StatusGrowing, Tender{Session: other}), verb: VerbTend, ask: Ask{Actor: Tender{Session: me}}, refuse: []string{other}},
 		{name: "a member-only claim refuses another member", seed: memberOnly("trellis"), verb: VerbTend, ask: Ask{Actor: Tender{Member: "alder"}}, refuse: []string{"Trellis"}},
 		{name: "a member-only claim lets its member back in", seed: memberOnly("trellis"), verb: VerbTend, ask: Ask{Actor: Tender{Member: "trellis"}}, tender: Tender{Member: "trellis"}},
@@ -182,7 +187,7 @@ func TestTransitionClaimsAndReasons(t *testing.T) {
 			if tc.sessionGone {
 				live = gone
 			}
-			outcome, err := Transition(tc.seed, tc.verb, tc.ask, live)
+			outcome, err := Transition(tc.seed, tc.verb, tc.ask, testStanding{live})
 			if tc.refuse != nil {
 				if err == nil {
 					t.Fatalf("%s was allowed, want a refusal", tc.verb)

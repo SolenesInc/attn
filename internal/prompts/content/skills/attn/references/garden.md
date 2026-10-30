@@ -71,6 +71,16 @@ messages to other agents. To the user, say the slug: `mermaid-rendered-grid`
 (`s-7k3f9m`) on first mention, then the slug alone. A person should never have
 to decode an id.
 
+## Moving a seed another agent tends
+
+A live claim yields to its tender, sessions above it in the delegation chain,
+or the profile's chief, for tend, park, harvest, wither and replant. A crew
+member's named claim yields only to that member or the chief. The move records
+who acted and whose claim ended, and prints the audit note and who it rang.
+A delegate hears it through its delegation watch. Everyone else needs
+`--force`, which the log also records. A call without a live session has no
+standing. Claims whose sessions ended no longer need an override.
+
 ## Harvesting on a merge
 
 When the only thing left on a seed is a pull request merging, say so once and

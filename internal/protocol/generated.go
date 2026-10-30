@@ -10634,6 +10634,9 @@ type SeedTransitionMessage struct {
 }
 
 type SeedTransitionResult struct {
+	// Audit corresponds to the JSON schema field "audit".
+	Audit *SeedNote `json:"audit,omitempty,omitzero"`
+
 	// Handoff corresponds to the JSON schema field "handoff".
 	Handoff *SeedNote `json:"handoff,omitempty,omitzero"`
 

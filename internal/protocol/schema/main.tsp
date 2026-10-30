@@ -6087,6 +6087,7 @@ model SeedTransitionResultMessage {
 }
 
 model SeedTransitionResult {
+  "audit"?: SeedNote;
   "moved"?: boolean;
   "ring_recipients"?: string[];
   "noted"?: SeedNote;

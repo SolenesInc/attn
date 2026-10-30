@@ -86,6 +86,12 @@ type seedVerb struct {
 	readOnly bool
 }
 
+const seedMoveAuthority = `
+A live claim yields to its tender, sessions above it in the delegation chain,
+or the profile's chief. A crew member's named claim yields only to that member
+or the chief. The log records standing and forced moves and whose claim ended.
+Everyone else needs --force. A call without a live session has no standing.`
+
 var seedVerbs = []seedVerb{
 	{`plant`, `plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
 if the seed gains children, that body is the plot's plan. --part-of
@@ -151,15 +157,13 @@ Edit entries in notes show the versions and size changes.`, []string{"json"}, fa
 	{`send-to-chief`, `send-to-chief <id> [-m "<optional guidance>"] [--json]`, `give this seed to the Chief to decide its next working context. The
 saved folder, branch and placement problem are recorded automatically;
 -m adds an exception such as a special branch or directory.`, []string{"m", "json"}, false},
-	{`tend`, `tend <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `claim the seed and start growing it. One tender at a time: tending a
-seed somebody else still holds is refused, naming them, and takes
---force to go through anyway. The freshest handoff prints on the
-claim, so picking a seed up primes you. Tending your own claim again
-changes nothing and rings nobody.`, []string{"m", "member", "force", "json"}, false},
+	{`tend`, `tend <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `claim the seed and start growing it. The freshest handoff prints on
+the claim, so picking a seed up primes you. Tending your own claim again
+changes nothing and rings nobody.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
 	{`park`, `park <id> [-m "<where you left it>"] [--member <name>] [--force] [--json]`, `pause the seed deliberately — it goes dormant and lets go of its
 tender. An optional comment lands on the log in the same move. Tending
 it again picks it back up. Parking it again keeps the state and adds
-only the optional comment. Moves print who they rang.`, []string{"m", "member", "force", "json"}, false},
+only the optional comment. Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
 	{`harvest`, `harvest <id> [-m "<what got done>"] [--when-merged [<pr-url>] [--clear]] [--member <name>] [--force] [--json]`, `close the seed as done, with a required -m reason. Repeating a harvest
 succeeds with the earlier reason; a different reason goes on its log.
 A withered seed must be replanted first. Moves print who they rang.
@@ -167,14 +171,14 @@ A withered seed must be replanted first. Moves print who they rang.
 reason when the pull request merges. Without -m it uses "PR #N merged:
 <title>". This command merges nothing. Use it only when the merge is
 the last step. With no url it takes this session's single open pull
-request; --when-merged --clear takes the arming back.`, []string{"m", "member", "force", "json", "when-merged", "clear"}, false},
+request; --when-merged --clear takes the arming back.` + seedMoveAuthority, []string{"m", "member", "force", "json", "when-merged", "clear"}, false},
 	{`wither`, `wither <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `close the seed as abandoned. Nobody is picking this up. Repeating it
 keeps the earlier reason and adds a different reason to the log. A
-harvested seed must be replanted first. Moves print who they rang.`, []string{"m", "member", "force", "json"}, false},
+harvested seed must be replanted first. Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
 	{`replant`, `replant <id> [-m "<why>"] [--member <name>] [--force] [--json]`, `put the seed back in the pool — planted, unclaimed, ready for whoever
 is free. Reopens a closed seed, un-parks a dormant one, and hands back
 one being grown. Replanting an already planted seed changes nothing
-and rings nobody. Moves print who they rang.`, []string{"m", "member", "force", "json"}, false},
+and rings nobody. Moves print who they rang.` + seedMoveAuthority, []string{"m", "member", "force", "json"}, false},
 	{`note`, `note <id> -m "<what happened>" [--handoff] [--ring] [--json]`, `append to the seed's log — what happened and what you learned, for
 whoever tends it next. - reads stdin. --handoff addresses it to your
 successor on this seed: show renders the freshest one first and tend
@@ -1374,6 +1378,9 @@ func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleare
 		fmt.Fprintln(w, line)
 	} else {
 		fmt.Fprintln(w, transitionLine(result.Seed))
+	}
+	if result.Audit != nil {
+		fmt.Fprintln(w, result.Audit.Body)
 	}
 	if result.Noted != nil {
 		fmt.Fprintf(w, "your reason is on its log: attn seed notes %s\n", result.Seed.ID)

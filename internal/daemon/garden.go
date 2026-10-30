@@ -1314,7 +1314,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 			return
 		}
 		result := &protocol.SeedTransitionResult{Seed: d.seedWire(seed, doc),
-			Moved: protocol.Ptr(details.Moved), Noted: details.Noted, RingRecipients: details.RingRecipients}
+			Moved: protocol.Ptr(details.Moved), Noted: details.Noted, Audit: details.Audit, RingRecipients: details.RingRecipients}
 		if details.Moved && garden.Closed(seed.Status) {
 			_, result.Unblocked = d.seedUnblocked(seed.ID)
 		}
@@ -1329,7 +1329,7 @@ func (d *Daemon) handleSeedTransition(conn net.Conn, msg *protocol.SeedTransitio
 	}
 	result := &protocol.SeedTransitionResult{
 		Seed: d.seedWire(seed, doc), Moved: protocol.Ptr(details.Moved),
-		Noted: details.Noted, RingRecipients: details.RingRecipients,
+		Noted: details.Noted, Audit: details.Audit, RingRecipients: details.RingRecipients,
 	}
 	if verb == garden.VerbTend {
 		result.Handoff = d.gardenHandoff(seed.ID)
@@ -1437,11 +1437,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
 				"%s changed since you reviewed it; refresh the garden%w", id, errSeedRevisionMoved)
 		}
-		var displaced *garden.Tender
-		if held := seed.Tender(); ask.Force && held.Holds(sessionLive) && !held.Is(ask.Actor) {
-			displaced = &held
-		}
-		outcome, err := garden.Transition(seed, verb, ask, sessionLive)
+		outcome, err := garden.Transition(seed, verb, ask, gardenStanding{daemon: d, profileID: seed.ProfileID, live: sessionLive})
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
@@ -1526,16 +1522,16 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 				occurrences = append(occurrences, unblocked)
 			}
 		}
-		if displaced == nil && comment == "" {
+		if outcome.Displaced == nil && comment == "" {
 			written, err = d.writeSeedWithEventsProtected(protection, *schema, next, doc.Rev, occurrences...)
 		} else {
 			var entries []garden.Note
 			auditIndex, commentIndex := -1, -1
-			if displaced != nil {
+			if outcome.Displaced != nil {
 				auditIndex = len(entries)
 				entries = append(entries, garden.Note{
 					Seed: next.ID, Kind: garden.NoteKindNote,
-					Body:          forcedSeedMoveBody(next.ID, verb, ask.Actor, *displaced),
+					Body:          d.seedMoveAuditBody(next, verb, ask.Actor, *outcome.Displaced, outcome.By),
 					AuthorSession: ask.Actor.Session, AuthorMember: ask.Actor.Member,
 				})
 			}

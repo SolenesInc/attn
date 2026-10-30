@@ -350,7 +350,7 @@ async function main() {
       await runInPane(client, pane, `attn seed tend ${sequenced} --session ${delegated}`, 'is growing');
 
       const refused = await runInPane(client, pane,
-        `attn seed tend ${parallel} --session ${delegated}`, 'takes it from them');
+        `attn seed tend ${parallel} --session ${delegated}`, '--force acts anyway');
       runner.assert(saw(refused, `${parallel} is being tended by ${second}`),
         'a second claim on one seed is refused and names who holds it', { refused });
 

@@ -9346,6 +9346,7 @@ export interface RelationElement {
 }
 
 export interface SeedTransitionResultObject {
+    audit?:           Note;
     handoff?:         Note;
     moved?:           boolean;
     noted?:           Note;
@@ -10572,6 +10573,7 @@ export interface WhenMerged {
 }
 
 export interface SeedTransitionResult {
+    audit?:           Note;
     handoff?:         Note;
     moved?:           boolean;
     noted?:           Note;
@@ -24761,6 +24763,7 @@ const typeMap: any = {
         { json: "title", js: "title", typ: "" },
     ], "any"),
     "SeedTransitionResultObject": o([
+        { json: "audit", js: "audit", typ: u(undefined, r("Note")) },
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "moved", js: "moved", typ: u(undefined, true) },
         { json: "noted", js: "noted", typ: u(undefined, r("Note")) },
@@ -25607,6 +25610,7 @@ const typeMap: any = {
         { json: "pull_request_url", js: "pull_request_url", typ: u(undefined, "") },
     ], "any"),
     "SeedTransitionResult": o([
+        { json: "audit", js: "audit", typ: u(undefined, r("Note")) },
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "moved", js: "moved", typ: u(undefined, true) },
         { json: "noted", js: "noted", typ: u(undefined, r("Note")) },

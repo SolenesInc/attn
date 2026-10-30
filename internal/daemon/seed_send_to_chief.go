@@ -112,7 +112,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSess
 	unclaimed.TenderSession, unclaimed.TenderMember = "", ""
 	outcome, err := garden.Transition(unclaimed, garden.VerbTend, garden.Ask{
 		Actor: garden.Tender{Session: chiefSessionID},
-	}, d.sessionActive)
+	}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: d.sessionActive})
 	if err != nil {
 		return nil, err
 	}

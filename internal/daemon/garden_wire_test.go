@@ -579,3 +579,128 @@ func editSeedBody(t *testing.T, cli *client.Client, id, body string) (*protocol.
 	}
 	return cli.SeedEdit(id, body, garden.BodySHA256(shown.Seed.Body), "")
 }
+
+func TestSeedMovesUseTheAgentCloseStandingAndTellTheDelegate(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		parent := w.bubbleClaude(t, app, "parent").id
+		chief := w.bubbleClaude(t, app, "chief").id
+		registerSessions(t, w, cli, "stranger")
+		if result := setChiefOfStaff(app, chief, true); !result.Success {
+			t.Fatalf("set chief: %+v", result)
+		}
+		delegate := func(caller, title string) (string, string) {
+			t.Helper()
+			seed := plantDelegationSeed(t, cli, caller, title)
+			request := delegateAtSeed(caller, w.Path("parent"), seed)
+			request.Agent = protocol.Ptr("claude")
+			request.RequestID = "standing-" + seed
+			started := make(chan struct{})
+			w.terms.OnNextSpawn(func(*testworld.Terminal) { close(started) })
+			accepted, err := cli.StartDelegation(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			<-started
+			w.bootBubbleClaude(t, string(accepted.SessionID)).reply("Ready. <!-- attn:state=idle -->")
+			result, err := cli.Delegate(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return string(result.SessionID), seed
+		}
+		middle, _ := delegate(parent, "Coordinate the work")
+		worker, seed := delegate(middle, "Complete the work")
+		reset := func() {
+			t.Helper()
+			if _, err := cli.SeedTransition(protocol.SessionID(parent), seed, "replant", "", "", true, client.SeedTransitionOptions{}); err != nil {
+				t.Fatal(err)
+			}
+			lifeMove(t, cli, worker, seed, "tend", "", "")
+			w.advance(0)
+			if _, err := cli.SeedShow(protocol.SessionID(worker), seed); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, actor := range []struct{ id, standing string }{{middle, "delegation-chain standing"}, {parent, "delegation-chain standing"}, {chief, "chief standing"}} {
+			for verb, status := range map[string]string{"tend": "growing", "park": "dormant", "harvest": "harvested", "wither": "withered", "replant": "planted"} {
+				reset()
+				reason := ""
+				if verb == "harvest" || verb == "wither" {
+					reason = "complete"
+				}
+				result, err := cli.SeedTransition(protocol.SessionID(actor.id), seed, verb, reason, "", false, client.SeedTransitionOptions{})
+				if err != nil {
+					t.Fatalf("%s %s without force: %v", actor.standing, verb, err)
+				}
+				if result.Seed.Status != status || result.Audit == nil {
+					t.Fatalf("standing move: %+v", result)
+				}
+				notes := lifeNoteBodies(t, cli, seed)
+				if len(notes) == 0 {
+					t.Fatal("standing move left no audit note")
+				}
+				audit := result.Audit.Body
+				if !slices.Contains(notes, audit) {
+					t.Fatalf("returned audit is absent from log: %q", notes)
+				}
+				for _, want := range []string{actor.id, actor.standing, worker, "claim ended", "attn seed " + verb} {
+					if !strings.Contains(audit, want) {
+						t.Errorf("audit %q lacks %q", audit, want)
+					}
+				}
+				if !slices.Contains(result.RingRecipients, worker) {
+					t.Fatalf("delegate missing from recipients: %+v", result.RingRecipients)
+				}
+				w.advance(0)
+				items := readInbox(t, cli, worker, 0).Items
+				if len(items) != 1 || !strings.Contains(items[0].Content, seed+" moved:") {
+					t.Fatalf("delegate inbox: %+v", items)
+				}
+			}
+		}
+		writeCrewCharter(t, w, "alder")
+		for _, actor := range []string{"stranger", ""} {
+			for _, verb := range []string{"tend", "park", "harvest", "wither", "replant"} {
+				reset()
+				reason := ""
+				if verb == "harvest" || verb == "wither" {
+					reason = "complete"
+				}
+				member := ""
+				if actor == "" && verb == "tend" {
+					member = "alder"
+				}
+				_, err := cli.SeedTransition(protocol.SessionID(actor), seed, verb, reason, member, false, client.SeedTransitionOptions{})
+				if err == nil || strings.Contains(err.Error(), "\n") || !strings.Contains(err.Error(), "delegation chain") || !strings.Contains(err.Error(), "--force") {
+					t.Fatalf("outside standing %q %s: %v", actor, verb, err)
+				}
+			}
+		}
+		result, err := cli.SeedTransition("stranger", seed, "harvest", "forced", "", true, client.SeedTransitionOptions{})
+		if err != nil {
+			t.Fatalf("forced move: %+v, %v", result, err)
+		}
+		forcedNotes := lifeNoteBodies(t, cli, seed)
+		if result.Audit == nil || !slices.Contains(forcedNotes, result.Audit.Body) || !strings.Contains(result.Audit.Body, "stranger forced") || !strings.Contains(result.Audit.Body, worker) {
+			t.Fatalf("forced audit: %q", forcedNotes)
+		}
+		writeCrewCharter(t, w, "trellis")
+		memberSeed := plantSeedAs(t, cli, parent, "Named crew claim")
+		lifeMove(t, cli, "", memberSeed, "tend", "", "trellis")
+		for _, actor := range []string{parent, middle, "stranger", ""} {
+			_, err := cli.SeedTransition(protocol.SessionID(actor), memberSeed, "harvest", "complete", "", false, client.SeedTransitionOptions{})
+			if err == nil || !strings.Contains(err.Error(), "Trellis") {
+				t.Fatalf("named claim yielded to %q: %v", actor, err)
+			}
+		}
+		result, err = cli.SeedTransition(protocol.SessionID(chief), memberSeed, "harvest", "complete", "", false, client.SeedTransitionOptions{})
+		if err != nil {
+			t.Fatalf("chief moves named claim: %+v, %v", result, err)
+		}
+		chiefNotes := lifeNoteBodies(t, cli, memberSeed)
+		if result.Audit == nil || !slices.Contains(chiefNotes, result.Audit.Body) || !strings.Contains(result.Audit.Body, "chief standing") || !strings.Contains(result.Audit.Body, "Trellis") {
+			t.Fatalf("chief audit: %q", chiefNotes)
+		}
+	})
+}

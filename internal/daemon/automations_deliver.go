@@ -451,7 +451,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 			ProfileID: req.IDs.ProfileID, ID: req.IDs.SeedID, Title: title, Body: body,
 			Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{},
 		})
-		outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: req.IDs.SessionID}}, func(protocol.SessionID) bool { return false })
+		outcome, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: req.IDs.SessionID}}, gardenStanding{daemon: d, profileID: seed.ProfileID, live: func(protocol.SessionID) bool { return false }})
 		if err != nil {
 			return false, nil, err
 		}

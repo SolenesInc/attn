@@ -31,7 +31,7 @@ The loop:
                                      matched prints under each hit. Run it before you plant
     attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    a new seed; prints the id
 
-`attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who holds the seed. If a live session or crew member holds it, the command refuses it by naming the holder. `--force` performs the move anyway, and the log records who forced it. A seed whose session ended is not held. `--member <name>` on any of these commands acts as a crew member instead of this session, and a member's claim never expires.
+`attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` check who tends the seed. A live claim yields to its tender, sessions above it in the delegation chain, or the profile's chief. A crew member's named claim yields only to that member or the chief. Acting through the chain or as chief records who moved it and whose claim ended; the delegate hears it through its delegation watch. Everyone else needs `--force`, which also records the move. A call without a live session has no standing. A seed whose session ended is unclaimed. `--member <name>` acts as a crew member instead of this session; a named claim never expires.
 
 Repeating a move to the same state succeeds without rewriting the seed or ringing anyone. A different reason is kept as a quiet note. Harvest on a withered seed, or wither on a harvested seed, requires `attn seed replant <id>` first. Every move prints who it rang. Harvest and wither also print the seeds the close set free and ring whoever tends one.
 

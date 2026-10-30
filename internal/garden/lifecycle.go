@@ -118,12 +118,27 @@ func ParseVerb(raw string) (Verb, error) {
 	return "", fmt.Errorf("%q is not something a seed does; the moves are %s", raw, strings.Join(names, ", "))
 }
 
-type Outcome struct {
-	Seed  Seed
-	Moved bool
+type Standing interface {
+	Live(protocol.SessionID) bool
+	Oversees(actor, held Tender) bool
 }
 
-func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protocol.SessionID) bool) (Outcome, error) {
+type Means string
+
+const (
+	MeansTender   Means = "tender"
+	MeansStanding Means = "standing"
+	MeansForce    Means = "force"
+)
+
+type Outcome struct {
+	Displaced *Tender
+	By        Means
+	Seed      Seed
+	Moved     bool
+}
+
+func Transition(seed Seed, verb Verb, ask Ask, standing Standing) (Outcome, error) {
 	rule, ok := moves[verb]
 	if !ok {
 		return Outcome{}, fmt.Errorf("%q is not something a seed does", verb)
@@ -137,9 +152,20 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protoc
 		return Outcome{}, fmt.Errorf(
 			"tending %s records who holds it and this call named nobody; run it from an attn session, or pass --member <name>", seed.ID)
 	}
-	if held := seed.Tender(); held.Holds(sessionLive) && !held.Is(ask.Actor) && !ask.Force {
-		return Outcome{}, refuseTakeover(seed, verb, held)
+	by := MeansTender
+	var displaced *Tender
+	if held := seed.Tender(); held.Holds(standing.Live) && !held.Is(ask.Actor) {
+		switch {
+		case ask.Force:
+			by = MeansForce
+		case standing.Oversees(ask.Actor, held):
+			by = MeansStanding
+		default:
+			return Outcome{}, refuseTakeover(seed, held)
+		}
+		displaced = &held
 	}
+
 	if err := ValidateReason(reason, seed.ID); err != nil {
 		return Outcome{}, err
 	}
@@ -173,7 +199,7 @@ func Transition(seed Seed, verb Verb, ask Ask, sessionLive func(sessionID protoc
 	if Closed(next.Status) {
 		next.HarvestWhen = nil
 	}
-	return Outcome{Seed: next, Moved: true}, nil
+	return Outcome{Seed: next, Moved: true, Displaced: displaced, By: by}, nil
 }
 
 func (s Seed) Tender() Tender {
@@ -184,10 +210,8 @@ func (d Dispatch) Dispatcher() Tender {
 	return Tender{Session: d.DispatcherSession, Member: d.DispatcherMember}
 }
 
-func refuseTakeover(seed Seed, verb Verb, held Tender) error {
-	return fmt.Errorf(
-		"%s is being tended by %s, and `attn seed %s` takes it from them; pass --force to act anyway; the log will record it. Or say what you need on the log: attn seed note %s -m \"…\"",
-		seed.ID, held.DisplayName(), verb, seed.ID)
+func refuseTakeover(seed Seed, held Tender) error {
+	return fmt.Errorf("%s is being tended by %s (live); only it, sessions above it in its delegation chain, or the profile's chief move it; --force acts anyway and the log records it", seed.ID, held.DisplayName())
 }
 
 func refuseState(seed Seed, verb Verb) error {
