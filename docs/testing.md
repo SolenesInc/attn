@@ -87,6 +87,36 @@ A kind names where the test enters and what it may fake. Fake nothing else.
   protocol, and the CLI. Real: everything attn ships, packaged as shipped.
   Faked: agent binaries, external services such as GitHub, clock.
 
+### Time
+
+Tests control time instead of waiting for it. A test that needs time to pass
+moves a clock; a test that needs something to happen waits for a signal that
+it did. No test sleeps or polls.
+
+- Go daemon wire tests run timer behavior under `synctest` with `inBubble`. A
+  world outside a bubble, which can run agents and watch folders, gives its
+  daemon a stepped clock the test moves; see
+  [Writing a daemon wire test](#writing-a-daemon-wire-test).
+- App wire tests use Vitest fake timers.
+- Stack tests move one stepped clock shared by the daemon and every PTY worker
+  it starts; see [Writing a CLI stack test](#writing-a-cli-stack-test).
+- Browser end-to-end specs wait for what the page shows (`expect`,
+  `expect.poll`, `page.waitForFunction`), or install `page.clock` and run
+  forward the timers the behavior depends on.
+- Scenarios step each daemon with the harness's `stepClock`, as the
+  [harness guide](../app/scripts/real-app-harness/AGENTS.md) describes.
+- A process signals that it is ready by opening a pipe the test reads.
+  `procwait.Exited` waits for any process to exit, including one the test did
+  not start.
+
+A stepped timer the test never advances fails at the hang guard instead of
+passing slowly. `make lint-go` fails a `time.Sleep`, `time.Tick`,
+`time.NewTicker` or bare `<-time.After` in Go test code outside a
+`synctest.Test` body, and `scripts/testtimelint` lists the few allowed ones
+with their reasons. `pnpm --dir app run lint` fails a `waitForTimeout` in
+`app/e2e`. Heartbeats, kernel socket deadlines, the operating system's file
+events, syncthing's own timers and the shared PTY host keep real time.
+
 ### Wire
 
 Wire tests are the default, and come in two forms:
@@ -102,13 +132,8 @@ Both use the generated protocol types, so a protocol change breaks both at
 once.
 
 A fake agent binary behaves like the real harness from the outside: same
-hooks, transcript files, and terminal output. Tests control time instead of
-waiting for it, with `synctest` in Go and Vitest fake timers in the app. To
-simulate a network failure, wrap the client's `net.Conn` inside the bubble. No
-test sleeps or polls: `make lint-go` fails a `time.Sleep`, `time.Tick`,
-`time.NewTicker` or bare `<-time.After` in Go test code outside a
-`synctest.Test` body, and
-`scripts/testtimelint` lists the few allowed ones with their reasons.
+hooks, transcript files, and terminal output. To simulate a network failure,
+wrap the client's `net.Conn` inside a `synctest` bubble.
 
 #### Writing a daemon wire test
 
