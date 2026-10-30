@@ -39,6 +39,7 @@ export interface Session {
 }
 
 export interface DaemonSessionSnapshot {
+ command_terminal?: boolean;
 	 host?: string;
 	 offline?: boolean;
   chief_of_staff?: boolean;

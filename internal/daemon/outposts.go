@@ -17,18 +17,20 @@ import (
 )
 
 type outpostDial struct {
-	cancel       context.CancelFunc
-	done         chan struct{}
-	conn         *bridge.Conn
-	state        bridge.State
-	since        string
-	build        string
-	lastError    string
-	lastErrorAt  string
-	errorKind    string
-	connectable  bool
-	notebook     *protocol.OutpostNotebook
-	notebookRoot string
+	commandSession protocol.SessionID
+	commandExit    chan int
+	cancel         context.CancelFunc
+	done           chan struct{}
+	conn           *bridge.Conn
+	state          bridge.State
+	since          string
+	build          string
+	lastError      string
+	lastErrorAt    string
+	errorKind      string
+	connectable    bool
+	notebook       *protocol.OutpostNotebook
+	notebookRoot   string
 }
 
 type outpostRemote interface {
@@ -85,6 +87,11 @@ func (d *Daemon) configureOutposts() {
 	}
 	d.configureNotebookSync()
 	enabled := d.outpostsEnabled()
+	if !enabled {
+		for _, row := range rows {
+			d.closeOutpostCommand(row.ID)
+		}
+	}
 	d.coalesceSnapshots(func() {
 		for _, row := range rows {
 			if enabled {
@@ -107,9 +114,25 @@ func (d *Daemon) startOutpostDial(row store.Outpost) {
 	}
 	if previous := r.dialers[row.ID]; previous != nil {
 		run.build, run.lastError, run.lastErrorAt, run.errorKind = previous.build, previous.lastError, previous.lastErrorAt, previous.errorKind
+		run.connectable = previous.connectable
+		if previous.state == bridge.StateRefused {
+			run.state, run.since = previous.state, previous.since
+		}
 	}
+	commands, lookupErr := d.store.UnfinishedCommandTerminals(row.ID)
+	if len(commands) > 0 {
+		run.commandSession = commands[0].SessionID
+		run.commandExit = make(chan int, 1)
+	}
+
 	r.dialers[row.ID] = run
 	r.mu.Unlock()
+	if lookupErr != nil {
+		d.updateOutpost(row.ID, run, bridge.StateRefused, "", fmt.Errorf("read connection terminals: %w", lookupErr))
+		cancel()
+		close(run.done)
+		return
+	}
 	if !d.life.Go("outpostDial:"+row.ID, func() { defer close(run.done); defer cancel(); d.dialOutpost(ctx, row, run) }) {
 		cancel()
 		close(run.done)
@@ -153,6 +176,9 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 	}
 	if err != nil {
 		run.lastError = err.Error()
+		if sshError != nil {
+			run.lastError = sshError.Stderr
+		}
 		if kind := bridge.ErrorKind(err); kind != run.errorKind {
 			run.errorKind, run.lastErrorAt = kind, time.Now().UTC().Format(time.RFC3339Nano)
 			changed = true
@@ -192,6 +218,16 @@ func (d *Daemon) setOutpostConn(id string, run *outpostDial, conn *bridge.Conn) 
 }
 
 func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpostDial) {
+	if run.commandExit != nil {
+		select {
+		case <-ctx.Done():
+			return
+		case code := <-run.commandExit:
+			if code != 0 && !waitOutpostRetry(ctx, bridge.LostAfter) {
+				return
+			}
+		}
+	}
 	for ctx.Err() == nil {
 		var pin *bridge.Pin
 		if row.HostKey != "" {

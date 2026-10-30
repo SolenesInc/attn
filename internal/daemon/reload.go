@@ -381,10 +381,13 @@ func (d *Daemon) recordReload(sessionID protocol.SessionID, opts ptybackend.Spaw
 	intent.Asks = d.launchedWithAsks(sessionID)
 	d.launchVentIntent(sessionID).applyTo(&intent)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
+		intent.Command = prior.Command
 		intent.AutoMode = prior.AutoMode
 		intent.ApprovalPolicy, intent.SandboxMode = prior.ApprovalPolicy, prior.SandboxMode
 	}
-	d.store.SetLaunchIntent(sessionID, intent)
+	if err := d.store.SetLaunchIntent(sessionID, intent); err != nil {
+		d.logf("save launch intent: %v", err)
+	}
 }
 
 func (d *Daemon) buildReloadSpawnOptions(session *protocol.Session) (ptybackend.SpawnOptions, error) {
@@ -494,6 +497,9 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		LoginShellEnv:    d.cachedLoginShellEnv(),
 		AutoApprove:      false,
 		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent, d.isChiefOfStaffSession(sessionID)),
+	}
+	if intent, ok := d.store.LaunchIntent(sessionID); ok && intent.Command != nil {
+		opts.AgentArgv = append([]string(nil), intent.Command.Argv...)
 	}
 	if !params.UnattendedLaunch.IsZero() {
 		if err := params.UnattendedLaunch.Validate(); err != nil {

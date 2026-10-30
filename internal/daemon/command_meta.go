@@ -26,6 +26,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdAddOutpost:                    commandMetadata(false, true),
 	protocol.CmdRemoveOutpost:                 commandMetadata(false, true),
 	protocol.CmdRepairOutpost:                 commandMetadata(false, true),
+	protocol.CmdConnectOutpostInTerminal:      commandMetadata(true, true),
 	protocol.CmdDropOutpostCopy:               commandMetadata(false, true),
 	protocol.CmdQuickCaptureSend:              commandMetadata(false, false),
 	protocol.CmdQuickCaptureGet:               commandMetadata(false, false),

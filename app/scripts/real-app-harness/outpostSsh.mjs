@@ -53,6 +53,9 @@ export async function outpostSsh(root) {
       routes[destination] = socket; save();
       return target;
     },
+    requireConfirmation(destination) {
+      routes[destination] = `prompt:${routes[destination]}`; save();
+    },
     async close() {
       if (fs.existsSync(controlRoot)) for (const entry of fs.readdirSync(controlRoot)) {
         if (!entry.endsWith('.sock')) continue;

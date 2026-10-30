@@ -22,7 +22,9 @@ func (d *Daemon) recoveredApprovalRoute(sessionID protocol.SessionID) (launchcon
 			if known {
 				if intent, exists := d.store.LaunchIntent(sessionID); exists && intent.ApprovalRoute != route {
 					intent.ApprovalRoute = route
-					d.store.SetLaunchIntent(sessionID, intent)
+					if err := d.store.SetLaunchIntent(sessionID, intent); err != nil {
+						d.logf("save approval route: %v", err)
+					}
 				}
 				return route, true
 			}

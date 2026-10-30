@@ -3301,6 +3301,7 @@ export function useDaemonSocket({
   }, []);
   const sendUpdateOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'update_outpost', id }), [sendOutpostCommand]);
   const sendAddOutpost = useCallback((name: string, destination: string) => sendOutpostCommand({ cmd: 'add_outpost', name, destination }), [sendOutpostCommand]);
+  const sendConnectOutpostInTerminal = useCallback((id: string) => sendOutpostCommand({ cmd: 'connect_outpost_in_terminal', id }), [sendOutpostCommand]);
   const sendRepairOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'repair_outpost', id }), [sendOutpostCommand]);
   const sendRemoveOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'remove_outpost', id }), [sendOutpostCommand]);
 
@@ -4346,6 +4347,7 @@ export function useDaemonSocket({
     sendUpdateOutpost,
     sendAddOutpost,
     sendRepairOutpost,
+    sendConnectOutpostInTerminal,
     sendRemoveOutpost,
     sendListPlugins,
     sendInstallPlugin,

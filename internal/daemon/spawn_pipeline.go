@@ -21,9 +21,11 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type internalSpawnPolicy struct {
+	command               *store.TerminalCommand
 	installWorkflowSkill  bool
 	requireWorkflowSkill  bool
 	parentSessionID       protocol.SessionID
@@ -323,6 +325,9 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	plan := &spawnPlan{}
 	autoApprove := (req.agent == "claude" || req.agent == "codex") && defaultOnBooleanSetting(d.homeSetting(SettingAutoApproveEnabled))
 	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), LoginShellEnv: d.cachedLoginShellEnv(), AutoApprove: autoApprove, Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
+	if req.policy.command != nil {
+		plan.spawnOpts.AgentArgv = append([]string(nil), req.policy.command.Argv...)
+	}
 	requestedChief := protocol.Deref(msg.ChiefOfStaff)
 	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["launch_instructions"] {
 		plan.rollback(d, msg.ID)
@@ -405,7 +410,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if req.autoModeDriver {
 		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
 	}
-	d.store.SetLaunchIntent(session.ID, intent)
+	intent.Command = req.policy.command
+	if err := d.store.SetLaunchIntent(session.ID, intent); err != nil {
+		plan.rollback(d, msg.ID)
+		if req.existingSession == nil {
+			d.discardSpawnSession(msg.ID)
+		}
+		return &spawnOutcome{err: fmt.Errorf("persist terminal launch intent: %w", err)}
+	}
 	previousLink := d.store.SessionLink(session.ID)
 	if err := d.store.SetSessionLink(session.ID, linkKind(req.link)); err != nil {
 		d.logf("spawn: %v", err)

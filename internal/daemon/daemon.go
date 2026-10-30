@@ -860,6 +860,7 @@ func (d *Daemon) Start() error {
 			return
 		}
 		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
+		d.reconcileOutpostCommandTerminals()
 		if d.stopping() {
 			return
 		}
@@ -1792,6 +1793,9 @@ func (d *Daemon) reactSessionExit(sessionID protocol.SessionID, exit sessionmoni
 	d.sessionMonitor(sessionID).RecordExitPublished(exit)
 	pausepoint.At(pausepoint.SessionExitObserved)
 	d.broadcastSessionStateChanged(sessionID)
+	if d.finishCommandTerminal(sessionID, exit) {
+		return
+	}
 	if exit.Code == 0 && exit.Signal == "" && !exit.Stopped {
 		d.life.Go("closeNormallyExitedSession", func() { d.closeNormallyExitedSession(sessionID) })
 	}
@@ -2176,7 +2180,8 @@ func (d *Daemon) closeSessionRecord(sessionID protocol.SessionID, closed store.S
 func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() (store.SessionClosure, error)) error {
 	terminals := d.terminalsOf(sessionID)
 	defer d.announceUnplacement(sessionID)()
-	if session := d.store.Get(sessionID); session != nil {
+	session := d.store.Get(sessionID)
+	if session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
@@ -2199,8 +2204,12 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 		d.queueConversationKeep()
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
-		d.decorateLedgerEntryWithUsage(entry)
-		d.publishFact(FactSessionClosed, string(sessionID), entry)
+		if entry == nil {
+			d.publishSessionUnregistered(session)
+		} else {
+			d.decorateLedgerEntryWithUsage(entry)
+			d.publishFact(FactSessionClosed, string(sessionID), entry)
+		}
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)

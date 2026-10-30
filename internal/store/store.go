@@ -72,7 +72,13 @@ type ActiveAgentDriverRun struct {
 	PluginName     string
 }
 
+type TerminalCommand struct {
+	Argv      []string `json:"argv"`
+	OutpostID string   `json:"outpost_id,omitempty"`
+}
+
 type LaunchIntent struct {
+	Command          *TerminalCommand                    `json:"command,omitempty"`
 	YoloMode         bool                                `json:"yolo_mode,omitempty"`
 	AutoMode         *bool                               `json:"auto_mode,omitempty"`
 	ApprovalPolicy   string                              `json:"approval_policy,omitempty"`
@@ -372,12 +378,12 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 	var labels SessionLabels
 	var stateSince, stateUpdatedAt, lastSeen string
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host, copiedFrom string
-	var isWorktree, priority int
+	var isWorktree, priority, commandTerminal int
 	var contextWindowCap int
 	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal
 		FROM sessions_with_runtime WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
@@ -406,6 +412,7 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 		&priority,
 		&host,
 		&copiedFrom,
+		&commandTerminal,
 	)
 	if err != nil {
 		return nil, false
@@ -418,6 +425,9 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 		AgentAt:      parseTurnStamp(turnAgentAt),
 	})
 
+	if commandTerminal != 0 {
+		session.CommandTerminal = protocol.Ptr(true)
+	}
 	if priority != 0 {
 		session.Priority = protocol.Ptr(true)
 	}
@@ -556,11 +566,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal
 			FROM sessions_with_runtime WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal
 			FROM sessions_with_runtime WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
@@ -574,7 +584,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var labels SessionLabels
 		var stateSince, stateUpdatedAt, lastSeen string
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil, turnAgentAt, succeeds, host string
-		var isWorktree, priority int
+		var isWorktree, priority, commandTerminal int
 		var contextWindowCap int
 		var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
@@ -605,6 +615,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&succeeds,
 			&priority,
 			&host,
+			&commandTerminal,
 		)
 		if err != nil {
 			continue
@@ -617,6 +628,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			AgentAt:      parseTurnStamp(turnAgentAt),
 		})
 
+		if commandTerminal != 0 {
+			session.CommandTerminal = protocol.Ptr(true)
+		}
 		if priority != 0 {
 			session.Priority = protocol.Ptr(true)
 		}
@@ -764,22 +778,28 @@ func (s *Store) GetSessionTranscriptPath(id protocol.SessionID) string {
 	return s.GetSessionConversation(id).TranscriptPath
 }
 
-func (s *Store) SetLaunchIntent(id protocol.SessionID, intent LaunchIntent) {
+func (s *Store) SetLaunchIntent(id protocol.SessionID, intent LaunchIntent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if s.db == nil {
-		return
+		return errors.New("launch intent requires a database")
 	}
-
 	intentJSON, err := json.Marshal(intent)
 	if err != nil {
-		log.Printf("[store] SetLaunchIntent: failed to marshal launch intent for session %s: %v", id, err)
-		return
+		return err
 	}
-	if _, err := s.db.Exec("UPDATE sessions SET launch_intent = ? WHERE id = ? AND closed_at = ''", string(intentJSON), id); err != nil {
-		log.Printf("[store] SetLaunchIntent: failed for session %s: %v", id, err)
+	result, err := s.db.Exec("UPDATE sessions SET launch_intent = ?, command_terminal = ? WHERE id = ? AND closed_at = ''", string(intentJSON), intent.Command != nil, id)
+	if err != nil {
+		return err
 	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed == 0 {
+		return fmt.Errorf("session %s is no longer open", id)
+	}
+	return nil
 }
 
 func (s *Store) ClearLaunchIntent(id protocol.SessionID) {
@@ -789,7 +809,7 @@ func (s *Store) ClearLaunchIntent(id protocol.SessionID) {
 	if s.db == nil {
 		return
 	}
-	if _, err := s.db.Exec("UPDATE sessions SET launch_intent = '' WHERE id = ? AND closed_at = ''", id); err != nil {
+	if _, err := s.db.Exec("UPDATE sessions SET launch_intent = '', command_terminal = 0 WHERE id = ? AND closed_at = ''", id); err != nil {
 		log.Printf("[store] ClearLaunchIntent: failed for session %s: %v", id, err)
 	}
 }

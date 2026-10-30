@@ -46,6 +46,7 @@ export function autoSettleSeconds(
 }
 
 export interface QueueBandSession extends DesktopViewSession {
+  commandTerminal?: boolean;
   offline?: boolean;
   chiefOfStaff?: boolean;
   priority?: boolean;
@@ -73,10 +74,10 @@ export interface QueueBandOptions<TSession extends QueueBandSession = QueueBandS
 /** Automation runs are browsed separately from the queue. Crew days only join the
  * queue when the user opts them in. */
 export function sessionParticipatesInQueue(
-  session: Pick<QueueBandSession, 'automation' | 'crewMember'>,
+  session: Pick<QueueBandSession, 'automation' | 'crewMember' | 'commandTerminal'>,
   crewInQueue = false,
 ): boolean {
-  return !session.automation && (!session.crewMember || crewInQueue);
+  return !session.commandTerminal && !session.automation && (!session.crewMember || crewInQueue);
 }
 
 export interface QueueActions {
@@ -177,6 +178,7 @@ export function buildQueueBands<TSession extends QueueBandSession>(
 
   for (const desktop of places) {
     for (const session of desktop.sessions) {
+      if (session.commandTerminal) continue;
       const row: QueueRow<TSession> = {
         session,
         desktopId: desktop.id,

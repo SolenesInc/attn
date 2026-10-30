@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { EventMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import { openSection, openSettings, savedSettings } from './test/settings';
+import { daemonSession, soloDesktop } from './test/daemonFixtures';
 import { initialState } from './test/scriptedDaemon';
 
 type Outpost = EventMessage<'outposts_updated'>['outposts'][number];
@@ -95,6 +96,35 @@ describe('Outposts settings', () => {
     expect(screen.getByRole('listitem', { name: 'studio' })).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [] }));
     expect(screen.queryByRole('listitem', { name: 'studio' })).toBeNull();
+  });
+
+  it('offers a keyboard button only for an ssh refusal and opens its terminal from settings', async () => {
+    const error = 'Host key verification failed.\nPlease contact your system administrator.\n';
+    const refused: Outpost = { ...connected, state: 'refused', reach: 'unreachable', connectable: true, last_error: error };
+    const daemon = await openSection('outposts', { settings: enabled, outposts: [refused] }, scripted => {
+      scripted.on('connect_outpost_in_terminal', () => {});
+    });
+    expect(screen.getByText(error, { exact: true, normalizer: text => text })).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: 'Connect in a terminal' });
+    button.focus();
+    expect(button).toHaveFocus();
+    expect(button).not.toHaveAttribute('tabindex', '-1');
+    await gesture(daemon, () => fireEvent.click(button));
+    expect(daemon.sentOf('connect_outpost_in_terminal')).toEqual([{ cmd: 'connect_outpost_in_terminal', id: connected.id }]);
+    expect(screen.queryByTestId('settings-modal')).toBeNull();
+    await openSettings(daemon);
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...refused, connectable: false }] }));
+    expect(screen.queryByRole('button', { name: 'Connect in a terminal' })).toBeNull();
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...refused, state: 'lost' }] }));
+    expect(screen.queryByRole('button', { name: 'Connect in a terminal' })).toBeNull();
+  });
+
+  it.each(['true', 'false'])('keeps a connection terminal out of the queue and home in queue flow %s', async (queue) => {
+    const shell = daemonSession('connection', { agent: 'shell', command_terminal: true, label: 'Connect to studio', state: 'idle' });
+    await renderApp({ initialState: { settings: { queue_mode_enabled: queue }, sessions: [shell], desktops: [soloDesktop(shell.id)] } });
+    expect(screen.queryByTestId('session-connection')).toBeNull();
+    expect(screen.queryByTestId('queue-turn-connection')).toBeNull();
+    expect(screen.queryByTestId('queue-settled-connection')).toBeNull();
   });
 
   it('shows the full refusal and keeps the daemon’s last error through reconnecting until connected', async () => {

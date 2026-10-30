@@ -62,6 +62,7 @@ var Placements = map[string][]Placement{
 	"clear_session_activity":           {Placement{LocatorHome, ""}},
 	"codex_status":                     {Placement{LocatorHere, ""}},
 	"collapse_repo":                    {Placement{LocatorHome, ""}},
+	"connect_outpost_in_terminal":      {Placement{LocatorHome, ""}},
 	"conversation_readiness":           {Placement{LocatorMachine, "host"}},
 	"create_worktree":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"create_worktree_from_branch":      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
@@ -650,6 +651,18 @@ func (m CollapseRepoMessage) Placement() Placement {
 }
 
 func (m CollapseRepoMessage) Locate() string {
+	return ""
+}
+
+func (ConnectOutpostInTerminalMessage) CommandName() string {
+	return "connect_outpost_in_terminal"
+}
+
+func (m ConnectOutpostInTerminalMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m ConnectOutpostInTerminalMessage) Locate() string {
 	return ""
 }
 

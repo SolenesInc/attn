@@ -341,6 +341,7 @@ export function reconcileArrangement(
 
 export function sessionAttentionFields(session: DaemonSessionSnapshot | undefined) {
   return {
+    commandTerminal: session?.command_terminal ?? false,
     offline: session?.offline ?? false,
     chiefOfStaff: session?.chief_of_staff ?? false,
     priority: session?.priority ?? false,

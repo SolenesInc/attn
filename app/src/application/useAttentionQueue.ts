@@ -56,7 +56,7 @@ export function useAttentionQueue({
     [queueModeEnabled, settings, hiddenSessions],
   );
   const queueSessions = useMemo(
-    () => (queueHidden.length ? [...profileSessions, ...queueHidden] : profileSessions),
+    () => (queueHidden.length ? [...profileSessions, ...queueHidden] : profileSessions).filter(session => !session.commandTerminal),
     [profileSessions, queueHidden],
   );
   const queueBands = useMemo(

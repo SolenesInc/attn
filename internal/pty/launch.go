@@ -38,7 +38,7 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 
 	prepared := PreparedLaunch{Agent: agent}
 	shellCandidates := preferredShellCandidates(loginShell)
-	if agent != "shell" && !opts.AgentLoginShell && len(shellCandidates) > 1 {
+	if len(opts.AgentArgv) > 0 && !opts.AgentLoginShell && len(shellCandidates) > 1 {
 		shellCandidates = shellCandidates[:1]
 	}
 	var preparationFailures []string
@@ -48,7 +48,7 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 			cmd        *exec.Cmd
 			cleanupDir string
 		)
-		if agent == "shell" {
+		if agent == "shell" && len(opts.AgentArgv) == 0 {
 			launch, err := prepareShellPaneLaunch(shellPath, cmdEnv)
 			if err != nil {
 				preparationFailures = append(preparationFailures, fmt.Sprintf("%s: %v", shellPath, err))

@@ -29,8 +29,8 @@ function NotebookSyncStatus({ notebook }: { notebook: OutpostNotebook }) {
   </div>;
 }
 
-export function OutpostsSettings() {
-  const { outposts, outpostCommandError, sendAddOutpost, sendRepairOutpost, sendRemoveOutpost, sendUpdateOutpost, homeBuild, isConnected } = useDaemonApi();
+export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => void }) {
+  const { outposts, outpostCommandError, sendAddOutpost, sendRepairOutpost, sendConnectOutpostInTerminal, sendRemoveOutpost, sendUpdateOutpost, homeBuild, isConnected } = useDaemonApi();
   const sessions = useDaemonStore((state) => state.daemonSessions);
   const removeButton = useRef<HTMLButtonElement>(null);
   const [removing, setRemoving] = useState<string | null>(null);
@@ -100,6 +100,7 @@ export function OutpostsSettings() {
                     {row.notebook && <NotebookSyncStatus notebook={row.notebook} />}
                     {row.update && <p className="settings-description" role="status">{outpostUpdateText(row)}</p>}
                     <div className="settings-outpost-actions">
+                      {row.state === 'refused' && row.connectable && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => { if (sendConnectOutpostInTerminal(row.id)) onOpenTerminal(); }}>Connect in a terminal</button>}
                       {outpostNeedsUpdate(row, homeBuild) && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : 'Update to home build'}</button>}
                       <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
                       <button

@@ -1,6 +1,7 @@
 package testworld
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -148,7 +149,7 @@ func (s *SSH) Use(w *World) {
 			path = strings.TrimPrefix(v, "PATH=")
 		}
 	}
-	w.Vars = append(w.Vars, "PATH="+bin+":"+path, "ATTN_TESTWORLD_SSH_ROUTES="+filepath.Join(s.Dir, "routes.json"), "ATTN_HARNESS_CONTROL_ROOT="+filepath.Join(s.Dir, "masters"))
+	w.Vars = append(w.Vars, "PATH="+bin+":"+path, "ATTN_TESTWORLD_SSH_ROUTES="+filepath.Join(s.Dir, "routes.json"), "ATTN_TESTWORLD_SSH_CALLS="+filepath.Join(s.Dir, "calls.jsonl"), "ATTN_HARNESS_CONTROL_ROOT="+filepath.Join(s.Dir, "masters"))
 }
 func (s *SSH) Route(destination string, remote *Stack) {
 	s.t.Helper()
@@ -312,6 +313,37 @@ func (s *SSH) Fail(destination, stderr string) {
 	s.save()
 }
 
+func (s *SSH) RequireConfirmation(destination string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routes[destination] = "prompt:" + s.reachable[destination]
+	s.save()
+}
+
+func (s *SSH) MasterAttempts() int {
+	s.t.Helper()
+	data, err := os.ReadFile(filepath.Join(s.Dir, "calls.jsonl"))
+	if err != nil && !os.IsNotExist(err) {
+		s.t.Fatal(err)
+	}
+	count := 0
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		var args []string
+		if json.Unmarshal(line, &args) != nil {
+			continue
+		}
+		master, batch := false, false
+		for _, arg := range args {
+			master = master || arg == "ControlMaster=yes"
+			batch = batch || arg == "BatchMode=yes"
+		}
+		if master && batch {
+			count++
+		}
+	}
+	return count
+}
+
 func RunSSH() {
 	mode := os.Getenv("ATTN_TESTWORLD_SSH")
 	if mode == "" {
@@ -322,8 +354,21 @@ func RunSSH() {
 		os.Exit(0)
 	}
 	args := os.Args[1:]
+	if path := os.Getenv("ATTN_TESTWORLD_SSH_CALLS"); path != "" {
+		log, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		if err != nil {
+			panic(err)
+		}
+		data, _ := json.Marshal(args)
+		_, err = log.Write(append(data, '\n'))
+		log.Close()
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	control, action, destination, script := "", "", "", ""
-	master := false
+	master, batch := false, false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-o":
@@ -334,6 +379,9 @@ func RunSSH() {
 			option := args[i]
 			if strings.HasPrefix(option, "ControlPath=") {
 				control = strings.TrimPrefix(option, "ControlPath=")
+			}
+			if option == "BatchMode=yes" {
+				batch = true
 			}
 			if option == "ControlMaster=yes" {
 				master = true
@@ -375,6 +423,22 @@ func RunSSH() {
 	var routes map[string]string
 	_ = json.Unmarshal(data, &routes)
 	route := routes[destination]
+	if strings.HasPrefix(route, "prompt:") {
+		if batch {
+			fail("Host key verification failed.")
+		}
+		fmt.Fprint(os.Stdout, "Are you sure you want to continue connecting (yes/no)? ")
+		answer, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+		if strings.TrimSpace(answer) != "yes" {
+			fail("Host key verification failed.")
+		}
+		route = strings.TrimPrefix(route, "prompt:")
+		routes[destination] = route
+		updated, _ := json.Marshal(routes)
+		if err := os.WriteFile(os.Getenv("ATTN_TESTWORLD_SSH_ROUTES"), updated, 0600); err != nil {
+			fail(err.Error())
+		}
+	}
 	if strings.HasPrefix(route, "error:") {
 		fail(strings.TrimPrefix(route, "error:"))
 	}

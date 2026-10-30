@@ -257,7 +257,7 @@ func (s *Store) SessionLedgerEntry(id protocol.SessionID) *protocol.SessionLedge
 		return s.ledgerEntryMemoryLocked(id)
 	}
 
-	row := s.db.QueryRow(ledgerSelect+" FROM sessions_with_runtime AS sessions WHERE id = ?", id)
+	row := s.db.QueryRow(ledgerSelect+" FROM sessions_with_runtime AS sessions WHERE "+ledgerVisible+" AND id = ?", id)
 	entry, err := scanLedgerEntry(row)
 	if err != nil {
 		return nil
@@ -291,8 +291,10 @@ const ledgerSelect = `SELECT id, user_label, harness_title, agent, directory, pr
 
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
 
+const ledgerVisible = "command_terminal = 0"
+
 func (q SessionLedgerQuery) scopeAndWindow() ([]string, []any) {
-	var where []string
+	where := []string{ledgerVisible}
 	var args []any
 	switch q.Scope {
 	case SessionLedgerClosed:

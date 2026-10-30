@@ -53,6 +53,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		return fmt.Errorf("outpost %q does not exist", id)
 	}
 	if action == "remove" {
+		d.closeOutpostCommand(id)
 		_, _, reachable := d.outpostConn(id)
 		for _, session := range d.store.List("") {
 			if protocol.Deref(session.Host) != id {

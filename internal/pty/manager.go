@@ -555,7 +555,7 @@ func normalizeAgent(agent string, external bool) string {
 }
 
 func buildSpawnCommand(opts SpawnOptions, agent, shellPath string, env []string) *exec.Cmd {
-	if agent == "shell" {
+	if agent == "shell" && len(opts.AgentArgv) == 0 {
 		return exec.Command(shellPath, "-l")
 	}
 	if opts.AgentLoginShell {

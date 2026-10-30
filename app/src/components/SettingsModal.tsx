@@ -231,7 +231,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
         />
       );
     case 'outposts':
-      return state.outpostsEnabled ? <OutpostsSettings /> : null;
+      return state.outpostsEnabled ? <OutpostsSettings onOpenTerminal={() => void state.closeSettings()} /> : null;
     case 'experimental':
       return (
         <ExperimentalSettings

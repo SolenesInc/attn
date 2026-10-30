@@ -2537,6 +2537,14 @@ type CommandUsage struct {
 	Score float64 `json:"score"`
 }
 
+type ConnectOutpostInTerminalMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+}
+
 type ConversationReadinessMessage struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
@@ -10761,6 +10769,9 @@ type Session struct {
 
 	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
 	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`
+
+	// CommandTerminal corresponds to the JSON schema field "command_terminal".
+	CommandTerminal *bool `json:"command_terminal,omitempty,omitzero"`
 
 	// ContextWindowCap corresponds to the JSON schema field "context_window_cap".
 	ContextWindowCap *int `json:"context_window_cap,omitempty,omitzero"`

@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN command_terminal INTEGER NOT NULL DEFAULT 0;
