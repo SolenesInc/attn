@@ -28,6 +28,7 @@ type CheckReport struct {
 	Summary   string             `json:"summary"`
 	Evidence  []CheckEvidence    `json:"evidence"`
 	Commit    string             `json:"commit,omitempty"`
+	Detail    bool               `json:"detail,omitempty"`
 	BySession protocol.SessionID `json:"by_session,omitempty"`
 	ByMember  string             `json:"by_member,omitempty"`
 	At        string             `json:"at"`
@@ -182,6 +183,34 @@ func validateCheckLine(id, field, text string) error {
 		return fmt.Errorf("max_check_%s_chars=%d, and this %s for %s is %d; the long version goes in a note (`attn seed note`)", field, MaxCheckSummaryChars, field, id, n)
 	}
 	return nil
+}
+
+type ReportText struct{ Summary, Detail string }
+
+func ParseReportText(text string) (ReportText, error) {
+	if n := len(text); n > MaxNoteBytes {
+		return ReportText{}, fmt.Errorf("max_note_bytes=%d, and this report's -m is %d bytes; the detail says what a reviewer needs to judge the check, and long output goes in an --evidence file", MaxNoteBytes, n)
+	}
+	summary, detail, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	summary = strings.TrimSpace(summary)
+	if n := utf8.RuneCountInString(summary); n > MaxCheckSummaryChars {
+		return ReportText{}, fmt.Errorf("max_check_summary_chars=%d, and this report's first line is %d; the first line of -m is the summary `show` prints, and the lines after it are detail kept in the report's check note", MaxCheckSummaryChars, n)
+	}
+	return ReportText{Summary: summary, Detail: strings.TrimSpace(detail)}, nil
+}
+
+func JoinProblems(problems []error) error {
+	switch len(problems) {
+	case 0:
+		return nil
+	case 1:
+		return problems[0]
+	}
+	lines := make([]string, len(problems))
+	for i, problem := range problems {
+		lines[i] = "  - " + problem.Error()
+	}
+	return fmt.Errorf("%d problems; fix each and run the same command again:\n%s", len(problems), strings.Join(lines, "\n"))
 }
 
 func ValidateCheckDefinitions(checks []Check) error {
@@ -380,9 +409,7 @@ func ParseCheckEvidence(raw string, artifacts []CheckEvidence) (CheckEvidence, e
 	if len(names) > 0 {
 		inventory = "its artifacts are " + strings.Join(names, ", ")
 	}
-	return CheckEvidence{}, fmt.Errorf(
-		"evidence %q is neither an artifact on this seed nor an http(s) URL; %s. Attach the file first: attn seed attach <id> --path <file> --move",
-		raw, inventory)
+	return CheckEvidence{}, fmt.Errorf("evidence %q is not a local file, an artifact on this seed, or an http(s) URL; %s", raw, inventory)
 }
 
 func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckEvidence, now time.Time) (Seed, Note, error) {
@@ -414,7 +441,12 @@ func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckE
 		effective := tree.EffectiveChecks(id)
 		index := slices.IndexFunc(effective, func(c EffectiveCheck) bool { return c.ID == checkID && !c.Removed })
 		if index < 0 {
-			return Seed{}, Note{}, notEffective(seed.ID, checkID, effective)
+			missing := notEffective(seed.ID, checkID, effective)
+			if move.Verb == CheckVerbReport {
+				_, _, problems := buildCheckReport(seed.ID, checkID, move, artifacts, at)
+				missing = JoinProblems(append([]error{missing}, problems...))
+			}
+			return Seed{}, Note{}, missing
 		}
 		result, key := effective[index].Result, checkID
 		if from := effective[index].From; from != "" {
@@ -437,6 +469,9 @@ func ApplyCheckMove(tree PlotTree, id string, move CheckMove, artifacts []CheckE
 	body := headline
 	if detail != "" {
 		body += checkNoteSeparator + detail
+	}
+	if err := ValidateNote(body); err != nil {
+		return Seed{}, Note{}, err
 	}
 	note := Note{
 		Seed: seed.ID, Kind: NoteKindCheck, Body: body,
@@ -516,33 +551,9 @@ func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove,
 	state := result.State()
 	switch move.Verb {
 	case CheckVerbReport:
-		if summary == "" {
-			return "", "", result, fmt.Errorf("a report says in a line what proves %s: attn seed check report %s %s -m \"<summary>\" --evidence <artifact|url>", checkID, seedID, checkID)
-		}
-		if err := validateCheckLine(checkID, "summary", summary); err != nil {
+		report, detail, problems := buildCheckReport(seedID, checkID, move, artifacts, at)
+		if err := JoinProblems(problems); err != nil {
 			return "", "", result, err
-		}
-		if n := len(move.Evidence); n > MaxCheckEvidenceItems {
-			return "", "", result, fmt.Errorf("max_check_evidence_items=%d, asked for %d", MaxCheckEvidenceItems, n)
-		}
-		evidence := make([]CheckEvidence, 0, len(move.Evidence))
-		for _, cited := range move.Evidence {
-			parsed, err := ParseCheckEvidence(cited, artifacts)
-			if err != nil {
-				return "", "", result, err
-			}
-			evidence = append(evidence, parsed)
-		}
-		report := &CheckReport{
-			Summary: summary, Evidence: evidence, Commit: strings.TrimSpace(move.Commit),
-			BySession: actorSession, ByMember: actorMember, At: at,
-		}
-		detail := summary
-		if cited := evidenceLabels(evidence); cited != "" {
-			detail += " · " + cited
-		}
-		if report.Commit != "" {
-			detail += " · @" + shortCommit(report.Commit)
 		}
 		return checkID + " reported", detail, CheckResult{Report: report}, nil
 	case CheckVerbConfirm, CheckVerbReject:
@@ -572,6 +583,48 @@ func applyResultMove(seedID, checkID string, result CheckResult, move CheckMove,
 		return checkID + " reopened", summary, CheckResult{}, nil
 	}
 	return "", "", result, fmt.Errorf("%q is not a result move", move.Verb)
+}
+
+func buildCheckReport(seedID, checkID string, move CheckMove, artifacts []CheckEvidence, at string) (*CheckReport, string, []error) {
+	var problems []error
+	var text ReportText
+	if strings.TrimSpace(move.Summary) == "" {
+		problems = append(problems, fmt.Errorf("a report says in a line what proves %s: attn seed check report %s %s -m \"<summary line>\" --evidence <file|artifact|url>", checkID, seedID, checkID))
+	} else if parsed, err := ParseReportText(move.Summary); err != nil {
+		problems = append(problems, err)
+	} else {
+		text = parsed
+	}
+	if n := len(move.Evidence); n > MaxCheckEvidenceItems {
+		problems = append(problems, fmt.Errorf("max_check_evidence_items=%d, asked for %d", MaxCheckEvidenceItems, n))
+	}
+	evidence := make([]CheckEvidence, 0, len(move.Evidence))
+	for _, cited := range move.Evidence {
+		parsed, err := ParseCheckEvidence(cited, artifacts)
+		if err != nil {
+			problems = append(problems, err)
+			continue
+		}
+		evidence = append(evidence, parsed)
+	}
+	if len(problems) > 0 {
+		return nil, "", problems
+	}
+	report := &CheckReport{
+		Summary: text.Summary, Evidence: evidence, Commit: strings.TrimSpace(move.Commit), Detail: text.Detail != "",
+		BySession: protocol.TrimID(move.Actor.Session), ByMember: strings.TrimSpace(move.Actor.Member), At: at,
+	}
+	note := text.Summary
+	if cited := evidenceLabels(evidence); cited != "" {
+		note += " · " + cited
+	}
+	if report.Commit != "" {
+		note += " · @" + shortCommit(report.Commit)
+	}
+	if text.Detail != "" {
+		note += "\n\n" + text.Detail
+	}
+	return report, note, nil
 }
 
 func evidenceLabels(evidence []CheckEvidence) string {

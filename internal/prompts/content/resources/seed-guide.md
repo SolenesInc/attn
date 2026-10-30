@@ -131,18 +131,22 @@ children; each proves it with its own report, and the plot rolls up how many
 are confirmed. A check only one child needs goes on that child. A plot check
 without `shared` is the plot's own.
 
-    attn seed check report <id> <C#> -m "<summary>" --evidence <artifact|url> --commit <rev>
+    attn seed check report <id> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>
     attn seed check confirm <id> <C#> [-m "<how you verified it>"]
     attn seed check reject <id> <C#> -m "<what would prove it>"
 
-Whoever does the work reports each check as they prove it, with evidence
-attached to the seed or an http(s) URL. A later run is a new report: it
-replaces the last one and clears its verdict. Attach the new evidence under
-the same name to replace the old file; `attn seed show` marks a report whose
-cited file changed after it, until the next report. A check that does not apply gets a report saying why and citing what
-shows it. Whoever judges the work confirms or rejects each report, and may
-confirm a check with no report that they verified themselves. Checks never
-block a move; harvest names the ones still open or rejected.
+Whoever does the work reports each check as they prove it, in one call. The
+first line of -m is the summary line `attn seed show` prints, at most 400
+characters; the lines after it are detail, kept in the report's check note.
+--evidence takes a local file, which attn copies onto the seed, an artifact
+already on the seed, or an http(s) URL. A later run is a new report: it
+replaces the last one and clears its verdict. Citing a changed file under the
+same name replaces the old one; `attn seed show` marks a report whose cited
+file changed after it, until the next report. A check that does not apply gets
+a report saying why and citing what shows it. Whoever judges the work confirms
+or rejects each report, and may confirm a check with no report that they
+verified themselves. Checks never block a move; harvest names the ones still
+open or rejected.
 
 WHAT DONE IS, BY DELIVERABLE
 

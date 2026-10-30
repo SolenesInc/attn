@@ -9523,6 +9523,14 @@ type SeedCheck struct {
 	Verdict *SeedCheckVerdict `json:"verdict,omitempty,omitzero"`
 }
 
+type SeedCheckAttachment struct {
+	// Filename corresponds to the JSON schema field "filename".
+	Filename string `json:"filename"`
+
+	// Replaced corresponds to the JSON schema field "replaced".
+	Replaced bool `json:"replaced"`
+}
+
 type SeedCheckDefinition struct {
 	// ID corresponds to the JSON schema field "id".
 	ID *string `json:"id,omitempty,omitzero"`
@@ -9563,6 +9571,9 @@ type SeedCheckMessage struct {
 
 	// Evidence corresponds to the JSON schema field "evidence".
 	Evidence []string `json:"evidence,omitempty,omitzero"`
+
+	// EvidenceFiles corresponds to the JSON schema field "evidence_files".
+	EvidenceFiles []string `json:"evidence_files,omitempty,omitzero"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
@@ -9608,6 +9619,9 @@ type SeedCheckReport struct {
 	// Commit corresponds to the JSON schema field "commit".
 	Commit *string `json:"commit,omitempty,omitzero"`
 
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *bool `json:"detail,omitempty,omitzero"`
+
 	// Evidence corresponds to the JSON schema field "evidence".
 	Evidence []SeedCheckEvidence `json:"evidence"`
 
@@ -9616,6 +9630,9 @@ type SeedCheckReport struct {
 }
 
 type SeedCheckResult struct {
+	// Attached corresponds to the JSON schema field "attached".
+	Attached []SeedCheckAttachment `json:"attached,omitempty,omitzero"`
+
 	// CheckID corresponds to the JSON schema field "check_id".
 	CheckID string `json:"check_id"`
 
@@ -10026,9 +10043,6 @@ type SeedNoteMessage struct {
 }
 
 type SeedNoteResult struct {
-	// CitedChecks corresponds to the JSON schema field "cited_checks".
-	CitedChecks []string `json:"cited_checks,omitempty,omitzero"`
-
 	// Note corresponds to the JSON schema field "note".
 	Note SeedNote `json:"note"`
 

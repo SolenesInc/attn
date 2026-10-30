@@ -129,8 +129,9 @@ Report on the seed and in the conversation:
 - the landed commits, and the commit your checks ran on when a rebase moved
   them
 - each of the seed's checks with its evidence, as
-  `attn seed check report <seed> <C#> -m "<summary>" --evidence <artifact|url>
-  --commit <rev>`, or in a note when the seed has none
+  `attn seed check report <seed> <C#> -m "<summary line>" --evidence
+  <file|artifact|url> --commit <rev>`, which copies a local file onto the
+  seed, or in a note when the seed has none
 - the review: which readers ran, the confirmed findings and their fixes, and
   the findings refuted
 

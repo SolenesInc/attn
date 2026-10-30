@@ -217,6 +217,7 @@ export function SeedChecks({
               <span className="seed-check__label">report</span>
               <span className="seed-check__value">
                 {report.summary}
+                {report.detail && <span className="seed-check__meta"> · detail in its note</span>}
                 {report.evidence.map((evidence, at) => (
                   <span key={at} className="seed-check__meta">
                     {' · '}

@@ -10,12 +10,12 @@ A change that turns out to need a parallel version of an existing mechanism, whi
 
 Verify the affected behavior as [Prove it works](../principles/prove-it-works.md) and [Sequence verifiable units](../principles/sequence-verifiable-units.md) describe: each unit ends in a check you ran on the surface the change touches, following the repository's verification guidance. When the repository has a `drive-*` skill, read the files of the features the change touches, update them in the same change when it adds, removes or alters a way in, and check every way in and context they list that applies before you call the change done. Reuse evidence that still applies and run further checks where changes or gaps warrant them. Address review findings, including rejected seed checks, whose verdict says what would prove them, then verify the corrections. When two corrections that shared an assumption have failed the same check, [Attack the premise](../principles/attack-the-premise.md) before writing a third.
 
-Report each check on the seed as you prove it. `attn seed show <seed-id>` lists your seed's checks, the plot's shared ones included. Attach local evidence to the seed first, then cite it with the commit it ran on:
+Report each check on the seed as you prove it, with the commit it ran on. `attn seed show <seed-id>` lists your seed's checks, the plot's shared ones included. A local file passed to `--evidence` is copied onto the seed and cited in the same call. The first line of `-m` is the summary line; put what a reviewer needs beyond it on the lines after:
 
 ```sh
-attn seed check report <seed-id> <C#> -m "<summary>" --evidence <artifact|url> --commit <rev>
+attn seed check report <seed-id> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>
 ```
 
-A check that does not apply still gets a report: say why and cite what shows it, and the verdict decides. A later run is a new report. It replaces the earlier one and clears its verdict, so the seed always shows which evidence is current. Attach the new evidence under the same name to replace the earlier file, or under a new name when the plan or notes cite the earlier one. When the brief numbers checks that are not on the seed, report each one in a note with its evidence.
+A check that does not apply still gets a report: say why and cite what shows it, and the verdict decides. A later run is a new report. It replaces the earlier one and clears its verdict, so the seed always shows which evidence is current. Cite the new evidence under the same name to replace the earlier file, or under a new name when the plan or notes cite the earlier one. When the brief numbers checks that are not on the seed, report each one in a note with its evidence.
 
 Return a reviewable change with the revision, each check with the current evidence that proves it, how to rerun the checks, and remaining limits. Make the result readable in the conversation and durable in the seed. Deliver as [Delivery](delivery.md) describes, within the task's authorization.

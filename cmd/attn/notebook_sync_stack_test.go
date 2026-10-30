@@ -184,6 +184,16 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 	requireStdout(t, outpost.Attn("seed", "show", seed.ID), notebookPath(outpost, "seeds", seed.ID))
 	requireStdout(t, outpost.Attn("seed", "check", "add", seed.ID, "C1", "-m", "Receipt arrived"))
 	requireStdout(t, outpost.Attn("seed", "check", "report", seed.ID, "C1", "-m", "Received", "--evidence", "copy.md"))
+	proof := filepath.Join(outpost.Dir, "proof.log")
+	if err := os.WriteFile(proof, []byte("proof from outpost"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	requireStdout(t, outpost.Attn("seed", "check", "report", seed.ID, "C1", "-m", "Received from the outpost",
+		"--evidence", proof, "--evidence", notebookPath(outpost, "seeds", seed.ID, "copy.md")), " · attached proof.log · ")
+	if data, err := os.ReadFile(notebookPath(home, "seeds", seed.ID, "proof.log")); err != nil || string(data) != "proof from outpost" {
+		t.Fatalf("the outpost's report returned before its file reached home: %q, %v", data, err)
+	}
+	requireStdout(t, home.Attn("seed", "show", seed.ID), "report  Received from the outpost\n", "proof.log, copy.md · ")
 	destination := filepath.Join(outpost.Dir, "detached.md")
 	outpost.Attn("seed", "detach", seed.ID, "--path", "move.md", "--to", destination, "--json").JSON(t, &attached)
 	if data, err := os.ReadFile(destination); err != nil || !strings.Contains(string(data), "move from outpost") {
@@ -196,7 +206,7 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitNotebookFile(t, pair.App, home, filepath.Join("seeds", seed.ID, "copy.md"), "", true)
-	t.Log("detach wrote outpost destination; home removed source before return; re-copying a changed source replaced the home's file before return; check report accepted copy.md; seed show printed outpost artifact folder; external unlink of a copied artifact reached home")
+	t.Log("detach wrote outpost destination; home removed source before return; re-copying a changed source replaced the home's file before return; check report accepted copy.md, then copied the outpost's proof.log to home and cited copy.md by its outpost folder path without copying it; seed show printed outpost artifact folder; external unlink of a copied artifact reached home")
 }
 
 func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {

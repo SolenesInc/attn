@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -351,7 +352,7 @@ func TestEvidenceNamesASeedArtifactOrAURL(t *testing.T) {
 		report := checkMove(seed, "C1", "report", "proof")
 		report.Evidence = []string{"verify.tar.gz"}
 		_, err := cli.SeedCheck(report)
-		lifeRefusal(t, "evidence naming no artifact", err, "verify.tar.gz", "docs/proof.md", "attn seed attach")
+		lifeRefusal(t, "evidence naming no artifact", err, "verify.tar.gz", "not a local file, an artifact on this seed, or an http(s) URL", "docs/proof.md")
 
 		report.Evidence = []string{"docs/proof.md", "https://github.com/victorarias/attn/pull/1"}
 		report.Commit = protocol.Ptr("da2b3b9c0ffee")
@@ -407,14 +408,120 @@ func TestEvidenceReplacedAfterItsReportIsMarkedUntilANewReport(t *testing.T) {
 	})
 }
 
-func TestACheckLimitRefusalNamesTheLimitAndTheAsk(t *testing.T) {
+func TestAReportsFirstLineIsItsSummaryAndTheRestIsItsDetail(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		sessions := spawnCheckSessions(w, app, "planner")
 		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
-		report := checkMove(seed, "C1", "report", strings.Repeat("x", 401))
+		const pr = "https://github.com/victorarias/attn/pull/1"
+		detail := "Ran go test ./internal/garden -run Empty -count=3.\n\n" + strings.Repeat("The 2 MB case took 40ms. ", 200)
+		report := checkMove(seed, "C1", "report", "  Empty, whitespace-only and 2 MB inputs pass.\n\n"+detail+"\n")
+		report.Evidence = []string{pr}
+		report.Commit = protocol.Ptr("da2b3b9c0ffee")
+		moved := checkMoveOK(t, cli, report)
+
+		for reply, seed := range map[string]protocol.Seed{"the report's reply": moved.Seed, "show": checksShow(t, cli, seed)} {
+			got := checkByID(seed.Checks, "C1").Report
+			if got == nil || got.Summary != "Empty, whitespace-only and 2 MB inputs pass." || !protocol.Deref(got.Detail) {
+				t.Errorf("%s holds the report %+v, want the summary line alone and detail set", reply, got)
+			}
+		}
+		wantNote := "C1 reported: Empty, whitespace-only and 2 MB inputs pass. · " + pr + " · @da2b3b9\n\n" + strings.TrimSpace(detail)
+		if moved.Note.Body != wantNote {
+			t.Errorf("the check note = %q, want the summary line, evidence and commit, then the detail: %q", moved.Note.Body, wantNote)
+		}
+
+		plain := checkMoveOK(t, cli, checkMove(seed, "C1", "report", "one line"))
+		if got := checkByID(plain.Seed.Checks, "C1").Report; got.Detail != nil {
+			t.Errorf("a one-line report sets detail %v, want none", *got.Detail)
+		}
+
+		_, err := cli.SeedCheck(checkMove(seed, "C1", "report", strings.Repeat("x", 401)+"\n\nshort detail"))
+		lifeRefusal(t, "a 401-character summary line", err, "max_check_summary_chars=400", "first line is 401", "lines after it are detail")
+		checkMoveOK(t, cli, checkMove(seed, "C1", "report", strings.Repeat("x", 400)+"\n\n"+strings.Repeat("y", 20000)))
+		_, err = cli.SeedCheck(checkMove(seed, "C1", "report", "too much\n\n"+strings.Repeat("y", 33000)))
+		lifeRefusal(t, "a report past the note limit", err, "max_note_bytes=32768", "--evidence file")
+	})
+}
+
+func TestAReportCopiesLocalFilesOntoTheSeedAndCitesThem(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		root := seedArtifactsNotebook(t, w)
+		sessions := spawnCheckSessions(w, app, "planner")
+		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
+		runs := t.TempDir()
+		out := seedArtifactsWrite(t, runs, "out.txt", []byte("first run"))
+		kept := seedArtifactsTransfer(t, cli, seed, "copy", seedArtifactsWrite(t, t.TempDir(), "kept.txt", []byte("kept")), "", "").DestinationPath
+		const pr = "https://github.com/victorarias/attn/pull/1"
+		report := checkMove(seed, "C1", "report", "it ran")
+		report.EvidenceFiles = []string{out, kept}
+		report.Evidence = []string{pr}
+
+		moved := checkMoveOK(t, cli, report)
+		if want := []protocol.SeedCheckAttachment{{Filename: "out.txt"}}; !slices.Equal(moved.Attached, want) {
+			t.Errorf("the report attached %+v, want out.txt alone: kept.txt already sits in the seed's folder", moved.Attached)
+		}
+		cited := func(when string, outSize int) {
+			t.Helper()
+			evidence := checkByID(checksShow(t, cli, seed).Checks, "C1").Report.Evidence
+			var labels []string
+			for _, e := range evidence {
+				labels = append(labels, protocol.Deref(e.Artifact)+protocol.Deref(e.URL))
+			}
+			if !slices.Equal(labels, []string{"out.txt", "kept.txt", pr}) {
+				t.Fatalf("%s the report cites %v, want the files, then the URL", when, labels)
+			}
+			if protocol.Deref(evidence[0].Size) != outSize || protocol.Deref(evidence[0].ModifiedAt) == "" || protocol.Deref(evidence[0].ChangedSinceReport) {
+				t.Errorf("%s out.txt is stamped %+v, want %d bytes, a time, and no change mark", when, evidence[0], outSize)
+			}
+			data, err := os.ReadFile(filepath.Join(root, "seeds", seed, "out.txt"))
+			if err != nil || len(data) != outSize {
+				t.Errorf("%s the seed's out.txt holds %q (%v), want %d bytes", when, data, err, outSize)
+			}
+		}
+		cited("after the first report", len("first run"))
+
+		seedArtifactsWrite(t, runs, "out.txt", []byte("second run, longer"))
+		moved = checkMoveOK(t, cli, report)
+		if want := []protocol.SeedCheckAttachment{{Filename: "out.txt", Replaced: true}}; !slices.Equal(moved.Attached, want) {
+			t.Errorf("a re-report with a changed file attached %+v, want out.txt replacing the earlier one", moved.Attached)
+		}
+		cited("after a re-report with a changed file", len("second run, longer"))
+
+		seedArtifactsWrite(t, runs, "out.txt", []byte("third run, longer still"))
+		missing := filepath.Join(runs, "late.txt")
+		retried := report
+		retried.Summary = protocol.Ptr("it ran a third time")
+		retried.EvidenceFiles = []string{out, missing}
+		_, err := cli.SeedCheck(retried)
+		lifeRefusal(t, "a report whose second file is gone", err, missing, "nothing was reported", "same command run again")
+		if got := checkByID(checksShow(t, cli, seed).Checks, "C1").Report.Summary; got != "it ran" {
+			t.Errorf("a report that failed while copying recorded %q, want the earlier report kept", got)
+		}
+		seedArtifactsWrite(t, runs, "late.txt", []byte("late"))
+		moved = checkMoveOK(t, cli, retried)
+		if got := checkByID(moved.Seed.Checks, "C1").Report; got.Summary != "it ran a third time" || len(got.Evidence) != 3 {
+			t.Errorf("the same report run again recorded %+v, want it with out.txt, late.txt and the URL", got)
+		}
+	})
+}
+
+func TestAReportWithSeveralProblemsIsRefusedOnceNamingEach(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		seedArtifactsNotebook(t, w)
+		sessions := spawnCheckSessions(w, app, "planner")
+		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
+		out := seedArtifactsWrite(t, t.TempDir(), "out.txt", []byte("run"))
+		report := checkMove(seed, "C99", "report", strings.Repeat("x", 450))
+		report.Evidence = []string{"verify.tar.gz"}
+		report.EvidenceFiles = []string{out}
 		_, err := cli.SeedCheck(report)
-		lifeRefusal(t, "a 401-character summary", err, "max_check_summary_chars=400", "401")
+		lifeRefusal(t, "a report with three problems", err, "3 problems", "has no check C99", "max_check_summary_chars=400", `"verify.tar.gz" is not a local file`)
+		if artifacts := lifeShow(t, cli, seed).Artifacts; len(artifacts) != 0 {
+			t.Errorf("a refused report copied %+v onto the seed, want nothing", artifacts)
+		}
 	})
 }
 
@@ -465,26 +572,12 @@ func TestARungCheckMoveNamesItsAudienceAndTheMoveInTheInbox(t *testing.T) {
 	})
 }
 
-func TestAPlainNoteCitingACheckSaysSo(t *testing.T) {
+func TestOnlyACheckMoveWritesACheckNote(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		sessions := spawnCheckSessions(w, app, "planner")
 		seed := checksPlot(t, cli, sessions["planner"]).Children[0].ID
-		cited, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C1 done and C5 too; C7 is elsewhere", "", "", false, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !slices.Equal(cited.CitedChecks, []string{"C1", "C5"}) {
-			t.Errorf("the note cites %v, want the effective C1 and C5", cited.CitedChecks)
-		}
-		other, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C6 is the plot's, not this seed's", "", "", false, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(other.CitedChecks) != 0 {
-			t.Errorf("a note citing a check the seed does not prove cites %v, want none", other.CitedChecks)
-		}
-		_, err = cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C1 confirmed", "", "check", false, nil)
+		_, err := cli.SeedNote(protocol.SessionID(sessions["planner"]), seed, "C1 confirmed", "", "check", false, nil)
 		lifeRefusal(t, "seed_note with the check kind", err, "attn seed check")
 	})
 }

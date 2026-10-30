@@ -1,9 +1,10 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"net"
-	"regexp"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -19,10 +20,13 @@ type seedCheckOutcome struct {
 	checkID        string
 	note           protocol.SeedNote
 	ringRecipients []string
+	attached       []protocol.SeedCheckAttachment
 }
 
-func (d *Daemon) handleSeedCheck(conn net.Conn, msg *protocol.SeedCheckMessage) {
-	outcome, err := d.applySeedCheck(msg)
+func (d *Daemon) handleSeedCheck(ctx context.Context, conn net.Conn, msg *protocol.SeedCheckMessage) {
+	ctx, cancel := d.connectionContext(ctx, conn)
+	defer cancel()
+	outcome, err := d.applySeedCheck(ctx, msg)
 	if err != nil {
 		d.sendGardenError(conn, "check", err)
 		return
@@ -30,7 +34,7 @@ func (d *Daemon) handleSeedCheck(conn net.Conn, msg *protocol.SeedCheckMessage) 
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok: true,
 		SeedCheckResult: &protocol.SeedCheckResult{
-			Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients,
+			Seed: outcome.seed, CheckID: outcome.checkID, Note: outcome.note, RingRecipients: outcome.ringRecipients, Attached: outcome.attached,
 		},
 	})
 }
@@ -40,7 +44,7 @@ func (d *Daemon) handleSeedCheckWS(client *wsClient, msg *protocol.SeedCheckMess
 		Event:     protocol.EventSeedCheckResult,
 		RequestID: protocol.Deref(msg.RequestID),
 	}
-	outcome, err := d.applySeedCheck(msg)
+	outcome, err := d.applySeedCheck(d.life.Context(), msg)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
@@ -52,7 +56,7 @@ func (d *Daemon) handleSeedCheckWS(client *wsClient, msg *protocol.SeedCheckMess
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcome, error) {
+func (d *Daemon) applySeedCheck(ctx context.Context, msg *protocol.SeedCheckMessage) (seedCheckOutcome, error) {
 	verb, err := garden.ParseCheckVerb(msg.Verb)
 	if err != nil {
 		return seedCheckOutcome{}, err
@@ -74,8 +78,9 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 	}
 	ring := protocol.Deref(msg.Ring)
 	var artifacts []garden.CheckEvidence
-	if verb == garden.CheckVerbReport && len(move.Evidence) > 0 {
-		if artifacts, err = d.citableSeedArtifacts(seedID); err != nil {
+	var attached []protocol.SeedCheckAttachment
+	if verb == garden.CheckVerbReport && len(move.Evidence)+len(msg.EvidenceFiles) > 0 {
+		if artifacts, attached, err = d.attachReportEvidence(ctx, msg, &move); err != nil {
 			return seedCheckOutcome{}, err
 		}
 	}
@@ -115,7 +120,7 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 		if err != nil {
 			return seedCheckOutcome{}, err
 		}
-		outcome := seedCheckOutcome{seed: read.withSeed(next, written).seed(next, written), checkID: attempt.CheckID, note: notes[0]}
+		outcome := seedCheckOutcome{seed: read.withSeed(next, written).seed(next, written), checkID: attempt.CheckID, note: notes[0], attached: attached}
 		if ring {
 			outcome.ringRecipients = recipients
 		}
@@ -124,6 +129,55 @@ func (d *Daemon) applySeedCheck(msg *protocol.SeedCheckMessage) (seedCheckOutcom
 	return seedCheckOutcome{}, fmt.Errorf(
 		"%s was rewritten under all %d attempts to %s a check; read it again with `attn seed show %s` and decide from what it says now",
 		seedID, attempts, verb, seedID)
+}
+
+func (d *Daemon) attachReportEvidence(ctx context.Context, msg *protocol.SeedCheckMessage, move *garden.CheckMove) ([]garden.CheckEvidence, []protocol.SeedCheckAttachment, error) {
+	seedID := strings.TrimSpace(msg.SeedID)
+	citable, err := d.citableSeedArtifacts(seedID)
+	if err != nil || len(msg.EvidenceFiles) == 0 {
+		return citable, nil, err
+	}
+	dir, err := d.callerSeedArtifactDir(ctx, seedID)
+	if err != nil {
+		return nil, nil, err
+	}
+	names := make([]string, 0, len(msg.EvidenceFiles)+len(move.Evidence))
+	landed := slices.Clone(citable)
+	var copies []string
+	for _, path := range msg.EvidenceFiles {
+		name := filepath.Base(path)
+		names = append(names, name)
+		if filepath.Dir(filepath.Clean(path)) != dir {
+			copies = append(copies, path)
+			landed = append(landed, garden.CheckEvidence{Artifact: name})
+		}
+	}
+	move.Evidence = append(names, move.Evidence...)
+	if len(copies) == 0 {
+		return citable, nil, nil
+	}
+	read, err := d.readGarden(protocol.Deref(msg.ProfileID))
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, _, err := garden.ApplyCheckMove(read.plots, seedID, *move, landed, d.gardenTime()); err != nil {
+		return nil, nil, err
+	}
+	attached := make([]protocol.SeedCheckAttachment, 0, len(copies))
+	for _, path := range copies {
+		copied, err := d.submitSeedArtifactTransfer(ctx, &protocol.SeedArtifactTransferMessage{
+			Cmd: protocol.CmdSeedArtifactTransfer, ProfileID: msg.ProfileID, SeedID: seedID, Operation: "copy",
+			SourcePath: protocol.Ptr(path), SourceSessionID: msg.SourceSessionID,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("copy %s onto %s: %w; nothing was reported, and the same command run again copies what is left and records the report", path, seedID, err)
+		}
+		attached = append(attached, protocol.SeedCheckAttachment{Filename: filepath.Base(copied.DestinationPath), Replaced: protocol.Deref(copied.Replaced)})
+	}
+	if citable, err = d.citableSeedArtifacts(seedID); err != nil {
+		return nil, nil, err
+	}
+	return citable, attached, nil
 }
 
 func (g gardenRead) withSeed(next garden.Seed, doc docstore.Document) gardenRead {
@@ -257,27 +311,6 @@ func (d *Daemon) seedOccurrenceRecipients(occurrences ...seedEvents.Occurrence) 
 	return out, nil
 }
 
-var citedCheckID = regexp.MustCompile(`\bC[1-9][0-9]*\b`)
-
-func (d *Daemon) citedChecks(seedID, body string) []string {
-	cited := citedCheckID.FindAllString(body, -1)
-	if len(cited) == 0 {
-		return nil
-	}
-	seed, _, err := d.readSeed(seedID)
-	if err != nil {
-		return nil
-	}
-	read := d.readGardenAround(seed)
-	var out []string
-	for _, check := range read.plots.EffectiveChecks(seed.ID) {
-		if !check.Removed && slices.Contains(cited, check.ID) {
-			out = append(out, check.ID)
-		}
-	}
-	return out
-}
-
 func checkNoteInboxText(note garden.Note) string {
 	by := note.AuthorMember
 	if by == "" {
@@ -364,6 +397,9 @@ func checkReportToProtocol(report *garden.CheckReport) *protocol.SeedCheckReport
 	}
 	if report.Commit != "" {
 		wire.Commit = protocol.Ptr(report.Commit)
+	}
+	if report.Detail {
+		wire.Detail = protocol.Ptr(true)
 	}
 	if report.BySession != "" {
 		wire.BySession = protocol.Ptr(report.BySession)

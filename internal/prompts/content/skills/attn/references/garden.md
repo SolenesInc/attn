@@ -58,12 +58,15 @@ check with the next free id in the plot tree and print it. A plot check marked s
 plot that has no children, each with its own report. `attn seed show` lists a
 seed's checks, inherited ones included, as open, reported, confirmed or rejected.
 
-    attn seed check report <id> <C#> -m "<summary>" --evidence <artifact|url> --commit <rev>
+    attn seed check report <id> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>
     attn seed check confirm <id> <C#> [-m "<how you verified it>"]
     attn seed check reject <id> <C#> -m "<what would prove it>"
 
-Whoever does the work reports each check, attaching local evidence to the seed
-first. A new report replaces the last one and clears its verdict. Whoever judges
+Whoever does the work reports each check in one call. The first line of -m is
+the summary line, at most 400 characters; the lines after it are detail, kept
+in the report's check note. A local --evidence file is copied onto the seed,
+replacing one of the same name. A refused report lists every problem at once.
+A new report replaces the last one and clears its verdict. Whoever judges
 the work confirms or rejects. Checks never block a move; harvest names the
 ones still open or rejected. Add `--ring` when the other side must act now.
 

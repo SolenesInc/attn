@@ -613,7 +613,7 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		requireLines(t, "show", seedAs(t, s, "", "show", child),
 			"\n  C1  reported\n      Wire tests pass.\n      report  tests pass\n              https://example.test/run/1 · ",
 			"\n  C5  open · shared from "+plot.Crown.ID+"\n",
-			"\n  report with: attn seed check report "+child+" <C#> -m \"<summary>\" --evidence <artifact|url>\n")
+			"\n  report with: attn seed check report "+child+" <C#> -m \"<summary line>\" --evidence <file|artifact|url>\n")
 		if err := os.MkdirAll(filepath.Join(s.Dir, "notebook"), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -632,6 +632,36 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		if shown := seedAs(t, s, "", "show", loose.ID); strings.Contains(shown, "changed since this report") {
 			t.Errorf("show after a new report still marks the evidence:\n%s", shown)
 		}
+		runs := t.TempDir()
+		if err := os.WriteFile(filepath.Join(runs, "run.log"), []byte("relative run"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		absolute := filepath.Join(t.TempDir(), "abs.log")
+		if err := os.WriteFile(absolute, []byte("absolute run"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		inFolder := filepath.Join(s.Dir, "notebook", "seeds", loose.ID, "out.txt")
+		oneCall := s.Run(testworld.Invocation{Dir: runs, Stdin: "All five kinds cite.\n\nThe relative file, the absolute file, the attached file, the artifact name and the URL.\n", Args: []string{
+			"seed", "check", "report", loose.ID, "C2", "-m", "-",
+			"--evidence", "run.log", "--evidence", absolute, "--evidence", inFolder, "--evidence", "out.txt", "--evidence", "https://example.test/run/2",
+		}})
+		if oneCall.Code != 0 {
+			t.Fatalf("one report with every kind of evidence exited %d: %s", oneCall.Code, oneCall.Stderr)
+		}
+		requireLines(t, "one report", oneCall.Stdout, "C2 reported on "+loose.ID+" (checked-seed) · attached run.log and abs.log · checks ")
+		requireLines(t, "show after one report", seedAs(t, s, "", "show", loose.ID),
+			"\n      report  All five kinds cite.\n              detail in its note · run.log, abs.log, out.txt, out.txt,\n              https://example.test/run/2 · ")
+		if err := os.WriteFile(filepath.Join(runs, "run.log"), []byte("relative run, again"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		requireLines(t, "re-report", seedAs(t, s, "", "check", "report", loose.ID, "C2", "-m", "ran again", "--evidence", filepath.Join(runs, "run.log")),
+			" · attached run.log (replacing the earlier file) · ")
+		refusal := s.Run(testworld.Invocation{Dir: runs, Args: []string{
+			"seed", "check", "report", loose.ID, "C2", "-m", strings.Repeat("x", 450), "--commit", "not-a-commit", "--evidence", "./missing.txt",
+		}})
+		refused(t, refusal, 2, "3 problems; fix each and run the same command again:\n")
+		requireLines(t, "the refusal", refusal.Stderr, "\n  - max_check_summary_chars=400, and this report's first line is 450", "\n  - --commit \"not-a-commit\" is not a commit", "\n  - --evidence ./missing.txt: no file at that path")
+
 		requireLines(t, "plot show", seedAs(t, s, "", "show", plot.Crown.ID),
 			"\nplot checks  0 of 2 confirmed · 1 to judge · 1 open\n", "\n  shared by every seed below\n  C5  0 of 1 confirmed\n", "      open       "+child+"\n")
 		_, row := lineOf(t, seedAs(t, s, "", "ls"), plot.Crown.ID)
@@ -643,8 +673,9 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 			t.Errorf("a seed without checks shows a tally: %q", row)
 		}
 
-		requireLines(t, "note", seedAs(t, s, "", "note", child, "-m", "C5 done"),
-			"noted on "+child+"\nhint: this note cites C5 but records no report. To record one:\n      attn seed check report "+child+" C5 -m \"<summary>\" --evidence <artifact|url>\n")
+		if noted := seedAs(t, s, "", "note", child, "-m", "C5 done"); noted != "noted on "+child+"\n" {
+			t.Errorf("a note citing a check prints %q, want only that it was noted", noted)
+		}
 		requireLines(t, "harvest", seedAs(t, s, "", "harvest", child, "-m", "done"),
 			"\nchecks: C5 is open. Checks never block a move; the tally stays on the seed.\n")
 		if exported := seedAs(t, s, "", "export", child, "--out", "-"); exported != garden.Stamp(child, plot.Children[0].Body) {

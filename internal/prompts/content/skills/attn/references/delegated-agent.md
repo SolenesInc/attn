@@ -18,10 +18,10 @@ Add `--ring` only when the delegator needs to respond now. A note does not stop 
 
 ## Complete the assignment
 
-Make the result readable in the conversation and durable in the seed. Link supporting artifacts and record the verification, remaining gaps and next step. `attn seed show <seed-id>` lists your seed's checks, the plot's shared ones included. Report each one before harvesting, citing evidence attached to the seed or an http(s) URL:
+Make the result readable in the conversation and durable in the seed. Link supporting artifacts and record the verification, remaining gaps and next step. `attn seed show <seed-id>` lists your seed's checks, the plot's shared ones included. Report each one before harvesting, in one call: the first line of -m is a summary line of at most 400 characters, any lines after it are detail, and `--evidence` takes a local file, which attn copies onto the seed, an artifact on the seed, or an http(s) URL:
 
 ```sh
-attn seed check report <seed-id> <C#> -m "<summary>" --evidence <artifact|url> --commit <rev>
+attn seed check report <seed-id> <C#> -m "<summary line>" --evidence <file|artifact|url> --commit <rev>
 ```
 
 A check that does not apply gets a report saying why and citing what shows it. When the brief numbers checks that are not on the seed, report each one in a note with its evidence. Before the final response, record the result. If it fits in the harvest reason, use it there; otherwise write one result note, then harvest with a concise summary.

@@ -5557,6 +5557,9 @@ model SeedCheckReport {
   "evidence": SeedCheckEvidence[];
   // The commit the evidence came from, as a full hash.
   "commit"?: string;
+  // The report's text had lines after its summary line; they are in the
+  // report's check note.
+  "detail"?: boolean;
   "by_session"?: SessionID;
   "by_member"?: string;
   "at": string;
@@ -5612,10 +5615,15 @@ model SeedCheckMessage {
   "text"?: string;
   // On add: every seed below this plot proves the check.
   "shared"?: boolean;
-  // A report's summary, or a verdict's reason. reject requires one.
+  // A verdict's reason, or a report's whole text: a summary line of at most
+  // 400 characters, then any detail. reject requires one.
   "summary"?: string;
   // On report: each a seed artifact or an http(s) URL.
   "evidence"?: string[];
+  // On report: absolute paths of files on the caller's machine to copy onto
+  // the seed and cite, ahead of evidence. A file already in the seed's
+  // artifact folder is cited without a copy.
+  "evidence_files"?: string[];
   // On report: the full commit hash the evidence came from.
   "commit"?: string;
   "member"?: string;
@@ -5627,9 +5635,17 @@ model SeedCheckResult {
   "seed": Seed;
   "check_id": string;
   "note": SeedNote;
+  // On report: each evidence file copied onto the seed.
+  "attached"?: SeedCheckAttachment[];
   // Present when the move rang: who the ring goes to, as session ids or
   // member names. Empty rings nobody.
   "ring_recipients"?: string[];
+}
+
+model SeedCheckAttachment {
+  "filename": string;
+  // The seed already had a file by this name, and this copy replaced it.
+  "replaced": boolean;
 }
 
 // SeedCheckResultMessage replies to a WebSocket seed_check, correlated by
@@ -6239,9 +6255,6 @@ model SeedNoteMessage {
 
 model SeedNoteResult {
   "note": SeedNote;
-  // The seed's effective check ids a plain note's body cites, so the CLI can
-  // point at `attn seed check report`.
-  "cited_checks"?: string[];
   // Present when the note rang: who the ring goes to, as session ids or
   // member names. Empty rings nobody.
   "ring_recipients"?: string[];

@@ -216,11 +216,17 @@ with its own report. Removed ids are never reused.`, []string{"m", "member", "ri
 	{`check edit`, `check edit <id> <C#> -m "<statement>"`, `Replace the check's statement.`, []string{"m", "member", "ring", "json"}, false},
 	{`check remove`, `check remove <id> <C#>`, `Remove a check. Its id stays reserved.`, []string{"m", "member", "ring", "json"}, false},
 	{`check restore`, `check restore <id> <C#>`, `Bring a removed check back with its result.`, []string{"m", "member", "ring", "json"}, false},
-	{`check report`, `check report <id> <C#> -m "<summary>" [--evidence <artifact|url>]... [--commit <rev>]`, `Record the proof for a check. --evidence is an artifact on the seed
-or an http(s) URL, and can repeat. A new report clears the verdict.
-show marks cited evidence replaced after the report.
-If a check doesn't apply, report that too: say why and cite what
-shows it. The verdict decides.`, []string{"m", "member", "ring", "json", "evidence", "commit"}, false},
+	{`check report`, `check report <id> <C#> -m "<summary line>[\n\n<detail>]" [--evidence <file|artifact|url>]... [--commit <rev>]`, `Record the proof for a check in one call. The first line of -m is the
+summary line, at most 400 characters, which show prints. The lines after
+it are detail, kept in the report's check note; the whole -m fits in
+32 KiB. -m - reads it from stdin.
+--evidence is a local file, an artifact on the seed, or an http(s) URL,
+and can repeat. A local file is copied onto the seed, replacing its file
+of the same name, unless it already sits in the seed's artifact folder.
+A refused report lists every problem it found; nothing is recorded.
+A new report clears the verdict. show marks cited evidence replaced
+after the report. If a check doesn't apply, report that too: say why
+and cite what shows it. The verdict decides.`, []string{"m", "member", "ring", "json", "evidence", "commit"}, false},
 	{`check confirm`, `check confirm <id> <C#> [-m "<how you verified it>"]`, `Confirm the check, with or without a report.`, []string{"m", "member", "ring", "json"}, false},
 	{`check reject`, `check reject <id> <C#> -m "<what would prove it>"`, `Reject the check. -m names what would prove it.`, []string{"m", "member", "ring", "json"}, false},
 	{`check uncheck`, `check uncheck <id> <C#> [-m "<why>"]`, `Clear the verdict and keep the report.`, []string{"m", "member", "ring", "json"}, false},
@@ -271,7 +277,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`ring`, ``, `give the current tender and watchers a seed update after this note or check move lands, and print who gets it`, func(f *seedFlags) { f.fs.BoolVar(&f.ring, "ring", false, "") }},
 	{`check`, `"[C#=]<statement>"`, `a check the seed must prove; attn picks the id unless C#= names it; repeats`, func(f *seedFlags) { f.fs.Var(&f.checks, "check", "") }},
 	{`shared`, ``, `every seed below this plot proves the check`, func(f *seedFlags) { f.fs.BoolVar(&f.shared, "shared", false, "") }},
-	{`evidence`, `<artifact|url>`, `an artifact on the seed or an http(s) URL; repeats`, func(f *seedFlags) { f.fs.Var(&f.evidence, "evidence", "") }},
+	{`evidence`, `<file|artifact|url>`, `a local file to copy onto the seed, an artifact on the seed, or an http(s) URL; repeats`, func(f *seedFlags) { f.fs.Var(&f.evidence, "evidence", "") }},
 	{`commit`, `<rev>`, `the commit the evidence came from, resolved with git rev-parse in the current directory`, func(f *seedFlags) { f.fs.StringVar(&f.commit, "commit", "", "") }},
 	{`path`, `<file>`, `local source, managed filename, or linked path`, func(f *seedFlags) { f.fs.StringVar(&f.path, "path", "", "") }},
 	{`repo`, `<name>`, `the repository that path lives in`, func(f *seedFlags) { f.fs.StringVar(&f.repo, "repo", "", "") }},
@@ -330,7 +336,7 @@ func writeSeedFlagHelp(w io.Writer, def seedFlagDef, owners string) {
 		prefix = "-"
 	}
 	label := strings.TrimSpace(prefix + def.name + " " + def.argument)
-	fmt.Fprintf(w, "  %-24s %s%s\n", label, def.about, owners)
+	fmt.Fprintf(w, "  %-30s %s%s\n", label, def.about, owners)
 }
 
 func writeSeedHelp(w io.Writer) {
@@ -1728,7 +1734,6 @@ func runSeedNote(args []string) {
 	if f.ring {
 		fprintRang(os.Stdout, result.Note.SeedID, result.RingRecipients)
 	}
-	fprintCitedChecks(os.Stdout, result.Note.SeedID, result.CitedChecks)
 }
 
 func runSeedWatch(verb string, args []string) {

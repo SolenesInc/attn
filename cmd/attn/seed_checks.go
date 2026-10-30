@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -89,15 +91,10 @@ func seedCheckMessage(verb garden.CheckVerb, f *seedFlags, positionals []string)
 	if f.shared {
 		msg.Shared = protocol.Ptr(true)
 	}
-	if len(f.evidence) > 0 || f.commit != "" {
-		msg.Evidence = f.evidence
-	}
-	if rev := strings.TrimSpace(f.commit); rev != "" {
-		full, err := exec.Command("git", "rev-parse", "--verify", rev+"^{commit}").Output()
-		if err != nil {
-			return protocol.SeedCheckMessage{}, fmt.Errorf("--commit %q is not a commit in this directory's repository (git rev-parse): %w", rev, err)
+	if verb == garden.CheckVerbReport {
+		if err := addReportEvidence(&msg, f.evidence, f.commit); err != nil {
+			return protocol.SeedCheckMessage{}, err
 		}
-		msg.Commit = protocol.Ptr(strings.TrimSpace(string(full)))
 	}
 	if member := strings.TrimSpace(f.member); member != "" {
 		msg.Member = protocol.Ptr(member)
@@ -108,8 +105,85 @@ func seedCheckMessage(verb garden.CheckVerb, f *seedFlags, positionals []string)
 	return msg, nil
 }
 
+func addReportEvidence(msg *protocol.SeedCheckMessage, evidence []string, commit string) error {
+	var problems []error
+	if text := protocol.Deref(msg.Summary); text != "" {
+		if _, err := garden.ParseReportText(text); err != nil {
+			problems = append(problems, err)
+		}
+	}
+	if rev := strings.TrimSpace(commit); rev != "" {
+		full, err := exec.Command("git", "rev-parse", "--verify", rev+"^{commit}").Output()
+		if err != nil {
+			problems = append(problems, fmt.Errorf("--commit %q is not a commit in this directory's repository (git rev-parse): %w", rev, err))
+		} else {
+			msg.Commit = protocol.Ptr(strings.TrimSpace(string(full)))
+		}
+	}
+	files := map[string]string{}
+	for _, value := range evidence {
+		value = strings.TrimSpace(value)
+		path, isFile, err := localEvidenceFile(value)
+		if err != nil {
+			problems = append(problems, err)
+			continue
+		}
+		if !isFile {
+			msg.Evidence = append(msg.Evidence, value)
+			continue
+		}
+		name := filepath.Base(path)
+		switch files[name] {
+		case "":
+			files[name] = path
+			msg.EvidenceFiles = append(msg.EvidenceFiles, path)
+		case path:
+		default:
+			problems = append(problems, fmt.Errorf("--evidence %s and %s are both named %s, and a seed keeps one file per name; rename one", files[name], path, name))
+		}
+	}
+	return garden.JoinProblems(problems)
+}
+
+func localEvidenceFile(value string) (string, bool, error) {
+	if cited, err := garden.ParseCheckEvidence(value, nil); err == nil && cited.URL != "" {
+		return "", false, nil
+	}
+	info, err := os.Stat(value)
+	if errors.Is(err, os.ErrNotExist) {
+		if filepath.IsAbs(value) || strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../") {
+			return "", false, fmt.Errorf("--evidence %s: no file at that path", value)
+		}
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("--evidence %s: %w", value, err)
+	}
+	if !info.Mode().IsRegular() {
+		return "", false, fmt.Errorf("--evidence %s is not a regular file; cite a file, an artifact on the seed, or an http(s) URL", value)
+	}
+	file, err := os.Open(value)
+	if err != nil {
+		return "", false, fmt.Errorf("--evidence %s: %w", value, err)
+	}
+	file.Close()
+	path, err := filepath.Abs(value)
+	return path, true, err
+}
+
 func fprintCheckMove(w io.Writer, result *protocol.SeedCheckResult, rang bool) {
 	line := fmt.Sprintf("%s on %s", garden.CheckNoteHeadline(result.Note.Body), seedHandle(result.Seed))
+	if len(result.Attached) > 0 {
+		names := make([]string, 0, len(result.Attached))
+		for _, attached := range result.Attached {
+			name := attached.Filename
+			if attached.Replaced {
+				name += " (replacing the earlier file)"
+			}
+			names = append(names, name)
+		}
+		line += " · attached " + strings.Join(names, " and ")
+	}
 	if tally := checkTallyLong(seedOrPlotCheckTally(result.Seed)); tally != "" {
 		line += " · checks " + tally
 	}
@@ -128,25 +202,6 @@ func fprintRang(w io.Writer, seedID string, recipients []string) {
 		return
 	}
 	fmt.Fprintf(w, "rang %s\n", strings.Join(recipients, ", "))
-}
-
-func fprintCitedChecks(w io.Writer, seedID string, cited []string) {
-	if len(cited) == 0 {
-		return
-	}
-	id := "<C#>"
-	if len(cited) == 1 {
-		id = cited[0]
-	}
-	fmt.Fprintf(w, "hint: this note cites %s but records no report. To record one:\n", joinAnd(cited))
-	fmt.Fprintf(w, "      attn seed check report %s %s -m \"<summary>\" --evidence <artifact|url>\n", seedID, id)
-}
-
-func joinAnd(items []string) string {
-	if len(items) <= 1 {
-		return strings.Join(items, "")
-	}
-	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
 func seedCheckTally(checks []protocol.SeedCheck) protocol.SeedCheckTally {
@@ -266,7 +321,7 @@ func fprintSeedChecks(w io.Writer, seed protocol.Seed) {
 		fmt.Fprintf(w, "  removed  %s — attn seed check restore %s <C#> brings one back\n", strings.Join(removed, ", "), seed.ID)
 	}
 	if live > 0 {
-		fmt.Fprintf(w, "  report with: attn seed check report %s <C#> -m \"<summary>\" --evidence <artifact|url>\n", seed.ID)
+		fmt.Fprintf(w, "  report with: attn seed check report %s <C#> -m \"<summary line>\" --evidence <file|artifact|url>\n", seed.ID)
 	}
 }
 
@@ -296,6 +351,9 @@ func fprintCheck(w io.Writer, check protocol.SeedCheck) {
 
 func reportProvenance(report protocol.SeedCheckReport) string {
 	var parts []string
+	if protocol.Deref(report.Detail) {
+		parts = append(parts, "detail in its note")
+	}
 	if cited := evidenceList(report.Evidence); cited != "" {
 		parts = append(parts, cited)
 	}

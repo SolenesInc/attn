@@ -15,7 +15,7 @@ const PR_736 = 'https://github.com/victorarias/attn/pull/736';
 const C8: Check = {
   id: 'C8', text: 'A database from the previous build opens with its sessions intact.', removed: false, state: 'confirmed',
   report: {
-    summary: 'Migration test opens a previous-build database intact',
+    summary: 'Migration test opens a previous-build database intact', detail: true,
     evidence: [{ artifact: 'verify-migration.tar.gz' }, { url: PR_736 }],
     commit: 'da2b3b9c0ffee0000000000000000000000000000', by_session: BUILDER, at: AT,
   },
@@ -89,7 +89,8 @@ describe('App garden seed checks', () => {
   it('renders every state under the body, naming authors and inherited checks', async () => {
     await openLeaf();
 
-    expect(checkRow('C8')).toHaveTextContent('Migration test opens a previous-build database intact');
+    expect(checkRow('C8')).toHaveTextContent('Migration test opens a previous-build database intact · detail in its note · verify-migration.tar.gz');
+    expect(checkRow('C1')).not.toHaveTextContent('detail in its note');
     expect(checkRow('C8')).toHaveTextContent('@da2b3b9 · Builder');
     expect(checkRow('C8')).toHaveTextContent('confirmed by Trellis');
     expect(checkRow('C4')).toHaveTextContent('from s-plot11');

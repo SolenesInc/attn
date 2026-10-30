@@ -195,7 +195,9 @@ From an outpost shell, `attn seed attach <seed> --path <file> --move` or `--copy
 that outpost's file and replaces the seed's file of the same name, if it has one. `attn seed detach <seed> --path <filename> --to <destination>`
 writes its destination on that outpost. Each command waits for the matching
 change at the home before returning, so a following check report can name the
-artifact as evidence. A sync failure names what is left. After fixing it, retry
+artifact as evidence. `attn seed check report <seed> <C#> --evidence <file>`
+from an outpost shell copies that outpost's file the same way before it
+records the report. A sync failure names what is left. After fixing it, retry
 the same command. `attn seed show <seed>` prints the artifact folder for the
 machine you called from.
 

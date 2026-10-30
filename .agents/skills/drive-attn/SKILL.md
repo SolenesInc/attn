@@ -191,8 +191,8 @@ Recording permission for the instance's app or your terminal.
 - Keep proof in a folder you name in your report
   (`mktemp -d /tmp/drive-attn-<feature>.XXXX`), or on your stake. From your
   own session, in a command without the instance shell's prefix, run
-  `attn seed attach <stake> --path <file> --move`, then cite it with
-  `attn seed check report <stake> <C#> -m "<summary>" --evidence <file name>`.
+  `attn seed check report <stake> <C#> -m "<summary>" --evidence <file>`,
+  which copies the file onto the stake and cites it.
 - Recordings: `./scripts/pr-evidence.sh record --instance <name> --seconds 20
   --out <dir>/clip.mp4`, then `./scripts/pr-evidence.sh publish <dir>/clip.mp4`.
   Watch the clip for private data before publishing. macOS only.

@@ -1799,9 +1799,6 @@ func (d *Daemon) handleSeedNote(conn net.Conn, msg *protocol.SeedNoteMessage) {
 		d.sendGardenError(conn, "note", err)
 		return
 	}
-	if result.Note.Kind == garden.NoteKindNote {
-		result.CitedChecks = d.citedChecks(result.Note.SeedID, result.Note.Body)
-	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedNoteResult: result})
 }
 
