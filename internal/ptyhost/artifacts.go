@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -78,6 +79,8 @@ func ImportArtifact(dir, source, id string) (Artifact, error) {
 		return Artifact{}, fmt.Errorf("read PTY host binary: %w", err)
 	}
 	defer src.Close()
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
 	tmp, err := os.CreateTemp(artifactDir(dir, id), BinaryName+".*.tmp")
 	if err != nil {
 		return Artifact{}, fmt.Errorf("stage PTY host artifact: %w", err)
