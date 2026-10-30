@@ -39,7 +39,9 @@ names the setting. No systemd service or root access is needed.
 
 Add continues until the daemons first pair. After ssh authentication succeeds,
 attn finishes installation on the next connection attempt. An Add interrupted
-by a home restart continues when the home starts again.
+by a home restart continues when the home starts again. If installation fails,
+the row keeps the reason and waits for **Update to home build** or **Re-pair**
+before trying another install.
 
 The first connection pairs the daemons. The home remembers the outpost's
 identity, and the outpost accepts only that home until you release it.
@@ -74,8 +76,8 @@ verifies it, and reconnects. Running shells keep their processes. The old
 binary stays at `<install path>.previous`. Installation refuses if the
 outpost has `pty_shared_host_enabled` on or its database needs a newer build.
 
-After pairing, a reconnect never installs a build. If the installed build differs or is
-missing, the row says why and offers Update.
+After pairing, a reconnect never installs a build. If the installed build
+differs or is missing, the row says why and offers Update.
 
 Keep the data folders, because they hold the pairing identities and work.
 If a build migrated the database, an older build may need a backup restored
