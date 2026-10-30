@@ -119,9 +119,9 @@ func (d *Daemon) startOutpostDial(row store.Outpost) {
 			run.state, run.since = previous.state, previous.since
 		}
 	}
-	commands, lookupErr := d.store.UnfinishedCommandTerminals(row.ID)
+	commands, lookupErr := d.store.UnfinishedOutpostTerminals(row.ID)
 	if len(commands) > 0 {
-		run.commandSession = commands[0].SessionID
+		run.commandSession = commands[0]
 		run.commandExit = make(chan int, 1)
 	}
 

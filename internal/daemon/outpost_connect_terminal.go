@@ -122,33 +122,42 @@ func (d *Daemon) releaseOutpostCommand(session protocol.SessionID, id string, co
 }
 
 func (d *Daemon) closeOutpostCommand(id string) {
-	commands, err := d.store.UnfinishedCommandTerminals(id)
+	commands, err := d.store.UnfinishedOutpostTerminals(id)
 	if err != nil {
 		d.logf("read outpost connection terminals: %v", err)
 		return
 	}
-	for _, command := range commands {
-		closing, err := d.beginSessionClose(command.SessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "outpost connection cancelled"}, nil)
+	for _, session := range commands {
+		closing, err := d.beginSessionClose(session, store.SessionClose{By: store.SessionClosedByUser, Reason: "outpost connection cancelled"}, nil)
 		if err != nil {
 			d.logf("close outpost connection terminal: %v", err)
 			continue
 		}
 		if closing.teardown != nil {
-			<-d.terminateSessionAsync(command.SessionID, syscall.SIGTERM, closing.teardown)
+			<-d.terminateSessionAsync(session, syscall.SIGTERM, closing.teardown)
 		}
 	}
 }
 
 func (d *Daemon) reconcileOutpostCommandTerminals() {
 	live := d.liveSessions(context.Background())
-	commands, err := d.store.UnfinishedCommandTerminals("")
-	if err != nil {
-		d.logf("read outpost connection terminals after recovery: %v", err)
-		return
+	waiting := map[protocol.SessionID]string{}
+	d.outposts.mu.Lock()
+	for id, run := range d.outposts.dialers {
+		if run.commandSession != "" {
+			waiting[run.commandSession] = id
+		}
 	}
-	for _, command := range commands {
-		if _, running := live[command.SessionID]; !running {
-			d.releaseOutpostCommand(command.SessionID, command.OutpostID, -1)
+	d.outposts.mu.Unlock()
+	for session, outpost := range waiting {
+		if exit := d.store.GetSessionExit(session); exit != nil {
+			code := exit.Code
+			if protocol.Deref(exit.Signal) != "" {
+				code = -1
+			}
+			d.releaseOutpostCommand(session, outpost, code)
+		} else if _, running := live[session]; !running {
+			d.releaseOutpostCommand(session, outpost, -1)
 		}
 	}
 }
