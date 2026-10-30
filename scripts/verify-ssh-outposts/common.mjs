@@ -39,7 +39,9 @@ export async function world(o) {
     W.R.data = `${remoteHome}/.attn-${o.instance}`;
     W.R.notebook = `${remoteHome}/attn-notebook-${o.instance}`;
     W.R.root = o.scratch;
-    await remote(`test ! -e ${quote(W.R.binary)}; test ! -e ${quote(W.R.data)}; test ! -e ${quote(W.R.notebook)}; mkdir -p ${quote(W.R.root)}`);
+    await remote(`test ! -e ${quote(W.R.binary)}; test ! -e ${quote(W.R.data)}; test ! -e ${quote(W.R.notebook)}; mkdir -p ${quote(path.dirname(W.R.root))}
+      if test -e ${quote(W.R.root)}; then echo ${quote(`refusing existing remote scratch ${W.R.root}: the run removes the scratch it creates, so pass a --scratch or --instance whose scratch path does not exist`)} >&2; exit 1; fi
+      mkdir ${quote(W.R.root)}`);
     W.remoteReady = true;
     receipt('fresh outpost paths', { ...W.R });
   };

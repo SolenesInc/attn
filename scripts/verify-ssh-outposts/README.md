@@ -5,9 +5,9 @@ Keep production data and production outposts out of the run.
 
 Build the Mac binary from this repository. Add installs the matching Linux
 build on the outpost, so the instance must have no files there: the harness
-refuses an existing install path, instance data or Notebook folder. It removes
-the instances, the installed binary, and the remote scratch and Notebook folders
-when finished.
+refuses an existing install path, instance data, Notebook folder or scratch
+folder. It removes the instances, the installed binary, and the remote scratch
+and Notebook folders when finished.
 
 Run the stack checks and record the host folders they must leave alone:
 
