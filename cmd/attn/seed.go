@@ -89,14 +89,20 @@ type seedVerb struct {
 var seedVerbs = []seedVerb{
 	{`plant`, `plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [--check "C1=<statement>"]... [flags]`, `plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
 if the seed gains children, that body is the plot's plan. --part-of
-plants it under a plot. --check defines what the seed must prove.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}, false},
+plants it under a plot. --check defines what the seed must prove.
+Lists up to 3 similar open seeds in your profile, leaving out that plot.
+Planting always proceeds. If one is the same work, wither the new seed.
+--json prints the new seed alone.`, []string{"m", "part-of", "discovered-from", "check", "member", "json"}, false},
 	{`plot`, `plot [-f <path>] [--json]`, `plant a whole plot in one move from a JSON payload (-f, or stdin):
 {"title": …, "body": …, "checks": [{"id": "C5", "text": …, "shared": true}],
 "children": [{"title": …, "body": …, "checks": […],
 "blocks": ["<sibling step slug>"]}]}. Children are parallel by
 default; blocks names the siblings a child holds back. A shared
 check is proven by every child. Prints the plot's id and each
-child's id and step slug.`, []string{"f", "member", "json"}, false},
+child's id and step slug, then up to 3 similar open seeds across all
+planted titles, each naming the new seed it resembles. Planting always
+proceeds; wither a new seed if a suggestion is the same work.
+--json prints the whole result, including similar seeds.`, []string{"f", "member", "json"}, false},
 	{`ls`, `ls [--stale [--window <duration>]] [--flat] [--json]`, fmt.Sprintf(`the garden, newest first, with children nested under their plot.
 --flat prints one list. --stale narrows to open seeds whose log has not moved
 for the window (default %s) — a query for your judgment, never a
@@ -556,6 +562,7 @@ func runSeedPlant(args []string) {
 		return
 	}
 	fmt.Println(seedLine(result.Seed))
+	fprintSeedSimilar(os.Stdout, result.Similar, false)
 }
 
 func seedLine(seed protocol.Seed) string {
@@ -864,6 +871,28 @@ func runSeedPlot(args []string) {
 		fmt.Fprintf(w, "  %s\t%s\t%s\n", child.ID, child.StepSlug, child.Title)
 	}
 	w.Flush()
+	fprintSeedSimilar(os.Stdout, result.Similar, true)
+}
+
+func fprintSeedSimilar(out io.Writer, similar []protocol.SeedSimilar, plot bool) {
+	if len(similar) == 0 {
+		return
+	}
+	fmt.Fprintln(out, "\nsimilar open seeds")
+	for _, hit := range similar {
+		fmt.Fprintf(out, "  %s  %s · %s", seedLine(hit.Seed), hit.Seed.Status, seedLastActive(hit.LastActive))
+		if plot {
+			fmt.Fprintf(out, "  like %s", hit.Like)
+		}
+		fmt.Fprintln(out)
+	}
+	seen := map[string]bool{}
+	for _, hit := range similar {
+		if !seen[hit.Like] {
+			fmt.Fprintf(out, "if one is the same work: attn seed wither %s -m \"duplicate of <id>\"\n", hit.Like)
+			seen[hit.Like] = true
+		}
+	}
 }
 
 func readPlotPayload(path string) []byte {

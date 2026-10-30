@@ -421,30 +421,34 @@ func (d *Daemon) sendGardenError(conn net.Conn, verb string, err error) {
 }
 
 func (d *Daemon) handleSeedPlant(conn net.Conn, msg *protocol.SeedPlantMessage) {
-	seed, err := d.plantSeedRequest(msg)
+	seed, read, err := d.plantSeedRequest(msg)
 	if err != nil {
 		d.sendGardenError(conn, "plant", err)
 		return
 	}
+	hits, err := d.similarSeeds(read, []string{msg.Title}, []string{seed.ID, strings.TrimSpace(protocol.Deref(msg.PartOf))})
+	if err != nil {
+		d.logf("garden: similar seeds after planting %s: %v", seed.ID, err)
+	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok:              true,
-		SeedPlantResult: &protocol.SeedPlantResult{Seed: seed},
+		SeedPlantResult: &protocol.SeedPlantResult{Seed: seed, Similar: similarWire(read, hits, []string{seed.ID})},
 	})
 }
 
-func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed, error) {
+func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed, gardenRead, error) {
 	title := strings.TrimSpace(msg.Title)
 	body := protocol.Deref(msg.Body)
 	if err := garden.ValidatePlant(title, body); err != nil {
-		return protocol.Seed{}, err
+		return protocol.Seed{}, gardenRead{}, err
 	}
 	checks := checkDefinitionsFromProtocol(msg.Checks)
 	if err := garden.ValidateCheckDefinitions(checks); err != nil {
-		return protocol.Seed{}, err
+		return protocol.Seed{}, gardenRead{}, err
 	}
 	schema, err := d.seedsCollection()
 	if err != nil {
-		return protocol.Seed{}, err
+		return protocol.Seed{}, gardenRead{}, err
 	}
 
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
@@ -462,26 +466,27 @@ func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed
 	}
 	if plot := strings.TrimSpace(protocol.Deref(msg.PartOf)); plot != "" {
 		if _, _, err := d.readSeed(plot); err != nil {
-			return protocol.Seed{}, err
+			return protocol.Seed{}, gardenRead{}, err
 		}
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: plot})
 		if len(checks) > 0 {
 			if err := d.refuseRepeatedCheckIDs(checks, plot, protocol.Deref(msg.ProfileID)); err != nil {
-				return protocol.Seed{}, err
+				return protocol.Seed{}, gardenRead{}, err
 			}
 		}
 	}
 	if origin := strings.TrimSpace(protocol.Deref(msg.DiscoveredFrom)); origin != "" {
 		if _, _, err := d.readSeed(origin); err != nil {
-			return protocol.Seed{}, err
+			return protocol.Seed{}, gardenRead{}, err
 		}
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgeDiscoveredFrom, To: origin})
 	}
 	seed, doc, err := d.mintAndPlant(*schema, seed)
 	if err != nil {
-		return protocol.Seed{}, err
+		return protocol.Seed{}, gardenRead{}, err
 	}
-	return d.seedWire(seed, doc), nil
+	read := d.readGardenAround(seed)
+	return read.seed(seed, doc), read, nil
 }
 
 func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
@@ -508,6 +513,10 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 	sessionID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	member := strings.TrimSpace(protocol.Deref(msg.Member))
 
+	titles := []string{spec.Title}
+	for _, child := range spec.Children {
+		titles = append(titles, child.Title)
+	}
 	var result protocol.SeedPlotResult
 	planted := []string{}
 
@@ -559,6 +568,11 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 			docs = append(docs, doc)
 		}
 		read := d.readGardenAround(crown)
+		hits, err := d.similarSeeds(read, titles, planted)
+		if err != nil {
+			d.logf("garden: similar seeds after planting plot %s: %v", crown.ID, err)
+		}
+		result.Similar = similarWire(read, hits, planted)
 		result.Crown = read.seed(crown, crownDoc)
 		for i, seed := range childSeeds {
 			result.Children = append(result.Children, read.seed(seed, docs[i]))
@@ -569,6 +583,30 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		return
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedPlotResult: &result})
+}
+
+func (d *Daemon) similarSeeds(read gardenRead, titles, excluded []string) ([]garden.SimilarHit, error) {
+	rows := make([][]docstore.TextMatch, len(titles))
+	for i, title := range titles {
+		var err error
+		rows[i], err = d.store.MatchText(garden.SeedsSchema(), docstore.Words(title), "")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return garden.Similar(rows, read.seeds, excluded), nil
+}
+
+func similarWire(read gardenRead, hits []garden.SimilarHit, planted []string) []protocol.SeedSimilar {
+	out := make([]protocol.SeedSimilar, 0, len(hits))
+	for _, hit := range hits {
+		out = append(out, protocol.SeedSimilar{
+			Seed:       read.seed(hit.Seed, read.docs[hit.Seed.ID]),
+			LastActive: hit.LastActive.UTC().Format(docstore.TimeFormat),
+			Like:       planted[hit.TitleIndex],
+		})
+	}
+	return out
 }
 
 func (d *Daemon) mintAndPlant(schema docstore.CollectionSchema, seed garden.Seed) (garden.Seed, docstore.Document, error) {
