@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
+	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/client"
@@ -131,15 +132,17 @@ out to the garden.`, []string{"plot", "all", "json"}, true},
 records where work came from without ordering it. A structural cycle
 is refused, naming both seeds and the edge to remove.`, []string{"json"}, false},
 	{`unlink`, `unlink <a> <blocks|part-of|discovered-from> <b> [--json]`, `remove the edge. Every link has one.`, []string{"json"}, false},
-	{`show`, `show <id> [--since <bookmark>] [--json]`, `one seed, news first: its state, who tends it and a bookmark; the newest
+	{`show`, `show <id> [--since <bookmark> | --section <heading|id>] [--json]`, `one seed, news first: its state, who tends it and a bookmark; the newest
 entries on its log, and where the freshest handoff is when it is older
 than those; every edge that touches it, with seeds discovered from it
-folded to a count and the open ones; a plot's open children as a board,
-each with what it waits for, its checks and its newest entry, closed
-children folded into one line; checks and artifacts; the body last.
+folded to a count and the open ones; the outline of the plot it is part
+of; a plot's open children as a board, each with what it waits for, its
+checks and its newest entry, closed children folded into one line;
+checks and artifacts; the body last.
 --since <bookmark> prints only the log entries saved after it, on this
 seed and every seed below it, newest first and labeled by seed, then a
-new bookmark.`, []string{"since", "json"}, true},
+new bookmark. --section prints one part of the body: the section under a
+heading, or every item that starts with an id like D3.`, []string{"since", "section", "json"}, true},
 	{`review`, `review <start|show|cancel|retry|keep>`, `start an advisory Garden review, inspect its progressive results,
 cancel unfinished classification, retry one failed or changed item, or keep
 one seed growing and review it again after seven quiet days.
@@ -277,6 +280,7 @@ var seedFlagDefs = []seedFlagDef{
 	{`out`, `<path>`, `file to write; - writes to stdout`, func(f *seedFlags) { f.fs.StringVar(&f.out, "out", "", "") }},
 	{`limit`, `<n>`, fmt.Sprintf(`how many log entries to read (notes), or how many hits to answer with (search; default %d, at most %d)`, garden.DefaultSearchResults, garden.MaxSearchResults), func(f *seedFlags) { f.fs.IntVar(&f.limit, "limit", 0, "") }},
 	{`since`, `<bookmark>`, `only the log entries saved after the bookmark an earlier read printed, on this seed and every seed below it`, func(f *seedFlags) { f.fs.IntVar(&f.since, "since", 0, "") }},
+	{`section`, `<heading|id>`, `only the body's section under this heading (exact, or its start), or the items that start with this id, like D3`, func(f *seedFlags) { f.fs.StringVar(&f.section, "section", "", "") }},
 	{`kind`, `<kind>`, `only log entries of this kind: ` + strings.Join(garden.EntryKinds, ", "), func(f *seedFlags) { f.fs.StringVar(&f.kind, "kind", "", "") }},
 	{`json`, ``, `print the result as JSON`, func(f *seedFlags) { f.fs.BoolVar(&f.json, "json", false, "") }},
 }
@@ -433,6 +437,7 @@ type seedFlags struct {
 	out            string
 	limit          int
 	since          int
+	section        string
 	kind           string
 	handoff        bool
 	ring           bool
@@ -1000,6 +1005,9 @@ func runSeedShow(args []string) {
 	if len(positionals) != 1 {
 		seedUsageError("show", fmt.Errorf("needs exactly one seed id, got %d: attn seed show s-7k3f9m", len(positionals)))
 	}
+	if f.wasSet("since") && f.wasSet("section") {
+		seedUsageError("show", fmt.Errorf("--since reads log entries and --section reads the body; pass one"))
+	}
 	var result *protocol.SeedShowResult
 	var err error
 	if since, ok := f.bookmark("show"); ok {
@@ -1012,6 +1020,14 @@ func runSeedShow(args []string) {
 	}
 	if f.json {
 		writeJSON(result)
+		return
+	}
+	if f.wasSet("section") {
+		section, err := garden.Section(result.Seed.Body, f.section)
+		if err != nil {
+			seedFail("show", fmt.Errorf("%s: %w", result.Seed.ID, err))
+		}
+		fmt.Printf("%s  %s\n\n%s\n", result.Seed.ID, result.Seed.Title, section)
 		return
 	}
 	bookmark := seedBookmarkCommand{verb: "show", seedID: result.Seed.ID, at: result.Bookmark}
@@ -1194,6 +1210,7 @@ func fprintSeedShow(w io.Writer, result *protocol.SeedShowResult, bookmark seedB
 	}
 	fprintHandoffPointer(w, result)
 	fprintShowRelations(w, result.Relations)
+	fprintParentOutline(w, result)
 	fprintBoard(w, seed.ID, result.Board, result.ClosedChildren)
 	fprintSeedChecks(w, seed)
 	fprintSeedHoldings(w, result)
@@ -1245,6 +1262,25 @@ func fprintShowRelations(w io.Writer, relations []protocol.SeedRelation) {
 		}
 		fmt.Fprintln(w, line)
 	}
+}
+
+func fprintParentOutline(out io.Writer, result *protocol.SeedShowResult) {
+	i := slices.IndexFunc(result.Relations, func(relation protocol.SeedRelation) bool { return relation.Label == garden.EdgePartOf })
+	if len(result.ParentOutline) == 0 || i < 0 {
+		return
+	}
+	parentID := result.Relations[i].SeedID
+	fmt.Fprintf(out, "\noutline of %s\n", parentID)
+	width := 0
+	for _, part := range result.ParentOutline {
+		width = max(width, utf8.RuneCountInString(part.Heading))
+	}
+	for _, part := range result.ParentOutline {
+		pad := strings.Repeat(" ", width-utf8.RuneCountInString(part.Heading))
+		line := fmt.Sprintf("  %s%s  %7s  %s", part.Heading, pad, humanBytes(int64(part.Bytes)), garden.IDRanges(part.Ids))
+		fmt.Fprintln(out, strings.TrimRight(line, " "))
+	}
+	fmt.Fprintf(out, "  read one part: attn seed show %s --section <heading|id>\n", parentID)
 }
 
 func fprintBoard(out io.Writer, plotID string, board []protocol.SeedBoardRow, closed *protocol.SeedClosedCount) {

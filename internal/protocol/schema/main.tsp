@@ -5807,6 +5807,9 @@ model SeedShowResult {
   // How many of a plot's direct children are closed; `seed_list` with `plot`
   // lists them.
   "closed_children"?: SeedClosedCount;
+  // The outline of the plot this seed is part of, absent when it is part of
+  // none. `attn seed show <plot> --section <heading|id>` reads one part.
+  "parent_outline"?: SeedOutlinePart[];
   // Direct visible regular files in the seed-owned artifact directory. The
   // filesystem is canonical; this is enumerated at read time.
   "artifacts": SeedArtifact[];
@@ -5837,6 +5840,14 @@ model SeedBoardRow {
   "waits_for": string[];
   // The child's newest log entry, absent when its log is empty.
   "newest"?: SeedNote;
+}
+
+// One level-one or level-two heading of a seed body: its section's size and
+// the item ids (D3, F5, C131) its items start with.
+model SeedOutlinePart {
+  "heading": string;
+  "bytes": int32;
+  "ids": string[];
 }
 
 model SeedClosedCount {

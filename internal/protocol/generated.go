@@ -10072,6 +10072,17 @@ type SeedNotesResult struct {
 	Total int `json:"total"`
 }
 
+type SeedOutlinePart struct {
+	// Bytes corresponds to the JSON schema field "bytes".
+	Bytes int `json:"bytes"`
+
+	// Heading corresponds to the JSON schema field "heading".
+	Heading string `json:"heading"`
+
+	// Ids corresponds to the JSON schema field "ids".
+	Ids []string `json:"ids"`
+}
+
 type SeedPlantMessage struct {
 	// Body corresponds to the JSON schema field "body".
 	Body *string `json:"body,omitempty,omitzero"`
@@ -10652,6 +10663,9 @@ type SeedShowResult struct {
 
 	// NotesTotal corresponds to the JSON schema field "notes_total".
 	NotesTotal int `json:"notes_total"`
+
+	// ParentOutline corresponds to the JSON schema field "parent_outline".
+	ParentOutline []SeedOutlinePart `json:"parent_outline,omitempty,omitzero"`
 
 	// References corresponds to the JSON schema field "references".
 	References []SeedArtifactReference `json:"references"`

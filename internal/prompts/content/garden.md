@@ -15,8 +15,8 @@ The loop:
     attn seed ready                  what you can pick up now: open, not parked, not blocked, nobody holding it
                                      inside your plot when you report to one. A plot itself is never ready; only its children can be
     attn seed ready --all            the same across your profile's garden; use it to look past your plot
-    attn seed show <id>              news first: state, tender and a bookmark, the newest entries, edges, a plot's open
-                                     children as a board, checks, then the body
+    attn seed show <id>              news first: state, tender and a bookmark, the newest entries, edges, the outline of
+                                     the plot it is part of, a plot's open children as a board, checks, then the body
     attn seed tend <id>              claim it; one tender at a time, a held seed refuses you by name
     attn seed note <id> -m "…"       what happened and what you learned, tending it or not; --handoff addresses the next tender
                                      --ring tells watchers to look

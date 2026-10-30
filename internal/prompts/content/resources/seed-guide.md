@@ -52,6 +52,9 @@ tended on their own; a child can itself be a plot. Keep shared decisions in the
 parent. Each child states its own assignment and names any parent section,
 sibling result or artifact it needs to read, with a reason. Those references
 save repetition, but their text is not included automatically in a delegation.
+A child's `show` lists the parent's headings and the item ids under each, and
+`attn seed show <plot> --section <heading|D3>` reads one, so name parent
+sections by heading and decisions or findings by id.
 
 Use `blocks` only when one child needs another's result. Otherwise leave them
 parallel. The children's states record progress, so the plan needs no checklist.

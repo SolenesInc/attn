@@ -812,6 +812,7 @@ func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protoco
 			HandoffNewer:   handoffNewer,
 			Board:          board,
 			ClosedChildren: closed,
+			ParentOutline:  parentOutline(read, seed),
 			ArtifactDir:    protocol.Ptr(artifactDir),
 			Artifacts:      artifacts,
 			References:     d.seedArtifactReferences(seed.ID),
@@ -904,6 +905,22 @@ func (d *Daemon) seedBoard(read gardenRead, plotID string) ([]protocol.SeedBoard
 		board = append(board, row)
 	}
 	return board, closed
+}
+
+func parentOutline(read gardenRead, seed garden.Seed) []protocol.SeedOutlinePart {
+	parentID, ok := garden.ParentOf(seed)
+	if !ok {
+		return nil
+	}
+	i := slices.IndexFunc(read.seeds, func(candidate garden.Seed) bool { return candidate.ID == parentID })
+	if i < 0 {
+		return nil
+	}
+	var outline []protocol.SeedOutlinePart
+	for _, part := range garden.Outline(read.seeds[i].Body) {
+		outline = append(outline, protocol.SeedOutlinePart{Heading: part.Heading, Bytes: part.Bytes, Ids: part.IDs})
+	}
+	return outline
 }
 
 func gardenRelations(read gardenRead, id string) []protocol.SeedRelation {
