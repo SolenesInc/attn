@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -18,7 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/bridge/memnet"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 )
 
 var home = bridge.Identity{DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "home", Instance: "default", Build: bridge.Build{Version: "test", SourceFingerprint: "unknown", ProtocolVersion: "test"}}
@@ -50,20 +48,14 @@ type pairWorld struct {
 	server  chan *bridge.Conn
 	served  chan error
 	workers sync.WaitGroup
-	keyring agent.Agent
 	cfg     bridge.ServerConfig
 }
 
 func pair(t *testing.T) *pairWorld {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	key := testKey(t)
-	keyring := agent.NewKeyring()
-	if err := keyring.Add(agent.AddedKey{PrivateKey: key}); err != nil {
-		t.Fatal(err)
-	}
-	w := &pairWorld{t: t, ctx: ctx, cancel: cancel, network: memnet.Listen(), server: make(chan *bridge.Conn, 1), served: make(chan error, 1), keyring: keyring}
-	w.cfg = bridge.ServerConfig{Self: outpost, HostKeyPath: filepath.Join(t.TempDir(), "bridge_host_key"), AuthorizedKeys: func() ([]byte, error) { return []byte(publicKey(t, key)), nil }}
+	w := &pairWorld{t: t, ctx: ctx, cancel: cancel, network: memnet.Listen(), server: make(chan *bridge.Conn, 1), served: make(chan error, 1)}
+	w.cfg = bridge.ServerConfig{Self: outpost, HostKeyPath: filepath.Join(t.TempDir(), "bridge_host_key")}
 	return w
 }
 
@@ -91,18 +83,16 @@ func (w *pairWorld) dialWith(handlers bridge.Handlers) (*bridge.Conn, *bridge.Pi
 }
 
 func (w *pairWorld) dialConfig(cfg bridge.DialConfig) (*bridge.Conn, *bridge.Pin, error) {
-	cfg.Address, cfg.AgentSocket = "outpost", "agent"
-	cfg.DialContext = w.dialContext
+	var err error
+	cfg.Conn, err = w.network.Dial(w.ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	return bridge.Dial(w.ctx, cfg)
 }
 
-func (w *pairWorld) dialContext(ctx context.Context, network, _ string) (net.Conn, error) {
-	if network == "tcp" {
-		return w.network.Dial(ctx)
-	}
-	a, b := net.Pipe()
-	w.workers.Go(func() { defer b.Close(); _ = agent.ServeAgent(w.keyring, b) })
-	return a, nil
+func (w *pairWorld) dialContext(ctx context.Context, _, _ string) (net.Conn, error) {
+	return w.network.Dial(ctx)
 }
 
 func state(t *testing.T, c *bridge.Conn, want bridge.State) {
@@ -199,30 +189,6 @@ func TestBridgePinsAndBuild(t *testing.T) {
 	})
 }
 
-func TestAuthorizedKeys(t *testing.T) {
-	key := publicKey(t, testKey(t))
-	for _, tc := range []struct {
-		name, line     string
-		keys, warnings int
-	}{
-		{"plain", key, 1, 0}, {"comment", key + " user@machine", 1, 0}, {"blank", "\n # comment\n", 0, 0},
-		{"command", `command="echo hello" ` + key, 0, 1}, {"restrict", "restrict " + key, 0, 1},
-		{"from", `from="10.0.0.*",no-pty ` + key, 0, 1}, {"invalid", "ssh-ed25519 invalid", 0, 1},
-		{"mixed", "# comment\nrestrict " + key + "\n" + key, 1, 1},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var warnings []string
-			keys := bridge.AuthorizedKeys([]byte(tc.line), func(format string, args ...any) { warnings = append(warnings, fmt.Sprintf(format, args...)) })
-			if len(keys) != tc.keys || len(warnings) != tc.warnings {
-				t.Fatalf("keys=%d warnings=%v", len(keys), warnings)
-			}
-			if tc.name == "mixed" && !strings.Contains(warnings[0], "line 2") {
-				t.Fatal(warnings)
-			}
-		})
-	}
-}
-
 func TestBridgeCancellationDuringHandshake(t *testing.T) {
 	for _, phase := range []string{"ssh", "hello", "connected"} {
 		t.Run(phase, func(t *testing.T) {
@@ -259,36 +225,6 @@ func TestBridgeCancellationDuringHandshake(t *testing.T) {
 	}
 }
 
-func TestBridgeRereadsAuthorizedKeysAndSkipsRestrictedKeys(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		w := pair(t)
-		path := filepath.Join(t.TempDir(), "authorized_keys")
-		keys, err := w.cfg.AuthorizedKeys()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, append([]byte("restrict "), keys...), 0600); err != nil {
-			t.Fatal(err)
-		}
-		w.cfg.AuthorizedKeys = func() ([]byte, error) { return os.ReadFile(path) }
-		w.start()
-		_, _, err = w.dial(home, nil)
-		var refusal *bridge.Refusal
-		if !errors.As(err, &refusal) || refusal.Reason != "auth" {
-			t.Fatalf("restricted key admitted: %v", err)
-		}
-		if err := os.WriteFile(path, keys, 0600); err != nil {
-			t.Fatal(err)
-		}
-		c, _, err := w.dial(home, nil)
-		if err != nil {
-			t.Fatalf("updated authorized_keys not read: %v", err)
-		}
-		<-w.server
-		_ = c.Close()
-	})
-}
-
 func TestBridgeBuildRefusalRetainsTheAdmittedConnection(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w := pair(t)
@@ -318,4 +254,13 @@ func TestBridgeBuildRefusalRetainsTheAdmittedConnection(t *testing.T) {
 		}
 		_ = first.Close()
 	})
+}
+
+func dialPipe(t *testing.T, w *pairWorld) net.Conn {
+	t.Helper()
+	conn, err := w.network.Dial(w.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conn
 }

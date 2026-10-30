@@ -20,12 +20,12 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	if action == "add" {
 		name = strings.TrimSpace(name)
 		if name == "" {
-			return fmt.Errorf("outpost name is required")
+			name = address
 		}
 		if strings.EqualFold(name, "home") {
 			return fmt.Errorf("outpost name %q is reserved for the home", name)
 		}
-		if err := validateOutpostAddress(address); err != nil {
+		if err := validateOutpostDestination(address); err != nil {
 			return err
 		}
 		row, err := d.store.AddOutpost(name, address)
@@ -75,6 +75,9 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 	d.cancelOutpostUpdate(id)
 	d.stopOutpostDial(id)
 	if action == "remove" {
+		if exitErr := d.outpostSSH(*row).ExitMaster(d.life.Context()); exitErr != nil {
+			d.logf("stop removed outpost master: %v", exitErr)
+		}
 		err = d.store.DeleteOutpost(id)
 	} else {
 		err = d.store.ClearOutpostPins(id)
@@ -120,7 +123,7 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, row := range rows {
-		info := protocol.OutpostInfo{ID: row.ID, Name: row.Name, Address: row.Address, State: protocol.OutpostStateConnecting, StateSince: row.AddedAt}
+		info := protocol.OutpostInfo{ID: row.ID, Name: row.Name, Destination: row.Destination, State: protocol.OutpostStateConnecting, StateSince: row.AddedAt}
 		if row.DaemonID != "" {
 			info.DaemonID = protocol.Ptr(row.DaemonID)
 			info.HostKeyFingerprint = protocol.Ptr((bridge.Pin{HostKey: row.HostKey}).Fingerprint())
@@ -132,6 +135,9 @@ func (d *Daemon) outpostsUpdatedMessage() *protocol.OutpostsUpdatedMessage {
 		run := r.dialers[row.ID]
 		_, info.Reach = outpostReach(enabled, run)
 		if run != nil {
+			if run.connectable {
+				info.Connectable = protocol.Ptr(true)
+			}
 			info.Notebook = run.notebook
 			info.State = protocol.OutpostState(run.state)
 			info.StateSince = run.since

@@ -437,7 +437,7 @@ func run() error {
 	}
 	p.mu.Unlock()
 	if host == "" {
-		if err := p.send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: *name, Address: *address}); err != nil {
+		if err := p.send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: *name, Destination: *address}); err != nil {
 			return err
 		}
 		if err := p.state(*name, "connected"); err != nil {

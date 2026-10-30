@@ -10,7 +10,7 @@ import type { EventMessage } from './test/protocol';
 type OutpostInfo = EventMessage<'outposts_updated'>['outposts'][number];
 
 const outpost: OutpostInfo = {
-  id: 'studio-id', name: 'studio', address: 'studio:2200', state: 'connected', reach: 'reachable',
+  id: 'studio-id', name: 'studio', destination: 'studio:2200', state: 'connected', reach: 'reachable',
   state_since: '2026-10-18T18:00:00Z',
 };
 const connecting: OutpostInfo = { ...outpost, state: 'connecting', reach: 'connecting' };

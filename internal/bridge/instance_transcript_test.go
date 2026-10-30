@@ -29,7 +29,7 @@ func TestUpdateRequiresTheOutpostsInstance(t *testing.T) {
 			observed := frozenOutpost(t, w, answer)
 			self := home
 			self.Instance = "router-check"
-			conn, _, err := bridge.DialUpdate(w.ctx, bridge.DialConfig{Address: "outpost", AgentSocket: "agent", Self: self, DialContext: w.dialContext})
+			conn, _, err := bridge.DialUpdate(w.ctx, bridge.DialConfig{Conn: dialPipe(t, w), Self: self})
 			if conn != nil {
 				path := filepath.Join(t.TempDir(), "payload")
 				if writeErr := os.WriteFile(path, []byte("hello"), 0600); writeErr != nil {

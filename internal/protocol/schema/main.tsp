@@ -344,9 +344,10 @@ model NotebookSyncReportMessage {
 }
 
 model OutpostInfo {
+  connectable?: boolean;
   id: string;
   name: string;
-  address: string;
+  destination: string;
   state: OutpostState;
   reach: OutpostReach;
   state_since: string;
@@ -1802,7 +1803,7 @@ model SettingsListResult {
   entries: SettingEntry[];
 }
 
-model AddOutpostMessage { cmd: "add_outpost"; name: string; address: string; }
+model AddOutpostMessage { cmd: "add_outpost"; name: string; destination: string; }
 model RemoveOutpostMessage { cmd: "remove_outpost"; id: string; }
 model RepairOutpostMessage { cmd: "repair_outpost"; id: string; }
 @extension("x-on", #{ home: true })

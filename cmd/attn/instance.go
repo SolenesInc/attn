@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/desktopentry"
+	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptyhost"
@@ -388,6 +390,9 @@ func cleanInstance(w io.Writer, r instanceResolved) error {
 		fmt.Fprintf(w, "  daemon   stopped\n")
 	}
 
+	if err := outpostssh.ExitInstanceMasters(context.Background(), r.Label); err != nil {
+		return err
+	}
 	workers := ptyworker.ReapDataDir(r.DataDir)
 	reportWorkerReap(w, workers)
 	for _, result := range workers {

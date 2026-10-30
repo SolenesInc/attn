@@ -794,7 +794,7 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 			mark := len(app.Log())
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: input})
 			observed.Await()
-			requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", ""), "outpost_listen")
+			requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"))
 			outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 			pendingAt := time.Now()
 			observed.Release()
@@ -821,7 +821,7 @@ func TestOutpostConversationHistorySurvivesSwitchesWhileDisconnected(t *testing.
 			}
 			reconnectedAt := time.Now()
 			connectionMark := app.EventCount()
-			requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", pair.Address), pair.Address)
+			requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"))
 			outpostReachSince(app, connectionMark, "outpost", protocol.OutpostReachReachable)
 			var next *protocol.Session
 			if scenario == "resume-closed" {
@@ -1168,7 +1168,7 @@ func TestOutpostClaudeConversationSharingRespectsTheMachine(t *testing.T) {
 			other := outpost
 			if crossMachine {
 				other = testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-				pair.Agent.Authorize(other.World)
+				pair.SSH.Use(other.World)
 				other.Start()
 			}
 			pair.Start()
@@ -1177,10 +1177,10 @@ func TestOutpostClaudeConversationSharingRespectsTheMachine(t *testing.T) {
 			otherHost := pair.Host
 			if crossMachine {
 				address := bridgeAddress(t)
-				requireStdout(t, other.Attn("settings", "set", "outpost_listen", address), address)
-				app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "other", Address: address})
+				pair.SSH.Route(address, other)
+				app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "other", Destination: address})
 				otherHost = outpostState(app, "other", protocol.OutpostStateConnected).ID
-				otherPair := &testworld.OutpostPair{Home: home, Outpost: other, Agent: pair.Agent, App: app, Host: otherHost, Address: address}
+				otherPair := &testworld.OutpostPair{Home: home, Outpost: other, SSH: pair.SSH, App: app, Host: otherHost, Destination: address}
 				awaitNotebookState(t, otherPair, protocol.OutpostNotebookStateInSync)
 			}
 			spawn := func(machine *testworld.Stack, host string) (string, *fakeagent.Run) {

@@ -2,12 +2,9 @@ package daemon
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/victorarias/attn/internal/bridge"
@@ -24,7 +21,6 @@ type outpostListener struct {
 }
 
 type outpostRuntime struct {
-	configure  sync.Mutex
 	mu         sync.Mutex
 	enrollment enrollment.Status
 	listener   *outpostListener
@@ -40,35 +36,9 @@ func (d *Daemon) bridgeIdentity() bridge.Identity {
 	return bridge.Identity{Name: name, Instance: config.InstanceLabel(), DaemonID: d.daemonInstanceID, Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}}
 }
 
-func validateOutpostAddress(address string) error {
-	if strings.TrimSpace(address) != address {
-		return fmt.Errorf("address must not contain leading or trailing whitespace")
-	}
-	host, port, err := net.SplitHostPort(address)
-	if err != nil || host == "" || port == "" {
-		return fmt.Errorf("expected an explicit address:port, received %q", address)
-	}
-	return nil
-}
-
-func (d *Daemon) configureOutpostListener() {
+func (d *Daemon) startBridgeSocket() error {
 	r := &d.outpost
-	r.configure.Lock()
-	defer r.configure.Unlock()
 	defer d.configureNotebookSync()
-	r.mu.Lock()
-	old := r.listener
-	r.listener = nil
-	r.mu.Unlock()
-	if old != nil {
-		old.cancel()
-		<-old.done
-	}
-	address := d.machineSetting(settingOutpostListen)
-	if address == "" {
-		d.setOutpostListenerState(nil, "off", nil)
-		return
-	}
 	ctx, cancel := context.WithCancel(d.life.Context())
 	run := &outpostListener{cancel: cancel, done: make(chan struct{})}
 	r.mu.Lock()
@@ -76,22 +46,20 @@ func (d *Daemon) configureOutpostListener() {
 	r.mu.Unlock()
 	listen := r.listen
 	if listen == nil {
-		listen = net.Listen
+		listen = listenBridgeSocket
 	}
-	listener, err := listen("tcp", address)
+	listener, err := listen("unix", filepath.Join(d.dataRoot, "bridge.sock"))
 	if err != nil {
 		cancel()
 		close(run.done)
-		d.setOutpostListenerState(run, "error", fmt.Errorf("outpost_listen %s: %w", address, err))
-		return
+		return err
 	}
-	d.setOutpostListenerState(run, "listening", nil)
+	d.setOutpostListenerState(run, "off", nil)
 	cfg := bridge.ServerConfig{
 		Self: d.bridgeIdentity(), HostKeyPath: filepath.Join(d.dataRoot, "bridge_host_key"),
-		AuthorizedKeys: func() ([]byte, error) { return os.ReadFile(config.AuthorizedKeysPath()) },
-		Logf:           d.logf,
-		Handlers:       d.outpostHandlers(),
-		Update:         d.outpostUpdateServer(),
+		Logf:     d.logf,
+		Handlers: d.outpostHandlers(),
+		Update:   d.outpostUpdateServer(),
 		Admit: func(home bridge.Identity) *bridge.Refusal {
 			before := d.settingValues()
 			r.mu.Lock()
@@ -107,26 +75,20 @@ func (d *Daemon) configureOutpostListener() {
 			d.refreshJobQueueRole()
 			return nil
 		},
-		OnError: func(err error) {
-			state := "error"
-			var refusal *bridge.Refusal
-			if errors.As(err, &refusal) {
-				state = "refused"
-			}
-			d.setOutpostListenerState(run, state, err)
-		},
+		OnError: func(err error) { d.logf("bridge: %v", err) },
 	}
 	if !d.life.Go("outpostListener", func() {
 		defer close(run.done)
 		defer cancel()
 		if err := bridge.Serve(ctx, listener, cfg, func(conn *bridge.Conn) { d.acceptOutpostBridge(run, conn) }); err != nil && ctx.Err() == nil {
-			d.setOutpostListenerState(run, "error", err)
+			d.logf("bridge socket: %v", err)
 		}
 	}) {
 		_ = listener.Close()
 		cancel()
 		close(run.done)
 	}
+	return nil
 }
 
 func (d *Daemon) setOutpostListenerState(run *outpostListener, state string, err error) {
@@ -202,9 +164,9 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 			case bridge.StateConnected:
 				d.updateOutpostListenerState(run, conn, "bridged", nil)
 			case bridge.StateStalled:
-				d.updateOutpostListenerState(run, conn, "stalled", nil)
+				d.updateOutpostListenerState(run, conn, "bridged", nil)
 			case bridge.StateLost:
-				d.updateOutpostListenerState(run, conn, "listening", conn.Err())
+				d.updateOutpostListenerState(run, conn, "off", conn.Err())
 			}
 		}
 	}) {
@@ -224,4 +186,19 @@ func (d *Daemon) outpostSettings() (state, home, lastError string) {
 		state = "off"
 	}
 	return state, home, lastError
+}
+
+func listenBridgeSocket(network, path string) (net.Listener, error) {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	listener, err := net.Listen(network, path)
+	if err != nil {
+		return nil, err
+	}
+	if err = os.Chmod(path, 0600); err != nil {
+		listener.Close()
+		return nil, err
+	}
+	return listener, nil
 }

@@ -55,11 +55,7 @@ func TestOutpostUpdateFrozenTranscript(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			signers, err := w.keyring.Signers()
-			if err != nil {
-				t.Fatal(err)
-			}
-			conn, channels, requests, err := ssh.NewClientConn(raw, "outpost", &ssh.ClientConfig{User: "attn", Auth: []ssh.AuthMethod{ssh.PublicKeys(signers...)}, HostKeyCallback: ssh.InsecureIgnoreHostKey()})
+			conn, channels, requests, err := ssh.NewClientConn(raw, "outpost", &ssh.ClientConfig{User: "attn", HostKeyCallback: ssh.InsecureIgnoreHostKey()})
 			if err != nil {
 				t.Fatal(err)
 			}

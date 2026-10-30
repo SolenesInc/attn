@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { outpostSsh } from './outpostSsh.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
@@ -20,11 +21,11 @@ if (!instance) throw new Error('Outpost update verification requires a named ins
 const runner = createScenarioRunner(options, { scenarioId: 'OutpostUpdate', tier: 'local', prefix: 'outpost-update', allowRealAgents: false });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-update-'));
 const binary = appDaemonInTree(options.appPath);
-const socket = path.join(root, 'agent.sock');
-const client = new UiAutomationClient({ ...options, launchEnv: { SSH_AUTH_SOCK: socket, ATTN_HARNESS_OUTPOST_BINARY: binary } });
+const ssh = await outpostSsh(root);
+const client = new UiAutomationClient({ ...options, launchEnv: ssh.env });
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
-const env = instanceCliEnv(instance, { SSH_AUTH_SOCK: socket });
+const env = instanceCliEnv(instance, ssh.env);
 const exec = promisify(execFile);
 const run = (command, args, childEnv = env) => exec(command, args, { env: childEnv });
 const children = [];
@@ -92,25 +93,12 @@ async function stopRemote() {
 }
 
 async function update(selector, name, visibleBanner) {
-  restartAllowed = new Promise(resolve => { releaseRestart = resolve; });
-  restarted = new Promise((resolve, reject) => { completeRestart = resolve; failRestart = reject; });
-  restarted.catch(() => {});
-  const restarting = receive(rows => rows.some(item => item.id === outpostId && item.update?.phase === 'restarting'));
-  const done = receive(rows => rows.some(item => item.id === outpostId && ['done', 'failed'].includes(item.update?.phase)));
-  done.catch(() => {});
+  const done = receive(rows => rows.some(item => item.id === outpostId && item.update?.phase === 'failed'));
   await press(selector);
-  await restarting;
-  if (visibleBanner) await wait(banner, { textIncludes: 'Restarting' });
-  else await wait(`${row} .settings-description[role="status"]`, { textIncludes: 'Restarting' });
-  await shot(`${name}-restarting`);
-  releaseRestart();
-  await restarted;
   const rows = await done;
   const outcome = rows.find(item => item.id === outpostId);
-  runner.assert(outcome.update.phase === 'done' && outcome.state === 'connected', 'outpost returns on the home build', outcome);
-  if (visibleBanner) await wait(banner, { textIncludes: "Updated to the home's build." });
-  else await wait(`${row} .settings-description[role="status"]`, { textIncludes: "Updated to the home's build." });
-  await shot(`${name}-done`);
+  runner.assert(outcome.update.outcome.includes('Update needs the ssh install, which is not available in this build'), 'Update names the interim hand install', outcome);
+  await shot(`${name}-refused`);
 }
 
 runner.registerCleanup('remove_scratch', () => fs.rmSync(root, { recursive: true, force: true }));
@@ -127,13 +115,10 @@ runner.registerCleanup('stop_children', async () => {
 });
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_observer', () => observer.close());
+runner.registerCleanup('close_ssh', () => ssh.close());
 
 try {
-  const agent = start('ssh-agent', ['-D', '-a', socket], env, ['ignore', 'pipe', 'pipe']);
-  await once(agent.stdout, 'data');
-  const key = path.join(root, 'key');
-  await run('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
-  await run('ssh-add', [key]);
+
   const info = JSON.parse((await run(binary, ['--build-info-json'])).stdout);
   await run('make', ['-C', fileURLToPath(new URL('../../..', import.meta.url)), 'build', `OUTPUT=${oldBinary}`, 'VERSION=before-outpost-update', `SOURCE_FINGERPRINT=${info.sourceFingerprint}`]);
   fs.copyFileSync(oldBinary, remoteBinary);
@@ -146,8 +131,8 @@ try {
     ATTN_PTY_BACKEND: 'embedded', ATTN_CACHED_SHELL_ENV: '[]', INVOCATION_ID: 'scenario-supervisor',
   });
   await startRemote();
-  const address = `127.0.0.1:${await port()}`;
-  await run(remoteBinary, ['settings', 'set', 'outpost_listen', address], outpostEnv);
+  const address = 'scenario-outpost';
+  await ssh.route(address, outpostEnv, remoteBinary);
   await run(binary, ['daemon', 'stop']);
   await launchFreshAppAndConnect(client, observer);
   runner.assert(observer.outposts.length === 0, 'scenario starts without other outposts', observer.outposts);
@@ -174,7 +159,7 @@ try {
     const refused = receive(rows => rows.some(item => item.name === 'Update studio' && item.state === 'refused'));
     await client.request('dom_focus', { selector: '#outpost-name' });
     await driver.typeText('Update studio');
-    await client.request('dom_focus', { selector: '#outpost-address' });
+    await client.request('dom_focus', { selector: '#outpost-destination' });
     await driver.typeText(address);
     await press('form[aria-label="Add an outpost"] button');
     const rows = await refused;
@@ -202,7 +187,7 @@ try {
     await shot('02-dismissal-retained');
     await update(`${row} .settings-outpost-actions button:first-child`, '03-row', false);
     await wait(banner, { absent: true });
-    runner.assert(restartCount === 2, 'one supervised restart for each user update', { restartCount, phases });
+    runner.assert(restartCount === 0, 'the interim Update refusal leaves the outpost running', { restartCount, phases });
     runner.writeJson('update-phases.json', { phases, restartCount });
   });
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));

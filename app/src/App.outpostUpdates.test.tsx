@@ -6,7 +6,7 @@ import type { EventMessage } from './test/protocol';
 
 type Outpost = EventMessage<'outposts_updated'>['outposts'][number];
 const homeBuild = '0.13.0 (source git:home, protocol current)';
-const old: Outpost = { id: 'studio', name: 'Studio', address: 'studio:7777', state: 'refused', reach: 'unreachable', state_since: '2026-10-26T12:00:00Z', build: '0.13.0 (source git:old, protocol old)' };
+const old: Outpost = { id: 'studio', name: 'Studio', destination: 'studio:7777', state: 'refused', reach: 'unreachable', state_since: '2026-10-26T12:00:00Z', build: '0.13.0 (source git:old, protocol old)' };
 const initial = { home_build: homeBuild, settings: { outposts_enabled: 'true' }, outposts: [old] };
 const banner = () => screen.queryByRole('region', { name: 'Outpost updates' });
 

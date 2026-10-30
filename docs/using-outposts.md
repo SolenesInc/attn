@@ -10,78 +10,33 @@ Input, screen updates and terminal commands pass through your home. Agents
 run on the outpost; their state, turns, cost and PR links reach the Mac.
 File tiles stay on the home's machine.
 
-## Set up an outpost
+## Add an outpost
 
-The outpost runs the same attn build as your home. A different build is
-refused. Install the home build on your Mac and build the outpost binary
-from the same checkout:
+An outpost is a Linux amd64 or arm64 machine that you can reach with your own
+`ssh` command. Use the same destination in attn, such as `ai-sandbox`,
+`user@host`, or `ssh://host:2222`. Your OpenSSH configuration chooses the route,
+keys and known hosts.
 
-```sh
-make install-daemon
-make build-linux-amd64 OUTPUT=/tmp/attn-outpost   # or build-linux-arm64
-```
+This build still needs the matching Linux binary placed by hand. Build it from
+the home's checkout with `make build-linux-amd64 OUTPUT=/tmp/attn-outpost`, or
+`build-linux-arm64`. Copy it to the outpost and install it at:
 
-To run attn on the outpost:
+- Default instance: `~/.local/bin/attn`.
+- Named instance: `~/.local/share/attn-outpost-instances/<instance>/attn`.
 
-1. From the Mac, copy `/tmp/attn-outpost` to the outpost's `/tmp` (for
-   example `scp /tmp/attn-outpost ai-sandbox:/tmp/`). Then, on the outpost, install it as
-   `~/.local/bin/attn` and run it as a systemd user service:
+The home and outpost use the same [instance](instances.md) name. A named home
+starts only its same-named instance on the outpost.
 
-   ```sh
-   install -D /tmp/attn-outpost ~/.local/bin/attn
-   ```
+On the home, turn on **Outposts** in Settings → Experimental. Open Settings →
+Outposts, enter the **ssh destination**, and click **Add outpost**. Name is
+optional and defaults to the destination. The name `home` is reserved.
 
-   ```ini
-   # ~/.config/systemd/user/attn.service
-   [Unit]
-   Description=attn daemon
+attn starts the daemon over ssh and keeps it running when ssh disconnects.
+The machine must have logind's `KillUserProcesses` off, or attn refuses and
+names the setting. No systemd service or root access is needed.
 
-   [Service]
-   ExecStart=%h/.local/bin/attn daemon
-   Restart=on-failure
-   RestartForceExitStatus=75
-   SuccessExitStatus=75
-   KillMode=process
-
-   [Install]
-   WantedBy=default.target
-   ```
-
-   ```sh
-   systemctl --user enable --now attn.service
-   loginctl enable-linger   # keep it running when you log out
-   ```
-
-   `KillMode=process` keeps your shells running when the daemon stops or
-   restarts. Without it, systemd ends every shell along with the daemon.
-   `Restart=on-failure` starts the daemon again after a crash, and it picks
-   up the shells that kept running. Exit status 75 requests a restart after
-   a build update and counts as a successful stop. To stop the daemon and its shells
-   together, run `systemctl --user kill attn.service`.
-
-2. Add the public key your home's ssh-agent holds (`ssh-add -L` on the Mac) to
-   `~/.ssh/authorized_keys`. attn skips lines with options such as
-   `restrict`, `command=` or `from=`, so add the key with no options.
-
-3. Choose the address your home will reach it on, for example its Tailscale
-   IP, and a free port:
-
-   ```sh
-   attn settings set outpost_listen 100.101.102.103:7777
-   ```
-
-   Nothing listens until you set this. Set it to `''` to stop listening.
-
-On the home, turn on **Outposts** in Settings → Experimental, then add the
-outpost by name and address in Settings → Outposts.
-The name `home` is reserved for the home's machine.
-
-The home and outpost must use the same [instance](instances.md) name. The
-default install on both sides already matches. A named instance cannot pair
-with production or another named instance.
-
-The first connection pairs them, with no prompt. The home remembers the
-outpost's identity, and the outpost accepts only this home from then on.
+The first connection pairs the daemons. The home remembers the outpost's
+identity, and the outpost accepts only that home until you release it.
 
 ## Read and change settings
 
@@ -93,7 +48,7 @@ setting at the home. The copy follows when the bridge delivers the change.
 
 Machine settings describe one computer: harness executables, the terminal
 backend and shared terminal host, worktree sweep, analytics recording,
-`notebook.root`, `outposts_enabled`, and `outpost_listen`. Changing one on an
+`notebook.root` and `outposts_enabled`. Changing one on an
 outpost changes only that outpost. Computed machine values, such as harness
 availability and connection status, also describe the computer where you read
 them.
@@ -104,42 +59,14 @@ the home to be reachable.
 
 ## Update outposts
 
-After installing a new home build, click **Update outposts** in the banner
-or **Update to home build** on an outpost's row in Settings → Outposts.
-The banner updates every outpost on a different build. Each row shows
-building or downloading, sending, verifying, and restarting, then the outcome.
-Dismissing the banner hides it until the home's build changes. The row button
-stays available.
+Update is unavailable in this build while SSH installation is being added.
+Its error names the install path. Place the home's matching Linux binary at
+that path by hand. Use `install` to replace a running binary, then let the
+home reconnect. attn starts the matching build and recovers its running shells.
 
-A source install builds the Linux daemon when you click Update. Keep the
-checkout the home was built from available, with Zig installed. A home built
-from a clean commit uses that commit. For an uncommitted build, the worktree
-must still contain the same changes. A release install downloads its own
-version's Linux asset. Both cache the result for later pushes. The Mac bundle carries no Linux binary.
-
-The outpost verifies the transfer, the staged build, and database compatibility
-before replacing its binary. Its systemd service restarts it, and existing
-shells keep running. The home waits up to 60 seconds for it to reconnect on the
-new build. An outpost with **Shared terminal host** enabled refuses an update,
-because the push carries only `attn`.
-
-Outposts installed before this version need one more manual install, including
-those that already support build updates. This version checks instance names
-before pairing or sending an update.
-Build and copy the binary as in **Set up an outpost**, update the service unit
-above, rerun `install`, and run `systemctl --user daemon-reload` followed by
-`systemctl --user restart attn.service`. Use `install` when replacing a running
-binary. `cp` fails with "Text file busy", including while an old shell's worker
-still uses it. Keep the home's and outpost's data folders, because their
-pairing identities live there. Install a named instance in its own binary path. An outpost running
-as a named instance refuses to replace the default `~/.local/bin/attn`.
-
-If the new build does not come back, check its row's outcome and the outpost's
-journal with `journalctl --user -u attn.service`. Fix forward, or stop the service
-and install `~/.local/bin/attn.previous` over `~/.local/bin/attn` before starting
-it again. If the new build migrated the database, the previous build may also
-need a backup restored with `attn db restore`. attn keeps the previous binary
-and never rolls back automatically.
+Keep the data folders, because they hold the pairing identities and work.
+If a build migrated the database, an older build may need a backup restored
+with `attn db restore`.
 
 ## Open a shell on an outpost
 
@@ -236,8 +163,8 @@ Before the first sync, attn moves a non-empty outpost folder it has no index for
 to `<root>.before-sync-<date>`. The outpost row names that saved folder. The home
 supplies the initial contents. Later connections resume from the existing index.
 Changing `notebook.root` while paired sync is active refuses and names the peers.
-Turn Outposts off at the home, or clear `outpost_listen` on the outpost, before
-changing that machine's root.
+Turn Outposts off at the home before changing its root. On an outpost, run
+`attn enrollment leave` before changing its root.
 
 Settings → Outposts shows first sync, syncing with the bytes and items left,
 in sync, or the error and its reason. Byte and item counts appear once the
@@ -263,7 +190,7 @@ marker under `.attn` and adds no `.stfolder` or `.stignore`. If the marker or ro
 is removed later, sync stops with an error instead of spreading deletions.
 
 The engine runs at the home while Outposts is on and a paired outpost remains.
-On an outpost it runs while enrolled and listening, including while disconnected.
+On an outpost it runs while enrolled, including while disconnected.
 Turning the home switch off stops its engine and keeps its index. Removing an
 outpost drops that device from the home. `attn enrollment leave` stops the
 outpost's engine and drops its index, retaining its Notebook files. The next
@@ -342,11 +269,11 @@ outpost, `attn settings list --all` shows its side: `outpost_state`,
 | Refused because | What to do |
 | --- | --- |
 | the two use different instance names | Start an outpost with the same instance name as the home. |
-| the two run different builds | Click **Update to home build**. Older outposts need the manual install described above. |
+| the two run different builds | Install the home's matching binary at the path described above. |
 | the outpost changed host key or daemon id | It was reinstalled or its data folder replaced. If you expect that, **Re-pair** it. |
 | the outpost is paired to another home | Run `attn enrollment leave` on the outpost. This home pairs on its next try. |
-| no ssh-agent, no keys in it, or no key accepted | Load your key with `ssh-add`, and check it is in the outpost's `authorized_keys`. |
-| it is the same outpost as another row | You added it twice under two addresses. Remove one. |
+| ssh refuses authentication or a host key | Run `ssh <destination>` in your terminal and follow ssh's message. attn never prompts from the daemon. |
+| it is the same outpost as another row | You added it twice under two destinations. Remove one. |
 
 ## Remove an outpost
 
@@ -361,39 +288,19 @@ home only. Run `attn enrollment leave` on the outpost to stop those shells.
 Turning Outposts off disconnects every outpost and keeps the list for next
 time. Their terminals show offline until you turn Outposts on again.
 
-## Checking a change to outposts (for contributors)
+## Checking a change to outposts
 
-`scripts/verify-outposts.py` runs two isolated attns on one machine, pairs
-them, freezes the outpost and checks that it goes stalled, lost and back to
-connected. `scripts/verify-outpost-systemd.py` runs on a Linux box with
-systemd. It starts the outpost under the unit from this page and checks that
-two shells keep their process, screen and state through
-`systemctl --user restart`, `attn daemon stop` followed by
-`systemctl --user start`, a daemon crash, and an update to another build.
-Run either with `--help` for its arguments.
-
-For a real bridge check, `scripts/outpost-instance.py` starts a named outpost
-on ai-sandbox with its own binary, data folder, listener and systemd user unit.
-Copy the script and Linux binary there, then run it through Bash (the login
-shell is fish):
+The stack tests in `cmd/attn` pair through testworld's fake ssh and run real
+daemons, bridge processes and terminal workers. Run the focused lifecycle check:
 
 ```sh
-scp scripts/outpost-instance.py /tmp/attn-outpost ai-sandbox:/tmp/
-ssh ai-sandbox bash -s <<'EOF'
-python3 /tmp/outpost-instance.py start --instance router-check --binary /tmp/attn-outpost --listen 127.0.0.1:17777
-EOF
+go test ./cmd/attn -run TestSSH -v
 ```
 
-Pair it only with the Mac's `router-check` instance. The example listens on
-localhost, so reach it through an SSH tunnel from the Mac, or pass `--listen`
-an address the Mac can reach directly. When finished, run:
-
-```sh
-ssh ai-sandbox bash -s <<'EOF'
-python3 /tmp/outpost-instance.py remove --instance router-check
-EOF
-```
-
-The helper stops the user unit and cleans the instance before removing its
-binary and unit file. If cleanup cannot stop a worker, it preserves the
-instance data and reports what remains. Resolve that failure and rerun removal.
+For the user's real ssh route, use `scripts/verify-ssh-outposts/transport.mjs`.
+It requires a named Mac instance and the same-named Linux binary already at
+its install path. It adds the destination, checks daemon and shell survival
+through a master exit, and records typing echo beside a plain echo on the
+same master. Its receipt and sample files support the latency analysis.
+Use `--mode bulk` with a copied Notebook to measure a first sync. The harness
+removes the instances and scratch files it starts.

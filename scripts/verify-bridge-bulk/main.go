@@ -49,7 +49,6 @@ func main() {
 	serve := flag.Bool("serve", false, "serve the isolated bridge and real shell")
 	address := flag.String("address", "", "dedicated test bridge address")
 	data := flag.String("data", "", "isolated instance data directory")
-	key := flag.String("keys", "", "test server's authorized_keys file")
 	size := flag.Int64("bytes", 1_000_000_000, "total duplex payload bytes")
 	raw := flag.Bool("ssh-only", false, "use only SSH's channel window")
 	flag.Parse()
@@ -63,7 +62,7 @@ func main() {
 	var err error
 	if *serve {
 		self.DaemonID = "bulk-proof-outpost"
-		err = server(ctx, *address, *data, *key, self)
+		err = server(ctx, *address, *data, self)
 	} else {
 		err = measure(ctx, *address, self, transfer{Bytes: *size / 2, Raw: *raw})
 	}
@@ -73,7 +72,7 @@ func main() {
 	}
 }
 
-func server(ctx context.Context, address, data, keys string, self bridge.Identity) error {
+func server(ctx context.Context, address, data string, self bridge.Identity) error {
 	if err := os.MkdirAll(data, 0700); err != nil {
 		return err
 	}
@@ -137,12 +136,12 @@ func server(ctx context.Context, address, data, keys string, self bridge.Identit
 			}()
 		},
 	}
-	listener, err := net.Listen("tcp", address)
+	listener, err := net.Listen("unix", address)
 	if err != nil {
 		return err
 	}
 	fmt.Println("ready", listener.Addr())
-	return bridge.Serve(ctx, listener, bridge.ServerConfig{Self: self, HostKeyPath: filepath.Join(data, "bridge_host_key"), AuthorizedKeys: func() ([]byte, error) { return os.ReadFile(keys) }, Handlers: handlers, OnError: func(err error) { fmt.Fprintln(os.Stderr, err) }}, func(c *bridge.Conn) {
+	return bridge.Serve(ctx, listener, bridge.ServerConfig{Self: self, HostKeyPath: filepath.Join(data, "bridge_host_key"), Handlers: handlers, OnError: func(err error) { fmt.Fprintln(os.Stderr, err) }}, func(c *bridge.Conn) {
 		go func() {
 			watchBridge(c)
 			fmt.Fprintln(os.Stderr, "bridge_ended:", c.Err())
@@ -152,7 +151,11 @@ func server(ctx context.Context, address, data, keys string, self bridge.Identit
 }
 
 func measure(ctx context.Context, address string, self bridge.Identity, request transfer) error {
-	c, _, err := bridge.Dial(ctx, bridge.DialConfig{Address: address, Self: self, AgentSocket: os.Getenv("SSH_AUTH_SOCK")})
+	raw, err := (&net.Dialer{}).DialContext(ctx, "unix", address)
+	if err != nil {
+		return err
+	}
+	c, _, err := bridge.Dial(ctx, bridge.DialConfig{Conn: raw, Self: self})
 	if err != nil {
 		return err
 	}

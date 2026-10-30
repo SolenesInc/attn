@@ -7,13 +7,13 @@ import { initialState } from './test/scriptedDaemon';
 
 type Outpost = EventMessage<'outposts_updated'>['outposts'][number];
 const connected: Outpost = {
-  id: 'outpost-1', name: 'studio', address: 'studio:2200', state: 'connected', reach: 'reachable',
+  id: 'outpost-1', name: 'studio', destination: 'studio:2200', state: 'connected', reach: 'reachable',
   state_since: '2026-10-18T18:00:00Z', daemon_id: 'studio-daemon',
   host_key_fingerprint: 'SHA256:studio-key', build: 'v0.12.0 (source abc, protocol def)',
 };
 const enabled = { outposts_enabled: 'true' };
 const name = () => screen.getByRole('textbox', { name: 'Name' });
-const address = () => screen.getByRole('textbox', { name: 'Address' });
+const address = () => screen.getByRole('textbox', { name: 'ssh destination' });
 const form = () => screen.getByRole('form', { name: 'Add an outpost' });
 function fill(nextName: string, nextAddress: string) {
   fireEvent.change(name(), { target: { value: nextName } });
@@ -35,12 +35,12 @@ describe('Outposts settings', () => {
     expect(screen.getByTestId('settings-section-connectivity')).toBeInTheDocument();
   });
 
-  it('adds by name and address, retaining the draft until a snapshot confirms it', async () => {
+  it('adds by name and ssh destination, retaining the draft until a snapshot confirms it', async () => {
     const daemon = await openSection('outposts', { settings: enabled }, scripted => {
       scripted.on('add_outpost', () => {});
     });
     await gesture(daemon, () => { fill(' studio ', ' studio:2200 '); fireEvent.submit(form()); });
-    expect(daemon.sentOf('add_outpost')).toEqual([{ cmd: 'add_outpost', name: 'studio', address: 'studio:2200' }]);
+    expect(daemon.sentOf('add_outpost')).toEqual([{ cmd: 'add_outpost', name: 'studio', destination: 'studio:2200' }]);
     expect(name()).toHaveValue(' studio ');
     const commands = [...daemon.sent];
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [connected] }));
@@ -53,6 +53,12 @@ describe('Outposts settings', () => {
     expect(row.getByText(connected.daemon_id!)).toBeInTheDocument();
     expect(row.getByText(new Date(connected.state_since).toLocaleString())).toHaveAttribute('datetime', connected.state_since);
     expect(daemon.sent).toEqual(commands);
+  });
+
+  it('requires only the ssh destination and defaults the name to it', async () => {
+    const daemon = await openSection('outposts', { settings: enabled }, scripted => { scripted.on('add_outpost', () => {}); });
+    await gesture(daemon, () => { fireEvent.change(address(), { target: { value: ' user@host ' } }); fireEvent.submit(form()); });
+    expect(daemon.sentOf('add_outpost')).toEqual([{ cmd: 'add_outpost', name: 'user@host', destination: 'user@host' }]);
   });
 
   it('preserves a failed or edited draft and shows command failures without clearing them on unrelated updates', async () => {
@@ -69,7 +75,7 @@ describe('Outposts settings', () => {
     daemon.on('add_outpost', () => {});
     await gesture(daemon, () => { fill('laptop', 'laptop:2200'); fireEvent.submit(form()); });
     await gesture(daemon, () => fill('next machine', 'next:2200'));
-    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [connected, { ...connected, id: 'laptop', name: 'laptop', address: 'laptop:2200' }] }));
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [connected, { ...connected, id: 'laptop', name: 'laptop', destination: 'laptop:2200' }] }));
     expect(name()).toHaveValue('next machine');
     expect(address()).toHaveValue('next:2200');
     expect(screen.queryByRole('alert')).toBeNull();

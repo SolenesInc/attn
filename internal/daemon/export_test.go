@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/bridge/memnet"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type WireDaemon struct {
@@ -21,6 +23,7 @@ type WireDaemon struct {
 
 func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, terminals ptybackend.Backend, nativeWatch bool, gardenClock ...func() time.Time) (*WireDaemon, error) {
 	d := New(socketPath)
+	d.outpost.listen = func(string, string) (net.Listener, error) { return memnet.Listen(), nil }
 	d.notebookSyncWatch = nativeWatch
 	if len(gardenClock) > 0 {
 		d.gardenNow = gardenClock[0]
@@ -62,11 +65,9 @@ func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
 const BridgeCallRecovery = bridgeCallRecovery
 
 func (w *WireDaemon) UseBridgeDialer(dial func(ctx context.Context, network, address string) (net.Conn, error)) {
-	w.d.outposts.dial = dial
-}
-
-func (w *WireDaemon) UseBridgeListener(listen func(string, string) (net.Listener, error)) {
-	w.d.outpost.listen = listen
+	w.d.outposts.dial = func(ctx context.Context, row store.Outpost) (net.Conn, error) {
+		return dial(ctx, "ssh", row.Destination)
+	}
 }
 
 func UseShippedPasteGap(t testing.TB) {

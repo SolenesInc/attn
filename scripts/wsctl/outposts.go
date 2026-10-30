@@ -17,7 +17,7 @@ import (
 func outposts(args []string) error {
 	fs := flag.NewFlagSet("outposts", flag.ContinueOnError)
 	add := fs.String("add", "", "add an outpost with this name")
-	address := fs.String("address", "", "address:port for --add")
+	destination := fs.String("destination", "", "ssh destination for --add")
 	remove := fs.String("remove", "", "remove this outpost id")
 	update := fs.String("update", "", "update this outpost to the home build and wait for its outcome")
 	repair := fs.String("repair", "", "clear this outpost's pins and redial")
@@ -35,8 +35,8 @@ func outposts(args []string) error {
 	if actions > 1 {
 		return errors.New("choose only one of --add, --remove, --repair or --update")
 	}
-	if *add != "" && *address == "" {
-		return errors.New("--add requires --address")
+	if *add != "" && *destination == "" {
+		return errors.New("--add requires --destination")
 	}
 	switch *until {
 	case "", "connecting", "connected", "stalled", "lost", "refused":
@@ -78,7 +78,7 @@ func outposts(args []string) error {
 		var command any
 		switch {
 		case *add != "":
-			command = protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: *add, Address: *address}
+			command = protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: *add, Destination: *destination}
 		case *update != "":
 			command = protocol.UpdateOutpostMessage{Cmd: protocol.CmdUpdateOutpost, ID: *update}
 		case *remove != "":

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -24,6 +26,7 @@ type outpostDial struct {
 	lastError    string
 	lastErrorAt  string
 	errorKind    string
+	connectable  bool
 	notebook     *protocol.OutpostNotebook
 	notebookRoot string
 }
@@ -34,7 +37,7 @@ type outpostsRuntime struct {
 	dialers map[string]*outpostDial
 	pushes  map[string]*outpostPush
 	changed chan struct{}
-	dial    func(context.Context, string, string) (net.Conn, error)
+	dial    func(context.Context, store.Outpost) (net.Conn, error)
 }
 
 func (d *Daemon) outpostsEnabled() bool {
@@ -69,6 +72,8 @@ func (d *Daemon) configureOutposts() {
 		for _, row := range rows {
 			if enabled {
 				d.startOutpostDial(row)
+			} else if err := d.outpostSSH(row).ExitMaster(d.life.Context()); err != nil {
+				d.logf("stop outpost master %s: %v", row.Name, err)
 			}
 			d.publishFact(FactOutpostChanged, row.ID, nil)
 		}
@@ -113,7 +118,10 @@ func (d *Daemon) updateOutpost(id string, run *outpostDial, state bridge.State, 
 		r.mu.Unlock()
 		return
 	}
-	changed := run.state != state
+	var sshError *outpostssh.Error
+	connectable := errors.As(err, &sshError) && sshError.Connectable()
+	changed := run.state != state || run.connectable != connectable
+	run.connectable = connectable
 	connected := changed && state == bridge.StateConnected
 	if changed {
 		run.state, run.since = state, time.Now().UTC().Format(time.RFC3339Nano)
@@ -172,7 +180,14 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		if row.HostKey != "" {
 			pin = &bridge.Pin{HostKey: row.HostKey, DaemonID: row.DaemonID}
 		}
-		conn, seen, err := bridge.Dial(ctx, bridge.DialConfig{Address: row.Address, Pin: pin, Self: d.bridgeIdentity(), AgentSocket: os.Getenv("SSH_AUTH_SOCK"), DialContext: d.outposts.dial, Handlers: d.homeHandlers(row.ID), CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
+
+		pipe, err := d.openOutpostPipe(ctx, row)
+		var conn *bridge.Conn
+		var seen *bridge.Pin
+		if err == nil {
+			conn, seen, err = bridge.Dial(ctx, bridge.DialConfig{Conn: pipe, Pin: pin, Self: d.bridgeIdentity(), Handlers: d.homeHandlers(row.ID), CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
+		}
+
 		if ctx.Err() != nil {
 			if conn != nil {
 				_ = conn.Close()
@@ -193,7 +208,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 				if conflict := d.outpostConflict(row.ID, seen.HostKey, seen.DaemonID); conflict != nil {
 					err = conflict
 				} else {
-					err = fmt.Errorf("pin outpost %s (%s): %w", row.Name, row.Address, err)
+					err = fmt.Errorf("pin outpost %s (%s): %w", row.Name, row.Destination, err)
 				}
 			} else {
 				row.HostKey, row.DaemonID = seen.HostKey, seen.DaemonID
@@ -205,6 +220,10 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			state, delay := bridge.StateLost, bridge.ReconnectInterval
 			var refusal *bridge.Refusal
 			build := ""
+			var sshError *outpostssh.Error
+			if errors.As(err, &sshError) && sshError.Connectable() {
+				state, delay = bridge.StateRefused, bridge.LostAfter
+			}
 			if errors.As(err, &refusal) {
 				state, delay = bridge.StateRefused, bridge.LostAfter
 				if refusal.Peer != nil {
@@ -295,8 +314,42 @@ func (d *Daemon) outpostConflict(id, hostKey, daemonID string) *bridge.Refusal {
 	}
 	for _, row := range rows {
 		if row.ID != id && (hostKey != "" && row.HostKey == hostKey || daemonID != "" && row.DaemonID == daemonID) {
-			return &bridge.Refusal{Reason: "identity", Detail: fmt.Sprintf("same outpost as %s (%s), daemon %s; remove one of these outpost rows", row.Name, row.Address, row.DaemonID)}
+			return &bridge.Refusal{Reason: "identity", Detail: fmt.Sprintf("same outpost as %s (%s), daemon %s; remove one of these outpost rows", row.Name, row.Destination, row.DaemonID)}
 		}
+	}
+	return nil
+}
+
+func (d *Daemon) outpostSSH(row store.Outpost) *outpostssh.Client {
+	return outpostssh.For(row.Destination, outpostssh.ControlPath(config.InstanceLabel(), row.ID), config.InstanceLabel())
+}
+func (d *Daemon) openOutpostPipe(ctx context.Context, row store.Outpost) (net.Conn, error) {
+	if d.outposts.dial != nil {
+		return d.outposts.dial(ctx, row)
+	}
+	if _, _, err := net.SplitHostPort(row.Destination); err == nil && !strings.HasPrefix(row.Destination, "ssh://") {
+		return nil, &bridge.Refusal{Reason: "destination", Detail: fmt.Sprintf("added by bridge address %s; remove it and add it again by the name you use with ssh", row.Destination)}
+	}
+	remote := d.outpostSSH(row)
+	if err := remote.EnsureMaster(ctx); err != nil {
+		return nil, err
+	}
+	probe, err := remote.Probe(ctx)
+	if err != nil {
+		var sshError *outpostssh.Error
+		if errors.As(err, &sshError) {
+			return nil, err
+		}
+		return nil, &bridge.Refusal{Reason: "platform", Detail: err.Error()}
+	}
+	if probe.Build == nil {
+		return nil, &bridge.Refusal{Reason: "build", Detail: "nothing installed; install the home's build by hand at " + remote.InstallPath()}
+	}
+	return remote.Bridge(ctx)
+}
+func validateOutpostDestination(destination string) error {
+	if strings.TrimSpace(destination) != destination || destination == "" || strings.HasPrefix(destination, "-") || strings.ContainsAny(destination, "\r\n\x00") {
+		return fmt.Errorf("ssh destination must be nonempty, must not start with a dash, and must not contain surrounding whitespace or control characters")
 	}
 	return nil
 }

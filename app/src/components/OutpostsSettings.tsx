@@ -35,22 +35,22 @@ export function OutpostsSettings() {
   const removeButton = useRef<HTMLButtonElement>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [submitted, setSubmitted] = useState<{ name: string; address: string } | null>(null);
+  const [destination, setDestination] = useState('');
+  const [submitted, setSubmitted] = useState<{ name: string; destination: string } | null>(null);
 
   useEffect(() => {
-    if (!submitted || !outposts.some(row => row.name === submitted.name && row.address === submitted.address)) return;
-    if (name.trim() === submitted.name && address.trim() === submitted.address) {
+    if (!submitted || !outposts.some(row => row.name === submitted.name && row.destination === submitted.destination)) return;
+    if ((name.trim() || destination.trim()) === submitted.name && destination.trim() === submitted.destination) {
       setName('');
-      setAddress('');
+      setDestination('');
     }
     setSubmitted(null);
-  }, [outposts, submitted, name, address]);
+  }, [outposts, submitted, name, destination]);
 
   function add(event: FormEvent) {
     event.preventDefault();
-    const row = { name: name.trim(), address: address.trim() };
-    if (sendAddOutpost(row.name, row.address) && !outposts.some(existing => existing.address === row.address)) setSubmitted(row);
+    const row = { name: name.trim() || destination.trim(), destination: destination.trim() };
+    if (sendAddOutpost(row.name, row.destination) && !outposts.some(existing => existing.destination === row.destination)) setSubmitted(row);
   }
 
   return (
@@ -63,13 +63,13 @@ export function OutpostsSettings() {
         <form className="settings-block-body" aria-label="Add an outpost" onSubmit={add}>
           <div className="settings-field">
             <label className="settings-label" htmlFor="outpost-name">Name</label>
-            <input id="outpost-name" className="settings-input" value={name} onChange={event => setName(event.target.value)} required />
+            <input id="outpost-name" className="settings-input" value={name} onChange={event => setName(event.target.value)} placeholder={destination.trim() || 'Optional'} />
           </div>
           <div className="settings-field">
-            <label className="settings-label" htmlFor="outpost-address">Address</label>
-            <input id="outpost-address" className="settings-input" value={address} onChange={event => setAddress(event.target.value)} placeholder="hostname:port" autoCapitalize="none" autoCorrect="off" spellCheck={false} required />
+            <label className="settings-label" htmlFor="outpost-destination">ssh destination</label>
+            <input id="outpost-destination" className="settings-input" value={destination} onChange={event => setDestination(event.target.value)} placeholder="user@host" autoCapitalize="none" autoCorrect="off" spellCheck={false} required />
           </div>
-          <div><button type="submit" className="settings-action" disabled={!isConnected || !name.trim() || !address.trim()}>Add outpost</button></div>
+          <div><button type="submit" className="settings-action" disabled={!isConnected || !destination.trim()}>Add outpost</button></div>
         </form>
       </section>
       {outpostCommandError && <div className="settings-warning" role="alert">{outpostCommandError}</div>}
@@ -89,7 +89,7 @@ export function OutpostsSettings() {
                 return (
                   <li key={row.id} className="settings-outpost" aria-label={row.name}>
                     <div className="settings-row-card">
-                      <div><h4 className="settings-row-title">{row.name}</h4><p className="settings-row-copy">{row.address}</p></div>
+                      <div><h4 className="settings-row-title">{row.name}</h4><p className="settings-row-copy">{row.destination}</p></div>
                       <span className={`settings-pill ${stateTone[row.state]}`}>{row.state}</span>
                     </div>
                     <div className="settings-meta-row"><span>Since</span><Timestamp value={row.state_since} /></div>

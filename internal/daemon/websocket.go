@@ -1122,7 +1122,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleUpdateOutpost(client, msg.(*protocol.UpdateOutpostMessage).ID)
 	case protocol.CmdAddOutpost:
 		m := msg.(*protocol.AddOutpostMessage)
-		d.handleOutpostCommand(client, "add", "", m.Name, m.Address)
+		d.handleOutpostCommand(client, "add", "", m.Name, m.Destination)
 	case protocol.CmdRemoveOutpost:
 		m := msg.(*protocol.RemoveOutpostMessage)
 		d.handleOutpostCommand(client, "remove", m.ID, "", "")

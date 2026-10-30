@@ -72,9 +72,7 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == string(settingOutpostsEnabled) {
 		d.configureOutposts()
 	}
-	if key == string(settingOutpostListen) {
-		d.configureOutpostListener()
-	}
+
 	if harness, ok := isAgentExecutableSettingKey(key); ok {
 		d.invalidateHarnessModels(harness)
 	}

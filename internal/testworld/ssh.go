@@ -1,105 +1,422 @@
 package testworld
 
 import (
+	"bytes"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
+	"syscall"
 	"testing"
-	"time"
-
-	"github.com/victorarias/attn/internal/fakeagent"
-	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
 )
 
-type SSHAgent struct {
-	Socket      string
-	PublicKey   []byte
-	mu          sync.Mutex
-	connections int
-	changed     chan struct{}
+type SSH struct {
+	t         testing.TB
+	Dir       string
+	mu        sync.Mutex
+	routes    map[string]string
+	reachable map[string]string
 }
 
-func NewSSHAgent(t testing.TB) *SSHAgent {
+func NewSSH(t testing.TB) *SSH {
 	t.Helper()
-	_, key, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pub, err := ssh.NewPublicKey(key.Public())
-	if err != nil {
-		t.Fatal(err)
-	}
-	keyring := agent.NewKeyring()
-	if err := keyring.Add(agent.AddedKey{PrivateKey: key}); err != nil {
-		t.Fatal(err)
-	}
 	dir, err := os.MkdirTemp("/tmp", "attn-ssh-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	socket := filepath.Join(dir, "ssh-agent.sock")
-	listener, err := net.Listen("unix", socket)
+	s := &SSH{t: t, Dir: dir, routes: map[string]string{}, reachable: map[string]string{}}
+	s.save()
+	t.Cleanup(func() {
+		paths, _ := filepath.Glob(filepath.Join(s.Dir, "masters", "*.sock"))
+		for _, path := range paths {
+			conn, err := net.Dial("unix", path)
+			if err == nil {
+				_, _ = io.WriteString(conn, "exit\n")
+				_, _ = io.Copy(io.Discard, conn)
+				conn.Close()
+			}
+		}
+	})
+	return s
+}
+func (s *SSH) save() {
+	data, _ := json.Marshal(s.routes)
+	if err := os.WriteFile(filepath.Join(s.Dir, "routes.json"), data, 0600); err != nil {
+		s.t.Fatal(err)
+	}
+}
+func (s *SSH) Use(w *World) {
+	w.T.Helper()
+	binary, err := os.Executable()
 	if err != nil {
-		t.Fatal(err)
+		w.T.Fatal(err)
+	}
+	bin := filepath.Join(w.Dir, "ssh-bin")
+	if err := os.MkdirAll(bin, 0700); err != nil {
+		w.T.Fatal(err)
+	}
+	script := "#!/bin/sh\nATTN_TESTWORLD_SSH=client exec \"" + binary + "\" \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte(script), 0700); err != nil {
+		w.T.Fatal(err)
+	}
+	path := os.Getenv("PATH")
+	for _, v := range w.Vars {
+		if strings.HasPrefix(v, "PATH=") {
+			path = strings.TrimPrefix(v, "PATH=")
+		}
+	}
+	w.Vars = append(w.Vars, "PATH="+bin+":"+path, "ATTN_TESTWORLD_SSH_ROUTES="+filepath.Join(s.Dir, "routes.json"), "ATTN_HARNESS_CONTROL_ROOT="+filepath.Join(s.Dir, "masters"))
+}
+func (s *SSH) Route(destination string, remote *Stack) {
+	s.t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	root := filepath.Join(remote.Dir, "install")
+	if err := os.MkdirAll(filepath.Join(root, ".local", "bin"), 0700); err != nil {
+		s.t.Fatal(err)
+	}
+	data, err := os.ReadFile(remote.binary)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	target := filepath.Join(root, ".local", "bin", "attn")
+	if err = os.WriteFile(target+".next", data, 0700); err != nil {
+		s.t.Fatal(err)
+	}
+	if err = os.Rename(target+".next", target); err != nil {
+		s.t.Fatal(err)
+	}
+	bin := filepath.Join(remote.Dir, "machine-bin")
+	if err = os.MkdirAll(bin, 0700); err != nil {
+		s.t.Fatal(err)
+	}
+	for name, body := range map[string]string{"uname": "echo Linux x86_64", "busctl": "echo b false"} {
+		if err = os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {
+			s.t.Fatal(err)
+		}
+	}
+	path := os.Getenv("PATH")
+	for _, v := range remote.Vars {
+		if strings.HasPrefix(v, "PATH=") {
+			path = strings.TrimPrefix(v, "PATH=")
+		}
+	}
+	env := append(remote.env(), "PATH="+bin+":"+path, "ATTN_HARNESS_OUTPOST_INSTALL_ROOT="+root)
+	socket := filepath.Join(s.Dir, fmt.Sprintf("machine-%d.sock", len(s.routes)))
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	lifeline, holder, err := os.Pipe()
+	if err != nil {
+		s.t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	var connections sync.WaitGroup
-	a := &SSHAgent{Socket: socket, PublicKey: ssh.MarshalAuthorizedKey(pub), changed: make(chan struct{})}
-	stopped := make(chan struct{})
+	var workers sync.WaitGroup
+	done := make(chan struct{})
 	go func() {
-		defer close(stopped)
+		defer close(done)
 		for {
-			conn, err := listener.Accept()
+			conn, err := listener.AcceptUnix()
 			if err != nil {
 				return
 			}
-			a.mu.Lock()
-			a.connections++
-			close(a.changed)
-			a.changed = make(chan struct{})
-			a.mu.Unlock()
-			connections.Go(func() {
+			workers.Go(func() {
 				defer conn.Close()
-				stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+				stop := context.AfterFunc(ctx, func() { conn.Close() })
 				defer stop()
-				_ = agent.ServeAgent(keyring, conn)
+				var req struct {
+					Script, ResultFile string
+					Lifeline           bool
+				}
+				if err := readSSHRequest(conn, &req); err != nil {
+					return
+				}
+				if req.Lifeline {
+					_, _ = io.Copy(io.Discard, conn)
+					return
+				}
+				cmd := exec.CommandContext(ctx, "sh", "-c", req.Script)
+				cmd.Env = append(env, "ATTN_HARNESS_LIFELINE_FD=3")
+				cmd.ExtraFiles = []*os.File{lifeline}
+				ws, err := remote.wsListener.File()
+				if err != nil {
+					return
+				}
+				defer ws.Close()
+				cmd.ExtraFiles = append(cmd.ExtraFiles, ws)
+				cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=4")
+				input, err := conn.File()
+				if err != nil {
+					return
+				}
+				defer input.Close()
+				cmd.Stdin = input
+				cmd.Stdout = conn
+				var stderr bytes.Buffer
+				cmd.Stderr = &stderr
+				err = cmd.Run()
+				code := 0
+				if err != nil {
+					code = -1
+					if cmd.ProcessState != nil {
+						code = cmd.ProcessState.ExitCode()
+					}
+				}
+				result, _ := json.Marshal(struct {
+					Code   int
+					Stderr string
+				}{code, stderr.String()})
+				_ = os.WriteFile(req.ResultFile, result, 0600)
 			})
 		}
 	}()
-	t.Cleanup(func() { cancel(); _ = listener.Close(); <-stopped; connections.Wait() })
-	return a
+	s.t.Cleanup(func() {
+		holder.Close()
+		cancel()
+		listener.Close()
+		<-done
+		workers.Wait()
+		lifeline.Close()
+	})
+	s.routes[destination] = socket
+	s.reachable[destination] = socket
+	s.save()
 }
 
-func (a *SSHAgent) AwaitConnections(t testing.TB, count int) {
-	t.Helper()
-	guard := time.NewTimer(fakeagent.HangGuard)
-	defer guard.Stop()
+func (s *SSH) Restore(destination string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routes[destination] = s.reachable[destination]
+	s.save()
+}
+func (s *SSH) Fail(destination, stderr string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routes[destination] = "error:" + stderr
+	s.save()
+}
+
+func RunSSH() {
+	mode := os.Getenv("ATTN_TESTWORLD_SSH")
+	if mode == "" {
+		return
+	}
+	if mode == "master" {
+		serveFakeMaster()
+		os.Exit(0)
+	}
+	args := os.Args[1:]
+	control, action, destination, script := "", "", "", ""
+	master := false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-o":
+			i++
+			if i >= len(args) {
+				os.Exit(2)
+			}
+			option := args[i]
+			if strings.HasPrefix(option, "ControlPath=") {
+				control = strings.TrimPrefix(option, "ControlPath=")
+			}
+			if option == "ControlMaster=yes" {
+				master = true
+			}
+		case "-O":
+			i++
+			action = args[i]
+		default:
+			if !strings.HasPrefix(args[i], "-") {
+				if destination == "" {
+					destination = args[i]
+				} else {
+					script = args[i]
+				}
+			}
+		}
+	}
+	fail := func(detail string) { fmt.Fprintln(os.Stderr, detail); os.Exit(255) }
+	if action != "" {
+		conn, err := net.Dial("unix", control)
+		if err != nil {
+			fail("Control socket connect: " + err.Error())
+		}
+		defer conn.Close()
+		_, _ = io.WriteString(conn, action+"\n")
+		answer, err := io.ReadAll(conn)
+		if err != nil {
+			fail(err.Error())
+		}
+		if action == "check" && string(answer) != "running\n" {
+			fail("Control master is not running")
+		}
+		os.Exit(0)
+	}
+	data, err := os.ReadFile(os.Getenv("ATTN_TESTWORLD_SSH_ROUTES"))
+	if err != nil {
+		fail(err.Error())
+	}
+	var routes map[string]string
+	_ = json.Unmarshal(data, &routes)
+	route := routes[destination]
+	if strings.HasPrefix(route, "error:") {
+		fail(strings.TrimPrefix(route, "error:"))
+	}
+	if route == "" {
+		fail("ssh: Could not resolve hostname " + destination + ": nodename nor servname provided, or not known")
+	}
+	if master {
+		binary, _ := os.Executable()
+		ready, signal, _ := os.Pipe()
+		cmd := exec.Command(binary)
+		cmd.Env = append(os.Environ(), "ATTN_TESTWORLD_SSH=master", "ATTN_TESTWORLD_MASTER="+control, "ATTN_TESTWORLD_DESTINATION="+destination)
+		cmd.ExtraFiles = []*os.File{signal}
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		if err = cmd.Start(); err != nil {
+			fail(err.Error())
+		}
+		signal.Close()
+		var b [1]byte
+		_, err = ready.Read(b[:])
+		ready.Close()
+		if err != nil {
+			fail(err.Error())
+		}
+		os.Exit(0)
+	}
+	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: control, Net: "unix"})
+	if err != nil {
+		fail("Control socket connect: " + err.Error())
+	}
+	_, _ = io.WriteString(conn, "run\n")
+	result, err := os.CreateTemp(filepath.Dir(os.Getenv("ATTN_TESTWORLD_SSH_ROUTES")), "ssh-result-")
+	if err != nil {
+		fail(err.Error())
+	}
+	result.Close()
+	_ = json.NewEncoder(conn).Encode(struct{ Script, ResultFile string }{script, result.Name()})
+	go func() { _, _ = io.Copy(conn, os.Stdin); _ = conn.CloseWrite() }()
+	_, _ = io.Copy(os.Stdout, conn)
+	conn.Close()
+	data, err = os.ReadFile(result.Name())
+	_ = os.Remove(result.Name())
+	var status struct {
+		Code   int
+		Stderr string
+	}
+	if err != nil || json.Unmarshal(data, &status) != nil {
+		fail("ssh: connection to master closed")
+	}
+	_, _ = io.WriteString(os.Stderr, status.Stderr)
+	os.Exit(status.Code)
+}
+func serveFakeMaster() {
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: os.Getenv("ATTN_TESTWORLD_MASTER"), Net: "unix"})
+	if err != nil {
+		return
+	}
+	signal := os.NewFile(3, "ready")
+	_, _ = signal.Write([]byte{1})
+	signal.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	defer listener.Close()
+	data, _ := os.ReadFile(os.Getenv("ATTN_TESTWORLD_SSH_ROUTES"))
+	var routes map[string]string
+	_ = json.Unmarshal(data, &routes)
+	lifeline, err := net.Dial("unix", routes[os.Getenv("ATTN_TESTWORLD_DESTINATION")])
+	if err != nil {
+		return
+	}
+	defer lifeline.Close()
+	_ = json.NewEncoder(lifeline).Encode(struct{ Lifeline bool }{true})
+	go func() { _, _ = io.Copy(io.Discard, lifeline); cancel(); listener.Close() }()
+	var workers sync.WaitGroup
+	defer workers.Wait()
+	defer cancel()
 	for {
-		a.mu.Lock()
-		seen, changed := a.connections, a.changed
-		a.mu.Unlock()
-		if seen >= count {
+		conn, err := listener.AcceptUnix()
+		if err != nil {
 			return
 		}
-		select {
-		case <-changed:
-		case <-guard.C:
-			t.Fatalf("ssh-agent saw %d connections, want %d", seen, count)
+		var first [1]byte
+		action := ""
+		for {
+			if _, err = conn.Read(first[:]); err != nil {
+				break
+			}
+			if first[0] == '\n' {
+				break
+			}
+			action += string(first[:])
 		}
+		if action == "exit" {
+			listener.Close()
+			cancel()
+			workers.Wait()
+			conn.Close()
+			return
+		}
+		if action != "run" {
+			if action == "check" {
+				_, _ = io.WriteString(conn, "running\n")
+			}
+			conn.Close()
+			continue
+		}
+		workers.Go(func() {
+			defer conn.Close()
+			stop := context.AfterFunc(ctx, func() { conn.Close() })
+			defer stop()
+			data, _ := os.ReadFile(os.Getenv("ATTN_TESTWORLD_SSH_ROUTES"))
+			var routes map[string]string
+			_ = json.Unmarshal(data, &routes)
+			remote, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: routes[os.Getenv("ATTN_TESTWORLD_DESTINATION")], Net: "unix"})
+			if err != nil {
+				return
+			}
+			defer remote.Close()
+			stopRemote := context.AfterFunc(ctx, func() { remote.Close() })
+			defer stopRemote()
+			input := make(chan struct{})
+			go func() { defer close(input); _, _ = io.Copy(remote, conn); _ = remote.CloseWrite() }()
+			_, _ = io.Copy(conn, remote)
+			_ = conn.CloseWrite()
+			conn.CloseRead()
+			<-input
+		})
 	}
 }
 
-func (a *SSHAgent) Authorize(w *World) {
-	w.T.Helper()
-	path := filepath.Join(w.Dir, "authorized_keys")
-	if err := os.WriteFile(path, a.PublicKey, 0600); err != nil {
-		w.T.Fatal(err)
+func readSSHRequest(conn net.Conn, request any) error {
+	var line []byte
+	var next [1]byte
+	for {
+		if _, err := io.ReadFull(conn, next[:]); err != nil {
+			return err
+		}
+		if next[0] == 10 {
+			break
+		}
+		line = append(line, next[0])
 	}
-	w.Vars = append(w.Vars, "ATTN_AUTHORIZED_KEYS_PATH="+path, "SSH_AUTH_SOCK="+a.Socket)
+	return json.Unmarshal(line, request)
+}
+
+func (s *SSH) ExitMaster(home *Stack, host string) {
+	home.T.Helper()
+	path := filepath.Join(s.Dir, "masters", "default-"+strings.ReplaceAll(host, "-", "")[:12]+".sock")
+	cmd := exec.Command(filepath.Join(home.Dir, "ssh-bin", "ssh"), "-o", "ControlPath="+path, "-O", "exit", "unused")
+	cmd.Env = home.env()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		home.T.Fatalf("exit fake master: %v: %s", err, out)
+	}
 }

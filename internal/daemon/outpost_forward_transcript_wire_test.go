@@ -17,14 +17,13 @@ const frozenForwardHeader = `{"caller":""}`
 
 func TestOutpostForwardFrozenTranscript(t *testing.T) {
 	w := &world{World: prepareWorld(t)}
-	t.Setenv("SSH_AUTH_SOCK", "agent")
 	w.start()
 	connected := make(chan *bridge.Conn, 1)
 	startFarOutpost(t, w, func(conn *bridge.Conn) { connected <- conn })
 	t.Cleanup(w.stop)
 	app := w.App()
 	setSetting(t, app, "outposts_enabled", "true")
-	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Address: outpostAddress.String()})
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Destination: outpostAddress.String()})
 	testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected
 	})

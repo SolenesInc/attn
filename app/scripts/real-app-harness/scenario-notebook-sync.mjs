@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { outpostSsh } from './outpostSsh.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
@@ -28,12 +29,12 @@ fs.writeFileSync(path.join(homeRoot, 'conflict.md'), 'baseline');
 fs.writeFileSync(path.join(outpostRoot, 'old.md'), 'saved before first sync');
 const payload = crypto.randomBytes(16 * 1024 * 1024);
 for (let file = 0; file < 16; file++) fs.writeFileSync(path.join(homeRoot, `payload-${file}.bin`), payload);
-const socket = path.join(root, 'agent.sock');
-const env = instanceCliEnv(instance, { SSH_AUTH_SOCK: socket });
+const ssh = await outpostSsh(root);
+const env = instanceCliEnv(instance, ssh.env);
 const exec = promisify(execFile);
 const run = (command, args, childEnv = env) => exec(command, args, { env: childEnv });
 const binary = appDaemonInTree(options.appPath);
-const client = new UiAutomationClient({ ...options, launchEnv: { SSH_AUTH_SOCK: socket } });
+const client = new UiAutomationClient({ ...options, launchEnv: ssh.env });
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const children = [];
@@ -68,12 +69,9 @@ runner.registerCleanup('stop_children', async () => {
 });
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_observer', () => observer.close());
+runner.registerCleanup('close_ssh', () => ssh.close());
 try {
-  const agent = start('ssh-agent', ['-D', '-a', socket], env, ['ignore', 'pipe', 'pipe']);
-  await once(agent.stdout, 'data');
-  const key = path.join(root, 'key');
-  await run('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
-  await run('ssh-add', [key]);
+
   const data = path.join(root, 'outpost-data');
   const remoteEnv = instanceCliEnv(instance, {
     ATTN_DATA_DIR: data, ATTN_HARNESS_DATA_DIR: data, ATTN_HARNESS_NOTEBOOK_ROOT: outpostRoot,
@@ -85,15 +83,15 @@ try {
   const outpost = start(binary, ['daemon'], remoteEnv, ['ignore', log, log, 'pipe']); fs.closeSync(log);
   const [ready] = await once(outpost.stdio[3], 'data');
   runner.assert(ready.toString().includes('ready'), 'outpost ready');
-  const address = `127.0.0.1:${await port()}`;
-  await run(binary, ['settings', 'set', 'outpost_listen', address], remoteEnv);
+  const destination = 'scenario-outpost';
+  await ssh.route(destination, remoteEnv, binary);
   await run(binary, ['daemon', 'stop']);
   await launchFreshAppAndConnect(client, observer);
   const previousRoot = observer.getSetting('notebook.root');
   await run(binary, ['settings', 'set', 'notebook.root', homeRoot]);
   runner.registerCleanup('restore_home_root', async () => {
     await client.request('set_setting', { key: 'outposts_enabled', value: 'true' });
-    const owned = observer.outposts.find(row => row.address === address);
+    const owned = observer.outposts.find(row => row.destination === destination);
     if (owned) {
       const removed = observer.waitForMessage(message => message.event === 'outposts_updated' && !message.outposts.some(row => row.id === owned.id), 'removed scenario outpost');
       observer.send({ cmd: 'remove_outpost', id: owned.id });
@@ -113,7 +111,7 @@ try {
   await driver.pressEnter();
   await runner.step('first_sync_and_saved_previous_folder', async () => {
     const first = receive(notebook => notebook?.state === 'first_sync' && notebook.need_items > 0 && notebook.previous_root).then(row => { outpost.kill('SIGSTOP'); return row; });
-    observer.send({ cmd: 'add_outpost', name: 'Studio', address });
+    observer.send({ cmd: 'add_outpost', name: 'Studio', destination });
     const row = await first;
     await wait({ textIncludes: 'Notebook: first sync' });
     runner.assert(row.notebook.need_bytes > 0, 'first sync names what is left', row);
@@ -128,11 +126,11 @@ try {
   });
   await runner.step('conflicting_offline_edits_keep_both_versions', async () => {
     await client.request('set_setting', { key: 'outposts_enabled', value: 'false' });
-    await run(binary, ['settings', 'set', 'outpost_listen', ''], remoteEnv);
+
     fs.writeFileSync(path.join(homeRoot, 'conflict.md'), 'home edit');
     fs.writeFileSync(path.join(outpostRoot, 'conflict.md'), 'outpost edit');
     const conflicted = receive(notebook => notebook?.conflicts === 1);
-    await run(binary, ['settings', 'set', 'outpost_listen', address], remoteEnv);
+
     await client.request('set_setting', { key: 'outposts_enabled', value: 'true' });
     await client.request('dom_focus', { selector: '[data-testid="settings-nav-outposts"]' }); await driver.pressEnter();
     await conflicted;
@@ -149,10 +147,12 @@ try {
     fs.unlinkSync(path.join(homeRoot, copy));
     await cleared;
     await wait({ textIncludes: 'Notebook: in sync' });
-    await run(binary, ['settings', 'set', 'outpost_listen', ''], remoteEnv);
+
+    await client.request('set_setting', { key: 'outposts_enabled', value: 'false' });
     fs.unlinkSync(path.join(outpostRoot, '.attn', 'notebook-sync'));
     const failed = receive(notebook => notebook?.state === 'error');
-    await run(binary, ['settings', 'set', 'outpost_listen', address], remoteEnv);
+
+    await client.request('set_setting', { key: 'outposts_enabled', value: 'true' });
     const row = await failed;
     runner.assert(row.notebook.error.includes('folder marker missing'), 'sync error names the cause', row);
     await wait({ textIncludes: 'folder marker missing' });

@@ -117,7 +117,7 @@ func TestOutpostForwardPreservesHalfCloseAndReportsBridgeLoss(t *testing.T) {
 	requireStdout(t, home.Attn("doc", "define", "tests/router", "tasks"), "tasks")
 	watch := outpost.Launch(testworld.Invocation{Args: []string{"doc", "watch", "tests/router", "tasks", "--json"}})
 	watch.AwaitStdout(`"documents": []`)
-	requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", ""))
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"))
 	result := watch.Wait()
 	name, err := os.Hostname()
 	if err != nil {
@@ -243,16 +243,17 @@ func TestOutpostForwardRefusalsNameTheHostAndHome(t *testing.T) {
 
 func TestOutpostRefusesAnotherInstanceBeforeEnrollment(t *testing.T) {
 	outpost := testworld.NewStack(t)
-	agent := testworld.NewSSHAgent(t)
-	agent.Authorize(outpost.World)
+	agent := testworld.NewSSH(t)
+	agent.Use(outpost.World)
 	outpost.Start()
 	address := bridgeAddress(t)
-	requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", address), address)
+	agent.Route(address, outpost)
 	cfg := bridge.DialConfig{
-		Address: address, AgentSocket: agent.Socket,
+		Conn: bridgeSocket(t, outpost),
 		Self: bridge.Identity{DaemonID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Name: "another home", Instance: "another-instance", Build: bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}},
 	}
 	for _, update := range []bool{false, true} {
+		cfg.Conn = bridgeSocket(t, outpost)
 		var refused error
 		if update {
 			conn, _, err := bridge.DialUpdate(context.Background(), cfg)

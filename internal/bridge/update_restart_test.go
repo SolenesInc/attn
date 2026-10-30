@@ -41,7 +41,7 @@ func TestOutpostUpdateRetiresItsListenerBeforeRestart(t *testing.T) {
 		w, binary := updatePair(t, func() { close(restarting); <-release })
 		w.start()
 		t.Cleanup(resume)
-		conn, _, err := bridge.DialUpdate(w.ctx, bridge.DialConfig{Address: "outpost", AgentSocket: "agent", Self: home, DialContext: w.dialContext})
+		conn, _, err := bridge.DialUpdate(w.ctx, bridge.DialConfig{Conn: dialPipe(t, w), Self: home})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,7 +107,7 @@ func TestOutpostUpdateWaitsForTheRestartingConnectionToClose(t *testing.T) {
 				t.Cleanup(resume)
 				ctx, cancel := context.WithCancel(w.ctx)
 				defer cancel()
-				conn, _, err := bridge.DialUpdate(ctx, bridge.DialConfig{Address: "outpost", AgentSocket: "agent", Self: home, DialContext: w.dialContext})
+				conn, _, err := bridge.DialUpdate(ctx, bridge.DialConfig{Conn: dialPipe(t, w), Self: home})
 				if err != nil {
 					t.Fatal(err)
 				}

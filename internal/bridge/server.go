@@ -15,23 +15,13 @@ import (
 const controlChannel = "attn-control"
 
 type ServerConfig struct {
-	Address        string
-	HostKeyPath    string
-	AuthorizedKeys func() ([]byte, error)
-	Self           Identity
-	Admit          func(Identity) *Refusal
-	Logf           func(string, ...any)
-	OnError        func(error)
-	Handlers       Handlers
-	Update         *UpdateServer
-}
-
-func Listen(ctx context.Context, cfg ServerConfig, onConn func(*Conn)) error {
-	listener, err := net.Listen("tcp", cfg.Address)
-	if err != nil {
-		return err
-	}
-	return Serve(ctx, listener, cfg, onConn)
+	HostKeyPath string
+	Self        Identity
+	Admit       func(Identity) *Refusal
+	Logf        func(string, ...any)
+	OnError     func(error)
+	Handlers    Handlers
+	Update      *UpdateServer
 }
 
 func Serve(ctx context.Context, listener net.Listener, cfg ServerConfig, onConn func(*Conn)) error {
@@ -76,21 +66,12 @@ func Serve(ctx context.Context, listener net.Listener, cfg ServerConfig, onConn 
 }
 
 func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConfig, onConn func(*Conn)) error {
-	if err := boundUnsentBytes(raw); err != nil {
-		return err
-	}
 	activity := &updateActivityConn{Conn: raw}
 	raw = activity
 	if err := raw.SetDeadline(time.Now().Add(LostAfter)); err != nil {
 		return err
 	}
-	sshConfig := &ssh.ServerConfig{PublicKeyCallback: func(_ ssh.ConnMetadata, candidate ssh.PublicKey) (*ssh.Permissions, error) {
-		data, err := cfg.AuthorizedKeys()
-		if err != nil {
-			return nil, fmt.Errorf("read authorized_keys: %w", err)
-		}
-		return nil, authorize(data, candidate, cfg.Logf)
-	}}
+	sshConfig := &ssh.ServerConfig{NoClientAuth: true}
 	sshConfig.AddHostKey(key)
 	transport, channels, requests, err := ssh.NewServerConn(raw, sshConfig)
 	if err != nil {
@@ -151,11 +132,7 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	if answer.Update == 1 {
 		return serveUpdate(ctx, transport, channels, home.Build, cfg.Update, activity)
 	}
-	pacer, err := newBulkPacer(activity.Conn)
-	if err != nil {
-		return err
-	}
-	conn := newConn(ctx, pacer, transport, channels, cfg.Handlers, control, decoder, home.Identity)
+	conn := newConn(ctx, transport, channels, cfg.Handlers, control, decoder, home.Identity)
 	onConn(conn)
 	<-conn.Done()
 	return nil

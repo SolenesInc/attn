@@ -13,7 +13,6 @@ const (
 
 const (
 	SettingOutpostsEnabled               MachineSetting = "outposts_enabled"
-	SettingOutpostListen                 MachineSetting = "outpost_listen"
 	SettingOutpostState                  MachineSetting = "outpost_state"
 	SettingOutpostHome                   MachineSetting = "outpost_home"
 	SettingOutpostLastError              MachineSetting = "outpost_last_error"
@@ -104,7 +103,7 @@ func ClassOf(key string) Class {
 		}
 	}
 	switch key {
-	case string(SettingOutpostsEnabled), string(SettingOutpostListen), string(SettingOutpostState), string(SettingOutpostHome), string(SettingOutpostLastError), string(SettingClaudeExecutable), string(SettingCodexExecutable), string(SettingPTYBackendMode), string(SettingSharedPTYHostEnabled), string(SettingSharedPTYHostActive), string(SettingNotebookRoot), string(SettingNotebookRootEffective), string(SettingAnalyticsEnabled), string(SettingWorktreeSweepEnabled), string(SettingClaudeAvailable), string(SettingCodexAvailable), string(SettingDBLastBackupAt), "notebook_sync_state", "notebook_sync_last_error":
+	case string(SettingOutpostsEnabled), string(SettingOutpostState), string(SettingOutpostHome), string(SettingOutpostLastError), string(SettingClaudeExecutable), string(SettingCodexExecutable), string(SettingPTYBackendMode), string(SettingSharedPTYHostEnabled), string(SettingSharedPTYHostActive), string(SettingNotebookRoot), string(SettingNotebookRootEffective), string(SettingAnalyticsEnabled), string(SettingWorktreeSweepEnabled), string(SettingClaudeAvailable), string(SettingCodexAvailable), string(SettingDBLastBackupAt), "notebook_sync_state", "notebook_sync_last_error":
 		return Machine
 	}
 	if strings.HasSuffix(key, "_available") || strings.Contains(key, "_cap_") || strings.HasPrefix(key, "tailscale_") && key != string(SettingTailscaleEnabled) {

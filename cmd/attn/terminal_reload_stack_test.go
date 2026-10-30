@@ -46,15 +46,15 @@ func TestTerminalRunWaitsForTheFirstPromptAfterReload(t *testing.T) {
 			var host string
 			var app *testworld.Peer
 			if placement == "outpost" {
-				agent := testworld.NewSSHAgent(t)
+				agent := testworld.NewSSH(t)
 				for _, stack := range []*testworld.Stack{machine, home} {
-					agent.Authorize(stack.World)
+					agent.Use(stack.World)
 					stack.Start()
 				}
 				address := bridgeAddress(t)
-				requireStdout(t, machine.Attn("settings", "set", "outpost_listen", address), address)
+				agent.Route(address, machine)
 				app = enableOutposts(t, home)
-				app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+				app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
 				host = outpostState(app, "outpost", protocol.OutpostStateConnected).ID
 			} else {
 				home.Start()

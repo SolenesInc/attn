@@ -3300,7 +3300,7 @@ export function useDaemonSocket({
     return true;
   }, []);
   const sendUpdateOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'update_outpost', id }), [sendOutpostCommand]);
-  const sendAddOutpost = useCallback((name: string, address: string) => sendOutpostCommand({ cmd: 'add_outpost', name, address }), [sendOutpostCommand]);
+  const sendAddOutpost = useCallback((name: string, destination: string) => sendOutpostCommand({ cmd: 'add_outpost', name, destination }), [sendOutpostCommand]);
   const sendRepairOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'repair_outpost', id }), [sendOutpostCommand]);
   const sendRemoveOutpost = useCallback((id: string) => sendOutpostCommand({ cmd: 'remove_outpost', id }), [sendOutpostCommand]);
 

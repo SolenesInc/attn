@@ -41,11 +41,11 @@ type ActivityStatusSession struct {
 }
 
 type AddOutpostMessage struct {
-	// Address corresponds to the JSON schema field "address".
-	Address string `json:"address"`
-
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Destination corresponds to the JSON schema field "destination".
+	Destination string `json:"destination"`
 
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
@@ -7436,14 +7436,17 @@ type OpenSentFilesMessage struct {
 }
 
 type OutpostInfo struct {
-	// Address corresponds to the JSON schema field "address".
-	Address string `json:"address"`
-
 	// Build corresponds to the JSON schema field "build".
 	Build *string `json:"build,omitempty,omitzero"`
 
+	// Connectable corresponds to the JSON schema field "connectable".
+	Connectable *bool `json:"connectable,omitempty,omitzero"`
+
 	// DaemonID corresponds to the JSON schema field "daemon_id".
 	DaemonID *string `json:"daemon_id,omitempty,omitzero"`
+
+	// Destination corresponds to the JSON schema field "destination".
+	Destination string `json:"destination"`
 
 	// HostKeyFingerprint corresponds to the JSON schema field "host_key_fingerprint".
 	HostKeyFingerprint *string `json:"host_key_fingerprint,omitempty,omitzero"`

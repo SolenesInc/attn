@@ -22,7 +22,7 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	for _, name := range []string{"home", "Home"} {
-		pair.App.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: name, Address: pair.Address})
+		pair.App.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: name, Destination: pair.Destination})
 		refused := testworld.Await(pair.App, protocol.EventCommandError, func(e protocol.CommandErrorMessage) bool { return protocol.Deref(e.Cmd) == protocol.CmdAddOutpost })
 		if !strings.Contains(refused.Error, "reserved") || !strings.Contains(refused.Error, name) {
 			t.Fatalf("reserved outpost name %s: %s", name, refused.Error)
@@ -392,7 +392,7 @@ func TestAnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart(t *testing.T) 
 				t.Fatalf("prepared delegation=%+v: %v", prepared, err)
 			}
 			home.Stop()
-			requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", ""))
+			pair.Disconnect()
 			home.Start()
 			pair.App = home.App()
 			retry := home.Launch(testworld.Invocation{Dir: callerDirectory, Args: []string{
@@ -422,7 +422,7 @@ func TestAnInterruptedDelegationKeepsItsOutpostAcrossAHomeRestart(t *testing.T) 
 				t.Logf("removed target ends the wait: %s", strings.TrimSpace(failed.Stderr))
 				return
 			}
-			requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", pair.Address), pair.Address)
+			pair.Reconnect()
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 			boot()
 			completed := retry.Wait()

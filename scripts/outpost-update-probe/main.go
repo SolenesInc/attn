@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,7 +15,7 @@ import (
 )
 
 func main() {
-	address := flag.String("address", "", "outpost address:port")
+	address := flag.String("address", "", "outpost bridge socket path")
 	identity := flag.String("identity", "", "JSON bridge identity of the home")
 	binary := flag.String("binary", "", "binary to send")
 	flag.Parse()
@@ -32,7 +33,11 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	start := time.Now()
-	conn, _, err := bridge.DialUpdate(ctx, bridge.DialConfig{Address: *address, Self: self, AgentSocket: os.Getenv("SSH_AUTH_SOCK")})
+	raw, err := (&net.Dialer{}).DialContext(ctx, "unix", *address)
+	if err != nil {
+		fail(err)
+	}
+	conn, _, err := bridge.DialUpdate(ctx, bridge.DialConfig{Conn: raw, Self: self})
 	if err != nil {
 		fail(err)
 	}

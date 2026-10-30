@@ -20,7 +20,6 @@ const (
 
 const (
 	settingOutpostsEnabled               = settingkeys.SettingOutpostsEnabled
-	settingOutpostListen                 = settingkeys.SettingOutpostListen
 	settingOutpostState                  = settingkeys.SettingOutpostState
 	settingOutpostHome                   = settingkeys.SettingOutpostHome
 	settingOutpostLastError              = settingkeys.SettingOutpostLastError
@@ -131,13 +130,8 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(settingNotebookSyncState), scope: daemonScope, description: "Current Notebook sync state on this machine.", readOnly: true},
 	{key: string(settingNotebookSyncLastError), scope: daemonScope, description: "Current Notebook sync error and its reason.", readOnly: true},
 	{key: string(settingOutpostsEnabled), scope: daemonScope, experimental: true, description: "Connect to outposts from this home: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(settingOutpostListen), scope: daemonScope, description: "Listen for a home bridge on this address:port. Empty disables the outpost listener.", validate: func(d *Daemon, key, value string) error {
-		if value == "" {
-			return nil
-		}
-		return validateOutpostAddress(value)
-	}},
-	{key: string(settingOutpostState), scope: daemonScope, description: "Current outpost listener and bridge state.", readOnly: true},
+
+	{key: string(settingOutpostState), scope: daemonScope, description: "Whether a home bridge is connected: bridged or off.", readOnly: true},
 	{key: string(settingOutpostHome), scope: daemonScope, description: "Recorded home daemon id. Release it with attn enrollment leave.", readOnly: true},
 	{key: string(settingOutpostLastError), scope: daemonScope, description: "Last outpost bridge error, kept until the next successful connection.", readOnly: true},
 	{key: string(SettingCaptureShortcut), scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},

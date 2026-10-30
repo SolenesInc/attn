@@ -18,6 +18,7 @@ import (
 )
 
 func TestOutpostUpdateRefusalsLeaveTheBinaryUntouched(t *testing.T) {
+	t.Skip("s-jtk5b0 (one-install-path-over-ssh) restores Update coverage; this slice intentionally refuses Update")
 	for _, test := range []struct{ name, reason string }{
 		{"unknown-channel", `channel "unknown"`},
 		{"not-systemd", "not running under systemd"},
@@ -27,7 +28,7 @@ func TestOutpostUpdateRefusalsLeaveTheBinaryUntouched(t *testing.T) {
 		{"before-updates", "install this build by hand once"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			a := testworld.NewSSHAgent(t)
+			a := testworld.NewSSH(t)
 			remote, home := testworld.NewStack(t), testworld.NewStack(t)
 			old := testworld.AttnBinaryAt(t, "before-update")
 			if test.name == "newer-schema" || test.name == "before-updates" {
@@ -52,16 +53,16 @@ func TestOutpostUpdateRefusalsLeaveTheBinaryUntouched(t *testing.T) {
 			}
 			home.Vars = append(home.Vars, "ATTN_HARNESS_OUTPOST_BINARY="+asset)
 			for _, s := range []*testworld.Stack{remote, home} {
-				a.Authorize(s.World)
+				a.Use(s.World)
 				s.Start()
 			}
 			if test.name == "shared-pty-host" {
 				requireStdout(t, remote.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
 			}
 			address := bridgeAddress(t)
-			requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+			a.Route(address, remote)
 			app := enableOutposts(t, home)
-			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
 			row := outpostState(app, "outpost", protocol.OutpostStateRefused)
 			if row.DaemonID == nil || row.HostKeyFingerprint == nil {
 				t.Fatalf("first build refusal did not pin outpost: %+v", row)
@@ -83,19 +84,20 @@ func TestOutpostUpdateRefusalsLeaveTheBinaryUntouched(t *testing.T) {
 			if err != nil || sha256.Sum256(before) != sha256.Sum256(after) {
 				t.Fatalf("refused update replaced the binary: %v", err)
 			}
-			requireStdout(t, remote.Attn("settings", "get", "outpost_listen"), address)
+			requireStdout(t, remote.Attn("settings", "get", "outpost_state"), "off")
 			t.Logf("%s: %s; original binary and running outpost preserved", test.name, outcome)
 		})
 	}
 }
 
 func TestOutpostUpdateReturnsOnHomeBuildAndKeepsShell(t *testing.T) {
+	t.Skip("s-jtk5b0 (one-install-path-over-ssh) restores Update coverage; this slice intentionally refuses Update")
 	for _, channel := range []string{"source", "release"} {
 		t.Run(channel, func(t *testing.T) {
 			if channel == "release" && runtime.GOOS != "linux" {
 				t.Skip("release assets target Linux; the Linux stack run covers this strategy")
 			}
-			a := testworld.NewSSHAgent(t)
+			a := testworld.NewSSH(t)
 			remote, home := testworld.NewStack(t), testworld.NewStack(t)
 			old := testworld.AttnBinaryAt(t, "before-update")
 			remote.RunFrom(old)
@@ -114,14 +116,14 @@ func TestOutpostUpdateReturnsOnHomeBuildAndKeepsShell(t *testing.T) {
 			}))
 			defer server.Close()
 			for _, s := range []*testworld.Stack{remote, home} {
-				a.Authorize(s.World)
+				a.Use(s.World)
 				s.Vars = append(s.Vars, "SHELL=/bin/bash")
 				s.Start()
 			}
 			address := bridgeAddress(t)
-			requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+			a.Route(address, remote)
 			app := enableOutposts(t, home)
-			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+			app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
 			host := outpostState(app, "outpost", protocol.OutpostStateConnected).ID
 			shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 			pidPath := filepath.Join(remote.Dir, "shell.pid")

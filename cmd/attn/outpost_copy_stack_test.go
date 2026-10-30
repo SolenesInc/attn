@@ -216,7 +216,6 @@ func TestARemoteShellExitReachesItsHomeAfterTheOutpostStopsListening(t *testing.
 	applied.Release()
 	app := pair.App
 	host := pair.Host
-	address := pair.Address
 
 	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &host })
 	release, exiting := makeFifo(t, remote.Path("release.fifo")), makeFifo(t, remote.Path("exiting.fifo"))
@@ -224,7 +223,7 @@ func TestARemoteShellExitReachesItsHomeAfterTheOutpostStopsListening(t *testing.
 	app.AwaitScreen(id, "armed")
 
 	mark := len(app.Log())
-	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", ""))
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"))
 	outpostStateSince(app, "outpost", protocol.OutpostStateLost, mark)
 	remote.Stop()
 	handled := remote.PauseAt(pausepoint.PtyExitHandled)
@@ -235,7 +234,7 @@ func TestARemoteShellExitReachesItsHomeAfterTheOutpostStopsListening(t *testing.
 	handled.Release()
 
 	mark = len(app.Log())
-	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"))
 	prepared.Await()
 	reported.Await()
 	reported.Release()

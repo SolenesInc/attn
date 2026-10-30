@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -21,6 +22,7 @@ type Invocation struct {
 	Session  string
 	Terminal string
 	Stdin    string
+	Input    io.Reader
 	Env      []string
 	Binary   string
 	Dir      string
@@ -130,7 +132,9 @@ func (s *Stack) command(ctx context.Context, inv Invocation) *exec.Cmd {
 		cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=3")
 	}
 	cmd.Env = append(cmd.Env, inv.Env...)
-	if inv.Stdin != "" {
+	if inv.Input != nil {
+		cmd.Stdin = inv.Input
+	} else if inv.Stdin != "" {
 		cmd.Stdin = strings.NewReader(inv.Stdin)
 	}
 	return cmd

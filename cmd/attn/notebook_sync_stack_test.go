@@ -130,7 +130,6 @@ func TestNotebookSyncKeepsBothMachinesFilesAndMovesAsideAnUnknownOutpost(t *test
 	if _, err := os.Stat(filepath.Join(outpost.Dir, "notebook-sync")); !os.IsNotExist(err) {
 		t.Fatalf("leave kept sync index: %v", err)
 	}
-	requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", ""))
 	requireStdout(t, outpost.Attn("settings", "get", "notebook_sync_state"), "off")
 	for _, check := range []struct {
 		stack *testworld.Stack
@@ -195,9 +194,9 @@ func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 	for _, side := range []string{"home", "outpost"} {
 		t.Run(side, func(t *testing.T) {
 			home, outpost := testworld.NewStack(t), testworld.NewStack(t)
-			target, other, key, off, on := home, outpost, "outpost_listen", "", ""
+			target := home
 			if side == "outpost" {
-				target, other, key, off, on = outpost, home, "outposts_enabled", "false", "true"
+				target = outpost
 			}
 			closed := target.PauseAt(pausepoint.BridgeConnectionClosed)
 			pending := target.PauseAt(pausepoint.NotebookStreamError)
@@ -207,15 +206,13 @@ func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 			seed := plant(t, home, "Reconnect receipt", "-m", "Attach through the replacement Notebook stream")
 			remoteApp := outpost.App()
-			if side == "home" {
-				on = pair.Address
-			}
-			requireStdout(t, other.Attn("settings", "set", key, off))
+
+			pair.Disconnect()
 			closed.Await()
 			pending.Await()
 			closed.Release()
 			writeNotebookFile(t, home, "replacement.md", "synced by the replacement stream")
-			requireStdout(t, other.Attn("settings", "set", key, on))
+			pair.Reconnect()
 			awaitNotebookFile(t, remoteApp, outpost, "replacement.md", "synced by the replacement stream", false)
 			pair.App = home.App()
 			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
@@ -253,10 +250,8 @@ func TestNotebookConflictsAndMissingMarkerAreVisibleAfterReconnect(t *testing.T)
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "false"))
-	requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", ""))
 	writeNotebookFile(t, home, "conflict.md", "home edit")
 	writeNotebookFile(t, outpost, "conflict.md", "outpost edit")
-	requireStdout(t, outpost.Attn("settings", "set", "outpost_listen", pair.Address))
 	requireStdout(t, home.Attn("settings", "set", "outposts_enabled", "true"))
 	testworld.Await(pair.App, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		for _, row := range m.Outposts {

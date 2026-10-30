@@ -236,7 +236,7 @@ describe('App terminal runtime', () => {
   it('keeps offline terminal geometry local and fits the outpost when its bridge returns', async () => {
     const resize = resizableTerminals(800, 600);
     const { daemon } = await renderSessions(daemonSession('s1', { agent: 'shell', state: 'idle', host: 'studio' }));
-    const outpost = { id: 'studio', name: 'Studio', address: 'studio:2200', state: 'connected' as const, reach: 'reachable' as const, state_since: '2026-10-18T18:00:00Z' };
+    const outpost = { id: 'studio', name: 'Studio', destination: 'studio:2200', state: 'connected' as const, reach: 'reachable' as const, state_since: '2026-10-18T18:00:00Z' };
     daemon.emit({ event: 'outposts_updated', outposts: [outpost] });
     open('s1');
     await daemon.idle();

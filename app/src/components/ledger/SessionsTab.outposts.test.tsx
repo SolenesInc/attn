@@ -5,7 +5,7 @@ import { openSessionsLedger, page, pages, rows } from './testSupport';
 
 it('shows a closed session’s outpost and sends its session identity when resuming', async () => {
   const view = await openSessionsLedger(pages([page({ entries: [closedEntry('remote', { host: 'host-linux' })] })]), {
-    initialState: { outposts: [{ id: 'host-linux', name: 'Linux studio', address: 'studio:2200', state: 'connected', reach: 'reachable', state_since: '2026-01-01T00:00:00Z' }] },
+    initialState: { outposts: [{ id: 'host-linux', name: 'Linux studio', destination: 'studio:2200', state: 'connected', reach: 'reachable', state_since: '2026-01-01T00:00:00Z' }] },
   });
   const row = rows().getByText('run remote').closest('.ledger-row') as HTMLElement;
   expect(within(row).getByText('Linux studio')).toBeInTheDocument();

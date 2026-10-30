@@ -873,9 +873,9 @@ export interface ActivityStatusSession {
 }
 
 export interface AddOutpostMessage {
-    address: string;
-    cmd:     AddOutpostMessageCmd;
-    name:    string;
+    cmd:         AddOutpostMessageCmd;
+    destination: string;
+    name:        string;
     [property: string]: any;
 }
 
@@ -5953,9 +5953,10 @@ export enum MigrationPhase {
 }
 
 export interface OutpostElement {
-    address:               string;
     build?:                string;
+    connectable?:          boolean;
     daemon_id?:            string;
+    destination:           string;
     host_key_fingerprint?: string;
     id:                    string;
     last_error?:           string;
@@ -7679,9 +7680,10 @@ export enum OpenSentFilesMessageCmd {
 }
 
 export interface OutpostInfo {
-    address:               string;
     build?:                string;
+    connectable?:          boolean;
     daemon_id?:            string;
+    destination:           string;
     host_key_fingerprint?: string;
     id:                    string;
     last_error?:           string;
@@ -19509,8 +19511,8 @@ const typeMap: any = {
         { json: "label", js: "label", typ: "" },
     ], "any"),
     "AddOutpostMessage": o([
-        { json: "address", js: "address", typ: "" },
         { json: "cmd", js: "cmd", typ: r("AddOutpostMessageCmd") },
+        { json: "destination", js: "destination", typ: "" },
         { json: "name", js: "name", typ: "" },
     ], "any"),
     "AgentCatalogMessage": o([
@@ -22638,9 +22640,10 @@ const typeMap: any = {
         { json: "tree_json", js: "tree_json", typ: "" },
     ], "any"),
     "OutpostElement": o([
-        { json: "address", js: "address", typ: "" },
         { json: "build", js: "build", typ: u(undefined, "") },
+        { json: "connectable", js: "connectable", typ: u(undefined, true) },
         { json: "daemon_id", js: "daemon_id", typ: u(undefined, "") },
+        { json: "destination", js: "destination", typ: "" },
         { json: "host_key_fingerprint", js: "host_key_fingerprint", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
@@ -23667,9 +23670,10 @@ const typeMap: any = {
         { json: "terminal_id", js: "terminal_id", typ: u(undefined, "") },
     ], "any"),
     "OutpostInfo": o([
-        { json: "address", js: "address", typ: "" },
         { json: "build", js: "build", typ: u(undefined, "") },
+        { json: "connectable", js: "connectable", typ: u(undefined, true) },
         { json: "daemon_id", js: "daemon_id", typ: u(undefined, "") },
+        { json: "destination", js: "destination", typ: "" },
         { json: "host_key_fingerprint", js: "host_key_fingerprint", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "last_error", js: "last_error", typ: u(undefined, "") },

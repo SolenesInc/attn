@@ -46,17 +46,17 @@ func awaitInputRefusals(t *testing.T, p *testworld.Peer, terminal protocol.Termi
 }
 
 func TestRemoteTerminalRefusalsNameTheirTerminalAndNothingIsReplayed(t *testing.T) {
-	a := testworld.NewSSHAgent(t)
+	a := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
 	for _, s := range []*testworld.Stack{remote, home} {
-		a.Authorize(s.World)
+		a.Use(s.World)
 		s.Vars = append(s.Vars, "SHELL=/bin/bash")
 		s.Start()
 	}
 	address := bridgeAddress(t)
-	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	a.Route(address, remote)
 	app := enableOutposts(t, home)
-	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
 	host := outpostReachSince(app, 0, "outpost", protocol.OutpostReachReachable).ID
 	id := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(host) })
 	terminal := protocol.TerminalID(app.Terminal(id))

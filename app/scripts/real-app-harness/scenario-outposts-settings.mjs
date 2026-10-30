@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { outpostSsh } from './outpostSsh.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
@@ -22,15 +23,15 @@ const instance = currentHarnessInstance();
 if (!instance) throw new Error('Outposts settings verification requires a named instance');
 const runner = createScenarioRunner(options, { scenarioId: 'OutpostsSettings', tier: 'local', prefix: 'outposts-settings', allowRealAgents: false });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-bridge-'));
-const socket = path.join(root, 'agent.sock');
-const client = new UiAutomationClient({ ...options, launchEnv: { SSH_AUTH_SOCK: socket } });
+const ssh = await outpostSsh(root);
+const client = new UiAutomationClient({ ...options, launchEnv: ssh.env });
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const binary = appDaemonInTree(options.appPath);
 const exec = promisify(execFile);
 const children = [];
 const created = [];
-const env = instanceCliEnv(instance, { SSH_AUTH_SOCK: socket });
+const env = instanceCliEnv(instance, ssh.env);
 const run = (command, args, childEnv = env) => exec(command, args, { env: childEnv });
 const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
 const text = async selector => (await client.request('dom_text', { selector })).text;
@@ -40,7 +41,7 @@ const toggle = '[role="switch"][aria-label="Outposts"]';
 const shot = async name => driver.screenshot(path.join(runner.runDir, `${name}.png`), { windowId: await driver.mainWindowId() });
 const receive = predicate => observer.waitForMessage(event => event.event === 'outposts_updated' && predicate(event.outposts) && event.outposts, 'outposts state', observer.connectTimeoutMs);
 async function removeScenarioOutposts() {
-  const rows = observer.outposts.filter(row => ['Studio', 'Studio alias'].includes(row.name) && /^(127\.0\.0\.1|localhost):/.test(row.address));
+  const rows = observer.outposts.filter(row => ['Studio', 'Studio alias'].includes(row.name) && row.destination.startsWith('scenario-outpost'));
   if (rows.length === 0) return;
   const previous = observer.getSetting('outposts_enabled');
   await run(binary, ['settings', 'set', 'outposts_enabled', 'true']);
@@ -105,7 +106,7 @@ async function add(name, address) {
   await client.request('dom_focus', { selector: '#outpost-name' });
   await driver.typeText(name);
   await driver.pressKey('Tab');
-  await wait('#outpost-address', { focused: true });
+  await wait('#outpost-destination', { focused: true });
   await driver.typeText(address);
   await driver.pressKey('Tab');
   await wait('form[aria-label="Add an outpost"] button', { focused: true });
@@ -123,12 +124,9 @@ runner.registerCleanup('stop_children', async () => {
 });
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_observer', () => observer.close());
+runner.registerCleanup('close_ssh', () => ssh.close());
 try {
-  const agent = start('ssh-agent', ['-D', '-a', socket], env, ['ignore', 'pipe', 'pipe']);
-  await once(agent.stdout, 'data');
-  const key = path.join(root, 'key');
-  await run('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', key]);
-  await run('ssh-add', [key]);
+
   const outpostData = path.join(root, 'outpost');
   fs.mkdirSync(outpostData, { mode: 0o700 });
   runner.registerCleanup('save_outpost_log', () => {
@@ -139,7 +137,7 @@ try {
     ATTN_DATA_DIR: outpostData,
     ATTN_HARNESS_DATA_DIR: outpostData,
     ATTN_HARNESS_NOTEBOOK_ROOT: path.join(outpostData, 'notebook'), ATTN_WS_PORT: String(await port()), ATTN_DAEMON_READY_FD: '3',
-    ATTN_AUTHORIZED_KEYS_PATH: `${key}.pub`, ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off',
+    ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off',
     ATTN_HARNESS_SKILL_SYNC: 'off', ATTN_PTY_BACKEND: 'embedded', ATTN_CACHED_SHELL_ENV: '[]',
     ATTN_TOOL_HOME: path.join(root, 'outpost-tools'),
   });
@@ -148,9 +146,9 @@ try {
   fs.closeSync(log);
   const [ready] = await once(outpost.stdio[3], 'data');
   runner.assert(ready.toString().includes('ready'), 'outpost reported readiness', ready.toString());
-  const bridgePort = await port();
-  const address = `127.0.0.1:${bridgePort}`;
-  await run(binary, ['settings', 'set', 'outpost_listen', address], outpostEnv);
+  const address = 'scenario-outpost';
+  await ssh.route(address, outpostEnv, binary);
+  await ssh.route('scenario-outpost-alias', outpostEnv, binary);
   await run(binary, ['daemon', 'stop']);
   await launchFreshAppAndConnect(client, observer);
   await removeScenarioOutposts();
@@ -189,7 +187,7 @@ try {
     writeMockAgentFixture(runner.sessionDir, { minimumWorkingMs: 0, turns: [{ includes: 'Local attention', actions: [{ type: 'reply', text: 'LOCAL_READY', state: 'waiting_input' }] }] });
     caller = await createSessionAndWaitForInitialPane({ client, observer, cwd: runner.sessionDir, label: 'Outpost operator', agent: 'claude' });
     created.push(caller);
-    callerEnv = instanceCliEnv(instance, { SSH_AUTH_SOCK: socket, ATTN_TERMINAL_ID: observer.terminalOf(caller) });
+    callerEnv = instanceCliEnv(instance, { ...ssh.env, ATTN_TERMINAL_ID: observer.terminalOf(caller) });
     const startDirectory = path.join(fs.realpathSync(root), 'remote-project');
     fs.mkdirSync(startDirectory);
     remote = JSON.parse(await cli('terminal', 'open', '--host', 'Studio', '--cwd', startDirectory, '--json'));

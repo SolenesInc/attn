@@ -231,6 +231,8 @@ func main() {
 		runBrowser()
 	case "help", "-h", "--help":
 		runHelp()
+	case "_bridge":
+		runBridge()
 	case "_hook-stop":
 		runHookStop()
 	case "_hook-session-start":
@@ -332,6 +334,7 @@ func runProtocolVersion() {
 func runBuildInfoJSON() {
 	printJSON(map[string]any{
 		"version":           buildinfo.Version,
+		"protocolVersion":   protocol.ProtocolVersion,
 		"channel":           buildinfo.Channel,
 		"buildTime":         buildinfo.BuildTime,
 		"sourceFingerprint": buildinfo.SourceFingerprint,

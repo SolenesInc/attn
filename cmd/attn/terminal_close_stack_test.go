@@ -42,15 +42,15 @@ func TestTerminalCloseStopsEveryShellPromptly(t *testing.T) {
 				var host string
 				var app *testworld.Peer
 				if placement == "outpost" {
-					a := testworld.NewSSHAgent(t)
+					a := testworld.NewSSH(t)
 					for _, stack := range []*testworld.Stack{machine, home} {
-						a.Authorize(stack.World)
+						a.Use(stack.World)
 						stack.Start()
 					}
 					address := bridgeAddress(t)
-					requireStdout(t, machine.Attn("settings", "set", "outpost_listen", address), address)
+					a.Route(address, machine)
 					app = enableOutposts(t, home)
-					app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+					app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
 					host = outpostState(app, "outpost", protocol.OutpostStateConnected).ID
 				} else {
 					home.Start()

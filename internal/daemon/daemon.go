@@ -649,8 +649,8 @@ func (d *Daemon) Start() error {
 	if err := d.recoverQuickCaptureAssets(); err != nil {
 		d.logf("quick capture asset recovery incomplete: %v", err)
 	}
-	if d.machineSetting(settingOutpostListen) != "" {
-		d.configureOutpostListener()
+	if err := d.startBridgeSocket(); err != nil {
+		return fmt.Errorf("start bridge socket: %w", err)
 	}
 	if d.outpostsEnabled() {
 		d.configureOutposts()

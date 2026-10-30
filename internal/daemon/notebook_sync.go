@@ -93,7 +93,7 @@ func (d *Daemon) notebookSyncDir() string { return filepath.Join(d.dataRoot, "no
 func (d *Daemon) notebookSyncPeers() (string, []string, error) {
 	status := d.enrollmentStatus()
 	if !status.IsHome() {
-		if d.machineSetting(settingOutpostListen) != "" && status.HomeDaemonID != "" {
+		if status.HomeDaemonID != "" {
 			return status.HomeDaemonID, []string{status.HomeDaemonID}, nil
 		}
 		return status.HomeDaemonID, nil, nil

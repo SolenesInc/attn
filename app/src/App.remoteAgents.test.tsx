@@ -8,7 +8,7 @@ import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { OutpostReach, OutpostState, type OutpostInfo } from './types/generated';
 
 const host: OutpostInfo = {
-  id: 'studio-id', name: 'studio', address: 'studio:2200', state: OutpostState.Connected, reach: OutpostReach.Reachable,
+  id: 'studio-id', name: 'studio', destination: 'studio:2200', state: OutpostState.Connected, reach: OutpostReach.Reachable,
   state_since: '2026-10-27T10:00:00Z',
 };
 const offline: OutpostInfo = { ...host, state: OutpostState.Lost, reach: OutpostReach.Unreachable };

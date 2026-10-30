@@ -9,22 +9,22 @@ import (
 )
 
 type Outpost struct {
-	ID       string
-	Name     string
-	Address  string
-	HostKey  string
-	DaemonID string
-	AddedAt  string
+	ID          string
+	Name        string
+	Destination string
+	HostKey     string
+	DaemonID    string
+	AddedAt     string
 }
 
-func (s *Store) AddOutpost(name, address string) (Outpost, error) {
-	row := Outpost{ID: uuid.NewString(), Name: name, Address: address, AddedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	_, err := s.db.Exec(`INSERT INTO outposts (id,name,address,added_at) VALUES (?,?,?,?)`, row.ID, row.Name, row.Address, row.AddedAt)
+func (s *Store) AddOutpost(name, destination string) (Outpost, error) {
+	row := Outpost{ID: uuid.NewString(), Name: name, Destination: destination, AddedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	_, err := s.db.Exec(`INSERT INTO outposts (id,name,destination,added_at) VALUES (?,?,?,?)`, row.ID, row.Name, row.Destination, row.AddedAt)
 	return row, err
 }
 
 func (s *Store) ListOutposts() ([]Outpost, error) {
-	rows, err := s.db.Query(`SELECT id,name,address,COALESCE(host_key,''),COALESCE(daemon_id,''),added_at FROM outposts ORDER BY added_at,id`)
+	rows, err := s.db.Query(`SELECT id,name,destination,COALESCE(host_key,''),COALESCE(daemon_id,''),added_at FROM outposts ORDER BY added_at,id`)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (s *Store) ListOutposts() ([]Outpost, error) {
 	out := []Outpost{}
 	for rows.Next() {
 		var row Outpost
-		if err := rows.Scan(&row.ID, &row.Name, &row.Address, &row.HostKey, &row.DaemonID, &row.AddedAt); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.Destination, &row.HostKey, &row.DaemonID, &row.AddedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, row)

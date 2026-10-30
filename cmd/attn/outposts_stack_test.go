@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,16 +44,23 @@ func enableOutposts(t *testing.T, s *testworld.Stack) *testworld.Peer {
 }
 
 func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
-	a := testworld.NewSSHAgent(t)
+	a := testworld.NewSSH(t)
 	remote, home, second := testworld.NewStack(t), testworld.NewStack(t), testworld.NewStack(t)
 	for _, s := range []*testworld.Stack{remote, home, second} {
-		a.Authorize(s.World)
+		a.Use(s.World)
 		s.Start()
 	}
 	address := bridgeAddress(t)
-	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	a.Route(address, remote)
 	p := enableOutposts(t, home)
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Address: address})
+	t.Cleanup(func() {
+		if t.Failed() {
+			for _, r := range home.App().Initial.Outposts {
+				t.Logf("outpost state=%s error=%s", r.State, protocol.Deref(r.LastError))
+			}
+		}
+	})
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
 	first := outpostState(p, "outpost", protocol.OutpostStateConnected)
 	if first.DaemonID == nil || first.HostKeyFingerprint == nil || first.Build == nil {
 		t.Fatalf("unpaired connected row: %+v", first)
@@ -69,7 +75,7 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 		t.Fatalf("restart changed pins: %+v -> %+v", first, again)
 	}
 	q := enableOutposts(t, second)
-	q.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "same outpost", Address: address})
+	q.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "same outpost", Destination: address})
 	refused := outpostState(q, "same outpost", protocol.OutpostStateRefused)
 	for _, word := range []string{protocol.Deref(p.Initial.DaemonInstanceID), protocol.Deref(q.Initial.DaemonInstanceID), "attn enrollment leave"} {
 		if !strings.Contains(protocol.Deref(refused.LastError), word) {
@@ -92,9 +98,11 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 
 func TestOutpostsDisabledCommandsAndRetainedRows(t *testing.T) {
 	s := testworld.NewStack(t)
+	ssh := testworld.NewSSH(t)
+	ssh.Use(s.World)
 	s.Start()
 	p := s.App()
-	for _, command := range []any{protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "x", Address: "127.0.0.1:1"}, protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: "missing"}, protocol.RepairOutpostMessage{Cmd: protocol.CmdRepairOutpost, ID: "missing"}} {
+	for _, command := range []any{protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "x", Destination: "offline"}, protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: "missing"}, protocol.RepairOutpostMessage{Cmd: protocol.CmdRepairOutpost, ID: "missing"}} {
 		p.Send(command)
 		refused := testworld.Refused(p)
 		if !strings.Contains(protocol.Deref(refused.Error), "outposts_enabled") {
@@ -102,9 +110,9 @@ func TestOutpostsDisabledCommandsAndRetainedRows(t *testing.T) {
 		}
 	}
 	p = enableOutposts(t, s)
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "unreachable", Address: "127.0.0.1:1"})
-	row := outpostState(p, "unreachable", protocol.OutpostStateRefused)
-	if !strings.Contains(protocol.Deref(row.LastError), "no SSH_AUTH_SOCK") {
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "unreachable", Destination: "offline"})
+	row := outpostState(p, "unreachable", protocol.OutpostStateLost)
+	if !strings.Contains(protocol.Deref(row.LastError), "Could not resolve hostname") {
 		t.Fatalf("missing agent: %+v", row)
 	}
 	requireStdout(t, s.Attn("settings", "set", "outposts_enabled", "false"), "false")
@@ -115,24 +123,24 @@ func TestOutpostsDisabledCommandsAndRetainedRows(t *testing.T) {
 	s.Start()
 	p = s.App()
 	requireStdout(t, s.Attn("settings", "set", "outposts_enabled", "true"), "true")
-	again := outpostState(p, "unreachable", protocol.OutpostStateRefused)
+	again := outpostState(p, "unreachable", protocol.OutpostStateLost)
 	if again.ID != row.ID {
 		t.Fatalf("switch lost row: %+v -> %+v", row, again)
 	}
 }
 
 func TestOutpostsDifferentBuildIsRefused(t *testing.T) {
-	a := testworld.NewSSHAgent(t)
+	a := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
 	remote.RunFrom(testworld.AttnBinaryAt(t, "other"))
 	for _, s := range []*testworld.Stack{remote, home} {
-		a.Authorize(s.World)
+		a.Use(s.World)
 		s.Start()
 	}
 	address := bridgeAddress(t)
-	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	a.Route(address, remote)
 	p := enableOutposts(t, home)
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "other build", Address: address})
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "other build", Destination: address})
 	row := outpostState(p, "other build", protocol.OutpostStateRefused)
 	for _, word := range []string{"other", "dev", protocol.Deref(p.Initial.DaemonInstanceID)} {
 		if !strings.Contains(protocol.Deref(row.LastError), word) {
@@ -142,16 +150,16 @@ func TestOutpostsDifferentBuildIsRefused(t *testing.T) {
 }
 
 func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {
-	a := testworld.NewSSHAgent(t)
+	a := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
 	for _, s := range []*testworld.Stack{remote, home} {
-		a.Authorize(s.World)
+		a.Use(s.World)
 		s.Start()
 	}
 	address := bridgeAddress(t)
-	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	a.Route(address, remote)
 	p := enableOutposts(t, home)
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "frozen", Address: address})
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "frozen", Destination: address})
 	first := outpostState(p, "frozen", protocol.OutpostStateConnected)
 	mark := p.EventCount()
 	remote.Signal(syscall.SIGSTOP)
@@ -179,17 +187,17 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			name = "same key new id"
 		}
 		t.Run(name, func(t *testing.T) {
-			a := testworld.NewSSHAgent(t)
+			a := testworld.NewSSH(t)
 			old, home, replacement := testworld.NewStack(t), testworld.NewStack(t), testworld.NewStack(t)
 			for _, s := range []*testworld.Stack{old, home, replacement} {
-				a.Authorize(s.World)
+				a.Use(s.World)
 			}
 			old.Start()
 			home.Start()
 			address := bridgeAddress(t)
-			requireStdout(t, old.Attn("settings", "set", "outpost_listen", address), address)
+			a.Route(address, old)
 			p := enableOutposts(t, home)
-			p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "replaced", Address: address})
+			p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "replaced", Destination: address})
 			first := outpostState(p, "replaced", protocol.OutpostStateConnected)
 			old.Stop()
 			if sameKey {
@@ -203,7 +211,7 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			}
 			replacement.Start()
 			remote := replacement.App()
-			requireStdout(t, replacement.Attn("settings", "set", "outpost_listen", address), address)
+			a.Route(address, replacement)
 			refused := outpostState(p, "replaced", protocol.OutpostStateRefused)
 			words := []string{address, protocol.Deref(first.DaemonID), "re-pair it in Settings → Outposts"}
 			if sameKey {
@@ -237,22 +245,19 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 }
 
 func TestOutpostsAddressAliasDoesNotReplaceTheWorkingBridge(t *testing.T) {
-	a := testworld.NewSSHAgent(t)
+	a := testworld.NewSSH(t)
 	remote, home := testworld.NewStack(t), testworld.NewStack(t)
 	for _, s := range []*testworld.Stack{remote, home} {
-		a.Authorize(s.World)
+		a.Use(s.World)
 		s.Start()
 	}
 	address := bridgeAddress(t)
-	requireStdout(t, remote.Attn("settings", "set", "outpost_listen", address), address)
+	a.Route(address, remote)
 	p := enableOutposts(t, home)
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "original", Address: address})
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "original", Destination: address})
 	first := outpostState(p, "original", protocol.OutpostStateConnected)
-	_, port, err := net.SplitHostPort(address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "alias", Address: net.JoinHostPort("localhost", port)})
+	a.Route("alias", remote)
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "alias", Destination: "alias"})
 	refused := outpostState(p, "alias", protocol.OutpostStateRefused)
 	if !strings.Contains(protocol.Deref(refused.LastError), "same outpost as original ("+address+")") {
 		t.Fatalf("alias refusal: %+v", refused)
@@ -261,44 +266,5 @@ func TestOutpostsAddressAliasDoesNotReplaceTheWorkingBridge(t *testing.T) {
 		if row.ID == first.ID && (row.State != protocol.OutpostStateConnected || row.StateSince != first.StateSince) {
 			t.Fatalf("alias replaced the working bridge: before=%+v after=%+v", first, row)
 		}
-	}
-}
-
-func TestOutpostsUnchangedRetryKeepsItsStateAndPublishesNoFacts(t *testing.T) {
-	a := testworld.NewSSHAgent(t)
-	home := testworld.NewStack(t)
-	a.Authorize(home.World)
-	home.Start()
-	p := enableOutposts(t, home)
-	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "offline", Address: bridgeAddress(t)})
-	first := outpostState(p, "offline", protocol.OutpostStateLost)
-	facts := func() int64 {
-		t.Helper()
-		var status struct {
-			Producers []struct {
-				Name   string `json:"name"`
-				Events int64  `json:"events"`
-			} `json:"producers"`
-		}
-		home.Attn("bus", "status", "--json").JSON(t, &status)
-		for _, row := range status.Producers {
-			if row.Name == "outpost.changed" {
-				return row.Events
-			}
-		}
-		return 0
-	}
-	before := facts()
-	a.AwaitConnections(t, 4)
-	snapshot := home.App().Initial.Outposts
-	if len(snapshot) != 1 {
-		t.Fatalf("retry lost its row: %+v", snapshot)
-	}
-	after := snapshot[0]
-	if after.State != first.State || after.StateSince != first.StateSince || protocol.Deref(after.LastError) != protocol.Deref(first.LastError) {
-		t.Fatalf("retry changed failure: before=%+v after=%+v", first, after)
-	}
-	if got := facts(); got != before {
-		t.Fatalf("unchanged retries published outpost.changed: %d -> %d", before, got)
 	}
 }

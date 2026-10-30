@@ -239,7 +239,14 @@ func spawnDaemon(binaryPath string) (daemonProcess, error) {
 		return daemonProcess{}, fmt.Errorf("create daemon readiness pipe: %w", err)
 	}
 	cmd := exec.Command(binaryPath, "daemon")
-	cmd.Env = append(os.Environ(),
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	var env []string
+	for _, pair := range os.Environ() {
+		if !strings.HasPrefix(pair, "SSH_") {
+			env = append(env, pair)
+		}
+	}
+	cmd.Env = append(env,
 		"ATTN_WRAPPER_PATH="+binaryPath,
 		fmt.Sprintf("%s=%d", readyFDEnv, 3),
 	)
@@ -268,6 +275,31 @@ func spawnDaemon(binaryPath string) (daemonProcess, error) {
 		cmd.ExtraFiles = append(cmd.ExtraFiles, file)
 		cmd.Env = append(cmd.Env, "ATTN_HARNESS_WS_LISTENER_FD=4")
 	}
+	if rawFD := os.Getenv("ATTN_HARNESS_LIFELINE_FD"); rawFD != "" {
+		if os.Getenv("ATTN_HARNESS_DATA_DIR") == "" {
+			reader.Close()
+			writer.Close()
+			return daemonProcess{}, fmt.Errorf("ATTN_HARNESS_LIFELINE_FD requires ATTN_HARNESS_DATA_DIR")
+		}
+		fd, err := strconv.Atoi(rawFD)
+		if err != nil {
+			reader.Close()
+			writer.Close()
+			return daemonProcess{}, err
+		}
+		duplicate, err := syscall.Dup(fd)
+		if err != nil {
+			reader.Close()
+			writer.Close()
+			return daemonProcess{}, err
+		}
+		syscall.CloseOnExec(duplicate)
+		file := os.NewFile(uintptr(duplicate), "harness-lifeline")
+		defer file.Close()
+		cmd.Env = append(cmd.Env, fmt.Sprintf("ATTN_HARNESS_LIFELINE_FD=%d", 3+len(cmd.ExtraFiles)))
+		cmd.ExtraFiles = append(cmd.ExtraFiles, file)
+	}
+
 	if err := cmd.Start(); err != nil {
 		reader.Close()
 		writer.Close()
