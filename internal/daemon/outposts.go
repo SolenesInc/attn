@@ -31,13 +31,24 @@ type outpostDial struct {
 	notebookRoot string
 }
 
+type outpostRemote interface {
+	EnsureMaster(context.Context) error
+	ExitMaster(context.Context) error
+	Probe(context.Context) (outpostssh.Probe, error)
+	Bridge(context.Context) (net.Conn, error)
+	Install(context.Context, string, bridge.Build, func(string)) error
+	Remove(context.Context) error
+	InstallPath() string
+	MasterCommand() []string
+}
+
 type outpostsRuntime struct {
 	actions sync.Mutex
 	mu      sync.Mutex
 	dialers map[string]*outpostDial
 	pushes  map[string]*outpostPush
 	changed chan struct{}
-	dial    func(context.Context, store.Outpost) (net.Conn, error)
+	remote  func(store.Outpost) outpostRemote
 }
 
 func (d *Daemon) outpostsEnabled() bool {
@@ -328,16 +339,13 @@ func (d *Daemon) outpostConflict(id, hostKey, daemonID string) *bridge.Refusal {
 	return nil
 }
 
-func (d *Daemon) outpostSSH(row store.Outpost) *outpostssh.Client {
+func (d *Daemon) outpostSSH(row store.Outpost) outpostRemote {
+	if d.outposts.remote != nil {
+		return d.outposts.remote(row)
+	}
 	return outpostssh.For(row.Destination, outpostssh.ControlPath(config.InstanceLabel(), row.ID), config.InstanceLabel())
 }
 func (d *Daemon) openOutpostPipe(ctx context.Context, row store.Outpost) (net.Conn, error) {
-	if d.outposts.dial != nil {
-		return d.outposts.dial(ctx, row)
-	}
-	if _, _, err := net.SplitHostPort(row.Destination); err == nil && !strings.HasPrefix(row.Destination, "ssh://") {
-		return nil, &bridge.Refusal{Reason: "destination", Detail: fmt.Sprintf("added by bridge address %s; remove it and add it again by the name you use with ssh", row.Destination)}
-	}
 	remote := d.outpostSSH(row)
 	if err := remote.EnsureMaster(ctx); err != nil {
 		return nil, err

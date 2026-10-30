@@ -3,11 +3,14 @@ package outpostssh
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/victorarias/attn/internal/bridge"
 )
 
 type Client struct{ Destination, ControlPath, Instance string }
@@ -66,6 +69,9 @@ func (c *Client) control(ctx context.Context, action string) error {
 	return err
 }
 func (c *Client) EnsureMaster(ctx context.Context) error {
+	if _, _, err := net.SplitHostPort(c.Destination); err == nil && !strings.HasPrefix(c.Destination, "ssh://") {
+		return &bridge.Refusal{Reason: "destination", Detail: fmt.Sprintf("added by bridge address %s; remove it and add it again by the name you use with ssh", c.Destination)}
+	}
 	if err := c.control(ctx, "check"); err == nil {
 		return nil
 	}

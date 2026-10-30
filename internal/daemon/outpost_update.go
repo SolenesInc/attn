@@ -136,7 +136,7 @@ func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpo
 	}
 }
 
-func (d *Daemon) installOutpost(ctx context.Context, remote *outpostssh.Client, probe outpostssh.Probe, phase func(string)) error {
+func (d *Daemon) installOutpost(ctx context.Context, remote outpostRemote, probe outpostssh.Probe, phase func(string)) error {
 	path := ""
 	if os.Getenv("ATTN_HARNESS_DATA_DIR") != "" {
 		path = os.Getenv("ATTN_HARNESS_OUTPOST_BINARY")

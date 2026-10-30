@@ -1,11 +1,13 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"syscall"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -32,11 +34,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		if err != nil {
 			return fmt.Errorf("add outpost %s (%s): %w", name, address, err)
 		}
-		if d.outposts.dial != nil {
-			d.startOutpostDial(row)
-		} else {
-			d.startOutpostInstall(row, true)
-		}
+		d.startOutpostInstall(row, true)
 		d.publishFact(FactOutpostChanged, row.ID, nil)
 		return nil
 	}
@@ -76,18 +74,18 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 			}
 		}
 	}
+	var removeError error
 	d.cancelOutpostUpdate(id)
 	d.stopOutpostDial(id)
 	if action == "remove" {
 		remote := d.outpostSSH(*row)
-		if d.outposts.dial == nil {
-			if remoteErr := remote.EnsureMaster(d.life.Context()); remoteErr == nil {
-				if remoteErr = remote.Remove(d.life.Context()); remoteErr != nil {
-					d.startOutpostDial(*row)
-					return fmt.Errorf("remove outpost %s: %w", row.Name, remoteErr)
-				}
-			}
+		ctx, cancel := context.WithTimeout(d.life.Context(), bridge.LostAfter)
+		if err := remote.Remove(ctx); err != nil {
+			instance := config.InstanceLabel()
+			path := remote.InstallPath()
+			removeError = fmt.Errorf("removed %s from this home, but could not stop it over ssh: %v; its daemon and shells may still be running; on %s run ATTN_INSTANCE=%s %s enrollment leave && ATTN_INSTANCE=%s %s daemon stop", row.Name, err, row.Destination, instance, path, instance, path)
 		}
+		cancel()
 		if exitErr := remote.ExitMaster(d.life.Context()); exitErr != nil {
 			d.logf("stop removed outpost master: %v", exitErr)
 		}
@@ -113,7 +111,7 @@ func (d *Daemon) changeOutpost(action, id, name, address string) error {
 		d.forgetNotebookSyncPeer(row.DaemonID)
 	}
 	d.publishFact(FactOutpostChanged, id, nil)
-	return nil
+	return removeError
 }
 
 func (d *Daemon) handleOutpostCommand(client *wsClient, action, id, name, address string) {

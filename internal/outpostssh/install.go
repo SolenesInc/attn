@@ -43,6 +43,9 @@ func (c *Client) Install(ctx context.Context, path string, build bridge.Build, p
 }
 
 func (c *Client) Remove(ctx context.Context) error {
-	_, err := c.Run(ctx, `if test -x `+c.binaryPath()+`; then `+c.binaryPath()+` enrollment leave && `+c.binaryPath()+` daemon stop; fi`)
+	if err := c.control(ctx, "check"); err != nil {
+		return err
+	}
+	_, err := c.Run(ctx, c.binaryPath()+` enrollment leave && `+c.binaryPath()+` daemon stop`)
 	return err
 }

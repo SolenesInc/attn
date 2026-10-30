@@ -9,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/bridge/memnet"
 	"github.com/victorarias/attn/internal/notebook"
+	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/store"
@@ -65,10 +67,29 @@ func (w *WireDaemon) UseFileStat(stat func(string) (os.FileInfo, error)) {
 const BridgeCallRecovery = bridgeCallRecovery
 
 func (w *WireDaemon) UseBridgeDialer(dial func(ctx context.Context, network, address string) (net.Conn, error)) {
-	w.d.outposts.dial = func(ctx context.Context, row store.Outpost) (net.Conn, error) {
-		return dial(ctx, "ssh", row.Destination)
+	w.d.outposts.remote = func(row store.Outpost) outpostRemote {
+		return &wireOutpostSSH{Client: outpostssh.For(row.Destination, "", "default"), dial: dial, build: w.d.bridgeIdentity().Build}
 	}
 }
+
+type wireOutpostSSH struct {
+	*outpostssh.Client
+	dial  func(context.Context, string, string) (net.Conn, error)
+	build bridge.Build
+}
+
+func (s *wireOutpostSSH) EnsureMaster(context.Context) error { return nil }
+func (s *wireOutpostSSH) ExitMaster(context.Context) error   { return nil }
+func (s *wireOutpostSSH) Probe(context.Context) (outpostssh.Probe, error) {
+	return outpostssh.Probe{Platform: "linux/amd64", Build: &s.build}, nil
+}
+func (s *wireOutpostSSH) Bridge(ctx context.Context) (net.Conn, error) {
+	return s.dial(ctx, "ssh", s.Destination)
+}
+func (s *wireOutpostSSH) Install(context.Context, string, bridge.Build, func(string)) error {
+	return nil
+}
+func (s *wireOutpostSSH) Remove(context.Context) error { return nil }
 
 func UseShippedPasteGap(t testing.TB) {
 	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay

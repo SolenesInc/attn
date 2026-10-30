@@ -299,7 +299,7 @@ describe('Remote shells in the app', () => {
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-outposts')));
     const row = within(screen.getByRole('listitem', { name: 'studio' }));
     await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove' })));
-    expect(row.getByText("studio isn't connected, so its shells keep running there until you run attn enrollment leave on it.")).toBeInTheDocument();
+    expect(row.getByText("studio isn't connected. If ssh cannot stop it, its daemon and shells keep running there. Run this instance's attn enrollment leave and attn daemon stop commands there.")).toBeInTheDocument();
     await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Remove and forget 1 terminal' })));
     expect(daemon.sentOf('remove_outpost')).toEqual([{ cmd: 'remove_outpost', id: outpost.id }]);
   });

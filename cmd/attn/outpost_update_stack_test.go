@@ -4,15 +4,15 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/bridge"
-	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -257,4 +257,37 @@ func TestSSHStagedInstallRefusesANamedInstanceAtDefaultPath(t *testing.T) {
 		t.Fatalf("failed staged binary left behind: %v", err)
 	}
 	t.Log(strings.TrimSpace(result.Stderr))
+}
+
+func TestSSHRemoveForgetsAfterRemoteStopFailure(t *testing.T) {
+	ssh := testworld.NewSSH(t)
+	remote, home := testworld.NewStack(t), testworld.NewStack(t)
+	ssh.Use(home.World)
+	remote.Start()
+	ssh.Route("stop-failure", remote)
+	home.Start()
+	app := enableOutposts(t, home)
+	app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: "stop-failure"})
+	row := awaitOutpostInstall(app)
+	if row.Update.Phase != protocol.OutpostUpdatePhaseDone {
+		t.Fatal(row.Update)
+	}
+	if err := os.Chmod(ssh.InstallPath(remote), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(ssh.InstallPath(remote), 0700); err != nil {
+			t.Error(err)
+		}
+	})
+	app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
+	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+	warning := testworld.Await[protocol.CommandErrorMessage](app, protocol.EventCommandError, func(m protocol.CommandErrorMessage) bool { return protocol.Deref(m.Cmd) == protocol.CmdRemoveOutpost })
+	if !strings.Contains(warning.Error, "may still be running") || !strings.Contains(warning.Error, "enrollment leave") || !strings.Contains(warning.Error, "daemon stop") {
+		t.Fatalf("missing remote-stop warning: %+v", warning)
+	}
+	t.Log(warning.Error)
+	if rows := home.App().Initial.Outposts; len(rows) != 0 {
+		t.Fatalf("removed row returned: %+v", rows)
+	}
 }

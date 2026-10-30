@@ -58,7 +58,7 @@ export function OutpostsSettings() {
       <section className="settings-block">
         <div className="settings-block-intro">
           <h3>Add an outpost</h3>
-          <p className="settings-description">Connect to attn on another computer running the same build. Its host key is pinned on first contact.</p>
+          <p className="settings-description">Add the destination you use with ssh. attn installs your home's build there and pins its identity on first contact.</p>
         </div>
         <form className="settings-block-body" aria-label="Add an outpost" onSubmit={add}>
           <div className="settings-field">
@@ -77,7 +77,7 @@ export function OutpostsSettings() {
       <section className="settings-block">
         <div className="settings-block-intro">
           <h3>Outposts</h3>
-          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, then disconnects and forgets this outpost. While it isn't connected, its shells keep running there until you run attn enrollment leave on it.</p>
+          <p className="settings-description">Re-pair forgets the pinned host key and daemon identity, then connects again. Remove closes its terminals across all profiles, releases enrollment and stops its daemon over ssh, then forgets this outpost. Its binary, data and Notebook stay. If ssh cannot reach it, run this instance's attn enrollment leave and attn daemon stop commands there.</p>
         </div>
         <div className="settings-block-body">
           {outposts.length === 0 ? <p className="settings-empty">No outposts added.</p> : (
@@ -123,7 +123,7 @@ export function OutpostsSettings() {
                       ) : null}
                     </div>
                     {removing === row.id && count > 0 && row.reach !== 'reachable' ? (
-                      <p className="settings-description" role="status">{row.name} isn't connected, so its shells keep running there until you run attn enrollment leave on it.</p>
+                      <p className="settings-description" role="status">{row.name} isn't connected. If ssh cannot stop it, its daemon and shells keep running there. Run this instance's attn enrollment leave and attn daemon stop commands there.</p>
                     ) : null}
                   </li>
                 );
