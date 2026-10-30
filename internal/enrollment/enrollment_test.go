@@ -34,7 +34,7 @@ func TestHomePairingAndRelease(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), first) || !strings.Contains(err.Error(), second) || !strings.Contains(err.Error(), "attn enrollment leave") {
 				t.Fatalf("second home: %v", err)
 			}
-			if _, err := enrollment.Leave(root); err != nil {
+			if _, err := enrollment.Leave(root, ""); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := enrollment.RecordHome(root, second, "second"); err != nil {

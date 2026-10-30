@@ -369,9 +369,9 @@ type refusingInstallSSH struct {
 	probes, installs int
 }
 
-func (r *refusingInstallSSH) EnsureMaster(context.Context) error { return nil }
-func (r *refusingInstallSSH) ExitMaster(context.Context) error   { return nil }
-func (r *refusingInstallSSH) Remove(context.Context) error       { return nil }
+func (r *refusingInstallSSH) EnsureMaster(context.Context) error   { return nil }
+func (r *refusingInstallSSH) ExitMaster(context.Context) error     { return nil }
+func (r *refusingInstallSSH) Remove(context.Context, string) error { return nil }
 func (r *refusingInstallSSH) Probe(context.Context) (outpostssh.Probe, error) {
 	r.probes++
 	return outpostssh.Probe{Platform: "linux/amd64", Build: &bridge.Build{Version: "earlier", SourceFingerprint: "git:earlier", ProtocolVersion: protocol.ProtocolVersion}}, nil

@@ -45,12 +45,14 @@ commands:
         show this daemon's id and whether its data folder is enrolled to
         another daemon.
 
-  leave [--json]
+  leave [--home <daemon-id>] [--json]
         release the enrollment so the data folder is its own again. The
         daemon closes the bridge from the old home and stops the terminals it
         ran for it: right away when it is running, otherwise when it next
         starts. Remove the outpost from the old home first; a home that still
-        has it pairs again on its next connection.
+        has it pairs again on its next connection. With --home, release only
+        an enrollment to that home; an enrollment to any other home is kept
+        and the result's status is "kept".
 `)
 }
 
@@ -103,9 +105,14 @@ func writeEnrollmentStatus(w io.Writer, status enrollment.Status) {
 func runEnrollmentLeave(args []string) {
 	fs := flag.NewFlagSet("enrollment leave", flag.ExitOnError)
 	asJSON := fs.Bool("json", false, "print the result as JSON")
+	home := fs.String("home", "", "release only an enrollment to this home daemon id")
 	_ = parseFlags(fs, args)
+	if *home != "" && !enrollment.ValidDaemonID(*home) {
+		fmt.Fprintf(os.Stderr, "enrollment leave: --home %q is not a daemon id; attn enrollment status on the home prints its id\n", *home)
+		os.Exit(2)
+	}
 
-	result, err := enrollment.Leave(enrollmentDataRoot())
+	result, err := enrollment.Leave(enrollmentDataRoot(), *home)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "enrollment leave: %v\n", err)
 		if errors.Is(err, enrollment.ErrNoDaemonID) {
@@ -113,7 +120,7 @@ func runEnrollmentLeave(args []string) {
 		}
 		os.Exit(1)
 	}
-	if c := client.New(""); c.IsRunning() {
+	if c := client.New(""); result.Status != "kept" && c.IsRunning() {
 		if err := c.DropOutpostCopy(); err != nil {
 			fmt.Fprintf(os.Stderr, "enrollment leave: released the enrollment, but the daemon could not stop the terminals it ran for its home: %v\n", err)
 			os.Exit(1)

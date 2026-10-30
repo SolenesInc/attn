@@ -303,8 +303,10 @@ pause while you answer. The terminal stays open so you can read the result.
 ## Remove an outpost
 
 **Remove** closes the outpost's terminals across all profiles. Over ssh, it
-releases enrollment and stops the daemon for the home's instance, then exits
-that outpost's ssh master and forgets the row. It keeps the binary,
+releases the outpost's enrollment to this home and stops its daemon for the
+home's instance, then exits that outpost's ssh master and forgets the row. An
+outpost enrolled to another home, such as one whose Add this home was refused,
+keeps its enrollment and its running daemon. Remove keeps the binary,
 `attn.previous`, data folder, and Notebook folder on the outpost.
 
 With terminals, the row asks **Remove and close N terminals**, or **Cancel**.

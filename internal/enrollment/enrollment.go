@@ -131,7 +131,7 @@ func Load(dataRoot string) (Status, error) {
 	return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID, HomeName: record.HomeName}, nil
 }
 
-func Leave(dataRoot string) (Result, error) {
+func Leave(dataRoot, home string) (Result, error) {
 	daemonID, err := ReadDaemonID(dataRoot)
 	if err != nil {
 		return Result{}, err
@@ -151,6 +151,15 @@ func Leave(dataRoot string) (Result, error) {
 	previous := ""
 	if err == nil {
 		previous = record.HomeDaemonID
+	}
+	if home != "" && previous != "" && previous != daemonID && previous != home {
+		return Result{
+			Status:       "kept",
+			DaemonID:     daemonID,
+			HomeDaemonID: previous,
+			HomeName:     record.HomeName,
+			Message:      fmt.Sprintf("enrolled to home %s, not %s; kept the enrollment", previous, home),
+		}, nil
 	}
 	if previous == daemonID {
 		return Result{

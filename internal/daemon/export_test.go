@@ -93,7 +93,7 @@ func (s *wireOutpostSSH) Bridge(ctx context.Context) (net.Conn, error) {
 func (s *wireOutpostSSH) Install(context.Context, string, bridge.Build, func(string)) error {
 	return nil
 }
-func (s *wireOutpostSSH) Remove(context.Context) error { return nil }
+func (s *wireOutpostSSH) Remove(context.Context, string) error { return nil }
 
 func UseShippedPasteGap(t testing.TB) {
 	sessionmonitor.SubmitDelay = shippedSessionInputSubmitDelay

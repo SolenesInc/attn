@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/enrollment"
 )
 
 func (c *Client) Install(ctx context.Context, path string, build bridge.Build, phase func(string)) error {
@@ -42,10 +43,21 @@ func (c *Client) Install(ctx context.Context, path string, build bridge.Build, p
 	})
 }
 
-func (c *Client) Remove(ctx context.Context) error {
+func (c *Client) Remove(ctx context.Context, home string) error {
 	if err := c.control(ctx, "check"); err != nil {
 		return err
 	}
-	_, err := c.Run(ctx, c.binaryPath()+` enrollment leave && `+c.binaryPath()+` daemon stop`)
+	out, err := c.Run(ctx, c.binaryPath()+` enrollment leave --json --home `+home)
+	if err != nil {
+		return err
+	}
+	var left enrollment.Result
+	if err := json.Unmarshal(out, &left); err != nil {
+		return fmt.Errorf("enrollment leave printed %q: %w", out, err)
+	}
+	if left.Status == "kept" {
+		return nil
+	}
+	_, err = c.Run(ctx, c.binaryPath()+` daemon stop`)
 	return err
 }

@@ -41,7 +41,7 @@ type outpostRemote interface {
 	Probe(context.Context) (outpostssh.Probe, error)
 	Bridge(context.Context) (net.Conn, error)
 	Install(context.Context, string, bridge.Build, func(string)) error
-	Remove(context.Context) error
+	Remove(context.Context, string) error
 	InstallPath() string
 	MasterCommand() []string
 }

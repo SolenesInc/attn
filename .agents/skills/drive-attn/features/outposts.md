@@ -16,7 +16,7 @@ removes outposts in Settings; agents open shells and delegate onto them with
 - `bridge-states`: connecting, connected, stalled, lost and refused, with the last error.
 - `outpost-connect-terminal`: answer ssh prompts in a focused home terminal; success reconnects automatically, and the user closes the tile.
 - `outpost-repair`: Re-pair forgets the pins and connects again.
-- `outpost-remove`: Remove closes the outpost's terminals in every profile, releases enrollment and stops its daemon over ssh, then forgets it. Its files stay.
+- `outpost-remove`: Remove closes the outpost's terminals in every profile, releases enrollment and stops its daemon over ssh, then forgets it. Its files stay. An outpost enrolled to another home keeps its enrollment and daemon.
 - `outpost-update`: the banner and row install the home's Linux build over ssh, including when a failed first Add left no build.
 - `enrollment`: an outpost's data folder belongs to the home it first accepted, until `attn enrollment leave`.
 - `remote-terminals`: shells and agents on an outpost in tiles beside local ones; their attn commands reach the home.
@@ -39,7 +39,7 @@ removes outposts in Settings; agents open shells and delegate onto them with
 - `attn terminal open --host <outpost|home>` opens a shell on that machine beside the caller (`cmd/attn/terminal.go`); [terminals.md](terminals.md) owns the verb. An agent on an outpost opens on its own machine by default, and `--host home` reaches the home.
 - `attn delegate --host <outpost|home>` starts a delegate on that machine, where the folder, refs and worktree are checked; [delegation.md](delegation.md) owns it.
 - `attn session reopen <id>` resumes a closed outpost session on the outpost it ran on, and refuses naming the host while that outpost is unreachable or removed (`cmd/attn/session_reopen.go`); [ledger.md](ledger.md) owns the verb.
-- `attn enrollment status` and `attn enrollment leave` (`cmd/attn/enrollment.go`), run on an outpost to see or release the home it is enrolled to.
+- `attn enrollment status` and `attn enrollment leave [--home <daemon-id>]` (`cmd/attn/enrollment.go`), run on an outpost to see or release the home it is enrolled to; with `--home`, an enrollment to any other home is kept and the status reads `kept`.
 - An agent on an outpost runs every other attn verb through its outpost daemon, which reaches the home; when the home is unreachable, the command fails at once and names it.
 
 ### Triggers
@@ -80,6 +80,7 @@ Preconditions:
 - **Remove.** Click `.settings-outpost[aria-label="drive-op"] .settings-outpost-actions button:last-child` ("Remove") natively. With no terminals, the row leaves at once: `.settings-outpost[aria-label="drive-op"]` is absent and `wsctl outposts` lists no outposts.
 - **Turn Outposts off.** Run `./attn settings set outposts_enabled false`; it prints `outposts_enabled = false`. `[data-testid="settings-nav-outposts"]` leaves the nav, and `wsctl outposts` refuses again.
 - **Install from scratch, update and remove.** Run `node scripts/verify-ssh-outposts/install.mjs --help` for the named Mac and Linux check. It proves fresh Add, Notebook sync, shell survival through Update, remote daemon stop on Remove, retained files and unchanged default-instance files and processes. Keep its receipts, including upload time.
+- **Remove a refused Add.** Run `./scripts/test-go.sh --packages -run TestOutpostsRemovingARefusedAddKeepsTheOtherHomesShell -v ./cmd/attn`. A first home pairs and runs a shell; a second home's Add is refused, and its Remove leaves the first home's enrollment, bridge and shell PID in place.
 - **Finish Add after authentication.** Run `go test ./cmd/attn -run TestSSHUnpairedAddFinishesAfterAuthentication -v`. It first refuses a host key, creates the master out of band as the terminal does, and observes installation and pairing without Update. Its restart case proves the saved unpaired row resumes Add. `TestSSHDisablingOutpostsCancelsUnpairedAdd` holds an external request and proves Outposts off cancels Add without a later install.
 - **A failed install waits for action.** Run `go test ./internal/daemon -run TestAnUnpairedOutpostDoesNotRepeatARefusedInstall -v`. With a fake clock and external SSH refusal, it proves one install attempt across repeated retries, continued probes, and one new attempt after Update.
 - **Pair through ssh.** Run `go test ./cmd/attn -run TestSSH -v`. The fake ssh models a Linux machine, and the real `_bridge` starts its daemon. The test opens a shell, exits its master, observes lost then connected, reattaches and types again. For a real route, run `scripts/verify-ssh-outposts/transport.mjs` with a fresh named instance; Add installs the matching binary.

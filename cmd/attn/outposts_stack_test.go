@@ -101,6 +101,49 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	}
 }
 
+func TestOutpostsRemovingARefusedAddKeepsTheOtherHomesShell(t *testing.T) {
+	ssh := testworld.NewSSH(t)
+	remote, home, second := testworld.NewStack(t), testworld.NewStack(t), testworld.NewStack(t)
+	for _, s := range []*testworld.Stack{remote, home, second} {
+		ssh.Use(s.World)
+		s.Start()
+	}
+	address := bridgeAddress(t)
+	ssh.Route(address, remote)
+	p := enableOutposts(t, home)
+	p.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "outpost", Destination: address})
+	paired := outpostState(p, "outpost", protocol.OutpostStateConnected)
+	shell := home.Spawn(p, fakeagent.Harness(protocol.SessionAgentShell), remote.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = &paired.ID })
+	pidPath := remote.Path("shell.pid")
+	p.TypeLine(shell, "echo $$ > "+pidPath+"; echo before-$((1+1))")
+	p.AwaitScreen(shell, "before-2")
+	before, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := enableOutposts(t, second)
+	q.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "failed add", Destination: address})
+	refused := outpostState(q, "failed add", protocol.OutpostStateRefused)
+	if !strings.Contains(protocol.Deref(refused.LastError), "paired to home") {
+		t.Fatalf("expected a home refusal: %+v", refused)
+	}
+	q.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: refused.ID})
+	testworld.Await[protocol.OutpostsUpdatedMessage](q, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
+
+	requireStdout(t, remote.Attn("enrollment", "status"), "enrolled to "+protocol.Deref(p.Initial.DaemonInstanceID))
+	p.TypeLine(shell, "echo $$ > "+pidPath+"; echo after-$((2+2))")
+	p.AwaitScreen(shell, "after-4")
+	after, err := os.ReadFile(pidPath)
+	if err != nil || string(before) != string(after) {
+		t.Fatalf("shell PID changed %s -> %s: %v", before, after, err)
+	}
+	if rows := home.App().Initial.Outposts; len(rows) != 1 || rows[0].ID != paired.ID || rows[0].State != protocol.OutpostStateConnected {
+		t.Fatalf("first home's bridge after the second home's Remove: %+v", rows)
+	}
+	t.Logf("second home removed its refused row; first home's enrollment, bridge and shell PID %s survived", strings.TrimSpace(string(after)))
+}
+
 func TestOutpostsDisabledCommandsAndRetainedRows(t *testing.T) {
 	s := testworld.NewStack(t)
 	ssh := testworld.NewSSH(t)
