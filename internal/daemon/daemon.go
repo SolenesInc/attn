@@ -3728,9 +3728,6 @@ func (d *Daemon) doDetailRefresh() {
 
 		changed, err := d.fetchPRDetails(client, pr.ID, pr.Repo, pr.Number)
 		if err != nil {
-			if errors.Is(err, errDaemonStopping) {
-				return
-			}
 			if errors.Is(err, github.ErrRateLimited) {
 				if info := client.GetRateLimit("core"); info != nil {
 					d.logf("Detail refresh: %s rate limited, stopping host refresh", host)
@@ -3766,7 +3763,7 @@ func (d *Daemon) doDetailRefresh() {
 		}
 	}
 
-	d.life.Do("doDetailRefresh", func() { d.publishPRDetailsChanged("Detail refresh", changedIDs) })
+	d.publishPRDetailsChanged("Detail refresh", changedIDs)
 }
 
 func (d *Daemon) publishPRDetailsChanged(origin string, ids []string) {
@@ -3834,9 +3831,6 @@ func (d *Daemon) fetchAllPRDetails() {
 
 		changed, err := d.fetchPRDetails(client, pr.ID, pr.Repo, pr.Number)
 		if err != nil {
-			if errors.Is(err, errDaemonStopping) {
-				return
-			}
 			if errors.Is(err, github.ErrRateLimited) {
 				if info := client.GetRateLimit("core"); info != nil {
 					d.logf("App launch: %s rate limited, stopping host fetch loop", host)
@@ -3872,7 +3866,7 @@ func (d *Daemon) fetchAllPRDetails() {
 		}
 	}
 
-	d.life.Do("fetchAllPRDetails", func() { d.publishPRDetailsChanged("App launch", changedIDs) })
+	d.publishPRDetailsChanged("App launch", changedIDs)
 }
 
 func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMessage) {
@@ -4060,9 +4054,6 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 
 	changed, err := d.fetchPRDetails(client, prID, pr.Repo, pr.Number)
 	if err != nil {
-		if errors.Is(err, errDaemonStopping) {
-			return
-		}
 		if errors.Is(err, github.ErrRateLimited) {
 			d.logf("Immediate fetch for %s: rate limited", prID)
 			if info := client.GetRateLimit("core"); info != nil {

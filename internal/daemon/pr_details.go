@@ -57,7 +57,7 @@ func (f *prDetailFetches) finish(id string) {
 	}
 }
 
-func (d *Daemon) fetchPRDetails(client *github.Client, id, repo string, number int) (changed bool, err error) {
+func (d *Daemon) fetchPRDetails(client *github.Client, id, repo string, number int) (bool, error) {
 	started := d.prDetailFetches.begin(id)
 	defer d.prDetailFetches.finish(id)
 
@@ -65,12 +65,7 @@ func (d *Daemon) fetchPRDetails(client *github.Client, id, repo string, number i
 	if err != nil {
 		return false, err
 	}
-	if !d.life.Do("applyPRDetails", func() {
-		changed, err = d.prDetailFetches.acceptUnlessSuperseded(id, started, func() (bool, error) {
-			return d.store.UpdatePRDetails(id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-		})
-	}) {
-		return false, errDaemonStopping
-	}
-	return changed, err
+	return d.prDetailFetches.acceptUnlessSuperseded(id, started, func() (bool, error) {
+		return d.store.UpdatePRDetails(id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
+	})
 }

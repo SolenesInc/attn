@@ -5,10 +5,8 @@ import (
 	"net/http"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/github/mockserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -307,13 +305,7 @@ func startDetailsReadHeldAtReviews(t *testing.T, gh *mockserver.Server, app *tes
 	held, release := gh.HoldReviews(pr.Repo, pr.Number)
 	t.Cleanup(release)
 	app.Send(protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: id})
-	guard := time.NewTimer(fakeagent.HangGuard)
-	defer guard.Stop()
-	select {
-	case <-held:
-	case <-guard.C:
-		t.Fatalf("the read of %s never asked GitHub for reviews within fakeagent.HangGuard=%s", id, fakeagent.HangGuard)
-	}
+	awaitHeldReviews(t, held, id)
 	return func() protocol.FetchPRDetailsResultMessage {
 		t.Helper()
 		release()
