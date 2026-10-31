@@ -152,16 +152,16 @@ func (d *Daemon) cancelAutomationRun(run *store.AutomationRun, reason, message s
 	return cancelled, persistErr
 }
 
-func (d *Daemon) automationRunIsContinuation(run *store.AutomationRun) (bool, error) {
-	origin, err := d.store.OriginAutomationRunIDForSeed(run.DefinitionID, run.SeedID)
+func (d *Daemon) automationRunIsContinuation(definitionID int, seedID, runID string) (bool, error) {
+	origin, err := d.store.OriginAutomationRunIDForSeed(definitionID, seedID)
 	if err != nil {
 		return false, err
 	}
-	return origin != "" && origin != run.ID, nil
+	return origin != "" && origin != runID, nil
 }
 
 func (d *Daemon) automationWorkReadyOccurrence(run *store.AutomationRun) (seedEvents.Occurrence, error) {
-	continuation, err := d.automationRunIsContinuation(run)
+	continuation, err := d.automationRunIsContinuation(run.DefinitionID, run.SeedID, run.ID)
 	if err != nil {
 		return seedEvents.Occurrence{}, err
 	}
@@ -183,7 +183,7 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 	if run == nil || strings.TrimSpace(run.SeedID) == "" {
 		return errors.New("record automation outcome: seed id missing")
 	}
-	continuation, err := d.automationRunIsContinuation(run)
+	continuation, err := d.automationRunIsContinuation(run.DefinitionID, run.SeedID, run.ID)
 	if err != nil {
 		return fmt.Errorf("record automation outcome: load continuity: %w", err)
 	}
@@ -470,7 +470,6 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 	if req.IDs.SeedID == "" {
 		return false, nil, errors.New("automation seed id missing")
 	}
-	continuation := false
 	if req.ContinuityKey != "" {
 		binding, err := d.store.GetActiveAutomationContinuityBinding(req.DefinitionID, req.ContinuityKey)
 		if err != nil {
@@ -479,7 +478,10 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 		if binding == nil || binding.SeedID != req.IDs.SeedID || binding.SessionID != req.IDs.SessionID {
 			return false, nil, errors.New("automation seed does not match its continuity binding")
 		}
-		continuation = binding.OriginRunID != "" && binding.OriginRunID != req.RunID
+	}
+	continuation, err := d.automationRunIsContinuation(req.DefinitionID, req.IDs.SeedID, req.RunID)
+	if err != nil {
+		return false, nil, err
 	}
 	title := strings.TrimSpace(def.Name)
 	if _, _, reviewTitle, ok := automationReviewNames(req); ok {
@@ -497,7 +499,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 			}
 		}
 		if seed.Tender != who.Session(req.IDs.SessionID) || seed.Status != garden.StatusGrowing {
-			if restore, err = d.activateAutomationContinuationSeed(req.IDs.SeedID, req.IDs.SessionID); err != nil {
+			if restore, err = d.activateAutomationContinuationSeed(req.DefinitionID, req.IDs.SeedID, req.IDs.SessionID); err != nil {
 				return false, nil, err
 			}
 		}
@@ -534,7 +536,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 	return continuation, restore, nil
 }
 
-func (d *Daemon) activateAutomationContinuationSeed(seedID string, sessionID protocol.SessionID) (func() error, error) {
+func (d *Daemon) activateAutomationContinuationSeed(definitionID int, seedID string, sessionID protocol.SessionID) (func() error, error) {
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		return nil, fmt.Errorf("read automation continuation seed %s: %w", seedID, err)
@@ -561,7 +563,17 @@ func (d *Daemon) activateAutomationContinuationSeed(seedID string, sessionID pro
 	if seed.Status == garden.StatusGrowing && seed.Tender == actor {
 		return restore, nil
 	}
-	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, quietAsk("")); err != nil {
+	tend := quietAsk("")
+	if previous, ok := seed.Tender.Session(); ok && previous != sessionID && d.sessionActive(previous) {
+		replaced, err := d.store.AutomationSessionHeldSeed(definitionID, seedID, previous)
+		if err != nil {
+			return nil, err
+		}
+		if replaced {
+			tend = garden.Ask{Actor: actor.Actor(), Claimant: actor, Force: true}
+		}
+	}
+	if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, tend); err != nil {
 		return nil, fmt.Errorf("tend automation continuation seed %s: %w", seedID, err)
 	}
 	return restore, nil

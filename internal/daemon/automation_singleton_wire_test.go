@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -183,4 +184,125 @@ func TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation(t 
 		t.Fatalf("after closing its session the singleton ran on %s/%s as %+v, want session %s resumed on its conversation %s", protocol.Deref(reopened.SessionID), protocol.Deref(reopened.SeedID), resumed, session, replacement.ConversationID)
 	}
 	t.Logf("%s lost its transcript and the next run launched %s fresh; closing %s and running again resumed conversation %s", lost, session, session, replacement.ConversationID)
+}
+
+func TestChangingASingletonsAgentHandsItsSeedToTheNextRunAndLeavesTheOldSessionWorking(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	claudeSpec := strings.Replace(automationSingletonSpec(w, "Sheriff", "latest", ""), "*/2 * * * *", "@every 3s", 1)
+	codexSpec := strings.Replace(claudeSpec, "launch: {driver: claude}", "launch: {driver: codex}", 1)
+	id := applyAutomation(t, cli, codexSpec).ID
+	awaitDelivered := func(earlier ...string) (run protocol.AutomationRunSummary) {
+		t.Helper()
+		w.tickSchedulesUntil("a new delivered run", func() bool {
+			runs := automationRuns(t, cli, id)
+			if len(runs) == 0 || runs[0].State != "delivered" || slices.Contains(earlier, runs[0].ID) {
+				return false
+			}
+			run = runs[0]
+			return true
+		})
+		setAutomationEnabled(t, cli, id, false)
+		return run
+	}
+	first := awaitDelivered()
+	stake := protocol.Deref(first.SeedID)
+	codexSession := protocol.Deref(first.SessionID)
+	codex := w.Launched(string(codexSession))
+	codex.Prompted()
+	codex.Reply("Checked. <!-- attn:state=idle -->")
+	setAutomationEnabled(t, cli, id, true)
+	again := awaitDelivered(first.ID)
+	if protocol.Deref(again.SessionID) != codexSession {
+		t.Fatalf("the second codex run went to %s, want %s", protocol.Deref(again.SessionID), codexSession)
+	}
+	codex.Prompted()
+	readInbox(t, cli, string(codexSession), 0)
+
+	applyAutomation(t, cli, automationEditSpec(id, claudeSpec))
+	setAutomationEnabled(t, cli, id, true)
+	next := awaitDelivered(first.ID, again.ID)
+	claudeSession := protocol.Deref(next.SessionID)
+	if claudeSession == codexSession || protocol.Deref(next.SeedID) != stake {
+		t.Fatalf("after the agent change the next run worked on %s/%s, want a new session continuing seed %s", claudeSession, protocol.Deref(next.SeedID), stake)
+	}
+	if prompt := w.Launched(string(claudeSession)).Prompted(); !strings.Contains(prompt, stake) {
+		t.Fatalf("the new agent's prompt does not name its stake %s:\n%s", stake, prompt)
+	}
+	shown, err := cli.SeedShow("", stake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tender := shown.Seed.Tender; tender == nil || protocol.Deref(tender.SessionID) != claudeSession || shown.Seed.Status != "growing" {
+		t.Fatalf("the stake is %s with tender %+v, want growing under %s", shown.Seed.Status, shown.Seed.Tender, claudeSession)
+	}
+	old := testworld.AwaitSession(app, string(codexSession), func(s protocol.Session) bool {
+		return s.Automation != nil && protocol.Deref(s.Automation.Superseded)
+	})
+	if old.State != "working" {
+		t.Fatalf("the agent change left the old session %s, want it still working", old.State)
+	}
+	if told := inboxContents(readInbox(t, cli, string(codexSession), 0).Items); !strings.Contains(told, stake+" moved: tended") {
+		t.Fatalf("the old session was not told its stake moved; its inbox holds %q", told)
+	}
+
+	applyAutomation(t, cli, automationEditSpec(id, codexSpec))
+	applyAutomation(t, cli, automationEditSpec(id, strings.Replace(codexSpec, "prompt: Sweep.", "prompt: Sweep the branches.", 1)))
+	setAutomationEnabled(t, cli, id, true)
+	reworded := awaitDelivered(first.ID, again.ID, next.ID)
+	if protocol.Deref(reworded.SeedID) == stake || protocol.Deref(reworded.SessionID) == claudeSession {
+		t.Fatalf("a launch edit then a prompt edit ran on %s/%s, want a new session on a new seed", protocol.Deref(reworded.SessionID), protocol.Deref(reworded.SeedID))
+	}
+	t.Logf("codex %s kept working; claude %s took over %s; a later prompt edit started %s", codexSession, claudeSession, stake, protocol.Deref(reworded.SeedID))
+}
+
+func TestASingletonRunDoesNotTakeBackASeedSomeoneElseTook(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	id := applyAutomation(t, cli, strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "*/2 * * * *", "@every 1s", 1)).ID
+	var first protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a delivered run", func() bool {
+		runs := automationRuns(t, cli, id)
+		if len(runs) == 0 || runs[0].State != "delivered" {
+			return false
+		}
+		first = runs[0]
+		return true
+	})
+	setAutomationEnabled(t, cli, id, false)
+	seed := protocol.Deref(first.SeedID)
+	w.Launched(string(protocol.Deref(first.SessionID))).Prompted()
+	other := w.Spawn(app, fakeagent.Claude, w.Path(""))
+	w.Launched(other)
+	if _, err := cli.SeedTransition(protocol.SessionID(other), seed, "tend", "", true, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	setAutomationEnabled(t, cli, id, true)
+	var refused protocol.AutomationRunSummary
+	w.tickSchedulesUntil("a refused run", func() bool {
+		runs := automationRuns(t, cli, id)
+		if len(runs) == 0 || runs[0].ID == first.ID || runs[0].State == "pending" {
+			return false
+		}
+		refused = runs[0]
+		return true
+	})
+	setAutomationEnabled(t, cli, id, false)
+	shown, err := cli.SeedShow("", seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tender := shown.Seed.Tender; tender == nil || protocol.Deref(tender.SessionID) != protocol.SessionID(other) {
+		t.Fatalf("after %s took %s the singleton's run (%s, %q) left it with %+v", other, seed, refused.State, protocol.Deref(refused.LastError), shown.Seed.Tender)
+	}
+	if refused.State != "failed" || !strings.Contains(protocol.Deref(refused.LastError), "being tended by") {
+		t.Fatalf("the run is %s with %q, want it failed naming the seed's tender", refused.State, protocol.Deref(refused.LastError))
+	}
 }
