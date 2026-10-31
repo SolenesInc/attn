@@ -37,6 +37,7 @@ func TestApplyingAModelChangeReloadsTheMemberInPlaceWithItsConversation(t *testi
 	cli := w.Client()
 	day := wakeCrew(t, cli, "trellis", "")
 	first := w.Launched(string(day.SessionID))
+	first.Prompted()
 	letters := crewLetters(t, w, "trellis")
 
 	setCrew(t, cli, "trellis", protocol.CrewSetMessage{Model: protocol.Ptr("claude-sonnet-fake"), Effort: protocol.Ptr("high")})
@@ -159,6 +160,7 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 	t.Run("switching back before the letter reloads in place and cancels the switch", func(t *testing.T) {
 		day := wakeCrew(t, cli, "keel", "")
 		first := w.Launched(string(day.SessionID))
+		first.Prompted()
 		switchCrewHarness(t, cli, "keel", "codex")
 		setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 		if back := applyCrew(t, cli, "keel"); back.Outcome != protocol.CrewApplyOutcomeReloaded {

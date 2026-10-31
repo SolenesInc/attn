@@ -11,8 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestACrewClaimOutlivesItsSessionThroughANap(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
+func TestACrewClaimOutlivesItsSessionThroughAHarnessSwitch(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
 	first := wakeCrew(t, cli, "keel", "").SessionID
 	w.Launched(string(first))
@@ -20,12 +20,13 @@ func TestACrewClaimOutlivesItsSessionThroughANap(t *testing.T) {
 	if _, err := cli.SeedTransition(first, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	handed := crewHandoff(t, cli, string(first), "Continue the same work.", false, protocol.CrewDayCloseNap)
+	switchCrewHarness(t, cli, "keel", "codex")
+	handed := crewHandoff(t, cli, string(first), "Continue the same work.", false)
 	next := protocol.Deref(handed.SessionID)
 	w.Launched(string(next)).Prompted()
 	shown := lifeShow(t, cli, seed).Seed
 	if !shown.Claimed || shown.Tender == nil || shown.Tender.Ref != "member:keel" || protocol.Deref(shown.Tender.SessionID) != next {
-		t.Fatalf("after the nap the seed shows %+v, want it claimed by member:keel in session %s", shown.Tender, next)
+		t.Fatalf("after the switch the seed shows %+v, want it claimed by member:keel in session %s", shown.Tender, next)
 	}
 }
 
@@ -69,7 +70,8 @@ func TestAMembersNextSessionClosesTheDelegateItsLastSessionDispatched(t *testing
 		t.Fatal(err)
 	}
 	w.Launched(string(delegated.SessionID))
-	handed := crewHandoff(t, cli, string(first), "My delegate is still working.", false, protocol.CrewDayCloseNap)
+	switchCrewHarness(t, cli, "keel", "codex")
+	handed := crewHandoff(t, cli, string(first), "My delegate is still working.", false)
 	next := protocol.Deref(handed.SessionID)
 	w.Launched(string(next))
 	closed, err := cli.AgentClose(string(delegated.SessionID), next, "The assigned work is complete.")
