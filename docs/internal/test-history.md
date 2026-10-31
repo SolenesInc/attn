@@ -34,15 +34,18 @@ the run, still writes `--receipt-out`, and the run goes on.
 
 Receipts are kept in the spool, `$ATTN_TEST_HISTORY_DIR` or else
 `attn-test-history` in the Git common directory, which every worktree of the
-checkout shares. `go tool test-history spool` prints its path.
-
+checkout shares. `go tool test-history spool` prints its path. It holds:
 
 - `working/<id>/`: a run in progress. Capture and the test command hold its
   lock while they run.
 - `receipts/<id>.json`: sealed receipts. A sealed receipt is never rewritten.
-- `shared/<id>.json`: receipts [sync](#sharing) downloaded from the shared
-  history. Selection reads them with the sealed ones.
-- `uploaded/<id>` and `sync.json`: what sync has uploaded and last done.
+- `shared/<id>.json`: this repository's receipts that [sync](#sharing)
+  downloaded from the shared history, this machine's own included. Selection
+  reads them with the sealed ones.
+- `uploaded/<id>`: an empty file marking a sealed receipt the service
+  acknowledged.
+- `sync.json`: the download cursor, and when sync last ran, last succeeded and
+  why it last failed.
 
 `go tool test-history recover` seals the working files of runs that ended
 without sealing, such as a capture killed with `SIGKILL`, as incomplete. It
@@ -66,26 +69,29 @@ machine's receipts. It imports CI's receipt artifacts on its own;
 `go tool test-history sync` exchanges the rest:
 
 - It uploads each sealed receipt the service has not acknowledged and marks
-  it in `uploaded/<id>`. A refused receipt is reported and offered again on
-  the next sync.
+  it in `uploaded/<id>`. The service can refuse a receipt, and so does sync
+  when the receipt's `repo` is not `host/owner/name`, as for a run captured
+  outside a checkout with an origin remote (`repo` is `unknown`). Sync reports
+  each refused receipt, offers it again on every sync, and exits 1.
 - It downloads this repository's receipts into `shared/<id>.json`, resuming
-  after the cursor kept in `sync.json`.
-- It prints how many receipts wait to upload. When it fails, it also prints
-  when a sync last succeeded, keeps every receipt, and exits 1.
+  after the cursor in `sync.json`.
+- On success it prints how many receipts it uploaded and downloaded and how
+  many wait to upload. On failure it prints how many wait to upload and when a
+  sync last succeeded, keeps every receipt, and exits 1.
 
 A sync never changes a test's result; no test command runs it.
 `ATTN_TEST_HISTORY_URL` points it at another service. Each request has a
-2-minute budget; a sync of one 67 KB receipt to a local service took 0.17 s.
+2-minute budget.
 
 The service token is read from
 `${XDG_CONFIG_HOME:-~/.config}/attn-test-history/token`. It lives in Proton
 Pass (Personal vault, login `attn-test-history ingestion`); install it with:
 
 ```sh
-mkdir -p ~/.config/attn-test-history
+dir="${XDG_CONFIG_HOME:-$HOME/.config}/attn-test-history"
+mkdir -p "$dir"
 (umask 077; pass-cli item view --vault-name Personal \
-  --item-title 'attn-test-history ingestion' --field password \
-  > ~/.config/attn-test-history/token)
+  --item-title 'attn-test-history ingestion' --field password > "$dir/token")
 ```
 
 ## Receipt
