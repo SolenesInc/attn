@@ -343,8 +343,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            runs_on: macos-14
+          - os: macos-15
+            runs_on: macos-15
           - os: ubuntu-24.04
             runs_on: ubuntu-24.04
     steps:
@@ -537,8 +537,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            runs_on: macos-14
+          - os: macos-15
+            runs_on: macos-15
           - os: ubuntu-24.04
             runs_on: ubuntu-24.04
     defaults:
