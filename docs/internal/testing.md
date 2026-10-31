@@ -85,15 +85,15 @@ it did. No test sleeps or polls.
 
 A stepped timer the test never advances fails at the hang guard instead of
 passing slowly. `make lint-go` fails a `time.Sleep`, `time.Tick`,
-`time.NewTicker`, a bare `<-time.After` or a `select` deadline other than
+`time.NewTicker`, a bare `<-time.After` or a `time.After` deadline other than
 `fakeagent.HangGuard` in Go test code outside a `synctest.Test` body, and
 `scripts/testtimelint` lists the few allowed ones with their reasons.
-`pnpm --dir app run lint` fails a `waitForTimeout` in `app/e2e`, and a sleep
-on `setTimeout` or `Bun.sleep` or a Testing Library `waitFor` or `findBy*`
-query in app, plugin and SDK tests; `.oxlintrc.json` lists the files still
-allowed, with their reasons. Heartbeats, kernel socket deadlines, the
-operating system's file events, syncthing's own timers and the shared PTY host
-keep real time.
+`pnpm --dir app run lint` fails a `waitForTimeout` in `app/e2e`, and in app,
+plugin and SDK tests a sleep on `setTimeout` or `Bun.sleep` and a poll with
+Testing Library's `waitFor` or `findBy*`, `vi.waitFor` or `expect.poll`;
+`.oxlintrc.json` lists the files still allowed, with their reasons.
+Heartbeats, kernel socket deadlines, the operating system's file events,
+syncthing's own timers and the shared PTY host keep real time.
 
 ### Wire
 
@@ -104,8 +104,9 @@ Wire tests are the default, and come in two forms:
 - An app wire test renders the real app with its real socket client and acts
   as the daemon. It sends protocol messages and asserts on what renders and
   what the app sends back. It runs in a simulated browser with the Tauri host
-  stubbed; everything else attn ships in the frontend is real, and
-  `pnpm --dir app run lint` fails a test that mocks one of attn's own modules.
+  stubbed; everything else attn ships in the frontend is real, apart from the
+  fakes [App wire tests](app-wire-tests.md) lists. `pnpm --dir app run lint`
+  fails a test that mocks one of attn's own modules.
 
 Both use the generated protocol types, so a protocol change breaks both at
 once.

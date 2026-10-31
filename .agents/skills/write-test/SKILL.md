@@ -41,27 +41,30 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
 
 ### Time
 
-- Sleeping, or polling until something happens. Wait for the signal that it
-  did: the event on a peer that connected before the call
-  (`testworld.Await`, `testworld.AwaitSession`), the CLI's output, or a pipe
-  the process opens when ready.
+- Sleeping, or polling for a result the test could be told about, in a Go or
+  app test. Wait for the signal that it happened: the event on a peer that
+  connected before the call (`testworld.Await`, `testworld.AwaitSession`),
+  the CLI's output, or a pipe the process opens when ready. Browser
+  end-to-end specs are the exception `testing.md` names.
 - Waiting for a timer to fire. Move the clock: `w.advance(d)` in a world,
   `s.Advance(d)` in a stack. When the timer is armed asynchronously, wait
-  for it first with `w.awaitTimer(d)` or `s.AwaitTimer(d)`.
-- `case <-time.After(5 * time.Second)` as a deadline. A short one fails on a
-  loaded machine, and a long one is a sleep. The only real-time bound is
-  `fakeagent.HangGuard`, for a signal that never arrives.
+  for it first: `w.awaitTimer(d)` in a world outside a bubble,
+  `s.AwaitTimer(d)` in a stack.
+- `time.After(5 * time.Second)` as a deadline, in a `select` or stored first.
+  A short one fails on a loaded machine, and a long one is a sleep. The only
+  real-time bound is `fakeagent.HangGuard`, for a signal that never arrives.
 - Waiting a while to show that something never happens. Run in `inBubble`
   and advance past the moment it would have happened: under `synctest`,
   "nothing happened" is exact.
-- `time.Now()` inside `inBubble` or `synctest.Test` reads the bubble's clock,
-  which moves only while every goroutine in the bubble waits. It is not a
-  live-clock bug: there, `time.Since(before) != 0` means the call waited on a
-  timer.
-- Testing Library's `waitFor` and `findBy*` poll on a real interval. The
-  scripted daemon installs fake timers: `gesture(daemon, action)` or
-  `await daemon.idle()` settles the app, `daemon.received(cmd)` waits for a
-  request, and `vi.advanceTimersByTimeAsync(ms)` moves time.
+- Flagging `time.Now()` inside `inBubble` or `synctest.Test` as a live-clock
+  bug. It reads the bubble's clock, which moves only while every goroutine
+  in the bubble waits, so a `time.Since(before) != 0` in a bubble means the
+  call waited on a timer.
+- Testing Library's `waitFor` and `findBy*`, `vi.waitFor` and `expect.poll`
+  poll on an interval. The scripted daemon installs fake timers:
+  `gesture(daemon, action)` or `await daemon.idle()` settles the app,
+  `daemon.received(cmd)` waits for a request, and
+  `await act(() => vi.advanceTimersByTimeAsync(ms))` moves time.
 - `await new Promise((r) => setTimeout(r, ms))`, `Bun.sleep(ms)` or a
   `Date.now()` deadline loop in a plugin or SDK test. Have the fake resolve a
   promise when the call the test waits for arrives, as `daemon.received`
@@ -79,19 +82,16 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
   event on a connected peer.
 - Poking launch internals to catch an agent mid-boot. `w.HoldNextBoot()`
   holds the fake agent, not the daemon.
-- `vi.mock('../Component')`, or mocking any other module of attn's own. App
-  wire tests fake only the Tauri host, which `app/src/test/setup.ts` already
-  mocks, and the daemon, which the test scripts.
+- `vi.mock('../Component')`, or mocking any other module of attn's own. An
+  app wire test fakes the daemon, which it scripts, and only the other fakes
+  `docs/internal/app-wire-tests.md` lists. Render the real module through
+  `renderApp`.
 - `render(<Component …/>)` with hand-built props depends on those props,
   which a rewrite changes. Render the app with `renderApp` and reach the
   component the way the user does.
-- A harness method that sets attn's own state. A harness models what is
-  outside attn; add the outside event that leads to that state.
 
-### Broken and flaky tests
+### Flaky tests
 
-- Repairing a test that a behavior-preserving change broke. It depended on
-  internals: delete it, or replace it with a test of the right kind.
 - Retrying a flaky test, or giving it a longer timeout. Find the step it
   races, usually a wait with no signal behind it, and give that step a
   signal or a stepped clock.
