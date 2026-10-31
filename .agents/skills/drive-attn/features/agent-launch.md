@@ -39,7 +39,7 @@ screen in its tile and offers Resume; a clean quit closes the session.
 
 ### Agents
 
-- `attn agent reload <session>... | --all` and `attn agent close <session-or-seed> -m "<reason>"`, both with `--source-session` and `--json` (`cmd/attn/agent_reload.go`, `cmd/attn/agent.go`). `attn agent close --self -m "<reason>"` closes the caller without its id; combining `--self` with a target is a usage error. A session may reload or close itself and the agents below it in its delegation chain; the chief may act on any agent of its profile.
+- `attn agent reload <session-or-member>... | --all` and `attn agent close <session-or-seed> -m "<reason>"`, both with `--source-session` and `--json` (`cmd/attn/agent_reload.go`, `cmd/attn/agent.go`). `attn agent close --self -m "<reason>"` closes the caller without its id; combining `--self` with a target is a usage error. A session may reload or close itself and the agents below it in its delegation chain; the chief may act on any agent of its profile.
 - `attn --help` lists `agent close` and `agent reload`; `attn session --help` points from reopening to `attn agent close`. An unknown close target points at `--self`.
 - Starting another agent is delegation ([delegation.md](delegation.md)); opening a shell beside itself is `attn terminal open` ([terminals.md](terminals.md)).
 - Prompts: the attn skill's reference on other sessions, which names `agent reload` and `agent close` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).

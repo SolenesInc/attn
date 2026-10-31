@@ -756,12 +756,13 @@ commands:
         seed keeps its tender with a note about the close.
         The caller defaults to this session (resolved from this terminal).
         --self closes the caller without its id and cannot take a target.
-  reload <session-id>... [--source-session <id>] [--json]
+  reload <session-or-member>... [--source-session <id>] [--json]
   reload --all [--source-session <id>] [--json]
         interrupt and reload agents in place, as "Reload this agent" does.
         Running work is interrupted and non-persistent state may be lost.
-        Full ids and unique prefixes work. A session may reload itself and
-        descendants; the profile's chief may reload any agent in that profile.
+        Full ids, unique prefixes and awake crew names work; a sleeping
+        member stays asleep. A session may reload itself and descendants;
+        the profile's chief may reload any agent in that profile.
         --all is chief-only, includes the chief and crew, and excludes shells.
         Chief and crew close protections do not prevent reload.
         Each target reports an outcome; failures leave successful reloads in place

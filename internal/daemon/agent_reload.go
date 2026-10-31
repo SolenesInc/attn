@@ -6,6 +6,7 @@ import (
 	"net"
 	"slices"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -16,7 +17,7 @@ func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessa
 		return
 	}
 	if msg.All == (len(msg.Targets) > 0) {
-		d.sendError(conn, "name one or more sessions, or use --all")
+		d.sendError(conn, "name one or more sessions or crew members, or use --all")
 		return
 	}
 	targets := slices.Clone(msg.Targets)
@@ -37,16 +38,8 @@ func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessa
 	sessions := []*protocol.Session{}
 	seen := map[protocol.SessionID]bool{}
 	for _, ref := range targets {
-		target, code := d.resolveSessionReference(ref, caller.ProfileID)
-		var err error
-		switch {
-		case target == nil:
-			if code == "ambiguous_session" {
-				err = fmt.Errorf("%q matches more than one session; use more of the id", ref)
-			} else {
-				err = fmt.Errorf("no session matches %q in the caller's profile", ref)
-			}
-		case target.Agent == "shell":
+		target, err := d.resolveAgentReloadTarget(ref, caller.ProfileID)
+		if err == nil && target.Agent == "shell" {
 			err = fmt.Errorf("%s is a shell, not an agent", ref)
 		}
 		if err != nil {
@@ -74,4 +67,26 @@ func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessa
 		result.Outcomes = append(result.Outcomes, outcome)
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, AgentReloadResult: result})
+}
+
+func (d *Daemon) resolveAgentReloadTarget(ref, profileID string) (*protocol.Session, error) {
+	member, found, err := d.resolveCrewMember(ref)
+	if err != nil {
+		return nil, err
+	}
+	if found && d.crewProfileID(member.ID) == profileID {
+		if session := d.store.Get(member.BindingSession); session != nil && d.crewBindingLive(member) {
+			return session, nil
+		}
+		return nil, fmt.Errorf("crew member %s is asleep; reload does not wake members", crew.DisplayName(member.ID))
+	}
+	target, code := d.resolveSessionReference(ref, profileID)
+	switch {
+	case target != nil:
+		return target, nil
+	case code == "ambiguous_session":
+		return nil, fmt.Errorf("%q matches more than one session; use more of the id", ref)
+	default:
+		return nil, fmt.Errorf("no session or awake crew member matches %q in the caller's profile", ref)
+	}
 }

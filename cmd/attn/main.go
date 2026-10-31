@@ -703,7 +703,7 @@ commands:
   agent inbox [message-id]              read durable agent notifications
   agent msg-status <message-id>         inspect a sent peer message
   agent close <session-or-seed> | --self -m "reason"   close a session and keep the reason
-  agent reload <session>... | --all     restart agents in place
+  agent reload <session-or-member>... | --all   restart agents in place
   terminal <command>                open, read, type into, wait on, move and close terminals
   session <command>                 read the ledger and conversations; reopen, rename, snooze and prioritize sessions
   state explain <id>                replay why a session's state is what it is

@@ -26,14 +26,14 @@ func runAgentReload(args []string) {
 		}
 		target := strings.TrimSpace(fs.Arg(0))
 		if target == "" {
-			err = errors.New("session id cannot be empty")
+			err = errors.New("target cannot be empty")
 			break
 		}
 		targets = append(targets, target)
 		rest = fs.Args()[1:]
 	}
 	if err == nil && *all == (len(targets) > 0) {
-		err = errors.New("name one or more session ids, or use --all")
+		err = errors.New("name one or more sessions or crew members, or use --all")
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "agent reload: %v\n", err)

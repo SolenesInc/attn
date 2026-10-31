@@ -9,7 +9,7 @@ Run `attn agent --help` for the exact flags; this file is the rules.
 
 `attn agent list` is the address book. It prints a short id per session; any
 unique prefix works, and `--json` carries the full ids and the machine shape.
-An awake crew member's stable name also addresses `peek` and `msg`.
+An awake crew member's stable name also addresses `peek`, `msg` and `reload`.
 
 `attn session list --tree` shows every live session under its dispatcher, with
 short ids, labels, harnesses, states, owed/snoozed turns and seed slugs. Use it
@@ -80,13 +80,14 @@ errors. Run `attn session --help` for syntax.
 
 ## Reloading agents
 
-`attn agent reload <session-id>...` does the same thing as the palette's
+`attn agent reload <session-or-member>...` does the same thing as the palette's
 "Reload this agent" action. It interrupts running agents immediately and may
 lose non-persistent state. Save anything needed before reloading. The session
 stays in place and resumes its saved conversation when one is available.
 
-Use full session ids or unique prefixes. A session may reload itself and
-agents below it in its delegation chain, including delegates of delegates.
+Use full session ids, unique prefixes or an awake crew member's name; a
+sleeping member stays asleep. A session may reload itself and agents below it
+in its delegation chain, including delegates of delegates.
 The profile's chief may reload any agent in that profile. Chief and crew
 sessions can be reloaded under these rules, even though they are protected
 from closing. Shells are excluded.
