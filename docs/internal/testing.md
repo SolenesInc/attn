@@ -39,7 +39,10 @@ When a promise cannot be reached or observed through other promises, extend
 the harness (`testworld`, `fakeagent`, the real-app harness) instead of
 reaching inside from the test. A harness capability models something outside
 attn, such as an agent, the user, the clock, or the network. It never sets
-attn's own state.
+attn's own state. Pause and crash points are the one reach inside: a named
+step in attn's code where a test holds or ends the daemon, to reach a moment
+between two steps of one action that no outside event can. They set no state;
+what the test observes still comes through promises.
 
 Kernel tests build their function's input directly, since the function is
 itself a promise.

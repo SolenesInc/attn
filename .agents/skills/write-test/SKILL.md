@@ -82,6 +82,11 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
   event on a connected peer.
 - Poking launch internals to catch an agent mid-boot. `w.HoldNextBoot()`
   holds the fake agent, not the daemon.
+- Avoiding a pause or crash point because it lives in attn's code, or calling
+  it a harness that sets attn's state. When the promise is about a moment
+  between two steps of one action, such as a change landing while a request
+  is held, `w.daemon.PauseNextHeldAction` or `s.StartCrashingAt` is the way
+  to reach it, and a new point is the way to reach another such moment.
 - `vi.mock('../Component')`, or mocking any other module of attn's own. An
   app wire test fakes the daemon, which it scripts, and only the other fakes
   `docs/internal/app-wire-tests.md` lists. Render the real module through

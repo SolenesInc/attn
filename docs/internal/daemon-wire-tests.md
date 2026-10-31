@@ -14,6 +14,10 @@ can reach the daemon only through the protocol and the CLI client.
   `newWorldInLongestDataDir(t)` does the same in a data directory as long as
   the world's own sockets allow, for promises about socket paths.
 - `w.App()` connects as the app. `w.Client()` returns a CLI client.
+- `w.daemon.PauseNextHeldAction(paused, resume)` is a pause point: the next
+  profile action sends on `paused` after it ran, with its client's
+  broadcasts still held, and waits for `resume`. A test uses it for what that
+  client receives when another change lands in that window.
 - `testworld.Await`, `testworld.Request` and `testworld.AwaitSession` read what
   the daemon sends.
 
