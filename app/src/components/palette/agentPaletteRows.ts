@@ -13,13 +13,14 @@ export interface PaletteSession extends QueueBandSession {
 
 export type AgentPaletteRow<S extends PaletteSession> =
   | { kind: 'agent'; key: string; session: S; anchored: boolean; queueHead: boolean }
-  | { kind: 'member'; key: string; member: string }
+  | { kind: 'member'; key: string; member: string; chief?: boolean; unconfigured?: boolean }
   | { kind: 'tile'; key: string; desktopId: string; tile: TileLeaf; title: string }
   | { kind: 'divider'; key: string };
 
 export interface AgentPaletteInput<S extends PaletteSession> {
   bands: QueueBands<S>;
   crewRoster: readonly { id: string; name: string }[];
+  chief?: { key: string; agent?: string } | null;
   desktops: readonly DesktopWithSessions<S>[];
   tileTitle: (desktopId: string, tile: TileLeaf) => string;
   now: number;
@@ -55,7 +56,7 @@ function matches(terms: readonly string[], ...texts: (string | undefined)[]): bo
 }
 
 export function agentPaletteRows<S extends PaletteSession>(
-  { bands, crewRoster, desktops, tileTitle }: AgentPaletteInput<S>,
+  { bands, crewRoster, chief, desktops, tileTitle }: AgentPaletteInput<S>,
   query: string,
 ): AgentPaletteRow<S>[] {
   const terms = queryTerms(query);
@@ -77,8 +78,12 @@ export function agentPaletteRows<S extends PaletteSession>(
     awakeByMember.set(member, [...(awakeByMember.get(member) ?? []), row]);
   }
   const names = new Map(crewRoster.map((member) => [member.id, member.name]));
+  if (chief && !bands.chief && matches(terms, chief.key, names.get(chief.key) ?? chief.key, 'chief')) {
+    anchored.push({ kind: 'member', key: `member:${chief.key}`, member: chief.key, chief: true, unconfigured: !chief.agent });
+  }
   const members = [...new Set([...names.keys(), ...awakeByMember.keys()])].sort();
   for (const member of members) {
+    if (member === chief?.key) continue;
     const awake = awakeByMember.get(member);
     if (awake) {
       for (const row of awake) anchored.push(...bandRow(row.session, true));

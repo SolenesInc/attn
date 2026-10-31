@@ -68,6 +68,7 @@ interface DashboardProps {
   onOpenPR?: (pr: DaemonPR) => void;
   onOpenSettings: () => void;
   introBanner?: { onReplay: () => void; onDismiss: () => void };
+  chiefOfStaffCard?: boolean;
   queue: QueueBands<DashboardSession> | null;
   followNextTurn?: boolean;
   onToggleFollowNextTurn?: () => void;
@@ -118,6 +119,7 @@ export function Dashboard({
   onOpenPR,
   onOpenSettings,
   introBanner,
+  chiefOfStaffCard = true,
   queue,
   followNextTurn = false,
   onToggleFollowNextTurn,
@@ -513,32 +515,34 @@ export function Dashboard({
           </div>
         </div>
 
-        <div className="dashboard-card chief-dispatch-card" data-testid="chief-of-staff-card">
-          <div className="card-header">
-            <h2>Chief of Staff</h2>
+        {chiefOfStaffCard && (
+          <div className="dashboard-card chief-dispatch-card" data-testid="chief-of-staff-card">
+            <div className="card-header">
+              <h2>Chief of Staff</h2>
+            </div>
+            <div className="card-body">
+              {!chiefSession ? (
+                <div className="card-empty">Assign a session as chief to track delegated work.</div>
+              ) : (
+                <div className="chief-session-block" data-testid="chief-session-summary">
+                  <div className="chief-section-label">Chief session</div>
+                  <button
+                    type="button"
+                    className="chief-session-summary"
+                    onClick={() => onSelectSession(chiefSession.id)}
+                  >
+                    <StateIndicator state={chiefSession.state} size="sm" seed={chiefSession.id} />
+                    <span className="chief-session-name"><SessionPriority priority={chiefSession.priority} />{sessionDisplayName(chiefSession)}</span>
+                    <ChiefOfStaffBadge compact />
+                    <span className="chief-session-state">
+                      Session: {chiefSession.state.replace('_', ' ')}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="card-body">
-            {!chiefSession ? (
-              <div className="card-empty">Assign a session as chief to track delegated work.</div>
-            ) : (
-              <div className="chief-session-block" data-testid="chief-session-summary">
-                <div className="chief-section-label">Chief session</div>
-                <button
-                  type="button"
-                  className="chief-session-summary"
-                  onClick={() => onSelectSession(chiefSession.id)}
-                >
-                  <StateIndicator state={chiefSession.state} size="sm" seed={chiefSession.id} />
-                  <span className="chief-session-name"><SessionPriority priority={chiefSession.priority} />{sessionDisplayName(chiefSession)}</span>
-                  <ChiefOfStaffBadge compact />
-                  <span className="chief-session-state">
-                    Session: {chiefSession.state.replace('_', ' ')}
-                  </span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
 
         <div className="dashboard-card">
           <div className="card-header">

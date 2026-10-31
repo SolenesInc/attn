@@ -79,4 +79,5 @@ export interface SettingsNavGroup {
 
 export interface SettingsModalHandle {
   close(): Promise<void>;
+  selectSection(section: SettingsSectionID): Promise<void>;
 }

@@ -26,7 +26,7 @@ export function AgentRowView<S extends PaletteSession>({
     case 'divider':
       return <hr className="unified-palette-divider" />;
     case 'member':
-      return <SleepingMember member={row.member} showCrewDetails={showCrewDetails} />;
+      return <SleepingMember member={row.member} chief={row.chief} unconfigured={row.unconfigured} showCrewDetails={showCrewDetails} />;
     case 'tile':
       return <TileRow row={row} slot={slotOf(row.desktopId)} />;
     case 'agent':
@@ -84,15 +84,15 @@ export function AgentSessionRow({
   );
 }
 
-function SleepingMember({ member, showCrewDetails }: { member: string; showCrewDetails: boolean }) {
+function SleepingMember({ member, chief, unconfigured, showCrewDetails }: { member: string; chief?: boolean; unconfigured?: boolean; showCrewDetails: boolean }) {
   const roster = useDaemonStore((state) => state.crew.find((entry) => entry.id === member));
   const label = showCrewDetails ? roster?.launch_desktop?.label : undefined;
   return <div className="unified-palette-row">
     <span className="unified-palette-dot is-asleep" />
-    <span className="unified-palette-name">{roster?.name ?? member}{showCrewDetails && <span className="unified-palette-muted"> · crew{label ? ` · ${label}` : ''}</span>}</span>
+    <span className="unified-palette-name">{roster?.name ?? member}{chief && <span className="unified-palette-muted"> · chief</span>}{showCrewDetails && !chief && <span className="unified-palette-muted"> · crew{label ? ` · ${label}` : ''}</span>}</span>
     <kbd className="unified-palette-slot" />
-    <span className="unified-palette-pill">asleep</span>
-    <span className="unified-palette-age">wake</span>
+    <span className="unified-palette-pill">{unconfigured ? 'not set up' : 'asleep'}</span>
+    <span className="unified-palette-age">{unconfigured ? 'set up' : 'wake'}</span>
     <span className="unified-palette-tag" />
   </div>;
 }

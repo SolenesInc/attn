@@ -126,7 +126,6 @@ export function useSettingsModalState({
     }
     if (await autosave.flush()) onClose();
   }, [autosave, onClose]);
-  useImperativeHandle(closeRef, () => ({ close: closeSettings }), [closeSettings]);
   const selectSection = useCallback(
     async (section: SettingsSectionID) => {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -138,6 +137,7 @@ export function useSettingsModalState({
     },
     [autosave],
   );
+  useImperativeHandle(closeRef, () => ({ close: closeSettings, selectSection }), [closeSettings, selectSection]);
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
   const outpostsEnabled = settings.outposts_enabled === 'true';
   useEffect(() => {

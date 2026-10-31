@@ -69,6 +69,12 @@ export const scenarioCatalog = [
     timeoutMs: 600_000,
   },
   {
+    id: 'chief-slot',
+    runnerId: 'CHIEF-SLOT',
+    label: 'Chief slot: fresh-profile setup that fits without scroll bars, keyboard-only Notebook pick and first wake',
+    command: ['node', 'scripts/real-app-harness/scenario-chief-slot.mjs'],
+  },
+  {
     id: 'snooze-keyboard',
     runnerId: 'SNOOZE-KEYBOARD',
     label: 'Snooze from the palette: agent-centered picker, native keys, focus handover and wake',

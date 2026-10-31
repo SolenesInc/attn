@@ -233,9 +233,19 @@ next session. With it on:
   harness, model, effort and folder, and the session becomes an ordinary one.
   On its first day the new Chief knows it can message that session for open
   work and context. A Chief with nothing to start from has no harness and
-  stays asleep, keeping its mail, until you pick one:
-  `attn crew set chief --agent <harness> --model <model>`.
+  stays asleep, keeping its mail, until you set it up.
+- The Chief has its own row at the top of the sidebar's Crew section. While it
+  has no harness, the row opens its setup: pick Claude Code or Codex, the model
+  and effort, and the profile's Notebook folder, then press Enter to wake it.
+  The Chief's home moves into the folder you pick. If neither harness is
+  installed, the setup says so; install one and choose "Check again". From a
+  shell, `attn crew set chief --agent <harness> --model <model>` sets it up,
+  and `attn crew wake chief` wakes it.
+- The Chief's menus offer "Harness and model…" to change what it runs on for
+  its next wake, "Edit charter", and Sleep in place of Close. It wakes with one
+  click. The command palette has the same actions.
 - The Chief member runs on its own launch settings (`attn crew set chief`).
   The Chief's model, effort and context budget in **Settings → Background
-  agents** apply only to a Chief session with Crew v2 off.
+  agents**, and the Chief of Staff card on Home, apply only to a Chief session
+  with Crew v2 off.
 - Turning Crew v2 off gives the Chief role back to the session that had it.

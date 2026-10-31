@@ -220,6 +220,7 @@ export interface CrewSetOptions {
   agent: string;
   model: string;
   effort: string;
+  notebookRoot?: string;
 }
 export type SeedPlacement = 'standalone' | { sessionId: string };
 
@@ -3546,6 +3547,7 @@ export function useDaemonSocket({
         model: options.model,
         effort: options.effort,
         ...(options.launchDesktop ? { launch_desktop_setting: options.launchDesktop } : {}),
+        ...(options.notebookRoot ? { notebook_root: options.notebookRoot } : {}),
       },
       'Saving the crew member\'s launch settings timed out',
       MODEL_DISCOVERY_TIMEOUT_MS,

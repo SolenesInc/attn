@@ -23,6 +23,7 @@ import {
   useAppDiagnosticsContext,
   useAppInputs,
   useAppPanelsContext,
+  useChiefContext,
   useAppShell,
   useAttentionQueueContext,
   useCrewPanelContext,
@@ -104,7 +105,9 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     toggleNotificationsPanel,
     openNotebookBrowser,
     whatsNew,
+    setSidebarCollapsed,
   } = useAppPanelsContext();
+  const chief = useChiefContext();
   const { openActiveSessionInEditor, editorUnavailableReason } = useOpenInEditor();
   const sharedCodexCommands = useSharedCodexCommands();
   const navigationCommands = useMemo<PaletteCommand[]>(() => {
@@ -676,8 +679,20 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     return actionMenuItemsWithDesktopActions;
   }, [actionMenuItemsWithDesktopActions, handleWakeActiveSession, handleSnoozeActiveSession]);
 
+  const chiefCommands = useMemo<PaletteCommand[]>(() => {
+    const view = chief.view;
+    if (!view) return [];
+    const openSetup = () => { setSidebarCollapsed(false); chief.actions.edit(); };
+    const commands: PaletteCommand[] = [];
+    if (view.phase === 'unconfigured') commands.push({ id: 'chief-setup', title: `Set up ${view.name}`, keywords: ['chief', 'harness', 'model'], icon: '⌁', run: openSetup });
+    if (view.phase === 'asleep') commands.push({ id: 'chief-wake', title: `Wake ${view.name}`, keywords: ['chief', 'wake'], icon: '☀', run: chief.actions.wake });
+    if (view.phase === 'awake') commands.push({ id: 'chief-sleep', title: `Put ${view.name} to sleep`, keywords: ['chief', 'sleep'], icon: '☾', run: chief.actions.sleep });
+    if (view.agent) commands.push({ id: 'chief-route', title: `Change ${view.name}'s harness and model`, keywords: ['chief', 'harness', 'model', 'effort'], icon: '⌁', run: openSetup });
+    return commands;
+  }, [chief, setSidebarCollapsed]);
+
   return useMemo(
-    () => [...navigationCommands, ...sharedCodexCommands, ...actionMenuItemsWithQueueActions],
-    [navigationCommands, sharedCodexCommands, actionMenuItemsWithQueueActions],
+    () => [...chiefCommands, ...navigationCommands, ...sharedCodexCommands, ...actionMenuItemsWithQueueActions],
+    [chiefCommands, navigationCommands, sharedCodexCommands, actionMenuItemsWithQueueActions],
   );
 }

@@ -11,9 +11,9 @@ import { useWhatsNew } from '../hooks/useWhatsNew';
 import { useAsksStore } from '../store/asks';
 
 interface Options {
-  agentSurfaceCount: number;
+  sidebarEmpty: boolean;
 }
-export function useAppPanels({ agentSurfaceCount }: Options) {
+export function useAppPanels({ sidebarEmpty: empty }: Options) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -40,7 +40,6 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
 
   const { dockState, toggleDockPanel, openDockPanel, closeDockPanel } = useDockPanels();
 
-  const empty = agentSurfaceCount === 0;
   const [sidebarState, setSidebarState] = useState({ empty, collapsed: empty });
   if (sidebarState.empty !== empty) setSidebarState({ empty, collapsed: empty });
   const sidebarCollapsed = sidebarState.collapsed;

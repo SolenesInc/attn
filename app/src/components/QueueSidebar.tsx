@@ -6,6 +6,7 @@ import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
 import { slotShortcut } from '../utils/desktops';
 import { formatWakeTimeShort } from '../utils/snoozeDurations';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
+import { ChiefSlot } from './ChiefSlot';
 import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } from './QueueRows';
 import './QueueSidebar.css';
 import { SidebarHeader, SidebarPopovers } from './SidebarChrome';
@@ -133,6 +134,7 @@ function CrewBlock() {
   const {
     queue,
     crew,
+    chief: chiefMember,
     selectedId,
     onSelectSession,
     onWakeCrewMember,
@@ -144,9 +146,9 @@ function CrewBlock() {
   } = useSidebarContext();
   const where = useRowWhere();
   if (!queue) return null;
-  const members = crewRows(crew, queue);
-  if (!queue.chief && members.length === 0) return null;
-  const chief = queue.chief;
+  const members = crewRows(crew, queue).filter(({ member }) => member !== chiefMember?.key);
+  const chief = chiefMember ? null : queue.chief;
+  if (!chiefMember && !chief && members.length === 0) return null;
   return (
     <div className="queue-crew-block" data-testid="queue-crew-block" data-callout-anchor="crew">
       <div className="queue-section-rule queue-crew-rule">
@@ -154,6 +156,7 @@ function CrewBlock() {
         <span className="queue-rule-line" aria-hidden="true" />
         {onManageCrew && <button type="button" data-testid="manage-crew" onClick={onManageCrew}>manage</button>}
       </div>
+      {chiefMember && <ChiefSlot />}
       {chief && (
         <QueueRowView
           row={chief}

@@ -21,6 +21,7 @@ export function AppCrewPanel() {
       visit={crewPanel.visit}
       isOpen={crewPanel.open}
       initialMember={crewPanel.member}
+      initialTab={crewPanel.tab}
       members={crew}
       canRename={settings.crew_v2_enabled === 'true'}
       sessions={daemonSessions}

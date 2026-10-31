@@ -15,6 +15,7 @@ import {
   useAppPanelsContext,
   useAppInputs,
   useAttentionQueueContext,
+  useChiefContext,
   useNavigationContext,
 } from './AppContexts';
 import { useAppCommands } from './useAppCommands';
@@ -69,6 +70,10 @@ function OpenPalette({
   const { desktopViews, handleSelectSession, handleSelectTile } = useNavigationContext();
   const { queueModeEnabled, crewQueueEnabled, queueHidden } = useAttentionQueueContext();
   const { handleWakeCrewMember } = useAppGardenActionsContext();
+  const chief = useChiefContext();
+  const chiefKey = chief.view?.key;
+  const chiefAgent = chief.view?.agent;
+  const { setSidebarCollapsed } = useAppPanelsContext();
   const { desktopTileContents, sendSettleTurn, sendSnoozeTurn, sendSetSessionPriority, sendGetCommandUsage, sendRecordCommandUsage } = useDaemonApi();
   const desktops = useProfilesStore((state) => state.desktops);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -111,11 +116,12 @@ function OpenPalette({
     return {
       bands: buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled, now, hidden: queueHidden }),
       crewRoster: crew.filter((member) => member.profile_id === selectedProfileId),
+      chief: chiefKey ? { key: chiefKey, agent: chiefAgent } : null,
       desktops: desktopViews,
       tileTitle,
       now,
     };
-  }, [crew, crewQueueEnabled, desktopViews, queueHidden, selectedProfileId, tileTitle]);
+  }, [crew, chiefKey, chiefAgent, crewQueueEnabled, desktopViews, queueHidden, selectedProfileId, tileTitle]);
 
   return (
     <UnifiedPalette
@@ -131,7 +137,11 @@ function OpenPalette({
       commandsLoading={usage === null}
       onCommandPick={recordCommand}
       onOpenAgent={(session) => handleSelectSession(session.id)}
-      onWakeMember={handleWakeCrewMember}
+      onWakeMember={(member) => {
+        if (member !== chief.view?.key) { handleWakeCrewMember(member); return; }
+        if (chief.view.phase === 'unconfigured') { setSidebarCollapsed(false); chief.actions.edit(); }
+        else chief.actions.wake();
+      }}
       onOpenTile={handleSelectTile}
       onSettle={(session) => void sendSettleTurn(session.id)}
       onPriority={(session) => sendSetSessionPriority(session.id, !session.priority)}

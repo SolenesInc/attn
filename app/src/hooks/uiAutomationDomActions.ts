@@ -390,6 +390,7 @@ export async function runDomAutomationAction(
       const panel = element.closest<HTMLElement>('.side-panel');
       return {
         bounds: rectSnapshot(element),
+        scroll: { scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight },
         animations: element.getAnimations({ subtree: true }).map((animation) => ({ state: animation.playState })),
         panel: panel ? {
           shellClass: panel.parentElement?.className,

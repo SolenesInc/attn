@@ -32,6 +32,7 @@ import type { SidebarSurface } from '../components/sidebarTypes';
 import { useAppSessions } from './useAppSessions';
 import { useAttentionQueue } from './useAttentionQueue';
 import { useChiefOfStaff } from './useChiefOfStaff';
+import { useChief } from './useChief';
 import { usePRLauncher } from './usePRLauncher';
 import { useSessionLaunch } from './useSessionLaunch';
 import { useSessionLifecycle } from './useSessionLifecycle';
@@ -204,7 +205,8 @@ export function useAppController({
   const agentSurfaceCount =
     sessions.length +
     desktopViews.filter((group) => group.hasUnresolvedAgentPanes).length;
-  const appPanels = useAppPanels({ agentSurfaceCount });
+  const chief = useChief({ liveSessionIds: appSessions.liveGardenSessions, selectSession: handleSelectSession, showError });
+  const appPanels = useAppPanels({ sidebarEmpty: agentSurfaceCount === 0 && settings.crew_v2_enabled !== 'true' });
   const crewPanelState = useCrewPanel();
   const { crewPanel, closeCrewPanel } = crewPanelState;
   const {
@@ -703,6 +705,7 @@ export function useAppController({
       prLauncher,
       sessionLifecycle,
       chiefOfStaff,
+      chief,
     },
     attention: {
       attentionQueue,

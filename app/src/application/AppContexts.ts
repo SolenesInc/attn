@@ -55,6 +55,9 @@ export function useSessionLifecycleContext() {
 export function useChiefOfStaffContext() {
   return useRequiredContext(SessionsContext).chiefOfStaff;
 }
+export function useChiefContext() {
+  return useRequiredContext(SessionsContext).chief;
+}
 
 export const AttentionContext = createContext<
   ReturnType<typeof useAppController>['attention'] | null

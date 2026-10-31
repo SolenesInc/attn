@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAskList } from '../store/asks';
@@ -15,6 +15,7 @@ import {
   useAppSessionsContext,
   useAppShell,
   useAttentionQueueContext,
+  useChiefContext,
   useChiefOfStaffContext,
   useCrewPanelContext,
   useDesktopNavigationContext,
@@ -66,7 +67,12 @@ export function AppSidebar() {
   const { handleOpenPalette, sidebarSurface, windowCovered, agentFocused } = useAppShell();
   const { keybindings } = useAppAppearanceContext();
   const { criticalNotifications, settings } = useAppInputs();
+  const { setSettingsOpen, settingsModalRef, setSidebarCollapsed } = useAppPanelsContext();
   const { handleChangeChiefOfStaff } = useChiefOfStaffContext();
+  const chief = useChiefContext();
+  useEffect(() => {
+    if (chief.view?.phase === 'unconfigured') setSidebarCollapsed(false);
+  }, [chief.view?.key, chief.view?.phase, setSidebarCollapsed]);
   const allCrew = useDaemonStore((state) => state.crew);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const profileName = useProfilesStore(
@@ -131,6 +137,11 @@ export function AppSidebar() {
       onTogglePriority={togglePriority}
       onChangeChiefOfStaff={handleChangeChiefOfStaff}
       crew={crew}
+      chief={chief.view}
+      chiefActions={chief.actions}
+      chiefSetupOpen={chief.setupOpen}
+      chiefSetupOpenedByUser={chief.setupOpenedByUser}
+      onChiefSettings={() => { void settingsModalRef.current?.selectSection('agents'); setSettingsOpen(true); }}
       onWakeCrewMember={handleWakeCrewMember}
       onSleepCrewMember={handleSleepCrewMember}
       onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}

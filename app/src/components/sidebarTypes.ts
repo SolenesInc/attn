@@ -12,6 +12,8 @@ import { type TileContentState } from '../types/desktop';
 import { type QueueBands as QueueBandsModel } from '../utils/queueBands';
 import type { DesktopWithSessions } from '../utils/desktopViewModels';
 import { type CrewMemberView } from './QueueRows';
+import type { ChiefActions, ChiefView } from '../application/useChief';
+import type { CrewTab } from '../hooks/useCrewNavigation';
 
 export interface LocalSession {
   id: string;
@@ -69,10 +71,15 @@ export interface SidebarProps {
   onToggleDockCollapsed?: () => void;
   queue?: QueueBandsModel<LocalSession> | null;
   crew?: CrewMemberView[];
+  chief?: ChiefView | null;
+  chiefActions?: ChiefActions;
+  chiefSetupOpen?: boolean;
+  chiefSetupOpenedByUser?: boolean;
+  onChiefSettings?: () => void;
   onWakeCrewMember?: (member: string) => void;
   onSleepCrewMember?: (member: string) => void;
   onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement) => void;
+  onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement, tab?: CrewTab) => void;
   onSettleTurn?: (id: string) => void;
   onWalkRuns?: () => void;
   onJumpToWaiting?: () => void;

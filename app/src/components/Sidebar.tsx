@@ -6,7 +6,7 @@ import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { QueueBar } from './QueueBar';
 import { QueueSidebar } from './QueueSidebar';
 import './Sidebar.css';
-import { SidebarCollapsed, SidebarSleepingCrew, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
+import { SidebarCollapsed, SidebarCrew, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
 import { SidebarContext, useSidebarContext } from './SidebarContext';
 import { HomeIcon } from './SidebarIcons';
 import type { SidebarProps } from './sidebarTypes';
@@ -76,7 +76,7 @@ function SidebarExpanded() {
       </button>
 
       <div ref={listRef} onClick={onClick} className={`session-list ${reorderDrag ? 'session-list--reordering' : ''}`.trim()}>
-        <SidebarSleepingCrew />
+        <SidebarCrew />
         <SidebarDesktopOverview />
         <SidebarDesktopList />
         {leafDrag && (

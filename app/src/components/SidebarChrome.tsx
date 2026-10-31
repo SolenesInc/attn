@@ -10,6 +10,7 @@ import { ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
 import { desktopShortcut, hasNoLeaves } from './sidebarModel';
 import { DesktopChip } from './SidebarDesktops';
 import { CrewRowView } from './QueueRows';
+import { ChiefSlot } from './ChiefSlot';
 import { CommandsButton, FlowToggleButton, SidebarPanelButtons } from './SidebarHeader';
 export { SidebarHeader } from './SidebarHeader';
 
@@ -171,10 +172,10 @@ export function SidebarFooter() {
   );
 }
 
-export function SidebarSleepingCrew() {
-  const { crew, onManageCrew, onWakeCrewMember, openCrewMemberActions } = useSidebarContext();
-  if (!crew?.length) return null;
-  const sleeping = crew.filter((member) => !member.binding_session);
+export function SidebarCrew() {
+  const { crew, chief, onManageCrew, onWakeCrewMember, openCrewMemberActions } = useSidebarContext();
+  const sleeping = (crew ?? []).filter((member) => !member.binding_session && member.id !== chief?.key);
+  if (!chief && !crew?.length) return null;
   return (
     <div className="sidebar-sleeping-crew" data-callout-anchor="crew">
       <div className="queue-section-rule queue-crew-rule">
@@ -182,6 +183,7 @@ export function SidebarSleepingCrew() {
         <span className="queue-rule-line" aria-hidden="true" />
         {onManageCrew && <button type="button" data-testid="manage-crew" onClick={onManageCrew}>manage</button>}
       </div>
+      <ChiefSlot />
       {sleeping.map((member) => (
         <CrewRowView
           key={member.id}
@@ -215,7 +217,10 @@ export function SidebarPopovers() {
     crewActionsTarget,
     setCrewActionsTarget,
     onOpenCrewMemberDetails,
+    chief,
+    chiefActions,
   } = useSidebarContext();
+  const chiefSession = Boolean(chief && sessionActionsTarget?.crewMember === chief.key);
   const actionsSession = sessionActionsTarget
     ? desktops.flatMap((desktop) => desktop.sessions).find((session) => session.id === sessionActionsTarget.id)
     : undefined;
@@ -241,6 +246,8 @@ export function SidebarPopovers() {
       {sessionActionsTarget && (
         <SessionActionsPopover
           sessionLabel={sessionActionsTarget.label}
+          onEditHarnessRoute={chiefSession ? chiefActions?.edit : undefined}
+          memberDetailsLabel={chiefSession ? 'Edit charter' : undefined}
           priority={actionsSession?.priority}
           onTogglePriority={onTogglePriority && actionsSession ? () => onTogglePriority(actionsSession) : undefined}
           chiefOfStaff={sessionActionsTarget.chiefOfStaff}
@@ -256,18 +263,18 @@ export function SidebarPopovers() {
               anchor: sessionActionsTarget.anchor,
             });
           }}
-          onChangeChiefOfStaff={(enabled) =>
+          onChangeChiefOfStaff={chiefSession ? undefined : (enabled) =>
             onChangeChiefOfStaff?.(sessionActionsTarget.id, enabled)
           }
-          onCloseSession={() => onCloseSession(sessionActionsTarget.id)}
+          ending={chiefSession && chief && chiefActions
+            ? { kind: 'sleep', name: chief.name, run: chiefActions.sleep }
+            : { kind: 'close', run: () => onCloseSession(sessionActionsTarget.id) }}
           onReloadSession={() => onReloadSession(sessionActionsTarget.id)}
           onMemberDetails={
             sessionActionsTarget.crewMember && onOpenCrewMemberDetails
-              ? () =>
-                  onOpenCrewMemberDetails(
-                    sessionActionsTarget.crewMember!,
-                    sessionActionsTarget.trigger,
-                  )
+              ? () => chiefSession
+                  ? onOpenCrewMemberDetails(sessionActionsTarget.crewMember!, sessionActionsTarget.trigger, 'charter')
+                  : onOpenCrewMemberDetails(sessionActionsTarget.crewMember!, sessionActionsTarget.trigger)
               : undefined
           }
           onClose={() => setSessionActionsTarget(null)}
@@ -277,11 +284,15 @@ export function SidebarPopovers() {
         <CrewMemberActionsPopover
           memberName={crew?.find((member) => member.id === crewActionsTarget.member)?.name ?? crewActionsTarget.member}
           desktopLabel={crew?.find((member) => member.id === crewActionsTarget.member)?.launch_desktop?.label}
+          memberDetailsLabel={crewActionsTarget.member === chief?.key ? 'Edit charter' : undefined}
+          onEditHarnessRoute={crewActionsTarget.member === chief?.key ? chiefActions?.edit : undefined}
+          onWake={crewActionsTarget.member === chief?.key && chief?.agent ? chiefActions?.wake : undefined}
           anchor={crewActionsTarget.anchor}
           onOpenDetails={() => {
             const target = crewActionsTarget;
             setCrewActionsTarget(null);
-            onOpenCrewMemberDetails?.(target.member, target.trigger);
+            if (target.member === chief?.key) onOpenCrewMemberDetails?.(target.member, target.trigger, 'charter');
+            else onOpenCrewMemberDetails?.(target.member, target.trigger);
           }}
           onClose={() => setCrewActionsTarget(null)}
         />

@@ -124,6 +124,14 @@
         "runnerClass": "github-hosted Linux",
         "note": "Green Automation surface scenario at 8c88b5b92, including save preservation of an unreported model and effort. Matrix elapsed 32.990s; ATTN_VERDICT durationMs=32173, including cleanup."
       },
+      "chief-slot": {
+        "run": "local: 20 serial runs on instance chiefslot",
+        "job": "scenario-chief-slot.mjs",
+        "recordedAt": "2026-10-31",
+        "seconds": 6.1,
+        "runnerClass": "local macOS arm64",
+        "note": "Twenty green runs took 5.89-6.14s by ATTN_VERDICT durationMs, launch and cleanup included. Remeasure from the first green Linux matrix."
+      },
       "crew-seed-header": {
         "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
         "job": "App acceptance shard 4/4",
@@ -420,6 +428,7 @@
     "close-pane-nonblocking": 10,
     "countdown-cancel": 46.3,
     "crash-recovery": 9,
+    "chief-slot": 6.1,
     "crew-seed-header": 53.2,
     "delegation-chain": 33.361,
     "delegation-preferences": 40.156,

@@ -25,6 +25,7 @@ interface CrewPanelProps {
   canRename: boolean;
   visit: number;
   initialMember?: string;
+  initialTab?: CrewTab;
   members: CrewMember[];
   sessions: DaemonSession[];
   seeds: Seed[];
@@ -184,6 +185,7 @@ function CrewPanelSurface({
   isOpen,
   canRename,
   initialMember,
+  initialTab,
   members,
   sessions,
   seeds,
@@ -201,7 +203,7 @@ function CrewPanelSurface({
   const closeRef = useRef<HTMLButtonElement>(null);
   const rosterRef = useRef<HTMLDivElement>(null);
   const { selectedMember, tab, pending: navigationPending, navigate } = useCrewNavigation({
-    members, initialMember, rosterRef, charter: charterAutosave, onClose, onOpenSeed,
+    members, initialMember, initialTab, rosterRef, charter: charterAutosave, onClose, onOpenSeed,
   });
   const selectedMemberId = selectedMember?.id;
   const charterEdit = selectedMemberId ? charterAutosave.read(selectedMemberId) : undefined;

@@ -1,18 +1,20 @@
 import { useCallback, useState } from 'react';
 import { useSessionStore } from '../store/sessions';
+import type { CrewTab } from '../hooks/useCrewNavigation';
 
 interface CrewPanelState {
   open: boolean;
   visit: number;
   member?: string;
   returnFocus?: HTMLElement;
+  tab?: CrewTab;
 }
 
 export function useCrewPanel() {
   const [crewPanel, setCrewPanel] = useState<CrewPanelState>({ open: false, visit: 0 });
 
-  const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement | undefined) => {
-    setCrewPanel((current) => ({ open: true, visit: current.visit + 1, member, returnFocus }));
+  const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement | undefined, tab?: CrewTab) => {
+    setCrewPanel((current) => ({ open: true, visit: current.visit + 1, member, returnFocus, tab }));
   }, []);
 
   const closeCrewPanel = useCallback(() => {
