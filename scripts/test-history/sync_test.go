@@ -318,18 +318,31 @@ func TestAReceiptWithoutARepositoryDoesNotStopTheSync(t *testing.T) {
 	}
 }
 
-func TestSyncReadsCIHistorySpelledDifferentlyAndRestartsACursorFromAnotherService(t *testing.T) {
+func TestACursorFromAnotherServiceDoesNotSkipThisServicesHistory(t *testing.T) {
 	w := newSyncWorld(t)
 	w.captureReceipt()
-	w.service.add("github.com/ACME/Attn", "ci-0", []byte(`{"invocation_id":"ci-0"}`))
+	w.service.add("github.com/"+checkoutRepository, "ci-0", []byte(`{"invocation_id":"ci-0"}`))
 	if out, errOut, code := w.sync(); code != 0 || w.shared("ci-0") == nil {
-		t.Fatalf("CI receipt spelled github.com/ACME/Attn not downloaded for checkout %s\nstdout: %s\nstderr: %s", checkoutRepository, out, errOut)
+		t.Fatalf("first sync exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
 	}
 
 	other := newFakeHistoryService(t)
-	other.add("github.com/acme/attn", "ci-elsewhere", []byte(`{"invocation_id":"ci-elsewhere"}`))
+	other.add("github.com/"+checkoutRepository, "ci-elsewhere", []byte(`{"invocation_id":"ci-elsewhere"}`))
 	w.service = other
 	if out, errOut, code := w.sync(); code != 0 || w.shared("ci-elsewhere") == nil {
 		t.Fatalf("a cursor advanced on another service skipped this one's history\nstdout: %s\nstderr: %s", out, errOut)
+	}
+}
+
+func TestACursorWrittenBeforeCursorsNamedTheirServiceStartsOver(t *testing.T) {
+	w := newSyncWorld(t)
+	for i := range 3 {
+		w.service.add("github.com/"+checkoutRepository, fmt.Sprintf("ci-%d", i), []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i)))
+	}
+	if err := os.WriteFile(filepath.Join(w.spool, "sync.json"), []byte(`{"last_attempt":"2026-10-31T12:00:00Z","cursor":20}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 3;") {
+		t.Fatalf("sync from a sync.json with cursor 20 and no service exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
 	}
 }
