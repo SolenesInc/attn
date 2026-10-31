@@ -148,16 +148,16 @@ func choiceOf(t *testing.T, selection testhistory.Selection, unit string) testhi
 	return testhistory.Choice{}
 }
 
-func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
+func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 	repo := newCheckout(t)
 	start := time.Now().Add(-time.Hour).Truncate(time.Second)
 	repo.write("scripts/landing-tests", "group go \\.go$\ngo ./p TestA\ngo ./p TestGone\n")
 	repo.write("p/p_test.go", fmt.Sprintf(testSource, "p", "A", "first", "B"))
 	repo.write("q/q_test.go", fmt.Sprintf(testSource, "q", "C", "first", "D"))
-	admitted := repo.commit("admit the baseline", start)
+	firstMain := repo.commit("the baseline", start)
 	repo.runTests("./p", "./q")
-	repo.receive(otherLaneFailure("ci-c-fails", admitted, "go ./q TestC", start.Add(time.Minute)))
-	repo.receive(otherLaneFailure("ci-native-fails", admitted, "native agent-reload", start.Add(time.Minute)))
+	repo.receive(otherLaneFailure("ci-c-fails", firstMain, "go ./q TestC", start.Add(time.Minute)))
+	repo.receive(otherLaneFailure("ci-native-fails", firstMain, "native agent-reload", start.Add(time.Minute)))
 
 	repo.git("checkout", "-q", "-b", "side")
 	repo.write("side/side.go", "package side\n")
@@ -170,14 +170,14 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 	landed := repo.commit("land on main", time.Now().Add(time.Hour))
 	repo.runTests("./p", "./q")
 	repo.receive(otherLaneFailure("ci-a-fails", landed, "go ./p TestA", time.Now().Add(2*time.Hour)))
-	recovered := otherLaneFailure("recovered-without-finish", admitted, "go ./p TestA", start)
+	recovered := otherLaneFailure("recovered-without-finish", firstMain, "go ./p TestA", start)
 	recovered.Command.FinishedAt, recovered.Command.Exit, recovered.Complete = nil, nil, false
 	repo.receive(recovered)
 	if out, code := repo.history("capture", "go", "--unit", "go ./p TestA", "--", "-count=1", "-run", "^TestA$", "./p"); code != 0 {
 		t.Fatalf("baseline landing run exited %d:\n%s", code, out)
 	}
 	if out, code := repo.history("capture", "go", "--unit", "go ./q TestC", "--", "-count=1", "-run", "^TestC$", "./q"); code != 0 {
-		t.Fatalf("measure run exited %d:\n%s", code, out)
+		t.Fatalf("TestC run exited %d:\n%s", code, out)
 	}
 
 	repo.git("checkout", "-q", "-b", "change")
@@ -185,13 +185,13 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 	repo.write("p/testdata/fixture/f_test.go", fmt.Sprintf(testSource, "fixture", "Fixture", "x", "Other"))
 
 	t.Run("select", func(t *testing.T) {
-		out, code := repo.history("select", "--main", "main", "--mode", "extend", "--json")
+		out, code := repo.history("select", "--main", "main", "--json")
 		if code != 0 {
 			t.Fatalf("select exited %d", code)
 		}
 		selection := decode[testhistory.Selection](t, out)
-		if selection.Policy != testhistory.SuccessCount || strings.Join(selection.Groups, " ") != "go" {
-			t.Fatalf("policy %s, groups %v", selection.Policy, selection.Groups)
+		if selection.ClearedAfter != testhistory.ClearedAfter || strings.Join(selection.Groups, " ") != "go" {
+			t.Fatalf("cleared after %d, groups %v", selection.ClearedAfter, selection.Groups)
 		}
 		changed := choiceOf(t, selection, "go ./p TestNew")
 		if !changed.Changed || changed.Status != testhistory.Selected {
@@ -206,13 +206,16 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 			}
 		}
 		baseline := choiceOf(t, selection, "go ./p TestA")
-		if baseline.Status != testhistory.Selected || baseline.Standing.Anchor.Kind != testhistory.AnchorFailure || baseline.Standing.Lane != otherLane().String() {
+		if baseline.Status != testhistory.Selected || baseline.Standing.Anchor.Commit != landed || baseline.Standing.Lane != otherLane().String() {
 			t.Fatalf("baseline TestA: %+v %+v", baseline, baseline.Standing)
 		}
 		nominated := choiceOf(t, selection, "go ./q TestC")
 		standing := nominated.Standing
-		if nominated.Status != testhistory.Selected || standing.Lane != otherLane().String() || standing.PassesSince != 0 || standing.Anchor.Commit != admitted {
+		if nominated.Status != testhistory.Selected || standing.Lane != otherLane().String() || standing.PassesSince != 0 || standing.Anchor.Commit != firstMain {
 			t.Fatalf("a failure in another lane, cleared only by passes in this one, must stand uncleared: %+v %+v", nominated, standing)
+		}
+		if native := choiceOf(t, selection, "native agent-reload"); native.Status != testhistory.Unavailable || !strings.Contains(native.Note, "no landing recipe") {
+			t.Fatalf("an uncleared native failure must be unavailable for want of a landing recipe: %+v", native)
 		}
 		if gone := choiceOf(t, selection, "go ./p TestGone"); gone.Status != testhistory.Unavailable || gone.Note == "" {
 			t.Fatalf("missing baseline test: %+v", gone)
@@ -223,48 +226,31 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 	})
 
 	t.Run("the same from a subdirectory", func(t *testing.T) {
-		cmd := historyCommand(t, repo.spool, filepath.Join(repo.dir, "q"), "select", "--main", "main", "--mode", "extend", "--json")
+		cmd := historyCommand(t, repo.spool, filepath.Join(repo.dir, "q"), "select", "--main", "main", "--json")
 		out, err := cmd.Output()
 		if err != nil {
 			t.Fatal(err)
 		}
-		root, _ := repo.history("select", "--main", "main", "--mode", "extend", "--json")
+		root, _ := repo.history("select", "--main", "main", "--json")
 		if string(out) != root {
 			t.Fatalf("select from q/ printed:\n%s\nfrom the root:\n%s", out, root)
 		}
 	})
 
-	t.Run("replace stays within the baseline's cost", func(t *testing.T) {
-		out, _ := repo.history("select", "--main", "main", "--json")
-		selection := decode[testhistory.Selection](t, out)
-		budget := selection.Budgets[0]
-		if budget.BudgetMS == nil || *budget.BudgetMS == 0 || budget.EstimateMS > *budget.BudgetMS {
-			t.Fatalf("budget %+v; the change touches baseline TestA, which must still count in the baseline's budget", budget)
+	t.Run("named groups replace the change's", func(t *testing.T) {
+		out, _ := repo.history("select", "--main", "main", "--group", "go", "--json")
+		if groups := decode[testhistory.Selection](t, out).Groups; strings.Join(groups, " ") != "go" {
+			t.Fatalf("groups %v", groups)
 		}
-		if testA := choiceOf(t, selection, "go ./p TestA"); !testA.Changed || testA.Status != testhistory.Selected {
-			t.Fatalf("changed baseline TestA: %+v", testA)
-		}
-		if choiceOf(t, selection, "go ./p TestNew").Status != testhistory.Selected {
-			t.Fatalf("a changed test must be selected outside the budget")
-		}
-	})
-
-	t.Run("baseline", func(t *testing.T) {
-		out, _ := repo.history("select", "--main", "main", "--mode", "baseline", "--json")
-		selection := decode[testhistory.Selection](t, out)
-		var units []string
-		for _, choice := range selection.Choices {
-			units = append(units, string(choice.Status)+" "+choice.Unit)
-		}
-		if got := strings.Join(units, ", "); got != "selected go ./p TestA, unavailable go ./p TestGone" {
-			t.Fatalf("baseline = %s", got)
+		if _, code := repo.history("select", "--main", "main", "--group", "nope"); code == 0 {
+			t.Fatal("an unknown group must fail")
 		}
 	})
 
 	t.Run("explain", func(t *testing.T) {
 		out, code := repo.history("explain", "--main", "main", "--test", "go ./q TestC", "--json")
 		explained := decode[explanation](t, out)
-		if code != 0 || explained.Standing == nil || len(explained.Standing.Lanes) != 1 || !explained.Priced {
+		if code != 0 || explained.Standing == nil || len(explained.Standing.Lanes) != 1 || explained.CostMS == nil {
 			t.Fatalf("explain exited %d: %+v", code, explained)
 		}
 		if evidence := explained.Standing.Anchor.Evidence; len(evidence) != 1 || evidence[0] != "ci-c-fails" {
@@ -276,33 +262,15 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 		}
 	})
 
-	t.Run("pending", func(t *testing.T) {
-		out, code := repo.history("pending", "--main", "main", "--json")
-		pending := decode[[]pendingUnit](t, out)
-		var units []string
-		for _, unit := range pending {
-			if !strings.HasPrefix(unit.Reason, "unavailable") {
-				t.Fatalf("%s pending as %q", unit.Unit, unit.Reason)
-			}
-			if strings.HasPrefix(unit.Unit, "native ") && !strings.Contains(unit.Reason, "no landing recipe") {
-				t.Fatalf("%s pending as %q; a native scenario is unavailable because no landing recipe runs it", unit.Unit, unit.Reason)
-			}
-			units = append(units, unit.Unit)
-		}
-		if got := strings.Join(units, ", "); code != 0 || got != "go ./p TestGone, native agent-reload" {
-			t.Fatalf("pending exited %d: %s", code, got)
-		}
-	})
-
 	t.Run("replay", func(t *testing.T) {
 		repo.write("q/q_test.go", "package q\n")
-		out, code := repo.history("replay", "--main", "main", "--from", admitted)
+		out, code := repo.history("replay", "--main", "main", "--from", firstMain)
 		lines := strings.Split(strings.TrimSpace(out), "\n")
 		point := decode[replayPoint](t, lines[len(lines)-1])
 		if code != 0 || len(lines) != 2 || point.Commit != landed {
 			t.Fatalf("replay exited %d at %s", code, point.Commit)
 		}
-		if point.Freshness.NewestEvidence != admitted {
+		if point.Freshness.NewestEvidence != firstMain {
 			t.Fatalf("replay at %s used evidence from %s; only earlier main commits count", landed, point.Freshness.NewestEvidence)
 		}
 		if strings.Join(point.Changed, " ") != "go ./q TestC" {
@@ -335,8 +303,8 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 		if selected := strings.Join(point.Selections["baseline"].Selected, " "); selected != "go ./p TestA" {
 			t.Fatalf("baseline selected %s", selected)
 		}
-		if extended := point.Selections["extend-all"].Selected; len(extended) != 2 {
-			t.Fatalf("extend-all selected %v, want TestA and the nominated TestC", extended)
+		if landing := point.Selections["landing"].Selected; len(landing) != 2 {
+			t.Fatalf("landing selected %v, want TestA and the failed TestC", landing)
 		}
 	})
 }

@@ -62,6 +62,11 @@ func caseResult(unit, name string, outcome th.Outcome) th.Result {
 	return th.Result{Unit: unit, Case: name, Attempt: 1, Outcome: outcome}
 }
 
+func filtered(r th.Receipt) th.Receipt {
+	r.Command.Argv = []string{"vitest", "run", "-t", "scrolls"}
+	return r
+}
+
 func cached(unit string) th.Result {
 	return th.Result{Unit: unit, Attempt: 1, Outcome: th.Pass, Cached: true}
 }
@@ -70,34 +75,23 @@ const unit = "vitest src/a.test.tsx"
 
 func TestStandingFollowsTheSpecification(t *testing.T) {
 	main := th.NewMainline(commits(6))
-	admittedAt1 := main.Admission("c01")
 	cases := []struct {
-		name      string
-		unit      string
-		receipts  []th.Receipt
-		admission *th.Admission
-		standing  bool
-		kind      th.AnchorKind
-		anchor    string
-		lane      string
-		passes    int
-		cases     []string
+		name     string
+		unit     string
+		receipts []th.Receipt
+		standing bool
+		anchor   string
+		lane     string
+		passes   int
+		cases    []string
 	}{
-		{name: "an admission with no observations stands with no passes",
-			admission: &admittedAt1, standing: true, kind: th.AnchorAdmission, anchor: "c01"},
-		{name: "fresh passes after the admission clear it",
-			admission: &admittedAt1, receipts: []th.Receipt{
-				receipt(on("c00", mac), result(unit, th.Pass)),
-				receipt(on("c02", mac), result(unit, th.Pass)),
-				receipt(on("c04", mac), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorAdmission, anchor: "c01", lane: "darwin/arm64", passes: 2},
 		{name: "passes after a failure in the same lane clear it",
 			receipts: []th.Receipt{
 				receipt(on("c00", mac), result(unit, th.Pass)),
 				receipt(on("c02", mac), result(unit, th.Fail)),
 				receipt(on("c03", mac), result(unit, th.Pass)),
 				receipt(on("c05", mac), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c02", lane: "darwin/arm64", passes: 2},
+			}, standing: true, anchor: "c02", lane: "darwin/arm64", passes: 2},
 		{name: "cached passes, skips, expected failures and interruptions clear nothing",
 			receipts: []th.Receipt{
 				receipt(on("c01", mac), result(unit, th.Fail)),
@@ -105,40 +99,45 @@ func TestStandingFollowsTheSpecification(t *testing.T) {
 				receipt(on("c03", mac), result(unit, th.Skip)),
 				receipt(on("c04", mac), result(unit, th.ExpectedFailure)),
 				receipt(on("c05", mac), result(unit, th.Interrupted)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c01", lane: "darwin/arm64"},
+			}, standing: true, anchor: "c01", lane: "darwin/arm64"},
 		{name: "repeated passes at one revision are one vote",
 			receipts: []th.Receipt{
 				receipt(on("c01", mac), result(unit, th.Fail)),
 				receipt(on("c02", mac), result(unit, th.Pass)),
 				receipt(on("c02", mac), result(unit, th.Pass), result(unit, th.Pass)),
 				receipt(on("c02", mac), result(unit, th.Pass), result(unit, th.Pass), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c01", lane: "darwin/arm64", passes: 1},
+			}, standing: true, anchor: "c01", lane: "darwin/arm64", passes: 1},
 		{name: "a failure wins over a pass at the same revision",
 			receipts: []th.Receipt{
 				receipt(on("c01", mac), result(unit, th.Pass)),
 				receipt(on("c03", mac), result(unit, th.Pass)),
 				receipt(on("c03", mac), result(unit, th.Pass), result(unit, th.Fail)),
 				receipt(on("c04", mac), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c03", lane: "darwin/arm64", passes: 1},
+			}, standing: true, anchor: "c03", lane: "darwin/arm64", passes: 1},
 		{name: "a retried attempt that failed is a failure",
 			receipts: []th.Receipt{
 				receipt(on("c02", mac), th.Result{Unit: unit, Case: "renders", Attempt: 1, Outcome: th.Fail, Detail: "retried"},
 					th.Result{Unit: unit, Case: "renders", Attempt: 2, Outcome: th.Pass}, result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c02", lane: "darwin/arm64", cases: []string{"renders"}},
+			}, standing: true, anchor: "c02", lane: "darwin/arm64", cases: []string{"renders"}},
 		{name: "a pass must cover the cases that failed",
 			receipts: []th.Receipt{
 				receipt(on("c01", mac), caseResult(unit, "renders", th.Fail), result(unit, th.Fail)),
-				receipt(on("c02", mac), caseResult(unit, "scrolls", th.Pass), result(unit, th.Pass)),
+				filtered(receipt(on("c02", mac), caseResult(unit, "scrolls", th.Pass), result(unit, th.Pass))),
 				receipt(on("c03", mac), caseResult(unit, "renders", th.Skip), result(unit, th.Pass)),
 				receipt(on("c04", mac), caseResult(unit, "renders", th.Pass), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c01", lane: "darwin/arm64", passes: 1, cases: []string{"renders"}},
+			}, standing: true, anchor: "c01", lane: "darwin/arm64", passes: 1, cases: []string{"renders"}},
+		{name: "a whole run that passes without a failed case it no longer has clears it",
+			receipts: []th.Receipt{
+				receipt(on("c01", mac), caseResult(unit, "renders", th.Fail), result(unit, th.Fail)),
+				receipt(on("c02", mac), caseResult(unit, "renders its rows", th.Pass), result(unit, th.Pass)),
+			}, standing: true, anchor: "c01", lane: "darwin/arm64", passes: 1, cases: []string{"renders"}},
 		{name: "a failure in another lane is cleared only by passes there",
 			receipts: []th.Receipt{
 				receipt(on("c01", linux), result(unit, th.Fail)),
 				receipt(on("c02", mac), result(unit, th.Pass)),
 				receipt(on("c03", mac), result(unit, th.Pass)),
 				receipt(on("c04", linux), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c01", lane: "linux/amd64", passes: 1},
+			}, standing: true, anchor: "c01", lane: "linux/amd64", passes: 1},
 		{name: "the least cleared lane decides",
 			receipts: []th.Receipt{
 				receipt(on("c01", mac), result(unit, th.Fail)),
@@ -146,45 +145,23 @@ func TestStandingFollowsTheSpecification(t *testing.T) {
 				receipt(on("c03", mac), result(unit, th.Pass)),
 				receipt(on("c04", mac), result(unit, th.Pass)),
 				receipt(on("c05", linux), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c02", lane: "linux/amd64", passes: 1},
-		{name: "a later failure replaces the admission as anchor",
-			admission: &admittedAt1, receipts: []th.Receipt{
-				receipt(on("c03", mac), result(unit, th.Fail)),
-				receipt(on("c04", mac), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c03", lane: "darwin/arm64", passes: 1},
-		{name: "a later admission replaces an older failure as anchor",
-			admission: &[]th.Admission{main.Admission("c03")}[0], receipts: []th.Receipt{
-				receipt(on("c01", mac), result(unit, th.Fail)),
-				receipt(on("c02", mac), result(unit, th.Pass)),
-				receipt(on("c04", mac), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorAdmission, anchor: "c03", lane: "darwin/arm64", passes: 1},
-		{name: "an admission not yet on main follows every main revision",
-			admission: &[]th.Admission{main.Admission("unlanded")}[0], receipts: []th.Receipt{
-				receipt(on("c04", mac), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorAdmission, anchor: "unlanded", lane: "darwin/arm64"},
+			}, standing: true, anchor: "c02", lane: "linux/amd64", passes: 1},
 		{name: "dirty and unlanded failures are not health evidence",
 			receipts: []th.Receipt{
 				receipt(on("c02", mac, true), result(unit, th.Fail)),
 				receipt(on("elsewhere", mac), result(unit, th.Fail)),
 			}},
-		{name: "silence is no standing without a failure or an admission",
-			receipts: []th.Receipt{receipt(on("c02", mac), result(unit, th.Pass))}},
-		{name: "a failure at the admission revision is the anchor",
-			admission: &admittedAt1, receipts: []th.Receipt{
-				receipt(on("c01", mac), result(unit, th.Fail)),
-				receipt(on("c02", mac), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c01", lane: "darwin/arm64", passes: 1},
 		{name: "passes without the race detector do not clear a race failure",
 			receipts: []th.Receipt{
 				receipt(on("c01", raceLinux), result(unit, th.Fail)),
 				receipt(on("c02", linux), result(unit, th.Pass)),
 				receipt(on("c03", linux), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c01", lane: "linux/amd64/race"},
+			}, standing: true, anchor: "c01", lane: "linux/amd64/race"},
 		{name: "race passes do not clear a failure without the race detector",
 			receipts: []th.Receipt{
 				receipt(on("c01", linux), result(unit, th.Fail)),
 				receipt(on("c02", raceLinux), result(unit, th.Pass)),
-			}, standing: true, kind: th.AnchorFailure, anchor: "c01", lane: "linux/amd64"},
+			}, standing: true, anchor: "c01", lane: "linux/amd64"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -192,15 +169,15 @@ func TestStandingFollowsTheSpecification(t *testing.T) {
 			if of == "" {
 				of = unit
 			}
-			standing, ok := th.BuildHealth(tc.receipts, main).Standing(of, tc.admission)
+			standing, ok := th.BuildHealth(tc.receipts, main).Standing(of)
 			if ok != tc.standing {
 				t.Fatalf("standing = %v, want %v (%+v)", ok, tc.standing, standing)
 			}
 			if !ok {
 				return
 			}
-			got := []any{standing.Anchor.Kind, standing.Anchor.Commit, standing.Lane, standing.PassesSince, standing.Anchor.Cases}
-			want := []any{tc.kind, tc.anchor, tc.lane, tc.passes, tc.cases}
+			got := []any{standing.Anchor.Commit, standing.Lane, standing.PassesSince, standing.Anchor.Cases}
+			want := []any{tc.anchor, tc.lane, tc.passes, tc.cases}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("standing = %v, want %v", got, want)
 			}
@@ -231,12 +208,6 @@ func timed(unit string, outcome th.Outcome, ms int64) th.Result {
 	return r
 }
 
-func priced(commit, unit string, ms int64) th.Receipt {
-	r := wall(receipt(on(commit, mac, true), result(unit, th.Pass)), ms)
-	r.InvocationID = "price-" + unit
-	return r
-}
-
 func recipes(t *testing.T, text string) th.RecipeList {
 	t.Helper()
 	list, err := th.ParseRecipeList(text)
@@ -246,156 +217,75 @@ func recipes(t *testing.T, text string) th.RecipeList {
 	return list
 }
 
-type selected map[string]th.Status
-
-func statuses(selection th.Selection) selected {
-	got := selected{}
+func statuses(selection th.Selection) map[string]th.Status {
+	got := map[string]th.Status{}
 	for _, choice := range selection.Choices {
 		got[choice.Unit] = choice.Status
 	}
 	return got
 }
 
-func ranked(selection th.Selection) []string {
-	var order []string
-	for _, choice := range selection.Choices {
-		if choice.Status == th.Selected && !choice.Changed {
-			order = append(order, choice.Unit)
-		}
-	}
-	return order
-}
-
 func TestSelectionFollowsTheSpecification(t *testing.T) {
-	main := th.NewMainline(commits(8))
+	n := th.ClearedAfter
+	main := th.NewMainline(commits(n + 4))
+	at := func(i int) string { return fmt.Sprintf("c%02d", i) }
 	const (
-		a, b, c   = "vitest src/a.test.tsx", "vitest src/b.test.tsx", "vitest src/c.test.tsx"
-		flaky     = "vitest src/flaky.test.tsx"
-		healed    = "vitest src/healed.test.tsx"
+		a, b      = "vitest src/a.test.tsx", "vitest src/b.test.tsx"
+		recent    = "vitest src/recent.test.tsx"
+		cleared   = "vitest src/cleared.test.tsx"
 		changed   = "vitest src/changed.test.tsx"
 		gone      = "vitest src/gone.test.tsx"
 		scenario  = "native agent-reload"
+		elsewhere = "go ./p TestElsewhere"
 		playwrite = "playwright e2e/x.spec.ts"
 	)
 	list := recipes(t, "group app ^app/\nvitest src/a.test.tsx\nvitest src/b.test.tsx\ngroup e2e ^app/e2e/\nplaywright e2e/x.spec.ts\n")
-	inventory := th.Inventory{a: true, b: true, c: true, flaky: true, healed: true, changed: true, playwrite: true}
-	admissions := map[string]th.Admission{a: main.Admission("c01"), b: main.Admission("c01"), playwrite: main.Admission("c01")}
+	inventory := th.Inventory{a: true, b: true, recent: true, cleared: true, changed: true, playwrite: true, elsewhere: true}
 	history := []th.Receipt{
-		receipt(on("c02", linux), result(a, th.Pass), result(b, th.Pass)),
-		receipt(on("c03", linux), result(a, th.Pass), result(healed, th.Fail)),
-		receipt(on("c04", linux), result(healed, th.Pass), result(b, th.Pass)),
-		receipt(on("c05", linux), result(healed, th.Pass), result(flaky, th.Fail), result(scenario, th.Fail), result(gone, th.Fail)),
-		receipt(on("c06", linux), result(healed, th.Pass), result(a, th.Pass)),
-		receipt(on("c07", linux), result(healed, th.Pass)),
-		priced("c07", a, 4000), priced("c07", b, 3000), priced("c07", flaky, 2000), priced("c07", healed, 1000), priced("c07", changed, 9000),
+		receipt(on(at(1), linux), result(cleared, th.Fail), result(scenario, th.Fail), result(gone, th.Fail)),
+		receipt(on(at(1), linux), result(elsewhere, th.Fail)),
+		receipt(on(at(2), linux), result(recent, th.Fail)),
+	}
+	for i := 2; i < n+2; i++ {
+		history = append(history, receipt(on(at(i), linux), result(cleared, th.Pass)))
+	}
+	for i := 3; i < n+2; i++ {
+		history = append(history, receipt(on(at(i), linux), result(recent, th.Pass)))
 	}
 	request := th.SelectRequest{
-		Policy: th.SuccessCount, Mode: th.ModeReplace, Recipes: list,
-		Changed: []string{"app/src/changed.test.tsx"}, ChangedTests: []string{changed},
-		Admissions: admissions, Inventory: inventory,
+		Groups: list.Groups[:1], ChangedTests: []string{changed}, Inventory: inventory,
 		Health: th.BuildHealth(history, main),
-		Costs:  th.BuildCosts(history, th.CostKey{Lane: mac, Machine: machine}),
+	}
+	selection := th.Select(request)
+	want := map[string]th.Status{
+		a: th.Selected, b: th.Selected, changed: th.Selected, recent: th.Selected,
+		cleared: th.Cleared, gone: th.Missing, scenario: th.Unavailable,
+	}
+	if got := statuses(selection); !reflect.DeepEqual(got, want) {
+		t.Fatalf("statuses = %v, want %v: the matched group's baseline, the changed test and a failure with %d of %d passes run; one with %d passes has cleared; a native failure is unavailable and a test gone from the checkout missing; a Go failure waits for a group that runs Go", got, want, n-1, n, n)
+	}
+	for _, choice := range selection.Choices {
+		if choice.Unit == recent && choice.PassesLeft() != 1 {
+			t.Fatalf("%s has %d passes left, want 1", recent, choice.PassesLeft())
+		}
+		if choice.Status == th.Unavailable && choice.Note == "" {
+			t.Fatalf("%s is unavailable without a reason", choice.Unit)
+		}
 	}
 
-	t.Run("replace ranks fewest passes first and fits the baseline's cost", func(t *testing.T) {
-		selection := th.Select(request)
-		if !reflect.DeepEqual(selection.Groups, []string{"app"}) {
-			t.Fatalf("groups = %v", selection.Groups)
-		}
-		if got, want := ranked(selection), []string{flaky, b, healed}; !reflect.DeepEqual(got, want) {
-			t.Fatalf("ranked selection = %v, want %v", got, want)
-		}
-		want := selected{changed: th.Selected, flaky: th.Selected, b: th.Selected, healed: th.Selected, a: th.OverBudget, gone: th.Unavailable}
-		if got := statuses(selection); !reflect.DeepEqual(got, want) {
-			t.Fatalf("statuses = %v, want %v", got, want)
-		}
-		budget := selection.Budgets[0]
-		if *budget.BudgetMS != 7000 || budget.EstimateMS != 6000 {
-			t.Fatalf("budget = %d, estimate = %d; want 7000 and 6000", *budget.BudgetMS, budget.EstimateMS)
-		}
-		if selection.Policy != th.SuccessCount {
-			t.Fatalf("policy = %s", selection.Policy)
+	t.Run("a baseline unit missing from the checkout is unavailable", func(t *testing.T) {
+		request := request
+		request.Inventory = th.Inventory{b: true}
+		if got := statuses(th.Select(request))[a]; got != th.Unavailable {
+			t.Fatalf("missing baseline unit is %s", got)
 		}
 	})
 
-	t.Run("a changed baseline unit is required and still counts in the baseline's budget", func(t *testing.T) {
-		changedBaseline := request
-		changedBaseline.ChangedTests = []string{a}
-		selection := th.Select(changedBaseline)
-		if *selection.Budgets[0].BudgetMS != 7000 {
-			t.Fatalf("budget = %d, want the whole baseline's 7000", *selection.Budgets[0].BudgetMS)
-		}
-		want := selected{a: th.Selected, flaky: th.Selected, b: th.Selected, healed: th.Selected, gone: th.Unavailable}
-		if got := statuses(selection); !reflect.DeepEqual(got, want) {
-			t.Fatalf("statuses = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("recent-failure ranks by the newest anchor alone", func(t *testing.T) {
-		recent := request
-		recent.Policy = th.RecentFailure
-		if got, want := ranked(th.Select(recent)), []string{flaky, healed, b}; !reflect.DeepEqual(got, want) {
-			t.Fatalf("ranked selection = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("extend keeps the baseline and adds within the allowance", func(t *testing.T) {
-		extend := request
-		extend.Mode = th.ModeExtend
-		allowance := int64(2500)
-		extend.AllowanceMS = &allowance
-		want := selected{changed: th.Selected, a: th.Selected, b: th.Selected, flaky: th.Selected, healed: th.OverBudget, gone: th.Unavailable}
-		if got := statuses(th.Select(extend)); !reflect.DeepEqual(got, want) {
-			t.Fatalf("statuses = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("baseline mode is the fixed list", func(t *testing.T) {
-		baseline := request
-		baseline.Mode = th.ModeBaseline
-		want := selected{a: th.Selected, b: th.Selected}
-		if got := statuses(th.Select(baseline)); !reflect.DeepEqual(got, want) {
-			t.Fatalf("statuses = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("an unpriced baseline unit leaves the runner without a budget", func(t *testing.T) {
-		unpriced := request
-		unpriced.Changed = []string{"app/e2e/x.spec.ts"}
-		unpriced.ChangedTests = nil
-		selection := th.Select(unpriced)
-		if got, want := statuses(selection)[playwrite], th.Selected; got != want {
-			t.Fatalf("%s = %s, want %s", playwrite, got, want)
-		}
-		for _, budget := range selection.Budgets {
-			if budget.Runner == th.RunnerPlaywright && (budget.BudgetMS != nil || budget.Note == "") {
-				t.Fatalf("playwright budget = %+v, want none with a reason", budget)
-			}
-		}
-	})
-
-	t.Run("a candidate without a cost is unpriced, never free", func(t *testing.T) {
-		unpricedFailure := request
-		unpricedFailure.Health = th.BuildHealth(append(history, receipt(on("c07", linux), result(c, th.Fail))), main)
-		if got := statuses(th.Select(unpricedFailure))[c]; got != th.Unpriced {
-			t.Fatalf("%s = %s, want unpriced", c, got)
-		}
-	})
-
-	t.Run("a changed test is selected outside the budget even when unpriced or over it", func(t *testing.T) {
-		tight := request
-		tight.ChangedTests = []string{changed, c}
-		got := statuses(th.Select(tight))
-		if got[changed] != th.Selected || got[c] != th.Selected {
-			t.Fatalf("changed tests = %s, %s; want selected", got[changed], got[c])
-		}
-	})
-
-	t.Run("no change selects nothing", func(t *testing.T) {
-		quiet := request
-		quiet.Changed, quiet.ChangedTests = nil, nil
-		if got := th.Select(quiet); len(got.Choices) != 0 || len(got.Groups) != 0 {
-			t.Fatalf("selection = %+v, want empty", got)
+	t.Run("no group selects nothing", func(t *testing.T) {
+		request := request
+		request.Groups = nil
+		if choices := th.Select(request).Choices; len(choices) != 0 {
+			t.Fatalf("with no group, chose %v", choices)
 		}
 	})
 }
@@ -565,27 +455,15 @@ func propertyRequest(t *rapid.T, main th.Mainline, history []th.Receipt) th.Sele
 	for _, u := range units {
 		inventory[u] = true
 	}
-	admission := main.Admission(rapid.SampledFrom(commits(main.Len())).Draw(t, "admitted"))
-	return th.SelectRequest{
-		Policy:  rapid.SampledFrom([]th.Policy{th.SuccessCount, th.RecentFailure}).Draw(t, "policy"),
-		Mode:    rapid.SampledFrom([]th.Mode{th.ModeReplace, th.ModeExtend, th.ModeBaseline}).Draw(t, "mode"),
-		Recipes: list, Changed: []string{"app/src/x.ts"},
-		Admissions: map[string]th.Admission{units[0]: admission, units[1]: admission},
-		Inventory:  inventory,
-		Health:     th.BuildHealth(history, main),
-		Costs:      th.BuildCosts(history, th.CostKey{Lane: mac, Machine: machine}),
-	}
+	return th.SelectRequest{Groups: list.Groups, Inventory: inventory, Health: th.BuildHealth(history, main)}
 }
 
 func decisions(selection th.Selection) []string {
 	var list []string
-	for _, budget := range selection.Budgets {
-		list = append(list, fmt.Sprintf("%s estimate %d", budget.Runner, budget.EstimateMS))
-	}
 	for _, choice := range selection.Choices {
 		line := fmt.Sprintf("%s %s", choice.Status, choice.Unit)
 		if s := choice.Standing; s != nil {
-			line += fmt.Sprintf(" %s@%s %s passes %d", s.Anchor.Kind, s.Anchor.Commit, s.Lane, s.PassesSince)
+			line += fmt.Sprintf(" %s %s passes %d", s.Anchor.Commit, s.Lane, s.PassesSince)
 		}
 		list = append(list, line)
 	}
@@ -609,7 +487,6 @@ func TestSelectionIgnoresArrivalOrderAndRepeatedRuns(t *testing.T) {
 			}
 		}
 		request.Health = th.BuildHealth(repeated, main)
-		request.Costs = th.BuildCosts(repeated, th.CostKey{Lane: mac, Machine: machine})
 		if got := decisions(th.Select(request)); !reflect.DeepEqual(got, decisions(want)) {
 			t.Fatalf("selection changed with arrival order or repeated runs:\n got %v\nwant %v", got, decisions(want))
 		}
@@ -625,35 +502,10 @@ func TestNoEvidenceButAFreshPassClearsAFailure(t *testing.T) {
 		noise := rapid.SampledFrom([]th.Result{cached(units[0]), result(units[0], th.Skip), result(units[0], th.Interrupted), result(units[0], th.ExpectedFailure)}).Draw(t, "noise")
 		where := at{rapid.SampledFrom(list).Draw(t, "commit"), rapid.SampledFrom([]th.Lane{mac, linux}).Draw(t, "lane"), false}
 		after := th.BuildHealth(append(history, receipt(where, noise)), main)
-		was, hadStanding := before.Standing(units[0], nil)
-		now, hasStanding := after.Standing(units[0], nil)
+		was, hadStanding := before.Standing(units[0])
+		now, hasStanding := after.Standing(units[0])
 		if hadStanding != hasStanding || hadStanding && now.PassesSince != was.PassesSince {
 			t.Fatalf("%v at %v changed the standing from %+v to %+v", noise.Outcome, where, was, now)
-		}
-	})
-}
-
-func TestReplaceNeverExceedsTheBaselineCost(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		list := commits(rapid.IntRange(1, 6).Draw(t, "commits"))
-		main := th.NewMainline(list)
-		request := propertyRequest(t, main, generateHistory(t, list))
-		request.Mode = th.ModeReplace
-		selection := th.Select(request)
-		for _, budget := range selection.Budgets {
-			if budget.BudgetMS != nil && budget.EstimateMS > *budget.BudgetMS {
-				t.Fatalf("%s selection costs %d, over its budget %d", budget.Runner, budget.EstimateMS, *budget.BudgetMS)
-			}
-		}
-		seen := map[string]bool{}
-		for _, choice := range selection.Choices {
-			if seen[choice.Unit] {
-				t.Fatalf("%s chosen twice", choice.Unit)
-			}
-			seen[choice.Unit] = true
-			if choice.Status == th.Selected && !choice.Changed && !choice.Baseline && !request.Costs.Priced(choice.Unit) {
-				t.Fatalf("%s selected without a cost", choice.Unit)
-			}
 		}
 	})
 }

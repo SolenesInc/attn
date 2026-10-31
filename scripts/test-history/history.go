@@ -119,37 +119,6 @@ func (t tree) recipes() (testhistory.RecipeList, error) {
 	return testhistory.ParseRecipeList(string(text))
 }
 
-func (t tree) admissions(list testhistory.RecipeList, main testhistory.Mainline) (map[string]testhistory.Admission, error) {
-	args := []string{"blame", "--porcelain"}
-	if t.revision != "" {
-		args = append(args, t.revision)
-	}
-	root, err := repoRoot()
-	if err != nil {
-		return nil, err
-	}
-	out, err := gitOutput(append(args, "--", filepath.Join(root, recipeList))...)
-	if err != nil {
-		return nil, err
-	}
-	lineCommits := map[int]string{}
-	header := regexp.MustCompile(`^([0-9a-f]{40}) \d+ (\d+)`)
-	for _, line := range strings.Split(string(out), "\n") {
-		if match := header.FindStringSubmatch(line); match != nil {
-			number, _ := strconv.Atoi(match[2])
-			lineCommits[number] = match[1]
-		}
-	}
-	admissions := map[string]testhistory.Admission{}
-	for _, recipe := range list.Recipes {
-		admission := main.Admission(lineCommits[recipe.Line])
-		if earlier, seen := admissions[recipe.Unit]; !seen || admission.Position < earlier.Position {
-			admissions[recipe.Unit] = admission
-		}
-	}
-	return admissions, nil
-}
-
 var goTestFunc = regexp.MustCompile(`^func (Test\w*)\(`)
 
 var goTestName = regexp.MustCompile(`^Test(?:[^a-z]\w*)?$`)

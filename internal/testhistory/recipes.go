@@ -105,3 +105,20 @@ func RecipeCommand(unit string) string {
 		return "pnpm --dir app exec playwright test " + fields[1]
 	}
 }
+
+func (list RecipeList) Named(names []string) ([]Group, error) {
+	var groups []Group
+	for _, name := range names {
+		found := false
+		for _, group := range list.Groups {
+			if group.Name == name {
+				groups, found = append(groups, group), true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("no group %s in the landing test list", name)
+		}
+	}
+	return groups, nil
+}

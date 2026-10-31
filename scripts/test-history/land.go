@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -10,17 +11,13 @@ import (
 	"github.com/victorarias/attn/internal/testhistory"
 )
 
-var landingPolicy = struct {
-	policy      testhistory.Policy
-	mode        testhistory.Mode
-	allowanceMS int64
-}{testhistory.SuccessCount, testhistory.ModeExtend, 0}
-
 func landCommand(args []string) int {
 	flags := flag.NewFlagSet("land", flag.ContinueOnError)
 	mainRef := flags.String("main", "origin/main", "")
 	unitsOut := flags.String("units-out", "", "")
-	if err := flags.Parse(args); err != nil || *unitsOut == "" || flags.NArg() != 0 {
+	var groups groupFlags
+	flags.Var(&groups, "group", "")
+	if err := flags.Parse(args); err != nil || *unitsOut == "" || len(groups) == 0 || flags.NArg() != 0 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
 	}
@@ -36,22 +33,21 @@ func landCommand(args []string) int {
 	if err != nil {
 		return fail(fmt.Errorf("no merge base with %s: %v", *mainRef, err))
 	}
-	policy, mode, allowance := landingPolicy.policy, landingPolicy.mode, &landingPolicy.allowanceMS
-	fallback := ""
-	if context.freshness().LastSync == nil {
-		mode, allowance = testhistory.ModeBaseline, nil
-		fallback = "no shared history: no sync has succeeded into " + context.spool + "; run go tool test-history sync"
-	}
-	request, err := context.request(tree{revision: head}, base, policy, mode, allowance)
+	request, err := context.request(tree{revision: head}, base, groups)
 	if err != nil {
 		return fail(err)
 	}
-	selection := testhistory.Select(request)
-	var units strings.Builder
-	for _, unit := range landingUnits(selection) {
-		units.WriteString(unit + "\n")
+	fallback := ""
+	if context.lastSync == nil {
+		request = testhistory.SelectRequest{Groups: request.Groups, Inventory: request.Inventory}
+		fallback = "no shared history: no sync has succeeded into " + context.spool + "; run go tool test-history sync"
 	}
-	if err := os.WriteFile(*unitsOut, []byte(units.String()), 0o644); err != nil {
+	selection := testhistory.Select(request)
+	units := landingUnits(selection)
+	if len(units) == 0 {
+		return fail(errors.New("groups " + strings.Join(groups, " ") + " name no landing tests"))
+	}
+	if err := os.WriteFile(*unitsOut, []byte(strings.Join(units, "\n")+"\n"), 0o644); err != nil {
 		return fail(err)
 	}
 	printLanding(os.Stdout, selectReport{Selection: selection, Freshness: context.freshness()}, head, fallback)
@@ -69,18 +65,22 @@ func landingUnits(selection testhistory.Selection) []string {
 }
 
 func printLanding(out io.Writer, report selectReport, head, fallback string) {
-	mode := fmt.Sprintf("%s, the baseline plus ranked tests within its cost", report.Policy)
+	rule := fmt.Sprintf("the baseline, the tests it changes, and each test that failed on main until it passes on %d main revisions", report.ClearedAfter)
 	if fallback != "" {
-		mode = "the baseline, " + fallback
+		rule = "the baseline, " + fallback
 	}
-	fmt.Fprintf(out, "landing tests for %s: %s; groups %s\n", short(head), mode, joinOrNone(report.Groups))
+	fmt.Fprintf(out, "landing tests for %s: %s; groups %s\n", short(head), rule, joinOrNone(report.Groups))
 	printHistory(out, report.Freshness)
-	for _, budget := range report.Budgets {
-		printBudget(out, budget)
-	}
-	baseline := 0
+	baseline, cleared, missing := 0, 0, 0
 	for _, choice := range report.Choices {
-		if choice.Baseline && choice.Status == testhistory.Selected {
+		switch {
+		case choice.Status == testhistory.Cleared:
+			cleared++
+			continue
+		case choice.Status == testhistory.Missing:
+			missing++
+			continue
+		case choice.Baseline && choice.Status == testhistory.Selected:
 			baseline++
 			continue
 		}
@@ -88,11 +88,7 @@ func printLanding(out io.Writer, report selectReport, head, fallback string) {
 		if choice.Status == testhistory.Selected {
 			label = "ADDED"
 		}
-		fmt.Fprintf(out, "%-11s %s", label, choice.Unit)
-		if choice.CostMS != nil {
-			fmt.Fprintf(out, " (%s)", seconds(*choice.CostMS))
-		}
-		fmt.Fprintln(out)
+		fmt.Fprintf(out, "%-11s %s\n", label, choice.Unit)
 		for _, reason := range choiceReasons(choice) {
 			fmt.Fprintf(out, "            %s\n", reason)
 		}
@@ -100,5 +96,15 @@ func printLanding(out io.Writer, report selectReport, head, fallback string) {
 			fmt.Fprintln(out, "            requested anyway: every baseline line must name a test in the checkout")
 		}
 	}
-	fmt.Fprintf(out, "baseline: %d units\n", baseline)
+	fmt.Fprintf(out, "baseline: %d units", baseline)
+	if cleared > 0 {
+		fmt.Fprintf(out, "; %d tests that failed on main have cleared", cleared)
+	}
+	if missing > 0 {
+		fmt.Fprintf(out, "; %d that failed on main are gone from this checkout", missing)
+	}
+	if cleared+missing > 0 {
+		fmt.Fprint(out, " (go tool test-history select lists them)")
+	}
+	fmt.Fprintln(out)
 }

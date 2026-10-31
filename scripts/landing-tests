@@ -35,7 +35,7 @@ go ./internal/daemon TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrit
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
 go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
-go ./scripts/test-history TestSelectRanksTheCheckoutsChangeFromItsHistory
+go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility

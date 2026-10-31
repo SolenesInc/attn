@@ -2,12 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -53,12 +51,8 @@ func loadContext(mainRef string) (selectionContext, error) {
 	return selectionContext{main: main, mainRef: mainRef, spool: dir, lastSync: state.LastSuccess, history: loaded, key: selectionKey(), receipts: loaded.receipts}, nil
 }
 
-func (c selectionContext) request(at tree, base string, policy testhistory.Policy, mode testhistory.Mode, allowance *int64) (testhistory.SelectRequest, error) {
+func (c selectionContext) request(at tree, base string, groupNames []string) (testhistory.SelectRequest, error) {
 	recipes, err := at.recipes()
-	if err != nil {
-		return testhistory.SelectRequest{}, err
-	}
-	admissions, err := at.admissions(recipes, c.main)
 	if err != nil {
 		return testhistory.SelectRequest{}, err
 	}
@@ -70,12 +64,15 @@ func (c selectionContext) request(at tree, base string, policy testhistory.Polic
 	if err != nil {
 		return testhistory.SelectRequest{}, err
 	}
+	groups := recipes.SelectedGroups(changed.paths)
+	if groupNames != nil {
+		if groups, err = recipes.Named(groupNames); err != nil {
+			return testhistory.SelectRequest{}, err
+		}
+	}
 	return testhistory.SelectRequest{
-		Policy: policy, Mode: mode, AllowanceMS: allowance,
-		Recipes: recipes, Changed: changed.paths, ChangedTests: changed.tests,
-		Admissions: admissions, Inventory: inventory,
+		Groups: groups, ChangedTests: changed.tests, Inventory: inventory,
 		Health: testhistory.BuildHealth(c.receipts, c.main),
-		Costs:  testhistory.BuildCosts(c.receipts, c.key),
 	}, nil
 }
 
@@ -114,37 +111,20 @@ type selectReport struct {
 	Freshness freshness `json:"freshness"`
 }
 
+type groupFlags []string
+
+func (g *groupFlags) String() string        { return strings.Join(*g, " ") }
+func (g *groupFlags) Set(name string) error { *g = append(*g, name); return nil }
+
 func selectCommand(args []string) int {
 	flags := flag.NewFlagSet("select", flag.ContinueOnError)
 	mainRef := flags.String("main", "origin/main", "")
-	modeName := flags.String("mode", "replace", "")
-	policyName := flags.String("policy", string(testhistory.SuccessCount), "")
-	allowance := flags.Duration("allowance", 0, "")
 	asJSON := flags.Bool("json", false, "")
+	var groups groupFlags
+	flags.Var(&groups, "group", "")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
-	}
-	mode, err := testhistory.ParseMode(*modeName)
-	if err != nil {
-		return fail(err)
-	}
-	policy, err := testhistory.ParsePolicy(*policyName)
-	if err != nil {
-		return fail(err)
-	}
-	var allowanceMS *int64
-	flags.Visit(func(set *flag.Flag) {
-		if set.Name == "allowance" {
-			ms := allowance.Milliseconds()
-			allowanceMS = &ms
-		}
-	})
-	if allowanceMS != nil && mode != testhistory.ModeExtend {
-		return fail(errors.New("--allowance applies only to --mode extend"))
-	}
-	if *allowance < 0 {
-		return fail(fmt.Errorf("--allowance %s is negative", *allowance))
 	}
 	context, err := loadContext(*mainRef)
 	if err != nil {
@@ -154,7 +134,11 @@ func selectCommand(args []string) int {
 	if err != nil {
 		return fail(fmt.Errorf("no merge base with %s: %v", *mainRef, err))
 	}
-	request, err := context.request(worktree, base, policy, mode, allowanceMS)
+	var names []string
+	if len(groups) > 0 {
+		names = groups
+	}
+	request, err := context.request(worktree, base, names)
 	if err != nil {
 		return fail(err)
 	}
@@ -167,20 +151,10 @@ func selectCommand(args []string) int {
 }
 
 func printSelection(out io.Writer, report selectReport) {
-	fmt.Fprintf(out, "test-history select: %s, mode %s, groups %s\n", report.Policy, report.Mode, joinOrNone(report.Groups))
+	fmt.Fprintf(out, "test-history select: groups %s; a test that failed on main runs until it passes on %d main revisions\n", joinOrNone(report.Groups), report.ClearedAfter)
 	printHistory(out, report.Freshness)
-	for _, budget := range report.Budgets {
-		printBudget(out, budget)
-	}
 	for _, choice := range report.Choices {
-		fmt.Fprintf(out, "%-11s %s", strings.ToUpper(string(choice.Status)), choice.Unit)
-		if choice.CostMS != nil {
-			fmt.Fprintf(out, " (%s)", seconds(*choice.CostMS))
-		}
-		if choice.Status == testhistory.Selected && !choice.Priced {
-			fmt.Fprint(out, " (unpriced)")
-		}
-		fmt.Fprintln(out)
+		fmt.Fprintf(out, "%-11s %s\n", strings.ToUpper(string(choice.Status)), choice.Unit)
 		for _, reason := range choiceReasons(choice) {
 			fmt.Fprintf(out, "            %s\n", reason)
 		}
@@ -196,38 +170,28 @@ func printHistory(out io.Writer, f freshness) {
 	if f.LastSync != nil {
 		synced = fmt.Sprintf("last sync %s (%s ago)", f.LastSync.Local().Format(time.RFC3339), time.Since(*f.LastSync).Round(time.Minute))
 	}
-	fmt.Fprintf(out, "history: %d receipts, %s; %s; costs for %s on %s\n", f.Receipts, synced, evidence, f.Lane, f.Machine)
+	fmt.Fprintf(out, "history: %d receipts, %s; %s\n", f.Receipts, synced, evidence)
 	for reason, count := range f.Skipped {
 		fmt.Fprintf(out, "history: skipped %d receipts (%s)\n", count, reason)
 	}
 }
 
-func printBudget(out io.Writer, budget testhistory.RunnerBudget) {
-	line := fmt.Sprintf("budget %s: selected %s", budget.Runner, seconds(budget.EstimateMS))
-	if budget.BaselineMS != nil {
-		line += ", baseline " + seconds(*budget.BaselineMS)
-	}
-	if budget.BudgetMS != nil {
-		line += ", limit " + seconds(*budget.BudgetMS)
-	}
-	if len(budget.Unpriced) > 0 {
-		line += "; unpriced: " + strings.Join(budget.Unpriced, ", ")
-	}
-	if budget.Note != "" {
-		line += "; " + budget.Note
-	}
-	fmt.Fprintln(out, line)
-}
-
 func choiceReasons(choice testhistory.Choice) []string {
 	var reasons []string
-	if choice.Changed {
+	switch {
+	case choice.Baseline:
+		reasons = append(reasons, "in the baseline")
+	case choice.Changed:
 		reasons = append(reasons, "changed by this landing")
 	}
 	if choice.Standing != nil {
-		reasons = append(reasons, choice.Standing.Describe())
+		reason := choice.Standing.Describe()
+		if left := choice.PassesLeft(); left > 0 && choice.Status == testhistory.Selected {
+			reason = fmt.Sprintf("%s; passed on %d main revisions since, runs until %d more pass", choice.Standing.Failure(), choice.Standing.PassesSince, left)
+		}
+		reasons = append(reasons, reason)
 	}
-	if choice.Note != "" && !choice.Changed {
+	if choice.Note != "" {
 		reasons = append(reasons, choice.Note)
 	}
 	return reasons
@@ -264,17 +228,15 @@ func printJSON(value any) int {
 }
 
 type explanation struct {
-	Unit        string                `json:"unit"`
-	Available   bool                  `json:"available"`
-	Note        string                `json:"note,omitempty"`
-	Baseline    bool                  `json:"baseline"`
-	Standing    *testhistory.Standing `json:"standing,omitempty"`
-	CostMS      *int64                `json:"cost_ms,omitempty"`
-	CostSamples int                   `json:"cost_samples"`
-	Priced      bool                  `json:"priced"`
-	Command     string                `json:"command,omitempty"`
-	Policy      testhistory.Policy    `json:"policy"`
-	Freshness   freshness             `json:"freshness"`
+	Unit         string                `json:"unit"`
+	Available    bool                  `json:"available"`
+	Note         string                `json:"note,omitempty"`
+	Standing     *testhistory.Standing `json:"standing,omitempty"`
+	ClearedAfter int                   `json:"cleared_after"`
+	CostMS       *int64                `json:"cost_ms,omitempty"`
+	CostSamples  int                   `json:"cost_samples"`
+	Command      string                `json:"command,omitempty"`
+	Freshness    freshness             `json:"freshness"`
 }
 
 func explainCommand(args []string) int {
@@ -290,39 +252,32 @@ func explainCommand(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
-	request, err := context.request(worktree, context.mainRef, testhistory.SuccessCount, testhistory.ModeReplace, nil)
+	inventory, err := worktree.inventory()
 	if err != nil {
 		return fail(err)
 	}
-	result := explanation{Unit: *unit, Policy: testhistory.SuccessCount, Command: testhistory.RecipeCommand(*unit), Freshness: context.freshness()}
-	result.Note = request.Inventory.Unavailable(*unit)
+	costs := testhistory.BuildCosts(context.receipts, context.key)
+	result := explanation{Unit: *unit, ClearedAfter: testhistory.ClearedAfter, Command: testhistory.RecipeCommand(*unit), Freshness: context.freshness()}
+	result.Note = inventory.Unavailable(*unit)
 	result.Available = result.Note == ""
-	var admission *testhistory.Admission
-	if found, ok := request.Admissions[*unit]; ok {
-		result.Baseline, admission = true, &found
-	}
-	if standing, ok := request.Health.Standing(*unit, admission); ok {
+	if standing, ok := testhistory.BuildHealth(context.receipts, context.main).Standing(*unit); ok {
 		result.Standing = &standing
 	}
-	if cost, ok := request.Costs.UnitMS(*unit); ok {
+	if cost, ok := costs.UnitMS(*unit); ok {
 		result.CostMS = &cost
 	}
-	result.CostSamples = request.Costs.Samples(*unit)
-	result.Priced = request.Costs.Priced(*unit)
+	result.CostSamples = costs.Samples(*unit)
 	if *asJSON {
 		return printJSON(result)
 	}
-	fmt.Printf("%s (%s)\n", result.Unit, result.Policy)
-	switch {
-	case !result.Available:
+	fmt.Println(result.Unit)
+	if !result.Available {
 		fmt.Println("  unavailable: " + result.Note)
-	case result.Baseline:
-		fmt.Println("  in the baseline list")
 	}
 	if result.Standing == nil {
-		fmt.Println("  no failure on main and not in the baseline: not a historical candidate")
+		fmt.Println("  no failure on main: landings run it only from the baseline or when they change it")
 	} else {
-		for _, lane := range append([]testhistory.LaneStanding{}, result.Standing.Lanes...) {
+		for _, lane := range result.Standing.Lanes {
 			fmt.Printf("  %s: %s\n", lane.Lane, lane.Describe())
 			if len(lane.Anchor.Evidence) > 0 {
 				fmt.Printf("    failure receipts: %s\n", strings.Join(lane.Anchor.Evidence, " "))
@@ -331,98 +286,17 @@ func explainCommand(args []string) int {
 				fmt.Printf("    pass at %s\n", short(commit))
 			}
 		}
-		if len(result.Standing.Lanes) == 0 {
-			fmt.Println("  " + result.Standing.Describe() + "; no observations yet")
+		if left := result.ClearedAfter - result.Standing.PassesSince; left > 0 {
+			fmt.Printf("  landings run it until it passes on %d more main revisions in %s\n", left, result.Standing.Lane)
 		} else {
-			fmt.Printf("  ranks by %s, its least cleared lane\n", result.Standing.Lane)
+			fmt.Printf("  cleared: %d passing main revisions in its least cleared lane, %s\n", result.Standing.PassesSince, result.Standing.Lane)
 		}
 	}
-	switch {
-	case result.Priced:
+	if result.CostMS != nil {
 		fmt.Printf("  cost on %s: %s, median of %d samples\n", context.key.Machine, seconds(*result.CostMS), result.CostSamples)
-	default:
-		fmt.Printf("  cost on %s: unpriced; measure with: go tool test-history measure '%s'\n", context.key.Machine, result.Unit)
 	}
 	if result.Command != "" {
 		fmt.Println("  rerun: " + result.Command)
-	}
-	return 0
-}
-
-type pendingUnit struct {
-	Unit    string `json:"unit"`
-	Reason  string `json:"reason"`
-	Measure string `json:"measure,omitempty"`
-}
-
-func pendingCommand(args []string) int {
-	flags := flag.NewFlagSet("pending", flag.ContinueOnError)
-	mainRef := flags.String("main", "origin/main", "")
-	asJSON := flags.Bool("json", false, "")
-	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
-		fmt.Fprint(os.Stderr, usage)
-		return 2
-	}
-	context, err := loadContext(*mainRef)
-	if err != nil {
-		return fail(err)
-	}
-	request, err := context.request(worktree, context.mainRef, testhistory.SuccessCount, testhistory.ModeReplace, nil)
-	if err != nil {
-		return fail(err)
-	}
-	candidates := map[string]bool{}
-	for _, recipe := range request.Recipes.Recipes {
-		candidates[recipe.Unit] = true
-	}
-	for _, unit := range request.Health.FailureUnits() {
-		candidates[unit] = true
-	}
-	pending := []pendingUnit{}
-	for _, unit := range keys(candidates) {
-		switch {
-		case request.Inventory.Unavailable(unit) != "":
-			pending = append(pending, pendingUnit{Unit: unit, Reason: "unavailable: " + request.Inventory.Unavailable(unit)})
-		case !request.Costs.Priced(unit):
-			pending = append(pending, pendingUnit{Unit: unit, Reason: "unpriced on " + context.key.Machine, Measure: "go tool test-history measure '" + unit + "'"})
-		}
-	}
-	if *asJSON {
-		return printJSON(pending)
-	}
-	for _, unit := range pending {
-		fmt.Printf("%s\n  %s\n", unit.Unit, unit.Reason)
-		if unit.Measure != "" {
-			fmt.Printf("  %s\n", unit.Measure)
-		}
-	}
-	if len(pending) == 0 {
-		fmt.Println("no pending candidates")
-	}
-	return 0
-}
-
-func measureCommand(args []string) int {
-	if len(args) == 0 {
-		fmt.Fprint(os.Stderr, usage)
-		return 2
-	}
-	root, err := repoRoot()
-	if err != nil {
-		return fail(err)
-	}
-	command := []string{root + "/scripts/landing-tests.sh"}
-	for _, unit := range args {
-		command = append(command, "--unit", unit)
-	}
-	run := exec.Command(command[0], command[1:]...)
-	run.Dir, run.Stdin, run.Stdout, run.Stderr = root, os.Stdin, os.Stdout, os.Stderr
-	if err := run.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return exitErr.ExitCode()
-		}
-		return fail(err)
 	}
 	return 0
 }
@@ -440,15 +314,13 @@ type replayPoint struct {
 }
 
 type replaySelection struct {
-	Policy     testhistory.Policy         `json:"policy"`
-	Groups     []string                   `json:"groups"`
-	Budgets    []testhistory.RunnerBudget `json:"budgets,omitempty"`
-	Selected   []string                   `json:"selected"`
-	Pending    []string                   `json:"pending,omitempty"`
-	EstimateMS int64                      `json:"estimate_ms"`
-	Unpriced   []string                   `json:"unpriced,omitempty"`
-	Included   []string                   `json:"included"`
-	Missed     []string                   `json:"missed"`
+	Groups      []string `json:"groups"`
+	Selected    []string `json:"selected"`
+	Unavailable []string `json:"unavailable,omitempty"`
+	EstimateMS  int64    `json:"estimate_ms"`
+	Unpriced    []string `json:"unpriced,omitempty"`
+	Included    []string `json:"included"`
+	Missed      []string `json:"missed"`
 }
 
 type actualLanding struct {
@@ -457,17 +329,6 @@ type actualLanding struct {
 	Attempts     int      `json:"attempts"`
 	Missing      []string `json:"missing,omitempty"`
 	Unattributed int      `json:"unattributed"`
-}
-
-var replayStrategies = []struct {
-	name   string
-	policy testhistory.Policy
-	mode   testhistory.Mode
-}{
-	{"baseline", testhistory.SuccessCount, testhistory.ModeBaseline},
-	{"success-count", testhistory.SuccessCount, testhistory.ModeReplace},
-	{"recent-failure", testhistory.RecentFailure, testhistory.ModeReplace},
-	{"extend-all", testhistory.SuccessCount, testhistory.ModeExtend},
 }
 
 func replayCommand(args []string) int {
@@ -525,21 +386,20 @@ func (c selectionContext) replayAt(observed testhistory.Health, commit string, a
 	before := selectionContext{main: c.main.Before(commit), mainRef: commit + "^", spool: c.spool, history: c.history, key: c.key, receipts: c.history.availableAt(at)}
 	point.Available = len(before.receipts)
 	point.Freshness = before.freshness()
-	shared, err := before.request(tree{revision: commit}, commit+"^", testhistory.SuccessCount, testhistory.ModeBaseline, nil)
+	recent, err := before.request(tree{revision: commit}, commit+"^", nil)
 	if err != nil {
 		return replayPoint{}, err
 	}
-	point.Changed = shared.ChangedTests
-	for _, strategy := range replayStrategies {
-		request := shared
-		request.Policy, request.Mode = strategy.policy, strategy.mode
+	point.Changed = recent.ChangedTests
+	costs := testhistory.BuildCosts(before.receipts, c.key)
+	baseline := testhistory.SelectRequest{Groups: recent.Groups, Inventory: recent.Inventory}
+	for name, request := range map[string]testhistory.SelectRequest{"baseline": baseline, "landing": recent} {
 		selection := testhistory.Select(request)
 		result := replaySelection{
-			Policy: selection.Policy, Groups: selection.Groups, Budgets: selection.Budgets,
-			Selected: selection.Units(testhistory.Selected), Included: []string{}, Missed: []string{},
-			Pending: append(selection.Units(testhistory.Unpriced), selection.Units(testhistory.Unavailable)...),
+			Groups: selection.Groups, Selected: selection.Units(testhistory.Selected), Unavailable: selection.Units(testhistory.Unavailable),
+			Included: []string{}, Missed: []string{},
 		}
-		result.EstimateMS, result.Unpriced = request.Costs.Estimate(result.Selected)
+		result.EstimateMS, result.Unpriced = costs.Estimate(result.Selected)
 		selected := map[string]bool{}
 		for _, unit := range result.Selected {
 			selected[unit] = true
@@ -551,7 +411,7 @@ func (c selectionContext) replayAt(observed testhistory.Health, commit string, a
 				result.Missed = append(result.Missed, unit)
 			}
 		}
-		point.Selections[strategy.name] = result
+		point.Selections[name] = result
 	}
 	point.Actual = c.actualBaseline(landed, point.Selections["baseline"].Selected)
 	return point, nil

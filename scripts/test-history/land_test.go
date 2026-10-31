@@ -9,19 +9,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/testhistory"
 )
 
-const sleepingTest = `package %s
+func otherLaneRun(id, commit, unit string, outcome testhistory.Outcome, finished time.Time) testhistory.Receipt {
+	receipt := otherLaneFailure(id, commit, unit, finished)
+	receipt.Results[0].Outcome = outcome
+	return receipt
+}
 
-import (
-	"testing"
-	"time"
-)
-
-func Test%s(t *testing.T) { time.Sleep(%d * time.Millisecond) }
-`
-
-func TestLandAddsFailedTestsOnlyWithinTheBaselinesCostAndChoosesTheBaselineBeforeAnySync(t *testing.T) {
+func TestLandRunsTheNamedGroupsAndEachFailureUntilItClears(t *testing.T) {
 	t.Setenv("GITHUB_REPOSITORY", checkoutRepository)
 	repo := newCheckout(t)
 	service := newFakeHistoryService(t)
@@ -33,43 +31,48 @@ func TestLandAddsFailedTestsOnlyWithinTheBaselinesCostAndChoosesTheBaselineBefor
 		t.Fatal(err)
 	}
 	start := time.Now().Add(-time.Hour).Truncate(time.Second)
-	repo.write("scripts/landing-tests", "group go \\.go$\ngo ./p TestA\n")
-	repo.write("p/p_test.go", fmt.Sprintf(sleepingTest, "p", "A", 800))
-	repo.write("q/q_test.go", fmt.Sprintf(sleepingTest, "q", "Slow", 1600))
-	repo.write("r/r_test.go", fmt.Sprintf(sleepingTest, "r", "Quick", 0))
-	admitted := repo.commit("admit the baseline", start)
-	repo.runTests("./p", "./q", "./r")
-	for _, unit := range []string{"go ./q TestSlow", "go ./r TestQuick"} {
-		id := "ci-" + strings.Fields(unit)[2]
-		body, err := json.Marshal(otherLaneFailure(id, admitted, unit, start.Add(time.Minute)))
+	repo.write("scripts/landing-tests", "group go \\.go$\ngo ./p TestA\ngo ./p TestRenamed\n")
+	repo.write("p/p_test.go", "package p\n\nimport \"testing\"\n\nfunc TestA(t *testing.T) {}\n")
+	repo.write("q/q_test.go", "package q\n\nimport \"testing\"\n\nfunc TestRecent(t *testing.T) {}\n\nfunc TestCleared(t *testing.T) {}\n")
+	failedAt := repo.commit("tests", start)
+	share := func(id, commit, unit string, outcome testhistory.Outcome) {
+		body, err := json.Marshal(otherLaneRun(id, commit, unit, outcome, start.Add(time.Minute)))
 		if err != nil {
 			t.Fatal(err)
 		}
 		service.add("github.com/"+checkoutRepository, id, body)
 	}
+	share("recent-fails", failedAt, "go ./q TestRecent", testhistory.Fail)
+	share("cleared-fails", failedAt, "go ./q TestCleared", testhistory.Fail)
+	for i := range testhistory.ClearedAfter {
+		repo.gitAt(start.Add(time.Duration(i+1)*time.Second), "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("main %d", i))
+		commit := repo.git("rev-parse", "HEAD")
+		share(fmt.Sprintf("cleared-passes-%d", i), commit, "go ./q TestCleared", testhistory.Pass)
+		if i == 0 {
+			share("recent-passes", commit, "go ./q TestRecent", testhistory.Pass)
+		}
+	}
 	repo.git("checkout", "-q", "-b", "change")
-	repo.write("p/p.go", "package p\n")
-	head := repo.commit("change p", start.Add(2*time.Minute))
+	repo.write("README.md", "docs only\n")
+	head := repo.commit("change the docs", start.Add(time.Hour))
 
-	land := func() (string, []string) {
+	land := func(groups ...string) (string, string, int) {
 		t.Helper()
 		unitsFile := filepath.Join(t.TempDir(), "units")
-		out, code := repo.history("land", "--main", "main", "--units-out", unitsFile)
-		if code != 0 {
-			t.Fatalf("land exited %d:\n%s", code, out)
+		args := []string{"land", "--main", "main", "--units-out", unitsFile}
+		for _, group := range groups {
+			args = append(args, "--group", group)
 		}
-		units, err := os.ReadFile(unitsFile)
-		if err != nil {
-			t.Fatal(err)
-		}
+		out, code := repo.history(args...)
+		units, _ := os.ReadFile(unitsFile)
 		chosen := strings.Split(strings.TrimSpace(string(units)), "\n")
 		sort.Strings(chosen)
-		return out, chosen
+		return out, strings.Join(chosen, ", "), code
 	}
 
-	out, units := land()
-	if strings.Join(units, ", ") != "go ./p TestA" || !strings.Contains(out, "the baseline, no shared history") || !strings.Contains(out, "run go tool test-history sync") {
-		t.Fatalf("before any sync, land chose %v:\n%s", units, out)
+	out, units, code := land("go")
+	if code != 0 || units != "go ./p TestA, go ./p TestRenamed" || !strings.Contains(out, "the baseline, no shared history") {
+		t.Fatalf("before any sync, land exited %d and chose %s:\n%s", code, units, out)
 	}
 
 	sync := historyCommand(t, repo.spool, repo.dir, "sync")
@@ -78,20 +81,24 @@ func TestLandAddsFailedTestsOnlyWithinTheBaselinesCostAndChoosesTheBaselineBefor
 		t.Fatalf("sync: %v\n%s", err, synced)
 	}
 
-	out, units = land()
-	if strings.Join(units, ", ") != "go ./p TestA, go ./r TestQuick" {
-		t.Fatalf("land chose %v, want the baseline plus the failed test that fits its cost:\n%s", units, out)
+	out, units, code = land("go")
+	if code != 0 || units != "go ./p TestA, go ./p TestRenamed, go ./q TestRecent" {
+		t.Fatalf("land --group go exited %d and chose %s, want the go group's baseline, though the change touches only docs, and the uncleared failure:\n%s", code, units, out)
 	}
 	for _, want := range []string{
-		"landing tests for " + short(head) + ": success-count/1",
-		"ADDED       go ./r TestQuick",
-		"failed on " + otherLane().String() + " at " + short(admitted) + ", 0 passing main revisions since",
-		"OVER-BUDGET go ./q TestSlow",
-		"past the limit of",
-		"baseline: 1 units",
+		"landing tests for " + short(head) + ":",
+		"ADDED       go ./q TestRecent",
+		fmt.Sprintf("failed on %s at %s; passed on 1 main revisions since, runs until %d more pass", otherLane(), short(failedAt), testhistory.ClearedAfter-1),
+		"UNAVAILABLE go ./p TestRenamed",
+		"requested anyway: every baseline line must name a test in the checkout",
+		"baseline: 1 units; 1 tests that failed on main have cleared",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("land output lacks %q:\n%s", want, out)
 		}
+	}
+
+	if _, _, code := land("missing"); code == 0 {
+		t.Fatal("land with a group the list lacks must fail, so land.sh runs its groups itself")
 	}
 }

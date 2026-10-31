@@ -46,6 +46,8 @@ func (l Lane) String() string {
 type revisionOutcome struct {
 	failedCases map[string]bool
 	passedCases map[string]bool
+	passedWhole bool
+	reported    map[string]bool
 	failedIn    []string
 }
 
@@ -76,12 +78,14 @@ func BuildHealth(receipts []Receipt, main Mainline) Health {
 				continue
 			}
 			outcome := health.outcome(result.Unit, lane, position)
+			outcome.reported[result.Case] = true
 			switch {
 			case result.Outcome == Fail:
 				outcome.failedCases[result.Case] = true
 				outcome.failedIn = appendOnce(outcome.failedIn, receipt.InvocationID)
 			case result.Outcome == Pass && !result.Cached:
 				outcome.passedCases[result.Case] = true
+				outcome.passedWhole = outcome.passedWhole || result.Case == "" && wholeUnits(receipt.Runner, receipt.Command.Argv)
 			}
 		}
 	}
@@ -114,37 +118,17 @@ func (h Health) outcome(unit, lane string, position int) *revisionOutcome {
 	}
 	outcome := revisions[position]
 	if outcome == nil {
-		outcome = &revisionOutcome{failedCases: map[string]bool{}, passedCases: map[string]bool{}}
+		outcome = &revisionOutcome{failedCases: map[string]bool{}, passedCases: map[string]bool{}, reported: map[string]bool{}}
 		revisions[position] = outcome
 	}
 	return outcome
 }
 
-type AnchorKind string
-
-const (
-	AnchorFailure   AnchorKind = "failure"
-	AnchorAdmission AnchorKind = "baseline-admission"
-)
-
 type Anchor struct {
-	Kind     AnchorKind `json:"kind"`
-	Commit   string     `json:"commit"`
-	Position int        `json:"position"`
-	Cases    []string   `json:"cases,omitempty"`
-	Evidence []string   `json:"evidence,omitempty"`
-}
-
-type Admission struct {
-	Commit   string
-	Position int
-}
-
-func (m Mainline) Admission(commit string) Admission {
-	if position, ok := m.Position(commit); ok {
-		return Admission{Commit: commit, Position: position}
-	}
-	return Admission{Commit: commit, Position: m.Len()}
+	Commit   string   `json:"commit"`
+	Position int      `json:"position"`
+	Cases    []string `json:"cases,omitempty"`
+	Evidence []string `json:"evidence,omitempty"`
 }
 
 type LaneStanding struct {
@@ -159,18 +143,15 @@ type Standing struct {
 	Lanes []LaneStanding `json:"lanes,omitempty"`
 }
 
-func (h Health) Standing(unit string, admission *Admission) (Standing, bool) {
+func (h Health) Standing(unit string) (Standing, bool) {
 	var lanes []LaneStanding
 	for lane, revisions := range h.units[unit] {
-		if standing, ok := h.laneStanding(lane, revisions, admission); ok {
+		if standing, ok := h.laneStanding(lane, revisions); ok {
 			lanes = append(lanes, standing)
 		}
 	}
 	if len(lanes) == 0 {
-		if admission == nil {
-			return Standing{}, false
-		}
-		return Standing{LaneStanding: LaneStanding{Anchor: admissionAnchor(*admission)}}, true
+		return Standing{}, false
 	}
 	sort.Slice(lanes, func(i, j int) bool { return lessCleared(lanes[i], lanes[j]) })
 	return Standing{LaneStanding: lanes[0], Lanes: lanes}, true
@@ -186,34 +167,25 @@ func lessCleared(a, b LaneStanding) bool {
 	return a.Lane < b.Lane
 }
 
-func admissionAnchor(admission Admission) Anchor {
-	return Anchor{Kind: AnchorAdmission, Commit: admission.Commit, Position: admission.Position}
-}
-
-func (h Health) laneStanding(lane string, revisions map[int]*revisionOutcome, admission *Admission) (LaneStanding, bool) {
+func (h Health) laneStanding(lane string, revisions map[int]*revisionOutcome) (LaneStanding, bool) {
 	latestFailure := -1
 	for position, outcome := range revisions {
 		if outcome.failed() && position > latestFailure {
 			latestFailure = position
 		}
 	}
-	var anchor Anchor
-	switch {
-	case admission != nil && admission.Position > latestFailure:
-		anchor = admissionAnchor(*admission)
-	case latestFailure >= 0:
-		failure := revisions[latestFailure]
-		anchor = Anchor{Kind: AnchorFailure, Commit: h.main.Commit(latestFailure), Position: latestFailure, Evidence: append([]string(nil), failure.failedIn...)}
-		for name := range failure.failedCases {
-			if name != "" {
-				anchor.Cases = append(anchor.Cases, name)
-			}
-		}
-		sort.Strings(anchor.Cases)
-		sort.Strings(anchor.Evidence)
-	default:
+	if latestFailure < 0 {
 		return LaneStanding{}, false
 	}
+	failure := revisions[latestFailure]
+	anchor := Anchor{Commit: h.main.Commit(latestFailure), Position: latestFailure, Evidence: append([]string(nil), failure.failedIn...)}
+	for name := range failure.failedCases {
+		if name != "" {
+			anchor.Cases = append(anchor.Cases, name)
+		}
+	}
+	sort.Strings(anchor.Cases)
+	sort.Strings(anchor.Evidence)
 	var passes []int
 	for position, outcome := range revisions {
 		if position > anchor.Position && covers(outcome, anchor.Cases) {
@@ -233,7 +205,7 @@ func covers(outcome *revisionOutcome, cases []string) bool {
 		return false
 	}
 	for _, name := range cases {
-		if !outcome.passedCases[name] {
+		if !outcome.passedCases[name] && !(outcome.passedWhole && !outcome.reported[name]) {
 			return false
 		}
 	}
@@ -278,17 +250,16 @@ func failedSomewhere(revisions map[int]*revisionOutcome) bool {
 	return false
 }
 
-func (s LaneStanding) Describe() string {
-	switch s.Anchor.Kind {
-	case AnchorAdmission:
-		return fmt.Sprintf("admitted to the baseline at %s, %d passing main revisions since", short(s.Anchor.Commit), s.PassesSince)
-	default:
-		cases := ""
-		if len(s.Anchor.Cases) > 0 {
-			cases = " (" + strings.Join(s.Anchor.Cases, ", ") + ")"
-		}
-		return fmt.Sprintf("failed on %s at %s%s, %d passing main revisions since", s.Lane, short(s.Anchor.Commit), cases, s.PassesSince)
+func (s LaneStanding) Failure() string {
+	cases := ""
+	if len(s.Anchor.Cases) > 0 {
+		cases = " (" + strings.Join(s.Anchor.Cases, ", ") + ")"
 	}
+	return fmt.Sprintf("failed on %s at %s%s", s.Lane, short(s.Anchor.Commit), cases)
+}
+
+func (s LaneStanding) Describe() string {
+	return fmt.Sprintf("%s, %d passing main revisions since", s.Failure(), s.PassesSince)
 }
 
 func short(commit string) string {

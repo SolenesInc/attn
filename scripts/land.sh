@@ -129,32 +129,36 @@ run_checks() {
 }
 
 run_landing_tests() {
-  local units_file unit units=()
+  local units_file unit group units=() group_options=()
   if [ "$landing_tests" = baseline ]; then
     echo "land: running the baseline landing tests (--baseline)"
     scripts/landing-tests.sh "$@"
     return
   fi
+  for group in "$@"; do group_options+=(--group "$group"); done
   units_file="$(mktemp "${TMPDIR:-/tmp}/attn-land-units.XXXXXX")"
-  if ! go tool test-history land --units-out "$units_file"; then
-    rm -f "$units_file"
+  if go tool test-history land --units-out "$units_file" "${group_options[@]}"; then
+    while IFS= read -r unit || [ -n "$unit" ]; do
+      if [ -n "$unit" ]; then units+=(--unit "$unit"); fi
+    done <"$units_file"
+  fi
+  rm -f "$units_file"
+  if [ "${#units[@]}" -eq 0 ]; then
     echo "land: choosing landing tests failed; running the baseline groups $*" >&2
     scripts/landing-tests.sh "$@"
     return
   fi
-  while IFS= read -r unit || [ -n "$unit" ]; do
-    if [ -n "$unit" ]; then units+=(--unit "$unit"); fi
-  done <"$units_file"
-  rm -f "$units_file"
-  [ "${#units[@]}" -gt 0 ] || return 0
   scripts/landing-tests.sh "${units[@]}"
 }
 
 git diff --quiet && git diff --cached --quiet || fail "commit or stash your changes first"
 rebasing && fail "finish the rebase in progress first"
-if [ "$landing_tests" = selected ]; then
-  go tool test-history sync || echo "land: choosing landing tests from the history already synced" >&2
-fi
+sync_history() {
+  [ "$landing_tests" = selected ] || return 0
+  go tool test-history sync || echo "land: $1" >&2
+}
+
+sync_history "choosing landing tests from the history already synced"
 
 for _ in $(seq "$max_attempts"); do
   git fetch --quiet origin main
@@ -163,6 +167,7 @@ for _ in $(seq "$max_attempts"); do
   run_checks
   if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
     echo "land: main is at $(git rev-parse --short HEAD)"
+    sync_history "this landing's test receipts upload at the next sync"
     exit 0
   fi
   git fetch --quiet origin main

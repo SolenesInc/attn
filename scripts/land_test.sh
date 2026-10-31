@@ -27,6 +27,7 @@ printf '%s\n' "$3" >>"$LAND_CHECK_LOG"
 case "$3" in
   sync) exit "${LAND_SYNC_EXIT:-0}" ;;
   land)
+    printf '%s\n' "${@:6}" >>"$LAND_CHECK_LOG"
     [ "${LAND_SELECT_EXIT:-0}" -eq 0 ] || exit "$LAND_SELECT_EXIT"
     [ "$4" = --units-out ] || exit 2
     printf '%s' "${LAND_SELECTED-$selected}" >"$5"
@@ -37,7 +38,8 @@ chmod +x "$work/bin/go"
 export PATH="$work/bin:$PATH"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
 export selected=$'go ./internal/example TestExample\nvitest src/example.test.ts'
-selected_tests=(land landing-tests --unit 'go ./internal/example TestExample' --unit 'vitest src/example.test.ts')
+selected_tests=(landing-tests --unit 'go ./internal/example TestExample' --unit 'vitest src/example.test.ts')
+go_choice=(land --group go --group prompts "${selected_tests[@]}")
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 git init -q --bare "$work/remote"
 cd "$work/repo"
@@ -88,37 +90,37 @@ expect_checks() {
 
 printf '\n' >>internal/example/example.go
 land 'Go change'
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${selected_tests[@]}"
+expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 git rm -q internal/example/other.go internal/removed/removed.go
 land 'Go deletions'
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${selected_tests[@]}"
+expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>go.mod
 land 'Module change'
-expect_checks sync check-go 'GO_PACKAGES=./...' "${selected_tests[@]}"
+expect_checks sync check-go 'GO_PACKAGES=./...' "${go_choice[@]}" sync
 
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts
 land 'App change'
-expect_checks sync check-frontend "${selected_tests[@]}"
+expect_checks sync check-frontend land --group app "${selected_tests[@]}" sync
 
 mkdir -p scripts internal/protocol/schema internal/prompts
 printf 'true\n' >scripts/example.sh
 printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
 land 'Scripts and generated inputs'
-expect_checks sync check-types check-prompts test-scripts "${selected_tests[@]}"
+expect_checks sync check-types check-prompts test-scripts land --group prompts "${selected_tests[@]}" sync
 
 printf '\n' >>README.md
 land 'Documentation change'
-expect_checks sync
+expect_checks sync sync
 
 touch "$LAND_MOVE_MAIN"
 printf '\n' >>internal/example/example.go
 land 'Go change while main moves'
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${selected_tests[@]}" \
-  check-go 'GO_PACKAGES=./internal/example' "${selected_tests[@]}"
+expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" \
+  check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>internal/example/example.go
 LAND_FLAGS=--baseline land 'Go change landed on the baseline'
@@ -127,17 +129,19 @@ expect_output 'running the baseline landing tests (--baseline)'
 
 printf '\n' >>internal/example/example.go
 land 'Go change when choosing fails' LAND_SELECT_EXIT=1
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' land landing-tests go prompts
+expect_checks sync check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests go prompts sync
 expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 printf '\n' >>internal/example/example.go
 land 'Go change when sync fails' LAND_SYNC_EXIT=1
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${selected_tests[@]}"
+expect_checks sync check-go 'GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 expect_output 'choosing landing tests from the history already synced'
+expect_output "this landing's test receipts upload at the next sync"
 
 printf '\n' >>internal/example/example.go
-land 'Go change that selects nothing' LAND_SELECTED=
-expect_checks sync check-go 'GO_PACKAGES=./internal/example' land
+land 'Go change when choosing writes nothing' LAND_SELECTED=
+expect_checks sync check-go 'GO_PACKAGES=./internal/example' land --group go --group prompts landing-tests go prompts sync
+expect_output 'choosing landing tests failed; running the baseline groups go prompts'
 
 refuses() {
   local before
