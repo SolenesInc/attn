@@ -1770,6 +1770,8 @@ model WorktreeRefreshResult {
 @extension("x-on", #{ here: true })
 model GetSettingsMessage {
   cmd: "get_settings";
+  source_session_id?: SessionID;
+  profile_id?: string;
   key?: string;
   all?: boolean;
 }
@@ -1777,12 +1779,14 @@ model GetSettingsMessage {
 @extension("x-on", #{ setting: "key" })
 model SetSettingMessage {
   cmd: "set_setting";
+  source_session_id?: SessionID;
+  profile_id?: string;
   request_id?: string;
   key: string;
   value: string;
 }
 
-enum SettingScope { daemon }
+enum SettingScope { daemon, profile }
 model SettingEntry {
   key: string;
   scope: SettingScope;
@@ -1793,6 +1797,8 @@ model SettingEntry {
 }
 model SettingsListResult {
   entries: SettingEntry[];
+  profile?: string; // name of the profile whose values the profile-scoped entries show
+  profile_unresolved?: string; // why profile-scoped entries were left out
 }
 
 model AddOutpostMessage { cmd: "add_outpost"; name: string; destination: string; }

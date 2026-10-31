@@ -4,6 +4,7 @@ import "strings"
 
 type HomeSetting string
 type MachineSetting string
+type ProfileSetting string
 type Class int
 
 const (
@@ -60,6 +61,7 @@ const (
 	SettingDefaultEffortPrefix           HomeSetting    = "default_effort_"
 	SettingNotebookRoot                  MachineSetting = "notebook.root"
 	SettingNotebookRootEffective         MachineSetting = "notebook.root.effective"
+	SettingNotebookProfileRoot           ProfileSetting = "notebook.profile_root"
 	SettingAutoModeEnabledDefault        HomeSetting    = "automode_enabled_default"
 	SettingActivityEnabled               HomeSetting    = "activity.enabled"
 	SettingActivityConfig                HomeSetting    = "activity.config"

@@ -579,7 +579,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Authors:                state.Authors,
 		GithubHosts:            state.GithubHosts,
 		GithubPollingOffReason: gitHubPollingOffReasonField(),
-		Settings:               d.daemonSettingsSnapshot(),
+		Settings:               d.settingsSnapshot(d.profileForClient(client)),
 		Warnings:               d.getWarnings(),
 		Crew:                   state.Crew,
 		Asks:                   asksSnapshot(client.selectedProfile(), d.asks()).Asks,

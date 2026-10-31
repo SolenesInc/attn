@@ -5747,9 +5747,11 @@ export enum GetScreenSnapshotResultMessageEvent {
 }
 
 export interface GetSettingsMessage {
-    all?: boolean;
-    cmd:  GetSettingsMessageCmd;
-    key?: string;
+    all?:               boolean;
+    cmd:                GetSettingsMessageCmd;
+    key?:               string;
+    profile_id?:        string;
+    source_session_id?: string;
     [property: string]: any;
 }
 
@@ -9537,10 +9539,13 @@ export interface Setting {
 
 export enum SettingScope {
     Daemon = "daemon",
+    Profile = "profile",
 }
 
 export interface SettingsList {
-    entries: Setting[];
+    entries:             Setting[];
+    profile?:            string;
+    profile_unresolved?: string;
     [property: string]: any;
 }
 
@@ -11466,10 +11471,12 @@ export enum SetSessionResumeIDMessageCmd {
 }
 
 export interface SetSettingMessage {
-    cmd:         SetSettingMessageCmd;
-    key:         string;
-    request_id?: string;
-    value:       string;
+    cmd:                SetSettingMessageCmd;
+    key:                string;
+    profile_id?:        string;
+    request_id?:        string;
+    source_session_id?: string;
+    value:              string;
     [property: string]: any;
 }
 
@@ -11576,7 +11583,9 @@ export interface SettingEntry {
 }
 
 export interface SettingsListResult {
-    entries: Setting[];
+    entries:             Setting[];
+    profile?:            string;
+    profile_unresolved?: string;
     [property: string]: any;
 }
 
@@ -22648,6 +22657,8 @@ const typeMap: any = {
         { json: "all", js: "all", typ: u(undefined, true) },
         { json: "cmd", js: "cmd", typ: r("GetSettingsMessageCmd") },
         { json: "key", js: "key", typ: u(undefined, "") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
     "GitHubHostsUpdatedMessage": o([
         { json: "event", js: "event", typ: r("GitHubHostsUpdatedMessageEvent") },
@@ -25050,6 +25061,8 @@ const typeMap: any = {
     ], "any"),
     "SettingsList": o([
         { json: "entries", js: "entries", typ: a(r("Setting")) },
+        { json: "profile", js: "profile", typ: u(undefined, "") },
+        { json: "profile_unresolved", js: "profile_unresolved", typ: u(undefined, "") },
     ], "any"),
     "StateExplainResultObject": o([
         { json: "agent", js: "agent", typ: "" },
@@ -26320,7 +26333,9 @@ const typeMap: any = {
     "SetSettingMessage": o([
         { json: "cmd", js: "cmd", typ: r("SetSettingMessageCmd") },
         { json: "key", js: "key", typ: "" },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "value", js: "value", typ: "" },
     ], "any"),
     "SetTerminalThemeMessage": o([
@@ -26379,6 +26394,8 @@ const typeMap: any = {
     ], "any"),
     "SettingsListResult": o([
         { json: "entries", js: "entries", typ: a(r("Setting")) },
+        { json: "profile", js: "profile", typ: u(undefined, "") },
+        { json: "profile_unresolved", js: "profile_unresolved", typ: u(undefined, "") },
     ], "any"),
     "SettingsUpdatedMessage": o([
         { json: "changed_key", js: "changed_key", typ: u(undefined, "") },
@@ -28459,6 +28476,7 @@ const typeMap: any = {
     ],
     "SettingScope": [
         "daemon",
+        "profile",
     ],
     "RestartSharedCodexMessageCmd": [
         "restart_shared_codex",

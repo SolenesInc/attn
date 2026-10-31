@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -100,7 +101,7 @@ func TestSkillsUseTheMachineExecutableSettingAtStartup(t *testing.T) {
 	if got := app.Initial.Settings["claude_available"]; got != "false" {
 		t.Fatalf("unavailable environment executable is offered: %v", got)
 	}
-	if _, err := w.Client().SetSetting("claude_executable", executable); err != nil {
+	if _, err := w.Client().SetSetting(client.SettingsCaller{}, "claude_executable", executable); err != nil {
 		t.Fatal(err)
 	}
 	skill := filepath.Join(os.Getenv("ATTN_TOOL_HOME"), ".claude", "skills", "attn", "SKILL.md")

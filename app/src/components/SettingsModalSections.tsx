@@ -245,6 +245,7 @@ export function DesktopSettings({
   handleToggleWorktreeSweep,
   worktreeSweepEnabled,
   notebookRootDraft,
+  notebookProfileRootDraft,
   effectiveNotebookRoot,
   handleBrowseNotebookRoot,
   handleToggleOpenSentFiles,
@@ -258,6 +259,7 @@ export function DesktopSettings({
   | 'handleToggleWorktreeSweep'
   | 'worktreeSweepEnabled'
   | 'notebookRootDraft'
+  | 'notebookProfileRootDraft'
   | 'effectiveNotebookRoot'
   | 'handleBrowseNotebookRoot'
   | 'handleToggleOpenSentFiles'
@@ -361,35 +363,74 @@ export function DesktopSettings({
         <div className="settings-block-intro">
           <h3>Notebook Folder</h3>
           <p className="settings-description">
-            Where attn keeps your durable Notebook — dated journals and the knowledge base — as plain markdown you own.
-            Leave blank to use the default (<code>~/attn-notebook</code>, separate per instance). Changing this points
-            attn at the new folder; your existing notes are not moved, so move or sync the folder yourself if you want
-            the current contents to come along.
+            Where attn keeps your durable Notebook — dated journals, the knowledge base and seed files — as plain
+            markdown you own. A profile uses the shared folder unless you give it its own. Changing a folder points attn
+            at the new one; your existing notes are not moved, so move or sync the folder yourself if you want the
+            current contents to come along.
           </p>
         </div>
         <div className="settings-block-body">
-          <div className="settings-inline-form projects-dir-input">
-            <input
-              data-testid="settings-notebook-root-input"
-              type="text"
-              value={notebookRootDraft.value}
-              onChange={notebookRootDraft.onChange}
-              onBlur={notebookRootDraft.commit}
-              onKeyDown={notebookRootDraft.onKeyDown}
-              placeholder={effectiveNotebookRoot || '~/attn-notebook'}
-              className="settings-input"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-            <SavedMark shown={savedFlash.saved('notebook.root')} testID="settings-notebook-root-saved" />
-            <button className="settings-action" onClick={handleBrowseNotebookRoot}>
-              Browse
-            </button>
+          <div className="settings-field">
+            <label className="settings-label" htmlFor="settings-notebook-profile-root">
+              This profile
+            </label>
+            <span className="settings-status">Leave blank to use the shared folder</span>
+            <div className="settings-inline-form projects-dir-input">
+              <input
+                id="settings-notebook-profile-root"
+                data-testid="settings-notebook-profile-root-input"
+                type="text"
+                value={notebookProfileRootDraft.value}
+                onChange={notebookProfileRootDraft.onChange}
+                onBlur={notebookProfileRootDraft.commit}
+                onKeyDown={notebookProfileRootDraft.onKeyDown}
+                placeholder="Shared folder"
+                className="settings-input"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <SavedMark
+                shown={savedFlash.saved('notebook.profile_root')}
+                testID="settings-notebook-profile-root-saved"
+              />
+              <button className="settings-action" onClick={() => handleBrowseNotebookRoot('notebook.profile_root')}>
+                Browse
+              </button>
+            </div>
+          </div>
+          <div className="settings-field">
+            <label className="settings-label" htmlFor="settings-notebook-root">
+              Shared
+            </label>
+            <span className="settings-status">
+              Used by profiles without their own folder and synced with outposts. Leave blank for{' '}
+              <code>~/attn-notebook</code>, separate per instance.
+            </span>
+            <div className="settings-inline-form projects-dir-input">
+              <input
+                id="settings-notebook-root"
+                data-testid="settings-notebook-root-input"
+                type="text"
+                value={notebookRootDraft.value}
+                onChange={notebookRootDraft.onChange}
+                onBlur={notebookRootDraft.commit}
+                onKeyDown={notebookRootDraft.onKeyDown}
+                placeholder="~/attn-notebook"
+                className="settings-input"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+              <SavedMark shown={savedFlash.saved('notebook.root')} testID="settings-notebook-root-saved" />
+              <button className="settings-action" onClick={() => handleBrowseNotebookRoot('notebook.root')}>
+                Browse
+              </button>
+            </div>
           </div>
           {effectiveNotebookRoot && (
             <p className="settings-description" data-testid="settings-notebook-root-effective">
-              Currently: <code>{effectiveNotebookRoot}</code>
+              This profile uses: <code>{effectiveNotebookRoot}</code>
             </p>
           )}
         </div>

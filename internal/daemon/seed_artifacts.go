@@ -140,11 +140,30 @@ func (d *Daemon) seedArtifactDir(seedID string, create bool) (string, string, er
 	return d.localSeedArtifactDir(seedID, create)
 }
 
+func (d *Daemon) seedNotebookRoot(seedID string) (string, error) {
+	if !d.enrollmentStatus().IsHome() {
+		return d.sharedNotebookRoot()
+	}
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return "", err
+	}
+	return d.seedProfileNotebookRoot(seed)
+}
+
+func (d *Daemon) seedProfileNotebookRoot(seed garden.Seed) (string, error) {
+	profileID, err := d.seedBirthProfile(seed)
+	if err != nil {
+		return "", err
+	}
+	return d.notebookRoot(profileID)
+}
+
 func (d *Daemon) localSeedArtifactDir(seedID string, create bool) (string, string, error) {
 	if err := garden.ValidateID(seedID); err != nil {
 		return "", "", err
 	}
-	root, err := d.notebookRoot()
+	root, err := d.seedNotebookRoot(seedID)
 	if err != nil {
 		return "", "", err
 	}
@@ -320,12 +339,13 @@ func (d *Daemon) reconcileSeedArtifactObservations() error {
 	if err != nil {
 		return err
 	}
-	root, err := d.notebookRoot()
-	if err != nil {
-		return err
-	}
 	var reconciliationErrors []error
 	for _, seed := range read.seeds {
+		root, err := d.seedProfileNotebookRoot(seed)
+		if err != nil {
+			reconciliationErrors = append(reconciliationErrors, fmt.Errorf("resolve the Notebook of %s: %w", seed.ID, err))
+			continue
+		}
 		dir := notebook.SeedArtifactsDir(root, seed.ID)
 		info, statErr := os.Lstat(dir)
 		if os.IsNotExist(statErr) {
@@ -406,6 +426,9 @@ func (d *Daemon) submitSeedArtifactTransfer(ctx context.Context, msg *protocol.S
 	}
 	host := ""
 	if remote {
+		if err := d.refuseOutpostSeedArtifacts(seedID, origin); err != nil {
+			return nil, err
+		}
 		host = origin.Host
 	}
 	transferred, err := Call[*seedArtifactMachineTransfer](ctx, d.router(), protocol.SeedArtifactTransferHereMessage{Cmd: protocol.CmdSeedArtifactTransferHere, Host: host, Transfer: *msg})
@@ -475,7 +498,7 @@ func (d *Daemon) transferSeedArtifact(msg *protocol.SeedArtifactTransferMessage)
 		if msg.DestinationPath != nil {
 			return nil, errors.New("move and copy choose the seed-owned destination; --to belongs to detach")
 		}
-		root, err = d.notebookRoot()
+		root, err = d.seedNotebookRoot(seedID)
 		if err != nil {
 			return nil, err
 		}

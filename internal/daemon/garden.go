@@ -842,6 +842,10 @@ func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protoco
 		d.sendGardenError(conn, "show", err)
 		return
 	}
+	var shownArtifactDir *string
+	if artifactDir != "" {
+		shownArtifactDir = &artifactDir
+	}
 	handoff, handoffNewer := d.handoffAndNewer(seed.ID)
 	board, closed := d.seedBoard(read, seed.ID)
 	d.consumeSeedBell(sessionID, seed.ID)
@@ -861,7 +865,7 @@ func (d *Daemon) handleSeedShow(ctx context.Context, conn net.Conn, msg *protoco
 			Board:          board,
 			ClosedChildren: closed,
 			ParentOutline:  parentOutline(read, seed),
-			ArtifactDir:    protocol.Ptr(artifactDir),
+			ArtifactDir:    shownArtifactDir,
 			Artifacts:      artifacts,
 			References:     d.seedArtifactReferences(seed.ID),
 		},

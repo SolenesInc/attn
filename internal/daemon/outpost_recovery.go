@@ -45,7 +45,7 @@ func (d *Daemon) outpostMachineReport() outpostMachine {
 			report.Live[live.terminal] = outpostLiveTerminal{Info: live.info, HaveInfo: live.haveInfo}
 		}
 	}
-	report.NotebookRoot, _ = d.notebookRoot()
+	report.NotebookRoot, _ = d.sharedNotebookRoot()
 	d.monitors().notifyViewsChanged()
 	return report
 }

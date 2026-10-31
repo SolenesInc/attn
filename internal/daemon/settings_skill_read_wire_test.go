@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -38,7 +39,7 @@ func TestSettingsSnapshotsLeaveInstalledSkillsAlone(t *testing.T) {
 	}
 	t.Run("initial state", func(t *testing.T) { w.App(); unchanged(t) })
 	t.Run("CLI settings", func(t *testing.T) {
-		if _, err := w.Client().Settings("", true); err != nil {
+		if _, err := w.Client().Settings(client.SettingsCaller{}, "", true); err != nil {
 			t.Fatal(err)
 		}
 		unchanged(t)

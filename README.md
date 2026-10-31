@@ -433,8 +433,9 @@ act as my thinking partner.
 ```
 
 To keep everything in one syncable folder, open **Settings → Notebook Folder**
-and point it at `chief-of-staff/notebook`. Add `notebook/.attn/` to
-`.gitignore`; it is machine state. Changing the Notebook Folder does not move
+and point **This profile** at `chief-of-staff/notebook`, or **Shared** to use
+it for every profile without its own folder. Add `notebook/.attn/` to
+`.gitignore`; it is machine state. Changing a Notebook folder does not move
 existing notes.
 
 Then: **Cmd+T**, pick a harness, select the `chief-of-staff` folder, turn

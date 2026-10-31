@@ -38,7 +38,11 @@ func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, isChief, sel
 	vents := d.launchVentIntent(sessionID)
 	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), Vent: vents.Vent, ToolVents: vents.ToolVents, SelfReportPullRequests: selfReportPullRequests, QuickCapture: parseBooleanSetting(d.homeSetting(SettingQuickCaptureEnabled))}
 	if isChief {
-		root, _, err := d.ensureNotebookScaffold()
+		profileID, err := d.sessionNotebookProfile(sessionID)
+		if err != nil {
+			return hooks.Launch{}, nil, fmt.Errorf("prepare chief notebook: %w", err)
+		}
+		root, _, err := d.ensureNotebookScaffold(profileID)
 		if err != nil {
 			return hooks.Launch{}, nil, fmt.Errorf("prepare chief notebook: %w", err)
 		}

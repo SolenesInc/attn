@@ -5391,6 +5391,12 @@ type GetSettingsMessage struct {
 
 	// Key corresponds to the JSON schema field "key".
 	Key *string `json:"key,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 }
 
 type GitHubHostsUpdatedMessage struct {
@@ -12003,8 +12009,14 @@ type SetSettingMessage struct {
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
 
 	// Value corresponds to the JSON schema field "value".
 	Value string `json:"value"`
@@ -12143,10 +12155,17 @@ type SettingEntry struct {
 type SettingScope string
 
 const SettingScopeDaemon SettingScope = "daemon"
+const SettingScopeProfile SettingScope = "profile"
 
 type SettingsListResult struct {
 	// Entries corresponds to the JSON schema field "entries".
 	Entries []SettingEntry `json:"entries"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile *string `json:"profile,omitempty,omitzero"`
+
+	// ProfileUnresolved corresponds to the JSON schema field "profile_unresolved".
+	ProfileUnresolved *string `json:"profile_unresolved,omitempty,omitzero"`
 }
 
 type SettingsUpdatedMessage struct {

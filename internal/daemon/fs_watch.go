@@ -15,10 +15,18 @@ type fsRootWatch struct {
 	refs    map[*wsClient]int
 }
 
+func (d *Daemon) clientNotebookRoot(client *wsClient, root string) bool {
+	own, err := d.notebookRoot(d.profileForClient(client))
+	return err == nil && own == root
+}
+
 func (d *Daemon) handleFsWatch(client *wsClient, requestID, rawRoot string) {
 	root, err := d.resolveFsRoot(client, rawRoot)
-	if err == nil && !d.isNotebookRoot(root) {
+	if err == nil && !d.clientNotebookRoot(client, root) {
 		err = d.addFsWatchRef(client, root)
+		if err == nil && d.isNotebookRoot(root) {
+			d.ensureNotebookWatcher(root)
+		}
 	}
 	msg := protocol.FsWatchResultMessage{
 		Event:     protocol.EventFsWatchResult,
@@ -35,7 +43,7 @@ func (d *Daemon) handleFsWatch(client *wsClient, requestID, rawRoot string) {
 
 func (d *Daemon) handleFsUnwatch(client *wsClient, requestID, rawRoot string) {
 	root, err := d.resolveFsRoot(client, rawRoot)
-	if err == nil && !d.isNotebookRoot(root) {
+	if err == nil && !d.clientNotebookRoot(client, root) {
 		d.dropFsWatchRef(client, root)
 	}
 	msg := protocol.FsUnwatchResultMessage{
@@ -62,13 +70,16 @@ func (d *Daemon) addFsWatchRef(client *wsClient, root string) error {
 		if len(d.fsWatchers) >= maxFsWatchers {
 			return fmt.Errorf("too many watched roots")
 		}
-		w, err := notebook.NewWatcher(d.clock, root, fsdoc.CleanPath, func(paths []string) {
-			d.broadcastFsChanged(root, originExternal, paths...)
-		})
-		if err != nil {
-			return err
+		entry = &fsRootWatch{refs: make(map[*wsClient]int)}
+		if !d.isNotebookRoot(root) {
+			w, err := notebook.NewWatcher(d.clock, root, fsdoc.CleanPath, func(paths []string) {
+				d.broadcastFsChanged(root, originExternal, paths...)
+			})
+			if err != nil {
+				return err
+			}
+			entry.watcher = w
 		}
-		entry = &fsRootWatch{watcher: w, refs: make(map[*wsClient]int)}
 		d.fsWatchers[root] = entry
 	}
 	entry.refs[client]++

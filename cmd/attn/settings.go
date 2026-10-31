@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/victorarias/attn/internal/client"
@@ -12,9 +14,11 @@ import (
 )
 
 func writeSettingsHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn settings <command>
+	fmt.Fprint(w, `usage: attn settings <command> [--profile <name|id>]
 
-Read and change daemon settings. Changes apply across all profiles.
+Read and change settings. Most apply to all profiles; a few apply to one
+profile, and list shows which. Inside an attn session, profile settings belong
+to the session's profile; outside, --profile chooses one when several exist.
 
 commands:
   list [--all] [--json]  show keys, scopes, values and descriptions;
@@ -34,6 +38,7 @@ func runSettings() {
 	verb := args[0]
 	fs := flag.NewFlagSet("settings", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	profile := fs.String("profile", "", "profile name or id outside an attn session")
 	jsonOut := fs.Bool("json", false, "print JSON")
 	all := fs.Bool("all", false, "include read-only values")
 	var positionals []string
@@ -73,8 +78,13 @@ func runSettings() {
 	}
 	c := client.New("")
 	refusal := func(err error) { fmt.Fprintln(os.Stderr, "settings: "+err.Error()); os.Exit(1) }
+	session, err := currentSession(c)
+	if err != nil && !errors.Is(err, errNoCurrentSession) {
+		refusal(err)
+	}
+	caller := client.SettingsCaller{SessionID: session, Profile: strings.TrimSpace(*profile)}
 	if verb == "set" {
-		entry, err := c.SetSetting(positionals[0], positionals[1])
+		entry, err := c.SetSetting(caller, positionals[0], positionals[1])
 		if err != nil {
 			refusal(err)
 		}
@@ -89,7 +99,7 @@ func runSettings() {
 	if verb == "get" {
 		key = positionals[0]
 	}
-	result, err := c.Settings(key, *all)
+	result, err := c.Settings(caller, key, *all)
 	if err != nil {
 		refusal(err)
 	}
@@ -106,9 +116,15 @@ func runSettings() {
 		printJSON(result)
 		return
 	}
+	if reason := protocol.Deref(result.ProfileUnresolved); reason != "" {
+		fmt.Fprintln(os.Stderr, "settings: profile settings left out: "+reason)
+	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, entry := range result.Entries {
 		scope := "all profiles"
+		if entry.Scope == protocol.SettingScopeProfile {
+			scope = strings.TrimSpace("profile " + protocol.Deref(result.Profile))
+		}
 		value := protocol.Deref(entry.Value)
 		if value == "" {
 			value = "-"

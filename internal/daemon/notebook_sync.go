@@ -120,7 +120,7 @@ func (d *Daemon) configureNotebookSync() {
 	r.configure.Lock()
 	defer r.configure.Unlock()
 	home, peers, err := d.notebookSyncPeers()
-	root, rootErr := d.notebookRoot()
+	root, rootErr := d.sharedNotebookRoot()
 	err = errors.Join(err, rootErr)
 	r.mu.Lock()
 	old := r.run
@@ -827,7 +827,7 @@ func (d *Daemon) NotebookReady(host string) error {
 	if err != nil {
 		return err
 	}
-	root, err := d.notebookRoot()
+	root, err := d.sharedNotebookRoot()
 	if err != nil {
 		return err
 	}
@@ -961,7 +961,7 @@ func (d *Daemon) forgetNotebookSyncPeer(peer string) {
 const notebookArtifactWaitTripwire = 8 * time.Hour
 
 func (d *Daemon) waitForNotebookArtifact(ctx context.Context, origin Origin, receipt *seedArtifactTransferReceipt) error {
-	root, err := d.notebookRoot()
+	root, err := d.seedNotebookRoot(receipt.SeedID)
 	if err != nil {
 		return err
 	}
@@ -998,8 +998,31 @@ func (d *Daemon) waitForNotebookArtifact(ctx context.Context, origin Origin, rec
 	}
 }
 
+func (d *Daemon) seedNotebookOffOutposts(seedID string) (string, error) {
+	seed, _, err := d.readSeed(seedID)
+	if err != nil {
+		return "", err
+	}
+	profileID, err := d.seedBirthProfile(seed)
+	if err != nil {
+		return "", err
+	}
+	return d.profileNotebookRoot(profileID), nil
+}
+
+func (d *Daemon) refuseOutpostSeedArtifacts(seedID string, origin Origin) error {
+	own, err := d.seedNotebookOffOutposts(seedID)
+	if err != nil || own == "" {
+		return err
+	}
+	return fmt.Errorf("%s keeps its files in its profile's own Notebook folder %s (notebook.profile_root), which stays at the home: outposts sync only the shared Notebook (notebook.root), so %s cannot reach it; run this from a shell at the home", seedID, own, origin.Name)
+}
+
 func (d *Daemon) callerSeedArtifactDir(ctx context.Context, seed string) (string, error) {
 	if origin, remote := OriginOf(ctx); remote {
+		if own, err := d.seedNotebookOffOutposts(seed); err != nil || own != "" {
+			return "", err
+		}
 		d.outposts.mu.Lock()
 		root := ""
 		if run := d.outposts.dialers[origin.Host]; run != nil {
@@ -1011,7 +1034,7 @@ func (d *Daemon) callerSeedArtifactDir(ctx context.Context, seed string) (string
 		}
 		return filepath.Join(root, "seeds", seed), nil
 	}
-	root, err := d.notebookRoot()
+	root, err := d.seedNotebookRoot(seed)
 	if err != nil {
 		return "", err
 	}

@@ -2,8 +2,8 @@
 
 The notebook is the user's notebook and daily journal, edited in a tile or
 fullscreen; the chief keeps it too. It is a folder of plain markdown files on
-disk, one per instance and shared by every profile: a journal of dated
-entries and a knowledge base of notes. People read and edit it in attn's
+disk: a journal of dated entries and a knowledge base of notes. Profiles share
+one folder per instance unless a profile sets its own. People read and edit it in attn's
 editor; agents read and edit the files with their own tools and append to the
 journal through attn, so concurrent writers never collide. The chief treats
 it as its home.
@@ -17,8 +17,9 @@ it as its home.
 - `note-finder`: ⌘P inside the notebook or an editor tile finds a note by name.
 - `notebook-links`: root-absolute links between notes, followed in place, and the backlinks that point at a note.
 - `editor-undo`: native ⌘Z and ⇧⌘Z undo and redo in the editor.
-- `notebook-root`: the folder the notebook lives in, a machine setting.
-- `notebook-sync`: an outpost's notebook syncs with the home's.
+- `notebook-root`: the shared folder, the machine setting `notebook.root`.
+- `profile-notebook`: a profile's own folder, `notebook.profile_root`, used instead of the shared one; empty falls back.
+- `notebook-sync`: an outpost's notebook syncs with the home's shared one.
 
 ## How to get to it
 
@@ -29,14 +30,14 @@ it as its home.
 - Sidebar: the "Open Notebook (⇧⌥⌘N)" button (`app/src/application/useAppSidebarActions.tsx`).
 - Fullscreen and tile (`app/src/components/NotebookSurface.tsx`): the "Notebook files" list, the document with its save status, the Outline and Backlinks sections, the "chief: active" or "chief: idle" status, and "Close" (Esc) fullscreen.
 - Editor tile (`app/src/components/notebook/NotebookTile.tsx`): its "Editor root" picker (`app/src/components/SessionTerminalDesktop/NotebookRootPicker.tsx`) and its note finder, "Find a note…" (`app/src/components/notebook/NotebookFinder.tsx`).
-- Settings: the notebook folder, blank for the default (`app/src/components/SettingsModalSections.tsx`), the machine setting `notebook.root`.
+- Settings → Notebook Folder (`app/src/components/SettingsModalSections.tsx`): "This profile" sets `notebook.profile_root` for the profile the window shows, blank for the shared folder; "Shared" sets `notebook.root`, blank for the default; "This profile uses:" shows `notebook.root.effective`.
 - Where people see what agents do: journal entries and notes agents write appear in the open notebook as the files change, and the status shows whether the chief is active.
 - Their own shell: the files themselves, and the verbs below.
 
 ### Agents
 
 - `attn journal append (--entry <text> | --entry-file <path>) [--date YYYY-MM-DD] [--session <id>] [--json]` (`cmd/attn/main.go`). There is no notebook CLI: agents read and edit notes with their own file tools.
-- `attn settings get notebook.root.effective` gives an outpost's notebook folder.
+- `attn settings get notebook.root.effective [--profile <name|id>]` gives the folder the caller's profile uses (an outpost's copy of the shared folder on an outpost). `attn settings set notebook.profile_root <path> [--profile <name|id>]` sets a profile's own folder; inside a session the session's profile is used.
 - Prompts: the chief's instructions name the notebook as its home (`internal/prompts/content/chief.md`); the attn skill's notebook reference covers the two layers, frontmatter, links and the journal command (`internal/prompts/content/skills/attn/references/notebook.md`).
 
 ### Triggers
@@ -77,7 +78,8 @@ Preconditions:
 - **Durability across restarts**: the notebook is files on disk and does not depend on attn running. An edit that the app had not saved yet is the only thing a crash can lose; the save status shows it. The open editor tile comes back with its desktop.
 - **Linux**: `attn journal append` and the files work the same where the daemon and CLI run on Linux. The editor tile is Ctrl+Shift+Alt+N and fullscreen Ctrl+Shift+Alt+F there (`LINUX_SHORTCUTS`).
 - **Outposts**: an outpost keeps its own copy at its `notebook.root.effective`, synced with the home's, and conflict copies appear on the outpost's row in Settings. Agents on an outpost append to the journal with `attn journal append`, which writes at the home. While the outpost is offline its copy waits for the next sync.
-- **Profiles**: the notebook belongs to the instance, not a profile. Every profile's chief reads and writes the same files.
+- **Profiles**: profiles share the instance's folder unless one sets `notebook.profile_root`. The app's notebook, editor tiles, the chief's launch guidance, `attn journal append` and seed artifacts all follow the profile: the window's profile for the app, the session's profile for agents, the seed's profile for its files. After switching the window's profile, the notebook opens on that profile's folder. Repointing a profile never moves files.
+- **Outposts and a profile's own folder**: only the shared folder syncs. For seeds of a profile with its own folder, `attn seed attach`, `detach` and `check report --evidence` refuse on an outpost, naming the folder, and `attn seed show` there prints no artifact folder.
 - **Performance and idle cost**: the open notebook and each editor tile watch their folder for changes. Nothing measures the cost of a large notebook or of an idle open editor; when a change touches them, check with `docs/internal/perf-testing.md`.
 - **Harnesses**: any harness reads and edits the files with its own tools and appends with the same `attn journal append`.
 - **Keyboard and native input**: ⌥⌘N, ⇧⌥⌘N, ⌘P inside the notebook, Esc to close fullscreen. ⌘Z and ⇧⌘Z reach the editor because attn removes the Edit menu's Undo and Redo, which would take them first. ⌘E is left free for inline code.
@@ -85,7 +87,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/notebook_wire_test.go`, `internal/daemon/notebook_containment_wire_test.go`, `internal/daemon/journal_wire_test.go`, `internal/daemon/notebook_test.go`.
+- Wire: `internal/daemon/notebook_wire_test.go`, `internal/daemon/notebook_profiles_wire_test.go`, `internal/daemon/notebook_containment_wire_test.go`, `internal/daemon/journal_wire_test.go`, `internal/daemon/notebook_test.go`.
 - Stack: `cmd/attn/notebook_sync_stack_test.go`, `cmd/attn/agent_commands_stack_test.go`, `app/e2e/notebook-tile.spec.ts`, `app/e2e/notebook-tile-finder.spec.ts`, `app/e2e/notebook-browser.spec.ts`, `app/e2e/live-markdown-editor.spec.ts`, `app/e2e/broken-links.spec.ts`, `app/e2e/frontmatter-card.spec.ts`.
 - Scenario: `notebook-editor-undo`, `notebook-sync`; outside the catalog, `app/scripts/real-app-harness/scenario-notebook-link-nav.mjs` and `scenario-notebook-tile-close.mjs`.
 - Kernel: `internal/notebook/*_test.go`.
@@ -95,7 +97,7 @@ Preconditions:
 
 - On a fresh instance the notebook folder does not exist until something writes to it; the first `attn journal append` creates it. `instance clean` leaves `~/attn-notebook-<name>` behind, so a later instance with the same name starts with old entries; read the day's file before counting entries.
 - Entries are dated by the home's clock. A run across midnight writes two files.
-- The notebook is one folder for every profile. A run in a second profile sees the first profile's notes; that is the design.
+- Profiles without `notebook.profile_root` share one folder. A run in a second such profile sees the first profile's notes; that is the design.
 - ⌘P means the note finder while focus is inside the notebook or an editor tile, and the markdown opener everywhere else. A freshly docked editor tile is not focused until you click in it.
 - Sidebar tile rows carry `data-tile-kind` too. Select inside the tile (`[data-tile-kind="notebook"] .notebook-surface-tile`) when you need the tile's own box.
 - `bridge capture_screenshot` shows the editor, but a save is proven only by the file on disk.

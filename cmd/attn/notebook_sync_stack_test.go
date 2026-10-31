@@ -210,6 +210,38 @@ func TestOutpostSeedTransfersUseItsNotebookAndWaitForTheHome(t *testing.T) {
 	t.Log("detach wrote outpost destination; home removed source before return; re-copying a changed source replaced the home's file before return; check report accepted copy.md, then copied the outpost's proof.log to home and cited copy.md by its outpost folder path without copying it; seed show printed outpost artifact folder; external unlink of a copied artifact reached home")
 }
 
+func TestOutpostsRefuseSeedFilesOfAProfileWithItsOwnNotebook(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	own := filepath.Join(home.Dir, "profile-notebook")
+	if err := os.Mkdir(own, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	requireStdout(t, home.Attn("settings", "set", "notebook.profile_root", own), "notebook.profile_root = "+own)
+	seed := plant(t, home, "Profile notebook", "-m", "Its files stay at the home")
+	source := filepath.Join(outpost.Dir, "evidence.md")
+	if err := os.WriteFile(source, []byte("from the outpost"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	refused := outpost.Attn("seed", "attach", seed.ID, "--path", source, "--copy")
+	if refused.Code == 0 || !strings.Contains(refused.Stderr, own) || !strings.Contains(refused.Stderr, "notebook.profile_root") {
+		t.Fatalf("attaching from the outpost = %+v, want a refusal naming the profile's folder", refused)
+	}
+	if _, err := os.Stat(filepath.Join(own, "seeds", seed.ID, "evidence.md")); !os.IsNotExist(err) {
+		t.Fatalf("the refused attach stored a file: %v", err)
+	}
+	if shown := showSeed(t, outpost, "", seed.ID); shown.ArtifactDir != nil {
+		t.Fatalf("the outpost shows artifact folder %q for a seed whose files stay at the home", *shown.ArtifactDir)
+	}
+	var attached protocol.SeedArtifactTransferResult
+	home.Attn("seed", "attach", seed.ID, "--path", source, "--copy", "--json").JSON(t, &attached)
+	if attached.DestinationPath != filepath.Join(own, "seeds", seed.ID, "evidence.md") {
+		t.Fatalf("attaching at the home landed at %s, want the profile's own folder", attached.DestinationPath)
+	}
+}
+
 func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 	for _, side := range []string{"home", "outpost"} {
 		t.Run(side, func(t *testing.T) {

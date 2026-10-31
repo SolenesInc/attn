@@ -156,6 +156,25 @@ func HarnessNotebookRoot() string {
 	return filepath.Clean(strings.TrimSpace(os.Getenv("ATTN_HARNESS_NOTEBOOK_ROOT")))
 }
 
+func RequireWithinHarness(label, path string) error {
+	rawRoot := strings.TrimSpace(os.Getenv("ATTN_HARNESS_DATA_DIR"))
+	if rawRoot == "" {
+		return nil
+	}
+	root, err := CanonicalRuntimePath(rawRoot)
+	if err != nil {
+		return fmt.Errorf("resolve ATTN_HARNESS_DATA_DIR: %w", err)
+	}
+	resolved, err := CanonicalRuntimePath(path)
+	if err != nil {
+		return fmt.Errorf("resolve %s: %w", label, err)
+	}
+	if !runtimePathWithin(resolved, root) {
+		return fmt.Errorf("refusing %s=%q outside instance harness root %q", label, resolved, root)
+	}
+	return nil
+}
+
 func runtimePathWithin(candidate, root string) bool {
 	relative, err := filepath.Rel(root, candidate)
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator)) && !filepath.IsAbs(relative)

@@ -24,18 +24,21 @@ func (d *Daemon) handleGetSettingsWS(client *wsClient) {
 	d.refreshTailscaleServeState()
 	d.sendToClient(client, &protocol.SettingsUpdatedMessage{
 		Event:    protocol.EventSettingsUpdated,
-		Settings: d.daemonSettingsSnapshot(),
+		Settings: d.settingsSnapshot(d.profileForClient(client)),
 	})
 }
 
 func (d *Daemon) handleSetSettingWS(client *wsClient, msg *protocol.SetSettingMessage) {
 	d.logf("Setting %s = %s", msg.Key, msg.Value)
+	if spec, ok := lookupSetting(msg.Key); ok && spec.scope == profileScope && protocol.Deref(msg.ProfileID) == "" {
+		msg.ProfileID = protocol.Ptr(d.profileForClient(client))
+	}
 	_, err := d.setSetting(msg)
 	response := &protocol.SettingsUpdatedMessage{Event: protocol.EventSettingsUpdated, RequestID: msg.RequestID, ChangedKey: protocol.Ptr(msg.Key), Success: protocol.Ptr(err == nil)}
 	if err != nil {
 		d.logf("Setting validation failed: %v", err)
 		response.Error = protocol.Ptr(err.Error())
-		response.Settings = d.daemonSettingsSnapshot()
+		response.Settings = d.settingsSnapshot(d.profileForClient(client))
 	}
 	if err != nil || msg.RequestID != nil {
 		d.sendToClient(client, response)
@@ -54,6 +57,9 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if err := spec.validate(d, msg.Key, msg.Value); err != nil {
 		return nil, err
 	}
+	if spec.scope == profileScope {
+		return d.applyProfileSetting(spec, msg)
+	}
 	if msg.Key == string(SettingSharedPTYHostEnabled) {
 		err = d.setSharedPTYHostEnabled(parseBooleanSetting(msg.Value))
 	} else {
@@ -64,13 +70,32 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	}
 	d.settingChanged(msg.Key, msg.Value)
 
-	entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil))
+	entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil, ""))
+	return &entry, nil
+}
+
+func (d *Daemon) applyProfileSetting(spec settingSpec, msg protocol.SetSettingMessage) (*protocol.SettingEntry, error) {
+	profile, err := d.settingsProfile(msg.SourceSessionID, msg.ProfileID)
+	if err != nil {
+		return nil, err
+	}
+	if err := d.store.SetProfileSetting(profile.ID, msg.Key, strings.TrimSpace(msg.Value)); err != nil {
+		return nil, err
+	}
+	if msg.Key == string(SettingNotebookProfileRoot) {
+		d.pruneNotebookWatchers()
+	}
+	d.publishSettingsFact(FactSettingChanged, msg.Key)
+	entry := d.settingEntry(spec, msg.Key, d.settingValue(spec, msg.Key, nil, profile.ID))
 	return &entry, nil
 }
 
 func (d *Daemon) settingChanged(key, value string) {
 	if key == string(settingOutpostsEnabled) {
 		d.configureOutposts()
+	}
+	if key == string(SettingNotebookRoot) {
+		d.pruneNotebookWatchers()
 	}
 
 	if harness, ok := isAgentExecutableSettingKey(key); ok {
@@ -136,15 +161,40 @@ func (d *Daemon) publishSettingsFact(name, subject string) {
 
 func (d *Daemon) projectSettingsUpdated(changedKey string) {
 	d.projectSnapshot(snapshotSettings, func() {
-		event := &protocol.SettingsUpdatedMessage{
-			Event:    protocol.EventSettingsUpdated,
-			Settings: d.daemonSettingsSnapshot(),
-		}
-		if strings.TrimSpace(changedKey) != "" {
-			event.ChangedKey = protocol.Ptr(changedKey)
-		}
-		d.broadcastMessage(event)
+		base := d.daemonSettingsSnapshot()
+		snapshots := map[string]map[string]interface{}{}
+		d.wsHub.ForEachClient(func(client *wsClient) {
+			profileID := d.profileForClient(client)
+			snapshot, ok := snapshots[profileID]
+			if !ok {
+				snapshot = d.withProfileSettings(base, profileID)
+				snapshots[profileID] = snapshot
+			}
+			event := &protocol.SettingsUpdatedMessage{Event: protocol.EventSettingsUpdated, Settings: snapshot}
+			if strings.TrimSpace(changedKey) != "" {
+				event.ChangedKey = protocol.Ptr(changedKey)
+			}
+			d.sendToClient(client, event)
+		})
 	})
+}
+
+func (d *Daemon) settingsSnapshot(profileID string) map[string]interface{} {
+	return d.withProfileSettings(d.daemonSettingsSnapshot(), profileID)
+}
+
+func (d *Daemon) withProfileSettings(base map[string]interface{}, profileID string) map[string]interface{} {
+	settings := make(map[string]interface{}, len(base)+2)
+	for k, v := range base {
+		settings[k] = v
+	}
+	if own := d.profileNotebookRoot(profileID); own != "" {
+		settings[string(SettingNotebookProfileRoot)] = own
+	}
+	if root, err := d.notebookRoot(profileID); err == nil {
+		settings[string(SettingNotebookRootEffective)] = root
+	}
+	return settings
 }
 
 func executableSettingKey(agent string) string {
@@ -221,9 +271,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 		settings[string(SettingAutoModeEnabledDefault)] = strconv.FormatBool(cfg.EnabledDefault)
 	}
 	settings[string(settingNotebookSyncState)], settings[string(settingNotebookSyncLastError)] = d.notebookSyncSettings()
-	if root, err := d.notebookRoot(); err == nil {
-		settings[string(SettingNotebookRootEffective)] = root
-	}
 	d.lastBackupMu.Lock()
 	lastBackupAt := d.lastBackupAt
 	d.lastBackupMu.Unlock()
@@ -492,13 +539,13 @@ func resolveContextWindowCap(stored string) int {
 	return agentdriver.DefaultContextWindowCap
 }
 
-func validateNotebookRoot(value string) error {
+func validateNotebookRoot(key, value string) error {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
 	_, err := normalizeExternalRoot(value)
 	if err != nil {
-		return fmt.Errorf("notebook.root %w", err)
+		return fmt.Errorf("%s %w", key, err)
 	}
 	return nil
 }

@@ -422,6 +422,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		})
 		return profileActionOutcome{arranges: true, publish: func() {
+			d.pruneNotebookWatchers()
 			d.announceClosedAsks(closedAsks)
 			d.publishFact(FactProfileDeleted, deleted.ID, nil)
 		}}, nil
@@ -786,6 +787,7 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 
 func (d *Daemon) sendProfileSnapshots(client *wsClient) {
 	profileID := client.selectedProfile()
+	d.sendToClient(client, &protocol.SettingsUpdatedMessage{Event: protocol.EventSettingsUpdated, Settings: d.settingsSnapshot(d.profileForClient(client))})
 	d.sendGardenFull(client)
 	d.sendToClient(client, asksSnapshot(profileID, d.asks()))
 	d.sendToClient(client, d.ventsSnapshot(profileID))

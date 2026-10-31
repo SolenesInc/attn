@@ -52,7 +52,7 @@ func (d *Daemon) toolVentsEnabled() bool {
 func (d *Daemon) experimentalSettingsOn() []string {
 	on := []string{}
 	for _, spec := range settingSpecs {
-		if spec.experimental && parseBooleanSetting(d.settingValue(spec, spec.key, nil)) {
+		if spec.experimental && parseBooleanSetting(d.settingValue(spec, spec.key, nil, "")) {
 			on = append(on, spec.key)
 		}
 	}

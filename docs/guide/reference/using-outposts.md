@@ -167,9 +167,13 @@ outpost, so they need its connection.
 
 ## Notebook sync
 
-Pairing an outpost starts two-way sync of the whole Notebook. Each machine has
+Pairing an outpost starts two-way sync of the shared Notebook. Each machine has
 its own folder, selected by its machine setting `notebook.root`. Read the
 resolved path with `attn settings get notebook.root.effective` on that machine.
+A profile that sets its own folder with `notebook.profile_root` keeps that
+folder at the home, unsynced: its agents on an outpost see the shared Notebook,
+and `attn seed attach`, `detach` and `check report --evidence` refuse there for
+its seeds, naming the folder. Run them from a shell at the home.
 Files edited, created or deleted on either machine reach the others. Knowledge
 notes and seed artifacts stay ordinary files you can read and edit with native
 tools. Append journal entries with `attn journal append --entry '<text>'`, so

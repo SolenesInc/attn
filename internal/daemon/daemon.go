@@ -217,12 +217,11 @@ type Daemon struct {
 	notebookSync        notebookSyncRuntime
 	notebookSyncWatch   bool
 	notebookMu          sync.Mutex
-	notebookStore       *notebook.Store
+	notebookStores      map[string]*notebook.Store
 	notebookWatcherMu   sync.Mutex
 	notebookWatch       func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error)
 	clock               *stepclock.Clock
-	notebookWatcher     *notebook.Watcher
-	notebookWatchedRoot string
+	notebookWatchers    map[string]*notebook.Watcher
 	fsMu                sync.Mutex
 	fsStores            map[string]*fsdoc.Store
 	fsWatchMu           sync.Mutex
@@ -1664,7 +1663,7 @@ func (d *Daemon) stop() {
 		_ = d.ptyBackend.Shutdown(context.Background())
 	}
 	d.monitors().registry.Close()
-	d.stopNotebookWatcher()
+	d.stopNotebookWatchers()
 	d.stopFsWatchers()
 	d.stopEventBus()
 	d.stopInstalledPlugins()

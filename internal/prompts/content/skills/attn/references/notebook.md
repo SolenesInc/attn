@@ -1,19 +1,21 @@
 # Notebook
 
-Load this reference when you read or maintain the attn Notebook — the durable,
-instance-wide markdown store — especially when your session is the chief of staff.
-The Notebook outlives any single agent or profile.
+Load this reference when you read or maintain the attn Notebook — your
+profile's durable markdown store — especially when your session is the chief of
+staff. The Notebook outlives any single agent.
 
 The Notebook is plain markdown on disk. Read it and edit knowledge notes with
 native tools (Read/Write/Edit and `ls`/`rg`). Append journal entries through
 `attn journal append`, which serializes writes at the home.
 There is no `attn notebook` CLI. The notebook root is given to you in your
-operating guidance (the chief-of-staff launch injection); it is
-`~/attn-notebook` by default (per-instance variants append the instance name). Paths
-below are written relative to that `<root>`. On an outpost, use that machine's
-`notebook.root.effective` from `attn settings get notebook.root.effective`. Its
-Notebook syncs with the home. `attn seed show <seed>` prints that machine's
-artifact folder.
+operating guidance (the chief-of-staff launch injection), and
+`attn settings get notebook.root.effective` prints it. Profiles share one folder,
+`~/attn-notebook` by default (per-instance variants append the instance name),
+unless a profile sets its own with `notebook.profile_root`. Paths below are
+written relative to that `<root>`. On an outpost, `notebook.root.effective` names
+that machine's copy of the shared Notebook, which syncs with the home; a folder
+a profile set for itself does not sync. `attn seed show <seed>` prints that
+machine's artifact folder.
 
 ## Orient First
 
@@ -98,5 +100,5 @@ points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/in
 record durable decisions in the knowledge base as you make them, and keep the
 day's journal current with your view of your profile. Write at a chief-of-staff
 altitude — what moved across your profile's agents, what you delegated and
-decided — not a per-agent play-by-play. Each profile has its own chief; the
-Notebook is the one store you all share.
+decided — not a per-agent play-by-play. Each profile has its own chief; chiefs
+of profiles that share a Notebook folder write to the same files.

@@ -32,14 +32,16 @@ func readNotebookWSEvent(t *testing.T, ch chan outboundMessage, target any) {
 
 func TestNotebookWatcherFollowsRootChange(t *testing.T) {
 	d := newNotebookDaemon(t)
-	t.Cleanup(d.stopNotebookWatcher)
+	t.Cleanup(d.stopNotebookWatchers)
 	rootA := d.store.GetSetting(string(SettingNotebookRoot))
 	rootB := t.TempDir()
 	client := &wsClient{send: make(chan outboundMessage, 64)}
 	d.wsHub.clients[client] = true
 
 	listNotebook(t, d)
-	d.store.SetSetting(string(SettingNotebookRoot), rootB)
+	if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(SettingNotebookRoot), Value: rootB}); err != nil {
+		t.Fatal(err)
+	}
 	if listed := listNotebook(t, d); len(listed) != 0 {
 		t.Fatalf("listing after the root moved to an empty directory returned %v", listed)
 	}

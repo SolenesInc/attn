@@ -2,9 +2,11 @@ package daemon
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/settingkeys"
@@ -12,6 +14,7 @@ import (
 
 type HomeSetting = settingkeys.HomeSetting
 type MachineSetting = settingkeys.MachineSetting
+type ProfileSetting = settingkeys.ProfileSetting
 
 const (
 	settingNotebookSyncState     MachineSetting = "notebook_sync_state"
@@ -67,6 +70,7 @@ const (
 	SettingDefaultEffortPrefix           = settingkeys.SettingDefaultEffortPrefix
 	SettingNotebookRoot                  = settingkeys.SettingNotebookRoot
 	SettingNotebookRootEffective         = settingkeys.SettingNotebookRootEffective
+	SettingNotebookProfileRoot           = settingkeys.SettingNotebookProfileRoot
 	SettingAutoModeEnabledDefault        = settingkeys.SettingAutoModeEnabledDefault
 	SettingActivityEnabled               = settingkeys.SettingActivityEnabled
 	SettingActivityConfig                = settingkeys.SettingActivityConfig
@@ -105,6 +109,7 @@ type settingScope int
 
 const (
 	daemonScope settingScope = iota + 1
+	profileScope
 )
 
 type settingSpec struct {
@@ -259,11 +264,24 @@ var settingSpecs = classifiedSettings([]settingSpec{
 	{key: string(SettingCrewWakeLimitWindowSeconds), scope: daemonScope, description: "Crew automatic wake accounting window in seconds.", validate: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
 	}},
-	{key: string(SettingNotebookRoot), scope: daemonScope, description: "Folder for the Notebook, journal and seed artifacts. Absolute or ~/ path outside attn's data folder. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
-		if err := validateNotebookRoot(value); err != nil {
+	{key: string(SettingNotebookRoot), scope: daemonScope, description: "Shared folder for the Notebook, journal and seed artifacts, used by every profile without notebook.profile_root and synced with outposts. Absolute or ~/ path outside attn's data folder. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
+		if err := validateNotebookRoot(key, value); err != nil {
 			return err
 		}
 		return d.notebookRootChangeAllowed()
+	}},
+	{key: string(SettingNotebookProfileRoot), scope: profileScope, description: "This profile's Notebook folder, used instead of notebook.root. Absolute or ~/ path outside attn's data folder. Changing it repoints without moving files. Empty uses notebook.root.", validate: func(d *Daemon, key, value string) error {
+		if config.HarnessNotebookRoot() != "" && strings.TrimSpace(value) != "" {
+			root, err := expandNotebookRoot(strings.TrimSpace(value))
+			if err != nil {
+				return err
+			}
+			if !filepath.IsAbs(root) {
+				return fmt.Errorf("%s must be an absolute path", key)
+			}
+			return config.RequireWithinHarness(key, root)
+		}
+		return validateNotebookRoot(key, value)
 	}},
 	{key: string(SettingKeybindingsConfig), scope: daemonScope, description: "Keyboard shortcut overrides as JSON. Empty restores default shortcuts.", validate: func(d *Daemon, key, value string) error {
 		return validateKeybindingsConfig(value)
@@ -288,7 +306,7 @@ var settingSpecs = classifiedSettings([]settingSpec{
 		return err
 	}},
 	{key: "session_cost.billed_as.<model>", scope: daemonScope, description: "Billing model alias. Empty removes the alias.", validate: func(d *Daemon, key, value string) error { return sessioncost.ValidateBilledAs(key, value) }},
-	{key: "notebook.root.effective", scope: daemonScope, description: "Resolved Notebook folder.", readOnly: true},
+	{key: "notebook.root.effective", scope: profileScope, description: "The Notebook folder this profile uses.", readOnly: true},
 	{key: "<harness>_available", scope: daemonScope, description: "Whether this harness executable is available on PATH.", readOnly: true},
 	{key: "<harness>_cap_<capability>", scope: daemonScope, description: "Whether this harness supports the named capability.", readOnly: true},
 	{key: "pty_backend_mode", scope: daemonScope, description: "Active terminal backend.", readOnly: true},

@@ -4,8 +4,26 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Client) Settings(key string, all bool) (*protocol.SettingsListResult, error) {
-	resp, err := c.send(protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings, Key: protocol.Ptr(key), All: protocol.Ptr(all)})
+type SettingsCaller struct {
+	SessionID protocol.SessionID
+	Profile   string
+}
+
+func (caller SettingsCaller) fields() (*protocol.SessionID, *string) {
+	var sessionID *protocol.SessionID
+	var profile *string
+	if caller.SessionID != "" {
+		sessionID = protocol.Ptr(caller.SessionID)
+	}
+	if caller.Profile != "" {
+		profile = protocol.Ptr(caller.Profile)
+	}
+	return sessionID, profile
+}
+
+func (c *Client) Settings(caller SettingsCaller, key string, all bool) (*protocol.SettingsListResult, error) {
+	sessionID, profile := caller.fields()
+	resp, err := c.send(protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings, SourceSessionID: sessionID, ProfileID: profile, Key: protocol.Ptr(key), All: protocol.Ptr(all)})
 	if err != nil {
 		return nil, err
 	}
@@ -20,8 +38,9 @@ func (c *Client) DropOutpostCopy() error {
 	return err
 }
 
-func (c *Client) SetSetting(key, value string) (*protocol.SettingEntry, error) {
-	resp, err := c.send(protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: key, Value: value})
+func (c *Client) SetSetting(caller SettingsCaller, key, value string) (*protocol.SettingEntry, error) {
+	sessionID, profile := caller.fields()
+	resp, err := c.send(protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, SourceSessionID: sessionID, ProfileID: profile, Key: key, Value: value})
 	if err != nil {
 		return nil, err
 	}
