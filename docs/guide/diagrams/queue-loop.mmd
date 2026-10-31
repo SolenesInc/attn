@@ -1,0 +1,5 @@
+graph TD
+show["Attn shows the agent waiting the longest"] --> prompt["you prompt it, then settle it"]
+prompt --> check["anyone else waiting?"]
+check -->|yes| show
+check -->|no| home["Home"]

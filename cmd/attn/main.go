@@ -230,6 +230,8 @@ func main() {
 		runBrowser()
 	case "help", "-h", "--help":
 		runHelp()
+	case "guide":
+		runGuide()
 	case "_outpost-install":
 		runOutpostInstall()
 	case "_bridge":
@@ -738,8 +740,13 @@ commands:
   instance <status|resolve|list>    show / resolve the active instance's resources
   instance-env <instance|--unset>   print shell commands for selecting an instance
   skill [--reference <name>|--list] print the bundled agent skill and its references
+  guide [<topic>]                   read the user guide
   prompts <command>                inspect prompt sources and scenario composition
   version [--json]                  print version, channel and commit
+
+For AI agents:
+  attn skill    how to operate Attn
+  attn guide    the user guide, to answer questions about Attn
 `)
 }
 

@@ -63,9 +63,10 @@ hash_file() {
 
 should_exclude_path() {
   local relative_path="$1"
-  # Only app + daemon source is tracked. Everything else — docs, tests,
-  # harness scripts, and CI config — can change without invalidating the
-  # packaged app bundle, so skipping those paths keeps iteration fast.
+  # Only app + daemon source is tracked, and the guide pages the daemon binary
+  # embeds. Everything else — other docs, tests, harness scripts, and CI
+  # config — can change without invalidating the packaged app bundle, so
+  # skipping those paths keeps iteration fast.
   case "${relative_path}" in
     internal/prompts/content/*) return 1 ;;
     cmd/prompt-editor/*|internal/prompts/scenarios/*|.prompt-editor/*) return 0 ;;
@@ -81,6 +82,7 @@ should_exclude_path() {
     app/scripts/*)                  return 0 ;;
     app/e2e/*)                      return 0 ;;
     app/test-harness/*)             return 0 ;;
+    docs/guide/*.go|docs/guide/tutorials/*|docs/guide/reference/*|docs/guide/diagrams/*.txt) return 1 ;;
     docs/*)                         return 0 ;;
     scripts/*)                      return 0 ;;
     .github/*)                      return 0 ;;

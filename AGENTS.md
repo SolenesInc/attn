@@ -170,9 +170,10 @@ check the affected surface. Do not run `make test`, `make lint`,
 `make test-frontend`, or another full suite locally: CI on `main` runs the full
 suites after landing.
 
-`make test` skips the Go suite when only `docs/`, root Markdown and `app/src`
-changed since `origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares
-against another branch.
+`make test` skips the Go suite when only `docs/` (except `docs/guide`'s Go code
+and the pages it embeds), root Markdown and `app/src` changed since
+`origin/main`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another
+branch.
 
 When diagnosing a failure that needs the whole `internal/daemon` package,
 use `make test`, which shards it;

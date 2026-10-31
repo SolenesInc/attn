@@ -1,0 +1,11 @@
+direction: down
+
+show: Attn shows the agent\nwaiting the longest
+prompt: you prompt it,\nthen settle it
+check: anyone else\nwaiting? {shape: diamond}
+home: Home
+
+show -> prompt
+prompt -> check
+check -> show: yes
+check -> home: no

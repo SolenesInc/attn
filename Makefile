@@ -162,7 +162,7 @@ verify-ghostty-vt-wasm:
 
 DIFF_BASE ?= origin/main
 GO_SUITE_IGNORES := ^(docs/|[^/]*\.md$$|app/src/)
-GO_SUITE_READS := ^app/src/(hooks/useDaemonSocket\.ts$$|ghostty/testdata/)
+GO_SUITE_READS := ^(app/src/(hooks/useDaemonSocket\.ts$$|ghostty/testdata/)|docs/guide/(.*\.go$$|tutorials/|reference/|diagrams/.*\.txt$$))
 test: git-hooks $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 	@changed="$$(git diff --name-only "$$(git merge-base HEAD $(DIFF_BASE))" && git ls-files --others --exclude-standard)" || changed=unknown; \
 	if [ -z "$(FORCE)" ] && ! printf '%s' "$$changed" | grep -qE '$(GO_SUITE_READS)' && ! printf '%s' "$$changed" | grep -qvE '$(GO_SUITE_IGNORES)'; then \

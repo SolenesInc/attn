@@ -49,6 +49,9 @@ jobs:
           filters: |
             daemon:
               - '**/*.go'
+              - 'docs/guide/tutorials/**'
+              - 'docs/guide/reference/**'
+              - 'docs/guide/diagrams/*.txt'
               - 'pty-host/**'
               - 'cmd/**'
               - 'internal/**'
