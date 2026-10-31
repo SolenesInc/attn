@@ -275,3 +275,35 @@ func TestSyncWithoutATokenNamesWhereItLooked(t *testing.T) {
 		t.Fatalf("sync without a token exited %d\nstderr: %s", code, errOut)
 	}
 }
+
+func TestAReceiptWithoutARepositoryDoesNotStopTheSync(t *testing.T) {
+	w := newSyncWorld(t)
+	module := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":          "module outside\n\ngo 1.22\n",
+		"outside_test.go": "package outside\n\nimport \"testing\"\n\nfunc TestPasses(t *testing.T) {}\n",
+	} {
+		if err := os.WriteFile(filepath.Join(module, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := historyCommand(t, w.spool, module, "capture", "go", "--", "-count=1", ".")
+	cmd.Env = append(cmd.Env, "GITHUB_REPOSITORY=", "GIT_CEILING_DIRECTORIES="+filepath.Dir(module))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("capture outside a checkout: %v\n%s", err, out)
+	}
+	orphan := sealedReceipts(t, w.spool)[0]
+	if orphan.Repo != "unknown" {
+		t.Fatalf("receipt captured outside a checkout has repo %q", orphan.Repo)
+	}
+	mine := w.captureReceipt()
+	w.service.add(w.receiptRepo(mine), "ci-0", []byte(`{"invocation_id":"ci-0"}`))
+
+	out, errOut, code := w.sync()
+	if code != 1 || !strings.Contains(errOut, "refused: "+orphan.InvocationID+`: repo "unknown"`) {
+		t.Fatalf("sync exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
+	}
+	if w.service.stored(mine) == nil || w.shared("ci-0") == nil {
+		t.Fatalf("the unknown-repo receipt stopped the rest of the sync\nstdout: %s\nstderr: %s", out, errOut)
+	}
+}

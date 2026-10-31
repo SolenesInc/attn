@@ -11,11 +11,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/testhistory"
 )
+
+var serviceRepo = regexp.MustCompile(`^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
 const (
 	defaultHistoryURL = "https://attn-test-history.int.caketroll.cloud"
@@ -115,6 +118,10 @@ func runSync(spool testhistory.Spool, state *syncState) (syncReport, error) {
 		}
 		if err := json.Unmarshal(body, &envelope); err != nil {
 			report.refused = append(report.refused, fmt.Sprintf("%s: %v", id, err))
+			continue
+		}
+		if !serviceRepo.MatchString(envelope.Repo) {
+			report.refused = append(report.refused, fmt.Sprintf("%s: repo %q is not host/owner/name; it was captured outside a checkout with an origin remote", id, envelope.Repo))
 			continue
 		}
 		stored, refusal, err := service.put(envelope.Repo, id, body)
