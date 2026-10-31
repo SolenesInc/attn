@@ -109,7 +109,7 @@ func printHandoffResult(result *protocol.CrewHandoffResult, retry bool) {
 		fmt.Printf("%s's letter is filed at %s.\n", result.Name, result.Path)
 	}
 	if successorErr := strings.TrimSpace(protocol.Deref(result.SuccessorError)); successorErr != "" {
-		fmt.Fprintf(os.Stderr, "handoff: the next session did not start: %s\nThis session is still running and %s is still bound to it. `attn handoff --retry` tries again; `attn crew sleep %[2]s` makes the retry end it with the member asleep. The letter above is filed, so do not write another.\n", successorErr, result.Name)
+		fmt.Fprintf(os.Stderr, "handoff: the next session did not start: %s\nThis session is still running and %s is still bound to it. `attn handoff --retry` tries again. The letter above is filed, so do not write another.\n", successorErr, result.Name)
 		os.Exit(1)
 	}
 	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseSleep {

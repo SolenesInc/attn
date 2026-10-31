@@ -82,7 +82,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 		t.Fatalf("a handoff whose successor could not start exited %d: %s", stuck.Code, stuck.Stderr)
 	}
 	requireLines(t, "stdout", stuck.Stdout, "Trellis's letter is filed at ")
-	requireLines(t, "stderr", stuck.Stderr, "handoff: the next session did not start: ", "`attn handoff --retry`", "`attn crew sleep Trellis`")
+	requireLines(t, "stderr", stuck.Stderr, "handoff: the next session did not start: ", "`attn handoff --retry`")
 	path := filedLetter(t, stuck.Stdout, "Trellis")
 	if day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession); string(day) != trellis {
 		t.Fatalf("after the failed successor trellis is bound to %q, want its day %s", day, trellis)

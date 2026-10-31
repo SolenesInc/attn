@@ -3396,6 +3396,7 @@ export interface Member {
     resolved_model?:  string;
     retired:          boolean;
     revision:         number;
+    switch_pending?:  boolean;
     [property: string]: any;
 }
 
@@ -3557,6 +3558,7 @@ export interface CrewMember {
     resolved_model?:  string;
     retired:          boolean;
     revision:         number;
+    switch_pending?:  boolean;
     [property: string]: any;
 }
 
@@ -21593,6 +21595,7 @@ const typeMap: any = {
         { json: "resolved_model", js: "resolved_model", typ: u(undefined, "") },
         { json: "retired", js: "retired", typ: true },
         { json: "revision", js: "revision", typ: 0 },
+        { json: "switch_pending", js: "switch_pending", typ: u(undefined, true) },
     ], "any"),
     "CrewHandoffDocument": o([
         { json: "content", js: "content", typ: "" },
@@ -21695,6 +21698,7 @@ const typeMap: any = {
         { json: "resolved_model", js: "resolved_model", typ: u(undefined, "") },
         { json: "retired", js: "retired", typ: true },
         { json: "revision", js: "revision", typ: 0 },
+        { json: "switch_pending", js: "switch_pending", typ: u(undefined, true) },
     ], "any"),
     "CrewMoveHomeMessage": o([
         { json: "cmd", js: "cmd", typ: r("CrewMoveHomeMessageCmd") },

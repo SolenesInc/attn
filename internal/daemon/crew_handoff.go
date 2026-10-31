@@ -96,7 +96,7 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s's day to close: %w", member.Name, err)
 	}
-	if member.SwitchingSession != sessionID || member.Retired {
+	if !d.crewSwitchDue(member, sessionID) {
 		if err := d.closeCrewDay(sessionID, teardown); err != nil {
 			d.cancelSessionTeardown(sessionID, teardown)
 			return nil, err
@@ -114,6 +114,12 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 	result.SessionID = protocol.Ptr(newSessionID)
 	result.Outcome = protocol.Ptr(protocol.CrewDayCloseSuccessor)
 	return result, nil
+}
+
+func (d *Daemon) crewSwitchDue(member crew.Member, sessionID protocol.SessionID) bool {
+	session := d.store.Get(sessionID)
+	return member.SwitchingSession == sessionID && !member.Retired && session != nil &&
+		!strings.EqualFold(strings.TrimSpace(session.Agent), member.LaunchAgent())
 }
 
 func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.SessionID, note string, retry bool) (string, error) {

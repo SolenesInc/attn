@@ -548,6 +548,9 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 	wire.AwarenessDirs = append([]string{}, member.AwarenessDirs...)
 	if d.crewBindingLive(member) {
 		wire.BindingSession = protocol.Ptr(member.BindingSession)
+		if d.crewSwitchDue(member, member.BindingSession) {
+			wire.SwitchPending = protocol.Ptr(true)
+		}
 	}
 	return wire
 }

@@ -24,7 +24,7 @@ may close or reload any agent of the profile.
 - `crew-sleep`: ask the member's session to file its letter and close.
 - `crew-clear`: `/clear` (Claude Code) or `/clear` and `/new` (Codex) in a member's terminal keeps the member awake in the new conversation's session; `attn crew prime` re-reads its orientation there.
 - `crew-letter`: the letter a session files with `attn handoff`, which ends the session and leaves the member asleep, or, when an applied harness change asked for it, starts the member's next session on the new harness from it.
-- `crew-apply`: put an awake member's saved launch settings and charter into its running session: a reload in place on the same harness, or a letter request on a different one.
+- `crew-apply`: put an awake member's saved launch settings and charter into its running session: a reload in place on the same harness, or a letter request on a different one. A requested switch shows as `switch_pending` in `attn crew list --json` and in Manage crew until the letter lands; saving the running harness back or a sleep request cancels it.
 - `crew-mailbox`: items addressed to a member reach its current session, and wake it when it sleeps.
 - `crew-heartbeat`: attn keeps an idle member's cache warm, and puts it to sleep after the user is away.
 - `chief`: the profile's coordinating session; made from the session menu or the new-session picker.

@@ -284,6 +284,11 @@ it('keeps a failed member edit through roster navigation and retries it', async 
     expect(daemon.sentOf('crew_sleep')).toEqual([]);
   });
 
+  it('shows a pending harness switch until the member files its letter', async () => {
+    await renderPanel({ members: [member('trellis', 4, { binding_session: 'session-trellis', resolved_agent: 'codex', switch_pending: true })] });
+    expect(panel().getByTestId('crew-switch-pending')).toHaveTextContent('continue on codex');
+  });
+
   it('offers no apply while the member is asleep', async () => {
     await renderPanel({ members: [member('trellis', 4)] });
     expect(panel().queryByTestId('crew-apply')).toBeNull();

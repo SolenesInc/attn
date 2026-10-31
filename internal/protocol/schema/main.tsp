@@ -7150,6 +7150,9 @@ model CrewMember {
   // session is live — the daemon judges the binding at read, so presence IS
   // "awake" and a caller never re-derives liveness.
   binding_session?: SessionID;
+  // True while the bound session was asked by `crew_apply` for its letter, so
+  // that filing it starts the next session on the saved harness.
+  switch_pending?: boolean;
 }
 
 model CrewListResult {

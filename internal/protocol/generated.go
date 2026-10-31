@@ -3116,6 +3116,9 @@ type CrewMember struct {
 
 	// Revision corresponds to the JSON schema field "revision".
 	Revision int `json:"revision"`
+
+	// SwitchPending corresponds to the JSON schema field "switch_pending".
+	SwitchPending *bool `json:"switch_pending,omitempty,omitzero"`
 }
 
 type CrewMoveHomeMessage struct {

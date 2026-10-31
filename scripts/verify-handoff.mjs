@@ -24,14 +24,14 @@ fs.cpSync(source, home, { recursive: true, dereference: true });
 const mock = fileURLToPath(new URL('../app/scripts/real-app-harness/mockAgent.mjs', import.meta.url));
 fs.writeFileSync(path.join(home, '.attn-mock-agent.json'), JSON.stringify({ version: 1, agent: 'claude', turns: [
   { includes: 'You have been woken', actions: [{ type: 'reply', text: 'HANDOFF_READY', state: 'idle' }] },
-  { includes: 'the letter above', actions: [{ type: 'reply', text: 'NAP_READY', state: 'idle' }] },
+  { includes: 'the letter above', actions: [{ type: 'reply', text: 'SUCCESSOR_READY', state: 'idle' }] },
 ] }));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('ATTN_') && !key.startsWith('CODEX_') && !key.startsWith('CLAUDE')));
 Object.assign(env, {
   ATTN_DATA_DIR: data, ATTN_TOOL_HOME: path.join(root, 'tools'),
   CODEX_HOME: path.join(root, 'tools', '.codex'), ATTN_WRAPPER_PATH: binary,
   ATTN_HEADLESS_TASKS: 'off', ATTN_GITHUB_POLLING: 'off', ATTN_HARNESS_SKILL_SYNC: 'off',
-  ATTN_PTY_BACKEND: 'worker', ATTN_CLAUDE_EXECUTABLE: mock, ATTN_WS_PORT: '0',
+  ATTN_PTY_BACKEND: 'worker', ATTN_CLAUDE_EXECUTABLE: mock, ATTN_CODEX_EXECUTABLE: mock, ATTN_WS_PORT: '0',
 });
 const output = [`Copied ${source} to ${home}. Source is read-only.`, `Runtime: ${root}`];
 const log = fs.openSync(path.join(receipts, 'daemon-stderr.log'), 'a');
@@ -103,16 +103,20 @@ try {
     const next = cli(['crew', 'wake', member], { json: true }).session_id;
     await ready(next);
     await present();
-    const napped = cli(['handoff', '--nap', '-m', 'Explicit reload verification.', '--session', next], { json: true });
-    assert.equal(napped.outcome, 'nap');
-    assert(napped.session_id && napped.session_id !== next);
-    await ready(napped.session_id);
-    assert.equal(roster().binding_session, napped.session_id);
-    output.push(`PASS: --nap starts a new session (crew_v2_enabled=${v2}).`);
-    cli(['handoff', '-m', 'Verification cleanup.', '--session', napped.session_id]);
+    cli(['crew', 'set', member, '--agent', 'codex']);
+    assert.equal(cli(['crew', 'apply', member], { json: true }).outcome, 'letter_requested');
+    const switched = cli(['handoff', '-m', 'Harness switch verification.', '--session', next], { json: true });
+    assert.equal(switched.outcome, 'successor');
+    assert(switched.session_id && switched.session_id !== next);
+    await ready(switched.session_id);
+    assert.equal(roster().binding_session, switched.session_id);
+    output.push(`PASS: an applied harness change starts a new session from the letter (crew_v2_enabled=${v2}).`);
+    cli(['handoff', '-m', 'Verification cleanup.', '--session', switched.session_id]);
+    cli(['crew', 'set', member, '--agent', 'claude']);
   }
   cli(['handoff', '--sleep', '-m', 'Removed flag'], { code: 2 });
-  output.push('PASS: --sleep is rejected.');
+  cli(['handoff', '--nap', '-m', 'Removed flag'], { code: 2 });
+  output.push('PASS: --sleep and --nap are rejected.');
 } finally {
   if (ws) ws.close();
   if (daemon.exitCode === null) {

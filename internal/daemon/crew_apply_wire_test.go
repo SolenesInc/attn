@@ -92,6 +92,9 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 	if got := crewSessionCount(t, cli); got != before {
 		t.Fatalf("asking for the letter changed the sessions from %d to %d", before, got)
 	}
+	if !protocol.Deref(crewRosterMember(t, cli, "trellis").SwitchPending) {
+		t.Fatal("the roster does not show trellis's pending switch")
+	}
 
 	letter := "Dear next trellis,\n\n#901 is waiting on review.\n"
 	handed := crewHandoff(t, cli, string(day.SessionID), letter, false)
@@ -137,6 +140,19 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 		}
 		if got := crewSessionCount(t, cli); got != count {
 			t.Fatalf("applying to an asleep member changed the sessions from %d to %d", count, got)
+		}
+	})
+
+	t.Run("saving the old harness back without applying cancels the switch", func(t *testing.T) {
+		day := wakeCrew(t, cli, "alder", "")
+		w.Launched(string(day.SessionID))
+		switchCrewHarness(t, cli, "alder", "codex")
+		setCrew(t, cli, "alder", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		if protocol.Deref(crewRosterMember(t, cli, "alder").SwitchPending) {
+			t.Fatal("the roster still shows a switch to the harness alder already runs on")
+		}
+		if slept := crewHandoff(t, cli, string(day.SessionID), "Done for today.", false); protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep {
+			t.Fatalf("handoff after saving the old harness back = %+v, want sleep", slept)
 		}
 	})
 

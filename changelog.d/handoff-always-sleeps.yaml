@@ -1,4 +1,4 @@
 kind: changed
 area: crew
 change: Plain attn handoff ends the session and leaves the member asleep until something wakes it, even while you are at the machine.
-notes: Plain --retry also sleeps. Use --nap to reload the member. The redundant --sleep flag is removed.
+notes: Plain --retry also sleeps. The --nap and --sleep flags are removed; attn crew apply moves a member to a new harness.

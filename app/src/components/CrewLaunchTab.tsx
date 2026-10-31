@@ -112,6 +112,7 @@ function ApplySettings({ member, saved, isConnected }: { member: CrewMember; sav
       <div>
         <h3>Apply settings now</h3>
         <p>The same harness reloads in place and keeps the conversation. A new harness starts after the member files its letter.</p>
+        {member.switch_pending && <p data-testid="crew-switch-pending">Waiting for {member.name || member.id}’s letter to continue on {member.resolved_agent}.</p>}
         {outcome && <p className={outcome.failed ? 'crew-apply-failed' : undefined} role="status">{outcome.text}</p>}
       </div>
       <button

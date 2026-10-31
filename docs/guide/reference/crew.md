@@ -141,7 +141,10 @@ agent above it in the delegation chain, and the Chief can run it too.
 
 An asleep member needs nothing: its next wake uses the saved settings. Any
 reload of a member's session, such as "Reload this agent" or
-`attn agent reload`, also uses its saved model and effort.
+`attn agent reload`, also uses its saved model and effort while the session
+runs on the saved harness; a changed harness needs Apply. Manage crew shows a
+harness switch that waits for the member's letter. Saving the running harness
+back, or asking the member to sleep, cancels it.
 
 ## Details
 
