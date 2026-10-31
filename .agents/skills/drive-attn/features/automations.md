@@ -56,7 +56,7 @@ Preconditions:
 - A run folder, `R=$(mktemp -d /tmp/drive-attn-automation-run.XXXX) && echo "export R=$R" >> $DRIVE_ENV`, holding this fixture as `$R/.attn-mock-agent.json`:
 
 ```json
-{"version": 1, "turns": [
+{"version": 1, "resumable": true, "turns": [
   {"includes": "Drive automation", "actions": [
     {"type": "reply", "text": "Which change should I review next?"}]}
 ]}
@@ -219,6 +219,7 @@ EOF
 - The first GitHub observation after applying or enabling an automation records existing review requests without starting runs. Drive a new request after that observation, as the withdraw-and-request sequence above does.
 - Turning an automation off cancels its pending runs. A run that was already delivered keeps its session.
 - A Codex run whose agent sits on a modal or bootstrap screen stays `pending`, across daemon restarts, until the agent starts its first turn or exits.
+- A mock conversation is resumable only when its fixture says `"resumable": true`, as the run folder's does. Without it, closing a singleton's session leaves nothing to resume, and the next occurrence starts a fresh session and seed instead of reopening it.
 - Closing a session keeps a copy of its conversation, so deleting a mock transcript after a close does not make the singleton unresumable. Stop the session with `wsctl kill-session` instead, then delete the transcript. The wire test `TestAnUnresumableSingletonStartsFreshAndAClosedOneResumesItsConversation` drives both cases.
 - Guards run through `/bin/sh -c` with the login-shell environment. A pipeline reports the last command's exit status. Capture first, as in `refs=$(git ls-remote origin refs/heads/main) && printf '%s\n' "$refs" | awk '…'`, so a failed first command reads `failed` instead of `empty`.
 - A guard fails at 60 seconds or more than 65536 stdout bytes. `show` and `list` name the limit. Failure detail keeps the last 2048 stderr bytes. These tripwires allow commands measured at 1.09–2.01 seconds and outputs of 15–41 bytes.
