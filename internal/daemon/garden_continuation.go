@@ -451,7 +451,8 @@ func (d *Daemon) continuationForSeedForeground(seed garden.Seed) *seedContinuati
 
 func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResume func(string, string, string) (bool, string)) *seedContinuation {
 	execution, source, ok := d.normalizedSeedContinuation(seed)
-	if !ok {
+	key, member := d.seedResumeMember(seed, execution.SessionID)
+	if !ok && !member {
 		return nil
 	}
 	entry := d.store.SessionLedgerEntry(execution.SessionID)
@@ -466,7 +467,7 @@ func (d *Daemon) continuationForSeedWithResumeCheck(seed garden.Seed, checkResum
 	if entry != nil && entry.ProfileID == seed.ProfileID {
 		continuation.Resume = strings.TrimSpace(d.store.GetResumeSessionID(entry.ID))
 	}
-	if key, member := d.seedResumeMember(seed, execution.SessionID); member {
+	if member {
 		if retired, ok := d.retiredCrewMember(key.String()); ok {
 			continuation.ResumeReason = retiredMemberError(retired).Error()
 		} else {

@@ -125,7 +125,7 @@ The two `protocol.` checks fail because no app is installed, so it prints
 | --- | --- | --- | --- |
 | `./attn <verb>` in the instance shell | A person's own shell; agents, for verbs that need no session | Every CLI verb, `--json` output, exit codes | The app; verbs that act as a session, such as `seed tend`, `seed watch` and `terminal`, refuse without one |
 | Mock agent | Agents | The CLI and prompts as a session in the instance sees them | Model judgment: it does only what its fixture says |
-| `wsctl` | The daemon protocol | Sessions, desktops and tiles (`wsctl list`), spawning, terminal input | What the app shows |
+| `wsctl` | The daemon protocol | Sessions, desktops and tiles (`wsctl list`), spawning, terminal input, a seed page's Resume (`seed-continuation`, `seed-resume`) | What the app shows |
 | `bridge` | People | Native keys, text and clicks inside the window; UI state; screenshots | The macOS menu bar |
 | Scenarios | People, as committed proof | The packaged app, through `createWindowDriver({ appPath, client })`, menus included | A quick local loop: CI runs them |
 

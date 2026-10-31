@@ -47,6 +47,10 @@ func main() {
 		err = list(args)
 	case "refresh-prs":
 		err = refreshPRs(args)
+	case "seed-continuation":
+		err = seedContinuation(args)
+	case "seed-resume":
+		err = seedResume(args)
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -74,6 +78,8 @@ Commands:
   input --id I --text T [--enter]
   list
   refresh-prs
+  seed-continuation --seed S   (what a seed's page offers: Resume, Handover)
+  seed-resume --seed S         (the seed page's Resume)
   outposts [--add NAME --address HOST:PORT | --remove ID | --repair ID | --update ID] [--until STATE | --watch]
 `, wsURL())
 }
@@ -282,6 +288,60 @@ func list(_ []string) error {
 	}, "", "  ")
 	fmt.Println(string(pretty))
 	return nil
+}
+
+func seedContinuation(args []string) error {
+	seed, err := seedFlag("seed-continuation", args)
+	if err != nil {
+		return err
+	}
+	requestID := newID("seed-doc")
+	response, err := sendAndWaitMatch(map[string]any{"cmd": protocol.CmdSeedDocumentGet, "seed_id": seed, "request_id": requestID},
+		protocol.EventSeedDocumentGetResult, func(ev map[string]any) bool { return ev["request_id"] == requestID }, 10*time.Second)
+	if err != nil {
+		return err
+	}
+	if success, _ := response["success"].(bool); !success {
+		message, _ := response["error"].(string)
+		return fmt.Errorf("read %s: %s", seed, message)
+	}
+	document, _ := response["document"].(map[string]any)
+	read, _ := document["seed"].(map[string]any)
+	pretty, _ := json.MarshalIndent(map[string]any{
+		"tender":       read["tender"],
+		"continuation": read["continuation"],
+	}, "", "  ")
+	fmt.Println(string(pretty))
+	return nil
+}
+
+func seedResume(args []string) error {
+	seed, err := seedFlag("seed-resume", args)
+	if err != nil {
+		return err
+	}
+	requestID := newID("seed-resume")
+	response, err := sendAndWaitMatch(map[string]any{"cmd": protocol.CmdSeedResume, "seed_id": seed, "request_id": requestID},
+		protocol.EventSeedResumeResult, func(ev map[string]any) bool { return ev["request_id"] == requestID }, 30*time.Second)
+	if err != nil {
+		return err
+	}
+	pretty, _ := json.MarshalIndent(response, "", "  ")
+	fmt.Println(string(pretty))
+	if success, _ := response["success"].(bool); !success {
+		return errors.New("resume failed")
+	}
+	return nil
+}
+
+func seedFlag(name string, args []string) (string, error) {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	seed := fs.String("seed", "", "seed id (required)")
+	fs.Parse(args)
+	if *seed == "" {
+		return "", errors.New("--seed is required")
+	}
+	return *seed, nil
 }
 
 func refreshPRs(args []string) error {

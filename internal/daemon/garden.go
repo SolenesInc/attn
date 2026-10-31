@@ -1618,7 +1618,34 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		if err != nil {
 			return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
 		}
+		next := outcome.Seed
+		if working, ok := d.liveSessionOf(ask.Claimant); verb == garden.VerbTend && ok &&
+			(outcome.Moved || working != protocol.TrimID(seed.LastExecutionID)) {
+			execution, executionErr := d.ensureGardenExecution(working)
+			if executionErr != nil {
+				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, executionErr
+			}
+			next.LastExecutionID = execution.SessionID
+		}
+		cause := protocol.TrimID(ask.CauseSession)
+		if cause == "" {
+			cause, _ = d.sessionOfActor(ask.Actor)
+		}
 		if !outcome.Moved {
+			if next.LastExecutionID != seed.LastExecutionID {
+				written, _, err := d.writeSeedChangeProtected(protection, *schema, next, doc.Rev, seedChange{author: ask.Actor, cause: cause})
+				if docstore.IsConflict(err) && expectedRev == 0 {
+					continue
+				}
+				if docstore.IsConflict(err) {
+					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(
+						"%s changed while the reviewed action was being applied; refresh the garden%w", id, errSeedRevisionMoved)
+				}
+				if err != nil {
+					return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, err
+				}
+				seed, doc = next, written
+			}
 			details := seedTransitionDetails{}
 			if reason := strings.TrimSpace(ask.Reason); reason != "" && reason != seed.Reason {
 				note, err := d.appendSeedNote(seed.ID, reason, ask.Actor, "", nil, false, ask.CauseSession)
@@ -1636,25 +1663,13 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 			return seed, doc, details, nil
 		}
-		next := outcome.Seed
 		if next.Status != seed.Status {
 			next.StateChangedAt = formatGardenTime(d.gardenTime())
-		}
-		if working, ok := d.sessionOfActor(ask.Actor); verb == garden.VerbTend && ok {
-			execution, executionErr := d.ensureGardenExecution(working)
-			if executionErr != nil {
-				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, executionErr
-			}
-			next.LastExecutionID = execution.SessionID
 		}
 		var written docstore.Document
 		notes := seedTransitionDetails{Moved: true}
 		if d.beforeSeedMoveWrite != nil {
 			d.beforeSeedMoveWrite(id)
-		}
-		cause := protocol.TrimID(ask.CauseSession)
-		if cause == "" {
-			cause, _ = d.sessionOfActor(ask.Actor)
 		}
 		lifecycleOccurrence := gardenSeedLifecycleOccurrence
 		if ask.SuppressNotification {

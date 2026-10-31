@@ -279,3 +279,52 @@ func TestGardenEventsNameWhoCausedThemAndWhoWasTold(t *testing.T) {
 		t.Fatalf("garden events for %s =\n%s\nwant\n%s", seed, strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+func TestWorkASessionAssignsResumesWithTheMemberAfterItParks(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	member := wakeCrew(t, cli, "keel", "").SessionID
+	w.Launched(string(member))
+	assigner := spawnPanes(w, app, w.Path("assigner"))[0].session
+	seed := plantSeedAs(t, cli, assigner, "Work assigned by a session")
+	if _, err := cli.SeedTransition(protocol.SessionID(assigner), seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "Keel"}); err != nil {
+		t.Fatal(err)
+	}
+	lifeMove(t, cli, string(member), seed, "tend", "", "")
+	lifeMove(t, cli, string(member), seed, "park", "", "")
+	resumed := seedResumeRequest(app, seed)
+	shown := lifeShow(t, cli, seed).Seed
+	if !resumed.Success || protocol.Deref(resumed.SessionID) != member || !protocol.Deref(resumed.AlreadyRunning) ||
+		shown.Tender == nil || shown.Tender.Ref != "member:keel" {
+		t.Fatalf("Resume after the member parked = %+v with tender %+v, want the member's session %s and a member:keel claim", resumed, shown.Tender, member)
+	}
+}
+
+func TestWorkTheUserAssignsToAnAsleepMemberResumesWithTheMember(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	seed := plantSeedAs(t, cli, "", "Work assigned by the user")
+	if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "Keel"}); err != nil {
+		t.Fatal(err)
+	}
+	if offered := seedReaderDocument(app, seed); !offered.Success || offered.Document.Seed.Continuation == nil || !offered.Document.Seed.Continuation.ResumeAvailable {
+		t.Fatalf("a seed assigned to an asleep member does not offer Resume: %+v", offered.Document.Seed.Continuation)
+	}
+	woken := seedResumeRequest(app, seed)
+	if !woken.Success || woken.SessionID == nil {
+		t.Fatalf("Resume of a member's assigned seed = %+v, want the member's session", woken)
+	}
+	member := *woken.SessionID
+	w.Launched(string(member))
+	lifeMove(t, cli, string(member), seed, "tend", "", "")
+	lifeMove(t, cli, string(member), seed, "park", "", "")
+	if offered := seedReaderDocument(app, seed); offered.Document.Seed.Continuation == nil || !offered.Document.Seed.Continuation.ResumeAvailable {
+		t.Fatalf("the parked seed does not offer Resume: %+v", offered.Document.Seed.Continuation)
+	}
+	resumed := seedResumeRequest(app, seed)
+	shown := lifeShow(t, cli, seed).Seed
+	if !resumed.Success || protocol.Deref(resumed.SessionID) != member || !protocol.Deref(resumed.AlreadyRunning) ||
+		shown.Tender == nil || shown.Tender.Ref != "member:keel" {
+		t.Fatalf("Resume after the member parked = %+v with tender %+v, want the member's session %s and a member:keel claim", resumed, shown.Tender, member)
+	}
+}
