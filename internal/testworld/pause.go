@@ -196,7 +196,7 @@ func (ps *pauseSocket) env() []string {
 	}
 }
 
-// admit reads "name pid" for a hold, or "name pid failed <error>" for a step that failed and does not wait. Each
+// admit reads "name pid" for a hold, or "name pid failed <quoted error>" for a step that failed and does not wait. Each
 // process holds a one-shot point once, so admit holds every arrival it is sent.
 func (ps *pauseSocket) admit(conn net.Conn) {
 	_ = conn.SetReadDeadline(time.Now().Add(fakeagent.HangGuard))
@@ -213,7 +213,11 @@ func (ps *pauseSocket) admit(conn net.Conn) {
 	}
 	var failed error
 	if len(fields) == 4 && fields[2] == pausepoint.Failed {
-		failed = errors.New(fields[3])
+		message, err := strconv.Unquote(fields[3])
+		if err != nil {
+			message = fields[3]
+		}
+		failed = errors.New(message)
 	}
 	ps.arrive(fields[0], pid, failed, false, func() { release(conn) })
 }

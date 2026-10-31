@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -153,7 +154,7 @@ func (a *armed) pause(name string, failed error) {
 	}
 	defer conn.Close()
 	if failed != nil {
-		_, _ = fmt.Fprintf(conn, "%s %d %s %s\n", name, os.Getpid(), Failed, strings.Join(strings.Fields(failed.Error()), " "))
+		_, _ = fmt.Fprintf(conn, "%s %d %s %s\n", name, os.Getpid(), Failed, strconv.Quote(failed.Error()))
 		return
 	}
 	if _, err := fmt.Fprintf(conn, "%s %d\n", name, os.Getpid()); err != nil {
