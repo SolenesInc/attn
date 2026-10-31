@@ -173,8 +173,8 @@ In the index, "both" means people and agents.
 ### Waiting
 
 - Wait on real signals, never on sleeps. In the app, `bridge dom_wait` takes
-  `selector` and `timeoutMs`, and optionally `textIncludes`, `absent: true`
-  and `focused: true`.
+  `selector` and `timeoutMs`, and optionally `textIncludes`, `valueEquals`
+  (an input's value), `absent: true` and `focused: true`.
 - A read right after a native key, a click or a command can run before the
   daemon answers. Where a step names a state, re-read the command or
   `bridge` read that shows it until the state appears, with a deadline that

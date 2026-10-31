@@ -361,6 +361,7 @@ export async function runDomAutomationAction(
         selector: typeof payload.selector === 'string' ? payload.selector : '',
         absent: payload.absent === true,
         textIncludes: typeof payload.textIncludes === 'string' ? payload.textIncludes : undefined,
+        valueEquals: typeof payload.valueEquals === 'string' ? payload.valueEquals : undefined,
         focused: payload.focused === true,
         timeoutMs: typeof payload.timeoutMs === 'number' ? payload.timeoutMs : NaN,
       });

@@ -84,12 +84,7 @@ try {
     await click('[data-testid="automation-form-name"]');
     await waitDom('[data-testid="automation-form-name"]', { focused: true });
     await driver.typeText('Home dock draft');
-    let value;
-    for (const deadline = Date.now() + 5_000; Date.now() < deadline; await sleep(50)) {
-      value = await client.request('dom_value', { selector: '[data-testid="automation-form-name"]' });
-      if (value.value === 'Home dock draft') break;
-    }
-    runner.assert(value.value === 'Home dock draft', 'the dock takes keyboard input', { value });
+    await waitDom('[data-testid="automation-form-name"]', { valueEquals: 'Home dock draft' });
     await click('[data-testid="automation-form-close"]');
     await driver.pressKey('Escape');
     await waitDom('[aria-label="Show Automations"]');
