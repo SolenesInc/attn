@@ -7,6 +7,9 @@ import (
 )
 
 func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view sessionmonitor.View, catchUp bool) {
+	if previous.Live.V != view.Live.V {
+		d.publishFact(FactSessionLiveChanged, string(session), nil)
+	}
 	if previous.HarnessTitle.V != view.HarnessTitle.V && d.store.SessionLabels(session).UserLabel == "" {
 		d.publishFact(FactSessionRenamed, string(session), nil)
 	}

@@ -125,7 +125,7 @@ type View struct {
 	LastSeen            Value[time.Time]                           `fact:"-"`
 	PendingConversation Value[Conversation]                        `fact:"-"`
 	Exit                Value[*Exit]                               `fact:"session.pty.exited"`
-	Live                Value[bool]                                `fact:"-"`
+	Live                Value[bool]                                `fact:"session.live.changed"`
 	AssistantWindow     Value[uint64]                              `fact:"session.assistant_window.changed"`
 }
 

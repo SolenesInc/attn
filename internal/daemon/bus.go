@@ -33,6 +33,7 @@ const (
 	FactSessionTerminalBuildChanged   = "session.terminal_build.changed"
 	FactSessionConversationChanged    = "session.conversation.changed"
 	FactSessionPullRequestChanged     = "session.pull_request.changed"
+	FactSessionLiveChanged            = "session.live.changed"
 
 	FactWorktreeSessionsRemoved = "worktree.sessions.removed"
 
@@ -189,6 +190,7 @@ func buildWireProjections() []projection {
 				FactSessionRespawned,
 				FactSessionPTYExited,
 				FactSessionConversationChanged,
+				FactSessionLiveChanged,
 				FactSessionClosed,
 			},
 			apply: func(d *Daemon, ev bus.Event) { d.projectSharedConversations(protocol.SessionID(ev.Subject)) },
