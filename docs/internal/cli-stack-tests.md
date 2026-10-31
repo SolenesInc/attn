@@ -61,6 +61,14 @@ returns `testworld.Main(m)`.
   dial, retry, or kill, because the row or the close can arrive before the timer
   is armed. A failure names the requested timer and the pending timers, with
   their durations.
+- `s.FireTimers(name)` fires each timer with that name, without moving the
+  clock, as soon as the daemon or a worker arms it. It runs until the test
+  calls the returned function or ends. Use it when a step may or may not arm
+  the timer. After a bridge loss the home redials at once. That redial succeeds
+  when the outpost's `_bridge` restarts its daemon in time, and fails otherwise.
+  So wrap the wait for the outpost's reconnected row in
+  `s.FireTimers(bridge.RetryTimer)` instead of advancing a retry that may never
+  be armed.
 - `s.CloseWatchWindows()` closes each folder watch's window as soon as the
   window opens, until the test calls the returned function. Each close moves the
   whole clock, the bridge's timers included, so use it only around one wait for

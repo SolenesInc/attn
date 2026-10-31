@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -45,6 +46,31 @@ func (s *Stack) readTranscripts() {
 func (s *Stack) AwaitTimer(name stepclock.Name) {
 	s.T.Helper()
 	awaitHubTimer(s.T, s.clock, name)
+}
+
+// FireTimers fires each timer named name, without moving the clock, as soon as the daemon or a process it started
+// arms it, until stop is called. It is for a step that may or may not arm that timer, such as a reconnect whose first
+// redial can succeed or fail.
+func (s *Stack) FireTimers(name stepclock.Name) (stop func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, ok := s.clock.AwaitTimer(ctx, name); !ok {
+				return
+			}
+			if err := s.clock.Fire(ctx, name); err != nil {
+				return
+			}
+		}
+	}()
+	stop = sync.OnceFunc(func() {
+		cancel()
+		<-done
+	})
+	s.T.Cleanup(stop)
+	return stop
 }
 
 // CloseWatchWindows closes each of the daemon's folder-watch windows as soon as it opens, until stop is called.

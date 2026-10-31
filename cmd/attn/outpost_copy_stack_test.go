@@ -105,9 +105,10 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	staged := remote.PauseAt(pausepoint.CopyBatchStaged)
 	remote.Start()
 	resume()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	priority(true)
 	staged.Await()
+	stopRetries()
 	pair.Disconnect()
 	remote.Kill()
 	staged.Release()
@@ -147,8 +148,9 @@ func TestOutpostCopyFollowsTheHomeForItsTerminalsOnly(t *testing.T) {
 	remote.Stop()
 	remote.Start()
 	resume()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries = home.FireTimers(bridge.RetryTimer)
 	staged.Await()
+	stopRetries()
 	staged.Release()
 	awaitCopy()
 	if copied := outpostLedgerRows(t, remote, true, false); !reflect.DeepEqual(copied, []string{string(kept)}) {
@@ -197,8 +199,9 @@ func TestReconnectRestoresTheCopyAfterAnOutpostLeaves(t *testing.T) {
 		t.Fatalf("a home leaving enrollment dropped its own shell: %v", kept)
 	}
 	requireStdout(t, remote.Attn("enrollment", "leave"), "no longer enrolled")
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	awaitCopy()
+	stopRetries()
 	if copied := sessionsOn(t, remote, ""); len(copied) != 1 {
 		t.Fatalf("re-pairing did not restore the home's shell: %v", copied)
 	}

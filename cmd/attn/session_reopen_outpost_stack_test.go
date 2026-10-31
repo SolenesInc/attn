@@ -57,8 +57,9 @@ func TestLedgerResumesAnOutpostAgentOnItsMachineWithItsConversationAndCost(t *te
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
 			mark = pair.App.EventCount()
 			outpost.Start()
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+			stopRetries()
 			reopened, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id)})
 			if err != nil {
 				t.Fatal(err)

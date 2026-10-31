@@ -141,8 +141,9 @@ func TestDelegationAndTerminalOpenDefaultToTheCallersMachine(t *testing.T) {
 			announcements = append(announcements, pair.App)
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 		} else {
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+			stopRetries()
 		}
 		exchangePrompt("after " + restart.name + " restart")
 		checkReceipts("after " + restart.name + " restart")
@@ -215,8 +216,9 @@ func TestADelegationWritesItsOutpostFailureNoteOnceAcrossReconnectAndRestarts(t 
 			pair.App = home.App()
 			outpostStateOnConnect(pair.App, "outpost", protocol.OutpostStateConnected)
 		} else {
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			outpostReachSince(pair.App, mark, "outpost", protocol.OutpostReachReachable)
+			stopRetries()
 		}
 		checkNote("after " + restarted.name + " restart")
 	}

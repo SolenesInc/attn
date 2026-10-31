@@ -72,8 +72,9 @@ func TestOutpostsPairRestartRefuseSecondHomeAndRelease(t *testing.T) {
 	outpostStateSince(p, "outpost", protocol.OutpostStateLost, mark)
 	mark = p.EventCount()
 	remote.Start()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	again := outpostStateSince(p, "outpost", protocol.OutpostStateConnected, mark)
+	stopRetries()
 	if protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) || protocol.Deref(again.HostKeyFingerprint) != protocol.Deref(first.HostKeyFingerprint) {
 		t.Fatalf("restart changed pins: %+v -> %+v", first, again)
 	}
@@ -278,8 +279,9 @@ func TestOutpostsFrozenPeerStallsLosesAndRecovers(t *testing.T) {
 	}
 	mark = p.EventCount()
 	resume()
-	home.Advance(bridge.ReconnectInterval)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
 	again := outpostStateSince(p, "frozen", protocol.OutpostStateConnected, mark)
+	stopRetries()
 	if again.LastError != nil || again.LastErrorAt != nil || protocol.Deref(again.DaemonID) != protocol.Deref(first.DaemonID) {
 		t.Fatalf("recovery: %+v", again)
 	}
@@ -317,8 +319,9 @@ func TestOutpostsChangedIdentityRequiresRepair(t *testing.T) {
 			replacement.Start()
 			remote := replacement.App()
 			a.Route(address, replacement)
-			home.Advance(bridge.ReconnectInterval)
+			stopRetries := home.FireTimers(bridge.RetryTimer)
 			refused := outpostState(p, "replaced", protocol.OutpostStateRefused)
+			stopRetries()
 			words := []string{address, protocol.Deref(first.DaemonID), "re-pair it in Settings → Outposts"}
 			if sameKey {
 				words = append(words, protocol.Deref(remote.Initial.DaemonInstanceID))

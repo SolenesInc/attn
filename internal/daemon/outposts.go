@@ -303,6 +303,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 			})
 			delay = max(delay, retryDelay)
 			retryDelay = min(delay*2, maxOutpostRetryDelay)
+			d.logf("outpost %s %s: %v; retrying in %s", row.ID, state, err, delay)
 			if !waitOutpostRetry(ctx, delay) {
 				return
 			}
