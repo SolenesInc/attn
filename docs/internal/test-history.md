@@ -39,13 +39,14 @@ checkout shares. `go tool test-history spool` prints its path. It holds:
 - `working/<id>/`: a run in progress. Capture and the test command hold its
   lock while they run.
 - `receipts/<id>.json`: sealed receipts. A sealed receipt is never rewritten.
-- `shared/<id>.json`: this repository's receipts that [sync](#sharing)
-  downloaded from the shared history, this machine's own included. Selection
-  reads them with the sealed ones.
+- `shared/<id>.json.zst`: this repository's receipts that [sync](#sharing)
+  downloaded from the shared history, this machine's own included, each the
+  sealed bytes in one zstd frame. Selection reads them with the sealed ones.
 - `uploaded/<id>`: an empty file marking a sealed receipt the service
   acknowledged.
-- `sync.json`: the download cursor with the service and repository it was read
-  from, and when sync last ran, last succeeded and why it last failed.
+- `sync.json`: the download cursor with the service, repository and `shared/`
+  layout it was read for, and when sync last ran, last succeeded and why it
+  last failed.
 
 `go tool test-history recover` seals the working files of runs that ended
 without sealing, such as a capture killed with `SIGKILL`, as incomplete. It
@@ -73,15 +74,20 @@ machine's receipts. It imports CI's receipt artifacts on its own;
   when the receipt's `repo` is not `host/owner/name`, as for a run captured
   outside a checkout with an origin remote (`repo` is `unknown`). Sync reports
   each refused receipt, offers it again on every sync, and exits 1.
-- It downloads this repository's receipts into `shared/<id>.json`, resuming
-  after the cursor in `sync.json`. A cursor read from another service or
-  repository starts the download over. The service treats every spelling of a
+- It downloads this repository's receipts into `shared/<id>.json.zst`,
+  resuming after the cursor in `sync.json`. It asks for each page as one zstd
+  stream, about a thirtieth of the page's JSON, since receipts repeat the same
+  test names. A cursor read from another service, repository or `shared/`
+  layout empties `shared/` and starts the download over; until that download
+  finishes, no sync has succeeded. The service treats every spelling of a
   repository as one, so a checkout whose origin is spelled
   `github.com/solenesinc/attn` receives CI's `github.com/SolenesInc/attn`
   receipts.
 - On success it prints how many receipts it uploaded and downloaded and how
   many wait to upload. On failure it prints how many wait to upload and when a
   sync last succeeded, keeps every receipt, and exits 1.
+- It prints each warning the service sends with its pages, such as storage
+  growing past the service's daily tripwire, without failing.
 
 A sync never changes a test's result. `scripts/land.sh` runs it before
 choosing landing tests and after a push; no test command does. `ATTN_TEST_HISTORY_URL` points

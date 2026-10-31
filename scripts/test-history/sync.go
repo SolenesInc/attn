@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ type historyService struct {
 
 type syncReport struct {
 	uploaded, alreadyStored, downloaded int
-	refused                             []string
+	refused, warnings                   []string
 }
 
 func syncHistory(args []string) int {
@@ -80,6 +81,9 @@ func syncHistory(args []string) int {
 	pending, _ := pendingUploads(spool)
 	for _, refusal := range report.refused {
 		warn("refused: %s", refusal)
+	}
+	for _, warning := range report.warnings {
+		warn("%s", warning)
 	}
 	if err != nil {
 		warn("sync failed: %v", err)
@@ -215,12 +219,16 @@ func (s historyService) request(method, path string, body []byte) (int, []byte, 
 		return 0, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+s.token)
+	req.Header.Set("Accept-Encoding", "zstd")
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return 0, nil, err
 	}
 	defer resp.Body.Close()
 	reply, err := io.ReadAll(resp.Body)
+	if err == nil && resp.Header.Get("Content-Encoding") == "zstd" {
+		reply, err = testhistory.Decompress(reply)
+	}
 	return resp.StatusCode, reply, err
 }
 
@@ -242,11 +250,14 @@ func (s historyService) put(repo, id string, body []byte) (stored bool, refusal 
 }
 
 func (s historyService) download(spool testhistory.Spool, repo string, state *syncState, report *syncReport) error {
+	if mirror := s.base + " " + strings.ToLower(repo) + " " + testhistory.SharedSuffix; state.CursorOf != mirror {
+		if err := os.RemoveAll(spool.SharedDir()); err != nil {
+			return err
+		}
+		state.Cursor, state.CursorOf, state.LastSuccess = 0, mirror, nil
+	}
 	if err := os.MkdirAll(spool.SharedDir(), 0o755); err != nil {
 		return err
-	}
-	if namespace := s.base + " " + strings.ToLower(repo); state.CursorOf != namespace {
-		state.Cursor, state.CursorOf = 0, namespace
 	}
 	for {
 		status, reply, err := s.request(http.MethodGet, fmt.Sprintf("/v1/receipts?repo=%s&after=%d", url.QueryEscape(repo), state.Cursor), nil)
@@ -261,17 +272,23 @@ func (s historyService) download(spool testhistory.Spool, repo string, state *sy
 				ID      string          `json:"id"`
 				Receipt json.RawMessage `json:"receipt"`
 			} `json:"receipts"`
-			Next int64 `json:"next"`
-			More bool  `json:"more"`
+			Next     int64    `json:"next"`
+			More     bool     `json:"more"`
+			Warnings []string `json:"warnings"`
 		}
 		if err := json.Unmarshal(reply, &page); err != nil {
 			return fmt.Errorf("GET receipts after %d: %w", state.Cursor, err)
 		}
 		for _, r := range page.Receipts {
-			if err := writeAtomically(filepath.Join(spool.SharedDir(), filepath.Base(r.ID)+".json"), r.Receipt); err != nil {
+			if err := writeAtomically(spool.SharedPath(r.ID), testhistory.Compress(r.Receipt)); err != nil {
 				return err
 			}
 			report.downloaded++
+		}
+		for _, warning := range page.Warnings {
+			if !slices.Contains(report.warnings, warning) {
+				report.warnings = append(report.warnings, warning)
+			}
 		}
 		state.Cursor = page.Next
 		if err := writeSyncState(spool, *state); err != nil {

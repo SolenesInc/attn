@@ -2,15 +2,19 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/victorarias/attn/internal/testhistory"
 )
 
 const (
@@ -29,7 +33,12 @@ type fakeHistoryService struct {
 	puts     int
 	down     bool
 	refuse   map[string]bool
-	server   *httptest.Server
+	warnings []string
+	// plain models the service before it answered Accept-Encoding: zstd.
+	plain bool
+	// pageEncodings records the Accept-Encoding of each page request.
+	pageEncodings []string
+	server        *httptest.Server
 }
 
 func newFakeHistoryService(t *testing.T) *fakeHistoryService {
@@ -80,6 +89,7 @@ func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 		s.receipts = append(s.receipts, storedReceipt{repo, id, body})
 		w.WriteHeader(http.StatusCreated)
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/receipts":
+		s.pageEncodings = append(s.pageEncodings, r.Header.Get("Accept-Encoding"))
 		var after int
 		fmt.Sscan(r.URL.Query().Get("after"), &after)
 		repo := strings.ToLower(r.URL.Query().Get("repo"))
@@ -102,7 +112,13 @@ func (s *fakeHistoryService) serve(w http.ResponseWriter, r *http.Request) {
 			written++
 			next = i + 1
 		}
-		fmt.Fprintf(&page, `],"next":%d,"more":%t}`, next, more)
+		warnings, _ := json.Marshal(s.warnings)
+		fmt.Fprintf(&page, `],"next":%d,"more":%t,"warnings":%s}`, next, more, warnings)
+		if !s.plain && r.Header.Get("Accept-Encoding") == "zstd" {
+			w.Header().Set("Content-Encoding", "zstd")
+			w.Write(testhistory.Compress(page.Bytes()))
+			return
+		}
 		w.Write(page.Bytes())
 	default:
 		http.NotFound(w, r)
@@ -186,9 +202,13 @@ func (w *syncWorld) receiptRepo(id string) string {
 }
 
 func (w *syncWorld) shared(id string) []byte {
-	data, err := os.ReadFile(filepath.Join(w.spool, "shared", id+".json"))
+	data, err := os.ReadFile(testhistory.Spool{Dir: w.spool}.SharedPath(id))
 	if err != nil {
 		return nil
+	}
+	data, err = testhistory.Decompress(data)
+	if err != nil {
+		w.t.Fatalf("shared %s: %v", id, err)
 	}
 	return data
 }
@@ -344,5 +364,95 @@ func TestACursorWrittenBeforeCursorsNamedTheirServiceStartsOver(t *testing.T) {
 	}
 	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 3;") {
 		t.Fatalf("sync from a sync.json with cursor 20 and no service exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
+	}
+}
+
+func repetitiveReceipt(id string) []byte {
+	return []byte(`{"invocation_id":"` + id + `","results":[` + strings.Repeat(`{"unit":"go ./internal/daemon TestStateExplain","outcome":"pass"},`, 100) + `{}]}`)
+}
+
+func TestSyncAsksForCompressedPagesAndPrintsEachServiceWarningOnce(t *testing.T) {
+	w := newSyncWorld(t)
+	for i := range 3 {
+		id := fmt.Sprintf("ci-%d", i)
+		w.service.add("github.com/"+checkoutRepository, id, repetitiveReceipt(id))
+	}
+	warning := "attn-test-history stored 300 bytes of receipts in the last 24 h, past its tripwire of 200 bytes"
+	w.service.mu.Lock()
+	w.service.warnings = []string{warning}
+	w.service.mu.Unlock()
+
+	out, errOut, code := w.sync()
+	if code != 0 || !strings.Contains(out, "downloaded 3;") || strings.Count(errOut, warning) != 1 {
+		t.Fatalf("sync exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
+	}
+	w.service.mu.Lock()
+	encodings := w.service.pageEncodings
+	w.service.mu.Unlock()
+	if len(encodings) < 2 || slices.ContainsFunc(encodings, func(e string) bool { return e != "zstd" }) {
+		t.Fatalf("page requests sent Accept-Encoding %q, want zstd on every page", encodings)
+	}
+	for i := range 3 {
+		id := fmt.Sprintf("ci-%d", i)
+		if !bytes.Equal(w.shared(id), repetitiveReceipt(id)) {
+			t.Fatalf("shared %s = %q, want the receipt's bytes", id, w.shared(id))
+		}
+		if info, err := os.Stat(testhistory.Spool{Dir: w.spool}.SharedPath(id)); err != nil || info.Size()*5 > int64(len(repetitiveReceipt(id))) {
+			t.Fatalf("shared %s takes %v bytes on disk for a %d-byte receipt (%v)", id, info.Size(), len(repetitiveReceipt(id)), err)
+		}
+	}
+}
+
+func TestSyncFromAServiceThatSendsPlainJSONKeepsTheSameCompressedMirror(t *testing.T) {
+	w := newSyncWorld(t)
+	w.service.plain = true
+	w.service.add("github.com/"+checkoutRepository, "ci-0", repetitiveReceipt("ci-0"))
+	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 1;") {
+		t.Fatalf("sync exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
+	}
+	if !bytes.Equal(w.shared("ci-0"), repetitiveReceipt("ci-0")) {
+		t.Fatalf("shared ci-0 = %q, want the receipt's bytes", w.shared("ci-0"))
+	}
+}
+
+func TestAMirrorInTheUncompressedLayoutDownloadsAgainAsCompressed(t *testing.T) {
+	w := newSyncWorld(t)
+	for i := range 3 {
+		w.service.add("github.com/"+checkoutRepository, fmt.Sprintf("ci-%d", i), []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i)))
+	}
+	shared := filepath.Join(w.spool, "shared")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 3 {
+		if err := os.WriteFile(filepath.Join(shared, fmt.Sprintf("ci-%d.json", i)), []byte(fmt.Sprintf(`{"invocation_id":"ci-%d"}`, i)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := fmt.Sprintf(`{"last_success":"2026-10-31T12:00:00Z","last_attempt":"2026-10-31T12:00:00Z","cursor":3,"cursor_of":"%s github.com/%s"}`, w.service.server.URL, checkoutRepository)
+	if err := os.WriteFile(filepath.Join(w.spool, "sync.json"), []byte(state), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	w.service.mu.Lock()
+	w.service.down = true
+	w.service.mu.Unlock()
+	if _, errOut, code := w.sync(); code != 1 || !strings.Contains(errOut, "no sync has succeeded yet") {
+		t.Fatalf("an interrupted download of the new mirror exited %d and must not count as a success\nstderr: %s", code, errOut)
+	}
+
+	w.service.mu.Lock()
+	w.service.down = false
+	w.service.mu.Unlock()
+	if out, errOut, code := w.sync(); code != 0 || !strings.Contains(out, "downloaded 3;") {
+		t.Fatalf("sync of an uncompressed mirror exited %d\nstdout: %s\nstderr: %s", code, out, errOut)
+	}
+	if old, _ := filepath.Glob(filepath.Join(shared, "*.json")); len(old) != 0 {
+		t.Fatalf("uncompressed receipts left behind: %v", old)
+	}
+	for i := range 3 {
+		if w.shared(fmt.Sprintf("ci-%d", i)) == nil {
+			t.Errorf("ci-%d missing from the compressed mirror", i)
+		}
 	}
 }

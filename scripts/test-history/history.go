@@ -44,16 +44,23 @@ func loadReceipts(dirs ...string) (history, error) {
 			if errors.Is(err, fs.ErrNotExist) && path == dir {
 				return fs.SkipDir
 			}
-			if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") || strings.HasPrefix(entry.Name(), ".") {
+			if err != nil || entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 				return err
+			}
+			compressed := strings.HasSuffix(entry.Name(), testhistory.SharedSuffix)
+			if !compressed && !strings.HasSuffix(entry.Name(), ".json") {
+				return nil
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {
 				return err
 			}
+			if compressed {
+				data, err = testhistory.Decompress(data)
+			}
 			var receipt testhistory.Receipt
 			switch {
-			case json.Unmarshal(data, &receipt) != nil:
+			case err != nil || json.Unmarshal(data, &receipt) != nil:
 				loaded.skipped["unreadable"]++
 			case receipt.Schema != testhistory.Schema:
 				loaded.skipped["schema "+receipt.Schema]++

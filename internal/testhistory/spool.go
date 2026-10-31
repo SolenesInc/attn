@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 type Spool struct {
@@ -40,6 +42,21 @@ func (s Spool) workingRoot() string { return filepath.Join(s.Dir, "working") }
 func (s Spool) ReceiptPath(id string) string {
 	return filepath.Join(s.ReceiptsDir(), id+".json")
 }
+
+const SharedSuffix = ".json.zst"
+
+func (s Spool) SharedPath(id string) string {
+	return filepath.Join(s.SharedDir(), filepath.Base(id)+SharedSuffix)
+}
+
+var (
+	sharedEncoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBetterCompression))
+	sharedDecoder, _ = zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
+)
+
+func Compress(data []byte) []byte { return sharedEncoder.EncodeAll(data, nil) }
+
+func Decompress(data []byte) ([]byte, error) { return sharedDecoder.DecodeAll(data, nil) }
 
 func resultsFile(runner Runner) string {
 	if runner == RunnerGo || runner == RunnerVitest {

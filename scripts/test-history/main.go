@@ -26,8 +26,10 @@ const usage = `usage: go tool test-history <command>
       Upload sealed receipts the history service has not acknowledged, then
       download the receipts it holds for this repository into the spool's
       shared directory. Prints how many receipts it uploaded and downloaded
-      and how many wait to upload. When the sync fails, it also prints when a
-      sync last succeeded. Exits 1 when the sync fails or a receipt is refused.
+      and how many wait to upload, and each warning the service sends, such
+      as storage past its daily tripwire. When the sync fails, it also prints
+      when a sync last succeeded. Exits 1 when the sync fails or a receipt is
+      refused.
       The service is $ATTN_TEST_HISTORY_URL, or the default history service;
       its token is in ${XDG_CONFIG_HOME:-~/.config}/attn-test-history/token.
   spool
