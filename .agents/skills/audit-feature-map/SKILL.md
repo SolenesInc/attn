@@ -77,11 +77,10 @@ your account of it. Write a `|` inside a cell as `\|`.
 
 ## Stake and pass notes
 
-Your stake is the seed the automation's opening names. Under the scheduled
-trigger it is the same seed every pass, and the next occurrence replants it
-after a harvest. A manual run plants a fresh stake, so it has no earlier pass
-to recover and `previous` is `none`. Pass progress lives in the stake's notes,
-written as it happens, so a fresh session can resume:
+Your stake is the seed the automation's opening names. Each run starts a new
+agent with a new stake. A pass's progress lives in the notes of the stake
+that started it, written as it happens, and its `pass.env` names that stake,
+so a later run can resume it:
 
 ```text
 pass <pass> start: revision <sha>, previous <sha|none>, folder <runs>, usage <tokens and cost>
@@ -100,9 +99,9 @@ the prefix points `attn` at the instance, where the stake does not exist.
 The automation's folder is the control checkout. It holds no work.
 
 1. Run `git pull --ff-only`. If this file changed, read it again.
-2. Read `attn seed notes <stake>`. When the newest `pass … start` has no
-   `done`, that pass is unfinished: [Recover](#recover) it. An occurrence
-   accepted while a pass is unfinished is answered by finishing that pass.
+2. When `$PWD.runs` holds a pass folder, that pass is unfinished:
+   [Recover](#recover) it. A run that starts while a pass is unfinished
+   answers by finishing that pass.
 3. Otherwise start a pass. This writes the pass's env file, which later
    commands source:
 
@@ -110,7 +109,7 @@ The automation's folder is the control checkout. It holds no work.
 pass=$(date +%Y%m%d-%H%M) runs=$PWD.runs/$pass rev=$(git rev-parse origin/main) &&
 mkdir -p $runs/evidence && git worktree add --detach $runs/work $rev &&
 git worktree add -b map-audit-$pass $runs/repair $rev && cat > $runs/pass.env <<EOF
-control=$PWD pass=$pass runs=$runs rev=$rev repair=$runs/repair
+control=$PWD pass=$pass runs=$runs rev=$rev repair=$runs/repair stake=<stake>
 S=$PWD/.agents/skills/audit-feature-map/scripts/audit.py
 cd $runs/work
 EOF
@@ -126,8 +125,8 @@ its revision.
 
 Each command after this starts in a fresh shell, so it begins with
 `. <runs>/pass.env &&`, `<runs>` written out; an instance command adds
-drive-attn's prefix after it. `previous` is the revision of the newest pass
-that finished with a report, not an abandoned one, or `none`. Usage is the `usage` line of `attn session show <session>`,
+drive-attn's prefix after it. `previous` is the revision in
+`$PWD.runs/previous`, which Finish writes, or `none`. Usage is the `usage` line of `attn session show <session>`,
 where `attn presence --session-id` prints your session. Write the start note
 before anything else.
 
@@ -296,21 +295,23 @@ branch holds commits `main` lacks:
 . <runs>/pass.env && git -C $repair fetch -q origin &&
 test -z "$(git -C $repair rev-list origin/main..HEAD)" &&
 tar -czf $runs/evidence-$pass.tar.gz -C $runs evidence &&
-attn seed attach <stake> --path $runs/evidence/report-$pass.md --copy &&
-attn seed attach <stake> --path $runs/evidence-$pass.tar.gz --move &&
+attn seed attach $stake --path $runs/evidence/report-$pass.md --copy &&
+attn seed attach $stake --path $runs/evidence-$pass.tar.gz --move &&
 git -C $control worktree remove --force $runs/work &&
 git -C $control worktree remove --force $repair &&
 git -C $control branch -D map-audit-$pass &&
-rm -r $runs
+rm -r $runs && echo $rev > $control.runs/previous
 ```
 
-Write the `done` note, then `attn seed harvest <stake> -m "pass <pass> at
+Write the `done` note, then `attn seed harvest $stake -m "pass <pass> at
 <sha>: <tally>; report attached"`.
 
 ## Recover
 
-The notes of the unfinished pass name its revision, folder, instances and
-finished features.
+The pass's `pass.env` names its stake, whose notes name its instances and
+finished features. Write the pass's notes on that stake and harvest it in
+Finish. When your own stake is another seed, harvest it too, naming the pass
+you finished.
 
 1. When the work or repair checkout is gone, add it again at the recorded
    revision, and the repair checkout on its branch when the branch survives.
@@ -370,9 +371,13 @@ trigger:
   schedule:
     cron: <cron>
     time_zone: Europe/Stockholm
-  continuity: singleton
+  continuity: fresh
   catch_up: latest
 ```
+
+`fresh` gives each run a new agent, so a pass never re-reads earlier passes'
+conversations; `singleton` would resume one agent every run. A run that finds
+an unfinished pass finishes it, as Start says.
 
 Applying it again keeps it disabled: the definition prints with
 `"enabled": false` until `attn automation enable <id>`. It has no guard: a
