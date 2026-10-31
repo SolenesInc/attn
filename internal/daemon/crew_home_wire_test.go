@@ -56,7 +56,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 		t.Fatalf("move: %+v", moved)
 	}
 	_, err = cli.CrewMoveHome("Keel")
-	crewErrorContains(t, err, "already outside attn's data folder", moved.Member.HomeDir)
+	crewErrorContains(t, err, "already in its profile's Notebook", moved.Member.HomeDir)
 	app := w.App()
 	read := notebookAskRead(app, "crew/keel/CHARTER.md")
 	if !read.Success || read.Result == nil || !strings.Contains(read.Result.Content, "What I care about.") {
@@ -139,7 +139,8 @@ func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
 	if moved.Member.HomeDir != home {
 		t.Fatalf("move into a taken folder: %+v", moved)
 	}
-	setSetting(t, app, "notebook.profile_root", w.Path("next-notebook"))
+	next := w.Path("next-notebook")
+	setSetting(t, app, "notebook.profile_root", next)
 	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != home {
 		t.Fatalf("changing the Notebook folder moved the home: %+v", got)
 	}
@@ -147,6 +148,19 @@ func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
 	if !read.Success || read.Charter == nil || !strings.Contains(read.Charter.Content, "What I care about.") {
 		t.Fatalf("charter after repointing the Notebook: %+v", read)
 	}
+
+	followed := moveCrewHome(t, w, "Keel")
+	if followed.Member.HomeDir != filepath.Join(next, crew.HomesDirName, "keel") || followed.PreviousHome != home {
+		t.Fatalf("move-home into the new Notebook: %+v", followed)
+	}
+	if read := notebookAskRead(app, "crew/keel/CHARTER.md"); !read.Success || read.Result == nil || !strings.Contains(read.Result.Content, "What I care about.") {
+		t.Fatalf("the charter in the new Notebook: %+v", read)
+	}
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatalf("the home stayed in the old Notebook: %v", err)
+	}
+	_, err := cli.CrewMoveHome("Keel")
+	crewErrorContains(t, err, "already in its profile's Notebook", followed.Member.HomeDir)
 }
 
 func TestCrewRenameFailureKeepsTheOriginalHomeAndRecord(t *testing.T) {

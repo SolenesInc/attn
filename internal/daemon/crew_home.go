@@ -315,12 +315,14 @@ func (d *Daemon) crewMoveHome(msg *protocol.CrewMoveHomeMessage) (*protocol.Crew
 		return nil, err
 	}
 	previous := member.HomeDir(d.dataRoot)
-	if !member.InDataDir() {
-		return nil, fmt.Errorf("%s's home is already outside attn's data folder, at %s", member.Name, previous)
-	}
 	parent, err := d.notebookCrewHomes(member.ProfileID)
 	if err != nil {
 		return nil, err
+	}
+	if within, err := sameDirOrWithin(parent, previous); err != nil {
+		return nil, err
+	} else if within {
+		return nil, fmt.Errorf("%s's home is already in its profile's Notebook, at %s", member.Name, previous)
 	}
 	moved, revision, err := d.relocateCrewHome(member, doc.Rev, parent, member.Name, d.commitCrewHomeMove)
 	if err != nil {

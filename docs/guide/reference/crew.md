@@ -38,23 +38,26 @@ never changes.
 
 ## Move a member's home
 
-A member whose home is in Attn's data folder, because you made the folder
-yourself or the member was added before homes moved to the Notebook, keeps it
-there until you run `attn crew move-home <member>`. That moves the home into its
-profile's Notebook, at `crew/<name>/` like a new member's. Its charter, letters
-and anything else in the folder move with it, and a working or awareness folder
-inside the home follows. So do its past sessions: [resume](sessions.md#resume)
-one from the ledger or with `attn session reopen` and it opens in the new home.
-The member must be asleep. Changing the profile's Notebook folder later leaves
-every home where it is.
+A home stays where it is until you move it. Changing the profile's Notebook
+folder leaves every home in the old one, and a home in Attn's data folder,
+because you made the folder yourself or the member was added before homes moved
+to the Notebook, stays there.
+
+`attn crew move-home <member>` moves a home into the profile's current
+Notebook, at `crew/<name>/` like a new member's, from wherever it is: Attn's
+data folder, an earlier Notebook or any other folder. Its charter, letters and anything else in the folder move
+with it, and a working or awareness folder inside the home follows. So do its
+past sessions: [resume](sessions.md#resume) one from the ledger or with
+`attn session reopen` and it opens in the new home. The member must be asleep,
+and the two folders must be on one volume.
 
 If a member's home goes missing, Attn refuses to wake the member or open its
 charter and names the path. Other members keep working. Put the folder back, or,
 if you moved or renamed it on purpose, run
 `attn crew set <member> --home <folder>`, without other settings. The folder
-must hold the member's `CHARTER.md`, and the member must be asleep. Attn renames the folder after the
-member if its name differs. As with `move-home`, a working or awareness folder
-inside the old home follows, and so do its past sessions.
+must hold the member's `CHARTER.md`, and the member must be asleep. Attn renames
+the folder after the member if its name differs. As with `move-home`, a working
+or awareness folder inside the old home follows, and so do its past sessions.
 
 To undo `attn crew move-home`, move the folder to `~/.attn/crew/<key>/` (for a
 named instance, `~/.attn-<instance>/crew/<key>/`) and run

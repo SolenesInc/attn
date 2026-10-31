@@ -127,11 +127,13 @@ commands:
         wake when it is awake. Needs crew_v2_enabled.
 
   move-home <member> [--json]
-        Move the member's home from attn's data folder into its profile's
-        Notebook, at crew/<name>/ (crew/<name>-2/ when that folder is taken).
+        Move the member's home into its profile's current Notebook, at
+        crew/<name>/ (crew/<name>-2/ when that folder is taken), from wherever
+        it is: attn's data folder, an earlier Notebook or any other folder.
         Its charter, letters and other files move; a working or awareness
-        directory inside the home follows. The member must be asleep. Later
-        changes to the Notebook folder leave the home where it is.
+        directory inside the home follows. The member must be asleep.
+        Changing the Notebook folder moves no home by itself; run this for
+        each member.
 
   retire <member> [--json]
         Stop the member's work: its claimed seeds are replanted with a note,
