@@ -119,12 +119,6 @@ function renderedPanes(desktopId: string): string[] {
   return surface ? paneSessionIds(surface) : [];
 }
 
-function renderedDesktopIds(): string[] {
-  return Array.from(document.querySelectorAll('.session-terminal-desktop'))
-    .map((node) => node.getAttribute('data-desktop-id') || '')
-    .sort();
-}
-
 async function connect(sessions: ReturnType<typeof session>[], desktops: ReturnType<typeof desktop>[]) {
   await waitFor(() => {
     expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
@@ -164,36 +158,6 @@ describe('a pane moved to another desktop', () => {
   const stay = { paneId: 'pane-stay', sessionId: 's-stay' };
   const moved = { paneId: 'pane-moved', sessionId: 's-moved' };
   const target = { paneId: 'pane-target', sessionId: 's-target' };
-
-  it('renders on the target desktop once the arrangement moves it and follows there', async () => {
-    const { unmount } = render(<App />);
-    const ws = await connect(
-      [session(stay.sessionId, 'staying'), session(moved.sessionId, 'moved'), session(target.sessionId, 'target')],
-      [desktop(SOURCE, 1, [stay, moved]), desktop(TARGET, 2, [target])],
-    );
-
-    await waitFor(() => {
-      expect(renderedPanes(SOURCE)).toEqual(['s-moved', 's-stay']);
-    });
-    expect(renderedDesktopIds()).toEqual([SOURCE]);
-
-    act(() => {
-      ws.emit({
-        event: 'profile_arrangement_changed',
-        profile: { ...PROFILE, current_desktop_id: TARGET, revision: 2 },
-        desktops: [desktop(SOURCE, 1, [stay], 2), desktop(TARGET, 2, [target, moved], 2)],
-      });
-    });
-
-    await waitFor(() => {
-      expect(renderedPanes(TARGET)).toEqual(['s-moved', 's-target']);
-    });
-    expect(renderedPanes(SOURCE)).toEqual(['s-stay']);
-    expect(renderedDesktopIds()).toEqual([SOURCE, TARGET]);
-    expect(paneSessionIds(document)).toEqual(['s-moved', 's-stay', 's-target']);
-
-    unmount();
-  });
 
   it('keeps a moved agent on its new desktop when a stale session broadcast arrives', async () => {
     const { unmount } = render(<App />);

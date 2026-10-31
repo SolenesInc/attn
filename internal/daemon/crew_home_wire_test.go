@@ -56,7 +56,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 		t.Fatalf("move: %+v", moved)
 	}
 	_, err = cli.CrewMoveHome("Keel")
-	crewErrorContains(t, err, "already outside attn's data folder", moved.Member.HomeDir)
+	crewErrorContains(t, err, "already in its profile's Notebook", moved.Member.HomeDir)
 	app := w.App()
 	read := notebookAskRead(app, "crew/keel/CHARTER.md")
 	if !read.Success || read.Result == nil || !strings.Contains(read.Result.Content, "What I care about.") {
@@ -139,7 +139,8 @@ func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
 	if moved.Member.HomeDir != home {
 		t.Fatalf("move into a taken folder: %+v", moved)
 	}
-	setSetting(t, app, "notebook.profile_root", w.Path("next-notebook"))
+	next := w.Path("next-notebook")
+	setSetting(t, app, "notebook.profile_root", next)
 	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != home {
 		t.Fatalf("changing the Notebook folder moved the home: %+v", got)
 	}
@@ -147,6 +148,19 @@ func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
 	if !read.Success || read.Charter == nil || !strings.Contains(read.Charter.Content, "What I care about.") {
 		t.Fatalf("charter after repointing the Notebook: %+v", read)
 	}
+
+	followed := moveCrewHome(t, w, "Keel")
+	if followed.Member.HomeDir != filepath.Join(next, crew.HomesDirName, "keel") || followed.PreviousHome != home {
+		t.Fatalf("move-home into the new Notebook: %+v", followed)
+	}
+	if read := notebookAskRead(app, "crew/keel/CHARTER.md"); !read.Success || read.Result == nil || !strings.Contains(read.Result.Content, "What I care about.") {
+		t.Fatalf("the charter in the new Notebook: %+v", read)
+	}
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatalf("the home stayed in the old Notebook: %v", err)
+	}
+	_, err := cli.CrewMoveHome("Keel")
+	crewErrorContains(t, err, "already in its profile's Notebook", followed.Member.HomeDir)
 }
 
 func TestCrewRenameFailureKeepsTheOriginalHomeAndRecord(t *testing.T) {
@@ -328,4 +342,124 @@ func sleepAfterADay(t *testing.T, w *world, member string) *fakeagent.Run {
 	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
 	crewHandoff(t, cli, string(day.SessionID), "Resume this conversation later.", false)
 	return run
+}
+
+func repointCrewHome(cli *client.Client, member, home string) (*protocol.CrewSetResult, error) {
+	return cli.CrewSetMessage(protocol.CrewSetMessage{Member: member, Home: protocol.Ptr(home)})
+}
+
+func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
+	w := newCrewV2World(t, fakeagent.Claude)
+	cli := w.Client()
+	home := moveCrewHome(t, w, "Keel").Member.HomeDir
+	notes := filepath.Join(home, "notes")
+	if err := os.MkdirAll(notes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setCrew(t, cli, "Keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(notes), AwarenessDirs: []string{notes}})
+	day := sleepAfterADay(t, w, "Keel")
+
+	tidied := w.Path("tidied")
+	if err := os.MkdirAll(tidied, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	aside := filepath.Join(tidied, "keel-old")
+	if err := os.Rename(home, aside); err != nil {
+		t.Fatal(err)
+	}
+	_, err := cli.CrewWake("Keel", "", "")
+	crewErrorContains(t, err, home, "unavailable")
+
+	empty := w.Path("empty")
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err = repointCrewHome(cli, "Keel", empty)
+	crewErrorContains(t, err, empty, "has no CHARTER.md")
+	_, err = cli.CrewSetMessage(protocol.CrewSetMessage{Member: "Keel", Home: protocol.Ptr(aside), Model: protocol.Ptr("claude-sonnet-fake")})
+	crewErrorContains(t, err, "--home is a change of its own")
+	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != home {
+		t.Fatalf("a refused --home changed the member: %+v", got)
+	}
+	_, err = repointCrewHome(cli, "Keel", notebookCrewHome(w, "alder-missing"))
+	crewErrorContains(t, err, notebookCrewHome(w, "alder-missing"), "not there")
+
+	repointed, err := repointCrewHome(cli, "Keel", aside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := filepath.Join(tidied, "keel")
+	movedNotes := filepath.Join(named, "notes")
+	if got := repointed.Member; got.HomeDir != named || protocol.Deref(got.Cwd) != movedNotes || len(got.AwarenessDirs) != 1 || got.AwarenessDirs[0] != movedNotes {
+		t.Fatalf("repointed member: %+v", got)
+	}
+	if _, err := os.Stat(aside); !os.IsNotExist(err) {
+		t.Fatalf("the repointed folder kept its old name: %v", err)
+	}
+
+	reopened, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(day.SessionID)})
+	if err != nil || reopened.Directory != movedNotes {
+		t.Fatalf("a closed session after the repoint: %+v %v", reopened, err)
+	}
+	if resumed := w.Launched(day.SessionID); !resumed.Resumed || resumed.ConversationID != day.ConversationID {
+		t.Fatalf("resume after the repoint started %+v", resumed)
+	}
+
+	wake := wakeCrew(t, cli, "Keel", "")
+	w.Launched(string(wake.SessionID))
+	if session := queriedSession(t, cli, string(wake.SessionID)); session.Directory != movedNotes {
+		t.Fatalf("launch directory after the repoint: %s", session.Directory)
+	}
+	prime, err := cli.CrewPrime(wake.SessionID)
+	if err != nil || !strings.Contains(protocol.Deref(prime.Guidance), "Resume this conversation later.") {
+		t.Fatalf("letters after the repoint: %+v %v", prime, err)
+	}
+	_, err = repointCrewHome(cli, "Keel", home)
+	crewErrorContains(t, err, "Keel is awake", "attn crew sleep Keel")
+}
+
+func TestARepointBringsAHomeBackIntoTheDataFolder(t *testing.T) {
+	w := newCrewWorld(t, fakeagent.Claude)
+	cli := w.Client()
+	dataHome := crewHome(w, "keel")
+	notebook := moveCrewHome(t, w, "Keel").Member.HomeDir
+	trellis := moveCrewHome(t, w, "Trellis").Member.HomeDir
+
+	_, err := repointCrewHome(cli, "Keel", trellis)
+	crewErrorContains(t, err, "Trellis's home", trellis)
+	_, err = repointCrewHome(cli, "Keel", crewHome(w, "alder"))
+	crewErrorContains(t, err, "attn's data folder", dataHome)
+
+	if err := os.Rename(notebook, dataHome); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := repointCrewHome(cli, "Keel", dataHome); err != nil || got.Member.HomeDir != dataHome {
+		t.Fatalf("repoint into the data folder: %+v %v", got, err)
+	}
+	w.restart()
+	cli = w.Client()
+	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != dataHome {
+		t.Fatalf("a home back in the data folder after a restart: %+v", got)
+	}
+	if moved := moveCrewHome(t, w, "Keel"); moved.Member.HomeDir != notebook || moved.PreviousHome != dataHome {
+		t.Fatalf("move-home after coming back: %+v", moved)
+	}
+}
+
+func TestARepointOverlappingAnotherProfilesMemberDoesNotNameIt(t *testing.T) {
+	w := newCrewWorld(t)
+	app := w.App()
+	cli := w.Client().WithGardenProfile(app.SelectedProfile(), "")
+	other := createProfile(app, "Other")
+	root := w.Path("other-notebook")
+	setSetting(t, w.AppOn(other.ID), "notebook.profile_root", root)
+	hidden := createCrew(t, w.Client().WithGardenProfile(other.ID, ""), "Hidden")
+	if err := os.WriteFile(filepath.Join(root, crew.CharterFileName), []byte("# Not Keel\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := repointCrewHome(cli, "Keel", root)
+	crewErrorContains(t, err, "overlaps another crew member's home")
+	if err != nil && (strings.Contains(err.Error(), "Hidden") || strings.Contains(err.Error(), hidden.HomeDir)) {
+		t.Fatalf("the refusal names another profile's member: %v", err)
+	}
 }

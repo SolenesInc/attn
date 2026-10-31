@@ -121,7 +121,7 @@ export async function getFrontWindowBounds(bundleId = null, options = {}) {
 
   if (appPlatform.os === 'linux') {
     const appPath = options.appPath || options.client?.appPath;
-    const driver = options.driver || createWindowDriver({ appPath });
+    const driver = options.driver || createWindowDriver({ appPath, client: options.client });
     return {
       ...await driver.windowGeometry(),
       processName: 'attn-app-window',
@@ -209,7 +209,7 @@ export async function setFrontWindowBounds(targetBounds, options = {}) {
 
   if (appPlatform.os === 'linux') {
     const appPath = options.appPath || options.client?.appPath;
-    const driver = options.driver || createWindowDriver({ appPath });
+    const driver = options.driver || createWindowDriver({ appPath, client: options.client });
     return {
       ...await driver.setWindowBounds(normalizedTarget),
       processName: 'attn-app-window',
@@ -370,7 +370,7 @@ export async function captureFrontWindowScreenshot(outputPath, options = {}) {
 
   if (appPlatform.os === 'linux') {
     const appPath = options.appPath || options.client?.appPath;
-    const driver = options.driver || createWindowDriver({ appPath });
+    const driver = options.driver || createWindowDriver({ appPath, client: options.client });
     const needsTransform = Boolean(options.crop) || (options.maxDim !== undefined && options.maxDim !== null);
     const capturedPath = needsTransform ? `${outputPath}.full.png` : outputPath;
     await driver.screenshot(capturedPath);

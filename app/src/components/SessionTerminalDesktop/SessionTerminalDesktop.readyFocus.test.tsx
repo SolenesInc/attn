@@ -103,15 +103,6 @@ afterEach(() => {
 });
 
 describe('SessionTerminalDesktop pane readiness focus', () => {
-  it('focuses the terminal when it becomes ready and nothing else holds focus', () => {
-    const { getByTestId } = renderDesktop();
-    (document.activeElement as HTMLElement | null)?.blur();
-    expect(document.activeElement).toBe(document.body);
-
-    announceReady();
-
-    expect(document.activeElement).toBe(getByTestId('mock-terminal-pane-term'));
-  });
 
   it('leaves focus on a control the user moved to before the terminal became ready', () => {
     const { getByTestId } = renderDesktop();

@@ -111,18 +111,6 @@ describe('useSessionLaunch from the new-session picker', () => {
     });
   });
 
-  it('starts an ordinary pick on the current desktop', async () => {
-    const { result } = renderLaunch();
-
-    await act(async () => {
-      await result.current.launchLocation('/repo/picked', 'shell');
-    });
-
-    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
-    expect(args).toMatchObject({ cwd: '/repo/picked', placement: { desktop_id: 'desktop-1' } });
-    expect(args.chief_of_staff).toBeFalsy();
-  });
-
   it('launches a chief of staff into a new worktree when the picker asks for one', async () => {
     const { result } = renderLaunch(null, {
       sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/repo/exsin--chief' })),

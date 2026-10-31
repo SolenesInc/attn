@@ -22,6 +22,13 @@ const (
 	ReconnectInterval    = 2 * time.Second
 )
 
+const (
+	StallTimer  stepclock.Name = "bridge-stall"
+	LostTimer   stepclock.Name = "bridge-lost"
+	AnswerTimer stepclock.Name = "bridge-answer"
+	RetryTimer  stepclock.Name = "bridge-retry"
+)
+
 var errNoFrames = fmt.Errorf("no frame for %s", LostAfter)
 
 type State string
@@ -126,8 +133,8 @@ func (c *Conn) run(ctx context.Context, transport ssh.Conn, channels <-chan ssh.
 			}
 		}
 	})
-	stall := stepclock.NewTimer(StallAfter)
-	lost := stepclock.NewTimer(LostAfter)
+	stall := stepclock.NewTimer(StallTimer, StallAfter)
+	lost := stepclock.NewTimer(LostTimer, LostAfter)
 	defer stall.Stop()
 	defer lost.Stop()
 	c.publish(StateConnected)

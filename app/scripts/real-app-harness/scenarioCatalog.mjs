@@ -55,6 +55,13 @@ export const scenarioCatalog = [
     command: ['node', 'scripts/real-app-harness/scenario-home-dock.mjs'],
   },
   {
+    id: 'owned-window',
+    runnerId: 'OWNED-WINDOW',
+    label: 'Native keys reach the app past a same-titled X window, at launch and after relaunch',
+    command: ['node', 'scripts/real-app-harness/scenario-owned-window.mjs'],
+    skipOn: { darwin: 'The decoy is an X11 window and the macOS driver resolves windows through AppKit' },
+  },
+  {
     id: 'launch-desktops',
     runnerId: 'LAUNCH-DESKTOPS',
     label: 'Launch desktops: mandatory review, named pending sharing, settings, protected errors and quiet background wakes',

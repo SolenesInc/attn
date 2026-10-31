@@ -1,0 +1,19 @@
+{
+  "finishedAt": null,
+  "complete": false,
+  "shard": null,
+  "results": [
+    {
+      "id": "session-reopen",
+      "code": 0,
+      "durationMs": 5671
+    },
+    {
+      "id": "session-close-ledger",
+      "code": 130,
+      "durationMs": 3399,
+      "signal": "SIGINT",
+      "interrupted": true
+    }
+  ]
+}

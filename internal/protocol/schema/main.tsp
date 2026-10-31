@@ -1168,6 +1168,7 @@ model DelegationPreferencesCommitMessage {
   cmd: "delegation_preferences_commit";
   preferences: DelegationPreferences;
   message?: string;
+  install_workflow_skill?: boolean;
 }
 
 @extension("x-on", #{ home: true })
@@ -6933,6 +6934,7 @@ model Response {
   delegation_operation?: DelegationOperation;
   delegation_roles?: DelegationRolesResult;
   delegation_preferences_revision?: DelegationPreferencesRevision;
+  workflow_skill_paths?: string[];
   delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
   caller_session_id?: SessionID;
@@ -7587,6 +7589,10 @@ model CrewSetMessage {
   // The Notebook folder for the Chief's profile, picked while the Chief has
   // no harness yet. The Chief's home moves into its crew folder.
   notebook_root?: string;
+  // An existing folder holding the member's CHARTER.md, recorded as its home
+  // after the folder was moved or renamed outside attn. The member must be
+  // asleep; outside attn's data folder the folder takes the member's name.
+  home?: string;
   launch_desktop_name?: string;
   launch_desktop_setting?: LaunchDesktopSetting;
 }

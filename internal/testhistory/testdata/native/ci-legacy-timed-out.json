@@ -1,0 +1,121 @@
+{
+  "finishedAt": "2026-10-31T12:06:02.518Z",
+  "shard": {
+    "index": 3,
+    "count": 4
+  },
+  "results": [
+    {
+      "id": "focusless-native",
+      "code": 0,
+      "durationMs": 0,
+      "skipped": true,
+      "skipReason": "The parked AppKit harness and in-process native input are macOS-only"
+    },
+    {
+      "id": "agent-reload",
+      "code": 0,
+      "durationMs": 11813
+    },
+    {
+      "id": "agent-terminals",
+      "code": 0,
+      "durationMs": 23990
+    },
+    {
+      "id": "palette-order",
+      "code": 0,
+      "durationMs": 47151
+    },
+    {
+      "id": "quick-capture",
+      "code": 0,
+      "durationMs": 0,
+      "skipped": true,
+      "skipReason": "Quick Capture uses a macOS nonactivating panel"
+    },
+    {
+      "id": "session-creation-shortcuts",
+      "code": 0,
+      "durationMs": 31707
+    },
+    {
+      "id": "close-desktop",
+      "code": 0,
+      "durationMs": 20956
+    },
+    {
+      "id": "close-pane-nonblocking",
+      "code": 0,
+      "durationMs": 10828
+    },
+    {
+      "id": "session-close-ledger",
+      "code": 0,
+      "durationMs": 6447
+    },
+    {
+      "id": "profile-lifecycle",
+      "code": 0,
+      "durationMs": 11899
+    },
+    {
+      "id": "garden-profile-scope",
+      "code": 0,
+      "durationMs": 17543
+    },
+    {
+      "id": "garden-seed-header",
+      "code": 0,
+      "durationMs": 33085
+    },
+    {
+      "id": "notebook-sync",
+      "code": 0,
+      "durationMs": 42079
+    },
+    {
+      "id": "outposts-settings",
+      "code": 124,
+      "durationMs": 120106,
+      "outputTail": "[2026-10-31T12:03:16.736Z] assert:ok {\"message\":\"connecting agent typing is never replayed\",\"details\":{\"paneId\":\"pane-068da0c3-53ee-471a-82e9-1b920c4e4e3f\",\"sessionId\":\"f6ae370a-0c55-48dc-8979-c1bd9e14b6af\",\"size\":{\"cols\":107,\"rows\":34},\"text\":\"╭────────────────────────────────────────────────────────────────────────────────────────────────────────╮\\n│ Claude Code mock agent                       ...\n[2026-10-31T12:03:17.747Z] step:ok connecting_tiles_refuse_input_until_repaired {\"durationMs\":16904}\n[2026-10-31T12:03:17.747Z] step:start full_refusal_keyboard_repair_and_remove\n[2026-10-31T12:03:20.923Z] assert:ok {\"message\":\"refusal detail is shown in full\",\"details\":{\"destination\":\"scenario-outpost-alias\",\"id\":\"575eff3f-1dc1-47ae-b380-40d96ed422cc\",\"last_error\":\"same outpost as Studio (scenario-outpost), daemon d-d22168ccfa285d445ea2c2eec29ed949; remove one of these outpost rows\",\"last_error_at\":\"2026-10-31T12:03:20.676556059Z\",\"name\":\"Studio alias\",\"reach\":\"unreachabl...\n[2026-10-31T12:03:25.254Z] step:ok full_refusal_keyboard_repair_and_remove {\"durationMs\":7507}\n[harness] restored claude_executable=unconfigured\n[harness] restored codex_executable=unconfigured\n[2026-10-31T12:03:25.266Z] settings:restored {\"count\":2}\n[2026-10-31T12:03:25.266Z] cleanup:start {\"reason\":\"finish\",\"count\":14}\n[2026-10-31T12:03:25.266Z] cleanup:run {\"reason\":\"finish\",\"name\":\"release_connecting_requests\"}\n[2026-10-31T12:03:25.266Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"release_connecting_requests\"}\n[2026-10-31T12:03:25.266Z] cleanup:run {\"reason\":\"finish\",\"name\":\"restore_auto_settle_enabled\"}\n[2026-10-31T12:03:25.318Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"restore_auto_settle_enabled\"}\n[2026-10-31T12:03:25.319Z] cleanup:run {\"reason\":\"finish\",\"name\":\"restore_queue_mode_enabled\"}\n[2026-10-31T12:03:25.396Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"restore_queue_mode_enabled\"}\n[2026-10-31T12:03:25.397Z] cleanup:run {\"reason\":\"finish\",\"name\":\"close_created_terminals\"}\n[2026-10-31T12:03:25.574Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"close_created_terminals\"}\n[2026-10-31T12:03:25.574Z] cleanup:run {\"reason\":\"finish\",\"name\":\"restore_switch\"}\n[2026-10-31T12:03:25.779Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"restore_switch\"}\n[2026-10-31T12:03:25.779Z] cleanup:run {\"reason\":\"finish\",\"name\":\"remove_scenario_outposts\"}\n[2026-10-31T12:03:25.781Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"remove_scenario_outposts\"}\n[2026-10-31T12:03:25.781Z] cleanup:run {\"reason\":\"finish\",\"name\":\"save_outpost_log\"}\n[2026-10-31T12:03:25.781Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"save_outpost_log\"}\n[2026-10-31T12:03:25.781Z] cleanup:run {\"reason\":\"finish\",\"name\":\"close_ssh\"}\n[2026-10-31T12:03:25.781Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"close_ssh\"}\n[2026-10-31T12:03:25.782Z] cleanup:run {\"reason\":\"finish\",\"name\":\"close_observer\"}\n[2026-10-31T12:03:25.783Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"close_observer\"}\n[2026-10-31T12:03:25.783Z] cleanup:run {\"reason\":\"finish\",\"name\":\"quit_app\"}\n[2026-10-31T12:03:25.980Z] signal {\"signal\":\"SIGTERM\"}\n[2026-10-31T12:03:25.986Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"quit_app\"}\n[2026-10-31T12:03:25.986Z] cleanup:run {\"reason\":\"finish\",\"name\":\"stop_home_daemon\"}\n[2026-10-31T12:03:26.054Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"stop_home_daemon\"}\n[2026-10-31T12:03:26.054Z] cleanup:run {\"reason\":\"finish\",\"name\":\"stop_children\"}\n[2026-10-31T12:03:26.054Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"stop_children\"}\n[2026-10-31T12:03:26.054Z] cleanup:run {\"reason\":\"finish\",\"name\":\"close_clocks\"}\n[2026-10-31T12:03:26.055Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"close_clocks\"}\n[2026-10-31T12:03:26.055Z] cleanup:run {\"reason\":\"finish\",\"name\":\"remove_scratch\"}\n[2026-10-31T12:03:26.074Z] cleanup:ok {\"reason\":\"finish\",\"name\":\"remove_scratch\"}\n[2026-10-31T12:03:26.075Z] cleanup:done {\"reason\":\"finish\"}\nATTN_VERDICT {\"ok\":true,\"scenarioId\":\"OutpostsSettings\",\"runId\":\"outposts-settings-2026-10-31T12-01-26-136Z\",\"failureCount\":0,\"firstFailure\":null,\"artifactsDir\":\"/home/runner/work/_temp/attn-real-app-harness/outposts-settings-2026-10-31T12-01-26-136Z\",\"summaryPath\":\"/home/runner/work/_temp/attn-real-app-harness/outposts-settings-2026-10-31T12-01-26-136Z/summary.json\",\"durationMs\":120005}"
+    },
+    {
+      "id": "refresh-focus",
+      "code": 0,
+      "durationMs": 10956
+    },
+    {
+      "id": "automation-lifecycle",
+      "code": 0,
+      "durationMs": 16341
+    },
+    {
+      "id": "automation-scheduled-cleanup",
+      "code": 0,
+      "durationMs": 31609
+    },
+    {
+      "id": "worktree-surface",
+      "code": 0,
+      "durationMs": 46279
+    },
+    {
+      "id": "terminal-block-copy",
+      "code": 0,
+      "durationMs": 0,
+      "skipped": true,
+      "skipReason": "Cmd+C reaches the terminal through the macOS menu accelerator"
+    },
+    {
+      "id": "pty-host-setting",
+      "code": 0,
+      "durationMs": 26647
+    },
+    {
+      "id": "tr301-local-claude",
+      "code": 0,
+      "durationMs": 24343
+    }
+  ]
+}

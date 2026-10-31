@@ -143,7 +143,7 @@ func TestWorkerRemovalWaitsForResistantChild(t *testing.T) {
 	}
 	removed := make(chan error, 1)
 	go func() { removed <- backend.Remove(context.Background(), id) }()
-	awaitTimer(t, resistantChildKillAfter)
+	awaitTimer(t, pty.KillDeadlineTimer)
 	select {
 	case err := <-removed:
 		t.Fatalf("removal finished before the child's %s kill deadline: %v", resistantChildKillAfter, err)

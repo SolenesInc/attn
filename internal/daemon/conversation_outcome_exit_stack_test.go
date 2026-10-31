@@ -11,7 +11,7 @@ import (
 
 func TestAnExitBeforeAConversationOutcomeEndsTheCommittedConversation(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	outcome := s.PauseAt(pausepoint.ConversationOutcome)
+	outcome := s.PauseAt(pausepoint.ConversationMoveSaved)
 	exiting := s.PauseAt(pausepoint.PtyExitHandled)
 	s.Start()
 	app := s.App()

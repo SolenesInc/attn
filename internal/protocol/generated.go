@@ -3309,6 +3309,9 @@ type CrewSetMessage struct {
 	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
 	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
 
+	// Home corresponds to the JSON schema field "home".
+	Home *string `json:"home,omitempty,omitzero"`
+
 	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
 	LaunchDesktop *string `json:"launch_desktop,omitempty,omitzero"`
 
@@ -3853,6 +3856,10 @@ type DelegationPreferencesChangedMessage struct {
 type DelegationPreferencesCommitMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// InstallWorkflowSkill corresponds to the JSON schema field
+	// "install_workflow_skill".
+	InstallWorkflowSkill *bool `json:"install_workflow_skill,omitempty,omitzero"`
 
 	// Message corresponds to the JSON schema field "message".
 	Message *string `json:"message,omitempty,omitzero"`
@@ -9516,6 +9523,9 @@ type Response struct {
 
 	// TerminalWaitResult corresponds to the JSON schema field "terminal_wait_result".
 	TerminalWaitResult *TerminalWaitResult `json:"terminal_wait_result,omitempty,omitzero"`
+
+	// WorkflowSkillPaths corresponds to the JSON schema field "workflow_skill_paths".
+	WorkflowSkillPaths []string `json:"workflow_skill_paths,omitempty,omitzero"`
 
 	// WorktreeKeepResult corresponds to the JSON schema field "worktree_keep_result".
 	WorktreeKeepResult *WorktreeKeepResult `json:"worktree_keep_result,omitempty,omitzero"`

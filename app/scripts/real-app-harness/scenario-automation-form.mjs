@@ -194,17 +194,6 @@ async function main() {
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
-  const nativeClick = async (selector) => {
-    await client.request('dom_scroll_into_view', { selector });
-    const { bounds } = await client.request('dom_bounds', { selector });
-    const { logicalBounds: window } = await client.request('get_window_bounds');
-    const { viewport } = await client.request('dom_focus_state');
-    await driver.clickWindow(
-      (Math.max(0, window.width - viewport.innerWidth) / 2 + bounds.x + bounds.width / 2) / window.width,
-      (Math.max(0, window.height - viewport.innerHeight) + bounds.y + bounds.height / 2) / window.height,
-    );
-  };
-
   const suffix = Date.now().toString(36);
   let primaryID = 0;
   let githubID = 0;
@@ -575,15 +564,14 @@ async function main() {
         directoryPath: fixturePath,
         prompt: 'Work only when the guard prints something new.',
       } });
-      await nativeClick('[data-testid="automation-form-guard"]');
-      await driver.typeText(guard);
+      await driver.typeInto('[data-testid="automation-form-guard"]', guard);
       const sentence = await client.request('dom_wait', {
         selector: '[data-testid="automation-form-sentence"]',
         textIncludes: `only when ${guard} prints something new`,
         timeoutMs: FORM_TIMEOUT_MS,
       });
       runner.writeJson('guard-form-sentence.json', sentence);
-      await nativeClick('[data-testid="automation-form-save"]');
+      await driver.click('[data-testid="automation-form-save"]');
       await client.request('dom_wait', { selector: '[data-testid="automation-form"]', absent: true, timeoutMs: FORM_TIMEOUT_MS });
       const savedAt = performance.now();
       const saved = (runJSON(binary, ['automation', 'list'], daemonEnv) || []).find((row) => row.name === guardName);
@@ -592,7 +580,7 @@ async function main() {
       createdDefinitions.add(guardID);
       const reopened = await openForm(client, { definitionId: guardID });
       runner.assert(reopened.values.guard === guard, 'the saved guard reloads into the form', reopened);
-      await nativeClick('[data-testid="automation-form-cancel"]');
+      await driver.click('[data-testid="automation-form-cancel"]');
 
       const selector = `[data-testid="automation-guard-check-${guardID}"]`;
       const emptyWaitStartedAt = performance.now();

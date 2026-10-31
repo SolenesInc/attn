@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -25,7 +26,7 @@ func readNotebookWSEvent(t *testing.T, ch chan outboundMessage, target any) {
 		if err := json.Unmarshal(message.payload, target); err != nil {
 			t.Fatalf("decode ws event: %v", err)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		t.Fatal("no websocket result event was sent")
 	}
 }
@@ -51,7 +52,7 @@ func TestNotebookWatcherFollowsRootChange(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	deadline := time.After(3 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	for {
 		select {
 		case message := <-client.send:

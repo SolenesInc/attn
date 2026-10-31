@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { LocationPickerProps } from './LocationPicker';
 import type { RecentLocation } from '../hooks/useDaemonSocket';
 import type { SessionAgent } from '../types/sessionAgent';
@@ -228,7 +228,7 @@ export function NewSessionLauncher({
     ];
   }, [where, branch]);
   const memory = where ? remember(where.repo) : 'main_repo';
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!where?.info) return;
     const exact = branch.trim()
       ? whereRows.findIndex((row) => row.kind === 'existing' && row.branch === branch.trim())

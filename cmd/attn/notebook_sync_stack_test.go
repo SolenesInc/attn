@@ -264,7 +264,7 @@ func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 			pending.Await()
 			closed.Release()
 			writeNotebookFile(t, home, "replacement.md", "synced by the replacement stream")
-			home.AwaitTimer(bridge.ReconnectInterval)
+			home.AwaitTimer(bridge.RetryTimer)
 			pair.Reconnect()
 			home.Advance(bridge.ReconnectInterval)
 			awaitNotebookFile(t, remoteApp, outpost, "replacement.md", "synced by the replacement stream", false)

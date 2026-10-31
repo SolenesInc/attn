@@ -44,17 +44,6 @@ async function main() {
   // Native palette opening took 420ms locally; this guards a hung UI, not input timing.
   const waitDom = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
   const focusedChoice = (id) => waitDom(`[data-testid="snooze-choice-${id}"]`, { focused: true });
-  const hover = async (selector) => {
-    const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-      client.request('dom_bounds', { selector }),
-      client.request('get_window_bounds'),
-      client.request('get_terminal_context_menu_state'),
-    ]);
-    await driver.movePointerInWindow(
-      (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-      (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-    );
-  };
   const palette = async (query) => {
     await pressShortcutKeys(client, driver, 'ui.commandPalette');
     await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
@@ -178,7 +167,7 @@ async function main() {
       await driver.pressKey('ArrowDown');
       await focusedChoice('1h');
       await driver.pressKey('Escape');
-      await hover('[data-testid="sidebar-home"]');
+      await driver.hover('[data-testid="sidebar-home"]');
       await waitDom('[data-testid="snooze-menu"]', { absent: true });
       await waitDom('[data-testid="delegation-chain-popover"]', { absent: true });
       await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);

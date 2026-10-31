@@ -250,6 +250,28 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 	requireStdout(t, s.Attn("crew", "rename", "Anchor", "Keeper"), "Anchor is now Keeper; its home keeps its folder while it is awake and moves to one named after Keeper at its next wake. Its key member:keel, letters and mail stay.")
 }
 
+func TestCrewSetHomeRepointsFromTheCallersFolder(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	writeCharter(t, s, "keel")
+	s.Start()
+	var moved protocol.CrewMoveHomeResult
+	s.Attn("crew", "move-home", "Keel", "--json").JSON(t, &moved)
+	tidied := s.Path("tidied")
+	if err := os.MkdirAll(tidied, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(moved.Member.HomeDir, filepath.Join(tidied, "old-keel")); err != nil {
+		t.Fatal(err)
+	}
+	refused := s.Run(testworld.Invocation{Args: []string{"crew", "set", "Keel", "--home", "."}, Dir: tidied})
+	if refused.Code != 1 || !strings.Contains(refused.Stderr, tidied+" has no CHARTER.md") {
+		t.Fatalf("--home at a folder without a charter: %+v", refused)
+	}
+	set := s.Run(testworld.Invocation{Args: []string{"crew", "set", "Keel", "--home", "old-keel"}, Dir: tidied})
+	requireStdout(t, set, "home: "+filepath.Join(tidied, "keel"))
+}
+
 func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))

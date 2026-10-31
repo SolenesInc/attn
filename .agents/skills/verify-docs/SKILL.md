@@ -47,6 +47,7 @@ It covers:
 - Does anything now refer to a renamed or removed thing, or give an example
   that is no longer true?
 - Does it use glossary terms, and no legacy names?
+- Does it follow `internal/prompts/content/skills/attn-workflow/references/technical-writing.md`?
 - Does it follow `AGENTS.md`: no implementation notes, product prompts address
   the user?
 - Text that agents load in every session, like `AGENTS.md`, the glossary and

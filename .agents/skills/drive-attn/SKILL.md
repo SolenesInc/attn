@@ -121,7 +121,7 @@ The two `protocol.` checks fail because no app is installed, so it prints
 
 ## Drive
 
-| Harness | Door | Reaches | Cannot reach |
+| Harness | Entrypoint | Reaches | Cannot reach |
 | --- | --- | --- | --- |
 | `./attn <verb>` in the instance shell | A person's own shell; agents, for verbs that need no session | Every CLI verb, `--json` output, exit codes | The app; verbs that act as a session, such as `seed tend`, `seed watch` and `terminal`, refuse without one |
 | Mock agent | Agents | The CLI and prompts as a session in the instance sees them | Model judgment: it does only what its fixture says |
@@ -156,7 +156,8 @@ actions: `attn` runs an attn verb as that session, `reply` prints text,
 '{"selector":"...","timeoutMs":5000}'`, which waits for a selector. Native
 input: `native_key '{"key":"t","modifiers":["command","shift"]}'`,
 `native_text '{"text":"..."}'`, `native_mouse
-'{"action":"click","x":0.5,"y":0.5}'` with window-relative coordinates.
+'{"action":"click","x":0.5,"y":0.5}'` with window-relative coordinates from
+`dom_native_point '{"selector":"..."}'`.
 Capture: `capture_screenshot '{"path":"<file>"}'`. DOM actions (`dom_click`,
 `dispatch_shortcut`, `garden_toggle_frame` and the like) skip native input:
 use them to set up, never as proof of a person's way in. The actions are the

@@ -304,6 +304,57 @@ func TestDelegateRolesEditWalkBackAndRestoreTheDaemonsTable(t *testing.T) {
 	requireLines(t, "roles history", roles("history", "--limit", "7"), "revision 7 (live)", "restores 4", "from the CLI", `"the user wants a builder"`, "added role build (claude opus high)")
 }
 
+func TestDelegateRolesInstallAddsAttnRolesBesideCustomOnesOnce(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
+	s.Start()
+	roles := func(args ...string) string {
+		t.Helper()
+		got := s.Attn(append([]string{"delegate", "roles"}, args...)...)
+		if got.Code != 0 {
+			t.Fatalf("attn delegate roles %q exited %d: %s", args, got.Code, got.Stderr)
+		}
+		return got.Stdout
+	}
+	table := func() []protocol.DelegationRole {
+		t.Helper()
+		var preferences protocol.DelegationPreferences
+		s.Attn("delegate", "roles", "show", "--json").JSON(t, &preferences)
+		if !preferences.Enabled || !preferences.WorkflowSkillEnabled {
+			t.Fatalf("after install the table is enabled=%t with attn-workflow=%t, want both on", preferences.Enabled, preferences.WorkflowSkillEnabled)
+		}
+		return preferences.Roles
+	}
+	ids := func(roles []protocol.DelegationRole) []string {
+		var result []string
+		for _, role := range roles {
+			result = append(result, role.ID+"="+string(protocol.Deref(role.Builtin)))
+		}
+		return result
+	}
+
+	roles("add", "special", "--name", "Specialist", "--agent", "claude", "--model", "sonnet")
+	roles("add", "builder", "--name", "My builder", "--agent", "claude", "--model", "sonnet")
+	skills := []string{filepath.Join(s.Dir, "toolhome", ".agents", "skills", "attn-workflow"), filepath.Join(s.Dir, "toolhome", ".claude", "skills", "attn-workflow")}
+	requireLines(t, "roles install", roles("install", "-m", "use Attn roles"),
+		"installed "+skills[0], "installed "+skills[1], "revision 3", "pathfinder", "builder-2", "reviewer", "orchestrator", "prototyper", "special")
+	for _, skill := range skills {
+		if _, err := os.Stat(filepath.Join(skill, "SKILL.md")); err != nil {
+			t.Errorf("install printed %s but the skill is missing: %v", skill, err)
+		}
+	}
+	want := []string{"special=", "builder=", "pathfinder=pathfinder", "builder-2=builder", "reviewer=reviewer", "orchestrator=orchestrator", "prototyper=prototyper"}
+	if got := ids(table()); !slices.Equal(got, want) {
+		t.Fatalf("roles after install = %v, want the custom roles first and every Attn role once: %v", got, want)
+	}
+	requireLines(t, "roles history", roles("history", "--limit", "1"), "revision 3 (live)", `"use Attn roles"`)
+
+	roles("install")
+	if got := ids(table()); !slices.Equal(got, want) {
+		t.Fatalf("roles after a second install = %v, want them unchanged: %v", got, want)
+	}
+}
+
 func TestDelegateDesktopPlacesTheAgentOnTheNamedDesktop(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))

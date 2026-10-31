@@ -83,6 +83,7 @@ func TestAPiSessionIsPricedFromTheTranscriptItsDriverReportsGuardianIncluded(t *
 	lines := piTranscriptLines(t)
 	appendTranscript(t, path, lines[:5])
 	appendTranscript(t, path, lines[5:])
+	w.readTranscripts()
 	usage := awaitPricedRows(app, session, 17386)
 	agent, guardian := usageRow(usage, "agent"), usageRow(usage, "guardian")
 	if agent.Model != "deepseek-v4-flash" || agent.OutputTokens != 1292 {
@@ -114,6 +115,7 @@ func TestAPiSessionThatEndsBeforeItsTranscriptAppearsIsNotIncomplete(t *testing.
 		t.Fatal(err)
 	}
 	appendTranscript(t, path, piTranscriptLines(t))
+	w.readTranscripts()
 	if usage := awaitPricedRows(app, session, 17386); protocol.Deref(usage.MeasurementIncomplete) {
 		t.Errorf("the usage = %+v, want the run that ended before writing anything not to mark it incomplete", usage)
 	}
@@ -145,4 +147,33 @@ func TestAPiTranscriptReportedAfterItAlreadyExistsKeepsItsHeadBaseline(t *testin
 			t.Fatalf("new usage after the baseline = %+v", agent)
 		}
 	})
+}
+
+func TestATranscriptTheReloadingRunReportsBeforeItsLaunchCommitsPricesTheSession(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	driver := connectDriver(t, w, "attn-pi", "pi", map[string]bool{"state_reporting": true, "resume": true})
+	awaitDriverAvailable(app, "pi")
+	session, first := spawnDriven(w, app, driver, w.Path("shop"))
+	driver.mu.Lock()
+	driver.holdLaunch = true
+	driver.mu.Unlock()
+	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 80, Rows: 24})
+	var reloading driverLaunch
+	reply := driver.asked("driver.resume", &reloading)
+	driver.launched()
+	path := w.Path("pi-session.jsonl")
+	if err := reportTranscript(driver, reloading.SessionID, reloading.RunID, path); err != nil {
+		t.Fatalf("the reloading run's transcript report was refused: %v", err)
+	}
+	driver.answer(reply, map[string]any{"argv": []string{"/bin/cat"}})
+	if result := testworld.Await(app, protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session }); !result.Success {
+		t.Fatal(protocol.Deref(result.Error))
+	}
+	if closed := driver.closed(); closed.RunID != first.RunID {
+		t.Fatalf("the reload closed run %s, want the replaced run %s", closed.RunID, first.RunID)
+	}
+	appendTranscript(t, path, piTranscriptLines(t))
+	w.readTranscripts()
+	awaitPricedRows(app, session, 17386)
 }

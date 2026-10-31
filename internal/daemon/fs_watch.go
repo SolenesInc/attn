@@ -163,11 +163,11 @@ func (d *Daemon) ensureRootWatcher(root string) error {
 	return nil
 }
 
-func (d *Daemon) noteSelfWrite(root string, writes ...notebook.SelfWrite) {
+func (d *Daemon) mutateRoot(root string, mutate func() []notebook.SelfWrite) {
 	d.rootWatcherMu.Lock()
 	w := d.rootWatchers[root]
 	d.rootWatcherMu.Unlock()
-	w.NoteSelfWrite(writes...)
+	w.Mutate(mutate)
 }
 
 func (d *Daemon) pruneRootWatchers() {

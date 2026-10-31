@@ -679,7 +679,7 @@ func (d *Daemon) sendNotebookSyncReports(conn *bridge.Conn) {
 		if err == nil {
 			var state protocol.OutpostNotebook
 			err = conn.Call(conn.Context(), bridgeCall, protocol.NotebookSyncReportMessage{Cmd: protocol.CmdNotebookSyncReport, Report: string(encoded)}, &state)
-			pausepoint.At(pausepoint.NotebookReportSent)
+			pausepoint.Done(pausepoint.NotebookReportSent, err)
 			if err == nil {
 				d.notebookSync.mu.Lock()
 				if run := d.notebookSync.run; run != nil {

@@ -105,17 +105,16 @@ type Daemon struct {
 	outpost             outpostRuntime
 	recentFileStat      func(string) (os.FileInfo, error)
 	recentFilePruneGate chan struct{}
-	// Nil in production; wire tests pause a profile action here, its broadcasts held, to land a change meanwhile.
-	heldActionRan    atomic.Pointer[func()]
-	socketPath       string
-	pidPath          string
-	pidFile          *os.File
-	dataRoot         string
-	daemonInstanceID string
-	clientToken      string
-	store            *store.Store
+	socketPath          string
+	pidPath             string
+	pidFile             *os.File
+	dataRoot            string
+	daemonInstanceID    string
+	clientToken         string
+	store               *store.Store
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu                sync.Mutex
+	prDetailFetches            prDetailFetches
 	automationMu               sync.Mutex
 	automationLaunchFailures   sync.Map
 	automationLaunchResults    sync.Map
@@ -3510,11 +3509,11 @@ func (d *Daemon) fetchPRDetailsForID(id string) ([]*protocol.PR, error) {
 		return nil, fmt.Errorf("no client for host %s", host)
 	}
 
-	details, err := client.FetchPRDetails(repo, number)
+	changed, err := d.fetchPRDetails(client, id, repo, number)
 	if err != nil {
 		return nil, fmt.Errorf("fetch details for %s: %w", id, err)
 	}
-	if d.store.UpdatePRDetails(id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch) {
+	if changed {
 		d.publishFact(FactPRDetailsChanged, id, nil)
 	}
 
@@ -3725,7 +3724,7 @@ func (d *Daemon) doDetailRefresh() {
 			continue
 		}
 
-		details, err := client.FetchPRDetails(pr.Repo, pr.Number)
+		changed, err := d.fetchPRDetails(client, pr.ID, pr.Repo, pr.Number)
 		if err != nil {
 			if errors.Is(err, github.ErrRateLimited) {
 				if info := client.GetRateLimit("core"); info != nil {
@@ -3739,19 +3738,8 @@ func (d *Daemon) doDetailRefresh() {
 				limitedHosts[host] = time.Now().Add(60 * time.Second)
 				continue
 			}
-			d.logf("Failed to fetch details for %s: %v", pr.ID, err)
+			d.logf("Failed to refresh details for %s: %v", pr.ID, err)
 			continue
-		}
-
-		var changed bool
-		stored := d.life.Do("doDetailRefresh", func() {
-			if prHeadSHA := protocol.Deref(pr.HeadSHA); prHeadSHA != "" && details.HeadSHA != prHeadSHA {
-				d.store.SetPRHot(pr.ID)
-			}
-			changed = d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-		})
-		if !stored {
-			return
 		}
 		if changed {
 			changedIDs = append(changedIDs, pr.ID)
@@ -3773,7 +3761,7 @@ func (d *Daemon) doDetailRefresh() {
 		}
 	}
 
-	d.life.Do("doDetailRefresh", func() { d.publishPRDetailsChanged("Detail refresh", changedIDs) })
+	d.publishPRDetailsChanged("Detail refresh", changedIDs)
 }
 
 func (d *Daemon) publishPRDetailsChanged(origin string, ids []string) {
@@ -3839,7 +3827,7 @@ func (d *Daemon) fetchAllPRDetails() {
 			continue
 		}
 
-		details, err := client.FetchPRDetails(pr.Repo, pr.Number)
+		changed, err := d.fetchPRDetails(client, pr.ID, pr.Repo, pr.Number)
 		if err != nil {
 			if errors.Is(err, github.ErrRateLimited) {
 				if info := client.GetRateLimit("core"); info != nil {
@@ -3855,13 +3843,6 @@ func (d *Daemon) fetchAllPRDetails() {
 			}
 			d.logf("Failed to fetch details for %s: %v", pr.ID, err)
 			continue
-		}
-
-		var changed bool
-		if !d.life.Do("fetchAllPRDetails", func() {
-			changed = d.store.UpdatePRDetails(pr.ID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
-		}) {
-			return
 		}
 		if changed {
 			changedIDs = append(changedIDs, pr.ID)
@@ -3883,7 +3864,7 @@ func (d *Daemon) fetchAllPRDetails() {
 		}
 	}
 
-	d.life.Do("fetchAllPRDetails", func() { d.publishPRDetailsChanged("App launch", changedIDs) })
+	d.publishPRDetailsChanged("App launch", changedIDs)
 }
 
 func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMessage) {
@@ -4069,7 +4050,7 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 
 	d.store.SetPRHot(prID)
 
-	details, err := client.FetchPRDetails(pr.Repo, pr.Number)
+	changed, err := d.fetchPRDetails(client, prID, pr.Repo, pr.Number)
 	if err != nil {
 		if errors.Is(err, github.ErrRateLimited) {
 			d.logf("Immediate fetch for %s: rate limited", prID)
@@ -4086,7 +4067,7 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 		return
 	}
 
-	if d.store.UpdatePRDetails(prID, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch) {
+	if changed {
 		d.publishFact(FactPRDetailsChanged, prID, nil)
 	}
 	d.logf("Immediate fetch complete for %s (heat=hot)", prID)

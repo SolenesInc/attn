@@ -39,7 +39,7 @@ func Validate(c Config) error {
 				return fmt.Errorf("role %q has unknown built-in %q", role.ID, *role.Builtin)
 			}
 			if !c.WorkflowSkillEnabled {
-				return fmt.Errorf("role %q requires the attn-workflow skill opt-in", role.ID)
+				return fmt.Errorf("role %q is an Attn role and needs the attn-workflow skill; install it with attn delegate roles install, or Add Attn roles in Settings > Delegation", role.ID)
 			}
 			if strings.TrimSpace(role.Name+role.Icon+role.Description+role.Instructions+role.StoppingPoint) != "" {
 				return fmt.Errorf("role %q copies maintained guidance; save only its built-in reference and choices", role.ID)

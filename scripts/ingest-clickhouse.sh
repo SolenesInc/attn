@@ -10,14 +10,29 @@ name=attn-ingest-clickhouse
 port="${ATTN_INGEST_CLICKHOUSE_PORT:-18123}"
 url="http://attn:attn@127.0.0.1:${port}/"
 ready_seconds=60
+docker_unreachable=3
 
 case "${1:-}" in
 start)
-  if [[ -z "$(docker ps -q --filter "name=^${name}$")" ]]; then
-    docker rm -f "$name" >/dev/null 2>&1 || true
-    docker run -d --name "$name" -p "127.0.0.1:${port}:8123" \
+  if ! command -v docker >/dev/null; then
+    echo "ClickHouse needs Docker, and there is no docker command: install OrbStack or Docker" >&2
+    exit "$docker_unreachable"
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "ClickHouse needs Docker, and no Docker daemon answers: start OrbStack or Docker" >&2
+    exit "$docker_unreachable"
+  fi
+  existing="$(docker inspect --format '{{.Id}} {{.Config.Image}}' "$name" 2>/dev/null || true)"
+  read -r existing_id existing_image <<<"$existing"
+  if [[ -n "$existing_id" && "$existing_image" != "$image" ]]; then
+    docker rm -f "$existing_id" >/dev/null 2>&1 || true
+  fi
+  if ! docker start "$name" >/dev/null 2>&1; then
+    if ! run_output="$(docker run -d --name "$name" -p "127.0.0.1:${port}:8123" \
       -e CLICKHOUSE_USER=attn -e CLICKHOUSE_PASSWORD=attn \
-      -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 "$image" >/dev/null
+      -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 "$image" 2>&1)"; then
+      [[ "$run_output" == *Conflict* ]] || { echo "$run_output" >&2; exit 1; }
+    fi
   fi
   deadline=$((SECONDS + ready_seconds))
   until curl -sf "$url" --data-binary 'SELECT 1' >/dev/null; do

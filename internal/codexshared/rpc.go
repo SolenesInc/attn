@@ -144,13 +144,15 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 	}
 	select {
 	case m := <-reply:
-		if len(m.Error) > 0 {
-			return nil, &RPCError{Method: method, Reply: m.Error}
-		}
-		return m.Result, nil
+		return replyResult(method, m)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-c.done:
+		select {
+		case m := <-reply:
+			return replyResult(method, m)
+		default:
+		}
 		c.mu.Lock()
 		err := c.err
 		c.mu.Unlock()
@@ -159,6 +161,13 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 		}
 		return nil, err
 	}
+}
+
+func replyResult(method string, m Message) (json.RawMessage, error) {
+	if len(m.Error) > 0 {
+		return nil, &RPCError{Method: method, Reply: m.Error}
+	}
+	return m.Result, nil
 }
 
 func (c *Client) Respond(ctx context.Context, id json.RawMessage, result any) error {

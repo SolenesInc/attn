@@ -6,149 +6,115 @@ report="$root/scripts/ci-flake-report.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-flake-report-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-mkdir -p "$work/bin" "$work/logs"
+mkdir -p "$work/bin" "$work/gh" "$work/repo"
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+cd "$work/repo"
+git init -q -b main
+for n in 1 2 3; do
+  git -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m "commit $n"
+  commit[n]="$(git rev-parse HEAD)"
+done
 
-cat >"$work/runs.json" <<'EOF'
-[
-  {"databaseId":901,"headSha":"aaaa1111","headBranch":"next","conclusion":"failure",
-   "createdAt":"2026-09-06T01:00:00Z","attempt":1,"event":"push","status":"completed"},
-  {"databaseId":902,"headSha":"aaaa1111","headBranch":"next","conclusion":"success",
-   "createdAt":"2026-09-06T02:00:00Z","attempt":1,"event":"push","status":"completed"},
-  {"databaseId":903,"headSha":"bbbb2222","headBranch":"next","conclusion":"cancelled",
-   "createdAt":"2026-09-06T03:00:00Z","attempt":1,"event":"push","status":"completed"}
-]
+unit() { printf 'go ./internal/example %s' "$1"; }
+case_result() { jq -nc --arg unit "$(unit "$1")" --arg case "$2" --arg outcome "$3" '{unit: $unit, case: $case, attempt: 1, outcome: $outcome}'; }
+result() { jq -nc --arg unit "$(unit "$1")" --argjson attempt "$2" --arg outcome "$3" --argjson cached "${4:-false}" \
+  '{unit: $unit, attempt: $attempt, outcome: $outcome, cached: $cached}'; }
+artifact() {
+  local run="$1" commit="$2"
+  shift 2
+  mkdir -p "$work/receipt-$run"
+  jq -n --arg id "ci-$run" --arg run "$run" --arg commit "$commit" --slurpfile results <(printf '%s\n' "$@") '{
+    schema: "attn.test-receipt/v1", repo: "github.com/example/attn", invocation_id: $id, runner: "go",
+    source: {kind: "ci", run_id: $run, attempt: "1", job: "packages"},
+    revision: {commit: $commit, tree: "t"}, lane: {os: "linux", arch: "amd64", race: false},
+    diagnostics: {machine_class: "github-hosted"},
+    command: {argv: ["test"], started_at: "2026-10-31T10:00:00Z", finished_at: "2026-10-31T10:01:00Z", exit: {code: 1}},
+    results: $results, complete: true}' >"$work/receipt-$run/ci-$run.json"
+  (cd "$work/receipt-$run" && zip -qr "$work/gh/zip-$run.zip" .)
+}
+
+artifact 900 "${commit[1]}" "$(case_result TestSubcase TestSubcase/other pass)" "$(result TestSubcase 1 pass)"
+artifact 901 "${commit[1]}" "$(case_result TestSubcase TestSubcase/broken fail)" "$(result TestSubcase 1 fail)" "$(result TestFlaky 1 fail)" "$(result TestFlaky 2 pass)" \
+  "$(result TestBroken 1 fail)" "$(result TestSkipped 1 skip)" "$(result TestRelapsed 1 fail)" "$(result TestRelapsed 2 pass)"
+artifact 902 "${commit[2]}" "$(result TestFlaky 1 pass)" "$(result TestBroken 1 pass true)" "$(result TestRelapsed 1 pass)"
+artifact 903 "${commit[3]}" "$(result TestFlaky 1 pass)" "$(result TestBroken 1 pass)" "$(result TestRelapsed 1 fail)" "$(result TestRelapsed 2 fail)"
+artifact 904 "${commit[3]}" "$(result TestHidden 1 fail)"
+
+listing() { printf '{"artifacts":[{"id":%s,"name":"%s","expired":%s}]}\n' "$2" "$3" "$4" >"$work/gh/artifacts-$1.json"; }
+listing 900 900 test-receipts-packages-1 false
+listing 901 901 test-receipts-packages-1 false
+listing 902 902 test-receipts-packages-1 false
+listing 903 903 test-receipts-packages-1 false
+listing 904 904 test-receipts-packages-1 true
+listing 905 9050 app-acceptance-digest-1 false
+cat >"$work/gh/runs.json" <<'EOF'
+[{"databaseId":906,"status":"in_progress"},{"databaseId":905,"status":"completed"},
+ {"databaseId":904,"status":"completed"},{"databaseId":903,"status":"completed"},
+ {"databaseId":902,"status":"completed"},{"databaseId":901,"status":"completed"},
+ {"databaseId":900,"status":"completed"}]
 EOF
 
-cat >"$work/jobs-901.json" <<'EOF'
-{"jobs":[{"id":5001,"name":"App acceptance","conclusion":"failure"}]}
-EOF
-cat >"$work/jobs-902.json" <<'EOF'
-{"jobs":[]}
-EOF
-cat >"$work/jobs-903.json" <<'EOF'
-{"jobs":[{"id":5002,"name":"App acceptance","conclusion":"failure"}]}
-EOF
-
-printf '%s\n' \
-  '2026-09-06T03:16:57.9648747Z PASS  garden-plot-dispatch                          61.2s' \
-  '2026-09-06T03:16:57.9648747Z FAIL  worktree-surface                              97.8s' \
-  '2026-09-06T03:16:57.9648747Z SKIP  terminal-block-copy                           needs macOS' \
-  >"$work/logs/5001.log"
-printf '%s\n' \
-  '2026-09-06T03:17:57.9648747Z FAIL  agent-close                                  37.5s' \
-  >"$work/logs/5002.log"
-
-# gh 2.98 refuses to write a job log without --allow-escape-sequences;
-# `advertises` is whether `gh api --help` offers the flag at all.
-fake_gh() {
-  local advertises="$1"
-  cat >"$work/bin/gh" <<EOF
+cat >"$work/bin/gh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-if [ "\$1" = run ] && [ "\$2" = list ]; then cat "$work/runs.json"; exit 0; fi
-if [ "\$1" = api ] && [ "\$2" = --help ]; then
-  if [ "$advertises" = yes ]; then
-    echo '      --allow-escape-sequences   Allow printing terminal escape sequences'
-  fi
-  exit 0
+if [ "\$1 \$2" = "run list" ]; then
+  [[ " \$* " == *" --workflow ci.yml "* ]] || { echo "run list without --workflow ci.yml: \$*" >&2; exit 2; }
+  limit="\$(sed -E 's/.*--limit ([0-9]+).*/\\1/' <<<"\$*")"
+  jq ".[:\$limit]" "$work/gh/runs.json"; exit 0
 fi
-allowed=no
-for arg in "\$@"; do [ "\$arg" = --allow-escape-sequences ] && allowed=yes; done
 for arg in "\$@"; do
   case "\$arg" in
-    */attempts/*/jobs*)
-      run="\${arg#repos/*/actions/runs/}"; run="\${run%%/*}"
-      attempt="\${arg#*/attempts/}"; attempt="\${attempt%%/*}"
-      if [ -f "$work/jobs-\$run-\$attempt.json" ]; then
-        cat "$work/jobs-\$run-\$attempt.json"; exit 0
-      fi
-      cat "$work/jobs-\$run.json"; exit 0 ;;
-    */jobs/*/logs)
-      job="\${arg#repos/*/actions/jobs/}"; job="\${job%/logs}"
-      if [ "\$allowed" = no ]; then
-        echo 'the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway' >&2
-        exit 1
-      fi
-      cat "$work/logs/\$job.log"; exit 0 ;;
+    repos/example/attn/actions/runs/*/artifacts*)
+      run="\${arg#repos/example/attn/actions/runs/}"; run="\${run%%/*}"
+      cat "$work/gh/artifacts-\$run.json"; exit 0 ;;
+    repos/example/attn/actions/artifacts/*/zip)
+      [ -z "\${FAKE_GH_DOWNLOADS_FAIL:-}" ] || { echo "HTTP 401" >&2; exit 1; }
+      id="\${arg#repos/example/attn/actions/artifacts/}"; id="\${id%/zip}"
+      cat "$work/gh/zip-\$id.zip"; exit 0 ;;
   esac
 done
 echo "unexpected gh command: \$*" >&2
 exit 2
 EOF
-  chmod +x "$work/bin/gh"
-}
-
+chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
+
 fail() { echo "ci-flake-report test: $1" >&2; exit 1; }
+run_report() { ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn --main main "$@"; }
+expect() { grep -qF -- "$2" <<<"$1" || fail "missing '$2' from:
+$1"; }
+refuse() { if grep -qF -- "$2" <<<"$1"; then fail "unexpected '$2' in:
+$1"; fi; }
+short() { git rev-parse --short=9 "$1"; }
 
-run_report() {
-  rm -rf "$work/cache"
-  ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn "$@"
-}
+out="$(run_report --format json --dormant-after 2)"
+records="$(jq -c '[.failures[] | [.unit, .flaky_commits, .failed_commits, .passes_since]]' <<<"$out")"
+[ "$records" = '[["go ./internal/example TestRelapsed",1,2,0],["go ./internal/example TestFlaky",1,1,2],["go ./internal/example TestBroken",0,1,1],["go ./internal/example TestSubcase",0,1,0]]' ] \
+  || fail "records: $records; a retry's pass makes a flake, a cached pass clears nothing, a skip or an expired artifact is no result, and another case passing on the commit makes no flake of a failed case"
+expect "$(jq -r .source <<<"$out")" "the last 6 completed ci.yml runs of example/attn (4 read, 1 expired, 0 unreadable; 1 runs uploaded none)"
 
-fake_gh yes
-out="$(run_report --limit 10 --format summary)" || fail "the report should succeed when logs are readable"
-grep -q 'serial-matrix › worktree-surface' <<<"$out" \
-  || fail "the failing scenario is missing from the ledger: $out"
-if grep -q 'garden-plot-dispatch' <<<"$out"; then fail "a passing scenario was counted as a failure"; fi
-if grep -q 'terminal-block-copy' <<<"$out"; then fail "a skipped scenario was counted as a failure"; fi
+out="$(run_report --dormant-after 2)"
+expect "$out" "4 receipts from 4 CI runs; 3 commits of main from $(short "${commit[1]}") to $(short "${commit[3]}")"
+expect "$(sed -n '/^DORMANT/,/^$/p' <<<"$out")" "TestFlaky"
+expect "$(sed -n '/^UNRESOLVED/,$p' <<<"$out")" "TestBroken"
+expect "$(sed -n '/^UNRESOLVED/,$p' <<<"$out")" "TestRelapsed"
+refuse "$(sed -n '/^ACTIVE/,/^$/p' <<<"$out")" "TestRelapsed"
 
-out="$(run_report --limit 10 --format table)" || fail "the table format should succeed"
-grep -q '1 logs read, 0 unreadable' <<<"$out" || fail "the table never says how many logs it read: $out"
-grep -q '2 completed, 1 red on final attempt' <<<"$out" \
-  || fail "the report counted a cancelled run: $out"
-if grep -q 'agent-close' <<<"$out"; then fail "a cancelled run contributed a failure: $out"; fi
+out="$(run_report --format json --limit 3)"
+expect "$(jq -r .source <<<"$out")" "the last 2 completed ci.yml runs of example/attn (0 read, 1 expired, 0 unreadable; 1 runs uploaded none)"
 
-fake_gh no
-status=0
-out="$(run_report --limit 10 --format markdown 2>"$work/err.txt")" || status=$?
-[ "$status" -ne 0 ] || fail "a report that read no log must not publish a verdict"
-grep -q 'read 0 of 1 failed job logs' "$work/err.txt" \
-  || fail "going blind was not reported: $(cat "$work/err.txt")"
-grep -q 'escape sequences' "$work/err.txt" \
-  || fail "the underlying gh error was swallowed: $(cat "$work/err.txt")"
-if grep -q '## Active' <<<"$out"; then fail "a blind report still printed an Active section"; fi
+out="$(run_report --format markdown --dormant-after 3)"
+expect "$out" "<!-- ci-flake-ledger -->"
+expect "$(sed -n '/^## Active/,/^## /p' <<<"$out")" "| 1 | 1 | 2 | $(short "${commit[1]}") | linux/amd64 | go ./internal/example TestFlaky |"
+refuse "$out" "## Dormant"
 
-cat >"$work/runs.json" <<'EOF'
-[
-  {"databaseId":904,"headSha":"cccc3333","headBranch":"next","conclusion":"failure",
-   "createdAt":"2026-09-06T04:00:00Z","attempt":2,"event":"push","status":"completed"},
-  {"databaseId":905,"headSha":"dddd4444","headBranch":"next","conclusion":"success",
-   "createdAt":"2026-09-06T05:00:00Z","attempt":2,"event":"push","status":"completed"}
-]
-EOF
-for run in 904 905; do
-  for attempt in 1 2; do
-    job="$run$attempt"
-    conclusion=failure
-    [ "$run-$attempt" = 905-2 ] && conclusion=success
-    printf '{"jobs":[{"id":%s,"name":"Daemon","run_attempt":%s,"conclusion":"%s"}]}\n' \
-      "$job" "$attempt" "$conclusion" >"$work/jobs-$run-$attempt.json"
-    printf '%s\n' \
-      "--- FAIL: TestAttempt$attempt (0.01s)" \
-      $'FAIL\tgithub.com/victor/attn/internal/daemon\t0.01s' >"$work/logs/$job.log"
-  done
-done
-fake_gh yes
-expected='[["904",1,"TestAttempt1","unresolved"],["904",2,"TestAttempt2","unresolved"],["905",1,"TestAttempt1","rerun-green"]]'
-assert_attempts() {
-  local actual
-  actual="$(jq -sc 'sort_by(.run, .attempt) | map([.run, .attempt, .test, .verdict])' <<<"$1")"
-  [ "$actual" = "$expected" ] || fail "failures attributed to the wrong attempt: $actual"
-}
+out="$(FAKE_GH_DOWNLOADS_FAIL=1 run_report --format json 2>/dev/null)"
+[ "$(jq '.failures | length' <<<"$out")" -eq 4 ] || fail "cached artifacts were not read again: $out"
 
-out="$(run_report --format jsonl)"
-assert_attempts "$out"
-out="$(ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn --format jsonl)"
-assert_attempts "$out"
-out="$(ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn --format jsonl --no-cache)"
-assert_attempts "$out"
-
-# Existing caches can hold attempt 1's jobs under the latest attempt's key.
 rm -rf "$work/cache"
-mkdir -p "$work/cache/jobs"
-cp "$work/jobs-904-1.json" "$work/cache/jobs/904-2.json"
-out="$(ATTN_FLAKE_CACHE="$work/cache" "$report" --repo example/attn --format jsonl)"
-assert_attempts "$out"
+out="$(FAKE_GH_DOWNLOADS_FAIL=1 run_report --format json 2>"$work/stderr")"
+expect "$(cat "$work/stderr")" "HTTP 401"
+expect "$(jq -r .source <<<"$out")" "(0 read, 1 expired, 4 unreadable; 1 runs uploaded none)"
+[ "$(jq '.failures | length' <<<"$out")" -eq 0 ] || fail "an unreadable artifact produced records: $out"
 
 echo "ci-flake-report: all tests passed"

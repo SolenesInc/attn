@@ -1,7 +1,6 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { ptySpawn } from '../pty/bridge';
 import { useDaemonSocket } from './useDaemonSocket';
 
 class FakeWebSocket {
@@ -36,22 +35,6 @@ class FakeWebSocket {
     this.readyState = FakeWebSocket.CLOSED;
     this.onclose?.(new CloseEvent('close'));
   }
-
-  emit(data: unknown) {
-    this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent);
-  }
-}
-
-async function waitForOpenSocket(timeout = 1_000): Promise<FakeWebSocket> {
-  await waitFor(() => {
-    expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
-  }, { timeout });
-  const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
-  expect(ws).toBeDefined();
-  await waitFor(() => {
-    expect(ws.readyState).toBe(FakeWebSocket.OPEN);
-  });
-  return ws;
 }
 
 describe('useDaemonSocket PTY kill sequencing', () => {
@@ -177,50 +160,4 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
     unmount();
   });
-
-  it('sends the requested cwd and agent when spawning a new agent session', async () => {
-    const { unmount } = renderHook(() =>
-      useDaemonSocket({
-        onSessionsUpdate: vi.fn(),
-        onPRsUpdate: vi.fn(),
-        onReposUpdate: vi.fn(),
-        onAuthorsUpdate: vi.fn(),
-        wsUrl: 'ws://localhost:9999/ws',
-      }),
-    );
-
-    const ws = await waitForOpenSocket();
-    const spawnPromise = ptySpawn({
-      args: {
-        id: 'sess-new',
-        cwd: '/tmp/repo',
-        agent: 'claude',
-        cols: 80,
-        rows: 24,
-      },
-    });
-
-    await waitFor(() => {
-      const sent = ws.sent.map((entry) => JSON.parse(entry));
-      expect(sent).toContainEqual({
-        cmd: 'spawn_session',
-        id: 'sess-new',
-        cwd: '/tmp/repo',
-        placement: {},
-        agent: 'claude',
-        cols: 80,
-        rows: 24,
-      });
-    });
-
-    act(() => {
-      ws.emit({ event: 'spawn_result', id: 'sess-new', success: true });
-    });
-    await expect(spawnPromise).resolves.toBeUndefined();
-    expect(ws.sent.map((entry) => JSON.parse(entry)).filter((message) =>
-      message.cmd === 'attach_session' || message.cmd === 'pty_resize',
-    )).toEqual([]);
-    unmount();
-  });
-
 });

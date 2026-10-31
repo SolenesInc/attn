@@ -65,17 +65,6 @@ async function waitForClipboard(expected, description, timeoutMs = 10_000) {
   throw new Error(`${description}: clipboard never matched.\nExpected: ${JSON.stringify(expected)}\nLast:     ${JSON.stringify(last)}`);
 }
 
-// Window bounds include the title bar; the page does not.
-function windowRelativePoint(pageX, pageY, windowBounds, innerWidth, innerHeight) {
-  const { width, height } = windowBounds.logicalBounds;
-  const chromeX = Math.max(0, width - innerWidth);
-  const chromeY = Math.max(0, height - innerHeight);
-  return {
-    relativeX: (chromeX / 2 + pageX) / width,
-    relativeY: (chromeY + pageY) / height,
-  };
-}
-
 async function waitForContextMenu(client, timeoutMs = 8_000) {
   const startedAt = Date.now();
   let state = null;
@@ -173,7 +162,6 @@ async function main() {
     let token;
     let outputRow;
     let target;
-    let windowBounds;
     await runner.step('run_command_and_locate_output', async () => {
       token = `CTXMENU_${runner.runId}`;
       await client.request('write_pane', { sessionId, paneId: pane.paneId, text: `echo ${token}` });
@@ -189,25 +177,17 @@ async function main() {
       outputRow = read.text.split('\n').findIndex((line) => line.trim() === token);
       runner.assert(outputRow >= 0, `Token row disappeared. Pane text:\n${read.text}`);
 
-      windowBounds = await client.request('get_window_bounds', {});
-      runner.assert(Boolean(windowBounds?.logicalBounds), `No window bounds: ${JSON.stringify(windowBounds)}`);
       const cellRect = await client.request('get_pane_cell_rect', {
         sessionId,
         paneId: pane.paneId,
         cell: { row: outputRow, col: 2 },
       });
-      target = windowRelativePoint(
-        cellRect.centerX,
-        cellRect.centerY,
-        windowBounds,
-        cellRect.innerWidth,
-        cellRect.innerHeight,
-      );
+      target = cellRect.target;
     });
 
     let menuItemsSummary;
     await runner.step('open_menu_and_copy_output', async () => {
-      await driver.rightClickWindow(target.relativeX, target.relativeY);
+      await driver.rightClick(target);
 
       const menu = await waitForContextMenu(client);
       await driver.screenshot(path.join(runner.runDir, 'context-menu-open.png'));
@@ -223,15 +203,7 @@ async function main() {
       }
 
       writeClipboard('context-menu-sentinel');
-      const copyOutput = itemById.get('copy-output');
-      const copyPoint = windowRelativePoint(
-        copyOutput.centerX,
-        copyOutput.centerY,
-        windowBounds,
-        menu.innerWidth,
-        menu.innerHeight,
-      );
-      await driver.clickWindow(copyPoint.relativeX, copyPoint.relativeY);
+      await driver.click('[data-testid="terminal-context-menu-copy-output"]');
       await waitForClipboard(token, 'menu Copy output copies the block output');
       menuItemsSummary = menu.items.map((item) => ({ id: item.id, disabled: item.disabled }));
     });
@@ -240,18 +212,11 @@ async function main() {
     await runner.step('open_menu_and_paste', async () => {
       pasteToken = `PASTEPROBE_${runner.runId}`;
       writeClipboard(pasteToken);
-      await driver.rightClickWindow(target.relativeX, target.relativeY);
+      await driver.rightClick(target);
       const menuAgain = await waitForContextMenu(client);
       const paste = menuAgain.items.find((item) => item.id === 'paste');
       runner.assert(Boolean(paste) && !paste.disabled, `Paste unavailable: ${JSON.stringify(menuAgain.items)}`);
-      const pastePoint = windowRelativePoint(
-        paste.centerX,
-        paste.centerY,
-        windowBounds,
-        menuAgain.innerWidth,
-        menuAgain.innerHeight,
-      );
-      await driver.clickWindow(pastePoint.relativeX, pastePoint.relativeY);
+      await driver.click('[data-testid="terminal-context-menu-paste"]');
       await waitForPaneText(
         client,
         sessionId,

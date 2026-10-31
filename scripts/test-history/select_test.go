@@ -1,0 +1,310 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/victorarias/attn/internal/testhistory"
+)
+
+type checkoutRepo struct {
+	t     *testing.T
+	dir   string
+	spool string
+}
+
+func newCheckout(t *testing.T) *checkoutRepo {
+	repo := &checkoutRepo{t: t, dir: t.TempDir(), spool: t.TempDir()}
+	repo.git("init", "-q", "-b", "main")
+	repo.write("go.mod", "module example.invalid/selection\n\ngo 1.22\n")
+	return repo
+}
+
+func (r *checkoutRepo) write(path, content string) {
+	r.t.Helper()
+	full := filepath.Join(r.dir, path)
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		r.t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+		r.t.Fatal(err)
+	}
+}
+
+func (r *checkoutRepo) git(args ...string) string {
+	r.t.Helper()
+	return r.gitAt(time.Now(), args...)
+}
+
+func (r *checkoutRepo) gitAt(when time.Time, args ...string) string {
+	r.t.Helper()
+	cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.invalid"}, args...)...)
+	cmd.Dir = r.dir
+	stamp := when.Format(time.RFC3339)
+	cmd.Env = append(os.Environ(), "GIT_COMMITTER_DATE="+stamp, "GIT_AUTHOR_DATE="+stamp)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		r.t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func (r *checkoutRepo) commit(message string, when time.Time) string {
+	r.t.Helper()
+	r.gitAt(when, "add", "-A")
+	r.gitAt(when, "commit", "-q", "-m", message)
+	return r.git("rev-parse", "HEAD")
+}
+
+func (r *checkoutRepo) history(args ...string) (string, int) {
+	r.t.Helper()
+	cmd := historyCommand(r.t, r.spool, r.dir, args...)
+	cmd.Env = append(cmd.Env, "GOWORK=off", "GOFLAGS=")
+	out, err := cmd.Output()
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		r.t.Logf("%s stderr:\n%s", strings.Join(args, " "), exitErr.Stderr)
+	}
+	return string(out), exitCode(err)
+}
+
+func (r *checkoutRepo) runTests(packages ...string) {
+	r.t.Helper()
+	if out, code := r.history(append([]string{"capture", "go", "--", "-count=1"}, packages...)...); code != 0 {
+		r.t.Fatalf("capture exited %d:\n%s", code, out)
+	}
+}
+
+func (r *checkoutRepo) receive(receipt testhistory.Receipt) {
+	r.t.Helper()
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	spool := testhistory.Spool{Dir: r.spool}
+	if err := os.MkdirAll(spool.SharedDir(), 0o755); err != nil {
+		r.t.Fatal(err)
+	}
+	if err := os.WriteFile(spool.SharedPath(receipt.InvocationID), testhistory.Compress(data), 0o644); err != nil {
+		r.t.Fatal(err)
+	}
+}
+
+func otherLane() testhistory.Lane {
+	if runtime.GOOS == "linux" {
+		return testhistory.Lane{OS: "darwin", Arch: "arm64"}
+	}
+	return testhistory.Lane{OS: "linux", Arch: "amd64"}
+}
+
+func otherLaneFailure(id, commit, unit string, finished time.Time) testhistory.Receipt {
+	exit := testhistory.Exit{Code: 1}
+	return testhistory.Receipt{
+		Schema: testhistory.Schema, InvocationID: id, Runner: testhistory.RunnerGo,
+		Source:      testhistory.Source{Kind: "ci", RunID: "1", Attempt: "1", Job: "daemon"},
+		Revision:    testhistory.Revision{Commit: commit},
+		Lane:        otherLane(),
+		Diagnostics: testhistory.Diagnostics{MachineClass: "github-hosted 4cpu/16GB"},
+		Command:     testhistory.Command{StartedAt: finished.Add(-time.Minute), FinishedAt: &finished, Exit: &exit},
+		Results:     []testhistory.Result{{Unit: unit, Attempt: 1, Outcome: testhistory.Fail}},
+		Complete:    true,
+	}
+}
+
+const testSource = `package %s
+
+import "testing"
+
+func Test%s(t *testing.T) {
+	t.Log("%s")
+}
+
+func Test%s(t *testing.T) {}
+`
+
+func decode[T any](t *testing.T, out string) T {
+	t.Helper()
+	var value T
+	if err := json.Unmarshal([]byte(out), &value); err != nil {
+		t.Fatalf("%v:\n%s", err, out)
+	}
+	return value
+}
+
+func choiceOf(t *testing.T, selection testhistory.Selection, unit string) testhistory.Choice {
+	t.Helper()
+	for _, choice := range selection.Choices {
+		if choice.Unit == unit {
+			return choice
+		}
+	}
+	t.Fatalf("%s is not a candidate in %+v", unit, selection.Choices)
+	return testhistory.Choice{}
+}
+
+func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
+	repo := newCheckout(t)
+	start := time.Now().Add(-time.Hour).Truncate(time.Second)
+	repo.write("scripts/landing-tests", "group go \\.go$\ngo ./p TestA\ngo ./p TestGone\n")
+	repo.write("p/p_test.go", fmt.Sprintf(testSource, "p", "A", "first", "B"))
+	repo.write("q/q_test.go", fmt.Sprintf(testSource, "q", "C", "first", "D"))
+	firstMain := repo.commit("the baseline", start)
+	repo.runTests("./p", "./q")
+	repo.receive(otherLaneFailure("ci-c-fails", firstMain, "go ./q TestC", start.Add(time.Minute)))
+	repo.receive(otherLaneFailure("ci-native-fails", firstMain, "native agent-reload", start.Add(time.Minute)))
+
+	repo.git("checkout", "-q", "-b", "side")
+	repo.write("side/side.go", "package side\n")
+	sideCommit := repo.commit("work merged into main", start.Add(2*time.Minute))
+	repo.receive(otherLaneFailure("ci-d-fails-off-main", sideCommit, "go ./q TestD", start.Add(3*time.Minute)))
+	repo.git("checkout", "-q", "main")
+	repo.gitAt(start.Add(4*time.Minute), "merge", "-q", "--no-ff", "-m", "merge side", "side")
+
+	repo.write("q/q_test.go", fmt.Sprintf(testSource, "q", "C", "second", "D"))
+	landed := repo.commit("land on main", time.Now().Add(time.Hour))
+	repo.runTests("./p", "./q")
+	repo.receive(otherLaneFailure("ci-a-fails", landed, "go ./p TestA", time.Now().Add(2*time.Hour)))
+	recovered := otherLaneFailure("recovered-without-finish", firstMain, "go ./p TestA", start)
+	recovered.Command.FinishedAt, recovered.Command.Exit, recovered.Complete = nil, nil, false
+	repo.receive(recovered)
+	if out, code := repo.history("capture", "go", "--unit", "go ./p TestA", "--", "-count=1", "-run", "^TestA$", "./p"); code != 0 {
+		t.Fatalf("baseline landing run exited %d:\n%s", code, out)
+	}
+	if out, code := repo.history("capture", "go", "--unit", "go ./q TestC", "--", "-count=1", "-run", "^TestC$", "./q"); code != 0 {
+		t.Fatalf("TestC run exited %d:\n%s", code, out)
+	}
+
+	repo.git("checkout", "-q", "-b", "change")
+	repo.write("p/p_test.go", fmt.Sprintf(testSource, "p", "A", "changed", "B")+"\nfunc TestNew(t *testing.T) {}\n")
+	repo.write("p/testdata/fixture/f_test.go", fmt.Sprintf(testSource, "fixture", "Fixture", "x", "Other"))
+
+	t.Run("select", func(t *testing.T) {
+		out, code := repo.history("select", "--main", "main", "--json")
+		if code != 0 {
+			t.Fatalf("select exited %d", code)
+		}
+		selection := decode[testhistory.Selection](t, out)
+		if selection.ClearedAfter != testhistory.ClearedAfter || strings.Join(selection.Groups, " ") != "go" {
+			t.Fatalf("cleared after %d, groups %v", selection.ClearedAfter, selection.Groups)
+		}
+		changed := choiceOf(t, selection, "go ./p TestNew")
+		if !changed.Changed || changed.Status != testhistory.Selected {
+			t.Fatalf("changed test: %+v", changed)
+		}
+		for _, choice := range selection.Choices {
+			if strings.Contains(choice.Unit, "testdata") {
+				t.Fatalf("a test under testdata, which go test skips, became a candidate: %+v", choice)
+			}
+			if choice.Unit == "go ./p TestB" {
+				t.Fatalf("TestB did not change, never failed and is not in the baseline, but is a candidate: %+v", choice)
+			}
+		}
+		baseline := choiceOf(t, selection, "go ./p TestA")
+		if baseline.Status != testhistory.Selected || baseline.Standing.Anchor.Commit != landed || baseline.Standing.Lane != otherLane().String() {
+			t.Fatalf("baseline TestA: %+v %+v", baseline, baseline.Standing)
+		}
+		nominated := choiceOf(t, selection, "go ./q TestC")
+		standing := nominated.Standing
+		if nominated.Status != testhistory.Red || standing.Lane != otherLane().String() || standing.PassesSince != 0 || standing.Anchor.Commit != firstMain {
+			t.Fatalf("a failure in another lane, cleared only by passes there, has not passed since and must stand red, listed and not run: %+v %+v", nominated, standing)
+		}
+		if native := choiceOf(t, selection, "native agent-reload"); native.Status != testhistory.Unavailable || !strings.Contains(native.Note, "no landing recipe") {
+			t.Fatalf("an uncleared native failure must be unavailable for want of a landing recipe: %+v", native)
+		}
+		if gone := choiceOf(t, selection, "go ./p TestGone"); gone.Status != testhistory.Missing || gone.Note == "" {
+			t.Fatalf("missing baseline test: %+v", gone)
+		}
+		if nominated.Command != "./scripts/test-go.sh --packages -count=1 -run '^TestC$' ./q" {
+			t.Fatalf("rerun command %q", nominated.Command)
+		}
+	})
+
+	t.Run("the same from a subdirectory", func(t *testing.T) {
+		cmd := historyCommand(t, repo.spool, filepath.Join(repo.dir, "q"), "select", "--main", "main", "--json")
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		root, _ := repo.history("select", "--main", "main", "--json")
+		if string(out) != root {
+			t.Fatalf("select from q/ printed:\n%s\nfrom the root:\n%s", out, root)
+		}
+	})
+
+	t.Run("named groups replace the change's", func(t *testing.T) {
+		out, _ := repo.history("select", "--main", "main", "--group", "go", "--json")
+		if groups := decode[testhistory.Selection](t, out).Groups; strings.Join(groups, " ") != "go" {
+			t.Fatalf("groups %v", groups)
+		}
+		if _, code := repo.history("select", "--main", "main", "--group", "nope"); code == 0 {
+			t.Fatal("an unknown group must fail")
+		}
+	})
+
+	t.Run("explain", func(t *testing.T) {
+		out, code := repo.history("explain", "--main", "main", "--test", "go ./q TestC", "--json")
+		explained := decode[explanation](t, out)
+		if code != 0 || explained.Standing == nil || len(explained.Standing.Lanes) != 1 || explained.CostMS == nil {
+			t.Fatalf("explain exited %d: %+v", code, explained)
+		}
+		if evidence := explained.Standing.Anchor.Evidence; len(evidence) != 1 || evidence[0] != "ci-c-fails" {
+			t.Fatalf("evidence = %v", evidence)
+		}
+		out, _ = repo.history("explain", "--main", "main", "--test", "go ./q TestD", "--json")
+		if offMain := decode[explanation](t, out); offMain.Standing != nil {
+			t.Fatalf("a failure on a merged branch's own commit counted as main evidence: %+v", offMain.Standing)
+		}
+	})
+
+	t.Run("replay", func(t *testing.T) {
+		repo.write("q/q_test.go", "package q\n")
+		out, code := repo.history("replay", "--main", "main", "--from", firstMain)
+		lines := strings.Split(strings.TrimSpace(out), "\n")
+		point := decode[replayPoint](t, lines[len(lines)-1])
+		if code != 0 || len(lines) != 2 || point.Commit != landed {
+			t.Fatalf("replay exited %d at %s", code, point.Commit)
+		}
+		if point.Freshness.NewestEvidence != firstMain {
+			t.Fatalf("replay at %s used evidence from %s; only earlier main commits count", landed, point.Freshness.NewestEvidence)
+		}
+		if strings.Join(point.Changed, " ") != "go ./q TestC" {
+			t.Fatalf("changed tests at the landed commit = %v, want its own change, not the checkout's", point.Changed)
+		}
+		if failures := point.Failures["go ./p TestA"]; len(failures) != 1 || failures[0] != otherLane().String() {
+			t.Fatalf("failures at the landed commit = %v", point.Failures)
+		}
+		shared, _ := filepath.Glob(filepath.Join(repo.spool, "shared", "*"+testhistory.SharedSuffix))
+		if want := len(sealedReceipts(t, repo.spool)) + len(shared) - 2; point.Available != want {
+			t.Fatalf("replay used %d receipts, want %d: all but ci-a-fails, which finished after the commit, and the recovered receipt, whose finish is unknown", point.Available, want)
+		}
+		if merge := decode[replayPoint](t, lines[0]); strings.Join(merge.Selections["baseline"].Unpriced, " ") != "go ./p TestA" {
+			t.Fatalf("at the merge, before any run was priced, baseline unpriced = %v; a missing cost must stay visible", merge.Selections["baseline"].Unpriced)
+		}
+		actual := point.Actual
+		if actual == nil || actual.Components != 1 || actual.Attempts != 1 || actual.Unattributed != 1 || len(actual.Missing) != 0 {
+			t.Fatalf("actual landing = %+v, want the one baseline run attributed and the TestC run left unattributed", actual)
+		}
+		for _, receipt := range sealedReceipts(t, repo.spool) {
+			if strings.Join(receipt.Command.RequestedUnits, " ") == "go ./p TestA" && actual.WallMS != *receipt.Command.WallMS {
+				t.Fatalf("actual landing wall = %d, want the baseline run's %d", actual.WallMS, *receipt.Command.WallMS)
+			}
+		}
+		for name, selection := range point.Selections {
+			if strings.Join(selection.Included, " ") != "go ./p TestA" {
+				t.Fatalf("%s included %v", name, selection.Included)
+			}
+		}
+		if selected := strings.Join(point.Selections["baseline"].Selected, " "); selected != "go ./p TestA" {
+			t.Fatalf("baseline selected %s", selected)
+		}
+		if landing := point.Selections["landing"].Selected; strings.Join(landing, " ") != "go ./p TestA go ./q TestC" {
+			t.Fatalf("landing selected %v, want TestA and TestC, which the commit changed", landing)
+		}
+	})
+}

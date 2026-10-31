@@ -45,6 +45,7 @@ type Kit struct {
 	nextBootResult *bootingResult
 	nextLaunch     chan *Run
 	answerer       func(*HeadlessTask)
+	onTranscript   func()
 }
 
 type fake struct {
@@ -313,6 +314,13 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 			return err
 		}
 		k.fail(fmt.Sprintf("%s (argv %q)", unexpected.Reason, unexpected.Argv))
+	case methodTranscript:
+		k.mu.Lock()
+		step := k.onTranscript
+		k.mu.Unlock()
+		if step != nil {
+			step()
+		}
 	case methodExiting:
 		var exit exitParams
 		if err := json.Unmarshal(params, &exit); err != nil {
@@ -325,6 +333,13 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		return fmt.Errorf("unknown method %q", method)
 	}
 	return nil
+}
+
+// OnTranscriptWrite runs step after each transcript write a fake makes, before that write returns to the fake.
+func (k *Kit) OnTranscriptWrite(step func()) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.onTranscript = step
 }
 
 func (f *fake) exited() int {

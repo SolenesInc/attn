@@ -60,7 +60,7 @@ Each feature file has these sections, in this order:
 6. `## Tests`: pointers to the committed tests, grouped by the repository's own kinds of test. Pointers only, never descriptions.
 7. `## Gotchas`: traps that waste or invalidate a run, and what working-but-wrong looks like for the feature.
 
-Recording the ways in per audience exposes one-way doors, such as an agent action with no view where a person can see it. Report each one you find to the user.
+When you list the ways in for each audience, look for gaps: an action with no way to undo it, or with no view where the other audience can see it, such as an agent action that no person can see in the app. Report each gap to the user.
 
 The repository's glossary or domain docs stay the vocabulary: use their terms and link to them instead of defining terms again. Links to code are plain pointers. Do not add ownership globs, completeness checks or links derived from test coverage. They solve problems the user does not have.
 
@@ -87,4 +87,4 @@ Some drift happens outside those steps, such as a commit made without them, or a
 
 ## Hand over the skill
 
-Hand over the skill, the evidence from its run, the one-way doors you found, what the stand-in left unproven, and the automation you suggested.
+Hand over the skill, the evidence from its run, the gaps you found, what the stand-in left unproven, and the automation you suggested.

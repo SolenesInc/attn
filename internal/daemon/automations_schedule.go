@@ -34,7 +34,7 @@ func automationScheduleInterval() time.Duration {
 }
 
 func (d *Daemon) automationScheduleHandler(ctx context.Context, _ *jobs.Job) (any, error) {
-	d.observeDueSchedules(ctx, time.Now())
+	d.observeDueSchedules(ctx, d.clock.Now())
 	return nil, nil
 }
 

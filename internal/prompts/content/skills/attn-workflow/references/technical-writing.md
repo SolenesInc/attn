@@ -46,7 +46,9 @@ Don't mix modes: no reference tables inside a tutorial, no tutorial hand-holding
 
 - Talk to the reader as "you", in the present tense. "Will" only for things that genuinely happen later.
 - Say who does what: "the compiler checks", not "is checked". Passive is fine only when the actor is unknown or beside the point.
+- Don't give an object or an event a verb that only a person can do. "A change keeps the files current" and "the row names the seed that carries its cause" make the reader work out who acts. Write "whoever changes a feature updates its map file" and "link the seed that explains the cause". Verbs for what a program literally does are fine: "the parser rejects a bad date".
 - Write instructions as commands: "Click Submit." State facts plainly. Never "should be done".
+- Don't write instructions as a list of end states, such as "the report is attached" or "the worktrees are removed". The reader then has to work out the steps. Say what to do, in order. A list of conditions for being done is fine when the reader can check each one.
 - Put the condition before the instruction: "To delete the document, click Delete."
 - Put the common case first. Exceptions after.
 - Sound like a knowledgeable friend. No buzzwords, no figurative language, no "please" in instructions, and never "simply", "easy", or "quickly" in a procedure. If it were simple, the reader would not be here.
@@ -72,6 +74,7 @@ Don't mix modes: no reference tables inside a tutorial, no tutorial hand-holding
 - Keep words like "only" and "not" next to the word they change: "only fails on growth" and "fails only on growth" say different things.
 - Break up long noun strings: "the proto import budget check script" becomes "the script that checks the proto-import budget".
 - Make every "it", "they", and "this" point at one obvious thing. Repeat the noun when in doubt. Never use "this" or "which" to point at a whole clause.
+- Don't chain "it", "its", and "one" across clauses. "Its report has one row per entrypoint, the check accepts it, and it is attached to your stake" has three "it"s and two referents. Repeat the noun when its last mention is more than a clause back.
 - Don't drop verbs: "Phase 1 moves the converters and Phase 2 the runtime" leaves Phase 2 without one. Give it one.
 - Keep the small words that show structure, such as "that" in "Ensure that the switch is off". Never trade clarity for word count.
 - Repeat the article in a series when it prevents a misread: "the client and the host", not "the client and host", when they are two things.

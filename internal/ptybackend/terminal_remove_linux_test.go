@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"golang.org/x/sys/unix"
 )
@@ -95,7 +96,7 @@ func TestAnAcceptedRemovalFinishesAfterItsClientTimesOut(t *testing.T) {
 		t.Fatalf("remove did not time out: %v", err)
 	}
 	_ = conn.Close()
-	awaitTimer(t, resistantChildKillAfter)
+	awaitTimer(t, pty.KillDeadlineTimer)
 	advance(t, resistantChildKillAfter)
 	fds := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
 	if n, err := unix.Poll(fds, int(ptyworker.TeardownRPCTimeout/time.Millisecond)); err != nil || n != 1 {
@@ -170,7 +171,7 @@ func TestTerminalRemovalStopsJobsAfterTheLeaderExits(t *testing.T) {
 			killed := make(chan error, 1)
 			go func() { killed <- backend.Kill(context.Background(), id, syscall.SIGTERM) }()
 			if kind == "worker" {
-				awaitTimer(t, resistantChildKillAfter)
+				awaitTimer(t, pty.KillDeadlineTimer)
 				advance(t, resistantChildKillAfter)
 			}
 			if err := <-killed; err != nil {

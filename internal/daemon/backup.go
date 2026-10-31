@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -44,7 +45,9 @@ func (d *Daemon) performDatabaseBackup() {
 		return
 	}
 
+	pausepoint.At(pausepoint.DatabaseBackupStarting)
 	path, err := d.store.BackupNow(d.life.Context(), d.backupDir())
+	pausepoint.Done(pausepoint.DatabaseBackupCopied, err)
 	if err != nil {
 		d.logf("database backup failed: %v", err)
 		return

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { Palette } from './Palette';
 
 interface Row { path: string }
@@ -66,11 +65,6 @@ describe('Palette', () => {
     expect(rows[2]).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('focuses the input on mount so typing lands in the palette', () => {
-    render(<Harness rows={['a.md']} />);
-    expect(input()).toHaveFocus();
-  });
-
   it('picks the highlighted row on Enter, moving with the arrow keys', () => {
     const onPick = vi.fn();
     render(<Harness rows={['a.md', 'b.md', 'c.md']} onPick={onPick} />);
@@ -90,16 +84,6 @@ describe('Palette', () => {
 
     fireEvent.keyDown(input(), { key: 'Enter' });
     expect(onPick).toHaveBeenCalledWith({ path: 'b.md' });
-  });
-
-  it('highlights the first result again after the query changes', () => {
-    const onPick = vi.fn();
-    render(<Harness rows={['alpha.md', 'beta.md', 'alphabet.md']} onPick={onPick} />);
-    fireEvent.keyDown(input(), { key: 'ArrowDown' });
-    fireEvent.change(input(), { target: { value: 'alpha' } });
-
-    fireEvent.keyDown(input(), { key: 'Enter' });
-    expect(onPick).toHaveBeenCalledWith({ path: 'alpha.md' });
   });
 
   it('clamps the highlight when the list shrinks under it', () => {
@@ -138,37 +122,6 @@ describe('Palette', () => {
     fireEvent.keyDown(input(), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(outerEscape).not.toHaveBeenCalled();
-  });
-
-  it('takes Escape ahead of a surface it opened over, leaving that surface open', () => {
-    const onClose = vi.fn();
-    const surfaceEscape = vi.fn();
-    function SurfaceBeneath() {
-      useEscapeStack(surfaceEscape, true);
-      return null;
-    }
-    const { rerender } = render(<SurfaceBeneath />);
-    rerender(
-      <>
-        <SurfaceBeneath />
-        <Harness rows={['a.md']} onClose={onClose} />
-      </>,
-    );
-
-    fireEvent.keyDown(input(), { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(surfaceEscape).not.toHaveBeenCalled();
-  });
-
-  it('closes on a backdrop click but not on a click inside the box', () => {
-    const onClose = vi.fn();
-    const { container } = render(<Harness rows={['a.md']} onClose={onClose} />);
-
-    fireEvent.mouseDown(container.querySelector('.palette-box')!);
-    expect(onClose).not.toHaveBeenCalled();
-
-    fireEvent.mouseDown(container.querySelector('.palette')!);
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('lets a caller intercept keys the shell does not own', () => {

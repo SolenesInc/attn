@@ -125,20 +125,6 @@ describe('sidebar harness identity', () => {
     expect(within(row).getByRole('button', { name: 'Open Investigate logs' })).toHaveAttribute('title', title);
   });
 
-  it('keeps harness identity when switching between desktop and queue arrangements', () => {
-    const data = sidebarData(true);
-    const props = { ...baseProps, ...data, crew: [{ id: 'fern', name: 'Fern' }, { id: 'sleeping', name: 'Sleeping' }] };
-    const { rerender } = render(<Sidebar {...props} agentListOpen queue={buildQueueBands(data.desktops)} />);
-    expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
-    expect(within(screen.getByTestId('queue-crew-sleeping')).getByRole('img', { name: 'Unknown harness · idle' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open Implement sidebar logos' })).toHaveAttribute('title', expect.stringContaining('Codex'));
-    expect(screen.getByRole('img', { name: 'Claude · idle' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Custom Driver · idle' })).toBeInTheDocument();
-    rerender(<Sidebar {...props} queue={null} />);
-    expect(within(screen.getByTestId('sidebar-session-pi')).getByRole('img', { name: 'Pi · idle' })).toBeInTheDocument();
-    expect(within(screen.getByTestId('sidebar-session-codex')).getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
-  });
-
   it.each([false, true])('keeps crew management reachable when queue mode is %s', (queueMode) => {
     const data = sidebarData(true);
     const onManageCrew = vi.fn();

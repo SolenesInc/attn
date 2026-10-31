@@ -1,0 +1,80 @@
+{
+  "config": {
+    "argv": [
+      "/Users/victor/.local/share/mise/installs/node/26.12.1/bin/node",
+      "/Users/victor/projects/victor/attn--test-history-capture/app/node_modules/@playwright/test/cli.js",
+      "test",
+      "--reporter=list,json"
+    ],
+    "configFile": "/private/tmp/attn-test-history-fixtures/playwright-broken/playwright.config.mjs",
+    "rootDir": "/private/tmp/attn-test-history-fixtures/playwright-broken/e2e",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/private/tmp/attn-test-history-fixtures/playwright-broken/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {},
+        "id": "",
+        "name": "",
+        "testDir": "/private/tmp/attn-test-history-fixtures/playwright-broken/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [],
+  "errors": [
+    {
+      "message": "Error: spec failed to load",
+      "stack": "Error: spec failed to load\n    at /private/tmp/attn-test-history-fixtures/playwright-broken/e2e/broken.spec.mjs:2:7",
+      "location": {
+        "file": "/private/tmp/attn-test-history-fixtures/playwright-broken/e2e/broken.spec.mjs",
+        "column": 7,
+        "line": 2
+      },
+      "snippet": "\u001b[90m   at \u001b[39mbroken.spec.mjs:2\n\n  1 | import { test } from '@playwright/test';\n> 2 | throw new Error('spec failed to load');\n    |       ^\n  3 |"
+    }
+  ],
+  "stats": {
+    "startTime": "2026-10-31T12:31:24.966Z",
+    "duration": 52.39799999999997,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

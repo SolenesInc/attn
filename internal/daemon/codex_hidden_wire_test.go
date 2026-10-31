@@ -1052,7 +1052,7 @@ func TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook(t *
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	parent, codex, _ := sharedCodexWaiting(t, w, app)
+	parent, codex, shownTerminal := sharedCodexWaiting(t, w, app)
 	server := w.CodexServer()
 	child := server.SpawnSubagent(codex.ConversationID)
 	terminal := protocol.TerminalID(harness.CodexThreadTerminal(app.SelectedProfile(), child))
@@ -1060,8 +1060,9 @@ func TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook(t *
 		t.Fatalf("loaded subagent caller = %s, %v; want %s", caller, err, parent)
 	}
 	server.CloseThread(child)
-	server.Work(codex.ConversationID)
-	testworld.AwaitSession(app, parent, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	typeInto(app, shownTerminal, "/rename Closed child processed\r")
+	codex.Prompted()
+	testworld.AwaitSession(app, parent, func(s protocol.Session) bool { return s.Label == "Closed child processed" })
 	for _, hook := range []bool{false, true} {
 		if hook {
 			if err := cli.UpdateStateFromHookEvidence(terminal, "working", "", "PreToolUse", ""); err != nil {

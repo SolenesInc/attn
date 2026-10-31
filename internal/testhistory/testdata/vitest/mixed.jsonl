@@ -1,0 +1,14 @@
+{"type":"case","module":"src/good.test.mjs","name":"only passes","state":"passed","mode":"run","fails":false,"retryCount":0,"duration":1.3859580000000165}
+{"type":"module","module":"src/good.test.mjs","state":"passed","errors":0,"duration":8.278625000000005}
+{"type":"module","module":"src/broken.test.mjs","state":"failed","errors":1,"duration":0}
+{"type":"case","module":"src/mixed.test.mjs","name":"outer > passes","state":"passed","mode":"run","fails":false,"retryCount":0,"duration":1.2834580000000244}
+{"type":"case","module":"src/mixed.test.mjs","name":"outer > fails","state":"failed","mode":"run","fails":false,"retryCount":0,"duration":5.453333999999984}
+{"type":"case","module":"src/mixed.test.mjs","name":"outer > is skipped","state":"skipped","mode":"skip","fails":false,"retryCount":0}
+{"type":"case","module":"src/mixed.test.mjs","name":"outer > is todo","state":"skipped","mode":"todo","fails":false,"retryCount":0}
+{"type":"case","module":"src/mixed.test.mjs","name":"outer > fails as expected","state":"passed","mode":"run","fails":true,"retryCount":0,"duration":51.38508300000001}
+{"type":"case","module":"src/mixed.test.mjs","name":"outer > passes on retry","state":"passed","mode":"run","fails":false,"retryCount":1,"duration":15.081457999999998}
+{"type":"module","module":"src/mixed.test.mjs","state":"failed","errors":0,"duration":74.746208}
+{"type":"case","module":"src/allskipped.test.mjs","name":"nothing runs > a","state":"skipped","mode":"skip","fails":false,"retryCount":0}
+{"type":"case","module":"src/allskipped.test.mjs","name":"nothing runs > b","state":"skipped","mode":"skip","fails":false,"retryCount":0}
+{"type":"module","module":"src/allskipped.test.mjs","state":"skipped","errors":0,"duration":0}
+{"type":"end","reason":"failed","unhandledErrors":0}

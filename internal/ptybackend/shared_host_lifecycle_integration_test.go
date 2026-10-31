@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
@@ -412,7 +413,7 @@ func TestSharedHost_KeystrokesReachTheChildAcrossDaemonReplacement(t *testing.T)
 
 func collectStreamUntil(t *testing.T, stream Stream, suffix string) []byte {
 	t.Helper()
-	deadline := time.After(8 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	var output bytes.Buffer
 	for !bytes.HasSuffix(output.Bytes(), []byte(suffix)) {
 		select {
@@ -602,7 +603,7 @@ func requireAbandoned(t *testing.T, backend *WorkerBackend, host ptyhost.HostReg
 	t.Helper()
 	select {
 	case <-exited:
-	case <-time.After(10 * time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		t.Fatalf("terminal %s was never stopped", id)
 	}
 	if err := backend.commitSharedSession(context.Background(), incarnationOfHost(host), id); !errors.Is(err, pty.ErrSessionNotFound) {

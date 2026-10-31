@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -471,7 +472,7 @@ func (d *upgradeDaemon) stop() {
 	_ = d.cmd.Process.Kill()
 	select {
 	case <-d.done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		d.t.Error("test daemon did not exit")
 	}
 }

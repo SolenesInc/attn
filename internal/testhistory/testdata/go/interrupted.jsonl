@@ -1,0 +1,11 @@
+{"Time":"2026-10-31T13:31:17.39521+01:00","Action":"start","Package":"example.invalid/fixture/good"}
+{"Time":"2026-10-31T13:31:17.666877+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestPasses"}
+{"Time":"2026-10-31T13:31:17.666976+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"=== RUN   TestPasses\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:17.66703+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"    good_test.go:9: fine\n"}
+{"Time":"2026-10-31T13:31:17.667059+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestPasses","Output":"--- PASS: TestPasses (0.00s)\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:17.66707+01:00","Action":"pass","Package":"example.invalid/fixture/good","Test":"TestPasses","Elapsed":0}
+{"Time":"2026-10-31T13:31:17.667085+01:00","Action":"run","Package":"example.invalid/fixture/good","Test":"TestSleeps"}
+{"Time":"2026-10-31T13:31:17.667092+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"=== RUN   TestSleeps\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:17.67395+01:00","Action":"output","Package":"example.invalid/fixture/good","Test":"TestSleeps","Output":"signal: interrupt\n"}
+{"Time":"2026-10-31T13:31:17.673995+01:00","Action":"output","Package":"example.invalid/fixture/good","Output":"FAIL\texample.invalid/fixture/good\t0.278s\n","OutputType":"frame"}
+{"Time":"2026-10-31T13:31:17.67401+01:00","Action":"fail","Package":"example.invalid/fixture/good","Elapsed":0.279}

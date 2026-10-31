@@ -2,6 +2,7 @@ name: CI
 
 env:
   GH_TOKEN: ${{ github.token }}
+  ATTN_TEST_HISTORY_DIR: /tmp/attn-test-history
 
 on:
   push:
@@ -319,6 +320,12 @@ jobs:
       - name: Test
         run: ./scripts/test-go.sh
 
+      - name: Upload test receipts
+        if: always()
+        uses: ./.github/actions/upload-test-receipts
+        with:
+          name: daemon
+
       - name: Check prompt catalog and scenarios
         run: |
           make check-prompts
@@ -440,6 +447,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Upload test receipts
+        if: always()
+        uses: ./.github/actions/upload-test-receipts
+        with:
+          name: frontend
+
       - name: Test prompt editor helpers
         working-directory: .
         run: |
@@ -522,7 +535,13 @@ jobs:
       - name: E2E
         env:
           ATTN_E2E_BIN: /tmp/attn
-        run: pnpm exec playwright test --shard=${{ matrix.shard }}/3
+        run: pnpm run e2e --shard=${{ matrix.shard }}/3
+
+      - name: Upload test receipts
+        if: always()
+        uses: ./.github/actions/upload-test-receipts
+        with:
+          name: frontend-e2e-${{ matrix.shard }}
 
       - name: Test prompt editor in Chromium
         if: matrix.shard == 1
@@ -757,6 +776,12 @@ jobs:
           xvfb-run -a -s '-noreset -screen 0 1600x1000x24'
           pnpm --dir app run real-app:serial-matrix -- --shard ${{ matrix.shard }}/4
 
+      - name: Upload test receipts
+        if: always()
+        uses: ./.github/actions/upload-test-receipts
+        with:
+          name: app-acceptance-shard-${{ matrix.shard }}
+
       - name: Collect daemon and worker logs
         if: always()
         env:
@@ -942,6 +967,12 @@ jobs:
 
       - name: Run native clipboard, keyboard and capture scenarios
         run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy --scenario terminal-input --scenario quick-capture
+
+      - name: Upload test receipts
+        if: always()
+        uses: ./.github/actions/upload-test-receipts
+        with:
+          name: app-acceptance-macos
 
       - name: Require executed macOS coverage
         run: |

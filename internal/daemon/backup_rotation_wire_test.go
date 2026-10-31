@@ -26,8 +26,11 @@ func TestTheDaemonBacksUpOnStartKeepingTheNewestRotationAndPreMigrationSnapshots
 	var rotating, premigration []string
 	preparedBackupUpgrade(t, func(dir string) {
 		backups = filepath.Join(dir, "backups")
-		for day := 1; day <= backupRotationKeep+1; day++ {
+		for day := 1; day <= backupRotationKeep; day++ {
 			rotating = append(rotating, plantBackup(t, backups, fmt.Sprintf("attn-199912%02d-000000.db", day)))
+			if day == 2 {
+				rotating = append(rotating, plantBackup(t, backups, "attn-19991202-000000-2.db"))
+			}
 		}
 		for day := 1; day <= backupPremigrationKeep+2; day++ {
 			premigration = append(premigration, plantBackup(t, backups, fmt.Sprintf("attn-premigration-9-199912%02d-000000.db", day)))
@@ -39,7 +42,7 @@ func TestTheDaemonBacksUpOnStartKeepingTheNewestRotationAndPreMigrationSnapshots
 			t.Fatalf("after starting, the daemon has taken backups %v, want one", taken)
 		}
 		assertUsableDatabase(t, filepath.Join(backups, taken[0]))
-		if got := backupsNamed(t, backups, "attn-1999"); !slices.Equal(got, rotating[2:]) {
+		if got := backupsNamed(t, backups, "attn-1999"); !slices.Equal(got, slices.Sorted(slices.Values(rotating[2:]))) {
 			t.Errorf("the rotation kept %v, want the %d newest older backups %v beside the one taken", got, backupRotationKeep-1, rotating[2:])
 		}
 		if got := backupsNamed(t, backups, "attn-premigration-"); !slices.Equal(got, premigration[2:]) {

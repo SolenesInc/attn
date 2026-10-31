@@ -15,6 +15,7 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/procreap"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -235,7 +236,7 @@ func TestInstanceCleanWaitsForWorkerChildResistingTermination(t *testing.T) {
 	var out bytes.Buffer
 	cleaned := make(chan error, 1)
 	go func() { cleaned <- cleanInstance(&out, r) }()
-	clock.AwaitTimer(resistantChildKillAfter)
+	clock.AwaitTimer(pty.KillDeadlineTimer)
 	clock.Advance(resistantChildKillAfter)
 	if err := <-cleaned; err != nil {
 		t.Fatalf("clean instance: %v\n%s", err, out.String())

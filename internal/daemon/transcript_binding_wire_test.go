@@ -15,6 +15,8 @@ func TestACodexSessionWithoutHooksStopsLookingForAnUnboundTranscript(t *testing.
 
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	w.Launched(session)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateLaunching })
+	w.readTranscripts()
 
 	if window := messageWindow(app, session); window.Status != protocol.SessionMessageWindowStatusUnavailable {
 		t.Fatalf("message window %s, want unavailable once no exact transcript can be bound", window.Status)

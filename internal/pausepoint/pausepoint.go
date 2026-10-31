@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 const (
 	EnvPoints = "ATTN_PAUSE_AT"
 	EnvSocket = "ATTN_PAUSE_SOCK"
 	Release   = "go"
+	Failed    = "failed"
 	Every     = "*"
 )
 
@@ -30,47 +33,51 @@ const (
 	BusEventHandled   = "bus-event-handled"
 	SeedRollbackRead  = "seed-rollback-read"
 
-	DaemonEnrollmentLoaded     = "daemon-enrollment-loaded"
-	DaemonStartupRecovery      = "daemon-startup-recovery"
-	SessionInputPasteGap       = "session-input-paste-gap"
-	SessionInputLaneContended  = "session-input-lane-contended"
-	SessionSnoozeCommitted     = "session-snooze-committed"
-	SessionTeardownPrepared    = "session-teardown-prepared"
-	AgentCloseDrained          = "agent-close-drained"
-	SessionExitObserved        = "session-process-exit-observed"
-	AgentTerminalStarted       = "agent-terminal-started"
-	TerminalStarting           = "terminal-starting"
-	AgentLaunchReady           = "agent-launch-ready"
-	CodexViewReleaseChecked    = "codex-view-release-checked"
-	ConversationCandidateTurn  = "conversation-candidate-turn"
-	ConversationDecision       = "conversation-decision"
-	ConversationOwnerResolved  = "conversation-owner-resolved"
-	ConversationObserved       = "conversation-observed"
-	ConversationOutcome        = "conversation-outcome"
-	ConversationInputLookup    = "conversation-input-lookup"
-	ConversationCandidateBound = "conversation-candidate-bound"
-	ConversationCandidateStart = "conversation-candidate-start"
-	MemberRetiredClearSleep    = "member-retired-clear-sleep"
-	ConversationDropped        = "conversation-dropped"
-	ConversationReportReady    = "conversation-report-ready"
-	PtyExitOwnerResolved       = "pty-exit-owner-resolved"
-	PtyExitHandled             = "pty-exit-handled"
-	TerminalExitReconciled     = "terminal-exit-reconciled"
-	DriverTranscriptCaptured   = "driver-transcript-captured"
-	DriverTranscriptApplied    = "driver-transcript-applied"
-	CopyBatchStaged            = "copy-batch-staged"
-	CopyBatchApplied           = "copy-batch-applied"
-	NotebookStreamOpen         = "notebook-stream-open"
-	NotebookReportSent         = "notebook-report-sent"
-	OutpostBridgeAccept        = "outpost-bridge-accept"
-	NotebookStreamError        = "notebook-stream-error"
-	NotebookStreamErrorHandled = "notebook-stream-error-handled"
-	BridgeConnectionClosed     = "bridge-connection-closed"
-	RemoteInputAnswered        = "remote-input-answered"
-	OutpostRecoveryReported    = "outpost-recovery-reported"
-	OutpostRecoveryStarted     = "outpost-recovery-started"
-	OutpostRecoveryApplied     = "outpost-recovery-applied"
-	ForwardSocketCreated       = "forward-socket-created"
+	DaemonEnrollmentLoaded        = "daemon-enrollment-loaded"
+	DaemonStartupRecovery         = "daemon-startup-recovery"
+	SessionInputPasteGap          = "session-input-paste-gap"
+	SessionInputLaneContended     = "session-input-lane-contended"
+	SessionSnoozeDecided          = "session-snooze-decided"
+	SessionTeardownPrepared       = "session-teardown-prepared"
+	AgentCloseDrained             = "agent-close-drained"
+	SessionExitObserved           = "session-process-exit-observed"
+	AgentTerminalStarted          = "agent-terminal-started"
+	TerminalStarting              = "terminal-starting"
+	AgentLaunchCommitReporting    = "agent-launch-commit-reporting"
+	CodexViewReleaseChecked       = "codex-view-release-checked"
+	ConversationCandidateTurn     = "conversation-candidate-turn"
+	ConversationDecision          = "conversation-decision"
+	ConversationOwnerResolved     = "conversation-owner-resolved"
+	ConversationObserved          = "conversation-observed"
+	ConversationMoveSaved         = "conversation-move-saved"
+	ConversationInputLookup       = "conversation-input-lookup"
+	ConversationCandidateBound    = "conversation-candidate-bound"
+	ConversationCandidateStart    = "conversation-candidate-start"
+	MemberRetiredClearSleep       = "member-retired-clear-sleep"
+	ConversationDropped           = "conversation-dropped"
+	ConversationReportReady       = "conversation-report-ready"
+	PtyExitOwnerResolved          = "pty-exit-owner-resolved"
+	PtyExitHandled                = "pty-exit-handled"
+	TerminalExitReconciled        = "terminal-exit-reconciled"
+	DriverTranscriptCaptured      = "driver-transcript-captured"
+	DriverTranscriptWatchStarting = "driver-transcript-watch-starting"
+	CopyBatchStaged               = "copy-batch-staged"
+	CopyBatchApplied              = "copy-batch-applied"
+	NotebookStreamOpen            = "notebook-stream-open"
+	NotebookReportSent            = "notebook-report-sent"
+	OutpostBridgeAccept           = "outpost-bridge-accept"
+	NotebookStreamError           = "notebook-stream-error"
+	NotebookStreamErrorHandled    = "notebook-stream-error-handled"
+	BridgeConnectionClosed        = "bridge-connection-closed"
+	RemoteInputAnswered           = "remote-input-answered"
+	OutpostRecoveryReported       = "outpost-recovery-reported"
+	OutpostRecoveryStarted        = "outpost-recovery-started"
+	OutpostRecoveryApplied        = "outpost-recovery-applied"
+	ForwardSocketCreated          = "forward-socket-created"
+	ProfileActionRan              = "profile-action-ran"
+	DatabaseBackupStarting        = "database-backup-starting"
+	DatabaseBackupCopied          = "database-backup-copied"
+	AutomationRunFinalizing       = "automation-run-finalizing"
 )
 
 type armed struct {
@@ -94,13 +101,43 @@ var load = sync.OnceValue(func() *armed {
 	return a
 })
 
+// Route holds this process at its armed points instead of the socket a stack test listens on.
+type Route interface {
+	Hold(name string, failed error)
+	Armed() []string
+}
+
+var inProcess atomic.Pointer[Route]
+
+// InProcess routes this process's At and Done calls to route until restore; it refuses a second route.
+func InProcess(route Route) (restore func(), err error) {
+	if !inProcess.CompareAndSwap(nil, &route) {
+		return nil, fmt.Errorf("pausepoint: a route is already installed with points %v; one in-process route per process", (*inProcess.Load()).Armed())
+	}
+	return func() { inProcess.CompareAndSwap(&route, nil) }, nil
+}
+
+// At holds the process here when a test armed name.
 func At(name string) {
+	reach(name, nil)
+}
+
+// Done marks a finished step: it holds like At when err is nil, and otherwise reports err to the test without holding.
+func Done(name string, err error) {
+	reach(name, err)
+}
+
+func reach(name string, failed error) {
+	if route := inProcess.Load(); route != nil {
+		(*route).Hold(name, failed)
+		return
+	}
 	if a := load(); a != nil {
-		a.pause(name)
+		a.pause(name, failed)
 	}
 }
 
-func (a *armed) pause(name string) {
+func (a *armed) pause(name string, failed error) {
 	a.mu.Lock()
 	every, armed := a.points[name]
 	// Once per process unless armed for every hit: a worker that re-execs itself for an upgrade arms again.
@@ -116,6 +153,10 @@ func (a *armed) pause(name string) {
 		return
 	}
 	defer conn.Close()
+	if failed != nil {
+		_, _ = fmt.Fprintf(conn, "%s %d %s %s\n", name, os.Getpid(), Failed, strconv.Quote(failed.Error()))
+		return
+	}
 	if _, err := fmt.Fprintf(conn, "%s %d\n", name, os.Getpid()); err != nil {
 		return
 	}

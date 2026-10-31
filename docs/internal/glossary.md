@@ -158,8 +158,8 @@ chief                   the crew member that coordinates one profile
 asleep                  the member has no session, until something wakes them
 awake                   the member has a session
 wake                    starts a session for the member
-nap                     ends the member's session and starts a new one from
-                        their letters
+apply                   puts a member's saved settings into their current
+                        session
 ```
 
 ```text

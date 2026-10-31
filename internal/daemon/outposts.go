@@ -383,7 +383,7 @@ func (d *Daemon) syncOutpost(ctx context.Context, id string, conn *bridge.Conn) 
 }
 
 func waitOutpostRetry(ctx context.Context, delay time.Duration) bool {
-	timer := stepclock.NewTimer(delay)
+	timer := stepclock.NewTimer(bridge.RetryTimer, delay)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():

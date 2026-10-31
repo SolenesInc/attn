@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 )
 
 const EnvSocket = "ATTN_STEP_CLOCK_SOCK"
+
+// Name identifies the operation a timer belongs to, so a test can wait for that timer and no other.
+// It is one word: the line protocol splits on spaces.
+type Name string
 
 type Timer interface {
 	C() <-chan time.Time
@@ -30,11 +35,13 @@ type Clock struct {
 	mu      sync.Mutex
 	now     time.Time
 	pending pending[*timer]
+	holds   int
+	idled   chan struct{}
 	report  func(event string)
 }
 
 func New() *Clock {
-	return &Clock{now: time.Now(), pending: newPending[*timer]()}
+	return &Clock{now: time.Now(), pending: newPending[*timer](), idled: make(chan struct{})}
 }
 
 var process = sync.OnceValue(func() *Clock {
@@ -50,22 +57,22 @@ var process = sync.OnceValue(func() *Clock {
 // Process is the clock ATTN_STEP_CLOCK_SOCK selects: stepped by the hub listening there, or real time when unset.
 func Process() *Clock { return process() }
 
-func NewTimer(d time.Duration) Timer { return Process().NewTimer(d) }
+func NewTimer(name Name, d time.Duration) Timer { return Process().NewTimer(name, d) }
 
-func AfterFunc(d time.Duration, f func()) Timer { return Process().AfterFunc(d, f) }
+func AfterFunc(name Name, d time.Duration, f func()) Timer { return Process().AfterFunc(name, d, f) }
 
-func (c *Clock) NewTimer(d time.Duration) Timer {
+func (c *Clock) NewTimer(name Name, d time.Duration) Timer {
 	if c == nil {
 		return realTimer{time.NewTimer(d)}
 	}
-	return c.newTimer(d, nil)
+	return c.newTimer(name, d, nil)
 }
 
-func (c *Clock) AfterFunc(d time.Duration, f func()) Timer {
+func (c *Clock) AfterFunc(name Name, d time.Duration, f func()) Timer {
 	if c == nil {
 		return realTimer{time.AfterFunc(d, f)}
 	}
-	return c.newTimer(d, f)
+	return c.newTimer(name, d, f)
 }
 
 func (c *Clock) Now() time.Time {
@@ -77,15 +84,59 @@ func (c *Clock) Now() time.Time {
 	return c.now
 }
 
+// Hold marks the clock's process busy until release is called, so a test can step it only once that work has settled.
+func (c *Clock) Hold() (release func()) {
+	if c == nil {
+		return func() {}
+	}
+	c.mu.Lock()
+	c.holds++
+	if c.holds == 1 {
+		c.reportLocked("busy")
+	}
+	c.mu.Unlock()
+	return func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.holds--
+		if c.holds == 0 {
+			c.reportLocked("idle")
+			close(c.idled)
+			c.idled = make(chan struct{})
+		}
+	}
+}
+
+// AwaitIdle waits until nothing holds the clock. When ctx ends first it returns false.
+func (c *Clock) AwaitIdle(ctx context.Context) bool {
+	for {
+		c.mu.Lock()
+		holds, idled := c.holds, c.idled
+		c.mu.Unlock()
+		if holds == 0 {
+			return true
+		}
+		select {
+		case <-idled:
+		case <-ctx.Done():
+			return false
+		}
+	}
+}
+
 type timer struct {
 	clock    *Clock
+	name     Name
 	deadline time.Time
 	channel  chan time.Time
 	callback func()
 }
 
-func (c *Clock) newTimer(d time.Duration, f func()) *timer {
-	t := &timer{clock: c, callback: f}
+func (c *Clock) newTimer(name Name, d time.Duration, f func()) *timer {
+	if name == "" || strings.ContainsAny(string(name), " \t\r\n") {
+		panic(fmt.Sprintf("stepclock timer name %q is not one word", name))
+	}
+	t := &timer{clock: c, name: name, callback: f}
 	if f == nil {
 		t.channel = make(chan time.Time, 1)
 	}
@@ -101,8 +152,8 @@ func (t *timer) Reset(d time.Duration) bool {
 	active := t.stopLocked()
 	t.deadline = c.now.Add(d)
 	if d > 0 {
-		c.pending.arm(t, d)
-		c.reportLocked("armed %p %s", t, d)
+		c.pending.arm(t, t.name, d)
+		c.reportLocked("armed %p %s %s", t, t.name, d)
 	} else if t.callback == nil {
 		t.channel <- c.now
 	}
@@ -143,15 +194,28 @@ func (c *Clock) Advance(d time.Duration) {
 	c.mu.Lock()
 	c.pending.mark()
 	c.now = c.now.Add(d)
+	c.fireLocked(func(t *timer) bool { return !t.deadline.After(c.now) })
+}
+
+// Fire fires every pending timer named name now, without moving the clock, and returns once their callbacks have run.
+// It is for a timer whose moment is no promise, such as a poll for changes the test has just made.
+func (c *Clock) Fire(name Name) {
+	c.mu.Lock()
+	c.fireLocked(func(t *timer) bool { return t.name == name })
+}
+
+func (c *Clock) fireLocked(due func(*timer) bool) {
 	var callbacks []func()
 	for _, t := range c.pending.armed() {
-		if t.deadline.After(c.now) {
+		if !due(t) {
 			continue
 		}
 		c.pending.disarm(t)
 		c.reportLocked("disarmed %p", t)
 		if t.callback != nil {
 			callbacks = append(callbacks, t.callback)
+		} else if t.deadline.After(c.now) {
+			t.channel <- c.now
 		} else {
 			t.channel <- t.deadline
 		}
@@ -164,10 +228,10 @@ func (c *Clock) Advance(d time.Duration) {
 	running.Wait()
 }
 
-// AwaitTimer waits until a timer of duration d, armed or reset after the last Advance or AwaitTimer, is pending.
-// When ctx ends first it returns false with the durations of the timers pending then.
-func (c *Clock) AwaitTimer(ctx context.Context, d time.Duration) ([]time.Duration, bool) {
-	return c.pending.await(ctx, &c.mu, d)
+// AwaitTimer waits until a timer named name, armed or reset after the last Advance or AwaitTimer, is pending.
+// When ctx ends first it returns false with the timers pending then, as "name duration".
+func (c *Clock) AwaitTimer(ctx context.Context, name Name) ([]string, bool) {
+	return c.pending.await(ctx, &c.mu, name)
 }
 
 // pending tracks armed timers by key, so a waiter can tell a timer armed after its mark from an older one.
@@ -179,6 +243,7 @@ type pending[K comparable] struct {
 }
 
 type armedTimer struct {
+	name     Name
 	duration time.Duration
 	revision uint64
 }
@@ -187,9 +252,9 @@ func newPending[K comparable]() pending[K] {
 	return pending[K]{timers: make(map[K]armedTimer), changed: make(chan struct{})}
 }
 
-func (p *pending[K]) arm(key K, d time.Duration) {
+func (p *pending[K]) arm(key K, name Name, d time.Duration) {
 	p.revision++
-	p.timers[key] = armedTimer{duration: d, revision: p.revision}
+	p.timers[key] = armedTimer{name: name, duration: d, revision: p.revision}
 	p.notify()
 }
 
@@ -214,24 +279,25 @@ func (p *pending[K]) notify() {
 	p.changed = make(chan struct{})
 }
 
-func (p *pending[K]) await(ctx context.Context, mu *sync.Mutex, d time.Duration) ([]time.Duration, bool) {
+func (p *pending[K]) await(ctx context.Context, mu *sync.Mutex, name Name) ([]string, bool) {
 	for {
 		mu.Lock()
-		var durations []time.Duration
+		var seen []string
 		for _, t := range p.timers {
-			if t.duration == d && t.revision > p.marked {
+			if t.name == name && t.revision > p.marked {
 				p.mark()
 				mu.Unlock()
 				return nil, true
 			}
-			durations = append(durations, t.duration)
+			seen = append(seen, fmt.Sprintf("%s %s", t.name, t.duration))
 		}
 		changed := p.changed
 		mu.Unlock()
 		select {
 		case <-changed:
 		case <-ctx.Done():
-			return durations, false
+			slices.Sort(seen)
+			return seen, false
 		}
 	}
 }
@@ -259,6 +325,11 @@ func (c *Clock) serve(socket string) {
 				panic(fmt.Sprintf("stepclock read: %v", err))
 			}
 			command, value, _ := strings.Cut(strings.TrimSpace(line), " ")
+			if command == "fire" && value != "" {
+				c.Fire(Name(value))
+				send("fired " + value)
+				continue
+			}
 			d, err := time.ParseDuration(value)
 			if command != "advance" || err != nil || d < 0 {
 				panic(fmt.Sprintf("stepclock invalid command %q", strings.TrimSpace(line)))

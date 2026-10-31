@@ -57,8 +57,6 @@ function main() {
       + `${(shard.results || []).length} scenarios, ${seconds.toFixed(1)}s (${shard.source})`);
   }
 
-  // The s<N> prefix breaks ci-flake-report.sh's serial-matrix rule on purpose:
-  // it harvests the shard jobs' tables, and would count these failures twice.
   const rows = formatResultTable(aggregate.results.map((result) => ({
     ...result,
     durationMs: result.durationMs ?? 0,

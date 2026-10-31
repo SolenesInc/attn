@@ -11,7 +11,7 @@ import (
 )
 
 func TestConversationMovesBeforeAnOutcomeEachGetASessionAndTheirOwnCost(t *testing.T) {
-	for _, point := range []string{pausepoint.ConversationDecision, pausepoint.ConversationOutcome} {
+	for _, point := range []string{pausepoint.ConversationDecision, pausepoint.ConversationMoveSaved} {
 		t.Run(point, func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 			outcome := s.PauseAt(point)
@@ -29,7 +29,7 @@ func TestConversationMovesBeforeAnOutcomeEachGetASessionAndTheirOwnCost(t *testi
 			agent.Prompted()
 			outcome.Await()
 			var middle protocol.Session
-			if point == pausepoint.ConversationOutcome {
+			if point == pausepoint.ConversationMoveSaved {
 				middle = awaitSuccessor(app, first)
 			}
 			typeInto(app, terminal, "middle prompt\r")
@@ -199,7 +199,7 @@ func TestACandidatesTitleAndTurnSurviveItsOutcome(t *testing.T) {
 		t.Run(string(agentKind), func(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(agentKind))
 			s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-			outcome := s.PauseAt(pausepoint.ConversationOutcome)
+			outcome := s.PauseAt(pausepoint.ConversationMoveSaved)
 			owed := s.PauseAt(pausepoint.ConversationCandidateTurn)
 			s.Start()
 			app := s.App()
@@ -257,7 +257,7 @@ func TestACandidatesTitleAndTurnSurviveItsOutcome(t *testing.T) {
 func TestACandidatesFailedTitleCanBeRetriedAfterRestart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-	outcome := s.PauseAt(pausepoint.ConversationOutcome)
+	outcome := s.PauseAt(pausepoint.ConversationMoveSaved)
 	s.Start()
 	app := s.App()
 	first := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("Original name") })
@@ -298,7 +298,7 @@ func TestACandidatesFailedTitleCanBeRetriedAfterRestart(t *testing.T) {
 
 func TestAResumedSharedConversationsRunSurvivesItsOutcome(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-	outcome := s.PauseEvery(pausepoint.ConversationOutcome)
+	outcome := s.PauseEvery(pausepoint.ConversationMoveSaved)
 	s.Start()
 	app := s.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
@@ -425,7 +425,7 @@ func TestAnEndedRuntimeCannotReplayItsPendingConversationOverItsReplacement(t *t
 func TestInputFindsItsConversationWhenBindingFinishesDuringLookup(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Vars = append(s.Vars, "ATTN_HEADLESS_TASKS=on")
-	outcome := s.PauseAt(pausepoint.ConversationOutcome)
+	outcome := s.PauseAt(pausepoint.ConversationMoveSaved)
 	lookup := s.PauseAt(pausepoint.ConversationInputLookup)
 	bound := s.PauseAt(pausepoint.ConversationCandidateBound)
 	s.Start()

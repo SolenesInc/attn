@@ -14,7 +14,9 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/notebook"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -28,6 +30,7 @@ type world struct {
 	terms       *testworld.Terminals
 	gardenClock func() time.Time
 	clock       *stepclock.Clock
+	pauses      *testworld.Pauses
 }
 
 func newWorld(t testing.TB, agents ...fakeagent.Harness) *world {
@@ -47,6 +50,23 @@ func newWorldInLongestDataDir(t *testing.T, agents ...fakeagent.Harness) *world 
 func inBubble(t *testing.T, script func(t *testing.T, w *world)) {
 	t.Helper()
 	inPreparedBubble(t, prepareWorld(t), script)
+}
+
+// inBubbleHeldAt runs script in a bubbled world whose pause points are armed before its daemon starts.
+func inBubbleHeldAt(t *testing.T, points []string, script func(t *testing.T, w *world, held map[string]*testworld.Pause)) {
+	t.Helper()
+	prepared := prepareWorld(t)
+	synctest.Test(t, func(t *testing.T) {
+		bubbled := *prepared
+		bubbled.T = t
+		w := &world{World: &bubbled, bubbled: true}
+		held := make(map[string]*testworld.Pause, len(points))
+		for _, point := range points {
+			held[point] = w.PauseAt(point)
+		}
+		w.start()
+		script(t, w, held)
+	})
 }
 
 func inCrewBubble(t *testing.T, script func(t *testing.T, w *world)) {
@@ -94,6 +114,10 @@ func (w *world) start() {
 	}
 	if !w.bubbled && w.clock == nil {
 		w.clock = stepclock.New()
+		w.OnTranscriptWrite(w.readTranscripts)
+	}
+	if w.pauses != nil {
+		w.pauses.Reopen()
 	}
 	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals, !w.bubbled, w.clock, w.gardenClock)
 	if err != nil {
@@ -101,6 +125,37 @@ func (w *world) start() {
 	}
 	w.daemon = started
 	w.T.Cleanup(w.stop)
+}
+
+// PauseAt holds the world's daemon the first time each run reaches the pause point name. A bubbled world can arm
+// before w.start, inside its bubble.
+func (w *world) PauseAt(name string) *testworld.Pause {
+	w.T.Helper()
+	return w.armPause(name, false)
+}
+
+// PauseEvery holds the world's daemon each time it reaches the pause point name.
+func (w *world) PauseEvery(name string) *testworld.Pause {
+	w.T.Helper()
+	return w.armPause(name, true)
+}
+
+func (w *world) armPause(name string, every bool) *testworld.Pause {
+	w.T.Helper()
+	if w.pauses == nil {
+		pauses := testworld.NewPauses()
+		unroute, err := pausepoint.InProcess(pauses)
+		if err != nil {
+			w.T.Fatalf("arm pause point %q: %v", name, err)
+		}
+		w.pauses = pauses
+		w.T.Cleanup(func() {
+			w.stop()
+			unroute()
+			pauses.FailUnreached()
+		})
+	}
+	return w.pauses.Arm(w.T, name, every)
 }
 
 func (w *world) listen() {
@@ -131,6 +186,9 @@ func (w *world) listen() {
 func (w *world) stop() {
 	if w.daemon == nil {
 		return
+	}
+	if w.pauses != nil {
+		w.pauses.Close()
 	}
 	if w.bubbled {
 		// Let calls the agents already have in flight land before their daemon goes away.
@@ -219,7 +277,7 @@ func (w *world) closeWatchWindows() {
 	go func() {
 		defer close(done)
 		for {
-			if _, ok := w.clock.AwaitTimer(ctx, notebook.WatchDebounce); !ok {
+			if _, ok := w.clock.AwaitTimer(ctx, notebook.WatchDebounceTimer); !ok {
 				return
 			}
 			w.clock.Advance(notebook.WatchDebounce)
@@ -231,16 +289,49 @@ func (w *world) closeWatchWindows() {
 	})
 }
 
-// awaitTimer waits for the daemon of a world outside a bubble to arm a timer of d after the last advance or awaitTimer.
-func (w *world) awaitTimer(d time.Duration) {
+// scheduleTickLimit is past the most schedule ticks any automation test waits for one outcome.
+const scheduleTickLimit = 10
+
+// tickSchedulesUntil ticks the automation schedule until done reports true after a tick. Each tick waits until the job
+// runner is idle, moves the daemon clock one schedule tick and waits until the runner is idle again.
+func (w *world) tickSchedulesUntil(what string, done func() bool) {
+	w.T.Helper()
+	if w.bubbled {
+		w.T.Fatal("tickSchedulesUntil steps the daemon clock, which a world inBubble does not have")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
+	defer cancel()
+	awaitIdle := func() {
+		w.T.Helper()
+		if !w.clock.AwaitIdle(ctx) {
+			w.T.Fatalf("%s: the job runner was still busy after %s", what, fakeagent.HangGuard)
+		}
+	}
+	for range scheduleTickLimit {
+		awaitIdle()
+		w.clock.Advance(daemon.AutomationScheduleTick)
+		awaitIdle()
+		if done() {
+			return
+		}
+	}
+	w.T.Fatalf("%s: not after %d schedule ticks (scheduleTickLimit)", what, scheduleTickLimit)
+}
+
+// readTranscripts fires every pending transcript poll without moving the clock and returns when their callbacks return.
+// A poll another fire already took reads later, so tests assert what the read shows, not that it finished.
+func (w *world) readTranscripts() { w.clock.Fire(sessionmonitor.TranscriptPoll) }
+
+// awaitTimer waits for the daemon of a world outside a bubble to arm the timer named name after the last advance or awaitTimer.
+func (w *world) awaitTimer(name stepclock.Name) {
 	w.T.Helper()
 	if w.bubbled {
 		w.T.Fatal("awaitTimer reads the stepped clock, which a world inBubble does not have")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
-	if seen, ok := w.clock.AwaitTimer(ctx, d); !ok {
-		w.T.Fatalf("awaitTimer(%s): no such timer armed within %s; saw timer durations %v", d, fakeagent.HangGuard, seen)
+	if seen, ok := w.clock.AwaitTimer(ctx, name); !ok {
+		w.T.Fatalf("awaitTimer(%s): no such timer armed within %s; timers pending: %v", name, fakeagent.HangGuard, seen)
 	}
 }
 

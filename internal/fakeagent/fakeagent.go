@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -53,6 +54,7 @@ const (
 	methodStopRead   = "stop_reading_terminal"
 	methodStatus     = "program_status"
 	methodCrashSrv   = "crash_app_server"
+	methodTranscript = "transcript_written"
 	signalExitBase   = 128
 )
 
@@ -166,12 +168,17 @@ func tripwire(cfg config, program, reason string) int {
 	return tripwireExitCode
 }
 
+// transcriptReports is this process's control peer, which hears about every transcript write before the write returns.
+var transcriptReports atomic.Pointer[rpcPeer]
+
 func dialControl(cfg config, handle rpcHandler) (*rpcPeer, error) {
 	conn, err := net.Dial("unix", cfg.Control)
 	if err != nil {
 		return nil, fmt.Errorf("dial control socket: %w", err)
 	}
-	return newRPCPeer(conn, handle), nil
+	peer := newRPCPeer(conn, handle)
+	transcriptReports.CompareAndSwap(nil, peer)
+	return peer, nil
 }
 
 type conversation interface {
@@ -557,7 +564,20 @@ func appendLines(path string, lines ...any) error {
 		f.Close()
 		return err
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return reportTranscriptWrite()
+}
+
+func reportTranscriptWrite() error {
+	control := transcriptReports.Load()
+	if control == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
+	defer cancel()
+	return control.call(ctx, methodTranscript, struct{}{}, nil)
 }
 
 func now() string {

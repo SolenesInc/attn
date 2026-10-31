@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -262,26 +261,13 @@ func preserveTargetFree(candidate string) (bool, error) {
 }
 
 func latestRotatingBackup(dir string) (string, error) {
-	entries, err := os.ReadDir(dir)
+	names, err := store.RotatingBackups(dir)
 	if err != nil {
-		return "", fmt.Errorf("read backups dir %s: %w", dir, err)
-	}
-
-	var names []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !store.IsRotatingBackupName(name) {
-			continue
-		}
-		names = append(names, name)
+		return "", fmt.Errorf("read backups: %w", err)
 	}
 	if len(names) == 0 {
 		return "", fmt.Errorf("no rotating backups found in %s", dir)
 	}
-	sort.Strings(names)
 	return filepath.Join(dir, names[len(names)-1]), nil
 }
 

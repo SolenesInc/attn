@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/stepclock"
 	"net"
 	"os"
 	"os/exec"
@@ -15,6 +14,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/stepclock"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/plugins"
@@ -29,7 +31,7 @@ type Stack struct {
 	daemon        *os.Process
 	exited        chan error
 	allowFallback bool
-	pauses        *pauses
+	pauses        *pauseSocket
 	clock         *stepclock.Hub
 	wsListener    *net.TCPListener
 }
@@ -62,6 +64,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	world := prepareIn(t, worldDir(t), binary, setup.harnesses, !setup.withoutAgentKit)
 	s := &Stack{World: world, binary: binary}
 	s.clock = listenForClock(t, s.Dir)
+	s.OnTranscriptWrite(s.readTranscripts)
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.ParseIP("127.0.0.1")})
 	if err != nil {
 		t.Fatal(err)
@@ -139,7 +142,7 @@ func (s *Stack) StartHeldBeforeReady(p *Pause) func() {
 		s.launch()
 	}()
 	s.T.Cleanup(func() {
-		p.releaseAll()
+		s.pauses.Close()
 		<-started
 	})
 	p.Await()
@@ -163,6 +166,7 @@ func (s *Stack) launch(vars ...string) {
 	if s.daemon != nil {
 		s.T.Fatal("Start: the stack's daemon is already running")
 	}
+	s.pauses.Reopen()
 	ready, signal, err := os.Pipe()
 	if err != nil {
 		s.T.Fatal(err)
@@ -247,6 +251,7 @@ func (s *Stack) Stop() {
 	if s.daemon == nil {
 		return
 	}
+	s.pauses.Close()
 	s.ClosePeers()
 	select {
 	case err := <-s.exited:
@@ -313,7 +318,7 @@ func (s *Stack) reapWorkers() []ptyworker.ReapResult {
 		results <- ptyworker.ReapDataDir(s.Dir)
 	}()
 	for {
-		if _, armed := s.clock.AwaitTimer(ctx, workerKillDeadline); !armed {
+		if _, armed := s.clock.AwaitTimer(ctx, pty.KillDeadlineTimer); !armed {
 			return <-results
 		}
 		s.Advance(workerKillDeadline)

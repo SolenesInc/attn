@@ -116,6 +116,13 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness,
 	return w
 }
 
+// OnTranscriptWrite runs step after each transcript write a fake agent makes, before the write returns to the agent.
+func (w *World) OnTranscriptWrite(step func()) {
+	if w.kit != nil {
+		w.kit.OnTranscriptWrite(step)
+	}
+}
+
 func (w *World) Path(elem ...string) string {
 	return filepath.Join(append([]string{w.Dir, "work"}, elem...)...)
 }

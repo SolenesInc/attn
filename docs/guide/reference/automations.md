@@ -42,7 +42,11 @@ agent works in. A scheduled trigger also takes:
 - **Schedule (cron)**. A standard five-field cron expression. The form reads
   it back in words.
 - **Worker**. **Fresh** starts a new agent for every run. **Singleton** sends
-  every run to the same agent, resuming it if it was closed.
+  every run to the same agent, resuming it if it was closed. When you change
+  the harness, model or effort, the next run starts a new agent on the same
+  seed, so the new agent picks up where the old one left off. When you change
+  the prompt or the directory, the next run starts a new agent on a new seed.
+  Either way, attn leaves the old agent running, and you can still open it.
 - **Missed runs**. What happens to a time that passed while Attn was off or
   the automation was disabled. **Skip** runs it only if Attn notices within
   5 minutes. **Latest** runs once for the most recent missed time.
@@ -56,8 +60,10 @@ For **PR review requested**, list repositories to include or exclude as
 every repository you can reach counts. Each review runs in a fresh worktree
 checked out at the pull request's head commit, so your own clone is never
 touched. Each pull request has one agent: when you are asked to review it
-again, the same agent picks it up. Requests that already exist when you enable
-the automation are left alone.
+again, the same agent picks it up. When you change the harness, model or
+effort, the next review starts a new agent on the pull request's seed; when you
+change the prompt, it starts a new agent on a new seed. Requests that already
+exist when you enable the automation are left alone.
 
 ## Runs
 

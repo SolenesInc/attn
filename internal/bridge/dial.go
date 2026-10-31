@@ -37,7 +37,7 @@ type DialConfig struct {
 
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	handshakeCtx, cancel := context.WithCancelCause(ctx)
-	deadline := stepclock.AfterFunc(AnswerWithin, func() { cancel(context.DeadlineExceeded) })
+	deadline := stepclock.AfterFunc(AnswerTimer, AnswerWithin, func() { cancel(context.DeadlineExceeded) })
 	defer deadline.Stop()
 	defer cancel(context.Canceled)
 	ready, seen, err := handshake(handshakeCtx, cfg)

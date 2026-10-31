@@ -60,13 +60,11 @@ func TestEnqueueDuringAUniqueJobRunsOneFollowupAfterTheCurrentPass(t *testing.T)
 	})
 }
 
-func newTestRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore, *fakeClock) {
+func newTestRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore) {
 	t.Helper()
 	store := newMemStore()
-	clock := newFakeClock()
 	opts := Options{
 		Store:        store,
-		Now:          clock.now,
 		PollInterval: testPoll,
 		Log:          func(string, ...interface{}) {},
 	}
@@ -75,7 +73,7 @@ func newTestRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore, *fake
 	}
 	r := New(opts)
 	t.Cleanup(r.Stop)
-	return r, store, clock
+	return r, store
 }
 
 func newBubbleRunner(t *testing.T, tune func(*Options)) (*Runner, *memStore) {
@@ -171,7 +169,7 @@ func TestCancelWaitsForTheCommitFence(t *testing.T) {
 }
 
 func TestCancelBeforeTheFenceStopsTheWrite(t *testing.T) {
-	r, _, _ := newTestRunner(t, nil)
+	r, _ := newTestRunner(t, nil)
 	started := make(chan struct{})
 	var wrote atomic.Bool
 	mustRegister(t, r, "commits", func(ctx context.Context, job *Job) (any, error) {

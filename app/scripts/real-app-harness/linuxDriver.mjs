@@ -8,6 +8,7 @@ import {
   bundleIdentifierForAppPath,
   defaultAppPathForInstance,
 } from './harnessInstance.mjs';
+import { TargetedWindowDriver } from './targetedWindowDriver.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -24,17 +25,6 @@ const LINUX_KEY_CODES = new Map([
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function parsePositiveIntegers(stdout) {
-  return String(stdout || '')
-    .split(/\s+/)
-    .map((value) => Number.parseInt(value, 10))
-    .filter((value) => Number.isInteger(value) && value > 0);
-}
-
-function escapeRegex(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function commandErrorDetail(error) {
@@ -72,12 +62,19 @@ export function linuxKeyName(key, modifiers = {}) {
     '=': 'equal',
     '[': 'bracketleft',
     ']': 'bracketright',
+    '{': 'braceleft',
+    '}': 'braceright',
+    '&': 'ampersand',
+    '`': 'grave',
+    '~': 'asciitilde',
     Enter: 'Return',
     Backspace: 'BackSpace',
     ArrowLeft: 'Left',
     ArrowRight: 'Right',
     ArrowDown: 'Down',
     ArrowUp: 'Up',
+    PageUp: 'Page_Up',
+    PageDown: 'Page_Down',
   };
   const raw = String(key || '').trim();
   const normalized = keyNames[raw] || raw;
@@ -115,19 +112,27 @@ export function parseXdotoolGeometry(stdout) {
   return geometry;
 }
 
-export class LinuxDriver {
+function selectOwnedWindow({ pid, windows }, { pid: launchedPid = null, windowTitle = null } = {}) {
+  if (launchedPid && pid !== launchedPid) {
+    throw new Error(`The app automation bridge answered from pid ${pid}, not the launched app pid ${launchedPid}`);
+  }
+  const window = windows.find(windowTitle ? (candidate) => candidate.title === windowTitle : (candidate) => candidate.label === 'main');
+  return window?.mapped ? window : null;
+}
+
+export class LinuxDriver extends TargetedWindowDriver {
   constructor({
     bundleId = null,
     appPath = defaultAppPathForInstance(),
-    actionDelayMs = 250,
     env = process.env,
     run = execFileAsync,
+    client = null,
   } = {}) {
+    super({ client, pointer: (gesture) => this.#pointer(gesture), keyboard: (stroke) => this.#keyboard(stroke) });
     this.appPath = appPath;
     this.appName = path.basename(appPath);
     this.bundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: this.bundleId });
-    this.actionDelayMs = actionDelayMs;
     this.env = env;
     this.run = run;
   }
@@ -144,13 +149,11 @@ export class LinuxDriver {
   async activateApp(opts = {}) {
     const windowId = await this.requireWindow(opts);
     await this.runXdotool(['windowraise', String(windowId), 'windowfocus', '--sync', String(windowId)]);
-    await delay(this.actionDelayMs);
   }
 
   async activateBackground(opts = {}) {
     const windowId = await this.requireWindow(opts);
     await this.runXdotool(['windowfocus', '--sync', String(windowId)]);
-    await delay(this.actionDelayMs);
   }
 
   async menu() {
@@ -174,55 +177,46 @@ export class LinuxDriver {
     };
   }
 
-  async mainWindowId(opts = {}) {
-    const searchArgs = ['search', '--onlyvisible'];
-    const pid = Number.isInteger(opts.pid) && opts.pid > 0 ? opts.pid : null;
-    if (pid) {
-      searchArgs.push('--pid', String(pid));
-    } else {
-      const title = opts.windowTitle || this.appName;
-      searchArgs.push('--name', `^${escapeRegex(title)}$`);
+  async ownedWindows() {
+    if (!this.client) {
+      throw new Error('LinuxDriver resolves app windows through the app automation bridge; create it with createWindowDriver({ appPath, client })');
     }
     try {
-      const ids = parsePositiveIntegers(await this.runXdotoolCapture(searchArgs));
-      return ids[0] || null;
+      return await this.client.request('native_windows', {}, { timeoutMs: 5_000 });
     } catch (error) {
-      if (error?.cause?.code === 1 || error?.code === 1) {
-        this.lastEmptyLookup = { searchArgs, stderr: String(error?.cause?.stderr ?? '').trim() };
-        return null;
-      }
-      throw error;
+      throw new Error(`LinuxDriver could not ask the app for its windows through the automation bridge: ${error?.message || error}`, { cause: error });
     }
+  }
+
+  async mainWindowId(opts = {}) {
+    return selectOwnedWindow(await this.ownedWindows(), opts)?.id ?? null;
   }
 
   async waitForMainWindow(timeoutMs = 10_000, pollIntervalMs = 150, opts = {}) {
     const deadline = Date.now() + timeoutMs;
+    let lastError = null;
     while (Date.now() < deadline) {
-      const windowId = await this.mainWindowId(opts);
-      if (windowId) return windowId;
+      try {
+        const windowId = await this.mainWindowId(opts);
+        if (windowId) return windowId;
+        lastError = null;
+      } catch (error) {
+        lastError = error;
+      }
       await delay(pollIntervalMs);
     }
+    if (lastError) throw lastError;
     return null;
   }
 
   async windowList() {
-    const main = await this.mainWindowId();
-    if (!main) return [];
-    let ids = [main];
-    try {
-      const pid = await this.runXdotoolCapture(['getwindowpid', String(main)]);
-      ids = parsePositiveIntegers(await this.runXdotoolCapture([
-        'search', '--onlyvisible', '--pid', pid,
-      ]));
-    } catch {}
-
-    const windows = [];
-    for (const id of ids) {
-      const name = await this.runXdotoolCapture(['getwindowname', String(id)]).catch(() => '');
-      const bounds = await this.windowGeometry(id).catch(() => null);
-      if (bounds) windows.push({ id, name, ...bounds, layer: 0 });
+    const { windows } = await this.ownedWindows();
+    const listed = [];
+    for (const window of windows.filter((candidate) => candidate.mapped)) {
+      const bounds = await this.windowGeometry(window.id).catch(() => null);
+      if (bounds) listed.push({ id: window.id, name: window.title ?? '', ...bounds, layer: 0 });
     }
-    return windows;
+    return listed;
   }
 
   async waitForWindowTitled(title, { timeoutMs = 10_000, pollIntervalMs = 200 } = {}) {
@@ -238,41 +232,31 @@ export class LinuxDriver {
     return null;
   }
 
-  async typeText(text) {
+  async #keyboard({ kind, key, keyCode, modifiers, text }) {
     await this.activateBackground();
-    await this.runXdotool(['type', '--clearmodifiers', '--', String(text)]);
-    await delay(this.actionDelayMs);
+    if (kind === 'text') {
+      await this.runXdotool(['type', '--clearmodifiers', '--', text]);
+      return;
+    }
+    const name = kind === 'keycode' ? linuxKeyCodeName(keyCode) : key;
+    await this.runXdotool(['key', '--clearmodifiers', linuxKeyName(name, modifiers)]);
   }
 
-  async pressKey(key, modifiers = {}) {
-    await this.activateBackground();
-    await this.runXdotool(['key', '--clearmodifiers', linuxKeyName(key, modifiers)]);
-    await delay(this.actionDelayMs);
+  async #pointer({ action, point, to, deltaY, opts }) {
+    if (action === 'move') return this.#move(point.x, point.y, opts);
+    if (action === 'click') return this.#click(1, point.x, point.y, opts);
+    if (action === 'right_click') return this.#click(3, point.x, point.y, opts);
+    if (action === 'drag') return this.#drag(point.x, point.y, to.x, to.y, opts);
+    if (action === 'scroll') return this.#scroll(point.x, point.y, deltaY, opts);
+    throw new Error(`LinuxDriver has no pointer action ${action}`);
   }
 
-  async pressKeyCode(keyCode, modifiers = {}) {
-    await this.pressKey(linuxKeyCodeName(keyCode), modifiers);
-  }
-
-  async pressEnter() {
-    await this.pressKeyCode(36);
-  }
-
-  async movePointerInWindow(relativeX, relativeY, opts = {}) {
+  async #move(relativeX, relativeY, opts) {
     const { windowId, x, y } = await this.relativePoint(relativeX, relativeY, opts);
     await this.runXdotool(['mousemove', '--window', String(windowId), String(x), String(y)]);
-    await delay(this.actionDelayMs);
   }
 
-  async clickWindow(relativeX, relativeY, opts = {}) {
-    await this.clickButton(1, relativeX, relativeY, opts);
-  }
-
-  async rightClickWindow(relativeX, relativeY, opts = {}) {
-    await this.clickButton(3, relativeX, relativeY, opts);
-  }
-
-  async dragWindow(relativeX, relativeY, toRelativeX, toRelativeY, opts = {}) {
+  async #drag(relativeX, relativeY, toRelativeX, toRelativeY, opts) {
     const start = await this.relativePoint(relativeX, relativeY, opts);
     const end = await this.relativePoint(toRelativeX, toRelativeY, opts);
     const stepCount = Math.max(2, Number.isInteger(opts.steps) ? opts.steps : 12);
@@ -289,19 +273,17 @@ export class LinuxDriver {
     args.push('mouseup', '1');
     await this.activateBackground(opts);
     await this.runXdotool(args);
-    await delay(this.actionDelayMs);
   }
 
-  async scrollWindow(relativeX, relativeY, deltaY, opts = {}) {
+  async #scroll(relativeX, relativeY, deltaY, opts) {
     const deltaX = Number(opts.deltaX || 0);
     const vertical = Math.abs(Number(deltaY)) >= Math.abs(deltaX);
     const delta = vertical ? Number(deltaY) : deltaX;
     if (!Number.isFinite(delta) || delta === 0) return;
     const button = vertical ? (delta > 0 ? 4 : 5) : (delta > 0 ? 6 : 7);
     const repeat = Number.isInteger(opts.steps) && opts.steps > 0 ? opts.steps : 1;
-    await this.movePointerInWindow(relativeX, relativeY, opts);
+    await this.#move(relativeX, relativeY, opts);
     await this.runXdotool(['click', '--repeat', String(repeat), String(button)]);
-    await delay(this.actionDelayMs);
   }
 
   async parkWindow() {}
@@ -317,6 +299,9 @@ export class LinuxDriver {
 
   async screenshot(outputPath, opts = {}) {
     const windowId = await this.requireWindow(opts);
+    await this.windowGeometry(windowId).catch((error) => {
+      throw new Error(`Linux window capture failed: window ${windowId} is gone: ${commandErrorDetail(error.cause ?? error)}`, { cause: error });
+    });
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     try {
       await this.run('import', ['-window', String(windowId), outputPath], {
@@ -360,7 +345,7 @@ export class LinuxDriver {
     ]));
   }
 
-  async nativeFocusState({ pid = null } = {}) {
+  async nativeFocusState() {
     const read = (fn) => fn().catch((error) => ({ error: String(error?.message || error) }));
     const describeWindow = async (id) => ({
       id,
@@ -368,9 +353,6 @@ export class LinuxDriver {
       pid: await this.runXdotoolCapture(['getwindowpid', String(id)]).catch(() => null),
       geometry: await this.windowGeometry(id).catch(() => null),
     });
-    const searchPid = async (extra) => parsePositiveIntegers(
-      await this.runXdotoolCapture(['search', ...extra, '--pid', String(pid)]).catch(() => ''),
-    );
     const [mainWindow, focusedWindow, pointer, appWindows] = await Promise.all([
       read(async () => {
         const id = await this.mainWindowId();
@@ -381,9 +363,14 @@ export class LinuxDriver {
         (await this.runXdotoolCapture(['getmouselocation', '--shell'])).split(/\r?\n/).map((line) => line.split('=', 2)),
       )),
       read(async () => {
-        if (!pid) return null;
-        const [all, visible] = await Promise.all([searchPid([]), searchPid(['--onlyvisible']).then((ids) => new Set(ids))]);
-        return Promise.all(all.map(async (id) => ({ ...await describeWindow(id), visible: visible.has(id) })));
+        const { pid, windows } = await this.ownedWindows();
+        return {
+          pid,
+          windows: await Promise.all(windows.map(async (window) => ({
+            ...window,
+            native: window.id ? await describeWindow(window.id) : null,
+          }))),
+        };
       }),
     ]);
     return { mainWindow, focusedWindow, pointer, appWindows };
@@ -401,7 +388,7 @@ export class LinuxDriver {
 
   // `mousemove --sync` waits for a motion event, and none comes when the
   // pointer already sits at the point (a repeated click), so it hangs.
-  async clickButton(button, relativeX, relativeY, opts = {}) {
+  async #click(button, relativeX, relativeY, opts) {
     const point = await this.relativePoint(relativeX, relativeY, opts);
     const modifiers = linuxModifierNames(opts.modifiers);
     const args = [
@@ -412,28 +399,16 @@ export class LinuxDriver {
     for (const modifier of [...modifiers].reverse()) args.push('keyup', modifier);
     await this.activateBackground(opts);
     await this.runXdotool(args);
-    await delay(this.actionDelayMs);
   }
 
   async requireWindow(opts = {}) {
-    const windowId = await this.mainWindowId(opts);
-    if (windowId) return windowId;
-    const title = opts.windowTitle || this.appName;
-    const lookup = this.lastEmptyLookup;
-    const attnWindows = await this.attnWindows().catch((error) => String(error?.message || error));
-    throw new Error(`Linux input driver found no visible window titled ${JSON.stringify(title)} on DISPLAY=${this.env.DISPLAY}`
-      + `; xdotool ${JSON.stringify(lookup?.searchArgs)} stderr=${JSON.stringify(lookup?.stderr ?? '')}`
-      + `; attn windows now: ${JSON.stringify(attnWindows)}`);
-  }
-
-  async attnWindows() {
-    const search = (extra) => this.runXdotoolCapture(['search', ...extra, '--name', '^attn']).then(parsePositiveIntegers, () => []);
-    const [all, visible] = await Promise.all([search([]), search(['--onlyvisible']).then((ids) => new Set(ids))]);
-    return Promise.all(all.map(async (id) => ({
-      id,
-      name: await this.runXdotoolCapture(['getwindowname', String(id)]).catch(() => null),
-      visible: visible.has(id),
-    })));
+    if (opts.windowId) return opts.windowId;
+    const owned = await this.ownedWindows();
+    const window = selectOwnedWindow(owned, opts);
+    if (window) return window.id;
+    const wanted = opts.windowTitle ? `titled ${JSON.stringify(opts.windowTitle)}` : 'labelled "main"';
+    throw new Error(`Linux input driver found no mapped app window ${wanted} on DISPLAY=${this.env.DISPLAY}`
+      + `; app pid ${owned.pid} reports windows ${JSON.stringify(owned.windows)}`);
   }
 
   requireDisplay() {

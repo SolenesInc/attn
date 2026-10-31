@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-[ "$#" -eq 0 ] || { echo "usage: scripts/land.sh" >&2; exit 2; }
+usage="usage: scripts/land.sh [--baseline]"
+landing_tests=selected
+case "$*" in
+  "") ;;
+  --baseline) landing_tests=baseline ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -63,11 +69,9 @@ regenerate() {
   done
 }
 
-regenerated=0
 rebase_onto_main() {
   local generators conflicted generator
   local -a generator_list
-  regenerated=0
   git rebase --quiet origin/main >/dev/null 2>&1 || true
   while rebasing; do
     if ! generators="$(generators_for_conflicts)" || [ -z "$generators" ]; then
@@ -83,14 +87,13 @@ Rebase yourself with git rebase origin/main, then run scripts/land.sh again."
       generator_list+=("$generator")
     done <<<"$generators"
     regenerate "${generator_list[@]}"
-    regenerated=1
     GIT_EDITOR=true git rebase --continue >/dev/null 2>&1 || true
   done
   git merge-base --is-ancestor origin/main HEAD || fail "could not rebase onto origin/main; run git rebase origin/main to see why"
 }
 
 run_checks() {
-  local changed file dir packages targets=()
+  local changed file dir packages group pattern targets=() landing_groups=()
   changed="$(git diff --name-only origin/main...HEAD)"
   touches() { grep -qE "$1" <<<"$changed"; }
   if touches '\.go$|^go\.(mod|sum)$'; then
@@ -114,23 +117,57 @@ run_checks() {
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
   touches '^scripts/' && targets+=(test-scripts)
+  while read -r _ group pattern; do
+    touches "$pattern" && landing_groups+=("$group")
+  done < <(awk '$1 == "group"' scripts/landing-tests)
   if [ "${#targets[@]}" -gt 0 ]; then
     make "${targets[@]}"
   fi
+  if [ "${#landing_groups[@]}" -gt 0 ]; then
+    run_landing_tests "${landing_groups[@]}"
+  fi
+}
+
+run_landing_tests() {
+  local units_file unit group units=() group_options=()
+  if [ "$landing_tests" = baseline ]; then
+    echo "land: running the baseline landing tests (--baseline)"
+    scripts/landing-tests.sh "$@"
+    return
+  fi
+  for group in "$@"; do group_options+=(--group "$group"); done
+  units_file="$(mktemp "${TMPDIR:-/tmp}/attn-land-units.XXXXXX")"
+  if go tool test-history land --units-out "$units_file" "${group_options[@]}"; then
+    while IFS= read -r unit || [ -n "$unit" ]; do
+      if [ -n "$unit" ]; then units+=(--unit "$unit"); fi
+    done <"$units_file"
+  fi
+  rm -f "$units_file"
+  if [ "${#units[@]}" -eq 0 ]; then
+    echo "land: choosing landing tests failed; running the baseline groups $*" >&2
+    scripts/landing-tests.sh "$@"
+    return
+  fi
+  scripts/landing-tests.sh "${units[@]}"
 }
 
 git diff --quiet && git diff --cached --quiet || fail "commit or stash your changes first"
 rebasing && fail "finish the rebase in progress first"
+sync_history() {
+  [ "$landing_tests" = selected ] || return 0
+  go tool test-history sync || echo "land: $1" >&2
+}
 
-for attempt in $(seq "$max_attempts"); do
+sync_history "choosing landing tests from the history already synced"
+
+for _ in $(seq "$max_attempts"); do
   git fetch --quiet origin main
   [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
   rebase_onto_main
-  if [ "$attempt" -eq 1 ] || [ "$regenerated" -eq 1 ]; then
-    run_checks
-  fi
+  run_checks
   if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
     echo "land: main is at $(git rev-parse --short HEAD)"
+    sync_history "this landing's test receipts upload at the next sync"
     exit 0
   fi
   git fetch --quiet origin main

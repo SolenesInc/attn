@@ -493,7 +493,11 @@ func (s Snapshot) ContinuationContract() ContinuationContract {
 }
 
 func (c ContinuationContract) Equal(other ContinuationContract) bool {
-	if c.Prompt != other.Prompt || c.Launch != other.Launch {
+	return c.Launch == other.Launch && c.SameWork(other)
+}
+
+func (c ContinuationContract) SameWork(other ContinuationContract) bool {
+	if c.Prompt != other.Prompt {
 		return false
 	}
 	leftJSON, leftErr := json.Marshal(c.Location)

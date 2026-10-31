@@ -11,6 +11,7 @@ import {
   defaultAppPathForInstance,
 } from './harnessInstance.mjs';
 import { createKeyInputGuard } from './keyInputGuard.mjs';
+import { TargetedWindowDriver } from './targetedWindowDriver.mjs';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -53,25 +54,25 @@ function modifierNames(modifiers = {}) {
   return names;
 }
 
-export class MacOSDriver {
+export class MacOSDriver extends TargetedWindowDriver {
   constructor({
     bundleId = null,
     appPath = defaultAppPathForInstance(),
-    actionDelayMs = 250,
     keyInputGuard = null,
     client = null,
+    systemInput = false,
   } = {}) {
+    super({ client, pointer: (gesture) => this.#pointer(gesture), keyboard: (stroke) => this.#keyboard(stroke) });
+    this.systemInput = systemInput;
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: resolvedBundleId });
     this.bundleId = resolvedBundleId;
     this.appPath = appPath;
-    this.actionDelayMs = actionDelayMs;
     this.keyInputGuard = keyInputGuard || createKeyInputGuard({ appPath });
-    this.client = client;
   }
 
   get injectsInApp() {
-    return this.client !== null;
+    return this.client !== null && !this.systemInput;
   }
 
   async #inApp(action, payload, opts = {}) {
@@ -94,12 +95,10 @@ export class MacOSDriver {
 
   async activateApp() {
     await this.runInputDriver(['activate']);
-    await delay(this.actionDelayMs);
   }
 
   async activateBackground() {
     await this.runInputDriver(['activate_background']);
-    await delay(this.actionDelayMs);
   }
 
   async menu(pathSegments) {
@@ -113,7 +112,6 @@ export class MacOSDriver {
       path.join('>'),
       '--prompt-accessibility',
     ]);
-    await delay(this.actionDelayMs);
   }
 
   async frontmostBundleId() {
@@ -180,55 +178,35 @@ export class MacOSDriver {
     return null;
   }
 
-  async typeText(text) {
+  async #keyboard({ kind, key, keyCode, modifiers, text }) {
     if (this.injectsInApp) {
-      await this.#inApp('native_text', { text });
-    } else {
+      if (kind === 'text') {
+        await this.#inApp('native_text', { text });
+      } else {
+        await this.#inApp('native_key', { ...(kind === 'keycode' ? { keyCode } : { key }), modifiers: modifierNames(modifiers) });
+      }
+      return;
+    }
+    const serialized = this.serializeModifiers(modifiers);
+    if (kind === 'text') {
       this.keyInputGuard.assertReaches(`typeText(${JSON.stringify(text.slice(0, 20))})`);
       await this.runInputDriver(['text', '--text', text, '--prompt-accessibility']);
+      return;
     }
-    await delay(this.actionDelayMs);
+    const [command, flag, value] = kind === 'keycode' ? ['keycode', '--key-code', String(keyCode)] : ['key', '--key', key];
+    this.keyInputGuard.assertReaches(`${kind === 'keycode' ? 'pressKeyCode' : 'pressKey'}(${value}, ${serialized || 'no modifiers'})`);
+    await this.runInputDriver([command, flag, value, '--modifiers', serialized, '--prompt-accessibility']);
   }
 
-  async pressKey(key, modifiers = {}) {
-    if (this.injectsInApp) {
-      await this.#inApp('native_key', { key, modifiers: modifierNames(modifiers) });
-    } else {
-      this.keyInputGuard.assertReaches(`pressKey(${key}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
-      await this.runInputDriver([
-        'key',
-        '--key',
-        key,
-        '--modifiers',
-        this.serializeModifiers(modifiers),
-        '--prompt-accessibility',
-      ]);
-    }
-    await delay(this.actionDelayMs);
+  async #pointer({ action, point, to, deltaY, opts }) {
+    if (action === 'move') return this.#move(point.x, point.y, opts);
+    if (action === 'click' || action === 'right_click') return this.#click(action, point.x, point.y, opts);
+    if (action === 'drag') return this.#drag(point.x, point.y, to.x, to.y, opts);
+    if (action === 'scroll') return this.#scroll(point.x, point.y, deltaY, opts);
+    throw new Error(`MacOSDriver has no pointer action ${action}`);
   }
 
-  async pressKeyCode(keyCode, modifiers = {}) {
-    if (this.injectsInApp) {
-      await this.#inApp('native_key', { keyCode, modifiers: modifierNames(modifiers) });
-    } else {
-      this.keyInputGuard.assertReaches(`pressKeyCode(${keyCode}, ${this.serializeModifiers(modifiers) || 'no modifiers'})`);
-      await this.runInputDriver([
-        'keycode',
-        '--key-code',
-        String(keyCode),
-        '--modifiers',
-        this.serializeModifiers(modifiers),
-        '--prompt-accessibility',
-      ]);
-    }
-    await delay(this.actionDelayMs);
-  }
-
-  async pressEnter() {
-    await this.pressKeyCode(36);
-  }
-
-  async movePointerInWindow(relativeX, relativeY, opts = {}) {
+  async #move(relativeX, relativeY, opts) {
     if (this.injectsInApp) {
       await this.#inApp('native_mouse', { action: 'move', x: relativeX, y: relativeY }, opts);
     } else {
@@ -241,15 +219,6 @@ export class MacOSDriver {
         '--prompt-accessibility',
       ], opts));
     }
-    await delay(this.actionDelayMs);
-  }
-
-  async clickWindow(relativeX, relativeY, opts = {}) {
-    await this.#click('click', relativeX, relativeY, opts);
-  }
-
-  async rightClickWindow(relativeX, relativeY, opts = {}) {
-    await this.#click('right_click', relativeX, relativeY, opts);
   }
 
   async #click(action, relativeX, relativeY, opts) {
@@ -274,12 +243,10 @@ export class MacOSDriver {
       }
       await this.runInputDriver(withWindowTitleArgs(args, opts));
     }
-    await delay(this.actionDelayMs);
   }
 
-  // Interpolated leftMouseDragged events: the shape WebKit requires for text
-  // selection. Same 0..1 semantics as clickWindow.
-  async dragWindow(relativeX, relativeY, toRelativeX, toRelativeY, opts = {}) {
+  // Interpolated leftMouseDragged events: the shape WebKit requires for text selection.
+  async #drag(relativeX, relativeY, toRelativeX, toRelativeY, opts) {
     if (this.injectsInApp) {
       await this.#inApp('native_mouse', {
         action: 'drag',
@@ -308,11 +275,10 @@ export class MacOSDriver {
       }
       await this.runInputDriver(withWindowTitleArgs(args, opts));
     }
-    await delay(this.actionDelayMs);
   }
 
   // Positive deltaY scrolls content up, negative down (CGEvent convention).
-  async scrollWindow(relativeX, relativeY, deltaY, opts = {}) {
+  async #scroll(relativeX, relativeY, deltaY, opts) {
     const args = [
       'scroll',
       '--relative-x',
@@ -330,7 +296,6 @@ export class MacOSDriver {
       args.push('--steps', String(opts.steps));
     }
     await this.runInputDriver(withWindowTitleArgs(args, opts));
-    await delay(this.actionDelayMs);
   }
 
   async parkWindow(visiblePx, opts = {}) {

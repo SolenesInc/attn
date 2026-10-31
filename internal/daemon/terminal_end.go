@@ -92,7 +92,7 @@ func (d *Daemon) terminalExited(ctx context.Context, msg protocol.TerminalExited
 		return struct{}{}, fmt.Errorf("session %s does not run on %s", msg.SessionID, origin.Name)
 	}
 	err := d.reconcileRemoteTerminals(ctx, msg.SessionID, msg.Running)
-	pausepoint.At(pausepoint.TerminalExitReconciled)
+	pausepoint.Done(pausepoint.TerminalExitReconciled, err)
 	return struct{}{}, err
 }
 

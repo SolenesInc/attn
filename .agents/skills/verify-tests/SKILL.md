@@ -9,7 +9,10 @@ Judge whether each test this change adds, changes or deletes earns its place in
 the whole suite. Report findings; do not edit.
 
 `docs/internal/testing.md` and the "Writing tests" section of `AGENTS.md` are
-attn's testing strategy. Read all of it first. This skill does not repeat it.
+attn's testing strategy, and the Gotchas in the `write-test` skill name the
+habits that most often break it. Read all of them first, and the page that
+`write-test` names for each kind of test the change touches. This skill does
+not repeat them.
 
 ## Read
 
@@ -51,7 +54,9 @@ native library there), never in this checkout, and remove it when you are done.
   state between tests, order between tests, fixed ports or paths?
 - Does it reach config paths without the test safety setup in `AGENTS.md`?
 - Does a harness change model something outside attn, or does it set attn's
-  own state?
+  own state? A pause or crash point is the one allowed reach inside, when the
+  promise is a moment between two steps of one action and the point sets no
+  state.
 - For a deleted test, does its promise keep coverage?
 
 ## Report

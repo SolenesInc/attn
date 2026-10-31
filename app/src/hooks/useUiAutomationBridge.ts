@@ -849,16 +849,22 @@ function wheelPaneElement(sessionId: string, paneId: string, deltaY: number, del
 // Cell math must use the canvas (grid) rect, not the container rect: the container is
 // larger by the fit remainder, so proportional division clicks the wrong row.
 function paneTerminalGrid(sessionId: string, paneId: string) {
-  const paneElement = document.querySelector(
-    `[data-pane-session-id="${sessionId}"][data-pane-id="${paneId}"]`
-  );
-  const terminal = paneElement?.querySelector('.terminal-container');
+  const terminalSelector = `[data-pane-session-id="${sessionId}"][data-pane-id="${paneId}"] .terminal-container`;
+  const terminal = document.querySelector(terminalSelector);
   if (!(terminal instanceof HTMLElement)) {
     throw new Error(`Terminal element not found for ${sessionId}:${paneId}`);
   }
   const canvas = terminal.querySelector('canvas');
+  const gridSelector = canvas instanceof HTMLElement ? `${terminalSelector} canvas` : terminalSelector;
   const gridRect = (canvas instanceof HTMLElement ? canvas : terminal).getBoundingClientRect();
-  return { terminal, gridRect };
+  return { terminal, gridRect, gridSelector };
+}
+
+function paneCellFraction(size: { cols: number; rows: number }, cell: { col: number; row: number }) {
+  return {
+    x: (cell.col + 0.5) / Math.max(1, size.cols),
+    y: (cell.row + 0.5) / Math.max(1, size.rows),
+  };
 }
 
 function paneCellPoint(
@@ -866,9 +872,10 @@ function paneCellPoint(
   size: { cols: number; rows: number },
   cell: { col: number; row: number },
 ) {
+  const fraction = paneCellFraction(size, cell);
   return {
-    clientX: gridRect.left + ((cell.col + 0.5) / Math.max(1, size.cols)) * gridRect.width,
-    clientY: gridRect.top + ((cell.row + 0.5) / Math.max(1, size.rows)) * gridRect.height,
+    clientX: gridRect.left + fraction.x * gridRect.width,
+    clientY: gridRect.top + fraction.y * gridRect.height,
   };
 }
 
@@ -913,13 +920,18 @@ function paneCellRect(
   size: { cols: number; rows: number },
   cell: { col: number; row: number },
 ) {
-  const { gridRect } = paneTerminalGrid(sessionId, paneId);
+  const { gridRect, gridSelector } = paneTerminalGrid(sessionId, paneId);
   const point = paneCellPoint(gridRect, size, cell);
   return {
     centerX: point.clientX,
     centerY: point.clientY,
     innerWidth: window.innerWidth,
     innerHeight: window.innerHeight,
+    target: {
+      selector: gridSelector,
+      at: { x: 0, y: 0 },
+      offset: { x: point.clientX - gridRect.left, y: point.clientY - gridRect.top },
+    },
   };
 }
 

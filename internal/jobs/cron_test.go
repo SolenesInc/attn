@@ -7,6 +7,8 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 const cronKind = "heartbeat"
@@ -52,9 +54,9 @@ func TestAFailingCronEntryStaysArmed(t *testing.T) {
 
 func TestRestartKeepsAnExistingCronSchedule(t *testing.T) {
 	store := newMemStore()
-	clock := newFakeClock()
+	clock := stepclock.New()
 	opts := func() Options {
-		return Options{Store: store, Now: clock.now, PollInterval: testPoll, Log: func(string, ...interface{}) {}}
+		return Options{Store: store, Clock: clock, PollInterval: testPoll, Log: func(string, ...interface{}) {}}
 	}
 	noop := func(context.Context, *Job) (any, error) { return nil, nil }
 
@@ -69,7 +71,7 @@ func TestRestartKeepsAnExistingCronSchedule(t *testing.T) {
 	}
 	first.Stop()
 
-	clock.advance(30 * time.Minute)
+	clock.Advance(30 * time.Minute)
 
 	second := New(opts())
 	if err := second.RegisterCron(cronKind, time.Hour, noop, HandlerConfig{}); err != nil {
@@ -149,9 +151,9 @@ func TestArmingRevivesACronEntryAPriorBuildKilled(t *testing.T) {
 
 func TestShorteningTheIntervalPullsAnArmedEntryIn(t *testing.T) {
 	store := newMemStore()
-	clock := newFakeClock()
+	clock := stepclock.New()
 	opts := func() Options {
-		return Options{Store: store, Now: clock.now, PollInterval: testPoll, Log: func(string, ...interface{}) {}}
+		return Options{Store: store, Clock: clock, PollInterval: testPoll, Log: func(string, ...interface{}) {}}
 	}
 	noop := func(context.Context, *Job) (any, error) { return nil, nil }
 
@@ -180,7 +182,7 @@ func TestShorteningTheIntervalPullsAnArmedEntryIn(t *testing.T) {
 	if !after.ScheduledAt.Before(armed.ScheduledAt) {
 		t.Fatalf("a shortened interval left the fire at %s (was %s)", after.ScheduledAt, armed.ScheduledAt)
 	}
-	if wait := after.ScheduledAt.Sub(clock.now()); wait > time.Minute {
+	if wait := after.ScheduledAt.Sub(clock.Now()); wait > time.Minute {
 		t.Fatalf("next fire is %s out, past the new %s interval", wait, time.Minute)
 	}
 	if after.ID != armed.ID {
@@ -190,9 +192,9 @@ func TestShorteningTheIntervalPullsAnArmedEntryIn(t *testing.T) {
 
 func TestLengtheningTheIntervalLeavesAnArmedEntryAlone(t *testing.T) {
 	store := newMemStore()
-	clock := newFakeClock()
+	clock := stepclock.New()
 	opts := func() Options {
-		return Options{Store: store, Now: clock.now, PollInterval: testPoll, Log: func(string, ...interface{}) {}}
+		return Options{Store: store, Clock: clock, PollInterval: testPoll, Log: func(string, ...interface{}) {}}
 	}
 	noop := func(context.Context, *Job) (any, error) { return nil, nil }
 

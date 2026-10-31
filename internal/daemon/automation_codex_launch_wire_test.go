@@ -146,7 +146,6 @@ func TestACodexAutomationIsDeliveredOnceItsOpeningPromptStartsATurn(t *testing.T
 }
 
 func TestASharedCodexSingletonContinuesItsLiveSessionAndResumesItsConversationAfterStopping(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL", "100ms")
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
@@ -155,15 +154,18 @@ func TestASharedCodexSingletonContinuesItsLiveSessionAndResumesItsConversationAf
 	setSetting(t, app, "codex_shared_enabled", "true")
 	spec := strings.NewReplacer("*/2 * * * *", "@every 1s", "launch: {driver: claude}", "launch: {driver: codex}").Replace(automationSingletonSpec(w, "Sweep", "latest", ""))
 	id := applyAutomation(t, cli, spec).ID
-	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
+	awaitDelivered := func(earlier ...string) (run protocol.AutomationRunSummary) {
 		t.Helper()
-		for {
-			if runs := automationRuns(t, cli, id); len(runs) > 0 && runs[0].State == "delivered" && !slices.Contains(earlier, runs[0].ID) {
-				setAutomationEnabled(t, cli, id, false)
-				return runs[0]
+		w.tickSchedulesUntil("a new delivered run", func() bool {
+			runs := automationRuns(t, cli, id)
+			if len(runs) == 0 || runs[0].State != "delivered" || slices.Contains(earlier, runs[0].ID) {
+				return false
 			}
-			awaitAutomationChanged(app, id)
-		}
+			run = runs[0]
+			return true
+		})
+		setAutomationEnabled(t, cli, id, false)
+		return run
 	}
 
 	first := awaitDelivered()

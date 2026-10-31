@@ -1,0 +1,68 @@
+# The baseline: tests scripts/land.sh always runs before it pushes, chosen by
+# the paths a landing changes. land.sh adds tests that failed on main and tests
+# the landing changes; docs/internal/test-history.md says how it chooses them.
+# Run groups by hand with scripts/landing-tests.sh <group>..., or single tests
+# with scripts/landing-tests.sh --unit '<unit>'...
+#
+# "group <name> <pattern>" starts a group. land.sh runs it when a changed path
+# matches the pattern, an extended regular expression. The lines under it name
+# the tests:
+#
+#   go <package> <TestName>   a top-level Go test and its subtests
+#   vitest <file>             a Vitest file, relative to app/
+#   playwright <file>         a Playwright spec, relative to app/
+#
+# The list grows from red main. When the sheriff's repair for a red cause lands,
+# the test that caught it joins the group whose paths can break it, if it runs
+# in seconds.
+
+group go \.go$|^go\.(mod|sum)$
+go ./internal/daemon TestAResumedSharedConversationsRunSurvivesItsOutcome
+go ./internal/daemon TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed
+go ./internal/daemon TestSimultaneousIDIntroductionsNeverShareAnID
+go ./internal/daemon TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter
+go ./internal/daemon TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnceWithoutRelaunching
+go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
+go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose
+go ./internal/daemon TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins
+go ./internal/daemon TestATranscriptTheReloadingRunReportsBeforeItsLaunchCommitsPricesTheSession
+go ./internal/daemon TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook
+go ./internal/daemon TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne
+go ./internal/daemon TestAnOlderDetailsReadNeverOverwritesANewerOne
+go ./internal/codexshared TestACallKeepsTheReplyItReceivedBeforeCodexDisconnected
+go ./internal/daemon TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover
+go ./internal/daemon TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrites
+go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
+go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
+go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
+go ./scripts/test-history TestSelectChoosesTheCheckoutsTestsFromItsHistory
+
+group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
+go ./internal/daemon TestLegacyPromptCompatibility
+go ./cmd/attn TestLegacyPromptCompatibility
+go ./internal/crew TestLegacyPromptCompatibility
+go ./internal/transcript TestLegacyPromptCompatibility
+go ./internal/activity TestLegacyPromptCompatibility
+go ./internal/classifier TestLegacyPromptCompatibility
+go ./internal/sessioninstructions TestLegacyPromptCompatibility
+go ./internal/agent TestLegacyPromptCompatibility
+go ./internal/hooks TestLegacyPromptCompatibility
+
+group clickhouse ^internal/daemon/analytics|^internal/analytics/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
+go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
+go ./internal/daemon TestAttnIngestRefusingTheDaysBytesIsShownAndWaitedOut
+go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
+go ./internal/daemon TestTurningSharingOffDuringTheFirstRegistrationSendsNothing
+go ./internal/daemon TestRecordsMadeAfterClearingDuringAnUploadAreStillSent
+go ./cmd/attn-ingest TestAnInstallSendsRetriesHitsTheMinuteLimitAndIsDeleted
+go ./cmd/attn-ingest TestOneInstallStoresAtMost128MiBADayAndOthersAreUnaffected
+go ./cmd/attn-ingest TestAllInstallsTogetherStoreAtMostTheConfiguredBytesADay
+go ./cmd/attn-ingest TestOneAddressRegistersAtMostTwentyInstallsAnHour
+go ./cmd/attn-ingest TestOversizedRequestsAreRefusedNamingTheLimit
+go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
+go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
+go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
+
+group app ^app/
+vitest src/App.desktops.test.tsx
+playwright e2e/queue-sidebar-fit.spec.ts

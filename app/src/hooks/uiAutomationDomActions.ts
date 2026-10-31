@@ -4,11 +4,13 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { waitForAutomationDom } from './uiAutomationDom';
 import {
-  armNativePointerWitness,
-  disarmNativePointerWitness,
-  waitForNativePointerWitness,
-} from './nativePointerWitness';
+  armNativeInputWitness,
+  disarmNativeInputWitness,
+  parseInputExpectation,
+  waitForNativeInputWitness,
+} from './nativeInputWitness';
 import { settleBeforeBridgeRequest, settleUi } from './uiAutomationSettle';
+import { parseNativeTarget, settledNativePoint, waitForFiniteAnimations } from './uiAutomationSettledTarget';
 import { supportUiDiagnosticsSnapshot } from '../utils/uiDiagnosticsLog';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
@@ -361,6 +363,7 @@ export async function runDomAutomationAction(
         selector: typeof payload.selector === 'string' ? payload.selector : '',
         absent: payload.absent === true,
         textIncludes: typeof payload.textIncludes === 'string' ? payload.textIncludes : undefined,
+        valueEquals: typeof payload.valueEquals === 'string' ? payload.valueEquals : undefined,
         focused: payload.focused === true,
         timeoutMs: typeof payload.timeoutMs === 'number' ? payload.timeoutMs : NaN,
       });
@@ -371,13 +374,10 @@ export async function runDomAutomationAction(
       if (!(element instanceof HTMLElement)) {
         throw new Error(`dom_wait_finite_animations selector not found in DOM: ${selector}`);
       }
-      const animations = element.getAnimations({ subtree: true }).filter((animation) => {
-        const endTime = animation.effect?.getComputedTiming().endTime;
-        return typeof endTime === 'number' && Number.isFinite(endTime);
-      });
-      await Promise.all(animations.map((animation) => animation.finished));
-      return { finished: animations.length };
+      return { finished: await waitForFiniteAnimations(selector, element.getAnimations({ subtree: true })) };
     }
+    case 'dom_native_point':
+      return settledNativePoint(parseNativeTarget(payload));
     case 'dom_bounds': {
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_bounds requires selector');
@@ -582,14 +582,12 @@ export async function runDomAutomationAction(
         },
       };
     }
-    case 'arm_native_pointer_witness': {
-      const selector = typeof payload.selector === 'string' ? payload.selector : '';
-      if (!selector) throw new Error('arm_native_pointer_witness requires selector');
-      armNativePointerWitness(selector);
+    case 'arm_native_input_witness': {
+      armNativeInputWitness(parseInputExpectation(payload));
       return { armed: true };
     }
-    case 'wait_native_pointer_witness': {
-      const receipt = await waitForNativePointerWitness();
+    case 'wait_native_input_witness': {
+      const receipt = await waitForNativeInputWitness();
       await settleUi();
       return receipt;
     }
@@ -640,7 +638,7 @@ export function useAutomationRequestListener(handleAutomationRequest: (request: 
     });
 
     return () => {
-      disarmNativePointerWitness();
+      disarmNativeInputWitness();
       void unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);

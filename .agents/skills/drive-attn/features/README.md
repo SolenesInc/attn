@@ -57,7 +57,7 @@ In the index, "both" means people and agents.
   needs a background process's exit code has the subshell that started it
   write the code to a file, as [doc-store.md](doc-store.md) does.
 
-### Doors and harnesses
+### Entrypoints and harnesses
 
 - People: `bridge` with native input (`native_key`, `native_text`,
   `native_mouse`) for shortcuts, the palette and controls; `./attn` for the
@@ -68,7 +68,7 @@ In the index, "both" means people and agents.
   reload, snooze, `attn terminal`, `attn turn`) behaves differently from a
   plain shell, so drive the agent's side through the mock.
 - The person's own shell can act as a session with `--session <id>` or
-  `--source-session <id>`. That is a door of its own, and a way to set up,
+  `--source-session <id>`. That is an entrypoint of its own, and a way to set up,
   never proof of what an agent can do.
 - Triggers: cause the real event (an agent stops, a note rings, a pull
   request changes on the mock GitHub) and observe what follows. Where the
@@ -131,27 +131,34 @@ In the index, "both" means people and agents.
   `[role="combobox"][aria-label="Commands"]` to take focus, type the
   command's title with `bridge native_text`, then press Enter. The map names
   the command id; you type its title.
-- Settings: press ⌘, (`ui.openSettings`), then click the section's nav
-  button, `[data-testid="settings-nav-<section>"]`, natively.
-  [settings.md](settings.md) lists the section ids.
+- Settings: press ⌘, (`ui.openSettings`; it closes the dialog when open),
+  clear any `search` that `bridge settings_get_state` shows, then click the
+  section's nav button, `[data-testid="settings-nav-<section>"]`, natively.
+  [settings.md](settings.md) lists the section ids and the step that clears
+  the search.
 - A native click: `bridge native_mouse` takes `x` and `y` from 0 to 1 across
-  the window. Take the element's box from `bridge dom_bounds
-  '{"selector":"..."}'` (`bounds`), the window's from `bridge
-  get_window_bounds` (`logicalBounds`), and the web view's from `bridge
-  dom_focus_state` (`viewport`). The web view sits below the title bar and
-  centered across the window, so
-  `x = (max(0, window.width - viewport.innerWidth) / 2 + box.x + box.width / 2) / window.width`
-  and
-  `y = (max(0, window.height - viewport.innerHeight) + box.y + box.height / 2) / window.height`.
+  the window. Get them for an element with `bridge dom_native_point
+  '{"selector":"..."}'`. It waits for the element to appear and for it and
+  its ancestors to stop moving, scrolls it into view when its point is
+  offscreen or covered, then returns `x` and `y` for the center of its box,
+  with `bounds` in page pixels. `at` picks another point as fractions of the
+  box, such as `{"x":0.9,"y":0.5}`, and `offset` adds page pixels to it. A
+  terminal cell's `get_pane_cell_rect` result carries a `target` to pass as
+  the payload. It refuses, naming the cause, an element with an empty box
+  (hidden on a retained desktop, for example) and a point that stays
+  offscreen or covered after scrolling.
+- Resolve the point right before each native action, and resolve it again
+  after anything that can move the element; a stored point goes stale.
 - `native_mouse` actions are `click`, `right_click`, `move` and `drag` (with
   `toX` and `toY`), each with optional `modifiers`. A control that takes
   clicks only while the pointer is over its row, such as a sidebar row's
-  buttons, needs a `move` over it first.
-- Before calculating coordinates, show the intended desktop and scope the
-  selector to its visible tile. Retained desktops can have hidden elements
-  with empty boxes. Scroll offscreen controls into view with
-  `dom_scroll_into_view` as setup, then read their bounds again. Native input
-  rejects coordinates outside `[0,1)` and clicks in native window chrome.
+  buttons, ignores the pointer until then, and `dom_native_point` refuses
+  it as covered. Resolve the row's point and `move` there first, then
+  resolve the control's point and click it.
+- Before resolving a point, show the intended desktop and scope the
+  selector to its visible tile; retained desktops keep hidden copies of
+  their elements. Native input rejects coordinates outside `[0,1)` and
+  clicks in native window chrome.
 - `native_mouse` hit-tests the target window, including browser page webviews.
   Keys and text follow its native first responder. An explicit `"window"`
   targets that webview instead: `"window":"main"` for app controls,
@@ -173,8 +180,8 @@ In the index, "both" means people and agents.
 ### Waiting
 
 - Wait on real signals, never on sleeps. In the app, `bridge dom_wait` takes
-  `selector` and `timeoutMs`, and optionally `textIncludes`, `absent: true`
-  and `focused: true`.
+  `selector` and `timeoutMs`, and optionally `textIncludes`, `valueEquals`
+  (an input's value), `absent: true` and `focused: true`.
 - A read right after a native key, a click or a command can run before the
   daemon answers. Where a step names a state, re-read the command or
   `bridge` read that shows it until the state appears, with a deadline that
@@ -304,7 +311,7 @@ path and scenario id must exist at HEAD.
 
 How the recipes were checked: [garden.md](garden.md)'s Driving it ran live
 on a named instance, daemon and CLI only, at commit `b3d0df90a`: every step
-from the instance shell and the Agents door, where the mock agent tended,
+from the instance shell and the agents' entrypoints, where the mock agent tended,
 watched, armed a harvest on merge and harvested. Its steps that arm a
 harvest without a url and take the arming back, its `bridge` steps, and
 every other file's Driving it, come from reading the source and the CLI's

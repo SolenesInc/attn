@@ -21,6 +21,7 @@ var allowed = map[string]string{
 	"internal/jobs/stores_test.go TestDueJobsRunByPriorityThenByScheduleWithinASecond":                               "runs in onTheJobDatabase's synctest bubble",
 	"internal/jobs/stores_test.go TestRetentionTrimsCompletedJobsBySubSecondAgeAndKeepsDeadOnes":                     "runs in onTheJobDatabase's synctest bubble",
 	"internal/fakeagent/codex_remote.go (*codexRemote).stayConnected":                                                "the fake Codex's own reconnect backoff, which the real Codex has too",
+	"internal/fakeagent/nisse.go (*Kit).NisseServer":                                                                 "real-time poll for a launched Nisse server; replace with a signal",
 	"internal/fakeagent/nisse.go (*nisseTUI).begin":                                                                  "real-time poll for the Nisse server socket; replace with a signal",
 	"internal/ptybackend/shared_host_integration_test.go waitForSessionIDs":                                          "real-time poll of the shared host; replace with a signal",
 	"internal/ptybackend/shared_host_integration_test.go waitForSessionExit":                                         "real-time poll of the shared host; replace with a signal",
@@ -121,6 +122,9 @@ func waitsIn(fset *token.FileSet, body ast.Node, name string) []string {
 	var inspect func(ast.Node) bool
 	inspect = func(node ast.Node) bool {
 		if clause, ok := node.(*ast.CommClause); ok {
+			if deadline := selectDeadline(clause.Comm); deadline != nil {
+				ast.Inspect(deadline, inspect)
+			}
 			for _, stmt := range clause.Body {
 				ast.Inspect(stmt, inspect)
 			}
@@ -129,6 +133,7 @@ func waitsIn(fset *token.FileSet, body ast.Node, name string) []string {
 		if receive, ok := node.(*ast.UnaryExpr); ok && receive.Op == token.ARROW {
 			if call, ok := receive.X.(*ast.CallExpr); ok && isCall(call, "time", "After") {
 				violations = append(violations, fmt.Sprintf("%s in %s: <-time.After outside a select", fset.Position(call.Pos()), name))
+				return false
 			}
 		}
 		call, ok := node.(*ast.CallExpr)
@@ -137,6 +142,9 @@ func waitsIn(fset *token.FileSet, body ast.Node, name string) []string {
 		}
 		if isCall(call, "synctest", "Test") {
 			return false
+		}
+		if isCall(call, "time", "After") && (len(call.Args) != 1 || !isHangGuard(call.Args[0])) {
+			violations = append(violations, fmt.Sprintf("%s in %s: time.After deadline other than fakeagent.HangGuard", fset.Position(call.Pos()), name))
 		}
 		for _, wait := range []string{"Sleep", "Tick", "NewTicker"} {
 			if isCall(call, "time", wait) {
@@ -147,6 +155,44 @@ func waitsIn(fset *token.FileSet, body ast.Node, name string) []string {
 	}
 	ast.Inspect(body, inspect)
 	return violations
+}
+
+func selectDeadline(comm ast.Stmt) *ast.CallExpr {
+	var received ast.Expr
+	switch comm := comm.(type) {
+	case *ast.ExprStmt:
+		received = comm.X
+	case *ast.AssignStmt:
+		if len(comm.Rhs) == 1 {
+			received = comm.Rhs[0]
+		}
+	}
+	receive, ok := received.(*ast.UnaryExpr)
+	if !ok || receive.Op != token.ARROW {
+		return nil
+	}
+	call, ok := receive.X.(*ast.CallExpr)
+	if !ok || !isCall(call, "time", "After") {
+		return nil
+	}
+	return call
+}
+
+func isHangGuard(expr ast.Expr) bool {
+	switch expr := expr.(type) {
+	case *ast.ParenExpr:
+		return isHangGuard(expr.X)
+	case *ast.Ident:
+		return expr.Name == "HangGuard"
+	case *ast.SelectorExpr:
+		pkg, ok := expr.X.(*ast.Ident)
+		return ok && pkg.Name == "fakeagent" && expr.Sel.Name == "HangGuard"
+	case *ast.BinaryExpr:
+		_, leftLiteral := expr.X.(*ast.BasicLit)
+		_, rightLiteral := expr.Y.(*ast.BasicLit)
+		return expr.Op == token.MUL && (leftLiteral && isHangGuard(expr.Y) || rightLiteral && isHangGuard(expr.X))
+	}
+	return false
 }
 
 func isCall(call *ast.CallExpr, pkg, name string) bool {

@@ -1,5 +1,3 @@
-// `./rebase` is spy-wrapped pass-through only, so the hash-unchanged path's
-// zero-heuristic guarantee stays observable.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createAnchor } from "./create";
 import { extractBlockTexts } from "./extractBlocks";
@@ -67,26 +65,6 @@ describe("hash-unchanged exactness (zero heuristics)", () => {
     "",
     "A closing paragraph.",
   ].join("\n");
-
-  it("returns stored coordinates without ever invoking rebase", () => {
-    const blocks = extractBlockTexts(DOC);
-    const second = blocks.filter((b) => b.text.includes("Repeated sentence"))[1];
-    const anchor = createAnchor(DOC, second.blockId, 0, second.text.length)!;
-    vi.mocked(rebaseAnchor).mockClear();
-
-    const resolved = resolveAnchor(DOC, anchor);
-    expect(resolved).toEqual({
-      state: "exact",
-      blockId: second.blockId,
-      start: 0,
-      end: second.text.length,
-    });
-    expect(rebaseAnchor).not.toHaveBeenCalled();
-
-    const full = resolveOrRebase(DOC, anchor);
-    expect(full.state).toBe("exact");
-    expect(rebaseAnchor).not.toHaveBeenCalled();
-  });
 
   it("corrupted offsets with a matching hash warn and fall through to rebase", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

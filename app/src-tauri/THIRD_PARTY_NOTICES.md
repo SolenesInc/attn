@@ -44,7 +44,9 @@ structure checks in `references/design.md` and the design-twice, tradeoffs and
 alternatives guidance in `references/planning.md` adapt the `architect` skill, and
 the independent candidates in `references/prototype.md` adapt its `arena` skill. The independent-review, standing-brief and second-review
 guidance in `references/orchestration.md` and `references/review.md` adapts
-pstack's orchestrate and autopilot playbooks and its `interrogate` skill:
+pstack's orchestrate and autopilot playbooks and its `interrogate` skill. The
+repository's `audit-feature-map` skill (`.agents/skills/audit-feature-map`)
+adapts pstack's `maintain-verification-skill` skill:
 
 https://github.com/cursor/plugins/tree/main/pstack
 https://github.com/backnotprop/pstack

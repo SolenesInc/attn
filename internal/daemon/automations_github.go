@@ -276,7 +276,7 @@ func (d *Daemon) settleWithdrawnAutomationRuns(definitionID int, host string) er
 	return cancelErr
 }
 func (d *Daemon) settleWithdrawnAutomationRun(run *store.AutomationRun) error {
-	continuation, err := d.automationRunIsContinuation(run)
+	continuation, err := d.automationRunIsContinuation(run.DefinitionID, run.SeedID, run.ID)
 	if err != nil {
 		return err
 	}

@@ -288,7 +288,7 @@ async function main() {
     await runner.step('focus_editor_with_native_click', async () => {
       let editorFocused = false;
       for (let attempt = 0; attempt < 2 && !editorFocused; attempt++) {
-        await driver.clickWindow(0.85, 0.85);
+        await driver.click({ selector: EDITOR_SELECTOR, at: { x: 0.9, y: 0.9 } });
         editorFocused = await waitForActiveElement(client, isEditorContent, 'native click focuses the CodeMirror editor', 5_000)
           .then(() => true, () => false);
       }

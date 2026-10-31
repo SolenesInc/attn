@@ -18,6 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -164,7 +165,7 @@ func TestOutpostAgentsQueueMessagesOfflineAndRecoverAcrossBothRestarts(t *testin
 }
 
 func TestOutpostConversationMovesKeepTheirHistoryWhileTheHomeOutcomeWaits(t *testing.T) {
-	for _, point := range []string{pausepoint.ConversationDecision, pausepoint.ConversationOutcome} {
+	for _, point := range []string{pausepoint.ConversationDecision, pausepoint.ConversationMoveSaved} {
 		t.Run(point, func(t *testing.T) {
 			home := testworld.NewStack(t)
 			outcome := home.PauseAt(point)
@@ -457,7 +458,7 @@ func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {
 
 func TestClosingAnOutpostConversationBeforeItsReplyDoesNotReopenIt(t *testing.T) {
 	home := testworld.NewStack(t)
-	outcome := home.PauseAt(pausepoint.ConversationOutcome)
+	outcome := home.PauseAt(pausepoint.ConversationMoveSaved)
 	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	bound := outpost.PauseAt(pausepoint.ConversationCandidateBound)
@@ -534,6 +535,8 @@ func TestClosingAnOutpostAgentDrainsItsFinalCostAndLeavesItsTranscriptReadable(t
 			id := home.Spawn(pair.App, harness, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
 			agent := outpost.LaunchedCarrying(pair.App.Terminal(id))
 			if scenario.beforeTranscriptCopy {
+				outpost.AwaitTimer(sessionmonitor.TranscriptPoll)
+				outpost.Advance(sessionmonitor.TranscriptDiscoveryGrace)
 				for {
 					window := testworld.Request(pair.App, protocol.SessionMessagesGetMessage{
 						Cmd: protocol.CmdSessionMessagesGet, RequestID: "before-first-prompt", SessionID: protocol.SessionID(id),
@@ -907,6 +910,10 @@ func TestOutpostConversationHistorySurvivesConversationMovesWhileDisconnected(t 
 			if scenario == "resume-closed" {
 				want += 2 * len(firstReply)
 			}
+			if scenario == "outpost-restart" {
+				testworld.AwaitSessionSince(app, mark, string(next.ID), func(s protocol.Session) bool { return s.Usage != nil && s.Usage.TotalTokens == want })
+				outpost.Advance(sessionmonitor.TranscriptQuietWindow)
+			}
 			ready := testworld.AwaitSessionSince(app, mark, string(next.ID), func(s protocol.Session) bool {
 				return protocol.Deref(s.TurnOwed) && s.Usage != nil && s.Usage.TotalTokens == want
 			})
@@ -939,7 +946,7 @@ func TestAResumedOutpostConversationSurvivesRecoveryBeforeItsCopyArrives(t *test
 	started := home.PauseEvery(pausepoint.OutpostRecoveryStarted)
 	applied := home.PauseEvery(pausepoint.OutpostRecoveryApplied)
 	decision := home.PauseEvery(pausepoint.ConversationDecision)
-	outcome := home.PauseEvery(pausepoint.ConversationOutcome)
+	outcome := home.PauseEvery(pausepoint.ConversationMoveSaved)
 	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()

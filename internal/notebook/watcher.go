@@ -15,6 +15,8 @@ import (
 
 const WatchDebounce = 400 * time.Millisecond
 
+const WatchDebounceTimer stepclock.Name = "notebook-watch-debounce"
+
 const selfWriteTTL = 3 * time.Second
 
 type treeEvent struct {
@@ -76,12 +78,14 @@ func NewWatcher(clock *stepclock.Clock, root string, cleanPath func(string) (str
 	return w, nil
 }
 
-func (w *Watcher) NoteSelfWrite(writes ...SelfWrite) {
-	if w == nil || len(writes) == 0 {
+func (w *Watcher) Mutate(mutate func() []SelfWrite) {
+	if w == nil {
+		mutate()
 		return
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	writes := mutate()
 	exp := w.clock.Now().Add(selfWriteTTL)
 	for _, sw := range writes {
 		clean, err := w.cleanPath(sw.Rel)
@@ -122,7 +126,7 @@ func (w *Watcher) loop() {
 			}
 			w.handleEvent(ev, pending)
 			if len(pending) > 0 && debounced == nil {
-				debounce = w.clock.NewTimer(WatchDebounce)
+				debounce = w.clock.NewTimer(WatchDebounceTimer, WatchDebounce)
 				debounced = debounce.C()
 			}
 		case <-debounced:
@@ -174,22 +178,16 @@ func (w *Watcher) flush(pending map[string]struct{}) {
 
 func (w *Watcher) dropSelfWrites(rels []string) []string {
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	now := w.clock.Now()
 	for k, rec := range w.selfWrites {
 		if now.After(rec.expiry) {
 			delete(w.selfWrites, k)
 		}
 	}
-	written := make(map[string]string)
-	for _, rel := range rels {
-		if rec, ok := w.selfWrites[rel]; ok {
-			written[rel] = rec.hash
-		}
-	}
-	w.mu.Unlock()
 	out := make([]string, 0, len(rels))
 	for _, rel := range rels {
-		if hash, ok := written[rel]; ok && w.diskHash(rel) == hash {
+		if rec, ok := w.selfWrites[rel]; ok && w.diskHash(rel) == rec.hash {
 			continue
 		}
 		out = append(out, rel)

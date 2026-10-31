@@ -105,6 +105,7 @@ func (m *Monitor) save(view View) bool {
 	session := m.session
 	m.mu.Unlock()
 	if saver == nil || session == "" {
+		m.traceApplied(view)
 		return true
 	}
 	m.saveMu.Lock()
@@ -130,15 +131,17 @@ func (m *Monitor) save(view View) bool {
 	}
 	err := saver.SaveRuntime(session, saved, view, cost)
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if err != nil {
-		m.logf("monitor save failed: session=%s: %v", session, err)
 		m.retrySaveLocked()
+		m.mu.Unlock()
+		m.logf("monitor save failed: session=%s: %v", session, err)
 		return false
 	}
 	m.saved.view = view
 	m.saved.cost = checkpoint
 	m.stopSaveRetryLocked()
+	m.mu.Unlock()
+	m.traceApplied(view)
 	return true
 }
 

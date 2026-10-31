@@ -48,6 +48,10 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 		}
 		w.bootBubbleClaude(t, string(delegated.SessionID))
 		synctest.Wait()
+		setSetting(t, app, "crew_v2_enabled", "true")
+		member := string(wakeCrew(t, cli, "chief", "").SessionID)
+		w.bootBubbleClaude(t, member)
+		synctest.Wait()
 
 		secret, err := hex.DecodeString(strings.TrimSpace(readSecret(t, filepath.Join(w.Dir, "analytics-secret"))))
 		if err != nil {
@@ -69,6 +73,7 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 			{"user", user.id, "session.state.changed", analytics.LaunchUser, &analytics.RepoTraits{AgentsMD: true, ClaudeMD: true, Worktree: true, Remote: true}},
 			{"delegated", string(delegated.SessionID), "session.state.changed", analytics.LaunchDelegation, &analytics.RepoTraits{AgentsMD: true, Worktree: true, Remote: true}},
 			{"chief", chief, "session.respawned", analytics.LaunchChief, nil},
+			{"chief member", member, "session.state.changed", analytics.LaunchChief, nil},
 		} {
 			subject := analytics.HashSubject(secret, tc.session)
 			latest := slices.IndexFunc(records, func(r analytics.Record) bool { return r.Name == tc.fact && r.Subject == subject })
@@ -94,7 +99,7 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, text := range []string{w.Dir, "shop", "notes", "example", "Refund", user.id, chief, string(delegated.SessionID)} {
+			for _, text := range []string{w.Dir, "shop", "notes", "example", "Refund", user.id, chief, member, string(delegated.SessionID)} {
 				if strings.Contains(string(encoded), text) {
 					t.Errorf("mirrored %s carries %q: %s", record.Name, text, encoded)
 				}
@@ -118,6 +123,7 @@ func assertDerivedTraitsAreClosed(t *testing.T, record analytics.Record) {
 	}
 	closed := map[string]map[string]bool{
 		"harness": {protocol.SessionAgentClaude: true},
+		"model":   {"fable": true},
 		"launch":  {string(analytics.LaunchUser): true, string(analytics.LaunchDelegation): true, string(analytics.LaunchAutomation): true, string(analytics.LaunchCrew): true, string(analytics.LaunchChief): true},
 		"state":   {},
 	}

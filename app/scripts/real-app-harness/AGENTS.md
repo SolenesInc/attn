@@ -32,11 +32,33 @@ repository root.
   `terminal_move` use their CLI response contract instead.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
   On macOS it sends input without taking focus or moving the pointer, except
-  `menu` and scrolling; on Linux, `xdotool` focuses the window and moves the
-  pointer. Shared-Mac runs keep the parked launch and never use activation,
-  `menu`, scrolling or physical input; see the
+  `menu` and scrolling; on Linux, `xdotool` focuses the window the app reports
+  through the client and moves the pointer. Shared-Mac runs keep the parked
+  launch and never use activation, `menu`, scrolling or physical input; see the
   [drive-attn launch rules](../../../.agents/skills/drive-attn/SKILL.md#launch).
   Scenarios requiring real focus or system input run on a dedicated display.
+- Point every native pointer action at an element: `driver.click`,
+  `rightClick`, `hover`, `scroll`, `drag` and `typeInto` take a selector or
+  `{ selector, at, offset }` (`at` is a fraction of the box, default its
+  center; `offset` adds CSS pixels). Before measuring, the app waits for the
+  element to appear and for it and its ancestors to stop moving, and scrolls
+  it into view when its point is offscreen or covered; `typeInto` also waits
+  for the element to take focus before typing. The drivers send no input to
+  raw coordinates, so a scenario never measures geometry or waits for an
+  animation before acting. `get_pane_cell_rect` returns a terminal cell's
+  `target`; a `drag` can end `{ by: { x, y } }` CSS pixels from its start;
+  Quick Capture targets add `webview: 'capture'`, and its driver takes
+  `systemInput: true` to keep system-level input.
+- Native input waits for delivery. `click`, `rightClick`, `drag`, `typeInto`,
+  `pressKey`, `pressKeyCode`, `pressEnter` and `typeText` return only after
+  the webview that should receive the input sees the trusted mouseup, or one
+  keyup per stroke, and settles, so the next read sees the input's effect.
+  Pointer input arms its target's webview; keys arm the main webview. Pointer
+  actions return the `receipt`; `receipt.matches` says whether the release
+  landed on the aimed selector. Input that lands in a browser tile page, starts
+  a native window drag, or replaces the page receiving it has no receipt: pass
+  `{ withoutReceipt: '<why>' }` in the last argument, after `modifiers` for
+  `pressKey` and `pressKeyCode`. `hover` and `scroll` have no receipt.
 - Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
   and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
   before launch; no fixture means a silent agent. Real providers need
@@ -52,8 +74,10 @@ repository root.
 - Build child environments with `instanceCliEnv`, never `{ ...process.env }`.
 - Outpost scenarios that exercise silence use `stepClock` for each daemon and
   advance it around observed bridge states instead of waiting for liveness
-  timers. Await a fresh timer registration before advancing an asynchronous
-  retry or a dial whose answer is deliberately held. Supply each clock's
+  timers. Await a fresh timer registration by its name, such as
+  `bridge-retry`, before advancing an asynchronous retry or a dial whose
+  answer is deliberately held. A stepped daemon's transcript watchers poll
+  only when its clock advances. Supply each clock's
   `env` through the daemon's child environment or the app's `launchEnv`; quit
   the old app before stopping its daemon so relaunch picks up that environment.
   Stop the daemons before closing their clocks. To measure a connecting notice,

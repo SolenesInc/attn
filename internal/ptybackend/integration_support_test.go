@@ -3,6 +3,7 @@ package ptybackend
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/procwait"
 	"os"
 	"os/exec"
@@ -69,7 +70,7 @@ func releaseAndReadPlacements(t *testing.T, stream Stream, release func() error)
 	if err := release(); err != nil {
 		t.Fatalf("release the child: %v", err)
 	}
-	deadline := time.After(15 * time.Second)
+	deadline := time.After(fakeagent.HangGuard)
 	for {
 		select {
 		case evt, ok := <-stream.Events():

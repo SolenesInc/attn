@@ -478,7 +478,7 @@ func pendingAutomationRunInThreadTx(tx *sql.Tx, definitionID int, provider, subj
 	return pending != 0, err
 }
 
-func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID int, continuityKey, profileID string, ids *AutomationRunReservation, now time.Time) error {
+func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID int, continuityKey, profileID, snapshotJSON string, ids *AutomationRunReservation, now time.Time) error {
 	var bound AutomationRunReservation
 
 	err := tx.QueryRow(
@@ -493,11 +493,54 @@ func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID int
 	case err != sql.ErrNoRows:
 		return err
 	}
+	inherited, err := seedForSameWorkTx(tx, definitionID, continuityKey, snapshotJSON)
+	if err != nil {
+		return err
+	}
+	if inherited != "" {
+		ids.SeedID = inherited
+	}
 	_, err = tx.Exec(
 		`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,profile_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'',?,?,?,?,?)`,
 		uuid.NewString(), definitionID, continuityKey, ids.SeedID, ids.RunID, ids.SessionID, profileID, AutomationBindingStatusActive, nowRaw, nowRaw,
 	)
 	return err
+}
+
+func seedForSameWorkTx(tx *sql.Tx, definitionID int, continuityKey, snapshotJSON string) (string, error) {
+	var seedID, reason, originSnapshotJSON string
+	err := tx.QueryRow(`
+		SELECT b.seed_id, b.released_reason, r.snapshot_json
+		FROM automation_continuity_bindings b
+		JOIN automation_runs r ON r.id=b.origin_run_id
+		WHERE b.definition_id=? AND b.continuity_key=?
+		ORDER BY b.created_at DESC, b.rowid DESC LIMIT 1
+	`, definitionID, continuityKey).Scan(&seedID, &reason, &originSnapshotJSON)
+	if err == sql.ErrNoRows || (err == nil && (seedID == "" || reason != AutomationBindingReleasedContractRotated)) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	var origin, next automation.Snapshot
+	if json.Unmarshal([]byte(originSnapshotJSON), &origin) != nil || json.Unmarshal([]byte(snapshotJSON), &next) != nil {
+		return "", nil
+	}
+	if !origin.ContinuationContract().SameWork(next.ContinuationContract()) {
+		return "", nil
+	}
+	return seedID, nil
+}
+
+func (s *Store) AutomationSessionHeldSeed(definitionID int, seedID string, sessionID protocol.SessionID) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return false, errors.New("automation persistence unavailable")
+	}
+	var held int
+	err := s.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM automation_continuity_bindings WHERE definition_id=? AND seed_id=? AND session_id=?)`, definitionID, seedID, sessionID).Scan(&held)
+	return held != 0, err
 }
 
 func (s *Store) AutomationSessionHasContinuityBinding(sessionID protocol.SessionID) (bool, error) {
@@ -697,7 +740,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID int, occurrenceKey, con
 		if blocked {
 			return nil, false, errors.New("an earlier scheduled automation run for this definition is still pending")
 		}
-		if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, continuityKey, profileID, &ids, observedAt); err != nil {
+		if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, continuityKey, profileID, snapshotJSON, &ids, observedAt); err != nil {
 			return nil, false, err
 		}
 	}
@@ -1011,7 +1054,7 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID int, subjectKey stri
 		return nil, false, errors.New("an earlier automation run for this subject is still pending")
 	}
 	ids := reserved
-	if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, subjectKey, profileID, &ids, observedAt); err != nil {
+	if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, subjectKey, profileID, snapshotJSON, &ids, observedAt); err != nil {
 		return nil, false, err
 	}
 	now := formatStoredTime(observedAt)

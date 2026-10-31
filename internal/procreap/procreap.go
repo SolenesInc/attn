@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/stepclock"
 	"os"
 	"path/filepath"
 	"sort"
 	"syscall"
 	"time"
+
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 type Entry struct {
@@ -200,8 +201,10 @@ func ProcessAlive(pid int) bool {
 	return pid > 0 && syscall.Kill(pid, 0) == nil && !isZombie(pid)
 }
 
+const goneDeadlineTimer stepclock.Name = "procreap-gone-deadline"
+
 func waitForGone(clock *stepclock.Clock, pid int, timeout time.Duration) bool {
-	deadline := clock.NewTimer(timeout)
+	deadline := clock.NewTimer(goneDeadlineTimer, timeout)
 	defer deadline.Stop()
 	poll := time.NewTicker(20 * time.Millisecond)
 	defer poll.Stop()

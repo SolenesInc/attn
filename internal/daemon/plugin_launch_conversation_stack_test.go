@@ -53,7 +53,7 @@ func TestAConversationReportedDuringLaunchSurvivesTheRunsImmediateExit(t *testin
 
 func TestAStaleLaunchCompletionLeavesTheNewerReloadsReportsQueued(t *testing.T) {
 	s := testworld.NewStack(t)
-	complete := s.PauseAt(pausepoint.AgentLaunchReady)
+	complete := s.PauseAt(pausepoint.AgentLaunchCommitReporting)
 	s.Start()
 	app := s.App()
 	driver := dialDriverAt(t, s.DialUnix, "snipe-plugin")

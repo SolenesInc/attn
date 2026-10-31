@@ -232,7 +232,7 @@ async function main() {
     });
 
     await runner.step('typing_immediately_after_the_native_switch_reaches_the_picked_shell', async () => {
-      const immediate = createWindowDriver({ appPath: options.appPath, client, actionDelayMs: 0 });
+      const immediate = createWindowDriver({ appPath: options.appPath, client });
       const marker = `SWITCH_INPUT_${runner.runId}`;
       await pressShortcutKeys(client, immediate, `desktop.select${desktopB.shortcut_slot}`);
       await immediate.typeText(`# ${marker}`);

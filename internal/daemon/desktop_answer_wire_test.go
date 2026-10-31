@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -116,15 +117,14 @@ func TestAChangeThatLandsWhileAClientsRequestIsHeldStillReachesItWhenTheRequestF
 		app := w.App()
 		injectAgent(t, w, "a")
 		desktop, _ := viewProfile(t, w, app.SelectedProfile()).paneOf(t, "a")
-		paused, resume := make(chan struct{}), make(chan struct{})
-		w.daemon.PauseNextHeldAction(paused, resume)
+		held := w.PauseAt(pausepoint.ProfileActionRan)
 		mark := len(app.Log())
 
 		requestID := uuid.NewString()
 		app.Send(protocol.DesktopShowLeafMessage{Cmd: protocol.CmdDesktopShowLeaf, RequestID: requestID, DesktopID: desktop.ID, LeafID: "no-such-leaf"})
-		<-paused
+		held.Await()
 		injectAgent(t, w, "b")
-		close(resume)
+		held.Release()
 		synctest.Wait()
 
 		refused := false

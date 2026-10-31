@@ -1,7 +1,8 @@
-# Keeps a single tracking issue in sync with what CI history actually shows
-# about flaky tests. The report distinguishes a flake (the same commit is known
-# to pass) from real breakage, and marks an entry dormant once enough runs have
-# gone by without a recurrence, so a landed fix is visible rather than assumed.
+# Keeps a single tracking issue in sync with what CI's test receipts show about
+# flaky tests. The report distinguishes a flake (the test also passed on the
+# commit where it failed) from an unresolved failure (it did not), and marks a
+# flake dormant once the test has passed on enough later commits, so a landed
+# fix is visible rather than assumed. It reads only CI's own receipt artifacts.
 name: Flake ledger
 
 on:
@@ -28,23 +29,31 @@ jobs:
     name: Update flake ledger
     runs-on: ubuntu-latest
     steps:
+      # The report orders receipts by their commits' place in main's history.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-toolchains
+        with:
+          go: 'true'
 
-      # Job logs and finished attempts are immutable, so the report's on-disk
-      # cache carries across days and only new runs cost API calls.
+      # Uploaded artifacts never change, so the report's on-disk cache carries
+      # across days and only new artifacts cost downloads. It is saved even
+      # when the report fails, so a run that hits the API rate limit keeps
+      # what it downloaded for the next one.
       # Literal on both sides: a ~ in an env: value reaches the script
       # unexpanded and the cache lands in a directory named '~'.
-      - name: Restore flake-report cache
-        uses: actions/cache@v4
+      - name: Restore receipt cache
+        uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/attn-ci-flakes
-          key: flake-ledger-${{ github.run_id }}
-          restore-keys: flake-ledger-
+          path: ${{ runner.temp }}/attn-ci-receipts
+          key: flake-ledger-receipts-${{ github.run_id }}
+          restore-keys: flake-ledger-receipts-
 
       - name: Generate ledger
         env:
           GH_TOKEN: ${{ github.token }}
-          ATTN_FLAKE_CACHE: ${{ runner.temp }}/attn-ci-flakes
+          ATTN_FLAKE_CACHE: ${{ runner.temp }}/attn-ci-receipts
         run: |
           ./scripts/ci-flake-report.sh \
             --repo "$GITHUB_REPOSITORY" \
@@ -52,6 +61,13 @@ jobs:
             --format markdown > ledger.md
           echo "--- ledger preview ---"
           head -20 ledger.md
+
+      - name: Save receipt cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/attn-ci-receipts
+          key: flake-ledger-receipts-${{ github.run_id }}
 
       - name: Publish to the tracking issue
         env:
@@ -96,7 +112,7 @@ jobs:
               echo
               sed 's/^/- `/; s/$/`/' newly-active.txt
               echo
-              echo "A failure is counted as a flake only when the same commit is known to pass, so these are not ordinary red builds."
+              echo "A failure is counted as a flake only when the test also passed on the commit where it failed, so these are not ordinary red builds."
             } > comment.md
             gh issue comment "$number" --body-file comment.md
             echo "commented with $(wc -l < newly-active.txt) new entries"

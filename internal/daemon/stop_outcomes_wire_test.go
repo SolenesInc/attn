@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/github/mockserver"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -148,5 +149,74 @@ func TestStoppingTheDaemonLetsAnAdmittedFetchFinish(t *testing.T) {
 		protocol.EventFetchRemotesResult, func(protocol.WebSocketEvent) bool { return true })
 	if !protocol.Deref(fetched.Success) {
 		t.Errorf("fetching again after restart = %+v, want a usable checkout", fetched)
+	}
+}
+
+func TestStoppingTheDaemonLetsAnAdmittedPRDetailsReadApply(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := newWorld(t)
+	if err := w.Client().ToggleMuteRepo("acme/docs"); err != nil {
+		t.Fatalf("mute repo: %v", err)
+	}
+	app := w.App()
+	docs := mockserver.MockPR{Repo: "acme/docs", Number: 3, Title: "Document checkout", Role: "reviewer"}
+	gh.AddPR(docs)
+	refreshPRs(t, app)
+	id := prNumbered(t, queryPRs(t, w.Client(), ""), docs.Number).ID
+	fetchPRDetails(t, app, id)
+	before := producedBy(busStatus(t, app), "pr.details.changed")
+
+	setPRDetails(gh, docs, "unstable", "", 0)
+	held, release := gh.HoldReviews(docs.Repo, docs.Number)
+	t.Cleanup(release)
+	app.Send(protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: id})
+	awaitHeldReviews(t, held, id)
+	finish := w.beginStop(t)
+	release()
+	finish()
+	w.start()
+	assertStoredDetails(t, w.Client(), docs.Number, "pending", "abc123", false)
+	if published := producedBy(busStatus(t, w.App()), "pr.details.changed") - before; published != 1 {
+		t.Errorf("the read that applied while the daemon stopped published %d pr.details.changed, want 1", published)
+	}
+}
+
+func TestStoppingTheDaemonLetsAnAdmittedDetailRefreshApplyAndPublish(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	docs := mockserver.MockPR{Repo: "acme/docs", Number: 3, Title: "Document checkout", Role: "reviewer", MergeableState: "unstable"}
+	gh.AddPR(docs)
+	held, release := gh.HoldReviews(docs.Repo, docs.Number)
+	t.Cleanup(release)
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := newWorld(t)
+	awaitHeldReviews(t, held, "the startup detail refresh")
+	if err := w.Client().ToggleMuteRepo(docs.Repo); err != nil {
+		t.Fatalf("mute repo: %v", err)
+	}
+	finish := w.beginStop(t)
+	release()
+	finish()
+	w.start()
+	assertStoredDetails(t, w.Client(), docs.Number, "pending", "abc123", false)
+	if published := producedBy(busStatus(t, w.App()), "pr.details.changed"); published != 1 {
+		t.Errorf("the detail refresh that applied while the daemon stopped published %d pr.details.changed, want 1", published)
+	}
+}
+
+func awaitHeldReviews(t *testing.T, held <-chan struct{}, what string) {
+	t.Helper()
+	guard := time.NewTimer(fakeagent.HangGuard)
+	defer guard.Stop()
+	select {
+	case <-held:
+	case <-guard.C:
+		t.Fatalf("%s never asked GitHub for reviews within fakeagent.HangGuard=%s", what, fakeagent.HangGuard)
 	}
 }

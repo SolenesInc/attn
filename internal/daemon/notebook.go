@@ -141,13 +141,17 @@ func (d *Daemon) ensureNotebookScaffold(profileID string) (root string, created 
 	if err != nil {
 		return "", false, err
 	}
-	scaffolded, scaffoldErr := store.EnsureScaffold()
+	var scaffolded []notebook.SelfWrite
+	var scaffoldErr error
+	d.mutateRoot(store.Root(), func() []notebook.SelfWrite {
+		scaffolded, scaffoldErr = store.EnsureScaffold()
+		return scaffolded
+	})
 	if len(scaffolded) > 0 {
 		createdPaths := make([]string, len(scaffolded))
 		for i, write := range scaffolded {
 			createdPaths[i] = write.Rel
 		}
-		d.noteSelfWrite(store.Root(), scaffolded...)
 		d.broadcastFsChanged(store.Root(), originAgent, createdPaths...)
 		d.ensureNotebookWatcher(store.Root())
 	}
@@ -270,7 +274,14 @@ func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, co
 		}
 		var hash string
 		var conflict *notebook.Conflict
-		if hash, conflict, err = store.Write(path, []byte(content), baseHash); err == nil {
+		d.mutateRoot(store.Root(), func() []notebook.SelfWrite {
+			hash, conflict, err = store.Write(path, []byte(content), baseHash)
+			if err != nil || conflict != nil {
+				return nil
+			}
+			return []notebook.SelfWrite{{Rel: changed, Hash: hash}}
+		})
+		if err == nil {
 			result = &protocol.NotebookWriteResult{Path: changed}
 			if conflict != nil {
 				result.Conflict = true
@@ -279,7 +290,6 @@ func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, co
 				}
 			} else {
 				result.Hash = protocol.Ptr(hash)
-				d.noteSelfWrite(store.Root(), notebook.SelfWrite{Rel: changed, Hash: hash})
 				d.broadcastFsChanged(store.Root(), originUI, changed)
 			}
 		}

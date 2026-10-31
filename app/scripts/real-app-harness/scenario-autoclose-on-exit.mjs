@@ -218,15 +218,8 @@ async function main() {
     const driver = createWindowDriver({ appPath: options.appPath, client });
     const clickNoticeButton = async (index) => {
       const selector = `${notice} button:nth-of-type(${index})`;
-      const [{ bounds }, { logicalBounds }, { innerWidth, innerHeight }] = await Promise.all([
-        client.request('dom_hover', { selector, leave: true }),
-        client.request('get_window_bounds'),
-        client.request('get_terminal_context_menu_state'),
-      ]);
-      await driver.clickWindow(
-        (Math.max(0, logicalBounds.width - innerWidth) / 2 + bounds.x + bounds.width / 2) / logicalBounds.width,
-        (Math.max(0, logicalBounds.height - innerHeight) + bounds.y + bounds.height / 2) / logicalBounds.height,
-      );
+      await client.request('dom_hover', { selector, leave: true });
+      await driver.click(selector);
     };
     await runner.step('stopped_screen_survives_app_relaunch', async () => {
       runner.assert((await client.request('dom_wait', { selector: notice, timeoutMs: 10_000 })).matched, 'stopped notice offers Resume');

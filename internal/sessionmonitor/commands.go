@@ -95,7 +95,7 @@ func (m *Monitor) Revision() uint64 {
 func (m *Monitor) Execute(kind CommandKind, turn, until, now time.Time) (bool, error) {
 	view, applied := m.Do(Command{Key: m.Key(), Kind: kind, Turn: turn, Until: until}, now)
 	if kind == Snooze {
-		pausepoint.At(pausepoint.SessionSnoozeCommitted)
+		pausepoint.At(pausepoint.SessionSnoozeDecided)
 	}
 	if !applied {
 		return false, nil

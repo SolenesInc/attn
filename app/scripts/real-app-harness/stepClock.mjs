@@ -53,14 +53,15 @@ export async function stepClock(socketPath, timeoutMs) {
         peer.pid = Number(fields[1]);
         return;
       }
-      if (fields[0] === 'armed' && fields.length === 3) {
+      if (fields[0] === 'armed' && fields.length === 4) {
         revision += 1;
-        pending.set(`${peer.pid} ${fields[1]}`, { ms: durationMs(fields[2]), revision });
+        pending.set(`${peer.pid} ${fields[1]}`, { name: fields[2], duration: fields[3], revision });
         notifyArmed();
       } else if (fields[0] === 'disarmed' && fields.length === 2) {
         pending.delete(`${peer.pid} ${fields[1]}`);
       } else if (fields[0] === 'advanced' && fields.length === 2) {
         peer.advanced.shift()?.();
+      } else if ((fields[0] === 'busy' || fields[0] === 'idle') && fields.length === 1) {
       } else {
         finish(new Error(`step clock process ${peer.pid} sent ${JSON.stringify(line)}`));
         socket.destroy();
@@ -82,8 +83,8 @@ export async function stepClock(socketPath, timeoutMs) {
     }
   }
 
-  function pendingDurations() {
-    return [...pending.values()].map(timer => `${timer.ms}ms`).join(', ');
+  function pendingTimers() {
+    return [...pending.values()].map(timer => `${timer.name} ${timer.duration}`).sort().join(', ');
   }
 
   return {
@@ -98,11 +99,10 @@ export async function stepClock(socketPath, timeoutMs) {
         peer.socket.write(`advance ${duration}\n`);
       }))));
     },
-    awaitTimer(duration) {
-      const ms = durationMs(duration);
-      return guarded(() => `step clock awaitTimer ${duration}: no such timer armed (pending: ${pendingDurations()})`, async () => {
+    awaitTimer(name) {
+      return guarded(() => `step clock awaitTimer ${name}: no such timer armed (pending: ${pendingTimers()})`, async () => {
         for (;;) {
-          if ([...pending.values()].some(timer => timer.ms === ms && timer.revision > marked)) {
+          if ([...pending.values()].some(timer => timer.name === name && timer.revision > marked)) {
             marked = revision;
             return;
           }

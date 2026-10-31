@@ -1,0 +1,17 @@
+{
+  "finishedAt": "2026-10-31T13:05:56.350Z",
+  "complete": true,
+  "shard": null,
+  "results": [
+    {
+      "id": "session-close-ledger",
+      "code": 0,
+      "durationMs": 22368
+    },
+    {
+      "id": "session-reopen",
+      "code": 0,
+      "durationMs": 20747
+    }
+  ]
+}

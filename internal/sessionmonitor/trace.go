@@ -47,10 +47,7 @@ func (m *Monitor) Trace(obs statetrace.Observation) {
 	obs = Stamped(obs)
 	var report *View
 	m.mu.Lock()
-	if m.trace == nil {
-		m.trace = statetrace.NewRing(statetrace.DefaultCapacity)
-	}
-	m.trace.Record(obs)
+	m.recordLocked(obs)
 	if m.firstReportAt.IsZero() && HarnessReportedState(obs.Source) {
 		m.firstReportAt = obs.RecordedAt
 		view := m.viewLocked()
@@ -63,10 +60,41 @@ func (m *Monitor) Trace(obs statetrace.Observation) {
 	}
 }
 
+func (m *Monitor) traceApplied(view View) {
+	state := view.State.V
+	m.mu.Lock()
+	if state.Sequence <= m.appliedState {
+		m.mu.Unlock()
+		return
+	}
+	m.appliedState = state.Sequence
+	if state.Quiet {
+		m.mu.Unlock()
+		return
+	}
+	source := state.Origin.Source
+	if source == "" {
+		source = state.Cause
+	}
+	obs := Stamped(statetrace.Observation{Source: source, Claim: string(state.State), Detail: state.Origin.Detail, Cause: state.Cause, Outcome: statetrace.OutcomeApplied, ObservedAt: state.Origin.ObservedAt})
+	m.recordLocked(obs)
+	m.mu.Unlock()
+	m.logf("%s", obs.LogLine(protocol.SessionID(m.Label())))
+}
+
+func (m *Monitor) recordLocked(obs statetrace.Observation) {
+	if m.trace == nil {
+		m.trace = statetrace.NewRing(statetrace.DefaultCapacity)
+	}
+	m.trace.Record(obs)
+}
+
 func (m *Monitor) TraceSnapshot() []statetrace.Observation {
 	if m == nil {
 		return nil
 	}
+	m.saveMu.Lock()
+	defer m.saveMu.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.trace.Snapshot()

@@ -1,6 +1,7 @@
 # Binaries (anchored to root)
 /cm
 /attn
+/test-history
 
 # IDE
 .idea/

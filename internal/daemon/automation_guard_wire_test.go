@@ -13,9 +13,8 @@ import (
 )
 
 func TestAGuardedScheduleOnlyRunsForNewOutput(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL", "1s")
 	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
+	cli := w.Client()
 	dir := w.Path("guarded")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -40,20 +39,22 @@ launch: {driver: claude}
 location: {type: directory, path: %q}
 `, dir)
 	id := applyAutomation(t, cli, spec).ID
-	await := func(outcome string, minChecks int) protocol.AutomationDefinitionSummary {
+	await := func(outcome string, minChecks int) (found protocol.AutomationDefinitionSummary) {
 		t.Helper()
-		for {
-			awaitAutomationChanged(app, id)
+		w.tickSchedulesUntil("guard check "+outcome, func() bool {
 			result, err := cli.AutomationDefinitions()
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, def := range result.Definitions {
 				if def.ID == id && def.GuardCheck != nil && def.GuardCheck.Outcome == outcome && def.GuardCheck.ChecksSinceRun >= minChecks && (outcome != "launched" || def.LastRun != nil && def.LastRun.State == "delivered") {
-					return def
+					found = def
+					return true
 				}
 			}
-		}
+			return false
+		})
+		return found
 	}
 	first := await("launched", 0)
 	runs := automationRuns(t, cli, id)
@@ -128,9 +129,8 @@ location: {type: directory, path: %q}
 }
 
 func TestAGuardedScheduleRetriesOutputWhoseRunFailed(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL", "1s")
 	w := newWorld(t)
-	app, cli := w.App(), w.Client()
+	cli := w.Client()
 	spec := fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
 name: %s
 trigger:
@@ -144,17 +144,14 @@ launch: {driver: claude}
 location: {type: directory, path: %q}
 `, strings.Repeat("x", 401), w.Dir)
 	id := applyAutomation(t, cli, spec).ID
-	for {
-		awaitAutomationChanged(app, id)
-		runs := automationRuns(t, cli, id)
-		if len(runs) < 2 || runs[0].State == "pending" {
-			continue
-		}
-		if runs[0].State != "failed" || runs[1].State != "failed" || runs[0].ID == runs[1].ID {
-			t.Fatalf("same output after failed launch = %+v, want two failed attempts", runs)
-		}
-		t.Logf("same output retried after failed run: %s and %s", runs[1].ID, runs[0].ID)
-		break
+	var runs []protocol.AutomationRunSummary
+	w.tickSchedulesUntil("two settled runs", func() bool {
+		runs = automationRuns(t, cli, id)
+		return len(runs) >= 2 && runs[0].State != "pending"
+	})
+	if runs[0].State != "failed" || runs[1].State != "failed" || runs[0].ID == runs[1].ID {
+		t.Fatalf("same output after failed launch = %+v, want two failed attempts", runs)
 	}
+	t.Logf("same output retried after failed run: %s and %s", runs[1].ID, runs[0].ID)
 	setAutomationEnabled(t, cli, id, false)
 }

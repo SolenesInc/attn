@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/fakeagent"
 )
 
 var statusNow = time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
@@ -222,7 +224,7 @@ func TestStartReportsLoudProducersBeforeTheFirstTick(t *testing.T) {
 		if !strings.Contains(line, "session.state.changed") || !strings.Contains(line, "1000/hour") {
 			t.Fatalf("first line does not report the loud producer: %q", line)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(fakeagent.HangGuard):
 		t.Fatal("Start never reported the loud producer; it waited for the retention tick")
 	}
 }

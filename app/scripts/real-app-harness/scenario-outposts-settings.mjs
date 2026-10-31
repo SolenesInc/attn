@@ -360,9 +360,9 @@ try {
     await shot('03-stalled-shell');
     await homeClock.advance('57s');
     await lost;
-    await homeClock.awaitTimer('10s');
+    await homeClock.awaitTimer('bridge-answer');
     await homeClock.advance('10s');
-    await homeClock.awaitTimer('2s');
+    await homeClock.awaitTimer('bridge-retry');
     await wait(`${tile(splitPane.paneId)}[data-offline="true"] .desktop-pane-offline-strip`, { textIncludes: 'Studio unreachable · typing is not sent' });
     const offline = await client.request('read_pane_text', splitPane);
     runner.assert(JSON.stringify(before.size) === JSON.stringify(offline.size) && before.text === offline.text, 'going offline preserves the screen and terminal size', { before, offline });

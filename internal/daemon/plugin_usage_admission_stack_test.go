@@ -12,7 +12,7 @@ import (
 func TestATranscriptAcknowledgementCountsUsageBeforeTheWatcherStarts(t *testing.T) {
 	s := testworld.NewStack(t)
 	captured := s.PauseAt(pausepoint.DriverTranscriptCaptured)
-	applied := s.PauseAt(pausepoint.DriverTranscriptApplied)
+	watchStarting := s.PauseAt(pausepoint.DriverTranscriptWatchStarting)
 	s.Start()
 	app := s.App()
 	driver := dialDriverAt(t, s.DialUnix, "attn-pi")
@@ -30,13 +30,13 @@ func TestATranscriptAcknowledgementCountsUsageBeforeTheWatcherStarts(t *testing.
 	go func() {
 		updated <- s.Client().UpdateState(protocol.TerminalID(run.SessionID), protocol.StateWaitingInput)
 	}()
-	applied.Await()
+	watchStarting.Await()
 	captured.Release()
 	if err := <-reported; err != nil {
 		t.Fatal(err)
 	}
 	appendTranscript(t, path, piTranscriptLines(t))
-	applied.Release()
+	watchStarting.Release()
 	if err := <-updated; err != nil {
 		t.Fatal(err)
 	}

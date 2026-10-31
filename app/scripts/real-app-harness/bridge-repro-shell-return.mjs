@@ -75,7 +75,7 @@ async function captureBridgeDebugArtifacts(client, runDir, suffix = 'failure') {
   }
 
   try {
-    const screenshot = await captureFrontWindowScreenshot(path.join(runDir, `ui-${suffix}.png`));
+    const screenshot = await captureFrontWindowScreenshot(path.join(runDir, `ui-${suffix}.png`), { client });
     saveJson(path.join(runDir, `screenshot-${suffix}.json`), screenshot);
   } catch (error) {
     fs.writeFileSync(
@@ -88,7 +88,7 @@ async function captureBridgeDebugArtifacts(client, runDir, suffix = 'failure') {
 
 async function tryCaptureScreenshot(client, runDir, filename) {
   try {
-    await captureFrontWindowScreenshot(path.join(runDir, filename));
+    await captureFrontWindowScreenshot(path.join(runDir, filename), { client });
   } catch (error) {
     fs.writeFileSync(
       path.join(runDir, `${filename}.txt`),

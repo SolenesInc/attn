@@ -66,4 +66,7 @@ require (
 	modernc.org/sqlite v1.57.0 // indirect
 )
 
-tool honnef.co/go/tools/cmd/staticcheck
+tool (
+	github.com/victorarias/attn/scripts/test-history
+	honnef.co/go/tools/cmd/staticcheck
+)

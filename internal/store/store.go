@@ -1496,12 +1496,12 @@ func (s *Store) GetPR(id string) *protocol.PR {
 	return scanPR(row)
 }
 
-func (s *Store) UpdatePRDetails(id string, mergeable *bool, mergeableState, ciStatus, reviewStatus, headSHA, headBranch string) bool {
+func (s *Store) UpdatePRDetails(id string, mergeable *bool, mergeableState, ciStatus, reviewStatus, headSHA, headBranch string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.db == nil {
-		return false
+		return false, errors.New("PR details need a database")
 	}
 
 	var mergeableVal *int
@@ -1509,17 +1509,35 @@ func (s *Store) UpdatePRDetails(id string, mergeable *bool, mergeableState, ciSt
 		v := boolToInt(*mergeable)
 		mergeableVal = &v
 	}
+	now := time.Now().Format(time.RFC3339)
 
-	s.execLog(`UPDATE prs SET details_fetched_at = ? WHERE id = ?`, time.Now().Format(time.RFC3339), id)
-	result, err := s.db.Exec(`UPDATE prs SET details_fetched = 1, mergeable = ?1, mergeable_state = ?2, ci_status = ?3, review_status = ?4, head_sha = ?5, head_branch = ?6
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, fmt.Errorf("update details for %s: %w", id, err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`UPDATE prs SET heat_state = ?, last_heat_activity_at = ? WHERE id = ? AND head_sha IS NOT NULL AND head_sha != '' AND head_sha IS NOT ?`,
+		protocol.HeatStateHot, now, id, headSHA); err != nil {
+		return false, fmt.Errorf("heat %s on a new head: %w", id, err)
+	}
+	if _, err := tx.Exec(`UPDATE prs SET details_fetched_at = ? WHERE id = ?`, now, id); err != nil {
+		return false, fmt.Errorf("stamp details for %s: %w", id, err)
+	}
+	result, err := tx.Exec(`UPDATE prs SET details_fetched = 1, mergeable = ?1, mergeable_state = ?2, ci_status = ?3, review_status = ?4, head_sha = ?5, head_branch = ?6
 		WHERE id = ?7 AND NOT (details_fetched = 1 AND mergeable IS ?1 AND mergeable_state IS ?2 AND ci_status IS ?3 AND review_status IS ?4 AND head_sha IS ?5 AND head_branch IS ?6)`,
 		mergeableVal, mergeableState, ciStatus, reviewStatus, headSHA, headBranch, id)
 	if err != nil {
-		log.Printf("[store] UpdatePRDetails: failed for %s: %v", id, err)
-		return false
+		return false, fmt.Errorf("update details for %s: %w", id, err)
 	}
-	updated, _ := result.RowsAffected()
-	return updated == 1
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("update details for %s: %w", id, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("update details for %s: %w", id, err)
+	}
+	return updated == 1, nil
 }
 
 func (s *Store) ListPRsByRepo(repo string) []*protocol.PR {

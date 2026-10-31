@@ -1,12 +1,15 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -34,14 +37,17 @@ func (s *Store) BackupNow(ctx context.Context, dir string) (string, error) {
 		return "", fmt.Errorf("backup: create dir %s: %w", dir, err)
 	}
 
-	name := backupNamePrefix + time.Now().UTC().Format(backupNameLayout) + backupNameSuffix
-	target := filepath.Join(dir, name)
-
-	if _, err := os.Stat(target); err == nil {
-		return "", fmt.Errorf("backup: target %s already exists", target)
-	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("backup: stat target %s: %w", target, err)
+	existing, err := listRotatingBackups(dir)
+	if err != nil {
+		return "", fmt.Errorf("backup: %w", err)
 	}
+	next := rotatingBackup{taken: time.Now().UTC().Format(backupNameLayout), n: 1}
+	for _, b := range existing {
+		if b.taken == next.taken {
+			next.n = b.n + 1
+		}
+	}
+	target := filepath.Join(dir, next.name())
 
 	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", target); err != nil {
 		_ = os.Remove(target)
@@ -56,21 +62,10 @@ func PruneBackups(dir string, keep int, protected map[string]struct{}) error {
 		keep = 0
 	}
 
-	entries, err := os.ReadDir(dir)
+	names, err := RotatingBackups(dir)
 	if err != nil {
-		return fmt.Errorf("read dir %s: %w", dir, err)
+		return err
 	}
-
-	var names []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if IsRotatingBackupName(e.Name()) {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
 
 	if len(names) <= keep {
 		return nil
@@ -172,15 +167,72 @@ func PrunePremigrationBackups(dir string, keep int, protected map[string]struct{
 	return firstErr
 }
 
-func IsRotatingBackupName(name string) bool {
-	if !strings.HasPrefix(name, backupNamePrefix) || !strings.HasSuffix(name, backupNameSuffix) {
-		return false
+type rotatingBackup struct {
+	taken string
+	n     int
+}
+
+func (b rotatingBackup) name() string {
+	if b.n == 1 {
+		return backupNamePrefix + b.taken + backupNameSuffix
 	}
-	stem := strings.TrimSuffix(strings.TrimPrefix(name, backupNamePrefix), backupNameSuffix)
-	if _, err := time.Parse(backupNameLayout, stem); err != nil {
-		return false
+	return fmt.Sprintf("%s%s-%d%s", backupNamePrefix, b.taken, b.n, backupNameSuffix)
+}
+
+func parseRotatingBackupName(name string) (rotatingBackup, bool) {
+	stem, ok := strings.CutPrefix(name, backupNamePrefix)
+	if !ok {
+		return rotatingBackup{}, false
 	}
-	return true
+	if stem, ok = strings.CutSuffix(stem, backupNameSuffix); !ok || len(stem) < len(backupNameLayout) {
+		return rotatingBackup{}, false
+	}
+	taken, rest := stem[:len(backupNameLayout)], stem[len(backupNameLayout):]
+	if _, err := time.Parse(backupNameLayout, taken); err != nil {
+		return rotatingBackup{}, false
+	}
+	n := 1
+	if rest != "" {
+		digits, ok := strings.CutPrefix(rest, "-")
+		parsed, err := strconv.Atoi(digits)
+		if !ok || err != nil || parsed < 2 || strconv.Itoa(parsed) != digits {
+			return rotatingBackup{}, false
+		}
+		n = parsed
+	}
+	return rotatingBackup{taken: taken, n: n}, true
+}
+
+func RotatingBackups(dir string) ([]string, error) {
+	backups, err := listRotatingBackups(dir)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(backups))
+	for i, b := range backups {
+		names[i] = b.name()
+	}
+	return names, nil
+}
+
+func listRotatingBackups(dir string) ([]rotatingBackup, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read dir %s: %w", dir, err)
+	}
+	var backups []rotatingBackup
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if b, ok := parseRotatingBackupName(e.Name()); ok {
+			backups = append(backups, b)
+		}
+	}
+	slices.SortFunc(backups, func(a, b rotatingBackup) int {
+		return cmp.Or(strings.Compare(a.taken, b.taken), cmp.Compare(a.n, b.n))
+	})
+	return backups, nil
 }
 
 func PremigrationBackupKeep() int { return backupPremigrationKeep }

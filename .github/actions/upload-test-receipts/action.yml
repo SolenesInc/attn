@@ -1,0 +1,22 @@
+name: Upload test receipts
+description: >-
+  Seal the receipts of test runs that ended without sealing, then upload every
+  receipt in ATTN_TEST_HISTORY_DIR, whatever the job's outcome.
+inputs:
+  name:
+    description: The job, and its shard when it has one
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Seal unfinished receipts
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: go tool test-history recover || echo "test-history recover failed; uploading the sealed receipts" >&2
+
+    - name: Upload receipts
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-receipts-${{ inputs.name }}-${{ github.run_attempt }}
+        path: ${{ env.ATTN_TEST_HISTORY_DIR }}/receipts/*.json
+        if-no-files-found: warn

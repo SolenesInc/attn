@@ -77,8 +77,14 @@ fi
 
 if [ "${1:-}" = "--packages" ]; then
   shift
-  "$go_bin" test "$@"
-  exit
+  capture_options=()
+  while [ "$#" -gt 1 ] && { [ "$1" = --unit ] || [ "$1" = --receipt-out ]; }; do
+    capture_options+=("$1" "$2")
+    shift 2
+  done
+  status=0
+  "$go_bin" tool test-history capture go ${capture_options[@]+"${capture_options[@]}"} -- "$@" || status=$?
+  exit "$status"
 fi
 
 short_mode=false
@@ -135,7 +141,7 @@ run_job() {
   local name="$1"
   shift
   local log="$test_root/$name.log"
-  (cd "$root" && "$@") >"$log" 2>&1 &
+  (cd "$root" && "$go_bin" tool test-history capture go --shard "$name" -- "$@") >"$log" 2>&1 &
   pids+=("$!")
   names+=("$name")
   logs+=("$log")
@@ -145,10 +151,10 @@ packages=()
 while IFS= read -r package; do
   packages+=("$package")
 done <"$packages_file"
-run_job packages "$go_bin" test -timeout "$test_timeout" -p "$package_parallelism" "$@" "${packages[@]}"
+run_job packages -timeout "$test_timeout" -p "$package_parallelism" "$@" "${packages[@]}"
 
 # Race-check document queries for lost wakes/torn reads.
-run_job race "$go_bin" test -timeout "$race_timeout" -race "$@" ./internal/store ./internal/docstore
+run_job race -timeout "$race_timeout" -race "$@" ./internal/store ./internal/docstore
 
 shard=0
 while [ "$shard" -lt "$shard_count" ]; do
@@ -159,7 +165,7 @@ while [ "$shard" -lt "$shard_count" ]; do
     }
     END { print "^(" tests ")$" }
   ' "$tests_file")"
-  run_job "daemon-$((shard + 1))" "$go_bin" test -timeout "$test_timeout" "$@" -run "$regex" ./internal/daemon
+  run_job "daemon-$((shard + 1))" -timeout "$test_timeout" "$@" -run "$regex" ./internal/daemon
   shard=$((shard + 1))
 done
 

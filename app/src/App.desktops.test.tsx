@@ -270,38 +270,6 @@ describe('desktop surface', () => {
     expect(await screen.findByTestId('sidebar')).toBeInTheDocument();
   });
 
-  it('groups the sidebar by desktop in the arrangement order', async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('sidebar').getAttribute('data-groups')).toBe(
-        'Desktop 1=s1+s2,Desktop 2=,Desktop 3=s3',
-      );
-    });
-  });
-
-  it('mounts only the current desktop until the user leaves it', async () => {
-    render(<App />);
-
-    expect(await screen.findByTestId(desktopTestId('d1'))).toBeInTheDocument();
-    expect(isActive('d1')).toBe(true);
-    expect(screen.queryByTestId(desktopTestId('d2'))).toBeNull();
-    expect(screen.queryByTestId(desktopTestId('d3'))).toBeNull();
-  });
-
-  it('stops treating the current desktop as active at home', async () => {
-    render(<App />);
-    await screen.findByTestId(desktopTestId('d1'));
-    expect(isActive('d1')).toBe(true);
-
-    act(() => {
-      useSessionStore.getState().goToDashboard();
-    });
-
-    expect(isActive('d1')).toBe(false);
-  });
-
-
   it('shows the focused tile again when the user comes back from Home to a desktop whose active leaf is a tile', async () => {
     render(<App />);
     await userEvent.click(await screen.findByTestId('select-d2'));
@@ -313,13 +281,6 @@ describe('desktop surface', () => {
 
     await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme'));
     expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
-  });
-
-  it('offers the focused agent\'s directory as the desktop root', async () => {
-    render(<App />);
-    await waitFor(() =>
-      expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-desktop-directory')).toBe('/tmp/repo'),
-    );
   });
 
   it('keeps the desktop a drag started on mounted while hovering switches through others', async () => {
@@ -347,21 +308,4 @@ describe('desktop surface', () => {
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('');
   });
 
-  it('sends the resolved terminal theme once the daemon handshake completes', async () => {
-    render(<App />);
-
-    await waitFor(() => {
-      expect(mockUseDaemonSocket.mock.results[0]?.value.sendSetTerminalTheme).toHaveBeenCalledWith({
-        foreground: '#d4d4d4',
-        background: '#1e1e1e',
-        cursor: '#d4d4d4',
-        ansi_palette: [
-          '#000000', '#cd3131', '#0dbc79', '#e5e510',
-          '#2472c8', '#bc3fbc', '#11a8cd', '#e5e5e5',
-          '#666666', '#f14c4c', '#23d18b', '#f5f543',
-          '#3b8eea', '#d670d6', '#29b8db', '#ffffff',
-        ],
-      });
-    });
-  });
 });

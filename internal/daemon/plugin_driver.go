@@ -197,9 +197,10 @@ type pluginClassifyStopResult struct {
 }
 
 type pendingPluginReport struct {
-	State    *pluginReportStateParams
-	Stop     *pluginReportStopParams
-	Metadata *pluginReportMetadataParams
+	State      *pluginReportStateParams
+	Stop       *pluginReportStopParams
+	Metadata   *pluginReportMetadataParams
+	Transcript *pluginReportTranscriptPathParams
 }
 
 func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginDriverRegisterParams) error {
@@ -405,18 +406,19 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 			return nil, true, fmt.Errorf("decode session.report_transcript_path params: %w", err)
 		}
 		params.SessionID = d.sessionInTerminal(params.TerminalID)
-		path := strings.TrimSpace(params.Path)
-		if path == "" {
+		params.Path = strings.TrimSpace(params.Path)
+		if params.Path == "" {
 			return nil, true, errors.New("session.report_transcript_path path is required")
 		}
-		if !filepath.IsAbs(path) {
-			return nil, true, fmt.Errorf("session.report_transcript_path path %q must be absolute", path)
+		if !filepath.IsAbs(params.Path) {
+			return nil, true, fmt.Errorf("session.report_transcript_path path %q must be absolute", params.Path)
 		}
-		if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
-			return nil, true, err
+		if !d.queueReportDuringPluginLaunch(plugin, params.SessionID, pendingPluginReport{Transcript: &params}) {
+			if err := d.authorizePluginSessionReport(plugin, params.SessionID, params.RunID); err != nil {
+				return nil, true, err
+			}
+			d.applyPluginReportedTranscriptPath(params)
 		}
-		d.notePluginDriverReport(params.SessionID)
-		d.applyPluginReportedTranscriptPath(params, path)
 		return struct{}{}, true, nil
 	case "session.report_automode_denial":
 		var params pluginReportAutoModeDenialParams
@@ -604,14 +606,15 @@ func (d *Daemon) applyPluginReportedMetadata(params pluginReportMetadataParams) 
 	return nil, nil
 }
 
-func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams, path string) {
+func (d *Daemon) applyPluginReportedTranscriptPath(params pluginReportTranscriptPathParams) {
+	d.notePluginDriverReport(params.SessionID)
 	if monitor := d.sessionMonitor(params.SessionID); monitor != nil {
 		if session := d.store.Get(params.SessionID); session != nil && transcript.SupportsUsage(session.Agent) {
-			if !d.life.Do("seedPluginUsageBaseline", func() { d.sessionMonitor(params.SessionID).SeedDriverUsageBaseline(path) }) {
+			if !d.life.Do("seedPluginUsageBaseline", func() { d.sessionMonitor(params.SessionID).SeedDriverUsageBaseline(params.Path) }) {
 				return
 			}
 		}
-		if !monitor.ReportDriverTranscript(params.RunID, path) {
+		if !monitor.ReportDriverTranscript(params.RunID, params.Path) {
 			d.logf("plugin transcript path report discarded: session=%s run=%s", params.SessionID, params.RunID)
 		}
 		return
@@ -647,6 +650,8 @@ func (d *Daemon) replayPluginReport(report pendingPluginReport) {
 		if err != nil {
 			d.logf("plugin metadata replay: session=%s: %v", report.Metadata.SessionID, err)
 		}
+	case report.Transcript != nil:
+		d.applyPluginReportedTranscriptPath(*report.Transcript)
 	}
 }
 
@@ -680,6 +685,8 @@ func (r pendingPluginReport) runID() string {
 		return r.Stop.RunID
 	case r.Metadata != nil:
 		return r.Metadata.RunID
+	case r.Transcript != nil:
+		return r.Transcript.RunID
 	default:
 		return ""
 	}
