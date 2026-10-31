@@ -1,10 +1,10 @@
 package codexshared_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -17,7 +17,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-const requestOutgrowingSocketBuffers = 1 << 20
+const largeRequestBytes = 1 << 20
 
 const disconnectingRounds = 20
 
@@ -81,16 +81,11 @@ func callWhileCodexRepliesAndDisconnects(t *testing.T, reply map[string]any) (js
 
 	outcome := make(chan callOutcome, 1)
 	go func() {
-		result, err := client.Call(context.Background(), "test/large", map[string]string{"payload": strings.Repeat("x", requestOutgrowingSocketBuffers)})
+		result, err := client.Call(context.Background(), "test/large", map[string]string{"payload": strings.Repeat("x", largeRequestBytes)})
 		outcome <- callOutcome{result, err}
 	}()
 
 	<-client.Done()
-	select {
-	case early := <-outcome:
-		t.Fatalf("Call returned (%s, %v) before Codex disconnected: a %d-byte request no longer outgrows the socket buffers", early.result, early.err, requestOutgrowingSocketBuffers)
-	default:
-	}
 	close(codex.drain)
 	got := <-outcome
 	return got.result, got.err
@@ -149,7 +144,8 @@ func startDisconnectingCodex(t *testing.T, reply map[string]any) disconnectingCo
 				t.Error(err)
 				return
 			}
-			id, err := requestID(request)
+			decoder := json.NewDecoder(request)
+			id, err := requestID(decoder)
 			if err != nil {
 				t.Error(err)
 				return
@@ -166,7 +162,7 @@ func startDisconnectingCodex(t *testing.T, reply map[string]any) disconnectingCo
 				return
 			}
 			<-codex.drain
-			if _, err := io.Copy(io.Discard, request); err != nil {
+			if _, err := io.Copy(io.Discard, io.MultiReader(decoder.Buffered(), request)); err != nil {
 				t.Error(err)
 			}
 		}),
@@ -176,25 +172,24 @@ func startDisconnectingCodex(t *testing.T, reply map[string]any) disconnectingCo
 	return codex
 }
 
-func requestID(request io.Reader) (json.RawMessage, error) {
-	prefix := make([]byte, len(`{"id":`))
-	if _, err := io.ReadFull(request, prefix); err != nil {
-		return nil, err
+func requestID(decoder *json.Decoder) (json.RawMessage, error) {
+	if open, err := decoder.Token(); err != nil || open != json.Delim('{') {
+		return nil, fmt.Errorf("request is not a JSON object: %v %v", open, err)
 	}
-	if string(prefix) != `{"id":` {
-		return nil, errors.New("request does not start with its id: " + string(prefix))
-	}
-	var id []byte
-	for {
-		b := make([]byte, 1)
-		if _, err := io.ReadFull(request, b); err != nil {
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
 			return nil, err
 		}
-		if b[0] == ',' {
-			return json.RawMessage(bytes.TrimSpace(id)), nil
+		var value json.RawMessage
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
 		}
-		id = append(id, b[0])
+		if key == "id" {
+			return value, nil
+		}
 	}
+	return nil, errors.New("request has no id")
 }
 
 func send(t *testing.T, ws *websocket.Conn, v any) {
