@@ -104,6 +104,17 @@ func (c *Client) CrewHandoff(sessionID protocol.SessionID, note string, retry bo
 	return resp.CrewHandoffResult, nil
 }
 
+func (c *Client) CrewMoveHome(member string) (*protocol.CrewMoveHomeResult, error) {
+	resp, err := c.send(protocol.CrewMoveHomeMessage{Cmd: protocol.CmdCrewMoveHome, Member: member})
+	if err != nil {
+		return nil, err
+	}
+	if resp.CrewMoveHomeResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a move-home result")
+	}
+	return resp.CrewMoveHomeResult, nil
+}
+
 func (c *Client) CrewRename(member, name string) (*protocol.CrewRenameResult, error) {
 	resp, err := c.send(protocol.CrewRenameMessage{Cmd: protocol.CmdCrewRename, Member: member, Name: name})
 	if err != nil {

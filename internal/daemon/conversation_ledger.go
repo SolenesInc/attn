@@ -315,7 +315,11 @@ func (d *Daemon) forgetConversation(id string, unlinkCrewLetters bool) (*protoco
 		})
 		unlinking = len(letters[key]) > 0
 		for _, letter := range letters[key] {
-			path := filepath.Join(d.dataRoot, crew.HomesDirName, letter.Member, crew.HandoffsDirName, letter.Filename+".json")
+			member, _, err := d.crewMember(letter.Member)
+			if err != nil {
+				return err
+			}
+			path := filepath.Join(member.HomeDir(d.dataRoot), crew.HandoffsDirName, letter.Filename+".json")
 			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return fmt.Errorf("removing crew letter session record %s: %w", path, err)
 			}

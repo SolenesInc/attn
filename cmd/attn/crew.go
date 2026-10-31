@@ -35,6 +35,8 @@ func runCrew() {
 		runCrewRetire(os.Args[3:])
 	case "restore":
 		runCrewRestore(os.Args[3:])
+	case "move-home":
+		runCrewMoveHome(os.Args[3:])
 	default:
 		recordUsageError("crew", usageErrorUnknownCommand)
 		fmt.Fprintf(os.Stderr, "crew: unknown command %q\n", os.Args[2])
@@ -46,9 +48,10 @@ func runCrew() {
 func writeCrewHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn crew <command>
 
-Manage the Crew. Members' charters and handoffs persist across sessions
-in the active instance's crew directory. Every member belongs to a profile
-and wakes only there.
+Manage the Crew. Each member has a home folder with its charter and letters,
+which persist across sessions: in attn's data folder, or in its profile's
+Notebook at crew/<name>/. Every member belongs to a profile and wakes only
+there.
 
 A <member> is a name in your profile, or member:<key> for the permanent key
 that never changes. Inside attn, your session's profile applies; outside,
@@ -89,8 +92,16 @@ commands:
         Use --awareness-dir "" to clear it.
 
   rename <member> <name> [--json]
-        Give the member a new name, unique in its profile. Its key, home,
-        letters, mail and seeds stay. Needs crew_v2_enabled.
+        Give the member a new name, unique in its profile. Its key, letters,
+        mail and seeds stay. A home in the Notebook moves to a folder named
+        after the new name, so the member must be asleep. Needs crew_v2_enabled.
+
+  move-home <member> [--json]
+        Move the member's home from attn's data folder into its profile's
+        Notebook, at crew/<name>/ (crew/<name>-2/ when that folder is taken).
+        Its charter, letters and other files move; a working or awareness
+        directory inside the home follows. The member must be asleep. Later
+        changes to the Notebook folder leave the home where it is.
 
   retire <member> [--json]
         Stop the member's work: its claimed seeds are replanted with a note,
@@ -462,7 +473,25 @@ func runCrewRename(args []string) {
 		printJSON(result)
 		return
 	}
+	if result.HomeDir != nil {
+		fmt.Printf("%s is now %s, and its home moved to %s; its key %s, letters and mail stay.\n", result.PreviousName, result.Name, *result.HomeDir, crew.KeyRefPrefix+result.Member)
+		return
+	}
 	fmt.Printf("%s is now %s; its key %s, home, letters and mail stay.\n", result.PreviousName, result.Name, crew.KeyRefPrefix+result.Member)
+}
+
+func runCrewMoveHome(args []string) {
+	parsed := parsedCrewMemberArgsOrExit("crew move-home", args)
+	result, err := crewClient(parsed.profile).CrewMoveHome(parsed.member)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "crew move-home: %v\n", err)
+		os.Exit(1)
+	}
+	if parsed.json {
+		printJSON(result)
+		return
+	}
+	fmt.Printf("%s's home is now %s (it was %s).\n", result.Member.Name, result.Member.HomeDir, result.PreviousHome)
 }
 
 type crewMemberArgs struct {

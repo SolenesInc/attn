@@ -155,6 +155,7 @@ const (
 	CmdCrewCreate                    = "crew_create"
 	CmdCrewRetire                    = "crew_retire"
 	CmdCrewRestore                   = "crew_restore"
+	CmdCrewMoveHome                  = "crew_move_home"
 	CmdCrewPrime                     = "crew_prime"
 	CmdCrewHandoff                   = "crew_handoff"
 	CmdStop                          = "stop"

@@ -7002,6 +7002,7 @@ model Response {
   crew_create_result?: CrewCreateResult;
   crew_retire_result?: CrewRetireResult;
   crew_restore_result?: CrewRestoreResult;
+  crew_move_home_result?: CrewMoveHomeResult;
   crew_prime_result?: CrewPrimeResult;
   crew_handoff_result?: CrewHandoffResult;
   seed_plant_result?: SeedPlantResult;
@@ -7345,8 +7346,9 @@ model CrewWakeResult {
   released_session_id?: SessionID;
 }
 
-// Rename a crew member. Its key, home, letters and mail stay; the bound
-// session's label follows the new name.
+// Rename a crew member. Its key, letters and mail stay; the bound session's
+// label follows the new name. A home in the Notebook moves to a folder named
+// after the new name, so an awake member with one is refused.
 @extension("x-on", #{ home: true })
 model CrewRenameMessage {
   cmd: "crew_rename";
@@ -7363,6 +7365,23 @@ model CrewRenameResult {
   previous_name: string;
   // The session whose label changed, when the member is awake.
   session_id?: SessionID;
+  // The member's new home, when the rename moved its folder in the Notebook.
+  home_dir?: string;
+}
+
+// Move a member's home from attn's data folder into its profile's Notebook,
+// at crew/<name>/. The member must be asleep.
+@extension("x-on", #{ home: true })
+model CrewMoveHomeMessage {
+  cmd: "crew_move_home";
+  member: string;
+  profile_id?: string;
+  source_session_id?: SessionID;
+}
+
+model CrewMoveHomeResult {
+  member: CrewMember;
+  previous_home: string;
 }
 
 model CrewRenameResultMessage {

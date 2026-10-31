@@ -158,25 +158,52 @@ func (s *Store) RenameCrewMember(key, name string) (previous string, err error) 
 		return "", err
 	}
 	err = s.profilesTx(func(tx *sql.Tx, _ string) error {
-		var profileID string
-		err := tx.QueryRow(`SELECT profile_id, name FROM crew_members WHERE member_key = ?`, key).Scan(&profileID, &previous)
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("crew member %s has no identity record", key)
+		previous, err = renameCrewMember(tx, key, name)
+		return err
+	})
+	return previous, err
+}
+
+func (s *Store) RenameCrewMemberMovingHome(key, name string, home DocumentCommit, now time.Time) (previous string, written DocumentWriteResult, err error) {
+	if err := crew.ValidateName(name); err != nil {
+		return "", DocumentWriteResult{}, err
+	}
+	table, err := s.documentTable(home.Write.Schema)
+	if err != nil {
+		return "", DocumentWriteResult{}, err
+	}
+	err = s.profilesTx(func(tx *sql.Tx, _ string) error {
+		if previous, err = renameCrewMember(tx, key, name); err != nil {
+			return err
 		}
+		results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{home}, []string{table}, now)
 		if err != nil {
 			return err
 		}
-		var holder string
-		err = tx.QueryRow(`SELECT name FROM crew_members WHERE profile_id = ? AND name = ? COLLATE NOCASE AND member_key != ?`, profileID, name, key).Scan(&holder)
-		if err == nil {
-			return fmt.Errorf("the name %q is already taken by %s in this profile", name, holder)
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		_, err = tx.Exec(`UPDATE crew_members SET name = ? WHERE member_key = ?`, name, key)
-		return err
+		written = results[0]
+		return nil
 	})
+	return previous, written, err
+}
+
+func renameCrewMember(tx *sql.Tx, key, name string) (previous string, err error) {
+	var profileID string
+	err = tx.QueryRow(`SELECT profile_id, name FROM crew_members WHERE member_key = ?`, key).Scan(&profileID, &previous)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("crew member %s has no identity record", key)
+	}
+	if err != nil {
+		return "", err
+	}
+	var holder string
+	err = tx.QueryRow(`SELECT name FROM crew_members WHERE profile_id = ? AND name = ? COLLATE NOCASE AND member_key != ?`, profileID, name, key).Scan(&holder)
+	if err == nil {
+		return "", fmt.Errorf("the name %q is already taken by %s in this profile", name, holder)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	_, err = tx.Exec(`UPDATE crew_members SET name = ? WHERE member_key = ?`, name, key)
 	return previous, err
 }
 

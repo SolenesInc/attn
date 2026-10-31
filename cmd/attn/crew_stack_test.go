@@ -223,3 +223,26 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 		t.Fatalf("restore JSON = %+v", restored)
 	}
 }
+
+func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	writeCharter(t, s, "keel")
+	writeCharter(t, s, "trellis")
+	s.Start()
+	var moved protocol.CrewMoveHomeResult
+	s.Attn("crew", "move-home", "Keel", "--json").JSON(t, &moved)
+	if moved.Member.ID != "keel" || moved.PreviousHome != filepath.Join(s.Dir, "crew", "keel") || moved.Member.HomeDir != filepath.Join(s.Dir, "notebook", "crew", "keel") {
+		t.Fatalf("move-home JSON: %+v", moved)
+	}
+	if raw, err := os.ReadFile(moved.Member.CharterPath); err != nil || string(raw) != "# keel\n" {
+		t.Fatalf("moved charter: %q %v", raw, err)
+	}
+	requireStdout(t, s.Attn("crew", "move-home", "Trellis"), "Trellis's home is now "+filepath.Join(s.Dir, "notebook", "crew", "trellis")+" (it was "+filepath.Join(s.Dir, "crew", "trellis")+").")
+	requireFailure(t, s.Attn("crew", "move-home", "Keel"), "crew move-home: ", "already outside attn's data folder")
+	if parse := s.Attn("crew", "move-home"); parse.Code != 2 || !strings.Contains(parse.Stderr, "takes one member name") || !strings.Contains(parse.Stderr, "move-home <member>") {
+		t.Fatalf("move-home without a member: %+v", parse)
+	}
+	requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "true"))
+	requireStdout(t, s.Attn("crew", "rename", "Keel", "Anchor"), "Keel is now Anchor, and its home moved to "+filepath.Join(s.Dir, "notebook", "crew", "anchor")+"; its key member:keel, letters and mail stay.")
+}

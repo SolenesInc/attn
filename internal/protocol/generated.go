@@ -3051,6 +3051,28 @@ type CrewMember struct {
 	Revision int `json:"revision"`
 }
 
+type CrewMoveHomeMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Member corresponds to the JSON schema field "member".
+	Member string `json:"member"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+}
+
+type CrewMoveHomeResult struct {
+	// Member corresponds to the JSON schema field "member".
+	Member CrewMember `json:"member"`
+
+	// PreviousHome corresponds to the JSON schema field "previous_home".
+	PreviousHome string `json:"previous_home"`
+}
+
 type CrewPrimeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -3097,6 +3119,9 @@ type CrewRenameMessage struct {
 }
 
 type CrewRenameResult struct {
+	// HomeDir corresponds to the JSON schema field "home_dir".
+	HomeDir *string `json:"home_dir,omitempty,omitzero"`
+
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
@@ -9139,6 +9164,10 @@ type Response struct {
 
 	// CrewListResult corresponds to the JSON schema field "crew_list_result".
 	CrewListResult *CrewListResult `json:"crew_list_result,omitempty,omitzero"`
+
+	// CrewMoveHomeResult corresponds to the JSON schema field
+	// "crew_move_home_result".
+	CrewMoveHomeResult *CrewMoveHomeResult `json:"crew_move_home_result,omitempty,omitzero"`
 
 	// CrewPrimeResult corresponds to the JSON schema field "crew_prime_result".
 	CrewPrimeResult *CrewPrimeResult `json:"crew_prime_result,omitempty,omitzero"`

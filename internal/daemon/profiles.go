@@ -4,12 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/victorarias/attn/internal/crew"
-	"github.com/victorarias/attn/internal/who"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/harness"
@@ -17,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type profileActionOutcome struct {
@@ -389,19 +386,9 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		homes, err := crew.ScanHomes(filepath.Join(d.dataRoot, crew.HomesDirName), d.logf)
+		members, err := d.crewMembersWithHomes(msg.ProfileID)
 		if err != nil {
 			return profileActionOutcome{}, err
-		}
-		identities, err := d.store.CrewIdentities()
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
-		members := 0
-		for _, member := range homes {
-			if identity := identities[member.ID]; identity.ProfileID == msg.ProfileID && !identity.Retired {
-				members++
-			}
 		}
 		d.automationMu.Lock()
 		deleted, closedAsks, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), members)

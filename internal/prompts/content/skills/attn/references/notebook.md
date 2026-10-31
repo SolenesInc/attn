@@ -47,6 +47,10 @@ since archived notes drop out of the active view.
 The knowledge base is not a task tracker. Capture what is *known*, not what is
 *to do*.
 
+`<root>/crew/` holds crew members' homes: a folder per member with its charter
+and letters. attn owns that folder and records where each home is, so don't
+move, rename or delete anything in it.
+
 ## Append A Journal Entry
 
 Append a short prose entry through the home:

@@ -34,6 +34,21 @@ run them from; outside, pass `--profile <name|id>` when you have several.
 `member:<key>`, such as `member:fern`, reaches the member by its key, which
 never changes.
 
+## Move a member's home into the Notebook
+
+`attn crew move-home <member>` moves a member's home from Attn's data folder
+into its profile's Notebook, at `crew/<name>/`, or `crew/<name>-2/` when that
+folder is taken. Its charter, letters and anything else in the folder move with
+it, and a working or awareness folder inside the home follows. There you can
+read and edit the charter in the Notebook, and the home stays with the rest of
+your notes when you back them up or sync them. The member must be asleep. Attn never moves a home on
+its own: members stay where they are until you run the command, and changing
+the profile's Notebook folder later leaves homes where they are.
+
+If a member's home goes missing, Attn refuses to wake the member or open its
+charter and names the path; put the folder back to fix it. Other members keep
+working.
+
 ## The Crew section
 
 The sidebar has a Crew section. In [queue flow](queue.md) it lists every
@@ -141,8 +156,10 @@ The member is asleep. Its next session starts from the last letter it filed, so 
 <summary>Can I rename or retire a member?</summary>
 
 With Crew v2 on, rename a member with `attn crew rename <member> <name>` or
-**Rename** next to its name in Manage crew. Its key, home folder, letters,
-mail and seeds stay, and an awake member's agent takes the new name.
+**Rename** next to its name in Manage crew. Its key, letters, mail and seeds
+stay, and an awake member's agent takes the new name. A home in the Notebook
+moves to a folder named after the new name, so Attn renames such a member only
+while it is asleep; a home in Attn's data folder stays put.
 
 `attn crew retire <member>` stops a member's work. The seeds they tend go back
 to planted, each with a note; their seed and pull request watches and open

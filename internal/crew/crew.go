@@ -35,6 +35,7 @@ type Member struct {
 	Name           string             `json:"-"`
 	ProfileID      string             `json:"-"`
 	Retired        bool               `json:"-"`
+	Home           string             `json:"home_dir,omitempty"`
 	CWD            string             `json:"cwd"`
 	Agent          string             `json:"agent"`
 	Model          string             `json:"model"`
@@ -48,7 +49,14 @@ type Member struct {
 }
 
 func (m Member) HomeDir(dataRoot string) string {
+	if m.Home != "" {
+		return m.Home
+	}
 	return filepath.Join(dataRoot, HomesDirName, m.ID)
+}
+
+func (m Member) InDataDir() bool {
+	return m.Home == ""
 }
 
 func (m Member) CharterPath(dataRoot string) string {

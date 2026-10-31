@@ -119,6 +119,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdCrewCreate:                    decodeInto[CrewCreateMessage],
 	CmdCrewRetire:                    decodeInto[CrewRetireMessage],
 	CmdCrewRestore:                   decodeInto[CrewRestoreMessage],
+	CmdCrewMoveHome:                  decodeInto[CrewMoveHomeMessage],
 	CmdCrewSet:                       decodeInto[CrewSetMessage],
 	CmdCrewPrime:                     decodeInto[CrewPrimeMessage],
 	CmdCrewHandoff:                   decodeInto[CrewHandoffMessage],

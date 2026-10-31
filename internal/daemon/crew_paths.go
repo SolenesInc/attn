@@ -26,7 +26,7 @@ func (d *Daemon) resolvedCrewRoot() (string, error) {
 }
 
 func (d *Daemon) requireCrewFiles(member crew.Member) error {
-	root, err := d.resolvedCrewRoot()
+	home, err := d.crewHomeFence(member)
 	if err != nil {
 		return err
 	}
@@ -35,14 +35,31 @@ func (d *Daemon) requireCrewFiles(member crew.Member) error {
 		if err != nil {
 			return fmt.Errorf("resolve %s's crew file %q: %w", member.Name, stored, err)
 		}
-		if !pathWithin(root, resolved) {
-			return fmt.Errorf("refusing crew member %s: %q resolves outside this daemon's crew root %q through a symlink", member.Name, stored, root)
+		if !pathWithin(home, resolved) {
+			return fmt.Errorf("refusing crew member %s: %q resolves outside %q through a symlink", member.Name, stored, home)
 		}
 		if _, err := os.Stat(stored); err != nil {
 			return fmt.Errorf("%s's crew file %s is unavailable: %w", member.Name, stored, err)
 		}
 	}
 	return nil
+}
+
+func (d *Daemon) crewHomeFence(member crew.Member) (string, error) {
+	if member.InDataDir() {
+		return d.resolvedCrewRoot()
+	}
+	if !filepath.IsAbs(member.Home) {
+		return "", fmt.Errorf("refusing crew member %s: its recorded home %q is not an absolute path", member.Name, member.Home)
+	}
+	if err := config.RequireWithinHarness(member.Name+"'s crew home", member.Home); err != nil {
+		return "", err
+	}
+	home, err := config.CanonicalRuntimePath(member.Home)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s's home %q: %w", member.Name, member.Home, err)
+	}
+	return home, nil
 }
 
 func (d *Daemon) validateCrewLetterPath(member crew.Member, letterPath string) error {

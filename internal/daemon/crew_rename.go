@@ -3,9 +3,13 @@ package daemon
 import (
 	"errors"
 	"net"
+	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 var errCrewRenameNeedsV2 = errors.New("renaming crew members is part of crew v2, which is off; `attn settings set crew_v2_enabled true` turns it on")
@@ -21,14 +25,16 @@ func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRena
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 	name := strings.TrimSpace(msg.Name)
-	previous, err := d.store.RenameCrewMember(member.ID, name)
+	if err := crew.ValidateName(name); err != nil {
+		return nil, err
+	}
+	previous, movedHome, err := d.renameCrewMember(member, name)
 	if err != nil {
 		return nil, err
 	}
-	d.publishFact(FactCrewUpdated, member.ID, nil)
 	d.publishArrangementChanged(member.ProfileID)
 	d.logf("crew: member %s renamed from %s to %s", member.ID, previous, name)
-	result := &protocol.CrewRenameResult{Member: member.ID, Name: name, PreviousName: previous}
+	result := &protocol.CrewRenameResult{Member: member.ID, Name: name, PreviousName: previous, HomeDir: movedHome}
 	if d.crewBindingLive(member) {
 		if err := d.renameSession(&protocol.RenameSessionMessage{SessionID: member.BindingSession, Label: name}); err != nil {
 			d.logf("crew: %s's session %s keeps its label: %v", name, member.BindingSession, err)
@@ -37,6 +43,29 @@ func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRena
 		}
 	}
 	return result, nil
+}
+
+func (d *Daemon) renameCrewMember(asked crew.Member, name string) (previous string, movedHome *string, err error) {
+	if asked.InDataDir() || strings.EqualFold(asked.Name, name) {
+		previous, err = d.store.RenameCrewMember(asked.ID, name)
+		if err == nil {
+			d.publishFact(FactCrewUpdated, asked.ID, nil)
+		}
+		return previous, nil, err
+	}
+	member, doc, err := d.crewMember(asked.ID)
+	if err != nil {
+		return "", nil, err
+	}
+	moved, _, err := d.relocateCrewHome(member, doc.Rev, filepath.Dir(member.HomeDir(d.dataRoot)), name, func(c store.DocumentCommit) (store.DocumentWriteResult, error) {
+		var written store.DocumentWriteResult
+		previous, written, err = d.store.RenameCrewMemberMovingHome(member.ID, name, c, time.Now())
+		return written, err
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	return previous, &moved.Home, nil
 }
 
 func (d *Daemon) handleCrewRename(conn net.Conn, msg *protocol.CrewRenameMessage) {
