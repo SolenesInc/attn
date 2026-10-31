@@ -111,6 +111,7 @@ try {
       && observer.getSession(builder)?.delegation_role?.name === 'Builder', 'saved roles projected onto sessions');
     runner.assert(!observer.getSession(child)?.delegation_role, 'direct delegation remains roleless');
     await client.request('select_session', { sessionId: builder });
+    await waitForSelector(`[data-testid="session-usage-${builder}"]`, "the Builder's first turn has put its usage in the header");
   });
   await runner.step('sidebar_hover_and_header_role', async () => {
     await driver.activateApp();
