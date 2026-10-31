@@ -163,6 +163,7 @@ func (s *Stack) launch(vars ...string) {
 	if s.daemon != nil {
 		s.T.Fatal("Start: the stack's daemon is already running")
 	}
+	s.pauses.Reopen()
 	ready, signal, err := os.Pipe()
 	if err != nil {
 		s.T.Fatal(err)
@@ -247,6 +248,7 @@ func (s *Stack) Stop() {
 	if s.daemon == nil {
 		return
 	}
+	s.pauses.Close()
 	s.ClosePeers()
 	select {
 	case err := <-s.exited:

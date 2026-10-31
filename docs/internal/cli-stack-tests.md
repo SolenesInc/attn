@@ -22,7 +22,8 @@ returns `testworld.Main(m)`.
   `s.StartHeldAt(pause)`. `Await` returns the held process's pid and `Release`
   lets it go. It is the same `testworld.Pause` a daemon wire test gets, and
   its `Await` fails at once with the step's error when a `Done` point's step
-  failed.
+  failed. `s.Stop()` releases every hold before the daemon stops, and the next
+  start holds afresh.
 - For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
   a daemon that kills itself with SIGKILL at a crash point named in the
   daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later
