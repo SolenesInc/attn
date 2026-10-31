@@ -29,11 +29,7 @@ type history struct {
 	skipped  map[string]int
 }
 
-func loadHistory() (history, error) {
-	dir, err := spoolDir()
-	if err != nil {
-		return history{}, err
-	}
+func loadHistory(dir string) (history, error) {
 	loaded := history{skipped: map[string]int{}}
 	seen := map[string]bool{}
 	for _, sub := range []string{"receipts", "shared"} {

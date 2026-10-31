@@ -1,6 +1,8 @@
-# Tests scripts/land.sh runs before it pushes, chosen by the paths a landing
-# changes. Run groups by hand with scripts/landing-tests.sh <group>..., or
-# single tests with scripts/landing-tests.sh --unit '<unit>'...
+# The baseline: tests scripts/land.sh always runs before it pushes, chosen by
+# the paths a landing changes. land.sh adds tests that failed on main and tests
+# the landing changes; docs/internal/test-history.md says how it chooses them.
+# Run groups by hand with scripts/landing-tests.sh <group>..., or single tests
+# with scripts/landing-tests.sh --unit '<unit>'...
 #
 # "group <name> <pattern>" starts a group. land.sh runs it when a changed path
 # matches the pattern, an extended regular expression. The lines under it name

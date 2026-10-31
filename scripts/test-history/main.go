@@ -33,6 +33,12 @@ const usage = `usage: go tool test-history <command>
   spool
       Print the spool directory.
 
+  land --units-out <file> [--main <ref>]
+      Choose the landing tests for HEAD's change against <ref> (default
+      origin/main) as scripts/land.sh does: success-count, extend, no
+      allowance. Writes the units to run, one per line, to <file>, and prints
+      every unit added to the baseline or left out, with its reason. With no
+      successful sync in the spool, it chooses the baseline.
   select [--mode replace|extend|baseline] [--policy success-count|recent-failure]
          [--allowance <duration>] [--main <ref>] [--json]
       Propose the landing tests for this checkout's change against <ref>
@@ -40,8 +46,10 @@ const usage = `usage: go tool test-history <command>
       candidate as SELECTED, OVER-BUDGET, UNPRICED or UNAVAILABLE with its
       reason. replace (the default) fits ranked tests into the baseline's
       measured cost; extend keeps the baseline and adds ranked tests, within
-      --allowance when given; both always select the tests the change touches.
-      baseline prints the fixed list alone. The default policy is success-count.
+      the baseline's cost plus --allowance when given (0 adds nothing to it),
+      or every ranked test without it; both always select the tests the change
+      touches. baseline prints the fixed list alone. The default policy is
+      success-count.
   explain --test '<unit>' [--main <ref>] [--json]
       Show a unit's anchor and passes in each lane, its cost and its rerun command.
   pending [--main <ref>] [--json]
@@ -68,6 +76,8 @@ func main() {
 		os.Exit(recoverWorking())
 	case "summary":
 		os.Exit(summary(os.Args[2:]))
+	case "land":
+		os.Exit(landCommand(os.Args[2:]))
 	case "select":
 		os.Exit(selectCommand(os.Args[2:]))
 	case "explain":

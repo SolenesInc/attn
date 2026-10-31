@@ -83,9 +83,11 @@ machine's receipts. It imports CI's receipt artifacts on its own;
   many wait to upload. On failure it prints how many wait to upload and when a
   sync last succeeded, keeps every receipt, and exits 1.
 
-A sync never changes a test's result; no test command runs it.
-`ATTN_TEST_HISTORY_URL` points it at another service. Each request has a
-2-minute budget.
+A sync never changes a test's result. `scripts/land.sh` runs it before
+choosing landing tests; no test command does. `ATTN_TEST_HISTORY_URL` points
+it at another service. Each request has a 2-minute budget, and connecting has
+10 seconds: a connection to the service takes about 0.15 seconds, and off the
+tailnet one never completes.
 
 The service token is read from
 `${XDG_CONFIG_HOME:-~/.config}/attn-test-history/token`. It lives in Proton
@@ -151,15 +153,37 @@ fixture projects, and native matrix results from CI and local runs.
 
 ## Selection
 
-`go tool test-history select` proposes the landing tests for the change
-between the checkout and `origin/main` from the receipts in the spool. It is a
-shadow: `scripts/land.sh` still runs the fixed list in `scripts/landing-tests`,
-the baseline. Every proposal names its policy revision: `success-count/1` by
-default, `recent-failure/1` with `--policy recent-failure`.
+`scripts/land.sh` chooses its landing tests after every rebase, for the commit
+it is about to push, with `go tool test-history land`. It runs the fixed list in
+`scripts/landing-tests`, the baseline, for the groups the change matches, and
+adds tests that failed on main and tests the change touches, within the
+baseline's estimated cost: policy `success-count/1`, mode `extend`, no
+allowance. It runs them through `scripts/landing-tests.sh --unit`, and any
+failure stops the push.
+
+- `land` prints each unit it adds and each candidate it leaves out, with its
+  reason, the history's freshness and the budget. It counts the baseline units
+  it keeps.
+- A baseline unit missing from the checkout, such as a renamed test, is
+  requested anyway: the run reports it `MISSING` and the landing fails until
+  its line in `scripts/landing-tests` names a test again.
+- Before choosing, `land.sh` runs `sync`. When the sync fails, it prints when
+  a sync last succeeded and chooses from the history already in the spool.
+- With no successful sync in the spool, `land` chooses the baseline and says so.
+- When `land` fails, `land.sh` prints that it is running the baseline groups,
+  and runs them.
+- `scripts/land.sh --baseline` runs the baseline groups without syncing or
+  choosing: the way out when history or selection misbehaves.
+
+`go tool test-history select` proposes landing tests for the change between
+the checkout and `origin/main` under any policy and mode, to compare them with
+what `land` chooses. Every proposal names its policy revision: `success-count/1`
+by default, `recent-failure/1` with `--policy recent-failure`.
 
 ```sh
+go tool test-history land --units-out units # what land.sh would run
 go tool test-history select                 # replace mode, success-count policy
-go tool test-history select --mode extend --allowance 30s
+go tool test-history select --mode extend --allowance 0s
 go tool test-history select --mode baseline # the fixed list
 go tool test-history select --policy recent-failure
 go tool test-history explain --test 'go ./internal/daemon TestStateExplain'
@@ -256,9 +280,10 @@ since.
   A baseline unit the change touches runs as a changed test and still counts
   in that budget.
 - `extend` keeps every baseline unit and adds ranked units, within the
-  baseline's cost plus `--allowance` when one is given.
+  baseline's cost plus `--allowance` when one is given (`0s` adds nothing to
+  the baseline's cost), or every ranked unit without it.
 - `baseline` selects only the baseline units of the selected groups, as
-  `land.sh` does.
+  `land.sh --baseline` does.
 
 A ranked unit that would exceed the budget is `OVER-BUDGET`; one without a cost
 is `UNPRICED`, never assumed free. When a baseline unit of a runner is unpriced,

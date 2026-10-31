@@ -19,6 +19,8 @@ import (
 type selectionContext struct {
 	main     testhistory.Mainline
 	mainRef  string
+	spool    string
+	lastSync *time.Time
 	history  history
 	key      testhistory.CostKey
 	receipts []testhistory.Receipt
@@ -29,7 +31,15 @@ func loadContext(mainRef string) (selectionContext, error) {
 	if err != nil {
 		return selectionContext{}, err
 	}
-	loaded, err := loadHistory()
+	dir, err := spoolDir()
+	if err != nil {
+		return selectionContext{}, err
+	}
+	loaded, err := loadHistory(dir)
+	if err != nil {
+		return selectionContext{}, err
+	}
+	state, err := readSyncState(testhistory.Spool{Dir: dir})
 	if err != nil {
 		return selectionContext{}, err
 	}
@@ -40,7 +50,7 @@ func loadContext(mainRef string) (selectionContext, error) {
 	if err := os.Chdir(root); err != nil {
 		return selectionContext{}, err
 	}
-	return selectionContext{main: main, mainRef: mainRef, history: loaded, key: selectionKey(), receipts: loaded.receipts}, nil
+	return selectionContext{main: main, mainRef: mainRef, spool: dir, lastSync: state.LastSuccess, history: loaded, key: selectionKey(), receipts: loaded.receipts}, nil
 }
 
 func (c selectionContext) request(at tree, base string, policy testhistory.Policy, mode testhistory.Mode, allowance *int64) (testhistory.SelectRequest, error) {
@@ -78,10 +88,11 @@ type freshness struct {
 	BehindHead     int            `json:"behind_head"`
 	Machine        string         `json:"machine"`
 	Lane           string         `json:"lane"`
+	LastSync       *time.Time     `json:"last_sync,omitempty"`
 }
 
 func (c selectionContext) freshness() freshness {
-	f := freshness{Receipts: len(c.receipts), Skipped: c.history.skipped, MainRef: c.mainRef, Machine: c.key.Machine, Lane: c.key.Lane.String(), BehindHead: c.main.Len()}
+	f := freshness{Receipts: len(c.receipts), Skipped: c.history.skipped, MainRef: c.mainRef, Machine: c.key.Machine, Lane: c.key.Lane.String(), BehindHead: c.main.Len(), LastSync: c.lastSync}
 	if c.main.Len() > 0 {
 		f.MainHead = c.main.Commit(c.main.Len() - 1)
 	}
@@ -122,13 +133,18 @@ func selectCommand(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
-	if *allowance != 0 && mode != testhistory.ModeExtend {
+	var allowanceMS *int64
+	flags.Visit(func(set *flag.Flag) {
+		if set.Name == "allowance" {
+			ms := allowance.Milliseconds()
+			allowanceMS = &ms
+		}
+	})
+	if allowanceMS != nil && mode != testhistory.ModeExtend {
 		return fail(errors.New("--allowance applies only to --mode extend"))
 	}
-	var allowanceMS *int64
-	if *allowance > 0 {
-		ms := allowance.Milliseconds()
-		allowanceMS = &ms
+	if *allowance < 0 {
+		return fail(fmt.Errorf("--allowance %s is negative", *allowance))
 	}
 	context, err := loadContext(*mainRef)
 	if err != nil {
@@ -151,31 +167,10 @@ func selectCommand(args []string) int {
 }
 
 func printSelection(out io.Writer, report selectReport) {
-	f := report.Freshness
 	fmt.Fprintf(out, "test-history select: %s, mode %s, groups %s\n", report.Policy, report.Mode, joinOrNone(report.Groups))
-	evidence := "no main evidence yet"
-	if f.NewestEvidence != "" {
-		evidence = fmt.Sprintf("newest main evidence %s, %d commits behind %s", short(f.NewestEvidence), f.BehindHead, f.MainRef)
-	}
-	fmt.Fprintf(out, "history: %d receipts; %s; costs for %s on %s\n", f.Receipts, evidence, f.Lane, f.Machine)
-	for reason, count := range f.Skipped {
-		fmt.Fprintf(out, "history: skipped %d receipts (%s)\n", count, reason)
-	}
+	printHistory(out, report.Freshness)
 	for _, budget := range report.Budgets {
-		line := fmt.Sprintf("budget %s: selected %s", budget.Runner, seconds(budget.EstimateMS))
-		if budget.BaselineMS != nil {
-			line += ", baseline " + seconds(*budget.BaselineMS)
-		}
-		if budget.BudgetMS != nil {
-			line += ", limit " + seconds(*budget.BudgetMS)
-		}
-		if len(budget.Unpriced) > 0 {
-			line += "; unpriced: " + strings.Join(budget.Unpriced, ", ")
-		}
-		if budget.Note != "" {
-			line += "; " + budget.Note
-		}
-		fmt.Fprintln(out, line)
+		printBudget(out, budget)
 	}
 	for _, choice := range report.Choices {
 		fmt.Fprintf(out, "%-11s %s", strings.ToUpper(string(choice.Status)), choice.Unit)
@@ -186,20 +181,56 @@ func printSelection(out io.Writer, report selectReport) {
 			fmt.Fprint(out, " (unpriced)")
 		}
 		fmt.Fprintln(out)
-		var reasons []string
-		if choice.Changed {
-			reasons = append(reasons, "changed by this landing")
-		}
-		if choice.Standing != nil {
-			reasons = append(reasons, choice.Standing.Describe())
-		}
-		if choice.Note != "" && !choice.Changed {
-			reasons = append(reasons, choice.Note)
-		}
-		for _, reason := range reasons {
+		for _, reason := range choiceReasons(choice) {
 			fmt.Fprintf(out, "            %s\n", reason)
 		}
 	}
+}
+
+func printHistory(out io.Writer, f freshness) {
+	evidence := "no main evidence yet"
+	if f.NewestEvidence != "" {
+		evidence = fmt.Sprintf("newest main evidence %s, %d commits behind %s", short(f.NewestEvidence), f.BehindHead, f.MainRef)
+	}
+	synced := "never synced"
+	if f.LastSync != nil {
+		synced = fmt.Sprintf("last sync %s (%s ago)", f.LastSync.Local().Format(time.RFC3339), time.Since(*f.LastSync).Round(time.Minute))
+	}
+	fmt.Fprintf(out, "history: %d receipts, %s; %s; costs for %s on %s\n", f.Receipts, synced, evidence, f.Lane, f.Machine)
+	for reason, count := range f.Skipped {
+		fmt.Fprintf(out, "history: skipped %d receipts (%s)\n", count, reason)
+	}
+}
+
+func printBudget(out io.Writer, budget testhistory.RunnerBudget) {
+	line := fmt.Sprintf("budget %s: selected %s", budget.Runner, seconds(budget.EstimateMS))
+	if budget.BaselineMS != nil {
+		line += ", baseline " + seconds(*budget.BaselineMS)
+	}
+	if budget.BudgetMS != nil {
+		line += ", limit " + seconds(*budget.BudgetMS)
+	}
+	if len(budget.Unpriced) > 0 {
+		line += "; unpriced: " + strings.Join(budget.Unpriced, ", ")
+	}
+	if budget.Note != "" {
+		line += "; " + budget.Note
+	}
+	fmt.Fprintln(out, line)
+}
+
+func choiceReasons(choice testhistory.Choice) []string {
+	var reasons []string
+	if choice.Changed {
+		reasons = append(reasons, "changed by this landing")
+	}
+	if choice.Standing != nil {
+		reasons = append(reasons, choice.Standing.Describe())
+	}
+	if choice.Note != "" && !choice.Changed {
+		reasons = append(reasons, choice.Note)
+	}
+	return reasons
 }
 
 func joinOrNone(list []string) string {
@@ -491,7 +522,7 @@ func (c selectionContext) replayAt(observed testhistory.Health, commit string, a
 		point.Observed++
 		landed = append(landed, receipt)
 	}
-	before := selectionContext{main: c.main.Before(commit), mainRef: commit + "^", history: c.history, key: c.key, receipts: c.history.availableAt(at)}
+	before := selectionContext{main: c.main.Before(commit), mainRef: commit + "^", spool: c.spool, history: c.history, key: c.key, receipts: c.history.availableAt(at)}
 	point.Available = len(before.receipts)
 	point.Freshness = before.freshness()
 	shared, err := before.request(tree{revision: commit}, commit+"^", testhistory.SuccessCount, testhistory.ModeBaseline, nil)

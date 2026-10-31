@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +24,7 @@ var serviceRepo = regexp.MustCompile(`^[a-z0-9.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-
 const (
 	defaultHistoryURL = "https://attn-test-history.int.caketroll.cloud"
 	syncRequestBudget = 2 * time.Minute
+	syncConnectBudget = 10 * time.Second
 )
 
 type syncState struct {
@@ -161,7 +163,14 @@ func newHistoryService() (historyService, error) {
 	if err != nil {
 		return historyService{}, err
 	}
-	return historyService{base: base, token: strings.TrimSpace(string(token)), client: &http.Client{Timeout: syncRequestBudget}}, nil
+	return historyService{base: base, token: strings.TrimSpace(string(token)), client: &http.Client{Timeout: syncRequestBudget, Transport: connectBudgeted()}}, nil
+}
+
+func connectBudgeted() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: syncConnectBudget}).DialContext
+	transport.TLSHandshakeTimeout = syncConnectBudget
+	return transport
 }
 
 func tokenPath() (string, error) {

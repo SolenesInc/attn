@@ -289,6 +289,7 @@ func (request SelectRequest) fit(runner Runner, baseline []string, ranked []*Cho
 		estimate, _ := request.Costs.Estimate(append(append([]string(nil), chosen...), choice.Unit))
 		if limit != nil && estimate > *limit {
 			choice.Status = OverBudget
+			choice.Note = fmt.Sprintf("adding it would estimate %s at %s, past the limit of %s", runner, formatMS(estimate), formatMS(*limit))
 			continue
 		}
 		choice.Status = Selected
@@ -310,6 +311,8 @@ func (policy Policy) ranksBefore(a, b Choice) bool {
 	}
 	return a.Unit < b.Unit
 }
+
+func formatMS(ms int64) string { return fmt.Sprintf("%.1fs", float64(ms)/1000) }
 
 func costOrMax(choice Choice) int64 {
 	if choice.CostMS == nil {

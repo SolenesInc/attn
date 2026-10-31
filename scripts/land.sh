@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-[ "$#" -eq 0 ] || { echo "usage: scripts/land.sh" >&2; exit 2; }
+usage="usage: scripts/land.sh [--baseline]"
+landing_tests=selected
+case "$*" in
+  "") ;;
+  --baseline) landing_tests=baseline ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -118,12 +124,37 @@ run_checks() {
     make "${targets[@]}"
   fi
   if [ "${#landing_groups[@]}" -gt 0 ]; then
-    scripts/landing-tests.sh "${landing_groups[@]}"
+    run_landing_tests "${landing_groups[@]}"
   fi
+}
+
+run_landing_tests() {
+  local units_file unit units=()
+  if [ "$landing_tests" = baseline ]; then
+    echo "land: running the baseline landing tests (--baseline)"
+    scripts/landing-tests.sh "$@"
+    return
+  fi
+  units_file="$(mktemp "${TMPDIR:-/tmp}/attn-land-units.XXXXXX")"
+  if ! go tool test-history land --units-out "$units_file"; then
+    rm -f "$units_file"
+    echo "land: choosing landing tests failed; running the baseline groups $*" >&2
+    scripts/landing-tests.sh "$@"
+    return
+  fi
+  while IFS= read -r unit || [ -n "$unit" ]; do
+    if [ -n "$unit" ]; then units+=(--unit "$unit"); fi
+  done <"$units_file"
+  rm -f "$units_file"
+  [ "${#units[@]}" -gt 0 ] || return 0
+  scripts/landing-tests.sh "${units[@]}"
 }
 
 git diff --quiet && git diff --cached --quiet || fail "commit or stash your changes first"
 rebasing && fail "finish the rebase in progress first"
+if [ "$landing_tests" = selected ]; then
+  go tool test-history sync || echo "land: choosing landing tests from the history already synced" >&2
+fi
 
 for _ in $(seq "$max_attempts"); do
   git fetch --quiet origin main

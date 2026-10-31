@@ -21,6 +21,7 @@ if [ "$1" = --unit ]; then
     shift 2
   done
   entries="$(awk '!seen[$0]++' <<<"$entries")"
+  requested="$(grep -c . <<<"$entries") units"
 else
   for group in "$@"; do
     grep -qxF -- "$group" <<<"$groups" || { echo "landing tests: no group $group in $list; groups: $(paste -sd' ' - <<<"$groups")" >&2; exit 2; }
