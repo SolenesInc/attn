@@ -80,7 +80,7 @@ Commands:
   refresh-prs
   seed-continuation --seed S   (what a seed's page offers: Resume, Handover)
   seed-resume --seed S         (the seed page's Resume)
-  outposts [--add NAME --address HOST:PORT | --remove ID | --repair ID | --update ID] [--until STATE | --watch]
+  outposts [--add NAME --destination SSH_DESTINATION | --remove ID | --repair ID | --update ID] [--until STATE | --watch]
 `, wsURL())
 }
 
