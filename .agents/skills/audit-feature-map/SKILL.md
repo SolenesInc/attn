@@ -90,7 +90,8 @@ pass <pass> done: <tally>              once the report is attached
 ```
 
 `<pass>` is the start time, `date +%Y%m%d-%H%M`. Use
-`attn seed note <stake> -m "..."`.
+`attn seed note <stake> -m "..."` from a shell without drive-attn's prefix:
+the prefix points `attn` at the instance, where the stake does not exist.
 
 ## Start
 
@@ -169,12 +170,16 @@ Take the features in `rows.md` order. Drive each one in its own subagent,
 one at a time, so each starts with an empty context; your own context keeps
 only what they return. Give the subagent the path of `<runs>/pass.env`, the
 instance name, the feature id, its rows from `rows.md`, its lines from
-`sources.txt`, the Rules and Outcomes sections of this file, and steps 1–4:
+`sources.txt`, the Rules and Outcomes sections of this file, and steps 1–4.
+Tell it that the instance keeps what earlier features left on it, and that a
+step the permissions deny is `blocked`, naming the denial, never worked
+around.
 
 1. Read the feature's file whole, and the commits `sources.txt` lists for it.
 2. Drive every door through its file's recipe, as drive-attn's Evidence says,
-   with `$runs/evidence/<feature>` as the recipe's proof folder `P`. Start
-   from the baseline as the README's Runs section says.
+   with `$runs/evidence/<feature>` as the recipe's proof folder `P`, keeping
+   each command's output there. Start from the baseline as the README's Runs
+   section says.
 3. When a step fails, read the source and the commits before deciding. Retry
    a step whose own deadline expired once, then classify it.
 4. Commit each map fix in `$repair`, and return the feature's filled rows
@@ -201,8 +206,9 @@ Write the `cleaned` note after each. When clean fails, stop launching, keep
 its output and the instance's env file, and ask the user with the instance
 name and the exact error.
 
-`clean` keeps `~/attn-notebook-<name>`. The pass made everything in it, so
-after a clean that succeeded, record its size and remove it:
+`clean` keeps `~/attn-notebook-<name>` when the instance made one. The pass
+made everything in it, so after a clean that succeeded, record its size and
+remove it:
 `du -sh ~/attn-notebook-<name> >> $runs/evidence/clean-<name>.log && rm -r ~/attn-notebook-<name>`.
 
 ## Repair the map
