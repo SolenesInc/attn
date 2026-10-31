@@ -47,6 +47,14 @@ const usage = `usage: go tool test-history <command>
   explain --test '<unit>' [--main <ref>] [--json]
       Show a unit's last failure and passes in each lane, whether landings
       still run it, its cost and its rerun command.
+  report [--receipts <dir>] [--source <text>] [--dormant-after <n>]
+         [--format table|markdown|json] [--main <ref>]
+      Rank the tests that failed on clean commits of <ref> (default
+      origin/main): a flake also passed on the commit of its last failure; an
+      unresolved failure did not. Passes since counts the commits where the
+      test passed after its last failure; from --dormant-after (default 60) on,
+      a flake is dormant. Reads the spool, or every receipt under --receipts.
+      --source describes where the receipts came from in the header.
   replay --from <rev> [--main <ref>] [--machine <class>]
       For each main commit after <rev>, print as a JSON line what the baseline
       and the landing rule would have selected from the receipts that
@@ -74,6 +82,8 @@ func main() {
 		os.Exit(selectCommand(os.Args[2:]))
 	case "explain":
 		os.Exit(explainCommand(os.Args[2:]))
+	case "report":
+		os.Exit(reportCommand(os.Args[2:]))
 	case "replay":
 		os.Exit(replayCommand(os.Args[2:]))
 	case "sync":

@@ -74,8 +74,11 @@ error, not by its run: the same failure in a newer run is the same failure.
   Once the run completes, `gh run view <id> --log-failed` also works.
   `Acceptance` and `App acceptance` only aggregate: find the job and test
   under them.
-- Look the test up in the `CI flake ledger` issue. A known flake still needs
-  its cause; the ledger says how often and since when it fails.
+- Look the test up in the `CI flake ledger` issue, built from CI's test
+  receipts. A known flake still needs its cause; the ledger says how often
+  it fails and on how many commits it passed since.
+  `go tool test-history explain --test '<unit>'` adds every machine's runs,
+  after `go tool test-history sync`.
 - Find the culprit among the commits since main's last green run:
   `git log <green-sha>..<red-sha>`. Match the failing tests to the commits'
   changes. Read each candidate's `Attn-Session:` and `Attn-Seed:` trailers. An
@@ -121,12 +124,14 @@ Use `--role pathfinder` to investigate. Link the delegation's seed with
 tests with their log lines, the culprit commit and its trailers, and the path
 you chose and why. A Builder's brief also says:
 
-- Reproduce the failure before the fix and show it passing after. Report
-  these repair checks on the seed; they are not main's CI outcome. When it
-  will not reproduce, stop and report that on the seed instead of guessing.
+- Reproduce the failure before the fix and show it passing after, running it
+  through `scripts/test-go.sh --packages`, `scripts/landing-tests.sh --unit`
+  or the app's test commands, so each run is recorded. Report these repair
+  checks on the seed; they are not main's CI outcome. When it will not
+  reproduce, stop and report that on the seed instead of guessing.
 - When the test that caught the failure runs in seconds, add it to
   `scripts/landing-tests` in the same landing, in the group whose paths can
-  break it, so `scripts/land.sh` runs it before later landings.
+  break it, so `scripts/land.sh` always runs it.
 - Land with the `land-on-main` skill. Stop when it pushes. Do not watch or
   re-run CI: the automation checks `main` again.
 - For a revert: revert only the culprit, name the run and the failure in the
@@ -159,6 +164,9 @@ re-land seed.
 - CI runs one push at a time and keeps only the newest push waiting. A push
   that arrives behind a newer one concludes `cancelled` with no jobs, so a red
   run covers every commit since the last green one.
+- A test that failed on `main` runs in every landing whose groups run its
+  runner until it has passed on 30 later `main` commits, so a real break
+  blocks those landings until its repair lands.
 - "is not on this daemon" from `attn agent msg` means the session is gone:
   plant the re-land seed.
 - This clone holds no work: never commit in it.

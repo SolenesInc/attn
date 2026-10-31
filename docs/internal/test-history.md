@@ -84,7 +84,7 @@ machine's receipts. It imports CI's receipt artifacts on its own;
   sync last succeeded, keeps every receipt, and exits 1.
 
 A sync never changes a test's result. `scripts/land.sh` runs it before
-choosing landing tests; no test command does. `ATTN_TEST_HISTORY_URL` points
+choosing landing tests and after a push; no test command does. `ATTN_TEST_HISTORY_URL` points
 it at another service. Each request has a 2-minute budget, and connecting has
 10 seconds: a connection to the service takes about 0.15 seconds, and off the
 tailnet one never completes.
@@ -201,8 +201,8 @@ names them.
 
 A receipt is health evidence when it ran a clean checkout (no
 `dirty_fingerprint`) of a commit on the first-parent history of `origin/main`.
-Dirty and unlanded runs count for nothing here, though they still price tests
-for reports. A clean local run counts once its exact commit lands. Revisions
+Dirty and unlanded runs count for nothing here, though `explain` and `replay`
+still use them to price tests. A clean local run counts once its exact commit lands. Revisions
 are ordered by their place in main's history, never by when a receipt was
 written or arrived.
 
@@ -280,3 +280,26 @@ Components with no run are `missing`; runs with other requested units are
 counted as `unattributed`. A failure a selection included is not proof that the
 selection would have prevented it: a Linux failure, for one, need not fail on
 the machine that lands.
+
+## Failure report
+
+`go tool test-history report` ranks the tests that failed on clean commits of
+`origin/main`, from the same health evidence as selection. An entry is a unit
+in one lane:
+
+- A **flake** also passed on the commit of its last failure in that lane: in a
+  retry, or in another run of that commit.
+- An **unresolved** failure did not: a break, fixed or not, or a flake nobody
+  ran again. Its earlier failures do not make it a flake.
+- **Passes since** counts the commits of `main` where the test passed afresh
+  in that lane after its last failure, as [Clearing](#clearing) does. A flake
+  with `--dormant-after` (default 60) or more is dormant. That threshold only
+  sorts the report; the 30 passes that clear a landing test are separate.
+
+It reads the spool, so after `sync` it covers every machine and CI, or every
+receipt under `--receipts`. `scripts/ci-flake-report.sh` reports CI alone: it
+downloads the receipt artifacts of recent `ci.yml` runs with the GitHub token
+and reads those, and names how many artifacts it read, found expired or could
+not read, and how many runs uploaded none. The daily `Flake ledger` workflow
+publishes its markdown to the `CI flake ledger` issue. An expired or missing
+artifact is a gap in the window, never a pass.

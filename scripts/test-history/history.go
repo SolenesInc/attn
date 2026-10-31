@@ -29,24 +29,24 @@ type history struct {
 	skipped  map[string]int
 }
 
-func loadHistory(dir string) (history, error) {
+func loadHistory(spool string) (history, error) {
+	return loadReceipts(filepath.Join(spool, "receipts"), filepath.Join(spool, "shared"))
+}
+
+func loadReceipts(dirs ...string) (history, error) {
 	loaded := history{skipped: map[string]int{}}
 	seen := map[string]bool{}
-	for _, sub := range []string{"receipts", "shared"} {
-		entries, err := os.ReadDir(filepath.Join(dir, sub))
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return history{}, err
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") || strings.HasPrefix(entry.Name(), ".") {
-				continue
+	for _, dir := range dirs {
+		err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+			if errors.Is(err, fs.ErrNotExist) && path == dir {
+				return fs.SkipDir
 			}
-			data, err := os.ReadFile(filepath.Join(dir, sub, entry.Name()))
+			if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") || strings.HasPrefix(entry.Name(), ".") {
+				return err
+			}
+			data, err := os.ReadFile(path)
 			if err != nil {
-				return history{}, err
+				return err
 			}
 			var receipt testhistory.Receipt
 			switch {
@@ -58,6 +58,10 @@ func loadHistory(dir string) (history, error) {
 				seen[receipt.InvocationID] = true
 				loaded.receipts = append(loaded.receipts, receipt)
 			}
+			return nil
+		})
+		if err != nil {
+			return history{}, err
 		}
 	}
 	return loaded, nil

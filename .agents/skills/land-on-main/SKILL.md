@@ -122,6 +122,18 @@ again and pushes on its own, and your checks still count. When it stops on a
 conflict in your code, resolve it with `git rebase origin/main`, rerun the
 checks the resolution touches, and run `scripts/land.sh` again.
 
+The gate's landing tests come from the shared test history: the groups of
+`scripts/landing-tests` that the changed paths match, the tests you changed,
+and every test that failed on `main` and has not yet passed on 30 later
+`main` commits. It prints each one it added, and why. A failing landing test
+stops the push like any other check, whether you touched it or not. When it
+fails the same way on `origin/main`, it is `main`'s failure and the sheriff's:
+wait for the repair, rebase onto it, and tell the user if the wait blocks you.
+When it passes on `origin/main` and on a second run of `scripts/land.sh`, it is
+a flake: land, and name it in your report. `scripts/land.sh --baseline` runs
+the baseline groups alone: use it only when the history or the choice
+misbehaves, never to skip a failing test.
+
 ## Report
 
 Report on the seed and in the conversation:
@@ -134,5 +146,7 @@ Report on the seed and in the conversation:
   seed, or in a note when the seed has none
 - the review: which readers ran, the confirmed findings and their fixes, and
   the findings refuted
+- any landing test that failed and passed on a rerun, and whether you used
+  `scripts/land.sh --baseline`, and why
 
 Then harvest. Do not watch CI: the sheriff watches `main`.

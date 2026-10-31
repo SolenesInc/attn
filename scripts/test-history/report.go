@@ -1,0 +1,178 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/victorarias/attn/internal/testhistory"
+)
+
+type failureReport struct {
+	Source       string                      `json:"source"`
+	Receipts     int                         `json:"receipts"`
+	Skipped      map[string]int              `json:"skipped,omitempty"`
+	CIRuns       int                         `json:"ci_runs"`
+	MainCommits  int                         `json:"main_commits"`
+	FirstCommit  string                      `json:"first_commit,omitempty"`
+	LastCommit   string                      `json:"last_commit,omitempty"`
+	MainRef      string                      `json:"main_ref"`
+	DormantAfter int                         `json:"dormant_after"`
+	Failures     []testhistory.FailureRecord `json:"failures"`
+}
+
+func reportCommand(args []string) int {
+	flags := flag.NewFlagSet("report", flag.ContinueOnError)
+	mainRef := flags.String("main", "origin/main", "")
+	receipts := flags.String("receipts", "", "")
+	source := flags.String("source", "", "")
+	dormantAfter := flags.Int("dormant-after", 60, "")
+	format := flags.String("format", "table", "")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		fmt.Fprint(os.Stderr, usage)
+		return 2
+	}
+	print, ok := map[string]func(io.Writer, failureReport){"table": printFailureTable, "markdown": printFailureMarkdown}[*format]
+	if !ok && *format != "json" {
+		return fail(fmt.Errorf("unknown format %q; formats: table, markdown, json", *format))
+	}
+	main, err := mainline(*mainRef)
+	if err != nil {
+		return fail(err)
+	}
+	var loaded history
+	if *receipts != "" {
+		loaded, err = loadReceipts(*receipts)
+		if *source == "" {
+			*source = "receipts under " + *receipts
+		}
+	} else {
+		var dir string
+		if dir, err = spoolDir(); err == nil {
+			loaded, err = loadHistory(dir)
+		}
+		if *source == "" {
+			*source = "this machine's spool " + dir + ": its own receipts and those sync downloaded"
+		}
+	}
+	if err != nil {
+		return fail(err)
+	}
+	report := failureReport{Source: *source, Receipts: len(loaded.receipts), Skipped: loaded.skipped, MainRef: *mainRef, DormantAfter: *dormantAfter,
+		Failures: testhistory.BuildHealth(loaded.receipts, main).FailureRecords()}
+	runs, commits := map[string]bool{}, map[int]bool{}
+	first, last := -1, -1
+	for _, receipt := range loaded.receipts {
+		if receipt.Source.Kind == "ci" {
+			runs[receipt.Source.RunID] = true
+		}
+		position, ok := testhistory.HealthEvidence(receipt, main)
+		if !ok {
+			continue
+		}
+		commits[position] = true
+		if first < 0 || position < first {
+			first = position
+		}
+		last = max(last, position)
+	}
+	report.CIRuns, report.MainCommits = len(runs), len(commits)
+	if first >= 0 {
+		report.FirstCommit, report.LastCommit = main.Commit(first), main.Commit(last)
+	}
+	if *format == "json" {
+		return printJSON(report)
+	}
+	print(os.Stdout, report)
+	return 0
+}
+
+func (r failureReport) window() string {
+	if r.FirstCommit == "" {
+		return fmt.Sprintf("no receipt ran a clean commit of %s", r.MainRef)
+	}
+	return fmt.Sprintf("%d commits of %s from %s to %s", r.MainCommits, r.MainRef, short(r.FirstCommit), short(r.LastCommit))
+}
+
+func (r failureReport) sections() (active, dormant, unresolved []testhistory.FailureRecord) {
+	for _, record := range r.Failures {
+		switch {
+		case !record.LastFlaky:
+			unresolved = append(unresolved, record)
+		case record.PassesSince >= r.DormantAfter:
+			dormant = append(dormant, record)
+		default:
+			active = append(active, record)
+		}
+	}
+	return active, dormant, unresolved
+}
+
+func printFailureTable(out io.Writer, r failureReport) {
+	fmt.Fprintf(out, "test failures on %s\n", r.MainRef)
+	fmt.Fprintf(out, "source   %s\n", r.Source)
+	fmt.Fprintf(out, "history  %d receipts from %d CI runs; %s\n", r.Receipts, r.CIRuns, r.window())
+	for reason, count := range r.Skipped {
+		fmt.Fprintf(out, "skipped  %d receipts (%s)\n", count, reason)
+	}
+	active, dormant, unresolved := r.sections()
+	table := func(title string, records []testhistory.FailureRecord) {
+		fmt.Fprintf(out, "\n%s\n", title)
+		if len(records) == 0 {
+			fmt.Fprintln(out, "  (none)")
+			return
+		}
+		fmt.Fprintf(out, "%-6s %-6s %-6s %-10s %-16s %s\n", "FLAKY", "FAILED", "SINCE", "LAST", "LANE", "TEST")
+		for _, f := range records {
+			fmt.Fprintf(out, "%-6d %-6d %-6d %-10s %-16s %s\n", f.FlakyCommits, f.FailedCommits, f.PassesSince, short(f.LastFailure), f.Lane, f.Unit)
+		}
+	}
+	table(fmt.Sprintf("ACTIVE FLAKES: its last failure also passed on that commit, fewer than %d passing commits since", r.DormantAfter), active)
+	if len(dormant) > 0 {
+		table(fmt.Sprintf("DORMANT: %d or more passing commits since its last failure", r.DormantAfter), dormant)
+	}
+	if len(unresolved) > 0 {
+		table("UNRESOLVED: its last failure never passed on that commit: a break, or a flake nobody ran again", unresolved)
+	}
+}
+
+func printFailureMarkdown(out io.Writer, r failureReport) {
+	fmt.Fprintln(out, "<!-- ci-flake-ledger -->")
+	fmt.Fprint(out, "# CI flake ledger\n\n")
+	fmt.Fprintf(out, "Generated by `scripts/ci-flake-report.sh` from test receipts: %s.\n\n", r.Source)
+	fmt.Fprintf(out, "- History: %d receipts from %d CI runs, covering %s.", r.Receipts, r.CIRuns, r.window())
+	for reason, count := range r.Skipped {
+		fmt.Fprintf(out, " %d receipts skipped (%s).", count, reason)
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "- A test is a **flake** when it also passed on the commit of its last failure, in a retry or another run. Otherwise it is unresolved, whatever its earlier failures did; **Flaky commits** counts the failures that also passed.")
+	fmt.Fprintf(out, "- **Passes since** counts the commits of main where the test passed after its last failure. Past %d, an entry is dormant.\n", r.DormantAfter)
+	fmt.Fprint(out, "- A test that did not run on a commit says nothing about it; silence never clears a failure.\n\n")
+	active, dormant, unresolved := r.sections()
+	flakes := func(records []testhistory.FailureRecord) {
+		fmt.Fprint(out, "| Flaky commits | Failed commits | Passes since | Last failed | Lane | Test |\n| ---: | ---: | ---: | --- | --- | --- |\n")
+		for _, f := range records {
+			fmt.Fprintf(out, "| %d | %d | %d | %s | %s | %s |\n", f.FlakyCommits, f.FailedCommits, f.PassesSince, short(f.LastFailure), f.Lane, f.Unit)
+		}
+		fmt.Fprintln(out)
+	}
+	fmt.Fprint(out, "## Active\n\n")
+	if len(active) == 0 {
+		fmt.Fprint(out, "None.\n\n")
+	} else {
+		flakes(active)
+	}
+	if len(dormant) > 0 {
+		fmt.Fprintf(out, "## Dormant\n\n%d or more passing commits since the last failure; a fix most likely landed.\n\n", r.DormantAfter)
+		flakes(dormant)
+	}
+	if len(unresolved) > 0 {
+		fmt.Fprint(out, "## Unresolved\n\nThe test did not pass on the commit of its last failure: a break, fixed or not, or a flake nobody ran again.\n\n")
+		fmt.Fprint(out, "| Flaky commits | Failed commits | Passes since | Last failed | Lane | Test |\n| ---: | ---: | ---: | --- | --- | --- |\n")
+		for _, f := range unresolved {
+			fmt.Fprintf(out, "| %d | %d | %d | %s | %s | %s |\n", f.FlakyCommits, f.FailedCommits, f.PassesSince, short(f.LastFailure), f.Lane, f.Unit)
+		}
+		fmt.Fprintln(out)
+	}
+}
