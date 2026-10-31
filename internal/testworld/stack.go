@@ -292,7 +292,7 @@ func ownedByAttnOrAnAgent(pair string) bool {
 }
 
 func (s *Stack) reap() {
-	for _, r := range ptyworker.ReapDataDir(s.Dir) {
+	for _, r := range s.reapWorkers() {
 		if r.Outcome != ptyworker.ReapRemoved && r.Outcome != ptyworker.ReapAlreadyGone {
 			s.T.Errorf("PTY worker for session %s (pid %d) %s: %v", r.SessionID, r.WorkerPID, r.Outcome, r.Err)
 		}
@@ -304,6 +304,23 @@ func (s *Stack) reap() {
 		}
 	}
 }
+
+func (s *Stack) reapWorkers() []ptyworker.ReapResult {
+	ctx, reaped := context.WithCancel(context.Background())
+	results := make(chan []ptyworker.ReapResult, 1)
+	go func() {
+		defer reaped()
+		results <- ptyworker.ReapDataDir(s.Dir)
+	}()
+	for {
+		if _, armed := s.clock.AwaitTimer(ctx, workerKillDeadline); !armed {
+			return <-results
+		}
+		s.Advance(workerKillDeadline)
+	}
+}
+
+const workerKillDeadline = 10 * time.Second
 
 func (s *Stack) AwaitStopped() {
 	s.T.Helper()

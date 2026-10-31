@@ -167,7 +167,13 @@ func TestTerminalRemovalStopsJobsAfterTheLeaderExits(t *testing.T) {
 			if n, err := unix.Poll([]unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}, int(ptyworker.TeardownRPCTimeout/time.Millisecond)); err != nil || n != 1 {
 				t.Fatalf("leader did not exit: events=%d, %v", n, err)
 			}
-			if err := backend.Kill(context.Background(), id, syscall.SIGTERM); err != nil {
+			killed := make(chan error, 1)
+			go func() { killed <- backend.Kill(context.Background(), id, syscall.SIGTERM) }()
+			if kind == "worker" {
+				awaitTimer(t, resistantChildKillAfter)
+				advance(t, resistantChildKillAfter)
+			}
+			if err := <-killed; err != nil {
 				t.Fatal(err)
 			}
 			if err := backend.Remove(context.Background(), id); err != nil {
