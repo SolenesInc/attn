@@ -1,0 +1,38 @@
+# Tests scripts/land.sh runs before it pushes, chosen by the paths a landing
+# changes. Run groups by hand with scripts/landing-tests.sh <group>...
+#
+# "group <name> <pattern>" starts a group. land.sh runs it when a changed path
+# matches the pattern, an extended regular expression. The lines under it name
+# the tests:
+#
+#   go <package> <TestName>   a top-level Go test and its subtests
+#   vitest <file>             a Vitest file, relative to app/
+#   playwright <file>         a Playwright spec, relative to app/
+#
+# The list grows from red main. When the sheriff's repair for a red cause lands,
+# the test that caught it joins the group whose paths can break it, if it runs
+# in seconds.
+
+group go \.go$|^go\.(mod|sum)$
+go ./internal/daemon TestAResumedSharedConversationsRunSurvivesItsOutcome
+go ./internal/daemon TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed
+go ./internal/daemon TestSimultaneousIDIntroductionsNeverShareAnID
+go ./internal/daemon TestAnAutomationAcceptsTheCodexDirectoryTrustPromptWithEnter
+go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
+go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind
+go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning
+
+group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
+go ./internal/daemon TestLegacyPromptCompatibility
+go ./cmd/attn TestLegacyPromptCompatibility
+go ./internal/crew TestLegacyPromptCompatibility
+go ./internal/transcript TestLegacyPromptCompatibility
+go ./internal/activity TestLegacyPromptCompatibility
+go ./internal/classifier TestLegacyPromptCompatibility
+go ./internal/sessioninstructions TestLegacyPromptCompatibility
+go ./internal/agent TestLegacyPromptCompatibility
+go ./internal/hooks TestLegacyPromptCompatibility
+
+group app ^app/
+vitest src/App.desktops.test.tsx
+playwright e2e/queue-sidebar-fit.spec.ts

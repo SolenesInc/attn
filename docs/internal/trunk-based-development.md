@@ -24,17 +24,24 @@ dispatches a fixer, and release notes are written from the commits.
 `scripts/land.sh` rebases onto `origin/main`, runs a fast gate for the paths the
 landing changes, and pushes:
 
-- Go: compile all packages and tests without running tests, run vet and
-  staticcheck on changed packages, and check daemon lifetimes and import
-  boundaries. A module change checks all packages.
+- Go: compile all packages and tests, run vet and staticcheck on changed
+  packages, and check daemon lifetimes and import boundaries. A module change
+  checks all packages.
 - Protocol schema or prompt inputs: check that generated types or catalogs
   are current.
-- `app/`: typecheck and lint, without Vitest.
+- `app/`: typecheck and lint.
 - `scripts/`: run the shell script tests.
+- The landing tests: the groups in `scripts/landing-tests` whose path pattern
+  matches the changes. They are a few tests that caught failures on `main`
+  before, not a suite. It prints each test's result, skipped ones included,
+  and the command that reruns a failed one.
 
 When only protocol types or prompt catalogs conflict, it regenerates them.
-When `main` moves during landing, it rebases and pushes again without
-re-running its checks.
+When `main` moves during landing, it rebases, runs the gate again on the new
+combination, and pushes.
+
+The landing tests grow from red `main`: when the sheriff's repair lands, the
+test that caught the failure joins its group if it runs in seconds.
 
 ## Verifying before landing
 

@@ -124,6 +124,9 @@ you chose and why. A Builder's brief also says:
 - Reproduce the failure before the fix and show it passing after. Report
   these repair checks on the seed; they are not main's CI outcome. When it
   will not reproduce, stop and report that on the seed instead of guessing.
+- When the test that caught the failure runs in seconds, add it to
+  `scripts/landing-tests` in the same landing, in the group whose paths can
+  break it, so `scripts/land.sh` runs it before later landings.
 - Land with the `land-on-main` skill. Stop when it pushes. Do not watch or
   re-run CI: the automation checks `main` again.
 - For a revert: revert only the culprit, name the run and the failure in the

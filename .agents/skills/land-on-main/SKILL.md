@@ -117,10 +117,10 @@ pushes. It is the only way to push `main`: `.githooks/pre-push` refuses a plain
 `git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
 after running its checks yourself.
 
-When `main` moves during landing, `scripts/land.sh` rebases and pushes again on
-its own, and your checks still count. When it stops on a conflict in your code,
-resolve it with `git rebase origin/main`, rerun the checks the resolution
-touches, and run `scripts/land.sh` again.
+When `main` moves during landing, `scripts/land.sh` rebases, runs its gate
+again and pushes on its own, and your checks still count. When it stops on a
+conflict in your code, resolve it with `git rebase origin/main`, rerun the
+checks the resolution touches, and run `scripts/land.sh` again.
 
 ## Report
 

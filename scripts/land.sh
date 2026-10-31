@@ -63,11 +63,9 @@ regenerate() {
   done
 }
 
-regenerated=0
 rebase_onto_main() {
   local generators conflicted generator
   local -a generator_list
-  regenerated=0
   git rebase --quiet origin/main >/dev/null 2>&1 || true
   while rebasing; do
     if ! generators="$(generators_for_conflicts)" || [ -z "$generators" ]; then
@@ -83,14 +81,13 @@ Rebase yourself with git rebase origin/main, then run scripts/land.sh again."
       generator_list+=("$generator")
     done <<<"$generators"
     regenerate "${generator_list[@]}"
-    regenerated=1
     GIT_EDITOR=true git rebase --continue >/dev/null 2>&1 || true
   done
   git merge-base --is-ancestor origin/main HEAD || fail "could not rebase onto origin/main; run git rebase origin/main to see why"
 }
 
 run_checks() {
-  local changed file dir packages targets=()
+  local changed file dir packages group pattern targets=() landing_groups=()
   changed="$(git diff --name-only origin/main...HEAD)"
   touches() { grep -qE "$1" <<<"$changed"; }
   if touches '\.go$|^go\.(mod|sum)$'; then
@@ -114,21 +111,25 @@ run_checks() {
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
   touches '^scripts/' && targets+=(test-scripts)
+  while read -r _ group pattern; do
+    touches "$pattern" && landing_groups+=("$group")
+  done < <(awk '$1 == "group"' scripts/landing-tests)
   if [ "${#targets[@]}" -gt 0 ]; then
     make "${targets[@]}"
+  fi
+  if [ "${#landing_groups[@]}" -gt 0 ]; then
+    scripts/landing-tests.sh "${landing_groups[@]}"
   fi
 }
 
 git diff --quiet && git diff --cached --quiet || fail "commit or stash your changes first"
 rebasing && fail "finish the rebase in progress first"
 
-for attempt in $(seq "$max_attempts"); do
+for _ in $(seq "$max_attempts"); do
   git fetch --quiet origin main
   [ -n "$(git rev-list origin/main..HEAD)" ] || { echo "land: nothing to land"; exit 0; }
   rebase_onto_main
-  if [ "$attempt" -eq 1 ] || [ "$regenerated" -eq 1 ]; then
-    run_checks
-  fi
+  run_checks
   if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
     echo "land: main is at $(git rev-parse --short HEAD)"
     exit 0

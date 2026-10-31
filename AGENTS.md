@@ -156,7 +156,8 @@ system.
 - `./scripts/test-go.sh --packages -run TestName ./pkg`: Targeted Go tests
 - `pnpm --dir app exec vitest run src/path/to/file.test.tsx`: One frontend test file
 - `scripts/land.sh`: Fast compile, typecheck, lint, generated-file and script
-  checks selected by changed paths, then push to `main`
+  checks, and the small test set in `scripts/landing-tests`, selected by
+  changed paths, then push to `main`
 - `make test`: Full Go suite (`make test-v` verbose, `make test-watch` on file
   changes), for CI or diagnosing a suite-wide failure
 - `make test-frontend`: Full frontend suite (`pnpm --dir app test:ui` for the Vitest UI)
