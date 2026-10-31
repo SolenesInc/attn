@@ -44,9 +44,10 @@ contexts its file lists. `audit.py doors` numbers them, such as
   through another door. Only success observed through the door itself is a
   `pass`.
 - On this shared Mac, use only drive-attn's focus-free input. A door that
-  needs activation, system-wide keys, Finder, a dedicated display, an outpost
-  peer, Pi or the Guardian, a local ingest service, or a real external service
-  is `blocked`, naming that precondition. Never turn on a real service to
+  needs activation, system-wide keys, the user's clipboard, Finder, a
+  dedicated display, an outpost peer, Pi or the Guardian, a local ingest
+  service, or a real external service is `blocked`, naming that
+  precondition. Never turn on a real service to
   get a pass.
 - One pass at a time, one instance driving at a time.
 - Do not dispatch fixers or message authors. Review main, the sheriff and CI
@@ -61,7 +62,7 @@ contexts its file lists. `audit.py doors` numbers them, such as
 | `drift` | The file is wrong and you could not correct it this pass | what the file says and what attn does | seed |
 | `regression` | attn breaks intended behavior | as `drift`, plus why the behavior is intended | seed |
 | `harness` | `bridge`, `wsctl`, the mock agent or a scenario failed, not attn | the failing command and output | seed |
-| `blocked` | A precondition the baseline lacks | the command tried and the missing precondition | seed if one exists |
+| `blocked` | A precondition the baseline lacks | the recipe command, run or, when running it would break a rule here, not run; and the missing precondition | seed if one exists |
 | `ambiguous` | Intent unclear | what each source says | ask id |
 
 Evidence is a path under the pass's evidence folder or a seed id, never only
@@ -76,7 +77,7 @@ lives in its notes, written as it happens, so a fresh session can resume:
 ```text
 pass <pass> start: revision <sha>, previous <sha|none>, folder <runs>/<pass>, usage <tokens and cost>
 pass <pass> instance <name>            before write-env.sh
-pass <pass> feature <id>: <tally>      once its rows are in the report
+pass <pass> feature <id>: <tally>, <minutes> min driving   once its rows are in the report
 pass <pass> cleaned <name>             once clean.sh succeeds
 pass <pass> done: <tally>              once the report is attached
 ```
@@ -100,7 +101,7 @@ pass=$(date +%Y%m%d-%H%M) runs=$PWD.runs/$pass rev=$(git rev-parse origin/main) 
 mkdir -p $runs/evidence && git worktree add --detach $runs/work $rev &&
 git worktree add -b map-audit-$pass $runs/repair $rev && cat > $runs/pass.env <<EOF
 control=$PWD pass=$pass runs=$runs rev=$rev repair=$runs/repair
-S=$runs/work/.agents/skills/audit-feature-map/scripts/audit.py
+S=$PWD/.agents/skills/audit-feature-map/scripts/audit.py
 cd $runs/work
 EOF
 echo $runs
@@ -109,7 +110,9 @@ echo $runs
 The work checkout is what you build and drive. It never changes during the
 pass: the instance must run the source it was built from, and `bridge` refuses
 an app whose source moved. Map fixes go in the repair checkout, `$repair`.
-`audit.py` acts on the checkout you run it in.
+`$S` is the control checkout's `audit.py`, which acts on the checkout you run
+it in. The control checkout's skill governs a resumed pass too; the pass keeps
+its revision.
 
 Each command after this starts in a fresh shell, so it begins with
 `. <runs>/pass.env &&`, `<runs>` written out; an instance command adds
@@ -213,7 +216,7 @@ Started <time>, finished <time>. Instances <names>.
 ## Cost
 setup: build, install (wall s, user+sys s each)
 display queue: <total wait, or none>
-driving: <wall from the first to the last feature note>
+driving: <sum of the feature notes' minutes>
 cleanup: <wall s, user+sys s>
 agent usage: <usage at done minus at start, or unavailable>
 CPU covers commands and their waited-for children only; the app, daemon and

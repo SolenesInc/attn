@@ -33,7 +33,7 @@ default, and the panel is macOS only.
 ### Agents
 
 - `attn agent attachment <capture-id> <attachment-id> --out <path>` saves a file the user attached (`cmd/attn/agent_attachment.go`). Agents never send a quick capture; they receive one.
-- Prompts: the quick capture guidance in the session instructions of agents launched while it is on (`internal/prompts/content/session/quick-capture.md`); the typed message and its file lines (`session/quick-capture-item.md`, `quick-capture-file.md`, `quick-capture-file-saved.md`).
+- Prompts: the quick capture guidance in the session instructions of the chief and crew members launched while it is on, and of no other agent (`internal/prompts/content/session/quick-capture.md`); the typed message and its file lines (`session/quick-capture-item.md`, `quick-capture-file.md`, `quick-capture-file-saved.md`).
 
 ### Triggers
 
@@ -83,6 +83,7 @@ EOF
 - **Hide and keep the draft.** Type `bridge native_text '{"window":"capture","text":"Draft for later"}'`, then `bridge native_key '{"window":"capture","key":"Escape"}'`. `bridge capture_state '{"visible":false}'` returns. Open the panel again as above: `bridge capture_state` shows `text: "Draft for later"`. `bridge capture_dismiss` hides it from the harness when a step needs it closed.
 - **A file for the agent.** Put an image on the clipboard, as ⌃⇧⌘4 and a selection does. Run `osascript -e "set the clipboard to (read (POSIX file \"$PWD/docs/banner.png\") as «class PNGf»)"`, open the panel as above, then run `bridge native_key '{"window":"capture","key":"v","modifiers":["command"]}'`. `bridge capture_state '{"attachmentCount":1,"settled":true}'` returns with one file. Send resets the mailbox to chief, so select Fern again with `bridge native_key '{"window":"capture","key":"2","modifiers":["command"]}'` and check `bridge capture_state '{"mailbox":"fern"}'` before pressing Enter. The fixture runs the message's `attn agent attachment` command; `./attn agent peek fern` shows `Saved file to <P>/received.png`, and `file "$P/received.png"` identifies the PNG. Reopen the panel and its history to see the message marked retrieved. A file dropped on the panel attaches the same way, but the drive has no app to drag one from: drop one from Finder by hand and say so in the report.
 - **Delivery to the chief.** Make a chief as [crew.md](crew.md) does, open the panel, leave the mailbox on `chief` (⌘1) and send. Peek on the chief shows the typed message. Without a chief, the message waits for the next one.
+- **Guidance at launch.** Fern's session starts after quick capture is on, woken by the send above or by `./attn crew wake fern`. `grep -c "The user can send you messages from Quick Capture" $C/.attn-mock-agent/*.jsonl` prints 1 for that session's transcript. A plain agent gets none: run `Q=$(mktemp -d /tmp/drive-attn-quick-capture-plain.XXXX) && echo "export Q=$Q" >> $DRIVE_ENV && echo '{"version": 1, "turns": []}' > $Q/.attn-mock-agent.json`, then `wsctl add-session --cwd $Q --agent claude --label qc-plain --id qc-plain`, re-run `ls $Q/.attn-mock-agent/` until it lists a `.jsonl` file, with a deadline that fails the run, and the same grep on it prints 0.
 - **Proof.** In `$P`, keep `bridge capture_state` after each step (its `latencyMs` times each opening), `input_driver frontmost` before and after each opening, `./attn crew list --json` and `./attn agent peek fern` after the send, and `./attn settings get quick_capture_enabled`. Put the way in in each file's name, such as `quick-capture-shortcut-state.json`.
 
 ## Contexts
@@ -112,6 +113,6 @@ EOF
 - `input_driver global_key` posts to the whole system. While quick capture is off or no shortcut is bound, ⌃⌥B lands in the app in front, such as the terminal you drive from. Turn quick capture on and bind the shortcut first.
 - macOS refuses shortcuts the system already uses (`macOS already uses this system shortcut`), and a refused binding keeps the previous one.
 - `bridge capture_state` waits for the expectations you pass, such as `{"visible":true}` or `{"mailbox":"fern"}`, and fails when they never hold. Call it without them for a plain read.
-- Agents launched before quick capture turned on lack its guidance, but still get the typed messages.
+- The chief and crew members launched before quick capture turned on lack its guidance, but still get the typed messages.
 - A capture is typed only after 30 seconds of quiet in the agent's terminal; `wsctl input` to that agent restarts the wait.
 - Working but wrong: "Saved for <mailbox>" means attn stored the message, not that the agent saw it, and the history's retrieved mark says "not necessarily understood or acted upon". The proof is the typed text on the agent's screen.
