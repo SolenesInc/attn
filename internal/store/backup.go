@@ -37,18 +37,17 @@ func (s *Store) BackupNow(ctx context.Context, dir string) (string, error) {
 		return "", fmt.Errorf("backup: create dir %s: %w", dir, err)
 	}
 
-	taken := time.Now().UTC().Format(backupNameLayout)
-	var target string
-	for n := 1; ; n++ {
-		target = filepath.Join(dir, rotatingBackupName(taken, n))
-		_, err := os.Stat(target)
-		if os.IsNotExist(err) {
-			break
-		}
-		if err != nil {
-			return "", fmt.Errorf("backup: stat target %s: %w", target, err)
+	existing, err := listRotatingBackups(dir)
+	if err != nil {
+		return "", fmt.Errorf("backup: %w", err)
+	}
+	next := rotatingBackup{taken: time.Now().UTC().Format(backupNameLayout), n: 1}
+	for _, b := range existing {
+		if b.taken == next.taken {
+			next.n = b.n + 1
 		}
 	}
+	target := filepath.Join(dir, next.name())
 
 	if _, err := s.db.ExecContext(ctx, "VACUUM INTO ?", target); err != nil {
 		_ = os.Remove(target)
@@ -173,11 +172,11 @@ type rotatingBackup struct {
 	n     int
 }
 
-func rotatingBackupName(taken string, n int) string {
-	if n == 1 {
-		return backupNamePrefix + taken + backupNameSuffix
+func (b rotatingBackup) name() string {
+	if b.n == 1 {
+		return backupNamePrefix + b.taken + backupNameSuffix
 	}
-	return fmt.Sprintf("%s%s-%d%s", backupNamePrefix, taken, n, backupNameSuffix)
+	return fmt.Sprintf("%s%s-%d%s", backupNamePrefix, b.taken, b.n, backupNameSuffix)
 }
 
 func parseRotatingBackupName(name string) (rotatingBackup, bool) {
@@ -205,6 +204,18 @@ func parseRotatingBackupName(name string) (rotatingBackup, bool) {
 }
 
 func RotatingBackups(dir string) ([]string, error) {
+	backups, err := listRotatingBackups(dir)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(backups))
+	for i, b := range backups {
+		names[i] = b.name()
+	}
+	return names, nil
+}
+
+func listRotatingBackups(dir string) ([]rotatingBackup, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("read dir %s: %w", dir, err)
@@ -221,11 +232,7 @@ func RotatingBackups(dir string) ([]string, error) {
 	slices.SortFunc(backups, func(a, b rotatingBackup) int {
 		return cmp.Or(strings.Compare(a.taken, b.taken), cmp.Compare(a.n, b.n))
 	})
-	names := make([]string, len(backups))
-	for i, b := range backups {
-		names[i] = rotatingBackupName(b.taken, b.n)
-	}
-	return names, nil
+	return backups, nil
 }
 
 func PremigrationBackupKeep() int { return backupPremigrationKeep }
