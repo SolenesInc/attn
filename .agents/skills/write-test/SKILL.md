@@ -25,17 +25,15 @@ habits that most often break it.
 
 ## Read
 
-Read the strategy's opening sections through "Choosing a kind", then the part
-for your kind:
+Read `docs/internal/testing.md`, then the page for your kind:
 
 | Kind | Read |
 |---|---|
-| Daemon wire | "Time", then "Writing a daemon wire test" |
-| App wire | "Time", "Wire", and the Tests section of `app/AGENTS.md` |
-| CLI stack | "Time", then "Writing a CLI stack test" |
-| Browser end-to-end | "Time" and "Stack" |
-| Scenario | "Scenario" and `app/scripts/real-app-harness/AGENTS.md` |
-| Kernel | "Kernel" |
+| Daemon wire | `docs/internal/daemon-wire-tests.md` |
+| App wire | `docs/internal/app-wire-tests.md` |
+| CLI stack | `docs/internal/cli-stack-tests.md` |
+| Browser end-to-end | the specs in `app/e2e` near yours |
+| Scenario | `app/scripts/real-app-harness/AGENTS.md` |
 
 ## Gotchas
 

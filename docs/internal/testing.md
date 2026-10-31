@@ -4,26 +4,6 @@ Tests guard the promises attn makes. To check your own work, run it: the
 daemon over `wsctl`, the CLI, a non-production instance, a throwaway test. Keep
 those scratch checks out of commits.
 
-Before landing, run targeted tests for the behavior you changed, such as
-`./scripts/test-go.sh --packages -run TestName ./pkg` or one file with
-`pnpm --dir app exec vitest run`. The `land-on-main` skill is the rest of
-landing.
-
-`--packages` passes the remaining arguments to `go test` without running the
-full suite; leading `--unit` and `--receipt-out` options go to test history.
-The runner and Makefile use `-trimpath` so unchanged packages can reuse build
-artifacts across worktrees. The runner gives targeted and full test runs the
-same isolated outer data directory; each package's `TestMain` still creates a
-fresh directory when tests run. Go can reuse successful test results when
-their flags, environment, and file inputs also match.
-`scripts/test-go.sh`, `pnpm --dir app test` and `pnpm --dir app run e2e`
-record a receipt of each run; `vitest` and `playwright` run directly do not.
-See [Test history](test-history.md).
-
-The runner and Makefile also share the pinned native VT artifact between
-worktrees. Before using Go commands directly, run
-`./scripts/build-libghostty-vt.sh` to prepare it for this checkout.
-
 ## Promises
 
 A promise is behavior that someone outside the code relies on: the user, the
@@ -89,10 +69,11 @@ it did. No test sleeps or polls.
 - Go daemon wire tests run timer behavior under `synctest` with `inBubble`. A
   world outside a bubble, which can run agents and watch folders, gives its
   daemon a stepped clock the test moves; see
-  [Writing a daemon wire test](#writing-a-daemon-wire-test).
-- App wire tests use Vitest fake timers.
+  [Daemon wire tests](daemon-wire-tests.md#timers).
+- App wire tests use Vitest fake timers; see
+  [App wire tests](app-wire-tests.md#waiting-and-time).
 - Stack tests move one stepped clock shared by the daemon and every PTY worker
-  it starts; see [Writing a CLI stack test](#writing-a-cli-stack-test).
+  it starts; see [CLI stack tests](cli-stack-tests.md).
 - Browser end-to-end specs wait for what the page shows (`expect`,
   `expect.poll`, `page.waitForFunction`), or install `page.clock` and run
   forward the timers the behavior depends on.
@@ -128,104 +109,8 @@ A fake agent binary behaves like the real harness from the outside: same
 hooks, transcript files, and terminal output. To simulate a network failure,
 wrap the client's `net.Conn` inside a `synctest` bubble.
 
-#### Writing a daemon wire test
-
-Daemon wire tests live in `package daemon_test` in `internal/daemon`, so they
-can reach the daemon only through the protocol and the CLI client.
-
-The world:
-
-- `newWorld(t)` runs a production daemon in its own data directory.
-  `w.restart()` replaces it with a new daemon over the same data.
-  `newWorldInLongestDataDir(t)` does the same in a data directory as long as
-  the world's own sockets allow, for promises about socket paths.
-- `w.App()` connects as the app. `w.Client()` returns a CLI client.
-- `testworld.Await`, `testworld.Request` and `testworld.AwaitSession` read what
-  the daemon sends.
-
-Agents:
-
-- Name the agents the test spawns, as in `newWorld(t, fakeagent.Claude, ...)`.
-  The test then plays the model behind each one.
-- `w.Spawn` starts a session. `w.Launched` returns the `fakeagent.Run` for its
-  agent.
-- `w.RequestSpawn` sends the same requests and returns the spawn result with
-  the workspace and pane it added, so the test can close a refused spawn's
-  pane the way the app does.
-- `w.HoldNextBoot()` keeps the next agent booting, before it paints its
-  resting title or reads input, until the test calls the returned function.
-- `w.ExitAtNextBoot(code, screen)` makes the next agent print `screen` and
-  exit with `code` before it starts, the way a harness that cannot start does.
-- `w.RefusePiLaunches(reason)` makes the Pi driver refuse every launch and
-  resume with `reason` until the test calls the returned function. Setting
-  `fakeagent.PiCapabilitiesEnv` (such as `launch_instructions,resume=false`)
-  before the world starts changes the capabilities the Pi driver registers.
-  `fakeagent.PiAgentEnv` registers the driver under another harness name, and
-  `fakeagent.PiModelsEnv` holds the catalog JSON it answers `driver.models` with.
-
-Playing the model, on a `fakeagent.Run`:
-
-- `Prompted` returns the prompt the agent received and moves `ConversationID`
-  to the agent's current conversation. Claude's `/clear` starts a new one and
-  `/resume <id>` switches to that one; Codex switches on the first prompt after
-  `/new`, `/clear` or `/resume <id>`; Pi's `/new` and `/resume <id>` switch
-  and say hello to the driver again, as a reloaded suite does.
-- `Reply` ends the turn with text carrying the `<!-- attn:state=... -->`
-  marker. `ReplyAfterStop` writes that reply only after the Stop hook.
-- `Exit` quits with an exit code.
-- `StopReadingTerminal` stops reading input, so what the daemon types backs
-  up in the terminal the way it does for a frozen agent.
-- `Halt` writes the harness's own record of the user interrupting the turn
-  (Claude and Codex).
-- Claude only: `Stream` writes part of a reply that the next `Reply` revises
-  under the same message. `Subagent` writes a subagent's transcript, and
-  `DeleteSubagentTranscripts` removes those transcripts.
-  A Claude launched with a bare `-r` opens its resume picker, which starts a
-  new conversation and sets `ResumePicker` on its `Run`.
-- Headless tasks, the one-shot model calls such as titles and turn verdicts,
-  are off unless the test sets `ATTN_HEADLESS_TASKS=on`. Then `w.HeadlessTask()`
-  returns the next task's `Harness`, `Model`, `Effort` and `Prompt` to `Answer`
-  or `Fail`, and a task the test never takes fails it. The task also carries
-  the `Argv`, `Env` and working `Dir` the harness process was started with.
-
-Waiting for results:
-
-- With a Stop hook (Claude and Codex), `Reply` and `ReplyAfterStop` return
-  once the daemon has recorded the turn's end. Every other write returns once
-  written, and the daemon reads the transcript on its own.
-- Either way, await the resulting event on a peer that connected before the
-  call. A peer that connects later sees the result in its initial state, which
-  it cannot await.
-- `testworld.AwaitSession` also accepts an update from before the call that
-  the peer has not read yet. To wait for a state that follows one the test
-  already saw, use `testworld.AwaitStateAfter`.
-
-Timers:
-
-- For behavior on a timer, write the test as
-  `inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world
-  under `synctest`, and move the clock with `w.advance(d)`.
-- A world from `inBubble` cannot run agents or watch folders. Its notebook at
-  `<w.Dir>/notebook` exists only if a test outside a bubble creates it.
-- A world outside a bubble gives its daemon a stepped clock instead. Timers on
-  it, such as a terminal's kill escalation, a folder watch's window and the
-  background job runner's schedule, fire only when the test calls
-  `w.advance(d)`; `w.awaitTimer(d)` first waits until a timer of `d` is armed.
-  A test that waits for such a timer without advancing fails at the hang
-  guard.
-- A test about outside edits to watched folders calls `w.closeWatchWindows()`,
-  which closes each folder watch's window as soon as it opens.
-- A test about scheduled automations calls `w.tickSchedulesUntil(what, done)`.
-  Each tick waits until the job runner is idle, moves the clock one schedule
-  tick and waits until the runner is idle again, so `done` reads settled
-  state. It fails after `scheduleTickLimit` ticks.
-- `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A
-  terminal's `Stall(alive, err)` makes its worker stop answering until the
-  test calls the returned function: recovery waits out its deadline and counts
-  it missing, and the liveness probe answers `alive, err`. Its
-  `HoldRemoval()` stops the next removal halfway until the test calls the
-  returned function: its streams have ended and its worker no longer answers,
-  but the backend has not forgotten the terminal yet.
+[Daemon wire tests](daemon-wire-tests.md) and [App wire tests](app-wire-tests.md)
+describe each form's harness.
 
 ### Stack
 
@@ -234,61 +119,7 @@ signals, PTY ownership, CLI behavior, and Linux paths. The browser end-to-end
 suite is also a stack test: a real daemon serves the frontend to a browser.
 It mocks the PTY unless a test needs real terminals.
 
-#### Writing a CLI stack test
-
-CLI stack tests live in `package main_test` in `cmd/attn`, whose `TestMain`
-returns `testworld.Main(m)`.
-
-- `testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, ...))`
-  prepares a data directory for the built `attn` binary.
-- `s.Start()` runs `attn daemon` and returns once it signals ready. `s.Stop()`
-  ends it. A `Start` after `Stop` restarts over the same data.
-  The stack holds its WebSocket listener until cleanup, including while the
-  daemon is stopped, so another process cannot take its address.
-- The historical PTY upgrade test uses port `0`: older binaries cannot inherit
-  that listener. After the daemon's bind-ready log, `lsof` discovers the captured
-  PID's assigned port without releasing a reservation or retrying startup.
-- For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
-  a daemon that kills itself with SIGKILL at a crash point named in the
-  daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later
-  `Start` recovers from the state the real daemon left behind.
-- The world helpers from daemon wire tests work here too.
-- `s.Attn(args...)` runs a CLI command to completion. `s.Run` takes an
-  `Invocation` when the command needs stdin, a session, extra env, or another
-  binary.
-- `s.Launch` starts a command that waits on something the test does next,
-  such as a long-running watch or a request the test answers as the app.
-  Await its output with `AwaitStdout` or `AwaitStderr`, or its result with
-  `Wait`. The stack interrupts it at cleanup.
-- `s.Advance(d)` moves the stepped clock of that daemon and of every PTY worker
-  it started: the bridge's stall, loss, retry and dial-answer timers, a
-  terminal's kill escalation, a folder watch's window and the background job
-  runner's schedule. Every stack uses this stepped clock; the shared PTY host,
-  which is not Go, keeps real time. A test waiting for one of those timers
-  without advancing fails at the hang guard.
-  Heartbeats and kernel socket deadlines keep real time, so a dial may still
-  fail without an advance. Await the connected or stalled row before advancing
-  its liveness timers.
-- `s.AwaitTimer(d)` waits until a timer of `d`, armed or reset after the last
-  `Advance` or `AwaitTimer`, is pending in the daemon or one of its workers.
-  Use it before advancing an asynchronous dial, retry or kill: its row or
-  close can arrive before its timer is armed. A failure names the requested
-  duration and the timers pending.
-- `s.CloseWatchWindows()` closes each folder watch's window as soon as it
-  opens, until the test calls the returned function. Each close moves the
-  whole clock, the bridge's timers included, so keep it to one wait for a
-  watched change.
-- A test that starts PTY workers without a stack steps them with
-  `testworld.StepChildren(t)`, whose `Advance` and `AwaitTimer` work the same
-  way. The test process itself keeps real time.
-
-If the daemon misses its ready guard or `s.Run` exceeds its hang guard, the
-stack sends SIGQUIT to capture all goroutines before terminating the process.
-CLI invocations have their own process group so shell wrappers and their Go
-children receive the same signal.
-Failure logs include CPU and I/O pressure from `/proc/pressure` when available.
-Oversized diagnostic streams retain their beginning and end and report the
-byte limit, original size and omitted bytes.
+[CLI stack tests](cli-stack-tests.md) describes the CLI stack harness.
 
 ### Scenario
 
@@ -347,3 +178,25 @@ Every test that reaches config paths follows the
 Wire and CLI stack worlds see an unavailable Tailscale backend by default.
 Tests of Tailscale provide their own CLI fake; the host's installed CLI is never
 used.
+
+## Running tests
+
+Before landing, run targeted tests for the behavior you changed, such as
+`./scripts/test-go.sh --packages -run TestName ./pkg` or one file with
+`pnpm --dir app exec vitest run`. The `land-on-main` skill is the rest of
+landing.
+
+`--packages` passes the remaining arguments to `go test` without running the
+full suite; leading `--unit` and `--receipt-out` options go to test history.
+The runner and Makefile use `-trimpath` so unchanged packages can reuse build
+artifacts across worktrees. The runner gives targeted and full test runs the
+same isolated outer data directory; each package's `TestMain` still creates a
+fresh directory when tests run. Go can reuse successful test results when
+their flags, environment, and file inputs also match.
+`scripts/test-go.sh`, `pnpm --dir app test` and `pnpm --dir app run e2e`
+record a receipt of each run; `vitest` and `playwright` run directly do not.
+See [Test history](test-history.md).
+
+The runner and Makefile also share the pinned native VT artifact between
+worktrees. Before using Go commands directly, run
+`./scripts/build-libghostty-vt.sh` to prepare it for this checkout.

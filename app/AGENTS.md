@@ -12,10 +12,8 @@ Paths are relative to `app/src`.
 
 - Name tests `Source.concern.test.tsx`.
 - Follow [Testing](../docs/internal/testing.md). App wire tests render the real
-  app with its real socket client against the scripted daemon in `src/test/`,
-  which speaks the generated protocol types.
-- Assert the exact requests the app sends after render settles, to catch
-  fetch loops.
+  app against the scripted daemon in `src/test/`, as
+  [App wire tests](../docs/internal/app-wire-tests.md) describes.
 - Real browser APIs need a Playwright harness under `test-harness/harnesses/`,
   registered in `index.ts`, with a spec under `e2e/`.
 
