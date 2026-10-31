@@ -114,10 +114,11 @@ commands:
         Use --awareness-dir "" to clear it.
         --home records where the member's home is after you moved or renamed
         its folder: a folder holding its CHARTER.md. Pass it without other
-        settings; the member must be asleep. Outside attn's data folder the folder is renamed after the
-        member. A working or awareness directory inside the old home follows,
-        and so do saved sessions. To undo move-home, move the folder to
-        crew/<key>/ in attn's data folder and point --home there.
+        settings; the member must be asleep. Outside attn's data folder the
+        folder is renamed after the member. A working or awareness directory
+        inside the old home follows, and so do saved sessions. To undo
+        move-home, move the folder to crew/<key>/ in attn's data folder and
+        point --home there.
 
   rename <member> <name> [--json]
         Give the member a new name, unique in its profile. Its key, letters,
