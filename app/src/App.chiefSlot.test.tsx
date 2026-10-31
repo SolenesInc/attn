@@ -408,6 +408,35 @@ for (const queue of [true, false]) describe(`Chief slot in ${queue ? 'queue' : '
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
     expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-member', 'second-chief');
   });
+  it.each([false, true])('settles a save that completes in another profile without waking it there (configured=%s)', async configuredBefore => {
+    const current = member(configuredBefore ? { agent: 'claude', model: 'opus', effort: 'low' } : {});
+    const { daemon } = await renderApp({ initialState: { settings, crew: [current] } });
+    daemon.on('crew_set', () => undefined);
+    if (configuredBefore) {
+      await gesture(daemon, () => fireEvent.click(slot().getByRole('button', { name: 'Actions for Captain' })));
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Harness and model…' })));
+      await gesture(daemon, () => fireEvent.click(setup().getByRole('radio', { name: /Sonnet/ })));
+      await gesture(daemon, () => fireEvent.click(setup().getByRole('button', { name: /Save/ })));
+    } else {
+      await gesture(daemon, () => fireEvent.click(setup().getByRole('button', { name: /Wake Captain/ })));
+    }
+    const request = daemon.sentOf('crew_set')[0];
+    const original = defaultProfile(DEFAULT_DESKTOP_ID);
+    const second = defaultProfile('second-desktop', { id: 'second-profile', name: 'Second' });
+    await gesture(daemon, () => daemon.emit({ event: 'profiles_changed', profiles: [original, second] }));
+    await gesture(daemon, () => daemon.emit({ event: 'profile_arrangement_changed', profile: second, desktops: [emptyDesktop('second-desktop', { profile_id: second.id })] }));
+    expect(screen.queryByTestId('chief-slot')).toBeNull();
+    const saved = { ...current, agent: 'claude', model: configuredBefore ? 'sonnet' : 'opus', effort: 'low', revision: 2 };
+    await gesture(daemon, () => daemon.replyTo(request, { event: 'crew_set_result', request_id: request.request_id, success: true, conflict: false, member: saved }));
+    await gesture(daemon, () => daemon.emit({ event: 'crew_updated', members: [saved] }));
+    expect(daemon.sentOf('crew_wake')).toHaveLength(0);
+    await gesture(daemon, () => daemon.emit({ event: 'profile_arrangement_changed', profile: original, desktops: [emptyDesktop(DEFAULT_DESKTOP_ID)] }));
+    expect(phase()).toBe('asleep');
+    expect(screen.queryByTestId('chief-setup')).toBeNull();
+    expect(daemon.sentOf('crew_wake')).toHaveLength(0);
+    await gesture(daemon, () => fireEvent.click(slot().getAllByRole('button', { name: 'Wake Captain' })[0]));
+    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:chief-key' })]);
+  });
   it.each([false, true])('opens the charter and returns focus to the persistent menu trigger (awake=%s)', async awake => {
     const current = member({ agent: 'claude', model: 'opus', binding_session: awake ? 'chief-day' : undefined });
     const { daemon } = await renderApp({ initialState: { settings, crew: [current], sessions: awake ? [daemonSession('chief-day', { chief_of_staff: true })] : [], desktops: awake ? [soloDesktop('chief-day')] : [] } });

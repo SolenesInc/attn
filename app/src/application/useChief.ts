@@ -70,11 +70,10 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
         setPending(value => value?.key === key ? null : value);
         return false;
       }
-      if (!isCurrent(key)) return false;
-      setEditor({ key, open: false });
-      if (firstRun) void wakeChief(key);
+      setEditor(value => value?.key === key ? { key, open: false } : value);
+      if (firstRun && isCurrent(key)) void wakeChief(key);
       else setPending(value => value?.key === key ? null : value);
-      return true;
+      return isCurrent(key);
     },
     wake() {
       if (!member?.agent || pending?.key === member.id) return;
