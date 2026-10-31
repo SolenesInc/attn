@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) ensureCrewCollections() {
@@ -234,6 +235,10 @@ func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document,
 			d.logf("crew: member %s has an invalid identity %q: %v", doc.ID, member.ID, err)
 			continue
 		}
+		if member.Key, err = who.ParseMemberKey(member.ID); err != nil {
+			d.logf("crew: member %s has an invalid key: %v", doc.ID, err)
+			continue
+		}
 		identity := identities[member.ID]
 		member.Name, member.ProfileID = identity.Name, identity.ProfileID
 		if member.Name == "" {
@@ -453,22 +458,27 @@ func (d *Daemon) crewMembersBySession() map[protocol.SessionID]crew.Member {
 }
 
 func (d *Daemon) crewMemberBoundTo(sessionID protocol.SessionID) string {
+	member, _ := d.crewMemberBoundToSession(sessionID)
+	return member.ID
+}
+
+func (d *Daemon) crewMemberBoundToSession(sessionID protocol.SessionID) (crew.Member, bool) {
 	if d.store == nil || protocol.TrimID(sessionID) == "" {
-		return ""
+		return crew.Member{}, false
 	}
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		if !docstore.IsUndeclaredCollection(err) {
 			d.logf("crew: reading roster for session %s: %v", sessionID, err)
 		}
-		return ""
+		return crew.Member{}, false
 	}
 	for _, member := range members {
 		if member.BindingSession == sessionID && d.crewBindingLive(member) {
-			return member.ID
+			return member, true
 		}
 	}
-	return ""
+	return crew.Member{}, false
 }
 
 func (d *Daemon) crewSessionBoundTo(memberID string) (protocol.SessionID, error) {

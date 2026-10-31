@@ -9,38 +9,35 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/crashpoint"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.QuickCaptureMailbox) (inbox.Address, error) {
+func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.QuickCaptureMailbox) (who.Address, error) {
 	switch mailbox.Kind {
 	case protocol.QuickCaptureMailboxKindChief:
 		if mailbox.MemberID != nil {
-			return inbox.Address{}, fmt.Errorf("chief mailbox cannot include member_id")
+			return who.Address{}, fmt.Errorf("chief mailbox cannot include member_id")
 		}
+		return who.ToChief(profileID), nil
 	case protocol.QuickCaptureMailboxKindCrewMember:
 		if strings.TrimSpace(protocol.Deref(mailbox.MemberID)) == "" {
-			return inbox.Address{}, fmt.Errorf("crew mailbox requires member_id")
+			return who.Address{}, fmt.Errorf("crew mailbox requires member_id")
 		}
 		member, _, err := d.crewMember(*mailbox.MemberID)
 		if err != nil {
-			return inbox.Address{}, err
+			return who.Address{}, err
 		}
 		if member.ProfileID != profileID {
-			return inbox.Address{}, fmt.Errorf("crew member %q not found in this profile", *mailbox.MemberID)
+			return who.Address{}, fmt.Errorf("crew member %q not found in this profile", *mailbox.MemberID)
 		}
 		if member.ID != *mailbox.MemberID {
-			return inbox.Address{}, fmt.Errorf("member_id must be the stable roster identity %q", member.ID)
+			return who.Address{}, fmt.Errorf("member_id must be the stable roster identity %q", member.ID)
 		}
-	default:
-		return inbox.Address{}, fmt.Errorf("unknown quick capture mailbox kind %q", mailbox.Kind)
+		return who.Member(member.Key).Address(), nil
 	}
-	if mailbox.Kind == protocol.QuickCaptureMailboxKindChief {
-		return inbox.ToChief(profileID), nil
-	}
-	return inbox.ToMember(*mailbox.MemberID), nil
+	return who.Address{}, fmt.Errorf("unknown quick capture mailbox kind %q", mailbox.Kind)
 }
 
 type quickCaptureScope struct {

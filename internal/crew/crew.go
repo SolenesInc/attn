@@ -15,6 +15,7 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -30,6 +31,7 @@ const DefaultAgent = "claude"
 
 type Member struct {
 	ID             string             `json:"id"`
+	Key            who.MemberKey      `json:"-"`
 	Name           string             `json:"-"`
 	ProfileID      string             `json:"-"`
 	CWD            string             `json:"cwd"`

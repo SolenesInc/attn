@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type seededNudgeGarden struct {
@@ -32,7 +32,7 @@ func newSeededNudgeGarden(t *testing.T) seededNudgeGarden {
 
 func queuedSeedBells(t *testing.T, d *Daemon, sessionID string) []string {
 	t.Helper()
-	messages, err := d.store.UnreadInboxDeliveries(inbox.ToSession(protocol.SessionID(sessionID)))
+	messages, err := d.store.UnreadInboxDeliveries(who.ToSession(protocol.SessionID(sessionID)))
 	if err != nil {
 		t.Fatalf("queued bells for %s: %v", sessionID, err)
 	}

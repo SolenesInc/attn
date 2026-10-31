@@ -38,7 +38,6 @@ import (
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/logging"
@@ -52,6 +51,7 @@ import (
 	"github.com/victorarias/attn/internal/settingkeys"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type workerReconcileReport struct {
@@ -201,7 +201,7 @@ type Daemon struct {
 	nisseState               *nisseLink
 	quickCaptureAssetMu      sync.Mutex
 	inboxMu                  sync.Mutex
-	inboxStates              map[inbox.Address]*inboxDeliveryState
+	inboxStates              map[who.Address]*inboxDeliveryState
 	inboxUnsubscribe         func()
 	monitorPolicyUnsubscribe func()
 	crewWakeMu               sync.Mutex
@@ -2193,7 +2193,7 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, commit func() 
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
 		}
 	}
-	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.kickInboxAfterCommit(who.ToSession(sessionID))
 	d.clearSnoozeState(sessionID)
 	closure, err := commit()
 	if err != nil {
@@ -2232,7 +2232,7 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 			d.logf("garden: preserving execution %s before reaping: %v", sessionID, err)
 		}
 	}
-	d.kickInboxAfterCommit(inbox.ToSession(sessionID))
+	d.kickInboxAfterCommit(who.ToSession(sessionID))
 	d.clearSnoozeState(sessionID)
 	d.sessionMonitor(sessionID).FenceInput()
 	closedAsks := d.store.Remove(sessionID)
@@ -3347,12 +3347,12 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			decorated.ConversationSharedWith = sharedConversations[decorated.ID]
-			addresses := []inbox.Address{inbox.ToSession(decorated.ID)}
+			addresses := []who.Address{who.ToSession(decorated.ID)}
 			if member, bound := crewBySession[decorated.ID]; bound {
-				addresses = append(addresses, inbox.ToMember(member.ID))
+				addresses = append(addresses, who.Member(member.Key).Address())
 			}
 			if chiefs[decorated.ProfileID] == decorated.ID {
-				addresses = append(addresses, inbox.ToChief(decorated.ProfileID))
+				addresses = append(addresses, who.ToChief(decorated.ProfileID))
 			}
 			decorated.PullRequests = d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(decorated.ID, addresses, pullRequestsBySession, pullRequestWatchesByPR), addresses, pullRequestWatchesByPR)
 			out = append(out, *decorated)

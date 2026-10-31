@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type sessionPullRequestFact struct {
@@ -202,7 +202,7 @@ func (d *Daemon) pullRequestWatchesByPR() map[string][]store.PullRequestWatch {
 	return byPR
 }
 
-func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord, addresses []inbox.Address, watchesByPR map[string][]store.PullRequestWatch) []protocol.SessionPullRequest {
+func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord, addresses []who.Address, watchesByPR map[string][]store.PullRequestWatch) []protocol.SessionPullRequest {
 	if len(records) == 0 {
 		return nil
 	}
@@ -260,18 +260,23 @@ func pullRequestField(value string) *string {
 }
 
 func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session) []protocol.SessionPullRequest {
-	addresses := []inbox.Address{inbox.ToSession(session.ID)}
+	addresses := []who.Address{who.ToSession(session.ID)}
 	if member := protocol.Deref(session.CrewMember); member != "" {
-		addresses = append(addresses, inbox.ToMember(member))
+		address, err := memberAddress(member)
+		if err != nil {
+			d.logf("pull requests of %s: %v", session.ID, err)
+		} else {
+			addresses = append(addresses, address)
+		}
 	}
 	if protocol.Deref(session.ChiefOfStaff) {
-		addresses = append(addresses, inbox.ToChief(session.ProfileID))
+		addresses = append(addresses, who.ToChief(session.ProfileID))
 	}
 	byPR := d.pullRequestWatchesByPR()
 	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, d.store.ListSessionPullRequestsBySession(), byPR), addresses, byPR)
 }
 
-func (d *Daemon) sessionPullRequestRecords(sessionID protocol.SessionID, addresses []inbox.Address, bySession map[protocol.SessionID][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {
+func (d *Daemon) sessionPullRequestRecords(sessionID protocol.SessionID, addresses []who.Address, bySession map[protocol.SessionID][]store.SessionPullRequestRecord, byPR map[string][]store.PullRequestWatch) []store.SessionPullRequestRecord {
 	records := append([]store.SessionPullRequestRecord(nil), bySession[sessionID]...)
 	for prID, watches := range byPR {
 		for _, watch := range watches {

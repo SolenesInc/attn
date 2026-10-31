@@ -11,8 +11,8 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type seedCheckOutcome struct {
@@ -294,13 +294,15 @@ func (d *Daemon) seedOccurrenceRecipients(occurrences ...seedEvents.Occurrence) 
 			return nil, err
 		}
 		for _, address := range recipients.addresses {
-			parsed, err := inbox.ParseAddress(address)
+			parsed, err := who.ParseAddress(address)
 			if err != nil {
 				return nil, err
 			}
-			name := parsed.MemberID()
-			if name == "" {
-				name = string(parsed.SessionID())
+			var name string
+			if key, member := parsed.Member(); member {
+				name = key.String()
+			} else if id, session := parsed.Session(); session {
+				name = string(id)
 			}
 			if !slices.Contains(out, name) {
 				out = append(out, name)

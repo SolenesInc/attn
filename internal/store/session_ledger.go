@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const SessionClosedByUser = "user"
@@ -156,7 +156,7 @@ func (s *Store) closeSessionTx(tx *sql.Tx, id protocol.SessionID, closed Session
 	if _, err := tx.Exec(`DELETE FROM terminal_bindings WHERE session_id = ?`, id); err != nil {
 		return false, false, nil, fmt.Errorf("close session %s terminal bindings: %w", id, err)
 	}
-	asks, err := closeAsksTo(tx, inbox.ToSession(id))
+	asks, err := closeAsksTo(tx, who.ToSession(id))
 	if err != nil {
 		return false, false, nil, fmt.Errorf("close session %s asks: %w", id, err)
 	}

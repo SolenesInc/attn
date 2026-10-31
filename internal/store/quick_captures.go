@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type QuickCaptureAssetState string
@@ -53,7 +54,7 @@ func (s *Store) QuickCaptureReplay(profileID string, msg protocol.QuickCaptureSe
 	return true, nil
 }
 
-func (s *Store) SaveQuickCapture(profileID string, msg protocol.QuickCaptureSendMessage, to inbox.Address, at time.Time) error {
+func (s *Store) SaveQuickCapture(profileID string, msg protocol.QuickCaptureSendMessage, to who.Address, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()

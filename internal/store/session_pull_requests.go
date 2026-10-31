@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/victorarias/attn/internal/inbox"
-
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type SessionPullRequestRecord struct {
@@ -295,7 +294,7 @@ func (s *Store) TouchSessionPullRequestActivity(prID string, at time.Time) error
 	return err
 }
 
-func (s *Store) ForgetSessionPullRequest(sessionID protocol.SessionID, to inbox.Address, prID string) (bool, []protocol.SessionID, error) {
+func (s *Store) ForgetSessionPullRequest(sessionID protocol.SessionID, to who.Address, prID string) (bool, []protocol.SessionID, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {

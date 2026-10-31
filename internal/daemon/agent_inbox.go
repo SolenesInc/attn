@@ -62,7 +62,7 @@ func (d *Daemon) handleAgentInbox(conn net.Conn, msg *protocol.AgentInboxMessage
 		d.replyPeerMessageError(conn, err)
 		return
 	}
-	if stored.To.SeedID() != "" {
+	if _, seed := stored.To.TenderOf(); seed {
 		holder, _, err := d.inboxRecipient(stored.To)
 		if err != nil {
 			d.replyPeerMessageError(conn, err)
@@ -200,7 +200,7 @@ func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerM
 	}
 	target := record.ReadBy
 	if target == "" {
-		target = record.To.SessionID()
+		target, _ = record.To.Session()
 		if holder := d.inboxHolder(record.To); holder != nil {
 			target = holder.ID
 		}

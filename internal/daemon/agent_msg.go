@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -62,7 +63,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	}
 
 	targetRef := protocol.SessionID(msg.TargetSessionID)
-	var address inbox.Address
+	var address who.Address
 	if seedID := strings.TrimSpace(protocol.Deref(msg.TargetSeedID)); seedID != "" {
 		if err := d.requireSeedInProfile(seedID, sender.ProfileID, false); err != nil {
 			d.replyAgentMsgError(conn, "cross_profile", err.Error())
@@ -77,7 +78,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 			d.replyAgentMsgError(conn, "seed_not_found", err.Error())
 			return
 		}
-		address = inbox.ToSeed(seed.ID)
+		address = who.ToTenderOf(seed.ID)
 	} else {
 		// A target in another profile is answered exactly like an unknown one.
 		notFound := func() {
@@ -85,7 +86,7 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 		}
 		member, found, memberErr := d.crewMemberIn(sender.ProfileID, string(targetRef))
 		if found {
-			address = inbox.ToMember(member.ID)
+			address = who.Member(member.Key).Address()
 		} else {
 			target, code := d.resolveSessionByIDOrPrefix(string(targetRef))
 			if target == nil {
@@ -143,8 +144,8 @@ func (d *Daemon) handleAgentMsg(conn net.Conn, msg *protocol.AgentMsgMessage) {
 	if holder := d.inboxHolder(address); holder != nil {
 		result.TargetSessionID = holder.ID
 	}
-	if receipt.Rang && address.MemberID() != "" {
-		result.Detail = "notified " + d.crewMemberName(address.MemberID())
+	if key, member := address.Member(); receipt.Rang && member {
+		result.Detail = "notified " + d.crewMemberName(key.String())
 	}
 
 	d.replyAgentMsg(conn, result)

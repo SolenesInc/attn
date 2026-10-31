@@ -2,10 +2,11 @@ package daemon_test
 
 import (
 	"fmt"
-	"github.com/victorarias/attn/internal/client"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/victorarias/attn/internal/client"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"

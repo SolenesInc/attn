@@ -13,9 +13,9 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const gardenSnapshotLimit = docstore.MaxLimit
@@ -1720,7 +1720,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			}
 			d.queueConversationKeepIfReferenceMoved(seed, next)
 			if garden.Closed(next.Status) {
-				d.closeAsksTo(inbox.ToSeed(next.ID))
+				d.closeAsksTo(who.ToTenderOf(next.ID))
 			}
 			if err := d.discardAllIneligibleGardenSeedBellsLocked(); err != nil {
 				return garden.Seed{}, docstore.Document{}, seedTransitionDetails{}, fmt.Errorf(

@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 var (
@@ -21,7 +22,7 @@ var (
 type Ask struct {
 	ID        string
 	SessionID protocol.SessionID
-	To        inbox.Address
+	To        who.Address
 	Subject   string
 	Markdown  string
 	BaseDir   string
@@ -44,7 +45,7 @@ func (s *Store) AddAsk(a Ask) error {
 	}
 	query := "INSERT INTO asks (" + askedColumns + ") SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ? AND closed_at = '')"
 	args := []any{a.ID, a.SessionID, a.To.String(), a.Subject, a.Markdown, a.BaseDir, a.CreatedAt, a.SessionID}
-	if seedID := a.To.SeedID(); seedID != "" {
+	if seedID, ok := a.To.TenderOf(); ok {
 		_, seeds, found, err := readCollection(s.db, garden.Namespace, garden.CollectionSeeds)
 		if err != nil {
 			return err
@@ -181,7 +182,7 @@ func (s *Store) ForgetRepliesBefore(cutoff time.Time) ([]string, error) {
 	return deleteAsks(s.db, "DELETE FROM asks WHERE answered_at != '' AND answered_at < ? RETURNING id", cutoff.UTC().Format(sortableTimeFormat))
 }
 
-func (s *Store) CloseAsksTo(to inbox.Address) ([]string, error) {
+func (s *Store) CloseAsksTo(to who.Address) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -190,13 +191,13 @@ func (s *Store) CloseAsksTo(to inbox.Address) ([]string, error) {
 	return closeAsksTo(s.db, to)
 }
 
-func closeAsksTo(db rowsQuerier, to inbox.Address) ([]string, error) {
+func closeAsksTo(db rowsQuerier, to who.Address) ([]string, error) {
 	return deleteAsks(db, "DELETE FROM asks WHERE address = ? RETURNING id", to.String())
 }
 
 func closeProfileMailboxAsks(db rowsQuerier, profileID string) ([]string, error) {
-	return deleteAsks(db, "DELETE FROM asks WHERE address = ? OR address IN (SELECT ? || member_key FROM crew_members WHERE profile_id = ?) RETURNING id",
-		inbox.ToChief(profileID).String(), inbox.ToMember("").String(), profileID)
+	return deleteAsks(db, "DELETE FROM asks WHERE address = ? OR address IN (SELECT 'member:' || member_key FROM crew_members WHERE profile_id = ?) RETURNING id",
+		who.ToChief(profileID).String(), profileID)
 }
 
 func deleteAsks(db rowsQuerier, query string, args ...any) ([]string, error) {
@@ -222,7 +223,7 @@ func scanAsk(row interface{ Scan(...any) error }) (Ask, error) {
 	if err := row.Scan(&a.ID, &a.SessionID, &address, &a.Subject, &a.Markdown, &a.BaseDir, &a.CreatedAt, &answeredAt, &answers, &note); err != nil {
 		return Ask{}, err
 	}
-	to, err := inbox.ParseAddress(address)
+	to, err := who.ParseAddress(address)
 	if err != nil {
 		return Ask{}, err
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/victorarias/attn/internal/sessioncost"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,8 +13,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/sessioncost"
+	"github.com/victorarias/attn/internal/who"
+
 	"github.com/victorarias/attn/internal/git"
-	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -528,7 +529,7 @@ func deleteSessionRows(db *sql.DB, id protocol.SessionID) ([]string, error) {
 			return nil, fmt.Errorf("drop %s: %w", statement.table, err)
 		}
 	}
-	asks, err := closeAsksTo(tx, inbox.ToSession(id))
+	asks, err := closeAsksTo(tx, who.ToSession(id))
 	if err != nil {
 		return nil, err
 	}

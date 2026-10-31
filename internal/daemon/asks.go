@@ -17,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const (
@@ -77,7 +78,8 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 		d.sendError(conn, errSessionNotLive(session.ID).Error())
 		return
 	case errors.Is(err, store.ErrAskSeedClosed):
-		d.sendError(conn, fmt.Sprintf("%s closed before the ask was saved; ask again", to.SeedID()))
+		seedID, _ := to.TenderOf()
+		d.sendError(conn, fmt.Sprintf("%s closed before the ask was saved; ask again", seedID))
 		return
 	case err != nil:
 		d.sendError(conn, err.Error())
@@ -87,12 +89,12 @@ func (d *Daemon) handleAskOpen(conn net.Conn, msg *protocol.AskOpenMessage) {
 	d.publishFact(FactAskOpened, id, nil)
 }
 
-func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (inbox.Address, error) {
+func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (who.Address, error) {
 	seedID := ref
 	if ref != "" {
 		var err error
 		if seedID, err = d.resolveSeedRef(ref, session.ProfileID); err != nil {
-			return inbox.Address{}, err
+			return who.Address{}, err
 		}
 	}
 	stake := d.openStake(session.ID)
@@ -100,23 +102,23 @@ func (d *Daemon) askAddressOf(session *protocol.Session, ref string) (inbox.Addr
 		if stake == "" {
 			return d.inboxAddressOf(session.ID), nil
 		}
-		return inbox.ToSeed(stake), nil
+		return who.ToTenderOf(stake), nil
 	}
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
-		return inbox.Address{}, err
+		return who.Address{}, err
 	}
 	if seed.ProfileID != session.ProfileID {
-		return inbox.Address{}, d.requireSeedInProfile(seed.ID, session.ProfileID, false)
+		return who.Address{}, d.requireSeedInProfile(seed.ID, session.ProfileID, false)
 	}
-	to := inbox.ToSeed(seed.ID)
+	to := who.ToTenderOf(seed.ID)
 	if holder := d.inboxHolder(to); holder != nil && holder.ID == session.ID {
 		return to, nil
 	}
 	if tender := seed.Tender(); tender.Named() {
-		return inbox.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, tender.DisplayName())
+		return who.Address{}, fmt.Errorf("%s is being tended by %s, and an ask is about a seed you tend; ask without --seed", seed.ID, tender.DisplayName())
 	}
-	return inbox.Address{}, fmt.Errorf("nobody is tending %s, and an ask is about a seed you tend; tend it first (attn seed tend %s), or ask without --seed", seed.ID, seed.ID)
+	return who.Address{}, fmt.Errorf("nobody is tending %s, and an ask is about a seed you tend; tend it first (attn seed tend %s), or ask without --seed", seed.ID, seed.ID)
 }
 
 func (d *Daemon) openStake(sessionID protocol.SessionID) string {
@@ -130,14 +132,15 @@ func (d *Daemon) openStake(sessionID protocol.SessionID) string {
 	return stake
 }
 
-func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(inbox.Address) bool {
+func (d *Daemon) askAddressHeldBy(sessionID protocol.SessionID) func(who.Address) bool {
 	roles := d.inboxRoleAddresses(sessionID)
 	stake, _ := d.gardenDispatchCrown(sessionID)
-	return func(to inbox.Address) bool {
-		switch seedID := to.SeedID(); seedID {
-		case "":
+	return func(to who.Address) bool {
+		seedID, seed := to.TenderOf()
+		switch {
+		case !seed:
 			return slices.Contains(roles, to)
-		case stake:
+		case seedID == stake:
 			return true
 		default:
 			holder := d.inboxHolder(to)
@@ -225,7 +228,7 @@ func (d *Daemon) answerAsk(msg *protocol.AskAnswerMessage, profileID string) err
 	}
 	reply := protocol.AskReply{Answers: msg.Answers, Note: msg.Note}
 	answer := inbox.Item{ID: uuid.NewString(), To: stored.To, Kind: inbox.AskAnswer, Source: stored.ID, Text: text}
-	if seedID := stored.To.SeedID(); seedID != "" {
+	if seedID, seed := stored.To.TenderOf(); seed {
 		err = d.noteAnswer(stored.ID, seedID, reply, answer)
 	} else {
 		err = d.store.AnswerAsk(stored.ID, reply, answer, time.Now())
@@ -261,7 +264,7 @@ func (d *Daemon) askRepliesForgetHandler(_ context.Context, _ *jobs.Job) (any, e
 	return map[string]any{"forgotten": len(ids)}, nil
 }
 
-func (d *Daemon) closeAsksTo(to inbox.Address) {
+func (d *Daemon) closeAsksTo(to who.Address) {
 	ids, err := d.store.CloseAsksTo(to)
 	if err != nil {
 		d.logf("asks: closing the asks to %s: %v", to, err)
@@ -322,9 +325,12 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 		CreatedAt: a.CreatedAt,
 		Reply:     a.Reply,
 	}}
+	seedID, toSeed := a.To.TenderOf()
+	memberKey, toMember := a.To.Member()
+	chiefProfileID, toChief := a.To.Chief()
 	switch {
-	case a.To.SeedID() != "":
-		seed, _, err := d.readSeed(a.To.SeedID())
+	case toSeed:
+		seed, _, err := d.readSeed(seedID)
 		if err != nil {
 			return shownAsk{}, err
 		}
@@ -333,12 +339,12 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 			shown.wire.SeedSlug = protocol.Ptr(seed.StepSlug)
 		}
 		shown.profileID = seed.ProfileID
-	case a.To.MemberID() != "":
-		shown.wire.CrewMember = protocol.Ptr(a.To.MemberID())
-		shown.profileID = d.crewProfileID(a.To.MemberID())
-	case a.To.ChiefProfileID() != "":
+	case toMember:
+		shown.wire.CrewMember = protocol.Ptr(memberKey.String())
+		shown.profileID = d.crewProfileID(memberKey.String())
+	case toChief:
 		shown.wire.Chief = protocol.Ptr(true)
-		shown.profileID = a.To.ChiefProfileID()
+		shown.profileID = chiefProfileID
 	default:
 		if session := d.store.Get(a.SessionID); session != nil {
 			shown.profileID = session.ProfileID

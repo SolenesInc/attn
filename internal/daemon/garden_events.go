@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/who"
 )
 
 const gardenSeedBellConsumer = "garden-seed-bells"
@@ -228,7 +229,7 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 	}
 	deliveries := make([]store.GardenSeedBellDelivery, len(recipients))
 	for i, recipient := range recipients {
-		address, err := inbox.ParseAddress(recipient)
+		address, err := who.ParseAddress(recipient)
 		if err != nil {
 			return err
 		}
@@ -241,7 +242,7 @@ func (d *Daemon) handleGardenSeedEventWithoutRoleLock(_ context.Context, event b
 		return err
 	}
 	for _, address := range created {
-		to, err := inbox.ParseAddress(address)
+		to, err := who.ParseAddress(address)
 		if err != nil {
 			return err
 		}
@@ -336,13 +337,13 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 			if !found {
 				return nil, nil
 			}
-			return []string{inbox.ToMember(member.ID).String()}, nil
+			return []string{who.Member(member.Key).Address().String()}, nil
 		}
 		sessionID, err := r.daemon.gardenTenderSession(seed)
 		if err != nil || sessionID == "" {
 			return nil, err
 		}
-		return []string{inbox.ToSession(protocol.SessionID(sessionID)).String()}, nil
+		return []string{who.ToSession(protocol.SessionID(sessionID)).String()}, nil
 	case events.CoveringWatchers:
 		coverage, err := r.subscriptions.coverageChecked(seedID)
 		if err != nil {
@@ -351,7 +352,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 		sessions := make([]string, 0, len(coverage))
 		for sessionID := range coverage {
 			if r.daemon.store.Get(sessionID) != nil || r.daemon.store.DelegationSessionReserved(sessionID) {
-				sessions = append(sessions, inbox.ToSession(sessionID).String())
+				sessions = append(sessions, who.ToSession(sessionID).String())
 			}
 		}
 		return sessions, nil
@@ -360,7 +361,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 	}
 }
 
-func (d *Daemon) discardIneligibleGardenSeedBellsLocked(to inbox.Address) error {
+func (d *Daemon) discardIneligibleGardenSeedBellsLocked(to who.Address) error {
 	items, err := d.store.UnreadGardenSeedMailboxItems(to)
 	if err != nil {
 		return err
@@ -395,7 +396,7 @@ func (d *Daemon) discardAllIneligibleGardenSeedBellsLocked() error {
 	if err != nil {
 		return err
 	}
-	recipients := map[inbox.Address]bool{}
+	recipients := map[who.Address]bool{}
 	for _, item := range items {
 		recipients[item.To] = true
 	}

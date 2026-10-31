@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type GardenSeedWatch struct {
@@ -27,13 +28,13 @@ func (w GardenSeedWatch) subscribe(now time.Time) func(*sql.Tx) (bool, error) {
 }
 
 type GardenSeedMailboxItem struct {
-	To       inbox.Address
+	To       who.Address
 	SeedID   string
 	BellName string
 }
 
 type GardenSeedBellDelivery struct {
-	To     inbox.Address
+	To     who.Address
 	ItemID string
 }
 
@@ -118,7 +119,7 @@ func (s *Store) HandleGardenSeedEvent(
 		return nil, false, fmt.Errorf("handle Garden seed event %d: quiet event has %d deliveries", eventSeq, len(deliveries))
 	}
 	for _, delivery := range deliveries {
-		if delivery.To == (inbox.Address{}) || delivery.ItemID == "" {
+		if delivery.To == (who.Address{}) || delivery.ItemID == "" {
 			return nil, false, fmt.Errorf("handle Garden seed event %d: delivery recipient and item id are required", eventSeq)
 		}
 	}
@@ -185,7 +186,7 @@ func (s *Store) HandleGardenSeedEvent(
 	return created, true, nil
 }
 
-func (s *Store) UnreadGardenSeedMailboxItems(to inbox.Address) ([]GardenSeedMailboxItem, error) {
+func (s *Store) UnreadGardenSeedMailboxItems(to who.Address) ([]GardenSeedMailboxItem, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rows, err := s.db.Query(`SELECT source_id, bell_name FROM inbox_items
@@ -222,7 +223,7 @@ func (s *Store) PendingGardenSeedMailboxItems() ([]GardenSeedMailboxItem, error)
 		if err := rows.Scan(&address, &item.SeedID, &item.BellName); err != nil {
 			return nil, err
 		}
-		item.To, err = inbox.ParseAddress(address)
+		item.To, err = who.ParseAddress(address)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +253,7 @@ func (s *Store) PendingGardenSeedBellNames() ([]string, error) {
 }
 
 func (s *Store) UnreadGardenSeedMailboxSeeds(sessionID protocol.SessionID) ([]string, error) {
-	items, err := s.UnreadGardenSeedMailboxItems(inbox.ToSession(sessionID))
+	items, err := s.UnreadGardenSeedMailboxItems(who.ToSession(sessionID))
 	if err != nil {
 		return nil, err
 	}

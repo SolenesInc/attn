@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 // sendToInbox is the way to put something in front of an agent.
@@ -21,7 +22,7 @@ func (d *Daemon) sendToInbox(item inbox.Item) (inbox.Receipt, error) {
 	}
 	return d.deliverSavedInbox(item.To, id, savedAt), nil
 }
-func (d *Daemon) deliverSavedInbox(to inbox.Address, id string, savedAt time.Time) inbox.Receipt {
+func (d *Daemon) deliverSavedInbox(to who.Address, id string, savedAt time.Time) inbox.Receipt {
 	receipt, err := d.deliverInbox(to)
 	receipt.ItemID = id
 	if err != nil {
@@ -46,12 +47,20 @@ func (d *Daemon) inboxItemRungSince(id string, since time.Time) bool {
 	notified, err := time.Parse(time.RFC3339Nano, item.NotifiedAt)
 	return err == nil && !notified.Before(since)
 }
-func (d *Daemon) kickInboxAfterCommit(addresses ...inbox.Address) {
+func (d *Daemon) kickInboxAfterCommit(addresses ...who.Address) {
 	for _, a := range addresses {
 		d.kickInbox(a)
 	}
 }
-func (d *Daemon) withdrawFromInbox(to inbox.Address, kind inbox.Kind, key string) error {
+func memberAddress(key string) (who.Address, error) {
+	k, err := who.ParseMemberKey(key)
+	if err != nil {
+		return who.Address{}, err
+	}
+	return who.Member(k).Address(), nil
+}
+
+func (d *Daemon) withdrawFromInbox(to who.Address, kind inbox.Kind, key string) error {
 	if err := d.store.WithdrawInbox(to, kind, key); err != nil {
 		return err
 	}
@@ -60,30 +69,30 @@ func (d *Daemon) withdrawFromInbox(to inbox.Address, kind inbox.Kind, key string
 }
 
 // chiefAddressOf is the chief inbox of the profile this session is chief of.
-func (d *Daemon) chiefAddressOf(sessionID protocol.SessionID) (inbox.Address, bool) {
+func (d *Daemon) chiefAddressOf(sessionID protocol.SessionID) (who.Address, bool) {
 	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" || d.store == nil {
-		return inbox.Address{}, false
+		return who.Address{}, false
 	}
 	profileID, err := d.store.SessionProfileID(sessionID)
 	if err != nil || profileID == "" || d.chiefOfProfile(profileID) != sessionID {
-		return inbox.Address{}, false
+		return who.Address{}, false
 	}
-	return inbox.ToChief(profileID), true
+	return who.ToChief(profileID), true
 }
-func (d *Daemon) inboxAddressOf(sessionID protocol.SessionID) inbox.Address {
-	if member := d.crewMemberBoundTo(sessionID); member != "" {
-		return inbox.ToMember(member)
+func (d *Daemon) inboxAddressOf(sessionID protocol.SessionID) who.Address {
+	if member, bound := d.crewMemberBoundToSession(sessionID); bound {
+		return who.Member(member.Key).Address()
 	}
 	if chief, ok := d.chiefAddressOf(sessionID); ok {
 		return chief
 	}
-	return inbox.ToSession(sessionID)
+	return who.ToSession(sessionID)
 }
-func (d *Daemon) inboxRoleAddresses(sessionID protocol.SessionID) []inbox.Address {
-	addresses := []inbox.Address{inbox.ToSession(sessionID)}
-	if member := d.crewMemberBoundTo(sessionID); member != "" {
-		addresses = append(addresses, inbox.ToMember(member))
+func (d *Daemon) inboxRoleAddresses(sessionID protocol.SessionID) []who.Address {
+	addresses := []who.Address{who.ToSession(sessionID)}
+	if member, bound := d.crewMemberBoundToSession(sessionID); bound {
+		addresses = append(addresses, who.Member(member.Key).Address())
 	}
 	if chief, ok := d.chiefAddressOf(sessionID); ok {
 		addresses = append(addresses, chief)
@@ -91,8 +100,8 @@ func (d *Daemon) inboxRoleAddresses(sessionID protocol.SessionID) []inbox.Addres
 	return addresses
 }
 
-func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]inbox.Address, error) {
-	addresses := []inbox.Address{inbox.ToSession(sessionID)}
+func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]who.Address, error) {
+	addresses := []who.Address{who.ToSession(sessionID)}
 	if chief, ok := d.chiefAddressOf(sessionID); ok {
 		addresses = append(addresses, chief)
 	}
@@ -104,7 +113,7 @@ func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]inbox.Address
 	for _, candidate := range members {
 		if candidate.BindingSession == sessionID && d.crewBindingLive(candidate) {
 			member = candidate.ID
-			addresses = append(addresses, inbox.ToMember(member))
+			addresses = append(addresses, who.Member(candidate.Key).Address())
 			break
 		}
 	}
@@ -113,7 +122,8 @@ func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]inbox.Address
 		return nil, err
 	}
 	for _, address := range pending {
-		seed, _, err := d.readSeed(address.SeedID())
+		seedID, _ := address.TenderOf()
+		seed, _, err := d.readSeed(seedID)
 		if err != nil {
 			return nil, err
 		}

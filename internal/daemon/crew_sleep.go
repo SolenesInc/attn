@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
@@ -74,7 +75,7 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 	}
 
 	prompt := prompts.RenderText("crew", "sleep-requested", prompts.Values{})
-	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: inbox.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
+	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: who.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", member.Name, err)
 	}

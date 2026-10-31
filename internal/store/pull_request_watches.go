@@ -10,10 +10,11 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
+	"github.com/victorarias/attn/internal/who"
 )
 
 type PullRequestWatch struct {
-	To            inbox.Address
+	To            who.Address
 	SessionID     protocol.SessionID
 	PRID          string
 	Mode          prreadiness.Mode
@@ -32,7 +33,7 @@ func PullRequestWatchCoalesceKey(prID string) string { return "pull-request-watc
 
 func PullRequestWatchOutageCoalesceKey(prID string) string { return "pull-request-outage:" + prID }
 
-func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, to inbox.Address, mode prreadiness.Mode, reviewer string, at time.Time) (bool, bool, error) {
+func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, to who.Address, mode prreadiness.Mode, reviewer string, at time.Time) (bool, bool, error) {
 	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
 		return false, false, err
 	}
@@ -99,7 +100,7 @@ func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, to inbox.Address,
 	return recorded, true, nil
 }
 
-func (s *Store) StopPullRequestWatch(to inbox.Address, prID string) (bool, error) {
+func (s *Store) StopPullRequestWatch(to who.Address, prID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -137,7 +138,7 @@ func (s *Store) StopPullRequestWatch(to inbox.Address, prID string) (bool, error
 	return true, tx.Commit()
 }
 
-func clearUnreadPullRequestItems(tx *sql.Tx, to inbox.Address, prID string) error {
+func clearUnreadPullRequestItems(tx *sql.Tx, to who.Address, prID string) error {
 	_, err := tx.Exec(`
 		DELETE FROM inbox_items
 		WHERE address=? AND kind=? AND source_id=? AND read_at=''
@@ -145,7 +146,7 @@ func clearUnreadPullRequestItems(tx *sql.Tx, to inbox.Address, prID string) erro
 	return err
 }
 
-func clearUnreadPullRequestStateItems(tx *sql.Tx, to inbox.Address, prID string) error {
+func clearUnreadPullRequestStateItems(tx *sql.Tx, to who.Address, prID string) error {
 	_, err := tx.Exec(`
 		DELETE FROM inbox_items
 		WHERE address=? AND kind=? AND source_id=? AND read_at=''
@@ -170,7 +171,7 @@ func (s *Store) PullRequestWatches() []PullRequestWatch {
 	return watches
 }
 
-func (s *Store) PullRequestWatch(to inbox.Address, prID string) (PullRequestWatch, bool) {
+func (s *Store) PullRequestWatch(to who.Address, prID string) (PullRequestWatch, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.db == nil {
@@ -218,7 +219,7 @@ func (s *Store) SessionPullRequestSessionIDs(prID string) ([]string, error) {
 }
 
 type PullRequestWatchReconcile struct {
-	To            inbox.Address
+	To            who.Address
 	SessionID     protocol.SessionID
 	PRID          string
 	CreatedAt     string
@@ -331,7 +332,7 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]I
 	return deliveries, projectionChanged, nil
 }
 
-func (s *Store) RecordPullRequestWatchFailure(to inbox.Address, sessionID protocol.SessionID, prID string, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, bool, error) {
+func (s *Store) RecordPullRequestWatchFailure(to who.Address, sessionID protocol.SessionID, prID string, createdAt string, mode prreadiness.Mode, reviewer, message string, outage inbox.Item, at time.Time) (*InboxDelivery, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -385,7 +386,7 @@ func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error)
 		return PullRequestWatch{}, err
 	}
 	var err error
-	watch.To, err = inbox.ParseAddress(address)
+	watch.To, err = who.ParseAddress(address)
 	if err != nil {
 		return PullRequestWatch{}, err
 	}
