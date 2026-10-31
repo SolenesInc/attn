@@ -42,7 +42,7 @@ note. Asks are an experimental setting, off by default.
 
 ### Triggers
 
-- The user's answer is a user message in the addressee's inbox; a ring types it into the conversation without waiting for the agent's turn to end (`internal/daemon/asks.go`; the rules are in `docs/inbox.md`).
+- The user's answer is a user message in the addressee's inbox; a ring types it into the conversation without waiting for the agent's turn to end (`internal/daemon/asks.go`; the rules are in `docs/internal/inbox.md`).
 
 ## Driving it
 
@@ -90,7 +90,7 @@ Preconditions:
 
 - **Durability across restarts**: open asks, answers and the answer's inbox item are the daemon's records and survive app, daemon and machine restarts. The drawer shows answered asks for a day.
 - **Linux**: `attn ask` works the same where the daemon and CLI run on Linux. `dock.asks` is Ctrl+Alt+R there, and Ctrl+Enter sends from the drawer.
-- **Performance and idle cost**: an ask's markdown is at most 64 KiB. Nothing measures the drawer's idle cost; when a change touches its rendering, check it for repaints with `docs/perf-testing.md`.
+- **Performance and idle cost**: an ask's markdown is at most 64 KiB. Nothing measures the drawer's idle cost; when a change touches its rendering, check it for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep its own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: ⌘⇧R opens the drawer and puts the keyboard on the first answer field; j, k, r, o, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
 - **Compatibility across versions**: an agent keeps the asks setting it launched with. Turning asks on reaches only agents launched after it; earlier ones refuse `attn ask` until they relaunch.

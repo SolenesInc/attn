@@ -55,7 +55,7 @@ checks.
 
 ### Triggers
 
-- A state move, a ringing note or check move, an armed or cleared harvest condition, and a seed's last blocker closing send the tender and watchers a seed update, which rings them (`internal/daemon/garden_nudges.go`; the rules are in `docs/inbox.md`).
+- A state move, a ringing note or check move, an armed or cleared harvest condition, and a seed's last blocker closing send the tender and watchers a seed update, which rings them (`internal/daemon/garden_nudges.go`; the rules are in `docs/internal/inbox.md`).
 - A seed armed with `harvest --when-merged` harvests itself when its pull request merges, on the next pull request refresh (`internal/daemon/garden_harvest_when.go`).
 - The garden advisor classifies seeds during a review and can draft a handoff (`internal/daemon/garden_advisor.go`, prompts in `internal/prompts/content/garden-advisor/`).
 
@@ -132,7 +132,7 @@ Preconditions:
 - **Linux**: `attn seed` works the same where the daemon and CLI run on Linux. `board.open` is Ctrl+Alt+G there (`LINUX_SHORTCUTS`).
 - **Outposts**: an agent on an outpost runs `attn seed` against the home's garden; its attn commands reach the home.
 - **Profiles**: a seed belongs to the profile that planted it, for life. Lists, links, children, claims and delegations stay in that profile, and another profile's seed is refused by name. Inside attn the session picks the profile; outside, `--profile` does when there are several.
-- **Performance and idle cost**: when the garden holds more seeds than the app keeps, the board says "The garden holds N seeds; this board has the newest M". `app/src/components/gardenSearch.bench.ts` measures search. Nothing measures an open garden's idle cost; when a change touches its rendering, check it for repaints with `docs/perf-testing.md`.
+- **Performance and idle cost**: when the garden holds more seeds than the app keeps, the board says "The garden holds N seeds; this board has the newest M". `app/src/components/gardenSearch.bench.ts` measures search. Nothing measures an open garden's idle cost; when a change touches its rendering, check it for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: every harness drives the garden with the same `attn seed` verbs and reads the same garden prompts. A seed update rings the tender in its own harness; a shell never gets a ring.
 - **Keyboard and native input**: ⌘⇧T, the palette, arrows, `/` and Escape reach the garden and its rows, and a card's open menu takes arrows and Enter. After ⌘⇧T the arrows do nothing until Tab or a click puts focus inside the garden.
 - **Compatibility across versions**: a later version reads today's seeds, through the store's garden migrations. Retired verbs answer with their replacement: `attn ticket` and `attn seed handover`.
@@ -152,7 +152,7 @@ Preconditions:
 - On a fresh instance, `attn seed attach` fails with `notebook root ... no such file or directory` until something creates the notebook folder; the journal append in the preconditions does.
 - A new check report clears the verdict. Report first, then confirm.
 - Typing through `wsctl input` delays rings by 30 seconds. A `rang <session>` reply only says who will get the update; the proof is the 📬 line in that agent's terminal.
-- An ordinary note does not ring; only `--ring` does, along with state moves and the other events in `docs/inbox.md`.
+- An ordinary note does not ring; only `--ring` does, along with state moves and the other events in `docs/internal/inbox.md`.
 - What's new on a fresh app takes ⌘⇧T: the shortcut seems dead until it is dismissed.
 - ⌘⇧T opens the garden in the frame used last, and fullscreen keeps its list or board view across relaunches. A run that opens fullscreen is not a bug.
 - `bridge capture_screenshot` leaves out terminal content and the seed chip's popover. Prove those with `./attn agent peek` and `bridge dom_text`.

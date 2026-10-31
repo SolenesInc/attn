@@ -268,17 +268,16 @@ Every feature file has these sections, in this order:
 7. `## Gotchas`: traps that waste or invalidate a run, and what "working but
    wrong" looks like for the feature.
 
-Write from the user's point of view. Name user paths, stable handles,
-required state, commands and observable results, never how the code works
-inside; a source path appears only to anchor a way in, a test, or a prompt
-whose text a gotcha quotes. Link
-another feature as `[<id>.md](<id>.md)`. Use the terms in `docs/glossary.md`
-and none of its legacy names in prose. Exact handles and output are
-literal: a command, flag, id, selector, JSON key, CLI output or UI label is
-written as the product has it, in backticks or quotes, even when it carries
-an older name the glossary lists (`waiting_input`, `activeLeaf`, `panes`,
-`runtime_id`, "Close Pane", "Reopen", "Wake"). The file's Gotchas name such a
-label as working but wrong. Every command, shortcut id, palette id, verb,
+Write from the user's point of view. Name user paths, stable handles, required
+state, commands and observable results, never how the code works inside; a
+source path appears only to anchor a way in, a test, or a prompt whose text a
+gotcha quotes. Link another feature as `[<id>.md](<id>.md)`. Use the terms in
+`docs/internal/glossary.md` and none of its legacy names in prose. Exact handles
+and output are literal: a command, flag, id, selector, JSON key, CLI output or
+UI label is written as the product has it, in backticks or quotes, even when it
+carries an older name the glossary lists (`waiting_input`, `activeLeaf`,
+`panes`, `runtime_id`, "Close Pane", "Reopen", "Wake"). The file's Gotchas name
+such a label as working but wrong. Every command, shortcut id, palette id, verb,
 path and scenario id must exist at HEAD.
 
 ## Contexts

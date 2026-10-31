@@ -14,7 +14,7 @@ those packages and posts the `benchstat` delta in its summary.
 
 ## Real-app memory
 
-These hand-run [harness](../app/scripts/real-app-harness/AGENTS.md) scenarios
+These hand-run [harness](../../app/scripts/real-app-harness/AGENTS.md) scenarios
 measure the whole attn process tree and compare against the machine's own
 baseline (`~/.attn-perf-registry/`, or `perf-baselines.json` for committed
 reference machines). A regression sets `ok: false` in the verdict without

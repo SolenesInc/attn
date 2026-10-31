@@ -6,9 +6,9 @@ description: Use when landing a change on attn's main, from checking and reviewi
 # Land on main
 
 attn lands changes straight on `main`, with no pull request;
-`docs/trunk-based-development.md` explains the system around it. A landing is
-one push of finished commits through `scripts/land.sh`. Your work ends when
-it pushes: CI, the sheriff and review on `main` take it from there.
+`docs/internal/trunk-based-development.md` explains the system around it. A
+landing is one push of finished commits through `scripts/land.sh`. Your work
+ends when it pushes: CI, the sheriff and review on `main` take it from there.
 
 ## Branch
 

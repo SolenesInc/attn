@@ -73,7 +73,7 @@ Ownership:
     cmd/attn/seed.go                    first-read layout, --since, --section, notes --since/--kind, ls --plot
     internal/prompts/content/           session/garden-update.md, delegation/seed.md (first sentence), garden.md,
                                         resources/seed-guide.md, skills/attn/references/garden.md, delegated-agent.md
-    docs/inbox.md, docs/glossary.md     bell text; bookmark, save number, log entry
+    docs/internal/inbox.md, docs/internal/glossary.md     bell text; bookmark, save number, log entry
 
 Interfaces. Call sites first:
 
@@ -163,7 +163,7 @@ func Outline(body string) []OutlinePart
 func Section(body, ref string) (string, error) // ref: a heading prefix or an id like D3; the error lists the parts
 ```
 
-New wire fields: edit main.tsp, run `make generate-types`, and commit the generated files and schema hash. `inbox_items.after_seq` is a schema change: follow docs/db-migrations.md.
+New wire fields: edit main.tsp, run `make generate-types`, and commit the generated files and schema hash. `inbox_items.after_seq` is a schema change: follow docs/internal/db-migrations.md.
 
 Invariants:
 
@@ -220,7 +220,7 @@ State:
 
 ## Execution
 
-Six children. Each lands on main with scripts/land.sh as docs/trunk-based-development.md describes; there are no pull requests.
+Six children. Each lands on main with scripts/land.sh as docs/internal/trunk-based-development.md describes; there are no pull requests.
 
 - Start in parallel: every-seed-change-writes-log-entry (s-5p8jrh; D2, D9), show-notes-read-since-bookmark (s-h5rsb7; D1, D3, D4, D12) and plot-payloads-take-slugs-part-after (s-zx00jk; D10, D11).
 - After the since-read child: first-read-leads-news-plots-show (s-43bhac; D5, D6) and bells-openings-hand-over-bookmark (s-3h472p; D7).

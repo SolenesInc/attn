@@ -1,13 +1,13 @@
 # Telemetry
 
 What attn records about its own use, kept in an outbox and uploaded only when
-the user turns it on. With usage analytics on, attn writes redacted records
-of its event bus, app actions, `attn` command outcomes and resource samples to
-an outbox on the machine and keeps them 7 days. Settings › Analytics shows
-every record exactly as it is stored. Sharing uploads the outbox to attn's
-maintainers; both are off by default. `docs/telemetry.md` says what each
-record holds and what leaves the machine. Vents, which live in the same
-section, are in [vents.md](vents.md).
+the user turns it on. With usage analytics on, attn writes redacted records of
+its event bus, app actions, `attn` command outcomes and resource samples to an
+outbox on the machine and keeps them 7 days. Settings › Analytics shows every
+record exactly as it is stored. Sharing uploads the outbox to attn's
+maintainers; both are off by default. `docs/guide/reference/telemetry.md` says
+what each record holds and what leaves the machine. Vents, which live in the
+same section, are in [vents.md](vents.md).
 
 ## Sub-features
 
@@ -17,7 +17,7 @@ section, are in [vents.md](vents.md).
 - `sharing`: an upload every 5 minutes, and once when sharing turns on; a refusal shows with its limit.
 - `forget-install`: delete what the server holds and start a new install.
 - `clear-record`: delete the local outbox and dismissed vents.
-- `ingest`: attn-ingest, the service that receives uploads (`cmd/attn-ingest`, `docs/attn-ingest.md`).
+- `ingest`: attn-ingest, the service that receives uploads (`cmd/attn-ingest`, `docs/internal/attn-ingest.md`).
 
 ## How to get to it
 
@@ -45,7 +45,7 @@ Preconditions:
 - The baseline instance with its app (`bridge --launch --wait-ready ping` answers) and What's new dismissed (`bridge dismiss_whats_new`).
 - A proof folder, `P=$(mktemp -d /tmp/drive-attn-telemetry.XXXX) && echo "export P=$P" >> $DRIVE_ENV`.
 - The baseline's `ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:1` in the daemon's environment, so a stray click on a sharing control cannot reach the real service. A daemon started without the env file lacks it: stop it and start it again in the instance shell.
-- Sharing only: a local attn-ingest on `127.0.0.1:8080`, started as "Running locally" in `docs/attn-ingest.md` says (`make ingest-clickhouse` needs Docker; `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), and the daemon started with `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` appended to the env file instead. Without both, skip the sharing step and report it skipped.
+- Sharing only: a local attn-ingest on `127.0.0.1:8080`, started as "Running locally" in `docs/internal/attn-ingest.md` says (`make ingest-clickhouse` needs Docker; `go run ./cmd/attn-ingest` needs `ATTN_INGEST_CLICKHOUSE_URL`, `ATTN_INGEST_IP_SECRET` and `ATTN_INGEST_LISTEN=127.0.0.1:8080`), and the daemon started with `export ATTN_ANALYTICS_INGEST_URL=http://127.0.0.1:8080` appended to the env file instead. Without both, skip the sharing step and report it skipped.
 
 - **Turn recording on in the app.** Press ⌘, (`ui.openSettings`): run `bridge native_key '{"key":",","modifiers":["command"]}'`; `bridge settings_get_state` shows `open: true`. Click `[data-testid="settings-nav-experimental"]` natively, then `[data-testid="settings-analytics-toggle"]`. `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","timeoutMs":5000}'` matches, and `./attn settings get analytics.enabled` prints `true`.
 - **Off and on from the shell.** `./attn settings set analytics.enabled false` prints `analytics.enabled = false`, and `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-analytics\"]","absent":true,"timeoutMs":5000}'` matches. `./attn settings set analytics.enabled true` brings the section back.

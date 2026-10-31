@@ -26,8 +26,8 @@ The outpost needs `sh`, `uname`, `cat`, `mkdir`, `mv`, `chmod`, and `busctl`.
 First run `ssh <destination>` in your terminal and answer any authentication
 or host-key prompts. attn's background commands never prompt.
 
-The home and outpost use the same [instance](instances.md) name. A named home
-starts only its same-named instance on the outpost.
+The home and outpost use the same [instance](../../internal/instances.md) name.
+A named home starts only its same-named instance on the outpost.
 
 On the home, turn on **Outposts** in Settings → Experimental. Open Settings →
 Outposts, enter the **ssh destination**, and click **Add outpost**. Name is
@@ -109,10 +109,11 @@ reconnect, the home marks the shell recoverable. **Resume** starts a new shell
 in its place.
 
 An `attn` command in an outpost shell or a plain SSH shell reaches the home
-through the outpost. [Garden](glossary.md) commands and document subscriptions
-use the home's records. Hooks and machine settings run on the outpost. If the home is
-unreachable, the command fails immediately and names the home. If the bridge
-is lost during a command, the error says that it may have run.
+through the outpost. [Garden](../../internal/glossary.md) commands and document
+subscriptions use the home's records. Hooks and machine settings run on the
+outpost. If the home is unreachable, the command fails immediately and names the
+home. If the bridge is lost during a command, the error says that it may have
+run.
 
 Files on an outpost don't open on the Mac yet. **Open in editor** and
 ⌘-clicked paths in an outpost shell fail and name the outpost, and nothing

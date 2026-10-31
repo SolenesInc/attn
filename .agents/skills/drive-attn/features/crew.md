@@ -49,7 +49,7 @@ may close or reload any agent of the profile.
 
 ### Triggers
 
-- An item for an asleep member wakes them before the ring, within the wake limit of `crew.wake_limit` wakes per `crew.wake_limit_window_seconds` (`internal/daemon/crew_wake.go`, `internal/daemon/inbox_delivery.go`; rules in `docs/inbox.md`).
+- An item for an asleep member wakes them before the ring, within the wake limit of `crew.wake_limit` wakes per `crew.wake_limit_window_seconds` (`internal/daemon/crew_wake.go`, `internal/daemon/inbox_delivery.go`; rules in `docs/internal/inbox.md`).
 - A lifecycle tick every 60 seconds sends an idle member a cache heartbeat before its cache lapses, and asks it to sleep once the user has been away for `crew.away_seconds` (`internal/daemon/crew_lifecycle.go`). `crew.heartbeat_enabled` and `crew.autosleep_enabled` turn each off.
 
 ## Driving it

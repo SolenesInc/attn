@@ -73,7 +73,7 @@ export function printCommonHelp(scriptName) {
 
   console.log(`Usage: pnpm exec node ${scriptName} [options]
 
-Active instance: ${label}  (set ATTN_INSTANCE, or ATTN_HARNESS_INSTANCE to override; see docs/instances.md)
+Active instance: ${label}  (set ATTN_INSTANCE, or ATTN_HARNESS_INSTANCE to override; see docs/internal/instances.md)
 
 Options:
   --ws-url <url>             Daemon websocket URL (default: ${wsUrl})

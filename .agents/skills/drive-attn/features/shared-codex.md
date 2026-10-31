@@ -2,13 +2,13 @@
 
 Codex sessions share one app-server that attn keeps updated and restarts. With
 the experimental setting on, every Codex terminal in a profile talks to one
-Codex app-server instead of running a Codex of its own. That lets a
-conversation outlive the terminal that showed it: a terminal that switches to
-another conversation leaves the first one running as a hidden session, which
-still queues, takes messages and answers approvals. When a newer Codex is out,
-attn offers to install it, moves the app-server to it once no turn runs, and
-offers to reload the tiles still on the old one. `docs/using-shared-codex.md`
-is the user's guide.
+Codex app-server instead of running a Codex of its own. That lets a conversation
+outlive the terminal that showed it: a terminal that switches to another
+conversation leaves the first one running as a hidden session, which still
+queues, takes messages and answers approvals. When a newer Codex is out, attn
+offers to install it, moves the app-server to it once no turn runs, and offers
+to reload the tiles still on the old one.
+`docs/guide/reference/using-shared-codex.md` is the user's guide.
 
 ## Sub-features
 
@@ -42,7 +42,7 @@ is the user's guide.
 - The first shared terminal starts the app-server as a terminal of its own; it stops when no open session and no shared terminal needs it (`internal/daemon/codex_shared.go`).
 - Once a day attn asks `codex doctor` for the latest Codex, and it reads the installed Codex when a shared terminal opens, when the app-server starts and when an update it ran finishes (`internal/daemon/codex_update.go`).
 - When the installed Codex differs from the one the app-server runs, attn restarts it once no turn runs and every shared terminal has finished starting (`internal/daemon/codex_restart.go`).
-- attn answers Codex's folder trust question for a folder where an agent session already started a conversation, and for every automation (`docs/using-shared-codex.md`).
+- attn answers Codex's folder trust question for a folder where an agent session already started a conversation, and for every automation (`docs/guide/reference/using-shared-codex.md`).
 
 ## Driving it
 

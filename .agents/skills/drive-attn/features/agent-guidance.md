@@ -72,7 +72,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: guidance is fixed when a harness starts. Claude Code gets the current guidance on every launch, a resume included. A Codex conversation resumed through the shared app-server keeps the developer instructions it started with (`docs/harnesses.md`). The skill on disk refreshes at daemon startup, when a harness executable setting is saved, and at launch.
+- **Durability across restarts**: guidance is fixed when a harness starts. Claude Code gets the current guidance on every launch, a resume included. A Codex conversation resumed through the shared app-server keeps the developer instructions it started with (`docs/internal/harnesses.md`). The skill on disk refreshes at daemon startup, when a harness executable setting is saved, and at launch.
 - **Linux**: `attn skill`, `attn prompts` and `attn presence` work the same where the CLI runs on Linux, and the skill lands in the same folders under the home.
 - **Harnesses**: Claude Code reads the launch instructions as appended system instructions and the skill from `~/.claude/skills/attn`. Codex reads them as developer instructions and the skill from `~/.agents/skills/attn`. A plugin harness gets the instructions only when its driver asks for them (the `launch_instructions` capability), and no attn skill is synced for it. The bundled Pi driver (`plugins/attn-pi/src/driver.ts`) does not ask, so a Pi session gets neither from attn. Claude Code launches with its own `ListAgents` tool denied unless the daemon runs with `ATTN_CLAUDE_PEER_MESSAGING` on; peers message each other through `attn agent msg` ([inbox.md](inbox.md)).
 - **Compatibility across versions**: an agent an earlier build started keeps the text it launched with. The prompt compatibility tests and `internal/prompttest/testdata/` keep what those agents rely on, and `app/src/prompts/render.compatibility.test.ts` keeps the app's renderer in step. `attn skill` prints the copy bundled with the running build, and the sync removes reference files a newer build dropped.
@@ -88,7 +88,7 @@ Preconditions:
 ## Gotchas
 
 - Prompts and the skill are embedded at build time. After editing `internal/prompts/content/**`, run `make build` before `./attn prompts` or `./attn skill` show the change, and relaunch the agent before it reads it.
-- The prompt editor (`go run ./cmd/prompt-editor`, `cmd/prompt-editor/main.go`, with `docs/prompt-authoring.md`) is how maintainers change the text. It is not a way in for people or agents, so nothing here drives it; its tests are under Kernel.
+- The prompt editor (`go run ./cmd/prompt-editor`, `cmd/prompt-editor/main.go`, with `docs/internal/prompt-authoring.md`) is how maintainers change the text. It is not a way in for people or agents, so nothing here drives it; its tests are under Kernel.
 - `attn prompts` is a preview: it says so, and it is not proof that an agent received the text. The proof is the mock agent's launch record.
 - An input left out of `--set` is false or absent. `render session launch` without `--set garden_available=true` drops the garden guidance that every real launch carries.
 - A named instance does not write the skill into your harness homes; only production and `dev` do, or an instance whose shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`. Checking `~/.claude/skills/attn` after a run on a named instance proves nothing about the change.

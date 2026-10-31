@@ -7,8 +7,8 @@ description: Drive attn's CLI, daemon and app on a non-production instance the w
 
 This skill is for maintainers: the agents and people changing attn. It starts
 attn on a named instance, drives a feature through each way in, and keeps the
-proof. `docs/instances.md` and `app/scripts/real-app-harness/AGENTS.md` hold
-the detail; this file holds the commands you need in hand.
+proof. `docs/internal/instances.md` and `app/scripts/real-app-harness/AGENTS.md`
+hold the detail; this file holds the commands you need in hand.
 
 Production stays out of every run: never point a daemon, app, recipe,
 harness or test at `~/.attn` or the production app. A feature that needs

@@ -32,13 +32,13 @@ Report a finding only when all of these hold:
 
 Look in this order:
 
-1. Design. Does the change fit attn's model (`docs/glossary.md`)? For each
-   new layer, option, fallback, cache or copy of state, name the current
+1. Design. Does the change fit attn's model (`docs/internal/glossary.md`)? For
+   each new layer, option, fallback, cache or copy of state, name the current
    requirement it serves. If none does, say what to remove and why behavior
    stays the same.
 2. Behavior. Edge cases, concurrency, restarts, Linux, what the user sees.
 3. Tests. Would they fail if the code broke? Do they rely only on promises
-   (`docs/testing.md`)?
+   (`docs/internal/testing.md`)?
 
 Leave out style, naming, anything CI checks, and what predates the unit.
 When you are not sure, leave it out: no finding beats a weak one.

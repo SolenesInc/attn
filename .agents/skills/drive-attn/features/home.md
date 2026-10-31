@@ -79,7 +79,7 @@ Preconditions:
 - **Linux**: `session.goToDashboard` is Ctrl+Alt+H (`LINUX_SHORTCUTS`).
 - **Outposts**: an agent whose outpost is offline is marked offline on home, never sits under "Your turn", and has no unsnooze button.
 - **Profiles**: home lists the selected profile's sessions and asks. Notifications are the daemon's, not a profile's: every profile shows the same list.
-- **Performance and idle cost**: turn ages re-read the clock every 30 seconds, and the GitHub rate-limit banner ticks every second only while it shows. Nothing measures home's idle cost; when a change touches its rendering, check it for repaints with `docs/perf-testing.md`.
+- **Performance and idle cost**: turn ages re-read the clock every 30 seconds, and the GitHub rate-limit banner ticks every second only while it shows. Nothing measures home's idle cost; when a change touches its rendering, check it for repaints with `docs/internal/perf-testing.md`.
 - **Keyboard and native input**: ⌘⇧H reaches home from anywhere, a text field included. The intro takes ←, →, Enter and Escape. Home's session rows take clicks only (see Gotchas).
 - **Flow**: in desktop flow, the Sessions card groups by state. Queue flow puts "Your turn" first and the rest under "Settled", and shows "All settled" when nothing is owed. The snoozed group shows in both.
 

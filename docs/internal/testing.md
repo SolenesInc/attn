@@ -104,7 +104,7 @@ it did. No test sleeps or polls.
   `expect.poll`, `page.waitForFunction`), or install `page.clock` and run
   forward the timers the behavior depends on.
 - Scenarios step each daemon with the harness's `stepClock`, as the
-  [harness guide](../app/scripts/real-app-harness/AGENTS.md) describes.
+  [harness guide](../../app/scripts/real-app-harness/AGENTS.md) describes.
 - A process signals that it is ready by opening a pipe the test reads.
   `procwait.Exited` waits for any process to exit, including one the test did
   not start.
@@ -296,7 +296,7 @@ byte limit, original size and omitted bytes.
 
 Scenarios run the packaged app in CI under Xvfb; see the
 [verification requirements](instances.md#verification-requirements) and the
-[harness guide](../app/scripts/real-app-harness/AGENTS.md). They cover
+[harness guide](../../app/scripts/real-app-harness/AGENTS.md). They cover
 rendering, focus, native keyboard and pointer input, menus, scrolling, and
 whole-product behavior such as queue mode. Their verdicts come from the screen,
 the protocol, or the CLI, never from the daemon's database.
@@ -344,7 +344,7 @@ repair it to match the new internals.
 ## Isolation
 
 Every test that reaches config paths follows the
-[test safety contract](../AGENTS.md#test-safety).
+[test safety contract](../../AGENTS.md#test-safety).
 
 Wire and CLI stack worlds see an unavailable Tailscale backend by default.
 Tests of Tailscale provide their own CLI fake; the host's installed CLI is never

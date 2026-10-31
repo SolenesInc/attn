@@ -1,7 +1,7 @@
 # attn
 
-Always read [docs/glossary.md](docs/glossary.md) to understand and change attn
-internals. It is attn's domain model.
+Always read [docs/internal/glossary.md](docs/internal/glossary.md) to understand
+and change attn internals. It is attn's domain model.
 
 attn stands for Attention: an interface friendly to both human and agent brains,
 built as a harness augmenter. What it does today, and what each part asks of you
@@ -94,8 +94,8 @@ responsibilities to keep consistent. Moving complexity behind a helper does not
 count.
 
 - The daemon owns application state; the app owns rendering.
-- Follow [the database migration rules](docs/db-migrations.md) for schema
-  changes.
+- Follow [the database migration rules](docs/internal/db-migrations.md) for
+  schema changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
 - Riskier changes, such as a new harness integration or PTY runtime, land first
@@ -113,7 +113,7 @@ count.
 attn is developed trunk-based: changes land straight on `main`, are reviewed
 before landing and again on `main`, and releases ship only reviewed, green
 commits.
-[Trunk-based development](docs/trunk-based-development.md) explains the
+[Trunk-based development](docs/internal/trunk-based-development.md) explains the
 system.
 
 - Land with the `land-on-main` skill: check, review, then `scripts/land.sh`.
@@ -131,9 +131,9 @@ system.
   does, say what to remove, what replaces it, and why behavior stays the same.
   Fewer lines on their own are not a reason.
 - Ask for a test, validation, or fallback only when you can name the
-  requirement or [testing promise](docs/testing.md) it protects. Inputs that
-  cannot happen don't count, and neither does a unit test for behavior a wire
-  test already covers.
+  requirement or [testing promise](docs/internal/testing.md) it protects. Inputs
+  that cannot happen don't count, and neither does a unit test for behavior a
+  wire test already covers.
 
 ### Author
 
@@ -189,12 +189,12 @@ that does it or proves it, so a reviewer reruns it instead of trusting a
 summary.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
-[verification requirements](docs/instances.md#verification-requirements).
+[verification requirements](docs/internal/instances.md#verification-requirements).
 Rendering changes must avoid continuous repainting.
 
 ## Writing tests
 
-Follow [Testing](docs/testing.md). In short:
+Follow [Testing](docs/internal/testing.md). In short:
 
 - Commit tests that guard a promise attn makes: behavior that users, the agents
   attn runs, clients, or later versions rely on. Check your own work by running
@@ -304,7 +304,9 @@ Never hand-edit `internal/protocol/generated.go` or
 ## Documentation
 
 Docs define product vocabulary, explain intended behavior and tell people how to
-use, run and test attn. Keep the glossary to short definitions.
+use, run and test attn. Keep the glossary to short definitions. Docs for people
+using attn live in `docs/guide/`; docs for people changing attn live in
+`docs/internal/`.
 
 Do not write implementation notes anywhere. The code must explain how it works.
 If it needs a prose explanation of its wiring or control flow, make the code
@@ -320,30 +322,34 @@ one text.
 Read the relevant entry when the task touches its subject. When changing or
 working on:
 
-- Database schema or migrations => docs/db-migrations.md
-- Tests, before writing, changing, or deleting them => docs/testing.md
-- How a harness behaves, before relying on it => docs/harnesses.md; check new
-  claims in its source or with a probe and record them there
-- The inbox: addresses, rings, wakes, seed updates or notices => docs/inbox.md
+- Database schema or migrations => docs/internal/db-migrations.md
+- Tests, before writing, changing, or deleting them => docs/internal/testing.md
+- How a harness behaves, before relying on it => docs/internal/harnesses.md;
+  check new claims in its source or with a probe and record them there
+- The inbox: addresses, rings, wakes, seed updates or notices =>
+  docs/internal/inbox.md
 - Agent-facing content in `internal/prompts/content/**`, its Go definitions, or
-  CLI help => docs/prompt-authoring.md
+  CLI help => docs/internal/prompt-authoring.md
 - Landing a change => the land-on-main skill (.agents/skills/land-on-main)
 - Review on main, a red main, or why attn lands this way =>
-  docs/trunk-based-development.md
-- Pull requests, or waiting on their reviews => docs/pull-requests.md
-- Release notes, releases, or hotfixes => docs/making-a-release.md
-- Installing, launching, or verifying instances => docs/instances.md
+  docs/internal/trunk-based-development.md
+- Pull requests, or waiting on their reviews => docs/internal/pull-requests.md
+- Release notes, releases, or hotfixes => docs/internal/making-a-release.md
+- Installing, launching, or verifying instances => docs/internal/instances.md
 - Checking a change live through every way into a feature => the drive-attn
   skill (.agents/skills/drive-attn) and its feature map
 - Frontend code or shortcuts => app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence =>
   app/scripts/real-app-harness/AGENTS.md
 - Pi driver or auto-mode permissions => plugins/attn-pi/AGENTS.md
-- CPU, memory, or benchmarks => docs/perf-testing.md
-- Terminal input that stops working => docs/diagnosing-terminal-input.md
-- Shared Rust PTY host => docs/pty-host-verification.md
-- The analytics ingest service (`cmd/attn-ingest`) => docs/attn-ingest.md
-- What analytics records and sends, or the upload => docs/telemetry.md
+- CPU, memory, or benchmarks => docs/internal/perf-testing.md
+- Terminal input that stops working =>
+  docs/internal/diagnosing-terminal-input.md
+- Shared Rust PTY host => docs/internal/pty-host-verification.md
+- The analytics ingest service (`cmd/attn-ingest`) =>
+  docs/internal/attn-ingest.md
+- What analytics records and sends, or the upload =>
+  docs/guide/reference/telemetry.md
 
 ## Diagnostics
 

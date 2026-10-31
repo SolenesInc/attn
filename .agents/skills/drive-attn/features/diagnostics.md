@@ -8,7 +8,7 @@ stuck terminal saves a diagnostic report from the palette and hands it to
 whoever maintains attn. Why one session has its state is `attn state
 explain`, in [agent-state.md](agent-state.md). Typing that stops working has
 its own walk through `attn debug input` in
-`docs/diagnosing-terminal-input.md`.
+`docs/internal/diagnosing-terminal-input.md`.
 
 ## Sub-features
 
@@ -21,7 +21,7 @@ its own walk through `attn debug input` in
 - `db-backup`: a rotating backup when the daemon starts and every 6 hours, keeping the newest 12, plus a snapshot before each migration.
 - `db-restore`: swap a backup in while the daemon is stopped, keeping the replaced database beside it.
 - `migration-failure`: the app's screen after a data migration failed at startup, with the details to copy.
-- `diag-endpoint`: `ATTN_PPROF` opens a loopback pprof and `/debug/vars` endpoint on the daemon, for `docs/perf-testing.md`.
+- `diag-endpoint`: `ATTN_PPROF` opens a loopback pprof and `/debug/vars` endpoint on the daemon, for `docs/internal/perf-testing.md`.
 
 ## How to get to it
 
@@ -73,7 +73,7 @@ Preconditions:
 - **Linux**: `attn preflight`, `attn debug`, `attn bus` and `attn db` work the same where the daemon and CLI run on Linux. The report and the settings sections are in the app; `ui.commandPalette` is Ctrl+Alt+K and `ui.openSettings` Ctrl+Shift+, there.
 - **Outposts**: `attn debug`, `attn bus` and `attn db` act on the machine they run on: an outpost's own log, event bus and database, never the home's.
 - **Profiles**: logs, the event bus, tasks and backups belong to the daemon and cover every profile.
-- **Performance and idle cost**: `attn bus status` names the loudest producers, the consumer at the retention floor and one that pins the log, and Settings › Event bus shows the same. `ATTN_PPROF` and `docs/perf-testing.md` cover memory and CPU.
+- **Performance and idle cost**: `attn bus status` names the loudest producers, the consumer at the retention floor and one that pins the log, and Settings › Event bus shows the same. `ATTN_PPROF` and `docs/internal/perf-testing.md` cover memory and CPU.
 - **Keyboard and native input**: the palette reaches the report, its "Save report" button has focus so Enter saves, and Escape closes it.
 - **Compatibility across versions**: `attn db restore <path>` takes a pre-migration snapshot, `attn-premigration-<version>-<timestamp>.db`, to go back to the data before a migration.
 

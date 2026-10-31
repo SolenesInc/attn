@@ -34,7 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 	if len(violations) > 0 {
-		fmt.Fprintf(os.Stderr, "tests waiting for real time; step a clock or wait on a signal (docs/testing.md):\n%s\n", strings.Join(violations, "\n"))
+		fmt.Fprintf(os.Stderr, "tests waiting for real time; step a clock or wait on a signal (docs/internal/testing.md):\n%s\n", strings.Join(violations, "\n"))
 		os.Exit(1)
 	}
 }

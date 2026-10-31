@@ -305,7 +305,7 @@ state or grants merge authority.
 Inspect with `attn pr status`; stop with `attn pr unwatch <url>`. Stopping clears
 that session's unread watch notifications. Closing or merging the PR ends the watch.
 For development instances, enable
-[GitHub polling](docs/instances.md#github-polling).
+[GitHub polling](docs/internal/instances.md#github-polling).
 
 Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>
 --mode <green|codex|formal-review>`. Its `--help` explains reviewers, baselining,
@@ -469,17 +469,18 @@ git clone https://github.com/victorarias/attn.git && cd attn
 Developing attn while running attn? `make dev` gives you a fully isolated dev
 sibling (own bundle, data dir, and port) so rebuilds never touch your live copy.
 The full dev-loop, instance, and harness targets live in
-**[docs/instances.md](docs/instances.md)** and [AGENTS.md](AGENTS.md).
+**[docs/internal/instances.md](docs/internal/instances.md)** and
+[AGENTS.md](AGENTS.md).
 
 ## Docs
 
 | | |
 |---|---|
-| [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
-| [Shared Codex](docs/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server, with hidden sessions |
-| [Nisse](docs/using-nisse.md) | Experimental: Nisse sessions, whose runs live in the Nisse server |
-| [Outposts](docs/using-outposts.md) | Experimental: connect attn on other computers, where agents will run |
-| [Release](docs/making-a-release.md) | Maintainer runbook |
+| [Instances](docs/internal/instances.md) | Run multiple isolated attn worlds side by side |
+| [Shared Codex](docs/guide/reference/using-shared-codex.md) | Experimental: Codex terminals sharing one app-server, with hidden sessions |
+| [Nisse](docs/guide/reference/using-nisse.md) | Experimental: Nisse sessions, whose runs live in the Nisse server |
+| [Outposts](docs/guide/reference/using-outposts.md) | Experimental: connect attn on other computers, where agents will run |
+| [Release](docs/internal/making-a-release.md) | Maintainer runbook |
 
 ## Status
 

@@ -81,7 +81,7 @@ Preconditions:
 - **Linux**: `attn journal append` and the files work the same where the daemon and CLI run on Linux. The editor tile is Ctrl+Shift+Alt+N and fullscreen Ctrl+Shift+Alt+F there (`LINUX_SHORTCUTS`).
 - **Outposts**: an outpost keeps its own copy at its `notebook.root.effective`, synced with the home's, and conflict copies appear on the outpost's row in Settings. Agents on an outpost append to the journal with `attn journal append`, which writes at the home. While the outpost is offline its copy waits for the next sync.
 - **Profiles**: the notebook belongs to the instance, not a profile. Every profile's chief reads and writes the same files, and a selection sent to the chief rings the chief of the profile the app shows.
-- **Performance and idle cost**: the open notebook and each editor tile watch their folder for changes. Nothing measures the cost of a large notebook or of an idle open editor; when a change touches them, check with `docs/perf-testing.md`.
+- **Performance and idle cost**: the open notebook and each editor tile watch their folder for changes. Nothing measures the cost of a large notebook or of an idle open editor; when a change touches them, check with `docs/internal/perf-testing.md`.
 - **Harnesses**: any harness reads and edits the files with its own tools and appends with the same `attn journal append`.
 - **Keyboard and native input**: ⌥⌘N, ⇧⌥⌘N, ⌘P inside the notebook, Esc to close fullscreen. ⌘Z and ⇧⌘Z reach the editor because attn removes the Edit menu's Undo and Redo, which would take them first. ⌘E is left free for inline code.
 - **Compatibility across versions**: frontmatter keys attn does not know are kept as written, and `index.md` and `log.md` carry none.

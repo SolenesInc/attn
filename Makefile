@@ -17,7 +17,7 @@ APP_BINARY=$(APP_BUNDLE)/Contents/MacOS/attn
 # Which instance to build/install. Empty = the default/prod bundle. A named
 # instance (e.g. `make install INSTANCE=agent7`) builds attn-agent7.app /
 # com.attn.manager.agent7 with its own data dir + port. `make dev` ==
-# `make install INSTANCE=dev`. See docs/instances.md.
+# `make install INSTANCE=dev`. See docs/internal/instances.md.
 INSTANCE ?=
 # DEMO=1 builds a named instance for recordings: no instance chip, window titled attn.
 DEMO ?=

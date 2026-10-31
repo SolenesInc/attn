@@ -37,7 +37,7 @@ default, and the panel is macOS only.
 
 ### Triggers
 
-- A sent capture is a user message in the chosen mailbox's inbox: a ring types it at once, without the 📬 line, and an asleep member is woken first without counting against the wake limit (`internal/daemon/quick_captures.go`; the rules are in `docs/inbox.md`).
+- A sent capture is a user message in the chosen mailbox's inbox: a ring types it at once, without the 📬 line, and an asleep member is woken first without counting against the wake limit (`internal/daemon/quick_captures.go`; the rules are in `docs/internal/inbox.md`).
 
 ## Driving it
 
@@ -90,7 +90,7 @@ EOF
 - **Durability across restarts**: the draft, its files and the binding survive app restarts, and a sent message is a durable inbox item that waits for its mailbox's session.
 - **Linux**: the panel, the global shortcut and the File menu item are macOS only; the `quick-capture` scenario skips Linux. Messages already in an inbox, and `attn agent attachment`, work where the daemon and CLI run on Linux.
 - **Profiles**: drafts are kept per profile, and the panel offers the chief and the crew members of the profile the app shows. `attn agent attachment` reads files only from the session's profile; outside a session, `--profile` picks one when there are several.
-- **Performance and idle cost**: the panel opens with the message field focused; the scenario records the time from the key press to focus in `opening-latency.json`. Nothing measures the hidden panel's idle cost; when a change touches it, check it with `docs/perf-testing.md`.
+- **Performance and idle cost**: the panel opens with the message field focused; the scenario records the time from the key press to focus in `opening-latency.json`. Nothing measures the hidden panel's idle cost; when a change touches it, check it with `docs/internal/perf-testing.md`.
 - **Harnesses**: the message is typed as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: the global shortcut, Enter, Shift+Enter, ⌘K with arrows and Enter, ⌘1 to ⌘4 and Escape reach every action; the panel shares the app's text size shortcuts. The message field holds the keyboard while the panel shows, including after a click elsewhere in the panel.
 

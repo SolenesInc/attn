@@ -96,7 +96,8 @@ backlog waits can reach the limit, and attn then waits as the refusal asks.
 The first upload registers the install and keeps its token in
 `<data-dir>/analytics-token`. The token identifies the install, not you. The
 server also keeps a keyed hash of the address each batch came from, never the
-address. [attn-ingest](attn-ingest.md) describes the service and its limits.
+address. [attn-ingest](../../internal/attn-ingest.md) describes the service and
+its limits.
 
 When the service refuses a batch, the records stay and Settings › Analytics
 shows the refusal with the limit, its value and what the batch would have

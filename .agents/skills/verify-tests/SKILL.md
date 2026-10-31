@@ -8,8 +8,8 @@ description: Use before landing or opening a pull request whose changes add, cha
 Judge whether each test this change adds, changes or deletes earns its place in
 the whole suite. Report findings; do not edit.
 
-`docs/testing.md` and the "Writing tests" section of `AGENTS.md` are attn's
-testing strategy. Read all of it first. This skill does not repeat it.
+`docs/internal/testing.md` and the "Writing tests" section of `AGENTS.md` are
+attn's testing strategy. Read all of it first. This skill does not repeat it.
 
 ## Read
 
@@ -28,7 +28,7 @@ Go tests need the native VT library. Build it once per checkout with
 `make "third_party/ghostty-vt/$(go env GOOS)_$(go env GOARCH)/lib/libghostty-vt.a"`.
 
 Run each new or changed Go test once with `go test -v -run` and compare its
-time with the budgets in `docs/testing.md`. Then run it with
+time with the budgets in `docs/internal/testing.md`. Then run it with
 `go test -race -count=10 -run`: a failure in any of those runs is a flake. Run
 each changed frontend test file with `pnpm --dir app exec vitest run` and
 compare its time with the same budgets.
@@ -40,8 +40,8 @@ native library there), never in this checkout, and remove it when you are done.
 ## Judge each test
 
 - Which promise does it guard? A test that guards none is a finding.
-- Is it the right kind, the first in the order `docs/testing.md` gives that
-  can observe the behavior? Does it fake only what its kind allows?
+- Is it the right kind, the first in the order `docs/internal/testing.md` gives
+  that can observe the behavior? Does it fake only what its kind allows?
 - Would it break if the code were rewritten with the same behavior?
 - Does another test, in this change or already in the suite, guard the same
   promise through the same entry? Name the one to keep.

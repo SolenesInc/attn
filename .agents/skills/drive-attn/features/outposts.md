@@ -32,7 +32,7 @@ removes outposts in Settings; agents open shells and delegate onto them with
 - Settings, Outposts (`app/src/components/OutpostsSettings.tsx`): the "Add an outpost" form with the required ssh destination, optional Name and "Add outpost"; each row's state, build, daemon id, host key, last error and notebook sync; and "Connect in a terminal" for ssh authentication and host-key refusals, "Update to home build", "Re-pair" and "Remove", which asks "Remove and close N terminals" or "Remove and forget N terminals" with Cancel while the outpost has terminals.
 - The banner "Update outposts", with its dismiss button (`app/src/components/OutpostUpdateBanner.tsx`).
 - Where people see and steer what runs there: an outpost terminal's tile header shows the outpost's name after the title, and its strip says "<name> not responding" while stalled, "Connecting to <name> · typing is not sent" while connecting, or "<name> unreachable · typing is not sent" while offline (`app/src/components/SessionTerminalDesktop/DesktopAgentIdentity.tsx`, `app/src/components/SessionTerminalDesktop/DesktopOfflineNotice.tsx`). ⌘D (`terminal.splitVertical`) in an outpost shell opens another shell on the same outpost. A closed outpost session's row in the Sessions ledger shows the outpost's name, and its "Reopen" resumes the session on that outpost (`app/src/components/ledger/SessionsTab.tsx`); [ledger.md](ledger.md) owns the ledger.
-- Their own shell: on the home, `attn settings set outposts_enabled true`; on the outpost, `attn settings list --all` for `outpost_state`, `outpost_home` and `outpost_last_error`, and `attn enrollment`, below. Setup is in `docs/using-outposts.md`.
+- Their own shell: on the home, `attn settings set outposts_enabled true`; on the outpost, `attn settings list --all` for `outpost_state`, `outpost_home` and `outpost_last_error`, and `attn enrollment`, below. Setup is in `docs/guide/reference/using-outposts.md`.
 
 ### Agents
 
@@ -110,7 +110,7 @@ Preconditions:
 
 ## Gotchas
 
-- The baseline has nothing to connect to: an added outpost ends `lost`, or `refused` when ssh refuses authentication or a host key. `go test ./cmd/attn -run TestSSH -v` proves the bridge states only; shells, agents, offline tiles, ledger resume, notebook sync and updates need a Linux box with the setup in `docs/using-outposts.md`. That outpost runs its machine's own Claude Code and Codex, never the mock agent.
+- The baseline has nothing to connect to: an added outpost ends `lost`, or `refused` when ssh refuses authentication or a host key. `go test ./cmd/attn -run TestSSH -v` proves the bridge states only; shells, agents, offline tiles, ledger resume, notebook sync and updates need a Linux box with the setup in `docs/guide/reference/using-outposts.md`. That outpost runs its machine's own Claude Code and Codex, never the mock agent.
 - A named instance pairs only with an outpost of the same instance name, never with production or another name. `go test ./cmd/attn -run TestSSH -v` sidesteps this with two daemons in temporary data folders.
 - Every outpost command refuses while Outposts is off: `outposts_enabled is off; run attn settings set outposts_enabled true before you add an outpost`.
 - The bridge uses the user's OpenSSH configuration. Every background command uses BatchMode and shows ssh's stderr on failure. The master survives a lost bridge and a home restart; Remove, Outposts off and instance clean exit it.

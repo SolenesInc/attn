@@ -53,7 +53,7 @@ nothing, main is green: end in one line.
 - **Escalate** with `attn turn open`, after commenting what you found, when no
   path is clearly right, or when:
   - the culprit adds a database migration and the fix is not small. Never
-    revert a migration (`docs/db-migrations.md`).
+    revert a migration (`docs/internal/db-migrations.md`).
   - the culprit is a release commit.
   - the runner, the network or another service failed, not a commit.
 

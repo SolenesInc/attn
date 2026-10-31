@@ -61,7 +61,7 @@ Preconditions:
 - **Linux**: `session.toggleSidebar` is Ctrl+Alt+B and `sidebar.agentList` is Ctrl+Alt+A (`LINUX_SHORTCUTS`).
 - **Outposts**: an agent whose outpost is offline keeps its row, marked offline, and the waiting count leaves it out.
 - **Profiles**: the sidebar shows the selected profile's desktops, agents and crew only; the profile pill switches profiles ([profiles.md](profiles.md)). Flow is one setting for every profile today, so switching profiles keeps the shape.
-- **Performance and idle cost**: turn ages re-read the clock every 30 seconds, and a row's settling bar animates only while a countdown runs. Nothing measures the sidebar's idle cost; when a change touches its rendering, check it for repaints with `docs/perf-testing.md`.
+- **Performance and idle cost**: turn ages re-read the clock every 30 seconds, and a row's settling bar animates only while a countdown runs. Nothing measures the sidebar's idle cost; when a change touches its rendering, check it for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: each row carries its harness's mark. With logos off, the queue sidebar still names the harness in the row's hover text.
 - **Keyboard and native input**: ⌘B and ⌘⇧A reach the sidebar from a terminal or the window. In an input, a textarea or an editor outside a terminal, ⌘B stays with that field, while ⌘⇧A still fires. In the queue sidebar, ↑ and ↓ walk rows and Escape steps back.
 - **Flow**: queue flow shows the queue sidebar and the queue bar, desktop flow the desktop sidebar and the rail. ⌘⇧A opens the agent list only where the queue sidebar shows.

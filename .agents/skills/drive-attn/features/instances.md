@@ -8,7 +8,7 @@ Maintainers select an instance in a shell, build and install it, start and
 stop its daemon, check which build runs, and clean it when they move on.
 Every `attn` command acts on the instance its shell selects. The full launch
 with the mock agent and the mock GitHub, the doctor and the cleanup are in
-[../SKILL.md](../SKILL.md); `docs/instances.md` covers the rest.
+[../SKILL.md](../SKILL.md); `docs/internal/instances.md` covers the rest.
 
 ## Sub-features
 

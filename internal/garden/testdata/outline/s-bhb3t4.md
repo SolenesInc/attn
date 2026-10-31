@@ -43,7 +43,7 @@ D2. Small evals run four arms: Claude Sonnet at medium effort, Claude Opus at me
 ## Eval sketch
 
 - Cases from the attached reports' "Eval cases" sections (~36 candidates), each traceable to a transcript. Train/test split.
-- Runner: a non-production instance (docs/instances.md). Fixture gardens are built through the CLI from copies of real seeds, never the production garden. Headless `claude -p` and `codex exec` as separate arms, because the two harnesses behave very differently.
+- Runner: a non-production instance (docs/internal/instances.md). Fixture gardens are built through the CLI from copies of real seeds, never the production garden. Headless `claude -p` and `codex exec` as separate arms, because the two harnesses behave very differently.
 - Graders: programmatic first, from final garden state over `--json` (body diff, edges, checks, states, artifacts) plus counts from the agent transcript (attn calls, failed calls, help lookups, bytes read). A judge on a different model only for answer-type cases (plot status, "what's decided").
 - Lesson from the crew-memory eval (`s-wxcdtv`, runner removed in #860): it grew a user simulator, a sandbox and digest approvals, cost ~$25, and found no headroom. Keep this one single-turn with no simulator, pilot the cost per case first, and get the run budget approved.
 

@@ -140,7 +140,7 @@ func contextScope(targets []string, current, base *prompts.Catalog, sources map[
 
 func (e *editor) authoringContext(ctx context.Context, q operationRequest, snapshot catalogSnapshot, selected *focus, catalog *prompts.Catalog, scenarios map[string]scenario) (contextReport, error) {
 	report := contextReport{
-		Guide: "docs/prompt-authoring.md", Workflow: authoringWorkflow,
+		Guide: "docs/internal/prompt-authoring.md", Workflow: authoringWorkflow,
 		CatalogRevision: revision(snapshot.Manifest), Sources: map[string]contextSource{},
 		Events: []contextEvent{}, Scenarios: []contextScenario{}, UnrenderedEvents: []string{}, UnrenderedSources: []string{},
 		Limits: []string{
@@ -214,7 +214,7 @@ func (e *editor) authoringContext(ctx context.Context, q operationRequest, snaps
 		targets = append(targets, s.Recipient+"/"+s.Event)
 	}
 	if len(targets) == 0 {
-		return report, fmt.Errorf("context needs an event, source, --scenario, --draft or --review; read docs/prompt-authoring.md before editing")
+		return report, fmt.Errorf("context needs an event, source, --scenario, --draft or --review; read docs/internal/prompt-authoring.md before editing")
 	}
 	slices.Sort(targets)
 	report.Scope = slices.Compact(targets)

@@ -7,7 +7,7 @@ set -euo pipefail
 # write the user-facing section per the style rules below, inserts it at the
 # top of CHANGELOG.md with a marker naming the commits it covers, and deletes
 # changelog.d. The result is left staged for review: read the section, fix the
-# copy where it misses, then commit and open a PR. See docs/making-a-release.md.
+# copy where it misses, then commit and open a PR. See docs/internal/making-a-release.md.
 #
 # usage: compile-changelog.sh [--dry-run]
 #   --dry-run  print the prompt that would be sent and exit without changes
