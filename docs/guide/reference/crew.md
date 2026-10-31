@@ -43,8 +43,10 @@ yourself or the member was added before homes moved to the Notebook, keeps it
 there until you run `attn crew move-home <member>`. That moves the home into its
 profile's Notebook, at `crew/<name>/` like a new member's. Its charter, letters and anything else in
 the folder move with it, and a working or awareness folder inside the home
-follows. The member must be asleep. Attn never moves a home on its own:
-changing the profile's Notebook folder later leaves every home where it is.
+follows. So do its past sessions: [resume](sessions.md#resume) one from the ledger or
+with `attn session reopen` and it opens in the new home. The member must be
+asleep. Attn never moves a home on its own: changing the profile's Notebook
+folder later leaves every home where it is.
 
 If a member's home goes missing, Attn refuses to wake the member or open its
 charter and names the path; put the folder back to fix it. Other members keep
@@ -190,8 +192,9 @@ The member is asleep. Its next session starts from the last letter it filed, so 
 With Crew v2 on, rename a member with `attn crew rename <member> <name>` or
 **Rename** next to its name in Manage crew. Its key, letters, mail and seeds
 stay, and an awake member's agent takes the new name. A home in the Notebook
-moves to a folder named after the new name, so Attn renames such a member only
-while it is asleep; a home in Attn's data folder stays put.
+moves to a folder named after the new name, taking the member's past sessions
+along as a move does, so Attn renames such a member only while it is asleep; a
+home in Attn's data folder stays put.
 
 `attn crew retire <member>` stops a member's work. The seeds they tend go back
 to planted, each with a note; their seed and pull request watches and open

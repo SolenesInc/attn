@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -43,7 +44,7 @@ func reserveCrewHome(parent, name string) (string, error) {
 	}
 }
 
-type crewHomeCommit func(store.DocumentCommit) (store.DocumentWriteResult, error)
+type crewHomeCommit func(store.CrewHomeMove) ([]store.DocumentWriteResult, error)
 
 func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, name string, commit crewHomeCommit) (crew.Member, int64, error) {
 	if d.crewBindingLive(member) {
@@ -85,6 +86,14 @@ func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, na
 		_ = os.Remove(home)
 		return member, revision, err
 	}
+	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
+	documents := []store.DocumentCommit{{Write: store.DocumentWrite{Schema: *schema, ID: member.ID, Body: body, Expected: &revision}, Fact: fact}}
+	dispatches, err := d.dispatchesFollowingHome(previous, home)
+	if err != nil {
+		_ = os.Remove(home)
+		return member, revision, fmt.Errorf("find the saved sessions that move with %s's home: %w", member.Name, err)
+	}
+	documents = append(documents, dispatches...)
 	if err := syscall.Rename(source, home); err != nil {
 		_ = os.Remove(home)
 		if errors.Is(err, syscall.EXDEV) {
@@ -92,18 +101,61 @@ func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, na
 		}
 		return member, revision, fmt.Errorf("move %s's home from %s to %s: %w", member.Name, previous, home, err)
 	}
-	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
-	written, err := commit(store.DocumentCommit{Write: store.DocumentWrite{Schema: *schema, ID: member.ID, Body: body, Expected: &revision}, Fact: fact})
+	written, err := commit(store.CrewHomeMove{Documents: documents, From: previous, To: home})
 	if err != nil {
 		if restoreErr := os.Rename(home, source); restoreErr != nil {
 			return member, revision, errors.Join(err, fmt.Errorf("put %s's home back from %s to %s: %w; its files are at %s", member.Name, home, previous, restoreErr, home))
 		}
 		return member, revision, err
 	}
-	d.announceCommittedWrite(fact, written.Seq)
+	for i, document := range documents {
+		d.announceCommittedWrite(document.Fact, written[i].Seq)
+	}
 	d.publishFact(FactCrewUpdated, member.ID, nil)
 	d.logf("crew: moved %s's home from %s to %s", member.ID, previous, home)
-	return moved, written.Rev, nil
+	return moved, written[0].Rev, nil
+}
+
+func (d *Daemon) dispatchesFollowingHome(previous, home string) ([]store.DocumentCommit, error) {
+	sessions, err := d.store.SessionsInDirectory(previous)
+	if err != nil || len(sessions) == 0 {
+		return nil, err
+	}
+	schema, err := d.dispatchesCollection()
+	if docstore.IsUndeclaredCollection(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var commits []store.DocumentCommit
+	for _, id := range sessions {
+		execution, doc, found, err := d.gardenDispatchDocument(id)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			continue
+		}
+		cwd := rebaseCrewPath(previous, home, execution.Cwd)
+		if cwd == execution.Cwd {
+			continue
+		}
+		execution.Cwd = cwd
+		body, err := execution.Encode()
+		if err != nil {
+			return nil, err
+		}
+		commits = append(commits, store.DocumentCommit{
+			Write: store.DocumentWrite{Schema: *schema, ID: doc.ID, Body: body, Expected: &doc.Rev},
+			Fact:  documentChangedFact(garden.Namespace, garden.CollectionDispatches, doc.ID, false),
+		})
+	}
+	return commits, nil
+}
+
+func (d *Daemon) commitCrewHomeMove(move store.CrewHomeMove) ([]store.DocumentWriteResult, error) {
+	return d.store.MoveCrewHome(move, time.Now())
 }
 
 func rebaseCrewPath(previous, home, path string) string {
@@ -133,9 +185,7 @@ func (d *Daemon) crewMoveHome(msg *protocol.CrewMoveHomeMessage) (*protocol.Crew
 	if err != nil {
 		return nil, err
 	}
-	moved, revision, err := d.relocateCrewHome(member, doc.Rev, parent, member.Name, func(c store.DocumentCommit) (store.DocumentWriteResult, error) {
-		return d.store.CommitDocumentWrite(c.Write, c.Fact, time.Now())
-	})
+	moved, revision, err := d.relocateCrewHome(member, doc.Rev, parent, member.Name, d.commitCrewHomeMove)
 	if err != nil {
 		return nil, err
 	}
@@ -223,9 +273,7 @@ func (d *Daemon) moveHomeIntoNotebook(member crew.Member, revision int64) (crew.
 	if within, err := sameDirOrWithin(parent, member.HomeDir(d.dataRoot)); err != nil || within {
 		return member, revision, err
 	}
-	return d.relocateCrewHome(member, revision, parent, member.Name, func(c store.DocumentCommit) (store.DocumentWriteResult, error) {
-		return d.store.CommitDocumentWrite(c.Write, c.Fact, time.Now())
-	})
+	return d.relocateCrewHome(member, revision, parent, member.Name, d.commitCrewHomeMove)
 }
 
 func sameDir(a, b string) (bool, error) {

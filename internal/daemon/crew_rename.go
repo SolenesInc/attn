@@ -67,9 +67,9 @@ func (d *Daemon) renameCrewMember(asked crew.Member, name string) (previous stri
 	if err != nil {
 		return "", nil, err
 	}
-	moved, _, err := d.relocateCrewHome(member, doc.Rev, filepath.Dir(member.HomeDir(d.dataRoot)), name, func(c store.DocumentCommit) (store.DocumentWriteResult, error) {
-		var written store.DocumentWriteResult
-		previous, written, err = d.store.RenameCrewMemberMovingHome(member.ID, name, c, time.Now())
+	moved, _, err := d.relocateCrewHome(member, doc.Rev, filepath.Dir(member.HomeDir(d.dataRoot)), name, func(move store.CrewHomeMove) ([]store.DocumentWriteResult, error) {
+		var written []store.DocumentWriteResult
+		previous, written, err = d.store.RenameCrewMemberMovingHome(member.ID, name, move, time.Now())
 		return written, err
 	})
 	if err != nil {

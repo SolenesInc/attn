@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -265,4 +266,57 @@ func TestCreatedMembersLiveInTheirProfilesNotebook(t *testing.T) {
 	if ownKeel.HomeDir != filepath.Join(root, crew.HomesDirName, "keel") {
 		t.Fatalf("a Keel in a profile with its own Notebook: %+v", ownKeel)
 	}
+}
+
+func TestClosedCrewConversationsResumeFromAMovedOrRenamedHome(t *testing.T) {
+	for _, relocation := range []string{"move", "rename"} {
+		t.Run(relocation, func(t *testing.T) {
+			w := newCrewV2World(t, fakeagent.Claude)
+			cli := w.Client()
+			if relocation == "rename" {
+				moveCrewHome(t, w, "Keel")
+			}
+			home := crewRosterMember(t, cli, "keel").HomeDir
+			atHome := sleepAfterADay(t, w, "Keel")
+			notes := filepath.Join(home, "notes")
+			if err := os.MkdirAll(notes, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			setCrew(t, cli, "Keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(notes)})
+			inNotes := sleepAfterADay(t, w, "Keel")
+
+			if relocation == "move" {
+				moveCrewHome(t, w, "Keel")
+			} else if _, err := cli.CrewRename("Keel", "Keeper"); err != nil {
+				t.Fatal(err)
+			}
+			moved := crewRosterMember(t, cli, "keel").HomeDir
+			if moved == home {
+				t.Fatalf("the %s left the home at %s", relocation, home)
+			}
+			for directory, day := range map[string]*fakeagent.Run{moved: atHome, filepath.Join(moved, "notes"): inNotes} {
+				reopened, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(day.SessionID)})
+				if err != nil {
+					t.Fatalf("resume %s after the %s: %v", day.SessionID, relocation, err)
+				}
+				if reopened.Directory != directory {
+					t.Fatalf("resumed %s in %s, want %s", day.SessionID, reopened.Directory, directory)
+				}
+				if resumed := w.Launched(day.SessionID); !resumed.Resumed || resumed.ConversationID != day.ConversationID {
+					t.Fatalf("resume after the %s started %+v, want conversation %s", relocation, resumed, day.ConversationID)
+				}
+			}
+		})
+	}
+}
+
+func sleepAfterADay(t *testing.T, w *world, member string) *fakeagent.Run {
+	t.Helper()
+	cli := w.Client()
+	day := wakeCrew(t, cli, member, "")
+	run := w.Launched(string(day.SessionID))
+	run.Prompted()
+	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
+	crewHandoff(t, cli, string(day.SessionID), "Resume this conversation later.", false)
+	return run
 }

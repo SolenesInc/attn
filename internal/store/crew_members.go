@@ -205,23 +205,66 @@ func (s *Store) RenameCrewMember(key, name string) (previous string, err error) 
 	return previous, err
 }
 
-func (s *Store) RenameCrewMemberMovingHome(key, name string, home DocumentCommit, now time.Time) (previous string, written DocumentWriteResult, err error) {
-	table, err := s.documentTable(home.Write.Schema)
+type CrewHomeMove struct {
+	Documents []DocumentCommit
+	From      string
+	To        string
+}
+
+const sessionsInDirectory = `directory = ? OR substr(directory, 1, length(?) + 1) = ? || '/'`
+
+func (s *Store) SessionsInDirectory(dir string) ([]protocol.SessionID, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rows, err := s.db.Query(`SELECT id FROM sessions WHERE `+sessionsInDirectory, dir, dir, dir)
 	if err != nil {
-		return "", DocumentWriteResult{}, err
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []protocol.SessionID
+	for rows.Next() {
+		var id protocol.SessionID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func (s *Store) MoveCrewHome(move CrewHomeMove, now time.Time) ([]DocumentWriteResult, error) {
+	results, _, err := s.commitDocumentWrites(move.Documents, nil, now, false, move.followSessions)
+	return results, err
+}
+
+func (s *Store) RenameCrewMemberMovingHome(key, name string, move CrewHomeMove, now time.Time) (previous string, written []DocumentWriteResult, err error) {
+	tables := make([]string, len(move.Documents))
+	for i, commit := range move.Documents {
+		if tables[i], err = s.documentTable(commit.Write.Schema); err != nil {
+			return "", nil, err
+		}
 	}
 	err = s.profilesTx(func(tx *sql.Tx, _ string) error {
 		if previous, err = renameCrewMember(tx, key, name); err != nil {
 			return err
 		}
-		results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{home}, []string{table}, now)
-		if err != nil {
+		if written, _, err = commitDocumentWritesWith(tx, move.Documents, tables, now); err != nil {
 			return err
 		}
-		written = results[0]
-		return nil
+		_, err = move.followSessions(tx)
+		return err
 	})
 	return previous, written, err
+}
+
+func (m CrewHomeMove) followSessions(tx *sql.Tx) (bool, error) {
+	result, err := tx.Exec(`UPDATE sessions SET directory = ? || substr(directory, length(?) + 1) WHERE `+sessionsInDirectory,
+		m.To, m.From, m.From, m.From, m.From)
+	if err != nil {
+		return false, fmt.Errorf("move saved session directories from %s to %s: %w", m.From, m.To, err)
+	}
+	moved, err := result.RowsAffected()
+	return moved != 0, err
 }
 
 func renameCrewMember(tx *sql.Tx, key, name string) (previous string, err error) {
