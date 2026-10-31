@@ -165,17 +165,25 @@ new name, find the cause, retry once it is gone, and name it in the report.
 
 ## Drive
 
-Take the features in `rows.md` order. For each one:
+Take the features in `rows.md` order. Drive each one in its own subagent,
+one at a time, so each starts with an empty context; your own context keeps
+only what they return. Give the subagent the path of `<runs>/pass.env`, the
+instance name, the feature id, its rows from `rows.md`, its lines from
+`sources.txt`, the Rules and Outcomes sections of this file, and steps 1–4:
 
-1. Read its file whole, and the commits `sources.txt` lists for it.
+1. Read the feature's file whole, and the commits `sources.txt` lists for it.
 2. Drive every door through its file's recipe, as drive-attn's Evidence says,
    with `$runs/evidence/<feature>` as the recipe's proof folder `P`. Start
-   from the baseline as the README's Runs section says; when the instance can
-   no longer give one, clean it and start another.
+   from the baseline as the README's Runs section says.
 3. When a step fails, read the source and the commits before deciding. Retry
    a step whose own deadline expired once, then classify it.
-4. Fill the feature's rows in `rows.md`: outcome, evidence and follow-up.
-5. Write the `feature` note.
+4. Commit each map fix in `$repair`, and return the feature's filled rows
+   (outcome, evidence and follow-up), its minutes of driving, and whether the
+   instance can still give a baseline.
+
+Then fill the rows in `rows.md` and write the `feature` note. When the
+instance can no longer give a baseline, clean it and start another before the
+next feature.
 
 A native scenario waits for the shared display lock. Record when it waited, so
 the report keeps waiting apart from driving.
