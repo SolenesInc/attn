@@ -25,6 +25,26 @@ const usage = `usage: go tool test-history <command>
   spool
       Print the spool directory.
 
+  select [--mode replace|extend|baseline] [--policy success-count|recent-failure]
+         [--allowance <duration>] [--main <ref>] [--json]
+      Propose the landing tests for this checkout's change against <ref>
+      (default origin/main) from the receipts in the spool. Prints each
+      candidate as SELECTED, OVER-BUDGET, UNPRICED or UNAVAILABLE with its
+      reason. replace (the default) fits ranked tests into the baseline's
+      measured cost; extend keeps the baseline and adds ranked tests, within
+      --allowance when given; both always select the tests the change touches.
+      baseline prints the fixed list alone. The default policy is success-count.
+  explain --test '<unit>' [--main <ref>] [--json]
+      Show a unit's anchor and passes in each lane, its cost and its rerun command.
+  pending [--main <ref>] [--json]
+      List candidates that are unpriced on this machine or unavailable here.
+  measure '<unit>'...
+      Run units through scripts/landing-tests.sh to record their cost.
+  replay --from <rev> [--main <ref>] [--machine <class>]
+      For each main commit after <rev>, print as a JSON line what each policy
+      would have selected from the receipts that existed when it was
+      committed, and which failures observed on that commit it included.
+
 The spool is $ATTN_TEST_HISTORY_DIR, or attn-test-history in the Git common directory.
 `
 
@@ -40,6 +60,16 @@ func main() {
 		os.Exit(recoverWorking())
 	case "summary":
 		os.Exit(summary(os.Args[2:]))
+	case "select":
+		os.Exit(selectCommand(os.Args[2:]))
+	case "explain":
+		os.Exit(explainCommand(os.Args[2:]))
+	case "pending":
+		os.Exit(pendingCommand(os.Args[2:]))
+	case "measure":
+		os.Exit(measureCommand(os.Args[2:]))
+	case "replay":
+		os.Exit(replayCommand(os.Args[2:]))
 	case "spool":
 		dir, err := spoolDir()
 		if err != nil {

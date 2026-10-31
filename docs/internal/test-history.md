@@ -13,7 +13,8 @@ These commands record a receipt:
 - `pnpm --dir app test`, `pnpm --dir app run e2e` and
   `pnpm --dir app run real-app:serial-matrix`.
 - `scripts/landing-tests.sh`, which also names the tests it requested, so a
-  test that reported nothing shows as `MISSING`.
+  test that reported nothing shows as `MISSING`. It runs groups of
+  `scripts/landing-tests`, or single tests with `--unit '<unit>'`.
 
 Running `go test`, `vitest` or `playwright` directly records nothing.
 
@@ -38,6 +39,8 @@ checkout shares. `go tool test-history spool` prints its path.
 - `working/<id>/`: a run in progress. Capture and the test command hold its
   lock while they run.
 - `receipts/<id>.json`: sealed receipts. A sealed receipt is never rewritten.
+- `shared/<id>.json`: receipts synced from the shared history. Selection reads
+  them with the sealed ones.
 
 `go tool test-history recover` seals the working files of runs that ended
 without sealing, such as a capture killed with `SIGKILL`, as incomplete. It
@@ -101,3 +104,127 @@ recorded as failed with the detail `retried`.
 `internal/testhistory/testdata` holds real output of each runner from small
 fixture projects, and native matrix results from CI and local runs.
 `testdata/regenerate.sh` reruns the fixture projects after a runner upgrade.
+
+## Selection
+
+`go tool test-history select` proposes the landing tests for the change
+between the checkout and `origin/main` from the receipts in the spool. It is a
+shadow: `scripts/land.sh` still runs the fixed list in `scripts/landing-tests`,
+the baseline. Every proposal names its policy revision: `success-count/1` by
+default, `recent-failure/1` with `--policy recent-failure`.
+
+```sh
+go tool test-history select                 # replace mode, success-count policy
+go tool test-history select --mode extend --allowance 30s
+go tool test-history select --mode baseline # the fixed list
+go tool test-history select --policy recent-failure
+go tool test-history explain --test 'go ./internal/daemon TestStateExplain'
+go tool test-history pending                # unpriced or unavailable candidates
+go tool test-history measure 'vitest src/App.desktops.test.tsx'
+go tool test-history replay --from <rev>    # what each policy would have chosen
+```
+
+`select`, `explain` and `pending` take `--json`, and `--main <ref>` in place of
+`origin/main`. `measure` runs its units through
+`scripts/landing-tests.sh --unit <unit>...`, the runner the landing uses, so
+its receipt prices them.
+
+### Health evidence
+
+A receipt is health evidence when it ran a clean checkout (no
+`dirty_fingerprint`) of a commit on the first-parent history of `origin/main`.
+Dirty and unlanded runs still price tests. A clean local run counts once its
+exact commit lands. Revisions are ordered by their place in main's history,
+never by when a receipt was written or arrived.
+
+Within one lane (operating system, architecture, race detector), for each unit
+and main revision:
+
+- The revision failed when any result for the unit or one of its cases is
+  `fail`, including an earlier attempt of a retried test. A failure at a
+  revision wins over passes at the same revision.
+- The revision passed when the unit's own result is a `pass` that was not
+  replayed from the Go test cache, and the revision did not fail.
+- `skip`, `expected-failure`, `interrupted`, cached passes and revisions where
+  the unit did not run are neither. Silence never clears a failure.
+- Many receipts at one revision are one vote. Go package results (`go ./pkg`),
+  such as build failures, are not schedulable tests and carry no health.
+
+Tool versions and machine class are not part of the lane.
+
+### Standing
+
+A unit's anchor in a lane is the later of its latest failing revision in that
+lane and, for a unit in the baseline list, its admission: the commit that added
+its line to `scripts/landing-tests`, as `git blame` reports it. A failure at the
+admission revision is the anchor. A line not yet on main is admitted after every
+main revision. A lane where the unit has no anchor does not apply.
+
+The unit's passes since its anchor are the main revisions after the anchor that
+passed in that lane. When the anchor is a failure with failing cases, a passing
+revision must also pass each of those cases; a run filtered to other cases does
+not clear it. The unit stands in its least cleared lane: fewest passes, then the
+newest anchor, then the lane name. A baseline unit with no observations stands
+at its admission with no passes. A unit with neither a failure nor an admission
+has no standing.
+
+A failure in one lane nominates the unit wherever it can run, and only passes in
+the failing lane clear it.
+
+### Cost
+
+Costs come from receipts on this machine class and lane whose command exited
+with status 0, including dirty and unlanded ones; each figure is the median of
+its samples.
+
+- A Vitest or Playwright file costs the wall time of a command that reported
+  only that file, setup included. A run filtered to some tests (Vitest `-t`,
+  Playwright `--grep`) prices nothing.
+- A Go selection runs as one `go test` command, whose packages run in parallel.
+  It costs the command's setup, plus the slowest package: that package's own
+  setup and teardown plus its selected tests' times. A receipt prices the
+  command setup as its wall time less its slowest package, and each package's
+  setup as its time less its tests' times.
+- A Go receipt with a cached result, repeated attempts (`-count` above 1), a
+  `-skip` or a `-run` pattern naming subtests prices nothing.
+
+### Candidates and modes
+
+The groups whose pattern matches a changed path are selected, as in
+`land.sh`. The candidates are the selected groups' baseline units, units with a
+failure on main whose runner a selected group runs, and the tests the change
+touches: top-level Go tests whose function overlaps a changed line in a
+`_test.go` file outside `testdata`, and changed Vitest and Playwright files.
+Vitest files are those Vitest's `include` in `app/vite.config.ts` names;
+Playwright files are `app/e2e/**/*.spec.ts`.
+
+A candidate missing from the checkout, such as a renamed test, is
+`UNAVAILABLE`, with the reason. No group runs native scenarios, so they are
+never candidates; `pending` lists a native scenario that failed on main as
+unavailable. In `replace` and `extend`,
+changed tests are always `SELECTED`, outside any budget. The rest are ranked:
+fewest passes since the anchor, then the newest anchor, then the lower cost,
+then the unit name. `recent-failure/1` ranks the same way but ignores passes
+since.
+
+- `replace` selects ranked units, per runner, while the estimated cost of the
+  selection stays within the estimated cost of that runner's baseline units.
+- `extend` keeps every baseline unit and adds ranked units, within the
+  baseline's cost plus `--allowance` when one is given.
+- `baseline` selects only the baseline units of the selected groups, as
+  `land.sh` does.
+
+A ranked unit that would exceed the budget is `OVER-BUDGET`; one without a cost
+is `UNPRICED`, never assumed free. When a baseline unit of a runner is unpriced,
+that runner has no budget and its baseline runs.
+
+### Replay
+
+`replay --from <rev>` prints one JSON line per main commit after `<rev>`. It
+selects for that commit with the receipts that had finished by the commit's
+committer time, the history before it, and the commit's own list, tests and
+diff; then compares the selections of `baseline`, `success-count`,
+`recent-failure` and `extend-all` (extend without an allowance) with the
+failures later observed on that commit. A failure a selection included is not
+proof that the selection would have prevented it: a Linux failure, for one,
+need not fail on the machine that lands.

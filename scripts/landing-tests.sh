@@ -5,15 +5,31 @@ cd "$(git rev-parse --show-toplevel)"
 
 list=scripts/landing-tests
 groups="$(awk '$1 == "group" { print $2 }' "$list")"
-[ "$#" -gt 0 ] || { echo "usage: scripts/landing-tests.sh <group>...; groups: $(paste -sd' ' - <<<"$groups")" >&2; exit 2; }
-for group in "$@"; do
-  grep -qxF -- "$group" <<<"$groups" || { echo "landing tests: no group $group in $list; groups: $(paste -sd' ' - <<<"$groups")" >&2; exit 2; }
-done
+usage="usage: scripts/landing-tests.sh <group>... | --unit '<unit>'...; groups: $(paste -sd' ' - <<<"$groups")"
+[ "$#" -gt 0 ] || { echo "$usage" >&2; exit 2; }
+requested="$*"
 
-entries="$(awk -v wanted=" $* " '
-  $1 == "group" { selected = index(wanted, " " $2 " ") > 0; next }
-  selected && ($1 == "go" || $1 == "vitest" || $1 == "playwright") && !seen[$0]++ { print }
-' "$list")"
+if [ "$1" = --unit ]; then
+  entries=""
+  while [ "$#" -gt 0 ]; do
+    [ "$1" = --unit ] && [ "$#" -ge 2 ] || { echo "$usage" >&2; exit 2; }
+    read -r -a fields <<<"$2"
+    case "${fields[0]}:${#fields[@]}" in
+      go:3 | vitest:2 | playwright:2) entries+="${fields[*]}"$'\n' ;;
+      *) echo "landing tests: $2 is not a unit; units are 'go <package> <TestName>', 'vitest <file>' or 'playwright <file>'" >&2; exit 2 ;;
+    esac
+    shift 2
+  done
+  entries="$(awk '!seen[$0]++' <<<"$entries")"
+else
+  for group in "$@"; do
+    grep -qxF -- "$group" <<<"$groups" || { echo "landing tests: no group $group in $list; groups: $(paste -sd' ' - <<<"$groups")" >&2; exit 2; }
+  done
+  entries="$(awk -v wanted=" $* " '
+    $1 == "group" { selected = index(wanted, " " $2 " ") > 0; next }
+    selected && ($1 == "go" || $1 == "vitest" || $1 == "playwright") && !seen[$0]++ { print }
+  ' "$list")"
+fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-landing-tests.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -81,7 +97,7 @@ if [ -n "$app_entries" ]; then
 fi
 
 echo
-echo "landing tests ($*):"
+echo "landing tests ($requested):"
 sed 's/^/  /' "$summary"
 if [ "$failed" -ne 0 ]; then
   sed 's/^/  /' "$work/reruns" >&2
