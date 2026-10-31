@@ -173,7 +173,7 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 	}
 
 	repo.git("checkout", "-q", "-b", "change")
-	repo.write("p/p_test.go", fmt.Sprintf(testSource, "p", "A", "first", "B")+"\nfunc TestNew(t *testing.T) {}\n")
+	repo.write("p/p_test.go", fmt.Sprintf(testSource, "p", "A", "changed", "B")+"\nfunc TestNew(t *testing.T) {}\n")
 	repo.write("p/testdata/fixture/f_test.go", fmt.Sprintf(testSource, "fixture", "Fixture", "x", "Other"))
 
 	t.Run("select", func(t *testing.T) {
@@ -230,8 +230,11 @@ func TestSelectRanksTheCheckoutsChangeFromItsHistory(t *testing.T) {
 		out, _ := repo.history("select", "--main", "main", "--json")
 		selection := decode[testhistory.Selection](t, out)
 		budget := selection.Budgets[0]
-		if budget.BudgetMS == nil || budget.EstimateMS > *budget.BudgetMS {
-			t.Fatalf("budget %+v", budget)
+		if budget.BudgetMS == nil || *budget.BudgetMS == 0 || budget.EstimateMS > *budget.BudgetMS {
+			t.Fatalf("budget %+v; the change touches baseline TestA, which must still count in the baseline's budget", budget)
+		}
+		if testA := choiceOf(t, selection, "go ./p TestA"); !testA.Changed || testA.Status != testhistory.Selected {
+			t.Fatalf("changed baseline TestA: %+v", testA)
 		}
 		if choiceOf(t, selection, "go ./p TestNew").Status != testhistory.Selected {
 			t.Fatalf("a changed test must be selected outside the budget")
